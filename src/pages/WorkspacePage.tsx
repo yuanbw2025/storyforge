@@ -1,9 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useProjectStore } from '../stores/project'
+import { useWorldviewStore } from '../stores/worldview'
+import { useCharacterStore } from '../stores/character'
+import { useOutlineStore } from '../stores/outline'
+import { useChapterStore } from '../stores/chapter'
+import { useForeshadowStore } from '../stores/foreshadow'
 import Sidebar, { type SidebarModule } from '../components/layout/Sidebar'
 import ProjectInfoPanel from '../components/project/ProjectInfoPanel'
 import AIConfigPanel from '../components/settings/AIConfigPanel'
+import WorldviewPanel from '../components/worldview/WorldviewPanel'
+import StoryCorePanel from '../components/worldview/StoryCorePanel'
+import PowerSystemPanel from '../components/worldview/PowerSystemPanel'
+import CharacterPanel from '../components/character/CharacterPanel'
+import FactionPanel from '../components/faction/FactionPanel'
+import OutlinePanel from '../components/outline/OutlinePanel'
+import ChapterEditor from '../components/editor/ChapterEditor'
+import ForeshadowPanel from '../components/foreshadow/ForeshadowPanel'
 import type { Project } from '../lib/types'
 
 export default function WorkspacePage() {
@@ -13,7 +26,9 @@ export default function WorkspacePage() {
   const [project, setProject] = useState<Project | null>(null)
   const [activeModule, setActiveModule] = useState<SidebarModule>('info')
   const [loading, setLoading] = useState(true)
+  const [editorNodeId, setEditorNodeId] = useState<number | null>(null)
 
+  // 加载项目 + 所有关联数据
   useEffect(() => {
     const load = async () => {
       if (!projectId || isNaN(Number(projectId))) {
@@ -27,6 +42,17 @@ export default function WorkspacePage() {
         return
       }
       setProject(p)
+
+      // 并行加载所有数据
+      const pid = p.id!
+      await Promise.all([
+        useWorldviewStore.getState().loadAll(pid),
+        useCharacterStore.getState().loadAll(pid),
+        useOutlineStore.getState().loadAll(pid),
+        useChapterStore.getState().loadAll(pid),
+        useForeshadowStore.getState().loadAll(pid),
+      ])
+
       setLoading(false)
     }
     load()
@@ -40,29 +66,34 @@ export default function WorkspacePage() {
     )
   }
 
+  const handleOpenChapter = (nodeId: number) => {
+    setEditorNodeId(nodeId)
+    setActiveModule('editor')
+  }
+
   /** 根据当前模块渲染主面板内容 */
   const renderMainPanel = () => {
     switch (activeModule) {
       case 'info':
         return <ProjectInfoPanel project={project} onUpdate={(p) => setProject(p)} />
+      case 'worldview':
+        return <WorldviewPanel project={project} />
+      case 'story-core':
+        return <StoryCorePanel project={project} />
+      case 'characters':
+        return <CharacterPanel project={project} />
+      case 'factions':
+        return <FactionPanel project={project} />
+      case 'power-system':
+        return <PowerSystemPanel project={project} />
+      case 'outline':
+        return <OutlinePanel project={project} onOpenChapter={handleOpenChapter} />
+      case 'editor':
+        return <ChapterEditor project={project} outlineNodeId={editorNodeId} />
+      case 'foreshadow':
+        return <ForeshadowPanel project={project} />
       case 'settings':
         return <AIConfigPanel />
-      case 'worldview':
-      case 'story-core':
-      case 'characters':
-      case 'factions':
-      case 'power-system':
-      case 'outline':
-      case 'editor':
-      case 'foreshadow':
-        return (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-text-muted text-lg mb-2">🚧 {getModuleLabel(activeModule)}</p>
-              <p className="text-text-muted text-sm">该模块将在后续 Phase 中开发</p>
-            </div>
-          </div>
-        )
       default:
         return null
     }
@@ -73,7 +104,7 @@ export default function WorkspacePage() {
       {/* 左侧导航 */}
       <Sidebar
         active={activeModule}
-        onSelect={setActiveModule}
+        onSelect={(m) => { setActiveModule(m); if (m !== 'editor') setEditorNodeId(null) }}
         onBack={() => navigate('/')}
         projectName={project.name}
       />
@@ -84,20 +115,4 @@ export default function WorkspacePage() {
       </main>
     </div>
   )
-}
-
-function getModuleLabel(module: SidebarModule): string {
-  const labels: Record<SidebarModule, string> = {
-    info: '基本信息',
-    worldview: '世界观',
-    'story-core': '故事核心',
-    characters: '角色',
-    factions: '势力',
-    'power-system': '力量体系',
-    outline: '大纲',
-    editor: '写作',
-    foreshadow: '伏笔',
-    settings: '设置',
-  }
-  return labels[module]
 }
