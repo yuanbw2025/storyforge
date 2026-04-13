@@ -27,6 +27,7 @@ import HistoryPanel from '../components/history/HistoryPanel'
 import ItemSystemPanel from '../components/items/ItemSystemPanel'
 import CreativeRulesPanel from '../components/rules/CreativeRulesPanel'
 import CharacterRelationPanel from '../components/relations/CharacterRelationPanel'
+import ExportPanel from '../components/export/ExportPanel'
 import type { Project } from '../lib/types'
 
 export default function WorkspacePage() {
@@ -117,6 +118,8 @@ export default function WorkspacePage() {
         return <ChapterEditor project={project} outlineNodeId={editorNodeId} />
       case 'foreshadow':
         return <ForeshadowPanel project={project} />
+      case 'export':
+        return <ExportPanel project={project} onImported={(newId) => navigate(`/workspace/${newId}`)} />
       case 'settings':
         return <AIConfigPanel />
       default:

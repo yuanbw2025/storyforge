@@ -1,7 +1,7 @@
 import {
   FileText, Globe, Sparkles, Users, Swords, Zap,
   MapPin, Clock, Gem, Ruler, Heart,
-  BookOpen, PenTool, Eye, Settings, ArrowLeft,
+  BookOpen, PenTool, Eye, Package, Settings, ArrowLeft,
 } from 'lucide-react'
 
 export type SidebarModule =
@@ -19,6 +19,7 @@ export type SidebarModule =
   | 'outline'       // 大纲
   | 'editor'        // 写作
   | 'foreshadow'    // 伏笔
+  | 'export'        // 导出
   | 'settings'      // 设置
 
 interface SidebarItem {
@@ -42,6 +43,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { id: 'outline', label: '大纲', icon: BookOpen },
   { id: 'editor', label: '写作', icon: PenTool },
   { id: 'foreshadow', label: '伏笔', icon: Eye },
+  { id: 'export', label: '导出', icon: Package },
   { id: 'settings', label: '设置', icon: Settings },
 ]
 
