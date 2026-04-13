@@ -1,5 +1,6 @@
 import {
   FileText, Globe, Sparkles, Users, Swords, Zap,
+  MapPin, Clock, Gem, Ruler,
   BookOpen, PenTool, Eye, Settings, ArrowLeft,
 } from 'lucide-react'
 
@@ -10,6 +11,10 @@ export type SidebarModule =
   | 'characters'    // 角色
   | 'factions'      // 势力
   | 'power-system'  // 力量体系
+  | 'geography'     // 地理环境
+  | 'history'       // 历史年表
+  | 'items'         // 道具系统
+  | 'rules'         // 创作规则
   | 'outline'       // 大纲
   | 'editor'        // 写作
   | 'foreshadow'    // 伏笔
@@ -28,6 +33,10 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { id: 'characters', label: '角色', icon: Users },
   { id: 'factions', label: '势力', icon: Swords },
   { id: 'power-system', label: '力量体系', icon: Zap },
+  { id: 'geography', label: '地理环境', icon: MapPin },
+  { id: 'history', label: '历史年表', icon: Clock },
+  { id: 'items', label: '道具系统', icon: Gem },
+  { id: 'rules', label: '创作规则', icon: Ruler },
   { id: 'outline', label: '大纲', icon: BookOpen },
   { id: 'editor', label: '写作', icon: PenTool },
   { id: 'foreshadow', label: '伏笔', icon: Eye },

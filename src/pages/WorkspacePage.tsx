@@ -6,6 +6,10 @@ import { useCharacterStore } from '../stores/character'
 import { useOutlineStore } from '../stores/outline'
 import { useChapterStore } from '../stores/chapter'
 import { useForeshadowStore } from '../stores/foreshadow'
+import { useGeographyStore } from '../stores/geography'
+import { useHistoryStore } from '../stores/history'
+import { useItemSystemStore } from '../stores/item-system'
+import { useCreativeRulesStore } from '../stores/creative-rules'
 import Sidebar, { type SidebarModule } from '../components/layout/Sidebar'
 import ProjectInfoPanel from '../components/project/ProjectInfoPanel'
 import AIConfigPanel from '../components/settings/AIConfigPanel'
@@ -17,6 +21,10 @@ import FactionPanel from '../components/faction/FactionPanel'
 import OutlinePanel from '../components/outline/OutlinePanel'
 import ChapterEditor from '../components/editor/ChapterEditor'
 import ForeshadowPanel from '../components/foreshadow/ForeshadowPanel'
+import GeographyPanel from '../components/geography/GeographyPanel'
+import HistoryPanel from '../components/history/HistoryPanel'
+import ItemSystemPanel from '../components/items/ItemSystemPanel'
+import CreativeRulesPanel from '../components/rules/CreativeRulesPanel'
 import type { Project } from '../lib/types'
 
 export default function WorkspacePage() {
@@ -51,6 +59,10 @@ export default function WorkspacePage() {
         useOutlineStore.getState().loadAll(pid),
         useChapterStore.getState().loadAll(pid),
         useForeshadowStore.getState().loadAll(pid),
+        useGeographyStore.getState().loadAll(pid),
+        useHistoryStore.getState().loadAll(pid),
+        useItemSystemStore.getState().loadAll(pid),
+        useCreativeRulesStore.getState().loadAll(pid),
       ])
 
       setLoading(false)
@@ -86,6 +98,14 @@ export default function WorkspacePage() {
         return <FactionPanel project={project} />
       case 'power-system':
         return <PowerSystemPanel project={project} />
+      case 'geography':
+        return <GeographyPanel project={project} />
+      case 'history':
+        return <HistoryPanel project={project} />
+      case 'items':
+        return <ItemSystemPanel project={project} />
+      case 'rules':
+        return <CreativeRulesPanel project={project} />
       case 'outline':
         return <OutlinePanel project={project} onOpenChapter={handleOpenChapter} />
       case 'editor':

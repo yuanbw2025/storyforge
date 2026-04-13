@@ -9,6 +9,10 @@ import type {
   OutlineNode,
   Chapter,
   Foreshadow,
+  Geography,
+  History,
+  ItemSystem,
+  CreativeRules,
 } from '../types'
 
 class StoryForgeDB extends Dexie {
@@ -21,6 +25,10 @@ class StoryForgeDB extends Dexie {
   outlineNodes!: Table<OutlineNode>
   chapters!: Table<Chapter>
   foreshadows!: Table<Foreshadow>
+  geographies!: Table<Geography>
+  histories!: Table<History>
+  itemSystems!: Table<ItemSystem>
+  creativeRules!: Table<CreativeRules>
 
   constructor() {
     super('storyforge')
@@ -35,6 +43,13 @@ class StoryForgeDB extends Dexie {
       outlineNodes: '++id, projectId, parentId, order, type',
       chapters: '++id, projectId, outlineNodeId, order, status',
       foreshadows: '++id, projectId, status, type',
+    })
+
+    this.version(2).stores({
+      geographies: '++id, projectId',
+      histories: '++id, projectId',
+      itemSystems: '++id, projectId',
+      creativeRules: '++id, projectId',
     })
   }
 }

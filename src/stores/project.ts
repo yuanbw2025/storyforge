@@ -51,15 +51,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   deleteProject: async (id: number) => {
     // 删除项目及所有关联数据
     await db.transaction('rw', [
-      db.projects,
-      db.worldviews,
-      db.storyCores,
-      db.powerSystems,
-      db.characters,
-      db.factions,
-      db.outlineNodes,
-      db.chapters,
-      db.foreshadows,
+      db.projects, db.worldviews, db.storyCores, db.powerSystems,
+      db.characters, db.factions, db.outlineNodes, db.chapters, db.foreshadows,
+      db.geographies, db.histories, db.itemSystems, db.creativeRules,
     ], async () => {
       await db.projects.delete(id)
       await db.worldviews.where('projectId').equals(id).delete()
@@ -70,6 +64,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       await db.outlineNodes.where('projectId').equals(id).delete()
       await db.chapters.where('projectId').equals(id).delete()
       await db.foreshadows.where('projectId').equals(id).delete()
+      await db.geographies.where('projectId').equals(id).delete()
+      await db.histories.where('projectId').equals(id).delete()
+      await db.itemSystems.where('projectId').equals(id).delete()
+      await db.creativeRules.where('projectId').equals(id).delete()
     })
     if (get().currentProjectId === id) {
       set({ currentProjectId: null })
