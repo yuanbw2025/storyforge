@@ -185,3 +185,78 @@ body {
   background: var(--accent-muted);
   color: var(--text-primary);
 }
+
+/* ========================================
+   ✍️ TipTap 富文本编辑器样式
+   ======================================== */
+.tiptap-editor {
+  min-height: 100%;
+  outline: none;
+}
+
+.tiptap-editor p {
+  margin: 0 0 0.75em 0;
+}
+
+.tiptap-editor p:last-child {
+  margin-bottom: 0;
+}
+
+.tiptap-editor h1,
+.tiptap-editor h2,
+.tiptap-editor h3,
+.tiptap-editor h4 {
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+  margin: 1.2em 0 0.6em 0;
+}
+
+.tiptap-editor h2 { font-size: 1.3em; }
+.tiptap-editor h3 { font-size: 1.15em; }
+.tiptap-editor h4 { font-size: 1.05em; }
+
+.tiptap-editor strong { font-weight: 700; color: var(--text-primary); }
+.tiptap-editor em { font-style: italic; }
+
+.tiptap-editor ul,
+.tiptap-editor ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0 0.75em 0;
+}
+
+.tiptap-editor li {
+  margin: 0.2em 0;
+}
+
+.tiptap-editor blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 0.3em 0 0.3em 1em;
+  margin: 0.75em 0;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border-radius: 0 4px 4px 0;
+}
+
+.tiptap-editor hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.2em 0;
+}
+
+.tiptap-editor code {
+  background: var(--bg-elevated);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-size: 0.9em;
+  color: var(--accent);
+}
+
+/* 占位符 */
+.tiptap-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+  height: 0;
+  float: left;
+}

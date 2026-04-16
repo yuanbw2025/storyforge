@@ -1,5 +1,51 @@
 import { db } from '../db/schema'
 import type { OutlineNode, Chapter } from '../types'
+import { isHtml, htmlToPlainText } from '../utils/html'
+
+/** HTML → Markdown（简化规则，覆盖 TipTap StarterKit 产出的常见结构） */
+function htmlToMarkdown(html: string): string {
+  if (!html) return ''
+  if (!isHtml(html)) return html
+  let md = html
+  // 标题
+  md = md.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '\n\n## $1\n\n')
+  md = md.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, '\n\n### $1\n\n')
+  md = md.replace(/<h4[^>]*>([\s\S]*?)<\/h4>/gi, '\n\n#### $1\n\n')
+  // 强调
+  md = md.replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**')
+  md = md.replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, '**$1**')
+  md = md.replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '*$1*')
+  md = md.replace(/<i[^>]*>([\s\S]*?)<\/i>/gi, '*$1*')
+  md = md.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`')
+  // 引用
+  md = md.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_, inner) => {
+    const text = inner.replace(/<[^>]+>/g, '').trim()
+    return text
+      .split('\n')
+      .map((l: string) => `> ${l}`)
+      .join('\n')
+  })
+  // 列表项
+  md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '- $1\n')
+  md = md.replace(/<\/?(ul|ol)[^>]*>/gi, '\n')
+  // 分割线
+  md = md.replace(/<hr[^>]*\/?>/gi, '\n---\n')
+  // 段落与换行
+  md = md.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n\n')
+  md = md.replace(/<br\s*\/?>/gi, '\n')
+  // 清理剩余标签
+  md = md.replace(/<[^>]+>/g, '')
+  // 实体
+  md = md
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+  // 规整空行
+  md = md.replace(/\n{3,}/g, '\n\n')
+  return md.trim()
+}
 
 /** 导出为 Markdown 格式 */
 export async function exportProjectMarkdown(projectId: number): Promise<string> {
@@ -115,7 +161,7 @@ function renderChapterMd(node: OutlineNode, chapterMap: Map<number, Chapter>): s
   const ch = chapterMap.get(node.id!)
   let md = `#### ${node.title}\n\n`
   if (ch?.content) {
-    md += `${ch.content}\n\n`
+    md += `${htmlToMarkdown(ch.content)}\n\n`
   } else if (node.summary) {
     md += `*（大纲：${node.summary}）*\n\n`
   }
@@ -126,7 +172,7 @@ function renderChapterTxt(node: OutlineNode, chapterMap: Map<number, Chapter>): 
   const ch = chapterMap.get(node.id!)
   let txt = `    ${node.title}\n\n`
   if (ch?.content) {
-    txt += `${ch.content}\n\n`
+    txt += `${htmlToPlainText(ch.content)}\n\n`
   }
   return txt
 }

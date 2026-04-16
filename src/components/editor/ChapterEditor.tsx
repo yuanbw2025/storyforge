@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Save, FileText, Eye } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
@@ -9,7 +9,9 @@ import { useAutoSave } from '../../hooks/useAutoSave'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/prompts/chapter'
 import { buildWorldContext, buildCharacterContext } from '../../lib/ai/context-builder'
+import { htmlToPlainText, plainTextToHtml, countWords } from '../../lib/utils/html'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import RichEditor, { type RichEditorHandle } from './RichEditor'
 import type { Project } from '../../lib/types'
 
 interface Props {
@@ -23,15 +25,21 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const { worldview, storyCore, powerSystem } = useWorldviewStore()
   const { characters } = useCharacterStore()
 
+  // content 为 HTML 字符串；旧数据是纯文本，RichEditor 内部会自动包装
   const [content, setContent] = useState('')
+  const [plainText, setPlainText] = useState('')
   const [savedContent, setSavedContent] = useState('')
   const [showContext, setShowContext] = useState(false)
   const [aiAction, setAIAction] = useState<string>('')
   const [customInstruction, setCustomInstruction] = useState('')
   const ai = useAIStream()
+  const editorRef = useRef<RichEditorHandle>(null)
+
+  // 字数（基于纯文本）
+  const wordCount = useMemo(() => countWords(plainText), [plainText])
 
   // 有未保存内容时阻止页面关闭
-  useBeforeUnload(content !== savedContent && content.length > 0)
+  useBeforeUnload(content !== savedContent && plainText.length > 0)
 
   useEffect(() => { loadChapters(project.id!) }, [project.id, loadChapters])
 
@@ -44,20 +52,24 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
   }, [outlineNodeId, chapters, selectChapter])
 
+  // 切换章节：同步到本地 state（RichEditor 会基于 value 重建内容）
   useEffect(() => {
-    setContent(currentChapter?.content || '')
+    const raw = currentChapter?.content || ''
+    setContent(raw)
+    setPlainText(htmlToPlainText(raw))
   }, [currentChapter])
 
-  // 切换章节时同步 savedContent
+  // 切换章节时同步 savedContent（只在章节 id 变化时）
   useEffect(() => {
     setSavedContent(currentChapter?.content || '')
   }, [currentChapter?.id])
 
   // 自动保存
-  useAutoSave(content, useCallback(async (c: string) => {
+  useAutoSave(content, useCallback(async (html: string) => {
     if (currentChapter?.id) {
-      await updateChapter(currentChapter.id, { content: c, wordCount: c.length })
-      setSavedContent(c)
+      const wc = countWords(htmlToPlainText(html))
+      await updateChapter(currentChapter.id, { content: html, wordCount: wc })
+      setSavedContent(html)
     }
   }, [currentChapter?.id, updateChapter]))
 
@@ -75,25 +87,25 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
   }
 
-  // AI 操作
+  // AI 操作 —— 所有 AI 交互都基于纯文本
   const handleGenerate = () => {
     if (!outlineNode) return
     const prevChapter = chapters.filter(c => c.order < (currentChapter?.order || 0)).pop()
-    const prevEnding = prevChapter?.content?.slice(-500) || ''
+    const prevEnding = htmlToPlainText(prevChapter?.content || '').slice(-500)
     const messages = buildChapterContentPrompt(outlineNode.title, outlineNode.summary, worldCtx, charCtx, prevEnding)
     setAIAction('generate')
     ai.start(messages)
   }
 
   const handleContinue = () => {
-    if (!content || !outlineNode) return
-    const messages = buildContinuePrompt(content, outlineNode.summary, worldCtx)
+    if (!plainText || !outlineNode) return
+    const messages = buildContinuePrompt(plainText, outlineNode.summary, worldCtx)
     setAIAction('continue')
     ai.start(messages)
   }
 
   const handlePolish = () => {
-    const selected = window.getSelection()?.toString() || content.slice(-1000)
+    const selected = editorRef.current?.getSelectedText() || plainText.slice(-1000)
     if (!selected) return
     const messages = buildPolishPrompt(selected, customInstruction || '优化文笔，使表达更生动')
     setAIAction('polish')
@@ -101,7 +113,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleExpand = () => {
-    const selected = window.getSelection()?.toString() || content.slice(-500)
+    const selected = editorRef.current?.getSelectedText() || plainText.slice(-500)
     if (!selected) return
     const messages = buildExpandPrompt(selected)
     setAIAction('expand')
@@ -109,7 +121,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleDeAI = () => {
-    const selected = window.getSelection()?.toString() || content.slice(-1000)
+    const selected = editorRef.current?.getSelectedText() || plainText.slice(-1000)
     if (!selected) return
     const messages = buildDeAIPrompt(selected)
     setAIAction('deai')
@@ -117,13 +129,20 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleAcceptAI = (text: string) => {
+    if (!editorRef.current) return
+    const html = plainTextToHtml(text)
+
     if (aiAction === 'continue') {
-      setContent(prev => prev + text)
+      editorRef.current.appendContent(html)
     } else if (aiAction === 'generate') {
-      setContent(text)
+      editorRef.current.setContent(html)
+      // setContent 不触发 onChange，这里手动同步
+      const newHtml = editorRef.current.getHTML()
+      setContent(newHtml)
+      setPlainText(editorRef.current.getPlainText())
     } else {
-      // polish/expand/deai: 替换内容（简化处理：追加到末尾供用户对比）
-      setContent(prev => prev + '\n\n--- AI 修改建议 ---\n' + text)
+      // polish/expand/deai：替换选区（若无选区则插入在光标处）
+      editorRef.current.replaceSelection(html)
     }
     ai.reset()
     setAIAction('')
@@ -168,7 +187,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold text-text-primary">{currentChapter.title}</h2>
-          <span className="text-xs text-text-muted">{content.length} 字</span>
+          <span className="text-xs text-text-muted">{wordCount} 字</span>
           <span className={`text-xs px-2 py-0.5 rounded ${
             currentChapter.status === 'draft' ? 'bg-warning/10 text-warning' :
             currentChapter.status === 'polished' ? 'bg-success/10 text-success' :
@@ -180,7 +199,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text-primary">
             <Eye className="w-3.5 h-3.5" /> 上下文
           </button>
-          <button onClick={() => currentChapter.id && updateChapter(currentChapter.id, { content, wordCount: content.length })}
+          <button onClick={() => currentChapter.id && updateChapter(currentChapter.id, { content, wordCount })}
             className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-accent">
             <Save className="w-3.5 h-3.5" /> 保存
           </button>
@@ -203,7 +222,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           className="px-3 py-1.5 bg-accent text-white text-xs rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors">
           ✨ 生成正文
         </button>
-        <button onClick={handleContinue} disabled={ai.isStreaming || !content}
+        <button onClick={handleContinue} disabled={ai.isStreaming || !plainText}
           className="px-3 py-1.5 bg-bg-elevated text-text-secondary text-xs rounded-md hover:text-text-primary disabled:opacity-50 transition-colors">
           📝 续写
         </button>
@@ -235,12 +254,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         </div>
       )}
 
-      {/* 编辑器 */}
-      <textarea
+      {/* TipTap 富文本编辑器 */}
+      <RichEditor
+        ref={editorRef}
         value={content}
-        onChange={e => setContent(e.target.value)}
+        onChange={(html, plain) => {
+          setContent(html)
+          setPlainText(plain)
+        }}
         placeholder="开始写作..."
-        className="w-full min-h-[400px] p-4 bg-bg-surface border border-border rounded-lg text-text-primary text-sm leading-relaxed resize-y focus:outline-none focus:border-accent"
+        minHeight={400}
       />
 
       {/* 作者笔记 */}
