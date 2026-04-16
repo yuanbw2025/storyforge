@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, MapPin } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, MapPin, GitBranch, List } from 'lucide-react'
 import { useGeographyStore } from '../../stores/geography'
 import type { Project, Location, LocationType } from '../../lib/types'
 import { nanoid } from '../../lib/utils/id'
+import LocationTreeMap from './LocationTreeMap'
 
 const LOCATION_TYPES: { value: LocationType; label: string }[] = [
   { value: 'continent', label: '大陆' },
@@ -26,6 +27,7 @@ export default function GeographyPanel({ project }: Props) {
   const [overview, setOverview] = useState('')
   const [locations, setLocations] = useState<Location[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [view, setView] = useState<'list' | 'map'>('map')
 
   useEffect(() => {
     loadAll(project.id!)
@@ -95,19 +97,43 @@ export default function GeographyPanel({ project }: Props) {
         />
       </div>
 
-      {/* 地点列表 */}
+      {/* 地点工具栏 */}
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-base font-semibold text-text-primary">地点列表 ({locations.length})</h3>
-        <button
-          onClick={handleAddLocation}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white text-sm rounded-md hover:bg-accent-hover transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          添加地点
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 视图切换 */}
+          <div className="flex bg-bg-elevated rounded-lg p-0.5">
+            <button
+              onClick={() => setView('map')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                view === 'map' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              <GitBranch className="w-3.5 h-3.5" /> 树状图
+            </button>
+            <button
+              onClick={() => setView('list')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                view === 'list' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" /> 列表
+            </button>
+          </div>
+          <button
+            onClick={handleAddLocation}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white text-sm rounded-md hover:bg-accent-hover transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            添加地点
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-2">
+      {/* 树状图视图 */}
+      {view === 'map' && <div className="mb-6"><LocationTreeMap locations={locations} /></div>}
+
+      <div className={`space-y-2 ${view === 'map' ? 'hidden' : ''}`}>
         {locations.length === 0 ? (
           <p className="text-text-muted text-sm py-8 text-center">暂无地点，点击上方按钮添加</p>
         ) : (

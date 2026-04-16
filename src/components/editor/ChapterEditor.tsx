@@ -6,6 +6,7 @@ import { useWorldviewStore } from '../../stores/worldview'
 import { useCharacterStore } from '../../stores/character'
 import { useAIStream } from '../../hooks/useAIStream'
 import { useAutoSave } from '../../hooks/useAutoSave'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/prompts/chapter'
 import { buildWorldContext, buildCharacterContext } from '../../lib/ai/context-builder'
 import AIStreamOutput from '../shared/AIStreamOutput'
@@ -23,10 +24,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const { characters } = useCharacterStore()
 
   const [content, setContent] = useState('')
+  const [savedContent, setSavedContent] = useState('')
   const [showContext, setShowContext] = useState(false)
   const [aiAction, setAIAction] = useState<string>('')
   const [customInstruction, setCustomInstruction] = useState('')
   const ai = useAIStream()
+
+  // 有未保存内容时阻止页面关闭
+  useBeforeUnload(content !== savedContent && content.length > 0)
 
   useEffect(() => { loadChapters(project.id!) }, [project.id, loadChapters])
 
@@ -43,10 +48,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setContent(currentChapter?.content || '')
   }, [currentChapter])
 
+  // 切换章节时同步 savedContent
+  useEffect(() => {
+    setSavedContent(currentChapter?.content || '')
+  }, [currentChapter?.id])
+
   // 自动保存
   useAutoSave(content, useCallback(async (c: string) => {
     if (currentChapter?.id) {
       await updateChapter(currentChapter.id, { content: c, wordCount: c.length })
+      setSavedContent(c)
     }
   }, [currentChapter?.id, updateChapter]))
 

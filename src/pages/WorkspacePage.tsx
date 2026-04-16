@@ -11,6 +11,7 @@ import { useHistoryStore } from '../stores/history'
 import { useItemSystemStore } from '../stores/item-system'
 import { useCreativeRulesStore } from '../stores/creative-rules'
 import { useCharacterRelationStore } from '../stores/character-relation'
+import { useAutoBackup } from '../hooks/useAutoBackup'
 import Sidebar, { type SidebarModule } from '../components/layout/Sidebar'
 import ProjectInfoPanel from '../components/project/ProjectInfoPanel'
 import AIConfigPanel from '../components/settings/AIConfigPanel'
@@ -27,6 +28,7 @@ import HistoryPanel from '../components/history/HistoryPanel'
 import ItemSystemPanel from '../components/items/ItemSystemPanel'
 import CreativeRulesPanel from '../components/rules/CreativeRulesPanel'
 import CharacterRelationPanel from '../components/relations/CharacterRelationPanel'
+import VersionHistoryPanel from '../components/backup/VersionHistoryPanel'
 import ExportPanel from '../components/export/ExportPanel'
 import type { Project } from '../lib/types'
 
@@ -38,6 +40,9 @@ export default function WorkspacePage() {
   const [activeModule, setActiveModule] = useState<SidebarModule>('info')
   const [loading, setLoading] = useState(true)
   const [editorNodeId, setEditorNodeId] = useState<number | null>(null)
+
+  // 自动定时备份（每 5 分钟）
+  useAutoBackup(project?.id ?? null)
 
   // 加载项目 + 所有关联数据
   useEffect(() => {
@@ -118,6 +123,8 @@ export default function WorkspacePage() {
         return <ChapterEditor project={project} outlineNodeId={editorNodeId} />
       case 'foreshadow':
         return <ForeshadowPanel project={project} />
+      case 'backup':
+        return <VersionHistoryPanel project={project} />
       case 'export':
         return <ExportPanel project={project} onImported={(newId) => navigate(`/workspace/${newId}`)} />
       case 'settings':

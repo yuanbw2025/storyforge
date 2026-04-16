@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { Plus, Trash2, ArrowRightLeft, ArrowRight, Users } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Plus, Trash2, ArrowRightLeft, ArrowRight, Users, GitFork, List } from 'lucide-react'
 import { useCharacterRelationStore } from '../../stores/character-relation'
 import { useCharacterStore } from '../../stores/character'
 import type { Project, RelationType } from '../../lib/types'
+import RelationGraph from './RelationGraph'
 
 const RELATION_TYPES: { value: RelationType; label: string }[] = [
   { value: 'family', label: '👨‍👩‍👧 亲属' },
@@ -27,6 +28,19 @@ export default function CharacterRelationPanel({ project }: Props) {
   const projectId = project.id!
 
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [view, setView] = useState<'list' | 'graph'>('graph')
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [graphWidth, setGraphWidth] = useState(700)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width
+      if (w) setGraphWidth(Math.floor(w))
+    })
+    ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [])
 
   // 新建关系
   const handleAdd = async () => {
@@ -49,24 +63,50 @@ export default function CharacterRelationPanel({ project }: Props) {
   const projectRelations = relations.filter((r) => r.projectId === projectId)
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6" ref={containerRef}>
       {/* 标题 */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <Users className="w-6 h-6 text-accent" />
           <h1 className="text-2xl font-bold text-text-primary">角色关系</h1>
           <span className="text-sm text-text-muted">({projectRelations.length} 条关系)</span>
         </div>
-        <button
-          onClick={handleAdd}
-          disabled={characters.length < 2}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white rounded-lg text-sm hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          title={characters.length < 2 ? '需要至少 2 个角色才能创建关系' : '添加关系'}
-        >
-          <Plus className="w-4 h-4" />
-          添加关系
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 视图切换 */}
+          <div className="flex bg-bg-elevated rounded-lg p-0.5">
+            <button
+              onClick={() => setView('graph')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                view === 'graph' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              <GitFork className="w-3.5 h-3.5" /> 关系图
+            </button>
+            <button
+              onClick={() => setView('list')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                view === 'list' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" /> 列表
+            </button>
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={characters.length < 2}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white rounded-lg text-sm hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title={characters.length < 2 ? '需要至少 2 个角色才能创建关系' : '添加关系'}
+          >
+            <Plus className="w-4 h-4" />
+            添加关系
+          </button>
+        </div>
       </div>
+
+      {/* 关系图视图 */}
+      {view === 'graph' && (
+        <RelationGraph width={graphWidth} height={480} />
+      )}
 
       {/* 提示 */}
       {characters.length < 2 && (
@@ -75,8 +115,8 @@ export default function CharacterRelationPanel({ project }: Props) {
         </div>
       )}
 
-      {/* 关系列表 */}
-      {projectRelations.length === 0 && characters.length >= 2 && (
+      {/* 列表视图 */}
+      {view === 'list' && projectRelations.length === 0 && characters.length >= 2 && (
         <div className="text-center py-16 text-text-muted">
           <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
           <p>还没有角色关系</p>
@@ -84,7 +124,7 @@ export default function CharacterRelationPanel({ project }: Props) {
         </div>
       )}
 
-      <div className="space-y-3">
+      {view === 'list' && <div className="space-y-3">
         {projectRelations.map((rel) => {
           const isEditing = editingId === rel.id
           return (
@@ -206,7 +246,7 @@ export default function CharacterRelationPanel({ project }: Props) {
             </div>
           )
         })}
-      </div>
+      </div>}
     </div>
   )
 }

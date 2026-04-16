@@ -14,6 +14,7 @@ import type {
   ItemSystem,
   CreativeRules,
   CharacterRelation,
+  Snapshot,
 } from '../types'
 
 class StoryForgeDB extends Dexie {
@@ -31,6 +32,7 @@ class StoryForgeDB extends Dexie {
   itemSystems!: Table<ItemSystem>
   creativeRules!: Table<CreativeRules>
   characterRelations!: Table<CharacterRelation>
+  snapshots!: Table<Snapshot>
 
   constructor() {
     super('storyforge')
@@ -56,6 +58,10 @@ class StoryForgeDB extends Dexie {
 
     this.version(3).stores({
       characterRelations: '++id, projectId, fromCharacterId, toCharacterId',
+    })
+
+    this.version(4).stores({
+      snapshots: '++id, projectId, type, createdAt',
     })
   }
 }

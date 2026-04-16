@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, ArrowRight, Sparkles, Loader2 } from 'lucide-react'
+import { Plus, Trash2, ArrowRight, Sparkles, Loader2, LayoutList, LayoutGrid } from 'lucide-react'
 import { useForeshadowStore } from '../../stores/foreshadow'
 import { useChapterStore } from '../../stores/chapter'
 import { useWorldviewStore } from '../../stores/worldview'
@@ -10,6 +10,7 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { buildForeshadowSuggestPrompt } from '../../lib/ai/prompts/foreshadow'
 import { buildWorldContext, buildCharacterContext } from '../../lib/ai/context-builder'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import ForeshadowKanban from './ForeshadowKanban'
 import type { Project, Foreshadow, ForeshadowStatus, ForeshadowType } from '../../lib/types'
 
 const STATUS_LABELS: Record<ForeshadowStatus, { label: string; color: string }> = {
@@ -40,6 +41,7 @@ export default function ForeshadowPanel({ project }: Props) {
   const [filterStatus, setFilterStatus] = useState<ForeshadowStatus | 'all'>('all')
   const [selected, setSelected] = useState<number | null>(null)
   const [showAI, setShowAI] = useState(false)
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
 
@@ -100,12 +102,12 @@ export default function ForeshadowPanel({ project }: Props) {
   }
 
   return (
-    <div className="flex gap-4 max-w-6xl">
-      {/* 左侧列表 */}
-      <div className="w-60 shrink-0 space-y-2">
-        <div className="flex gap-1.5">
+    <div className="space-y-4 max-w-6xl">
+      {/* 顶部工具栏 */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
           <button onClick={handleAdd}
-            className="flex-1 flex items-center gap-1.5 px-3 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-hover transition-colors">
+            className="flex items-center gap-1.5 px-3 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-hover transition-colors">
             <Plus className="w-4 h-4" /> 添加伏笔
           </button>
           <button onClick={handleAISuggest}
@@ -115,6 +117,36 @@ export default function ForeshadowPanel({ project }: Props) {
             {ai.isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
           </button>
         </div>
+        {/* 视图切换 */}
+        <div className="flex items-center gap-1 bg-bg-elevated rounded-lg p-0.5">
+          <button
+            onClick={() => setViewMode('list')}
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition ${
+              viewMode === 'list' ? 'bg-bg-surface text-accent shadow-sm' : 'text-text-muted hover:text-text-primary'
+            }`}
+            title="列表视图"
+          >
+            <LayoutList className="w-3.5 h-3.5" /> 列表
+          </button>
+          <button
+            onClick={() => setViewMode('kanban')}
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition ${
+              viewMode === 'kanban' ? 'bg-bg-surface text-accent shadow-sm' : 'text-text-muted hover:text-text-primary'
+            }`}
+            title="看板视图"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" /> 看板
+          </button>
+        </div>
+      </div>
+
+      {/* 看板视图 */}
+      {viewMode === 'kanban' ? (
+        <ForeshadowKanban onSelectForeshadow={(id) => { setSelected(id); setViewMode('list') }} />
+      ) : (
+      <div className="flex gap-4">
+      {/* 左侧列表 */}
+      <div className="w-60 shrink-0 space-y-2">
 
         {/* 状态筛选 */}
         <div className="flex flex-wrap gap-1">
@@ -268,6 +300,8 @@ export default function ForeshadowPanel({ project }: Props) {
           </div>
         ) : null}
       </div>
+    </div>
+      )}
     </div>
   )
 }
