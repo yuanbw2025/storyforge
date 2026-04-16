@@ -2,26 +2,27 @@ import {
   FileText, Globe, Sparkles, Users, Swords, Zap,
   MapPin, Clock, Gem, Ruler, Heart,
   BookOpen, PenTool, Eye, Package, Settings, ArrowLeft, History,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react'
 
 export type SidebarModule =
-  | 'info'          // 基本信息
-  | 'worldview'     // 世界观
-  | 'story-core'    // 故事核心
-  | 'characters'    // 角色
-  | 'relations'     // 角色关系
-  | 'factions'      // 势力
-  | 'power-system'  // 力量体系
-  | 'geography'     // 地理环境
-  | 'history'       // 历史年表
-  | 'items'         // 道具系统
-  | 'rules'         // 创作规则
-  | 'outline'       // 大纲
-  | 'editor'        // 写作
-  | 'foreshadow'    // 伏笔
-  | 'backup'        // 版本历史
-  | 'export'        // 导出
-  | 'settings'      // 设置
+  | 'info'
+  | 'worldview'
+  | 'story-core'
+  | 'characters'
+  | 'relations'
+  | 'factions'
+  | 'power-system'
+  | 'geography'
+  | 'history'
+  | 'items'
+  | 'rules'
+  | 'outline'
+  | 'editor'
+  | 'foreshadow'
+  | 'backup'
+  | 'export'
+  | 'settings'
 
 interface SidebarItem {
   id: SidebarModule
@@ -54,27 +55,34 @@ interface SidebarProps {
   onSelect: (module: SidebarModule) => void
   onBack: () => void
   projectName: string
+  collapsed: boolean
+  onToggleCollapse: () => void
 }
 
-export default function Sidebar({ active, onSelect, onBack, projectName }: SidebarProps) {
+export default function Sidebar({ active, onSelect, onBack, projectName, collapsed, onToggleCollapse }: SidebarProps) {
   return (
-    <aside className="w-52 bg-bg-surface border-r border-border flex flex-col h-full shrink-0">
-      {/* 顶部：返回 + 项目名 */}
-      <div className="p-3 border-b border-border">
+    <aside
+      className={`${collapsed ? 'w-14' : 'w-52'} bg-bg-surface border-r border-border flex flex-col h-full shrink-0 transition-[width] duration-200`}
+    >
+      {/* 顶部：返回 + 项目名（折叠时只显示返回图标） */}
+      <div className={`border-b border-border ${collapsed ? 'p-2' : 'p-3'}`}>
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-text-secondary hover:text-text-primary text-sm transition-colors mb-2"
+          title="返回首页"
+          className={`flex items-center gap-1.5 text-text-secondary hover:text-text-primary text-sm transition-colors ${collapsed ? 'justify-center w-full mb-0' : 'mb-2'}`}
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span>返回首页</span>
+          <ArrowLeft className="w-4 h-4 shrink-0" />
+          {!collapsed && <span>返回首页</span>}
         </button>
-        <h2 className="text-text-primary font-semibold text-sm truncate px-1" title={projectName}>
-          {projectName}
-        </h2>
+        {!collapsed && (
+          <h2 className="text-text-primary font-semibold text-sm truncate px-1" title={projectName}>
+            {projectName}
+          </h2>
+        )}
       </div>
 
       {/* 导航列表 */}
-      <nav className="flex-1 py-2 overflow-y-auto">
+      <nav className="flex-1 py-2 overflow-y-auto overflow-x-hidden">
         {SIDEBAR_ITEMS.map((item) => {
           const Icon = item.icon
           const isActive = active === item.id
@@ -82,8 +90,10 @@ export default function Sidebar({ active, onSelect, onBack, projectName }: Sideb
             <button
               key={item.id}
               onClick={() => onSelect(item.id)}
+              title={collapsed ? item.label : undefined}
               className={`
-                w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-all
+                w-full flex items-center gap-2.5 text-sm transition-all
+                ${collapsed ? 'justify-center px-0 py-2.5' : 'px-4 py-2.5'}
                 ${isActive
                   ? 'text-accent bg-accent/10 border-r-2 border-accent'
                   : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
@@ -91,11 +101,22 @@ export default function Sidebar({ active, onSelect, onBack, projectName }: Sideb
               `}
             >
               <Icon className="w-4 h-4 shrink-0" />
-              <span>{item.label}</span>
+              {!collapsed && <span>{item.label}</span>}
             </button>
           )
         })}
       </nav>
+
+      {/* 底部：折叠切换按钮 */}
+      <div className="border-t border-border p-2 flex justify-center">
+        <button
+          onClick={onToggleCollapse}
+          title={collapsed ? '展开侧边栏' : '折叠侧边栏'}
+          className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
+        >
+          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
+      </div>
     </aside>
   )
 }

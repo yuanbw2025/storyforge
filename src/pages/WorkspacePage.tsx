@@ -12,7 +12,9 @@ import { useItemSystemStore } from '../stores/item-system'
 import { useCreativeRulesStore } from '../stores/creative-rules'
 import { useCharacterRelationStore } from '../stores/character-relation'
 import { useAutoBackup } from '../hooks/useAutoBackup'
+import { PanelRight } from 'lucide-react'
 import Sidebar, { type SidebarModule } from '../components/layout/Sidebar'
+import PropertiesPanel from '../components/layout/PropertiesPanel'
 import ProjectInfoPanel from '../components/project/ProjectInfoPanel'
 import AIConfigPanel from '../components/settings/AIConfigPanel'
 import WorldviewPanel from '../components/worldview/WorldviewPanel'
@@ -40,6 +42,8 @@ export default function WorkspacePage() {
   const [activeModule, setActiveModule] = useState<SidebarModule>('info')
   const [loading, setLoading] = useState(true)
   const [editorNodeId, setEditorNodeId] = useState<number | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [showProperties, setShowProperties] = useState(false)
 
   // 自动定时备份（每 5 分钟）
   useAutoBackup(project?.id ?? null)
@@ -142,12 +146,30 @@ export default function WorkspacePage() {
         onSelect={(m) => { setActiveModule(m); if (m !== 'editor') setEditorNodeId(null) }}
         onBack={() => navigate('/')}
         projectName={project.name}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(v => !v)}
       />
 
       {/* 主面板 */}
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className="flex-1 overflow-y-auto p-6 relative">
+        {/* 属性面板切换按钮 */}
+        <button
+          onClick={() => setShowProperties(v => !v)}
+          title={showProperties ? '关闭属性面板' : '打开属性面板'}
+          className={`absolute top-4 right-4 p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors z-10 ${showProperties ? 'text-accent' : ''}`}
+        >
+          <PanelRight className="w-4 h-4" />
+        </button>
         {renderMainPanel()}
       </main>
+
+      {/* 右侧属性面板 */}
+      {showProperties && (
+        <PropertiesPanel
+          activeModule={activeModule}
+          onClose={() => setShowProperties(false)}
+        />
+      )}
     </div>
   )
 }

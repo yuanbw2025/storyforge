@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, MapPin, GitBranch, List } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, MapPin, GitBranch, List, Sparkles, Image, Copy, Check, Loader2 } from 'lucide-react'
 import { useGeographyStore } from '../../stores/geography'
+import { useAIStream } from '../../hooks/useAIStream'
+import { buildConceptMapPrompt, buildImageMapPrompt } from '../../lib/ai/prompts/geography'
 import type { Project, Location, LocationType } from '../../lib/types'
 import { nanoid } from '../../lib/utils/id'
 import LocationTreeMap from './LocationTreeMap'
@@ -27,7 +29,11 @@ export default function GeographyPanel({ project }: Props) {
   const [overview, setOverview] = useState('')
   const [locations, setLocations] = useState<Location[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [view, setView] = useState<'list' | 'map'>('map')
+  const [view, setView] = useState<'list' | 'map' | 'aimap'>('map')
+  const [svgContent, setSvgContent] = useState<string>('')
+  const [imagePrompt, setImagePrompt] = useState<string>('')
+  const [copied, setCopied] = useState(false)
+  const ai = useAIStream()
 
   useEffect(() => {
     loadAll(project.id!)
@@ -81,6 +87,32 @@ export default function GeographyPanel({ project }: Props) {
     saveLocations(updated)
   }
 
+  // AI 概念地图
+  const handleGenerateConceptMap = async () => {
+    setSvgContent('')
+    setView('aimap')
+    const messages = buildConceptMapPrompt(overview, locations)
+    const result = await ai.start(messages)
+    // 提取 SVG 代码（去掉可能的 markdown code block）
+    const svg = result
+      .replace(/^```(?:svg|xml)?\n?/i, '')
+      .replace(/\n?```$/i, '')
+      .trim()
+    setSvgContent(svg)
+  }
+
+  // AI 图像 prompt
+  const handleGenerateImagePrompt = () => {
+    const prompt = buildImageMapPrompt(project.name, overview, locations)
+    setImagePrompt(prompt)
+  }
+
+  const handleCopyPrompt = async () => {
+    await navigator.clipboard.writeText(imagePrompt)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div className="max-w-4xl">
       <h2 className="text-xl font-bold text-text-primary mb-4">🗺️ 地理环境</h2>
@@ -98,9 +130,9 @@ export default function GeographyPanel({ project }: Props) {
       </div>
 
       {/* 地点工具栏 */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <h3 className="text-base font-semibold text-text-primary">地点列表 ({locations.length})</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* 视图切换 */}
           <div className="flex bg-bg-elevated rounded-lg p-0.5">
             <button
@@ -110,6 +142,14 @@ export default function GeographyPanel({ project }: Props) {
               }`}
             >
               <GitBranch className="w-3.5 h-3.5" /> 树状图
+            </button>
+            <button
+              onClick={() => setView('aimap')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                view === 'aimap' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" /> AI地图
             </button>
             <button
               onClick={() => setView('list')}
@@ -132,6 +172,69 @@ export default function GeographyPanel({ project }: Props) {
 
       {/* 树状图视图 */}
       {view === 'map' && <div className="mb-6"><LocationTreeMap locations={locations} /></div>}
+
+      {/* AI 概念地图视图 */}
+      {view === 'aimap' && (
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <button
+              onClick={handleGenerateConceptMap}
+              disabled={ai.isStreaming || locations.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white text-sm rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors"
+            >
+              {ai.isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {ai.isStreaming ? 'AI 生成中...' : '生成 AI 概念地图'}
+            </button>
+            <button
+              onClick={handleGenerateImagePrompt}
+              disabled={locations.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-elevated text-text-secondary text-sm rounded-md hover:text-text-primary disabled:opacity-50 transition-colors"
+            >
+              <Image className="w-4 h-4" />
+              生成图像 Prompt
+            </button>
+            {locations.length === 0 && (
+              <span className="text-xs text-text-muted">请先在列表中添加地点</span>
+            )}
+          </div>
+
+          {/* SVG 概念地图输出 */}
+          {ai.isStreaming && !svgContent && (
+            <div className="flex items-center gap-2 text-text-muted text-sm py-8 justify-center">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              AI 正在绘制地图...
+            </div>
+          )}
+          {ai.error && (
+            <div className="text-error text-sm p-3 bg-error/10 rounded-lg">{ai.error}</div>
+          )}
+          {svgContent && (
+            <div
+              className="rounded-lg overflow-hidden border border-border bg-bg-base"
+              dangerouslySetInnerHTML={{ __html: svgContent }}
+            />
+          )}
+
+          {/* 图像生成 Prompt */}
+          {imagePrompt && (
+            <div className="mt-4 p-3 bg-bg-elevated border border-border rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-text-secondary flex items-center gap-1">
+                  <Image className="w-3.5 h-3.5" /> 图像生成 Prompt（适用于 Midjourney / DALL-E）
+                </span>
+                <button
+                  onClick={handleCopyPrompt}
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-accent transition-colors"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? '已复制' : '复制'}
+                </button>
+              </div>
+              <p className="text-xs text-text-muted leading-relaxed break-words select-all">{imagePrompt}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className={`space-y-2 ${view === 'map' ? 'hidden' : ''}`}>
         {locations.length === 0 ? (
