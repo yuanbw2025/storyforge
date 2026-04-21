@@ -1,0 +1,37 @@
+name: Build and Deploy to Gitee
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Push dist to Gitee gh-pages
+        run: |
+          cd dist
+          git init
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+          git add -A
+          git commit -m "Deploy $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          git push -f https://Aloneoneyuan:${{ secrets.GITEE_TOKEN }}@gitee.com/Aloneoneyuan/storyforge.git HEAD:gh-pages
+
+      - name: Trigger Gitee Pages rebuild
+        run: |
+          curl -s -X POST "https://gitee.com/api/v5/repos/Aloneoneyuan/storyforge/pages/builds" \
+            -H "Content-Type: application/json" \
+            -d "{\"access_token\":\"${{ secrets.GITEE_TOKEN }}\"}" || true
