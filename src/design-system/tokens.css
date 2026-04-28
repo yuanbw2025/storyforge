@@ -1,0 +1,270 @@
+/* ============================================================
+   StoryForge · Design Tokens
+   ------------------------------------------------------------
+   单一真相源。所有组件、所有页面、三种 theme 都从这里取值。
+   修改这里 = 修改全局视觉。
+   ============================================================ */
+
+/* ---------- 1. 全局不变量（与 theme 无关）---------- */
+:root {
+  /* —— 字体族 —— */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Source Serif 4", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+
+  /* —— 字号阶梯（基于 1.25 倍率）—— */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+  --fs-3xl: 32px;
+  --fs-4xl: 44px;
+  --fs-5xl: 64px;
+
+  /* —— 字重 —— */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* —— 行高 —— */
+  --lh-tight: 1.2;
+  --lh-snug: 1.45;
+  --lh-normal: 1.6;
+  --lh-relaxed: 1.8;
+  --lh-prose: 2.1;        /* 仅用于 C 模式下的中文正文 */
+
+  /* —— 字间距（中文/英文 Caps）—— */
+  --ls-tight: -0.4px;
+  --ls-normal: 0;
+  --ls-wide: 1.5px;
+  --ls-wider: 3px;
+  --ls-widest: 4px;
+
+  /* —— 间距（4px 基线）—— */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* —— 圆角 —— */
+  --radius-none: 0;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-pill: 999px;
+
+  /* —— 边框宽度 —— */
+  --border-thin: 1px;
+  --border-medium: 1.5px;
+  --border-thick: 2px;
+
+  /* —— 过渡 —— */
+  --transition-fast: 0.12s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* —— Z-index —— */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-sticky: 100;
+  --z-overlay: 1000;
+  --z-modal: 2000;
+  --z-toast: 3000;
+
+  /* ============================================================
+     品牌色（三 theme 共享，全局唯一身份色）
+     ============================================================ */
+  --brand-flame: #D97757;        /* 火光橙 — 主品牌色 */
+  --brand-flame-deep: #B85C3F;   /* 火光深 — hover/pressed */
+  --brand-flame-soft: rgba(217, 119, 87, 0.12);
+  --brand-gold: #C8A155;         /* 金线 — B 模式装饰 */
+  --brand-ember: #8B3E1F;        /* 余烬 — 最深的暖调 */
+
+  /* —— 语义色（三 theme 共享）—— */
+  --color-success: #4ADE80;
+  --color-warning: #FBBF24;
+  --color-error: #EF4444;
+  --color-info: #60A5FA;
+}
+
+/* ============================================================
+   2. Theme: WORK（A · 暗夜书房）
+   ------------------------------------------------------------
+   日常生产力主屏：编辑器、大纲、伏笔看板、设置、所有列表
+   深色 / 紧凑 / Inter / 信息密度高
+   ============================================================ */
+[data-theme="work"] {
+  /* 背景层级 */
+  --bg-base: #0E0D0C;
+  --bg-surface: #161412;
+  --bg-elevated: #1F1C19;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+  --bg-active: rgba(217, 119, 87, 0.10);
+
+  /* 文本 */
+  --text-primary: #EFEAE2;
+  --text-secondary: #9A9389;
+  --text-muted: #5F5950;
+  --text-inverse: #0E0D0C;
+
+  /* 边框 */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  /* 强调（继承品牌火光） */
+  --accent: var(--brand-flame);
+  --accent-deep: var(--brand-flame-deep);
+  --accent-soft: var(--brand-flame-soft);
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+
+  /* UI 字体 = 无衬线 */
+  --font-ui: var(--font-sans);
+  --font-content: var(--font-sans);   /* 工作区不强调内容 */
+
+  /* 信息密度 = 紧凑 */
+  --density-padding-x: var(--space-4);
+  --density-padding-y: var(--space-2);
+  --density-row-height: 32px;
+}
+
+/* ============================================================
+   3. Theme: FORGE（B · 熔炉）
+   ------------------------------------------------------------
+   仪式时刻：首页、欢迎页、新建项目向导、章节扉页、导出预览、空状态
+   暖色 / 戏剧化 / 大衬线 / 火光金线装饰
+   ============================================================ */
+[data-theme="forge"] {
+  /* 背景层级 */
+  --bg-base: #1A0F0A;
+  --bg-surface: #25180F;
+  --bg-elevated: #2F1F14;
+  --bg-hover: rgba(217, 119, 87, 0.08);
+  --bg-active: rgba(217, 119, 87, 0.16);
+
+  /* 文本 */
+  --text-primary: #F5E6D3;
+  --text-secondary: #B89A7A;
+  --text-muted: #6F5A45;
+  --text-inverse: #1A0F0A;
+
+  /* 边框 */
+  --border-subtle: rgba(200, 161, 85, 0.12);
+  --border-default: rgba(200, 161, 85, 0.22);
+  --border-strong: rgba(200, 161, 85, 0.40);
+
+  /* 强调 */
+  --accent: var(--brand-flame);
+  --accent-deep: var(--brand-flame-deep);
+  --accent-soft: rgba(217, 119, 87, 0.18);
+
+  /* 阴影（带橙色光晕） */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 24px rgba(139, 62, 31, 0.35);
+  --shadow-lg: 0 16px 64px rgba(139, 62, 31, 0.5);
+  --shadow-glow: 0 0 80px rgba(217, 119, 87, 0.25);
+
+  /* UI 用衬线，内容也用衬线 */
+  --font-ui: var(--font-serif);
+  --font-content: var(--font-serif);
+
+  /* 密度 = 宽松 */
+  --density-padding-x: var(--space-8);
+  --density-padding-y: var(--space-4);
+  --density-row-height: 56px;
+}
+
+/* ============================================================
+   4. Theme: PAPER（C · 纸与墨）
+   ------------------------------------------------------------
+   写作焦点模式、章节预览、成稿视图、阅读模式
+   浅色 / 大量留白 / 衬线正文 / AI 退到边批
+   ============================================================ */
+[data-theme="paper"] {
+  /* 背景层级 */
+  --bg-base: #FAF7F0;
+  --bg-surface: #F5F1E8;
+  --bg-elevated: #FFFFFF;
+  --bg-hover: rgba(31, 27, 22, 0.04);
+  --bg-active: rgba(217, 119, 87, 0.10);
+
+  /* 文本 */
+  --text-primary: #1F1B16;
+  --text-secondary: #56503F;
+  --text-muted: #8A7E6A;
+  --text-inverse: #FAF7F0;
+
+  /* 边框 */
+  --border-subtle: rgba(31, 27, 22, 0.06);
+  --border-default: rgba(31, 27, 22, 0.12);
+  --border-strong: rgba(31, 27, 22, 0.22);
+
+  /* 强调 */
+  --accent: var(--brand-flame-deep);   /* 浅色背景下用深一点的橙 */
+  --accent-deep: var(--brand-ember);
+  --accent-soft: rgba(184, 92, 63, 0.10);
+
+  /* 阴影（更轻） */
+  --shadow-sm: 0 1px 2px rgba(31, 27, 22, 0.04);
+  --shadow-md: 0 4px 12px rgba(31, 27, 22, 0.08);
+  --shadow-lg: 0 12px 40px rgba(31, 27, 22, 0.10);
+
+  /* UI 无衬线，内容衬线 */
+  --font-ui: var(--font-sans);
+  --font-content: var(--font-serif);
+
+  /* 密度 = 极宽松 */
+  --density-padding-x: var(--space-10);
+  --density-padding-y: var(--space-5);
+  --density-row-height: 48px;
+}
+
+/* ============================================================
+   5. 自动模式：跟随系统深浅
+   ------------------------------------------------------------
+   用法：<html data-theme="auto">
+   系统深色 → work；系统浅色 → paper
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] { /* 镜像 work */
+    --bg-base: #0E0D0C; --bg-surface: #161412; --bg-elevated: #1F1C19;
+    --bg-hover: rgba(255,255,255,0.04); --bg-active: rgba(217,119,87,0.10);
+    --text-primary: #EFEAE2; --text-secondary: #9A9389; --text-muted: #5F5950; --text-inverse: #0E0D0C;
+    --border-subtle: rgba(255,255,255,0.06); --border-default: rgba(255,255,255,0.10); --border-strong: rgba(255,255,255,0.18);
+    --accent: var(--brand-flame); --accent-deep: var(--brand-flame-deep); --accent-soft: var(--brand-flame-soft);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.3); --shadow-md: 0 4px 12px rgba(0,0,0,0.35); --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+    --font-ui: var(--font-sans); --font-content: var(--font-sans);
+    --density-padding-x: var(--space-4); --density-padding-y: var(--space-2); --density-row-height: 32px;
+  }
+}
+@media (prefers-color-scheme: light) {
+  [data-theme="auto"] { /* 镜像 paper */
+    --bg-base: #FAF7F0; --bg-surface: #F5F1E8; --bg-elevated: #FFFFFF;
+    --bg-hover: rgba(31,27,22,0.04); --bg-active: rgba(217,119,87,0.10);
+    --text-primary: #1F1B16; --text-secondary: #56503F; --text-muted: #8A7E6A; --text-inverse: #FAF7F0;
+    --border-subtle: rgba(31,27,22,0.06); --border-default: rgba(31,27,22,0.12); --border-strong: rgba(31,27,22,0.22);
+    --accent: var(--brand-flame-deep); --accent-deep: var(--brand-ember); --accent-soft: rgba(184,92,63,0.10);
+    --shadow-sm: 0 1px 2px rgba(31,27,22,0.04); --shadow-md: 0 4px 12px rgba(31,27,22,0.08); --shadow-lg: 0 12px 40px rgba(31,27,22,0.10);
+    --font-ui: var(--font-sans); --font-content: var(--font-serif);
+    --density-padding-x: var(--space-10); --density-padding-y: var(--space-5); --density-row-height: 48px;
+  }
+}

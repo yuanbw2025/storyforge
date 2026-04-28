@@ -139,7 +139,7 @@ export default function WorkspacePage() {
   }
 
   return (
-    <div className="h-screen bg-bg-base flex overflow-hidden">
+    <div data-theme="work" className="h-screen bg-bg-base flex overflow-hidden">
       {/* 左侧导航 */}
       <Sidebar
         active={activeModule}

@@ -2,261 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ========================================
-   🌑 深夜书房（默认主题）
-   纯黑底 + 靛蓝强调
-   ======================================== */
+/*
+ * tokens.css 和 components.css 已在 main.tsx 中于本文件之前 import。
+ * 这里只做两件事：
+ *   1. 为 Tailwind 的旧 class（bg-bg-base / text-text-primary / ...）提供兼容别名
+ *   2. 全局 scrollbar / selection 样式
+ *
+ * 不要在此处硬编码任何颜色或间距——走 var(--xxx)。
+ */
+
+/* ── 旧 token 别名（兼容现有 Tailwind class 里的 --accent-hover / --accent-muted / --border）─── */
 :root,
-[data-theme="midnight"] {
-  --bg-base: #0a0a0f;
-  --bg-surface: #12121a;
-  --bg-elevated: #1a1a2e;
-  --bg-hover: #252540;
-
-  --text-primary: #e8e8ed;
-  --text-secondary: #8888a0;
-  --text-muted: #555570;
-
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
-  --accent-muted: #4338ca;
-
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --info: #3b82f6;
-
-  --border: #2a2a40;
-  --border-hover: #3a3a55;
+[data-theme="work"],
+[data-theme="forge"],
+[data-theme="paper"],
+[data-theme="auto"] {
+  --accent-hover: var(--accent-deep);
+  --accent-muted: var(--accent-soft);
+  --border:       var(--border-default);
+  --border-hover: var(--border-strong);
 }
 
-/* ========================================
-   🌃 暗夜蓝
-   深蓝灰底 + 青蓝强调
-   ======================================== */
-[data-theme="ocean"] {
-  --bg-base: #0f172a;
-  --bg-surface: #1e293b;
-  --bg-elevated: #273548;
-  --bg-hover: #334155;
-
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-
-  --accent: #38bdf8;
-  --accent-hover: #7dd3fc;
-  --accent-muted: #0284c7;
-
-  --success: #34d399;
-  --warning: #fbbf24;
-  --error: #f87171;
-  --info: #60a5fa;
-
-  --border: #334155;
-  --border-hover: #475569;
-}
-
-/* ========================================
-   🌫️ 墨灰
-   中性灰底 + 暖橙强调
-   ======================================== */
-[data-theme="graphite"] {
-  --bg-base: #1c1c1e;
-  --bg-surface: #2c2c2e;
-  --bg-elevated: #3a3a3c;
-  --bg-hover: #48484a;
-
-  --text-primary: #f5f5f7;
-  --text-secondary: #a1a1a6;
-  --text-muted: #6e6e73;
-
-  --accent: #f59e0b;
-  --accent-hover: #fbbf24;
-  --accent-muted: #d97706;
-
-  --success: #34d399;
-  --warning: #fbbf24;
-  --error: #fb7185;
-  --info: #60a5fa;
-
-  --border: #3a3a3c;
-  --border-hover: #48484a;
-}
-
-/* ========================================
-   ☁️ 烟白
-   浅灰底 + 靛蓝强调
-   ======================================== */
-[data-theme="mist"] {
-  --bg-base: #f1f5f9;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f8fafc;
-  --bg-hover: #e2e8f0;
-
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --text-muted: #94a3b8;
-
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --accent-muted: #a5b4fc;
-
-  --success: #16a34a;
-  --warning: #d97706;
-  --error: #dc2626;
-  --info: #2563eb;
-
-  --border: #e2e8f0;
-  --border-hover: #cbd5e1;
-}
-
-/* ========================================
-   📜 暖纸
-   米色纸张底 + 棕色强调
-   ======================================== */
-[data-theme="parchment"] {
-  --bg-base: #faf7f2;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f5f0e8;
-  --bg-hover: #ede5d8;
-
-  --text-primary: #292524;
-  --text-secondary: #78716c;
-  --text-muted: #a8a29e;
-
-  --accent: #92400e;
-  --accent-hover: #78350f;
-  --accent-muted: #d6a86c;
-
-  --success: #15803d;
-  --warning: #b45309;
-  --error: #b91c1c;
-  --info: #1d4ed8;
-
-  --border: #e7e0d5;
-  --border-hover: #d6cfc4;
-}
-
-/* ========================================
-   全局基础样式
-   ======================================== */
+/* ── Scrollbar ─── */
 * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
 }
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial,
-    sans-serif;
-  background-color: var(--bg-base);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-pill);
 }
+*::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
-#root {
-  min-height: 100vh;
-}
-
-/* 滚动条样式 */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--border-hover);
-}
-
-/* 选中文字颜色 */
+/* ── 选中高亮 ─── */
 ::selection {
-  background: var(--accent-muted);
+  background: var(--accent-soft);
   color: var(--text-primary);
-}
-
-/* ========================================
-   ✍️ TipTap 富文本编辑器样式
-   ======================================== */
-.tiptap-editor {
-  min-height: 100%;
-  outline: none;
-}
-
-.tiptap-editor p {
-  margin: 0 0 0.75em 0;
-}
-
-.tiptap-editor p:last-child {
-  margin-bottom: 0;
-}
-
-.tiptap-editor h1,
-.tiptap-editor h2,
-.tiptap-editor h3,
-.tiptap-editor h4 {
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.3;
-  margin: 1.2em 0 0.6em 0;
-}
-
-.tiptap-editor h2 { font-size: 1.3em; }
-.tiptap-editor h3 { font-size: 1.15em; }
-.tiptap-editor h4 { font-size: 1.05em; }
-
-.tiptap-editor strong { font-weight: 700; color: var(--text-primary); }
-.tiptap-editor em { font-style: italic; }
-
-.tiptap-editor ul,
-.tiptap-editor ol {
-  padding-left: 1.5em;
-  margin: 0.5em 0 0.75em 0;
-}
-
-.tiptap-editor li {
-  margin: 0.2em 0;
-}
-
-.tiptap-editor blockquote {
-  border-left: 3px solid var(--accent);
-  padding: 0.3em 0 0.3em 1em;
-  margin: 0.75em 0;
-  color: var(--text-secondary);
-  background: var(--bg-elevated);
-  border-radius: 0 4px 4px 0;
-}
-
-.tiptap-editor hr {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 1.2em 0;
-}
-
-.tiptap-editor code {
-  background: var(--bg-elevated);
-  padding: 0.1em 0.35em;
-  border-radius: 3px;
-  font-size: 0.9em;
-  color: var(--accent);
-}
-
-/* 占位符 */
-.tiptap-editor p.is-editor-empty:first-child::before {
-  content: attr(data-placeholder);
-  color: var(--text-muted);
-  pointer-events: none;
-  height: 0;
-  float: left;
 }

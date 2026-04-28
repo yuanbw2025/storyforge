@@ -46,7 +46,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-base">
+    <div data-theme="forge" className="min-h-screen bg-bg-base">
       {/* 顶栏 */}
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
