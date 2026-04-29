@@ -15,6 +15,7 @@ import type {
   CreativeRules,
   CharacterRelation,
   Snapshot,
+  Reference,
 } from '../types'
 
 class StoryForgeDB extends Dexie {
@@ -33,6 +34,7 @@ class StoryForgeDB extends Dexie {
   creativeRules!: Table<CreativeRules>
   characterRelations!: Table<CharacterRelation>
   snapshots!: Table<Snapshot>
+  references!: Table<Reference>
 
   constructor() {
     super('storyforge')
@@ -62,6 +64,11 @@ class StoryForgeDB extends Dexie {
 
     this.version(4).stores({
       snapshots: '++id, projectId, type, createdAt',
+    })
+
+    // v5: 新增参考书目表，projects 表支持 genres[] / status / coverImage
+    this.version(5).stores({
+      references: '++id, projectId, type, createdAt',
     })
   }
 }

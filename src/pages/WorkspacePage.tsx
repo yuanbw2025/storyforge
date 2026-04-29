@@ -11,12 +11,15 @@ import { useHistoryStore } from '../stores/history'
 import { useItemSystemStore } from '../stores/item-system'
 import { useCreativeRulesStore } from '../stores/creative-rules'
 import { useCharacterRelationStore } from '../stores/character-relation'
+import { useReferenceStore } from '../stores/reference'
 import { useAutoBackup } from '../hooks/useAutoBackup'
 import { PanelRight } from 'lucide-react'
 import Sidebar, { type SidebarModule } from '../components/layout/Sidebar'
 import PropertiesPanel from '../components/layout/PropertiesPanel'
 import ProjectInfoPanel from '../components/project/ProjectInfoPanel'
+import ReferencePanel from '../components/project/ReferencePanel'
 import AIConfigPanel from '../components/settings/AIConfigPanel'
+import DataManagementPanel from '../components/data/DataManagementPanel'
 import WorldviewPanel from '../components/worldview/WorldviewPanel'
 import StoryCorePanel from '../components/worldview/StoryCorePanel'
 import PowerSystemPanel from '../components/worldview/PowerSystemPanel'
@@ -30,8 +33,6 @@ import HistoryPanel from '../components/history/HistoryPanel'
 import ItemSystemPanel from '../components/items/ItemSystemPanel'
 import CreativeRulesPanel from '../components/rules/CreativeRulesPanel'
 import CharacterRelationPanel from '../components/relations/CharacterRelationPanel'
-import VersionHistoryPanel from '../components/backup/VersionHistoryPanel'
-import ExportPanel from '../components/export/ExportPanel'
 import type { Project } from '../lib/types'
 
 export default function WorkspacePage() {
@@ -76,6 +77,7 @@ export default function WorkspacePage() {
         useItemSystemStore.getState().loadAll(pid),
         useCreativeRulesStore.getState().loadAll(pid),
         useCharacterRelationStore.getState().loadAll(pid),
+        useReferenceStore.getState().loadAll(pid),
       ])
 
       setLoading(false)
@@ -101,6 +103,8 @@ export default function WorkspacePage() {
     switch (activeModule) {
       case 'info':
         return <ProjectInfoPanel project={project} onUpdate={(p) => setProject(p)} />
+      case 'references':
+        return <ReferencePanel project={project} />
       case 'worldview':
         return <WorldviewPanel project={project} />
       case 'story-core':
@@ -127,12 +131,13 @@ export default function WorkspacePage() {
         return <ChapterEditor project={project} outlineNodeId={editorNodeId} />
       case 'foreshadow':
         return <ForeshadowPanel project={project} />
-      case 'backup':
-        return <VersionHistoryPanel project={project} />
-      case 'export':
-        return <ExportPanel project={project} onImported={(newId) => navigate(`/workspace/${newId}`)} />
       case 'settings':
         return <AIConfigPanel />
+      // 数据管理（含 export + backup legacy aliases）
+      case 'data-management':
+      case 'backup':
+      case 'export':
+        return <DataManagementPanel project={project} onImported={(newId) => navigate(`/workspace/${newId}`)} />
       default:
         return null
     }

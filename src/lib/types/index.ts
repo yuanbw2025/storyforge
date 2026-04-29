@@ -1,4 +1,5 @@
 export * from './project'
+export * from './reference'
 export * from './ai'
 export * from './worldview'
 export * from './character'

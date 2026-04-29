@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { Project, CreateProjectInput } from '../lib/types'
+import { migrateGenre } from '../lib/types'
 
 interface ProjectStore {
   projects: Project[]
@@ -22,12 +23,16 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   loadProjects: async () => {
     set({ loading: true })
-    const projects = await db.projects.orderBy('updatedAt').reverse().toArray()
+    const raw = await db.projects.orderBy('updatedAt').reverse().toArray()
+    // 兼容旧数据：确保每条记录都有 genres[] 和 status
+    const projects = raw.map(migrateGenre)
     set({ projects, loading: false })
   },
 
   loadProject: async (id: number) => {
-    const project = await db.projects.get(id)
+    const raw = await db.projects.get(id)
+    if (!raw) return undefined
+    const project = migrateGenre(raw)
     set({ currentProjectId: id })
     return project
   },
@@ -36,6 +41,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const now = Date.now()
     const id = await db.projects.add({
       ...data,
+      genres: data.genres ?? [],
+      status: data.status ?? 'drafting',
       createdAt: now,
       updatedAt: now,
     } as Project)
@@ -54,7 +61,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       db.projects, db.worldviews, db.storyCores, db.powerSystems,
       db.characters, db.factions, db.outlineNodes, db.chapters, db.foreshadows,
       db.geographies, db.histories, db.itemSystems, db.creativeRules,
-      db.characterRelations, db.snapshots,
+      db.characterRelations, db.snapshots, db.references,
     ], async () => {
       await db.projects.delete(id)
       await db.worldviews.where('projectId').equals(id).delete()
@@ -71,6 +78,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       await db.creativeRules.where('projectId').equals(id).delete()
       await db.characterRelations.where('projectId').equals(id).delete()
       await db.snapshots.where('projectId').equals(id).delete()
+      await db.references.where('projectId').equals(id).delete()
     })
     if (get().currentProjectId === id) {
       set({ currentProjectId: null })
