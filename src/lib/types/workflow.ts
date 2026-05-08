@@ -8,6 +8,22 @@
  */
 import type { PromptModuleKey } from './prompt'
 
+/**
+ * 步骤输出的"自动写回"目标（Phase 17）
+ *
+ * 工作流跑完一步后，输出文本可以自动保存到当前项目的对应数据：
+ * - worldview-field: 写到 worldview[field]（如 worldOrigin、historyLine）
+ * - storyCore-field: 写到 storyCore[field]（如 logline、theme）
+ * - chapter-content: 写到指定章节的 content（需要 chapterId 或 outlineNodeId）
+ * - none: 不自动写，仅复制到剪贴板（默认）
+ *
+ * 复杂目标（角色/大纲多节点）需要 AI 输出结构化 JSON，留待后续 Phase。
+ */
+export type SaveTarget =
+  | { type: 'worldview-field'; field: string; mode?: 'replace' | 'append' }
+  | { type: 'storyCore-field'; field: string; mode?: 'replace' | 'append' }
+  | { type: 'creativeRules-field'; field: string; mode?: 'replace' | 'append' }
+
 export interface PromptWorkflowStep {
   /** UUID（前端生成） */
   stepId: string
@@ -29,6 +45,8 @@ export interface PromptWorkflowStep {
   parameterValues?: Record<string, unknown>
   /** 给 AI 的额外提示（每步可独立设置） */
   userHint?: string
+  /** Phase 17：本步输出的自动写回目标 */
+  saveTarget?: SaveTarget
 }
 
 export interface PromptWorkflow {

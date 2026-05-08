@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { Plus, Upload, Download, Layers, FileText, Workflow } from 'lucide-react'
 import { usePromptStore } from '../../../stores/prompt'
 import type { PromptTemplate } from '../../../lib/types/prompt'
+import type { Project } from '../../../lib/types'
 import { GENRE_PACKS } from '../../../lib/ai/prompt-seeds-genre-packs'
 import PromptTemplateList from './PromptTemplateList'
 import PromptTemplateEditor from './PromptTemplateEditor'
@@ -9,7 +10,12 @@ import PromptWorkflowsPanel from './PromptWorkflowsPanel'
 
 type ScopeFilter = 'all' | 'system' | 'user'
 
-export default function PromptManagerPanel() {
+interface Props {
+  /** 当前项目 — 工作流的「保存到项目」需要 */
+  project?: Project
+}
+
+export default function PromptManagerPanel({ project }: Props = {}) {
   const templates = usePromptStore(s => s.templates)
   const saveTemplate = usePromptStore(s => s.saveTemplate)
   const setActive = usePromptStore(s => s.setActive)
@@ -142,7 +148,7 @@ export default function PromptManagerPanel() {
 
       {tab === 'workflows' ? (
         <div className="flex-1 overflow-y-auto">
-          <PromptWorkflowsPanel />
+          <PromptWorkflowsPanel project={project} />
         </div>
       ) : (
         <PromptTemplatesView

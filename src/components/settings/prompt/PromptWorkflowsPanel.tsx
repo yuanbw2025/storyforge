@@ -1,16 +1,23 @@
 import { useState, useEffect } from 'react'
 import {
   Play, Trash2, Copy, ArrowRight, Square,
-  Sparkles, Check, X, Loader2, ChevronRight,
+  Sparkles, Check, X, Loader2, ChevronRight, Save, ClipboardCopy,
 } from 'lucide-react'
 import { useWorkflowStore } from '../../../stores/workflow'
 import { usePromptStore } from '../../../stores/prompt'
+import { useWorldviewStore } from '../../../stores/worldview'
+import { useCreativeRulesStore } from '../../../stores/creative-rules'
 import { useAIStream } from '../../../hooks/useAIStream'
 import { renderPrompt } from '../../../lib/ai/prompt-engine'
-import type { PromptWorkflow, PromptWorkflowStep } from '../../../lib/types/workflow'
+import type { PromptWorkflow, PromptWorkflowStep, SaveTarget } from '../../../lib/types/workflow'
+import type { Project } from '../../../lib/types'
+
+interface Props {
+  project?: Project
+}
 
 /** 工作流面板：列表 + Runner（在同一面板切换） */
-export default function PromptWorkflowsPanel() {
+export default function PromptWorkflowsPanel({ project }: Props = {}) {
   const workflows = useWorkflowStore(s => s.workflows)
   const cloneWorkflow = useWorkflowStore(s => s.clone)
   const removeWorkflow = useWorkflowStore(s => s.remove)
@@ -26,7 +33,7 @@ export default function PromptWorkflowsPanel() {
       setRunningId(null)
       return null
     }
-    return <WorkflowRunner workflow={wf} onClose={() => setRunningId(null)} />
+    return <WorkflowRunner workflow={wf} project={project} onClose={() => setRunningId(null)} />
   }
 
   return (
@@ -110,6 +117,7 @@ export default function PromptWorkflowsPanel() {
 
 interface RunnerProps {
   workflow: PromptWorkflow
+  project?: Project
   onClose: () => void
 }
 
@@ -120,8 +128,57 @@ interface StepResult {
   error?: string
 }
 
-function WorkflowRunner({ workflow, onClose }: RunnerProps) {
+function WorkflowRunner({ workflow, project, onClose }: RunnerProps) {
   const ai = useAIStream()
+  const { worldview, saveWorldview, storyCore, saveStoryCore, loadAll: loadWorldview } = useWorldviewStore()
+  const { creativeRules, save: saveCreativeRules, loadAll: loadCreativeRules } = useCreativeRulesStore()
+  const [savedSteps, setSavedSteps] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (project?.id) {
+      loadWorldview(project.id)
+      loadCreativeRules(project.id)
+    }
+  }, [project?.id, loadWorldview, loadCreativeRules])
+
+  /** 写入对应模块 */
+  const handleSaveTarget = async (stepId: string, output: string, target: SaveTarget) => {
+    if (!project?.id) {
+      alert('未关联项目，无法自动保存。请进入某个项目后再运行。')
+      return
+    }
+    try {
+      if (target.type === 'worldview-field') {
+        const existing = (worldview?.[target.field as keyof typeof worldview] as string) || ''
+        const next = target.mode === 'append' && existing ? `${existing}\n\n${output}` : output
+        await saveWorldview({ projectId: project.id, [target.field]: next })
+      } else if (target.type === 'storyCore-field') {
+        const existing = (storyCore?.[target.field as keyof typeof storyCore] as string) || ''
+        const next = target.mode === 'append' && existing ? `${existing}\n\n${output}` : output
+        await saveStoryCore({ projectId: project.id, [target.field]: next })
+      } else if (target.type === 'creativeRules-field') {
+        const existing = (creativeRules?.[target.field as keyof typeof creativeRules] as string) || ''
+        const next = target.mode === 'append' && existing ? `${existing}\n\n${output}` : output
+        await saveCreativeRules({ projectId: project.id, [target.field]: next })
+      }
+      setSavedSteps(prev => new Set(prev).add(stepId))
+    } catch (e) {
+      alert(`保存失败：${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  const targetLabel = (target: SaveTarget): string => {
+    const fieldMap: Record<string, string> = {
+      worldOrigin: '世界起源', powerHierarchy: '力量层次',
+      historyLine: '世界历史线', summary: '世界观摘要',
+      logline: '一句话故事', concept: '故事概念', theme: '主题',
+      writingStyle: '写作风格', toneAndMood: '基调氛围',
+    }
+    const label = fieldMap[target.field] || target.field
+    if (target.type === 'worldview-field') return `世界观.${label}`
+    if (target.type === 'storyCore-field') return `故事.${label}`
+    return `创作规则.${label}`
+  }
   const [results, setResults] = useState<Map<string, StepResult>>(() => {
     const m = new Map<string, StepResult>()
     workflow.steps.forEach(s => m.set(s.stepId, { stepId: s.stepId, output: '', status: 'pending' }))
@@ -278,6 +335,10 @@ function WorkflowRunner({ workflow, onClose }: RunnerProps) {
             isCurrent={idx === currentIndex && globalStatus === 'running'}
             onSkip={() => handleSkip(step.stepId)}
             onRetry={() => handleRetryStep(idx)}
+            onSave={(output, target) => handleSaveTarget(step.stepId, output, target)}
+            saved={savedSteps.has(step.stepId)}
+            targetLabel={targetLabel}
+            hasProject={!!project?.id}
           />
         ))}
       </div>
@@ -297,6 +358,7 @@ function WorkflowRunner({ workflow, onClose }: RunnerProps) {
 
 function StepCard({
   step, index, result, isCurrent, onSkip, onRetry,
+  onSave, saved, targetLabel, hasProject,
 }: {
   step: PromptWorkflowStep
   index: number
@@ -304,8 +366,21 @@ function StepCard({
   isCurrent: boolean
   onSkip: () => void
   onRetry: () => void
+  onSave: (output: string, target: SaveTarget) => void
+  saved: boolean
+  targetLabel: (target: SaveTarget) => string
+  hasProject: boolean
 }) {
   const [expanded, setExpanded] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    if (!result.output) return
+    navigator.clipboard.writeText(result.output).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
 
   const statusIcon = {
     pending:  <ChevronRight className="w-4 h-4 text-text-muted" />,
@@ -362,13 +437,45 @@ function StepCard({
             <p className="text-xs text-error">⚠ {result.error}</p>
           )}
           {(result.status === 'done' || result.status === 'failed') && (
-            <div className="flex items-center gap-1 pt-1">
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
               <button
                 onClick={onRetry}
                 className="text-xs text-accent hover:underline"
               >
                 重新生成
               </button>
+              {result.status === 'done' && (
+                <>
+                  <span className="text-text-muted">·</span>
+                  <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary"
+                  >
+                    {copied ? <Check className="w-3 h-3 text-success" /> : <ClipboardCopy className="w-3 h-3" />}
+                    {copied ? '已复制' : '复制'}
+                  </button>
+                  {step.saveTarget && (
+                    <>
+                      <span className="text-text-muted">·</span>
+                      <button
+                        onClick={() => onSave(result.output, step.saveTarget!)}
+                        disabled={saved || !hasProject}
+                        title={!hasProject ? '需先进入项目' : `自动写入 ${targetLabel(step.saveTarget)}`}
+                        className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${
+                          saved
+                            ? 'bg-success/15 text-success'
+                            : !hasProject
+                              ? 'text-text-muted opacity-50 cursor-not-allowed'
+                              : 'bg-accent/10 text-accent hover:bg-accent/20'
+                        }`}
+                      >
+                        {saved ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
+                        {saved ? `已存到 ${targetLabel(step.saveTarget)}` : `保存到 ${targetLabel(step.saveTarget)}`}
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
               {result.status !== 'done' && (
                 <>
                   <span className="text-text-muted">·</span>

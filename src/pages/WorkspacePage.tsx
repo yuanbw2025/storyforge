@@ -171,7 +171,7 @@ export default function WorkspacePage() {
 
       // ── 提示词库（一级） ───────────────────────────────────────────
       case 'prompts':
-        return <PromptManagerPanel />
+        return <PromptManagerPanel project={project} />
 
       // ── 设置区 ─────────────────────────────────────────────────────
       case 'version-history':

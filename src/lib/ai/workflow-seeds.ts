@@ -22,6 +22,7 @@ export const SYSTEM_WORKFLOW_SEEDS: WorkflowSeed[] = [
         promptModuleKey: 'story.generate',
         userHint: '请用一句话讲清楚这部小说要讲什么',
         userConfirmRequired: false,
+        saveTarget: { type: 'storyCore-field', field: 'logline', mode: 'replace' },
       },
       {
         stepId: uid(),
@@ -30,6 +31,7 @@ export const SYSTEM_WORKFLOW_SEEDS: WorkflowSeed[] = [
         inputMapping: { previousOutput: 'storyCore' },
         userHint: '基于上一步的故事核心，构思世界的来源和力量层次',
         userConfirmRequired: true,
+        saveTarget: { type: 'worldview-field', field: 'worldOrigin', mode: 'replace' },
       },
       {
         stepId: uid(),
@@ -108,6 +110,7 @@ export const SYSTEM_WORKFLOW_SEEDS: WorkflowSeed[] = [
         promptModuleKey: 'worldview.dimension',
         userHint: '生成 200-400 字的世界观精华摘要，用于后续 AI 上下文',
         userConfirmRequired: false,
+        saveTarget: { type: 'worldview-field', field: 'summary', mode: 'replace' },
       },
       {
         stepId: uid(),
