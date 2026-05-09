@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="work">
+<head>
+<meta charset="UTF-8"/>
+<title>StoryForge · 组件库 v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tokens.css"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--bg-base); color: var(--text-primary);
+         -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.5; }
+
+  .shell { max-width: 1100px; margin: 0 auto; padding: 48px 32px 80px; }
+  .sec { margin-bottom: 56px; }
+  .sec h2 { font-family: var(--font-serif); font-size: 26px; font-weight: 500; margin: 0 0 6px; letter-spacing: -0.3px; }
+  .sec .desc { color: var(--text-secondary); font-size: 13px; margin: 0 0 20px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 18px;
+         border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); margin-bottom: 10px; }
+  .row-label { width: 100%; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+               margin-bottom: 4px; letter-spacing: 0.5px; }
+
+  /* Theme bar */
+  .tbar { position: sticky; top: 0; z-index: 10; background: var(--bg-surface); border-bottom: 1px solid var(--border);
+          padding: 12px 32px; display: flex; align-items: center; gap: 14px; }
+  .tbar .brand { font-family: var(--font-serif); font-size: 17px; letter-spacing: -0.3px; }
+  .tbar .sub { color: var(--text-secondary); font-size: 12px; }
+  .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .toggle button { background: transparent; border: 0; padding: 5px 14px; font-family: var(--font-sans);
+                   font-size: 12px; color: var(--text-secondary); cursor: pointer;
+                   border-right: 1px solid var(--border); }
+  .toggle button:last-child { border-right: 0; }
+  .toggle button.on { background: var(--accent); color: #fff; }
+
+  /* Swatches */
+  .sg { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .sw { padding: 14px; border-radius: 6px; border: 1px solid var(--border); }
+  .sw .c { height: 48px; border-radius: 4px; margin-bottom: 8px; border: 1px solid var(--border); }
+  .sw .n { font-size: 12px; font-weight: 500; margin-bottom: 2px; }
+  .sw .v { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+
+  /* Typography rows */
+  .tr { display: flex; align-items: baseline; gap: 24px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .tr:last-child { border-bottom: 0; }
+  .tr .m { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); width: 200px; flex-shrink: 0; }
+
+  /* Spacing demo */
+  .sp { display: flex; align-items: end; gap: 8px; }
+  .sp .b { background: var(--accent); border-radius: 2px; width: 24px; }
+  .sp .b span { font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary);
+                display: block; margin-top: 6px; text-align: center; }
+
+  /* Component: btn */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+         font-family: var(--font-sans); font-size: 12px; font-weight: 500;
+         padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
+         background: var(--bg-elevated); color: var(--text-primary); cursor: pointer;
+         transition: all 0.12s; white-space: nowrap; }
+  .btn:hover { background: var(--bg-hover); border-color: var(--border-hover); }
+  .btn-p { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-p:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn-g { background: transparent; border-color: transparent; color: var(--text-secondary); }
+  .btn-g:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .btn-d { color: var(--error); border-color: var(--error); background: transparent; }
+  .btn-d:hover { background: var(--error); color: #fff; }
+  .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .btn-sm { font-size: 11px; padding: 4px 10px; }
+  .btn-lg { font-size: 14px; padding: 10px 18px; }
+
+  /* Component: card */
+  .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .card-accent { border-top: 2px solid var(--accent); }
+  .card-elevated { background: var(--bg-elevated); box-shadow: var(--shadow-md); }
+
+  /* Component: input */
+  .inp { width: 100%; font-family: var(--font-sans); font-size: 14px; padding: 8px 12px;
+         border-radius: 6px; border: 1px solid var(--border); background: var(--bg-base);
+         color: var(--text-primary); outline: none; transition: border-color 0.12s; }
+  .inp:focus { border-color: var(--accent); }
+  .inp::placeholder { color: var(--text-muted); }
+
+  /* Component: pill */
+  .pill { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-sans);
+          font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
+          background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); }
+  .pill-a { color: var(--accent); border-color: var(--accent); background: var(--accent-soft, rgba(217,119,87,0.12)); }
+  .pill-s { color: var(--success); border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.1); }
+  .pill-w { color: var(--warning); border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.1); }
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+
+  /* Component: sidebar mock */
+  .sidebar { width: 224px; background: var(--bg-surface); border-right: 1px solid var(--border);
+             padding: 8px; display: flex; flex-direction: column; gap: 1px; }
+  .nav-grp { font-family: var(--font-sans); font-size: 10px; font-weight: 600; letter-spacing: 2px;
+             text-transform: uppercase; color: var(--text-muted); opacity: 0.6; padding: 12px 10px 4px; }
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px;
+              color: var(--text-secondary); font-size: 13px; cursor: pointer;
+              border-left: 2px solid transparent; transition: all 0.12s; }
+  .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .nav-active { background: rgba(217,119,87,0.10); color: var(--accent); border-left-color: var(--accent); }
+
+  /* AI block */
+  .ai-block { border-left: 2px solid var(--accent); background: var(--accent-soft, rgba(217,119,87,0.12));
+              padding: 14px 18px; border-radius: 0 6px 6px 0; }
+  .ai-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .ai-avatar { width: 16px; height: 16px; border-radius: 999px; background: var(--accent);
+               color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; }
+  @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+  .cursor-blink { display: inline-block; width: 2px; height: 1em; background: var(--accent);
+                  margin-left: 2px; vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
+
+  /* Topbar mock */
+  .topbar { height: 48px; padding: 0 16px; background: var(--bg-surface); border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 10px; }
+  /* Statusbar mock */
+  .statusbar { height: 26px; padding: 0 14px; background: var(--bg-surface); border-top: 1px solid var(--border);
+               display: flex; align-items: center; gap: 14px; font-size: 11px; color: var(--text-secondary); }
+
+  /* Prose */
+  .prose { font-family: var(--font-serif); font-size: 17px; line-height: 2.1; color: var(--text-primary); }
+  .prose p { margin: 0 0 1.3em; text-indent: 2em; }
+</style>
+</head>
+<body>
+  <div class="tbar">
+    <div class="brand">StoryForge · Components</div>
+    <span class="sub">切换主题查看同一组件在三种场景下的表现</span>
+    <div style="flex:1"></div>
+    <div class="toggle">
+      <button data-t="work" class="on">Work</button>
+      <button data-t="forge">Forge</button>
+      <button data-t="paper">Paper</button>
+    </div>
+  </div>
+
+  <div class="shell">
+    <!-- 1. BRAND COLORS -->
+    <section class="sec">
+      <h2>1. 品牌色（三 theme 共享）</h2>
+      <p class="desc">产品 DNA。无论在哪个 theme 都不变。</p>
+      <div class="sg">
+        <div class="sw"><div class="c" style="background:#D97757"></div><div class="n">brand-flame</div><div class="v">#D97757</div></div>
+        <div class="sw"><div class="c" style="background:#B85C3F"></div><div class="n">brand-flame-deep</div><div class="v">#B85C3F</div></div>
+        <div class="sw"><div class="c" style="background:#C8A155"></div><div class="n">brand-gold</div><div class="v">#C8A155</div></div>
+        <div class="sw"><div class="c" style="background:#8B3E1F"></div><div class="n">brand-ember</div><div class="v">#8B3E1F</div></div>
+      </div>
+    </section>
+
+    <!-- 2. THEME COLORS -->
+    <section class="sec">
+      <h2>2. 主题色（当前 theme）</h2>
+      <p class="desc">跟着 <code style="font-family:var(--font-mono);font-size:12px">data-theme</code> 变。组件写 <code style="font-family:var(--font-mono);font-size:12px">bg-bg-surface</code>，无需关心是哪个 theme。</p>
+      <div class="sg" id="theme-swatches"></div>
+    </section>
+
+    <!-- 3. TYPOGRAPHY -->
+    <section class="sec">
+      <h2>3. 字体阶梯</h2>
+      <div style="background:var(--bg-surface);padding:20px 28px;border-radius:8px;border:1px solid var(--border)">
+        <div class="tr"><div class="m">eyebrow / 11px sans caps</div><div style="font-family:var(--font-sans);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text-secondary)">DESIGN SYSTEM · STORYFORGE</div></div>
+        <div class="tr"><div class="m">display / 44px serif</div><div style="font-family:var(--font-serif);font-size:44px;font-weight:400;letter-spacing:-0.5px;line-height:1.1">故事熔炉</div></div>
+        <div class="tr"><div class="m">h1 / 32px semibold</div><div style="font-size:32px;font-weight:600;line-height:1.2;letter-spacing:-0.4px">页面主标题</div></div>
+        <div class="tr"><div class="m">h2 / 24px semibold</div><div style="font-size:24px;font-weight:600;line-height:1.3">区块标题</div></div>
+        <div class="tr"><div class="m">h3 / 20px semibold</div><div style="font-size:20px;font-weight:600;line-height:1.3">卡片标题</div></div>
+        <div class="tr"><div class="m">body / 14px</div><div style="font-size:14px;line-height:1.6">普通正文，工具 UI 默认。</div></div>
+        <div class="tr"><div class="m">body-sm / 12px</div><div style="font-size:12px;line-height:1.6;color:var(--text-secondary)">辅助说明文字</div></div>
+        <div class="tr"><div class="m">caption / 11px</div><div style="font-size:11px;line-height:1.45;color:var(--text-muted)">最弱注释、时间戳</div></div>
+        <div class="tr"><div class="m">prose / 17px serif 2.1lh</div>
+          <div class="prose" style="max-width:480px"><p>陈风踏上山门第一阶时，听见远处有人吹箫。箫声不悲不喜，像风穿过古老的竹林。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. BUTTONS -->
+    <section class="sec">
+      <h2>4. Button</h2>
+      <p class="desc">对应 Tailwind 类：<code style="font-family:var(--font-mono);font-size:12px">bg-accent text-white rounded-lg</code> 等。</p>
+      <div class="row">
+        <span class="row-label">Variants</span>
+        <button class="btn btn-p">主行动</button>
+        <button class="btn">默认</button>
+        <button class="btn btn-g">幽灵</button>
+        <button class="btn btn-d">危险</button>
+        <button class="btn" disabled>禁用</button>
+      </div>
+      <div class="row">
+        <span class="row-label">Sizes</span>
+        <button class="btn btn-p btn-sm">小</button>
+        <button class="btn btn-p">默认</button>
+        <button class="btn btn-p btn-lg">大</button>
+      </div>
+    </section>
+
+    <!-- 5. INPUTS -->
+    <section class="sec">
+      <h2>5. Input / Textarea</h2>
+      <div class="row" style="flex-direction:column;align-items:stretch;gap:10px">
+        <input class="inp" placeholder="项目名称（如：剑出山门）"/>
+        <textarea class="inp" rows="3" placeholder="一句话简介…" style="resize:vertical"></textarea>
+      </div>
+    </section>
+
+    <!-- 6. PILLS -->
+    <section class="sec">
+      <h2>6. Pill / Badge</h2>
+      <div class="row">
+        <span class="pill">玄幻</span>
+        <span class="pill pill-a">主项目</span>
+        <span class="pill pill-s"><span class="dot"></span>进行中</span>
+        <span class="pill pill-w"><span class="dot"></span>未呼应</span>
+      </div>
+    </section>
+
+    <!-- 7. CARDS -->
+    <section class="sec">
+      <h2>7. Card</h2>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+        <div class="card"><h3 style="font-size:17px;font-weight:600;margin-bottom:6px">默认卡</h3><p style="font-size:12px;color:var(--text-secondary)">bg-bg-surface border rounded-xl p-5</p></div>
+        <div class="card card-accent"><h3 style="font-size:17px;font-weight:600;margin-bottom:6px">主项目</h3><p style="font-size:12px;color:var(--text-secondary)">+ border-t-2 border-t-accent</p></div>
+        <div class="card card-elevated"><h3 style="font-size:17px;font-weight:600;margin-bottom:6px">悬浮</h3><p style="font-size:12px;color:var(--text-secondary)">bg-bg-elevated shadow-theme-md</p></div>
+      </div>
+    </section>
+
+    <!-- 8. SIDEBAR + TOPBAR + STATUSBAR -->
+    <section class="sec">
+      <h2>8. Layout 骨架</h2>
+      <p class="desc">匹配 WorkspacePage 的实际结构：Sidebar + Topbar + Main + Statusbar</p>
+      <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg-base);height:380px">
+        <div class="sidebar">
+          <div class="nav-grp">构建</div>
+          <div class="nav-item">基本信息</div>
+          <div class="nav-item nav-active">世界观</div>
+          <div class="nav-item">角色管理 <span style="margin-left:auto;font-size:11px;color:var(--text-muted);font-feature-settings:'tnum'">6</span></div>
+          <div class="nav-item">势力阵营</div>
+          <div class="nav-grp">创作</div>
+          <div class="nav-item">大纲 <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">18</span></div>
+          <div class="nav-item">写作 <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">12/30</span></div>
+          <div class="nav-item">伏笔</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column">
+          <div class="topbar">
+            <span style="font-weight:500">《剑出山门》</span>
+            <span style="font-size:12px;color:var(--text-muted)">· 第四章 · 山门石阶</span>
+            <div style="flex:1"></div>
+            <button class="btn btn-g btn-sm"><span class="dot" style="color:var(--success)"></span>deepseek-chat</button>
+            <button class="btn btn-g btn-sm">导出</button>
+          </div>
+          <div style="flex:1;padding:24px;overflow:hidden;color:var(--text-secondary);font-size:13px">主内容区</div>
+          <div class="statusbar">
+            <span style="font-feature-settings:'tnum'">16,420 字</span>
+            <span>·</span><span>5 章</span><span>·</span>
+            <span style="color:var(--success)"><span class="dot"></span> 已保存</span>
+            <div style="flex:1"></div>
+            <span>StoryForge v0.4.2</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. AI BLOCK -->
+    <section class="sec">
+      <h2>9. AI 协作块</h2>
+      <p class="desc">匹配 AIStreamOutput.tsx 的实际模式。左色条 + 软底色 + 三按钮。</p>
+      <div style="background:var(--bg-surface);padding:20px;border-radius:8px;border:1px solid var(--border)">
+        <div class="ai-block">
+          <div class="ai-header">
+            <span class="ai-avatar">笔</span>
+            <span style="font-size:12px;font-weight:500">AI 续写建议</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-left:auto">deepseek-chat · 312 tok</span>
+          </div>
+          <p style="margin:0 0 10px;line-height:1.7;font-size:14px">
+            林清回头时，发现陈风的眼里映着一片不属于这个山门的天空。那片天空里有星辰在运转，仿佛比山中所有的星星都更早就在那里。<span class="cursor-blink"></span>
+          </p>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-p btn-sm">采纳</button>
+            <button class="btn btn-g btn-sm">重写</button>
+            <button class="btn btn-g btn-sm">丢弃</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 10. SPACING -->
+    <section class="sec">
+      <h2>10. 间距阶梯</h2>
+      <div class="sp" style="background:var(--bg-surface);padding:20px;border-radius:8px;border:1px solid var(--border)">
+        <div class="b" style="height:4px"><span>1<br/>4</span></div>
+        <div class="b" style="height:8px"><span>2<br/>8</span></div>
+        <div class="b" style="height:12px"><span>3<br/>12</span></div>
+        <div class="b" style="height:16px"><span>4<br/>16</span></div>
+        <div class="b" style="height:20px"><span>5<br/>20</span></div>
+        <div class="b" style="height:24px"><span>6<br/>24</span></div>
+        <div class="b" style="height:32px"><span>8<br/>32</span></div>
+        <div class="b" style="height:40px"><span>10<br/>40</span></div>
+        <div class="b" style="height:48px"><span>12<br/>48</span></div>
+        <div class="b" style="height:64px"><span>16<br/>64</span></div>
+      </div>
+    </section>
+  </div>
+
+<script>
+  const root = document.documentElement;
+  document.querySelectorAll('.toggle button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.toggle button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      root.setAttribute('data-theme', b.dataset.t);
+      renderSwatches();
+    });
+  });
+  function renderSwatches() {
+    const tokens = ['bg-base','bg-surface','bg-elevated','bg-hover','text-primary','text-secondary','text-muted','accent','accent-hover','accent-muted','border','border-hover'];
+    const el = document.getElementById('theme-swatches');
+    el.innerHTML = tokens.map(t => {
+      const v = getComputedStyle(root).getPropertyValue('--' + t).trim();
+      return `<div class="sw"><div class="c" style="background:var(--${t})"></div><div class="n">--${t}</div><div class="v">${v}</div></div>`;
+    }).join('');
+  }
+  renderSwatches();
+</script>
+</body>
+</html>
