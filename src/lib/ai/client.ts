@@ -6,10 +6,14 @@ import { createLog, updateLog } from './logger'
  * 根据 provider 构造请求 URL 和 headers
  */
 function buildRequest(config: AIConfig, messages: ChatMessage[], stream: boolean) {
-  // Poe 使用不同的 endpoint 格式
-  if (config.provider === 'poe') {
+  // 标准化 baseUrl：去除尾部斜杠
+  const baseUrl = config.baseUrl.replace(/\/+$/, '')
+  const isPoe = config.provider === 'poe' || baseUrl.includes('api.poe.com')
+
+  // Poe 使用不同的 endpoint 格式: baseUrl/model
+  if (isPoe) {
     return {
-      url: `${config.baseUrl}/${config.model}`,
+      url: `${baseUrl}/${config.model}`,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${config.apiKey}`,
@@ -25,7 +29,7 @@ function buildRequest(config: AIConfig, messages: ChatMessage[], stream: boolean
 
   // 所有 OpenAI 兼容格式的 provider（deepseek, qwen, doubao, minimax, glm, wenxin, gemini, openai, kimi, claude, ollama）
   return {
-    url: `${config.baseUrl}/chat/completions`,
+    url: `${baseUrl}/chat/completions`,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`,
