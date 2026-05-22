@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0414"/>
+      <stop offset="50%" style="stop-color:#150828"/>
+      <stop offset="100%" style="stop-color:#0a0414"/>
+    </linearGradient>
+    <linearGradient id="fire" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff6b35"/>
+      <stop offset="50%" style="stop-color:#f7931e"/>
+      <stop offset="100%" style="stop-color:#ffd700"/>
+    </linearGradient>
+    <linearGradient id="purple-blue" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+    <radialGradient id="glow-center" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.15"/>
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:0"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Radial glow -->
+  <circle cx="600" cy="315" r="400" fill="url(#glow-center)"/>
+
+  <!-- Decorative rings -->
+  <circle cx="600" cy="315" r="260" fill="none" stroke="#7c3aed" stroke-width="1" opacity="0.1"/>
+  <circle cx="600" cy="315" r="320" fill="none" stroke="#7c3aed" stroke-width="1" opacity="0.06"/>
+
+  <!-- Particle dots -->
+  <circle cx="200" cy="150" r="2" fill="#7c3aed" opacity="0.5"/>
+  <circle cx="950" cy="120" r="2" fill="#f97316" opacity="0.5"/>
+  <circle cx="100" cy="420" r="3" fill="#3b82f6" opacity="0.4"/>
+  <circle cx="1080" cy="480" r="2" fill="#10b981" opacity="0.5"/>
+  <circle cx="160" cy="550" r="2" fill="#7c3aed" opacity="0.3"/>
+  <circle cx="1040" cy="200" r="3" fill="#f97316" opacity="0.3"/>
+  <circle cx="320" cy="90" r="2" fill="#10b981" opacity="0.4"/>
+  <circle cx="880" cy="540" r="2" fill="#3b82f6" opacity="0.4"/>
+
+  <!-- Fire emoji -->
+  <text x="600" y="175" text-anchor="middle" font-size="64" filter="url(#glow)">🔥</text>
+
+  <!-- Main headline -->
+  <text x="600" y="245" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="54" font-weight="900" fill="url(#fire)" filter="url(#glow)" letter-spacing="6">创作的快感</text>
+  <text x="600" y="308" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="54" font-weight="900" fill="url(#fire)" filter="url(#glow)" letter-spacing="6">不该被 AI 抹掉</text>
+
+  <!-- Sub headline -->
+  <text x="600" y="360" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="26" fill="#a78bfa" letter-spacing="2">而是被 AI 放大</text>
+
+  <!-- Divider line -->
+  <line x1="400" y1="385" x2="800" y2="385" stroke="url(#purple-blue)" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- CTA button -->
+  <rect x="380" y="405" width="440" height="66" rx="33" fill="url(#purple-blue)" filter="url(#glow)"/>
+  <text x="600" y="447" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="22" fill="white" font-weight="700" letter-spacing="2">⭐ GitHub Star 支持开源</text>
+
+  <!-- GitHub URL -->
+  <text x="600" y="504" text-anchor="middle" font-family="'Courier New', monospace" font-size="17" fill="#7c3aed" letter-spacing="1">github.com/yuanbw2025/storyforge</text>
+
+  <!-- Feature highlights row -->
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" text-anchor="middle">
+
+    <text x="200" y="556" font-size="22">🔓</text>
+    <text x="200" y="577" font-size="12" fill="#94a3b8">完全开源</text>
+    <text x="200" y="592" font-size="11" fill="#64748b">MIT 协议</text>
+
+    <text x="360" y="556" font-size="22">💾</text>
+    <text x="360" y="577" font-size="12" fill="#94a3b8">数据本地</text>
+    <text x="360" y="592" font-size="11" fill="#64748b">不上传服务器</text>
+
+    <text x="520" y="556" font-size="22">🤖</text>
+    <text x="520" y="577" font-size="12" fill="#94a3b8">11 家 AI</text>
+    <text x="520" y="592" font-size="11" fill="#64748b">任意切换</text>
+
+    <text x="680" y="556" font-size="22">🎯</text>
+    <text x="680" y="577" font-size="12" fill="#94a3b8">43 模板</text>
+    <text x="680" y="592" font-size="11" fill="#64748b">全部可编辑</text>
+
+    <text x="840" y="556" font-size="22">⚡</text>
+    <text x="840" y="577" font-size="12" fill="#94a3b8">工作流</text>
+    <text x="840" y="592" font-size="11" fill="#64748b">一键起书</text>
+
+    <text x="1000" y="556" font-size="22">📖</text>
+    <text x="1000" y="577" font-size="12" fill="#94a3b8">大师研读</text>
+    <text x="1000" y="592" font-size="11" fill="#64748b">五维分析</text>
+
+  </g>
+
+  <!-- Bottom bar -->
+  <rect x="0" y="610" width="1200" height="20" fill="#050810"/>
+  <text x="600" y="623" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="10" fill="#334155">故事熔炉 StoryForge · React 19 + TypeScript 5 + Dexie.js · PWA 离线 · MIT License</text>
+
+</svg>

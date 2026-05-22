@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+*.tsbuildinfo
+
+# Azgaar Fantasy Map Generator（构建产物，运行 setup 脚本生成）
+public/fmg/

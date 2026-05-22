@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#050810"/>
+      <stop offset="100%" style="stop-color:#0d1117"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Top title -->
+  <text x="600" y="48" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="28" fill="#f1f5f9" font-weight="700">故事熔炉 · 功能全景</text>
+  <text x="600" y="72" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" fill="#475569">从设定到正文，AI 全程辅助 · 提示词全透明</text>
+
+  <!-- 3×2 Grid of feature cards -->
+  <!-- Card 1: 设定库 -->
+  <rect x="40" y="95" width="358" height="238" rx="14" fill="#0f172a" stroke="#7c3aed" stroke-width="1.5"/>
+  <rect x="40" y="95" width="358" height="50" rx="14" fill="#1a1040"/>
+  <rect x="40" y="132" width="358" height="13" rx="0" fill="#1a1040"/>
+  <text x="74" y="126" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="22" fill="#7c3aed">🌍</text>
+  <text x="102" y="126" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#c4b5fd" font-weight="700">设定库</text>
+  <text x="240" y="126" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" fill="#7c3aed">21 字段 · 全 AI 生成</text>
+
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5">
+    <text x="60" y="162" fill="#94a3b8">🔹 世界观 3 子模块（起源/自然/人文）</text>
+    <text x="60" y="182" fill="#94a3b8">🔹 故事设计 7 字段（logline → 复线）</text>
+    <text x="60" y="202" fill="#94a3b8">🔹 角色分档：主角/次要/NPC/路人</text>
+    <text x="60" y="222" fill="#94a3b8">🔹 D3-force 角色关系可视化力导图</text>
+    <text x="60" y="242" fill="#94a3b8">🔹 智能上下文（已填字段自动传入 AI）</text>
+    <rect x="60" y="257" width="310" height="24" rx="6" fill="#3b0764" opacity="0.5"/>
+    <text x="215" y="272" text-anchor="middle" fill="#c4b5fd" font-size="11">77 个流派标签 · 亲属/敌对/暧昧 6 类关系</text>
+  </g>
+
+  <!-- Card 2: 提示词系统 -->
+  <rect x="421" y="95" width="358" height="238" rx="14" fill="#0f172a" stroke="#f97316" stroke-width="1.5"/>
+  <rect x="421" y="95" width="358" height="50" rx="14" fill="#1c1006"/>
+  <rect x="421" y="132" width="358" height="13" rx="0" fill="#1c1006"/>
+  <text x="455" y="126" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="22" fill="#f97316">🎯</text>
+  <text x="483" y="126" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#fdba74" font-weight="700">提示词系统</text>
+  <text x="618" y="126" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" fill="#f97316">核心差异化</text>
+
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5">
+    <text x="441" y="162" fill="#94a3b8">🔹 43 条内置 system prompt 模板</text>
+    <text x="441" y="182" fill="#94a3b8">🔹 5 套题材包（仙侠/言情/现实/悬疑）</text>
+    <text x="441" y="202" fill="#94a3b8">🔹 题材包热切换，30 秒换风格</text>
+    <text x="441" y="222" fill="#94a3b8">🔹 克隆 → 改 system/参数/few-shot</text>
+    <text x="441" y="242" fill="#94a3b8">🔹 调参浮窗覆盖全部创作面板</text>
+    <rect x="441" y="257" width="310" height="24" rx="6" fill="#431407" opacity="0.7"/>
+    <text x="596" y="272" text-anchor="middle" fill="#fdba74" font-size="11">{{var}} + {{#if}} 条件块 + few-shot 自动拼接</text>
+  </g>
+
+  <!-- Card 3: 创作区 -->
+  <rect x="802" y="95" width="358" height="238" rx="14" fill="#0f172a" stroke="#10b981" stroke-width="1.5"/>
+  <rect x="802" y="95" width="358" height="50" rx="14" fill="#062016"/>
+  <rect x="802" y="132" width="358" height="13" rx="0" fill="#062016"/>
+  <text x="836" y="126" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="22" fill="#10b981">✏️</text>
+  <text x="864" y="126" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#6ee7b7" font-weight="700">创作区</text>
+  <text x="960" y="126" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" fill="#10b981">6 个子模块</text>
+
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5">
+    <text x="822" y="162" fill="#94a3b8">🔹 大纲：卷章树 + AI 生成 + 参数控制</text>
+    <text x="822" y="182" fill="#94a3b8">🔹 细纲：单章拆 3-6 场景 + AI 展开</text>
+    <text x="822" y="202" fill="#94a3b8">🔹 正文：TipTap 编辑器 + 5 AI 操作</text>
+    <text x="822" y="222" fill="#94a3b8">🔹 伏笔：10 类型 · 4 状态 · 列表+看板</text>
+    <text x="822" y="242" fill="#94a3b8">🔹 创作规则：视角/基调/禁忌/一致性</text>
+    <rect x="822" y="257" width="310" height="24" rx="6" fill="#052e16" opacity="0.7"/>
+    <text x="977" y="272" text-anchor="middle" fill="#6ee7b7" font-size="11">写正文 / 续写 / 润色 / 扩写 / 去 AI 味</text>
+  </g>
+
+  <!-- Card 4: 工作流 -->
+  <rect x="40" y="350" width="358" height="238" rx="14" fill="#0f172a" stroke="#3b82f6" stroke-width="1.5"/>
+  <rect x="40" y="350" width="358" height="50" rx="14" fill="#0c1a30"/>
+  <rect x="40" y="387" width="358" height="13" rx="0" fill="#0c1a30"/>
+  <text x="74" y="381" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="22" fill="#3b82f6">🔗</text>
+  <text x="102" y="381" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#93c5fd" font-weight="700">工作流引擎</text>
+  <text x="254" y="381" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" fill="#3b82f6">链式编排 · 自动写回</text>
+
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5">
+    <text x="60" y="417" fill="#94a3b8">🔹 极速起书（5 步：核心→世界→角色→大纲→章）</text>
+    <text x="60" y="437" fill="#94a3b8">🔹 单章深度生成（拆场景→写→润色→去AI）</text>
+    <text x="60" y="457" fill="#94a3b8">🔹 伏笔体系搭建（2 步）</text>
+    <text x="60" y="477" fill="#94a3b8">🔹 结果自动批量写回（角色/大纲/伏笔）</text>
+    <text x="60" y="497" fill="#94a3b8">🔹 用户自建工作流 + 导出 JSON 分享</text>
+    <rect x="60" y="512" width="310" height="24" rx="6" fill="#0c1a30" stroke="#1e40af"/>
+    <text x="215" y="527" text-anchor="middle" fill="#93c5fd" font-size="11">暂停 / 重新生成 / 跳过 · SSE 流式输出</text>
+  </g>
+
+  <!-- Card 5: 大师研读 + 导入 -->
+  <rect x="421" y="350" width="358" height="238" rx="14" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5"/>
+  <rect x="421" y="350" width="358" height="50" rx="14" fill="#1c1600"/>
+  <rect x="421" y="387" width="358" height="13" rx="0" fill="#1c1600"/>
+  <text x="455" y="381" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="22" fill="#f59e0b">📖</text>
+  <text x="483" y="381" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#fbbf24" font-weight="700">大师研读 + 导入</text>
+  <text x="640" y="381" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" fill="#f59e0b">新功能</text>
+
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5">
+    <text x="441" y="417" fill="#94a3b8">🔹 上传名作 → 五维深度分析</text>
+    <text x="441" y="437" fill="#94a3b8">    世界观/角色/情节/伏笔/文笔</text>
+    <text x="441" y="457" fill="#94a3b8">🔹 三级深度：快速/标准/精读</text>
+    <text x="441" y="477" fill="#94a3b8">🔹 百万字导入 · 分块 · 断点续传</text>
+    <text x="441" y="497" fill="#94a3b8">🔹 Jaccard 角色去重合并跨分块</text>
+    <rect x="441" y="512" width="310" height="24" rx="6" fill="#1c1600" stroke="#92400e"/>
+    <text x="596" y="527" text-anchor="middle" fill="#fbbf24" font-size="11">独立数据表 · 不污染创作 · 可跨作品归纳</text>
+  </g>
+
+  <!-- Card 6: AI + 数据 -->
+  <rect x="802" y="350" width="358" height="238" rx="14" fill="#0f172a" stroke="#ec4899" stroke-width="1.5"/>
+  <rect x="802" y="350" width="358" height="50" rx="14" fill="#1a0518"/>
+  <rect x="802" y="387" width="358" height="13" rx="0" fill="#1a0518"/>
+  <text x="836" y="381" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="22" fill="#ec4899">🤖</text>
+  <text x="864" y="381" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="17" fill="#f9a8d4" font-weight="700">AI 接入 + 数据安全</text>
+
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5">
+    <text x="822" y="417" fill="#94a3b8">🔹 11 家厂商：GPT · Claude · Gemini</text>
+    <text x="822" y="437" fill="#94a3b8">    DeepSeek · 通义 · 豆包 · Kimi · Ollama</text>
+    <text x="822" y="457" fill="#94a3b8">🔹 API Key 存本地，不经过任何服务器</text>
+    <text x="822" y="477" fill="#94a3b8">🔹 5 种导出（JSON/MD/TXT/FS/Gist）</text>
+    <text x="822" y="497" fill="#94a3b8">🔹 版本历史：5 分钟自动 + 手动快照</text>
+    <rect x="822" y="512" width="310" height="24" rx="6" fill="#1a0518" stroke="#9d174d"/>
+    <text x="977" y="527" text-anchor="middle" fill="#f9a8d4" font-size="11">PWA 离线 · 28 张表 · MIT 开源</text>
+  </g>
+
+  <!-- Bottom bar -->
+  <rect x="0" y="602" width="1200" height="28" fill="#050810"/>
+  <text x="600" y="620" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" fill="#334155">github.com/yuanbw2025/storyforge · React 19 + TypeScript 5 + Dexie.js · 完全免费开源</text>
+</svg>

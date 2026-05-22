@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d1117"/>
+      <stop offset="100%" style="stop-color:#161b27"/>
+    </linearGradient>
+    <linearGradient id="panel-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e2433"/>
+      <stop offset="100%" style="stop-color:#161c2d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Section title -->
+  <text x="60" y="55" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" fill="#7c3aed" font-weight="600" letter-spacing="3">核心差异化</text>
+  <text x="60" y="90" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="36" fill="#f1f5f9" font-weight="700">提示词系统 · 全透明可编辑</text>
+  <text x="60" y="118" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#64748b">每个 AI 按钮背后的 System Prompt + 参数，完整可见</text>
+  <line x1="60" y1="135" x2="540" y2="135" stroke="url(#accent)" stroke-width="2"/>
+
+  <!-- Left: Template list panel -->
+  <rect x="60" y="155" width="310" height="430" rx="12" fill="url(#panel-grad)" stroke="#2d3748" stroke-width="1"/>
+  <rect x="60" y="155" width="310" height="44" rx="12" fill="#1a2035"/>
+  <rect x="60" y="187" width="310" height="12" rx="0" fill="#1a2035"/>
+  <text x="215" y="182" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" fill="#94a3b8" font-weight="600">提示词模板库</text>
+
+  <!-- Template items -->
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5">
+    <!-- Active item -->
+    <rect x="72" y="212" width="286" height="38" rx="8" fill="#7c3aed" opacity="0.25"/>
+    <rect x="72" y="212" width="286" height="38" rx="8" fill="none" stroke="#7c3aed" stroke-width="1"/>
+    <circle cx="90" cy="231" r="6" fill="#7c3aed"/>
+    <text x="104" y="228" fill="#c4b5fd" font-weight="600">世界起源维度生成</text>
+    <text x="104" y="243" fill="#7c3aed" font-size="11">通用 · 激活中</text>
+
+    <rect x="72" y="258" width="286" height="38" rx="8" fill="#1e2a3a"/>
+    <circle cx="90" cy="277" r="6" fill="#2563eb" opacity="0.5"/>
+    <text x="104" y="274" fill="#94a3b8">角色深度设计</text>
+    <text x="104" y="289" fill="#475569" font-size="11">通用</text>
+
+    <rect x="72" y="304" width="286" height="38" rx="8" fill="#1e2a3a"/>
+    <circle cx="90" cy="323" r="6" fill="#10b981" opacity="0.5"/>
+    <text x="104" y="320" fill="#94a3b8">章节场景展开</text>
+    <text x="104" y="335" fill="#475569" font-size="11">通用</text>
+
+    <!-- Divider -->
+    <line x1="72" y1="355" x2="346" y2="355" stroke="#2d3748" stroke-width="1"/>
+    <text x="215" y="370" text-anchor="middle" fill="#7c3aed" font-size="11" font-weight="600">仙侠修真 题材包</text>
+
+    <rect x="72" y="378" width="286" height="38" rx="8" fill="#1e2a3a"/>
+    <circle cx="90" cy="397" r="6" fill="#f59e0b" opacity="0.5"/>
+    <text x="104" y="394" fill="#94a3b8">飞升体系构建</text>
+    <text x="104" y="409" fill="#475569" font-size="11">仙侠修真</text>
+
+    <rect x="72" y="424" width="286" height="38" rx="8" fill="#1e2a3a"/>
+    <circle cx="90" cy="443" r="6" fill="#f59e0b" opacity="0.5"/>
+    <text x="104" y="440" fill="#94a3b8">心境突破描写</text>
+    <text x="104" y="455" fill="#475569" font-size="11">仙侠修真</text>
+
+    <rect x="72" y="470" width="286" height="38" rx="8" fill="#1e2a3a"/>
+    <circle cx="90" cy="489" r="6" fill="#f59e0b" opacity="0.5"/>
+    <text x="104" y="486" fill="#94a3b8">修真对白风格</text>
+    <text x="104" y="501" fill="#475569" font-size="11">仙侠修真</text>
+
+    <!-- Count badge -->
+    <rect x="72" y="522" width="286" height="48" rx="8" fill="#0f1629" stroke="#1e293b"/>
+    <text x="215" y="541" text-anchor="middle" fill="#475569" font-size="11">共 43 条系统模板 + 用户自建</text>
+    <text x="215" y="558" text-anchor="middle" fill="#7c3aed" font-size="11" font-weight="600">🔒 系统模板 → 克隆为我的版本 → 自由修改</text>
+  </g>
+
+  <!-- Middle: Template editor -->
+  <rect x="392" y="155" width="420" height="430" rx="12" fill="url(#panel-grad)" stroke="#2d3748" stroke-width="1"/>
+  <rect x="392" y="155" width="420" height="44" rx="12" fill="#1a2035"/>
+  <rect x="392" y="187" width="420" height="12" rx="0" fill="#1a2035"/>
+  <text x="602" y="182" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" fill="#94a3b8" font-weight="600">模板编辑器</text>
+
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif">
+    <text x="410" y="225" font-size="11" fill="#64748b">SYSTEM PROMPT</text>
+    <rect x="410" y="232" width="384" height="82" rx="6" fill="#0d1117" stroke="#1e293b"/>
+    <text x="422" y="250" font-size="11.5" fill="#7ee787" font-family="'Courier New', monospace">你是一位世界观架构师。请基于作者</text>
+    <text x="422" y="265" font-size="11.5" fill="#7ee787" font-family="'Courier New', monospace">提供的背景，生成详尽的</text>
+    <text x="422" y="265" font-size="11.5" fill="#79c0ff" font-family="'Courier New', monospace" x="520">{{worldType}}</text>
+    <text x="422" y="280" font-size="11.5" fill="#7ee787" font-family="'Courier New', monospace">世界起源设定。风格：</text>
+    <text x="508" y="280" font-size="11.5" fill="#79c0ff" font-family="'Courier New', monospace">{{tone}}</text>
+    <text x="422" y="295" font-size="11.5" fill="#7ee787" font-family="'Courier New', monospace">详尽度：</text>
+    <text x="462" y="295" font-size="11.5" fill="#79c0ff" font-family="'Courier New', monospace">{{detail}}</text>
+    <text x="490" y="295" font-size="11.5" fill="#7ee787" font-family="'Courier New', monospace">字数约</text>
+    <text x="528" y="295" font-size="11.5" fill="#79c0ff" font-family="'Courier New', monospace">{{wordCount}}</text>
+
+    <text x="410" y="335" font-size="11" fill="#64748b">USER TEMPLATE</text>
+    <rect x="410" y="342" width="384" height="60" rx="6" fill="#0d1117" stroke="#1e293b"/>
+    <text x="422" y="360" font-size="11.5" fill="#e2e8f0" font-family="'Courier New', monospace">项目名：</text>
+    <text x="463" y="360" font-size="11.5" fill="#79c0ff" font-family="'Courier New', monospace">{{projectName}}</text>
+    <text x="422" y="375" font-size="11.5" fill="#e2e8f0" font-family="'Courier New', monospace">流派：</text>
+    <text x="453" y="375" font-size="11.5" fill="#79c0ff" font-family="'Courier New', monospace">{{genre}}</text>
+    <text x="422" y="390" font-size="11.5" fill="#ffa657" font-family="'Courier New', monospace">{{#if worldBackground}}</text>
+    <text x="630" y="390" font-size="11.5" fill="#e2e8f0" font-family="'Courier New', monospace">已有背景...{{/if}}</text>
+
+    <text x="410" y="428" font-size="11" fill="#64748b">可调参数</text>
+    <!-- Params -->
+    <rect x="410" y="436" width="175" height="34" rx="6" fill="#0d1117" stroke="#1e293b"/>
+    <text x="420" y="450" font-size="11" fill="#94a3b8">基调</text>
+    <rect x="462" y="440" width="90" height="22" rx="4" fill="#1e293b"/>
+    <text x="508" y="455" text-anchor="middle" font-size="11" fill="#c4b5fd">神秘 ▾</text>
+    <text x="560" y="455" font-size="11" fill="#10b981">☑</text>
+
+    <rect x="596" y="436" width="200" height="34" rx="6" fill="#0d1117" stroke="#1e293b"/>
+    <text x="606" y="450" font-size="11" fill="#94a3b8">详尽度</text>
+    <rect x="652" y="440" width="90" height="22" rx="4" fill="#1e293b"/>
+    <text x="698" y="455" text-anchor="middle" font-size="11" fill="#c4b5fd">深度 ▾</text>
+    <text x="750" y="455" font-size="11" fill="#10b981">☑</text>
+
+    <rect x="410" y="480" width="175" height="34" rx="6" fill="#0d1117" stroke="#1e293b"/>
+    <text x="420" y="494" font-size="11" fill="#94a3b8">字数</text>
+    <rect x="452" y="484" width="110" height="22" rx="4" fill="#1e293b"/>
+    <text x="508" y="499" text-anchor="middle" font-size="11" fill="#c4b5fd">800 字 ↕</text>
+    <text x="570" y="499" font-size="11" fill="#10b981">☑</text>
+
+    <rect x="596" y="480" width="200" height="34" rx="6" fill="#0d1117" stroke="#1e293b"/>
+    <text x="606" y="494" font-size="11" fill="#94a3b8">包含神话元素</text>
+    <rect x="714" y="484" width="38" height="22" rx="11" fill="#7c3aed"/>
+    <circle cx="741" cy="495" r="9" fill="white"/>
+
+    <!-- Few-shot section -->
+    <text x="410" y="535" font-size="11" fill="#64748b">示例 / 反例（few-shot 自动拼接）</text>
+    <rect x="410" y="543" width="175" height="32" rx="6" fill="#052e16" stroke="#166534"/>
+    <text x="420" y="557" font-size="11" fill="#6ee7b7">👍 好示例 × 3</text>
+    <text x="420" y="570" font-size="10" fill="#4ade80">点 ✓ 采纳后自动加入</text>
+    <rect x="596" y="543" width="175" height="32" rx="6" fill="#2d0a0a" stroke="#7f1d1d"/>
+    <text x="606" y="557" font-size="11" fill="#fca5a5">👎 反例 × 1</text>
+    <text x="606" y="570" font-size="10" fill="#f87171">AI 避开此类写法</text>
+  </g>
+
+  <!-- Right: Run panel -->
+  <rect x="834" y="155" width="306" height="430" rx="12" fill="url(#panel-grad)" stroke="#2d3748" stroke-width="1"/>
+  <rect x="834" y="155" width="306" height="44" rx="12" fill="#1a2035"/>
+  <rect x="834" y="187" width="306" height="12" rx="0" fill="#1a2035"/>
+  <text x="987" y="182" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" fill="#94a3b8" font-weight="600">调参浮窗 (PromptRunPanel)</text>
+
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12">
+    <text x="852" y="225" fill="#64748b">当前模板</text>
+    <rect x="852" y="232" width="270" height="30" rx="6" fill="#0f1629" stroke="#7c3aed" stroke-width="1"/>
+    <text x="862" y="251" fill="#c4b5fd" font-size="11">📋 内置-世界观维度生成 ▾</text>
+
+    <!-- Slider controls -->
+    <text x="852" y="286" fill="#94a3b8">基调</text>
+    <rect x="900" y="275" width="140" height="20" rx="4" fill="#1e293b"/>
+    <rect x="900" y="275" width="80" height="20" rx="4" fill="#7c3aed" opacity="0.6"/>
+    <circle cx="980" cy="285" r="8" fill="#7c3aed"/>
+    <text x="1050" y="288" fill="#10b981" font-size="13">☑</text>
+
+    <text x="852" y="316" fill="#94a3b8">详尽度</text>
+    <rect x="900" y="305" width="140" height="20" rx="4" fill="#1e293b"/>
+    <rect x="900" y="305" width="110" height="20" rx="4" fill="#2563eb" opacity="0.5"/>
+    <circle cx="1010" cy="315" r="8" fill="#2563eb"/>
+    <text x="1050" y="318" fill="#10b981" font-size="13">☑</text>
+
+    <text x="852" y="346" fill="#94a3b8">字数</text>
+    <rect x="900" y="335" width="100" height="20" rx="4" fill="#1e293b"/>
+    <text x="951" y="349" text-anchor="middle" fill="#c4b5fd" font-size="11">800</text>
+    <text x="1050" y="348" fill="#10b981" font-size="13">☑</text>
+
+    <!-- Temp override -->
+    <rect x="852" y="368" width="270" height="38" rx="6" fill="#0d1117" stroke="#1e293b"/>
+    <text x="862" y="383" fill="#475569" font-size="11">▾ 高级：临时修改 Prompt 文字</text>
+    <text x="862" y="398" fill="#475569" font-size="10">不写回模板，只影响本次</text>
+
+    <!-- Buttons -->
+    <rect x="852" y="418" width="125" height="32" rx="6" fill="#1e293b" stroke="#334155"/>
+    <text x="915" y="437" text-anchor="middle" fill="#94a3b8" font-size="11">⟲ 重置</text>
+    <rect x="990" y="418" width="132" height="32" rx="6" fill="#7c3aed" opacity="0.3" stroke="#7c3aed"/>
+    <text x="1056" y="437" text-anchor="middle" fill="#c4b5fd" font-size="11">💾 另存新版本</text>
+
+    <!-- Output area -->
+    <rect x="852" y="462" width="270" height="72" rx="6" fill="#0d1117" stroke="#1e293b"/>
+    <text x="862" y="478" fill="#94a3b8" font-size="11">流式输出：</text>
+    <text x="862" y="493" fill="#e2e8f0" font-size="10.5">远古混沌初开，天地未分之时，</text>
+    <text x="862" y="507" fill="#e2e8f0" font-size="10.5">一股神秘的意志从虚空中凝聚...</text>
+    <rect x="862" y="510" width="4" height="14" fill="#7c3aed" opacity="0.8"/>
+
+    <!-- Action buttons -->
+    <rect x="852" y="546" width="78" height="28" rx="6" fill="#052e16" stroke="#166534"/>
+    <text x="891" y="563" text-anchor="middle" fill="#4ade80" font-size="11">👍 好示例</text>
+    <rect x="940" y="546" width="78" height="28" rx="6" fill="#2d0a0a" stroke="#7f1d1d"/>
+    <text x="979" y="563" text-anchor="middle" fill="#f87171" font-size="11">👎 反例</text>
+    <rect x="1028" y="546" width="94" height="28" rx="6" fill="#1e3a5f" stroke="#2563eb"/>
+    <text x="1075" y="563" text-anchor="middle" fill="#93c5fd" font-size="11">✓ 采纳写入</text>
+  </g>
+
+  <!-- Bottom label -->
+  <rect x="0" y="600" width="1200" height="30" fill="#0d1117"/>
+  <text x="600" y="620" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" fill="#475569">故事熔炉 StoryForge · 提示词不是黑箱，每一行都是你的创作意图</text>
+</svg>

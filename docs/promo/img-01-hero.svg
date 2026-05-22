@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f0f1a"/>
+      <stop offset="100%" style="stop-color:#1a0f2e"/>
+    </linearGradient>
+    <linearGradient id="fire" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff6b35"/>
+      <stop offset="50%" style="stop-color:#f7931e"/>
+      <stop offset="100%" style="stop-color:#ffd700"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glow-strong">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Grid pattern -->
+  <g opacity="0.05" stroke="#7c3aed" stroke-width="1">
+    <line x1="0" y1="105" x2="1200" y2="105"/>
+    <line x1="0" y1="210" x2="1200" y2="210"/>
+    <line x1="0" y1="315" x2="1200" y2="315"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="0" y1="525" x2="1200" y2="525"/>
+    <line x1="150" y1="0" x2="150" y2="630"/>
+    <line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="450" y1="0" x2="450" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="750" y1="0" x2="750" y2="630"/>
+    <line x1="900" y1="0" x2="900" y2="630"/>
+    <line x1="1050" y1="0" x2="1050" y2="630"/>
+  </g>
+
+  <!-- Glowing orb background -->
+  <circle cx="600" cy="315" r="280" fill="none" stroke="url(#fire)" stroke-width="1" opacity="0.15"/>
+  <circle cx="600" cy="315" r="220" fill="none" stroke="url(#fire)" stroke-width="1" opacity="0.1"/>
+  <circle cx="600" cy="315" r="340" fill="none" stroke="#7c3aed" stroke-width="1" opacity="0.08"/>
+
+  <!-- Fire emoji large -->
+  <text x="600" y="200" text-anchor="middle" font-size="90" filter="url(#glow-strong)">🔥</text>
+
+  <!-- Main title -->
+  <text x="600" y="290" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="72" font-weight="900" fill="url(#fire)" filter="url(#glow)" letter-spacing="8">故事熔炉</text>
+
+  <!-- Subtitle -->
+  <text x="600" y="340" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="26" fill="#a78bfa" letter-spacing="4">StoryForge</text>
+
+  <!-- Tagline -->
+  <text x="600" y="400" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" fill="#94a3b8" letter-spacing="2">AI 辅助小说创作工作台 · 提示词全透明 · 纯本地运行</text>
+
+  <!-- Feature pills -->
+  <!-- Pill 1 -->
+  <rect x="140" y="450" width="160" height="36" rx="18" fill="#7c3aed" opacity="0.3"/>
+  <rect x="140" y="450" width="160" height="36" rx="18" fill="none" stroke="#7c3aed" stroke-width="1"/>
+  <text x="220" y="473" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" fill="#c4b5fd">11 家 AI 厂商</text>
+
+  <!-- Pill 2 -->
+  <rect x="320" y="450" width="160" height="36" rx="18" fill="#1d4ed8" opacity="0.3"/>
+  <rect x="320" y="450" width="160" height="36" rx="18" fill="none" stroke="#3b82f6" stroke-width="1"/>
+  <text x="400" y="473" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" fill="#93c5fd">43 条提示词模板</text>
+
+  <!-- Pill 3 -->
+  <rect x="500" y="450" width="160" height="36" rx="18" fill="#064e3b" opacity="0.5"/>
+  <rect x="500" y="450" width="160" height="36" rx="18" fill="none" stroke="#10b981" stroke-width="1"/>
+  <text x="580" y="473" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" fill="#6ee7b7">5 套题材包</text>
+
+  <!-- Pill 4 -->
+  <rect x="680" y="450" width="160" height="36" rx="18" fill="#7c2d12" opacity="0.5"/>
+  <rect x="680" y="450" width="160" height="36" rx="18" fill="none" stroke="#f97316" stroke-width="1"/>
+  <text x="760" y="473" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" fill="#fdba74">工作流引擎</text>
+
+  <!-- Pill 5 -->
+  <rect x="860" y="450" width="160" height="36" rx="18" fill="#1e1b4b" opacity="0.8"/>
+  <rect x="860" y="450" width="160" height="36" rx="18" fill="none" stroke="#818cf8" stroke-width="1"/>
+  <text x="940" y="473" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" fill="#a5b4fc">完全开源免费</text>
+
+  <!-- Bottom bar -->
+  <rect x="0" y="570" width="1200" height="60" fill="#0f0f1a" opacity="0.8"/>
+  <text x="600" y="607" text-anchor="middle" font-family="'Courier New', monospace" font-size="15" fill="#64748b">github.com/yuanbw2025/storyforge · MIT License · 纯前端 · 数据本地</text>
+
+  <!-- Decorative dots -->
+  <circle cx="80" cy="200" r="3" fill="#7c3aed" opacity="0.6" filter="url(#glow)"/>
+  <circle cx="1120" cy="400" r="3" fill="#f97316" opacity="0.6" filter="url(#glow)"/>
+  <circle cx="100" cy="500" r="2" fill="#3b82f6" opacity="0.5"/>
+  <circle cx="1100" cy="150" r="2" fill="#10b981" opacity="0.5"/>
+  <circle cx="50" cy="350" r="4" fill="#7c3aed" opacity="0.3"/>
+  <circle cx="1150" cy="280" r="4" fill="#f97316" opacity="0.3"/>
+</svg>

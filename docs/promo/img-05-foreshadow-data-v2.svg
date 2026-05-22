@@ -1,0 +1,208 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#070810"/>
+      <stop offset="100%" style="stop-color:#0d1020"/>
+    </linearGradient>
+    <linearGradient id="card-dark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#111827"/>
+      <stop offset="100%" style="stop-color:#0d1117"/>
+    </linearGradient>
+    <marker id="arr-y" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#f59e0b"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- ===== LEFT: Foreshadow system ===== -->
+  <text x="60" y="44" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#f59e0b" letter-spacing="3" font-weight="600">伏 笔 追 踪 系 统</text>
+  <text x="60" y="76" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="26" fill="#f1f5f9" font-weight="800">跨越全书的线索管理</text>
+  <text x="60" y="100" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="13" fill="#475569">不再因为写得太长而忘记当初埋的线 · 从计划到回收，全程追踪</text>
+  <line x1="60" y1="115" x2="520" y2="115" stroke="#3d2000" stroke-width="1.5"/>
+
+  <!-- Kanban view -->
+  <!-- Column: 计划 -->
+  <rect x="60" y="128" width="130" height="300" rx="8" fill="#0d1117" stroke="#1e293b"/>
+  <rect x="60" y="128" width="130" height="36" rx="8" fill="#1e293b"/>
+  <rect x="60" y="152" width="130" height="12" fill="#1e293b"/>
+  <text x="125" y="151" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#94a3b8" font-weight="600">📋 计划</text>
+  <rect x="70" y="172" width="110" height="62" rx="6" fill="#1a1000" stroke="#92400e"/>
+  <text x="125" y="190" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#fbbf24" font-weight="600">上古神器</text>
+  <text x="125" y="206" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#92400e">契诃夫之枪</text>
+  <text x="125" y="220" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">计划在第2章提及</text>
+  <text x="125" y="234" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">第15章爆发</text>
+
+  <rect x="70" y="246" width="110" height="62" rx="6" fill="#1a1000" stroke="#92400e"/>
+  <text x="125" y="264" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#fbbf24" font-weight="600">神明盟约</text>
+  <text x="125" y="280" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#92400e">预言类</text>
+  <text x="125" y="294" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">尾声前三章</text>
+  <text x="125" y="308" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">揭示真相</text>
+
+  <!-- Column: 埋设 -->
+  <rect x="202" y="128" width="130" height="300" rx="8" fill="#0d1117" stroke="#1e293b"/>
+  <rect x="202" y="128" width="130" height="36" rx="8" fill="#1a2035"/>
+  <rect x="202" y="152" width="130" height="12" fill="#1a2035"/>
+  <text x="267" y="151" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#7c3aed" font-weight="600">⚡ 埋设</text>
+  <rect x="212" y="172" width="110" height="76" rx="6" fill="#140a2e" stroke="#5b21b6"/>
+  <text x="267" y="192" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#c4b5fd" font-weight="600">苏晨神脉</text>
+  <text x="267" y="208" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#7c3aed">角色伏线</text>
+  <text x="267" y="222" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">第3章·山门考核</text>
+  <text x="267" y="236" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">神脉意外显现</text>
+  <text x="267" y="249" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">→呼应：第8章</text>
+
+  <rect x="212" y="260" width="110" height="62" rx="6" fill="#140a2e" stroke="#5b21b6"/>
+  <text x="267" y="278" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#c4b5fd" font-weight="600">灵脉枯竭迹象</text>
+  <text x="267" y="294" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#7c3aed">环境伏线</text>
+  <text x="267" y="308" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">第1章·散修营地</text>
+  <text x="267" y="322" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">灵草提前枯萎</text>
+
+  <!-- Column: 呼应 -->
+  <rect x="344" y="128" width="130" height="300" rx="8" fill="#0d1117" stroke="#1e293b"/>
+  <rect x="344" y="128" width="130" height="36" rx="8" fill="#0a2010"/>
+  <rect x="344" y="152" width="130" height="12" fill="#0a2010"/>
+  <text x="409" y="151" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#10b981" font-weight="600">🔔 呼应</text>
+  <rect x="354" y="172" width="110" height="76" rx="6" fill="#052e16" stroke="#166534"/>
+  <text x="409" y="192" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#6ee7b7" font-weight="600">苏晨神脉</text>
+  <text x="409" y="208" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#10b981">第8章</text>
+  <text x="409" y="222" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">与老长老对话</text>
+  <text x="409" y="236" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">暗示神脉身份</text>
+  <text x="409" y="249" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">→回收：第22章</text>
+
+  <!-- Column: 回收 -->
+  <rect x="486" y="128" width="130" height="300" rx="8" fill="#0d1117" stroke="#1e293b"/>
+  <rect x="486" y="128" width="130" height="36" rx="8" fill="#0a1628"/>
+  <rect x="486" y="152" width="130" height="12" fill="#0a1628"/>
+  <text x="551" y="151" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#3b82f6" font-weight="600">✅ 回收</text>
+  <rect x="496" y="172" width="110" height="76" rx="6" fill="#0c1a30" stroke="#1d4ed8"/>
+  <text x="551" y="192" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#93c5fd" font-weight="600">上古传承</text>
+  <text x="551" y="208" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#3b82f6">第5章埋设</text>
+  <text x="551" y="222" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#6ee7b7">第18章回收 ✓</text>
+  <text x="551" y="236" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">苏晨得到上古</text>
+  <text x="551" y="249" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">修炼秘法</text>
+
+  <!-- AI suggest -->
+  <rect x="60" y="444" width="556" height="52" rx="8" fill="#1c1000" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="338" y="464" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#fbbf24" font-weight="600">✦ AI 批量建议伏笔</text>
+  <text x="338" y="482" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#92400e">基于世界观+大纲，一次建议 3-12 个伏笔，涵盖 10 种类型</text>
+
+  <!-- Stats -->
+  <rect x="60" y="510" width="264" height="52" rx="8" fill="#0d1117" stroke="#1e293b"/>
+  <text x="192" y="530" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#94a3b8">全书伏笔统计</text>
+  <text x="105" y="552" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="20" fill="#fbbf24" font-weight="700">12</text>
+  <text x="105" y="566" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">计划中</text>
+  <text x="192" y="552" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="20" fill="#7c3aed" font-weight="700">8</text>
+  <text x="192" y="566" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">已埋设</text>
+  <text x="278" y="552" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="20" fill="#3b82f6" font-weight="700">3</text>
+  <text x="278" y="566" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#64748b">已回收</text>
+
+  <rect x="352" y="510" width="264" height="52" rx="8" fill="#0d1117" stroke="#1e293b"/>
+  <text x="484" y="530" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#94a3b8">10 种伏笔类型</text>
+  <text x="484" y="550" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#64748b">契诃夫 · 预言 · 象征 · 角色 · 对话</text>
+  <text x="484" y="565" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#64748b">环境 · 时间线 · 红鲱鱼 · 平行 · 回调</text>
+
+  <!-- ===== DIVIDER ===== -->
+  <line x1="640" y1="115" x2="640" y2="600" stroke="#1e293b" stroke-width="1"/>
+
+  <!-- ===== RIGHT: Data & Safety ===== -->
+  <text x="666" y="44" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#3b82f6" letter-spacing="3" font-weight="600">数 据 · 安 全 · 自 由</text>
+  <text x="666" y="76" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="26" fill="#f1f5f9" font-weight="800">你的作品，永远属于你</text>
+  <text x="666" y="100" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="13" fill="#475569">全部本地存储 · 11家AI任选 · 5种导出 · 版本历史兜底</text>
+  <line x1="666" y1="115" x2="1140" y2="115" stroke="#1e3a5f" stroke-width="1.5"/>
+
+  <!-- AI Vendors -->
+  <rect x="666" y="128" width="514" height="130" rx="10" fill="url(#card-dark)" stroke="#1e293b"/>
+  <text x="923" y="153" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="13" fill="#94a3b8" font-weight="600">🤖 11 家 AI 厂商 · 自带 API Key · 随时切换</text>
+  <!-- International -->
+  <text x="686" y="178" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#64748b">国际</text>
+  <rect x="716" y="166" width="80" height="26" rx="5" fill="#1a2035" stroke="#334155"/>
+  <text x="756" y="183" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#93c5fd">OpenAI</text>
+  <rect x="804" y="166" width="80" height="26" rx="5" fill="#1a2035" stroke="#334155"/>
+  <text x="844" y="183" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#e2e8f0">Claude</text>
+  <rect x="892" y="166" width="80" height="26" rx="5" fill="#1a2035" stroke="#334155"/>
+  <text x="932" y="183" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#4ade80">Gemini</text>
+  <rect x="980" y="166" width="90" height="26" rx="5" fill="#1a2035" stroke="#334155"/>
+  <text x="1025" y="183" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#60a5fa">DeepSeek</text>
+  <!-- Domestic -->
+  <text x="686" y="216" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#64748b">国内</text>
+  <rect x="716" y="204" width="64" height="26" rx="5" fill="#1a2035" stroke="#334155"/>
+  <text x="748" y="221" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#fbbf24">通义</text>
+  <rect x="788" y="204" width="56" height="26" rx="5" fill="#1a2035" stroke="#334155"/>
+  <text x="816" y="221" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#f9a8d4">豆包</text>
+  <rect x="852" y="204" width="56" height="26" rx="5" fill="#1a2035" stroke="#334155"/>
+  <text x="880" y="221" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#6ee7b7">文心</text>
+  <rect x="916" y="204" width="56" height="26" rx="5" fill="#1a2035" stroke="#334155"/>
+  <text x="944" y="221" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#c4b5fd">Kimi</text>
+  <rect x="980" y="204" width="56" height="26" rx="5" fill="#1a2035" stroke="#334155"/>
+  <text x="1008" y="221" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#a5b4fc">智谱</text>
+  <rect x="1044" y="204" width="72" height="26" rx="5" fill="#1a2035" stroke="#334155"/>
+  <text x="1080" y="221" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#94a3b8">Ollama本地</text>
+  <text x="923" y="248" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#475569">API Key 仅存你的浏览器本地，不经过任何服务器</text>
+
+  <!-- Export -->
+  <rect x="666" y="274" width="514" height="108" rx="10" fill="url(#card-dark)" stroke="#1e293b"/>
+  <text x="923" y="298" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="13" fill="#94a3b8" font-weight="600">📤 5 种导出方式</text>
+  <g font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11.5">
+    <rect x="680" y="308" width="90" height="54" rx="6" fill="#0f172a" stroke="#1e293b"/>
+    <text x="725" y="330" text-anchor="middle" fill="#fbbf24">📦</text>
+    <text x="725" y="346" text-anchor="middle" fill="#94a3b8">JSON</text>
+    <text x="725" y="358" text-anchor="middle" fill="#64748b" font-size="10">完整备份</text>
+
+    <rect x="778" y="308" width="90" height="54" rx="6" fill="#0f172a" stroke="#1e293b"/>
+    <text x="823" y="330" text-anchor="middle" fill="#93c5fd">📄</text>
+    <text x="823" y="346" text-anchor="middle" fill="#94a3b8">Markdown</text>
+    <text x="823" y="358" text-anchor="middle" fill="#64748b" font-size="10">结构存档</text>
+
+    <rect x="876" y="308" width="90" height="54" rx="6" fill="#0f172a" stroke="#1e293b"/>
+    <text x="921" y="330" text-anchor="middle" fill="#6ee7b7">📝</text>
+    <text x="921" y="346" text-anchor="middle" fill="#94a3b8">TXT</text>
+    <text x="921" y="358" text-anchor="middle" fill="#64748b" font-size="10">纯文本投稿</text>
+
+    <rect x="974" y="308" width="90" height="54" rx="6" fill="#0f172a" stroke="#1e293b"/>
+    <text x="1019" y="330" text-anchor="middle" fill="#f9a8d4">📁</text>
+    <text x="1019" y="346" text-anchor="middle" fill="#94a3b8">本地文件夹</text>
+    <text x="1019" y="358" text-anchor="middle" fill="#64748b" font-size="10">实时同步</text>
+
+    <rect x="1072" y="308" width="90" height="54" rx="6" fill="#0f172a" stroke="#1e293b"/>
+    <text x="1117" y="330" text-anchor="middle" fill="#a5b4fc">☁</text>
+    <text x="1117" y="346" text-anchor="middle" fill="#94a3b8">GitHub Gist</text>
+    <text x="1117" y="358" text-anchor="middle" fill="#64748b" font-size="10">云端备份</text>
+  </g>
+
+  <!-- Version history -->
+  <rect x="666" y="398" width="514" height="100" rx="10" fill="url(#card-dark)" stroke="#1e293b"/>
+  <text x="923" y="422" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="13" fill="#94a3b8" font-weight="600">🕐 版本历史 · 安全网</text>
+  <!-- Timeline -->
+  <g font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11">
+    <circle cx="700" cy="455" r="8" fill="#7c3aed" stroke="#a78bfa"/>
+    <text x="700" y="476" text-anchor="middle" fill="#7c3aed" font-size="10">手动</text>
+    <text x="700" y="488" text-anchor="middle" fill="#64748b" font-size="10">v1.0</text>
+
+    <circle cx="770" cy="455" r="6" fill="#334155"/>
+    <text x="770" y="476" text-anchor="middle" fill="#475569" font-size="10">自动</text>
+
+    <circle cx="830" cy="455" r="6" fill="#334155"/>
+    <circle cx="890" cy="455" r="6" fill="#334155"/>
+    <circle cx="950" cy="455" r="6" fill="#334155"/>
+    <circle cx="1010" cy="455" r="6" fill="#334155"/>
+
+    <circle cx="1070" cy="455" r="8" fill="#3b82f6" stroke="#60a5fa"/>
+    <text x="1070" y="476" text-anchor="middle" fill="#3b82f6" font-size="10">手动</text>
+    <text x="1070" y="488" text-anchor="middle" fill="#64748b" font-size="10">v2.0</text>
+
+    <circle cx="1130" cy="455" r="6" fill="#1e3a6e" stroke="#3b82f6" stroke-width="1.5"/>
+    <text x="1130" y="476" text-anchor="middle" fill="#3b82f6" font-size="10">当前</text>
+
+    <line x1="708" y1="455" x2="1122" y2="455" stroke="#1e293b" stroke-width="1.5"/>
+  </g>
+  <text x="923" y="498" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#475569">5分钟自动 · 保留20条 · 手动永久快照 · 恢复创建新项目（不覆盖原版）</text>
+
+  <!-- Import -->
+  <rect x="666" y="514" width="514" height="56" rx="10" fill="url(#card-dark)" stroke="#1e293b"/>
+  <text x="923" y="536" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="13" fill="#94a3b8" font-weight="600">📥 文档导入 · 百万字分块导入 + 断点续传</text>
+  <text x="923" y="556" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#475569">既有内容导入 · 名作文本导入大师研读 · 角色跨块去重合并 · 支持暂停恢复</text>
+
+  <!-- Bottom -->
+  <rect x="0" y="598" width="1200" height="32" fill="#050810"/>
+  <text x="600" y="619" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#334155">故事熔炉 StoryForge · 完全开源免费 · github.com/yuanbw2025/storyforge · MIT License</text>
+</svg>

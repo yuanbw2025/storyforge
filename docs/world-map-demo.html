@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StoryForge · 世界地图 Demo</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#1a1410; color:#d4c8a0; font-family:'PingFang SC','Microsoft YaHei',serif; display:flex; flex-direction:column; align-items:center; min-height:100vh; padding:20px; }
+  h1 { font-size:18px; margin-bottom:8px; color:#c9a84c; letter-spacing:2px; }
+  .subtitle { font-size:12px; color:#7a7060; margin-bottom:16px; }
+  .map-container { position:relative; border:3px solid #3a3020; border-radius:8px; overflow:hidden; box-shadow: 0 0 40px rgba(0,0,0,.6), inset 0 0 60px rgba(0,0,0,.3); }
+  canvas { display:block; cursor:grab; }
+  .legend { margin-top:16px; display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
+  .legend-item { display:flex; align-items:center; gap:6px; font-size:12px; color:#8a7d60; }
+  .legend-dot { width:12px; height:12px; border-radius:2px; border:1px solid rgba(255,255,255,.15); }
+  .info { margin-top:20px; max-width:800px; background:#221c14; border:1px solid #3a3020; border-radius:8px; padding:20px; font-size:13px; line-height:1.8; color:#9a8d70; }
+  .info h3 { color:#c9a84c; margin-bottom:8px; font-size:14px; }
+  .info code { background:#1a1410; padding:2px 6px; border-radius:3px; font-size:12px; color:#c9a84c; }
+</style>
+</head>
+<body>
+
+<h1>🔥 StoryForge · 世界地图渲染 Demo</h1>
+<p class="subtitle">基于结构化地理数据的 Canvas 渲染 — 仿权游/魔兽风格</p>
+
+<div class="map-container">
+  <canvas id="map" width="900" height="620"></canvas>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#4a7a3a"></div>平原/草地</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#2d5a2a"></div>森林</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#c4a54a"></div>沙漠</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d8d8e8"></div>冰原</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#7a6a5a"></div>山脉</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3a6080"></div>海洋</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4a90c0"></div>河流</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#c9a84c"></div>城市/门派</div>
+</div>
+
+<div class="info">
+  <h3>📋 这个 Demo 展示的是什么？</h3>
+  <p>这是 <strong>方案 4（AI → 结构化数据 → Canvas 渲染）</strong>的效果预览。</p>
+  <p>实际流程：用户在「设定库 → 世界观」中写下文字描述 → 点击「生成世界地图」→ AI 提取结构化 JSON → Canvas 渲染。</p>
+  <p>下方就是 AI 可能返回的结构化数据，直接渲染出的效果。所有地形、山脉、河流、城市标注都是代码绘制的（非图片）。</p>
+  <br>
+  <h3>🧪 模拟的世界观输入</h3>
+  <p>
+    世界尺寸：方圆数万里的大世界<br>
+    大陆分布：中央灵虚大陆为最大陆地，东方隔沧澜海有一座孤岛东灵岛，南方是赤焰沙漠，北方是万里冰原<br>
+    山川河流：天柱山脉纵贯大陆中部，灵河发源于天柱峰流向东南入海，西边有一条暗河从荒漠中穿过<br>
+    势力分布：天都城是人族王庭所在，云隐宗在天柱山北麓，赤焰教在南方沙漠腹地，冰宫在极北
+  </p>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// 模拟 AI 返回的结构化地理数据（未来会由 AI 从世界观文字中提取）
+// ═══════════════════════════════════════════════════════════════
+const worldData = {
+  name: "灵虚世界",
+  // 区域（大陆/海洋/沙漠/冰原）
+  regions: [
+    // 海洋
+    { name:"沧澜海",     type:"ocean",     cx:760, cy:300, rx:140, ry:250, color:"#2a4a68" },
+    { name:"西海",        type:"ocean",     cx:60,  cy:320, rx:80,  ry:200, color:"#2a4a68" },
+    { name:"北冰洋",      type:"ocean",     cx:450, cy:20,  rx:300, ry:40,  color:"#2a4a6a" },
+    // 大陆区域
+    { name:"灵虚大陆",    type:"continent", cx:400, cy:320, rx:280, ry:240, color:"#3a6a30" },
+    // 子区域
+    { name:"翠原平原",    type:"plains",    cx:350, cy:350, rx:100, ry:70,  color:"#4a7a3a" },
+    { name:"幽暗森林",    type:"forest",    cx:260, cy:260, rx:60,  ry:50,  color:"#2d5a2a" },
+    { name:"赤焰沙漠",    type:"desert",    cx:380, cy:520, rx:120, ry:60,  color:"#b89840" },
+    { name:"万里冰原",    type:"tundra",    cx:400, cy:100, rx:160, ry:60,  color:"#c8c8d8" },
+    { name:"东灵岛",      type:"island",    cx:720, cy:200, rx:35,  ry:45,  color:"#3a7a3a" },
+    { name:"迷雾沼泽",    type:"swamp",     cx:500, cy:420, rx:50,  ry:35,  color:"#3a5a30" },
+  ],
+  // 山脉
+  mountains: [
+    { name:"天柱山脉", points:[[360,170],[380,210],[400,250],[410,290],[420,330],[415,370]], height:"high" },
+    { name:"铁壁岭",   points:[[250,400],[280,420],[310,430]], height:"medium" },
+    { name:"冰牙山",   points:[[350,80],[380,90],[410,85]], height:"low" },
+  ],
+  // 河流
+  rivers: [
+    { name:"灵河",   points:[[400,250],[430,290],[460,330],[500,370],[540,400],[590,430],[650,450]], width:3 },
+    { name:"暗河",   points:[[300,460],[330,480],[360,500],[400,510]], width:2, dashed:true },
+    { name:"冰泉溪", points:[[380,130],[370,160],[365,190],[370,210]], width:1.5 },
+  ],
+  // 城市/据点
+  cities: [
+    { name:"天都城",   x:350, y:340, type:"capital",  faction:"人族王庭" },
+    { name:"云隐宗",   x:370, y:200, type:"sect",     faction:"正道" },
+    { name:"赤焰教总坛", x:380, y:510, type:"sect",   faction:"邪教" },
+    { name:"冰宫",     x:400, y:80,  type:"fortress", faction:"冰族" },
+    { name:"沧澜港",   x:620, y:380, type:"port",     faction:"商会" },
+    { name:"东灵书院", x:720, y:190, type:"academy",  faction:"学派" },
+    { name:"幽林镇",   x:250, y:280, type:"town",     faction:"散修" },
+    { name:"铁壁关",   x:280, y:410, type:"fortress", faction:"军方" },
+    { name:"雾沼渡口", x:510, y:410, type:"port",     faction:"无" },
+  ],
+  // 标注（地名/区域名，不关联具体实体）
+  labels: [
+    { text:"沧澜海", x:750, y:310, size:16, color:"#4a7a9a", style:"italic" },
+    { text:"西海",    x:60,  y:330, size:13, color:"#4a7a9a", style:"italic" },
+    { text:"赤焰沙漠", x:380, y:540, size:12, color:"#a08040" },
+    { text:"万里冰原", x:400, y:115, size:12, color:"#8a8a9a" },
+    { text:"翠原平原", x:340, y:370, size:11, color:"#5a8a4a" },
+    { text:"幽暗森林", x:250, y:243, size:10, color:"#3a6a2a" },
+    { text:"迷雾沼泽", x:500, y:440, size:10, color:"#4a6a3a" },
+  ],
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Canvas 渲染引擎
+// ═══════════════════════════════════════════════════════════════
+const canvas = document.getElementById('map')
+const ctx = canvas.getContext('2d')
+const W = canvas.width, H = canvas.height
+
+// ── 辅助函数 ──
+function rand(a,b){ return a + Math.random()*(b-a) }
+function seededRand(seed){ return function(){ seed=(seed*16807)%2147483647; return(seed-1)/2147483646 } }
+
+// ── 1. 羊皮纸背景 ──
+function drawParchment(){
+  // 基色
+  const grad = ctx.createRadialGradient(W/2,H/2,50,W/2,H/2,500)
+  grad.addColorStop(0, '#3a3425')
+  grad.addColorStop(0.7, '#2a2518')
+  grad.addColorStop(1, '#1a1810')
+  ctx.fillStyle = grad
+  ctx.fillRect(0,0,W,H)
+  
+  // 纸张纹理
+  const r = seededRand(42)
+  ctx.globalAlpha = 0.03
+  for(let i=0; i<8000; i++){
+    const x=r()*W, y=r()*H, s=r()*2
+    ctx.fillStyle = r()>0.5 ? '#fff' : '#000'
+    ctx.fillRect(x,y,s,s)
+  }
+  ctx.globalAlpha = 1
+  
+  // 边框装饰线
+  ctx.strokeStyle = '#4a3a20'
+  ctx.lineWidth = 1
+  ctx.strokeRect(12,12,W-24,H-24)
+  ctx.strokeStyle = '#3a2a15'
+  ctx.lineWidth = 0.5
+  ctx.strokeRect(16,16,W-32,H-32)
+}
+
+// ── 2. 海洋 ──
+function drawOcean(region){
+  ctx.save()
+  ctx.globalAlpha = 0.7
+  // 水域底色
+  const grad = ctx.createRadialGradient(region.cx,region.cy,0,region.cx,region.cy,Math.max(region.rx,region.ry))
+  grad.addColorStop(0, region.color || '#2a4a68')
+  grad.addColorStop(1, '#1a2a3a')
+  ctx.fillStyle = grad
+  ctx.beginPath()
+  ctx.ellipse(region.cx,region.cy,region.rx,region.ry,0,0,Math.PI*2)
+  ctx.fill()
+  
+  // 波浪纹
+  ctx.globalAlpha = 0.15
+  ctx.strokeStyle = '#5a8ab0'
+  ctx.lineWidth = 0.5
+  const rng = seededRand(region.cx*100+region.cy)
+  for(let i=0; i<20; i++){
+    const ox = region.cx + (rng()-0.5)*region.rx*1.4
+    const oy = region.cy + (rng()-0.5)*region.ry*1.2
+    ctx.beginPath()
+    ctx.moveTo(ox-12, oy)
+    ctx.quadraticCurveTo(ox-6, oy-4, ox, oy)
+    ctx.quadraticCurveTo(ox+6, oy+4, ox+12, oy)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+// ── 3. 陆地区域 ──
+function drawRegion(region){
+  ctx.save()
+  const type = region.type
+  if(type === 'ocean') return drawOcean(region)
+  
+  ctx.globalAlpha = type === 'continent' ? 0.4 : 0.6
+  
+  // 不规则边界（椭圆 + 噪声）
+  const rng = seededRand(region.cx*31+region.cy*17)
+  ctx.beginPath()
+  const steps = 60
+  for(let i=0; i<=steps; i++){
+    const a = (i/steps) * Math.PI*2
+    const noise = 1 + (rng()-0.5)*0.15
+    const x = region.cx + Math.cos(a)*region.rx*noise
+    const y = region.cy + Math.sin(a)*region.ry*noise
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y)
+  }
+  ctx.closePath()
+  
+  const grad = ctx.createRadialGradient(region.cx,region.cy,0,region.cx,region.cy,Math.max(region.rx,region.ry))
+  grad.addColorStop(0, region.color)
+  grad.addColorStop(1, adjustColor(region.color, -30))
+  ctx.fillStyle = grad
+  ctx.fill()
+  
+  // 边缘线
+  ctx.globalAlpha = 0.2
+  ctx.strokeStyle = lighten(region.color, 40)
+  ctx.lineWidth = 0.8
+  ctx.stroke()
+  
+  // 地形纹理
+  ctx.globalAlpha = 0.4
+  if(type === 'forest') drawForestTexture(region, rng)
+  if(type === 'desert') drawDesertTexture(region, rng)
+  if(type === 'tundra') drawTundraTexture(region, rng)
+  if(type === 'swamp') drawSwampTexture(region, rng)
+  
+  ctx.restore()
+}
+
+function drawForestTexture(r, rng){
+  ctx.fillStyle = '#1a4a1a'
+  for(let i=0; i<40; i++){
+    const x = r.cx + (rng()-0.5)*r.rx*1.5
+    const y = r.cy + (rng()-0.5)*r.ry*1.5
+    // 小三角形表示树
+    ctx.beginPath()
+    ctx.moveTo(x, y-5)
+    ctx.lineTo(x-3, y+3)
+    ctx.lineTo(x+3, y+3)
+    ctx.closePath()
+    ctx.fill()
+  }
+}
+
+function drawDesertTexture(r, rng){
+  ctx.fillStyle = '#c4a040'
+  ctx.globalAlpha = 0.2
+  for(let i=0; i<30; i++){
+    const x = r.cx + (rng()-0.5)*r.rx*1.3
+    const y = r.cy + (rng()-0.5)*r.ry*1.3
+    ctx.beginPath()
+    ctx.arc(x,y,1,0,Math.PI*2)
+    ctx.fill()
+  }
+}
+
+function drawTundraTexture(r, rng){
+  ctx.fillStyle = '#e0e0f0'
+  ctx.globalAlpha = 0.3
+  for(let i=0; i<25; i++){
+    const x = r.cx + (rng()-0.5)*r.rx*1.3
+    const y = r.cy + (rng()-0.5)*r.ry*1.3
+    // 雪花点
+    ctx.beginPath()
+    ctx.arc(x,y,1.5,0,Math.PI*2)
+    ctx.fill()
+  }
+}
+
+function drawSwampTexture(r, rng){
+  ctx.strokeStyle = '#2a4a20'
+  ctx.lineWidth = 0.5
+  ctx.globalAlpha = 0.5
+  for(let i=0; i<15; i++){
+    const x = r.cx + (rng()-0.5)*r.rx*1.2
+    const y = r.cy + (rng()-0.5)*r.ry*1.2
+    ctx.beginPath()
+    ctx.arc(x,y,3+rng()*4,0,Math.PI*2)
+    ctx.stroke()
+  }
+}
+
+// ── 4. 山脉 ──
+function drawMountains(mtn){
+  const pts = mtn.points
+  const h = mtn.height === 'high' ? 18 : mtn.height === 'medium' ? 13 : 9
+  
+  ctx.save()
+  for(let i=0; i<pts.length; i++){
+    const [x,y] = pts[i]
+    // 山体
+    const w = h * 0.8
+    
+    // 阴影
+    ctx.fillStyle = 'rgba(0,0,0,0.2)'
+    ctx.beginPath()
+    ctx.moveTo(x, y-h+2)
+    ctx.lineTo(x-w-2, y+4)
+    ctx.lineTo(x+w+2, y+4)
+    ctx.closePath()
+    ctx.fill()
+    
+    // 山体
+    ctx.fillStyle = '#6a5a48'
+    ctx.beginPath()
+    ctx.moveTo(x, y-h)
+    ctx.lineTo(x-w, y+2)
+    ctx.lineTo(x+w, y+2)
+    ctx.closePath()
+    ctx.fill()
+    
+    // 雪顶
+    if(h > 12){
+      ctx.fillStyle = '#e8e0d0'
+      ctx.beginPath()
+      ctx.moveTo(x, y-h)
+      ctx.lineTo(x-w*0.3, y-h*0.5)
+      ctx.lineTo(x+w*0.3, y-h*0.5)
+      ctx.closePath()
+      ctx.fill()
+    }
+    
+    // 纹理线
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)'
+    ctx.lineWidth = 0.5
+    ctx.beginPath()
+    ctx.moveTo(x-w*0.5, y)
+    ctx.lineTo(x, y-h*0.6)
+    ctx.lineTo(x+w*0.5, y)
+    ctx.stroke()
+  }
+  
+  // 山脉名称
+  if(pts.length >= 2){
+    const mid = pts[Math.floor(pts.length/2)]
+    ctx.fillStyle = '#8a7a60'
+    ctx.font = 'italic 9px serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(mtn.name, mid[0], mid[1]+18)
+  }
+  ctx.restore()
+}
+
+// ── 5. 河流 ──
+function drawRiver(river){
+  ctx.save()
+  const pts = river.points
+  ctx.strokeStyle = '#4a90c0'
+  ctx.lineWidth = river.width || 2
+  ctx.globalAlpha = 0.8
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  
+  if(river.dashed) ctx.setLineDash([4,4])
+  
+  ctx.beginPath()
+  ctx.moveTo(pts[0][0], pts[0][1])
+  
+  // 贝塞尔曲线使河流自然弯曲
+  for(let i=1; i<pts.length-1; i++){
+    const xc = (pts[i][0]+pts[i+1][0])/2
+    const yc = (pts[i][1]+pts[i+1][1])/2
+    ctx.quadraticCurveTo(pts[i][0], pts[i][1], xc, yc)
+  }
+  if(pts.length >= 2){
+    const last = pts[pts.length-1]
+    ctx.lineTo(last[0], last[1])
+  }
+  ctx.stroke()
+  
+  // 河名
+  if(pts.length >= 3){
+    const mid = pts[Math.floor(pts.length/2)]
+    ctx.fillStyle = '#5a9ac0'
+    ctx.font = 'italic 8px serif'
+    ctx.textAlign = 'center'
+    ctx.globalAlpha = 0.7
+    ctx.fillText(river.name, mid[0]+12, mid[1]-6)
+  }
+  ctx.restore()
+}
+
+// ── 6. 城市标注 ──
+function drawCity(city){
+  ctx.save()
+  const x = city.x, y = city.y
+  
+  const icons = {
+    capital:  '🏰',
+    sect:     '⚔️',
+    fortress: '🏯',
+    port:     '⚓',
+    academy:  '📚',
+    town:     '🏘️',
+  }
+  const icon = icons[city.type] || '📍'
+  const isCapital = city.type === 'capital'
+  
+  // 光晕
+  if(isCapital){
+    ctx.globalAlpha = 0.3
+    ctx.fillStyle = '#c9a84c'
+    ctx.beginPath()
+    ctx.arc(x,y,12,0,Math.PI*2)
+    ctx.fill()
+  }
+  
+  // 图标
+  ctx.globalAlpha = 1
+  ctx.font = isCapital ? '14px serif' : '11px serif'
+  ctx.textAlign = 'center'
+  ctx.fillText(icon, x, y+4)
+  
+  // 城市名
+  ctx.fillStyle = isCapital ? '#c9a84c' : '#b0a080'
+  ctx.font = isCapital ? 'bold 11px serif' : '10px serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  
+  // 文字描边（提高可读性）
+  ctx.strokeStyle = '#1a1810'
+  ctx.lineWidth = 3
+  ctx.strokeText(city.name, x, y+10)
+  ctx.fillText(city.name, x, y+10)
+  
+  ctx.restore()
+}
+
+// ── 7. 区域文字标注 ──
+function drawLabel(label){
+  ctx.save()
+  ctx.globalAlpha = 0.6
+  ctx.fillStyle = label.color || '#8a7d60'
+  const style = label.style === 'italic' ? 'italic ' : ''
+  ctx.font = `${style}${label.size || 11}px serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  
+  ctx.strokeStyle = '#1a1810'
+  ctx.lineWidth = 2.5
+  ctx.strokeText(label.text, label.x, label.y)
+  ctx.fillText(label.text, label.x, label.y)
+  ctx.restore()
+}
+
+// ── 8. 指南针 ──
+function drawCompass(){
+  ctx.save()
+  const cx = W-55, cy = 55
+  
+  // 外圈
+  ctx.strokeStyle = '#5a4a30'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.arc(cx,cy,22,0,Math.PI*2)
+  ctx.stroke()
+  
+  // 十字
+  ctx.strokeStyle = '#4a3a25'
+  ctx.lineWidth = 0.5
+  ctx.beginPath()
+  ctx.moveTo(cx,cy-20); ctx.lineTo(cx,cy+20)
+  ctx.moveTo(cx-20,cy); ctx.lineTo(cx+20,cy)
+  ctx.stroke()
+  
+  // 北指针
+  ctx.fillStyle = '#c9a84c'
+  ctx.beginPath()
+  ctx.moveTo(cx, cy-18)
+  ctx.lineTo(cx-4, cy)
+  ctx.lineTo(cx+4, cy)
+  ctx.closePath()
+  ctx.fill()
+  
+  // 南指针
+  ctx.fillStyle = '#5a4a30'
+  ctx.beginPath()
+  ctx.moveTo(cx, cy+18)
+  ctx.lineTo(cx-4, cy)
+  ctx.lineTo(cx+4, cy)
+  ctx.closePath()
+  ctx.fill()
+  
+  // N 标记
+  ctx.fillStyle = '#c9a84c'
+  ctx.font = 'bold 10px serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('N', cx, cy-24)
+  
+  ctx.restore()
+}
+
+// ── 9. 标题框 ──
+function drawTitle(){
+  ctx.save()
+  const title = worldData.name
+  
+  // 标题区域
+  ctx.fillStyle = 'rgba(26,24,16,0.7)'
+  ctx.fillRect(20, 20, 160, 36)
+  ctx.strokeStyle = '#5a4a30'
+  ctx.lineWidth = 1
+  ctx.strokeRect(20, 20, 160, 36)
+  
+  // 内框
+  ctx.strokeStyle = '#3a2a18'
+  ctx.lineWidth = 0.5
+  ctx.strokeRect(23, 23, 154, 30)
+  
+  ctx.fillStyle = '#c9a84c'
+  ctx.font = 'bold 16px serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(title, 100, 38)
+  
+  ctx.restore()
+}
+
+// ── 10. 比例尺 ──
+function drawScale(){
+  ctx.save()
+  const x = 30, y = H-35
+  
+  ctx.strokeStyle = '#6a5a40'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(x,y); ctx.lineTo(x+80,y)
+  ctx.moveTo(x,y-4); ctx.lineTo(x,y+4)
+  ctx.moveTo(x+80,y-4); ctx.lineTo(x+80,y+4)
+  ctx.moveTo(x+40,y-3); ctx.lineTo(x+40,y+3)
+  ctx.stroke()
+  
+  ctx.fillStyle = '#7a6a50'
+  ctx.font = '9px serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('0', x, y+14)
+  ctx.fillText('五千里', x+40, y+14)
+  ctx.fillText('万里', x+80, y+14)
+  
+  ctx.restore()
+}
+
+// ── 颜色工具 ──
+function adjustColor(hex, amt){
+  const num = parseInt(hex.replace('#',''), 16)
+  let r = Math.min(255, Math.max(0, (num>>16) + amt))
+  let g = Math.min(255, Math.max(0, ((num>>8)&0xff) + amt))
+  let b = Math.min(255, Math.max(0, (num&0xff) + amt))
+  return `rgb(${r},${g},${b})`
+}
+function lighten(hex, amt){ return adjustColor(hex, amt) }
+
+// ═══════════════════════════════════════════════════════════════
+// 主渲染
+// ═══════════════════════════════════════════════════════════════
+function render(){
+  ctx.clearRect(0,0,W,H)
+  
+  // 1. 羊皮纸背景
+  drawParchment()
+  
+  // 2. 海洋（先画，在底层）
+  worldData.regions.filter(r => r.type === 'ocean').forEach(drawRegion)
+  
+  // 3. 大陆（覆盖海洋边缘）
+  worldData.regions.filter(r => r.type === 'continent').forEach(drawRegion)
+  
+  // 4. 子区域
+  worldData.regions.filter(r => !['ocean','continent'].includes(r.type)).forEach(drawRegion)
+  
+  // 5. 山脉
+  worldData.mountains.forEach(drawMountains)
+  
+  // 6. 河流
+  worldData.rivers.forEach(drawRiver)
+  
+  // 7. 城市
+  worldData.cities.forEach(drawCity)
+  
+  // 8. 区域标注
+  worldData.labels.forEach(drawLabel)
+  
+  // 9. UI 元素
+  drawCompass()
+  drawTitle()
+  drawScale()
+}
+
+render()
+</script>
+</body>
+</html>

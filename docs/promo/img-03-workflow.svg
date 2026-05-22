@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0f1e"/>
+      <stop offset="100%" style="stop-color:#0f1a2e"/>
+    </linearGradient>
+    <linearGradient id="step-done" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#052e16"/>
+      <stop offset="100%" style="stop-color:#064e3b"/>
+    </linearGradient>
+    <linearGradient id="step-active" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1e1b4b"/>
+      <stop offset="100%" style="stop-color:#1d3a6e"/>
+    </linearGradient>
+    <linearGradient id="step-wait" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Title area -->
+  <text x="60" y="52" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" fill="#f97316" font-weight="600" letter-spacing="3">工作流引擎</text>
+  <text x="60" y="88" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="36" fill="#f1f5f9" font-weight="700">链式 AI 步骤 · 一键跑完五步起书</text>
+  <text x="60" y="116" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#64748b">每步结果自动写回项目，无需手动复制粘贴</text>
+  <line x1="60" y1="132" x2="580" y2="132" stroke="#f97316" stroke-width="2"/>
+
+  <!-- Workflow: 极速起书 -->
+  <!-- Header -->
+  <rect x="60" y="152" width="660" height="50" rx="12" fill="#1a1a2e" stroke="#f97316" stroke-width="1.5"/>
+  <text x="80" y="172" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="15" fill="#fbbf24" font-weight="700">⚡ 极速起书 · 通用</text>
+  <text x="80" y="190" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">5 步从零到框架，每步自动写回项目对应字段</text>
+  <rect x="640" y="164" width="70" height="26" rx="13" fill="#f97316" opacity="0.2" stroke="#f97316"/>
+  <text x="675" y="181" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" fill="#fbbf24">▶ 运行</text>
+
+  <!-- Step cards -->
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif">
+
+    <!-- Step 1: Done -->
+    <rect x="60" y="218" width="628" height="72" rx="10" fill="url(#step-done)" stroke="#166534" stroke-width="1"/>
+    <rect x="60" y="218" width="4" height="72" rx="2" fill="#10b981"/>
+    <circle cx="96" cy="254" r="16" fill="#10b981" opacity="0.2" stroke="#10b981"/>
+    <text x="96" y="259" text-anchor="middle" font-size="14" fill="#10b981" font-weight="700">1</text>
+    <text x="122" y="244" font-size="13" fill="#6ee7b7" font-weight="600">故事核心生成</text>
+    <text x="122" y="261" font-size="11.5" fill="#4ade80">→ 一句话故事 + 故事概念 + 主题 + 核心冲突</text>
+    <text x="122" y="277" font-size="11" fill="#64748b">saveTarget: storyCore ✓ 已写回</text>
+    <rect x="580" y="230" width="96" height="24" rx="6" fill="#10b981" opacity="0.2" stroke="#10b981"/>
+    <text x="628" y="246" text-anchor="middle" font-size="11" fill="#4ade80">✓ 已完成</text>
+    <text x="580" y="264" font-size="11" fill="#475569">📋 复制</text>
+    <text x="620" y="264" font-size="11" fill="#475569">↺ 重新生成</text>
+
+    <!-- Arrow -->
+    <line x1="374" y1="290" x2="374" y2="304" stroke="#334155" stroke-width="2"/>
+    <polygon points="370,302 374,310 378,302" fill="#334155"/>
+
+    <!-- Step 2: Done -->
+    <rect x="60" y="314" width="628" height="72" rx="10" fill="url(#step-done)" stroke="#166534" stroke-width="1"/>
+    <rect x="60" y="314" width="4" height="72" rx="2" fill="#10b981"/>
+    <circle cx="96" cy="350" r="16" fill="#10b981" opacity="0.2" stroke="#10b981"/>
+    <text x="96" y="355" text-anchor="middle" font-size="14" fill="#10b981" font-weight="700">2</text>
+    <text x="122" y="340" font-size="13" fill="#6ee7b7" font-weight="600">世界起源生成</text>
+    <text x="122" y="357" font-size="11.5" fill="#4ade80">→ 世界来源 + 力量层次 + 神明设定</text>
+    <text x="122" y="373" font-size="11" fill="#64748b">saveTarget: worldview.worldOrigin ✓ 已写回</text>
+    <rect x="580" y="326" width="96" height="24" rx="6" fill="#10b981" opacity="0.2" stroke="#10b981"/>
+    <text x="628" y="342" text-anchor="middle" font-size="11" fill="#4ade80">✓ 已完成</text>
+
+    <!-- Arrow -->
+    <line x1="374" y1="386" x2="374" y2="400" stroke="#334155" stroke-width="2"/>
+    <polygon points="370,398 374,406 378,398" fill="#334155"/>
+
+    <!-- Step 3: Active (streaming) -->
+    <rect x="60" y="410" width="628" height="72" rx="10" fill="url(#step-active)" stroke="#3b82f6" stroke-width="1.5"/>
+    <rect x="60" y="410" width="4" height="72" rx="2" fill="#3b82f6"/>
+    <circle cx="96" cy="446" r="16" fill="#3b82f6" opacity="0.3" stroke="#3b82f6"/>
+    <text x="96" y="451" text-anchor="middle" font-size="14" fill="#93c5fd" font-weight="700">3</text>
+    <text x="122" y="436" font-size="13" fill="#93c5fd" font-weight="600">主角深度设计</text>
+    <text x="122" y="453" font-size="11.5" fill="#60a5fa">→ AI 正在流式输出角色设定...</text>
+    <!-- streaming dots -->
+    <circle cx="122" cy="472" r="3" fill="#3b82f6"><animate attributeName="opacity" values="1;0.3;1" dur="1.2s" repeatCount="indefinite"/></circle>
+    <circle cx="132" cy="472" r="3" fill="#3b82f6"><animate attributeName="opacity" values="1;0.3;1" dur="1.2s" begin="0.4s" repeatCount="indefinite"/></circle>
+    <circle cx="142" cy="472" r="3" fill="#3b82f6"><animate attributeName="opacity" values="1;0.3;1" dur="1.2s" begin="0.8s" repeatCount="indefinite"/></circle>
+    <text x="155" y="476" font-size="11" fill="#475569">批量写入角色表（JSON）</text>
+    <rect x="580" y="422" width="96" height="24" rx="6" fill="#1e40af" opacity="0.4" stroke="#3b82f6"/>
+    <text x="628" y="438" text-anchor="middle" font-size="11" fill="#93c5fd">⟳ 执行中</text>
+
+    <!-- Arrow -->
+    <line x1="374" y1="482" x2="374" y2="496" stroke="#1e293b" stroke-width="2" stroke-dasharray="4,3"/>
+    <polygon points="370,494 374,502 378,494" fill="#1e293b"/>
+
+    <!-- Step 4: Waiting -->
+    <rect x="60" y="506" width="628" height="50" rx="10" fill="url(#step-wait)" stroke="#1e293b" stroke-width="1"/>
+    <rect x="60" y="506" width="4" height="50" rx="2" fill="#334155"/>
+    <circle cx="96" cy="531" r="16" fill="#1e293b" stroke="#334155"/>
+    <text x="96" y="536" text-anchor="middle" font-size="14" fill="#475569" font-weight="700">4</text>
+    <text x="122" y="528" font-size="13" fill="#475569">卷大纲生成</text>
+    <text x="122" y="546" font-size="11" fill="#334155">saveTarget: outlineNodes（批量） · 等待中</text>
+
+    <!-- Step 5: Waiting -->
+    <rect x="60" y="562" width="628" height="50" rx="10" fill="url(#step-wait)" stroke="#1e293b" stroke-width="1"/>
+    <rect x="60" y="562" width="4" height="50" rx="2" fill="#334155"/>
+    <circle cx="96" cy="587" r="16" fill="#1e293b" stroke="#334155"/>
+    <text x="96" y="592" text-anchor="middle" font-size="14" fill="#475569" font-weight="700">5</text>
+    <text x="122" y="584" font-size="13" fill="#475569">第一章正文</text>
+    <text x="122" y="602" font-size="11" fill="#334155">saveTarget: chapter.content · 等待中</text>
+
+  </g>
+
+  <!-- Right panel: saveTarget explanation -->
+  <rect x="748" y="152" width="400" height="460" rx="12" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+
+  <text x="768" y="185" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" fill="#f1f5f9" font-weight="600">🎯 saveTarget · 自动写回</text>
+  <text x="768" y="205" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" fill="#64748b">步骤完成后，结果自动写入项目对应字段</text>
+  <line x1="768" y1="215" x2="1128" y2="215" stroke="#1e293b" stroke-width="1"/>
+
+  <g font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12">
+    <!-- Type 1 -->
+    <rect x="768" y="228" width="360" height="60" rx="8" fill="#1a2035" stroke="#334155"/>
+    <text x="784" y="246" fill="#94a3b8" font-size="11" font-weight="600">单字段写回</text>
+    <text x="784" y="262" fill="#64748b" font-size="10.5" font-family="'Courier New', monospace">type: 'storyCore-field'</text>
+    <text x="784" y="278" fill="#64748b" font-size="10.5" font-family="'Courier New', monospace">field: 'logline' · mode: 'replace'</text>
+
+    <!-- Type 2 -->
+    <rect x="768" y="300" width="360" height="80" rx="8" fill="#1a2035" stroke="#334155"/>
+    <text x="784" y="318" fill="#94a3b8" font-size="11" font-weight="600">批量 JSON 写回 · 角色库</text>
+    <text x="784" y="336" fill="#64748b" font-size="10.5" font-family="'Courier New', monospace">type: 'characters-batch'</text>
+    <rect x="784" y="345" width="330" height="28" rx="4" fill="#0d1117"/>
+    <text x="794" y="355" fill="#7ee787" font-size="10" font-family="'Courier New', monospace">[ {name:"苏晨", role:"主角", ...},</text>
+    <text x="794" y="367" fill="#7ee787" font-size="10" font-family="'Courier New', monospace">  {name:"叶幽", role:"配角", ...} ]</text>
+
+    <!-- Type 3 -->
+    <rect x="768" y="392" width="360" height="60" rx="8" fill="#1a2035" stroke="#334155"/>
+    <text x="784" y="410" fill="#94a3b8" font-size="11" font-weight="600">批量 JSON 写回 · 大纲节点</text>
+    <text x="784" y="428" fill="#64748b" font-size="10.5" font-family="'Courier New', monospace">type: 'outline-batch'</text>
+    <text x="784" y="444" fill="#64748b" font-size="10.5" font-family="'Courier New', monospace">→ addOutlineNode ×N，保持树结构</text>
+
+    <!-- Type 4 -->
+    <rect x="768" y="464" width="360" height="60" rx="8" fill="#1a2035" stroke="#334155"/>
+    <text x="784" y="482" fill="#94a3b8" font-size="11" font-weight="600">批量 JSON 写回 · 伏笔库</text>
+    <text x="784" y="500" fill="#64748b" font-size="10.5" font-family="'Courier New', monospace">type: 'foreshadow-batch'</text>
+    <text x="784" y="516" fill="#64748b" font-size="10.5" font-family="'Courier New', monospace">→ addForeshadow ×N，含类型/状态</text>
+
+    <!-- User workflow -->
+    <rect x="768" y="538" width="360" height="58" rx="8" fill="#1e1b4b" stroke="#7c3aed" stroke-width="1"/>
+    <text x="784" y="558" fill="#c4b5fd" font-size="12" font-weight="600">🛠 自建工作流</text>
+    <text x="784" y="575" fill="#a78bfa" font-size="11">新建 → 编辑步骤（增删/排序）→ 选模板</text>
+    <text x="784" y="589" fill="#a78bfa" font-size="11">→ 配 saveTarget → 导出 JSON 分享</text>
+  </g>
+
+  <!-- Bottom -->
+  <rect x="0" y="610" width="1200" height="20" fill="#0a0f1e"/>
+  <text x="600" y="624" text-anchor="middle" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" fill="#334155">故事熔炉 StoryForge · 工作流引擎 · 每步结果自动落库，不需要手动粘贴</text>
+</svg>

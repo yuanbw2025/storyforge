@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#07090f"/>
+      <stop offset="100%" style="stop-color:#0d1220"/>
+    </linearGradient>
+    <linearGradient id="fire-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e05c00"/>
+      <stop offset="60%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#fde68a"/>
+    </linearGradient>
+    <linearGradient id="node-world" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e3a5f"/>
+      <stop offset="100%" style="stop-color:#0f2040"/>
+    </linearGradient>
+    <linearGradient id="node-char" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b1f5e"/>
+      <stop offset="100%" style="stop-color:#1f0f35"/>
+    </linearGradient>
+    <linearGradient id="node-create" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f3526"/>
+      <stop offset="100%" style="stop-color:#071a12"/>
+    </linearGradient>
+    <linearGradient id="node-study" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3d2000"/>
+      <stop offset="100%" style="stop-color:#1f1000"/>
+    </linearGradient>
+    <filter id="glow-blue">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-orange">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6" opacity="0.7"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#8b5cf6" opacity="0.7"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#10b981" opacity="0.7"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#f59e0b" opacity="0.7"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="600" y="46" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="13" fill="#f59e0b" letter-spacing="4" font-weight="600">故 事 熔 炉  ·  S T O R Y F O R G E</text>
+  <text x="600" y="84" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="34" fill="#f1f5f9" font-weight="800" letter-spacing="2">从一个想法，到一部自洽的小说</text>
+  <text x="600" y="112" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="15" fill="#64748b">每个模块的输出，都是下一个模块的输入 · AI 始终在你的世界里工作</text>
+
+  <!-- ========== FLOW DIAGRAM ========== -->
+  <!-- Row 1: 大师研读 (top, feeds into style) -->
+  <rect x="60" y="140" width="200" height="80" rx="10" fill="url(#node-study)" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="160" y="168" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="13" fill="#fbbf24" font-weight="700">📖 大师研读</text>
+  <text x="160" y="186" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#92400e">上传名作 · 五维拆解</text>
+  <text x="160" y="202" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#92400e">世界观/角色/情节/伏笔/文笔</text>
+
+  <!-- 大师研读 → 创作规则 arrow -->
+  <line x1="260" y1="180" x2="315" y2="180" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)"/>
+  <text x="288" y="172" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="9" fill="#92400e">方法论</text>
+
+  <!-- 创作规则 / 题材包 -->
+  <rect x="316" y="140" width="200" height="80" rx="10" fill="#1a1a1a" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="416" y="168" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="13" fill="#a5b4fc" font-weight="700">🎨 风格基调</text>
+  <text x="416" y="186" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#6366f1">题材包 · 参考书目</text>
+  <text x="416" y="202" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#6366f1">创作规则 · 叙事视角</text>
+
+  <!-- Style → ALL (vertical line going down, dashed) -->
+  <line x1="416" y1="220" x2="416" y2="248" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="440" y="240" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="9" fill="#6366f1">全局影响↓</text>
+
+  <!-- Row 2: World building -->
+  <!-- Arrow: Style/Rules → World (and all subsequent via global) -->
+  <!-- World Origin -->
+  <rect x="60" y="258" width="155" height="90" rx="10" fill="url(#node-world)" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="138" y="282" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#93c5fd" font-weight="700">🌌 世界起源</text>
+  <text x="138" y="298" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#60a5fa">创世来源</text>
+  <text x="138" y="312" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#60a5fa">力量层次</text>
+  <text x="138" y="326" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#60a5fa">神明体系</text>
+
+  <!-- Arrow World Origin → Natural -->
+  <line x1="215" y1="303" x2="240" y2="303" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- Natural Env -->
+  <rect x="241" y="258" width="155" height="90" rx="10" fill="url(#node-world)" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="319" y="282" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#93c5fd" font-weight="700">🏔 自然环境</text>
+  <text x="319" y="298" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#60a5fa">大陆地理</text>
+  <text x="319" y="312" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#60a5fa">气候分布</text>
+  <text x="319" y="326" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#60a5fa">资源矿产</text>
+
+  <!-- Arrow Natural → Humanity -->
+  <line x1="396" y1="303" x2="421" y2="303" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- Humanity -->
+  <rect x="422" y="258" width="155" height="90" rx="10" fill="url(#node-world)" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="500" y="282" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#93c5fd" font-weight="700">🏛 人文环境</text>
+  <text x="500" y="298" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#60a5fa">势力历史</text>
+  <text x="500" y="312" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#60a5fa">种族文化</text>
+  <text x="500" y="326" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#60a5fa">矛盾冲突</text>
+
+  <!-- Arrow Humanity → Story Design -->
+  <line x1="577" y1="303" x2="602" y2="303" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- Story Design -->
+  <rect x="603" y="258" width="155" height="90" rx="10" fill="url(#node-world)" stroke="#818cf8" stroke-width="1.5"/>
+  <text x="681" y="282" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#c7d2fe" font-weight="700">📐 故事设计</text>
+  <text x="681" y="298" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#a5b4fc">Logline</text>
+  <text x="681" y="312" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#a5b4fc">核心冲突</text>
+  <text x="681" y="326" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#a5b4fc">主线/复线</text>
+
+  <!-- Arrow Story Design → Character -->
+  <line x1="758" y1="303" x2="783" y2="303" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+  <!-- Character -->
+  <rect x="784" y="258" width="155" height="90" rx="10" fill="url(#node-char)" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="862" y="282" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#d8b4fe" font-weight="700">👤 角色设计</text>
+  <text x="862" y="298" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#c4b5fd">主/次/NPC/路人</text>
+  <text x="862" y="312" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#c4b5fd">弧光设计</text>
+  <text x="862" y="326" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#c4b5fd">关系力导图</text>
+
+  <!-- Row 3: Creation zone -->
+  <!-- Arrow down from Character block to Outline -->
+  <line x1="862" y1="348" x2="862" y2="368" stroke="#8b5cf6" stroke-width="1.5"/>
+  <line x1="862" y1="368" x2="330" y2="368" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="330" y1="368" x2="330" y2="388" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <text x="600" y="362" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="9" fill="#8b5cf6">全部设定 → 引用</text>
+
+  <!-- Outline -->
+  <rect x="60" y="388" width="175" height="82" rx="10" fill="url(#node-create)" stroke="#10b981" stroke-width="1.5"/>
+  <text x="148" y="412" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#6ee7b7" font-weight="700">📋 大纲</text>
+  <text x="148" y="428" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#4ade80">卷/章节树结构</text>
+  <text x="148" y="442" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#4ade80">AI 生成卷章概要</text>
+  <text x="148" y="456" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#4ade80">节奏/冲突规划</text>
+
+  <!-- Arrow Outline → Detailed Outline -->
+  <line x1="235" y1="429" x2="260" y2="429" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <!-- Detailed Outline -->
+  <rect x="261" y="388" width="175" height="82" rx="10" fill="url(#node-create)" stroke="#10b981" stroke-width="1.5"/>
+  <text x="349" y="412" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#6ee7b7" font-weight="700">📝 细纲</text>
+  <text x="349" y="428" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#4ade80">单章拆 3-6 场景</text>
+  <text x="349" y="442" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#4ade80">人物/地点/冲突</text>
+  <text x="349" y="456" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#4ade80">字数估算</text>
+
+  <!-- Arrow Detailed → Editor -->
+  <line x1="436" y1="429" x2="461" y2="429" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <!-- Editor -->
+  <rect x="462" y="388" width="175" height="82" rx="10" fill="url(#node-create)" stroke="#34d399" stroke-width="2"/>
+  <text x="550" y="412" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#6ee7b7" font-weight="700">✍️ 正文编辑器</text>
+  <text x="550" y="428" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#4ade80">写/续写/润色</text>
+  <text x="550" y="442" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#4ade80">扩写/去AI味</text>
+  <text x="550" y="456" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#4ade80">自动保存</text>
+
+  <!-- Foreshadow (floating across creation) -->
+  <rect x="662" y="388" width="175" height="82" rx="10" fill="#1a1000" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="750" y="412" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#fbbf24" font-weight="700">🔮 伏笔追踪</text>
+  <text x="750" y="428" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#d97706">10类型·4状态</text>
+  <text x="750" y="442" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#d97706">跨章节追踪</text>
+  <text x="750" y="456" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#d97706">埋设→呼应→回收</text>
+
+  <!-- Foreshadow span label -->
+  <line x1="662" y1="470" x2="636" y2="470" stroke="#f59e0b" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>
+  <line x1="637" y1="430" x2="637" y2="510" stroke="#f59e0b" stroke-width="1" opacity="0.3"/>
+
+  <!-- Workflow box on right -->
+  <rect x="862" y="388" width="278" height="82" rx="10" fill="#140a2e" stroke="#7c3aed" stroke-width="2"/>
+  <text x="1001" y="412" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="13" fill="#c4b5fd" font-weight="700">⚡ 工作流引擎</text>
+  <text x="1001" y="430" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#a78bfa">把上面整条链路一键自动串联</text>
+  <text x="1001" y="447" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#7c3aed">每步结果自动写回 · 下步自动引用</text>
+  <text x="1001" y="462" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#7c3aed">极速起书5步 / 单章深度4步</text>
+
+  <!-- Workflow connects to whole chain -->
+  <line x1="862" y1="429" x2="839" y2="429" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-purple)"/>
+
+  <!-- Bottom: Data safety bar -->
+  <rect x="60" y="496" width="1080" height="56" rx="10" fill="#0d1117" stroke="#1e293b" stroke-width="1"/>
+  <text x="600" y="519" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#64748b" font-weight="600">数据保障层</text>
+  <text x="190" y="539" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#475569">💾 全部数据本地存储</text>
+  <text x="430" y="539" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#475569">🤖 11家AI厂商任选</text>
+  <text x="660" y="539" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#475569">🕐 5分钟自动快照</text>
+  <text x="900" y="539" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#475569">📤 5种方式导出</text>
+
+  <!-- Bottom label -->
+  <rect x="0" y="568" width="1200" height="62" fill="#050810"/>
+  <text x="600" y="596" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="20" fill="url(#fire-grad)" font-weight="800" letter-spacing="3">🔥 故事熔炉 StoryForge</text>
+  <text x="600" y="618" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#334155">完全开源免费 · github.com/yuanbw2025/storyforge · MIT License</text>
+</svg>

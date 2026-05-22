@@ -1,0 +1,151 @@
+/* ============================================================
+   StoryForge · Component Primitives
+   ------------------------------------------------------------
+   所有组件类。三 theme 共享一套类名，外观靠 token 自动切换。
+   依赖：tokens.css 必须先于本文件加载。
+   ============================================================ */
+
+/* ---------- Reset / Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+  background: var(--bg-base);
+  font-feature-settings: "ss01", "cv11";
+}
+
+/* ---------- Typography Utilities ---------- */
+.sf-serif { font-family: var(--font-serif); }
+.sf-sans  { font-family: var(--font-sans); }
+.sf-mono  { font-family: var(--font-mono); }
+.sf-content { font-family: var(--font-content); }
+.sf-ui      { font-family: var(--font-ui); }
+
+.sf-eyebrow { font-family: var(--font-sans); font-size: var(--fs-xs); letter-spacing: var(--ls-wider);
+              text-transform: uppercase; color: var(--text-secondary); font-weight: var(--fw-medium); }
+.sf-title-display { font-family: var(--font-serif); font-size: var(--fs-5xl); font-weight: var(--fw-regular);
+                    line-height: var(--lh-tight); letter-spacing: var(--ls-tight); color: var(--text-primary); }
+.sf-title-h1 { font-size: var(--fs-3xl); font-weight: var(--fw-semibold); line-height: var(--lh-tight); letter-spacing: var(--ls-tight); }
+.sf-title-h2 { font-size: var(--fs-2xl); font-weight: var(--fw-semibold); line-height: var(--lh-snug); }
+.sf-title-h3 { font-size: var(--fs-xl); font-weight: var(--fw-semibold); line-height: var(--lh-snug); }
+.sf-body     { font-size: var(--fs-base); line-height: var(--lh-normal); color: var(--text-primary); }
+.sf-body-sm  { font-size: var(--fs-sm); line-height: var(--lh-normal); color: var(--text-secondary); }
+.sf-caption  { font-size: var(--fs-xs); line-height: var(--lh-snug); color: var(--text-muted); }
+.sf-prose    { font-family: var(--font-serif); font-size: var(--fs-lg); line-height: var(--lh-prose); color: var(--text-primary); }
+.sf-prose p { margin: 0 0 1.3em; text-indent: 2em; }
+
+/* ---------- Button ---------- */
+.sf-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  font-family: var(--font-ui); font-size: var(--fs-sm); font-weight: var(--fw-medium);
+  padding: var(--density-padding-y) var(--density-padding-x);
+  border-radius: var(--radius-md); border: var(--border-thin) solid var(--border-default);
+  background: var(--bg-elevated); color: var(--text-primary);
+  cursor: pointer; transition: all var(--transition-fast); white-space: nowrap;
+}
+.sf-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.sf-btn:active { transform: translateY(1px); }
+.sf-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.sf-btn--primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sf-btn--primary:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+
+.sf-btn--ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
+.sf-btn--ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.sf-btn--danger { color: var(--color-error); border-color: var(--color-error); background: transparent; }
+.sf-btn--danger:hover { background: var(--color-error); color: #fff; }
+
+.sf-btn--sm { font-size: var(--fs-xs); padding: 4px 10px; }
+.sf-btn--lg { font-size: var(--fs-md); padding: 12px 20px; }
+
+/* ---------- Card ---------- */
+.sf-card {
+  background: var(--bg-surface); border: var(--border-thin) solid var(--border-default);
+  border-radius: var(--radius-lg); padding: var(--space-6);
+  transition: border-color var(--transition-base), transform var(--transition-base);
+}
+.sf-card--elevated { background: var(--bg-elevated); box-shadow: var(--shadow-md); }
+.sf-card--interactive { cursor: pointer; }
+.sf-card--interactive:hover { border-color: var(--border-strong); }
+.sf-card--accent { border-top: var(--border-thick) solid var(--accent); }
+
+/* ---------- Input ---------- */
+.sf-input, .sf-textarea {
+  width: 100%; font-family: var(--font-ui); font-size: var(--fs-base);
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+  border: var(--border-thin) solid var(--border-default);
+  background: var(--bg-elevated); color: var(--text-primary);
+  transition: border-color var(--transition-fast); outline: none;
+}
+.sf-input:focus, .sf-textarea:focus { border-color: var(--accent); }
+.sf-input::placeholder, .sf-textarea::placeholder { color: var(--text-muted); }
+
+/* ---------- Pill / Badge ---------- */
+.sf-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-ui); font-size: var(--fs-xs); font-weight: var(--fw-medium);
+  padding: 3px 10px; border-radius: var(--radius-pill);
+  background: var(--bg-elevated); color: var(--text-secondary);
+  border: var(--border-thin) solid var(--border-default);
+}
+.sf-pill--accent { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.sf-pill--success { color: var(--color-success); border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.1); }
+.sf-pill--warning { color: var(--color-warning); border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.1); }
+
+.sf-dot { display: inline-block; width: 6px; height: 6px; border-radius: var(--radius-pill); background: currentColor; }
+
+/* ---------- Sidebar / Nav ---------- */
+.sf-sidebar { width: 224px; background: var(--bg-surface); border-right: var(--border-thin) solid var(--border-default);
+              padding: var(--space-3) var(--space-2); display: flex; flex-direction: column; gap: 1px; }
+.sf-nav-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 7px 10px; border-radius: var(--radius-md);
+  color: var(--text-secondary); font-size: var(--fs-base); cursor: pointer;
+  border-left: var(--border-thick) solid transparent; transition: all var(--transition-fast);
+}
+.sf-nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sf-nav-item--active { background: var(--bg-active); color: var(--accent); border-left-color: var(--accent); }
+.sf-nav-group { font-family: var(--font-sans); font-size: var(--fs-xs); letter-spacing: var(--ls-wide);
+                text-transform: uppercase; color: var(--text-muted);
+                padding: var(--space-4) var(--space-3) var(--space-2); }
+
+/* ---------- Topbar ---------- */
+.sf-topbar { height: 48px; padding: 0 var(--space-5); background: var(--bg-surface);
+             border-bottom: var(--border-thin) solid var(--border-default);
+             display: flex; align-items: center; gap: var(--space-3); }
+
+/* ---------- Status Bar ---------- */
+.sf-statusbar { height: 26px; padding: 0 var(--space-4); background: var(--bg-surface);
+                border-top: var(--border-thin) solid var(--border-default);
+                display: flex; align-items: center; gap: var(--space-5);
+                font-size: var(--fs-xs); color: var(--text-secondary); }
+
+/* ---------- Forge-only decorations (B theme) ---------- */
+[data-theme="forge"] .sf-rule {
+  height: 1px; background: linear-gradient(90deg, transparent, var(--brand-gold) 50%, transparent);
+}
+[data-theme="forge"] .sf-glow {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 0%, rgba(217,119,87,0.18), transparent 60%);
+}
+
+/* ---------- Paper-only decorations (C theme) ---------- */
+[data-theme="paper"] .sf-paper-bg {
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0, transparent 31px, rgba(31,27,22,0.04) 32px);
+}
+
+/* ---------- Misc ---------- */
+.sf-rule { height: 1px; background: var(--border-default); border: none; margin: var(--space-6) 0; }
+.sf-no-scrollbar::-webkit-scrollbar { display: none; }
+.sf-no-scrollbar { scrollbar-width: none; }
+.sf-tnum { font-feature-settings: "tnum"; }
+
+@keyframes sf-blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+.sf-cursor-blink { display: inline-block; width: 2px; height: 1em; background: var(--accent);
+                   margin-left: 2px; vertical-align: text-bottom; animation: sf-blink 1s steps(1) infinite; }

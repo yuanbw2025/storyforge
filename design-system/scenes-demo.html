@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<title>StoryForge · 三场景示意 v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="tokens.css"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #080808; padding: 40px; font-family: var(--font-sans); color: #ccc;
+         -webkit-font-smoothing: antialiased; }
+  .page { max-width: 1320px; margin: 0 auto 64px; }
+  .page > h2 { color: #fff; font-family: var(--font-serif); font-weight: 400; font-size: 22px;
+               margin: 0 0 4px; letter-spacing: -0.3px; }
+  .page > .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
+                 text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
+  .page > .desc { color: #777; font-size: 13px; margin: 0 0 16px; }
+  .frame { border-radius: 10px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+           border: 1px solid #222; }
+  .frame > div { width: 1280px; height: 720px; position: relative; overflow: hidden; }
+
+  /* Shared components */
+  .btn { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-sans);
+         font-size: 12px; font-weight: 500; padding: 6px 14px; border-radius: 6px;
+         border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-primary);
+         cursor: pointer; white-space: nowrap; }
+  .btn-p { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-g { background: transparent; border-color: transparent; color: var(--text-secondary); }
+  .btn-sm { font-size: 11px; padding: 4px 10px; }
+  .btn-lg { font-size: 14px; padding: 10px 18px; }
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+  .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 500;
+          padding: 2px 8px; border-radius: 999px; }
+  .eyebrow { font-family: var(--font-sans); font-size: 11px; letter-spacing: 3px;
+             text-transform: uppercase; color: var(--text-secondary); }
+  @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+  .cursor-blink { display: inline-block; width: 2px; height: 1em; background: var(--accent);
+                  margin-left: 2px; vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
+</style>
+</head>
+<body>
+
+<!-- ========== SCENE 1: FORGE (HomePage) ========== -->
+<div class="page">
+  <div class="tag" style="background:rgba(217,119,87,0.2);color:#D97757">FORGE · 仪式时刻</div>
+  <h2>场景 ① 首页 — 用户归来的那一瞬间</h2>
+  <p class="desc">对应 HomePage.tsx · data-theme="forge" · 暖色、戏剧化、大衬线、火光金线。</p>
+  <div class="frame"><div data-theme="forge" style="background:var(--bg-base);color:var(--text-primary)">
+    <!-- Glow -->
+    <div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 0%, rgba(217,119,87,0.18), transparent 60%)"></div>
+
+    <!-- Header (matches HomePage header) -->
+    <header style="position:relative;border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:10px;background:rgba(26,15,10,0.9);backdrop-filter:blur(8px)">
+      <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#8B3E1F);display:flex;align-items:center;justify-content:center">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+      </div>
+      <div>
+        <div style="font-size:15px;font-weight:700;line-height:1">StoryForge</div>
+        <div style="font-size:10px;color:var(--text-muted);letter-spacing:1.5px">故事熔炉</div>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn btn-g btn-sm">设置</button>
+      <button class="btn btn-g btn-sm">GitHub</button>
+    </header>
+
+    <!-- Hero -->
+    <div style="position:relative;padding:56px 80px 32px;text-align:center">
+      <div class="eyebrow" style="letter-spacing:4px;margin-bottom:16px">— 锻造你的故事世界 —</div>
+      <h1 style="font-family:var(--font-serif);font-size:60px;font-weight:400;letter-spacing:-1px;line-height:1.08;margin-bottom:16px">
+        从一颗<em style="font-style:italic;color:var(--accent)">火种</em>，<br/>到一座燃烧的<em style="font-style:italic;color:#C8A155">世界</em>。
+      </h1>
+      <hr style="border:0;height:1px;width:200px;margin:20px auto;background:linear-gradient(90deg,transparent,#C8A155,transparent)"/>
+      <p style="font-size:14px;color:var(--text-secondary);max-width:440px;margin:0 auto 20px;line-height:1.7">构建世界观 · 生成大纲 · 写章节正文 · 导出小说</p>
+      <button class="btn btn-p btn-lg">起炉新作</button>
+    </div>
+
+    <!-- Project grid -->
+    <div style="position:relative;padding:0 80px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+      <div style="background:var(--bg-surface);border:1px solid var(--border);border-top:2px solid var(--accent);border-radius:8px;padding:20px">
+        <div style="font-family:var(--font-serif);font-size:44px;color:var(--accent);line-height:1;margin-bottom:10px">剑</div>
+        <div style="font-family:var(--font-serif);font-size:17px;font-weight:500;margin-bottom:4px">剑出山门</div>
+        <div style="font-size:11px;color:var(--text-muted)">玄幻 · 2小时前</div>
+        <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);font-feature-settings:'tnum'">
+          <span>12 章</span><span style="color:#C8A155">28,540 字</span>
+        </div>
+      </div>
+      <div style="background:var(--bg-surface);border:1px solid var(--border);border-top:2px solid var(--border);border-radius:8px;padding:20px">
+        <div style="font-family:var(--font-serif);font-size:44px;color:var(--text-muted);line-height:1;margin-bottom:10px">星</div>
+        <div style="font-family:var(--font-serif);font-size:17px;font-weight:500;margin-bottom:4px">星海纪</div>
+        <div style="font-size:11px;color:var(--text-muted)">科幻 · 3天前</div>
+        <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);font-feature-settings:'tnum'">
+          <span>8 章</span><span>15,200 字</span>
+        </div>
+      </div>
+      <div style="background:var(--bg-surface);border:1px solid var(--border);border-top:2px solid var(--border);border-radius:8px;padding:20px">
+        <div style="font-family:var(--font-serif);font-size:44px;color:var(--text-muted);line-height:1;margin-bottom:10px">雾</div>
+        <div style="font-family:var(--font-serif);font-size:17px;font-weight:500;margin-bottom:4px">雾海孤城</div>
+        <div style="font-size:11px;color:var(--text-muted)">悬疑 · 1周前</div>
+        <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:8px;display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);font-feature-settings:'tnum'">
+          <span>5 章</span><span>9,800 字</span>
+        </div>
+      </div>
+      <!-- New project card -->
+      <div style="border:1.5px dashed var(--border-hover);border-radius:8px;padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:160px;color:var(--text-muted)">
+        <div style="width:36px;height:36px;border-radius:999px;border:1.5px dashed var(--border-hover);display:flex;align-items:center;justify-content:center;font-size:18px">+</div>
+        <span style="font-size:12px">新建项目</span>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ========== SCENE 2: WORK (WorkspacePage) ========== -->
+<div class="page">
+  <div class="tag" style="background:rgba(217,119,87,0.15);color:#E8906D">WORK · 生产力主屏</div>
+  <h2>场景 ② 编辑器 — 用户每天 8 小时呆的地方</h2>
+  <p class="desc">对应 WorkspacePage.tsx · data-theme="work" · 深色、紧凑、Sans、信息密度高。侧栏 + 主内容 + 可选属性面板。</p>
+  <div class="frame"><div data-theme="work" style="background:var(--bg-base);color:var(--text-primary);display:flex;height:100%">
+    <!-- Sidebar (matches Sidebar.tsx) -->
+    <aside style="width:220px;background:var(--bg-surface);border-right:1px solid var(--border);padding:8px;display:flex;flex-direction:column;gap:1px;overflow:hidden">
+      <div style="padding:8px;border-bottom:1px solid var(--border);margin-bottom:4px">
+        <div style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:4px;margin-bottom:6px">← 返回首页</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary)">《剑出山门》</div>
+      </div>
+      <div style="font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);opacity:0.6;padding:10px 10px 4px">构建</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;color:var(--text-secondary);font-size:13px">基本信息</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;color:var(--text-secondary);font-size:13px">世界观</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;color:var(--text-secondary);font-size:13px">角色管理 <span style="margin-left:auto;font-size:11px;color:var(--text-muted);font-feature-settings:'tnum'">6</span></div>
+      <div style="font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);opacity:0.6;padding:10px 10px 4px">创作</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;color:var(--text-secondary);font-size:13px">大纲 <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">18</span></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:rgba(217,119,87,0.10);color:var(--accent);border-left:2px solid var(--accent);font-size:13px;font-weight:500">写作 <span style="margin-left:auto;font-size:11px">12/30</span></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;color:var(--text-secondary);font-size:13px">伏笔 <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">8</span></div>
+    </aside>
+
+    <!-- Main (matches ChapterEditor layout) -->
+    <main style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:20px 24px 0">
+        <!-- Title bar -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <h2 style="font-size:18px;font-weight:700">山门石阶</h2>
+            <span style="font-size:12px;color:var(--text-muted);font-feature-settings:'tnum'">1,840 字</span>
+            <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(251,191,36,0.1);color:var(--warning)">draft</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-g btn-sm">上下文</button>
+            <button class="btn btn-g btn-sm">保存</button>
+          </div>
+        </div>
+
+        <!-- AI toolbar -->
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+          <button class="btn btn-p btn-sm">✨ 生成正文</button>
+          <button class="btn btn-sm" style="background:var(--bg-elevated);border-color:var(--border)">📝 续写</button>
+          <button class="btn btn-sm" style="background:var(--bg-elevated);border-color:var(--border)">📖 扩写</button>
+          <button class="btn btn-sm" style="background:var(--bg-elevated);border-color:var(--border)">💎 润色</button>
+          <button class="btn btn-sm" style="background:var(--bg-elevated);border-color:var(--border)">🔥 去AI味</button>
+          <input style="flex:1;min-width:120px;padding:4px 8px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--text-primary);outline:none" placeholder="自定义指令..."/>
+        </div>
+      </div>
+
+      <!-- AI output block -->
+      <div style="margin:0 24px 14px;border-left:2px solid var(--accent);background:rgba(217,119,87,0.08);padding:14px 18px;border-radius:0 6px 6px 0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="width:16px;height:16px;border-radius:999px;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px">笔</span>
+          <span style="font-size:12px;font-weight:500">AI 续写</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:auto;font-feature-settings:'tnum'">312 tok</span>
+        </div>
+        <p style="margin:0 0 10px;line-height:1.7;font-size:14px">林清回头时，发现陈风的眼里映着一片不属于这个山门的天空。那片天空里有星辰在运转<span class="cursor-blink"></span></p>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-p btn-sm">采纳</button>
+          <button class="btn btn-g btn-sm">重写</button>
+          <button class="btn btn-g btn-sm">丢弃</button>
+        </div>
+      </div>
+
+      <!-- Editor content -->
+      <div style="flex:1;padding:0 24px 24px;overflow:hidden">
+        <div style="font-size:14px;line-height:1.85;color:var(--text-primary)">
+          <p style="margin-bottom:0.75em">陈风踏上山门第一阶时，听见远处有人吹箫。箫声不悲不喜，像风穿过古老的竹林。</p>
+          <p style="margin-bottom:0.75em">"三千阶。"林清在他身后说，"上不去就回家。"</p>
+          <p style="margin-bottom:0.75em">他没回头，只是把背上的剑挪了挪。剑鞘是父亲留下的，木纹已经磨得发亮，像被无数双手抚过。石阶湿滑，薄雾从山腰漫下来，模糊了远处殿宇的轮廓。</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Context panel (matches PropertiesPanel) -->
+    <aside style="width:260px;border-left:1px solid var(--border);padding:20px;background:var(--bg-surface);overflow:hidden">
+      <div class="eyebrow" style="font-size:10px;letter-spacing:2px;margin-bottom:14px">章节上下文</div>
+      <div style="margin-bottom:16px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">出场角色</div><div style="font-size:13px">陈风 · 林清</div></div>
+      <div style="margin-bottom:16px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">地点</div><div style="font-size:13px">清风宗山门</div></div>
+      <div style="margin-bottom:16px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">伏笔</div><div style="font-size:13px;color:var(--warning)">古剑「听风」· 未呼应</div></div>
+      <div style="margin-bottom:16px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">前章末</div><div style="font-size:13px;font-style:italic;color:var(--text-secondary)">心跳与石面合在一处</div></div>
+      <hr style="border:0;height:1px;background:var(--border);margin:16px 0"/>
+      <div class="eyebrow" style="font-size:10px;letter-spacing:2px;margin-bottom:10px">模型</div>
+      <div style="font-size:12px;display:flex;align-items:center;gap:6px"><span class="dot" style="color:var(--success)"></span>deepseek-chat</div>
+    </aside>
+  </div></div>
+</div>
+
+<!-- ========== SCENE 3: PAPER (Focus Mode) ========== -->
+<div class="page">
+  <div class="tag" style="background:rgba(31,27,22,0.5);color:#8A7E6A">PAPER · 写作心流</div>
+  <h2>场景 ③ 焦点模式 — 一切退场，只剩稿纸与笔</h2>
+  <p class="desc">未来 F11 切入 · data-theme="paper" · 浅色、留白、衬线正文、AI 退到边批。</p>
+  <div class="frame"><div data-theme="paper" style="background:var(--bg-base);color:var(--text-primary);display:flex;flex-direction:column;height:100%;background-image:repeating-linear-gradient(0deg,transparent 0,transparent 31px,rgba(31,27,22,0.03) 32px)">
+    <!-- Minimal header -->
+    <div style="display:flex;align-items:center;padding:14px 28px;border-bottom:1px solid var(--border)">
+      <span style="font-family:var(--font-serif);font-size:15px;font-style:italic">storyforge</span>
+      <span style="font-size:11px;color:var(--text-muted);margin-left:8px">· 焦点模式</span>
+      <div style="flex:1"></div>
+      <span style="font-size:11px;color:var(--text-muted);font-feature-settings:'tnum'">1,840 字 · 已保存</span>
+      <button class="btn btn-g btn-sm" style="margin-left:10px">退出 ⌘.</button>
+    </div>
+
+    <!-- Manuscript -->
+    <div style="flex:1;overflow:hidden;padding:64px 0 200px">
+      <div style="max-width:640px;margin:0 auto;padding:0 48px">
+        <div class="eyebrow" style="margin-bottom:6px;font-size:11px;letter-spacing:2px">第 四 章</div>
+        <h1 style="font-family:var(--font-serif);font-size:40px;font-weight:400;margin:0 0 20px;letter-spacing:-0.5px">山门石阶</h1>
+        <hr style="border:0;height:1px;background:var(--border);margin:0 0 24px"/>
+        <div style="font-family:var(--font-serif);font-size:17px;line-height:2.1;color:var(--text-primary)">
+          <p style="margin:0 0 1.3em;text-indent:2em">陈风踏上山门第一阶时，听见远处有人吹箫。箫声不悲不喜，像风穿过古老的竹林。他把背上的剑挪了挪，剑鞘是父亲留下的，木纹已经磨得发亮，像被无数双手抚过。</p>
+          <p style="margin:0 0 1.3em;text-indent:2em">"三千阶。"林清在他身后说，"上不去就回家。"</p>
+          <p style="margin:0 0 1.3em;text-indent:2em">他没回头。山门很远，他的脚很慢，但每一步都踩得很实。石阶湿滑，薄雾从山腰漫下来，模糊了远处殿宇的轮廓。他数到第一百阶时，箫声停了。</p>
+          <p style="margin:0 0 1.3em;text-indent:2em">心跳与石面合在一处。<span class="cursor-blink"></span></p>
+        </div>
+
+        <!-- Inline AI suggestion (paper mode: quiet, marginal) -->
+        <div style="margin-top:24px;padding:16px 20px;border:1px solid var(--border);border-radius:8px;background:var(--bg-surface)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px;color:var(--text-secondary)">
+            <span style="width:16px;height:16px;border-radius:999px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px">笔</span>
+            <span style="font-weight:500">AI 提议续写</span>
+            <span style="margin-left:auto;font-family:var(--font-mono);font-size:10px">deepseek · 156 tok</span>
+          </div>
+          <div style="font-family:var(--font-serif);font-size:15px;line-height:1.9;color:var(--text-secondary);font-style:italic">
+            <p style="margin:0 0 0.8em;text-indent:2em">第一百零一阶上，有人等着他。那人穿白衣，站在雾中，像一棵冬天的树。</p>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn btn-p btn-sm">采纳</button>
+            <button class="btn btn-g btn-sm">重写</button>
+            <button class="btn btn-g btn-sm">丢弃</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<script>
+  function fit() {
+    document.querySelectorAll('.frame > div').forEach(el => {
+      const wrap = el.parentElement;
+      const w = wrap.clientWidth;
+      const scale = Math.min(1, w / 1280);
+      el.style.transform = 'scale(' + scale + ')';
+      el.style.transformOrigin = 'top left';
+      wrap.style.height = (720 * scale) + 'px';
+    });
+  }
+  fit();
+  window.addEventListener('resize', fit);
+</script>
+</body>
+</html>

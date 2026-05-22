@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#07090f"/>
+      <stop offset="100%" style="stop-color:#0d1220"/>
+    </linearGradient>
+    <linearGradient id="card-dark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#111827"/>
+      <stop offset="100%" style="stop-color:#0d1117"/>
+    </linearGradient>
+    <marker id="arr-g" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L7,3 z" fill="#10b981" opacity="0.9"/>
+    </marker>
+    <marker id="arr-p" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L7,3 z" fill="#8b5cf6" opacity="0.9"/>
+    </marker>
+    <marker id="arr-b" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L7,3 z" fill="#3b82f6" opacity="0.9"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Header -->
+  <text x="60" y="44" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#8b5cf6" letter-spacing="3" font-weight="600">角 色 设 计 → 大 纲 → 细 纲 → 正 文</text>
+  <text x="60" y="78" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="30" fill="#f1f5f9" font-weight="800">设定落地为故事——三级拆解，逐步具体</text>
+  <text x="60" y="104" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#475569">角色设计引用世界观 · 大纲引用角色 · 细纲拆解大纲 · 正文引用细纲+规则</text>
+  <line x1="60" y1="118" x2="900" y2="118" stroke="#1e293b" stroke-width="1.5"/>
+
+  <!-- ===== LEFT: Character Card ===== -->
+  <rect x="60" y="134" width="290" height="450" rx="12" fill="url(#card-dark)" stroke="#2d1b4e" stroke-width="1.5"/>
+  <rect x="60" y="134" width="290" height="50" rx="12" fill="#170d30"/>
+  <rect x="60" y="162" width="290" height="22" fill="#170d30"/>
+  <text x="84" y="166" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="16" fill="#a78bfa">👤</text>
+  <text x="106" y="166" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#c4b5fd" font-weight="700">主角卡片</text>
+  <text x="240" y="166" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#5b21b6">引用世界观</text>
+
+  <g font-family="'PingFang SC','Microsoft YaHei',sans-serif">
+    <!-- Name + Basic -->
+    <text x="80" y="206" font-size="11" fill="#64748b">姓名</text>
+    <rect x="80" y="212" width="250" height="26" rx="5" fill="#0f172a" stroke="#1e293b"/>
+    <text x="96" y="229" font-size="13" fill="#e2e8f0" font-weight="600">苏 晨</text>
+    <text x="200" y="229" font-size="11" fill="#64748b">· 修炼境界：筑基初期</text>
+
+    <text x="80" y="254" font-size="11" fill="#64748b">背景</text>
+    <rect x="80" y="260" width="250" height="56" rx="5" fill="#0f172a" stroke="#1e293b"/>
+    <text x="96" y="278" font-size="11" fill="#cbd5e1">散修出身，家门遭灭，独入苍云大陆</text>
+    <text x="96" y="293" font-size="11" fill="#cbd5e1">求道。体内隐有上古神脉，尚未觉醒。</text>
+    <text x="96" y="308" font-size="10" fill="#5b21b6">↑ 引用"世界起源·灵脉"设定</text>
+
+    <text x="80" y="334" font-size="11" fill="#64748b">核心欲望</text>
+    <rect x="80" y="340" width="250" height="40" rx="5" fill="#0f172a" stroke="#1e293b"/>
+    <text x="96" y="357" font-size="11" fill="#cbd5e1">查明家门覆灭真相，重振家族。</text>
+    <text x="96" y="372" font-size="10" fill="#5b21b6">↑ 引用"核心矛盾·宗门争斗"</text>
+
+    <text x="80" y="398" font-size="11" fill="#64748b">性格弱点</text>
+    <rect x="80" y="404" width="250" height="28" rx="5" fill="#0f172a" stroke="#1e293b"/>
+    <text x="96" y="421" font-size="11" fill="#cbd5e1">过于执着复仇，易被情绪左右</text>
+
+    <text x="80" y="448" font-size="11" fill="#64748b">成长弧光</text>
+    <rect x="80" y="454" width="250" height="42" rx="5" fill="#0f172a" stroke="#1e293b"/>
+    <text x="96" y="471" font-size="11" fill="#cbd5e1">从孤身复仇 → 理解更大格局</text>
+    <text x="96" y="486" font-size="11" fill="#cbd5e1">个人恩仇 → 守护苍云大陆</text>
+
+    <text x="80" y="514" font-size="11" fill="#64748b">说话风格</text>
+    <rect x="80" y="520" width="250" height="26" rx="5" fill="#0f172a" stroke="#1e293b"/>
+    <text x="96" y="537" font-size="11" fill="#cbd5e1">言简意赅，少用敬称，偶有冷语</text>
+
+    <!-- 关系网 mini -->
+    <rect x="80" y="556" width="250" height="18" rx="4" fill="#170d30" stroke="#2d1b4e"/>
+    <text x="205" y="568" text-anchor="middle" font-size="10" fill="#7c3aed">+ 关系网：与 6 名角色有关系连线</text>
+  </g>
+
+  <!-- Arrow char → outline -->
+  <line x1="350" y1="359" x2="378" y2="359" stroke="#8b5cf6" stroke-width="2" marker-end="url(#arr-p)"/>
+  <text x="364" y="350" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="9" fill="#8b5cf6">引用</text>
+
+  <!-- ===== MIDDLE: Outline + Detailed Outline ===== -->
+  <rect x="379" y="134" width="280" height="220" rx="12" fill="url(#card-dark)" stroke="#1e4030" stroke-width="1.5"/>
+  <rect x="379" y="134" width="280" height="50" rx="12" fill="#0a2010"/>
+  <rect x="379" y="162" width="280" height="22" fill="#0a2010"/>
+  <text x="400" y="166" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="16" fill="#4ade80">📋</text>
+  <text x="422" y="166" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#6ee7b7" font-weight="700">大纲</text>
+  <text x="510" y="166" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#166534">引用世界观+角色+故事设计</text>
+
+  <g font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11.5">
+    <!-- Outline tree -->
+    <text x="398" y="202" fill="#4ade80" font-weight="600">▼ 第一卷·苍云初入</text>
+    <text x="414" y="220" fill="#94a3b8">├ 第1章 家门遭难，孤身逃脱</text>
+    <text x="414" y="236" fill="#94a3b8">├ 第2章 流落市集，初遇机缘</text>
+    <text x="414" y="252" fill="#3b82f6" font-weight="600">→ 第3章 踏入天剑宗外门</text>
+    <text x="414" y="268" fill="#94a3b8">└ 第4章 宗门考核，初显神脉</text>
+    <text x="398" y="288" fill="#475569">▶ 第二卷·宗门博弈（15章）</text>
+    <text x="398" y="306" fill="#475569">▶ 第三卷·神器之争（18章）</text>
+    <rect x="398" y="316" width="240" height="20" rx="4" fill="#0a1a0a" stroke="#166534"/>
+    <text x="518" y="329" text-anchor="middle" fill="#166534" font-size="10">AI 生成·引用角色弧光规划节奏</text>
+  </g>
+
+  <!-- Arrow outline → detailed -->
+  <line x1="519" y1="354" x2="519" y2="378" stroke="#10b981" stroke-width="2" marker-end="url(#arr-g)"/>
+  <text x="536" y="368" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="9" fill="#10b981">拆解</text>
+
+  <!-- Detailed Outline -->
+  <rect x="379" y="379" width="280" height="205" rx="12" fill="url(#card-dark)" stroke="#1e4030" stroke-width="1.5"/>
+  <rect x="379" y="379" width="280" height="46" rx="12" fill="#0a2010"/>
+  <rect x="379" y="403" width="280" height="22" fill="#0a2010"/>
+  <text x="400" y="407" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#4ade80">📝</text>
+  <text x="420" y="407" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#6ee7b7" font-weight="700">细纲 · 第3章</text>
+
+  <g font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5">
+    <!-- Scene 1 -->
+    <rect x="394" y="432" width="250" height="58" rx="6" fill="#0d1117" stroke="#1e293b"/>
+    <text x="406" y="447" fill="#10b981" font-weight="600">场景1 · 宗门山门前</text>
+    <text x="406" y="461" fill="#94a3b8">人物：苏晨 · 门卫长老</text>
+    <text x="406" y="475" fill="#94a3b8">冲突：出身散修，遭刁难盘查</text>
+    <text x="406" y="489" fill="#64748b">节奏：压抑↗ · 估算：800字</text>
+
+    <!-- Scene 2 -->
+    <rect x="394" y="498" width="250" height="58" rx="6" fill="#0d1117" stroke="#1e293b"/>
+    <text x="406" y="513" fill="#10b981" font-weight="600">场景2 · 外门考核广场</text>
+    <text x="406" y="527" fill="#94a3b8">人物：苏晨 · 考核师兄</text>
+    <text x="406" y="541" fill="#94a3b8">冲突：神脉意外显现，引众人注目</text>
+    <text x="406" y="555" fill="#64748b">节奏：爆发↑ · 估算：1200字</text>
+  </g>
+
+  <!-- Arrow detailed → editor -->
+  <line x1="659" y1="481" x2="687" y2="481" stroke="#10b981" stroke-width="2" marker-end="url(#arr-g)"/>
+  <text x="673" y="472" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="9" fill="#10b981">执行</text>
+
+  <!-- ===== RIGHT: Editor ===== -->
+  <rect x="688" y="134" width="452" height="450" rx="12" fill="url(#card-dark)" stroke="#166534" stroke-width="2"/>
+  <rect x="688" y="134" width="452" height="50" rx="12" fill="#0a2010"/>
+  <rect x="688" y="162" width="452" height="22" fill="#0a2010"/>
+  <text x="710" y="166" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="16" fill="#4ade80">✍️</text>
+  <text x="732" y="166" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#6ee7b7" font-weight="700">正文编辑器 · 第3章</text>
+  <text x="928" y="166" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#166534">引用细纲+角色+创作规则</text>
+
+  <!-- Context bar -->
+  <rect x="704" y="196" width="420" height="22" rx="5" fill="#0d1a0d" stroke="#166534"/>
+  <text x="714" y="211" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#4ade80">引用中 · 视角:第三人称限知 · 基调:紧张压抑 · 角色:苏晨(性格·背景) · 场景:宗门山门前</text>
+
+  <!-- Chapter content -->
+  <rect x="704" y="226" width="420" height="262" rx="6" fill="#0a0e14" stroke="#1e293b"/>
+  <g font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#cbd5e1">
+    <text x="720" y="252">　　苍云宗的山门比苏晨想象中更为壮阔。</text>
+    <text x="720" y="271">三道玉石山门自山腰横贯而出，灵气氤氲</text>
+    <text x="720" y="290">其间，便是隔着百丈距离，也能感受到那</text>
+    <text x="720" y="309">股压迫。</text>
+    <text x="720" y="336">　　"散修？"守门的灰袍长老抬起眼皮，</text>
+    <text x="720" y="355">目光在苏晨身上扫了一圈，似乎在打量一</text>
+    <text x="720" y="374">件残破货物，"外门考核在东广场，你自</text>
+    <text x="720" y="393">己过去。"</text>
+    <text x="720" y="420">　　苏晨没说话。他的目光越过长老的肩</text>
+    <text x="720" y="439">头，落在那三道山门后连绵的宗门峰群上。</text>
+    <text x="720" y="458">某处，一定有他要找的答案。</text>
+    <!-- cursor -->
+    <rect x="720" y="465" width="2" height="16" fill="#10b981" opacity="0.8"/>
+  </g>
+
+  <!-- AI toolbar -->
+  <rect x="704" y="496" width="420" height="44" rx="6" fill="#0d1117" stroke="#1e293b"/>
+  <text x="720" y="512" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#64748b">AI 操作</text>
+  <rect x="754" y="501" width="62" height="28" rx="6" fill="#0a2010" stroke="#10b981"/>
+  <text x="785" y="519" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#4ade80">✦ 续写</text>
+  <rect x="824" y="501" width="62" height="28" rx="6" fill="#0a1a2a" stroke="#3b82f6"/>
+  <text x="855" y="519" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#60a5fa">⟳ 润色</text>
+  <rect x="894" y="501" width="62" height="28" rx="6" fill="#1a0a0a" stroke="#ef4444"/>
+  <text x="925" y="519" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#f87171">✗ 去AI</text>
+  <rect x="964" y="501" width="62" height="28" rx="6" fill="#1a100a" stroke="#f59e0b"/>
+  <text x="995" y="519" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#fbbf24">⊕ 扩写</text>
+  <rect x="1034" y="501" width="78" height="28" rx="6" fill="#170d30" stroke="#8b5cf6"/>
+  <text x="1073" y="519" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#c4b5fd">✎ 写正文</text>
+
+  <!-- Status bar -->
+  <rect x="704" y="548" width="420" height="28" rx="6" fill="#0d1117"/>
+  <text x="720" y="566" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#64748b">第3章 · 已写 486 字 / 估算 2000 字 · 状态：初稿</text>
+  <rect x="1044" y="554" width="60" height="16" rx="4" fill="#1a2a10" stroke="#4ade80"/>
+  <text x="1074" y="565" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#4ade80">自动保存</text>
+
+  <!-- Bottom -->
+  <rect x="0" y="600" width="1200" height="30" fill="#050810"/>
+  <text x="600" y="619" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#334155">故事熔炉 StoryForge · 角色→大纲→细纲→正文，每一步都在前一步的基础上生长</text>
+</svg>
