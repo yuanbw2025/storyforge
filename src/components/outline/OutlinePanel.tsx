@@ -110,7 +110,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       {(ai.output || ai.isStreaming || ai.error) && (
         <div className="mb-4">
           <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
-            onStop={ai.stop} onAccept={() => ai.reset()} onRetry={handleAIVolumes}
+            onStop={ai.stop} onAccept={() => {if (!ai.isStreaming) ai.reset()}} onRetry={handleAIVolumes}
             moduleKey={activeModuleKey} />
         </div>
       )}

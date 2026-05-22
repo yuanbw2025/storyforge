@@ -53,6 +53,8 @@ export default function AIFieldCard({
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+	if (ai.isStreaming) return
+  
     ai.reset()
     setParameterValues({})
     setSystemOverride(null)

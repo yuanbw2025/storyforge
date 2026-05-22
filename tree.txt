@@ -1,0 +1,150 @@
+E:\Project AI Novel Studio\storyforge
+├── design-system
+|  ├── components-demo.html
+|  ├── components.css
+|  ├── design-system.md
+|  ├── MIGRATION.md
+|  ├── scenes-demo.html
+|  ├── tailwind.config.ts
+|  └── tokens.css
+├── docs
+|  ├── 01-PRODUCT-OVERVIEW.md
+|  ├── 02-FEATURE-SPEC.md
+|  ├── 03-UI-DESIGN.md
+|  ├── 04-TECH-ARCHITECTURE.md
+|  ├── 05-WORLD-BUILDING-ENGINE.md
+|  ├── 06-AI-PROMPTS-SYSTEM.md
+|  ├── 07-DEVELOPMENT-PLAN.md
+|  ├── 08-DATA-SCHEMA.md
+|  ├── 09-REDESIGN-INTEGRATION-PLAN.md
+|  ├── ARCHITECTURE.md
+|  ├── HANDOFF.md
+|  ├── playbooks
+|  |  ├── PHASE-00-genre-web-search.md
+|  |  ├── PHASE-01-prompt-infrastructure.md
+|  |  ├── PHASE-02-prompt-manager-ui.md
+|  |  ├── PHASE-03-data-model-rebuild.md
+|  |  ├── PHASE-04-sidebar-rebuild.md
+|  |  ├── PHASE-05-worldview-origin-natural.md
+|  |  ├── PHASE-06-worldview-humanity.md
+|  |  ├── PHASE-07-character-tiers.md
+|  |  ├── PHASE-08-creation-zone.md
+|  |  ├── PHASE-09-version-history.md
+|  |  ├── PHASE-10-import-doc.md
+|  |  ├── PHASE-11-polish.md
+|  |  ├── PHASE-12-prompt-parameters.md
+|  |  ├── PHASE-13-genre-packs.md
+|  |  ├── PHASE-14-prompt-run-panel.md
+|  |  ├── PHASE-15-examples-counterexamples.md
+|  |  ├── PHASE-16-prompt-workflows.md
+|  |  ├── PHASE-17-workflow-auto-save.md
+|  |  ├── PHASE-18-import-pipeline.md
+|  |  ├── PHASE-19-master-studies.md
+|  |  ├── PHASE-20-world-map.md
+|  |  └── TEMPLATE.md
+|  ├── promo
+|  |  ├── img-01-hero-v2.svg
+|  |  ├── img-01-hero.svg
+|  |  ├── img-02-prompt-system.svg
+|  |  ├── img-02-worldbuilding-v2.svg
+|  |  ├── img-03-character-outline-v2.svg
+|  |  ├── img-03-workflow.svg
+|  |  ├── img-04-features-grid.svg
+|  |  ├── img-04-workflow-study-v2.svg
+|  |  ├── img-05-comparison.svg
+|  |  ├── img-05-foreshadow-data-v2.svg
+|  |  ├── img-06-cta.svg
+|  |  ├── world-map-cangyun.svg
+|  |  ├── zhihu-article-v2.md
+|  |  └── zhihu-article.md
+|  └── world-map-demo.html
+├── index.html
+├── package-lock.json
+├── package.json
+├── postcss.config.js
+├── PROGRESS.md
+├── public
+|  ├── icon-192.png
+|  ├── icon-512.png
+|  ├── icon.svg
+|  └── world-map-cangyun.svg
+├── README.md
+├── src
+|  ├── App.tsx
+|  ├── components
+|  |  ├── character
+|  |  ├── data
+|  |  ├── editor
+|  |  ├── export
+|  |  ├── faction
+|  |  ├── foreshadow
+|  |  ├── geography
+|  |  ├── guide
+|  |  ├── history
+|  |  ├── items
+|  |  ├── layout
+|  |  ├── master-studies
+|  |  ├── outline
+|  |  ├── project
+|  |  ├── relations
+|  |  ├── rules
+|  |  ├── settings
+|  |  ├── shared
+|  |  ├── state
+|  |  ├── system
+|  |  └── worldview
+|  ├── hooks
+|  |  ├── useAIStream.ts
+|  |  ├── useAutoBackup.ts
+|  |  ├── useAutoSave.ts
+|  |  ├── useBeforeUnload.ts
+|  |  ├── useFileSystemAccess.ts
+|  |  └── useKeyboardShortcuts.ts
+|  ├── index.css
+|  ├── lib
+|  |  ├── ai
+|  |  ├── data
+|  |  ├── db
+|  |  ├── doc-parser.ts
+|  |  ├── export
+|  |  ├── import
+|  |  ├── master-study
+|  |  ├── reference-analysis
+|  |  ├── types
+|  |  ├── utils
+|  |  └── world-map
+|  ├── main.tsx
+|  ├── pages
+|  |  ├── HomePage.tsx
+|  |  └── WorkspacePage.tsx
+|  ├── stores
+|  |  ├── ai-config.ts
+|  |  ├── backup.ts
+|  |  ├── chapter.ts
+|  |  ├── character-relation.ts
+|  |  ├── character.ts
+|  |  ├── detailed-outline.ts
+|  |  ├── emotion-beat.ts
+|  |  ├── foreshadow.ts
+|  |  ├── import-session.ts
+|  |  ├── import-status.ts
+|  |  ├── master-study.ts
+|  |  ├── outline.ts
+|  |  ├── project-singletons.ts
+|  |  ├── project.ts
+|  |  ├── prompt.ts
+|  |  ├── reference.ts
+|  |  ├── state-card.ts
+|  |  ├── workflow.ts
+|  |  ├── world-node.ts
+|  |  ├── worldview.ts
+|  |  └── _factories.ts
+|  └── vite-env.d.ts
+├── start.bat
+├── tailwind.config.ts
+├── tsconfig.json
+└── vite.config.ts
+
+directory: 980 file: 3946
+
+ignored: directory (143)

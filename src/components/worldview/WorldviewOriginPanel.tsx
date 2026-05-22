@@ -130,8 +130,9 @@ export default function WorldviewOriginPanel({ project }: Props) {
     return parts.join('\n')
   }, [worldOrigin, powerHierarchy, divineDesign])
 
-  const handleStreamingChange = useCallback((key: string, streaming: boolean) => {
+const handleStreamingChange = useCallback((key: string, streaming: boolean) => {
     setStreamingKeys(prev => {
+      if (prev.has(key) === streaming) return prev 
       const next = new Set(prev)
       if (streaming) next.add(key)
       else next.delete(key)
