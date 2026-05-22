@@ -6,3 +6,9 @@ dist/
 
 # Azgaar Fantasy Map Generator（构建产物，运行 setup 脚本生成）
 public/fmg/
+
+# 拦截所有目录树导出文本
+tree.txt
+
+# 拦截所有临时备份文件
+*.bak
