@@ -27,6 +27,10 @@ export interface CreativeRules {
   /** 选中的参考作品 ID 列表，其深度分析结果会注入 AI prompt 上下文 */
   citedReferenceIds?: string   // JSON number[]
 
+  // ── Phase 19-d —— 大师洞察注入 ──────────────────────────────
+  /** 选中的大师洞察 ID 列表，其方法论会注入 AI prompt 上下文 */
+  citedInsightIds?: string     // JSON number[]
+
   createdAt: number
   updatedAt: number
 }

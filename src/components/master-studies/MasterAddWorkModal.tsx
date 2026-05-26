@@ -10,6 +10,7 @@ import {
   planMasterChunks,
   registerMasterChunks,
   runMasterAnalysis,
+  saveMasterBlob,
 } from '../../lib/master-study/pipeline'
 import { useMasterStudyStore } from '../../stores/master-study'
 import type { MasterAnalysisDepth } from '../../lib/types/master-study'
@@ -76,6 +77,7 @@ export default function MasterAddWorkModal({ projectId, onClose, onStarted }: Pr
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
+  const fileRef = useRef<File | null>(null)
 
   // 分块预览
   const preview = useMemo(() => {
@@ -91,6 +93,7 @@ export default function MasterAddWorkModal({ projectId, onClose, onStarted }: Pr
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f) return
+    fileRef.current = f
     setFileError(null)
     setExtractInfo(null)
     setFilename(f.name)
@@ -145,6 +148,11 @@ export default function MasterAddWorkModal({ projectId, onClose, onStarted }: Pr
       })
       // 把分块原文注册进内存（pipeline 会用）
       registerMasterChunks(workId, preview.chunks)
+      // Blob 持久化（Phase 19-c）：关浏览器后可从 DB 恢复原文续跑
+      if (fileRef.current) {
+        saveMasterBlob(workId, fileRef.current.name, fileRef.current, preview.fileHash)
+          .catch(err => console.warn('[master] Blob 保存失败（不影响本次分析）：', err))
+      }
       // 立即启动分析（不 await，让父级 UI 先拿到 workId 跳转）
       runMasterAnalysis({ workId }).catch(err => {
         console.error('[master] runMasterAnalysis 崩了：', err)

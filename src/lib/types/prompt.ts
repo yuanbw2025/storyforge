@@ -40,6 +40,8 @@ export type PromptModuleKey =
   | 'import.merge-characters'
   // —— Phase 19 作品学习 ——
   | 'master.analyze-chunk'
+  | 'master.extract-beats'
+  | 'master.generate-insights'
 
 /** 模板可调参数定义（Phase 12） */
 export interface PromptParameter {

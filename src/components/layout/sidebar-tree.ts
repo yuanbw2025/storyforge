@@ -4,7 +4,7 @@ import {
   UserCircle, UsersRound, User, Footprints, Network,
   Ruler, BookOpen, FilePen, Eye,
   FileCog, History, Upload, Download, Settings,
-  Map, ClipboardList, GitBranch,
+  Map, ClipboardList, GitBranch, MapPin, Clock, Gem,
 } from 'lucide-react'
 
 /**
@@ -26,6 +26,9 @@ export type SidebarModule =
   | 'characters-npc'        // 占位 (P7)
   | 'characters-extra'      // 占位 (P7)
   | 'relations'             // 关系网
+  | 'geography'             // 地理环境
+  | 'history'               // 历史年表
+  | 'items'                 // 道具系统
 
   // 创作区
   | 'rules'
@@ -57,7 +60,7 @@ export type SidebarModule =
   // 世界地图（Phase 20）
   | 'world-map'
   // legacy aliases，路由仍兼容但不再出现在 sidebar
-  | 'worldview' | 'geography' | 'history' | 'power-system' | 'items'
+  | 'worldview' | 'power-system'
   | 'story-core' | 'factions' | 'backup'
 
 // ── 树节点 ────────────────────────────────────────────────────────────
@@ -118,10 +121,13 @@ export const NAV_TREE: TreeSection[] = [
           leaf('worldview-origin',   '世界起源', Sparkles),
           leaf('worldview-natural',  '自然环境', Mountain),
           leaf('worldview-humanity', '人文环境', Users2),
+          leaf('geography',          '地理环境', MapPin),
+          leaf('history',            '历史年表', Clock),
           leaf('world-map',          '世界地图', Map),
         ],
       },
       leaf('story-design', '故事设计', BookOpen),
+      leaf('items',        '道具系统', Gem),
       {
         kind: 'branch',
         branchId: 'lib.characters',

@@ -314,6 +314,34 @@ function sleep(ms: number) {
   return new Promise(r => setTimeout(r, ms))
 }
 
+// ── Blob 持久化（Phase 19-c） ─────────────────────────────
+// 复用 importFiles 表，用 BLOB_ID_OFFSET + workId 做虚拟 sessionId 避免冲突
+const BLOB_ID_OFFSET = 100000
+
+export function masterBlobId(workId: number): number {
+  return BLOB_ID_OFFSET + workId
+}
+
+export async function saveMasterBlob(
+  workId: number,
+  filename: string,
+  blob: Blob,
+  fileHash: string,
+): Promise<void> {
+  const { saveBlob } = await import('../../stores/import-session').then(m => m.useImportSessionStore.getState())
+  await saveBlob(masterBlobId(workId), filename, blob, fileHash)
+}
+
+export async function loadMasterBlob(workId: number) {
+  const { loadBlob } = await import('../../stores/import-session').then(m => m.useImportSessionStore.getState())
+  return await loadBlob(masterBlobId(workId))
+}
+
+export async function deleteMasterBlob(workId: number): Promise<void> {
+  const { deleteBlob } = await import('../../stores/import-session').then(m => m.useImportSessionStore.getState())
+  await deleteBlob(masterBlobId(workId))
+}
+
 // ── 给 UI 用的便利函数 ─────────────────────────────────────
 
 export interface PrepareChunksResult {

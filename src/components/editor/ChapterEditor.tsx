@@ -13,7 +13,7 @@ import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
 import { buildStateExtractPrompt, parseStateDiffs } from '../../lib/ai/adapters/state-extract-adapter'
 import { buildSummaryPrompt } from '../../lib/ai/adapters/summary-adapter'
-import { buildWorldContext, buildCharacterContext, filterActiveCharacters, getContextMemo, buildRefAnalysisContext } from '../../lib/ai/context-builder'
+import { buildWorldContext, buildCharacterContext, filterActiveCharacters, getContextMemo, buildRefAnalysisContext, buildMasterInsightContext } from '../../lib/ai/context-builder'
 import { buildGenreConstraintContext } from '../../lib/ai/genre-metadata'
 import { buildStylePromptInjection } from '../../lib/ai/writing-styles'
 import { buildMemory, type MemoryTaskType } from '../../lib/ai/memory-builder'
@@ -167,6 +167,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       }
     } catch { /* ignore */ }
 
+    // 大师洞察注入（Phase 19-d）
+    let insightCtx = ''
+    try {
+      const insightIds: number[] = JSON.parse(creativeRules?.citedInsightIds || '[]')
+      if (insightIds.length) {
+        insightCtx = await buildMasterInsightContext(insightIds)
+      }
+    } catch { /* ignore */ }
+
     // Phase B3: 注入故事线上下文
     const storyArcCtx = buildStoryArcContext(currentChapter?.order)
 
@@ -204,6 +213,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (genreCtx) parts.push(genreCtx)
     if (styleCtx) parts.push(styleCtx)
     if (refCtx) parts.push(refCtx)
+    if (insightCtx) parts.push(insightCtx)
     return parts.filter(Boolean).join('\n\n')
   }
 

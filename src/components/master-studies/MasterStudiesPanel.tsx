@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   GraduationCap, Plus, BookOpen, Lightbulb, Settings as SettingsIcon,
-  FileSearch, Trash2, Loader2, AlertCircle,
+  FileSearch, Trash2, Loader2, AlertCircle, Sparkles, ChevronDown,
+  ChevronUp, Copy, Check,
 } from 'lucide-react'
 import MasterLegalConsentModal from './MasterLegalConsentModal'
 import MasterAddWorkModal from './MasterAddWorkModal'
@@ -10,8 +11,13 @@ import { useMasterStudyStore } from '../../stores/master-study'
 import {
   setMasterPipelineListener,
   getActiveMasterWorkId,
+  loadMasterBlob,
+  registerMasterChunks,
 } from '../../lib/master-study/pipeline'
-import type { Project, MasterWork, MasterWorkStatus } from '../../lib/types'
+import { extractTextFromFile } from '../../lib/doc-parser'
+import { chunkDocument } from '../../lib/import/chunker'
+import { generateInsights } from '../../lib/master-study/insight-generator'
+import type { Project, MasterWork, MasterWorkStatus, MasterInsight } from '../../lib/types'
 
 const CONSENT_KEY = 'sf-master-consent'
 
@@ -41,11 +47,29 @@ export default function MasterStudiesPanel({ project }: Props) {
 
   const { works, loading, listWorks, deleteWork } = useMasterStudyStore()
 
-  // 进入即刷新作品列表（全局学习库：不按项目过滤）
+  // 进入即刷新作品列表 + Blob 恢复扫描（Phase 19-c）
   useEffect(() => {
-    if (consent === true) {
-      listWorks()
-    }
+    if (consent !== true) return
+    listWorks().then(async (allWorks) => {
+      const pending = allWorks.filter(
+        w => w.id && (w.status === 'pending' || w.status === 'analyzing' || (w.status === 'failed' && w.progress > 0 && w.progress < 100)),
+      )
+      for (const w of pending) {
+        if (!w.id) continue
+        try {
+          const blob = await loadMasterBlob(w.id)
+          if (!blob) continue
+          const file = new File([blob.blob], blob.filename, { type: 'text/plain' })
+          const result = await extractTextFromFile(file)
+          const depth = w.analysisDepth || 'standard'
+          const targetChars = { quick: 40000, standard: 25000, deep: 15000 }[depth]
+          const chunks = chunkDocument(result.text, { targetChars })
+          registerMasterChunks(w.id, chunks)
+        } catch {
+          // Blob 恢复失败不阻断
+        }
+      }
+    })
   }, [consent, listWorks])
 
   // 在列表页订阅 pipeline，用 listWorks 触发 progress 刷新（store 已自带更新，
@@ -182,8 +206,8 @@ export default function MasterStudiesPanel({ project }: Props) {
           onOpen={w => w.id && setDetailWorkId(w.id)}
         />
       )}
-      {tab === 'insights' && <InsightsTabPlaceholder />}
-      {tab === 'settings' && <SettingsTabPlaceholder />}
+      {tab === 'insights' && <MasterInsightsTab works={works} />}
+      {tab === 'settings' && <MasterSettingsTab works={works} onCleaned={() => listWorks()} />}
 
       {/* Add modal */}
       {showAddModal && (
@@ -348,37 +372,426 @@ function WorkCard({
   )
 }
 
-function InsightsTabPlaceholder() {
-  return (
-    <div className="rounded-2xl border border-dashed border-border bg-bg-elevated/30 p-10 text-center">
-      <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-bg-surface border border-border mb-3">
-        <Lightbulb className="w-5 h-5 text-text-muted" />
+function MasterInsightsTab({ works }: { works: MasterWork[] }) {
+  const { insights, listInsights, deleteInsight } = useMasterStudyStore()
+  const [generating, setGenerating] = useState(false)
+  const [activity, setActivity] = useState('')
+  const [showGenerator, setShowGenerator] = useState(false)
+  const [selectedWorkIds, setSelectedWorkIds] = useState<Set<number>>(new Set())
+  const [genreFilter, setGenreFilter] = useState('')
+  const [insightCount, setInsightCount] = useState(5)
+
+  const doneWorks = works.filter(w => w.id && w.status === 'done')
+  const genres = [...new Set(doneWorks.map(w => w.genre).filter(Boolean))]
+
+  useEffect(() => { listInsights() }, [listInsights])
+
+  const toggleWork = useCallback((id: number) => {
+    setSelectedWorkIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const selectAll = useCallback(() => {
+    const filtered = genreFilter
+      ? doneWorks.filter(w => w.genre === genreFilter)
+      : doneWorks
+    setSelectedWorkIds(new Set(filtered.map(w => w.id!)))
+  }, [doneWorks, genreFilter])
+
+  const handleGenerate = async () => {
+    const ids = [...selectedWorkIds]
+    if (ids.length < 2) {
+      alert('请至少选择 2 本已完成分析的作品')
+      return
+    }
+    setGenerating(true)
+    setActivity('')
+    try {
+      await generateInsights(ids, {
+        genre: genreFilter || undefined,
+        insightCount,
+      }, {
+        onActivity: (_level, msg) => setActivity(msg),
+      })
+      await listInsights()
+      setShowGenerator(false)
+    } catch (err) {
+      setActivity(`失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('删除此洞察？')) return
+    await deleteInsight(id)
+  }
+
+  // 空态
+  if (insights.length === 0 && !showGenerator) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-dashed border-border bg-bg-elevated/30 p-10 text-center">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-bg-surface border border-border mb-3">
+            <Lightbulb className="w-5 h-5 text-text-muted" />
+          </div>
+          <h3 className="text-base font-medium text-text-primary mb-1">还没有手法洞察</h3>
+          <p className="text-sm text-text-secondary mb-4">
+            选择多本已分析完成的作品，AI 会归纳出跨作品的共性创作方法论。
+          </p>
+          {doneWorks.length >= 2 ? (
+            <button
+              onClick={() => setShowGenerator(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent text-white text-sm hover:opacity-90"
+            >
+              <Sparkles className="w-4 h-4" />
+              归纳洞察
+            </button>
+          ) : (
+            <p className="text-xs text-text-muted">
+              至少需要 2 本已完成分析的作品才能归纳（当前 {doneWorks.length} 本）
+            </p>
+          )}
+        </div>
       </div>
-      <h3 className="text-base font-medium text-text-primary mb-1">手法洞察</h3>
-      <p className="text-sm text-text-secondary">
-        学习多本同流派作品后，系统会在这里归纳共性手法卡片。
-      </p>
-      <div className="inline-flex items-center gap-2 mt-3 px-3 py-1 rounded-full bg-accent/10 text-accent text-xs">
-        <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-        将在 Phase 19-d 上线
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 顶部操作栏 */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-text-secondary">{insights.length} 条洞察</p>
+        {doneWorks.length >= 2 && (
+          <button
+            onClick={() => setShowGenerator(!showGenerator)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white text-sm hover:opacity-90"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            {showGenerator ? '收起' : '归纳新洞察'}
+          </button>
+        )}
+      </div>
+
+      {/* 归纳面板 */}
+      {showGenerator && (
+        <InsightGeneratorPanel
+          doneWorks={doneWorks}
+          genres={genres as string[]}
+          selectedWorkIds={selectedWorkIds}
+          genreFilter={genreFilter}
+          insightCount={insightCount}
+          generating={generating}
+          activity={activity}
+          onToggleWork={toggleWork}
+          onSelectAll={selectAll}
+          onSetGenreFilter={setGenreFilter}
+          onSetInsightCount={setInsightCount}
+          onGenerate={handleGenerate}
+        />
+      )}
+
+      {/* 洞察卡片列表 */}
+      <div className="space-y-3">
+        {insights.map(insight => (
+          <InsightCard key={insight.id} insight={insight} works={works} onDelete={() => insight.id && handleDelete(insight.id)} />
+        ))}
       </div>
     </div>
   )
 }
 
-function SettingsTabPlaceholder() {
+function InsightGeneratorPanel({
+  doneWorks, genres, selectedWorkIds, genreFilter, insightCount,
+  generating, activity,
+  onToggleWork, onSelectAll, onSetGenreFilter, onSetInsightCount, onGenerate,
+}: {
+  doneWorks: MasterWork[]
+  genres: string[]
+  selectedWorkIds: Set<number>
+  genreFilter: string
+  insightCount: number
+  generating: boolean
+  activity: string
+  onToggleWork: (id: number) => void
+  onSelectAll: () => void
+  onSetGenreFilter: (v: string) => void
+  onSetInsightCount: (v: number) => void
+  onGenerate: () => void
+}) {
+  const filtered = genreFilter
+    ? doneWorks.filter(w => w.genre === genreFilter)
+    : doneWorks
+
   return (
-    <div className="rounded-2xl border border-dashed border-border bg-bg-elevated/30 p-10 text-center">
-      <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-bg-surface border border-border mb-3">
-        <SettingsIcon className="w-5 h-5 text-text-muted" />
+    <div className="rounded-xl border border-accent/30 bg-accent/5 p-4 space-y-3">
+      <h4 className="text-sm font-medium text-text-primary">选择作品归纳</h4>
+
+      {/* 流派筛选 */}
+      {genres.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-text-muted">流派：</span>
+          <button
+            onClick={() => onSetGenreFilter('')}
+            className={`text-xs px-2 py-0.5 rounded-full border transition ${!genreFilter ? 'border-accent bg-accent/10 text-accent' : 'border-border text-text-secondary'}`}
+          >
+            全部
+          </button>
+          {genres.map(g => (
+            <button
+              key={g}
+              onClick={() => onSetGenreFilter(g)}
+              className={`text-xs px-2 py-0.5 rounded-full border transition ${genreFilter === g ? 'border-accent bg-accent/10 text-accent' : 'border-border text-text-secondary'}`}
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 作品多选 */}
+      <div className="flex items-center gap-2 mb-1">
+        <button onClick={onSelectAll} className="text-xs text-accent hover:underline">全选</button>
+        <span className="text-xs text-text-muted">已选 {selectedWorkIds.size} / {filtered.length}</span>
       </div>
-      <h3 className="text-base font-medium text-text-primary mb-1">学习设置</h3>
-      <p className="text-sm text-text-secondary">
-        这里会放默认分析深度、停用词、批量清理等选项。
-      </p>
-      <div className="inline-flex items-center gap-2 mt-3 px-3 py-1 rounded-full bg-accent/10 text-accent text-xs">
-        <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-        将在 Phase 19-c 上线
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-40 overflow-y-auto">
+        {filtered.map(w => (
+          <label
+            key={w.id}
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-hover cursor-pointer text-sm"
+          >
+            <input
+              type="checkbox"
+              checked={selectedWorkIds.has(w.id!)}
+              onChange={() => onToggleWork(w.id!)}
+              className="rounded border-border"
+            />
+            <span className="truncate text-text-primary">{w.title}</span>
+            {w.genre && <span className="text-[11px] text-text-muted shrink-0">{w.genre}</span>}
+          </label>
+        ))}
+      </div>
+
+      {/* 洞察数量 */}
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-text-muted">归纳数量：</span>
+        {[3, 5, 8].map(n => (
+          <button
+            key={n}
+            onClick={() => onSetInsightCount(n)}
+            className={`text-xs px-2.5 py-1 rounded-lg border transition ${insightCount === n ? 'border-accent bg-accent/10 text-accent' : 'border-border text-text-secondary'}`}
+          >
+            {n} 条
+          </button>
+        ))}
+      </div>
+
+      {/* 执行按钮 */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onGenerate}
+          disabled={generating || selectedWorkIds.size < 2}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent text-white text-sm hover:opacity-90 disabled:opacity-50"
+        >
+          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          {generating ? '归纳中…' : '开始归纳'}
+        </button>
+        {activity && <span className="text-xs text-text-muted">{activity}</span>}
+      </div>
+    </div>
+  )
+}
+
+function InsightCard({ insight, works, onDelete }: { insight: MasterInsight; works: MasterWork[]; onDelete: () => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const sourceNames = insight.sourceWorkIds
+    .map(id => works.find(w => w.id === id)?.title)
+    .filter(Boolean)
+
+  const handleCopy = async () => {
+    const text = `${insight.title}\n\n${insight.description}\n\n${insight.bulletPoints.map(b => `• ${b}`).join('\n')}`
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-bg-surface p-4 group">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+          <div className="flex items-center gap-2">
+            <Lightbulb className="w-4 h-4 text-amber-500 shrink-0" />
+            <h4 className="font-medium text-text-primary truncate">{insight.title}</h4>
+            {insight.genre && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-accent/10 text-accent shrink-0">
+                {insight.genre}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-text-muted mt-1 line-clamp-2">{insight.description}</p>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={handleCopy} className="p-1 rounded hover:bg-bg-hover text-text-muted" title="复制">
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            onClick={onDelete}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-text-muted hover:text-red-500 transition"
+            title="删除"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => setExpanded(!expanded)} className="p-1 rounded hover:bg-bg-hover text-text-muted">
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-border space-y-3">
+          <div className="text-sm text-text-secondary whitespace-pre-wrap">{insight.description}</div>
+
+          {insight.bulletPoints.length > 0 && (
+            <ul className="space-y-1">
+              {insight.bulletPoints.map((bp, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className="text-accent mt-0.5 shrink-0">•</span>
+                  <span className="text-text-primary">{bp}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {sourceNames.length > 0 && (
+            <p className="text-[11px] text-text-muted">
+              来源：{sourceNames.join('、')}
+            </p>
+          )}
+
+          <p className="text-[11px] text-text-muted">
+            创建于 {new Date(insight.createdAt).toLocaleDateString('zh-CN')}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const SETTINGS_KEY = 'sf-master-settings'
+
+interface MasterSettings {
+  defaultDepth: 'quick' | 'standard' | 'deep'
+  autoLayer2: boolean
+}
+
+function loadSettings(): MasterSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (raw) return { ...{ defaultDepth: 'standard', autoLayer2: false }, ...JSON.parse(raw) }
+  } catch { /* ignore */ }
+  return { defaultDepth: 'standard', autoLayer2: false }
+}
+
+function saveSettings(s: MasterSettings) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
+}
+
+export function getMasterSettings(): MasterSettings {
+  return loadSettings()
+}
+
+function MasterSettingsTab({ works, onCleaned }: { works: MasterWork[]; onCleaned: () => void }) {
+  const [settings, setSettings] = useState(loadSettings)
+  const { deleteWork } = useMasterStudyStore()
+  const [cleaning, setCleaning] = useState(false)
+
+  const failedWorks = works.filter(w => w.status === 'failed')
+
+  const update = (partial: Partial<MasterSettings>) => {
+    const next = { ...settings, ...partial }
+    setSettings(next)
+    saveSettings(next)
+  }
+
+  const handleCleanFailed = async () => {
+    if (failedWorks.length === 0) return
+    if (!confirm(`将删除 ${failedWorks.length} 个失败的作品及其分析数据，此操作不可恢复。继续？`)) return
+    setCleaning(true)
+    for (const w of failedWorks) {
+      if (w.id) await deleteWork(w.id)
+    }
+    setCleaning(false)
+    onCleaned()
+  }
+
+  return (
+    <div className="max-w-xl space-y-6">
+      {/* 默认分析深度 */}
+      <div>
+        <h3 className="text-sm font-medium text-text-primary mb-2">默认分析深度</h3>
+        <p className="text-xs text-text-muted mb-3">新建作品时的预选深度。</p>
+        <div className="flex gap-2">
+          {(['quick', 'standard', 'deep'] as const).map(d => {
+            const labels = { quick: '快速', standard: '标准', deep: '深度' }
+            const active = settings.defaultDepth === d
+            return (
+              <button
+                key={d}
+                onClick={() => update({ defaultDepth: d })}
+                className={`px-4 py-2 rounded-lg border text-sm transition ${
+                  active
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border text-text-secondary hover:border-accent/40'
+                }`}
+              >
+                {labels[d]}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 自动 Layer 2 */}
+      <div>
+        <h3 className="text-sm font-medium text-text-primary mb-2">Layer 2 分析</h3>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <div
+            onClick={() => update({ autoLayer2: !settings.autoLayer2 })}
+            className={`w-10 h-6 rounded-full transition-colors relative ${
+              settings.autoLayer2 ? 'bg-accent' : 'bg-bg-elevated border border-border'
+            }`}
+          >
+            <div
+              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                settings.autoLayer2 ? 'translate-x-4' : 'translate-x-0.5'
+              }`}
+            />
+          </div>
+          <div>
+            <span className="text-sm text-text-primary">Layer 1 完成后自动运行风格量化</span>
+            <p className="text-xs text-text-muted">本地计算，不消耗 AI token</p>
+          </div>
+        </label>
+      </div>
+
+      {/* 批量清理 */}
+      <div>
+        <h3 className="text-sm font-medium text-text-primary mb-2">数据清理</h3>
+        <button
+          onClick={handleCleanFailed}
+          disabled={cleaning || failedWorks.length === 0}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border text-sm text-text-primary hover:bg-bg-hover disabled:opacity-50"
+        >
+          {cleaning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          清理失败作品（{failedWorks.length} 个）
+        </button>
       </div>
     </div>
   )

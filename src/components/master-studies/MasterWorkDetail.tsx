@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft, Download, Loader2, AlertCircle, RefreshCw,
   StopCircle, Calendar, Hash, BookOpen, Sparkles,
+  BarChart3, Activity,
 } from 'lucide-react'
 import MasterAnalysisReport from './MasterAnalysisReport'
+import MasterStyleCard from './MasterStyleCard'
+import MasterBeatsTimeline from './MasterBeatsTimeline'
 import { useMasterStudyStore } from '../../stores/master-study'
 import {
   setMasterPipelineListener,
@@ -11,10 +14,20 @@ import {
   getActiveMasterWorkId,
   hasMasterChunks,
   runMasterAnalysis,
+  loadMasterBlob,
 } from '../../lib/master-study/pipeline'
+import { computeAndSaveStyleMetrics } from '../../lib/master-study/style-analyzer'
+import {
+  extractChapterBeats,
+  splitIntoChapters,
+  cancelBeatExtraction,
+  type BeatExtractorListener,
+} from '../../lib/master-study/beat-extractor'
+import { extractTextFromFile } from '../../lib/doc-parser'
 import { downloadAnalysisArchive } from '../../lib/master-study/export-archive'
 import type {
-  MasterWork, MasterChunkAnalysis, MasterWorkStatus,
+  MasterWork, MasterChunkAnalysis, MasterChapterBeat,
+  MasterStyleMetrics, MasterWorkStatus,
 } from '../../lib/types/master-study'
 
 interface Props {
@@ -36,9 +49,14 @@ export default function MasterWorkDetail({ workId, onBack }: Props) {
 
   const [work, setWork] = useState<MasterWork | null>(null)
   const [analyses, setAnalyses] = useState<MasterChunkAnalysis[]>([])
+  const [beats, setBeats] = useState<MasterChapterBeat[]>([])
+  const [styleMetrics, setStyleMetrics] = useState<MasterStyleMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [log, setLog] = useState<Array<{ level: string; message: string; ts: number }>>([])
   const [downloading, setDownloading] = useState(false)
+  const [runningStyleCompute, setRunningStyleCompute] = useState(false)
+  const [runningBeats, setRunningBeats] = useState(false)
+  const [beatProgress, setBeatProgress] = useState<{ done: number; total: number } | null>(null)
 
   // 从 store 订阅 works 数组以便 progress 实时刷新
   const storeWorks = useMasterStudyStore(s => s.works)
@@ -47,25 +65,30 @@ export default function MasterWorkDetail({ workId, onBack }: Props) {
     [storeWorks, workId, work],
   )
 
-  // 初次加载数据
+  // 初次加载数据（Layer 1 + Layer 2）
   useEffect(() => {
     let cancelled = false
     const load = async () => {
       setLoading(true)
       try {
-        const w = await getWork(workId)
+        const [w, rows, b, sm] = await Promise.all([
+          getWork(workId),
+          listChunkAnalysis(workId),
+          listChapterBeats(workId),
+          getStyleMetrics(workId),
+        ])
         if (cancelled) return
         setWork(w)
-        const rows = await listChunkAnalysis(workId)
-        if (cancelled) return
         setAnalyses(rows)
+        setBeats(b)
+        setStyleMetrics(sm)
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
     load()
     return () => { cancelled = true }
-  }, [workId, getWork, listChunkAnalysis])
+  }, [workId, getWork, listChunkAnalysis, listChapterBeats, getStyleMetrics])
 
   // 订阅 pipeline 事件（仅当本作品是当前 active）
   useEffect(() => {
@@ -81,9 +104,14 @@ export default function MasterWorkDetail({ workId, onBack }: Props) {
       },
       onDone: async (finishedId) => {
         if (finishedId !== workId) return
-        // 重新抓分析结果
-        const rows = await listChunkAnalysis(workId)
+        const [rows, b, sm] = await Promise.all([
+          listChunkAnalysis(workId),
+          listChapterBeats(workId),
+          getStyleMetrics(workId),
+        ])
         setAnalyses(rows)
+        setBeats(b)
+        setStyleMetrics(sm)
       },
     })
     return () => {
@@ -131,6 +159,69 @@ export default function MasterWorkDetail({ workId, onBack }: Props) {
     if (getActiveMasterWorkId() !== liveWork.id) return
     if (!confirm('确认取消本次分析？已完成的块会保留。')) return
     cancelMasterPipeline()
+  }
+
+  const handleRunStyleMetrics = async () => {
+    if (!liveWork?.id) return
+    setRunningStyleCompute(true)
+    try {
+      const blob = await loadMasterBlob(liveWork.id)
+      if (!blob) {
+        alert('原文已丢失（页面可能刷新过且 Blob 未保存），请重新上传。')
+        return
+      }
+      const file = new File([blob.blob], blob.filename, { type: 'text/plain' })
+      const { text } = await extractTextFromFile(file)
+      const sm = await computeAndSaveStyleMetrics(liveWork.id, text)
+      setStyleMetrics(sm)
+    } catch (err) {
+      alert(`风格量化失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setRunningStyleCompute(false)
+    }
+  }
+
+  const handleRunBeats = async () => {
+    if (!liveWork?.id) return
+    setRunningBeats(true)
+    setBeatProgress(null)
+    try {
+      const blob = await loadMasterBlob(liveWork.id)
+      if (!blob) {
+        alert('原文已丢失，请重新上传。')
+        setRunningBeats(false)
+        return
+      }
+      const file = new File([blob.blob], blob.filename, { type: 'text/plain' })
+      const { text } = await extractTextFromFile(file)
+      const chapters = splitIntoChapters(text)
+
+      const listener: BeatExtractorListener = {
+        onProgress: (done, total) => setBeatProgress({ done, total }),
+        onActivity: (level, message) => {
+          setLog(prev => {
+            const next = [...prev, { level, message, ts: Date.now() }]
+            return next.length > 200 ? next.slice(-200) : next
+          })
+        },
+      }
+
+      await extractChapterBeats(liveWork, chapters, listener)
+      const b = await listChapterBeats(liveWork.id)
+      setBeats(b)
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        alert(`节奏分析失败：${err instanceof Error ? err.message : String(err)}`)
+      }
+    } finally {
+      setRunningBeats(false)
+      setBeatProgress(null)
+    }
+  }
+
+  const handleCancelBeats = () => {
+    if (!confirm('确认取消节奏分析？已完成的章节会保留。')) return
+    cancelBeatExtraction()
   }
 
   if (loading || !liveWork) {
@@ -263,6 +354,74 @@ export default function MasterWorkDetail({ workId, onBack }: Props) {
         <h2 className="text-base font-semibold text-text-primary mb-2">五维分析报告</h2>
         <MasterAnalysisReport analyses={analyses} />
       </div>
+
+      {/* Layer 2：风格量化 + 节奏时间线 */}
+      {liveWork.status === 'done' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-text-primary">Layer 2 深度分析</h2>
+            <div className="flex items-center gap-2">
+              {!styleMetrics && (
+                <button
+                  onClick={handleRunStyleMetrics}
+                  disabled={runningStyleCompute}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border text-xs text-text-primary hover:bg-bg-hover disabled:opacity-50"
+                >
+                  {runningStyleCompute
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <BarChart3 className="w-3.5 h-3.5" />}
+                  {runningStyleCompute ? '计算中…' : '运行风格量化'}
+                </button>
+              )}
+              {beats.length === 0 && !runningBeats && (
+                <button
+                  onClick={handleRunBeats}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border text-xs text-text-primary hover:bg-bg-hover"
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                  运行节奏分析
+                </button>
+              )}
+              {runningBeats && (
+                <button
+                  onClick={handleCancelBeats}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-error/40 text-error text-xs hover:bg-error/10"
+                >
+                  <StopCircle className="w-3.5 h-3.5" />
+                  取消节奏分析
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 节奏分析进度 */}
+          {runningBeats && beatProgress && (
+            <div className="rounded-lg border border-border bg-bg-surface p-3">
+              <div className="flex items-center justify-between text-xs text-text-muted mb-1">
+                <span>节奏分析进度</span>
+                <span>{beatProgress.done} / {beatProgress.total} 章</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-bg-elevated overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-all"
+                  style={{ width: `${(beatProgress.done / beatProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {styleMetrics && <MasterStyleCard metrics={styleMetrics} />}
+          {beats.length > 0 && <MasterBeatsTimeline beats={beats} />}
+
+          {!styleMetrics && beats.length === 0 && !runningStyleCompute && !runningBeats && (
+            <div className="rounded-xl border border-dashed border-border bg-bg-elevated/30 p-6 text-center">
+              <p className="text-sm text-text-muted">
+                Layer 2 分析尚未运行。点击上方按钮开始风格量化或节奏分析。
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -260,7 +260,7 @@ export default function GeographyPanel({ project }: Props) {
                 {/* 展开编辑 */}
                 {isExpanded && (
                   <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs text-text-muted mb-1">名称</label>
                         <input
@@ -278,6 +278,19 @@ export default function GeographyPanel({ project }: Props) {
                         >
                           {LOCATION_TYPES.map(t => (
                             <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-text-muted mb-1">上级地点</label>
+                        <select
+                          value={loc.parentId ?? ''}
+                          onChange={e => handleUpdateLocation(loc.id, { parentId: e.target.value || null })}
+                          className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
+                        >
+                          <option value="">（顶级）</option>
+                          {locations.filter(l => l.id !== loc.id).map(l => (
+                            <option key={l.id} value={l.id}>{l.name}</option>
                           ))}
                         </select>
                       </div>

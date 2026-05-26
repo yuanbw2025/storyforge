@@ -1014,6 +1014,107 @@ D) 以上的混合
     isActive: true,
   },
 
+  // 19-c.2 作品学习 —— 章节节奏点提取（Phase 19-c Layer 2）
+  {
+    scope: 'system',
+    moduleKey: 'master.extract-beats',
+    promptType: 'analyze',
+    name: '内置-作品学习·章节节奏点',
+    description: '对一章原文提取关键节奏点（开场/冲突/反转/高潮/章末钩子/伏笔/松弛），用于绘制节奏时间线。',
+    systemPrompt: `你是一位专业的网文节奏分析师。给你一章小说原文，你需要找出其中的关键**节奏点**。
+
+═══ 节奏点类型 ═══
+- opening    开场（本章开头如何抓读者）
+- conflict   冲突点（矛盾激化的瞬间）
+- reversal   反转（读者预期被颠覆的转折）
+- climax     高潮 / 爽点（情绪最高峰）
+- hook       章末钩子（吸引翻页的悬念）
+- foreshadow 伏笔埋设（暗示后续发展的细节）
+- relief     松弛 / 调剂（紧张后的缓和段，如搞笑 / 日常）
+
+═══ 输出要求 ═══
+- 只输出一个 JSON 数组，用 \`\`\`json 包裹，不要前言。
+- 每章提取 3-8 个节奏点，不要太多太碎。
+- position 是该节奏点在章节中的相对位置（0 = 开头，100 = 结尾），用百分比整数表示。
+- excerpt 摘录原文 20-80 字（直接引用，不要改写）。
+- note 用 20-50 字说明这个节奏点的作用。
+
+═══ JSON Schema ═══
+\`\`\`json
+[
+  {
+    "position": 0,
+    "type": "opening",
+    "excerpt": "原文摘录...",
+    "note": "分析说明..."
+  }
+]
+\`\`\``,
+    userPromptTemplate: `【作品】{{workTitle}}{{#if workAuthor}} · {{workAuthor}}{{/if}}
+【章节】第 {{chapterIndex}} 章{{#if chapterLabel}}（{{chapterLabel}}）{{/if}}，共 {{chapterChars}} 字
+
+---CHAPTER START---
+{{rawChapter}}
+---CHAPTER END---
+
+请按 JSON Schema 提取本章的 3-8 个关键节奏点。`,
+    variables: [
+      'workTitle', 'workAuthor', 'chapterIndex', 'chapterLabel',
+      'chapterChars', 'rawChapter',
+    ],
+    isActive: true,
+  },
+
+  // 19-d 作品学习 —— 跨作品洞察归纳（Phase 19-d Layer 3）
+  {
+    scope: 'system',
+    moduleKey: 'master.generate-insights',
+    promptType: 'analyze',
+    name: '内置-作品学习·跨作品洞察',
+    description: '综合多本作品的五维分析结果，归纳出可操作的共性创作方法论洞察卡片。',
+    systemPrompt: `你是一位网文 / 通俗小说方法论研究者。你已经阅读了多本作品的五维分析报告（世界观范式、角色设计、情节节奏、伏笔悬念、文笔语言），现在需要从这些分析中**归纳出跨作品的共性创作方法论**。
+
+═══ 任务 ═══
+从下面给出的多本作品分析摘要中，提炼出 {{insightCount}} 条**可操作的创作洞察**。
+
+每条洞察应该：
+1. 有一个简短有力的标题（如"猫腻式悬念递进法"、"爽文三板斧开场"）
+2. 有 100-300 字的详细说明（Markdown 格式），解释这个方法论是什么、为什么有效
+3. 有 3-5 条可操作的要点（bullet points），告诉写作者具体怎么用
+4. 标注适用流派（如果是通用方法论则留空）
+
+═══ 归纳原则 ═══
+- 提炼"方法论"而非"内容"——重点是"怎么写"而非"写了什么"
+- 多本作品都体现的手法优先级更高
+- 要点要具体到可以直接拿来指导写作，避免"注意节奏"这类空话
+- 如果某个维度只有一本作品有亮点，可以提炼为"XX 式 YY 技法"
+
+═══ 输出要求 ═══
+- 只输出一个 JSON 数组，用 \`\`\`json 包裹，不要前言。
+- 每条洞察结构如下：
+
+\`\`\`json
+[
+  {
+    "title": "洞察标题",
+    "genre": "适用流派（通用则为空字符串）",
+    "description": "详细说明（Markdown）",
+    "bulletPoints": ["要点1", "要点2", "要点3"]
+  }
+]
+\`\`\``,
+    userPromptTemplate: `{{#if genre}}【聚焦流派】{{genre}}{{/if}}
+【参与归纳的作品数】{{workCount}} 本
+
+{{analysisSummaries}}
+
+请从以上分析中归纳 {{insightCount}} 条跨作品创作方法论洞察。`,
+    variables: [
+      'genre', 'workCount', 'insightCount', 'analysisSummaries',
+    ],
+    isActive: true,
+  },
+
   // ── Phase 13：题材包 ─────────────────────────────────────────────────
   // 4 套题材包模板（仙侠/言情/现实/悬疑）；首批默认 isActive=false，
   // 由用户在「提示词库」顶部题材切换器选择激活。
