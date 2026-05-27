@@ -34,6 +34,8 @@ import type {
   EmotionBeatCard,
   WorldNode,
   StoryArc,
+  HistoricalTimelineEvent,
+  HistoricalKeyword,
 } from '../types'
 
 class StoryForgeDB extends Dexie {
@@ -85,6 +87,12 @@ class StoryForgeDB extends Dexie {
 
   // 多世界 / 世界树
   worldNodes!: Table<WorldNode, number>
+
+  // PHASE-H1 —— 历史时间线事件
+  historicalTimelineEvents!: Table<HistoricalTimelineEvent, number>
+
+  // PHASE-H2 —— 历史关键词与细节
+  historicalKeywords!: Table<HistoricalKeyword, number>
 
   constructor() {
     super('storyforge')
@@ -189,6 +197,16 @@ class StoryForgeDB extends Dexie {
     // Phase H3: 便签/笔记
     this.version(17).stores({
       notes: '++id, projectId, chapterId, pinned',
+    })
+
+    // PHASE-H1: 历史时间线事件
+    this.version(18).stores({
+      historicalTimelineEvents: '++id, projectId, era, year',
+    })
+
+    // PHASE-H2: 历史关键词与细节
+    this.version(19).stores({
+      historicalKeywords: '++id, projectId, category, era',
     })
   }
 }

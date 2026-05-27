@@ -25,6 +25,7 @@ import {
 const TYPE_CONFIG: Record<ReferenceType, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   story: { label: '故事参考', icon: BookMarked, color: 'text-accent bg-accent/10 border-accent/30' },
   style: { label: '风格参考', icon: Palette,   color: 'text-purple-400 bg-purple-500/10 border-purple-400/30' },
+  historical: { label: '历史资料', icon: Library, color: 'text-amber-500 bg-amber-500/10 border-amber-500/30' },
 }
 
 /** 世界观字段 → 中文标签映射 */
@@ -110,7 +111,7 @@ export default function ReferencePanel({ project }: Props) {
 
         {/* 筛选 tabs */}
         <div className="flex gap-1 bg-bg-elevated rounded-lg p-1">
-          {([['all', '全部', references.length], ['story', '故事', storyCount], ['style', '风格', styleCount]] as const).map(
+          {([['all', '全部', references.length], ['story', '故事', storyCount], ['style', '风格', styleCount], ['historical', '历史', references.filter(r => r.type === 'historical').length]] as const).map(
             ([v, l, c]) => (
               <button
                 key={v}
@@ -194,6 +195,7 @@ export default function ReferencePanel({ project }: Props) {
             <div className="text-xs text-text-muted/60 text-center max-w-xs space-y-0.5">
               <p>· <span className="text-accent">故事参考</span>：借鉴情节结构、世界观框架</p>
               <p>· <span className="text-purple-400">风格参考</span>：借鉴文风、叙事节奏</p>
+              <p>· <span className="text-amber-500">历史资料</span>：考证历史背景、社会制度、日常生活细节</p>
               <p>· <span className="text-blue-400">导入参考</span>：通过「导入」解析文档自动填充</p>
             </div>
           </div>
@@ -348,6 +350,20 @@ function InfoTab({
         <span className="w-16 shrink-0 text-xs text-text-muted pt-0.5 text-right">作者</span>
         <div className="flex-1 min-w-0">
           <InlineInput value={reference.author} onChange={v => onUpdate({ author: v })} placeholder="点击填写作者…" className="text-sm text-text-primary" />
+        </div>
+      </div>
+      <div className="flex gap-4 py-3">
+        <span className="w-16 shrink-0 text-xs text-text-muted pt-0.5 text-right">类型</span>
+        <div className="flex-1 min-w-0">
+          <select
+            value={reference.type}
+            onChange={e => onUpdate({ type: e.target.value as ReferenceType })}
+            className="bg-bg-elevated border border-border rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent"
+          >
+            <option value="story">故事参考</option>
+            <option value="style">风格参考</option>
+            <option value="historical">历史资料</option>
+          </select>
         </div>
       </div>
       <div className="flex gap-4 py-3">
@@ -574,14 +590,26 @@ function DeepAnalysisTab({
 
   const isAnalyzing = status === 'analyzing' || running
 
+  const isHistorical = reference.type === 'historical'
+
   return (
     <div className="space-y-4">
       {/* 说明 */}
       <div className="bg-bg-elevated rounded-lg p-3 text-xs text-text-muted leading-relaxed">
         <Microscope className="w-4 h-4 inline mr-1.5 text-accent" />
-        上传优秀网文 / 小说样本，让 AI 从
-        <span className="text-accent font-medium"> 叙事架构、开篇技法、情节节奏、人物塑造、冲突升级、伏笔悬念、文笔对话、世界观构建 </span>
-        八个维度提炼创作方法论。分析结果永久保留在浏览器本地，创作时可「引用手法」注入 AI prompt 上下文。
+        {isHistorical ? (
+          <>
+            上传历史文献、考证资料或学术论文，让 AI 从
+            <span className="text-amber-500 font-medium"> 历史背景、社会制度、日常生活、物质文化、语言习惯 </span>
+            等维度提炼最地道的时代细节。分析结果永久保留在浏览器本地，创作时可「引用手法」注入 AI prompt 上下文。
+          </>
+        ) : (
+          <>
+            上传优秀网文 / 小说样本，让 AI 从
+            <span className="text-accent font-medium"> 叙事架构、开篇技法、情节节奏、人物塑造、冲突升级、伏笔悬念、文笔对话、世界观构建 </span>
+            八个维度提炼创作方法论。分析结果永久保留在浏览器本地，创作时可「引用手法」注入 AI prompt 上下文。
+          </>
+        )}
       </div>
 
       {/* 操作区 */}
@@ -691,14 +719,14 @@ function DeepAnalysisTab({
 
       {/* 分块分析结果 */}
       {chunks.length > 0 && !isAnalyzing && (
-        <ChunkAnalysisViewer chunks={chunks} />
+        <ChunkAnalysisViewer chunks={chunks} isHistorical={isHistorical} />
       )}
     </div>
   )
 }
 
 /** 分块分析查看器 —— 可切换块 + 按维度展示 */
-function ChunkAnalysisViewer({ chunks }: { chunks: ReferenceChunkAnalysis[] }) {
+function ChunkAnalysisViewer({ chunks, isHistorical }: { chunks: ReferenceChunkAnalysis[]; isHistorical: boolean }) {
   const [selectedChunk, setSelectedChunk] = useState(0)
   const [expandedDims, setExpandedDims] = useState<Set<string>>(new Set(ANALYSIS_DIMENSIONS))
 
@@ -723,7 +751,25 @@ function ChunkAnalysisViewer({ chunks }: { chunks: ReferenceChunkAnalysis[] }) {
     foreshadowing:      'text-cyan-400 border-cyan-400/30',
     proseAndDialogue:   'text-pink-400 border-pink-400/30',
     worldBuilding:      'text-teal-400 border-teal-400/30',
+    // 历史维度专属古风色彩
+    historicalContext:  'text-[#C17D5E] border-[#C17D5E]/30', // 古铜色
+    socialInstitutions: 'text-[#B06B7B] border-[#B06B7B]/30', // 朱砂红
+    dailyLife:          'text-[#7BA08A] border-[#7BA08A]/30', // 松石绿
+    materialCulture:    'text-[#B08B6B] border-[#B08B6B]/30', // 琥珀金
+    languageCustoms:    'text-[#8B7BB0] border-[#8B7BB0]/30', // 黛紫色
   }
+
+  // 根据是否为历史资料，动态过滤展示的维度
+  const visibleDimensions = ANALYSIS_DIMENSIONS.filter(dim => {
+    const isHistDim = ['historicalContext', 'socialInstitutions', 'dailyLife', 'materialCulture', 'languageCustoms'].includes(dim)
+    if (isHistorical) {
+      // 历史资料：优先展示历史维度，文学维度有内容也展示
+      return isHistDim || (chunk[dim] && chunk[dim] !== '本块未涉及')
+    } else {
+      // 普通小说：只展示文学维度
+      return !isHistDim
+    }
+  })
 
   return (
     <div className="space-y-3">
@@ -747,9 +793,9 @@ function ChunkAnalysisViewer({ chunks }: { chunks: ReferenceChunkAnalysis[] }) {
         </div>
       </div>
 
-      {/* 八维内容 */}
+      {/* 十三维内容 */}
       <div className="space-y-1">
-        {ANALYSIS_DIMENSIONS.map(dim => {
+        {visibleDimensions.map(dim => {
           const content = chunk[dim]
           if (!content || content === '本块未涉及') return null
           const isExpanded = expandedDims.has(dim)

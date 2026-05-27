@@ -14,13 +14,21 @@ export type PromptSeed = Omit<PromptTemplate, 'id' | 'createdAt' | 'updatedAt'>
 
 // ── 公用 system prompts ────────────────────────────────────────────────────
 
-const WORLDVIEW_SYSTEM = `你是一位资深的奇幻/科幻世界设计师，擅长构建宏大、自洽、有深度的虚构世界{{#if usesTone}}，写作基调偏{{tone}}{{/if}}。
+const WORLDVIEW_SYSTEM = `{{#if (eq creativeMode "historical")}}你是一位极其严谨、甚至有些挑剔的全球历史学家与小说考证顾问。
+你的首要原则是：**绝对不迎合、不顺从作者可能存在的错误假设，坚决捍卫历史真实性，杜绝时代错乱（Anachronism）**。
+
+你的职责：
+1. 根据用户提供的小说类型、历史时期和基本设定，为其构建极其严谨、符合时代特征的世界观要素。
+2. 确保所有细节（如官职、赋税、器物、称谓、科技水平）完全符合所选历史时期的真实生产力水平，绝不出现超前或跨地域的违和设定。
+3. 如果发现作者的前提存在史实硬伤（如宋代出现近视眼镜、唐代出现红薯、汉代出现铁锅炒菜），必须在回答的最开头予以明确否定，并给出历史替代方案。
+4. 提供具体、生动、有史料支撑的细节，帮助作者增加小说的真实感和沉浸感。
+{{else}}你是一位资深的奇幻/科幻世界设计师，擅长构建宏大、自洽、有深度的虚构世界{{#if usesTone}}，写作基调偏{{tone}}{{/if}}。
 
 你的职责：
 1. 根据用户提供的小说类型和基本设定，为其构建详细的世界观要素
 2. 确保世界观各维度之间逻辑自洽
 3. 提供具体、生动的细节，而非泛泛而谈
-4. 用条理清晰的格式组织内容
+4. 用条理清晰的格式组织内容{{/if}}
 
 输出要求：
 - 直接输出内容，不需要重复用户的输入
@@ -146,15 +154,24 @@ export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
     systemPrompt: WORLDVIEW_SYSTEM,
     userPromptTemplate: `小说名称：{{projectName}}
 小说类型：{{genres}}
-需要生成的维度：{{dimension}}{{#if worldContext}}
+需要生成的维度：{{dimension}}{{#if (eq creativeMode "historical")}} (历史考证模式){{/if}}{{#if worldContext}}
 
 已有世界观设定（请保持一致）：
 {{worldContext}}{{/if}}{{#if userHint}}
 
-用户补充说明：{{userHint}}{{/if}}{{#if isSummary}}
+用户补充说明：{{userHint}}{{/if}}{{#if (eq creativeMode "historical")}}
+
+**历史考证维度指南**：
+- 如果是【真实地理与地名考据】：请提供该历史时期的真实行政区划、地名演变、关隘要塞、水系分布，并指出哪些是史实，哪些是为小说服务的合理虚构。
+- 如果是【历史时期与架空度】：请明确界定核心历史年份、皇帝年号、朝代背景，并详细阐述小说的“架空程度”（如：严格史实/适度架空/完全架空世界线），以及架空点（蝴蝶效应起点）在哪里。
+- 如果是【社会等级与官职】：请提供该时期真实的官制体系（如三省六部、九品中正）、爵位制度、社会阶层（士农工商/奴隶/贵族）以及真实的升迁/科举路径。
+- 如果是【宗教与民间信仰】：请提供该时期真实的国教、民间信仰、岁时节日、祭祀风俗、禁忌与避讳。
+- 如果是【经济与赋税制度】：请提供该时期真实的货币体系（如铜钱、飞钱、交子）、赋税制度（如租庸调制、两税法）、核心商品与商路（如丝绸之路、大运河）。
+- 如果是【时代科技与生产力】：请提供该时期真实的农业工具（如曲辕犁、水车）、手工业水平（如织布机、造纸术）、武器装备（如明光铠、神臂弓）以及交通工具。
+{{/if}}{{#if isSummary}}
 
 请将上述世界观浓缩为 200-400 字的精华摘要，后续 AI 写作时会作为核心上下文参考。{{/if}}`,
-    variables: ['projectName', 'genres', 'dimension', 'worldContext', 'userHint', 'isSummary'],
+    variables: ['projectName', 'genres', 'dimension', 'worldContext', 'userHint', 'isSummary', 'creativeMode'],
     parameters: [
       { key: 'tone', label: '基调', type: 'select',
         options: ['严肃', '史诗', '抒情', '硬核', '轻奇幻'],

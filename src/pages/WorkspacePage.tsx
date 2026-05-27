@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useProjectStore } from '../stores/project'
 import { useWorldviewStore } from '../stores/worldview'
@@ -48,18 +48,22 @@ import CharacterRelationPanel from '../components/relations/CharacterRelationPan
 import WorldMapPanel from '../components/geography/WorldMapPanel'
 import StatePanel from '../components/state/StatePanel'
 import StoryArcPanel from '../components/outline/StoryArcPanel'
-import type { Project } from '../lib/types'
 
 export default function WorkspacePage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
-  const { loadProject } = useProjectStore()
-  const [project, setProject] = useState<Project | null>(null)
+  const { loadProject, projects, currentProjectId } = useProjectStore()
   const [activeModule, setActiveModule] = useState<SidebarModule>('info')
   const [loading, setLoading] = useState(true)
   const [editorNodeId, setEditorNodeId] = useState<number | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showProperties, setShowProperties] = useState(false)
+
+  // 从 Zustand Store 中动态获取当前项目，实现全局响应式更新
+  const project = useMemo(() => {
+    if (!currentProjectId) return null
+    return projects.find(p => p.id === currentProjectId) || null
+  }, [projects, currentProjectId])
 
   // 自动定时备份（每 5 分钟）
   useAutoBackup(project?.id ?? null)
@@ -77,7 +81,6 @@ export default function WorkspacePage() {
         navigate('/')
         return
       }
-      setProject(p)
 
       // 并行加载所有数据
       const pid = p.id!
@@ -118,7 +121,7 @@ export default function WorkspacePage() {
   const renderMainPanel = () => {
     switch (activeModule) {
       case 'info':
-        return <ProjectInfoPanel project={project} onUpdate={(p) => setProject(p)} />
+        return <ProjectInfoPanel project={project} onUpdate={() => useProjectStore.getState().loadProjects()} />
       case 'references':
         return <ReferencePanel project={project} />
 

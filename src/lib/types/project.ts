@@ -73,6 +73,9 @@ export const GENRE_OPTIONS = [
 /** 旧的单选类型（保留兼容性） */
 export type NovelGenre = string
 
+/** 创作模式 */
+export type CreativeMode = 'fantasy' | 'historical'
+
 /** 项目 */
 export interface Project {
   id?: number
@@ -97,6 +100,10 @@ export interface Project {
   writingStyleId?: string
   /** 创作方法论 ID */
   methodologyId?: string
+
+  // ── PHASE-H4 新字段 ──
+  /** 创作模式：fantasy=玄幻/幻想模式，historical=历史/考证模式 */
+  creativeMode?: CreativeMode
 
   createdAt: number        // timestamp
   updatedAt: number        // timestamp

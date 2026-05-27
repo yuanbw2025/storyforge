@@ -1,5 +1,5 @@
 /** 参考书目类型 */
-export type ReferenceType = 'story' | 'style'
+export type ReferenceType = 'story' | 'style' | 'historical'
 
 /** 深度分析深度档位 */
 export type ReferenceAnalysisDepth = 'quick' | 'standard' | 'deep'
@@ -105,6 +105,18 @@ export interface ReferenceChunkAnalysis {
   /** 世界观构建：设定融入叙事、规则展示、沉浸感营造 */
   worldBuilding?: string
 
+  // ── 历史考证维度（PHASE-H3 历史资料专属） ──
+  /** 历史背景与时代特征：时代大势、历史转折点、政治气候 */
+  historicalContext?: string
+  /** 社会制度与等级：官制、科举、法律、阶层划分、社会流动性 */
+  socialInstitutions?: string
+  /** 日常生活细节：衣食住行、岁时节日、娱乐消遣、民间信仰 */
+  dailyLife?: string
+  /** 物质文化：器物、工具、建筑、科技水平、生产工艺 */
+  materialCulture?: string
+  /** 语言习惯与称谓：时代特色词汇、避讳、人际称谓、书面/口语风格 */
+  languageCustoms?: string
+
   /** 本块引用的精彩片段（~200 字） */
   rawExcerpt?: string
 
@@ -112,7 +124,7 @@ export interface ReferenceChunkAnalysis {
 }
 
 /**
- * 八维分析维度键名列表，用于遍历
+ * 十三维分析维度键名列表，用于遍历
  */
 export const ANALYSIS_DIMENSIONS = [
   'narrativeStructure',
@@ -123,11 +135,17 @@ export const ANALYSIS_DIMENSIONS = [
   'foreshadowing',
   'proseAndDialogue',
   'worldBuilding',
+  // 历史维度
+  'historicalContext',
+  'socialInstitutions',
+  'dailyLife',
+  'materialCulture',
+  'languageCustoms',
 ] as const
 
 export type AnalysisDimension = (typeof ANALYSIS_DIMENSIONS)[number]
 
-/** 八维维度中文标签 */
+/** 十三维维度中文标签 */
 export const DIMENSION_LABELS: Record<AnalysisDimension, string> = {
   narrativeStructure: '叙事架构',
   openingTechnique: '开篇与黄金三章',
@@ -137,4 +155,10 @@ export const DIMENSION_LABELS: Record<AnalysisDimension, string> = {
   foreshadowing: '伏笔与悬念',
   proseAndDialogue: '文笔与对话',
   worldBuilding: '世界观构建',
+  // 历史维度
+  historicalContext: '历史背景与时代特征',
+  socialInstitutions: '社会制度与等级',
+  dailyLife: '日常生活细节',
+  materialCulture: '物质文化（器物/科技）',
+  languageCustoms: '语言习惯与称谓',
 }

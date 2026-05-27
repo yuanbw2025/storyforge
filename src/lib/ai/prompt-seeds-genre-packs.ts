@@ -333,7 +333,7 @@ const YANQING: PromptSeed[] = [
 - 冲突避免狗血外挂（车祸失忆生死劫），偏向真实人性张力
 - 留白和遗憾胜过 100% 圆满`,
     userPromptTemplate: `小说：{{projectName}}（言情）
-需要生成的故事维度：{{dimension}}
+    需要生成的故事维度：{{dimension}}
 
 世界观/背景：
 {{worldContext}}{{#if userHint}}
@@ -699,6 +699,32 @@ const SUSPENSE: PromptSeed[] = [
   },
   {
     scope: 'system',
+    moduleKey: 'worldview.dimension',
+    promptType: 'generate',
+    name: '悬疑推理包-世界观维度',
+    description: '信息控制、不可靠叙事、伏笔密度高。',
+    genres: ['suspense'],
+    systemPrompt: `你是一位悬疑推理背景设计师。悬疑的"世界观"通常是真实世界的某一片切面：现代都市、古代朝堂、民国乱世、校园象牙塔等。
+
+要求：
+- 时代背景的细节要扎实（衣食住行、语言习惯、社会规则）
+- 主角圈子的真实感（行业、职业、人际关系）
+- 影响 CP 关系的外部规则（如门第、礼教、阶层、舆论）
+- 避免架空到悬浮，让"爱情遇到的阻力"有可信来源
+
+输出 Markdown，重在细节而非宏大设定。`,
+    userPromptTemplate: `小说：{{projectName}}（悬疑推理）
+需要生成的维度：{{dimension}}{{#if worldContext}}
+
+已有背景：
+{{worldContext}}{{/if}}{{#if userHint}}
+
+用户补充：{{userHint}}{{/if}}`,
+    variables: ['projectName', 'dimension', 'worldContext', 'userHint'],
+    isActive: false,
+  },
+  {
+    scope: 'system',
     moduleKey: 'foreshadow.generate',
     promptType: 'generate',
     name: '悬疑推理包-伏笔建议',
@@ -737,9 +763,217 @@ const SUSPENSE: PromptSeed[] = [
   },
 ]
 
+// ── 历史题材包（PHASE-H5） ──────────────────────────────────────────────────
+
+const HISTORICAL: PromptSeed[] = [
+  {
+    scope: 'system',
+    moduleKey: 'chapter.content',
+    promptType: 'generate',
+    name: '历史包-章节正文',
+    description: '朝堂权谋、历史厚重感、古雅文风、细节考证。',
+    genres: ['lishi'],
+    systemPrompt: `你是一位极其严谨、文笔厚重古雅的历史小说作者{{#if usesTone}}，本章基调偏{{tone}}{{/if}}。
+
+写作要点：
+1. **历史重力感**：所有情节必须在真实的历史重力（如当时的律法、技术、社会阶层、道德禁忌、地理环境）下展开，绝无现代词汇或玄幻幻觉。
+2. **朝堂权谋与机锋**：对话要含蓄、克制、言外有意，充满政治博弈与人情世故。少用直白表态，多用潜台词和眼神、动作暗示。
+3. **地道的时代细节**：将考证出来的衣食住行、官制称谓、岁时风俗自然融入叙事，避免生硬的“设定倾倒（Info-dump）”。
+4. **时代局限性**：角色的价值观、动机和选择必须符合其所处的时代背景，不以现代人的道德标准去强求历史人物。
+5. **章末钩子**：多以“大势所趋的无奈”、“暗流涌动的危机”或“权谋棋局的下一步”收束，余韵悠长。
+
+输出要求：
+- 直接输出正文{{#if usesChapterLength}}，约 {{chapterLength}} 字{{/if}}
+- 不输出章节标题
+- 语言典雅、洗练，具有历史小说的厚重质感`,
+    userPromptTemplate: `请按历史考证风格撰写本章：
+
+章节标题：{{chapterTitle}}
+章节大纲：{{chapterSummary}}
+
+历史背景与地理考据：
+{{worldContext}}
+
+涉及角色（注意其政治立场与家族背景）：
+{{characters}}
+
+前一章结尾（衔接用）：
+{{previousChapterEnding}}{{#if userHint}}
+
+用户额外要求：{{userHint}}{{/if}}`,
+    variables: ['chapterTitle', 'chapterSummary', 'worldContext', 'characters', 'previousChapterEnding', 'userHint'],
+    parameters: [
+      { key: 'tone', label: '基调', type: 'select',
+        options: ['厚重', '权谋', '悲凉', '古雅', '激昂'], default: '厚重', optional: true },
+      { key: 'chapterLength', label: '目标字数', type: 'slider',
+        min: 1500, max: 5000, step: 100, default: 2500, optional: true },
+    ],
+    isActive: false,
+  },
+  {
+    scope: 'system',
+    moduleKey: 'outline.volume',
+    promptType: 'generate',
+    name: '历史包-卷级大纲',
+    description: '围绕历史大势、政治斗争、社会变革展开。',
+    genres: ['lishi'],
+    systemPrompt: `你是一位精通朝堂权谋与历史大势的历史大纲师。历史小说的卷级结构围绕“历史重力”与“政治博弈”展开。
+
+设计原则：
+1. **大势所趋**：每一卷必须对应一个明确的历史大势或政治转折点（如：夺嫡、削藩、变法、外敌入侵、党争爆发）。
+2. **权谋博弈**：冲突的核心是政治立场的对立、家族利益的纠葛或理想与现实的冲突，避免简单的善恶对立。
+3. **个人与时代**：主角的成长线必须与时代大潮紧密交织，展现“顺应大势”或“逆流抗争”的宿命感。
+4. **卷尾收束**：每卷结尾应是一个阶段性政治博弈的落幕，伴随着权力的重新洗牌或时代的巨变。
+
+输出格式：
+- 卷标题用极具历史厚重感的词汇（如“风起”、“夺嫡”、“变法”、“社稷”）
+- 每卷 3-5 句情节摘要 + 一句“时代注脚”`,
+    userPromptTemplate: `小说：{{projectName}}（历史题材）
+目标字数：约 {{targetWordCount}} 字
+建议卷数：约 {{estimatedVolumes}} 卷
+
+历史背景与地理考据：
+{{worldContext}}
+
+故事核心：
+{{storyCore}}
+
+请按历史小说节奏生成卷级大纲，每卷围绕一次核心政治博弈或历史转折。{{#if userHint}}
+
+用户补充：{{userHint}}{{/if}}`,
+    variables: ['projectName', 'targetWordCount', 'estimatedVolumes', 'worldContext', 'storyCore', 'userHint'],
+    isActive: false,
+  },
+  {
+    scope: 'system',
+    moduleKey: 'character.generate',
+    promptType: 'generate',
+    name: '历史包-角色设计',
+    description: '注重历史身份、政治立场、家族背景、时代局限性。',
+    genres: ['lishi'],
+    systemPrompt: `你是一位历史人物设计师，擅长塑造具有“历史重力感”和“时代局限性”的鲜活人物。
+
+设计要点：
+1. **政治立场与家族背景**：每个人物都有其代表的阶层利益（如士族、寒门、勋贵、宦官、外戚）和明确的政治立场。
+2. **时代局限性**：人物的价值观、道德观和眼界必须受其所处时代的生产力和文化水平制约，绝无现代人的超前思想。
+3. **核心动机**：是为了家族传承、社稷黎民、个人权位，还是在乱世中苟全性命？
+4. **风骨与称谓**：符合时代特征的字、号、官职、人际称谓，以及独特的处世风骨。
+
+输出 Markdown 格式，包含：
+- 姓名（字/号）
+- 政治立场与阶层背景
+- 官职/身份
+- 性格与致命软肋
+- 核心动机
+- 时代局限性（最关键 — 决定其悲剧性与真实感）
+- 标志性日常/细节`,
+    userPromptTemplate: `小说：{{projectName}}（历史题材）
+
+历史背景与地理考据：
+{{worldContext}}
+
+已有角色：
+{{existingCharacters}}
+
+请设计一位符合历史背景的鲜活人物。{{#if userHint}}
+
+用户要求：{{userHint}}{{/if}}`,
+    variables: ['projectName', 'worldContext', 'existingCharacters', 'userHint'],
+    isActive: false,
+  },
+  {
+    scope: 'system',
+    moduleKey: 'story.generate',
+    promptType: 'generate',
+    name: '历史包-故事核心',
+    description: '关于“大势与个人”、“权谋与道义”、“历史重力下的抉择”。',
+    genres: ['lishi'],
+    systemPrompt: `你是一位历史故事架构师。历史故事的核心冲突往往不是简单的善恶，而是：
+
+- 大势与个人：在滚滚历史车轮下，个人的挣扎与宿命。
+- 权谋与道义：为了政治理想，能否舍弃个人道德与情感？
+- 变法与守旧：社会变革时期的阶层撕裂与利益重组。
+- 华夷之辨：家国情怀、民族认同与乱世抉择。
+
+设计要点：
+- 冲突必须具有极高的政治厚度与社会写实感。
+- 避免天降神迹或现代科技外挂，所有反转必须基于当时的智谋、人心和生产力。
+- 结局往往带有历史的沧桑感与遗憾美。`,
+    userPromptTemplate: `小说：{{projectName}}（历史题材）
+需要生成的故事维度：{{dimension}}
+
+历史背景与地理考据：
+{{worldContext}}{{#if userHint}}
+
+用户补充：{{userHint}}{{/if}}`,
+    variables: ['projectName', 'dimension', 'worldContext', 'userHint'],
+    isActive: false,
+  },
+  {
+    scope: 'system',
+    moduleKey: 'worldview.dimension',
+    promptType: 'generate',
+    name: '历史包-世界观维度',
+    description: '考证真实地理、官制、赋税、科技与生产力。',
+    genres: ['lishi'],
+    systemPrompt: `你是一位极其严谨的历史世界观设计师。你的任务是为历史小说构建极其扎实、符合时代特征的背景设定。
+
+考证维度：
+- 真实地理与地名考据（行政区划、地名演变、关隘要塞、水系分布）
+- 历史时期与架空度（核心年份、皇帝年号、朝代背景、蝴蝶效应起点）
+- 社会等级与官职（官制体系、爵位制度、社会阶层、升迁/科举路径）
+- 宗教与民间信仰（国教、民间信仰、岁时节日、祭祀风俗、禁忌与避讳）
+- 经济与赋税制度（货币体系、赋税制度、核心商品与商路）
+- 时代科技与生产力（农业工具、手工业水平、武器装备、交通工具）
+
+输出 Markdown，文风严谨、考证详实，杜绝任何玄幻或现代违和设定。`,
+    userPromptTemplate: `小说：{{projectName}}
+需要生成的维度：{{dimension}}{{#if worldContext}}
+
+已有背景：
+{{worldContext}}{{/if}}{{#if userHint}}
+
+用户补充：{{userHint}}{{/if}}`,
+    variables: ['projectName', 'dimension', 'worldContext', 'userHint'],
+    isActive: false,
+  },
+]
+
 // ── 各包补 chapter.continue（续写）────────────────────────────────────────
 
 const CONTINUE_TEMPLATES: PromptSeed[] = [
+  {
+    scope: 'system',
+    moduleKey: 'chapter.continue',
+    promptType: 'continue',
+    name: '历史包-章节续写',
+    description: '保持历史厚重感与权谋张力的续写。',
+    genres: ['lishi'],
+    systemPrompt: `你是一位极其严谨的历史小说续写者{{#if usesTone}}，本次基调偏{{tone}}{{/if}}。续写要求：
+1. 文笔保持厚重古雅，绝对不出现现代词汇或时代错乱。
+2. 保持前文的权谋张力与对话机锋，言外有意。
+3. 细节考证必须符合当时的生产力水平。
+4. 续写约 1000-2000 字。`,
+    userPromptTemplate: `请续写以下历史小说正文：
+
+章节大纲：{{chapterSummary}}
+
+历史背景与地理考据：
+{{worldContext}}
+
+已有正文（接续）：
+---
+{{existingContent}}
+---{{#if userHint}}
+
+用户额外要求：{{userHint}}{{/if}}`,
+    variables: ['chapterSummary', 'worldContext', 'existingContent', 'userHint'],
+    parameters: [
+      { key: 'tone', label: '基调', type: 'select',
+        options: ['厚重', '权谋', '悲凉', '古雅'], default: '厚重', optional: true },
+    ],
+    isActive: false,
+  },
   {
     scope: 'system',
     moduleKey: 'chapter.continue',
@@ -874,6 +1108,7 @@ const CONTINUE_TEMPLATES: PromptSeed[] = [
 // ── 合并导出 ───────────────────────────────────────────────────────────────
 
 export const GENRE_PACK_SEEDS: PromptSeed[] = [
+  ...HISTORICAL,
   ...XIANXIA,
   ...YANQING,
   ...REALISM,
@@ -893,6 +1128,8 @@ export interface GenrePackMeta {
 export const GENRE_PACKS: GenrePackMeta[] = [
   { id: 'general',    label: '通用 / 玄幻爽文（默认）', emoji: '⚙️',
     description: '默认包，长篇连载向，男频玄幻爽文风格基底。' },
+  { id: 'lishi',      label: '历史',                  emoji: '📜',
+    description: '历史背景、朝堂权谋、架空或考据。' },
   { id: 'xianxia',    label: '仙侠修真',              emoji: '☯️',
     description: '飞升体系、人间道义、正邪较量。文笔典雅。' },
   { id: 'yanqing',    label: '言情',                  emoji: '💗',
@@ -908,8 +1145,6 @@ export const GENRE_PACKS: GenrePackMeta[] = [
     description: '江湖恩怨、侠义精神、门派纷争。' },
   { id: 'dushi',      label: '都市',                  emoji: '🏙️',
     description: '现代都市背景、职场/商战/生活。' },
-  { id: 'lishi',      label: '历史',                  emoji: '📜',
-    description: '历史背景、朝堂权谋、架空或考据。' },
   { id: 'scifi',      label: '科幻',                  emoji: '🚀',
     description: '科学设定、未来社会、星际探索。' },
   { id: 'moshi',      label: '末世',                  emoji: '☠️',
