@@ -6,23 +6,32 @@
 
 ## 2026-05-29
 
-### Hotfix — 世界观三面板上下文互注
+### Hotfix — 全局AI上下文互注（世界观 ↔ 各独立面板）
 
 **来源**：社区用户（买辣椒）反馈世界观各模块 AI 生成的内容互不关联、缺乏逻辑一致性
 
-**问题**：世界起源面板和自然环境面板的 AI 上下文（`buildCtx`）只读本面板内已有字段，不读其他面板的设定。导致 AI 生成世界起源时看不到地理环境，生成自然环境时看不到世界来源和力量层次。只有人文环境面板读了跨面板数据。
+**问题**：世界观三面板互不读取；地理面板AI概念地图不读世界观自然环境；历史年表AI考证/头脑风暴不读世界观设定。各模块AI生成内容互相矛盾。
 
 **修复**：
-- 世界起源面板 `buildCtx` 注入自然环境（世界结构/地貌/气候）+ 人文环境（历史线/种族/势力）
-- 自然环境面板 `buildCtx` 注入世界起源（世界来源/力量层次）+ 人文环境（历史线/种族/势力）
-- 人文环境面板原已读取跨面板数据，无需改动
-- 三面板形成完整上下文闭环
+
+**1) 世界观三面板上下文闭环**
+- 世界起源 `buildCtx` 注入自然环境（世界结构/地貌/气候）+ 人文环境（历史线/种族/势力）
+- 自然环境 `buildCtx` 注入世界起源（世界来源/力量层次）+ 人文环境（历史线/种族/势力）
+- 人文环境原已读取跨面板数据，无需改动
+
+**2) 地理面板AI概念地图注入世界观**
+- `buildConceptMapPrompt` 自动提取世界来源、世界结构、地貌分布、山川水系、气候环境、重镇分布，附加到概述中传给AI
+
+**3) 历史年表AI注入世界观**
+- 事件考证和关键词头脑风暴的 `userPrompt` 自动附加世界观关键字段：世界来源、力量层次、世界历史线、世界大事记、种族与民族、势力分布、历史总述、纪年体系
 
 **改动文件**：
 | 文件 | 改动 |
 |------|------|
 | `src/components/worldview/WorldviewOriginPanel.tsx` | `buildCtx` 增加 Natural + Humanity 关键字段注入 |
 | `src/components/worldview/WorldviewNaturalPanel.tsx` | `buildCtx` 增加 Origin + Humanity 关键字段注入 |
+| `src/lib/ai/adapters/geography-adapter.ts` | `buildConceptMapPrompt` 注入 worldview 自然环境上下文 |
+| `src/components/history/HistoryPanel.tsx` | 两个 AI 调用注入 worldview 上下文 |
 
 ---
 
