@@ -1,6 +1,6 @@
 # StoryForge 开发路线图
 
-> **最后更新**: 2026-05-28
+> **最后更新**: 2026-06-01
 > **说明**: 本文档是唯一的功能规划文档。旧文档已归档至 `docs/archive/`。
 > **结构**: 上半部分「已完成」，下半部分「待开发」按优先级排列。完成后从待办挪到已完成区。
 
@@ -142,227 +142,37 @@
 
 > Prompt 精细化：经确认现有功能已满足需求，关闭。
 
+## ✅ Phase 32 — 真实与幻想（世界规则体系）（2026-05-28）
+
+- 维度级约束声明（15 大类 → ~50 子类 → 提示标签），每个节点独立设置「📜真实 / ✨架空 / ⚖️冲突优先」
+- WorldRulesPanel 三栏布局 + 用户自定义节点 + 规则清单实时预览 + Token 估算
+- 下游 prompt 全部改为注入 worldRulesContext，取代旧 creativeMode 二选一
+- DB v21 新增 worldRulesProfiles 表
+
+## ✅ Phase 28.4 — 导入分卷支持（2026-05-29）
+
+- 卷标题自动检测 + 预览 + 分卷骨架创建 + 章节自动挂卷
+
+## ✅ Phase 30.2 + 30.5 — 角色关系提取 + 导入去重（2026-05-29）
+
+- 角色关系自动提取（大纲+正文 → AI → 智能匹配 → 去重 → 批量导入）
+- 导入去重增强（世界观句子级/角色按名聚合/大纲标题去重）
+
+## ✅ Phase 33 — NVIDIA NIM API 接入（2026-05-28）
+
+- NVIDIA NIM OpenAI 兼容接口，预置 7 个模型，本地代理转发
+
+## ✅ Phase 26.3 — 角色驱动剧情模式（2026-05-29）
+
+- 角色初始/目标状态 → AI 推演中间情节 → 卷/章大纲 → 一键导入
+
+## ✅ Phase 26.4 — 灵感反推入口（2026-05-29）
+
+- 碎片灵感 → AI 反推世界观+故事核心+角色 → 分模块/一键采纳
+
 ---
 
 # ═══ 待开发（按优先级排列）═══
-
-## 🔴 优先级：高
-
-### Phase 32 — ✅ 真实与幻想（世界规则体系）（2026-05-28）
-
-> 来源：内部审查 | 状态：已完成 | 取代 Phase 31.3（creativeMode 联动）
-
-**核心理念**：将历史考证从「项目级二选一模式（fantasy/historical）」改为「维度级约束声明」。用户可在任何维度上自由混搭真实与架空，AI 生成时遵守用户声明的约束。
-
-**三级树结构**（15 大类 → ~50 子类 → 提示标签），每个节点可独立设置「📜取自真实 / ✨架空改造 / ⚖️冲突优先」：
-
-```
-1. 时代背景        — 历史时期 / 架空起点 / 历法时间
-2. 重大事件        — 与历史年表联动，isHistorical=true 自动成为锚点
-3. 地理疆域        — 行政区划 / 地形地貌 / 城市重镇 / 水系 / 道路交通
-4. 气候环境        — 气候特征 / 自然灾害 / 生态物种
-5. 政治制度        — 政体 / 中央官制 / 地方官制 / 选官 / 爵位 / 法律 / 外交
-6. 军事            — 军制编制 / 武器装备 / 战术战法 / 防御工事
-7. 经济            — 赋税 / 货币金融 / 商业贸易 / 农业 / 手工业 / 资源物产
-8. 社会结构        — 阶层 / 宗族 / 性别秩序 / 依附关系 / 民间组织
-9. 科技生产力      — 工程 / 医药 / 天文 / 交通工具 / 通信 / 生产工具
-10. 文化思想       — 主流思想 / 文学艺术 / 教育
-11. 宗教信仰       — 官方宗教 / 民间信仰 / 丧葬祭祀 / 禁忌避讳
-12. 民族族群       — 主体民族 / 周边民族 / 民族互动 / 外国势力
-13. 语言称谓       — 口语风格 / 称谓体系 / 书面语 / 忌讳用语
-14. 日常生活       — 饮食 / 服饰 / 居住 / 出行 / 度量衡 / 时间 / 娱乐 / 节庆 / 社交
-15. 力量与超自然   — 力量体系 / 超自然存在 / 灵材法器 / 力量与社会
-```
-
-**用户可自定义**：支持新增 L1 大类、L2 子类、L3 提示标签。
-
-**子任务**：
-
-- **32.1** ✅ 数据模型 + DB v21（2026-05-28）
-  - 新增 `WorldRulesProfile` 类型：`entries: Record<nodeId, {historical, fictional, priority}>` + `customNodes[]`
-  - DB 新增 `worldRulesProfiles` 表（singleton per project）
-- **32.2** ✅ Store（`world-rules.ts`，singleton 模式）（2026-05-28）
-- **32.3** ✅ 规则清单生成器（`world-rules-manifest.ts`）（2026-05-28）
-  - 从 entries 生成结构化清单，集成历史年表锚点 + 历史关键词
-  - 不设 Token 上限，透明展示消耗估算
-  - `buildWorldRulesContext(projectId)` 一站式读取 DB → 生成清单
-- **32.4** ✅ WorldRulesPanel UI（2026-05-28）
-  - 三栏布局：L1 列表 → L2 列表 → 编辑区（双输入框 + 优先级）
-  - L3 作为编辑区灰色提示标签
-  - 底部规则清单实时预览 + Token 估算
-  - 各级 `+ 新增` 按钮（用户自定义节点）
-  - 已填节点标记（色点指示）
-- **32.5** ✅ 世界观三面板去 toggle（2026-05-28）
-  - 去掉 WorldviewOriginPanel / NaturalPanel / HumanityPanel / WorldviewPanel 的「幻想设定/历史考证」二选一按钮
-  - 统一使用通用字段标签
-  - 各面板 AI 生成调用改为注入 `worldRulesContext`
-- **32.6** ✅ 下游 prompt 改造（2026-05-28）
-  - `world-rules-manifest.ts`：新增 `buildWorldRulesContext(projectId)`
-  - `prompt-seeds.ts`：`{{#if (eq creativeMode "historical")}}` → `{{#if worldRulesContext}}`
-  - `outline-adapter.ts` / `batch-outline-runner.ts`：参数改为 `worldRulesContext`
-  - `OutlinePanel.tsx`：调用 `buildWorldRulesContext` 替代 `buildHistoricalContext`
-- **32.7** ✅ 侧边栏 + 路由（2026-05-28）
-  - 世界观子树第一项：「⚖️ 真实与幻想」（Scale 图标）
-  - WorkspacePage 注册 `world-rules` → `WorldRulesPanel`
-- **32.8** ✅ 历史年表锚点标识（2026-05-28）
-  - `isHistorical: true` 事件标签改为「⚓ 史实锚点」+「AI 不可违反」提示
-  - `isHistorical: false` 事件标签改为「✨ 虚构/架空」
-- **32.9** ✅ 数据迁移（2026-05-28）
-  - `loadProfile` 首次访问时检测 `creativeMode=historical`，自动填充 `globalNote` 迁移提示
-  - WorkspacePage 并行加载块新增 `useWorldRulesStore.getState().loadProfile(pid)`
-- **32.10** ✅ tsc + build 验证（2026-05-28）
-
-**文件变更清单**：
-
-| 操作 | 文件 |
-|------|------|
-| 新增 | `src/lib/types/world-rules.ts` |
-| 新增 | `src/stores/world-rules.ts` |
-| 新增 | `src/lib/ai/world-rules-manifest.ts` |
-| 新增 | `src/components/worldview/WorldRulesPanel.tsx` |
-| 修改 | `src/lib/db/schema.ts` — v21 |
-| 修改 | `src/lib/types/index.ts` |
-| 修改 | `src/lib/types/project.ts` — deprecated creativeMode |
-| 修改 | `src/lib/ai/context-builder.ts` |
-| 修改 | `src/lib/ai/prompt-seeds.ts` |
-| 修改 | `src/components/worldview/WorldviewPanel.tsx` |
-| 修改 | `src/components/worldview/WorldviewOriginPanel.tsx` |
-| 修改 | `src/components/worldview/WorldviewNaturalPanel.tsx` |
-| 修改 | `src/components/worldview/WorldviewHumanityPanel.tsx` |
-| 修改 | `src/components/outline/OutlinePanel.tsx` |
-| 修改 | `src/lib/ai/batch-outline-runner.ts` |
-| 修改 | `src/lib/ai/adapters/outline-adapter.ts` |
-| 修改 | `src/components/layout/sidebar-tree.ts` |
-| 修改 | `src/pages/WorkspacePage.tsx` |
-
-### Phase 28.4 — ✅ 导入分卷支持（2026-05-29）
-
-> 来源：社区反馈 | 状态：已完成
-
-- 本地正则检测卷标题（第X卷/部/篇、卷X、【第X卷】等格式）和章标题
-- 确认弹窗显示检测到的分卷结构预览（可展开/折叠）
-- 导入时自动创建卷结构骨架（先建空卷，AI 解析的章节自动挂到匹配的卷下）
-- chunk-writer 增强：写入大纲时检测已有同名卷，跳过重复创建并复用已有卷 ID
-- 卷匹配支持模糊匹配（标题包含关系）
-
-**文件变更**：
-
-| 操作 | 文件 |
-|------|------|
-| 新增 | `src/lib/import/volume-detector.ts` |
-| 修改 | `src/lib/import/chunk-writer.ts` — 卷匹配 + 子章节挂载 |
-| 修改 | `src/components/system/ImportDocPanel.tsx` — 分卷检测 + 预写卷骨架 |
-| 修改 | `src/components/system/import/ImportConfirmModal.tsx` — 分卷结构预览 UI |
-
-### Phase 30.2 — ✅ 角色关系自动提取（2026-05-29）
-
-> 来源：社区用户 | 状态：已完成
-
-- 数据源：大纲摘要 + 章节正文（自动截取，控制在 ~8000 字内）
-- AI 输出 JSON `[{char1, char2, type, label, description, bidirectional}]`
-- 关系类型：亲属、恋人、朋友、对手、敌人、师徒、盟友、上下级、其他
-- 智能匹配：AI 返回的角色名自动匹配已有角色（精确 + 包含匹配）
-- 去重：同对角色同类型关系自动标记「已存在」
-- 预览面板：勾选要导入的关系，批量写入
-- 新增 prompt seed：`relation.extract`
-
-**文件变更**：
-
-| 操作 | 文件 |
-|------|------|
-| 新增 | `src/lib/ai/relation-extractor.ts` |
-| 修改 | `src/lib/types/prompt.ts` — 增加 `relation.extract` |
-| 修改 | `src/lib/ai/prompt-seeds.ts` — 新增关系提取 seed |
-| 修改 | `src/components/relations/CharacterRelationPanel.tsx` — AI 提取按钮 + 预览面板 |
-
-### Phase 30.5 — ✅ 导入去重增强（2026-05-29）
-
-> 来源：社区用户 | 状态：已完成 | 与 Phase 28.1 协同
-
-- 世界观字段：句子级 bigram 相似度过滤（本地计算，阈值 0.7，无需 AI）
-- 角色按名字聚合：同名角色自动合并字段（追加不覆盖），支持去标点/空格的模糊匹配
-- 大纲按标题/摘要去重：bigram 相似度检测（阈值 0.8），重复节点跳过创建但补充摘要
-
-**文件变更**：
-
-| 操作 | 文件 |
-|------|------|
-| 新增 | `src/lib/import/dedup.ts` — 三类去重工具函数 |
-| 修改 | `src/lib/import/chunk-writer.ts` — 集成世界观/角色/大纲去重逻辑 |
-
----
-
-## 🟡 优先级：中-高
-
-### Phase 33 — ✅ NVIDIA NIM API 接入（2026-05-28）
-
-> 来源：社区反馈（长耳朵兔子） | 状态：已完成
-
-**背景**：NVIDIA NIM（`integrate.api.nvidia.com`）提供 OpenAI 兼容的 `/v1/chat/completions` 接口。浏览器直接请求存在 CORS 限制，通过 vite dev server 代理转发。
-
-**实现内容**：
-- `AIProvider` 新增 `'nvidia'` 类型
-- 预置 7 个模型：Llama 3.3 70B / Llama 3.1 405B / Llama 3.1 70B / DeepSeek R1 / Qwen 2.5 72B / Gemma 2 27B / Mistral Large 2
-- 本地代理：`/nvidia-proxy` → `https://integrate.api.nvidia.com`
-- 设置面板：NVIDIA NIM 选项 + 一键代理切换
-- `client.ts` 无需改动（NIM 兼容 OpenAI 协议，走默认分支）
-
-| 操作 | 文件 |
-|------|------|
-| 修改 | `vite.config.ts` |
-| 修改 | `src/lib/types/ai.ts` |
-| 修改 | `src/components/settings/AIConfigPanel.tsx` |
-
----
-
-### Phase 26.3 — ✅ 角色驱动剧情模式（2026-05-29）
-
-> 来源：社区反馈 | 状态：已完成
-
-- 用户为角色设定「初始状态」和「目标状态/结局」，AI 推演中间情节并生成卷/章大纲
-- 支持多角色弧光交织、自动注入世界观/故事核心/世界规则上下文
-- 结构化预览（卷/章树）+ 一键导入大纲系统
-- 新增 prompt seed: `plot.character-driven`
-- 侧边栏创作区新增「角色驱动」入口
-
-**文件变更**：
-
-| 操作 | 文件 |
-|------|------|
-| 新增 | `src/lib/ai/character-driven-plot.ts` |
-| 新增 | `src/components/outline/CharacterDrivenPlotPanel.tsx` |
-| 修改 | `src/lib/types/prompt.ts` — 增加 `plot.character-driven` |
-| 修改 | `src/lib/ai/prompt-seeds.ts` — 新增角色驱动剧情 seed |
-| 修改 | `src/components/layout/sidebar-tree.ts` — 新增侧边栏入口 |
-| 修改 | `src/pages/WorkspacePage.tsx` — 注册面板 |
-
-### Phase 26.4 — ✅ 灵感反推入口（2026-05-29）
-
-> 来源：社区反馈 | 状态：已完成
-
-- 独立面板：用户写碎片灵感（一句话/关键词/场景片段都行）
-- AI 反向生成：世界观草稿（摘要+地理+社会+规则）、故事核心（一句话故事+主题+冲突+模式+主线）、2-5 个初始角色卡
-- 结构化预览：三大模块可展开/折叠，角色可逐个勾选
-- 分模块采纳或一键全部采纳，写入对应 Store（世界观/故事设计/角色库）
-- 新增 prompt seed: `inspiration.reverse`
-- 侧边栏著作信息下新增「灵感反推」入口（Sparkles 图标）
-
-**文件变更**：
-
-| 操作 | 文件 |
-|------|------|
-| 新增 | `src/lib/ai/inspiration-reverse.ts` |
-| 新增 | `src/components/project/InspirationPanel.tsx` |
-| 修改 | `src/lib/types/prompt.ts` — 增加 `inspiration.reverse` |
-| 修改 | `src/lib/ai/prompt-seeds.ts` — 新增灵感反推 seed |
-| 修改 | `src/components/layout/sidebar-tree.ts` — 新增侧边栏入口 |
-| 修改 | `src/pages/WorkspacePage.tsx` — 注册面板 |
-
-### ~~Phase 31.3 — creativeMode 联动题材包~~
-
-> ~~来源：内部审查~~ | 状态：**已被 Phase 32 取代**（Phase 32 去掉了 creativeMode 二选一，改为维度级世界规则体系）
-
----
 
 ## 🟢 优先级：中
 
