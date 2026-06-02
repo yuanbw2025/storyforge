@@ -4,6 +4,55 @@
 
 ---
 
+## 2026-06-02
+
+### Phase 25.4 — 多世界系统
+
+**来源**：产品规划（诸天流/无限流/快穿/修仙多界等多世界题材支持）
+
+一个项目可以管理多个独立世界，每个世界拥有自己的世界观、力量体系、地理和角色。默认关闭，开启后才出现多世界相关 UI，单世界用户完全无感。
+
+**核心能力**：
+
+- **多世界开关**：项目概况页一个开关，默认关闭。开启时自动把现有世界观/力量/地理数据归属到「主世界」
+- **世界总览面板**：管理多个世界（增删改排序）、世界列表、穿越总览表格、世界关系
+- **世界详情**：编辑世界基础信息（名称/类型/图标/预计章节）+ 穿越规则（进入条件/能力限制/可带走物品）
+- **世界切换器**：世界观三面板、地理、力量体系面板顶部，一键切换查看/编辑不同世界的设定
+- **角色世界归属**：角色可标记属于某个世界或「跨世界」（主角等），角色面板按世界过滤
+- **大纲世界标签**：每卷可指定所属世界，列表显示世界图标
+- **AI 按世界生成**：生成某世界的世界观/章节时，自动只读该世界的上下文，互不串味
+- **AI 建议世界**：写下整体故事概念，AI 建议 2-4 个差异化的世界，勾选采纳
+- **AI 扩写世界观**：给世界一句话草稿，AI 参考其他世界扩展出完整世界观（避免雷同）
+- **世界关系**：定义世界间的传送门/飞升通道/召唤/分支等连接
+- **导入导出**：JSON 导出/导入完整保留多世界数据及其关联
+
+**实现分期**：A 数据地基 → B 管理 UI → C 数据隔离 → D AI 全链路 → E 世界关系
+
+**改动文件**：
+| 操作 | 文件 |
+|------|------|
+| 新增 | `src/lib/types/world-group.ts` — WorldGroup/WorldGroupLink 类型 |
+| 新增 | `src/stores/world-group.ts` — 世界组 Store（CRUD/级联删除/迁移） |
+| 新增 | `src/lib/ai/world-group-context.ts` — 当前世界/全世界上下文构建 |
+| 新增 | `src/lib/ai/world-group-ai.ts` — AI 建议/扩写适配器 |
+| 新增 | `src/components/world-group/WorldGroupOverview.tsx` — 世界总览 |
+| 新增 | `src/components/world-group/WorldGroupDetail.tsx` — 世界详情 |
+| 新增 | `src/components/world-group/WorldGroupSwitcher.tsx` — 世界切换器 |
+| 修改 | `src/lib/db/schema.ts` — DB v22（worldGroups/worldGroupLinks 表） |
+| 修改 | `src/lib/types/{project,worldview,character,outline,geography,history}.ts` — 增加 worldGroupId 等字段 |
+| 修改 | `src/lib/export/json-export.ts` — v3 导出导入世界组 |
+| 修改 | `src/stores/{worldview,_factories,project}.ts` — 按世界加载/保存 |
+| 修改 | `src/components/worldview/{WorldviewOrigin,Natural,Humanity,PowerSystem}Panel.tsx` — 接入切换器 |
+| 修改 | `src/components/geography/GeographyPanel.tsx` — 接入切换器 |
+| 修改 | `src/components/character/CharacterPanel.tsx` — 世界过滤器 + 归属 |
+| 修改 | `src/components/outline/OutlinePanel.tsx` — 卷世界标签 + 按世界生成 |
+| 修改 | `src/components/editor/ChapterEditor.tsx` — 按卷所属世界注入上下文 |
+| 修改 | `src/components/project/ProjectInfoPanel.tsx` — 多世界开关 |
+| 修改 | `src/lib/ai/prompt-seeds.ts` — world-group.suggest/expand seed |
+| 修改 | `src/components/layout/{Sidebar,sidebar-tree}.ts(x)` — 世界总览入口 |
+
+---
+
 ## 2026-06-01
 
 ### Bugfix — 三个社区反馈 bug 修复
