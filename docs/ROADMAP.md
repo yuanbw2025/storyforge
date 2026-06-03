@@ -205,7 +205,7 @@
 - ✅ 买辣椒：世界观各模块 AI 生成内容割裂 — 上下文互注修复
 
 **待修复**：
-- ⬜ **买辣椒：伏笔 AI 生成后无法写入表单**（`onAccept` 回调只关闭面板未写入数据，需用 AI 解析输出为结构化伏笔条目并批量创建）`ForeshadowPanel.tsx:214`
+- ✅ **买辣椒：伏笔 AI 生成后无法写入表单** — 已修复：onAccept 改为 AI 二次结构化解析 → 批量写入伏笔表（`foreshadow-adapter.ts` + `ForeshadowPanel.tsx`）
 - ✅ **买辣椒：正文粘贴内容切换页面后格式丢失** — 已修复：`useAutoSave` cleanup 增加 dirty 检测 + unmount flush（`src/hooks/useAutoSave.ts`）
 - ⬜ zzjj：AI 生成内容用 JSON 格式化输出，阅读不友好（中间结果对用户可见问题）
 - ⬜ 鲤鱼跃龙门：灵感反推没有保存/导出按钮（设计缺失，需加保存草稿或结果导出）
