@@ -50,7 +50,7 @@ echo.
 echo  [*] 正在启动 StoryForge...
 echo  [*] 启动后浏览器会自动打开，如果没有请手动访问：
 echo.
-echo      http://localhost:5175/storyforge/
+echo      http://localhost:1111/storyforge/
 echo.
 echo  [*] 关闭此窗口即可停止服务
 echo  ─────────────────────────────────────

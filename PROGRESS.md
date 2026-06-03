@@ -24,7 +24,7 @@
 cd my-website/storyforge
 # 如果用 nvm：
 export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-npm run dev    # http://localhost:5175/storyforge/
+npm run dev    # http://localhost:1111/storyforge/
 ```
 
 ### 项目在主仓库中的位置
@@ -61,7 +61,7 @@ my-website/
 | 文件 | 说明 |
 |------|------|
 | `package.json` | React 19 + Vite 6 + Zustand 5 + Dexie 4 + lucide-react |
-| `vite.config.ts` | base: `/storyforge/`，端口 5175 |
+| `vite.config.ts` | base: `/storyforge/`，端口 1111 |
 | `tsconfig.json` | strict mode，ES2020 target |
 | `tailwind.config.ts` | 自定义颜色映射到 CSS 变量（bg-base, text-primary, accent 等） |
 | `postcss.config.js` | tailwindcss + autoprefixer |
