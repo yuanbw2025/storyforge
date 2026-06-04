@@ -9,6 +9,7 @@ import type { OutlineNode } from '../types/outline'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from './prompt-engine'
 import { buildWorldContext } from './context-builder'
+import { buildCodexContext } from './codex-context'
 import { buildWorldRulesContext } from './world-rules-manifest'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useOutlineStore } from '../../stores/outline'
@@ -95,7 +96,8 @@ export async function buildCharacterDrivenPlotPrompt(
   userHint?: string,
 ): Promise<ChatMessage[]> {
   const { worldview, storyCore, powerSystem } = useWorldviewStore.getState()
-  const worldContext = buildWorldContext(worldview, storyCore, powerSystem)
+  const codexCtx = await buildCodexContext(projectId, null)
+  const worldContext = [buildWorldContext(worldview, storyCore, powerSystem), codexCtx].filter(Boolean).join('\n\n')
   const worldRulesContext = await buildWorldRulesContext(projectId)
 
   const storyCoreParts: string[] = []

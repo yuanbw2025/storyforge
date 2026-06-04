@@ -44,7 +44,12 @@ export async function buildCodexContext(
   if (allEntries.length === 0) return ''
 
   const wg = worldGroupId ?? null
-  const inWorld = <T extends { worldGroupId?: number | null }>(x: T) => (x.worldGroupId ?? null) === wg
+  // 全局项（worldGroupId=null，如内置分类）在任何世界都可见；
+  // 世界专属项仅在其所属世界可见。单世界（wg=null）时只含全局项。
+  const inWorld = <T extends { worldGroupId?: number | null }>(x: T) => {
+    const w = x.worldGroupId ?? null
+    return w === null || w === wg
+  }
 
   // 仅取当前世界、未隐藏分类下的词条
   const cats = allCats

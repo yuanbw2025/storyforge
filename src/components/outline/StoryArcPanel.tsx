@@ -10,6 +10,7 @@ import { useOutlineStore } from '../../stores/outline'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildStoryArcPrompt, parseStoryArcResult } from '../../lib/ai/adapters/story-arc-adapter'
 import { buildWorldContext } from '../../lib/ai/context-builder'
+import { buildCodexContext } from '../../lib/ai/codex-context'
 import { CInput } from '../shared/CompositionInput'
 import { CTextarea } from '../shared/CompositionInput'
 import AIStreamOutput from '../shared/AIStreamOutput'
@@ -52,7 +53,8 @@ export default function StoryArcPanel({ project }: Props) {
 
   // AI 生成故事线
   const handleGenerate = async () => {
-    const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
+    const codexCtx = await buildCodexContext(project.id!, null)
+    const worldCtx = [buildWorldContext(worldview, storyCore, powerSystem), codexCtx].filter(Boolean).join('\n\n')
     const storyCoreCtx = [
       storyCore?.theme && `主题：${storyCore.theme}`,
       storyCore?.centralConflict && `核心冲突：${storyCore.centralConflict}`,

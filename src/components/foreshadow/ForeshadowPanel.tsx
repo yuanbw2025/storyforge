@@ -10,6 +10,7 @@ import { useAIConfigStore } from '../../stores/ai-config'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildForeshadowSuggestPrompt, buildForeshadowStructurePrompt, parseForeshadowStructured } from '../../lib/ai/adapters/foreshadow-adapter'
 import { buildWorldContext, buildCharacterContext } from '../../lib/ai/context-builder'
+import { buildCodexContext } from '../../lib/ai/codex-context'
 import { chat } from '../../lib/ai/client'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
@@ -133,10 +134,11 @@ export default function ForeshadowPanel({ project }: Props) {
   }
 
   // AI 建议伏笔
-  const handleAISuggest = () => {
+  const handleAISuggest = async () => {
     if (!config.apiKey) return
     setShowAI(true)
-    const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
+    const codexCtx = await buildCodexContext(project.id!, null)
+    const worldCtx = [buildWorldContext(worldview, storyCore, powerSystem), codexCtx].filter(Boolean).join('\n\n')
     const charCtx = buildCharacterContext(characters)
     const existingForeshadows = foreshadows.map(f => `${f.name}（${TYPE_LABELS[f.type]}，${STATUS_LABELS[f.status].label}）：${f.description.slice(0, 100)}`).join('\n')
     const opts = {

@@ -10,6 +10,7 @@ import { useAIConfigStore } from '../../stores/ai-config'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildCharacterPrompt } from '../../lib/ai/adapters/character-adapter'
 import { buildWorldContext } from '../../lib/ai/context-builder'
+import { buildCodexContext } from '../../lib/ai/codex-context'
 import { parseCharacterOutput } from '../../lib/ai/parse-character-output'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
@@ -101,7 +102,7 @@ export default function CharacterPanel({ project }: Props) {
     if (selectedChar?.id) updateCharacter(selectedChar.id, { [field]: value })
   }
 
-  const handleAIGenerate = () => {
+  const handleAIGenerate = async () => {
     // 统计阵容缺口
     const roleCounts: Record<CharacterRole, number> = {
       protagonist: 0, antagonist: 0, supporting: 0, minor: 0, npc: 0, extra: 0,
@@ -110,7 +111,8 @@ export default function CharacterPanel({ project }: Props) {
     const rosterGap = `当前阵容：主角 ${roleCounts.protagonist}、反派 ${roleCounts.antagonist}、配角 ${roleCounts.supporting}、次要 ${roleCounts.minor}、NPC ${roleCounts.npc}、路人 ${roleCounts.extra}`
     const existing = characters.map(c => `${c.name}（${ROLE_LABELS[c.role]}）`).join('、')
     const enrichedHint = [hint, rosterGap].filter(Boolean).join('\n')
-    const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
+    const codexCtx = await buildCodexContext(project.id!, null)
+    const worldCtx = [buildWorldContext(worldview, storyCore, powerSystem), codexCtx].filter(Boolean).join('\n\n')
     const opts = {
       parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
       overrides: (systemOverride != null || userOverride != null) ? {

@@ -12,6 +12,7 @@ import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildWorldContext } from '../../lib/ai/context-builder'
 import { buildCurrentWorldContext } from '../../lib/ai/world-group-context'
+import { buildCodexContext } from '../../lib/ai/codex-context'
 import { buildHistoricalContext } from '../../lib/ai/context-builder'
 import { buildWorldRulesContext } from '../../lib/ai/world-rules-manifest'
 import { buildSceneVerifyPrompt } from '../../lib/ai/adapters/scene-verify-adapter'
@@ -67,7 +68,8 @@ export default function SceneVerifyPanel({ project }: Props) {
       if (project.enableMultiWorld && activeGroupId != null) {
         worldContext = await buildCurrentWorldContext(project.id!, activeGroupId)
       } else {
-        worldContext = buildWorldContext(worldview, storyCore, powerSystem)
+        const codexCtx = await buildCodexContext(project.id!, null)
+        worldContext = [buildWorldContext(worldview, storyCore, powerSystem), codexCtx].filter(Boolean).join('\n\n')
       }
       const [historyContext, worldRulesContext] = await Promise.all([
         buildHistoricalContext(project.id!),
