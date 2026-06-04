@@ -7,6 +7,7 @@
  */
 import { db } from '../db/schema'
 import { WORLD_GROUP_TYPE_LABELS } from '../types/world-group'
+import { buildCodexContext } from './codex-context'
 import type { Worldview, PowerSystem } from '../types'
 
 /** 取某世界组下的世界观（按 worldGroupId 匹配） */
@@ -58,6 +59,10 @@ export async function buildCurrentWorldContext(
   if (ps?.name) {
     parts.push(`\n【力量体系】${ps.name}：${ps.description?.slice(0, 200) || ''}`)
   }
+
+  // Phase 35-a：注入本世界的设定词条（上游设定）
+  const codex = await buildCodexContext(projectId, worldGroupId)
+  if (codex) parts.push(`\n${codex}`)
 
   return parts.join('\n').slice(0, 3000)
 }

@@ -11,6 +11,7 @@ import { useCharacterStore } from '../../stores/character'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildDetailSceneGeneratePrompt } from '../../lib/ai/adapters/detail-scene-adapter'
 import { buildWorldContext, buildCharacterContext } from '../../lib/ai/context-builder'
+import { buildCodexContext } from '../../lib/ai/codex-context'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import { nanoid } from '../../lib/utils/id'
 import type { DetailedScene, ScenePace } from '../../lib/types'
@@ -85,11 +86,12 @@ export default function ScenePanel({ projectId, outlineNodeId, chapterTitle, cha
     await updateScenes(detailed.scenes.filter(s => s.sceneId !== sceneId))
   }
 
-  const handleAIGenerate = () => {
+  const handleAIGenerate = async () => {
+    const codexCtx = await buildCodexContext(projectId, null)
     const messages = buildDetailSceneGeneratePrompt(
       chapterTitle,
       chapterSummary || '',
-      buildWorldContext(worldview, storyCore, null),
+      [buildWorldContext(worldview, storyCore, null), codexCtx].filter(Boolean).join('\n\n'),
       buildCharacterContext(characters.filter(c => c.role === 'protagonist' || c.role === 'supporting')),
       '',
     )

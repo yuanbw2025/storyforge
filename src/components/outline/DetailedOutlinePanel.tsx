@@ -9,6 +9,7 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { buildDetailSceneGeneratePrompt, buildEnhancedDetailPrompt, parseEnhancedDetailSmart } from '../../lib/ai/adapters/detail-scene-adapter'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { buildWorldContext, buildCharacterContext } from '../../lib/ai/context-builder'
+import { buildCodexContext } from '../../lib/ai/codex-context'
 import { batchGenerateDetails, type BatchProgress } from '../../lib/ai/batch-detail-runner'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import { nanoid } from '../../lib/utils/id'
@@ -105,12 +106,13 @@ export default function DetailedOutlinePanel({ project }: Props) {
     await updateScenes(currentDetailed.scenes.filter(s => s.sceneId !== sceneId))
   }
 
-  const handleAIGenerate = () => {
+  const handleAIGenerate = async () => {
     if (!currentChapter) return
+    const codexCtx = await buildCodexContext(project.id!, null)
     const messages = buildDetailSceneGeneratePrompt(
       currentChapter.title,
       currentChapter.summary || '',
-      buildWorldContext(worldview, storyCore, null),
+      [buildWorldContext(worldview, storyCore, null), codexCtx].filter(Boolean).join('\n\n'),
       buildCharacterContext(characters.filter(c => c.role === 'protagonist' || c.role === 'supporting')),
       '',
     )
@@ -118,12 +120,13 @@ export default function DetailedOutlinePanel({ project }: Props) {
   }
 
   // D2: 完善细纲
-  const handleEnhancedGenerate = () => {
+  const handleEnhancedGenerate = async () => {
     if (!currentChapter) return
     const idx = chapterNodes.indexOf(currentChapter)
     const prevSummary = idx > 0 ? (chapterNodes[idx - 1].summary || '') : ''
     const nextSummary = idx < chapterNodes.length - 1 ? (chapterNodes[idx + 1].summary || '') : ''
-    const worldCtx = buildWorldContext(worldview, storyCore, null)
+    const codexCtx = await buildCodexContext(project.id!, null)
+    const worldCtx = [buildWorldContext(worldview, storyCore, null), codexCtx].filter(Boolean).join('\n\n')
 
     const charCtx = characters
       .filter(c => c.role === 'protagonist' || c.role === 'supporting')
@@ -206,7 +209,8 @@ export default function DetailedOutlinePanel({ project }: Props) {
 
   const handleBatchDetail = useCallback(async () => {
     if (batchProgress) return // 已在运行
-    const worldCtx = buildWorldContext(worldview, storyCore, null)
+    const codexCtx = await buildCodexContext(project.id!, null)
+    const worldCtx = [buildWorldContext(worldview, storyCore, null), codexCtx].filter(Boolean).join('\n\n')
     const charCtx = characters
       .filter(c => c.role === 'protagonist' || c.role === 'supporting')
       .map(c => `[ID:${c.id}] ${c.name}（${c.role}）`)

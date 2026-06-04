@@ -17,6 +17,7 @@
 - 词条详情表单由字段 schema 驱动，自动渲染文本/长文本/下拉/数字/关联等控件。
 - 支持词条间关联（如「器物 ← 所需材料」「城池 → 所属势力」），通过关联选择器建立。
 - 支持用户自定义分类（新增/删除），内置分类不可删除但可隐藏。
+- **接入 AI 写作上下文（上游设定贯通）**：词条作为「上游设定」注入 AI 生成链路，写章节/大纲/细纲/场景时按当前世界读取并遵守，避免词条独立于 AI 生成体系之外。多世界经 `buildCurrentWorldContext` 统一注入（一处覆盖全部调用点）；单世界在各写作面追加读取。单世界且无任何词条时返回空，对现有写作零影响。
 
 **改动文件**：
 | 文件 | 改动 |
@@ -26,6 +27,9 @@
 | `src/stores/codex.ts` | 新增：词条 store（内置分类幂等播种 + 分类/词条 CRUD） |
 | `src/components/codex/CodexPanel.tsx` | 新增：通用词条三栏面板（分类树 / 词条列表 / schema 驱动详情） |
 | `src/components/layout/sidebar-tree.ts` + `src/pages/WorkspacePage.tsx` | 注册「设定词条」入口 |
+| `src/lib/ai/codex-context.ts` | 新增：`buildCodexContext` 词条上游上下文构建（分类紧凑格式化 + 预算上限 + 世界隔离） |
+| `src/lib/ai/world-group-context.ts` | `buildCurrentWorldContext` 注入词条（多世界全调用点覆盖） |
+| `src/components/editor/ChapterEditor.tsx`、`outline/OutlinePanel.tsx`、`outline/ScenePanel.tsx`、`outline/DetailedOutlinePanel.tsx` | 单世界写作面追加词条上下文读取 |
 
 > 后续：Phase 35-b（自然/人文分类落地、势力与阵营合并、历史线并入年表、道具系统下线）、35-c（导入时 AI 自动分类）、Phase 37（修炼体系，异兽「修炼体系」字段升级为关联）。
 

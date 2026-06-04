@@ -15,6 +15,7 @@ import { buildStateExtractPrompt, parseStateDiffs } from '../../lib/ai/adapters/
 import { buildSummaryPrompt } from '../../lib/ai/adapters/summary-adapter'
 import { buildWorldContext, buildCharacterContext, filterActiveCharacters, getContextMemo, buildRefAnalysisContext, buildMasterInsightContext } from '../../lib/ai/context-builder'
 import { buildCurrentWorldContext } from '../../lib/ai/world-group-context'
+import { buildCodexContext } from '../../lib/ai/codex-context'
 import { buildGenreConstraintContext } from '../../lib/ai/genre-metadata'
 import { buildStylePromptInjection } from '../../lib/ai/writing-styles'
 import { buildMemory, type MemoryTaskType } from '../../lib/ai/memory-builder'
@@ -152,10 +153,19 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     return () => { cancelled = true }
   }, [project.id, chapterWorldGroupId])
 
-  // 多世界模式且本卷有所属世界 → 用世界上下文；否则走原全局世界观
+  // 单世界：异步读取设定词条（多世界模式下词条已包含在 multiWorldCtx 内，避免重复注入）
+  const [singleCodexCtx, setSingleCodexCtx] = useState('')
+  useEffect(() => {
+    if (chapterWorldGroupId != null) { setSingleCodexCtx(''); return }
+    let cancelled = false
+    buildCodexContext(project.id!, null).then(ctx => { if (!cancelled) setSingleCodexCtx(ctx) })
+    return () => { cancelled = true }
+  }, [project.id, chapterWorldGroupId])
+
+  // 多世界模式且本卷有所属世界 → 用世界上下文；否则走原全局世界观 + 词条
   const worldCtx = chapterWorldGroupId != null
     ? [memo, multiWorldCtx].filter(Boolean).join('\n\n')
-    : [memo, buildWorldContext(worldview, storyCore, powerSystem)].filter(Boolean).join('\n\n')
+    : [memo, buildWorldContext(worldview, storyCore, powerSystem), singleCodexCtx].filter(Boolean).join('\n\n')
   // Phase G2: 过滤活跃角色（多世界下先按所属世界过滤：本世界角色 + 跨世界角色）
   const worldScopedChars = chapterWorldGroupId != null
     ? characters.filter(c => c.isCrossWorld || c.homeWorldGroupId === chapterWorldGroupId)

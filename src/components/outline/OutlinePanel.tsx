@@ -7,6 +7,7 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { buildVolumeOutlinePrompt, buildChapterOutlinePrompt } from '../../lib/ai/adapters/outline-adapter'
 import { buildWorldContext, buildCharacterContext } from '../../lib/ai/context-builder'
 import { buildCurrentWorldContext } from '../../lib/ai/world-group-context'
+import { buildCodexContext } from '../../lib/ai/codex-context'
 import { buildWorldRulesContext } from '../../lib/ai/world-rules-manifest'
 import { useCharacterStore } from '../../stores/character'
 import {
@@ -130,7 +131,8 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     setActiveModuleKey('outline.volume')
     setPreviewVolumes(null)
     setPreviewChapters(null)
-    const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
+    const codexCtx = await buildCodexContext(project.id!, null)
+    const worldCtx = [buildWorldContext(worldview, storyCore, powerSystem), codexCtx].filter(Boolean).join('\n\n')
     const scCtx = storyCore ? `主题：${storyCore.theme}\n冲突：${storyCore.centralConflict}\n故事线：${storyCore.storyLines}` : ''
     const charCtx = buildCharacterContext(characters)
     // Phase 32: 世界规则清单注入
@@ -152,7 +154,8 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       // 角色限定为本世界角色 + 跨世界角色
       chars = characters.filter(c => c.isCrossWorld || c.homeWorldGroupId === selectedVol.worldGroupId)
     } else {
-      worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
+      const codexCtx = await buildCodexContext(project.id!, null)
+      worldCtx = [buildWorldContext(worldview, storyCore, powerSystem), codexCtx].filter(Boolean).join('\n\n')
     }
     const volIdx = volumes.indexOf(selectedVol)
     const prevSummary = volIdx > 0 ? volumes[volIdx - 1].summary : ''
@@ -174,7 +177,8 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     const controller = new AbortController()
     batchAbortRef.current = controller
 
-    const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
+    const batchCodexCtx = await buildCodexContext(project.id!, null)
+    const worldCtx = [buildWorldContext(worldview, storyCore, powerSystem), batchCodexCtx].filter(Boolean).join('\n\n')
     const charCtx = buildCharacterContext(characters)
     // Phase 32: 世界规则清单
     const rulesCtx = await buildWorldRulesContext(project.id!)
