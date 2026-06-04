@@ -226,6 +226,11 @@
 | **上下文快照世界观为空** | `context-snapshot`（注入写作的「上下文快照」）只读 v2 字段 → v3 用户快照世界观空白 | 🟠 | 改读 v3，v2 仅兜底 |
 | **故事核心生成上下文过薄** | `StoryCorePanel` 世界上下文仅 worldOrigin 一个字段 | 🟡 | 补力量/种族/势力/历史线等关键字段 |
 | 消耗类型补标 | 故事年表提取/物品提取/批量章纲/工作流 的 AI 调用未分类 | — | 已补 category |
+| **细纲 getOrCreate 重复风险** | `detailed-outline.getOrCreate` 仅查内存 state，store 未加载/竞态时会对同一节点重复建细纲 | 🟡 数据 | 内存未命中时按 outlineNodeId 查 DB 兜底 |
+
+**第五批额外核对安全**：useAutoSave（refs→最新数据 + 卸载 flush，无陈旧闭包）；useAutoBackup 复用 export（含数据丢失修复）；useBeforeUnload 正常；批量 abort 正确复位；关系提取经 `matchRelations` 解析 name→id；prompt-engine 缺失变量→空串不漏占位；world-map nations「culture 复用」注释为误导（cells 未改，无 bug）；world-map 为视觉子系统，bug 不影响小说数据。
+
+**本次全量审计扫描覆盖**：导出/导入/快照/自动备份（数据完整性）、全部 AI 生成与提取上下文（v2/v3 + 单/多世界）、全部解析器与 prompt 种子字段对齐、所有单例/集合 store 的写入幂等、自动保存/卸载/关闭数据安全、跨项目泄漏、JSON.parse 健壮性、abort/错误恢复、死代码。**剩余未深扫**：world-map azgaar 引擎内部（视觉，不涉小说数据）。
 
 **核对确认安全（排除嫌疑）**：
 - 版本快照还原复用 export/import（已含数据丢失修复）；`ensure-schema` REQUIRED_TABLES 保守（不误删老用户）。
