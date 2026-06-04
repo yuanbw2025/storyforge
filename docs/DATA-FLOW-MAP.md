@@ -230,7 +230,13 @@
 
 **第五批额外核对安全**：useAutoSave（refs→最新数据 + 卸载 flush，无陈旧闭包）；useAutoBackup 复用 export（含数据丢失修复）；useBeforeUnload 正常；批量 abort 正确复位；关系提取经 `matchRelations` 解析 name→id；prompt-engine 缺失变量→空串不漏占位；world-map nations「culture 复用」注释为误导（cells 未改，无 bug）；world-map 为视觉子系统，bug 不影响小说数据。
 
-**本次全量审计扫描覆盖**：导出/导入/快照/自动备份（数据完整性）、全部 AI 生成与提取上下文（v2/v3 + 单/多世界）、全部解析器与 prompt 种子字段对齐、所有单例/集合 store 的写入幂等、自动保存/卸载/关闭数据安全、跨项目泄漏、JSON.parse 健壮性、abort/错误恢复、死代码。**剩余未深扫**：world-map azgaar 引擎内部（视觉，不涉小说数据）。
+**本次全量审计扫描覆盖**：导出/导入/快照/自动备份（数据完整性）、全部 AI 生成与提取上下文（v2/v3 + 单/多世界）、全部解析器与 prompt 种子字段对齐、所有单例/集合 store 的写入幂等、自动保存/卸载/关闭数据安全、跨项目泄漏、JSON.parse 健壮性、abort/错误恢复、死代码。
+
+**第六批：world-map 子系统 + 导出完整性终检（2026-06-04）**
+- world-map 数据路径安全：地图配置存 `worldNodes.mapConfigJSON`（**已在导出覆盖范围内**），渲染结果按 seed 确定性重算、不持久化 → 无数据丢失；地图生成解析由调用方 try/catch 保护。world-map 渲染算法属纯视觉，bug 仅影响地图长相、不涉小说数据，未逐行验证（需运行时验证）。
+- **导出完整性终检**：逐一核对 27 张表，未导出的 `snapshots`（本地版本历史）/ `promptTemplates`·`promptWorkflows`（全局 scope=system/user，非项目数据）/ `importJobs·Sessions·Logs·Files`（临时导入态）/ `aiUsageLog`（统计）**均为合理排除**（app 级/临时/统计）。**项目内容表已全部纳入导出**。
+
+> ✅ 结论：除 world-map 视觉渲染算法（需运行时验证）外，**涉及小说数据完整性与 AI 贯通的代码已全量静态扫描完毕**，发现的问题已全部修复或记入待开发。
 
 **核对确认安全（排除嫌疑）**：
 - 版本快照还原复用 export/import（已含数据丢失修复）；`ensure-schema` REQUIRED_TABLES 保守（不误删老用户）。
