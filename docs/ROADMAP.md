@@ -187,23 +187,24 @@
 
 ## 🔴 优先级：高
 
-### BUG-WORKFLOW-CTX — 工作流步骤生成不出内容（缺项目上下文/维度变量）
+### BUG-INPUT-WITH-GEN — 文本框应可用户自行输入，且 AI 生成时带上用户已输入内容（通用原则）
 
-> 来源：社区反馈（2026-06-04）「从零到第一章」工作流第一步「一句话故事」无法输出内容 | 文件：`src/components/settings/prompt/WorkflowRunner.tsx`、`src/lib/ai/workflow-seeds.ts`
+> 来源：社区反馈 + 用户明确诉求（2026-06-04）。最初表现：「从零到第一章」工作流第一步「一句话故事」用户无法输入。
+> 文件：`src/components/settings/prompt/WorkflowRunner.tsx`（重灾区）、`src/components/shared/AIFieldCard.tsx`、各调用 AIFieldCard/AI 生成按钮的面板。
 
-**现象**：工作流第一步「一句话故事 → story.generate」点了不出内容；实际上后续步骤也缺上下文，只是第一步最直观。
+**用户诉求（通用原则，按此实现）**：
+> 每个文本框都应能让用户**自己输入**内容；当用户点击该文本框对应的「AI 生成」按钮时，**把用户已输入的内容自动带进提示词**，在用户写的基础上生成/扩展（而不是无视用户输入从零生成）。
 
-**问题关键（已定位根因）**：
-1. `WorkflowRunner` 用通用 `renderPrompt(tpl, ctx)` 渲染，而 `ctx` **只包含**「上一步输出（inputMapping 映射的 previousOutput）+ userHint」，**完全没有注入项目上下文变量**（`projectName` / `genres` / `worldContext` / `characterContext` 等）。
-2. `story.generate` 模板的**必需变量是 `projectName` / `genres` / `dimension`**（见 `prompt-seeds.ts` 的 `variables`）。第一步是工作流首步、没有 previousOutput，ctx 里只有 userHint → 这三个必需变量**全为空** → 渲染出「小说名称：(空) / 类型：(空) / 需要生成的故事维度：(空)」→ AI 不知道要生成什么 → 出不来内容。
-3. 关键缺失是 **`dimension`**（本应是「一句话故事」）：这是 `story.generate` / `worldview.dimension` 这类「按维度生成」模板的核心变量，而工作流步骤配置（`workflow-seeds.ts`）里**根本没声明 dimension**，runner 也不注入。
-4. **为何只在工作流出问题**：正常面板（StoryCorePanel）走的是 `buildStoryGeneratePrompt(dimension, projectName, genre, worldContext, …)` 适配器，显式把所有变量填好；工作流绕过了适配器、用裸 `renderPrompt`，于是丢了这些变量。
-5. **影响面**：不止第一步——**所有工作流步骤都缺项目上下文**（projectName/genres/worldContext），生成质量普遍受损；第一步因连 previousOutput 都没有而表现为「完全出不来」。
+**已核实的现状**：
+1. **工作流步骤卡（WorkflowRunner StepCard）= 重灾区**：步骤卡**完全没有用户输入框**，只读地显示 AI 的 `result.output` + 一个「重新生成」按钮 → 用户连「一句话故事」都**没法自己敲**，更谈不上带着它去生成。这是本次反馈最直接的痛点。
+2. **普通字段组件 AIFieldCard**：用户**能**编辑字段值（`value`/`onChange`）、也能填一个独立的提示（`hint`）；但「AI 生成时是否把当前字段值（用户已写内容）带进 prompt」**取决于各调用方传入的 `buildMessages` 实现，不统一**——有的带、有的只带 hint 不带 value。
+3. （次要）`WorkflowRunner` 还存在裸 `renderPrompt` 不注入项目上下文（projectName/genres/worldContext/dimension）的问题，导致即使能输入，生成质量也受损——一并在本条修复。
 
 **解决方案**：
-- **A（推荐）**：`WorkflowRunner` 构建 ctx 时补注入项目上下文——`projectName`/`genres`（从 `project` 读）、`worldContext`（`buildWorldContext` 或多世界 `buildCurrentWorldContext`）、`characterContext`（`buildCharacterContext`）；并给工作流步骤增加一个 `contextVars?: Record<string,string>` 字段，由 runner 合并进 ctx，seed 在 dimension 类步骤上声明（如第一步 `contextVars: { dimension: '一句话故事' }`、世界起源 `{ dimension: '世界来源' }`…）。注意 `dimension` 是模板 `{{变量}}` 而非 `parameter`，必须进 ctx 而不是 parameterValues。
-- **B（更根治）**：为工作流建立 `moduleKey → adapter` 映射，让步骤复用 `buildStoryGeneratePrompt` 等适配器（自动获得完整变量填充），而非裸 renderPrompt。改动较大但与「统一 prompt 装配」一致。
-- **验证**：跑「从零到第一章」工作流，第一步能正常产出一句话故事，后续步骤能同时拿到「项目上下文 + 维度 + 前一步输出」。
+- **工作流（首要）**：给每个步骤卡加**可编辑输入框**（用户可预先输入本步内容，如一句话故事）；点「生成」时把该输入并入 ctx（作为 userHint/seed 之一），随项目上下文一起喂给 AI；AI 产出后也允许用户**编辑输出再采纳**。
+- **通用约定**：约定所有「AI 生成」按钮在构建 prompt 时**必须带上对应字段的当前值**（用户已输入内容）作为「在此基础上改写/扩展」的种子。审计所有 `buildMessages`/生成入口，统一让其纳入当前 `value`。
+- **配套**：WorkflowRunner 同时补注入项目上下文（projectName/genres/worldContext/characterContext）+ 步骤声明 `contextVars`（含 dimension，如「一句话故事」），`dimension` 是模板 `{{变量}}` 须进 ctx。
+- **验证**：① 工作流每步可手动输入、且生成带上用户输入；② 抽查若干面板字段：先输入半句→点 AI 生成→产出是在用户输入基础上扩展而非另起。
 
 ---
 
