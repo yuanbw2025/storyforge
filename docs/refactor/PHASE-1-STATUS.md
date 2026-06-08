@@ -12,7 +12,7 @@
 |---|---|---|---|
 | 1.1a 建 PROJECT_TABLES 注册表 + 派生 API(纯新增) | ✅ Done | `refactor/phase-1-task-1.1a` | 新建 `src/lib/registry/`,登记 45 表;派生 API 单测 10 条通过;现有调用方一行未改 |
 | 1.1b 生命周期切换到派生 API + 启动校验 | ✅ Done | `refactor/phase-1-task-1.1b` | deleteProject/deleteGroup/migrate 改派生;main.tsx 接入 validateRegistry;手写表清单全消失;27 测试持续全绿 |
-| 1.2a 建 FIELD_REGISTRY + AdoptionSchema + adopt() | Pending | TBD | 纯新增写回层 |
+| 1.2a 建 FIELD_REGISTRY + AdoptionSchema + adopt() | ✅ Done | `refactor/phase-1-task-1.2a` | 纯新增写回层;不切现有调用方 |
 | 1.2b 写回调用方切换到 adopt() | Pending | TBD | 灵感反推/导入/工作流/saveXxx |
 | 1.3a 建 CONTEXT_SOURCES + assembleContext() | Pending | TBD | 纯新增读取层 |
 | 1.3b 生成入口切换到 assembleContext() | Pending | TBD | 32+ 生成入口,章节正文优先 |
@@ -86,3 +86,30 @@
 **反模式确认**:`grep "db.transaction('rw', \[" src/stores` 无匹配(手写表清单全消失)
 
 **下一步(1.2a)**:建 FIELD_REGISTRY + AdoptionSchema + adopt() 入口(纯新增)
+
+### 2026-06-08 21:57:04 CST · 1.2a 进行中(by Codex)
+
+- 从 `refactor/phase-1-task-1.1b` 切出 `refactor/phase-1-task-1.2a`。
+- 同步 `docs/refactor/REFACTOR-PROGRESS.md`:Phase 0/1.1a/1.1b 状态改为实际完成态,1.2a 改为进行中。
+- 扩展 `src/lib/registry/types.ts`:新增 FieldSpec / CollectionAdoptionSpec / AdoptInput / AdoptResult 等写回层类型。
+- 新增 `src/lib/registry/field-registry.ts`:登记 worldviews / storyCores / characters / creativeRules / outlineNodes / chapters / detailedOutlines / foreshadows / storyArcs / codexCategories / codexEntries 的可写字段、别名、枚举归一。
+- 新增 `src/lib/registry/adoption-schema.ts`:登记集合写回 identity / duplicatePolicy / required / autoStamps / FK / arrayMemberChecks。
+- 新增 `src/lib/registry/adopt.ts`:实现统一写回入口,含单例 replace/append、集合 add/add-many/merge-diffs、字段别名归一、类型校验、FK 校验、数组成员过滤、自动盖章、去重写入。
+- 扩展 `src/lib/registry/validate.ts`:checkRegistry 同时校验 FIELD_REGISTRY / ADOPTION_SCHEMAS 的 target、字段、required、fk、array member。
+- 新增 `tests/registry/adopt.test.ts`:覆盖 registry 完整性、summary→worldOrigin、storyLines→mainPlot、中文 role 归一、重复角色跳过、codex FK fail-safe、数组成员过滤。
+- 已通过: `npm test -- tests/registry/adopt.test.ts`。
+- 已通过: `npm test -- tests/registry/project-tables.test.ts tests/registry/adopt.test.ts`。
+- 已通过: `npx tsc --noEmit`。
+
+### 2026-06-08 21:58:12 CST · 1.2a 完成(by Codex)
+
+- 状态:完成。
+- 本步保持 a/b 两步法边界:只新增写回层和测试,未迁移任何现有调用方。
+- 验证: `npm test -- tests/registry/adopt.test.ts` 通过(6 tests)。
+- 验证: `npm test -- tests/registry/project-tables.test.ts tests/registry/adopt.test.ts` 通过(16 tests)。
+- 验证: `npm test` 通过(11 files / 33 tests)。
+- 验证: `npm run check:required-tables` 通过(45 tables match schema.ts)。
+- 验证: `npx tsc --noEmit` 通过。
+- 验证: `npm run build` 通过。Vite 仍输出既有 chunk-size / dynamic-import warning,无构建失败。
+
+**下一步(1.2b)**:把灵感反推 / 多世界扩展 / 导入 chunk-writer / WorkflowRunner / saveXxx 薄壳逐步切到 `adopt()`,每个切换点补反例测试。

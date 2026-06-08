@@ -108,3 +108,63 @@ export interface TableSpec<T = any> {
   /** 备注(说明为什么这样配) */
   note?: string
 }
+
+/**
+ * FIELD_REGISTRY 字段定义(Phase 1.2a)。
+ *
+ * 只描述 AI/结构化采纳允许写入的字段。调用方给出的别名字段会在 adopt()
+ * 里归一成这里登记的 canonical field。
+ */
+export interface FieldSpec {
+  /** 目标表名,必须存在于 PROJECT_TABLES */
+  target: string
+  /** canonical 字段名 */
+  field: string
+  type: 'string' | 'longtext' | 'json' | 'number' | 'boolean' | 'enum' | 'array'
+  enums?: string[]
+  worldScoped?: boolean
+  aliases?: string[]
+  sanitize?: (val: unknown) => unknown
+  label?: string
+  /** 中文/别名枚举归一,如 主角 -> protagonist */
+  enumAliasMap?: Record<string, string>
+}
+
+export interface CompositeIdentity {
+  kind: 'composite'
+  fields: string[]
+}
+
+export interface CollectionAdoptionSpec {
+  /** 集合目标表名 */
+  target: string
+  /** 唯一键策略(去重定位) */
+  identity: 'id' | 'name' | CompositeIdentity
+  duplicatePolicy: 'skip' | 'update' | 'merge' | 'error'
+  /** 必填字段;缺失则跳过该条 */
+  required: string[]
+  /** 自动盖章字段 */
+  autoStamps: ('projectId' | 'worldGroupId' | 'homeWorldGroupId' | 'createdAt' | 'updatedAt')[]
+  /** FK 校验:写入前检查字段引用是否存在 */
+  fkChecks?: { field: string; target: string }[]
+  /** 数组成员校验:过滤不存在的成员,并记录 fkErrors */
+  arrayMemberChecks?: { field: string; itemTarget: string }[]
+  mergeStrategy?: 'overwrite-non-empty' | 'append-text' | 'union-array'
+}
+
+export interface AdoptInput {
+  projectId: number
+  worldGroupId?: number | null
+  target: string
+  data: Record<string, unknown> | Record<string, unknown>[]
+  mode: 'replace' | 'append' | 'add' | 'add-many' | 'merge-diffs'
+}
+
+export interface AdoptResult {
+  written: { id: number; fields: string[] }[]
+  aliasMapped: { from: string; to: string }[]
+  unknown: string[]
+  typeErrors: { field: string; expected: string; got: string }[]
+  fkErrors: { field: string; refValue: unknown }[]
+  skipped: { reason: string; data: unknown }[]
+}
