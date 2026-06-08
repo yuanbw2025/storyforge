@@ -313,7 +313,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!currentChapter || !plainText) return
     setExtracting(true)
     try {
-      const stateCtx = buildStateContext()
+      const stateCtx = buildSelectiveStateContext(plainText, extraStateIds).text
       const chapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
       const messages = buildStateExtractPrompt(stateCtx, chapterTitle, plainText)
       console.log('[StateExtract] 开始提取，章节:', chapterTitle)
@@ -369,7 +369,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     // 1. 自动提取状态
     setAutoProcessing('extracting')
     try {
-      const stateCtx = buildStateContext()
+      const stateCtx = buildSelectiveStateContext(text, extraStateIds).text
       const chapterTitle = outlineNode?.title || currentChapter?.title || '未知章节'
       const messages = buildStateExtractPrompt(stateCtx, chapterTitle, text)
       console.log('[AutoPost] 自动提取状态:', chapterTitle)

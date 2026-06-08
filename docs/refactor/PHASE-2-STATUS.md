@@ -12,7 +12,7 @@
 | 2.4 `chunk-writer` target `worldGroupId` | Done | `refactor/phase-2-task-2.4` / this task commit | Import sessions record a target world, the confirm modal lets multiworld users choose it, and chunk writes stamp worldview/characters/outline to that world. |
 | 2.5 Batch detail/content `worldContextResolver` | Done | `refactor/phase-2-task-2.5` / this task commit | Batch chapter content generation now supports per-chapter world context resolution; batch detail already used this resolver and remains covered. |
 | 2.6 Character JSON reference remap | Done | `refactor/phase-2-task-2.6` / this task commit | Character delete/merge now rewrites registered detailed-outline array/scene JSON references and remaps character state cards by name. |
-| 2.7 Selective state extraction | Pending | - | State extraction should use selective state recall instead of full state context. |
+| 2.7 Selective state extraction | Done | `refactor/phase-2-task-2.7` / this task commit | Manual and automatic state extraction now use selective state recall based on the chapter text instead of full state context. |
 | 2.8 Remaining P1 fixes | Pending | - | Close remaining P1 issues listed in `MASTER-BLUEPRINT.md`. |
 
 ## 2.1 Verification Evidence
@@ -109,3 +109,17 @@
 - Manual `deleteCharacter()` now runs character deletion, relation cleanup, detailed-outline cleanup, and character state-card deletion in one transaction.
 - Import character merge now remaps duplicate-character references to the primary character and merges duplicate character state cards by `entityName`.
 - R-15 covers both delete and merge paths for `appearingCharacterIds`, `scenes[].characterIds`, `characterRelations`, and character `stateCards`.
+
+## 2.7 Verification Evidence
+
+- `npx tsc --noEmit`: passed.
+- `npm test -- tests/regression/R-16-selective-state-extraction.test.ts`: 1 file / 2 tests passed.
+- `npm test`: 19 files / 49 tests passed.
+- `npm run check:required-tables`: 45 tables match `schema.ts`.
+- `npm run build`: passed; existing Vite dynamic-import/chunk-size warnings only.
+
+## 2.7 Completion Notes
+
+- `handleExtractState()` now passes `buildSelectiveStateContext(plainText, extraStateIds).text` into `buildStateExtractPrompt()`.
+- `handleAutoPostGenerate()` now passes `buildSelectiveStateContext(text, extraStateIds).text` into automatic state extraction.
+- R-16 locks both wiring points so `const stateCtx = buildStateContext()` cannot silently return in those extraction paths.

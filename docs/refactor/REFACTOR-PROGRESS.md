@@ -58,7 +58,7 @@
 | 2.4 `chunk-writer` target `worldGroupId` | Done | `refactor/phase-2-task-2.4` / this task commit | Import sessions and chunk writes now route project-imported worldview/characters/outline data to the selected target world; R-13 covers cross-world same-name isolation. |
 | 2.5 Batch detail/content `worldContextResolver` | Done | `refactor/phase-2-task-2.5` / this task commit | Batch chapter content now supports per-chapter world context resolver; R-14 verifies prompt routing. |
 | 2.6 Character JSON reference remap | Done | `refactor/phase-2-task-2.6` / this task commit | Shared character-reference remap now removes/replaces detailed-outline character arrays, scene JSON character ids, relations, and character state cards; R-15 covers delete and merge. |
-| 2.7 Selective state extraction | Pending | - | Replace full state context in extraction with selective state recall. |
+| 2.7 Selective state extraction | Done | `refactor/phase-2-task-2.7` / this task commit | Manual and automatic state extraction now use selective recall from chapter text; R-16 locks the wiring. |
 | 2.8 Remaining P1 fixes | Pending | - | Close remaining P1 items listed in `MASTER-BLUEPRINT.md`. |
 
 ## Execution Notes
