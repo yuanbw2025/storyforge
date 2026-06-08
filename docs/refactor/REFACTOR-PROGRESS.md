@@ -32,7 +32,7 @@
 | 0.2 migrateToMultiWorld transaction scope | Done | `refactor/phase-0-task-0.2` / `31cb206` | `migrateToMultiWorld` transaction includes `db.codexEntries`; `R-02` added and green. |
 | 0.3 ensureSchema delete-db risk | Done | `refactor/phase-0-task-0.3` / this task commit | Production schema self-check blocks reset instead of deleting IndexedDB; 45-table drift check added. |
 | 0.4 BUG-EXPORT-WG worldGroupId remap | Done | `refactor/phase-0-task-0.4` / this task commit | Multiworld backup ownership uses export ids and imports back to the corresponding new world groups. |
-| 0.5 importProjectJSON transaction + FK fail-fast | Pending | TBD | Make import atomic and reject invalid FK remaps without partial writes. |
+| 0.5 importProjectJSON transaction + FK fail-fast | Done | `refactor/phase-0-task-0.5` / this task commit | Import is wrapped in one 45-table transaction, invalid FK remaps fail fast, and final FK integrity assertion runs before commit. |
 | 0.6 deleteProject indirect ownership cleanup | Pending | TBD | Delete import logs/files/jobs and master-study blobs with the project. |
 | 0.7 deleteNode chapter cascade | Pending | TBD | Ensure outline deletion cascades through chapter cleanup paths. |
 | 0.8 migrateToMultiWorld outlineNodes stamping | Pending | TBD | Stamp old outline nodes to primary world so they remain visible after migration. |

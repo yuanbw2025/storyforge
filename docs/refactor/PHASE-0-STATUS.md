@@ -10,7 +10,7 @@
 | 0.2 migrateToMultiWorld transaction scope | Done | `refactor/phase-0-task-0.2` / `31cb206` | Add `db.codexEntries` to migration transaction scope. | `npm test -- R-02`; `npm test -- R-01 R-02`; `npm test`; `npx tsc --noEmit`; `npm run build` |
 | 0.3 ensureSchema delete-db risk | Done | `refactor/phase-0-task-0.3` / this task commit | Prevent production schema self-check from calling `Dexie.delete()`; align required table list with DB v26. | `npm test -- R-17`; `npm run check:required-tables`; `npm test`; `tsc`; build |
 | 0.4 BUG-EXPORT-WG worldGroupId remap | Done | `refactor/phase-0-task-0.4` / this task commit | Export world group ownership by export ids and import with correct remap. | `npm test -- R-03`; Phase 0 regression suite; `npm test`; `tsc`; build |
-| 0.5 importProjectJSON transaction + FK fail-fast | Pending | TBD | Wrap import in transaction and abort/rollback on invalid remapped FK. | Broken JSON import rollback regression; `npm test`; `tsc`; build |
+| 0.5 importProjectJSON transaction + FK fail-fast | Done | `refactor/phase-0-task-0.5` / this task commit | Wrap import in transaction and abort/rollback on invalid remapped FK. | `npm test -- R-04`; `npm test -- R-03 R-04`; Phase 0 regression suite; `npm test`; `npm run check:required-tables`; `tsc`; build |
 | 0.6 deleteProject indirect ownership cleanup | Pending | TBD | Delete import sessions/logs/files/jobs and master-study blobs when deleting project. | Delete-project residue regression; `npm test`; `tsc`; build |
 | 0.7 deleteNode chapter cascade | Pending | TBD | Make outline node deletion use chapter cascade so child tables such as emotionBeatCards are cleaned. | Delete-node cascade regression; `npm test`; `tsc`; build |
 | 0.8 migrateToMultiWorld outlineNodes stamping | Pending | TBD | Stamp outline nodes to primary world during multiworld migration. | Outline visibility/stamping regression; `npm test`; `tsc`; build |
@@ -149,3 +149,26 @@ Execution note: because the reviewer is temporarily unavailable, Phase 0 tasks a
 - Result: passed with zero errors.
 - Command: `npm run build`.
 - Result: passed. Vite emitted existing bundle-size/dynamic-import warnings; no build failure.
+
+## Phase 0.5 - importProjectJSON Transaction + FK Fail-Fast
+
+### 2026-06-08 17:36:57 CST
+
+- Status: started.
+- Branch: `refactor/phase-0-task-0.5`.
+- Branch base: stacked on top of `refactor/phase-0-task-0.4`.
+- Scope: wrap `importProjectJSON` in one Dexie transaction and replace unsafe FK fallback/skip paths with transaction-aborting errors.
+- Changed `src/lib/export/json-export.ts`: added temporary 45-table transaction scope and FK remap helpers.
+- Added `tests/regression/R-04-import-atomic-fk.test.ts`: verifies a broken chapter outline FK makes import throw and leaves no partial project.
+
+### 2026-06-08 17:43:23 CST
+
+- Status: done.
+- Changed `src/lib/export/json-export.ts`: added a final import integrity assertion covering the FK surfaces touched by this task.
+- Verification: `npm test -- R-04` passed.
+- Verification: `npm test -- R-03 R-04` passed after the integrity assertion was added.
+- Verification: `npm test -- R-01 R-02 R-03 R-04 R-17` passed.
+- Verification: `npm test` passed.
+- Verification: `npm run check:required-tables` passed.
+- Verification: `npx tsc --noEmit` passed.
+- Verification: `npm run build` passed. Vite emitted existing bundle-size/dynamic-import warnings; no build failure.
