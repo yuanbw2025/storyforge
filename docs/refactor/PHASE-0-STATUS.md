@@ -12,7 +12,7 @@
 | 0.4 BUG-EXPORT-WG worldGroupId remap | Done | `refactor/phase-0-task-0.4` / this task commit | Export world group ownership by export ids and import with correct remap. | `npm test -- R-03`; Phase 0 regression suite; `npm test`; `tsc`; build |
 | 0.5 importProjectJSON transaction + FK fail-fast | Done | `refactor/phase-0-task-0.5` / this task commit | Wrap import in transaction and abort/rollback on invalid remapped FK. | `npm test -- R-04`; `npm test -- R-03 R-04`; Phase 0 regression suite; `npm test`; `npm run check:required-tables`; `tsc`; build |
 | 0.6 deleteProject indirect ownership cleanup | Done | `refactor/phase-0-task-0.6` / this task commit | Collect sessionIds before transaction; bulk-delete importLogs/importFiles by sessionId; bulk-delete master blobs via masterBlobId(workId); clean importJobs by projectId. | `npm test -- R-05`; full regression suite; `npm run check:required-tables`; `tsc`; build |
-| 0.7 deleteNode chapter cascade | Pending | TBD | Make outline node deletion use chapter cascade so child tables such as emotionBeatCards are cleaned. | Delete-node cascade regression; `npm test`; `tsc`; build |
+| 0.7 deleteNode chapter cascade | Done | `refactor/phase-0-task-0.7` / this task commit | Extract `cascadeDeleteChapters` as the single chapter-deletion entry; deleteChapter and deleteNode both route through it so emotionBeatCards are always cleaned. | `npm test -- R-06`; full regression suite; `npm run check:required-tables`; `tsc`; build |
 | 0.8 migrateToMultiWorld outlineNodes stamping | Pending | TBD | Stamp outline nodes to primary world during multiworld migration. | Outline visibility/stamping regression; `npm test`; `tsc`; build |
 
 Execution note: because the reviewer is temporarily unavailable, Phase 0 tasks after 0.1 are being implemented as stacked task branches and commits. They still require later independent review before main merge.
@@ -260,3 +260,42 @@ GPT 5.5 限额暂停。审查者 Claude 接管 0.6 / 0.7 / 0.8 实施。
   - `npm run build` → success
 
 - **灾难场景**:✅ 已根治。用户导入 10MB 小说 blob 后删项目 → blob 不再永久残留。
+
+---
+
+## Phase 0.7 - deleteNode Chapter Cascade
+
+### 2026-06-08 by Claude(接手者)
+
+- **任务**:MASTER-BLUEPRINT §4.0.7 — deleteNode 绕过 deleteChapter → emotionBeatCards 残留
+- **位置**:`src/stores/chapter.ts` + `src/stores/outline.ts`
+- **改法(遵循"章节删除只能有一个入口")**:
+  - chapter store 新增 `cascadeDeleteChapters(ids: number[])` 作为**唯一章节删除入口**:
+    - DB 层:事务内 `chapters.bulkDelete(ids)` + 按 chapterId 清 `emotionBeatCards`
+    - 内存层:从 chapters 移除 + currentChapter 若被删则置空
+  - `deleteChapter(id)` 改为 `await cascadeDeleteChapters([id])`(复用)
+  - `outline.deleteNode` 删章节处从 `db.chapters.bulkDelete(...)`(绕过级联)
+    改为 `useChapterStore.getState().cascadeDeleteChapters(orphanChapters)`
+  - 无循环依赖:outline→chapter 单向,chapter 不 import outline
+
+- **新增反例测试**:`tests/regression/R-06-delete-node-cascade.test.ts`
+  - Test 1:删章节节点 → chapters/detailedOutlines/emotionBeatCards 全清 + 内存同步
+  - Test 2:删卷(递归子章节)→ 所有后代节拍卡级联清空
+
+- **完成判据**:
+  - [x] 章节删除单一入口 cascadeDeleteChapters
+  - [x] deleteNode 不再 bulkDelete 绕过级联
+  - [x] R-06 通过(2 tests)
+  - [x] tsc 零错
+  - [x] 全部 15 个反例测试通过
+  - [x] `npm run check:required-tables` 通过
+  - [x] build 通过
+
+- **Verification**:
+  - `npm test -- R-06` → 2 passed
+  - `npm test` → 15 passed(8 files)
+  - `npx tsc --noEmit` → TSC=0
+  - `npm run check:required-tables` → ok
+  - `npm run build` → success
+
+- **灾难场景**:✅ 已根治。删大纲卷/章后,情感节拍卡不再残留孤儿。

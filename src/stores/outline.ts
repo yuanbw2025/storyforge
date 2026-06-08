@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { OutlineNode } from '../lib/types'
+import { useChapterStore } from './chapter'
 
 interface OutlineStore {
   nodes: OutlineNode[]
@@ -51,8 +52,10 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
       if (child.id) await get().deleteNode(child.id)
     }
     // 级联删除挂在本节点上的正文章节 + 细纲（按 outlineNodeId），否则删大纲后正文内容会成孤儿
+    // Phase 0.7: 章节删除必须走 chapter store 的唯一入口 cascadeDeleteChapters,
+    //            否则会绕过级联 → 章节关联的 emotionBeatCards 残留(孤儿数据)。
     const orphanChapters = (await db.chapters.where('outlineNodeId').equals(id).primaryKeys()) as number[]
-    if (orphanChapters.length) await db.chapters.bulkDelete(orphanChapters)
+    if (orphanChapters.length) await useChapterStore.getState().cascadeDeleteChapters(orphanChapters)
     const orphanDetails = (await db.detailedOutlines.where('outlineNodeId').equals(id).primaryKeys()) as number[]
     if (orphanDetails.length) await db.detailedOutlines.bulkDelete(orphanDetails)
     await db.outlineNodes.delete(id)
