@@ -282,3 +282,58 @@ git grep -rn "\b略\b\|TODO\|占位\|暂时" docs/MASTER-BLUEPRINT.md docs/refac
 任何修改本契约需要项目作者书面同意(在群里 / issue 中明确表态)。
 
 实施者或审查者认为契约不合理 → 开 issue 讨论 → 项目作者决策。
+
+---
+
+## 附录 A · 常见疑问(FAQ)
+
+### A1. 自动备份模块为什么只集成到 3 个高危操作,不是 4 个?
+
+`require-backup-before.ts` 当前集成到:
+- `deleteProject`(删项目)
+- `deleteGroup`(删世界组)
+- `migrateToMultiWorld`(启用多世界)
+
+**未集成 `importProjectJSON`**,理由:当前 `importProjectJSON` 行为是 **"新建项目"**(把 ExportData 转成新项目),不会覆盖任何现有数据,**没有数据破坏风险**。
+
+**Phase 0.5 修改导入逻辑时**(把它包进事务 + FK fail-fast),如果**新增"覆盖目标项目"功能**,届时必须集成 `requireBackupBefore`。在 Phase 0.5 任务交付物里**明确登记此项**。
+
+### A2. 反例测试只有 R-01 一条,R-02~R-17 在哪里?
+
+R-01 是**完整样板**(含 `beforeEach` 清库 / `it.skip` 标记 / 准备数据 / 断言模式)。
+
+**实施者(5.5)按 R-01 模板自己写后续测试**:
+- 修 Phase 0.X 任务时,**同步写对应的 R-0X 测试**
+- 不要等审查者写,这是你的交付物的一部分
+- 测试代码 ≤ 100 行,模式参考 R-01,不需要发明轮子
+
+每个 P0 任务的"完成判据"都含对应反例测试,见 MASTER-BLUEPRINT §4.0.X。
+
+### A3. MASTER-BLUEPRINT §5 三注册表的"工具函数"留给我自己写,会不会跑偏?
+
+不会。`§5` 三个核心 API(`cascadeDeleteProject` / `adopt` / `assembleContext`)的**伪代码已经把核心难点(事务作用域、拓扑序、间接归属、Blob owner、别名映射、FK 校验、真裁剪、多世界解析)全部点透**。
+
+留给你自由实现的辅助函数(`topoSort` / `removeJsonRef` / `validateAndCoerce` / `normalizeAndValidate` / `findExisting` / `mergeByStrategy` / `getCurrentFieldValue` / `resolveNodeWorldGroupId` / `estimateTokens`)都是 **< 30 行纯函数**,不会跑偏。
+
+如果你写的某个工具函数超过 30 行,**停下来思考是否模式不对**,开 issue 与审查者讨论。
+
+### A4. 任务描述里出现"暂行步骤 / 暂时硬编码"怎么办?
+
+Phase 0 部分任务(如 0.1 `deleteGroup`)的改法包含"暂行步骤"(暂时手写 45 张表名,Phase 1 后改派生)。**这是已经规划好的过渡方案,不是含糊任务**。
+
+执行规则:
+- 严格按"暂行步骤"写
+- Phase 1 启动时把暂行代码改成派生(届时由审查者明确告知)
+- **不要自作主张提前改成派生**(违反 Phase 串行原则)
+
+### A5. 我跑测试发现一个新 bug,但不在 P0/P1 清单里,怎么办?
+
+不要立刻动手。
+
+1. 在 GitHub Issue 开新 issue,标题 `[New bug] xxx`
+2. 描述:复现步骤 / 影响范围 / 你的初步分析
+3. @ 审查者 + 项目作者
+4. 等决策:
+   - 严重度 P0 → 紧急修(hotfix 分支),完成后继续 Phase
+   - 严重度 P1/P2 → 加入 ROADMAP,Phase X 完成后处理
+   - 误报 → 关 issue 继续 Phase

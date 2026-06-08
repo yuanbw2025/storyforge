@@ -2,7 +2,7 @@
 
 > 这份文件是 **MASTER-BLUEPRINT.md §4.0.1 中 `PROJECT_TABLES_ALL` 常量的事实来源**。
 > 实施者(5.5)在写 Phase 0/1 时,如果需要"全部表清单",直接引用本文件。
-> 自动生成自 `src/lib/db/schema.ts` 当前版本 v26(2026-06-04 扫描)。
+> 核对来源: `src/lib/db/schema.ts` DB v26 + `src/lib/types/*` 字段定义 + `src/lib/export/json-export.ts` 当前导出实现(2026-06-08 重新扫描)。
 
 ---
 
@@ -64,45 +64,52 @@ const ALL_DEXIE_TABLES_V26 = [
 
 ## 二、按 owner 分类(Phase 1 PROJECT_TABLES 注册用)
 
-### 2.1 项目级表(28 张,带 `projectId` 字段)
+### 2.1 项目根表(1 张,自身就是项目)
+
+```
+projects
+```
+
+### 2.2 直接项目归属表(35 张,带 `projectId` 字段/索引)
 正常用 `where('projectId').equals(pid)` 查询。
 
 ```
-chapters, characterRelations, characters, codexCategories, codexEntries,
-creativeRules, detailedOutlines, emotionBeatCards, factions, foreshadows,
-geographies, historicalKeywords, historicalTimelineEvents, histories,
-importantLocations, itemLedger, itemSystems, masterWorks, notes,
-outlineNodes, powerSystems, references, snapshots, stateCards,
-storyArcs, storyCores, storyTimelineEvents, worldRulesProfiles,
-worldGroups, worldGroupLinks, worldNodes, worldviews,
-aiUsageLog, importSessions, importJobs
+aiUsageLog, chapters, characterRelations, characters, codexCategories,
+codexEntries, creativeRules, detailedOutlines, emotionBeatCards, factions,
+foreshadows, geographies, historicalKeywords, historicalTimelineEvents,
+histories, importJobs, importSessions, importantLocations, itemLedger,
+itemSystems, masterWorks, notes, outlineNodes, powerSystems, references,
+snapshots, stateCards, storyArcs, storyCores, storyTimelineEvents,
+worldGroupLinks, worldGroups, worldNodes, worldRulesProfiles, worldviews
 ```
 
-(注:实施者请重新核对 schema.ts 中每张表的字段;以上为初稿。)
+特殊说明:
+- `masterWorks.projectId` 类型为 `number | null | undefined`; `null` 表示全局学习库,非 null 时归属项目。
+- `aiUsageLog.projectId` 类型为 `number | null | undefined`; `null` 表示未绑定项目的 AI 消耗记录。
 
-### 2.2 间接归属表(3 张,通过 `sessionId/workId` 间接挂项目)
+### 2.3 间接归属表(6 张,通过其它表间接挂项目)
 **这些表删项目时容易漏!**
 
 | 表 | 间接关联 |
 |---|---|
-| `importFiles` | 通过 `sessionId` 间接挂 importSessions.projectId;同时 master blob 通过 `100000 + workId` 虚拟 sessionId 复用此表 |
+| `importFiles` | 通过 `sessionId` 间接挂 importSessions.projectId;参考/导入原文跟 importSessions 走;大师作品还可能通过 `MasterWork.importSessionId` 或 `100000 + workId` 虚拟 sessionId 复用此表 |
 | `importLogs` | 通过 `sessionId` 间接挂 importSessions.projectId |
 | `referenceChunkAnalysis` | 通过 `referenceId` 间接挂 references.projectId |
 | `masterChunkAnalysis` | 通过 `workId` 间接挂 masterWorks.projectId |
 | `masterChapterBeats` | 同上 |
 | `masterStyleMetrics` | 同上 |
 
-### 2.3 全局表(3 张,不绑项目)
+### 2.4 全局表(3 张,不绑项目)
 不参与 `deleteProject` 级联。
 
 ```
 promptTemplates       // scope: 'system' | 'user',全局共享
 promptWorkflows       // 同上
-masterInsights        // 按 genre 全局共享,可被多个项目复用
+masterInsights        // 按 genre 全局共享,可被多个项目复用;当前 JSON 备份会全量导出/按 genre 去重导入
 ```
 
-### 2.4 带 `worldGroupId` 字段的表(10 张,worldScoped)
-**Phase 1 PROJECT_TABLES 必须标记 `worldScoped: true`,这些表参与:**
+### 2.5 带 `worldGroupId` / `homeWorldGroupId` 字段的表(11 张,worldScoped / homeWorldScoped)
+**Phase 1 PROJECT_TABLES 必须按实际字段标记 `worldScoped` / `homeWorldScoped`,这些表参与:**
 - 多世界隔离(查询时按当前世界过滤)
 - `migrateToMultiWorld` 盖章
 - `deleteGroup` 级联清理
@@ -115,44 +122,50 @@ histories
 worldNodes
 historicalTimelineEvents
 historicalKeywords
-outlineNodes          ← Gemini 独立发现的漏盖章表(P0-8)
+outlineNodes          ← P0-8 漏盖章表
 codexCategories       ← 仅自定义分类有 worldGroupId;内置分类保持 null=全局共用结构
 codexEntries
-characters            ← 实际是 homeWorldGroupId(不是 worldGroupId)
+characters            ← 实际字段是 homeWorldGroupId(不是 worldGroupId),应标记 homeWorldScoped
 ```
 
 特殊说明:
 - `worldRulesProfiles` **当前** schema 是 `++id, &projectId`(项目级单例),**Phase 40 后**改为 `++id, projectId, worldGroupId`(每世界一套)
 
-### 2.5 项目级但**不**带 worldGroupId(永远项目级,不参与多世界隔离)
-按设计如此(诸天流跨世界共享):
+### 2.6 直接项目归属但**不**带 worldGroupId/homeWorldGroupId(24 张)
+这些表不按当前世界组直接隔离;其中部分通过外键间接继承世界归属。
 
 ```
-storyCores           // 故事核心是项目级,跨世界共享主线
+aiUsageLog           // 项目级消耗统计;可 null
+chapters             // 通过 outlineNodeId 间接继承大纲节点世界归属
+characterRelations   // 角色关系;世界归属需从角色侧解析
 creativeRules        // 创作规则项目级
-foreshadows          // 伏笔可跨世界
-storyArcs            // 故事线可跨世界
-itemLedger           // 物品流水(诸天流主角跨世界携带物品)
-storyTimelineEvents  // 故事时间线
-stateCards           // 角色状态卡
-characterRelations   // 角色关系
-emotionBeatCards     // 情感节拍
 detailedOutlines     // 细纲挂 outlineNode,继承其 worldGroupId
-importantLocations   // 重要地点 ⚠️ 无 worldGroupId 但全局注入到所有写作上下文
+emotionBeatCards     // 情感节拍卡,通过 chapterId 间接挂章节
 factions             // 旧实体,将被 codex.faction 替代
+foreshadows          // 伏笔可跨世界
+importJobs           // 导入任务临时态
+importSessions       // 导入会话临时态
+importantLocations   // 重要地点:当前无 worldGroupId,会全局注入到写作上下文
+itemLedger           // 物品流水,chapterId 可空
 itemSystems          // 旧实体,将被 codex.artifact 替代
+masterWorks          // 大师作品学习;projectId 可空
 notes                // 自由笔记
-snapshots            // 本地版本历史
 references           // 项目参考书
-masterWorks          // 大师作品学习
-projects             // 项目本身
+snapshots            // 本地版本历史
+stateCards           // 角色/地点/物品/势力状态卡
+storyArcs            // 故事线可跨世界
+storyCores           // 故事核心项目级,跨世界共享主线
+storyTimelineEvents  // 故事时间线,chapterId 可空
+worldGroupLinks      // 世界组关系本身
+worldGroups          // 世界组本身
+worldRulesProfiles   // 当前项目级单例;Phase 40 后改每世界一套
 ```
 
 ---
 
 ## 三、各表的 `exportable` 状态(Phase 1 PROJECT_TABLES 用)
 
-### 3.1 可导出(JSON 备份纳入)— 36 张
+### 3.1 可导出(JSON 备份纳入)— 37 张
 
 ```
 projects, worldviews, storyCores, powerSystems, characters, factions,
@@ -165,7 +178,12 @@ importantLocations, worldRulesProfiles, worldGroups, worldGroupLinks,
 itemLedger, storyTimelineEvents, codexCategories, codexEntries
 ```
 
-### 3.2 不导出(本地态/全局态/统计)— 9 张
+说明:
+- 该清单来自 `ProjectExportData` 与 `exportProjectJSON()` 当前实现。
+- `masterInsights` 虽然是全局表,当前实现会全量导出,导入时按 `genre` 去重。
+- `masterWorks` 只导出 `projectId === 当前项目` 的记录;全局学习库记录不随项目 JSON 备份导出。
+
+### 3.2 不导出(本地态/全局态/统计)— 8 张
 
 ```
 snapshots              // 本地版本历史,避免循环嵌套
@@ -207,8 +225,12 @@ aiUsageLog             // 消耗统计,体积大不导出
 
 | 表 | 字段 | 通过 |
 |---|---|---|
-| `importFiles` | `sessionId` | importSessions.projectId(普通)/ `100000+workId` 虚拟(master blob) |
+| `importFiles` | `sessionId` | importSessions.projectId(普通导入/参考导入);或 MasterWork.importSessionId;或 `100000+workId` 虚拟(master blob) |
 | `importLogs` | `sessionId` | 同上(普通导入) |
+| `referenceChunkAnalysis` | `referenceId` | references.projectId |
+| `masterChunkAnalysis` | `workId` | masterWorks.projectId |
+| `masterChapterBeats` | `workId` | masterWorks.projectId |
+| `masterStyleMetrics` | `workId` | masterWorks.projectId |
 
 ### 4.3 JSON 字段引用(Phase 1 JsonRef / ArrayRef)
 
