@@ -1,6 +1,7 @@
 import type { ChatMessage } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
+import { composeFieldGenerationHint, type FieldGenerationMode } from '../field-generation-context'
 
 export interface RunOptions {
   parameterValues?: Record<string, unknown>
@@ -15,14 +16,19 @@ export function buildStoryGeneratePrompt(
   worldContext: string,
   userHint?: string,
   options?: RunOptions,
+  currentValue?: string,
+  mode: FieldGenerationMode = 'expand',
 ): ChatMessage[] {
   const tpl = usePromptStore.getState().getActive('story.generate')
+  const effectiveHint = composeFieldGenerationHint(userHint, currentValue, mode)
   const { messages } = renderPrompt(tpl, {
     projectName,
     genres: genre,
     dimension,
     worldContext: worldContext || '',
-    userHint,
+    currentValue: currentValue || '',
+    generationMode: mode,
+    userHint: effectiveHint,
   }, options)
   return messages
 }

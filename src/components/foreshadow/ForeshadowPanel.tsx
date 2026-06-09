@@ -3,13 +3,13 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, ArrowRight, Sparkles, Loader2, LayoutList, LayoutGrid } from 'lucide-react'
 import { useForeshadowStore } from '../../stores/foreshadow'
 import { useChapterStore } from '../../stores/chapter'
-import { useWorldviewStore } from '../../stores/worldview'
-import { useCharacterStore } from '../../stores/character'
 import { useOutlineStore } from '../../stores/outline'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useAIStream } from '../../hooks/useAIStream'
-import { buildForeshadowSuggestPrompt } from '../../lib/ai/adapters/foreshadow-adapter'
-import { buildWorldContext, buildCharacterContext } from '../../lib/ai/context-builder'
+import { buildForeshadowSuggestPrompt, buildForeshadowStructurePrompt, parseForeshadowStructured } from '../../lib/ai/adapters/foreshadow-adapter'
+import { chat } from '../../lib/ai/client'
+import { adopt } from '../../lib/registry/adopt'
+import { assembleContext } from '../../lib/registry/assemble-context'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import ForeshadowKanban from './ForeshadowKanban'
@@ -36,8 +36,6 @@ export default function ForeshadowPanel({ project }: Props) {
   const { foreshadows, loadAll, addForeshadow, updateForeshadow, deleteForeshadow, updateStatus } = useForeshadowStore()
   const { chapters } = useChapterStore()
   const { nodes: outlineNodes } = useOutlineStore()
-  const { worldview, storyCore, powerSystem } = useWorldviewStore()
-  const { characters } = useCharacterStore()
   const { config } = useAIConfigStore()
   const ai = useAIStream()
   const [filterStatus, setFilterStatus] = useState<ForeshadowStatus | 'all'>('all')
@@ -47,8 +45,47 @@ export default function ForeshadowPanel({ project }: Props) {
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
+  const [adopting, setAdopting] = useState(false)
+  const [adoptMsg, setAdoptMsg] = useState<string | null>(null)
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
+
+  // 采纳 AI 伏笔建议：用 AI 把自由文本结构化 → 批量写入伏笔表
+  const handleAdoptForeshadows = async (text: string) => {
+    if (!text.trim()) return
+    setAdopting(true)
+    setAdoptMsg(null)
+    try {
+      const raw = await chat(buildForeshadowStructurePrompt(text), config)
+      const items = parseForeshadowStructured(raw)
+      if (items.length === 0) {
+        setAdoptMsg('未能解析出伏笔条目，请重试或手动添加')
+        return
+      }
+      const result = await adopt({
+        projectId: project.id!,
+        target: 'foreshadows',
+        mode: 'add-many',
+        data: items.map(it => ({
+          name: it.name,
+          type: it.type,
+          status: 'planned',
+          description: it.description,
+          plantChapterId: null,
+          echoChapterIds: [],
+          resolveChapterId: null,
+          notes: '',
+        })),
+      })
+      await loadAll(project.id!)
+      setAdoptMsg(`已写入 ${result.written.length} 条伏笔${result.skipped.length ? `，跳过 ${result.skipped.length} 条` : ''}`)
+      setShowAI(false)
+    } catch (err) {
+      setAdoptMsg(`采纳失败：${err instanceof Error ? err.message : '未知错误'}`)
+    } finally {
+      setAdopting(false)
+    }
+  }
 
   const filtered = filterStatus === 'all' ? foreshadows : foreshadows.filter(f => f.status === filterStatus)
   const selectedF = foreshadows.find(f => f.id === selected)
@@ -96,11 +133,19 @@ export default function ForeshadowPanel({ project }: Props) {
   }
 
   // AI 建议伏笔
-  const handleAISuggest = () => {
+  const handleAISuggest = async () => {
     if (!config.apiKey) return
     setShowAI(true)
-    const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
-    const charCtx = buildCharacterContext(characters)
+    const assembled = await assembleContext({
+      projectId: project.id!,
+      worldGroupId: null,
+      provider: config.provider,
+      model: config.model,
+      sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+    })
+    const charIdx = assembled.included.indexOf('characters')
+    const worldCtx = assembled.text
+    const charCtx = charIdx >= 0 ? assembled.segments[charIdx]?.content ?? '' : ''
     const existingForeshadows = foreshadows.map(f => `${f.name}（${TYPE_LABELS[f.type]}，${STATUS_LABELS[f.status].label}）：${f.description.slice(0, 100)}`).join('\n')
     const opts = {
       parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
@@ -205,13 +250,19 @@ export default function ForeshadowPanel({ project }: Props) {
               userOverride={userOverride}
               onUserOverrideChange={setUserOverride}
             />
+            {adopting && (
+              <div className="flex items-center gap-2 text-xs text-accent">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> AI 正在把建议整理为伏笔条目并写入…
+              </div>
+            )}
+            {adoptMsg && <div className="text-xs text-text-muted">{adoptMsg}</div>}
             <AIStreamOutput
               output={ai.output}
               isStreaming={ai.isStreaming}
               error={ai.error} tokenUsage={ai.tokenUsage}
               onStop={ai.stop}
               onRetry={handleAISuggest}
-              onAccept={(_text: string) => { setShowAI(false) }}
+              onAccept={(text: string) => { handleAdoptForeshadows(text) }}
               moduleKey="foreshadow.generate"
             />
           </div>

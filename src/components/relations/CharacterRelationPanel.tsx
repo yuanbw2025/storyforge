@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
-import { Plus, Trash2, ArrowRightLeft, ArrowRight, Users, GitFork, List } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Plus, Trash2, ArrowRightLeft, ArrowRight, Users, GitFork, List, Sparkles, Check, X, AlertCircle } from 'lucide-react'
 import { useCharacterRelationStore } from '../../stores/character-relation'
 import { useCharacterStore } from '../../stores/character'
+import { useAIStream } from '../../hooks/useAIStream'
+import { buildRelationExtractPrompt, parseRelationOutput, matchRelations, type MatchedRelation } from '../../lib/ai/relation-extractor'
 import type { Project, RelationType } from '../../lib/types'
 import RelationGraph from './RelationGraph'
 
@@ -32,6 +34,12 @@ export default function CharacterRelationPanel({ project }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [graphWidth, setGraphWidth] = useState(700)
 
+  // ── AI 提取相关状态 ──
+  const ai = useAIStream()
+  const [extractedRelations, setExtractedRelations] = useState<MatchedRelation[]>([])
+  const [selectedExtracted, setSelectedExtracted] = useState<Set<number>>(new Set())
+  const [showExtractPanel, setShowExtractPanel] = useState(false)
+
   useEffect(() => {
     if (!containerRef.current) return
     const ro = new ResizeObserver(entries => {
@@ -41,6 +49,45 @@ export default function CharacterRelationPanel({ project }: Props) {
     ro.observe(containerRef.current)
     return () => ro.disconnect()
   }, [])
+
+  // ── AI 提取：流完成后自动解析 ──
+  useEffect(() => {
+    if (!ai.isStreaming && ai.output && showExtractPanel) {
+      const parsed = parseRelationOutput(ai.output)
+      const matched = matchRelations(parsed, characters, relations)
+      setExtractedRelations(matched)
+      // 默认选中所有非重复的
+      const sel = new Set<number>()
+      matched.forEach((r, i) => { if (!r.isDuplicate) sel.add(i) })
+      setSelectedExtracted(sel)
+    }
+  }, [ai.isStreaming, ai.output, showExtractPanel, characters, relations])
+
+  const handleAIExtract = useCallback(async () => {
+    setShowExtractPanel(true)
+    setExtractedRelations([])
+    setSelectedExtracted(new Set())
+    const messages = await buildRelationExtractPrompt(projectId, characters)
+    ai.start(messages)
+  }, [projectId, characters, ai])
+
+  const handleAcceptExtracted = async () => {
+    for (const [i, rel] of extractedRelations.entries()) {
+      if (!selectedExtracted.has(i)) continue
+      await addRelation({
+        projectId,
+        fromCharacterId: rel.fromCharacterId,
+        toCharacterId: rel.toCharacterId,
+        relationType: rel.type,
+        label: rel.label,
+        description: rel.description,
+        isBidirectional: rel.bidirectional,
+      })
+    }
+    setShowExtractPanel(false)
+    setExtractedRelations([])
+    ai.reset()
+  }
 
   // 新建关系
   const handleAdd = async () => {
@@ -92,6 +139,15 @@ export default function CharacterRelationPanel({ project }: Props) {
             </button>
           </div>
           <button
+            onClick={handleAIExtract}
+            disabled={characters.length < 2 || ai.isStreaming}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-sm hover:bg-accent/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="AI 从大纲和章节中自动提取角色关系"
+          >
+            <Sparkles className="w-4 h-4" />
+            {ai.isStreaming ? 'AI 提取中...' : 'AI 提取'}
+          </button>
+          <button
             onClick={handleAdd}
             disabled={characters.length < 2}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white rounded-lg text-sm hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -102,6 +158,120 @@ export default function CharacterRelationPanel({ project }: Props) {
           </button>
         </div>
       </div>
+
+      {/* ── AI 提取结果面板 ── */}
+      {showExtractPanel && (
+        <div className="bg-bg-surface border border-accent/30 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-accent" />
+              AI 关系提取
+            </h3>
+            <button
+              onClick={() => { setShowExtractPanel(false); ai.reset() }}
+              className="text-text-muted hover:text-text-primary"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {ai.isStreaming && (
+            <div className="flex items-center gap-2 text-sm text-text-muted">
+              <span className="animate-spin">⏳</span>
+              正在分析大纲和章节内容，提取角色关系...
+            </div>
+          )}
+
+          {ai.error && (
+            <div className="flex items-center gap-2 text-sm text-red-400">
+              <AlertCircle className="w-4 h-4" />
+              {ai.error}
+            </div>
+          )}
+
+          {extractedRelations.length > 0 && (
+            <>
+              <div className="text-xs text-text-muted">
+                共发现 {extractedRelations.length} 条关系，
+                {extractedRelations.filter(r => r.isDuplicate).length > 0 &&
+                  `其中 ${extractedRelations.filter(r => r.isDuplicate).length} 条与已有关系重复。`}
+                勾选要导入的关系：
+              </div>
+              <div className="max-h-[300px] overflow-y-auto space-y-2">
+                {extractedRelations.map((rel, i) => {
+                  const fromName = characters.find(c => c.id === rel.fromCharacterId)?.name || rel.char1
+                  const toName = characters.find(c => c.id === rel.toCharacterId)?.name || rel.char2
+                  const typeLabel = RELATION_TYPES.find(t => t.value === rel.type)?.label || rel.type
+                  const isSelected = selectedExtracted.has(i)
+                  return (
+                    <label
+                      key={i}
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        rel.isDuplicate
+                          ? 'border-border/50 bg-bg-base/50 opacity-60'
+                          : isSelected
+                            ? 'border-accent/40 bg-accent/5'
+                            : 'border-border hover:border-border-hover'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          setSelectedExtracted(prev => {
+                            const next = new Set(prev)
+                            if (next.has(i)) next.delete(i)
+                            else next.add(i)
+                            return next
+                          })
+                        }}
+                        className="mt-0.5 accent-accent"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="font-medium text-text-primary">{fromName}</span>
+                          <span className="text-accent text-xs">{rel.bidirectional ? '⇄' : '→'}</span>
+                          <span className="font-medium text-text-primary">{toName}</span>
+                          <span className="px-1.5 py-0.5 bg-accent/10 text-accent rounded text-xs">{typeLabel}</span>
+                          {rel.label && <span className="text-xs text-text-muted">「{rel.label}」</span>}
+                          {rel.isDuplicate && (
+                            <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-400 rounded text-xs">已存在</span>
+                          )}
+                        </div>
+                        {rel.description && (
+                          <p className="text-xs text-text-muted mt-1 line-clamp-2">{rel.description}</p>
+                        )}
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  onClick={() => { setShowExtractPanel(false); ai.reset() }}
+                  className="px-3 py-1.5 text-sm text-text-muted hover:text-text-primary transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleAcceptExtracted}
+                  disabled={selectedExtracted.size === 0}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-accent text-white rounded-lg text-sm hover:bg-accent/90 disabled:opacity-40 transition-colors"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  导入选中 ({selectedExtracted.size})
+                </button>
+              </div>
+            </>
+          )}
+
+          {!ai.isStreaming && !ai.error && extractedRelations.length === 0 && ai.output && (
+            <div className="text-sm text-text-muted py-2">
+              未能从文本中提取到有效的角色关系。请确保已填写大纲摘要或章节正文。
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 关系图视图 */}
       {view === 'graph' && (

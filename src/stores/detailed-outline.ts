@@ -28,6 +28,14 @@ export const useDetailedOutlineStore = create<DetailedOutlineStore>((set, get) =
   getOrCreate: async (projectId: number, outlineNodeId: number): Promise<DetailedOutline> => {
     const existing = get().detailedOutlines.find(d => d.outlineNodeId === outlineNodeId)
     if (existing) return existing
+    // 内存没有时以 DB 为准再查一次，避免 store 未加载/竞态导致同一节点重复建细纲
+    const inDb = await db.detailedOutlines.where('outlineNodeId').equals(outlineNodeId).first()
+    if (inDb) {
+      if (!get().detailedOutlines.some(d => d.id === inDb.id)) {
+        set({ detailedOutlines: [...get().detailedOutlines, inDb] })
+      }
+      return inDb
+    }
     const fresh: DetailedOutline = {
       projectId, outlineNodeId, scenes: [],
       createdAt: now(), updatedAt: now(),

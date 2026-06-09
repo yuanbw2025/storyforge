@@ -13,6 +13,7 @@ export function buildChapterContentPrompt(
   worldContext: string,
   characterContext: string,
   previousChapterEnding: string,
+  worldRulesContext?: string,
   userHint?: string,
   options?: RunOptions,
 ): ChatMessage[] {
@@ -23,6 +24,7 @@ export function buildChapterContentPrompt(
     worldContext: worldContext || '（暂无）',
     characters: characterContext || '（暂无角色设定）',
     previousChapterEnding: previousChapterEnding || '（这是第一章）',
+    worldRulesContext: worldRulesContext || '',
     userHint,
   }, options)
   return messages

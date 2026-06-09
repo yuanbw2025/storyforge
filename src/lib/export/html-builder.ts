@@ -5,6 +5,7 @@
  */
 import { db } from '../db/schema'
 import type { Chapter } from '../types'
+import { sanitizeExportHtml } from './sanitize-html'
 
 export interface HTMLExportOptions {
   /** 包含大纲 */
@@ -68,6 +69,32 @@ export async function exportProjectHTML(
     const worldview = await db.worldviews.where('projectId').equals(projectId).first()
     if (worldview) {
       parts.push('<div class="section worldview"><h2>世界观设定</h2>')
+      // 渲染世界观各字段（此前只渲染了世界树 worldNodes，遗漏了世界观本身的设定字段）
+      const wvFields: [string, string | undefined][] = [
+        ['世界来源', worldview.worldOrigin],
+        ['力量体系', worldview.powerHierarchy],
+        ['世界结构', worldview.worldStructure],
+        ['疆域尺寸', worldview.worldDimensions],
+        ['地貌分布', worldview.continentLayout],
+        ['重镇/区域分布', worldview.regionDimensions],
+        ['山川水系', worldview.mountainsRivers],
+        ['气候环境', worldview.climateByRegion],
+        ['世界历史线', worldview.historyLine],
+        ['世界大事记', worldview.worldEvents],
+        ['种族民族', worldview.races],
+        ['势力分布', worldview.factionLayout],
+        ['政经文化', worldview.politicsEconomyCulture],
+        ['矛盾冲突', worldview.internalConflicts],
+        ['道具设计', worldview.itemDesign],
+      ]
+      for (const [label, val] of wvFields) {
+        if (val && val.trim()) parts.push(`<h3>${escapeHTML(label)}</h3><p>${escapeHTML(val)}</p>`)
+      }
+      if (worldview.divineDesign?.hasDivinity) {
+        const d = worldview.divineDesign
+        parts.push(`<h3>神明设定</h3><p>${escapeHTML([d.divineRank, d.divineNames, d.divineRules].filter(Boolean).join('；'))}</p>`)
+      }
+      // 世界树节点（多世界）
       const wNodes = await db.worldNodes.where('projectId').equals(projectId).toArray()
       for (const wn of wNodes) {
         parts.push(`<h3>${escapeHTML(wn.name)}</h3><p>${escapeHTML(wn.description || '')}</p>`)
@@ -85,8 +112,12 @@ export async function exportProjectHTML(
         parts.push(`<div class="character-card">
           <h3>${escapeHTML(c.name)}</h3>
           <p><strong>简介：</strong>${escapeHTML(c.shortDescription)}</p>
+          ${c.appearance ? `<p><strong>外貌：</strong>${escapeHTML(c.appearance)}</p>` : ''}
           ${c.personality ? `<p><strong>性格：</strong>${escapeHTML(c.personality)}</p>` : ''}
           ${c.background ? `<p><strong>背景：</strong>${escapeHTML(c.background)}</p>` : ''}
+          ${c.motivation ? `<p><strong>动机：</strong>${escapeHTML(c.motivation)}</p>` : ''}
+          ${c.abilities ? `<p><strong>能力：</strong>${escapeHTML(c.abilities)}</p>` : ''}
+          ${c.arc ? `<p><strong>成长弧线：</strong>${escapeHTML(c.arc)}</p>` : ''}
         </div>`)
       }
       parts.push('</div>')
@@ -108,7 +139,7 @@ export async function exportProjectHTML(
       const ch = chapterMap.get(node.id!)
       parts.push(`<div class="chapter" id="ch-${node.id}"><h3>${escapeHTML(node.title)}</h3>`)
       if (ch?.content) {
-        parts.push(`<div class="chapter-content">${ch.content}</div>`)
+        parts.push(`<div class="chapter-content">${sanitizeExportHtml(ch.content)}</div>`)
       } else if (node.summary) {
         parts.push(`<p class="outline-only">[大纲] ${escapeHTML(node.summary)}</p>`)
       }

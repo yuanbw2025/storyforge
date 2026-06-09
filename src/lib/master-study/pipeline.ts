@@ -18,10 +18,10 @@ import { db } from '../db/schema'
 import { chat } from '../ai/client'
 import { renderPrompt } from '../ai/prompt-engine'
 import { usePromptStore } from '../../stores/prompt'
-import { useAIConfigStore } from '../../stores/ai-config'
 import { useMasterStudyStore } from '../../stores/master-study'
 import { chunkDocument, quickHash, type ChunkPlan } from '../import/chunker'
 import { extractJSON } from '../ai/adapters/import-adapter'
+import { getMasterAIConfig } from './model-resolver'
 import type { AIConfig, ChatMessage } from '../types'
 import type {
   MasterAnalysisDepth,
@@ -30,7 +30,7 @@ import type {
 } from '../types'
 
 /** 不同深度对应的分块字符数 + maxTokens 上限 */
-const DEPTH_PRESET: Record<MasterAnalysisDepth, {
+export const DEPTH_PRESET: Record<MasterAnalysisDepth, {
   targetChars: number
   maxTokens: number
 }> = {
@@ -202,7 +202,7 @@ export async function runMasterAnalysis(args: RunMasterAnalysisArgs): Promise<vo
 
     // 收尾 —— 统计成功 vs 失败
     const finalAnalyses = await db.masterChunkAnalysis.where('workId').equals(workId).toArray()
-    const successRatio = finalAnalyses.length / total
+    const successRatio = total > 0 ? finalAnalyses.length / total : 0
     const finalStatus = successRatio >= 1
       ? 'done'
       : (successRatio > 0 ? 'done' : 'failed') // 有部分结果就算 done，用户可看已有
@@ -265,8 +265,7 @@ async function analyzeChunkOnce(args: {
     rawDocument: args.chunk.text,
     depth: args.work.analysisDepth,
   })
-  const baseConfig = useAIConfigStore.getState().config
-  const config: AIConfig = { ...baseConfig, maxTokens: args.maxTokens }
+  const config: AIConfig = getMasterAIConfig(args.maxTokens)
   if (!config.apiKey) throw new Error('未配置 AI API Key（请先到「系统设置 → AI 配置」填写）')
   const output = await chatWithAbort(messages, config, args.signal)
   const obj = extractJSON(output) as RawAnalysis
@@ -281,17 +280,7 @@ async function chatWithAbort(
   if (signal?.aborted) {
     const e = new Error('aborted'); e.name = 'AbortError'; throw e
   }
-  return await Promise.race([
-    chat(messages, config),
-    new Promise<string>((_, reject) => {
-      if (!signal) return
-      const onAbort = () => {
-        const e = new Error('aborted'); e.name = 'AbortError'; reject(e)
-      }
-      if (signal.aborted) onAbort()
-      else signal.addEventListener('abort', onAbort, { once: true })
-    }),
-  ])
+  return await chat(messages, config, undefined, signal)
 }
 
 function buildRollingContext(prev: string, row: MasterChunkAnalysis): string {
@@ -312,6 +301,34 @@ function trim(s: string | undefined): string | undefined {
 
 function sleep(ms: number) {
   return new Promise(r => setTimeout(r, ms))
+}
+
+// ── Blob 持久化（Phase 19-c） ─────────────────────────────
+// 复用 importFiles 表，用 BLOB_ID_OFFSET + workId 做虚拟 sessionId 避免冲突
+const BLOB_ID_OFFSET = 100000
+
+export function masterBlobId(workId: number): number {
+  return BLOB_ID_OFFSET + workId
+}
+
+export async function saveMasterBlob(
+  workId: number,
+  filename: string,
+  blob: Blob,
+  fileHash: string,
+): Promise<void> {
+  const { saveBlob } = await import('../../stores/import-session').then(m => m.useImportSessionStore.getState())
+  await saveBlob(masterBlobId(workId), filename, blob, fileHash)
+}
+
+export async function loadMasterBlob(workId: number) {
+  const { loadBlob } = await import('../../stores/import-session').then(m => m.useImportSessionStore.getState())
+  return await loadBlob(masterBlobId(workId))
+}
+
+export async function deleteMasterBlob(workId: number): Promise<void> {
+  const { deleteBlob } = await import('../../stores/import-session').then(m => m.useImportSessionStore.getState())
+  await deleteBlob(masterBlobId(workId))
 }
 
 // ── 给 UI 用的便利函数 ─────────────────────────────────────

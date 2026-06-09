@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { Project, CreateProjectInput } from '../lib/types'
 import { migrateGenre } from '../lib/types'
+import { requireBackupBefore } from '../lib/safety/require-backup-before'
+import { cascadeDeleteProject } from '../lib/registry/lifecycle'
 
 interface ProjectStore {
   projects: Project[]
@@ -56,30 +58,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   deleteProject: async (id: number) => {
-    // 删除项目及所有关联数据
-    await db.transaction('rw', [
-      db.projects, db.worldviews, db.storyCores, db.powerSystems,
-      db.characters, db.factions, db.outlineNodes, db.chapters, db.foreshadows,
-      db.geographies, db.histories, db.itemSystems, db.creativeRules,
-      db.characterRelations, db.snapshots, db.references,
-    ], async () => {
-      await db.projects.delete(id)
-      await db.worldviews.where('projectId').equals(id).delete()
-      await db.storyCores.where('projectId').equals(id).delete()
-      await db.powerSystems.where('projectId').equals(id).delete()
-      await db.characters.where('projectId').equals(id).delete()
-      await db.factions.where('projectId').equals(id).delete()
-      await db.outlineNodes.where('projectId').equals(id).delete()
-      await db.chapters.where('projectId').equals(id).delete()
-      await db.foreshadows.where('projectId').equals(id).delete()
-      await db.geographies.where('projectId').equals(id).delete()
-      await db.histories.where('projectId').equals(id).delete()
-      await db.itemSystems.where('projectId').equals(id).delete()
-      await db.creativeRules.where('projectId').equals(id).delete()
-      await db.characterRelations.where('projectId').equals(id).delete()
-      await db.snapshots.where('projectId').equals(id).delete()
-      await db.references.where('projectId').equals(id).delete()
+    // 数据红线:删项目前强制提示备份(Pre-Phase 0 安全网)
+    const proceed = await requireBackupBefore({
+      operation: '删除项目',
+      projectId: id,
+      details: '此操作将清除该项目的全部数据(章节、世界观、角色、词条、状态卡等),不可恢复。',
     })
+    if (!proceed) return  // 用户取消
+
+    // Phase 1.1b: 级联删除全部从 PROJECT_TABLES 注册表派生(不再手写表清单)。
+    // 加新表 = 注册表加一行,这里自动覆盖。行为与 Phase 0.6 手写版等价(R-05 保证)。
+    await cascadeDeleteProject(id)
+
     if (get().currentProjectId === id) {
       set({ currentProjectId: null })
     }

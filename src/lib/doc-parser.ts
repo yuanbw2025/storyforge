@@ -7,13 +7,12 @@
  * 所有大小限制是「本地文件大小上限」，与 AI 一次处理能力无关——
  * AI 解析阶段仍会被 import-adapter 的 MAX_CHARS 再截断一次。
  */
-import * as pdfjs from 'pdfjs-dist'
-// Vite URL import — pdfjs 的 worker 必须走 URL 引入
+// Vite URL import — pdfjs 的 worker 必须走 URL 引入（仅 URL 字符串，不进主包）
 // @ts-ignore - Vite 的 ?url 后缀 import TS 无法识别
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
-import mammoth from 'mammoth'
 
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+// pdfjs / mammoth 体积大（~870KB）且仅在用户导入文件时才需要，改为动态导入按需加载，
+// 不进首屏主包。下面在解析函数内 await import。
 
 /** 各文件类型的本地大小限制（单位字节） */
 export const FILE_SIZE_LIMITS = {
@@ -92,6 +91,8 @@ export async function extractTextFromFile(file: File): Promise<ExtractResult> {
 }
 
 async function extractPdf(file: File): Promise<ExtractResult> {
+  const pdfjs = await import('pdfjs-dist')
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
   const buf = await file.arrayBuffer()
   const pdf = await pdfjs.getDocument({ data: buf }).promise
   const pages: string[] = []
@@ -108,6 +109,7 @@ async function extractPdf(file: File): Promise<ExtractResult> {
 }
 
 async function extractDocx(file: File): Promise<ExtractResult> {
+  const mammoth = (await import('mammoth')).default
   const buf = await file.arrayBuffer()
   // mammoth.extractRawText 返回纯文本（不带样式）
   const { value } = await mammoth.extractRawText({ arrayBuffer: buf })

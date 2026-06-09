@@ -61,7 +61,7 @@ export default defineConfig({
   ],
   base: '/storyforge/',
   server: {
-    port: 5175,
+    port: 1111,
     open: '/storyforge/',
     proxy: {
       '/deepseek-proxy': {
@@ -88,9 +88,31 @@ export default defineConfig({
         rewrite: (path: string) => path.replace(/^\/claude-proxy/, ''),
         secure: true,
       },
+      '/nvidia-proxy': {
+        target: 'https://integrate.api.nvidia.com',
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/nvidia-proxy/, ''),
+        secure: true,
+      },
     },
   },
   build: {
     outDir: 'dist',
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        // 只把 react 固定成独立 vendor chunk（便于缓存）。
+        // pdfjs / mammoth / three / jszip 均已通过「动态 import() 按需加载」自然分块，
+        // 不可在此用 manualChunks 固定它们——否则会被并入主包静态引用、反而变回首屏 eager 加载。
+        // Phase 3.5:把大的静态依赖拆成独立 vendor chunk。
+        // 好处:① 主包变小、解析更快 ② 这些库很少变,浏览器可长期缓存(应用更新不必重下)。
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-editor': ['@tiptap/react', '@tiptap/starter-kit', '@tiptap/extension-placeholder'],
+          'vendor-db': ['dexie', 'dexie-react-hooks'],
+          'vendor-d3': ['d3-force', 'd3-hierarchy'],
+        },
+      },
+    },
   },
 })

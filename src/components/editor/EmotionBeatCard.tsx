@@ -272,7 +272,15 @@ export default function EmotionBeatCard({
       {ai.isStreaming && (
         <p className="text-xs text-text-muted mt-2 animate-pulse">
           <Sparkles className="w-3 h-3 inline mr-1" />正在生成情感节拍...
+          {ai.output.length > 0 && (
+            <span className="ml-1">≈ ~{Math.round(ai.output.length * 1.5).toLocaleString()} tokens</span>
+          )}
         </p>
+      )}
+      {ai.tokenUsage && !ai.isStreaming && (
+        <div className="mt-1 text-[10px] text-text-muted">
+          Token: ↑{ai.tokenUsage.inputTokens.toLocaleString()} ↓{ai.tokenUsage.outputTokens.toLocaleString()}
+        </div>
       )}
     </div>
   )

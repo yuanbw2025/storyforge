@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { Character, Faction } from '../lib/types'
+import { applyCharacterReferenceRemap } from '../lib/registry/character-references'
 
 interface CharacterStore {
   characters: Character[]
@@ -51,7 +52,16 @@ export const useCharacterStore = create<CharacterStore>((set, get) => ({
   },
 
   deleteCharacter: async (id) => {
-    await db.characters.delete(id)
+    await db.transaction('rw', db.characters, db.characterRelations, db.detailedOutlines, db.stateCards, async () => {
+      const char = await db.characters.get(id)
+      if (!char) return
+      await db.characters.delete(id)
+      await applyCharacterReferenceRemap({
+        projectId: char.projectId,
+        fromCharacterId: id,
+        fromName: char.name,
+      })
+    })
     set({ characters: get().characters.filter(c => c.id !== id) })
   },
 

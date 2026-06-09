@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Plus, Upload, Download, Layers, FileText, Workflow } from 'lucide-react'
 import { usePromptStore } from '../../../stores/prompt'
 import type { PromptTemplate } from '../../../lib/types/prompt'
@@ -23,9 +23,16 @@ export default function PromptManagerPanel({ project }: Props = {}) {
 
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all')
-  const [genrePack, setGenrePack] = useState<string>('general')
+  const [genrePack, setGenrePack] = useState<string>(() => {
+    try { return localStorage.getItem('sf-genre-pack') || 'general' } catch { return 'general' }
+  })
   const [tab, setTab] = useState<'templates' | 'workflows'>('templates')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // 持久化题材包选择（切换时写入 + 挂载时从上面的 useState 初始化器读取）
+  useEffect(() => {
+    try { localStorage.setItem('sf-genre-pack', genrePack) } catch { /* ignore */ }
+  }, [genrePack])
 
   /** 切换题材包：把同 moduleKey 下属于该 genre 的模板设为激活 */
   const handleGenrePackChange = async (genreId: string) => {

@@ -4,8 +4,8 @@
     {
       "name": "storyforge-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "7788"],
-      "port": 7788
+      "runtimeArgs": ["run", "dev", "--", "--port", "1111"],
+      "port": 1111
     }
   ]
 }

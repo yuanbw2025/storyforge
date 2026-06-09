@@ -4,7 +4,8 @@ import {
   UserCircle, UsersRound, User, Footprints, Network,
   Ruler, BookOpen, FilePen, Eye,
   FileCog, History, Upload, Download, Settings,
-  Map, ClipboardList, GitBranch,
+  Map, ClipboardList, GitBranch, Clock, Gem, MapPin, Scale,
+  Drama, Package, CalendarClock, ScanSearch, Boxes, Coins,
 } from 'lucide-react'
 
 /**
@@ -15,8 +16,11 @@ export type SidebarModule =
   // 著作信息
   | 'info'
   | 'references'
+  | 'inspiration'              // Phase 26.4 — 灵感反推
 
   // 设定库
+  | 'world-overview'        // Phase 25.4 — 世界总览（多世界）
+  | 'world-rules'           // Phase 32 — 真实与幻想
   | 'worldview-origin'      // 占位 (P5)
   | 'worldview-natural'     // 占位 (P5)
   | 'worldview-humanity'    // 占位 (P6)
@@ -26,10 +30,16 @@ export type SidebarModule =
   | 'characters-npc'        // 占位 (P7)
   | 'characters-extra'      // 占位 (P7)
   | 'relations'             // 关系网
+  | 'geography'             // 地理环境（legacy）
+  | 'locations'             // 重要地点（Phase 25.3）
+  | 'history'               // 历史年表
+  | 'items'                 // 道具系统
+  | 'codex'                 // 设定词条（Phase 35-a）
 
   // 创作区
   | 'rules'
   | 'outline'
+  | 'character-driven-plot'  // Phase 26.3 — 角色驱动剧情
   | 'detailed-outline'      // 占位 (P8)
   | 'chapters-list'         // 占位 (P8)
   | 'editor'
@@ -45,11 +55,21 @@ export type SidebarModule =
   | 'version-history'       // 占位 (P9)
   | 'import-doc'            // 占位 (P10)
   | 'export'                // = DataManagementPanel (export 入口)
+  | 'usage-stats'           // = UsageStatsPage（AI 消耗统计）
   | 'settings'              // = AIConfigPanel
   | 'data-management'       // 数据管理
 
   // 状态表（A1）
   | 'state-table'
+
+  // 物品栏（Phase 25.5.2-b）
+  | 'inventory'
+
+  // 故事进程年表（Phase 25.5.2-a）
+  | 'story-timeline'
+
+  // 场景考证（Phase 27.2a）
+  | 'scene-verify'
 
   // 全局故事线（Phase B）
   | 'story-arc'
@@ -57,7 +77,7 @@ export type SidebarModule =
   // 世界地图（Phase 20）
   | 'world-map'
   // legacy aliases，路由仍兼容但不再出现在 sidebar
-  | 'worldview' | 'geography' | 'history' | 'power-system' | 'items'
+  | 'power-system'
   | 'story-core' | 'factions' | 'backup'
 
 // ── 树节点 ────────────────────────────────────────────────────────────
@@ -101,27 +121,33 @@ export const NAV_TREE: TreeSection[] = [
     sectionId: 'project',
     label: '著作信息',
     children: [
-      leaf('info',       '项目概况', FileText),
-      leaf('references', '项目参考', Library),
+      leaf('info',         '项目概况', FileText),
+      leaf('inspiration',  '灵感反推', Sparkles),
+      leaf('references',   '项目参考', Library),
     ],
   },
   {
     sectionId: 'lib',
     label: '设定库',
     children: [
+      leaf('world-overview', '世界总览', Globe),
       {
         kind: 'branch',
         branchId: 'lib.worldview',
         label: '世界观',
         icon: Globe,
         children: [
+          leaf('world-rules',        '真实与幻想', Scale),
           leaf('worldview-origin',   '世界起源', Sparkles),
           leaf('worldview-natural',  '自然环境', Mountain),
           leaf('worldview-humanity', '人文环境', Users2),
+          leaf('history',            '历史年表', Clock),
           leaf('world-map',          '世界地图', Map),
         ],
       },
       leaf('story-design', '故事设计', BookOpen),
+      leaf('codex',        '设定词条', Boxes),
+      leaf('items',        '道具系统', Gem),
       {
         kind: 'branch',
         branchId: 'lib.characters',
@@ -143,10 +169,15 @@ export const NAV_TREE: TreeSection[] = [
     children: [
       leaf('rules',            '创作规则', Ruler),
       leaf('outline',          '大纲',     BookOpen),
+      leaf('character-driven-plot', '角色驱动', Drama),
       leaf('story-arc',        '故事线',   GitBranch),
       leaf('chapters-list',    '章节',     FilePen),
       leaf('foreshadow',       '伏笔',     Eye),
+      leaf('locations',        '重要地点', MapPin),
       leaf('state-table',      '状态表',   ClipboardList),
+      leaf('inventory',        '物品栏',   Package),
+      leaf('story-timeline',   '故事年表', CalendarClock),
+      leaf('scene-verify',     '场景考证', ScanSearch),
     ],
   },
   // 作品学习已整合进「项目参考 → 深度分析」tab（Phase 20）
@@ -163,6 +194,7 @@ export const NAV_TREE: TreeSection[] = [
       leaf('version-history',  '版本历史', History),
       leaf('import-doc',       '导入',     Upload),
       leaf('export',           '导出',     Download),
+      leaf('usage-stats',      '消耗统计', Coins),
       leaf('settings',         '设置',     Settings),
     ],
   },

@@ -23,6 +23,7 @@ import { useImportStatusStore } from '../../stores/import-status'
 import { extractJSON } from '../ai/adapters/import-adapter'
 import type { AIConfig, Character } from '../types'
 import { chatWithAbort } from './chat-with-abort'
+import { applyCharacterReferenceRemap } from '../registry/character-references'
 
 export interface RunCharacterMergeArgs {
   sessionId: number
@@ -153,10 +154,18 @@ async function applyMergeGroup(
   }
   merged.relationships = append(merged.relationships || '', aliasNote)
 
-  await db.transaction('rw', db.characters, async () => {
+  await db.transaction('rw', db.characters, db.characterRelations, db.detailedOutlines, db.stateCards, async () => {
     await db.characters.update(primary.id!, { ...merged, updatedAt: Date.now() })
     for (const o of others) {
-      if (o.id) await db.characters.delete(o.id)
+      if (!o.id) continue
+      await applyCharacterReferenceRemap({
+        projectId,
+        fromCharacterId: o.id,
+        fromName: o.name,
+        toCharacterId: primary.id!,
+        toName: canonical,
+      })
+      await db.characters.delete(o.id)
     }
   })
   return others.length

@@ -4,15 +4,17 @@ import {
 } from 'lucide-react'
 import { InlineInput, InlineTextarea } from '../shared/InlineEdit'
 import { useCharacterStore } from '../../stores/character'
-import { useWorldviewStore } from '../../stores/worldview'
+import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildCharacterPrompt } from '../../lib/ai/adapters/character-adapter'
-import { buildWorldContext } from '../../lib/ai/context-builder'
 import { parseCharacterOutput } from '../../lib/ai/parse-character-output'
+import { adopt } from '../../lib/registry/adopt'
+import { assembleContext } from '../../lib/registry/assemble-context'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import type { Project, Character, CharacterRole, CharacterAlignment } from '../../lib/types'
+import CharacterStatusPanel from './CharacterStatusPanel'
 
 // ── 常量 ───────────────────────────────────────────────────────
 
@@ -50,25 +52,46 @@ interface Props { project: Project }
 
 export default function CharacterPanel({ project }: Props) {
   const { characters, loadAll, addCharacter, updateCharacter, deleteCharacter } = useCharacterStore()
-  const { worldview, storyCore, powerSystem } = useWorldviewStore()
+  const { groups, activeGroupId } = useWorldGroupStore()
   const { config: aiConfig } = useAIConfigStore()
   const [selected, setSelected] = useState<number | null>(null)
   const [hint, setHint] = useState('')
   const [parsing, setParsing] = useState(false)
+  const [showRolePicker, setShowRolePicker] = useState(false)
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
+  // 多世界：角色世界过滤器（'all' | 'cross' | 世界组 id）
+  const [worldFilter, setWorldFilter] = useState<'all' | 'cross' | number>('all')
   const ai = useAIStream()
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
 
+  // 多世界过滤：跨世界角色在任意世界都显示
+  const displayedChars = !project.enableMultiWorld || worldFilter === 'all'
+    ? characters
+    : worldFilter === 'cross'
+      ? characters.filter(c => c.isCrossWorld)
+      : characters.filter(c => c.isCrossWorld || c.homeWorldGroupId === worldFilter)
+
   const selectedChar = characters.find(c => c.id === selected)
 
-  const handleAdd = async () => {
+  // 多世界模式下新建角色时归属的世界（过滤器选了具体世界则用它，否则用当前活跃世界）
+  const newCharHomeWorld = (): number | null => {
+    if (!project.enableMultiWorld) return null
+    if (typeof worldFilter === 'number') return worldFilter
+    if (worldFilter === 'cross') return null
+    return activeGroupId
+  }
+
+  const handleAdd = async (role: CharacterRole = 'supporting') => {
+    setShowRolePicker(false)
     const id = await addCharacter({
-      projectId: project.id!, name: '新角色', role: 'supporting',
+      projectId: project.id!, name: '新角色', role,
       shortDescription: '', appearance: '', personality: '',
       background: '', motivation: '', abilities: '', relationships: '', arc: '',
+      homeWorldGroupId: newCharHomeWorld(),
+      isCrossWorld: project.enableMultiWorld && worldFilter === 'cross',
     })
     setSelected(id)
   }
@@ -77,9 +100,27 @@ export default function CharacterPanel({ project }: Props) {
     if (selectedChar?.id) updateCharacter(selectedChar.id, { [field]: value })
   }
 
-  const handleAIGenerate = () => {
+  const handleAIGenerate = async () => {
+    // 统计阵容缺口
+    const roleCounts: Record<CharacterRole, number> = {
+      protagonist: 0, antagonist: 0, supporting: 0, minor: 0, npc: 0, extra: 0,
+    }
+    characters.forEach(c => { roleCounts[c.role] = (roleCounts[c.role] || 0) + 1 })
+    const rosterGap = `当前阵容：主角 ${roleCounts.protagonist}、反派 ${roleCounts.antagonist}、配角 ${roleCounts.supporting}、次要 ${roleCounts.minor}、NPC ${roleCounts.npc}、路人 ${roleCounts.extra}`
     const existing = characters.map(c => `${c.name}（${ROLE_LABELS[c.role]}）`).join('、')
-    const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
+    const enrichedHint = [hint, rosterGap].filter(Boolean).join('\n')
+    // 多世界：按当前选中/活跃世界读取上下文（此前写死单世界）
+    const targetWorld = project.enableMultiWorld
+      ? (typeof worldFilter === 'number' ? worldFilter : activeGroupId)
+      : null
+    const assembled = await assembleContext({
+      projectId: project.id!,
+      worldGroupId: targetWorld,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+      sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+    })
+    const worldCtx = assembled.text
     const opts = {
       parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
       overrides: (systemOverride != null || userOverride != null) ? {
@@ -87,20 +128,39 @@ export default function CharacterPanel({ project }: Props) {
         userPromptTemplate: userOverride ?? undefined,
       } : undefined,
     }
-    const messages = buildCharacterPrompt(project.name, project.genre ?? '', worldCtx, existing, hint, opts)
-    ai.start(messages)
+    const messages = buildCharacterPrompt(project.name, project.genre ?? '', worldCtx, existing, enrichedHint, opts)
+    ai.start(messages, undefined, { category: 'character.generate', projectId: project.id! })
   }
 
   return (
     <div className="space-y-3">
       {/* 工具栏 */}
       <div className="flex items-center gap-3 flex-wrap">
-        <button
-          onClick={handleAdd}
-          className="flex items-center gap-1.5 px-3 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-hover transition-colors"
-        >
-          <Plus className="w-4 h-4" /> 新建角色
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowRolePicker(!showRolePicker)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-hover transition-colors"
+          >
+            <Plus className="w-4 h-4" /> 新建角色 <ChevronDown className="w-3 h-3 ml-0.5" />
+          </button>
+          {showRolePicker && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowRolePicker(false)} />
+              <div className="absolute top-full left-0 mt-1 z-50 bg-bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[140px]">
+                {(Object.entries(ROLE_LABELS) as [CharacterRole, string][]).map(([role, label]) => (
+                  <button
+                    key={role}
+                    onClick={() => handleAdd(role)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-bg-hover transition-colors"
+                  >
+                    <span className={`inline-block w-2 h-2 rounded-full ${ROLE_COLORS[role].split(' ')[0].replace('/10', '')}`} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         <div className="flex items-center gap-2 flex-1">
           <input
             value={hint}
@@ -118,6 +178,45 @@ export default function CharacterPanel({ project }: Props) {
         </div>
         <span className="text-xs text-text-muted ml-auto">角色册 · {characters.length}</span>
       </div>
+
+      {/* 多世界：世界过滤器 */}
+      {project.enableMultiWorld && groups.length > 1 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={() => setWorldFilter('all')}
+            className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+              worldFilter === 'all'
+                ? 'bg-accent text-white border-accent'
+                : 'bg-bg-base text-text-secondary border-border hover:border-accent/50'
+            }`}
+          >
+            全部
+          </button>
+          {groups.map(g => (
+            <button
+              key={g.id}
+              onClick={() => setWorldFilter(g.id!)}
+              className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                worldFilter === g.id
+                  ? 'bg-accent text-white border-accent'
+                  : 'bg-bg-base text-text-secondary border-border hover:border-accent/50'
+              }`}
+            >
+              <span>{g.icon || '🌐'}</span>{g.name}
+            </button>
+          ))}
+          <button
+            onClick={() => setWorldFilter('cross')}
+            className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+              worldFilter === 'cross'
+                ? 'bg-accent text-white border-accent'
+                : 'bg-bg-base text-text-secondary border-border hover:border-accent/50'
+            }`}
+          >
+            🌐 跨世界
+          </button>
+        </div>
+      )}
 
       {/* 调参浮窗 */}
       <PromptRunPanel
@@ -152,20 +251,26 @@ export default function CharacterPanel({ project }: Props) {
             setParsing(false)
             const nameMatch = text.match(/(?:\*\*|#{1,3}\s*|【)([^*#\n【】]{1,20})(?:\*\*|】)/)
             const fallbackName = nameMatch?.[1]?.trim() || 'AI 生成角色'
-            const id = await addCharacter({
+            const result = await adopt({
               projectId: project.id!,
-              name:             parsed?.name             || fallbackName,
-              role:             parsed?.role             || 'supporting',
-              shortDescription: parsed?.shortDescription || '',
-              appearance:       parsed?.appearance       || '',
-              personality:      parsed?.personality      || '',
-              background:       parsed?.background       || text,
-              motivation:       parsed?.motivation       || '',
-              abilities:        parsed?.abilities        || '',
-              relationships:    parsed?.relationships    || '',
-              arc:              parsed?.arc              || '',
+              worldGroupId: newCharHomeWorld(),
+              target: 'characters',
+              mode: 'add',
+              data: {
+                name:             parsed?.name             || fallbackName,
+                role:             parsed?.role             || 'supporting',
+                shortDescription: parsed?.shortDescription || '',
+                appearance:       parsed?.appearance       || '',
+                personality:      parsed?.personality      || '',
+                background:       parsed?.background       || text,
+                motivation:       parsed?.motivation       || '',
+                abilities:        parsed?.abilities        || '',
+                relationships:    parsed?.relationships    || '',
+                arc:              parsed?.arc              || '',
+              },
             })
-            setSelected(id)
+            await loadAll(project.id!)
+            if (result.written[0]?.id != null) setSelected(result.written[0].id)
           }}
           onRetry={handleAIGenerate}
           moduleKey="character.generate"
@@ -182,7 +287,7 @@ export default function CharacterPanel({ project }: Props) {
         <div className="flex gap-4">
           {/* 左侧角色列表 */}
           <div className="w-40 shrink-0 space-y-0.5">
-            {characters.map((c, i) => {
+            {displayedChars.map((c, i) => {
               const active = selected === c.id
               const colorClass = GLYPH_COLORS[i % GLYPH_COLORS.length]
               return (
@@ -213,8 +318,11 @@ export default function CharacterPanel({ project }: Props) {
               <CharacterDetailCard
                 char={selectedChar}
                 charIndex={characters.findIndex(c => c.id === selectedChar.id)}
+                projectId={project.id!}
                 onUpdate={handleUpdate}
                 onDelete={() => { deleteCharacter(selectedChar.id!); setSelected(null) }}
+                multiWorld={!!project.enableMultiWorld}
+                worldGroups={groups}
               />
             ) : (
               <div className="flex items-center justify-center h-64 text-text-muted text-sm">
@@ -231,12 +339,15 @@ export default function CharacterPanel({ project }: Props) {
 // ── 角色详情卡（design 风格） ────────────────────────────────────
 
 function CharacterDetailCard({
-  char, charIndex, onUpdate, onDelete,
+  char, charIndex, projectId, onUpdate, onDelete, multiWorld, worldGroups,
 }: {
   char: Character
   charIndex: number
+  projectId: number
   onUpdate: (f: keyof Character, v: string) => void
   onDelete: () => void
+  multiWorld?: boolean
+  worldGroups?: import('../../lib/types').WorldGroup[]
 }) {
   const { updateCharacter } = useCharacterStore()
   const [expanded, setExpanded] = useState(true)
@@ -275,6 +386,31 @@ function CharacterDetailCard({
               <option value="good">正派</option>
               <option value="evil">反派</option>
             </select>
+
+            {/* 多世界：归属世界 + 跨世界标记 */}
+            {multiWorld && (
+              <>
+                <select
+                  value={char.isCrossWorld ? 'cross' : (char.homeWorldGroupId ?? '')}
+                  onChange={e => {
+                    if (!char.id) return
+                    const v = e.target.value
+                    if (v === 'cross') {
+                      updateCharacter(char.id, { isCrossWorld: true, homeWorldGroupId: null })
+                    } else {
+                      updateCharacter(char.id, { isCrossWorld: false, homeWorldGroupId: v ? Number(v) : null })
+                    }
+                  }}
+                  className="px-1.5 py-0.5 bg-bg-elevated text-text-secondary text-[10px] rounded border border-border focus:outline-none focus:border-accent cursor-pointer"
+                  title="角色所属世界"
+                >
+                  <option value="cross">🌐 跨世界</option>
+                  {(worldGroups || []).map(g => (
+                    <option key={g.id} value={g.id}>{g.icon || '🌐'} {g.name}</option>
+                  ))}
+                </select>
+              </>
+            )}
           </div>
 
           {/* 名字（可编辑） */}
@@ -315,6 +451,9 @@ function CharacterDetailCard({
         </div>
       </div>
 
+      {/* Phase 23.1: 动态状态面板 */}
+      <CharacterStatusPanel projectId={projectId} characterName={char.name} />
+
       {/* 字段列表 — 横排 label: value */}
       {expanded && (
         <div className="space-y-0 divide-y divide-border/40">
@@ -338,4 +477,3 @@ function CharacterDetailCard({
     </div>
   )
 }
-

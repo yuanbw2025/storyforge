@@ -16,6 +16,9 @@ export function buildVolumeOutlinePrompt(
   targetWordCount: number,
   userHint?: string,
   options?: RunOptions,
+  characterContext?: string,
+  /** Phase 32: 世界规则清单（替代旧 historicalContext + creativeMode） */
+  worldRulesContext?: string,
 ): ChatMessage[] {
   const estimatedVolumes = Math.max(1, Math.ceil(targetWordCount / 300000))
   const tpl = usePromptStore.getState().getActive('outline.volume')
@@ -26,6 +29,8 @@ export function buildVolumeOutlinePrompt(
     estimatedVolumes,
     worldContext: worldContext || '（暂无，请自由发挥）',
     storyCore: storyCoreContext || '（暂无，请自由发挥）',
+    characterContext: characterContext || '',
+    worldRulesContext: worldRulesContext || '',
     userHint,
   }, options)
   return messages
@@ -39,6 +44,9 @@ export function buildChapterOutlinePrompt(
   prevVolumeSummary: string,
   userHint?: string,
   options?: RunOptions,
+  characterContext?: string,
+  /** Phase 32: 世界规则清单 */
+  worldRulesContext?: string,
 ): ChatMessage[] {
   const tpl = usePromptStore.getState().getActive('outline.chapter')
   const { messages } = renderPrompt(tpl, {
@@ -46,6 +54,8 @@ export function buildChapterOutlinePrompt(
     volumeSummary,
     worldContext: worldContext || '（暂无）',
     prevVolumeSummary: prevVolumeSummary || '（这是第一卷）',
+    characterContext: characterContext || '',
+    worldRulesContext: worldRulesContext || '',
     userHint,
   }, options)
   return messages

@@ -34,7 +34,18 @@ import type {
   EmotionBeatCard,
   WorldNode,
   StoryArc,
+  HistoricalTimelineEvent,
+  HistoricalKeyword,
+  ImportantLocation,
+  WorldRulesProfile,
+  WorldGroup,
+  WorldGroupLink,
+  ItemLedgerEntry,
+  StoryTimelineEvent,
+  CodexCategory,
+  CodexEntry,
 } from '../types'
+import type { AIUsageEntry } from '../ai/usage-log'
 
 class StoryForgeDB extends Dexie {
   projects!: Table<Project>
@@ -85,6 +96,35 @@ class StoryForgeDB extends Dexie {
 
   // 多世界 / 世界树
   worldNodes!: Table<WorldNode, number>
+
+  // PHASE-H1 —— 历史时间线事件
+  historicalTimelineEvents!: Table<HistoricalTimelineEvent, number>
+
+  // PHASE-H2 —— 历史关键词与细节
+  historicalKeywords!: Table<HistoricalKeyword, number>
+
+  // Phase 25.3 —— 重要地点
+  importantLocations!: Table<ImportantLocation, number>
+
+  // Phase 32 —— 世界规则（真实与幻想）
+  worldRulesProfiles!: Table<WorldRulesProfile, number>
+
+  // Phase 25.4 —— 多世界系统
+  worldGroups!: Table<WorldGroup, number>
+  worldGroupLinks!: Table<WorldGroupLink, number>
+
+  // Phase 25.5.2-b —— 物品流水（游戏包裹式物品栏）
+  itemLedger!: Table<ItemLedgerEntry, number>
+
+  // Phase 25.5.2-a —— 故事进程年表
+  storyTimelineEvents!: Table<StoryTimelineEvent, number>
+
+  // Phase 35-a —— 词条系统（Codex）
+  codexCategories!: Table<CodexCategory, number>
+  codexEntries!: Table<CodexEntry, number>
+
+  // AI 消耗统计
+  aiUsageLog!: Table<AIUsageEntry, number>
 
   constructor() {
     super('storyforge')
@@ -189,6 +229,63 @@ class StoryForgeDB extends Dexie {
     // Phase H3: 便签/笔记
     this.version(17).stores({
       notes: '++id, projectId, chapterId, pinned',
+    })
+
+    // PHASE-H1: 历史时间线事件
+    this.version(18).stores({
+      historicalTimelineEvents: '++id, projectId, era, year',
+    })
+
+    // PHASE-H2: 历史关键词与细节
+    this.version(19).stores({
+      historicalKeywords: '++id, projectId, category, era',
+    })
+
+    // Phase 25.3: 重要地点
+    this.version(20).stores({
+      importantLocations: '++id, projectId, parentId, sortOrder',
+    })
+
+    // Phase 32: 世界规则（真实与幻想）—— singleton per project
+    this.version(21).stores({
+      worldRulesProfiles: '++id, &projectId',
+    })
+
+    // Phase 25.4: 多世界系统
+    this.version(22).stores({
+      worldGroups: '++id, projectId, type, order',
+      worldGroupLinks: '++id, projectId, fromGroupId, toGroupId',
+    })
+
+    // Phase 25.5.2-b: 物品流水（物品栏）
+    this.version(23).stores({
+      itemLedger: '++id, projectId, itemName, chapterId',
+    })
+
+    // Phase 25.5.2-a: 故事进程年表
+    this.version(24).stores({
+      storyTimelineEvents: '++id, projectId, chapterId, order',
+    })
+
+    // Phase 35-a: 词条系统（Codex）
+    this.version(25).stores({
+      codexCategories: '++id, projectId, domain, parentId, builtInKey, worldGroupId, order',
+      codexEntries: '++id, projectId, categoryId, worldGroupId, order',
+    })
+
+    // AI 消耗统计
+    this.version(26).stores({
+      aiUsageLog: '++id, projectId, timestamp, category, model',
+    })
+
+    // v27: 真实与幻想从项目级单例升级为每世界一套
+    this.version(27).stores({
+      worldRulesProfiles: '++id, projectId, worldGroupId',
+    })
+
+    // v28: 导入会话记录多世界目标世界
+    this.version(28).stores({
+      importSessions: '++id, projectId, status, updatedAt, fileHash, targetWorldGroupId',
     })
   }
 }

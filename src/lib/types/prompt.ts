@@ -38,8 +38,26 @@ export type PromptModuleKey =
   | 'import.parse-all'
   | 'import.parse-chunk'
   | 'import.merge-characters'
+  // —— Phase 30.2 角色关系提取 ——
+  | 'relation.extract'
+  // —— Phase 26.3 角色驱动剧情 ——
+  | 'plot.character-driven'
+  // —— Phase 26.4 灵感反推 ——
+  | 'inspiration.reverse'
+  | 'inspiration.reverse.multiworld'
+  // —— Phase 25.4 多世界 ——
+  | 'world-group.suggest'
+  | 'world-group.expand'
+  // —— Phase 25.5.2-b 物品栏 ——
+  | 'inventory.extract'
+  // —— Phase 25.5.2-a 故事进程年表 ——
+  | 'story-timeline.extract'
+  // —— Phase 27.2a 场景考证 ——
+  | 'scene.verify'
   // —— Phase 19 作品学习 ——
   | 'master.analyze-chunk'
+  | 'master.extract-beats'
+  | 'master.generate-insights'
 
 /** 模板可调参数定义（Phase 12） */
 export interface PromptParameter {

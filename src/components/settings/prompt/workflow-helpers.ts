@@ -11,6 +11,51 @@
 
 import type { SaveTarget } from '../../../lib/types/workflow'
 
+/**
+ * FB-1 修复 · 工作流步骤上下文整形(纯函数,可单测)。
+ *
+ * IO 部分(从 ref 取上一步输出、调 assembleContext)留在 WorkflowRunner;
+ * 本函数只负责「把各路上下文摆进模板变量槽位」的纯逻辑,因此能脱离 React/DB 直接测。
+ *
+ * 关键不变量:
+ * - projectName/genres/dimension 必须有值(此前全空导致 AI 失去依据)
+ * - worldContext 是所有工作流步骤模板共用的「前序上下文」槽位:
+ *   已存项目设定(assembledContext)+ 上一步输出(prevOutput)都汇入这里,
+ *   因此 step2「世界起源」一定能看到 step1「一句话故事」。
+ * - 仍保留步骤自身 inputMapping 中非 worldContext 的特定变量(如 chapterSummary)。
+ */
+export function assembleWorkflowStepVars(params: {
+  step: { label?: string; userHint?: string; inputMapping?: Record<string, string> }
+  prevOutput: string
+  projectName?: string
+  genres?: string
+  assembledContext?: string
+  worldRulesContext?: string
+}): Record<string, string | number | undefined> {
+  const { step, prevOutput, projectName, genres, assembledContext, worldRulesContext } = params
+  const ctx: Record<string, string | number | undefined> = {}
+
+  ctx.projectName = projectName ?? ''
+  ctx.genres = genres ?? ''
+  ctx.dimension = step.label ?? ''
+  if (step.userHint) ctx.userHint = step.userHint
+
+  // 保留 inputMapping 中非 worldContext 的特定变量(worldContext 由下方通用槽位统一处理)
+  if (step.inputMapping && prevOutput) {
+    for (const [from, to] of Object.entries(step.inputMapping)) {
+      if (from === 'previousOutput' && to !== 'worldContext') ctx[to] = prevOutput
+    }
+  }
+
+  if (worldRulesContext) ctx.worldRulesContext = worldRulesContext
+
+  // 通用前序上下文槽位:已存设定 + 上一步输出
+  const prior = [assembledContext, prevOutput].filter(Boolean).join('\n\n')
+  if (prior) ctx.worldContext = prior
+
+  return ctx
+}
+
 /** WorkflowEditor 下拉选项使用的模块键列表（与 prompt-seeds 的 system moduleKey 保持一致） */
 export const ALL_MODULE_KEYS_FOR_WORKFLOW = [
   'worldview.dimension', 'character.generate', 'character.dimension',
@@ -24,7 +69,7 @@ export const ALL_MODULE_KEYS_FOR_WORKFLOW = [
 export const SAVE_TARGET_PRESETS = [
   { label: '不自动保存（仅复制）', value: '' },
   { label: '世界观.世界起源', value: 'worldview-field:worldOrigin' },
-  { label: '世界观.力量层次', value: 'worldview-field:powerHierarchy' },
+  { label: '世界观.力量体系', value: 'worldview-field:powerHierarchy' },
   { label: '世界观.世界历史线', value: 'worldview-field:historyLine' },
   { label: '世界观.世界观摘要', value: 'worldview-field:summary' },
   { label: '故事.一句话故事', value: 'storyCore-field:logline' },
@@ -72,7 +117,7 @@ export function valueToSaveTarget(v: string): SaveTarget | undefined {
 
 /** 字段 key → 中文标签的映射，供 targetLabel 使用 */
 const SAVE_TARGET_FIELD_LABELS: Record<string, string> = {
-  worldOrigin: '世界起源', powerHierarchy: '力量层次',
+  worldOrigin: '世界起源', powerHierarchy: '力量体系',
   historyLine: '世界历史线', summary: '世界观摘要',
   logline: '一句话故事', concept: '故事概念', theme: '主题',
   centralConflict: '核心冲突', mainPlot: '故事主线',

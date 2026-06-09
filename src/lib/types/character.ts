@@ -45,6 +45,12 @@ export interface Character {
   /** 退场/死亡章节 ID */
   exitChapterId?: number | null
 
+  // ── Phase 25.4 多世界 ──
+  /** 角色原属世界组 ID（null = 主角/跨世界角色） */
+  homeWorldGroupId?: number | null
+  /** 是否跨世界角色（主角、系统精灵等，在所有世界中可见） */
+  isCrossWorld?: boolean
+
   createdAt: number
   updatedAt: number
 }
@@ -60,6 +66,10 @@ export interface Faction {
   goals: string              // 目标
   resources: string          // 资源/实力
   relationships: string      // 与其他势力关系
+  /** Phase 23.3: 绑定世界地图区域名（对应 Voronoi 地图的 regionName） */
+  mapRegion?: string
+  /** Phase 23.3: 势力颜色（十六进制，地图上标注用） */
+  color?: string
   createdAt: number
   updatedAt: number
 }

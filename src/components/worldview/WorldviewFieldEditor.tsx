@@ -4,7 +4,9 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { buildWorldviewPrompt } from '../../lib/ai/adapters/worldview-adapter'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
+import AIFieldModeTabs from '../shared/AIFieldModeTabs'
 import type { Project } from '../../lib/types'
+import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
 
 interface Props {
   label: string                 // emoji + 名称，如 "🌌 世界来源"
@@ -34,6 +36,7 @@ export default function WorldviewFieldEditor({
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
+  const [mode, setMode] = useState<FieldGenerationMode>('expand')
   const ai = useAIStream()
 
   // 切换字段时清空 AI 流 + 重置临时覆盖
@@ -61,6 +64,8 @@ export default function WorldviewFieldEditor({
       contextSummary,
       hint,
       opts,
+      value,
+      mode,
     )
     ai.start(messages)
   }
@@ -100,6 +105,7 @@ export default function WorldviewFieldEditor({
       />
 
       <div className="flex items-center gap-2">
+        <AIFieldModeTabs value={mode} onChange={setMode} />
         {showHintBox && (
           <input
             value={hint}

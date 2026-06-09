@@ -6,7 +6,6 @@ import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../../../lib/ai/prompt-engine'
 import { PREVIEW_VARS } from '../../../lib/ai/prompt-preview-vars'
 import type { PromptTemplate, PromptModuleKey, PromptParameter } from '../../../lib/types/prompt'
-import { db } from '../../../lib/db/schema'
 import PromptParametersEditor from './PromptParametersEditor'
 import PromptExamplesEditor from './PromptExamplesEditor'
 
@@ -44,6 +43,7 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   const saveTemplate = usePromptStore(s => s.saveTemplate)
   const cloneTemplate = usePromptStore(s => s.cloneTemplate)
   const setActive = usePromptStore(s => s.setActive)
+  const deleteTemplate = usePromptStore(s => s.deleteTemplate)
 
   // 本地编辑状态（draft），只在选中模板变化时同步
   const [draft, setDraft] = useState<PromptTemplate | null>(template)
@@ -104,7 +104,7 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   const handleDelete = async () => {
     if (!draft.id) return
     if (!confirm(`删除模板「${draft.name}」？此操作不可恢复。`)) return
-    await db.promptTemplates.delete(draft.id)
+    await deleteTemplate(draft.id)  // Phase 3.3: 走 store action,不直接 db.delete
     onDeleted()
     onChanged()
   }

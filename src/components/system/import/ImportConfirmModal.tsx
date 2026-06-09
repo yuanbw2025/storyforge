@@ -1,16 +1,23 @@
-import { useMemo } from 'react'
-import { X, Wand2, AlertTriangle, Info, Gauge, Timer, Coins } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { X, Wand2, AlertTriangle, Info, Gauge, Timer, Coins, BookOpen, ChevronDown, ChevronRight } from 'lucide-react'
 import type { ChunkPlan } from '../../../lib/import/chunker'
+import type { VolumeDetectResult } from '../../../lib/import/volume-detector'
+import type { WorldGroup } from '../../../lib/types'
 
 interface Props {
   filename: string
   totalChars: number
   chunks: ChunkPlan[]
   chunkSize: number
+  /** 本地检测到的分卷结构 */
+  volumeDetect?: VolumeDetectResult | null
   /** 单块估算用时（秒），给总时预估用 */
   estSecondsPerChunk?: number
+  worldGroups?: WorldGroup[]
+  targetWorldGroupId?: number | null
+  onTargetWorldGroupChange?: (id: number | null) => void
   onChunkSizeChange: (size: number) => void
-  onConfirm: (target: 'project' | 'reference') => void
+  onConfirm: (target: 'project' | 'reference', targetWorldGroupId?: number | null) => void
   onCancel: () => void
 }
 
@@ -22,9 +29,14 @@ interface Props {
  */
 export default function ImportConfirmModal({
   filename, totalChars, chunks, chunkSize,
+  volumeDetect,
   estSecondsPerChunk = 35,
+  worldGroups = [],
+  targetWorldGroupId = null,
+  onTargetWorldGroupChange,
   onChunkSizeChange, onConfirm, onCancel,
 }: Props) {
+  const [showStructure, setShowStructure] = useState(false)
   const stats = useMemo(() => {
     const totalChunks = chunks.length
     const totalSeconds = totalChunks * estSecondsPerChunk
@@ -77,6 +89,51 @@ export default function ImportConfirmModal({
               {totalChars.toLocaleString()} 字符 · 预计拆成 {stats.totalChunks} 块
             </div>
           </div>
+
+          {/* 分卷结构检测 */}
+          {volumeDetect && (volumeDetect.hasVolumes || volumeDetect.totalChapters > 0) && (
+            <div className="bg-bg-base border border-border rounded-lg p-3">
+              <button
+                onClick={() => setShowStructure(v => !v)}
+                className="flex items-center gap-2 w-full text-left"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-accent" />
+                <span className="text-xs font-medium text-text-primary flex-1">
+                  📖 检测到文档结构：
+                  {volumeDetect.hasVolumes
+                    ? `${volumeDetect.totalVolumes} 卷 · ${volumeDetect.totalChapters} 章`
+                    : `${volumeDetect.totalChapters} 章（未检测到分卷）`}
+                </span>
+                {showStructure
+                  ? <ChevronDown className="w-3.5 h-3.5 text-text-muted" />
+                  : <ChevronRight className="w-3.5 h-3.5 text-text-muted" />}
+              </button>
+              {showStructure && (
+                <div className="mt-2 max-h-[200px] overflow-y-auto text-xs space-y-1">
+                  {volumeDetect.orphanChapters.length > 0 && (
+                    <div className="space-y-0.5 mb-2">
+                      {volumeDetect.orphanChapters.map((ch, i) => (
+                        <div key={i} className="pl-4 text-text-muted truncate">📄 {ch.title}</div>
+                      ))}
+                    </div>
+                  )}
+                  {volumeDetect.volumes.map((vol, vi) => (
+                    <div key={vi}>
+                      <div className="font-medium text-accent truncate">📚 {vol.title}</div>
+                      {vol.chapters.map((ch, ci) => (
+                        <div key={ci} className="pl-6 text-text-muted truncate">📄 {ch.title}</div>
+                      ))}
+                    </div>
+                  ))}
+                  {volumeDetect.hasVolumes && (
+                    <div className="pt-1 text-text-muted italic">
+                      导入时将自动创建卷→章层级大纲结构
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* chunkSize 调节 */}
           <div>
@@ -157,6 +214,22 @@ export default function ImportConfirmModal({
             <div className="bg-bg-base border border-accent/30 rounded-lg p-2.5">
               <div className="font-medium text-accent mb-0.5">📥 导入当前项目</div>
               <div className="text-text-muted leading-relaxed">直接填入当前项目的世界观、角色、大纲等模块</div>
+              {worldGroups.length > 0 && (
+                <label className="block mt-2">
+                  <span className="block text-[10px] text-text-muted mb-1">目标世界</span>
+                  <select
+                    value={targetWorldGroupId ?? ''}
+                    onChange={e => onTargetWorldGroupChange?.(e.target.value ? Number(e.target.value) : null)}
+                    className="w-full rounded border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent"
+                  >
+                    {worldGroups.map(group => (
+                      <option key={group.id} value={group.id}>
+                        {group.icon ? `${group.icon} ` : ''}{group.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
             <div className="bg-bg-base border border-purple-400/30 rounded-lg p-2.5">
               <div className="font-medium text-purple-400 mb-0.5">📚 导入项目参考</div>
@@ -174,13 +247,13 @@ export default function ImportConfirmModal({
             取消
           </button>
           <button
-            onClick={() => onConfirm('reference')}
+            onClick={() => onConfirm('reference', null)}
             className="flex items-center gap-1.5 px-4 py-2 bg-purple-500/80 text-white text-sm rounded hover:bg-purple-500 transition-colors"
           >
             📚 导入项目参考
           </button>
           <button
-            onClick={() => onConfirm('project')}
+            onClick={() => onConfirm('project', targetWorldGroupId)}
             className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm rounded hover:bg-accent-hover"
           >
             <Wand2 className="w-4 h-4" /> 导入当前项目（{stats.totalChunks} 块）

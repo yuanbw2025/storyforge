@@ -29,6 +29,8 @@ export interface Geography {
   overview: string          // 世界地理总述
   locations: string         // Location[] JSON string
   worldMapData?: string     // WorldMapData JSON string（Phase 20）
+  /** 所属世界组 ID（Phase 25.4） */
+  worldGroupId?: number | null
   createdAt: number
   updatedAt: number
 }
@@ -70,6 +72,8 @@ export interface WorldNode {
   sortOrder: number
   /** 图标 emoji */
   icon?: string
+  /** 所属世界组 ID（Phase 25.4） */
+  worldGroupId?: number | null
   createdAt: number
   updatedAt: number
 }

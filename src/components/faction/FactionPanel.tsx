@@ -1,6 +1,6 @@
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import { useState, useEffect } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, MapPin, Palette } from 'lucide-react'
 import { useCharacterStore } from '../../stores/character'
 import type { Project, Faction } from '../../lib/types'
 
@@ -67,6 +67,34 @@ export default function FactionPanel({ project }: Props) {
                   className="w-full p-2 bg-bg-base border border-border rounded text-sm text-text-primary resize-y focus:outline-none focus:border-accent" />
               </div>
             ))}
+            {/* Phase 23.3: 地图区域绑定 + 势力颜色 */}
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
+              <div>
+                <label className="flex items-center gap-1 text-xs text-text-muted mb-1">
+                  <MapPin className="w-3 h-3" /> 绑定地图区域
+                </label>
+                <CInput
+                  value={selectedFaction.mapRegion || ''}
+                  onChange={e => handleUpdate('mapRegion', e.target.value)}
+                  placeholder="输入 Voronoi 地图区域名"
+                  className="w-full p-2 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
+                />
+              </div>
+              <div>
+                <label className="flex items-center gap-1 text-xs text-text-muted mb-1">
+                  <Palette className="w-3 h-3" /> 势力颜色
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={selectedFaction.color || '#6366f1'}
+                    onChange={e => handleUpdate('color', e.target.value)}
+                    className="w-8 h-8 rounded cursor-pointer border border-border"
+                  />
+                  <span className="text-xs text-text-muted">{selectedFaction.color || '未设置'}</span>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="flex items-center justify-center h-64 text-text-muted text-sm">

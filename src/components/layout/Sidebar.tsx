@@ -16,6 +16,8 @@ interface SidebarProps {
   projectName: string
   collapsed: boolean
   onToggleCollapse: () => void
+  /** 需要隐藏的模块 ID 集合（如多世界关闭时隐藏 world-overview） */
+  hiddenModules?: Set<SidebarModule>
 }
 
 /** legacy → new 别名映射（路由层兼容） */
@@ -31,7 +33,7 @@ function normalize(m: SidebarModule): SidebarModule {
 }
 
 export default function Sidebar({
-  active, onSelect, onBack, projectName, collapsed, onToggleCollapse,
+  active, onSelect, onBack, projectName, collapsed, onToggleCollapse, hiddenModules,
 }: SidebarProps) {
   const normActive = normalize(active)
 
@@ -110,6 +112,7 @@ export default function Sidebar({
               normActive,
               onSelect,
               onToggle: toggle,
+              hiddenModules,
             }))}
           </div>
         ))}
@@ -150,10 +153,12 @@ interface RenderArgs {
   normActive: SidebarModule
   onSelect: (m: SidebarModule) => void
   onToggle: (branchId: string) => void
+  hiddenModules?: Set<SidebarModule>
 }
 
-function renderNode(args: RenderArgs): ReactElement {
-  const { node, depth, collapsed, expanded, normActive, onSelect, onToggle } = args
+function renderNode(args: RenderArgs): ReactElement | null {
+  const { node, depth, collapsed, expanded, normActive, onSelect, onToggle, hiddenModules } = args
+  if (node.kind === 'leaf' && hiddenModules?.has(node.id)) return null
   if (node.kind === 'leaf') {
     return (
       <NavLeafButton

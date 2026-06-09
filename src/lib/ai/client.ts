@@ -1,6 +1,15 @@
 import type { AIConfig, ChatMessage } from '../types'
 import { AIError } from '../types'
 import { createLog, updateLog, type TokenUsage } from './logger'
+import { recordUsage } from './usage-log'
+import { trimMessagesToFit } from './context-budget'
+
+/** 调用元信息（用于消耗统计分类） */
+export interface AICallMeta {
+  /** 消耗类型标识（moduleKey 或显式 category，如 'chapter.content'） */
+  category?: string
+  projectId?: number | null
+}
 
 /** 可变容器，streamChat 写入 usage，调用方读取 */
 export interface StreamResult {
@@ -74,8 +83,13 @@ export async function* streamChat(
   config: AIConfig,
   signal?: AbortSignal,
   result?: StreamResult,
+  meta?: AICallMeta,
 ): AsyncGenerator<string> {
-  const req = buildRequest(config, messages, true)
+  const trimmed = trimMessagesToFit(messages, config.provider, config.model, config.maxTokens)
+  if (trimmed.trimmed) {
+    console.warn(`[AI] request messages trimmed to fit context window: ${trimmed.totalInputTokens}/${trimmed.inputBudget} tokens`)
+  }
+  const req = buildRequest(config, trimmed.messages, true)
 
   const log = createLog({
     type: 'stream',
@@ -140,6 +154,7 @@ export async function* streamChat(
             if (usage) logUpdate.usage = usage
             if (result && usage) result.usage = usage
             updateLog(log.id, logUpdate)
+            if (usage) void recordUsage({ projectId: meta?.projectId ?? null, timestamp: Date.now(), category: meta?.category ?? '', model: config.model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens })
             return
           }
           try {
@@ -165,6 +180,7 @@ export async function* streamChat(
     if (usage) logUpdate.usage = usage
     if (result && usage) result.usage = usage
     updateLog(log.id, logUpdate)
+    if (usage) void recordUsage({ projectId: meta?.projectId ?? null, timestamp: Date.now(), category: meta?.category ?? '', model: config.model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens })
   } catch (err) {
     if (err instanceof AIError) throw err
     const duration = Date.now() - startTime
@@ -179,13 +195,20 @@ export async function* streamChat(
 export async function chat(
   messages: ChatMessage[],
   config: AIConfig,
+  meta?: AICallMeta,
+  signal?: AbortSignal,
 ): Promise<string> {
-  const req = buildRequest(config, messages, false)
+  const trimmed = trimMessagesToFit(messages, config.provider, config.model, config.maxTokens)
+  if (trimmed.trimmed) {
+    console.warn(`[AI] request messages trimmed to fit context window: ${trimmed.totalInputTokens}/${trimmed.inputBudget} tokens`)
+  }
+  const req = buildRequest(config, trimmed.messages, false)
 
   const response = await fetch(req.url, {
     method: 'POST',
     headers: req.headers,
     body: req.body,
+    signal,
   })
 
   if (!response.ok) {
@@ -194,5 +217,15 @@ export async function chat(
   }
 
   const json = await response.json()
+  if (json.usage) {
+    void recordUsage({
+      projectId: meta?.projectId ?? null,
+      timestamp: Date.now(),
+      category: meta?.category ?? '',
+      model: config.model,
+      inputTokens: json.usage.prompt_tokens ?? 0,
+      outputTokens: json.usage.completion_tokens ?? 0,
+    })
+  }
   return json.choices?.[0]?.message?.content || ''
 }

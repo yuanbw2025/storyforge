@@ -1,6 +1,21 @@
 import type { ChatMessage, Location } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
+import { useWorldviewStore } from '../../../stores/worldview'
 import { renderPrompt } from '../prompt-engine'
+
+/** 从世界观 store 提取与地理相关的上下文 */
+function getWorldviewGeoContext(): string {
+  const wv = useWorldviewStore.getState().worldview
+  if (!wv) return ''
+  const parts: string[] = []
+  if (wv.worldOrigin)      parts.push(`【世界来源】${wv.worldOrigin.slice(0, 150)}`)
+  if (wv.worldStructure)   parts.push(`【世界结构】${wv.worldStructure.slice(0, 150)}`)
+  if (wv.continentLayout)  parts.push(`【地貌分布】${wv.continentLayout.slice(0, 200)}`)
+  if (wv.mountainsRivers)  parts.push(`【山川水系】${wv.mountainsRivers.slice(0, 150)}`)
+  if (wv.climateByRegion)  parts.push(`【气候环境】${wv.climateByRegion.slice(0, 100)}`)
+  if (wv.regionDimensions) parts.push(`【重镇分布】${wv.regionDimensions.slice(0, 100)}`)
+  return parts.length ? `\n\n=== 世界观已有设定（请保持一致）===\n${parts.join('\n')}` : ''
+}
 
 /**
  * 构建 AI 概念地图 prompt（API 与旧 src/lib/ai/prompts/geography.ts 一致）
@@ -14,9 +29,12 @@ export function buildConceptMapPrompt(
     .map(l => `- ${l.name}（${l.type}）：${l.description || '无描述'}${l.parentId ? `，隶属于 ${locations.find(p => p.id === l.parentId)?.name || '未知'}` : ''}`)
     .join('\n')
 
+  // 注入世界观自然环境上下文，让概念地图与世界观设定保持一致
+  const worldCtx = getWorldviewGeoContext()
+
   const tpl = usePromptStore.getState().getActive('geography.concept-map')
   const { messages } = renderPrompt(tpl, {
-    overview: overview || '（无）',
+    overview: (overview || '（无）') + worldCtx,
     locationList: locationList || '（暂无地点）',
   })
   return messages

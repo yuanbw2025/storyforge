@@ -12,6 +12,7 @@ export type AIProvider =
   | 'kimi'
   | 'claude'
   | 'modelscope'
+  | 'nvidia'
   | 'ollama'
   | 'custom'
 
@@ -23,6 +24,13 @@ export interface AIConfig {
   baseUrl: string
   temperature: number
   maxTokens: number
+}
+
+/** API 配置预设（多套配置一键切换） */
+export interface AIConfigPreset {
+  id: string
+  name: string
+  config: AIConfig
 }
 
 /** 聊天消息 */
@@ -68,6 +76,15 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'Gemini-3.1-Pro', label: 'Gemini 3.1 Pro' },
     { value: 'GPT-5.4', label: 'GPT-5.4' },
     { value: 'GLM-5.1-FM', label: 'GLM 5.1 FM' },
+  ],
+  nvidia: [
+    { value: 'meta/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', desc: '最新 Llama，推荐' },
+    { value: 'meta/llama-3.1-405b-instruct', label: 'Llama 3.1 405B', desc: '最强开源模型' },
+    { value: 'meta/llama-3.1-70b-instruct', label: 'Llama 3.1 70B', desc: '高性能' },
+    { value: 'deepseek-ai/deepseek-r1', label: 'DeepSeek R1', desc: '推理模型' },
+    { value: 'qwen/qwen2.5-72b-instruct', label: 'Qwen 2.5 72B', desc: '通义千问' },
+    { value: 'google/gemma-2-27b-it', label: 'Gemma 2 27B', desc: 'Google 开源' },
+    { value: 'mistralai/mistral-large-2-instruct', label: 'Mistral Large 2', desc: 'Mistral 旗舰' },
   ],
   modelscope: [
     { value: 'Qwen/Qwen3-235B-A22B', label: 'Qwen3 235B A22B', desc: '最强 MoE 模型' },
@@ -124,6 +141,10 @@ export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
   claude: {
     baseUrl: 'https://api.anthropic.com/v1',
     model: 'claude-sonnet-4-20250514',
+  },
+  nvidia: {
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    model: 'meta/llama-3.3-70b-instruct',
   },
   modelscope: {
     baseUrl: 'https://api-inference.modelscope.cn/v1',

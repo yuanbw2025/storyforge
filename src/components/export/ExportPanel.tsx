@@ -7,6 +7,7 @@ import {
 import { exportProjectJSON, downloadJSON, importProjectJSON, type ProjectExportData } from '../../lib/export/json-export'
 import { exportProjectMarkdown, exportProjectTXT, downloadTextFile } from '../../lib/export/text-export'
 import { exportProjectHTML } from '../../lib/export/html-builder'
+import { exportProjectEPUB } from '../../lib/export/epub-export'
 import { exportToGist, validateGitHubPAT } from '../../lib/export/gist-export'
 import {
   generateContextSnapshot, downloadContextSnapshot,
@@ -35,7 +36,11 @@ export default function ExportPanel({ project, onImported }: Props) {
   const contextImportRef = useRef<HTMLInputElement>(null)
 
   // 6.6 GitHub Gist
-  const [pat, setPat] = useState(() => localStorage.getItem('sf_github_pat') ?? '')
+  // Phase 3.4 安全:PAT 默认只存 sessionStorage(关标签即清);用户显式勾选"记住"才落 localStorage。
+  // 旧版曾默认持久化到 localStorage,任何 XSS/本地脚本可读取 token。
+  const [pat, setPat] = useState(() =>
+    sessionStorage.getItem('sf_github_pat') ?? localStorage.getItem('sf_github_pat') ?? '')
+  const [rememberPat, setRememberPat] = useState(() => !!localStorage.getItem('sf_github_pat'))
   const [gistId, setGistId] = useState(() => localStorage.getItem(`sf_gist_${project.id}`) ?? '')
   const [gistUrl, setGistUrl] = useState('')
   const [patUser, setPatUser] = useState<string | null>(null)
@@ -117,6 +122,17 @@ export default function ExportPanel({ project, onImported }: Props) {
     }
   }
 
+  // ── EPUB 导出（Phase 24.1）──
+  const handleExportEPUB = async () => {
+    try {
+      showStatus('loading', '正在生成 EPUB...')
+      await exportProjectEPUB(project.id!)
+      showStatus('success', 'EPUB 导出成功！')
+    } catch (e) {
+      showStatus('error', `EPUB 导出失败：${(e as Error).message}`)
+    }
+  }
+
   // ── 6.5 File System Access ─────────────────────────────────
   const handleBindFolder = async () => {
     const fsaHandle = await pickDirectory()
@@ -145,7 +161,10 @@ export default function ExportPanel({ project, onImported }: Props) {
     try {
       const login = await validateGitHubPAT(pat.trim())
       setPatUser(login)
-      localStorage.setItem('sf_github_pat', pat.trim())
+      // 默认 session-only;勾选"记住"才持久化到 localStorage
+      sessionStorage.setItem('sf_github_pat', pat.trim())
+      if (rememberPat) localStorage.setItem('sf_github_pat', pat.trim())
+      else localStorage.removeItem('sf_github_pat')
     } catch {
       setPatUser(null)
       showStatus('error', 'PAT 无效，请检查权限（需要 gist 权限）')
@@ -314,6 +333,18 @@ export default function ExportPanel({ project, onImported }: Props) {
         </button>
       </div>
 
+      {/* EPUB 导出（Phase 24.1） */}
+      <div className="bg-bg-surface border border-border rounded-lg p-5 space-y-4">
+        <h3 className="text-base font-semibold text-text-primary flex items-center gap-2">
+          <FileText className="w-5 h-5 text-purple-400" /> EPUB 电子书
+        </h3>
+        <p className="text-sm text-text-muted">导出为 EPUB 3.0 格式电子书，可在 Kindle、Apple Books、微信读书等阅读器中打开。自动生成目录和封面页。</p>
+        <button onClick={handleExportEPUB} disabled={status === 'loading'}
+          className="flex items-center gap-2 px-4 py-2.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium hover:bg-purple-500/30 transition-colors disabled:opacity-50">
+          <Download className="w-4 h-4" /> 导出 EPUB
+        </button>
+      </div>
+
       {/* 6.5 本地文件夹自动保存 */}
       <div className="bg-bg-surface border border-border rounded-lg p-5 space-y-4">
         <h3 className="text-base font-semibold text-text-primary flex items-center gap-2">
@@ -390,6 +421,19 @@ export default function ExportPanel({ project, onImported }: Props) {
               <CheckCircle className="w-3 h-3" /> 已验证：@{patUser}
             </p>
           )}
+          {/* Phase 3.4 安全:默认不持久化 token */}
+          <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberPat}
+              onChange={(e) => {
+                setRememberPat(e.target.checked)
+                if (!e.target.checked) localStorage.removeItem('sf_github_pat')
+                else if (pat.trim()) localStorage.setItem('sf_github_pat', pat.trim())
+              }}
+            />
+            在本机记住此 Token（存浏览器 localStorage）。不勾选则仅本次会话有效，关闭标签页即清除（更安全）。
+          </label>
         </div>
 
         {/* 已有 Gist ID */}

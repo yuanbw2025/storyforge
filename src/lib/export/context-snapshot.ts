@@ -42,15 +42,25 @@ export async function generateContextSnapshot(projectId: number): Promise<string
   // ── 头部 ──
   sections.push(`# 上下文快照：${project.name}\n生成时间：${new Date().toLocaleString('zh-CN')}\n类型：${project.genre || '未指定'}`)
 
-  // ── 世界观 ──
+  // ── 世界观（v3 字段；v2 仅作极老项目兜底）──
   const wv = worldviews[0]
   if (wv) {
     const parts: string[] = ['## 世界观']
-    if (wv.summary) {
-      parts.push(wv.summary)
-    } else {
+    if (wv.summary) parts.push(wv.summary)
+    const v3: [string, string | undefined][] = [
+      ['世界来源', wv.worldOrigin], ['力量体系', wv.powerHierarchy],
+      ['世界结构', wv.worldStructure], ['地貌分布', wv.continentLayout],
+      ['气候环境', wv.climateByRegion], ['山川水系', wv.mountainsRivers],
+      ['世界历史线', wv.historyLine], ['世界大事记', wv.worldEvents],
+      ['种族民族', wv.races], ['势力分布', wv.factionLayout],
+      ['政经文化', wv.politicsEconomyCulture], ['矛盾冲突', wv.internalConflicts],
+    ]
+    let hasV3 = false
+    for (const [label, val] of v3) {
+      if (val) { parts.push(`**${label}**：${compress(val, 250)}`); hasV3 = true }
+    }
+    if (!hasV3 && !wv.summary) {
       if (wv.geography) parts.push(`**地理**：${compress(wv.geography, 300)}`)
-      if (wv.history) parts.push(`**历史**：${compress(wv.history, 300)}`)
       if (wv.society) parts.push(`**社会**：${compress(wv.society, 300)}`)
       if (wv.culture) parts.push(`**文化**：${compress(wv.culture, 200)}`)
       if (wv.rules) parts.push(`**规则**：${compress(wv.rules, 200)}`)

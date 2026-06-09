@@ -281,7 +281,7 @@ async function runChunk(
           outlineNodes: Array.isArray(result.outline) ? result.outline.length : 0,
         }
       } else {
-        counts = await applyChunkResult(projectId, result)
+        counts = await applyChunkResult(projectId, result, session.targetWorldGroupId ?? null)
       }
 
       // 更新 session.merged 和 rollingContext

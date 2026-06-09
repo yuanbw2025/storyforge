@@ -32,7 +32,7 @@ export interface Worldview {
   // ── v3 §2.1 新字段（全部可选，渐进填充） ─────────────────────────────────
   // 世界起源
   worldOrigin?: string                    // 世界来源（创世神话/科技起源等）
-  powerHierarchy?: string                 // 力量层次（替代独立 powerSystems 表）
+  powerHierarchy?: string                 // 力量体系（替代独立 powerSystems 表）
   divineDesign?: DivineDesign             // 神明设定
 
   // 自然环境
@@ -52,6 +52,10 @@ export interface Worldview {
   politicsEconomyCulture?: string         // 政治/经济/文化设计
   internalConflicts?: string              // 矛盾冲突设计
   itemDesign?: string                     // 道具设计（替代独立 itemSystems 表）
+
+  // ── Phase 25.4 多世界 ──
+  /** 所属世界组 ID（null/undefined = 默认主世界） */
+  worldGroupId?: number | null
 
   createdAt: number
   updatedAt: number
@@ -83,6 +87,8 @@ export interface PowerSystem {
   description: string     // 体系描述
   levels: string          // 等级列表（JSON string）
   rules: string           // 体系规则
+  /** 所属世界组 ID（Phase 25.4） */
+  worldGroupId?: number | null
   createdAt: number
   updatedAt: number
 }

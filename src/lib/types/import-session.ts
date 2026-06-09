@@ -78,6 +78,8 @@ export interface ImportSession {
   rollingContext: string
   /** 导入目标：写入当前项目 还是 项目参考 */
   importTarget: ImportTarget
+  /** 多世界项目导入当前项目时的目标世界；null = 单世界/默认归属 */
+  targetWorldGroupId?: number | null
   /** 整体状态 */
   status: ImportSessionStatus
   /** 失败时的终结错误信息 */

@@ -212,6 +212,11 @@ ${template.systemPrompt}
         {renderList('good')}
         {renderList('bad')}
       </div>
+      {ai.tokenUsage && !ai.isStreaming && (
+        <div className="mt-2 text-[10px] text-text-muted">
+          Token: ↑{ai.tokenUsage.inputTokens.toLocaleString()} ↓{ai.tokenUsage.outputTokens.toLocaleString()}
+        </div>
+      )}
       <p className="mt-3 text-xs text-text-muted">
         提示：好示例最多取前 3 条、反例最多前 2 条拼入 prompt（避免 token 浪费）。
       </p>

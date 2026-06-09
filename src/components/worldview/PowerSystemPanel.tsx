@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useWorldviewStore } from '../../stores/worldview'
+import { useWorldGroupStore } from '../../stores/world-group'
+import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import type { Project } from '../../lib/types'
 
 interface Props {
@@ -8,14 +10,15 @@ interface Props {
 
 export default function PowerSystemPanel({ project }: Props) {
   const { powerSystem, savePowerSystem, loadAll } = useWorldviewStore()
+  const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [levels, setLevels] = useState('')
   const [rules, setRules] = useState('')
 
   useEffect(() => {
-    loadAll(project.id!)
-  }, [project.id, loadAll])
+    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
 
   useEffect(() => {
     if (powerSystem) {
@@ -32,7 +35,10 @@ export default function PowerSystemPanel({ project }: Props) {
 
   return (
     <div className="max-w-3xl">
-      <h2 className="text-xl font-bold text-text-primary mb-4">⚡ 力量体系</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-text-primary">⚡ 力量体系</h2>
+        {project.enableMultiWorld && <WorldGroupSwitcher />}
+      </div>
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-text-secondary mb-1">体系名称</label>

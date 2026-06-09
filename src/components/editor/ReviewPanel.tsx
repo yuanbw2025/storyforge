@@ -128,6 +128,14 @@ export default function ReviewPanel(props: Props) {
           <div className="flex items-center justify-center py-8 gap-2 text-text-muted text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
             AI 正在分析...
+            {ai.output.length > 0 && (
+              <span className="text-xs">≈ ~{Math.round(ai.output.length * 1.5).toLocaleString()} tokens</span>
+            )}
+          </div>
+        )}
+        {ai.tokenUsage && !ai.isStreaming && (
+          <div className="text-[10px] text-text-muted mb-2" title={`输入 ${ai.tokenUsage.inputTokens} + 输出 ${ai.tokenUsage.outputTokens}`}>
+            Token: ↑{ai.tokenUsage.inputTokens.toLocaleString()} ↓{ai.tokenUsage.outputTokens.toLocaleString()}
           </div>
         )}
 

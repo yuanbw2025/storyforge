@@ -25,6 +25,8 @@ export interface OutlineNode {
   title: string
   summary: string            // 情节摘要
   order: number              // 排序
+  /** 此卷/篇章发生在哪个世界组（Phase 25.4，null = 默认主世界） */
+  worldGroupId?: number | null
   createdAt: number
   updatedAt: number
 }

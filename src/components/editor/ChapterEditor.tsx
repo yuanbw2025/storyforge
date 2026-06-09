@@ -2,10 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Save, FileText, Eye, ClipboardList, CheckSquare, Square, BookOpenCheck, ShieldCheck, StickyNote } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
-import { useWorldviewStore } from '../../stores/worldview'
-import { useCharacterStore } from '../../stores/character'
 import { useStateCardStore } from '../../stores/state-card'
-import { useEmotionBeatStore } from '../../stores/emotion-beat'
 import { useAIStream } from '../../hooks/useAIStream'
 import { CInput } from '../shared/CompositionInput'
 import { useAutoSave } from '../../hooks/useAutoSave'
@@ -13,21 +10,25 @@ import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
 import { buildStateExtractPrompt, parseStateDiffs } from '../../lib/ai/adapters/state-extract-adapter'
 import { buildSummaryPrompt } from '../../lib/ai/adapters/summary-adapter'
-import { buildWorldContext, buildCharacterContext, filterActiveCharacters, getContextMemo, buildRefAnalysisContext } from '../../lib/ai/context-builder'
 import { buildGenreConstraintContext } from '../../lib/ai/genre-metadata'
 import { buildStylePromptInjection } from '../../lib/ai/writing-styles'
-import { buildMemory, type MemoryTaskType } from '../../lib/ai/memory-builder'
+import type { MemoryTaskType } from '../../lib/ai/memory-builder'
+import { assembleContext } from '../../lib/registry/assemble-context'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
 import { useStoryArcStore } from '../../stores/story-arc'
 import { useForeshadowStore } from '../../stores/foreshadow'
 import { htmlToPlainText, plainTextToHtml, countWords } from '../../lib/utils/html'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import ContextBudgetBar from '../shared/ContextBudgetBar'
+import { useAIConfigStore } from '../../stores/ai-config'
+import { analyzeContextSegments, calculateBudget, type ContextBudget } from '../../lib/ai/context-budget'
 import StateDiffModal from '../state/StateDiffModal'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
 import EmotionBeatCard from './EmotionBeatCard'
 import OutlinePreview from '../outline/OutlinePreview'
 import ReviewPanel from './ReviewPanel'
 import NotePanel from './NotePanel'
+import FloatingToolbar from './FloatingToolbar'
 import type { Project, StateDiffItem } from '../../lib/types'
 
 interface Props {
@@ -38,12 +39,9 @@ interface Props {
 export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const { chapters, currentChapter, selectChapter, addChapter, updateChapter, loadAll: loadChapters } = useChapterStore()
   const { nodes } = useOutlineStore()
-  const { worldview, storyCore, powerSystem } = useWorldviewStore()
-  const { characters } = useCharacterStore()
   const { cards: stateCards, loadAll: loadStateCards, buildStateContext, buildSelectiveStateContext, applyDiffs } = useStateCardStore()
-  const { buildBeatContext } = useEmotionBeatStore()
   const { creativeRules } = useCreativeRulesStore()
-  const { buildStoryArcContext, loadAll: loadArcs } = useStoryArcStore()
+  const { loadAll: loadArcs } = useStoryArcStore()
   const { buildForeshadowContext, loadAll: loadForeshadows } = useForeshadowStore()
 
   // content 为 HTML 字符串；旧数据是纯文本，RichEditor 内部会自动包装
@@ -67,6 +65,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [showOutlinePreview, setShowOutlinePreview] = useState(false)
   const [showReviewPanel, setShowReviewPanel] = useState(false)
   const [showNotePanel, setShowNotePanel] = useState(false)
+  const [contextBudget, setContextBudget] = useState<ContextBudget | null>(null)
+  const aiConfig = useAIConfigStore(s => s.config)
 
   // 字数（基于纯文本）
   const wordCount = useMemo(() => countWords(plainText), [plainText])
@@ -119,11 +119,39 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }, [currentChapter?.id, updateChapter]))
 
   const outlineNode = currentChapter ? nodes.find(n => n.id === currentChapter.outlineNodeId) : null
-  const memo = getContextMemo(project.id!)
-  const worldCtx = [memo, buildWorldContext(worldview, storyCore, powerSystem)].filter(Boolean).join('\n\n')
-  // Phase G2: 过滤活跃角色
-  const activeChars = filterActiveCharacters(characters, currentChapter?.id)
-  const charCtx = buildCharacterContext(activeChars)
+  // 多世界：沿父链找到所属卷的 worldGroupId
+  const chapterWorldGroupId = useMemo(() => {
+    if (!project.enableMultiWorld || !outlineNode) return null
+    let cur: typeof outlineNode | undefined = outlineNode
+    const guard = new Set<number>()
+    while (cur && !guard.has(cur.id!)) {
+      if (cur.worldGroupId != null) return cur.worldGroupId
+      guard.add(cur.id!)
+      cur = cur.parentId != null ? nodes.find(n => n.id === cur!.parentId) : undefined
+    }
+    return null
+  }, [project.enableMultiWorld, outlineNode, nodes])
+
+  const [worldCtx, setWorldCtx] = useState('')
+  const [charCtx, setCharCtx] = useState('')
+  useEffect(() => {
+    let cancelled = false
+    assembleContext({
+      projectId: project.id!,
+      worldGroupId: chapterWorldGroupId ?? null,
+      outlineNodeId: outlineNode?.id ?? null,
+      chapterId: currentChapter?.id ?? null,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+      sourceKeys: ['contextMemo', 'chapterOutline', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+    }).then(assembled => {
+      if (cancelled) return
+      const charIdx = assembled.included.indexOf('characters')
+      setWorldCtx(assembled.text)
+      setCharCtx(charIdx >= 0 ? assembled.segments[charIdx]?.content ?? '' : '')
+    })
+    return () => { cancelled = true }
+  }, [project.id, chapterWorldGroupId, outlineNode?.id, currentChapter?.id, aiConfig.provider, aiConfig.model])
 
   // A2: 按需召回 — 根据章节大纲+标题+已有文本筛选相关状态卡
   const selectiveState = useMemo(() => {
@@ -151,78 +179,109 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   // AI 操作 —— 所有 AI 交互都基于纯文本
   // Phase A2: 使用三层记忆构建器生成完整上下文
   const buildFullWorldCtx = async (taskType: MemoryTaskType = 'write') => {
-    // 情感节拍上下文
-    let emotionBeatCtx = ''
-    if (currentChapter?.id) {
-      const beatCtx = buildBeatContext(currentChapter.id)
-      if (beatCtx) emotionBeatCtx = beatCtx
-    }
-
     // 引用手法注入（Phase 20）
-    let refCtx = ''
+    let citedIds: number[] = []
     try {
-      const citedIds: number[] = JSON.parse(creativeRules?.citedReferenceIds || '[]')
-      if (citedIds.length) {
-        refCtx = await buildRefAnalysisContext(citedIds)
-      }
+      citedIds = JSON.parse(creativeRules?.citedReferenceIds || '[]')
     } catch { /* ignore */ }
 
-    // Phase B3: 注入故事线上下文
-    const storyArcCtx = buildStoryArcContext(currentChapter?.order)
+    // 大师洞察注入（Phase 19-d）
+    let insightIds: number[] = []
+    try {
+      insightIds = JSON.parse(creativeRules?.citedInsightIds || '[]')
+    } catch { /* ignore */ }
 
-    // Phase C2: 伏笔上下文注入
-    const foreshadowCtx = currentChapter?.id ? buildForeshadowContext(currentChapter.id) : ''
+    const stateRef = [
+      outlineNode?.title,
+      outlineNode?.summary,
+      currentChapter?.title,
+      plainText.slice(-2000),
+    ].filter(Boolean).join(' ')
 
-    const memory = await buildMemory({
-      taskType,
-      working: {
-        currentOutline: outlineNode ? { title: outlineNode.title, summary: outlineNode.summary } : null,
-        emotionBeatContext: emotionBeatCtx,
-        projectId: project.id!,
-        currentChapterOrder: currentChapter?.order ?? 0,
-      },
-      episodic: {
-        stateCards,
-        currentChapterId: currentChapter?.id,
-      },
-      semantic: {
-        worldContext: worldCtx,
-        characterContext: charCtx,
-        openForeshadows: foreshadowCtx || undefined,
-        storyArcContext: storyArcCtx || undefined,
-      },
+    const assembled = await assembleContext({
+      projectId: project.id!,
+      worldGroupId: chapterWorldGroupId ?? null,
+      outlineNodeId: outlineNode?.id ?? null,
+      chapterId: currentChapter?.id ?? null,
+      currentChapterOrder: currentChapter?.order ?? 0,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+      citedReferenceIds: citedIds,
+      masterInsightIds: insightIds,
+      stateReferenceText: stateRef,
+      extraStateIds,
+      sourceKeys: [
+        'contextMemo',
+        'chapterOutline',
+        'worldview',
+        'storyCore',
+        'powerSystem',
+        'codex',
+        'characters',
+        'creativeRules',
+        'worldRules',
+        'historical',
+        'locations',
+        'foreshadows',
+        'storyArcs',
+        'emotionBeats',
+        'stateCards',
+        'references',
+        'masterInsights',
+      ],
     })
 
-    console.log(`[MemoryBuilder] ${taskType} 模式 — W:${memory.stats.working} E:${memory.stats.episodic} S:${memory.stats.semantic} Total:${memory.stats.total}`)
+    console.log(`[assembleContext] ${taskType} 模式 — included:${assembled.included.join(',')} trimmed:${assembled.trimmed.join(',') || 'none'} tokens:${assembled.totalInputTokens}`)
 
     // Phase E: 题材约束 + 写作风格注入
     const genreCtx = buildGenreConstraintContext(project.genre)
     const styleCtx = project.writingStyleId ? buildStylePromptInjection(project.writingStyleId) : ''
 
-    // 引用手法追加到末尾（不计入三层记忆预算）
-    const parts = [memory.fullContext]
+    const parts = [assembled.text]
     if (genreCtx) parts.push(genreCtx)
     if (styleCtx) parts.push(styleCtx)
-    if (refCtx) parts.push(refCtx)
-    return parts.filter(Boolean).join('\n\n')
+    const worldRulesIdx = assembled.included.indexOf('worldRules')
+    return {
+      text: parts.filter(Boolean).join('\n\n'),
+      segments: assembled.segments,
+      worldRulesContext: worldRulesIdx >= 0 ? assembled.segments[worldRulesIdx]?.content ?? '' : '',
+    }
   }
 
   const handleGenerate = async () => {
     if (!outlineNode) return
     const prevChapter = chapters.filter(c => c.order < (currentChapter?.order || 0)).pop()
     const prevEnding = htmlToPlainText(prevChapter?.content || '').slice(-500)
-    const fullCtx = await buildFullWorldCtx('write')
-    const messages = buildChapterContentPrompt(outlineNode.title, outlineNode.summary, fullCtx, charCtx, prevEnding)
+    const { text: fullCtx, segments: assembledSegments, worldRulesContext } = await buildFullWorldCtx('write')
+    const messages = buildChapterContentPrompt(
+      outlineNode.title,
+      outlineNode.summary,
+      fullCtx,
+      charCtx,
+      prevEnding,
+      worldRulesContext,
+    )
+
+    // Phase 21.3: 计算上下文预算
+    const segments = analyzeContextSegments([
+      { label: 'System Prompt', content: messages.find(m => m.role === 'system')?.content || '', layer: 'L0' },
+      { label: '章节大纲', content: outlineNode.summary || '', layer: 'L1' },
+      { label: '前文结尾', content: prevEnding, layer: 'L1' },
+      ...assembledSegments,
+      { label: 'User Prompt', content: messages.find(m => m.role === 'user')?.content || '', layer: 'L1' },
+    ])
+    setContextBudget(calculateBudget(aiConfig.provider, aiConfig.model, segments))
+
     setAIAction('generate')
-    ai.start(messages)
+    ai.start(messages, undefined, { category: 'chapter.content', projectId: project.id! })
   }
 
   const handleContinue = async () => {
     if (!plainText || !outlineNode) return
-    const fullCtx = await buildFullWorldCtx('write')
+    const { text: fullCtx } = await buildFullWorldCtx('write')
     const messages = buildContinuePrompt(plainText, outlineNode.summary, fullCtx)
     setAIAction('continue')
-    ai.start(messages)
+    ai.start(messages, undefined, { category: 'chapter.continue', projectId: project.id! })
   }
 
   const handlePolish = () => {
@@ -230,7 +289,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!selected) return
     const messages = buildPolishPrompt(selected, customInstruction || '优化文笔，使表达更生动')
     setAIAction('polish')
-    ai.start(messages)
+    ai.start(messages, undefined, { category: 'chapter.polish', projectId: project.id! })
   }
 
   const handleExpand = () => {
@@ -238,7 +297,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!selected) return
     const messages = buildExpandPrompt(selected)
     setAIAction('expand')
-    ai.start(messages)
+    ai.start(messages, undefined, { category: 'chapter.expand', projectId: project.id! })
   }
 
   const handleDeAI = () => {
@@ -246,7 +305,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!selected) return
     const messages = buildDeAIPrompt(selected)
     setAIAction('deai')
-    ai.start(messages)
+    ai.start(messages, undefined, { category: 'chapter.deai', projectId: project.id! })
   }
 
   // ── 状态提取 ──
@@ -254,11 +313,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!currentChapter || !plainText) return
     setExtracting(true)
     try {
-      const stateCtx = buildStateContext()
+      const stateCtx = buildSelectiveStateContext(plainText, extraStateIds).text
       const chapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
       const messages = buildStateExtractPrompt(stateCtx, chapterTitle, plainText)
       console.log('[StateExtract] 开始提取，章节:', chapterTitle)
-      const raw = await stateAI.start(messages)
+      const raw = await stateAI.start(messages, undefined, { category: 'state.extract', projectId: project.id! })
       const { diffs, error } = parseStateDiffs(raw)
       if (error) {
         console.error('[StateExtract] 解析失败:', error)
@@ -290,7 +349,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const chapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
       const messages = buildSummaryPrompt(chapterTitle, text)
       console.log('[Summary] 自动生成章节摘要:', chapterTitle)
-      const raw = await summaryAI.start(messages)
+      const raw = await summaryAI.start(messages, undefined, { category: 'summary', projectId: project.id! })
       if (raw) {
         const summary = raw.trim()
         await updateChapter(currentChapter.id, { summary })
@@ -310,11 +369,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     // 1. 自动提取状态
     setAutoProcessing('extracting')
     try {
-      const stateCtx = buildStateContext()
+      const stateCtx = buildSelectiveStateContext(text, extraStateIds).text
       const chapterTitle = outlineNode?.title || currentChapter?.title || '未知章节'
       const messages = buildStateExtractPrompt(stateCtx, chapterTitle, text)
       console.log('[AutoPost] 自动提取状态:', chapterTitle)
-      const raw = await stateAI.start(messages)
+      const raw = await stateAI.start(messages, undefined, { category: 'state.extract', projectId: project.id! })
       const { diffs, error } = parseStateDiffs(raw)
       if (error) {
         console.error('[AutoPost] 状态提取解析失败:', error)
@@ -604,6 +663,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         />
       )}
 
+      {/* Phase 21.3: 上下文预算条 */}
+      {contextBudget && (
+        <div className="mb-2">
+          <ContextBudgetBar budget={contextBudget} compact={ai.isStreaming} />
+        </div>
+      )}
+
       {(ai.output || ai.isStreaming || ai.error) && (
         <div className="mb-3">
           <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
@@ -643,6 +709,20 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         }}
         placeholder="开始写作..."
         minHeight={400}
+      />
+
+      {/* Phase 24.3: 选中文本浮动工具栏 */}
+      <FloatingToolbar
+        getSelectedText={() => editorRef.current?.getSelectedText() || ''}
+        getSelectionRect={() => {
+          const sel = window.getSelection()
+          if (!sel || sel.isCollapsed || !sel.rangeCount) return null
+          return sel.getRangeAt(0).getBoundingClientRect()
+        }}
+        replaceSelectedText={(text) => {
+          editorRef.current?.replaceSelection(text)
+        }}
+        disabled={ai.isStreaming}
       />
 
       {/* 作者笔记 */}

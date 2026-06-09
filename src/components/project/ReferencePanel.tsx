@@ -10,7 +10,6 @@ import type {
   Project, Reference, ReferenceType,
   ReferenceChunkAnalysis, ReferenceAnalysisDepth,
 } from '../../lib/types'
-import { DIMENSION_LABELS, ANALYSIS_DIMENSIONS } from '../../lib/types/reference'
 import type { WritingTechniques } from '../../lib/types/import-session-data'
 import {
   planRefChunks,
@@ -19,18 +18,20 @@ import {
   cancelRefAnalysisPipeline,
   setRefAnalysisPipelineListener,
 } from '../../lib/reference-analysis/pipeline'
+import AnalysisReportViewer from './AnalysisReportViewer'
 
 // ── 常量 ─────────────────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<ReferenceType, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   story: { label: '故事参考', icon: BookMarked, color: 'text-accent bg-accent/10 border-accent/30' },
   style: { label: '风格参考', icon: Palette,   color: 'text-purple-400 bg-purple-500/10 border-purple-400/30' },
+  historical: { label: '历史资料', icon: Library, color: 'text-amber-500 bg-amber-500/10 border-amber-500/30' },
 }
 
 /** 世界观字段 → 中文标签映射 */
 const WV_LABELS: Record<string, string> = {
   worldOrigin: '世界来源',
-  powerHierarchy: '力量层次',
+  powerHierarchy: '力量体系',
   worldStructure: '世界结构',
   worldDimensions: '世界尺寸',
   continentLayout: '大陆分布',
@@ -110,7 +111,7 @@ export default function ReferencePanel({ project }: Props) {
 
         {/* 筛选 tabs */}
         <div className="flex gap-1 bg-bg-elevated rounded-lg p-1">
-          {([['all', '全部', references.length], ['story', '故事', storyCount], ['style', '风格', styleCount]] as const).map(
+          {([['all', '全部', references.length], ['story', '故事', storyCount], ['style', '风格', styleCount], ['historical', '历史', references.filter(r => r.type === 'historical').length]] as const).map(
             ([v, l, c]) => (
               <button
                 key={v}
@@ -194,6 +195,7 @@ export default function ReferencePanel({ project }: Props) {
             <div className="text-xs text-text-muted/60 text-center max-w-xs space-y-0.5">
               <p>· <span className="text-accent">故事参考</span>：借鉴情节结构、世界观框架</p>
               <p>· <span className="text-purple-400">风格参考</span>：借鉴文风、叙事节奏</p>
+              <p>· <span className="text-amber-500">历史资料</span>：考证历史背景、社会制度、日常生活细节</p>
               <p>· <span className="text-blue-400">导入参考</span>：通过「导入」解析文档自动填充</p>
             </div>
           </div>
@@ -348,6 +350,20 @@ function InfoTab({
         <span className="w-16 shrink-0 text-xs text-text-muted pt-0.5 text-right">作者</span>
         <div className="flex-1 min-w-0">
           <InlineInput value={reference.author} onChange={v => onUpdate({ author: v })} placeholder="点击填写作者…" className="text-sm text-text-primary" />
+        </div>
+      </div>
+      <div className="flex gap-4 py-3">
+        <span className="w-16 shrink-0 text-xs text-text-muted pt-0.5 text-right">类型</span>
+        <div className="flex-1 min-w-0">
+          <select
+            value={reference.type}
+            onChange={e => onUpdate({ type: e.target.value as ReferenceType })}
+            className="bg-bg-elevated border border-border rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent"
+          >
+            <option value="story">故事参考</option>
+            <option value="style">风格参考</option>
+            <option value="historical">历史资料</option>
+          </select>
         </div>
       </div>
       <div className="flex gap-4 py-3">
@@ -574,14 +590,26 @@ function DeepAnalysisTab({
 
   const isAnalyzing = status === 'analyzing' || running
 
+  const isHistorical = reference.type === 'historical'
+
   return (
     <div className="space-y-4">
       {/* 说明 */}
       <div className="bg-bg-elevated rounded-lg p-3 text-xs text-text-muted leading-relaxed">
         <Microscope className="w-4 h-4 inline mr-1.5 text-accent" />
-        上传优秀网文 / 小说样本，让 AI 从
-        <span className="text-accent font-medium"> 叙事架构、开篇技法、情节节奏、人物塑造、冲突升级、伏笔悬念、文笔对话、世界观构建 </span>
-        八个维度提炼创作方法论。分析结果永久保留在浏览器本地，创作时可「引用手法」注入 AI prompt 上下文。
+        {isHistorical ? (
+          <>
+            上传历史文献、考证资料或学术论文，让 AI 从
+            <span className="text-amber-500 font-medium"> 历史背景、社会制度、日常生活、物质文化、语言习惯 </span>
+            等维度提炼最地道的时代细节。分析结果永久保留在浏览器本地，创作时可「引用手法」注入 AI prompt 上下文。
+          </>
+        ) : (
+          <>
+            上传优秀网文 / 小说样本，让 AI 从
+            <span className="text-accent font-medium"> 叙事架构、开篇技法、情节节奏、人物塑造、冲突升级、伏笔悬念、文笔对话、世界观构建 </span>
+            八个维度提炼创作方法论。分析结果永久保留在浏览器本地，创作时可「引用手法」注入 AI prompt 上下文。
+          </>
+        )}
       </div>
 
       {/* 操作区 */}
@@ -689,104 +717,9 @@ function DeepAnalysisTab({
         </div>
       )}
 
-      {/* 分块分析结果 */}
+      {/* 分块分析结果（结构化报告） */}
       {chunks.length > 0 && !isAnalyzing && (
-        <ChunkAnalysisViewer chunks={chunks} />
-      )}
-    </div>
-  )
-}
-
-/** 分块分析查看器 —— 可切换块 + 按维度展示 */
-function ChunkAnalysisViewer({ chunks }: { chunks: ReferenceChunkAnalysis[] }) {
-  const [selectedChunk, setSelectedChunk] = useState(0)
-  const [expandedDims, setExpandedDims] = useState<Set<string>>(new Set(ANALYSIS_DIMENSIONS))
-
-  const chunk = chunks[selectedChunk]
-  if (!chunk) return null
-
-  const toggleDim = (dim: string) => {
-    setExpandedDims(prev => {
-      const next = new Set(prev)
-      if (next.has(dim)) next.delete(dim)
-      else next.add(dim)
-      return next
-    })
-  }
-
-  const dimColors: Record<string, string> = {
-    narrativeStructure: 'text-blue-400 border-blue-400/30',
-    openingTechnique:   'text-amber-400 border-amber-400/30',
-    plotRhythm:         'text-green-400 border-green-400/30',
-    characterCraft:     'text-purple-400 border-purple-400/30',
-    conflictEscalation: 'text-red-400 border-red-400/30',
-    foreshadowing:      'text-cyan-400 border-cyan-400/30',
-    proseAndDialogue:   'text-pink-400 border-pink-400/30',
-    worldBuilding:      'text-teal-400 border-teal-400/30',
-  }
-
-  return (
-    <div className="space-y-3">
-      {/* 块选择器 */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-text-muted">分块：</span>
-        <div className="flex flex-wrap gap-1">
-          {chunks.map((c, i) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedChunk(i)}
-              className={`px-2 py-0.5 text-xs rounded transition-colors ${
-                i === selectedChunk
-                  ? 'bg-accent text-white'
-                  : 'bg-bg-elevated text-text-muted hover:text-text-secondary'
-              }`}
-            >
-              {c.label || `块 ${i + 1}`}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 八维内容 */}
-      <div className="space-y-1">
-        {ANALYSIS_DIMENSIONS.map(dim => {
-          const content = chunk[dim]
-          if (!content || content === '本块未涉及') return null
-          const isExpanded = expandedDims.has(dim)
-          const colorClass = dimColors[dim] || 'text-text-muted border-border'
-
-          return (
-            <div key={dim} className="border border-border/40 rounded-lg overflow-hidden">
-              <button
-                onClick={() => toggleDim(dim)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-bg-hover transition-colors"
-              >
-                {isExpanded
-                  ? <ChevronDown className="w-3.5 h-3.5 text-text-muted shrink-0" />
-                  : <ChevronRight className="w-3.5 h-3.5 text-text-muted shrink-0" />
-                }
-                <span className={`text-xs font-medium ${colorClass.split(' ')[0]}`}>
-                  {DIMENSION_LABELS[dim]}
-                </span>
-              </button>
-              {isExpanded && (
-                <div className="px-3 pb-3 text-sm text-text-primary leading-relaxed whitespace-pre-wrap">
-                  {content}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* 精彩片段 */}
-      {chunk.rawExcerpt && (
-        <div className="border border-border/40 rounded-lg p-3">
-          <h4 className="text-xs font-medium text-text-muted mb-1.5">精彩片段引用</h4>
-          <div className="text-sm text-text-secondary italic leading-relaxed whitespace-pre-wrap">
-            {chunk.rawExcerpt}
-          </div>
-        </div>
+        <AnalysisReportViewer reference={reference} chunks={chunks} isHistorical={isHistorical} />
       )}
     </div>
   )

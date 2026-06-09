@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Square, Check, RotateCcw, Loader2, ThumbsUp, ThumbsDown } from 'lucide-react'
+import { Square, Check, RotateCcw, Loader2, ThumbsUp, ThumbsDown, Braces, ChevronDown, ChevronRight } from 'lucide-react'
 import { usePromptStore } from '../../stores/prompt'
 import type { PromptModuleKey, PromptExample } from '../../lib/types/prompt'
 import type { TokenUsage } from '../../lib/ai/logger'
@@ -42,6 +42,13 @@ export default function AIStreamOutput({
 }: AIStreamOutputProps) {
   const hasOutput = output.length > 0
   const [marked, setMarked] = useState<'good' | 'bad' | null>(null)
+  const [showRaw, setShowRaw] = useState(false)
+
+  // 检测是否结构化输出（JSON）——这类内容是给程序解析的，不该让用户直接读原始 JSON
+  const trimmed = output.trimStart()
+  const isStructured = hasOutput && (
+    trimmed.startsWith('{') || trimmed.startsWith('[') || /^```(?:json)?\s*[[{]/.test(trimmed)
+  )
 
   /** 把当前输出存为模板的好/坏示例 */
   const handleMark = async (kind: 'good' | 'bad') => {
@@ -62,6 +69,11 @@ export default function AIStreamOutput({
     await usePromptStore.getState().saveTemplate({ ...tpl, examples: updated })
     setMarked(kind)
   }
+
+  // Phase 21.1: 生成中 token 估算（中文 ≈ 1.5 token/字，英文 ≈ 1.3 token/word）
+  const estimatedOutputTokens = isStreaming && !tokenUsage && output.length > 0
+    ? Math.round(output.length * 1.5)
+    : null
 
   return (
     <div className="border border-border rounded-lg overflow-hidden border-l-2 border-l-accent">
@@ -85,6 +97,30 @@ export default function AIStreamOutput({
               </p>
             )}
           </div>
+        ) : isStructured ? (
+          // 结构化（JSON）输出：不直接展示原始 JSON，给友好提示 + 可折叠原文
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-text-secondary">
+              <Braces className="w-4 h-4 text-accent shrink-0" />
+              {isStreaming ? (
+                <span className="flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> AI 正在生成结构化内容…（完成后点「采纳」自动整理为可编辑内容）
+                </span>
+              ) : (
+                <span>✓ 已生成结构化内容，点「采纳」自动整理填入对应栏目。</span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowRaw(v => !v)}
+              className="flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary transition-colors"
+            >
+              {showRaw ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              {showRaw ? '收起原始数据' : '查看原始数据'}
+            </button>
+            {showRaw && (
+              <pre className="text-xs text-text-muted bg-bg-base/50 rounded p-2 overflow-x-auto whitespace-pre-wrap max-h-60">{output}</pre>
+            )}
+          </div>
         ) : hasOutput ? (
           <div className="text-text-primary text-sm leading-relaxed whitespace-pre-wrap">
             {output}
@@ -106,11 +142,15 @@ export default function AIStreamOutput({
       <div className="flex items-center justify-between px-4 py-2 bg-bg-elevated border-t border-border">
         <span className="text-text-muted text-xs flex items-center gap-2">
           {hasOutput && <span>{output.length} 字</span>}
-          {tokenUsage && (
+          {tokenUsage ? (
             <span title={`输入 ${tokenUsage.inputTokens} + 输出 ${tokenUsage.outputTokens}`}>
               Token: ↑{tokenUsage.inputTokens.toLocaleString()} ↓{tokenUsage.outputTokens.toLocaleString()}
             </span>
-          )}
+          ) : estimatedOutputTokens ? (
+            <span className="text-text-muted" title="基于字数估算，精确值在生成完成后显示">
+              ≈ 输出 ~{estimatedOutputTokens.toLocaleString()} tokens
+            </span>
+          ) : null}
         </span>
         <div className="flex items-center gap-2">
           {isStreaming ? (

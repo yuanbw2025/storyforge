@@ -29,7 +29,7 @@ export const SYSTEM_WORKFLOW_SEEDS: WorkflowSeed[] = [
         label: '世界起源',
         promptModuleKey: 'worldview.dimension',
         inputMapping: { previousOutput: 'storyCore' },
-        userHint: '基于上一步的故事核心，构思世界的来源和力量层次',
+        userHint: '基于上一步的故事核心，构思世界的来源和力量体系',
         userConfirmRequired: true,
         saveTarget: { type: 'worldview-field', field: 'worldOrigin', mode: 'replace' },
       },

@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight, MapPin, GitBranch, List, Sparkles, Image, Copy, Check, Loader2 } from 'lucide-react'
 import { useGeographyStore } from '../../stores/project-singletons'
+import { useWorldGroupStore } from '../../stores/world-group'
+import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildConceptMapPrompt, buildImageMapPrompt } from '../../lib/ai/adapters/geography-adapter'
 import type { Project, Location, LocationType } from '../../lib/types'
 import { nanoid } from '../../lib/utils/id'
+import { sanitizeSvg } from '../../lib/utils/sanitize-svg'
 import LocationTreeMap from './LocationTreeMap'
 
 const LOCATION_TYPES: { value: LocationType; label: string }[] = [
@@ -20,12 +23,25 @@ const LOCATION_TYPES: { value: LocationType; label: string }[] = [
   { value: 'other', label: '其他' },
 ]
 
+export function removeLocationSubtree(locations: Location[], id: string): Location[] {
+  const toDelete = new Set<string>()
+  const collect = (parentId: string) => {
+    toDelete.add(parentId)
+    for (const loc of locations) {
+      if (loc.parentId === parentId) collect(loc.id)
+    }
+  }
+  collect(id)
+  return locations.filter(l => !toDelete.has(l.id))
+}
+
 interface Props {
   project: Project
 }
 
 export default function GeographyPanel({ project }: Props) {
   const { geography, loadAll, save } = useGeographyStore()
+  const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const [overview, setOverview] = useState('')
   const [locations, setLocations] = useState<Location[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -36,8 +52,8 @@ export default function GeographyPanel({ project }: Props) {
   const ai = useAIStream()
 
   useEffect(() => {
-    loadAll(project.id!)
-  }, [project.id, loadAll])
+    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
 
   useEffect(() => {
     if (geography) {
@@ -83,8 +99,7 @@ export default function GeographyPanel({ project }: Props) {
   }
 
   const handleDeleteLocation = (id: string) => {
-    const updated = locations.filter(l => l.id !== id && l.parentId !== id)
-    saveLocations(updated)
+    saveLocations(removeLocationSubtree(locations, id))
   }
 
   // AI 概念地图
@@ -98,7 +113,8 @@ export default function GeographyPanel({ project }: Props) {
       .replace(/^```(?:svg|xml)?\n?/i, '')
       .replace(/\n?```$/i, '')
       .trim()
-    setSvgContent(svg)
+    // 安全清洗：AI 输出的 SVG 直接 dangerouslySetInnerHTML 渲染，须剔除脚本/事件防 XSS
+    setSvgContent(sanitizeSvg(svg))
   }
 
   // AI 图像 prompt
@@ -115,7 +131,10 @@ export default function GeographyPanel({ project }: Props) {
 
   return (
     <div className="max-w-4xl">
-      <h2 className="text-xl font-bold text-text-primary mb-4">🗺️ 地理环境</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-text-primary">🗺️ 地理环境</h2>
+        {project.enableMultiWorld && <WorldGroupSwitcher />}
+      </div>
 
       {/* 总述 */}
       <div className="mb-6">
@@ -203,6 +222,14 @@ export default function GeographyPanel({ project }: Props) {
             <div className="flex items-center gap-2 text-text-muted text-sm py-8 justify-center">
               <Loader2 className="w-4 h-4 animate-spin" />
               AI 正在绘制地图...
+              {ai.output.length > 0 && (
+                <span className="text-xs">≈ ~{Math.round(ai.output.length * 1.5).toLocaleString()} tokens</span>
+              )}
+            </div>
+          )}
+          {ai.tokenUsage && !ai.isStreaming && (
+            <div className="text-[10px] text-text-muted mb-2">
+              Token: ↑{ai.tokenUsage.inputTokens.toLocaleString()} ↓{ai.tokenUsage.outputTokens.toLocaleString()}
             </div>
           )}
           {ai.error && (
@@ -260,7 +287,7 @@ export default function GeographyPanel({ project }: Props) {
                 {/* 展开编辑 */}
                 {isExpanded && (
                   <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs text-text-muted mb-1">名称</label>
                         <input
@@ -278,6 +305,19 @@ export default function GeographyPanel({ project }: Props) {
                         >
                           {LOCATION_TYPES.map(t => (
                             <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-text-muted mb-1">上级地点</label>
+                        <select
+                          value={loc.parentId ?? ''}
+                          onChange={e => handleUpdateLocation(loc.id, { parentId: e.target.value || null })}
+                          className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
+                        >
+                          <option value="">（顶级）</option>
+                          {locations.filter(l => l.id !== loc.id).map(l => (
+                            <option key={l.id} value={l.id}>{l.name}</option>
                           ))}
                         </select>
                       </div>

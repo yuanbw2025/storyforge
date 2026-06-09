@@ -2,6 +2,7 @@ import { CTextarea } from '../shared/CompositionInput'
 import { useState } from 'react'
 import { Save, X, ChevronDown } from 'lucide-react'
 import { useProjectStore } from '../../stores/project'
+import { useWorldGroupStore } from '../../stores/world-group'
 import type { Project } from '../../lib/types'
 import { GENRE_OPTIONS } from '../../lib/types'
 
@@ -170,6 +171,41 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
             onChange={(e) => setForm({ ...form, targetWordCount: Number(e.target.value) })}
             className="w-full accent-accent"
           />
+        </div>
+
+        {/* 多世界开关 */}
+        <div className="p-4 bg-bg-surface border border-border rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                🌐 多世界模式
+              </div>
+              <p className="text-xs text-text-muted mt-0.5">
+                适用于诸天流/无限流/快穿/修仙多界等题材，开启后可为每个世界创建独立的世界观、力量体系、地理和角色设定
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                if (!project.id) return
+                const next = !project.enableMultiWorld
+                // 开启时：确保主世界组 + 把现有项目级数据归属到主世界组
+                if (next) {
+                  await useWorldGroupStore.getState().migrateToMultiWorld(project.id)
+                }
+                await updateProject(project.id, { enableMultiWorld: next })
+                onUpdate({ ...project, enableMultiWorld: next, updatedAt: Date.now() })
+              }}
+              className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ml-4 ${
+                project.enableMultiWorld ? 'bg-accent' : 'bg-border'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                  project.enableMultiWorld ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
         </div>
 
         <div className="pt-4 border-t border-border">

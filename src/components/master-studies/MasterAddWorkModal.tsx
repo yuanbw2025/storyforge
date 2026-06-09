@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import {
   X, Upload, FileText, AlertTriangle, Sparkles, Loader2,
-  Wand2, Info,
+  Wand2, Info, Coins,
 } from 'lucide-react'
 import {
   extractTextFromFile, ACCEPT_ATTR, FILE_LIMIT_HINTS,
@@ -10,7 +10,10 @@ import {
   planMasterChunks,
   registerMasterChunks,
   runMasterAnalysis,
+  saveMasterBlob,
+  DEPTH_PRESET,
 } from '../../lib/master-study/pipeline'
+import { estimateCost } from '../../lib/master-study/model-resolver'
 import { useMasterStudyStore } from '../../stores/master-study'
 import type { MasterAnalysisDepth } from '../../lib/types/master-study'
 
@@ -76,6 +79,7 @@ export default function MasterAddWorkModal({ projectId, onClose, onStarted }: Pr
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
+  const fileRef = useRef<File | null>(null)
 
   // 分块预览
   const preview = useMemo(() => {
@@ -91,6 +95,7 @@ export default function MasterAddWorkModal({ projectId, onClose, onStarted }: Pr
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f) return
+    fileRef.current = f
     setFileError(null)
     setExtractInfo(null)
     setFilename(f.name)
@@ -145,6 +150,11 @@ export default function MasterAddWorkModal({ projectId, onClose, onStarted }: Pr
       })
       // 把分块原文注册进内存（pipeline 会用）
       registerMasterChunks(workId, preview.chunks)
+      // Blob 持久化（Phase 19-c）：关浏览器后可从 DB 恢复原文续跑
+      if (fileRef.current) {
+        saveMasterBlob(workId, fileRef.current.name, fileRef.current, preview.fileHash)
+          .catch(err => console.warn('[master] Blob 保存失败（不影响本次分析）：', err))
+      }
       // 立即启动分析（不 await，让父级 UI 先拿到 workId 跳转）
       runMasterAnalysis({ workId }).catch(err => {
         console.error('[master] runMasterAnalysis 崩了：', err)
@@ -155,6 +165,53 @@ export default function MasterAddWorkModal({ projectId, onClose, onStarted }: Pr
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // 费用预估子组件
+  const CostEstimateBar = ({ totalChars, chunkCount, depth: d }: {
+    totalChars: number; chunkCount: number; depth: MasterAnalysisDepth
+  }) => {
+    const est = useMemo(() => {
+      try {
+        return estimateCost(totalChars, chunkCount, DEPTH_PRESET[d].maxTokens)
+      } catch {
+        return null
+      }
+    }, [totalChars, chunkCount, d])
+
+    if (!est) return null
+
+    return (
+      <div className="flex items-start gap-1.5 px-2 py-1.5 bg-bg-base/60 rounded border border-border/50">
+        <Coins className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-text-primary font-medium">费用预估</span>
+            <span className="text-text-muted">·</span>
+            <span className="text-text-muted">{est.label}</span>
+          </div>
+          <div className="mt-0.5 text-[11px] text-text-muted">
+            预计消耗：↑{(est.estimatedInputTokens / 10000).toFixed(1)} 万 + ↓{(est.estimatedOutputTokens / 10000).toFixed(1)} 万 token
+            {est.isFree && (
+              <span className="ml-1.5 text-green-400 font-medium">免费</span>
+            )}
+            {!est.isFree && est.estimatedCostYuan !== null && (
+              <span className={`ml-1.5 font-medium ${est.estimatedCostYuan > 1 ? 'text-amber-400' : 'text-green-400'}`}>
+                ≈ ¥{est.estimatedCostYuan.toFixed(2)}
+              </span>
+            )}
+            {est.estimatedCostYuan === null && !est.isFree && (
+              <span className="ml-1.5 text-text-muted">（无法估算价格）</span>
+            )}
+          </div>
+          {est.estimatedCostYuan !== null && est.estimatedCostYuan > 2 && (
+            <p className="mt-1 text-[11px] text-amber-400">
+              💡 费用较高，建议在「学习设置」中切换到更便宜的模型（如 DeepSeek Flash / GLM Flash）
+            </p>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -300,9 +357,9 @@ export default function MasterAddWorkModal({ projectId, onClose, onStarted }: Pr
             </div>
           </section>
 
-          {/* Step 4：预览 */}
+          {/* Step 4：预览 + 费用估算 */}
           {preview && (
-            <section className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2.5 text-xs text-text-secondary">
+            <section className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2.5 text-xs text-text-secondary space-y-2">
               <div className="flex items-center gap-1.5 mb-1 text-text-primary">
                 <Wand2 className="w-3.5 h-3.5 text-accent" />
                 <span className="font-medium">分析计划</span>
@@ -317,6 +374,13 @@ export default function MasterAddWorkModal({ projectId, onClose, onStarted }: Pr
                 </li>
                 <li>文件指纹：<span className="font-mono text-text-muted">{preview.fileHash}</span></li>
               </ul>
+
+              {/* 费用预估 */}
+              <CostEstimateBar
+                totalChars={preview.totalChars}
+                chunkCount={preview.chunks.length}
+                depth={depth}
+              />
             </section>
           )}
 

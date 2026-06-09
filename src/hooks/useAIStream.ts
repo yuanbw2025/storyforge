@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { streamChat, type StreamResult } from '../lib/ai/client'
+import { streamChat, type StreamResult, type AICallMeta } from '../lib/ai/client'
 import { useAIConfigStore } from '../stores/ai-config'
 import type { AIConfig, ChatMessage } from '../lib/types'
 import type { TokenUsage } from '../lib/ai/logger'
@@ -18,7 +18,7 @@ export interface UseAIStreamReturn {
    * @param messages 聊天消息
    * @param overrideConfig 临时覆盖的配置片段（例如导入面板需要 maxTokens=16384）
    */
-  start: (messages: ChatMessage[], overrideConfig?: Partial<AIConfig>) => Promise<string>
+  start: (messages: ChatMessage[], overrideConfig?: Partial<AIConfig>, meta?: AICallMeta) => Promise<string>
   /** 停止生成 */
   stop: () => void
   /** 重置状态 */
@@ -53,6 +53,7 @@ export function useAIStream(): UseAIStreamReturn {
   const start = useCallback(async (
     messages: ChatMessage[],
     overrideConfig?: Partial<AIConfig>,
+    meta?: AICallMeta,
   ): Promise<string> => {
     // 重置状态
     setOutput('')
@@ -80,7 +81,7 @@ export function useAIStream(): UseAIStreamReturn {
     const streamResult: StreamResult = {}
 
     try {
-      const stream = streamChat(messages, config, controller.signal, streamResult)
+      const stream = streamChat(messages, config, controller.signal, streamResult, meta)
       for await (const chunk of stream) {
         if (controller.signal.aborted) break
         accumulated += chunk

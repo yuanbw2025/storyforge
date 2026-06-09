@@ -16,7 +16,9 @@ export interface ParsedCharacter {
   arc: string
 }
 
-/** 角色定位中文 → CharacterRole */
+const VALID_ROLES: CharacterRole[] = ['protagonist', 'antagonist', 'supporting', 'minor', 'npc', 'extra']
+
+/** 角色定位中文 → CharacterRole（仅当 AI 未按要求返回英文枚举时的兜底） */
 const ROLE_MAP: Record<string, CharacterRole> = {
   '主角':    'protagonist',
   '男主':    'protagonist',
@@ -33,9 +35,17 @@ const ROLE_MAP: Record<string, CharacterRole> = {
   '路人':    'extra',
 }
 
-function parseRole(text: string): CharacterRole {
+/**
+ * 归一化 AI 返回的 role 字段。
+ * 优先信任 AI 已按要求返回的英文枚举；仅当其非合法枚举时，才用中文关键词兜底，
+ * 都不匹配则回退 supporting。
+ */
+function normalizeRole(raw: string): CharacterRole {
+  const v = (raw || '').trim().toLowerCase()
+  const direct = VALID_ROLES.find(r => r === v)
+  if (direct) return direct
   for (const [cn, role] of Object.entries(ROLE_MAP)) {
-    if (text.includes(cn)) return role
+    if (raw.includes(cn)) return role
   }
   return 'supporting'
 }
@@ -94,7 +104,7 @@ ${rawText}`
 
     return {
       name:             parsed.name             || 'AI 生成角色',
-      role:             parseRole(parsed.role || '') || (parsed.role as CharacterRole) || 'supporting',
+      role:             normalizeRole(parsed.role || ''),
       shortDescription: parsed.shortDescription || '',
       appearance:       parsed.appearance       || '',
       personality:      parsed.personality      || '',

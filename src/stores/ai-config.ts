@@ -1,9 +1,27 @@
 import { create } from 'zustand'
-import type { AIConfig, AIProvider } from '../lib/types'
+import type { AIConfig, AIProvider, AIConfigPreset } from '../lib/types'
 import { PROVIDER_PRESETS } from '../lib/types'
 import { createLog, updateLog } from '../lib/ai/logger'
+import { nanoid } from '../lib/utils/id'
 
 const STORAGE_KEY = 'storyforge-ai-config'
+const PRESETS_KEY = 'storyforge-ai-presets'
+
+/** 从 localStorage 加载预设列表 */
+function loadPresets(): AIConfigPreset[] {
+  try {
+    const saved = localStorage.getItem(PRESETS_KEY)
+    if (saved) {
+      const arr = JSON.parse(saved)
+      if (Array.isArray(arr)) return arr
+    }
+  } catch { /* ignore */ }
+  return []
+}
+
+function savePresets(presets: AIConfigPreset[]) {
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets))
+}
 
 /** 根据 HTTP 状态码和英文错误信息，返回中文解释 */
 function getChineseExplanation(status: number, msg: string): string {
@@ -79,18 +97,65 @@ export interface TestResult {
 
 interface AIConfigStore {
   config: AIConfig
+  presets: AIConfigPreset[]
+  /** 当前生效的预设 id（null = 未对应任何预设/已改动） */
+  activePresetId: string | null
   setConfig: (config: Partial<AIConfig>) => void
   switchProvider: (provider: AIProvider) => void
   testConnection: () => Promise<TestResult>
+  // ── 预设管理 ──
+  saveAsPreset: (name: string) => string
+  applyPreset: (id: string) => void
+  updatePresetFromCurrent: (id: string) => void
+  renamePreset: (id: string, name: string) => void
+  deletePreset: (id: string) => void
 }
 
 export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   config: loadConfig(),
+  presets: loadPresets(),
+  activePresetId: null,
 
   setConfig: (partial: Partial<AIConfig>) => {
     const newConfig = { ...get().config, ...partial }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newConfig))
-    set({ config: newConfig })
+    // 手动改动配置后，与已选预设脱钩（除非改动等于该预设）
+    set({ config: newConfig, activePresetId: null })
+  },
+
+  saveAsPreset: (name: string) => {
+    const id = nanoid()
+    const preset: AIConfigPreset = { id, name: name.trim() || '未命名配置', config: { ...get().config } }
+    const presets = [...get().presets, preset]
+    savePresets(presets)
+    set({ presets, activePresetId: id })
+    return id
+  },
+
+  applyPreset: (id: string) => {
+    const preset = get().presets.find(p => p.id === id)
+    if (!preset) return
+    const newConfig = { ...preset.config }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newConfig))
+    set({ config: newConfig, activePresetId: id })
+  },
+
+  updatePresetFromCurrent: (id: string) => {
+    const presets = get().presets.map(p => p.id === id ? { ...p, config: { ...get().config } } : p)
+    savePresets(presets)
+    set({ presets, activePresetId: id })
+  },
+
+  renamePreset: (id: string, name: string) => {
+    const presets = get().presets.map(p => p.id === id ? { ...p, name: name.trim() || p.name } : p)
+    savePresets(presets)
+    set({ presets })
+  },
+
+  deletePreset: (id: string) => {
+    const presets = get().presets.filter(p => p.id !== id)
+    savePresets(presets)
+    set({ presets, activePresetId: get().activePresetId === id ? null : get().activePresetId })
   },
 
   switchProvider: (provider: AIProvider) => {
@@ -102,7 +167,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
       apiKey: provider === get().config.provider ? get().config.apiKey : (preset.apiKey || ''),
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newConfig))
-    set({ config: newConfig })
+    set({ config: newConfig, activePresetId: null })
   },
 
   testConnection: async (): Promise<TestResult> => {

@@ -1,0 +1,44 @@
+name: CI
+
+# StoryForge CI(Phase 3.3)
+# 在 push / PR 时跑全套守护:架构铁律 + 注册表完整性 + 文档一致性 + 类型 + 测试 + 构建。
+# 任何一项失败则红,阻止"屎山复发"与回归。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: 表注册完整性(REQUIRED_TABLES vs schema)
+        run: npm run check:required-tables
+
+      - name: AI 说明书与代码一致(防 prompt key 漂移)
+        run: npm run check:ai-manual
+
+      - name: 架构铁律(三注册表反模式守护)
+        run: npm run check:architecture
+
+      - name: TypeScript 严格类型检查
+        run: npx tsc --noEmit
+
+      - name: 测试 + 覆盖率门槛
+        run: npm run test:coverage
+
+      - name: 生产构建
+        run: npm run build

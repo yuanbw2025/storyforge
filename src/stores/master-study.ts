@@ -120,6 +120,12 @@ export const useMasterStudyStore = create<MasterStudyStore>((set, get) => ({
         // Blob 不存在就算了，不让删作品失败
       }
     }
+    // Phase 19-c: 清掉 master Blob（虚拟 sessionId = 100000 + workId）
+    try {
+      await db.importFiles.delete(100000 + id)
+    } catch {
+      // ignore
+    }
     set({ works: get().works.filter(w => w.id !== id) })
   },
 
