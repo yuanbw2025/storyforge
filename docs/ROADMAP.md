@@ -320,12 +320,14 @@
 - 把 `ChapterEditor` 的正文生成从旧 `buildFullWorldCtx + buildChapterContentPrompt` 切到 `assembleContext`(属「旧代码清除」专项的一环)。
 - **完成判据**:有细纲的章节,正文生成的请求体里能看到细纲场景信息(可用网络抓包验证,同 FB-1 手法)。
 
-## 🔴 FB-10（数据 bug · 疑似未走 adopt）— 生成卷级大纲，点采纳后未写入
+## ✅ FB-10（数据 bug · 已修复 2026-06-09）— 生成卷级大纲，点采纳后未写入
 
 > 反馈人：买辣椒也用券。"生成卷级大纲,点击采纳写入后,并未写入"。
-> 文件:疑似卷级大纲生成面板的采纳写回路径(`outline.volume` 相关 / `OutlinePanel` / 工作流 saveTarget `create-outline-nodes`)
+> 文件:`src/components/outline/OutlinePanel.tsx`(分支 `fix/fb-10-volume-adopt`)
 
-**待查根因**:采纳后未落库,可能是①该采纳路径没走 `adopt({ target:'outlineNodes' })`(旧手写写回失败静默)②AI 输出非预期 JSON 结构导致解析失败但无提示③卷/章层级 parentId 错误被去重误杀(与 FB-6 同源)。
+**✅ 已修复(2026-06-09)·根因单测坐实**:`OutlinePanel` 的采纳**确实走了** `adopt({target:'outlineNodes'})`,但 outlineNodes 的 AdoptionSchema 是 `duplicatePolicy:'skip'`(identity=parentId+type+title)。命中去重(同名卷/章,常见于"重新生成后再采纳"或 AI 产出标题与已有重复)时,adopt 进 `skipped`、**不写入也不抛错**,而 `handleConfirmVolumes/Chapters` 此前**完全不处理 skipped → 静默无反馈**,用户感知为"点了采纳没反应"。
+**改法**:`addOutlineNodeByAdopt` 返回 skip 原因;两个 confirm 回调统计 written/skipped,全跳过→明确 alert 原因+"想替换请先删同名卷",部分跳过→告知数量。反例测试 `R-FB10`(3条:新卷正常写入 / 同名被skip带原因 / 多卷都写入)。
+**遗留(UX 增强,非 bug)**:若希望"重新生成即自动替换同名卷"而非跳过,需另做替换交互,已另议。
 
 **改法**:定位该采纳入口 → 确认是否走 `adopt()` → 若是旧手写路径则切到 `adopt()` 并加失败提示;补反例测试(喂卷级大纲 AI 输出 → 断言 outlineNodes 实际写入)。**先复现/定位再改。** 与 FB-6(导入大纲丢失)、旧代码清除联动排查。
 
