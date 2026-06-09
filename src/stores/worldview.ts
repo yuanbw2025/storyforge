@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { Worldview, StoryCore, PowerSystem } from '../lib/types'
+import { adopt } from '../lib/registry/adopt'
 
 interface WorldviewStore {
   worldview: Worldview | null
@@ -52,51 +53,36 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
   saveWorldview: async (data: Partial<Worldview>) => {
     const { worldview, activeWorldGroupId } = get()
     const projectId = data.projectId ?? worldview?.projectId
-    // 以 DB 为准定位既有记录，避免内存为 null/陈旧时误新增第二条导致"采纳后世界观为空"
-    let target = worldview
-    if (!target?.id && projectId != null) {
-      const list = await db.worldviews.where('projectId').equals(projectId).toArray()
-      target = (activeWorldGroupId == null
-        ? (list.find(w => w.worldGroupId == null) ?? list[0])
-        : list.find(w => w.worldGroupId === activeWorldGroupId)) ?? null
-    }
-    if (target?.id) {
-      await db.worldviews.update(target.id, { ...data, updatedAt: now() })
-      set({ worldview: { ...target, ...data, updatedAt: now() } })
-    } else if (projectId != null) {
-      const newWv: Worldview = {
-        projectId,
-        geography: '', history: '', society: '',
-        culture: '', economy: '', rules: '', summary: '',
-        worldGroupId: activeWorldGroupId,   // 多世界模式下盖章当前世界组
-        createdAt: now(), updatedAt: now(),
-        ...data,
-      }
-      const id = await db.worldviews.add(newWv)
-      set({ worldview: { ...newWv, id: id as number } })
-    }
+    if (projectId == null) return
+    const { id: _, projectId: __, createdAt: ___, updatedAt: ____, worldGroupId, ...patch } = data
+    const targetWorldGroupId = worldGroupId ?? activeWorldGroupId
+    await adopt({
+      projectId,
+      worldGroupId: targetWorldGroupId,
+      target: 'worldviews',
+      mode: 'replace',
+      data: patch as Record<string, unknown>,
+    })
+    const list = await db.worldviews.where('projectId').equals(projectId).toArray()
+    const next = (targetWorldGroupId == null
+      ? (list.find(w => w.worldGroupId == null) ?? list[0])
+      : list.find(w => w.worldGroupId === targetWorldGroupId)) ?? null
+    set({ worldview: next })
   },
 
   saveStoryCore: async (data: Partial<StoryCore>) => {
     const { storyCore } = get()
     const projectId = data.projectId ?? storyCore?.projectId
-    let target = storyCore
-    if (!target?.id && projectId != null) {
-      target = await db.storyCores.where('projectId').equals(projectId).first() ?? null
-    }
-    if (target?.id) {
-      await db.storyCores.update(target.id, { ...data, updatedAt: now() })
-      set({ storyCore: { ...target, ...data, updatedAt: now() } })
-    } else if (projectId != null) {
-      const newSc: StoryCore = {
-        projectId,
-        theme: '', centralConflict: '', plotPattern: '', storyLines: '',
-        createdAt: now(), updatedAt: now(),
-        ...data,
-      }
-      const id = await db.storyCores.add(newSc)
-      set({ storyCore: { ...newSc, id: id as number } })
-    }
+    if (projectId == null) return
+    const { id: _, projectId: __, createdAt: ___, updatedAt: ____, ...patch } = data
+    await adopt({
+      projectId,
+      target: 'storyCores',
+      mode: 'replace',
+      data: patch as Record<string, unknown>,
+    })
+    const next = await db.storyCores.where('projectId').equals(projectId).first() ?? null
+    set({ storyCore: next })
   },
 
   savePowerSystem: async (data: Partial<PowerSystem>) => {

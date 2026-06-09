@@ -1,6 +1,7 @@
 import type { ChatMessage } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
+import { composeFieldGenerationHint, type FieldGenerationMode } from '../field-generation-context'
 
 export interface RunOptions {
   parameterValues?: Record<string, unknown>
@@ -34,12 +35,17 @@ export function buildCharacterDimensionPrompt(
   existingInfo: string,
   worldContext: string,
   options?: RunOptions,
+  currentValue?: string,
+  mode: FieldGenerationMode = 'expand',
 ): ChatMessage[] {
   const tpl = usePromptStore.getState().getActive('character.dimension')
+  const effectiveInfo = composeFieldGenerationHint(undefined, currentValue || existingInfo, mode)
   const { messages } = renderPrompt(tpl, {
     characterName,
     dimension,
-    characterInfo: existingInfo,
+    characterInfo: effectiveInfo || existingInfo,
+    currentValue: currentValue || existingInfo || '',
+    generationMode: mode,
     worldContext: worldContext || '（暂无）',
   }, options)
   return messages

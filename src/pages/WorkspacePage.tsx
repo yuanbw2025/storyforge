@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, lazy, Suspense } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useProjectStore } from '../stores/project'
 import { useWorldviewStore } from '../stores/worldview'
@@ -42,13 +42,14 @@ import OutlinePanel from '../components/outline/OutlinePanel'
 import DetailedOutlinePanel from '../components/outline/DetailedOutlinePanel'
 import ChaptersListPanel from '../components/editor/ChaptersListPanel'
 import ForeshadowPanel from '../components/foreshadow/ForeshadowPanel'
-import GeographyPanel from '../components/geography/GeographyPanel'
+// Phase 3.5 性能:地图类面板拉 three.js / d3 / azgaar(重),懒加载踢出首屏主包
+const GeographyPanel = lazy(() => import('../components/geography/GeographyPanel'))
 import HistoryPanel from '../components/history/HistoryPanel'
 import ItemSystemPanel from '../components/items/ItemSystemPanel'
 import CodexPanel from '../components/codex/CodexPanel'
 import CreativeRulesPanel from '../components/rules/CreativeRulesPanel'
 import CharacterRelationPanel from '../components/relations/CharacterRelationPanel'
-import WorldMapPanel from '../components/geography/WorldMapPanel'
+const WorldMapPanel = lazy(() => import('../components/geography/WorldMapPanel'))
 import StatePanel from '../components/state/StatePanel'
 import StoryArcPanel from '../components/outline/StoryArcPanel'
 import CharacterDrivenPlotPanel from '../components/outline/CharacterDrivenPlotPanel'
@@ -274,7 +275,10 @@ export default function WorkspacePage() {
         >
           <PanelRight className="w-4 h-4" />
         </button>
-        {renderMainPanel()}
+        {/* Phase 3.5: 懒加载面板(地图类)加载时显示 fallback */}
+        <Suspense fallback={<div className="flex items-center justify-center h-64 text-text-muted text-sm">面板加载中…</div>}>
+          {renderMainPanel()}
+        </Suspense>
       </main>
 
       {/* 右侧属性面板 */}

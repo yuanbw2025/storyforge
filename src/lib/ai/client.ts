@@ -2,6 +2,7 @@ import type { AIConfig, ChatMessage } from '../types'
 import { AIError } from '../types'
 import { createLog, updateLog, type TokenUsage } from './logger'
 import { recordUsage } from './usage-log'
+import { trimMessagesToFit } from './context-budget'
 
 /** 调用元信息（用于消耗统计分类） */
 export interface AICallMeta {
@@ -84,7 +85,11 @@ export async function* streamChat(
   result?: StreamResult,
   meta?: AICallMeta,
 ): AsyncGenerator<string> {
-  const req = buildRequest(config, messages, true)
+  const trimmed = trimMessagesToFit(messages, config.provider, config.model, config.maxTokens)
+  if (trimmed.trimmed) {
+    console.warn(`[AI] request messages trimmed to fit context window: ${trimmed.totalInputTokens}/${trimmed.inputBudget} tokens`)
+  }
+  const req = buildRequest(config, trimmed.messages, true)
 
   const log = createLog({
     type: 'stream',
@@ -191,13 +196,19 @@ export async function chat(
   messages: ChatMessage[],
   config: AIConfig,
   meta?: AICallMeta,
+  signal?: AbortSignal,
 ): Promise<string> {
-  const req = buildRequest(config, messages, false)
+  const trimmed = trimMessagesToFit(messages, config.provider, config.model, config.maxTokens)
+  if (trimmed.trimmed) {
+    console.warn(`[AI] request messages trimmed to fit context window: ${trimmed.totalInputTokens}/${trimmed.inputBudget} tokens`)
+  }
+  const req = buildRequest(config, trimmed.messages, false)
 
   const response = await fetch(req.url, {
     method: 'POST',
     headers: req.headers,
     body: req.body,
+    signal,
   })
 
   if (!response.ok) {

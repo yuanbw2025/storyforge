@@ -2,19 +2,17 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Plus, Trash2, Sparkles, ChevronRight, Wand2, AlertTriangle, Zap, Square } from 'lucide-react'
 import { useOutlineStore } from '../../stores/outline'
 import { useDetailedOutlineStore } from '../../stores/detailed-outline'
-import { useWorldviewStore } from '../../stores/worldview'
 import { useCharacterStore } from '../../stores/character'
 import { useForeshadowStore } from '../../stores/foreshadow'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildDetailSceneGeneratePrompt, buildEnhancedDetailPrompt, parseEnhancedDetailSmart } from '../../lib/ai/adapters/detail-scene-adapter'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { buildWorldContext, buildCharacterContext } from '../../lib/ai/context-builder'
-import { buildCodexContext } from '../../lib/ai/codex-context'
-import { buildNodeWritingContext } from '../../lib/ai/world-group-context'
 import { batchGenerateDetails, type BatchProgress } from '../../lib/ai/batch-detail-runner'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import { nanoid } from '../../lib/utils/id'
-import type { Project, DetailedScene, ScenePace, EmotionArc } from '../../lib/types'
+import { adopt } from '../../lib/registry/adopt'
+import { assembleContext } from '../../lib/registry/assemble-context'
+import type { Project, DetailedOutline, DetailedScene, ScenePace, EmotionArc } from '../../lib/types'
 
 interface Props {
   project: Project
@@ -42,12 +40,15 @@ const EMOTION_LABELS: Record<EmotionArc, string> = {
   climax:  '⚡ 高潮',
 }
 
+export function filterExistingIds(ids: number[], validIds: Set<number>): number[] {
+  return [...new Set(ids.filter(id => validIds.has(id)))]
+}
+
 /** v3 §2.1 — 创作区.细纲（场景拆分 + AI） */
 export default function DetailedOutlinePanel({ project }: Props) {
   const { nodes, loadAll: loadOutline } = useOutlineStore()
   const { detailedOutlines, loadAll: loadDetailed, getOrCreate, save } = useDetailedOutlineStore()
-  const { worldview, storyCore } = useWorldviewStore()
-  const { characters } = useCharacterStore()
+  const { characters, loadAll: loadCharacters } = useCharacterStore()
   const aiConfig = useAIConfigStore(s => s.config)
   const { foreshadows, loadAll: loadForeshadows } = useForeshadowStore()
   const ai = useAIStream()
@@ -59,7 +60,8 @@ export default function DetailedOutlinePanel({ project }: Props) {
     loadOutline(project.id!)
     loadDetailed(project.id!)
     loadForeshadows(project.id!)
-  }, [project.id, loadOutline, loadDetailed, loadForeshadows])
+    loadCharacters(project.id!)
+  }, [project.id, loadOutline, loadDetailed, loadForeshadows, loadCharacters])
 
   // 章节节点列表（按 order 排序）
   const chapterNodes = useMemo(() =>
@@ -70,6 +72,14 @@ export default function DetailedOutlinePanel({ project }: Props) {
   // 当前选中章节的细纲
   const currentChapter = chapterNodes.find(n => n.id === selectedNodeId)
   const currentDetailed = detailedOutlines.find(d => d.outlineNodeId === selectedNodeId)
+  const validCharacterIds = useMemo(
+    () => new Set(characters.map(c => c.id).filter((id): id is number => id != null)),
+    [characters],
+  )
+  const validForeshadowIds = useMemo(
+    () => new Set(foreshadows.map(f => f.id).filter((id): id is number => id != null)),
+    [foreshadows],
+  )
 
   const ensureDetailed = async () => {
     if (!currentChapter) return null
@@ -107,15 +117,45 @@ export default function DetailedOutlinePanel({ project }: Props) {
     await updateScenes(currentDetailed.scenes.filter(s => s.sceneId !== sceneId))
   }
 
+  const adoptDetailedPatch = useCallback(async (
+    outlineNodeId: number,
+    patch: Partial<DetailedOutline>,
+  ) => {
+    const result = await adopt({
+      projectId: project.id!,
+      target: 'detailedOutlines',
+      mode: 'add',
+      data: { outlineNodeId, ...patch },
+    })
+    await loadDetailed(project.id!)
+    return result
+  }, [project.id, loadDetailed])
+
+  const buildDetailContext = useCallback(async (outlineNodeId: number) => {
+    const node = nodes.find(n => n.id === outlineNodeId)
+    const assembled = await assembleContext({
+      projectId: project.id!,
+      worldGroupId: node?.worldGroupId ?? null,
+      outlineNodeId,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+      sourceKeys: ['chapterOutline', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+    })
+    const charIdx = assembled.included.indexOf('characters')
+    return {
+      worldContext: assembled.text,
+      characterContext: charIdx >= 0 ? assembled.segments[charIdx]?.content ?? '' : '',
+    }
+  }, [project.id, nodes, aiConfig.provider, aiConfig.model])
+
   const handleAIGenerate = async () => {
     if (!currentChapter) return
-    // 多世界下按本章所属世界读取上下文
-    const worldCtx = await buildNodeWritingContext(project.id!, currentChapter.id!)
+    const ctx = await buildDetailContext(currentChapter.id!)
     const messages = buildDetailSceneGeneratePrompt(
       currentChapter.title,
       currentChapter.summary || '',
-      worldCtx,
-      buildCharacterContext(characters.filter(c => c.role === 'protagonist' || c.role === 'supporting')),
+      ctx.worldContext,
+      ctx.characterContext,
       '',
     )
     ai.start(messages, undefined, { category: 'detail.scene', projectId: project.id! })
@@ -127,8 +167,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
     const idx = chapterNodes.indexOf(currentChapter)
     const prevSummary = idx > 0 ? (chapterNodes[idx - 1].summary || '') : ''
     const nextSummary = idx < chapterNodes.length - 1 ? (chapterNodes[idx + 1].summary || '') : ''
-    // 多世界下按本章所属世界读取上下文
-    const worldCtx = await buildNodeWritingContext(project.id!, currentChapter.id!)
+    const { worldContext: worldCtx } = await buildDetailContext(currentChapter.id!)
 
     const charCtx = characters
       .filter(c => c.role === 'protagonist' || c.role === 'supporting')
@@ -155,16 +194,19 @@ export default function DetailedOutlinePanel({ project }: Props) {
       alert('解析增强细纲失败，请重试')
       return
     }
-    const dt = await ensureDetailed()
-    if (!dt?.id) return
+    if (!currentChapter?.id) return
 
-    const patch: Partial<import('../../lib/types').DetailedOutline> = {}
+    const patch: Partial<DetailedOutline> = {}
     if (parsed.openingHook) patch.openingHook = parsed.openingHook
     if (parsed.endingCliffhanger) patch.endingCliffhanger = parsed.endingCliffhanger
     if (parsed.sceneLocation) patch.sceneLocation = parsed.sceneLocation
     if (parsed.emotionArc) patch.emotionArc = parsed.emotionArc as EmotionArc
-    if (parsed.appearingCharacterIds) patch.appearingCharacterIds = parsed.appearingCharacterIds
-    if (parsed.foreshadowIds) patch.foreshadowIds = parsed.foreshadowIds
+    if (parsed.appearingCharacterIds) {
+      patch.appearingCharacterIds = filterExistingIds(parsed.appearingCharacterIds, validCharacterIds)
+    }
+    if (parsed.foreshadowIds) {
+      patch.foreshadowIds = filterExistingIds(parsed.foreshadowIds, validForeshadowIds)
+    }
 
     // 如果 AI 返回了场景，也写入
     if (parsed.scenes && parsed.scenes.length > 0) {
@@ -172,7 +214,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
         sceneId: nanoid(),
         title: s.title,
         summary: s.summary,
-        characterIds: s.characterIds || [],
+        characterIds: filterExistingIds(s.characterIds || [], validCharacterIds),
         location: s.location || '',
         conflict: s.conflict || '',
         pace: (s.pace || 'medium') as ScenePace,
@@ -184,7 +226,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
 
     // Phase 30.3: 同时快照当前大纲摘要
     patch.lastUsedSummary = currentChapter?.summary || ''
-    await save(dt.id, patch)
+    await adoptDetailedPatch(currentChapter.id, patch)
     enhanceAI.reset()
   }
 
@@ -211,8 +253,14 @@ export default function DetailedOutlinePanel({ project }: Props) {
 
   const handleBatchDetail = useCallback(async () => {
     if (batchProgress) return // 已在运行
-    const codexCtx = await buildCodexContext(project.id!, null)
-    const worldCtx = [buildWorldContext(worldview, storyCore, null), codexCtx].filter(Boolean).join('\n\n')
+    const baseCtx = await assembleContext({
+      projectId: project.id!,
+      worldGroupId: null,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+      sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+    })
+    const worldCtx = baseCtx.text
     const charCtx = characters
       .filter(c => c.role === 'protagonist' || c.role === 'supporting')
       .map(c => `[ID:${c.id}] ${c.name}（${c.role}）`)
@@ -232,13 +280,12 @@ export default function DetailedOutlinePanel({ project }: Props) {
         worldContext: worldCtx,
         // 多世界：逐章用本章所属世界的上下文
         worldContextResolver: project.enableMultiWorld
-          ? (chId) => buildNodeWritingContext(project.id!, chId)
+          ? async (chId) => (await buildDetailContext(chId)).worldContext
           : undefined,
         characterContext: charCtx,
         foreshadowContext: foreshadowCtx,
         onSave: async (outlineNodeId, data) => {
-          const dt = await getOrCreate(project.id!, outlineNodeId)
-          if (dt.id) await save(dt.id, data)
+          await adoptDetailedPatch(outlineNodeId, data)
         },
         onProgress: setBatchProgress,
         signal: ac.signal,
@@ -253,7 +300,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
       // 3 秒后清除进度信息
       setTimeout(() => setBatchProgress(null), 3000)
     }
-  }, [batchProgress, worldview, storyCore, characters, foreshadows, chapterNodes, detailedOutlines, getOrCreate, save, project.id, loadDetailed])
+  }, [batchProgress, characters, foreshadows, chapterNodes, detailedOutlines, project.id, project.enableMultiWorld, loadDetailed, adoptDetailedPatch, buildDetailContext, aiConfig.provider, aiConfig.model])
 
   const handleBatchStop = useCallback(() => {
     batchAbortRef.current?.abort()
@@ -397,24 +444,25 @@ export default function DetailedOutlinePanel({ project }: Props) {
                     // AI 输出粘贴到第一个场景的备注里，让用户参考着手动拆
                     // 后续 P10 可以做结构化解析
                     try {
+                      if (!currentChapter.id) return
                       if (!currentDetailed || currentDetailed.scenes.length === 0) {
-                        await addScene()
-                        const fresh = useDetailedOutlineStore.getState().detailedOutlines.find(d => d.outlineNodeId === currentChapter.id)
-                        if (fresh && fresh.scenes[0]) {
-                          await updateScenes(fresh.scenes.map((s, i) =>
-                            i === 0 ? { ...s, notes: text } : s
-                          ))
+                        const newScene: DetailedScene = {
+                          sceneId: nanoid(),
+                          title: '新场景', summary: '',
+                          characterIds: [], location: '', conflict: '',
+                          pace: 'medium', estimatedWords: 0, notes: text,
                         }
-                        // Phase 30.3: 快照当前大纲摘要
-                        if (fresh?.id) {
-                          await save(fresh.id, { lastUsedSummary: currentChapter.summary || '' })
-                        }
+                        await adoptDetailedPatch(currentChapter.id, {
+                          scenes: [newScene],
+                          lastUsedSummary: currentChapter.summary || '',
+                        })
                       } else {
-                        await updateScene(currentDetailed.scenes[0].sceneId, { notes: text })
-                        // Phase 30.3: 快照当前大纲摘要
-                        if (currentDetailed.id) {
-                          await save(currentDetailed.id, { lastUsedSummary: currentChapter.summary || '' })
-                        }
+                        await adoptDetailedPatch(currentChapter.id, {
+                          scenes: currentDetailed.scenes.map((s, i) =>
+                            i === 0 ? { ...s, notes: text } : s
+                          ),
+                          lastUsedSummary: currentChapter.summary || '',
+                        })
                       }
                     } catch (err) {
                       console.error('[DetailedOutline] 采纳失败:', err)

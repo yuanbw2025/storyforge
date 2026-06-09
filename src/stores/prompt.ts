@@ -24,6 +24,9 @@ interface PromptStore {
   /** 把某模板设为对应 moduleKey 的激活模板（其他同 key 的取消激活）。 */
   setActive(id: number): Promise<void>
 
+  /** 删除一个模板并刷新列表（UI 层不得直接 db.delete，必须走这里）。 */
+  deleteTemplate(id: number): Promise<void>
+
   /** 强制重新从 DB 加载。 */
   reload(): Promise<void>
 }
@@ -147,6 +150,11 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
         }
       }
     })
+    await get().reload()
+  },
+
+  deleteTemplate: async (id: number): Promise<void> => {
+    await db.promptTemplates.delete(id)
     await get().reload()
   },
 

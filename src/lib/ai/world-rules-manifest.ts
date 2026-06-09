@@ -250,23 +250,43 @@ import { db } from '../db/schema'
  * 一站式：从 DB 读取项目的世界规则 + 时间线 + 关键词，生成完整清单。
  * 用于 prompt 注入时调用。
  */
-export async function buildWorldRulesContext(projectId: number): Promise<string> {
+async function resolveDefaultWorldRulesProfile(projectId: number): Promise<WorldRulesProfile | null> {
+  const profiles = await db.worldRulesProfiles.where('projectId').equals(projectId).toArray()
+  const nullProfile = profiles.find(p => (p.worldGroupId ?? null) === null)
+  if (nullProfile) return nullProfile
+  const primary = await db.worldGroups.where('projectId').equals(projectId).toArray()
+    .then(groups => groups.find(g => g.type === 'primary') ?? groups.sort((a, b) => a.order - b.order)[0])
+  if (!primary?.id) return null
+  return profiles.find(p => p.worldGroupId === primary.id) ?? null
+}
+
+export async function buildWorldRulesContext(
+  projectId: number,
+  worldGroupId?: number | null,
+): Promise<string> {
   // 1. 读世界规则 profile
-  const profile = await db.worldRulesProfiles
-    .where('projectId').equals(projectId)
-    .first() || null
+  const profile = worldGroupId !== undefined
+    ? (await db.worldRulesProfiles.where('projectId').equals(projectId).toArray())
+      .find(p => (p.worldGroupId ?? null) === (worldGroupId ?? null)) ?? null
+    : await resolveDefaultWorldRulesProfile(projectId)
 
   if (!profile) return ''
+  const effectiveWorldGroupId = worldGroupId !== undefined
+    ? (worldGroupId ?? null)
+    : (profile.worldGroupId ?? null)
+  const shouldFilterWorld = worldGroupId !== undefined || effectiveWorldGroupId != null
 
   // 2. 读历史时间线事件
-  const timelineEvents = await db.historicalTimelineEvents
+  const timelineEvents = (await db.historicalTimelineEvents
     .where('projectId').equals(projectId)
-    .sortBy('year')
+    .sortBy('year'))
+    .filter(e => !shouldFilterWorld || (e.worldGroupId ?? null) === effectiveWorldGroupId)
 
   // 3. 读历史关键词
-  const keywords = await db.historicalKeywords
+  const keywords = (await db.historicalKeywords
     .where('projectId').equals(projectId)
-    .toArray()
+    .toArray())
+    .filter(k => !shouldFilterWorld || (k.worldGroupId ?? null) === effectiveWorldGroupId)
 
   return buildWorldRulesManifest(profile, { timelineEvents, keywords })
 }

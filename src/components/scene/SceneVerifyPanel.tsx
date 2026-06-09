@@ -7,14 +7,9 @@
  */
 import { useState, useEffect } from 'react'
 import { ScanSearch, Sparkles, Loader2 } from 'lucide-react'
-import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
-import { buildWorldContext } from '../../lib/ai/context-builder'
-import { buildCurrentWorldContext } from '../../lib/ai/world-group-context'
-import { buildCodexContext } from '../../lib/ai/codex-context'
-import { buildHistoricalContext } from '../../lib/ai/context-builder'
-import { buildWorldRulesContext } from '../../lib/ai/world-rules-manifest'
+import { assembleContext } from '../../lib/registry/assemble-context'
 import { buildSceneVerifyPrompt } from '../../lib/ai/adapters/scene-verify-adapter'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import AutoResizeTextarea from '../shared/AutoResizeTextarea'
@@ -27,7 +22,6 @@ interface Props {
 }
 
 export default function SceneVerifyPanel({ project }: Props) {
-  const { worldview, storyCore, powerSystem, loadAll } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const ai = useAIStream()
 
@@ -36,11 +30,6 @@ export default function SceneVerifyPanel({ project }: Props) {
   const [sceneEra, setSceneEra] = useState('')
   const [sceneLocation, setSceneLocation] = useState('')
   const [building, setBuilding] = useState(false)
-
-  // 多世界下世界观随当前世界加载
-  useEffect(() => {
-    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
-  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
 
   // 草稿持久化
   useEffect(() => {
@@ -62,19 +51,19 @@ export default function SceneVerifyPanel({ project }: Props) {
   const handleVerify = async () => {
     if (!scene.trim()) return
     setBuilding(true)
-    let worldContext = ''
     try {
-      // 多世界：当前世界完整上下文；单世界：常规世界观上下文
-      if (project.enableMultiWorld && activeGroupId != null) {
-        worldContext = await buildCurrentWorldContext(project.id!, activeGroupId)
-      } else {
-        const codexCtx = await buildCodexContext(project.id!, null)
-        worldContext = [buildWorldContext(worldview, storyCore, powerSystem), codexCtx].filter(Boolean).join('\n\n')
+      const assembled = await assembleContext({
+        projectId: project.id!,
+        worldGroupId: project.enableMultiWorld ? activeGroupId ?? null : null,
+        sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'historical', 'worldRules', 'locations'],
+      })
+      const part = (key: string) => {
+        const idx = assembled.included.indexOf(key)
+        return idx >= 0 ? assembled.segments[idx]?.content ?? '' : ''
       }
-      const [historyContext, worldRulesContext] = await Promise.all([
-        buildHistoricalContext(project.id!),
-        buildWorldRulesContext(project.id!),
-      ])
+      const worldContext = assembled.text
+      const historyContext = part('historical')
+      const worldRulesContext = part('worldRules')
       setBuilding(false)
       const messages = buildSceneVerifyPrompt({
         worldContext,

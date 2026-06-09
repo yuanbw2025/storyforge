@@ -2,10 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Save, FileText, Eye, ClipboardList, CheckSquare, Square, BookOpenCheck, ShieldCheck, StickyNote } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
-import { useWorldviewStore } from '../../stores/worldview'
-import { useCharacterStore } from '../../stores/character'
 import { useStateCardStore } from '../../stores/state-card'
-import { useEmotionBeatStore } from '../../stores/emotion-beat'
 import { useAIStream } from '../../hooks/useAIStream'
 import { CInput } from '../shared/CompositionInput'
 import { useAutoSave } from '../../hooks/useAutoSave'
@@ -13,12 +10,10 @@ import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
 import { buildStateExtractPrompt, parseStateDiffs } from '../../lib/ai/adapters/state-extract-adapter'
 import { buildSummaryPrompt } from '../../lib/ai/adapters/summary-adapter'
-import { buildWorldContext, buildCharacterContext, filterActiveCharacters, getContextMemo, buildRefAnalysisContext, buildMasterInsightContext, buildCreativeRulesContext, buildLocationContext } from '../../lib/ai/context-builder'
-import { buildCurrentWorldContext } from '../../lib/ai/world-group-context'
-import { buildCodexContext } from '../../lib/ai/codex-context'
 import { buildGenreConstraintContext } from '../../lib/ai/genre-metadata'
 import { buildStylePromptInjection } from '../../lib/ai/writing-styles'
-import { buildMemory, type MemoryTaskType } from '../../lib/ai/memory-builder'
+import type { MemoryTaskType } from '../../lib/ai/memory-builder'
+import { assembleContext } from '../../lib/registry/assemble-context'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
 import { useStoryArcStore } from '../../stores/story-arc'
 import { useForeshadowStore } from '../../stores/foreshadow'
@@ -44,12 +39,9 @@ interface Props {
 export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const { chapters, currentChapter, selectChapter, addChapter, updateChapter, loadAll: loadChapters } = useChapterStore()
   const { nodes } = useOutlineStore()
-  const { worldview, storyCore, powerSystem } = useWorldviewStore()
-  const { characters } = useCharacterStore()
   const { cards: stateCards, loadAll: loadStateCards, buildStateContext, buildSelectiveStateContext, applyDiffs } = useStateCardStore()
-  const { buildBeatContext } = useEmotionBeatStore()
   const { creativeRules } = useCreativeRulesStore()
-  const { buildStoryArcContext, loadAll: loadArcs } = useStoryArcStore()
+  const { loadAll: loadArcs } = useStoryArcStore()
   const { buildForeshadowContext, loadAll: loadForeshadows } = useForeshadowStore()
 
   // content 为 HTML 字符串；旧数据是纯文本，RichEditor 内部会自动包装
@@ -127,8 +119,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }, [currentChapter?.id, updateChapter]))
 
   const outlineNode = currentChapter ? nodes.find(n => n.id === currentChapter.outlineNodeId) : null
-  const memo = getContextMemo(project.id!)
-
   // 多世界：沿父链找到所属卷的 worldGroupId
   const chapterWorldGroupId = useMemo(() => {
     if (!project.enableMultiWorld || !outlineNode) return null
@@ -142,36 +132,26 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     return null
   }, [project.enableMultiWorld, outlineNode, nodes])
 
-  // 多世界：异步构建本卷所属世界的完整上下文
-  const [multiWorldCtx, setMultiWorldCtx] = useState('')
+  const [worldCtx, setWorldCtx] = useState('')
+  const [charCtx, setCharCtx] = useState('')
   useEffect(() => {
-    if (chapterWorldGroupId == null) { setMultiWorldCtx(''); return }
     let cancelled = false
-    buildCurrentWorldContext(project.id!, chapterWorldGroupId).then(ctx => {
-      if (!cancelled) setMultiWorldCtx(ctx)
+    assembleContext({
+      projectId: project.id!,
+      worldGroupId: chapterWorldGroupId ?? null,
+      outlineNodeId: outlineNode?.id ?? null,
+      chapterId: currentChapter?.id ?? null,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+      sourceKeys: ['contextMemo', 'chapterOutline', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+    }).then(assembled => {
+      if (cancelled) return
+      const charIdx = assembled.included.indexOf('characters')
+      setWorldCtx(assembled.text)
+      setCharCtx(charIdx >= 0 ? assembled.segments[charIdx]?.content ?? '' : '')
     })
     return () => { cancelled = true }
-  }, [project.id, chapterWorldGroupId])
-
-  // 单世界：异步读取设定词条（多世界模式下词条已包含在 multiWorldCtx 内，避免重复注入）
-  const [singleCodexCtx, setSingleCodexCtx] = useState('')
-  useEffect(() => {
-    if (chapterWorldGroupId != null) { setSingleCodexCtx(''); return }
-    let cancelled = false
-    buildCodexContext(project.id!, null).then(ctx => { if (!cancelled) setSingleCodexCtx(ctx) })
-    return () => { cancelled = true }
-  }, [project.id, chapterWorldGroupId])
-
-  // 多世界模式且本卷有所属世界 → 用世界上下文；否则走原全局世界观 + 词条
-  const worldCtx = chapterWorldGroupId != null
-    ? [memo, multiWorldCtx].filter(Boolean).join('\n\n')
-    : [memo, buildWorldContext(worldview, storyCore, powerSystem), singleCodexCtx].filter(Boolean).join('\n\n')
-  // Phase G2: 过滤活跃角色（多世界下先按所属世界过滤：本世界角色 + 跨世界角色）
-  const worldScopedChars = chapterWorldGroupId != null
-    ? characters.filter(c => c.isCrossWorld || c.homeWorldGroupId === chapterWorldGroupId)
-    : characters
-  const activeChars = filterActiveCharacters(worldScopedChars, currentChapter?.id)
-  const charCtx = buildCharacterContext(activeChars)
+  }, [project.id, chapterWorldGroupId, outlineNode?.id, currentChapter?.id, aiConfig.provider, aiConfig.model])
 
   // A2: 按需召回 — 根据章节大纲+标题+已有文本筛选相关状态卡
   const selectiveState = useMemo(() => {
@@ -199,91 +179,95 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   // AI 操作 —— 所有 AI 交互都基于纯文本
   // Phase A2: 使用三层记忆构建器生成完整上下文
   const buildFullWorldCtx = async (taskType: MemoryTaskType = 'write') => {
-    // 情感节拍上下文
-    let emotionBeatCtx = ''
-    if (currentChapter?.id) {
-      const beatCtx = buildBeatContext(currentChapter.id)
-      if (beatCtx) emotionBeatCtx = beatCtx
-    }
-
     // 引用手法注入（Phase 20）
-    let refCtx = ''
+    let citedIds: number[] = []
     try {
-      const citedIds: number[] = JSON.parse(creativeRules?.citedReferenceIds || '[]')
-      if (citedIds.length) {
-        refCtx = await buildRefAnalysisContext(citedIds)
-      }
+      citedIds = JSON.parse(creativeRules?.citedReferenceIds || '[]')
     } catch { /* ignore */ }
 
     // 大师洞察注入（Phase 19-d）
-    let insightCtx = ''
+    let insightIds: number[] = []
     try {
-      const insightIds: number[] = JSON.parse(creativeRules?.citedInsightIds || '[]')
-      if (insightIds.length) {
-        insightCtx = await buildMasterInsightContext(insightIds)
-      }
+      insightIds = JSON.parse(creativeRules?.citedInsightIds || '[]')
     } catch { /* ignore */ }
 
-    // Phase B3: 注入故事线上下文
-    const storyArcCtx = buildStoryArcContext(currentChapter?.order)
+    const stateRef = [
+      outlineNode?.title,
+      outlineNode?.summary,
+      currentChapter?.title,
+      plainText.slice(-2000),
+    ].filter(Boolean).join(' ')
 
-    // Phase C2: 伏笔上下文注入
-    const foreshadowCtx = currentChapter?.id ? buildForeshadowContext(currentChapter.id) : ''
-
-    const memory = await buildMemory({
-      taskType,
-      working: {
-        currentOutline: outlineNode ? { title: outlineNode.title, summary: outlineNode.summary } : null,
-        emotionBeatContext: emotionBeatCtx,
-        projectId: project.id!,
-        currentChapterOrder: currentChapter?.order ?? 0,
-      },
-      episodic: {
-        stateCards,
-        currentChapterId: currentChapter?.id,
-      },
-      semantic: {
-        worldContext: worldCtx,
-        characterContext: charCtx,
-        openForeshadows: foreshadowCtx || undefined,
-        storyArcContext: storyArcCtx || undefined,
-      },
+    const assembled = await assembleContext({
+      projectId: project.id!,
+      worldGroupId: chapterWorldGroupId ?? null,
+      outlineNodeId: outlineNode?.id ?? null,
+      chapterId: currentChapter?.id ?? null,
+      currentChapterOrder: currentChapter?.order ?? 0,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+      citedReferenceIds: citedIds,
+      masterInsightIds: insightIds,
+      stateReferenceText: stateRef,
+      extraStateIds,
+      sourceKeys: [
+        'contextMemo',
+        'chapterOutline',
+        'worldview',
+        'storyCore',
+        'powerSystem',
+        'codex',
+        'characters',
+        'creativeRules',
+        'worldRules',
+        'historical',
+        'locations',
+        'foreshadows',
+        'storyArcs',
+        'emotionBeats',
+        'stateCards',
+        'references',
+        'masterInsights',
+      ],
     })
 
-    console.log(`[MemoryBuilder] ${taskType} 模式 — W:${memory.stats.working} E:${memory.stats.episodic} S:${memory.stats.semantic} Total:${memory.stats.total}`)
+    console.log(`[assembleContext] ${taskType} 模式 — included:${assembled.included.join(',')} trimmed:${assembled.trimmed.join(',') || 'none'} tokens:${assembled.totalInputTokens}`)
 
     // Phase E: 题材约束 + 写作风格注入
     const genreCtx = buildGenreConstraintContext(project.genre)
     const styleCtx = project.writingStyleId ? buildStylePromptInjection(project.writingStyleId) : ''
-    // 创作规则注入（写作风格/视角/基调/禁忌/一致性——此前从不进入 prompt）
-    const rulesCtx = buildCreativeRulesContext(creativeRules)
-    // 重要地点注入（此前重要地点表从不进入写作链路）
-    const locationCtx = await buildLocationContext(project.id!)
 
-    // 引用手法追加到末尾（不计入三层记忆预算）
-    const parts = [memory.fullContext]
-    if (rulesCtx) parts.push(rulesCtx)
-    if (locationCtx) parts.push(locationCtx)
+    const parts = [assembled.text]
     if (genreCtx) parts.push(genreCtx)
     if (styleCtx) parts.push(styleCtx)
-    if (refCtx) parts.push(refCtx)
-    if (insightCtx) parts.push(insightCtx)
-    return parts.filter(Boolean).join('\n\n')
+    const worldRulesIdx = assembled.included.indexOf('worldRules')
+    return {
+      text: parts.filter(Boolean).join('\n\n'),
+      segments: assembled.segments,
+      worldRulesContext: worldRulesIdx >= 0 ? assembled.segments[worldRulesIdx]?.content ?? '' : '',
+    }
   }
 
   const handleGenerate = async () => {
     if (!outlineNode) return
     const prevChapter = chapters.filter(c => c.order < (currentChapter?.order || 0)).pop()
     const prevEnding = htmlToPlainText(prevChapter?.content || '').slice(-500)
-    const fullCtx = await buildFullWorldCtx('write')
-    const messages = buildChapterContentPrompt(outlineNode.title, outlineNode.summary, fullCtx, charCtx, prevEnding)
+    const { text: fullCtx, segments: assembledSegments, worldRulesContext } = await buildFullWorldCtx('write')
+    const messages = buildChapterContentPrompt(
+      outlineNode.title,
+      outlineNode.summary,
+      fullCtx,
+      charCtx,
+      prevEnding,
+      worldRulesContext,
+    )
 
     // Phase 21.3: 计算上下文预算
     const segments = analyzeContextSegments([
       { label: 'System Prompt', content: messages.find(m => m.role === 'system')?.content || '', layer: 'L0' },
       { label: '章节大纲', content: outlineNode.summary || '', layer: 'L1' },
       { label: '前文结尾', content: prevEnding, layer: 'L1' },
-      { label: '世界观+角色+伏笔', content: fullCtx, layer: 'L2' },
+      ...assembledSegments,
       { label: 'User Prompt', content: messages.find(m => m.role === 'user')?.content || '', layer: 'L1' },
     ])
     setContextBudget(calculateBudget(aiConfig.provider, aiConfig.model, segments))
@@ -294,7 +278,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
   const handleContinue = async () => {
     if (!plainText || !outlineNode) return
-    const fullCtx = await buildFullWorldCtx('write')
+    const { text: fullCtx } = await buildFullWorldCtx('write')
     const messages = buildContinuePrompt(plainText, outlineNode.summary, fullCtx)
     setAIAction('continue')
     ai.start(messages, undefined, { category: 'chapter.continue', projectId: project.id! })
@@ -329,7 +313,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!currentChapter || !plainText) return
     setExtracting(true)
     try {
-      const stateCtx = buildStateContext()
+      const stateCtx = buildSelectiveStateContext(plainText, extraStateIds).text
       const chapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
       const messages = buildStateExtractPrompt(stateCtx, chapterTitle, plainText)
       console.log('[StateExtract] 开始提取，章节:', chapterTitle)
@@ -385,7 +369,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     // 1. 自动提取状态
     setAutoProcessing('extracting')
     try {
-      const stateCtx = buildStateContext()
+      const stateCtx = buildSelectiveStateContext(text, extraStateIds).text
       const chapterTitle = outlineNode?.title || currentChapter?.title || '未知章节'
       const messages = buildStateExtractPrompt(stateCtx, chapterTitle, text)
       console.log('[AutoPost] 自动提取状态:', chapterTitle)

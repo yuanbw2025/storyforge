@@ -9,7 +9,8 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { buildWorldExpandPrompt, parseWorldExpandOutput } from '../../lib/ai/world-group-ai'
 import { buildAllWorldsOverview } from '../../lib/ai/world-group-context'
 import { db } from '../../lib/db/schema'
-import type { WorldGroup, WorldGroupType, Worldview } from '../../lib/types'
+import { adopt } from '../../lib/registry/adopt'
+import type { WorldGroup, WorldGroupType } from '../../lib/types'
 import { WORLD_GROUP_TYPE_LABELS } from '../../lib/types/world-group'
 
 const TYPE_OPTIONS: { value: WorldGroupType; label: string }[] = [
@@ -97,21 +98,13 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
     if (!result) return
     const parsed = parseWorldExpandOutput(result)
     if (!parsed) return
-    // 写入该世界组的 worldview 记录（可能非当前活跃世界，直接操作 DB）
-    const existing = (await db.worldviews.where('projectId').equals(group.projectId).toArray())
-      .find(w => w.worldGroupId === group.id)
-    const now = Date.now()
-    if (existing?.id) {
-      await db.worldviews.update(existing.id, { ...parsed, updatedAt: now })
-    } else {
-      await db.worldviews.add({
-        projectId: group.projectId,
-        geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '',
-        ...parsed,
-        worldGroupId: group.id,
-        createdAt: now, updatedAt: now,
-      } as Worldview)
-    }
+    await adopt({
+      projectId: group.projectId,
+      worldGroupId: group.id,
+      target: 'worldviews',
+      mode: 'replace',
+      data: { ...parsed },
+    })
     setExpanded(true)
   }
 

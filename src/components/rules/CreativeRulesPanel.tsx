@@ -7,6 +7,7 @@ import { useReferenceStore } from '../../stores/reference'
 import { useMasterStudyStore } from '../../stores/master-study'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildRulesGeneratePrompt } from '../../lib/ai/adapters/rules-adapter'
+import { adopt } from '../../lib/registry/adopt'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import type { Project, NarrativePOV } from '../../lib/types'
 
@@ -49,7 +50,7 @@ export default function CreativeRulesPanel({ project }: Props) {
     if (creativeRules) {
       setWritingStyle(creativeRules.writingStyle || '')
       setNarrativePOV(creativeRules.narrativePOV || 'third-limited')
-      setToneAndMood(creativeRules.toneAndMood || '')
+      setToneAndMood(creativeRules.atmosphere || creativeRules.toneAndMood || '')
       setSpecialRequirements(creativeRules.specialRequirements || '')
       try { setProhibitions(JSON.parse(creativeRules.prohibitions || '[]')) } catch { setProhibitions([]) }
       try { setConsistencyRules(JSON.parse(creativeRules.consistencyRules || '[]')) } catch { setConsistencyRules([]) }
@@ -81,10 +82,18 @@ export default function CreativeRulesPanel({ project }: Props) {
     ai.start(messages, undefined, { category: 'rules.generate', projectId: project.id! })
   }
 
-  const acceptAi = (text: string) => {
-    if (aiTarget === 'writingStyle') { setWritingStyle(text); saveField({ writingStyle: text }) }
-    else if (aiTarget === 'toneAndMood') { setToneAndMood(text); saveField({ toneAndMood: text }) }
-    else if (aiTarget === 'specialRequirements') { setSpecialRequirements(text); saveField({ specialRequirements: text }) }
+  const acceptAi = async (text: string) => {
+    if (!aiTarget) return
+    if (aiTarget === 'writingStyle') setWritingStyle(text)
+    else if (aiTarget === 'toneAndMood') setToneAndMood(text)
+    else if (aiTarget === 'specialRequirements') setSpecialRequirements(text)
+    await adopt({
+      projectId: project.id!,
+      target: 'creativeRules',
+      mode: 'replace',
+      data: { [aiTarget]: text },
+    })
+    await loadAll(project.id!)
     ai.reset()
     setAiTarget(null)
   }

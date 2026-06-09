@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { Character, Faction } from '../lib/types'
+import { applyCharacterReferenceRemap } from '../lib/registry/character-references'
 
 interface CharacterStore {
   characters: Character[]
@@ -51,12 +52,16 @@ export const useCharacterStore = create<CharacterStore>((set, get) => ({
   },
 
   deleteCharacter: async (id) => {
-    await db.characters.delete(id)
-    // 清理引用该角色的关系，否则留下悬空关系（关系网会显示「角色#id」断链）
-    const fromKeys = (await db.characterRelations.where('fromCharacterId').equals(id).primaryKeys()) as number[]
-    const toKeys = (await db.characterRelations.where('toCharacterId').equals(id).primaryKeys()) as number[]
-    const relKeys = [...new Set([...fromKeys, ...toKeys])]
-    if (relKeys.length) await db.characterRelations.bulkDelete(relKeys)
+    await db.transaction('rw', db.characters, db.characterRelations, db.detailedOutlines, db.stateCards, async () => {
+      const char = await db.characters.get(id)
+      if (!char) return
+      await db.characters.delete(id)
+      await applyCharacterReferenceRemap({
+        projectId: char.projectId,
+        fromCharacterId: id,
+        fromName: char.name,
+      })
+    })
     set({ characters: get().characters.filter(c => c.id !== id) })
   },
 

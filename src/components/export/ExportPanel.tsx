@@ -36,7 +36,11 @@ export default function ExportPanel({ project, onImported }: Props) {
   const contextImportRef = useRef<HTMLInputElement>(null)
 
   // 6.6 GitHub Gist
-  const [pat, setPat] = useState(() => localStorage.getItem('sf_github_pat') ?? '')
+  // Phase 3.4 安全:PAT 默认只存 sessionStorage(关标签即清);用户显式勾选"记住"才落 localStorage。
+  // 旧版曾默认持久化到 localStorage,任何 XSS/本地脚本可读取 token。
+  const [pat, setPat] = useState(() =>
+    sessionStorage.getItem('sf_github_pat') ?? localStorage.getItem('sf_github_pat') ?? '')
+  const [rememberPat, setRememberPat] = useState(() => !!localStorage.getItem('sf_github_pat'))
   const [gistId, setGistId] = useState(() => localStorage.getItem(`sf_gist_${project.id}`) ?? '')
   const [gistUrl, setGistUrl] = useState('')
   const [patUser, setPatUser] = useState<string | null>(null)
@@ -157,7 +161,10 @@ export default function ExportPanel({ project, onImported }: Props) {
     try {
       const login = await validateGitHubPAT(pat.trim())
       setPatUser(login)
-      localStorage.setItem('sf_github_pat', pat.trim())
+      // 默认 session-only;勾选"记住"才持久化到 localStorage
+      sessionStorage.setItem('sf_github_pat', pat.trim())
+      if (rememberPat) localStorage.setItem('sf_github_pat', pat.trim())
+      else localStorage.removeItem('sf_github_pat')
     } catch {
       setPatUser(null)
       showStatus('error', 'PAT 无效，请检查权限（需要 gist 权限）')
@@ -414,6 +421,19 @@ export default function ExportPanel({ project, onImported }: Props) {
               <CheckCircle className="w-3 h-3" /> 已验证：@{patUser}
             </p>
           )}
+          {/* Phase 3.4 安全:默认不持久化 token */}
+          <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberPat}
+              onChange={(e) => {
+                setRememberPat(e.target.checked)
+                if (!e.target.checked) localStorage.removeItem('sf_github_pat')
+                else if (pat.trim()) localStorage.setItem('sf_github_pat', pat.trim())
+              }}
+            />
+            在本机记住此 Token（存浏览器 localStorage）。不勾选则仅本次会话有效，关闭标签页即清除（更安全）。
+          </label>
         </div>
 
         {/* 已有 Gist ID */}

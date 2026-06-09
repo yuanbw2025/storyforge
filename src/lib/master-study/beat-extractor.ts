@@ -144,16 +144,7 @@ async function chatWithAbort(
   if (signal.aborted) {
     const e = new Error('aborted'); e.name = 'AbortError'; throw e
   }
-  return await Promise.race([
-    chat(messages, config),
-    new Promise<string>((_, reject) => {
-      const onAbort = () => {
-        const e = new Error('aborted'); e.name = 'AbortError'; reject(e)
-      }
-      if (signal.aborted) onAbort()
-      else signal.addEventListener('abort', onAbort, { once: true })
-    }),
-  ])
+  return await chat(messages, config, undefined, signal)
 }
 
 function clamp(v: number, min: number, max: number): number {

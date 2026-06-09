@@ -180,7 +180,10 @@ export interface BatchChapterOptions {
   }>
   /** 字数阈值：content 字数 < threshold 才生成 */
   minWordThreshold: number
+  /** 世界观上下文（单一，作为兜底） */
   worldContext: string
+  /** 多世界：按章解析各自世界上下文（提供则逐章覆盖 worldContext） */
+  worldContextResolver?: (chapterNodeId: number) => Promise<string>
   characterContext: string
   /** 保存回调 */
   onSave: (chapterId: number, content: string) => Promise<void>
@@ -200,7 +203,16 @@ export interface BatchChapterResult {
 export async function batchGenerateChapters(
   opts: BatchChapterOptions,
 ): Promise<BatchChapterResult> {
-  const { chapters, minWordThreshold, worldContext, characterContext, onSave, onProgress, signal } = opts
+  const {
+    chapters,
+    minWordThreshold,
+    worldContext,
+    worldContextResolver,
+    characterContext,
+    onSave,
+    onProgress,
+    signal,
+  } = opts
   const config = useAIConfigStore.getState().config
   const start = Date.now()
 
@@ -231,10 +243,11 @@ export async function batchGenerateChapters(
     })
 
     try {
+      const chWorldContext = worldContextResolver ? await worldContextResolver(ch.id) : worldContext
       const messages = buildChapterContentPrompt(
         ch.title,
         ch.summary || '',
-        worldContext,
+        chWorldContext,
         characterContext,
         prevEnding,
       )

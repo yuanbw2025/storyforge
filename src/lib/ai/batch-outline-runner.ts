@@ -47,6 +47,8 @@ export interface BatchOutlineOptions {
   characterContext?: string
   /** Phase 32: 世界规则清单（替代旧 historicalContext + creativeMode） */
   worldRulesContext?: string
+  /** 多世界：按卷解析各自世界规则（提供则逐卷覆盖 worldRulesContext） */
+  worldRulesContextResolver?: (volumeId: number) => Promise<string>
   /** 进度回调 */
   onProgress?: (progress: BatchOutlineProgress) => void
   /** 取消信号 */
@@ -61,7 +63,17 @@ export interface BatchOutlineOptions {
 export async function runBatchOutlineGeneration(
   options: BatchOutlineOptions,
 ): Promise<BatchOutlineResult> {
-  const { volumes, worldContext, worldContextResolver, userHint, characterContext, worldRulesContext, onProgress, signal } = options
+  const {
+    volumes,
+    worldContext,
+    worldContextResolver,
+    userHint,
+    characterContext,
+    worldRulesContext,
+    worldRulesContextResolver,
+    onProgress,
+    signal,
+  } = options
   const config = useAIConfigStore.getState().config
   const chaptersByVolume = new Map<number, ParsedChapter[]>()
   const startTime = Date.now()
@@ -92,6 +104,9 @@ export async function runBatchOutlineGeneration(
 
     // 多世界：用本卷所属世界的上下文
     const volWorldContext = worldContextResolver ? await worldContextResolver(volId) : worldContext
+    const volWorldRulesContext = worldRulesContextResolver
+      ? await worldRulesContextResolver(volId)
+      : worldRulesContext
 
     const messages = buildChapterOutlinePrompt(
       vol.title,
@@ -101,7 +116,7 @@ export async function runBatchOutlineGeneration(
       userHint,
       undefined, // options
       characterContext,
-      worldRulesContext,
+      volWorldRulesContext,
     )
 
     try {

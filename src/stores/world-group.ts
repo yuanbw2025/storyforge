@@ -5,8 +5,12 @@ import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { WorldGroup, WorldGroupLink } from '../lib/types'
 import { requireBackupBefore } from '../lib/safety/require-backup-before'
+import { cascadeDeleteGroup, stampPrimaryWorld } from '../lib/registry/lifecycle'
 
 const now = () => Date.now()
+
+// Phase 1.1b: 原 PROJECT_TABLES_ALL 手写 45 表清单已删除,
+// deleteGroup/migrate 改用 lib/registry/lifecycle 派生 API。
 
 interface WorldGroupStore {
   groups: WorldGroup[]
@@ -94,76 +98,9 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
 
     const pid = group.projectId
 
-    // 级联删除该组下的所有数据
-    await db.transaction('rw', [
-      db.worldGroups, db.worldGroupLinks,
-      db.worldviews, db.powerSystems, db.geographies,
-      db.histories, db.worldNodes, db.characters,
-      db.outlineNodes,
-    ], async () => {
-      // 删除关联的设定数据
-      const allWv = await db.worldviews.where('projectId').equals(pid).toArray()
-      for (const wv of allWv) {
-        if (wv.worldGroupId === id) await db.worldviews.delete(wv.id!)
-      }
-      const allPs = await db.powerSystems.where('projectId').equals(pid).toArray()
-      for (const ps of allPs) {
-        if (ps.worldGroupId === id) await db.powerSystems.delete(ps.id!)
-      }
-      const allGeo = await db.geographies.where('projectId').equals(pid).toArray()
-      for (const geo of allGeo) {
-        if (geo.worldGroupId === id) await db.geographies.delete(geo.id!)
-      }
-      const allHist = await db.histories.where('projectId').equals(pid).toArray()
-      for (const h of allHist) {
-        if (h.worldGroupId === id) await db.histories.delete(h.id!)
-      }
-      const allWn = await db.worldNodes.where('projectId').equals(pid).toArray()
-      for (const wn of allWn) {
-        if (wn.worldGroupId === id) await db.worldNodes.delete(wn.id!)
-      }
-      // 历史年表事件 / 关键词（有 worldGroupId，此前漏删 → 孤儿数据）
-      const allHte = await db.historicalTimelineEvents.where('projectId').equals(pid).toArray()
-      for (const e of allHte) {
-        if (e.worldGroupId === id) await db.historicalTimelineEvents.delete(e.id!)
-      }
-      const allHk = await db.historicalKeywords.where('projectId').equals(pid).toArray()
-      for (const k of allHk) {
-        if (k.worldGroupId === id) await db.historicalKeywords.delete(k.id!)
-      }
-      // 设定词条：删该世界的词条 + 该世界的自定义分类（内置分类 worldGroupId=null 为全局，不会匹配）
-      const allCe = await db.codexEntries.where('projectId').equals(pid).toArray()
-      for (const e of allCe) {
-        if (e.worldGroupId === id) await db.codexEntries.delete(e.id!)
-      }
-      const allCc = await db.codexCategories.where('projectId').equals(pid).toArray()
-      for (const c of allCc) {
-        if (c.worldGroupId === id) await db.codexCategories.delete(c.id!)
-      }
-
-      // 角色：清除归属（不删角色本身）
-      const allChars = await db.characters.where('projectId').equals(pid).toArray()
-      for (const c of allChars) {
-        if (c.homeWorldGroupId === id) {
-          await db.characters.update(c.id!, { homeWorldGroupId: null })
-        }
-      }
-
-      // 大纲：清除世界标记
-      const allOutline = await db.outlineNodes.where('projectId').equals(pid).toArray()
-      for (const n of allOutline) {
-        if (n.worldGroupId === id) {
-          await db.outlineNodes.update(n.id!, { worldGroupId: null })
-        }
-      }
-
-      // 删除相关链接
-      await db.worldGroupLinks.where('fromGroupId').equals(id).delete()
-      await db.worldGroupLinks.where('toGroupId').equals(id).delete()
-
-      // 删除世界组本身
-      await db.worldGroups.delete(id)
-    })
+    // Phase 1.1b: 级联删除从 PROJECT_TABLES 注册表派生(worldScoped 表 + 角色归属清除 +
+    // 大纲 setNull + 内置词条分类保留 + 删世界组本身)。行为与手写版等价(R-01 保证)。
+    await cascadeDeleteGroup(pid, id)
 
     // 刷新 store
     const groups = get().groups.filter(g => g.id !== id)
@@ -235,39 +172,16 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
     const proceed = await requireBackupBefore({
       operation: '启用多世界模式',
       projectId,
-      details: '此操作将把现有项目数据迁移到「主世界」归属。当前代码存在已知的迁移 bug(详见 MASTER-BLUEPRINT § P0-8),建议先导出备份。',
+      details: '此操作将把现有项目数据(世界观、力量体系、大纲、词条等)迁移到「主世界」归属。建议先导出备份。',
     })
     if (!proceed) return  // 用户取消
 
     // 1. 确保主世界组存在
     const primaryId = await get().ensurePrimaryGroup(projectId)
 
-    // 2. 把现有 worldGroupId 为空的项目级数据归属到主世界组
-    await db.transaction('rw', [
-      db.worldviews, db.powerSystems, db.geographies, db.histories, db.worldNodes,
-      db.historicalTimelineEvents, db.historicalKeywords,
-    ], async () => {
-      const stamp = async <T extends { id?: number; worldGroupId?: number | null }>(
-        table: { toArray: () => Promise<T[]>; update: (id: number, c: Partial<T>) => Promise<number> },
-        records: T[],
-      ) => {
-        for (const r of records) {
-          if (r.worldGroupId == null && r.id != null) {
-            await table.update(r.id, { worldGroupId: primaryId } as Partial<T>)
-          }
-        }
-      }
-      await stamp(db.worldviews, await db.worldviews.where('projectId').equals(projectId).toArray())
-      await stamp(db.powerSystems, await db.powerSystems.where('projectId').equals(projectId).toArray())
-      await stamp(db.geographies, await db.geographies.where('projectId').equals(projectId).toArray())
-      await stamp(db.histories, await db.histories.where('projectId').equals(projectId).toArray())
-      await stamp(db.worldNodes, await db.worldNodes.where('projectId').equals(projectId).toArray())
-      await stamp(db.historicalTimelineEvents, await db.historicalTimelineEvents.where('projectId').equals(projectId).toArray())
-      await stamp(db.historicalKeywords, await db.historicalKeywords.where('projectId').equals(projectId).toArray())
-      // 设定词条：只盖章「词条」到主世界（使其归属主世界，与 worldview 一致）；
-      // 内置/自定义「分类」保持 worldGroupId=null 为全局结构，所有世界共用，不盖章。
-      await stamp(db.codexEntries, await db.codexEntries.where('projectId').equals(projectId).toArray())
-    })
+    // 2. Phase 1.1b: 盖章从 PROJECT_TABLES 注册表派生(所有 worldScoped 表的 null 记录
+    //    盖章到主世界;codexCategories 分类结构保持全局不盖)。行为与手写版等价(R-02 保证)。
+    await stampPrimaryWorld(projectId, primaryId)
   },
 
   setActiveGroup: (id) => {

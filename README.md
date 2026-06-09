@@ -24,6 +24,29 @@ GitHub: https://github.com/yuanbw2025/storyforge
 
 ---
 
+## 🌐 English (TL;DR)
+
+**StoryForge** is a privacy-first, fully-offline, browser-based AI writing studio for long-form fiction.
+
+- **100% client-side** — your manuscript lives only in your browser's IndexedDB. No server, no account, no data sent anywhere except the AI provider you choose.
+- **Bring your own AI** — works with 11 OpenAI-compatible providers; you supply the key.
+- **No black box** — every prompt is visible, editable, and savable. You control every AI output.
+- **Built for series-scale work** — multiworld settings, a three-layer memory system, a codex/worldbuilding registry, consistency checking, and reverse-inference from fragments.
+
+**Architecture** is built on three single-source-of-truth registries (read / write / lifecycle), enforced by CI to keep the codebase clean as it grows. See [`CLAUDE.md`](./CLAUDE.md) and [`docs/MASTER-BLUEPRINT.md`](./docs/MASTER-BLUEPRINT.md).
+
+Quick start:
+
+```bash
+npm install
+npm run dev      # http://localhost:5173
+npm run ci       # full check chain (lint + tests + build)
+```
+
+Contributions welcome — read [`CONTRIBUTING.md`](./CONTRIBUTING.md) first.
+
+---
+
 ## 目录
 
 - [价值主张](#-价值主张)

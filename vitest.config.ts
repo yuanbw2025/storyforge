@@ -23,18 +23,38 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
-      include: ['src/**/*.{ts,tsx}'],
+      // 覆盖率聚焦【核心业务逻辑层】:数据/注册表/AI 解析与装配。
+      // 排除 UI 层(components/pages/hooks)与纯视觉(world-map 渲染)——
+      // 纯前端 UI 单测成本极高、价值低,业界惯例是对核心逻辑设高门槛、UI 用 E2E 另测。
+      include: [
+        'src/lib/registry/**/*.ts',
+        'src/lib/db/**/*.ts',
+        'src/lib/export/**/*.ts',
+        'src/lib/import/**/*.ts',
+        'src/lib/ai/adapters/**/*.ts',
+        'src/lib/ai/*.ts',
+      ],
       exclude: [
         'src/**/*.test.{ts,tsx}',
-        'src/main.tsx',
-        'src/vite-env.d.ts',
+        'src/lib/world-map/**',      // 纯视觉地图渲染算法
+        'src/lib/ai/client.ts',      // 真实网络请求,需 E2E
+        'src/**/*.d.ts',
       ],
       thresholds: {
-        // Phase 3 目标 - 当前是入门基线
-        // lines: 60,
-        // branches: 60,
-        // functions: 60,
-        // statements: 60,
+        // 门槛 = "防退化基线"(略低于当前实际值),不是逼写低价值测试。
+        // 数据正确性由 parser 测试 + 16 个反例测试 + registry 单测三重保证;
+        // prompt 字符串拼接(buildXxxPrompt)与 UI 不强制覆盖(业界惯例,靠集成/E2E)。
+        lines: 42,
+        functions: 42,
+        statements: 42,
+        branches: 55,
+        // 注册表是地基(单一事实源),要求更高
+        'src/lib/registry/**/*.ts': {
+          lines: 75,
+          functions: 70,
+          statements: 75,
+          branches: 70,
+        },
       },
     },
   },

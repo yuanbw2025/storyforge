@@ -9,8 +9,6 @@ import {
   Lightbulb, Sparkles, Loader2, Check, ChevronDown, ChevronRight,
   Globe, BookOpen, UserCircle, ArrowDownToLine, Download,
 } from 'lucide-react'
-import { useWorldviewStore } from '../../stores/worldview'
-import { useCharacterStore } from '../../stores/character'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
 import {
@@ -22,20 +20,13 @@ import {
   type ReverseCharacter,
   type ReverseMultiWorldResult,
 } from '../../lib/ai/inspiration-reverse'
-import { db } from '../../lib/db/schema'
+import { adopt } from '../../lib/registry/adopt'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import AutoResizeTextarea from '../shared/AutoResizeTextarea'
-import type { Project, Worldview } from '../../lib/types'
-import type { CharacterRole } from '../../lib/types/character'
+import type { Project } from '../../lib/types'
 
 interface Props {
   project: Project
-}
-
-const ROLE_MAP: Record<string, CharacterRole> = {
-  protagonist: 'protagonist',
-  antagonist: 'antagonist',
-  supporting: 'supporting',
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -45,8 +36,6 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 export default function InspirationPanel({ project }: Props) {
-  const wvStore = useWorldviewStore()
-  const chStore = useCharacterStore()
   const wgStore = useWorldGroupStore()
   const ai = useAIStream()
   const isMW = !!project.enableMultiWorld
@@ -131,13 +120,17 @@ export default function InspirationPanel({ project }: Props) {
 
       // 1. 故事核心（项目级）
       const sc = mwResult.storyCore
-      await wvStore.saveStoryCore({
+      await adopt({
         projectId: project.id!,
-        theme: sc.theme || undefined,
-        centralConflict: sc.centralConflict || undefined,
-        plotPattern: sc.plotPattern || undefined,
-        mainPlot: sc.mainPlot || undefined,
-        logline: sc.logline || undefined,
+        target: 'storyCores',
+        mode: 'replace',
+        data: {
+          theme: sc.theme || undefined,
+          centralConflict: sc.centralConflict || undefined,
+          plotPattern: sc.plotPattern || undefined,
+          mainPlot: sc.mainPlot || undefined,
+          logline: sc.logline || undefined,
+        },
       })
 
       // 2. 逐个世界：创建世界组 + 写入该世界的世界观（字段严格对齐 Worldview）
@@ -167,50 +160,45 @@ export default function InspirationPanel({ project }: Props) {
           })
         }
         nameToGroupId.set(w.name, groupId)
-        // 写入该世界组的 worldview（直接操作 DB，字段名严格对齐 v3）
-        const existing = (await db.worldviews.where('projectId').equals(project.id!).toArray())
-          .find(x => x.worldGroupId === groupId)
-        const nowTs = Date.now()
-        const wvFields = {
-          worldOrigin: w.worldOrigin || '',
-          powerHierarchy: w.powerHierarchy || '',
-          continentLayout: w.continentLayout || '',
-          climateByRegion: w.climateByRegion || '',
-          historyLine: w.historyLine || '',
-          races: w.races || '',
-          factionLayout: w.factionLayout || '',
-        }
-        if (existing?.id) {
-          await db.worldviews.update(existing.id, { ...wvFields, updatedAt: nowTs })
-        } else {
-          await db.worldviews.add({
-            projectId: project.id!,
-            geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '',
-            ...wvFields,
-            worldGroupId: groupId,
-            createdAt: nowTs, updatedAt: nowTs,
-          } as Worldview)
-        }
+        await adopt({
+          projectId: project.id!,
+          worldGroupId: groupId,
+          target: 'worldviews',
+          mode: 'replace',
+          data: {
+            worldOrigin: w.worldOrigin || '',
+            powerHierarchy: w.powerHierarchy || '',
+            continentLayout: w.continentLayout || '',
+            climateByRegion: w.climateByRegion || '',
+            historyLine: w.historyLine || '',
+            races: w.races || '',
+            factionLayout: w.factionLayout || '',
+          },
+        })
       }
 
       // 3. 角色：按 homeWorld 归属，跨世界角色标记
       for (const c of mwResult.characters) {
         if (!c.name) continue
         const homeGroupId = c.isCrossWorld ? null : (nameToGroupId.get(c.homeWorld) ?? null)
-        await chStore.addCharacter({
+        await adopt({
           projectId: project.id!,
-          name: c.name,
-          role: ROLE_MAP[c.role] || 'supporting',
-          shortDescription: c.shortDescription || '',
-          appearance: '',
-          personality: c.personality || '',
-          background: c.background || '',
-          motivation: c.motivation || '',
-          abilities: '',
-          relationships: '',
-          arc: c.arc || '',
-          homeWorldGroupId: homeGroupId,
-          isCrossWorld: c.isCrossWorld,
+          worldGroupId: homeGroupId,
+          target: 'characters',
+          mode: 'add',
+          data: {
+            name: c.name,
+            role: c.role || 'supporting',
+            shortDescription: c.shortDescription || '',
+            appearance: '',
+            personality: c.personality || '',
+            background: c.background || '',
+            motivation: c.motivation || '',
+            abilities: '',
+            relationships: '',
+            arc: c.arc || '',
+            isCrossWorld: c.isCrossWorld,
+          },
         })
       }
 
@@ -300,15 +288,19 @@ export default function InspirationPanel({ project }: Props) {
     if (!result || adoptedSections.has('worldview')) return
     setAdopting(true)
     const wv = result.worldview
-    await wvStore.saveWorldview({
+    await adopt({
       projectId: project.id!,
-      worldOrigin: wv.worldOrigin || undefined,
-      powerHierarchy: wv.powerHierarchy || undefined,
-      continentLayout: wv.continentLayout || undefined,
-      climateByRegion: wv.climateByRegion || undefined,
-      historyLine: wv.historyLine || undefined,
-      races: wv.races || undefined,
-      factionLayout: wv.factionLayout || undefined,
+      target: 'worldviews',
+      mode: 'replace',
+      data: {
+        worldOrigin: wv.worldOrigin || undefined,
+        powerHierarchy: wv.powerHierarchy || undefined,
+        continentLayout: wv.continentLayout || undefined,
+        climateByRegion: wv.climateByRegion || undefined,
+        historyLine: wv.historyLine || undefined,
+        races: wv.races || undefined,
+        factionLayout: wv.factionLayout || undefined,
+      },
     })
     setAdoptedSections(prev => new Set(prev).add('worldview'))
     setAdopting(false)
@@ -319,13 +311,17 @@ export default function InspirationPanel({ project }: Props) {
     if (!result || adoptedSections.has('storyCore')) return
     setAdopting(true)
     const sc = result.storyCore
-    await wvStore.saveStoryCore({
+    await adopt({
       projectId: project.id!,
-      theme: sc.theme || undefined,
-      centralConflict: sc.centralConflict || undefined,
-      plotPattern: sc.plotPattern || undefined,
-      mainPlot: sc.mainPlot || undefined,
-      logline: sc.logline || undefined,
+      target: 'storyCores',
+      mode: 'replace',
+      data: {
+        theme: sc.theme || undefined,
+        centralConflict: sc.centralConflict || undefined,
+        plotPattern: sc.plotPattern || undefined,
+        mainPlot: sc.mainPlot || undefined,
+        logline: sc.logline || undefined,
+      },
     })
     setAdoptedSections(prev => new Set(prev).add('storyCore'))
     setAdopting(false)
@@ -338,18 +334,22 @@ export default function InspirationPanel({ project }: Props) {
     for (const idx of Array.from(selectedChars).sort()) {
       const c = result.characters[idx]
       if (!c || !c.name) continue
-      await chStore.addCharacter({
+      await adopt({
         projectId: project.id!,
-        name: c.name,
-        role: ROLE_MAP[c.role] || 'supporting',
-        shortDescription: c.shortDescription || '',
-        appearance: '',
-        personality: c.personality || '',
-        background: c.background || '',
-        motivation: c.motivation || '',
-        abilities: '',
-        relationships: '',
-        arc: c.arc || '',
+        target: 'characters',
+        mode: 'add',
+        data: {
+          name: c.name,
+          role: c.role || 'supporting',
+          shortDescription: c.shortDescription || '',
+          appearance: '',
+          personality: c.personality || '',
+          background: c.background || '',
+          motivation: c.motivation || '',
+          abilities: '',
+          relationships: '',
+          arc: c.arc || '',
+        },
       })
     }
     setAdoptedSections(prev => new Set(prev).add('characters'))

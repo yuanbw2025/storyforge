@@ -4,8 +4,10 @@ import { CInput, CTextarea } from './CompositionInput'
 import { useAIStream } from '../../hooks/useAIStream'
 import AIStreamOutput from './AIStreamOutput'
 import PromptRunPanel from './PromptRunPanel'
+import AIFieldModeTabs from './AIFieldModeTabs'
 import type { ChatMessage } from '../../lib/types'
 import type { PromptModuleKey } from '../../lib/types/prompt'
+import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
 
 export interface AIFieldRunOptions {
   parameterValues?: Record<string, unknown>
@@ -25,7 +27,12 @@ interface Props {
    * Phase 14：buildMessages 接受第二个参数 options，由本组件传入运行时覆盖。
    * 调用方应把它转发给对应的 adapter。
    */
-  buildMessages: (hint: string, options?: AIFieldRunOptions) => ChatMessage[]
+  buildMessages: (
+    hint: string,
+    options?: AIFieldRunOptions,
+    currentValue?: string,
+    mode?: FieldGenerationMode,
+  ) => ChatMessage[]
   rows?: number
   /** 用于切换字段时清空 AI 输出（一般传字段 key） */
   resetKey?: string
@@ -46,6 +53,7 @@ export default function AIFieldCard({
 }: Props) {
   const [hint, setHint] = useState('')
   const [showHint, setShowHint] = useState(false)
+  const [mode, setMode] = useState<FieldGenerationMode>('expand')
   // Phase 14：运行时调参 / 临时覆盖 prompt 文字
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
@@ -69,7 +77,7 @@ export default function AIFieldCard({
         userPromptTemplate: userOverride ?? undefined,
       } : undefined,
     }
-    ai.start(buildMessages(hint, opts))
+    ai.start(buildMessages(hint, opts, value, mode))
   }
   const handleAccept = (text: string) => {
     onChange(text); onSave(text); ai.reset()
@@ -102,6 +110,7 @@ export default function AIFieldCard({
       />
 
       <div className="flex items-center gap-2">
+        <AIFieldModeTabs value={mode} onChange={setMode} />
         {showHint && (
           <CInput
             value={hint}

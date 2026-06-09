@@ -1,5 +1,5 @@
 /**
- * Phase 32 — 世界规则 Store（singleton per project）
+ * Phase 32 — 世界规则 Store（按 projectId + worldGroupId 维护 profile）
  */
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
@@ -13,10 +13,11 @@ import { createEmptyEntry, isEntryEmpty, countFilledEntries } from '../lib/types
 
 interface WorldRulesState {
   profile: WorldRulesProfile | null
+  activeWorldGroupId: number | null
   loading: boolean
 
   /** 加载项目的世界规则 */
-  loadProfile: (projectId: number) => Promise<void>
+  loadProfile: (projectId: number, worldGroupId?: number | null) => Promise<void>
 
   /** 保存整个 profile（内部使用） */
   _persist: () => Promise<void>
@@ -48,16 +49,20 @@ interface WorldRulesState {
 
 export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
   profile: null,
+  activeWorldGroupId: null,
   loading: false,
 
-  loadProfile: async (projectId: number) => {
+  loadProfile: async (projectId: number, worldGroupId: number | null = null) => {
     set({ loading: true })
     try {
-      let profile = await db.worldRulesProfiles
-        .where('projectId').equals(projectId)
-        .first()
+      const targetWorldGroupId = worldGroupId ?? null
+      const profile = await db.transaction('rw', db.projects, db.worldRulesProfiles, async () => {
+        const profiles = await db.worldRulesProfiles
+          .where('projectId').equals(projectId)
+          .toArray()
+        const existing = profiles.find(p => (p.worldGroupId ?? null) === targetWorldGroupId)
+        if (existing) return existing
 
-      if (!profile) {
         // 首次访问，创建空 profile
         // Phase 32.9: 检查旧项目是否设过 creativeMode=historical，自动迁移提示
         const project = await db.projects.get(projectId)
@@ -69,16 +74,17 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
         const now = Date.now()
         const id = await db.worldRulesProfiles.add({
           projectId,
+          worldGroupId: targetWorldGroupId,
           entries: {},
           customNodes: [],
           globalNote: migrationNote,
           createdAt: now,
           updatedAt: now,
         })
-        profile = await db.worldRulesProfiles.get(id)
-      }
+        return await db.worldRulesProfiles.get(id) ?? null
+      })
 
-      set({ profile: profile || null })
+      set({ profile: profile || null, activeWorldGroupId: targetWorldGroupId })
     } finally {
       set({ loading: false })
     }

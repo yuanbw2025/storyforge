@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Sparkles } from 'lucide-react'
 import { useWorldviewStore } from '../../stores/worldview'
+import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildStoryGeneratePrompt } from '../../lib/ai/adapters/story-adapter'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import { InlineTextarea } from '../shared/InlineEdit'
+import AIFieldModeTabs from '../shared/AIFieldModeTabs'
 import type { Project } from '../../lib/types'
+import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
 
 // ── 字段定义 ──────────────────────────────────────────────────
 
@@ -35,13 +38,16 @@ interface Props { project: Project }
 
 export default function StoryCorePanel({ project }: Props) {
   const { storyCore, worldview, saveStoryCore, loadAll } = useWorldviewStore()
+  const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
 
   const [values, setValues] = useState<Record<string, string>>({})
   const [activeKey, setActiveKey] = useState(FIELDS[0].key)
   // 跟踪哪些字段正在 streaming（用于侧边栏小圆点）
   const [streamingKeys, setStreamingKeys] = useState<Set<string>>(new Set())
 
-  useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
+  useEffect(() => {
+    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
 
   useEffect(() => {
     if (!storyCore) return
@@ -162,6 +168,7 @@ function FieldEditor({
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
+  const [mode, setMode] = useState<FieldGenerationMode>('expand')
   const ai = useAIStream()
 
   // 通知父组件 streaming 状态
@@ -178,7 +185,7 @@ function FieldEditor({
       } : undefined,
     }
     const messages = buildStoryGeneratePrompt(
-      field.dimension, project.name, project.genre || '', worldCtx(), hint, opts,
+      field.dimension, project.name, project.genre || '', worldCtx(), hint, opts, value, mode,
     )
     ai.start(messages, undefined, { category: 'story.generate', projectId: project.id! })
   }
@@ -205,6 +212,7 @@ function FieldEditor({
       {/* AI 生成区 */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
+          <AIFieldModeTabs value={mode} onChange={setMode} />
           <input
             value={hint}
             onChange={e => setHint(e.target.value)}

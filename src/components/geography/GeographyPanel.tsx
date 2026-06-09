@@ -23,6 +23,18 @@ const LOCATION_TYPES: { value: LocationType; label: string }[] = [
   { value: 'other', label: '其他' },
 ]
 
+export function removeLocationSubtree(locations: Location[], id: string): Location[] {
+  const toDelete = new Set<string>()
+  const collect = (parentId: string) => {
+    toDelete.add(parentId)
+    for (const loc of locations) {
+      if (loc.parentId === parentId) collect(loc.id)
+    }
+  }
+  collect(id)
+  return locations.filter(l => !toDelete.has(l.id))
+}
+
 interface Props {
   project: Project
 }
@@ -87,8 +99,7 @@ export default function GeographyPanel({ project }: Props) {
   }
 
   const handleDeleteLocation = (id: string) => {
-    const updated = locations.filter(l => l.id !== id && l.parentId !== id)
-    saveLocations(updated)
+    saveLocations(removeLocationSubtree(locations, id))
   }
 
   // AI 概念地图

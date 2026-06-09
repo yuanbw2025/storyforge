@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { X, Wand2, AlertTriangle, Info, Gauge, Timer, Coins, BookOpen, ChevronDown, ChevronRight } from 'lucide-react'
 import type { ChunkPlan } from '../../../lib/import/chunker'
 import type { VolumeDetectResult } from '../../../lib/import/volume-detector'
+import type { WorldGroup } from '../../../lib/types'
 
 interface Props {
   filename: string
@@ -12,8 +13,11 @@ interface Props {
   volumeDetect?: VolumeDetectResult | null
   /** 单块估算用时（秒），给总时预估用 */
   estSecondsPerChunk?: number
+  worldGroups?: WorldGroup[]
+  targetWorldGroupId?: number | null
+  onTargetWorldGroupChange?: (id: number | null) => void
   onChunkSizeChange: (size: number) => void
-  onConfirm: (target: 'project' | 'reference') => void
+  onConfirm: (target: 'project' | 'reference', targetWorldGroupId?: number | null) => void
   onCancel: () => void
 }
 
@@ -27,6 +31,9 @@ export default function ImportConfirmModal({
   filename, totalChars, chunks, chunkSize,
   volumeDetect,
   estSecondsPerChunk = 35,
+  worldGroups = [],
+  targetWorldGroupId = null,
+  onTargetWorldGroupChange,
   onChunkSizeChange, onConfirm, onCancel,
 }: Props) {
   const [showStructure, setShowStructure] = useState(false)
@@ -207,6 +214,22 @@ export default function ImportConfirmModal({
             <div className="bg-bg-base border border-accent/30 rounded-lg p-2.5">
               <div className="font-medium text-accent mb-0.5">📥 导入当前项目</div>
               <div className="text-text-muted leading-relaxed">直接填入当前项目的世界观、角色、大纲等模块</div>
+              {worldGroups.length > 0 && (
+                <label className="block mt-2">
+                  <span className="block text-[10px] text-text-muted mb-1">目标世界</span>
+                  <select
+                    value={targetWorldGroupId ?? ''}
+                    onChange={e => onTargetWorldGroupChange?.(e.target.value ? Number(e.target.value) : null)}
+                    className="w-full rounded border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent"
+                  >
+                    {worldGroups.map(group => (
+                      <option key={group.id} value={group.id}>
+                        {group.icon ? `${group.icon} ` : ''}{group.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
             <div className="bg-bg-base border border-purple-400/30 rounded-lg p-2.5">
               <div className="font-medium text-purple-400 mb-0.5">📚 导入项目参考</div>
@@ -224,13 +247,13 @@ export default function ImportConfirmModal({
             取消
           </button>
           <button
-            onClick={() => onConfirm('reference')}
+            onClick={() => onConfirm('reference', null)}
             className="flex items-center gap-1.5 px-4 py-2 bg-purple-500/80 text-white text-sm rounded hover:bg-purple-500 transition-colors"
           >
             📚 导入项目参考
           </button>
           <button
-            onClick={() => onConfirm('project')}
+            onClick={() => onConfirm('project', targetWorldGroupId)}
             className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm rounded hover:bg-accent-hover"
           >
             <Wand2 className="w-4 h-4" /> 导入当前项目（{stats.totalChunks} 块）

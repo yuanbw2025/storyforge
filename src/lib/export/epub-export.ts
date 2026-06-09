@@ -14,6 +14,7 @@
  *   OEBPS/chapter-*.xhtml   — 章节内容
  */
 import { db } from '../db/schema'
+import { sanitizeExportHtml } from './sanitize-html'
 // Chapter type used internally via db queries
 
 interface EpubChapter {
@@ -209,7 +210,7 @@ ${body}
 /** 将 TipTap HTML 内容转为 EPUB 安全的 XHTML */
 function htmlToEpubBody(html: string): string {
   // 移除 TipTap 特有属性和标签，保留基本结构
-  let clean = html
+  let clean = sanitizeExportHtml(html)
     // 移除 data-* 属性
     .replace(/\s+data-[a-z-]+="[^"]*"/gi, '')
     // 自闭合标签

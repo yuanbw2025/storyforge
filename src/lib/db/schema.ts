@@ -277,6 +277,16 @@ class StoryForgeDB extends Dexie {
     this.version(26).stores({
       aiUsageLog: '++id, projectId, timestamp, category, model',
     })
+
+    // v27: 真实与幻想从项目级单例升级为每世界一套
+    this.version(27).stores({
+      worldRulesProfiles: '++id, projectId, worldGroupId',
+    })
+
+    // v28: 导入会话记录多世界目标世界
+    this.version(28).stores({
+      importSessions: '++id, projectId, status, updatedAt, fileHash, targetWorldGroupId',
+    })
   }
 }
 

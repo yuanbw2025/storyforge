@@ -8,7 +8,7 @@
  * - 预算计算与自动裁剪
  */
 
-import type { AIProvider } from '../types'
+import type { AIProvider, ChatMessage } from '../types'
 
 // ── 模型上下文窗口预设 ──────────────────────────────
 
@@ -211,6 +211,60 @@ export function autoTrimToFit(
   }
 
   return { segments: remaining, trimmedLayers }
+}
+
+export interface TrimmedMessagesResult {
+  messages: ChatMessage[]
+  trimmed: boolean
+  totalInputTokens: number
+  inputBudget: number
+}
+
+/** True request-side trimming used before fetch, not only for the UI budget preview. */
+export function trimMessagesToFit(
+  messages: ChatMessage[],
+  provider: AIProvider,
+  model: string,
+  maxOutput?: number,
+): TrimmedMessagesResult {
+  const preset = getModelPreset(provider, model)
+  const safetyMargin = Math.round(preset.maxContext * 0.05)
+  const inputBudget = preset.maxContext - (maxOutput && maxOutput > 0 ? maxOutput : preset.maxOutput) - safetyMargin
+  const copy = messages.map(message => ({ ...message }))
+  let total = copy.reduce((sum, message) => sum + estimateTokens(message.content), 0)
+  let trimmed = false
+
+  let guard = 0
+  while (total > inputBudget && guard++ < copy.length * 3) {
+    const index = copy.findIndex(message =>
+      message.role !== 'system' && message.content !== '（此段因上下文窗口限制已裁剪）')
+    if (index < 0) break
+    const tokens = estimateTokens(copy[index].content)
+    const overflow = total - inputBudget
+    if (tokens <= overflow + 128) {
+      copy[index].content = '（此段因上下文窗口限制已裁剪）'
+    } else {
+      const keepTokens = Math.max(64, tokens - overflow - 128)
+      copy[index].content = trimTextToApproxTokens(copy[index].content, keepTokens)
+    }
+    total = copy.reduce((sum, message) => sum + estimateTokens(message.content), 0)
+    trimmed = true
+  }
+
+  return { messages: copy, trimmed, totalInputTokens: total, inputBudget }
+}
+
+function trimTextToApproxTokens(text: string, keepTokens: number): string {
+  if (estimateTokens(text) <= keepTokens) return text
+  let lo = 0
+  let hi = text.length
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    const candidate = text.slice(text.length - mid)
+    if (estimateTokens(candidate) <= keepTokens) lo = mid
+    else hi = mid - 1
+  }
+  return `（前文因上下文窗口限制已裁剪）\n${text.slice(text.length - lo)}`
 }
 
 /** 格式化 token 数为人类可读 */

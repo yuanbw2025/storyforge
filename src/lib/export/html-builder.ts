@@ -5,6 +5,7 @@
  */
 import { db } from '../db/schema'
 import type { Chapter } from '../types'
+import { sanitizeExportHtml } from './sanitize-html'
 
 export interface HTMLExportOptions {
   /** 包含大纲 */
@@ -138,7 +139,7 @@ export async function exportProjectHTML(
       const ch = chapterMap.get(node.id!)
       parts.push(`<div class="chapter" id="ch-${node.id}"><h3>${escapeHTML(node.title)}</h3>`)
       if (ch?.content) {
-        parts.push(`<div class="chapter-content">${ch.content}</div>`)
+        parts.push(`<div class="chapter-content">${sanitizeExportHtml(ch.content)}</div>`)
       } else if (node.summary) {
         parts.push(`<p class="outline-only">[大纲] ${escapeHTML(node.summary)}</p>`)
       }

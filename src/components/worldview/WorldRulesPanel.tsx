@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, Trash2, Eye, EyeOff, X, Check } from 'lucide-react'
 import { useWorldRulesStore } from '../../stores/world-rules'
+import { useWorldGroupStore } from '../../stores/world-group'
 import {
   WORLD_RULE_TREE,
   CONFLICT_PRIORITY_LABELS,
@@ -65,12 +66,18 @@ export default function WorldRulesPanel({ project }: Props) {
     addCustomNode, deleteCustomNode,
     filledCount,
   } = useWorldRulesStore()
+  const {
+    groups: worldGroups,
+    activeGroupId,
+    loadAll: loadWorldGroups,
+  } = useWorldGroupStore()
 
   const [selectedL1, setSelectedL1] = useState<string>(WORLD_RULE_TREE[0].id)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [previewText, setPreviewText] = useState('')
   const [previewTokens, setPreviewTokens] = useState(0)
+  const [worldTab, setWorldTab] = useState<number | null>(null)
 
   // 自定义节点新增
   const [addingL1, setAddingL1] = useState(false)
@@ -81,10 +88,32 @@ export default function WorldRulesPanel({ project }: Props) {
   const [timelineEvents, setTimelineEvents] = useState<HistoricalTimelineEvent[]>([])
   const [keywords, setKeywords] = useState<HistoricalKeyword[]>([])
 
-  // 加载数据
+  const projectWorldGroups = useMemo(
+    () => worldGroups.filter(group => group.projectId === project.id),
+    [project.id, worldGroups],
+  )
+
+  // 多世界项目先加载世界组，再按当前世界加载规则 profile。
   useEffect(() => {
-    loadProfile(project.id!)
-  }, [project.id, loadProfile])
+    if (!project.enableMultiWorld) return
+    loadWorldGroups(project.id!)
+  }, [project.id, project.enableMultiWorld, loadWorldGroups])
+
+  useEffect(() => {
+    if (!project.enableMultiWorld) {
+      setWorldTab(null)
+      return
+    }
+    if (worldTab != null) return
+    const activeGroupBelongsToProject = projectWorldGroups.some(group => group.id === activeGroupId)
+    const nextWorldGroupId = activeGroupBelongsToProject ? activeGroupId : projectWorldGroups[0]?.id ?? null
+    if (nextWorldGroupId != null) setWorldTab(nextWorldGroupId)
+  }, [activeGroupId, project.enableMultiWorld, projectWorldGroups, worldTab])
+
+  useEffect(() => {
+    if (project.enableMultiWorld && worldTab == null) return
+    loadProfile(project.id!, project.enableMultiWorld ? worldTab : null)
+  }, [project.id, project.enableMultiWorld, worldTab, loadProfile])
 
   useEffect(() => {
     const loadExtras = async () => {
@@ -99,6 +128,16 @@ export default function WorldRulesPanel({ project }: Props) {
     }
     loadExtras()
   }, [project.id])
+
+  const scopedTimelineEvents = useMemo(() => {
+    if (!project.enableMultiWorld) return timelineEvents
+    return timelineEvents.filter(e => (e.worldGroupId ?? null) === (worldTab ?? null))
+  }, [project.enableMultiWorld, timelineEvents, worldTab])
+
+  const scopedKeywords = useMemo(() => {
+    if (!project.enableMultiWorld) return keywords
+    return keywords.filter(k => (k.worldGroupId ?? null) === (worldTab ?? null))
+  }, [project.enableMultiWorld, keywords, worldTab])
 
   // 所有 L1 节点（预定义 + 自定义顶级）
   const l1Nodes = useMemo(() => {
@@ -198,11 +237,20 @@ export default function WorldRulesPanel({ project }: Props) {
       setShowPreview(false)
       return
     }
-    const text = buildWorldRulesManifest(profile, { timelineEvents, keywords })
+    const text = buildWorldRulesManifest(profile, {
+      timelineEvents: scopedTimelineEvents,
+      keywords: scopedKeywords,
+    })
     setPreviewText(text)
     setPreviewTokens(estimateManifestTokens(text))
     setShowPreview(true)
-  }, [showPreview, profile, timelineEvents, keywords])
+  }, [showPreview, profile, scopedTimelineEvents, scopedKeywords])
+
+  const handleSwitchWorld = useCallback((worldGroupId: number) => {
+    setWorldTab(worldGroupId)
+    setSelectedNode(null)
+    setShowPreview(false)
+  }, [])
 
   // 新增自定义 L1
   const handleAddL1 = useCallback(async () => {
@@ -257,6 +305,25 @@ export default function WorldRulesPanel({ project }: Props) {
           {showPreview ? '关闭预览' : 'AI 清单预览'}
         </button>
       </div>
+
+      {project.enableMultiWorld && projectWorldGroups.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {projectWorldGroups.map(group => (
+            <button
+              key={group.id}
+              onClick={() => group.id && handleSwitchWorld(group.id)}
+              className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                worldTab === group.id
+                  ? 'bg-accent/15 border-accent/40 text-accent'
+                  : 'bg-bg-base border-border text-text-secondary hover:bg-bg-hover'
+              }`}
+            >
+              <span className="mr-1">{group.icon || '🌐'}</span>
+              {group.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 三列布局 */}
       <div className="flex gap-0 border border-border rounded-xl overflow-hidden bg-bg-base" style={{ minHeight: 520 }}>

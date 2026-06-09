@@ -8,6 +8,8 @@
 import { useCharacterStore } from '../../stores/character'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useOutlineStore } from '../../stores/outline'
+import { db } from '../db/schema'
+import { adopt } from '../registry/adopt'
 import type { UnifiedParseResult } from '../types'
 import type { CharacterRole } from '../types'
 import {
@@ -32,7 +34,9 @@ export interface ApplyChunkCounts {
 export async function applyChunkResult(
   projectId: number,
   result: UnifiedParseResult,
+  worldGroupId: number | null = null,
 ): Promise<ApplyChunkCounts> {
+  const targetWorldGroupId = worldGroupId ?? null
   let worldviewFields = 0
   let charactersAdded = 0
   let outlineAdded = 0
@@ -40,7 +44,7 @@ export async function applyChunkResult(
   // ── 世界观：合并写（Phase 30.5: 句子级去重） ────────────────────
   if (result.worldview) {
     const wvStore = useWorldviewStore.getState()
-    await wvStore.loadAll(projectId)
+    await wvStore.loadAll(projectId, targetWorldGroupId)
     const existing = useWorldviewStore.getState().worldview
     const patch: Record<string, string> = {}
     for (const [k, v] of Object.entries(result.worldview)) {
@@ -61,7 +65,14 @@ export async function applyChunkResult(
       }
     }
     if (Object.keys(patch).length > 0) {
-      await wvStore.saveWorldview({ projectId, ...patch })
+      await adopt({
+        projectId,
+        worldGroupId: targetWorldGroupId,
+        target: 'worldviews',
+        mode: 'replace',
+        data: patch,
+      })
+      await wvStore.loadAll(projectId, targetWorldGroupId)
     }
   }
 
@@ -70,6 +81,7 @@ export async function applyChunkResult(
     const chStore = useCharacterStore.getState()
     await chStore.loadAll(projectId)
     const existingChars = useCharacterStore.getState().characters
+      .filter(ch => (ch.homeWorldGroupId ?? null) === targetWorldGroupId)
     // 建立名字→ID映射
     const nameMap = new Map<string, number>()
     for (const ch of existingChars) {
@@ -107,32 +119,51 @@ export async function applyChunkResult(
             arc: existing.arc || '',
           }
           const merged = mergeCharacterFields(existingFields, incomingFields)
-          await chStore.updateCharacter(dedup.existingId, merged)
+          await adopt({
+            projectId,
+            worldGroupId: targetWorldGroupId,
+            target: 'characters',
+            mode: 'add',
+            data: {
+              name: c.name.trim(),
+              role,
+              homeWorldGroupId: targetWorldGroupId,
+              ...merged,
+            },
+          })
           charactersAdded++ // 仍然计数（表示处理了一个角色）
         }
       } else {
         // 新角色 → 直接创建
         const charName = String(c.name).trim()
-        await chStore.addCharacter({
+        await adopt({
           projectId,
-          name: charName,
-          role,
-          shortDescription: incomingFields.shortDescription,
-          appearance: incomingFields.appearance,
-          personality: incomingFields.personality,
-          background: incomingFields.background,
-          motivation: incomingFields.motivation,
-          abilities: incomingFields.abilities,
-          relationships: incomingFields.relationships,
-          arc: incomingFields.arc,
+          worldGroupId: targetWorldGroupId,
+          target: 'characters',
+          mode: 'add',
+          data: {
+            name: charName,
+            role,
+            homeWorldGroupId: targetWorldGroupId,
+            shortDescription: incomingFields.shortDescription,
+            appearance: incomingFields.appearance,
+            personality: incomingFields.personality,
+            background: incomingFields.background,
+            motivation: incomingFields.motivation,
+            abilities: incomingFields.abilities,
+            relationships: incomingFields.relationships,
+            arc: incomingFields.arc,
+          },
         })
         // 更新映射以便同块内后续角色也能去重
-        const newChars = useCharacterStore.getState().characters
-        const added = newChars.find(ch => ch.name === charName)
+        const newChars = await db.characters.where('projectId').equals(projectId).toArray()
+        const added = newChars.find(ch =>
+          ch.name === charName && (ch.homeWorldGroupId ?? null) === targetWorldGroupId)
         if (added?.id != null) nameMap.set(added.name, added.id)
         charactersAdded++
       }
     }
+    await chStore.loadAll(projectId)
   }
 
   // ── 大纲：递归写（Phase 28.4: 支持将章节挂到已存在的同名卷下） ──
@@ -140,6 +171,7 @@ export async function applyChunkResult(
     const olStore = useOutlineStore.getState()
     await olStore.loadAll(projectId)
     const existingNodes = [...useOutlineStore.getState().nodes]
+      .filter(n => (n.worldGroupId ?? null) === targetWorldGroupId)
 
     // 已有卷节点的名称→ID映射（用于匹配 AI 返回的卷标题）
     const volumeMap = new Map<string, number>()
@@ -217,14 +249,22 @@ export async function applyChunkResult(
         return
       }
 
-      const id = await olStore.addNode({
+      const adopted = await adopt({
         projectId,
-        parentId,
-        type: isVolume ? 'volume' : 'chapter',
-        title: node.title.trim(),
-        summary: String(node.summary || ''),
-        order: orderRef.value++,
+        worldGroupId: targetWorldGroupId,
+        target: 'outlineNodes',
+        mode: 'add',
+        data: {
+          parentId,
+          type: isVolume ? 'volume' : 'chapter',
+          worldGroupId: targetWorldGroupId,
+          title: node.title.trim(),
+          summary: String(node.summary || ''),
+          order: orderRef.value++,
+        },
       })
+      const id = adopted.written[0]?.id
+      if (id == null) return
       outlineAdded++
       // 更新 existingNodes 以便同块内后续节点也能去重
       existingNodes.push({
@@ -232,6 +272,7 @@ export async function applyChunkResult(
         projectId,
         parentId,
         type: isVolume ? 'volume' : 'chapter',
+        worldGroupId: targetWorldGroupId,
         title: node.title.trim(),
         summary: String(node.summary || ''),
         order: orderRef.value - 1,
@@ -252,6 +293,7 @@ export async function applyChunkResult(
     for (const n of result.outline) {
       await writeNode(n as Record<string, unknown>, null, ref)
     }
+    await olStore.loadAll(projectId)
   }
 
   return {

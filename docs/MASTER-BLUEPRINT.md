@@ -826,7 +826,280 @@ export async function importProjectByRegistry(data: ExportData): Promise<number>
 export function validateRegistry(): void  // 在 main.tsx 启动时调用
 ```
 
-**关键不变量**：
+**核心 API 实现伪代码**(实施者可直接照写):
+
+```ts
+// ─────────────────────────────────────────────────────────────
+// 派生函数(基础)
+// ─────────────────────────────────────────────────────────────
+
+const REGISTRY_BY_NAME = new Map(PROJECT_TABLES.map(s => [s.name, s] as const))
+
+export const projectScopedTables = () =>
+  PROJECT_TABLES.filter(s =>
+    s.owner === 'project' || s.owner === 'direct-child' ||
+    s.owner === 'indirect' || s.owner === 'transient' || s.owner === 'blob'
+  )
+
+export const worldScopedTables = () =>
+  PROJECT_TABLES.filter(s => s.worldScoped)
+
+export const exportableTables = () => {
+  // 按 refs 拓扑序(被依赖的表先,依赖的表后)
+  return topoSort(PROJECT_TABLES.filter(s => s.exportable))
+}
+
+/** 计算某个生命周期操作需要的事务表清单(防止 Dexie 事务作用域漏表) */
+export function transactionTablesFor(
+  op: 'deleteProject' | 'deleteGroup' | 'migrate' | 'export' | 'import',
+): Table[] {
+  if (op === 'deleteProject') {
+    return projectScopedTables().map(s => s.table)
+  }
+  if (op === 'deleteGroup') {
+    // 不仅 worldScoped,还包括需要 setNull 的角色/大纲等
+    return [
+      ...worldScopedTables().map(s => s.table),
+      db.characters,           // homeWorldGroupId setNull
+      db.outlineNodes,         // worldGroupId setNull
+      db.worldGroups, db.worldGroupLinks,
+    ]
+  }
+  if (op === 'migrate') {
+    return worldScopedTables().map(s => s.table)
+  }
+  // export/import:全部可导出表
+  return exportableTables().map(s => s.table)
+}
+
+// ─────────────────────────────────────────────────────────────
+// cascadeDeleteProject - 删项目级联清理
+// ─────────────────────────────────────────────────────────────
+
+export async function cascadeDeleteProject(projectId: number): Promise<void> {
+  await db.transaction('rw', transactionTablesFor('deleteProject'), async () => {
+    // Step 1:收集 indirect 表的待删 keys(因为它们没 projectId)
+    const importSessions = await db.importSessions
+      .where('projectId').equals(projectId).primaryKeys()
+    const masterWorks = await db.masterWorks
+      .where('projectId').equals(projectId).primaryKeys()
+    const references = await db.references
+      .where('projectId').equals(projectId).primaryKeys()
+
+    // Step 2:按拓扑序删子表(被依赖的最后删)
+    for (const spec of projectScopedTables().reverse()) {
+      if (spec.owner === 'project') {
+        // 直接 projectId 删
+        await spec.table.where('projectId').equals(projectId).delete()
+      } else if (spec.owner === 'indirect') {
+        // 间接归属:用 IndirectRef 解析
+        for (const ref of spec.refs ?? []) {
+          if (ref.kind !== 'indirect') continue
+          if (ref.via.table === 'importSessions') {
+            await spec.table.where(ref.via.field).anyOf(importSessions as number[]).delete()
+          }
+          // 其他间接归属同理
+        }
+      } else if (spec.owner === 'blob') {
+        // Blob owner:用 keyResolver 计算 key
+        for (const ref of spec.refs ?? []) {
+          if (ref.kind !== 'blob-owner') continue
+          // master blob 用 100000+workId 虚拟 sessionId
+          for (const wid of masterWorks as number[]) {
+            await spec.table.delete(ref.keyResolver({ workId: wid }) as number)
+          }
+          // 普通导入 blob
+          for (const sid of importSessions as number[]) {
+            await spec.table.delete(sid as number)
+          }
+        }
+      } else if (spec.owner === 'transient') {
+        await spec.table.where('projectId').equals(projectId).delete()
+      }
+    }
+
+    // Step 3:删主表
+    await db.projects.delete(projectId)
+  })
+}
+
+// ─────────────────────────────────────────────────────────────
+// cascadeDeleteGroup - 删世界组级联清理
+// ─────────────────────────────────────────────────────────────
+
+export async function cascadeDeleteGroup(projectId: number, wgId: number): Promise<void> {
+  await db.transaction('rw', transactionTablesFor('deleteGroup'), async () => {
+    // Step 1:删该世界的所有 worldScoped 数据
+    for (const spec of worldScopedTables()) {
+      const wgField = spec.worldGroupField ?? 'worldGroupId'
+
+      // codexCategories 特殊:builtInKey 非空的内置分类保持 null=全局,不删
+      if (spec.name === 'codexCategories') {
+        const all = await spec.table.where('projectId').equals(projectId).toArray()
+        for (const row of all) {
+          const r = row as any
+          if (r[wgField] === wgId && !r.builtInKey) {
+            await spec.table.delete(r.id)
+          }
+        }
+        continue
+      }
+
+      const rows = await spec.table.where('projectId').equals(projectId).toArray()
+      for (const row of rows) {
+        if ((row as any)[wgField] === wgId) {
+          await spec.table.delete((row as any).id)
+        }
+      }
+    }
+
+    // Step 2:清角色 homeWorldGroupId(homeWorldScoped 表)
+    const chars = await db.characters.where('projectId').equals(projectId).toArray()
+    for (const c of chars) {
+      if (c.homeWorldGroupId === wgId) {
+        await db.characters.update(c.id!, { homeWorldGroupId: null })
+      }
+    }
+
+    // Step 3:清大纲 worldGroupId(outlineNodes 是 worldScoped 但不删,只 setNull)
+    const nodes = await db.outlineNodes.where('projectId').equals(projectId).toArray()
+    for (const n of nodes) {
+      if (n.worldGroupId === wgId) {
+        await db.outlineNodes.update(n.id!, { worldGroupId: null })
+      }
+    }
+
+    // Step 4:删世界关系链接
+    await db.worldGroupLinks.where('fromGroupId').equals(wgId).delete()
+    await db.worldGroupLinks.where('toGroupId').equals(wgId).delete()
+    await db.worldGroups.delete(wgId)
+  })
+}
+
+// ─────────────────────────────────────────────────────────────
+// stampPrimaryWorld - 开启多世界时把现有数据盖章到主世界
+// ─────────────────────────────────────────────────────────────
+
+export async function stampPrimaryWorld(projectId: number, primaryId: number): Promise<void> {
+  await db.transaction('rw', transactionTablesFor('migrate'), async () => {
+    for (const spec of worldScopedTables()) {
+      const wgField = spec.worldGroupField ?? 'worldGroupId'
+      const rows = await spec.table.where('projectId').equals(projectId).toArray()
+      for (const row of rows) {
+        const r = row as any
+        if (r[wgField] == null) {
+          // 内置 codexCategories(builtInKey 非空)保持 null=全局共用结构,不盖章
+          if (spec.name === 'codexCategories' && r.builtInKey) continue
+          await spec.table.update(r.id, { [wgField]: primaryId })
+        }
+      }
+    }
+  })
+}
+
+// ─────────────────────────────────────────────────────────────
+// cascadeDeleteRecord - 删某条记录时按 refs 级联(角色/章节/大纲等)
+// ─────────────────────────────────────────────────────────────
+
+export async function cascadeDeleteRecord(tableName: string, id: number): Promise<void> {
+  const spec = REGISTRY_BY_NAME.get(tableName)
+  if (!spec || !spec.refs?.length) {
+    return await spec?.table.delete(id)
+  }
+
+  // 收集所有"指向此记录"的引用,按 RefSpec 分类处理
+  for (const ref of spec.refs) {
+    switch (ref.kind) {
+      case 'simple': {
+        // 简单外键:cascade=级联删 / setNull=置空 / keep=保留
+        const m = ref.target.match(/^(\w+)\[(\w+)\]$/)
+        if (!m) break
+        const [, targetName, targetField] = m
+        const targetSpec = REGISTRY_BY_NAME.get(targetName)
+        if (!targetSpec) break
+
+        if (ref.onDelete === 'cascade') {
+          const keys = await (targetSpec.table as any).where(targetField).equals(id).primaryKeys()
+          if (keys.length) await targetSpec.table.bulkDelete(keys)
+        } else if (ref.onDelete === 'setNull') {
+          const rows = await (targetSpec.table as any).where(targetField).equals(id).toArray()
+          for (const r of rows) await targetSpec.table.update((r as any).id, { [targetField]: null })
+        }
+        break
+      }
+      case 'json': {
+        // JSON 字段引用:扫描所有可能含该 id 的记录,按 jsonPath 移除/重写
+        // 当前实现:全表扫描(数据量小,可接受;大数据后做索引)
+        const m = ref.target.match(/^(\w+)\[(\w+)\]$/)
+        if (!m) break
+        const [, targetName] = m
+        const targetSpec = REGISTRY_BY_NAME.get(targetName)
+        if (!targetSpec) break
+
+        const rows = await (targetSpec.table as any).toArray()
+        for (const r of rows) {
+          const jsonStr = (r as any)[ref.field]
+          if (!jsonStr) continue
+          try {
+            const parsed = JSON.parse(jsonStr)
+            // 简化:此处用 jsonpath 库或自写小解析
+            const cleaned = removeJsonRef(parsed, ref.jsonPath, id, ref.onDelete)
+            if (cleaned !== parsed) {
+              await targetSpec.table.update((r as any).id, { [ref.field]: JSON.stringify(cleaned) })
+            }
+          } catch { /* 静默忽略坏 JSON */ }
+        }
+        break
+      }
+      case 'array': {
+        // 数组字段引用:扫描所有包含该 id 的数组,移除该项
+        const m = ref.itemTarget.match(/^(\w+)$/)
+        if (!m) break
+        // 实现略,与 json 类似但操作目标是数组而非 JSON path
+        break
+      }
+      case 'indirect':
+      case 'blob-owner':
+        // 由 cascadeDeleteProject/Group 处理,这里不重复
+        break
+    }
+  }
+
+  await spec.table.delete(id)
+}
+
+// ─────────────────────────────────────────────────────────────
+// validateRegistry - 启动期完整性校验
+// ─────────────────────────────────────────────────────────────
+
+export function validateRegistry(): void {
+  const dexieTableNames = db.tables.map(t => t.name)
+  const registryTableNames = PROJECT_TABLES.map(s => s.name)
+
+  const missing = dexieTableNames.filter(n => !registryTableNames.includes(n))
+  const extra = registryTableNames.filter(n => !dexieTableNames.includes(n))
+
+  if (missing.length) throw new Error(`[Registry] 缺失登记: ${missing.join(', ')}`)
+  if (extra.length) throw new Error(`[Registry] 多了不存在的表: ${extra.join(', ')}`)
+
+  // 校验所有 RefSpec.target 表名存在
+  for (const spec of PROJECT_TABLES) {
+    for (const ref of spec.refs ?? []) {
+      if (ref.kind === 'simple' || ref.kind === 'json') {
+        const m = ref.target.match(/^(\w+)\[/)
+        if (m && !REGISTRY_BY_NAME.has(m[1])) {
+          throw new Error(`[Registry] ${spec.name}.refs 指向不存在的表: ${ref.target}`)
+        }
+      }
+    }
+  }
+}
+```
+
+> 📌 **实施者注**:`topoSort` / `removeJsonRef` 等辅助函数 5.5 自由实现(都是 < 30 行的纯函数)。
+> 关键的"事务作用域 / 拓扑序 / 间接归属 / Blob owner"四类难点在伪代码里已点透。
+
+**关键不变量**:
 - 启动期 `validateRegistry()` 校验：
   - 注册表中每张表都存在于 Dexie 实例
   - Dexie 中每张表都在注册表里登记（反之亦然）
@@ -894,6 +1167,218 @@ export interface AdoptResult {
 export async function adopt(input: AdoptInput): Promise<AdoptResult>
 ```
 
+**adopt() 实现伪代码**(实施者可直接照写):
+
+```ts
+const FIELD_BY_TARGET = new Map<string, FieldSpec[]>()
+for (const f of FIELD_REGISTRY) {
+  const arr = FIELD_BY_TARGET.get(f.target) ?? []
+  arr.push(f)
+  FIELD_BY_TARGET.set(f.target, arr)
+}
+
+const ADOPTION_BY_TARGET = new Map<string, CollectionAdoptionSpec>(
+  ADOPTION_SCHEMAS.map(s => [s.target, s] as const)
+)
+
+export async function adopt(input: AdoptInput): Promise<AdoptResult> {
+  const result: AdoptResult = {
+    written: [], aliasMapped: [], unknown: [], typeErrors: [], fkErrors: [], skipped: [],
+  }
+
+  const fieldSpecs = FIELD_BY_TARGET.get(input.target) ?? []
+  if (!fieldSpecs.length) {
+    result.skipped.push({ reason: `target ${input.target} 未在 FIELD_REGISTRY 登记`, data: input.data })
+    return result
+  }
+
+  const tableSpec = PROJECT_TABLES.find(s => s.name === input.target)
+  if (!tableSpec) throw new Error(`[adopt] target ${input.target} 不在 PROJECT_TABLES`)
+
+  // 分支:集合 vs 单例
+  const isCollection = ['add', 'add-many', 'merge-diffs'].includes(input.mode)
+
+  if (isCollection) {
+    return await adoptCollection(input, fieldSpecs, tableSpec, result)
+  } else {
+    return await adoptSingleton(input, fieldSpecs, tableSpec, result)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 单例写回(worldviews / storyCores / creativeRules 等)
+// ─────────────────────────────────────────────────────────────
+async function adoptSingleton(
+  input: AdoptInput, fieldSpecs: FieldSpec[], tableSpec: TableSpec, result: AdoptResult,
+): Promise<AdoptResult> {
+  const data = input.data as Record<string, unknown>
+  const patch: Record<string, unknown> = {}
+
+  // 1. 别名映射 + 类型校验
+  const byName = new Map(fieldSpecs.map(f => [f.field, f] as const))
+  const byAlias = new Map<string, FieldSpec>()
+  for (const f of fieldSpecs) for (const a of f.aliases ?? []) byAlias.set(a, f)
+
+  for (const [key, val] of Object.entries(data)) {
+    if (val == null || val === '') continue
+
+    let spec = byName.get(key)
+    let canonical = key
+    if (!spec) {
+      const aliasHit = byAlias.get(key)
+      if (aliasHit) {
+        spec = aliasHit
+        canonical = aliasHit.field
+        result.aliasMapped.push({ from: key, to: canonical })
+      } else {
+        result.unknown.push(key)
+        console.warn(`[adopt] 未知字段: ${input.target}.${key}`)
+        continue
+      }
+    }
+
+    const cleaned = validateAndCoerce(spec, val, result)
+    if (cleaned === undefined) continue
+
+    if (input.mode === 'append' && spec.type === 'longtext') {
+      const existing = await getCurrentFieldValue(input, spec)
+      patch[canonical] = existing ? `${existing}\n\n${cleaned}` : cleaned
+    } else {
+      patch[canonical] = cleaned
+    }
+  }
+
+  // 2. 以 DB 为准定位记录(防"内存为 null 建重复"那一类 bug)
+  const all = await tableSpec.table.where('projectId').equals(input.projectId).toArray()
+  let target: any = null
+  if (tableSpec.worldScoped) {
+    const wgField = tableSpec.worldGroupField ?? 'worldGroupId'
+    target = all.find((r: any) => (r[wgField] ?? null) === (input.worldGroupId ?? null))
+  } else {
+    target = all[0]
+  }
+
+  // 3. 写入(update 或 add)
+  if (target?.id) {
+    await tableSpec.table.update(target.id, { ...patch, updatedAt: Date.now() })
+    result.written.push({ id: target.id, fields: Object.keys(patch) })
+  } else {
+    const newRow = {
+      projectId: input.projectId,
+      ...(tableSpec.worldScoped ? { worldGroupId: input.worldGroupId ?? null } : {}),
+      ...patch,
+      createdAt: Date.now(), updatedAt: Date.now(),
+    }
+    const id = await tableSpec.table.add(newRow as any) as number
+    result.written.push({ id, fields: Object.keys(patch) })
+  }
+
+  return result
+}
+
+// ─────────────────────────────────────────────────────────────
+// 集合写回(characters / foreshadows / codexEntries 等)
+// ─────────────────────────────────────────────────────────────
+async function adoptCollection(
+  input: AdoptInput, fieldSpecs: FieldSpec[], tableSpec: TableSpec, result: AdoptResult,
+): Promise<AdoptResult> {
+  const adoption = ADOPTION_BY_TARGET.get(input.target)
+  if (!adoption) {
+    throw new Error(`[adopt] target ${input.target} 是集合写回但未在 ADOPTION_SCHEMAS 登记`)
+  }
+
+  const items = Array.isArray(input.data) ? input.data : [input.data as Record<string, unknown>]
+
+  for (const raw of items) {
+    // 1. 字段映射(同单例)
+    const item = normalizeAndValidate(raw, fieldSpecs, result)
+    if (!item) continue
+
+    // 2. 必填字段校验
+    for (const req of adoption.required) {
+      if (!item[req]) {
+        result.skipped.push({ reason: `必填字段 ${req} 缺失`, data: raw })
+        continue
+      }
+    }
+
+    // 3. FK 校验(防 AI 幻觉 ID 进库)
+    let fkOk = true
+    for (const fk of adoption.fkChecks ?? []) {
+      const refValue = item[fk.field]
+      if (refValue == null) continue
+      const targetSpec = PROJECT_TABLES.find(s => s.name === fk.target)
+      if (!targetSpec) continue
+      const exists = await targetSpec.table.get(refValue as number)
+      if (!exists) {
+        result.fkErrors.push({ field: fk.field, refValue })
+        fkOk = false
+        break
+      }
+    }
+    if (!fkOk) {
+      result.skipped.push({ reason: 'FK 校验失败', data: raw })
+      continue
+    }
+
+    // 4. 数组成员校验(防 AI 幻觉 ID 进 JSON 数组)
+    for (const arr of adoption.arrayMemberChecks ?? []) {
+      const arrValue = item[arr.field] as unknown[]
+      if (!Array.isArray(arrValue)) continue
+      const targetSpec = PROJECT_TABLES.find(s => s.name === arr.itemTarget)
+      if (!targetSpec) continue
+      const filtered: unknown[] = []
+      for (const v of arrValue) {
+        if (await targetSpec.table.get(v as number)) filtered.push(v)
+        else result.fkErrors.push({ field: `${arr.field}[]`, refValue: v })
+      }
+      item[arr.field] = filtered
+    }
+
+    // 5. 自动盖章(projectId / worldGroupId / homeWorldGroupId / 时间戳)
+    for (const stamp of adoption.autoStamps) {
+      if (stamp === 'projectId') item.projectId = input.projectId
+      else if (stamp === 'worldGroupId' && tableSpec.worldScoped) item.worldGroupId = input.worldGroupId ?? null
+      else if (stamp === 'homeWorldGroupId' && tableSpec.homeWorldScoped) item.homeWorldGroupId = input.worldGroupId ?? null
+      else if (stamp === 'createdAt') item.createdAt = Date.now()
+      else if (stamp === 'updatedAt') item.updatedAt = Date.now()
+    }
+
+    // 6. 去重 + 写入
+    const existing = await findExisting(tableSpec, item, adoption)
+    if (existing) {
+      if (adoption.duplicatePolicy === 'skip') {
+        result.skipped.push({ reason: '重复(skip)', data: raw })
+      } else if (adoption.duplicatePolicy === 'update') {
+        await tableSpec.table.update(existing.id, item)
+        result.written.push({ id: existing.id, fields: Object.keys(item) })
+      } else if (adoption.duplicatePolicy === 'merge') {
+        const merged = mergeByStrategy(existing, item, adoption.mergeStrategy ?? 'overwrite-non-empty')
+        await tableSpec.table.update(existing.id, merged)
+        result.written.push({ id: existing.id, fields: Object.keys(merged) })
+      } else if (adoption.duplicatePolicy === 'error') {
+        throw new Error(`[adopt] 重复记录 ${input.target}.${JSON.stringify(item)}`)
+      }
+    } else {
+      const id = await tableSpec.table.add(item as any) as number
+      result.written.push({ id, fields: Object.keys(item) })
+    }
+  }
+
+  return result
+}
+
+// 工具函数(实施者自由实现细节):
+// - validateAndCoerce(spec, val, result) → 类型校验 + 枚举归一(role: 主角→protagonist)
+// - normalizeAndValidate(raw, specs, result) → 单条记录的字段映射 + 校验
+// - findExisting(tableSpec, item, adoption) → 按 identity 策略找已有记录(id / name / composite)
+// - mergeByStrategy(existing, item, strategy) → overwrite-non-empty / append-text / union-array
+// - getCurrentFieldValue(input, spec) → 取单例表当前字段值(用于 append 模式)
+```
+
+> 📌 **实施者注**:6 个工具函数都是 < 30 行的纯函数,5.5 自由实现。
+> 核心难点(别名映射 / FK 校验 / 数组成员校验 / 自动盖章 / 去重策略)在伪代码里已点透。
+
 ### 5.3 CONTEXT_SOURCES（v2 强化版）
 
 ```ts
@@ -918,6 +1403,124 @@ export async function assembleContext(input: AssembleInput): Promise<AssembleRes
 // 2. 实现真裁剪（L3→L2→L1 真删 segment 后再发送）
 // 3. assembleContext 返回的 sections 用于消耗统计/预算条
 ```
+
+**assembleContext() 实现伪代码**(实施者可直接照写):
+
+```ts
+const SOURCE_BY_ID = new Map(CONTEXT_SOURCES.map(s => [s.id, s] as const))
+
+export async function assembleContext(input: AssembleInput): Promise<AssembleResult> {
+  const project = await db.projects.get(input.projectId)
+  if (!project) throw new Error('[assembleContext] 项目不存在')
+
+  // ──────────────────────────────────────────
+  // Step 1:多世界 worldGroupId 解析
+  // ──────────────────────────────────────────
+  // 优先级:input.worldGroupId 显式传入 > 按 nodeId 沿父链解析 > 单世界 null
+  let resolvedWg = input.worldGroupId ?? null
+  if (project.enableMultiWorld && resolvedWg == null && input.nodeId != null) {
+    resolvedWg = await resolveNodeWorldGroupId(input.projectId, input.nodeId)
+  }
+  const resolved: AssembleInput = { ...input, worldGroupId: resolvedWg }
+
+  // ──────────────────────────────────────────
+  // Step 2:运行时校验 scope='world' 必须有 worldGroupId
+  // ──────────────────────────────────────────
+  const need = new Set(input.need)
+  for (const id of need) {
+    const src = SOURCE_BY_ID.get(id)
+    if (!src) {
+      console.warn(`[assembleContext] need 中含未登记的 source: ${id}`)
+      continue
+    }
+    if (src.scope === 'world' && project.enableMultiWorld && resolvedWg == null) {
+      console.warn(`[assembleContext] source ${id} 是 world-scoped 但未指定 worldGroupId(项目多世界模式)`)
+    }
+  }
+
+  // ──────────────────────────────────────────
+  // Step 3:并行 build 所有声明的源
+  // ──────────────────────────────────────────
+  const tasks = CONTEXT_SOURCES
+    .filter(s => need.has(s.id))
+    .filter(s => !s.enabledWhen || s.enabledWhen(resolved, project))
+    .map(async (s): Promise<AssembledSection | null> => {
+      try {
+        const text = await s.build(resolved)
+        if (!text || !text.trim()) return null
+
+        const budget = input.budgetOverride?.[s.id] ?? s.budget
+        const clipped = text.length > budget
+          ? text.slice(0, budget) + '\n…(单源预算截断)'
+          : text
+
+        return {
+          id: s.id,
+          label: s.label,
+          layer: s.layer,
+          text: clipped,
+          tokens: estimateTokens(clipped),
+        }
+      } catch (err) {
+        console.warn(`[assembleContext] source ${s.id} build 失败:`, err)
+        return null
+      }
+    })
+
+  const sections = (await Promise.all(tasks)).filter(Boolean) as AssembledSection[]
+
+  // ──────────────────────────────────────────
+  // Step 4:按 layer 排序(L0 在前必留 / L3 末尾可丢)
+  // ──────────────────────────────────────────
+  sections.sort((a, b) => a.layer.localeCompare(b.layer))
+
+  // ──────────────────────────────────────────
+  // Step 5:真裁剪(超总预算时 L3→L2→L1 真删 segment)
+  // ──────────────────────────────────────────
+  const trimmedLayers: string[] = []
+  if (input.totalBudget != null) {
+    let total = sections.reduce((s, x) => s + x.tokens, 0)
+    for (const layer of ['L3', 'L2', 'L1'] as const) {
+      if (total <= input.totalBudget) break
+      const toRemove = sections.filter(s => s.layer === layer)
+      if (toRemove.length) {
+        const removed = toRemove.reduce((sum, s) => sum + s.tokens, 0)
+        for (const s of toRemove) {
+          const idx = sections.indexOf(s)
+          if (idx >= 0) {
+            sections.splice(idx, 1)
+            s.trimmed = true
+          }
+        }
+        total -= removed
+        trimmedLayers.push(layer)
+      }
+    }
+    // L0 必留:如仍超预算只能告警,不能再删
+    if (total > input.totalBudget) {
+      console.warn(`[assembleContext] L0 必留层超预算 ${total}/${input.totalBudget}`)
+    }
+  }
+
+  // ──────────────────────────────────────────
+  // Step 6:拼装 fullContext
+  // ──────────────────────────────────────────
+  return {
+    fullContext: sections.map(s => s.text).join('\n\n'),
+    sections,
+    totalTokens: sections.reduce((s, x) => s + x.tokens, 0),
+    trimmedLayers,
+    resolvedWorldGroupId: resolvedWg,
+  }
+}
+
+// 工具函数(实施者自由实现):
+// - resolveNodeWorldGroupId(projectId, nodeId) → 沿大纲 parentId 父链找到所属世界
+// - estimateTokens(text) → 中文 ~1.5 字符/token,英文 ~4 字符/token,粗估
+```
+
+> 📌 **实施者注**:`resolveNodeWorldGroupId` / `estimateTokens` 都是 < 20 行纯函数,5.5 自由实现。
+> 关键的"多世界解析 / 运行时 scope 校验 / 真裁剪 L3→L2→L1"在伪代码里已点透。
 
 ---
 

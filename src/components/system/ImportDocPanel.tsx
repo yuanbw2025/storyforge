@@ -12,6 +12,7 @@ import {
 } from '../../lib/import/pipeline'
 import { useImportSessionStore } from '../../stores/import-session'
 import { useImportStatusStore } from '../../stores/import-status'
+import { useWorldGroupStore } from '../../stores/world-group'
 import ImportConfirmModal from './import/ImportConfirmModal'
 import ImportReportModal from './import/ImportReportModal'
 import ImportStatusBar from './import/ImportStatusBar'
@@ -49,6 +50,7 @@ export default function ImportDocPanel({ project }: Props) {
   const [chunkSize, setChunkSize] = useState(DEFAULT_CHUNK_SIZE)
   const [showConfirm, setShowConfirm] = useState(false)
   const [volumeDetect, setVolumeDetect] = useState<VolumeDetectResult | null>(null)
+  const [targetWorldGroupId, setTargetWorldGroupId] = useState<number | null>(null)
 
   // 报告 modal + 未完成会话
   const [reportSession, setReportSession] = useState<ImportSession | null>(null)
@@ -58,9 +60,33 @@ export default function ImportDocPanel({ project }: Props) {
   const [restoringBlob, setRestoringBlob] = useState(false)
 
   const status = useImportStatusStore()
+  const {
+    groups: allWorldGroups,
+    activeGroupId,
+    loadAll: loadWorldGroups,
+  } = useWorldGroupStore()
   const phase = status.phase
   const isRunning = phase === 'running' || phase === 'merging' || phase === 'preparing'
   const isPaused = phase === 'paused'
+  const worldGroups = useMemo(
+    () => allWorldGroups.filter(group => group.projectId === project.id),
+    [allWorldGroups, project.id],
+  )
+
+  useEffect(() => {
+    if (!project.enableMultiWorld) {
+      setTargetWorldGroupId(null)
+      return
+    }
+    loadWorldGroups(project.id!)
+  }, [project.enableMultiWorld, project.id, loadWorldGroups])
+
+  useEffect(() => {
+    if (!project.enableMultiWorld) return
+    if (targetWorldGroupId != null && worldGroups.some(group => group.id === targetWorldGroupId)) return
+    const activeBelongsToProject = worldGroups.some(group => group.id === activeGroupId)
+    setTargetWorldGroupId(activeBelongsToProject ? activeGroupId : worldGroups[0]?.id ?? null)
+  }, [activeGroupId, project.enableMultiWorld, targetWorldGroupId, worldGroups])
 
   // ── 启动时：申请持久存储权限（一次性，浏览器会记住） ─────
   useEffect(() => {
@@ -196,8 +222,12 @@ export default function ImportDocPanel({ project }: Props) {
   }
 
   // ── 在 Confirm Modal 里确认：创建 session 并启动 ───────────
-  const handleConfirmStart = async (importTarget: ImportTarget) => {
+  const handleConfirmStart = async (importTarget: ImportTarget, selectedWorldGroupId?: number | null) => {
     if (!plans) return
+    if (importTarget === 'project' && project.enableMultiWorld && selectedWorldGroupId == null) {
+      alert('请先选择本次导入要写入的目标世界。')
+      return
+    }
     setShowConfirm(false)
 
     useImportStatusStore.getState().reset()
@@ -223,6 +253,7 @@ export default function ImportDocPanel({ project }: Props) {
       merged: { worldview: {}, characters: [], outline: [] },
       rollingContext: '',
       importTarget,
+      targetWorldGroupId: importTarget === 'project' ? (selectedWorldGroupId ?? null) : null,
       status: 'pending',
     }
 
@@ -257,6 +288,7 @@ export default function ImportDocPanel({ project }: Props) {
             projectId: project.id!,
             parentId: null,
             type: 'volume',
+            worldGroupId: selectedWorldGroupId ?? null,
             title: vol.title,
             summary: '',
             order: startOrder + vi,
@@ -542,6 +574,9 @@ export default function ImportDocPanel({ project }: Props) {
           chunks={plans}
           chunkSize={chunkSize}
           volumeDetect={volumeDetect}
+          worldGroups={project.enableMultiWorld ? worldGroups : []}
+          targetWorldGroupId={targetWorldGroupId}
+          onTargetWorldGroupChange={setTargetWorldGroupId}
           onChunkSizeChange={handleChunkSizeChange}
           onConfirm={handleConfirmStart}
           onCancel={() => setShowConfirm(false)}

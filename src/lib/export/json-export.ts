@@ -14,6 +14,188 @@ import type {
   ImportantLocation, WorldRulesProfile, CodexCategory, CodexEntry,
 } from '../types'
 
+type WorldGroupExportRef = {
+  _worldGroupExportId?: number | null
+  /** Legacy export compatibility only. New exports should not write this field. */
+  worldGroupId?: number | null
+}
+
+type HomeWorldGroupExportRef = {
+  _homeWorldGroupExportId?: number | null
+  /** Legacy export compatibility only. New exports should not write this field. */
+  homeWorldGroupId?: number | null
+}
+
+const PROJECT_TABLES_ALL = [
+  db.aiUsageLog,
+  db.chapters,
+  db.characterRelations,
+  db.characters,
+  db.codexCategories,
+  db.codexEntries,
+  db.creativeRules,
+  db.detailedOutlines,
+  db.emotionBeatCards,
+  db.factions,
+  db.foreshadows,
+  db.geographies,
+  db.historicalKeywords,
+  db.historicalTimelineEvents,
+  db.histories,
+  db.importFiles,
+  db.importJobs,
+  db.importLogs,
+  db.importSessions,
+  db.importantLocations,
+  db.itemLedger,
+  db.itemSystems,
+  db.masterChapterBeats,
+  db.masterChunkAnalysis,
+  db.masterInsights,
+  db.masterStyleMetrics,
+  db.masterWorks,
+  db.notes,
+  db.outlineNodes,
+  db.powerSystems,
+  db.projects,
+  db.promptTemplates,
+  db.promptWorkflows,
+  db.referenceChunkAnalysis,
+  db.references,
+  db.snapshots,
+  db.stateCards,
+  db.storyArcs,
+  db.storyCores,
+  db.storyTimelineEvents,
+  db.worldGroupLinks,
+  db.worldGroups,
+  db.worldNodes,
+  db.worldRulesProfiles,
+  db.worldviews,
+]
+
+function requireMappedId(
+  map: Map<number, number>,
+  exportId: number | null | undefined,
+  label: string,
+): number {
+  if (exportId == null) {
+    throw new Error(`[importProjectJSON] 缺失外键映射:${label}`)
+  }
+  const id = map.get(exportId)
+  if (id == null) {
+    throw new Error(`[importProjectJSON] 无效外键映射:${label}=${exportId}`)
+  }
+  return id
+}
+
+function optionalMappedId(
+  map: Map<number, number>,
+  exportId: number | null | undefined,
+  label: string,
+): number | null {
+  if (exportId == null) return null
+  return requireMappedId(map, exportId, label)
+}
+
+function assertRequiredIdInSet(allowedIds: Set<number>, id: number | null | undefined, label: string): void {
+  if (id == null || !allowedIds.has(id)) {
+    throw new Error(`[importProjectJSON] 导入完整性断言失败:${label}=${id ?? 'null'}`)
+  }
+}
+
+function assertOptionalIdInSet(allowedIds: Set<number>, id: number | null | undefined, label: string): void {
+  if (id == null) return
+  assertRequiredIdInSet(allowedIds, id, label)
+}
+
+async function assertImportedProjectIntegrity(
+  newProjectId: number,
+  ids: {
+    outlineIds: Iterable<number>
+    chapterIds: Iterable<number>
+    characterIds: Iterable<number>
+    referenceIds: Iterable<number>
+    masterWorkIds: Iterable<number>
+    worldGroupIds: Iterable<number>
+    worldNodeIds: Iterable<number>
+    locationIds: Iterable<number>
+    codexCategoryIds: Iterable<number>
+  },
+): Promise<void> {
+  const outlineIds = new Set(ids.outlineIds)
+  const chapterIds = new Set(ids.chapterIds)
+  const characterIds = new Set(ids.characterIds)
+  const referenceIds = new Set(ids.referenceIds)
+  const masterWorkIds = new Set(ids.masterWorkIds)
+  const worldGroupIds = new Set(ids.worldGroupIds)
+  const worldNodeIds = new Set(ids.worldNodeIds)
+  const locationIds = new Set(ids.locationIds)
+  const codexCategoryIds = new Set(ids.codexCategoryIds)
+
+  const referenceIdList = [...referenceIds]
+  const masterWorkIdList = [...masterWorkIds]
+
+  const [
+    outlineNodes,
+    chapters,
+    relations,
+    detailedOutlines,
+    emotionCards,
+    worldNodes,
+    worldGroupLinks,
+    itemLedger,
+    storyEvents,
+    locations,
+    codexCategories,
+    codexEntries,
+    referenceChunks,
+    masterChunks,
+    masterBeats,
+    masterMetrics,
+  ] = await Promise.all([
+    db.outlineNodes.where('projectId').equals(newProjectId).toArray(),
+    db.chapters.where('projectId').equals(newProjectId).toArray(),
+    db.characterRelations.where('projectId').equals(newProjectId).toArray(),
+    db.detailedOutlines.where('projectId').equals(newProjectId).toArray(),
+    db.emotionBeatCards.where('projectId').equals(newProjectId).toArray(),
+    db.worldNodes.where('projectId').equals(newProjectId).toArray(),
+    db.worldGroupLinks.where('projectId').equals(newProjectId).toArray(),
+    db.itemLedger.where('projectId').equals(newProjectId).toArray(),
+    db.storyTimelineEvents.where('projectId').equals(newProjectId).toArray(),
+    db.importantLocations.where('projectId').equals(newProjectId).toArray(),
+    db.codexCategories.where('projectId').equals(newProjectId).toArray(),
+    db.codexEntries.where('projectId').equals(newProjectId).toArray(),
+    referenceIdList.length > 0 ? db.referenceChunkAnalysis.where('referenceId').anyOf(referenceIdList).toArray() : [],
+    masterWorkIdList.length > 0 ? db.masterChunkAnalysis.where('workId').anyOf(masterWorkIdList).toArray() : [],
+    masterWorkIdList.length > 0 ? db.masterChapterBeats.where('workId').anyOf(masterWorkIdList).toArray() : [],
+    masterWorkIdList.length > 0 ? db.masterStyleMetrics.where('workId').anyOf(masterWorkIdList).toArray() : [],
+  ])
+
+  for (const n of outlineNodes) assertOptionalIdInSet(outlineIds, n.parentId, 'outlineNodes.parentId')
+  for (const c of chapters) assertRequiredIdInSet(outlineIds, c.outlineNodeId, 'chapters.outlineNodeId')
+  for (const r of relations) {
+    assertRequiredIdInSet(characterIds, r.fromCharacterId, 'characterRelations.fromCharacterId')
+    assertRequiredIdInSet(characterIds, r.toCharacterId, 'characterRelations.toCharacterId')
+  }
+  for (const d of detailedOutlines) assertRequiredIdInSet(outlineIds, d.outlineNodeId, 'detailedOutlines.outlineNodeId')
+  for (const e of emotionCards) assertRequiredIdInSet(chapterIds, e.chapterId, 'emotionBeatCards.chapterId')
+  for (const n of worldNodes) assertOptionalIdInSet(worldNodeIds, n.parentId, 'worldNodes.parentId')
+  for (const l of worldGroupLinks) {
+    assertRequiredIdInSet(worldGroupIds, l.fromGroupId, 'worldGroupLinks.fromGroupId')
+    assertRequiredIdInSet(worldGroupIds, l.toGroupId, 'worldGroupLinks.toGroupId')
+  }
+  for (const e of itemLedger) assertOptionalIdInSet(chapterIds, e.chapterId, 'itemLedger.chapterId')
+  for (const e of storyEvents) assertOptionalIdInSet(chapterIds, e.chapterId, 'storyTimelineEvents.chapterId')
+  for (const l of locations) assertOptionalIdInSet(locationIds, l.parentId, 'importantLocations.parentId')
+  for (const c of codexCategories) assertOptionalIdInSet(codexCategoryIds, c.parentId, 'codexCategories.parentId')
+  for (const e of codexEntries) assertRequiredIdInSet(codexCategoryIds, e.categoryId, 'codexEntries.categoryId')
+  for (const a of referenceChunks) assertRequiredIdInSet(referenceIds, a.referenceId, 'referenceChunkAnalysis.referenceId')
+  for (const a of masterChunks) assertRequiredIdInSet(masterWorkIds, a.workId, 'masterChunkAnalysis.workId')
+  for (const b of masterBeats) assertRequiredIdInSet(masterWorkIds, b.workId, 'masterChapterBeats.workId')
+  for (const s of masterMetrics) assertRequiredIdInSet(masterWorkIds, s.workId, 'masterStyleMetrics.workId')
+}
+
 /**
  * 完整项目导出数据结构
  *
@@ -35,16 +217,16 @@ export interface ProjectExportData {
   project: Omit<Project, 'id'>
 
   // ── 原有（v1）──
-  worldviews: Omit<Worldview, 'id' | 'projectId'>[]
+  worldviews: (Omit<Worldview, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
   storyCores: Omit<StoryCore, 'id' | 'projectId'>[]
-  powerSystems: Omit<PowerSystem, 'id' | 'projectId'>[]
-  characters: Omit<Character, 'id' | 'projectId'>[]
+  powerSystems: (Omit<PowerSystem, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
+  characters: (Omit<Character, 'id' | 'projectId' | 'homeWorldGroupId'> & HomeWorldGroupExportRef)[]
   factions: Omit<Faction, 'id' | 'projectId'>[]
-  outlineNodes: (Omit<OutlineNode, 'id' | 'projectId'> & { _exportId: number; _parentExportId: number | null })[]
+  outlineNodes: (Omit<OutlineNode, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef & { _exportId: number; _parentExportId: number | null })[]
   chapters: (Omit<Chapter, 'id' | 'projectId' | 'outlineNodeId'> & { _outlineExportId: number })[]
   foreshadows: Omit<Foreshadow, 'id' | 'projectId'>[]
-  geographies: Omit<Geography, 'id' | 'projectId'>[]
-  histories: Omit<History, 'id' | 'projectId'>[]
+  geographies: (Omit<Geography, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
+  histories: (Omit<History, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
   itemSystems: Omit<ItemSystem, 'id' | 'projectId'>[]
   creativeRules: Omit<CreativeRules, 'id' | 'projectId'>[]
   characterRelations: (Omit<CharacterRelation, 'id' | 'projectId' | 'fromCharacterId' | 'toCharacterId'> & {
@@ -57,12 +239,12 @@ export interface ProjectExportData {
   emotionBeatCards?: (Omit<EmotionBeatCard, 'id' | 'projectId' | 'chapterId'> & { _chapterExportId: number })[]
   stateCards?: Omit<StateCard, 'id' | 'projectId'>[]
   storyArcs?: Omit<StoryArc, 'id' | 'projectId'>[]
-  worldNodes?: (Omit<WorldNode, 'id' | 'projectId'> & { _exportId: number; _parentExportId: number | null })[]
+  worldNodes?: (Omit<WorldNode, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef & { _exportId: number; _parentExportId: number | null })[]
   notes?: Omit<Note, 'id' | 'projectId'>[]
   references?: (Omit<Reference, 'id' | 'projectId'> & { _exportId: number })[]
   referenceChunkAnalysis?: (Omit<ReferenceChunkAnalysis, 'id' | 'referenceId'> & { _referenceExportId: number })[]
-  historicalTimelineEvents?: Omit<HistoricalTimelineEvent, 'id' | 'projectId'>[]
-  historicalKeywords?: Omit<HistoricalKeyword, 'id' | 'projectId'>[]
+  historicalTimelineEvents?: (Omit<HistoricalTimelineEvent, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
+  historicalKeywords?: (Omit<HistoricalKeyword, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
   masterWorks?: (Omit<MasterWork, 'id'> & { _exportId: number })[]
   masterChunkAnalysis?: (Omit<MasterChunkAnalysis, 'id' | 'workId'> & { _workExportId: number })[]
   masterChapterBeats?: (Omit<MasterChapterBeat, 'id' | 'workId'> & { _workExportId: number })[]
@@ -83,9 +265,9 @@ export interface ProjectExportData {
 
   // ── 此前漏导出（会丢数据），补全 ──
   importantLocations?: (Omit<ImportantLocation, 'id' | 'projectId' | 'parentId'> & { _exportId: number; _parentExportId: number | null })[]
-  worldRulesProfiles?: Omit<WorldRulesProfile, 'id' | 'projectId'>[]
-  codexCategories?: (Omit<CodexCategory, 'id' | 'projectId' | 'parentId'> & { _exportId: number; _parentExportId: number | null })[]
-  codexEntries?: (Omit<CodexEntry, 'id' | 'projectId' | 'categoryId'> & { _categoryExportId: number })[]
+  worldRulesProfiles?: (Omit<WorldRulesProfile, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
+  codexCategories?: (Omit<CodexCategory, 'id' | 'projectId' | 'parentId' | 'worldGroupId'> & WorldGroupExportRef & { _exportId: number; _parentExportId: number | null })[]
+  codexEntries?: (Omit<CodexEntry, 'id' | 'projectId' | 'categoryId' | 'worldGroupId'> & WorldGroupExportRef & { _categoryExportId: number })[]
 }
 
 /** 导出项目为 JSON */
@@ -154,6 +336,22 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
   // 世界组 ID → 导出序号
   const worldGroupIdMap = new Map<number, number>()
   worldGroups.forEach((g, i) => { if (g.id) worldGroupIdMap.set(g.id, i) })
+  const toWorldGroupExportId = (worldGroupId?: number | null): number | null => {
+    if (worldGroupId == null) return null
+    return worldGroupIdMap.get(worldGroupId) ?? null
+  }
+  const withWorldGroupExportId = <T extends { worldGroupId?: number | null }>(
+    row: T,
+  ): Omit<T, 'worldGroupId'> & WorldGroupExportRef => {
+    const { worldGroupId, ...rest } = row
+    return { ...rest, _worldGroupExportId: toWorldGroupExportId(worldGroupId) }
+  }
+  const withHomeWorldGroupExportId = <T extends { homeWorldGroupId?: number | null }>(
+    row: T,
+  ): Omit<T, 'homeWorldGroupId'> & HomeWorldGroupExportRef => {
+    const { homeWorldGroupId, ...rest } = row
+    return { ...rest, _homeWorldGroupExportId: toWorldGroupExportId(homeWorldGroupId) }
+  }
 
   // 大纲节点 ID → 导出序号
   const outlineIdMap = new Map<number, number>()
@@ -216,15 +414,15 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     project: projectData,
 
     // ── v1 原有 ──
-    worldviews: worldviews.map(({ id: _, projectId: __, ...rest }) => rest),
+    worldviews: worldviews.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
     storyCores: storyCores.map(({ id: _, projectId: __, ...rest }) => rest),
-    powerSystems: powerSystems.map(({ id: _, projectId: __, ...rest }) => rest),
-    characters: characters.map(({ id: _, projectId: __, ...rest }) => rest),
+    powerSystems: powerSystems.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
+    characters: characters.map(({ id: _, projectId: __, ...rest }) => withHomeWorldGroupExportId(rest)),
     factions: factions.map(({ id: _, projectId: __, ...rest }) => rest),
     outlineNodes: outlineNodes.map((n) => {
       const { id, projectId: __, ...rest } = n
       return {
-        ...rest,
+        ...withWorldGroupExportId(rest),
         _exportId: outlineIdMap.get(id!) ?? 0,
         _parentExportId: n.parentId ? (outlineIdMap.get(n.parentId) ?? null) : null,
       }
@@ -237,8 +435,8 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
       }
     }),
     foreshadows: foreshadows.map(({ id: _, projectId: __, ...rest }) => rest),
-    geographies: geographies.map(({ id: _, projectId: __, ...rest }) => rest),
-    histories: histories.map(({ id: _, projectId: __, ...rest }) => rest),
+    geographies: geographies.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
+    histories: histories.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
     itemSystems: itemSystems.map(({ id: _, projectId: __, ...rest }) => rest),
     creativeRules: creativeRules.map(({ id: _, projectId: __, ...rest }) => rest),
     characterRelations: characterRelations.map((r) => {
@@ -264,7 +462,7 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     worldNodes: worldNodes.map((w) => {
       const { id, projectId: __, ...rest } = w
       return {
-        ...rest,
+        ...withWorldGroupExportId(rest),
         _exportId: worldNodeIdMap.get(id!) ?? 0,
         _parentExportId: w.parentId ? (worldNodeIdMap.get(w.parentId) ?? null) : null,
       }
@@ -278,8 +476,8 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
       const { id: _, referenceId, ...rest } = a
       return { ...rest, _referenceExportId: refIdMap.get(referenceId) ?? 0 }
     }),
-    historicalTimelineEvents: historicalTimelineEvents.map(({ id: _, projectId: __, ...rest }) => rest),
-    historicalKeywords: historicalKeywords.map(({ id: _, projectId: __, ...rest }) => rest),
+    historicalTimelineEvents: historicalTimelineEvents.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
+    historicalKeywords: historicalKeywords.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
     masterWorks: masterWorks.map((w) => {
       const { id, ...rest } = w
       return { ...rest, _exportId: masterWorkIdMap.get(id!) ?? 0 }
@@ -322,14 +520,14 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
       _exportId: i,
       _parentExportId: parentId != null ? (locationIdMap.get(parentId) ?? null) : null,
     })),
-    worldRulesProfiles: worldRulesProfiles.map(({ id: _, projectId: _p, ...rest }) => rest),
+    worldRulesProfiles: worldRulesProfiles.map(({ id: _, projectId: _p, ...rest }) => withWorldGroupExportId(rest)),
     codexCategories: codexCategories.map(({ id: _, projectId: _p, parentId, ...rest }, i) => ({
-      ...rest,
+      ...withWorldGroupExportId(rest),
       _exportId: i,
       _parentExportId: parentId != null ? (codexCatIdMap.get(parentId) ?? null) : null,
     })),
     codexEntries: codexEntries.map(({ id: _, projectId: _p, categoryId, ...rest }) => ({
-      ...rest,
+      ...withWorldGroupExportId(rest),
       _categoryExportId: codexCatIdMap.get(categoryId) ?? 0,
     })),
   }
@@ -355,6 +553,7 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
 
   const now = Date.now()
 
+  return await db.transaction('rw', PROJECT_TABLES_ALL, async () => {
   // 1. 创建项目
   const newProjectId = await db.projects.add({
     ...data.project,
@@ -363,22 +562,53 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
     updatedAt: now,
   } as Project) as number
 
+  const newWorldGroupIds = new Map<number, number>()
+  for (const g of data.worldGroups || []) {
+    const { _exportId, ...rest } = g
+    const newId = await db.worldGroups.add({
+      ...rest,
+      projectId: newProjectId,
+    } as WorldGroup) as number
+    newWorldGroupIds.set(_exportId, newId)
+  }
+
+  const remapImportedWorldGroupId = (
+    exportId?: number | null,
+    legacyRawId?: number | null,
+  ): number | null => {
+    if (exportId != null) return newWorldGroupIds.get(exportId) ?? null
+    if (legacyRawId != null) return newWorldGroupIds.get(legacyRawId) ?? null
+    return null
+  }
+  const importWorldScoped = <T extends WorldGroupExportRef>(
+    row: T,
+  ): Omit<T, '_worldGroupExportId' | 'worldGroupId'> & { worldGroupId: number | null } => {
+    const { _worldGroupExportId, worldGroupId, ...rest } = row
+    return { ...rest, worldGroupId: remapImportedWorldGroupId(_worldGroupExportId, worldGroupId) }
+  }
+  const importHomeWorldScoped = <T extends HomeWorldGroupExportRef>(
+    row: T,
+  ): Omit<T, '_homeWorldGroupExportId' | 'homeWorldGroupId'> & { homeWorldGroupId: number | null } => {
+    const { _homeWorldGroupExportId, homeWorldGroupId, ...rest } = row
+    return { ...rest, homeWorldGroupId: remapImportedWorldGroupId(_homeWorldGroupExportId, homeWorldGroupId) }
+  }
+
   // 2. 导入世界观相关
   for (const w of data.worldviews || []) {
-    await db.worldviews.add({ ...w, projectId: newProjectId } as Worldview)
+    await db.worldviews.add({ ...importWorldScoped(w), projectId: newProjectId } as Worldview)
   }
   for (const sc of data.storyCores || []) {
     await db.storyCores.add({ ...sc, projectId: newProjectId } as StoryCore)
   }
   for (const ps of data.powerSystems || []) {
-    await db.powerSystems.add({ ...ps, projectId: newProjectId } as PowerSystem)
+    await db.powerSystems.add({ ...importWorldScoped(ps), projectId: newProjectId } as PowerSystem)
   }
 
   // 3. 导入角色（记录新旧 ID 映射）
   const newCharIds = new Map<number, number>()
   for (let i = 0; i < (data.characters || []).length; i++) {
     const c = data.characters[i]
-    const newId = await db.characters.add({ ...c, projectId: newProjectId } as Character) as number
+    const newId = await db.characters.add({ ...importHomeWorldScoped(c), projectId: newProjectId } as Character) as number
     newCharIds.set(i, newId)
   }
 
@@ -396,9 +626,9 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   })
   for (const n of sortedNodes) {
     const { _exportId, _parentExportId, parentId: _, ...rest } = n
-    const newParentId = _parentExportId !== null ? (newOutlineIds.get(_parentExportId) ?? null) : null
+    const newParentId = optionalMappedId(newOutlineIds, _parentExportId, 'outlineNodes.parentId')
     const newId = await db.outlineNodes.add({
-      ...rest,
+      ...importWorldScoped(rest),
       parentId: newParentId,
       projectId: newProjectId,
     } as OutlineNode) as number
@@ -410,7 +640,7 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   for (let i = 0; i < (data.chapters || []).length; i++) {
     const ch = data.chapters[i]
     const { _outlineExportId, ...rest } = ch
-    const newOutlineNodeId = newOutlineIds.get(_outlineExportId) ?? 0
+    const newOutlineNodeId = requireMappedId(newOutlineIds, _outlineExportId, 'chapters.outlineNodeId')
     const newId = await db.chapters.add({
       ...rest,
       outlineNodeId: newOutlineNodeId,
@@ -426,10 +656,10 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
 
   // 8. 导入其他基础模块
   for (const g of data.geographies || []) {
-    await db.geographies.add({ ...g, projectId: newProjectId } as Geography)
+    await db.geographies.add({ ...importWorldScoped(g), projectId: newProjectId } as Geography)
   }
   for (const h of data.histories || []) {
-    await db.histories.add({ ...h, projectId: newProjectId } as History)
+    await db.histories.add({ ...importWorldScoped(h), projectId: newProjectId } as History)
   }
   for (const item of data.itemSystems || []) {
     await db.itemSystems.add({ ...item, projectId: newProjectId } as ItemSystem)
@@ -441,16 +671,14 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   // 9. 导入角色关系（重建 fromCharacterId/toCharacterId）
   for (const r of data.characterRelations || []) {
     const { _fromCharacterIndex, _toCharacterIndex, ...rest } = r
-    const fromId = newCharIds.get(_fromCharacterIndex)
-    const toId = newCharIds.get(_toCharacterIndex)
-    if (fromId && toId) {
-      await db.characterRelations.add({
-        ...rest,
-        fromCharacterId: fromId,
-        toCharacterId: toId,
-        projectId: newProjectId,
-      } as CharacterRelation)
-    }
+    const fromId = requireMappedId(newCharIds, _fromCharacterIndex, 'characterRelations.fromCharacterId')
+    const toId = requireMappedId(newCharIds, _toCharacterIndex, 'characterRelations.toCharacterId')
+    await db.characterRelations.add({
+      ...rest,
+      fromCharacterId: fromId,
+      toCharacterId: toId,
+      projectId: newProjectId,
+    } as CharacterRelation)
   }
 
   // ── v2 新增表（向后兼容：字段不存在时跳过） ──
@@ -458,7 +686,7 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   // 10. 细纲（重建 outlineNodeId）
   for (const d of data.detailedOutlines || []) {
     const { _outlineExportId, ...rest } = d
-    const newOutlineNodeId = newOutlineIds.get(_outlineExportId) ?? 0
+    const newOutlineNodeId = requireMappedId(newOutlineIds, _outlineExportId, 'detailedOutlines.outlineNodeId')
     await db.detailedOutlines.add({
       ...rest,
       outlineNodeId: newOutlineNodeId,
@@ -469,7 +697,7 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   // 11. 情感节拍卡（重建 chapterId）
   for (const e of data.emotionBeatCards || []) {
     const { _chapterExportId, ...rest } = e
-    const newChapterId = newChapterIds.get(_chapterExportId) ?? 0
+    const newChapterId = requireMappedId(newChapterIds, _chapterExportId, 'emotionBeatCards.chapterId')
     await db.emotionBeatCards.add({
       ...rest,
       chapterId: newChapterId,
@@ -496,9 +724,9 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   })
   for (const w of sortedWorldNodes) {
     const { _exportId, _parentExportId, parentId: _, ...rest } = w
-    const newParentId = _parentExportId !== null ? (newWorldNodeIds.get(_parentExportId) ?? null) : null
+    const newParentId = optionalMappedId(newWorldNodeIds, _parentExportId, 'worldNodes.parentId')
     const newId = await db.worldNodes.add({
-      ...rest,
+      ...importWorldScoped(rest),
       parentId: newParentId,
       projectId: newProjectId,
     } as WorldNode) as number
@@ -524,23 +752,21 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   // 17. 参考书目分块分析（重建 referenceId）
   for (const a of data.referenceChunkAnalysis || []) {
     const { _referenceExportId, ...rest } = a
-    const newRefId = newRefIds.get(_referenceExportId)
-    if (newRefId) {
-      await db.referenceChunkAnalysis.add({
-        ...rest,
-        referenceId: newRefId,
-      } as ReferenceChunkAnalysis)
-    }
+    const newRefId = requireMappedId(newRefIds, _referenceExportId, 'referenceChunkAnalysis.referenceId')
+    await db.referenceChunkAnalysis.add({
+      ...rest,
+      referenceId: newRefId,
+    } as ReferenceChunkAnalysis)
   }
 
   // 18. 历史时间轴事件
   for (const e of data.historicalTimelineEvents || []) {
-    await db.historicalTimelineEvents.add({ ...e, projectId: newProjectId } as HistoricalTimelineEvent)
+    await db.historicalTimelineEvents.add({ ...importWorldScoped(e), projectId: newProjectId } as HistoricalTimelineEvent)
   }
 
   // 19. 历史关键词
   for (const k of data.historicalKeywords || []) {
-    await db.historicalKeywords.add({ ...k, projectId: newProjectId } as HistoricalKeyword)
+    await db.historicalKeywords.add({ ...importWorldScoped(k), projectId: newProjectId } as HistoricalKeyword)
   }
 
   // 20. 作品学习（记录新旧 ID）
@@ -557,28 +783,22 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   // 21. 作品学习分块分析（重建 workId）
   for (const a of data.masterChunkAnalysis || []) {
     const { _workExportId, ...rest } = a
-    const newWorkId = newMasterWorkIds.get(_workExportId)
-    if (newWorkId) {
-      await db.masterChunkAnalysis.add({ ...rest, workId: newWorkId } as MasterChunkAnalysis)
-    }
+    const newWorkId = requireMappedId(newMasterWorkIds, _workExportId, 'masterChunkAnalysis.workId')
+    await db.masterChunkAnalysis.add({ ...rest, workId: newWorkId } as MasterChunkAnalysis)
   }
 
   // 22. 章节节奏点（重建 workId）
   for (const b of data.masterChapterBeats || []) {
     const { _workExportId, ...rest } = b
-    const newWorkId = newMasterWorkIds.get(_workExportId)
-    if (newWorkId) {
-      await db.masterChapterBeats.add({ ...rest, workId: newWorkId } as MasterChapterBeat)
-    }
+    const newWorkId = requireMappedId(newMasterWorkIds, _workExportId, 'masterChapterBeats.workId')
+    await db.masterChapterBeats.add({ ...rest, workId: newWorkId } as MasterChapterBeat)
   }
 
   // 23. 风格量化（重建 workId）
   for (const s of data.masterStyleMetrics || []) {
     const { _workExportId, ...rest } = s
-    const newWorkId = newMasterWorkIds.get(_workExportId)
-    if (newWorkId) {
-      await db.masterStyleMetrics.add({ ...rest, workId: newWorkId } as MasterStyleMetrics)
-    }
+    const newWorkId = requireMappedId(newMasterWorkIds, _workExportId, 'masterStyleMetrics.workId')
+    await db.masterStyleMetrics.add({ ...rest, workId: newWorkId } as MasterStyleMetrics)
   }
 
   // 24. 大师洞察（全局，不绑定 projectId）
@@ -591,36 +811,23 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
     await db.masterInsights.add(i as MasterInsight)
   }
 
-  // 25. 世界组（v3，Phase 25.4）
-  const newWorldGroupIds = new Map<number, number>()
-  for (const g of data.worldGroups || []) {
-    const { _exportId, ...rest } = g
-    const newId = await db.worldGroups.add({
-      ...rest,
-      projectId: newProjectId,
-    } as WorldGroup) as number
-    newWorldGroupIds.set(_exportId, newId)
-  }
-
   // 26. 世界组关系
   for (const l of data.worldGroupLinks || []) {
     const { _fromGroupExportId, _toGroupExportId, ...rest } = l
-    const fromId = newWorldGroupIds.get(_fromGroupExportId)
-    const toId = newWorldGroupIds.get(_toGroupExportId)
-    if (fromId && toId) {
-      await db.worldGroupLinks.add({
-        ...rest,
-        projectId: newProjectId,
-        fromGroupId: fromId,
-        toGroupId: toId,
-      } as WorldGroupLink)
-    }
+    const fromId = requireMappedId(newWorldGroupIds, _fromGroupExportId, 'worldGroupLinks.fromGroupId')
+    const toId = requireMappedId(newWorldGroupIds, _toGroupExportId, 'worldGroupLinks.toGroupId')
+    await db.worldGroupLinks.add({
+      ...rest,
+      projectId: newProjectId,
+      fromGroupId: fromId,
+      toGroupId: toId,
+    } as WorldGroupLink)
   }
 
   // 26.5 物品流水（v3，chapterId 重映射）
   for (const e of data.itemLedger || []) {
     const { _chapterExportId, ...rest } = e
-    const newChapterId = _chapterExportId != null ? (newChapterIds.get(_chapterExportId) ?? null) : null
+    const newChapterId = optionalMappedId(newChapterIds, _chapterExportId, 'itemLedger.chapterId')
     await db.itemLedger.add({
       ...rest,
       projectId: newProjectId,
@@ -631,7 +838,7 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   // 26.6 故事进程年表（v3，chapterId 重映射）
   for (const e of data.storyTimelineEvents || []) {
     const { _chapterExportId, ...rest } = e
-    const newChapterId = _chapterExportId != null ? (newChapterIds.get(_chapterExportId) ?? null) : null
+    const newChapterId = optionalMappedId(newChapterIds, _chapterExportId, 'storyTimelineEvents.chapterId')
     await db.storyTimelineEvents.add({
       ...rest,
       projectId: newProjectId,
@@ -648,7 +855,7 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   })
   for (const l of sortedLocs) {
     const { _exportId, _parentExportId, ...rest } = l
-    const newParentId = _parentExportId !== null ? (newLocationIds.get(_parentExportId) ?? null) : null
+    const newParentId = optionalMappedId(newLocationIds, _parentExportId, 'importantLocations.parentId')
     const newId = await db.importantLocations.add({
       ...rest, parentId: newParentId, projectId: newProjectId,
     } as ImportantLocation) as number
@@ -657,7 +864,7 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
 
   // 26.8 真实与幻想（世界规则）—— 此前漏导入
   for (const p of data.worldRulesProfiles || []) {
-    await db.worldRulesProfiles.add({ ...p, projectId: newProjectId } as WorldRulesProfile)
+    await db.worldRulesProfiles.add({ ...importWorldScoped(p), projectId: newProjectId } as WorldRulesProfile)
   }
 
   // 26.9 词条分类（树，重建 parentId）—— 此前漏导入
@@ -669,9 +876,9 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   })
   for (const c of sortedCats) {
     const { _exportId, _parentExportId, ...rest } = c
-    const newParentId = _parentExportId !== null ? (newCodexCatIds.get(_parentExportId) ?? null) : null
+    const newParentId = optionalMappedId(newCodexCatIds, _parentExportId, 'codexCategories.parentId')
     const newId = await db.codexCategories.add({
-      ...rest, parentId: newParentId, projectId: newProjectId,
+      ...importWorldScoped(rest), parentId: newParentId, projectId: newProjectId,
     } as CodexCategory) as number
     newCodexCatIds.set(_exportId, newId)
   }
@@ -679,100 +886,24 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   // 26.10 词条（重建 categoryId）—— 此前漏导入
   for (const e of data.codexEntries || []) {
     const { _categoryExportId, ...rest } = e
-    const newCategoryId = newCodexCatIds.get(_categoryExportId)
-    if (newCategoryId == null) continue
+    const newCategoryId = requireMappedId(newCodexCatIds, _categoryExportId, 'codexEntries.categoryId')
     await db.codexEntries.add({
-      ...rest, categoryId: newCategoryId, projectId: newProjectId,
+      ...importWorldScoped(rest), categoryId: newCategoryId, projectId: newProjectId,
     } as CodexEntry)
   }
 
-  // 27. 重映射所有 worldGroupId 引用
-  // 导入的记录里 worldGroupId 还指向旧 ID，需要：
-  //   - 旧 ID 在映射表中 → 替换为新 ID
-  //   - 旧 ID 不在映射表（孤立引用，或没导入世界组）→ 清为 null
-  //     （否则旧 ID 可能撞上本项目自增产生的新世界组 ID，导致数据错乱）
-  const remap = (oldId: number | null | undefined): number | null => {
-    if (oldId === null || oldId === undefined) return null
-    return newWorldGroupIds.get(oldId) ?? null
-  }
-
-  // worldviews
-  const allWv = await db.worldviews.where('projectId').equals(newProjectId).toArray()
-  for (const wv of allWv) {
-    if (wv.worldGroupId !== undefined && wv.worldGroupId !== null) {
-      await db.worldviews.update(wv.id!, { worldGroupId: remap(wv.worldGroupId) })
-    }
-  }
-  // powerSystems
-  const allPs = await db.powerSystems.where('projectId').equals(newProjectId).toArray()
-  for (const ps of allPs) {
-    if (ps.worldGroupId !== undefined && ps.worldGroupId !== null) {
-      await db.powerSystems.update(ps.id!, { worldGroupId: remap(ps.worldGroupId) })
-    }
-  }
-  // characters homeWorldGroupId
-  const allChars = await db.characters.where('projectId').equals(newProjectId).toArray()
-  for (const c of allChars) {
-    if (c.homeWorldGroupId !== undefined && c.homeWorldGroupId !== null) {
-      await db.characters.update(c.id!, { homeWorldGroupId: remap(c.homeWorldGroupId) })
-    }
-  }
-  // outlineNodes worldGroupId
-  const allNodes = await db.outlineNodes.where('projectId').equals(newProjectId).toArray()
-  for (const n of allNodes) {
-    if (n.worldGroupId !== undefined && n.worldGroupId !== null) {
-      await db.outlineNodes.update(n.id!, { worldGroupId: remap(n.worldGroupId) })
-    }
-  }
-  // geographies
-  const allGeo = await db.geographies.where('projectId').equals(newProjectId).toArray()
-  for (const g of allGeo) {
-    if (g.worldGroupId !== undefined && g.worldGroupId !== null) {
-      await db.geographies.update(g.id!, { worldGroupId: remap(g.worldGroupId) })
-    }
-  }
-  // histories
-  const allHist = await db.histories.where('projectId').equals(newProjectId).toArray()
-  for (const h of allHist) {
-    if (h.worldGroupId !== undefined && h.worldGroupId !== null) {
-      await db.histories.update(h.id!, { worldGroupId: remap(h.worldGroupId) })
-    }
-  }
-  // worldNodes
-  const allWn = await db.worldNodes.where('projectId').equals(newProjectId).toArray()
-  for (const wn of allWn) {
-    if (wn.worldGroupId !== undefined && wn.worldGroupId !== null) {
-      await db.worldNodes.update(wn.id!, { worldGroupId: remap(wn.worldGroupId) })
-    }
-  }
-  // historicalTimelineEvents
-  const allHte = await db.historicalTimelineEvents.where('projectId').equals(newProjectId).toArray()
-  for (const e of allHte) {
-    if (e.worldGroupId !== undefined && e.worldGroupId !== null) {
-      await db.historicalTimelineEvents.update(e.id!, { worldGroupId: remap(e.worldGroupId) })
-    }
-  }
-  // historicalKeywords
-  const allHk = await db.historicalKeywords.where('projectId').equals(newProjectId).toArray()
-  for (const k of allHk) {
-    if (k.worldGroupId !== undefined && k.worldGroupId !== null) {
-      await db.historicalKeywords.update(k.id!, { worldGroupId: remap(k.worldGroupId) })
-    }
-  }
-  // codexCategories worldGroupId
-  const allCc = await db.codexCategories.where('projectId').equals(newProjectId).toArray()
-  for (const c of allCc) {
-    if (c.worldGroupId !== undefined && c.worldGroupId !== null) {
-      await db.codexCategories.update(c.id!, { worldGroupId: remap(c.worldGroupId) })
-    }
-  }
-  // codexEntries worldGroupId
-  const allCe = await db.codexEntries.where('projectId').equals(newProjectId).toArray()
-  for (const e of allCe) {
-    if (e.worldGroupId !== undefined && e.worldGroupId !== null) {
-      await db.codexEntries.update(e.id!, { worldGroupId: remap(e.worldGroupId) })
-    }
-  }
+  await assertImportedProjectIntegrity(newProjectId, {
+    outlineIds: newOutlineIds.values(),
+    chapterIds: newChapterIds.values(),
+    characterIds: newCharIds.values(),
+    referenceIds: newRefIds.values(),
+    masterWorkIds: newMasterWorkIds.values(),
+    worldGroupIds: newWorldGroupIds.values(),
+    worldNodeIds: newWorldNodeIds.values(),
+    locationIds: newLocationIds.values(),
+    codexCategoryIds: newCodexCatIds.values(),
+  })
 
   return newProjectId
+  })
 }

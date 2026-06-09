@@ -1,5 +1,60 @@
 import Dexie from 'dexie'
 
+export const REQUIRED_TABLES_V26 = [
+  'aiUsageLog',
+  'chapters',
+  'characterRelations',
+  'characters',
+  'codexCategories',
+  'codexEntries',
+  'creativeRules',
+  'detailedOutlines',
+  'emotionBeatCards',
+  'factions',
+  'foreshadows',
+  'geographies',
+  'historicalKeywords',
+  'historicalTimelineEvents',
+  'histories',
+  'importFiles',
+  'importJobs',
+  'importLogs',
+  'importSessions',
+  'importantLocations',
+  'itemLedger',
+  'itemSystems',
+  'masterChapterBeats',
+  'masterChunkAnalysis',
+  'masterInsights',
+  'masterStyleMetrics',
+  'masterWorks',
+  'notes',
+  'outlineNodes',
+  'powerSystems',
+  'projects',
+  'promptTemplates',
+  'promptWorkflows',
+  'referenceChunkAnalysis',
+  'references',
+  'snapshots',
+  'stateCards',
+  'storyArcs',
+  'storyCores',
+  'storyTimelineEvents',
+  'worldGroupLinks',
+  'worldGroups',
+  'worldNodes',
+  'worldRulesProfiles',
+  'worldviews',
+] as const
+
+export interface EnsureSchemaOptions {
+  /** Production must keep this false. Development may pass import.meta.env.DEV. */
+  allowReset?: boolean
+  /** Tests can disable browser alert while still asserting non-destructive behavior. */
+  notifyUser?: boolean
+}
+
 /**
  * Schema 健康自检 + 自动恢复。
  *
@@ -10,36 +65,60 @@ import Dexie from 'dexie'
  * 本函数在 App 启动最早期跑：
  *   1. 用原生 IndexedDB API 探测 storyforge DB 当前版本和表列表
  *   2. 若期望表全在 → 直接放行
- *   3. 若缺表 → 删库（保证下一次 Dexie 打开时按当前代码定义的最新版本全新创建）
- *      然后返回 true 通知调用方"已重置，需要重新初始化"
+ *   3. 若缺表 → 开发环境可删库重建;生产环境只提示,绝不自动删库
  *
  * 删库失败（被其他 tab 占住）会抛错，由调用方决定怎么提示用户。
  */
-export async function ensureSchema(expectedTables: string[]): Promise<{ reset: boolean; missing: string[] }> {
+export async function ensureSchema(
+  expectedTables: readonly string[],
+  options: EnsureSchemaOptions = {},
+): Promise<{ reset: boolean; missing: string[]; blocked: boolean }> {
   const dbName = 'storyforge'
+  const { allowReset = false, notifyUser = true } = options
 
   // 1. 检查 DB 是否存在 + 当前 schema
   const info = await probeDatabase(dbName)
   if (info === null) {
     // DB 还不存在，让 Dexie 后续按最新定义创建
-    return { reset: false, missing: [] }
+    return { reset: false, missing: [], blocked: false }
   }
 
   const missing = expectedTables.filter(t => !info.stores.includes(t))
   if (missing.length === 0) {
     // 全部期望表都在
-    return { reset: false, missing: [] }
+    return { reset: false, missing: [], blocked: false }
+  }
+
+  if (!allowReset) {
+    console.error(
+      `[schema] DB v${info.version} 缺少表 [${missing.join(', ')}]。生产环境已阻止自动删库,请先导出备份后再处理。`,
+    )
+    if (notifyUser) notifySchemaMismatch(missing)
+    return { reset: false, missing, blocked: true }
   }
 
   console.warn(
-    `[schema] DB v${info.version} 缺少表 [${missing.join(', ')}]，自动删库重建（开发期无真实用户）`,
+    `[schema] DB v${info.version} 缺少表 [${missing.join(', ')}]，开发环境自动删库重建`,
   )
 
   // 2. 删库
   await Dexie.delete(dbName)
   console.info('[schema] DB 已重置，下次打开时会按最新 schema 全新创建')
 
-  return { reset: true, missing }
+  return { reset: true, missing, blocked: false }
+}
+
+function notifySchemaMismatch(missing: string[]) {
+  try {
+    if (typeof window === 'undefined' || typeof window.alert !== 'function') return
+    window.alert(
+      'StoryForge 检测到本地数据库结构不完整,为保护你的小说数据,系统不会自动清空数据库。\\n\\n' +
+      `缺失表:${missing.join(', ')}\\n\\n` +
+      '请先导出备份,然后刷新页面或联系维护者处理。',
+    )
+  } catch {
+    // 提示失败不能影响数据保护路径。
+  }
 }
 
 /** 探测 DB：不存在返回 null，存在返回 { version, stores }。 */

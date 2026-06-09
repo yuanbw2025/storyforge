@@ -58,11 +58,13 @@ export interface WorldRuleEntry {
   priority: ConflictPriority
 }
 
-// ── 项目世界规则 Profile（singleton per project） ─────────────
+// ── 项目世界规则 Profile（projectId + worldGroupId） ─────────────
 
 export interface WorldRulesProfile {
   id?: number
   projectId: number
+  /** 所属世界组；null = 单世界/默认主世界 */
+  worldGroupId?: number | null
   /** 节点数据，key = nodeId（预定义或自定义），只存非空节点 */
   entries: Record<string, WorldRuleEntry>
   /** 用户自定义节点列表 */

@@ -364,17 +364,7 @@ async function chatWithAbort(
   if (signal?.aborted) {
     const e = new Error('aborted'); e.name = 'AbortError'; throw e
   }
-  return await Promise.race([
-    chat(messages, config),
-    new Promise<string>((_, reject) => {
-      if (!signal) return
-      const onAbort = () => {
-        const e = new Error('aborted'); e.name = 'AbortError'; reject(e)
-      }
-      if (signal.aborted) onAbort()
-      else signal.addEventListener('abort', onAbort, { once: true })
-    }),
-  ])
+  return await chat(messages, config, undefined, signal)
 }
 
 function buildRollingContext(prev: string, row: ReferenceChunkAnalysis): string {

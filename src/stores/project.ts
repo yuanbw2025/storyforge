@@ -3,6 +3,7 @@ import { db } from '../lib/db/schema'
 import type { Project, CreateProjectInput } from '../lib/types'
 import { migrateGenre } from '../lib/types'
 import { requireBackupBefore } from '../lib/safety/require-backup-before'
+import { cascadeDeleteProject } from '../lib/registry/lifecycle'
 
 interface ProjectStore {
   projects: Project[]
@@ -65,73 +66,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     })
     if (!proceed) return  // 用户取消
 
-    // 先收集子表外键 ID（需在主表删除前查询）
-    const refIds = await db.references.where('projectId').equals(id).primaryKeys()
-    const workIds = await db.masterWorks.where('projectId').equals(id).primaryKeys()
+    // Phase 1.1b: 级联删除全部从 PROJECT_TABLES 注册表派生(不再手写表清单)。
+    // 加新表 = 注册表加一行,这里自动覆盖。行为与 Phase 0.6 手写版等价(R-05 保证)。
+    await cascadeDeleteProject(id)
 
-    // 删除项目及所有关联数据（Phase 29-fix: 补全所有 projectId 表）
-    await db.transaction('rw', [
-      db.projects, db.worldviews, db.storyCores, db.powerSystems,
-      db.characters, db.factions, db.outlineNodes, db.chapters, db.foreshadows,
-      db.geographies, db.histories, db.itemSystems, db.creativeRules,
-      db.characterRelations, db.snapshots, db.references,
-      db.detailedOutlines, db.emotionBeatCards, db.stateCards,
-      db.storyArcs, db.worldNodes, db.notes,
-      db.historicalTimelineEvents, db.historicalKeywords,
-      db.masterWorks, db.importSessions,
-      db.referenceChunkAnalysis, db.masterChunkAnalysis,
-      db.masterChapterBeats, db.masterStyleMetrics,
-      db.worldGroups, db.worldGroupLinks, db.itemLedger, db.storyTimelineEvents,
-      db.importantLocations, db.worldRulesProfiles, db.codexCategories, db.codexEntries, db.aiUsageLog,
-    ], async () => {
-      // 子表先删（依赖外键）
-      if (refIds.length) await db.referenceChunkAnalysis.where('referenceId').anyOf(refIds).delete()
-      if (workIds.length) {
-        await db.masterChunkAnalysis.where('workId').anyOf(workIds).delete()
-        await db.masterChapterBeats.where('workId').anyOf(workIds).delete()
-        await db.masterStyleMetrics.where('workId').anyOf(workIds).delete()
-      }
-      // 主表删除
-      await db.projects.delete(id)
-      await db.worldviews.where('projectId').equals(id).delete()
-      await db.storyCores.where('projectId').equals(id).delete()
-      await db.powerSystems.where('projectId').equals(id).delete()
-      await db.characters.where('projectId').equals(id).delete()
-      await db.factions.where('projectId').equals(id).delete()
-      await db.geographies.where('projectId').equals(id).delete()
-      await db.histories.where('projectId').equals(id).delete()
-      await db.itemSystems.where('projectId').equals(id).delete()
-      await db.characterRelations.where('projectId').equals(id).delete()
-      await db.worldNodes.where('projectId').equals(id).delete()
-      await db.historicalTimelineEvents.where('projectId').equals(id).delete()
-      await db.historicalKeywords.where('projectId').equals(id).delete()
-      await db.outlineNodes.where('projectId').equals(id).delete()
-      await db.chapters.where('projectId').equals(id).delete()
-      await db.detailedOutlines.where('projectId').equals(id).delete()
-      await db.emotionBeatCards.where('projectId').equals(id).delete()
-      await db.stateCards.where('projectId').equals(id).delete()
-      await db.storyArcs.where('projectId').equals(id).delete()
-      await db.foreshadows.where('projectId').equals(id).delete()
-      await db.creativeRules.where('projectId').equals(id).delete()
-      await db.notes.where('projectId').equals(id).delete()
-      await db.references.where('projectId').equals(id).delete()
-      await db.masterWorks.where('projectId').equals(id).delete()
-      await db.snapshots.where('projectId').equals(id).delete()
-      await db.importSessions.where('projectId').equals(id).delete()
-      // Phase 25.4: 多世界系统
-      await db.worldGroups.where('projectId').equals(id).delete()
-      await db.worldGroupLinks.where('projectId').equals(id).delete()
-      // Phase 25.5.2-b: 物品流水
-      await db.itemLedger.where('projectId').equals(id).delete()
-      // Phase 25.5.2-a: 故事进程年表
-      await db.storyTimelineEvents.where('projectId').equals(id).delete()
-      // 此前漏删（删项目后会留孤儿）：重要地点 / 真实与幻想 / 设定词条 / 消耗统计
-      await db.importantLocations.where('projectId').equals(id).delete()
-      await db.worldRulesProfiles.where('projectId').equals(id).delete()
-      await db.codexCategories.where('projectId').equals(id).delete()
-      await db.codexEntries.where('projectId').equals(id).delete()
-      await db.aiUsageLog.where('projectId').equals(id).delete()
-    })
     if (get().currentProjectId === id) {
       set({ currentProjectId: null })
     }

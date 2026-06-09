@@ -12,6 +12,13 @@ interface ChapterStore {
   addChapter: (ch: Omit<Chapter, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
   updateChapter: (id: number, data: Partial<Chapter>) => Promise<void>
   deleteChapter: (id: number) => Promise<void>
+  /**
+   * 章节删除的【唯一入口】(Phase 0.7)。
+   * 删 chapters + 紧耦合子表(emotionBeatCards),并更新内存。
+   * deleteChapter(单个) 和 outline.deleteNode(批量,删大纲带正文) 都必须走这里,
+   * 否则会出现"绕过级联 → emotionBeatCards 残留"的孤儿数据。
+   */
+  cascadeDeleteChapters: (ids: number[]) => Promise<void>
 }
 
 const now = () => Date.now()
@@ -55,15 +62,27 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
   },
 
   deleteChapter: async (id) => {
-    await db.chapters.delete(id)
-    // 清理与该章紧耦合的情感节拍（按 chapterId），否则成孤儿
-    const beatKeys = (await db.emotionBeatCards.where('chapterId').equals(id).primaryKeys()) as number[]
-    if (beatKeys.length) await db.emotionBeatCards.bulkDelete(beatKeys)
-    // 注：物品栏/故事年表/伏笔 中以 chapterId 关联的记录保留（含冗余章节标题，属独立产物，
-    //     是否随章删除语义不明确，不强删以免误删用户产物）。
+    // 复用唯一入口,保证级联一致(Phase 0.7)
+    await get().cascadeDeleteChapters([id])
+  },
+
+  cascadeDeleteChapters: async (ids) => {
+    if (!ids.length) return
+    // DB 层:删章节 + 紧耦合的情感节拍(按 chapterId),包事务保证原子
+    await db.transaction('rw', db.chapters, db.emotionBeatCards, async () => {
+      await db.chapters.bulkDelete(ids)
+      const beatKeys = (await db.emotionBeatCards
+        .where('chapterId').anyOf(ids).primaryKeys()) as number[]
+      if (beatKeys.length) await db.emotionBeatCards.bulkDelete(beatKeys)
+    })
+    // 注：物品栏/故事年表/伏笔 中以 chapterId 关联的记录保留(含冗余章节标题,属独立产物,
+    //     是否随章删除语义不明确,不强删以免误删用户产物)。
+    // 内存层:从 chapters 移除,currentChapter 若被删则置空
+    const idSet = new Set(ids)
+    const cur = get().currentChapter
     set({
-      chapters: get().chapters.filter(c => c.id !== id),
-      currentChapter: get().currentChapter?.id === id ? null : get().currentChapter,
+      chapters: get().chapters.filter(c => !idSet.has(c.id!)),
+      currentChapter: cur && idSet.has(cur.id!) ? null : cur,
     })
   },
 }))

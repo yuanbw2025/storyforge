@@ -1,6 +1,7 @@
 import type { ChatMessage } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
+import { composeFieldGenerationHint, type FieldGenerationMode } from '../field-generation-context'
 
 const DIMENSION_LABELS: Record<string, string> = {
   geography: '地理环境',
@@ -25,15 +26,20 @@ export function buildWorldviewPrompt(
   existingContext: string,
   userHint?: string,
   options?: RunOptions,
+  currentValue?: string,
+  mode: FieldGenerationMode = 'expand',
 ): ChatMessage[] {
   const tpl = usePromptStore.getState().getActive('worldview.dimension')
   const label = DIMENSION_LABELS[dimension] || dimension
+  const effectiveHint = composeFieldGenerationHint(userHint, currentValue, mode)
   const { messages } = renderPrompt(tpl, {
     projectName,
     genres: genre,
     dimension: label,
     worldContext: existingContext,
-    userHint,
+    currentValue: currentValue || '',
+    generationMode: mode,
+    userHint: effectiveHint,
     isSummary: dimension === 'summary' ? '1' : '',
   }, options)
   return messages

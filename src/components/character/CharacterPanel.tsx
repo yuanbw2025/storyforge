@@ -4,15 +4,13 @@ import {
 } from 'lucide-react'
 import { InlineInput, InlineTextarea } from '../shared/InlineEdit'
 import { useCharacterStore } from '../../stores/character'
-import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildCharacterPrompt } from '../../lib/ai/adapters/character-adapter'
-import { buildWorldContext } from '../../lib/ai/context-builder'
-import { buildCodexContext } from '../../lib/ai/codex-context'
-import { buildCurrentWorldContext } from '../../lib/ai/world-group-context'
 import { parseCharacterOutput } from '../../lib/ai/parse-character-output'
+import { adopt } from '../../lib/registry/adopt'
+import { assembleContext } from '../../lib/registry/assemble-context'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import type { Project, Character, CharacterRole, CharacterAlignment } from '../../lib/types'
@@ -54,7 +52,6 @@ interface Props { project: Project }
 
 export default function CharacterPanel({ project }: Props) {
   const { characters, loadAll, addCharacter, updateCharacter, deleteCharacter } = useCharacterStore()
-  const { worldview, storyCore, powerSystem } = useWorldviewStore()
   const { groups, activeGroupId } = useWorldGroupStore()
   const { config: aiConfig } = useAIConfigStore()
   const [selected, setSelected] = useState<number | null>(null)
@@ -116,13 +113,14 @@ export default function CharacterPanel({ project }: Props) {
     const targetWorld = project.enableMultiWorld
       ? (typeof worldFilter === 'number' ? worldFilter : activeGroupId)
       : null
-    let worldCtx: string
-    if (targetWorld != null) {
-      worldCtx = await buildCurrentWorldContext(project.id!, targetWorld)
-    } else {
-      const codexCtx = await buildCodexContext(project.id!, null)
-      worldCtx = [buildWorldContext(worldview, storyCore, powerSystem), codexCtx].filter(Boolean).join('\n\n')
-    }
+    const assembled = await assembleContext({
+      projectId: project.id!,
+      worldGroupId: targetWorld,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+      sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+    })
+    const worldCtx = assembled.text
     const opts = {
       parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
       overrides: (systemOverride != null || userOverride != null) ? {
@@ -253,21 +251,26 @@ export default function CharacterPanel({ project }: Props) {
             setParsing(false)
             const nameMatch = text.match(/(?:\*\*|#{1,3}\s*|【)([^*#\n【】]{1,20})(?:\*\*|】)/)
             const fallbackName = nameMatch?.[1]?.trim() || 'AI 生成角色'
-            const id = await addCharacter({
+            const result = await adopt({
               projectId: project.id!,
-              name:             parsed?.name             || fallbackName,
-              role:             parsed?.role             || 'supporting',
-              shortDescription: parsed?.shortDescription || '',
-              appearance:       parsed?.appearance       || '',
-              personality:      parsed?.personality      || '',
-              background:       parsed?.background       || text,
-              motivation:       parsed?.motivation       || '',
-              abilities:        parsed?.abilities        || '',
-              relationships:    parsed?.relationships    || '',
-              arc:              parsed?.arc              || '',
-              homeWorldGroupId: newCharHomeWorld(),
+              worldGroupId: newCharHomeWorld(),
+              target: 'characters',
+              mode: 'add',
+              data: {
+                name:             parsed?.name             || fallbackName,
+                role:             parsed?.role             || 'supporting',
+                shortDescription: parsed?.shortDescription || '',
+                appearance:       parsed?.appearance       || '',
+                personality:      parsed?.personality      || '',
+                background:       parsed?.background       || text,
+                motivation:       parsed?.motivation       || '',
+                abilities:        parsed?.abilities        || '',
+                relationships:    parsed?.relationships    || '',
+                arc:              parsed?.arc              || '',
+              },
             })
-            setSelected(id)
+            await loadAll(project.id!)
+            if (result.written[0]?.id != null) setSelected(result.written[0].id)
           }}
           onRetry={handleAIGenerate}
           moduleKey="character.generate"
@@ -474,4 +477,3 @@ function CharacterDetailCard({
     </div>
   )
 }
-
