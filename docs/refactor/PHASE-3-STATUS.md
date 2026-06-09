@@ -11,7 +11,7 @@
 | 3.4 安全加固 | ✅ Done | GitHub PAT 默认 session-only + 可选记住;SVG/HTML/EPUB sanitize 已就位(复核确认) |
 | 3.5 性能 | ✅ Done | 地图面板 React.lazy + vendor 拆分(editor/db/d3/react);主包 1948→1422KB(gzip 587→415) |
 | 3.6 文档体系 | ✅ Done | CONTRIBUTING(含铁律)+ README 英文 TL;DR + Issue/PR 模板 |
-| 3.7 国际化预留(i18n 框架) | Pending | |
+| 3.7 i18n 框架预留 | ✅ Done | 零依赖 i18n(t/hook/切换)+ zh/en 资源 + key 对齐测试 + 迁移指南 |
 
 ---
 
@@ -105,3 +105,31 @@
 **验证**:check:architecture 0 违规 / 76 测试全绿(纯文档改动,逻辑未变)
 
 **下一步(3.7)**:i18n 框架预留。
+
+## 3.7 · i18n 框架预留（2026-06-09 by Claude）
+
+- **零依赖 i18n** `src/i18n/`:`t()` / `useTranslation()` / `setLang()` / `getLang()`,语言自动检测(非中文浏览器默认英文)+ 持久化。
+- **资源** `locales/zh-CN.ts`(默认,收录通用高频文案)+ `locales/en.ts`(结构对齐)。
+- **类型安全**:`Locale = DeepString<typeof zhCN>` 强制 en 实现同结构。
+- **测试** `i18n.test.ts`(6 条):翻译可用 / 缺失回退 / **zh-en key 一一对齐(防漏译)**。
+- **为什么零依赖**:项目当前无真实多语言需求,刚做完性能优化,装 react-i18next 是过度工程;零依赖版满足"预留"语义且有平滑升级路径。
+- **迁移指南** `docs/refactor/I18N-GUIDE.md`:如何渐进全量迁移 + 何时升级 react-i18next。
+- 说明:108 个组件含硬编码中文,全量抽取是独立大工程,本阶段只"预留框架"(符合蓝图 §3.7)。
+
+**验证**:tsc=0 / 82 测试全绿(新增 6)/ check:architecture 0 违规 / build OK
+
+---
+
+## 🎉 Phase 3 全部完成(7/7)
+
+| # | 任务 | 成果 |
+|---|---|---|
+| 3.1 | AI 说明书自动生成器 | 代码扫描生成 + CI 防 key 漂移 |
+| 3.2 | 测试覆盖率体系 | 聚焦核心层门槛 + 16 parser 测试 |
+| 3.3 | CI lint + GitHub Actions | 架构铁律自动守护 + 6 道关 |
+| 3.4 | 安全加固 | PAT session-only + sanitize 复核 |
+| 3.5 | 性能 | 主包 -30%(1948→1422KB) |
+| 3.6 | 文档体系 | CONTRIBUTING + README 英文 + 模板 |
+| 3.7 | i18n 框架预留 | 零依赖 i18n + 迁移指南 |
+
+**82 个测试全绿。整个重构(Phase 0/1/2/3)完成。**
