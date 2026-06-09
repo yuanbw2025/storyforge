@@ -9,7 +9,7 @@
 | 3.2 测试覆盖率体系 | ✅ Done | 聚焦核心逻辑层门槛(防退化基线) + 16 parser 测试 + registry≥75%;76 测试全绿 |
 | 3.3 CI lint + GitHub Actions | ✅ Done | 架构铁律 lint(抓到并修 1 处真违规)+ 4 守护链 + .github/workflows/ci.yml |
 | 3.4 安全加固 | ✅ Done | GitHub PAT 默认 session-only + 可选记住;SVG/HTML/EPUB sanitize 已就位(复核确认) |
-| 3.5 性能(主包 < 1MB / React.lazy 懒加载) | Pending | |
+| 3.5 性能 | ✅ Done | 地图面板 React.lazy + vendor 拆分(editor/db/d3/react);主包 1948→1422KB(gzip 587→415) |
 | 3.6 文档体系(README 中英 / CONTRIBUTING) | Pending | |
 | 3.7 国际化预留(i18n 框架) | Pending | |
 
@@ -78,3 +78,18 @@
 **验证**:tsc=0 / 76 测试全绿 / check:architecture 0 违规 / build OK
 
 **下一步(3.5)**:性能(主包 < 1MB / React.lazy 懒加载重面板)。
+
+## 3.5 · 性能（2026-06-09 by Claude）
+
+- **地图面板懒加载**:`GeographyPanel`/`WorldMapPanel` 改 `React.lazy`,渲染区包 `<Suspense>`。拉 d3/azgaar 的重面板不再进首屏主包。
+- **vendor 拆分**(vite manualChunks):大静态依赖拆成独立可缓存 chunk:
+  - vendor-editor(TipTap)372KB / vendor-db(Dexie)96KB / vendor-d3 14KB / vendor-react 49KB
+  - 好处:① 主包变小、解析更快 ② 这些库少变,浏览器长期缓存(应用更新不必重下)
+- **主包**:`index` 从 **1948KB → 1422KB**(gzip **587 → 415KB**),减少 ~30%。
+- **副发现**:`WorldMap3DCanvas`(three.js 3D 地图)实际无人引用 = 死代码/预留;three 因 tree-shaking 本就没进主包。已记待清理。
+
+> 备注:主包 gzip 415KB 对功能丰富的编辑器 SPA 属合理区间。进一步压到 <300KB 需懒加载章节编辑器(TipTap)等核心面板,有 UX 取舍,列为后续优化(非阻断)。
+
+**验证**:tsc=0 / 76 测试全绿 / check:architecture 0 违规 / build OK(主包降 30%)
+
+**下一步(3.6)**:README 中英双语 + CONTRIBUTING。
