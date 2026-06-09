@@ -12,7 +12,6 @@ import { buildStateExtractPrompt, parseStateDiffs } from '../../lib/ai/adapters/
 import { buildSummaryPrompt } from '../../lib/ai/adapters/summary-adapter'
 import { buildGenreConstraintContext } from '../../lib/ai/genre-metadata'
 import { buildStylePromptInjection } from '../../lib/ai/writing-styles'
-import type { MemoryTaskType } from '../../lib/ai/memory-builder'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
 import { useStoryArcStore } from '../../stores/story-arc'
@@ -30,6 +29,9 @@ import ReviewPanel from './ReviewPanel'
 import NotePanel from './NotePanel'
 import FloatingToolbar from './FloatingToolbar'
 import type { Project, StateDiffItem } from '../../lib/types'
+
+/** 生成任务类型(原 memory-builder 三层记忆已被 assembleContext 取代,此类型仅用于调试日志标签) */
+type MemoryTaskType = 'write' | 'plan' | 'review'
 
 interface Props {
   project: Project
