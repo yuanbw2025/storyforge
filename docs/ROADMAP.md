@@ -734,6 +734,8 @@
 
 ### Phase 35 — 世界观词条化重构（自然/人文重新划分 + 道具系统拆分）
 
+> 🏗️ **施工权威**：`docs/CODEX-REFACTOR-PLAN.md`（Phase 35-b/c 分步施工蓝图,防跑偏)。设计依据 `docs/CODEX-REDESIGN.md`。
+
 > 来源：用户构想（2026-06-03） | 状态：**设计文档已完成、35-a 部分落地但跑偏** → `docs/CODEX-REDESIGN.md` | 规模：大重构（动 DB + 核心世界观面板）
 
 ---
