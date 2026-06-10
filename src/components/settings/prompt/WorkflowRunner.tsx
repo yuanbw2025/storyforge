@@ -70,6 +70,13 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
    */
   const stepOutputsRef = useRef<Map<string, string>>(new Map())
 
+  /**
+   * FB-7(BUG-INPUT-WITH-GEN):每个步骤的「用户输入」。
+   * 此前步骤卡完全没有输入框,用户连「一句话故事」都没法自己敲。现在每步可预先输入,
+   * 点生成时并入 ctx(作为 userHint/seed)。用 ref 读取避免闭包陈旧(同 FB-1 教训)。
+   */
+  const userInputsRef = useRef<Map<string, string>>(new Map())
+
   useEffect(() => {
     if (project?.id) {
       loadWorldview(project.id)
@@ -232,7 +239,7 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
     }
 
     // ③ 纯逻辑整形(可单测,见 tests/regression/R-WF-*)
-    return assembleWorkflowStepVars({
+    const ctx = assembleWorkflowStepVars({
       step,
       prevOutput: prevOut,
       projectName: project?.name,
@@ -240,6 +247,12 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
       assembledContext: assembledText,
       worldRulesContext: worldRulesText,
     })
+    // FB-7:把用户为本步输入的内容并入 userHint(在用户已写的基础上生成/扩展)
+    const userInput = userInputsRef.current.get(step.stepId)?.trim()
+    if (userInput) {
+      ctx.userHint = [ctx.userHint, userInput].filter(Boolean).join('\n')
+    }
+    return ctx
   }
 
   /** 执行第 idx 步 */
@@ -373,6 +386,7 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
             onSkip={() => handleSkip(step.stepId)}
             onRetry={() => handleRetryStep(idx)}
             onSave={(output, target) => handleSaveTarget(step.stepId, output, target)}
+            onUserInputChange={(v) => userInputsRef.current.set(step.stepId, v)}
             saved={savedSteps.has(step.stepId)}
             hasProject={!!project?.id}
           />
@@ -394,7 +408,7 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
 
 function StepCard({
   step, index, result, isCurrent, onSkip, onRetry,
-  onSave, saved, hasProject,
+  onSave, onUserInputChange, saved, hasProject,
 }: {
   step: PromptWorkflowStep
   index: number
@@ -403,15 +417,22 @@ function StepCard({
   onSkip: () => void
   onRetry: () => void
   onSave: (output: string, target: SaveTarget) => void
+  onUserInputChange: (v: string) => void
   saved: boolean
   hasProject: boolean
 }) {
   const [expanded, setExpanded] = useState(true)
   const [copied, setCopied] = useState(false)
+  // FB-7:用户为本步输入的内容(生成前可填,作为种子并入 prompt)
+  const [userInput, setUserInput] = useState('')
+  // FB-7:AI 输出可编辑(产出后允许用户改了再保存/复制)
+  const [editedOutput, setEditedOutput] = useState('')
+  useEffect(() => { setEditedOutput(result.output || '') }, [result.output])
+  const outText = editedOutput
 
   const handleCopy = () => {
-    if (!result.output) return
-    navigator.clipboard.writeText(result.output).then(() => {
+    if (!outText) return
+    navigator.clipboard.writeText(outText).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     })
@@ -455,6 +476,14 @@ function StepCard({
           {step.userHint && (
             <p className="text-xs text-text-muted">💡 {step.userHint}</p>
           )}
+          {/* FB-7:用户输入框 — 可预先写本步内容(如一句话故事),生成时会带进 prompt */}
+          <textarea
+            value={userInput}
+            onChange={e => { setUserInput(e.target.value); onUserInputChange(e.target.value) }}
+            rows={2}
+            placeholder="你的输入(可选)：在此写本步内容,AI 会在你写的基础上生成/扩展"
+            className="w-full px-2 py-1.5 bg-bg-surface border border-border rounded text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+          />
           {result.status === 'pending' && (
             <p className="text-xs text-text-muted">待执行</p>
           )}
@@ -468,10 +497,16 @@ function StepCard({
               Token: ↑{result.tokenUsage.inputTokens.toLocaleString()} ↓{result.tokenUsage.outputTokens.toLocaleString()}
             </div>
           )}
-          {result.output && (
-            <pre className="text-xs text-text-primary whitespace-pre-wrap font-sans max-h-64 overflow-y-auto p-2 bg-bg-surface rounded">
-              {result.output}
-            </pre>
+          {result.status === 'done' && (
+            <>
+              <textarea
+                value={editedOutput}
+                onChange={e => setEditedOutput(e.target.value)}
+                rows={8}
+                className="w-full text-xs text-text-primary font-sans max-h-72 p-2 bg-bg-surface border border-border rounded resize-y focus:outline-none focus:border-accent"
+              />
+              <p className="text-[10px] text-text-muted">AI 输出可直接编辑,保存/复制将使用编辑后的内容。</p>
+            </>
           )}
           {result.error && (
             <p className="text-xs text-error">⚠ {result.error}</p>
@@ -498,7 +533,7 @@ function StepCard({
                     <>
                       <span className="text-text-muted">·</span>
                       <button
-                        onClick={() => onSave(result.output, step.saveTarget!)}
+                        onClick={() => onSave(outText, step.saveTarget!)}
                         disabled={saved || !hasProject}
                         title={!hasProject ? '需先进入项目' : `自动写入 ${targetLabel(step.saveTarget)}`}
                         className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${

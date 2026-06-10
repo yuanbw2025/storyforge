@@ -1,17 +1,16 @@
 import Dexie, { type Table } from 'dexie'
+import { migrateLegacyTablesToCodex } from '../migrations/legacy-to-codex-upgrade'
 import type {
   Project,
   Worldview,
   StoryCore,
   PowerSystem,
   Character,
-  Faction,
   OutlineNode,
   Chapter,
   Foreshadow,
   Geography,
   History,
-  ItemSystem,
   CreativeRules,
   CharacterRelation,
   Snapshot,
@@ -53,13 +52,11 @@ class StoryForgeDB extends Dexie {
   storyCores!: Table<StoryCore>
   powerSystems!: Table<PowerSystem>
   characters!: Table<Character>
-  factions!: Table<Faction>
   outlineNodes!: Table<OutlineNode>
   chapters!: Table<Chapter>
   foreshadows!: Table<Foreshadow>
   geographies!: Table<Geography>
   histories!: Table<History>
-  itemSystems!: Table<ItemSystem>
   creativeRules!: Table<CreativeRules>
   characterRelations!: Table<CharacterRelation>
   snapshots!: Table<Snapshot>
@@ -286,6 +283,16 @@ class StoryForgeDB extends Dexie {
     // v28: 导入会话记录多世界目标世界
     this.version(28).stores({
       importSessions: '++id, projectId, status, updatedAt, fileHash, targetWorldGroupId',
+    })
+
+    // v29: 词条化收尾 —— 旧 itemSystems / factions 表彻底并入词条后删除。
+    // 升级事务内"先迁移后删":先把数据搬进「人工器物」/「势力」词条(含体系总述并入
+    // worldview.itemDesign、势力 mapRegion/color),再把这两张表置 null 删除。零丢失。
+    this.version(29).stores({
+      itemSystems: null,
+      factions: null,
+    }).upgrade(async (tx) => {
+      await migrateLegacyTablesToCodex(tx)
     })
   }
 }

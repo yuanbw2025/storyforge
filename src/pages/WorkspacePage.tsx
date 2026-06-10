@@ -8,7 +8,6 @@ import { useChapterStore } from '../stores/chapter'
 import { useForeshadowStore } from '../stores/foreshadow'
 import { useGeographyStore } from '../stores/project-singletons'
 import { useHistoryStore } from '../stores/project-singletons'
-import { useItemSystemStore } from '../stores/project-singletons'
 import { useCreativeRulesStore } from '../stores/project-singletons'
 import { useCharacterRelationStore } from '../stores/character-relation'
 import { useReferenceStore } from '../stores/reference'
@@ -37,7 +36,6 @@ import CharacterPanel from '../components/character/CharacterPanel'
 import CharacterMinorPanel from '../components/character/CharacterMinorPanel'
 import CharacterNPCPanel from '../components/character/CharacterNPCPanel'
 import CharacterExtraPanel from '../components/character/CharacterExtraPanel'
-import FactionPanel from '../components/faction/FactionPanel'
 import OutlinePanel from '../components/outline/OutlinePanel'
 import DetailedOutlinePanel from '../components/outline/DetailedOutlinePanel'
 import ChaptersListPanel from '../components/editor/ChaptersListPanel'
@@ -45,8 +43,6 @@ import ForeshadowPanel from '../components/foreshadow/ForeshadowPanel'
 // Phase 3.5 性能:地图类面板拉 three.js / d3 / azgaar(重),懒加载踢出首屏主包
 const GeographyPanel = lazy(() => import('../components/geography/GeographyPanel'))
 import HistoryPanel from '../components/history/HistoryPanel'
-import ItemSystemPanel from '../components/items/ItemSystemPanel'
-import CodexPanel from '../components/codex/CodexPanel'
 import CreativeRulesPanel from '../components/rules/CreativeRulesPanel'
 import CharacterRelationPanel from '../components/relations/CharacterRelationPanel'
 const WorldMapPanel = lazy(() => import('../components/geography/WorldMapPanel'))
@@ -113,7 +109,7 @@ export default function WorkspacePage() {
         useForeshadowStore.getState().loadAll(pid),
         useGeographyStore.getState().loadAll(pid),
         useHistoryStore.getState().loadAll(pid),
-        useItemSystemStore.getState().loadAll(pid),
+        // 注:道具系统(C1)/ 势力(C2)的旧表数据已由 DB v29 升级迁移并入词条,旧表已删除,此处无需再迁移。
         useCreativeRulesStore.getState().loadAll(pid),
         useCharacterRelationStore.getState().loadAll(pid),
         useReferenceStore.getState().loadAll(pid),
@@ -172,10 +168,6 @@ export default function WorkspacePage() {
         return <WorldMapPanel project={project} />
       case 'history':
         return <HistoryPanel project={project} />
-      case 'items':
-        return <ItemSystemPanel project={project} />
-      case 'codex':
-        return <CodexPanel project={project} />
       case 'power-system':
         return <PowerSystemPanel project={project} />
 
@@ -195,8 +187,6 @@ export default function WorkspacePage() {
         return <CharacterExtraPanel project={project} />
       case 'relations':
         return <CharacterRelationPanel project={project} />
-      case 'factions':
-        return <FactionPanel project={project} />
 
       // ── 创作区 ─────────────────────────────────────────────────────
       case 'rules':
@@ -238,7 +228,7 @@ export default function WorkspacePage() {
       case 'version-history':
         return <VersionHistoryPanel project={project} />
       case 'import-doc':
-        return <ImportDocPanel project={project} />
+        return <ImportDocPanel project={project} onNavigate={(m) => { setActiveModule(m); setEditorNodeId(null) }} />
       case 'settings':
         return <SettingsPage />
       case 'usage-stats':

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { X, CheckCircle2, AlertTriangle, RotateCcw, FileText, Trash2 } from 'lucide-react'
+import { X, CheckCircle2, AlertTriangle, RotateCcw, FileText, Trash2, ArrowRight } from 'lucide-react'
 import type { ImportSession } from '../../../lib/types/import-session'
 
 interface Props {
@@ -7,6 +7,8 @@ interface Props {
   onRetryFailed: () => void
   onClose: () => void
   onDiscard: () => void
+  /** 「前往查看」—— 跳到导入数据的落点（当前项目=设定库 / 项目参考页）。不传则不显示该按钮。 */
+  onNavigate?: () => void
 }
 
 /**
@@ -18,8 +20,9 @@ interface Props {
  *   · 要不要对失败块单独重试
  */
 export default function ImportReportModal({
-  session, onRetryFailed, onClose, onDiscard,
+  session, onRetryFailed, onClose, onDiscard, onNavigate,
 }: Props) {
+  const toReference = session.importTarget === 'reference'
   const { done, failed, totalWv, totalChars, totalOl, failedChunks } = useMemo(() => {
     const done = session.chunks.filter(c => c.status === 'done').length
     const failed = session.chunks.filter(c => c.status === 'failed').length
@@ -82,6 +85,21 @@ export default function ImportReportModal({
             大纲节点累计 +{totalOl} 个（跨块合并已自动处理别名去重）。
           </div>
 
+          {/* 已导入提示 —— 数据在解析时已实时入库,无需再点「导入」 */}
+          {done > 0 && (
+            <div className="bg-success/10 border border-success/30 rounded-lg p-3 text-sm">
+              <div className="flex items-center gap-1.5 text-success font-medium mb-1">
+                <CheckCircle2 className="w-4 h-4" />
+                {toReference ? '已存入「项目参考」' : '已导入当前项目'}
+              </div>
+              <div className="text-text-secondary text-xs leading-relaxed">
+                {toReference
+                  ? '解析结果已作为创作参照保存到「项目参考」页，不影响当前项目。无需再点导入；关闭后可在「项目参考」中查看，并按需采用到项目。'
+                  : '解析出的世界观、角色、大纲已在解析过程中实时写入对应模块——无需再点导入。关闭本窗口后，即可在左侧「设定库 / 角色设计 / 大纲」中查看与编辑。'}
+              </div>
+            </div>
+          )}
+
           {/* finalReport 详文 */}
           {session.finalReport && (
             <div className="bg-bg-base border border-border rounded-lg p-3">
@@ -143,9 +161,22 @@ export default function ImportReportModal({
                 <RotateCcw className="w-4 h-4" /> 重试失败块（{failedChunks.length}）
               </button>
             )}
+            {onNavigate && done > 0 && (
+              <button
+                onClick={onNavigate}
+                className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm rounded hover:bg-accent-hover"
+              >
+                {toReference ? '前往项目参考' : '前往设定库查看'}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-accent text-white text-sm rounded hover:bg-accent-hover"
+              className={`px-4 py-2 text-sm rounded ${
+                onNavigate && done > 0
+                  ? 'border border-border text-text-secondary hover:bg-bg-hover'
+                  : 'bg-accent text-white hover:bg-accent-hover'
+              }`}
             >
               完成
             </button>

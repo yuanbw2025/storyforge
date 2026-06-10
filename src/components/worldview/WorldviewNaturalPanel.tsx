@@ -3,6 +3,7 @@ import { Sparkles } from 'lucide-react'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
+import CodexPanel from '../codex/CodexPanel'
 import { InlineTextarea } from '../shared/InlineEdit'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildWorldviewPrompt } from '../../lib/ai/adapters/worldview-adapter'
@@ -155,12 +156,24 @@ export default function WorldviewNaturalPanel({ project }: Props) {
               />
             </div>
           ))}
-          <div className={activeKey === 'naturalResources' ? '' : 'hidden'}>
-            <NaturalResourcesEditor
-              naturalResources={naturalResources}
-              setNaturalResources={setNaturalResources}
-              save={save}
-            />
+          <div className={activeKey === 'naturalResources' ? 'space-y-4' : 'hidden'}>
+            {/* B3:自然物产词条化(矿物/草药/异兽)——嵌入式词条,主入口在此 */}
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary mb-1">📚 自然物产(词条)</h3>
+              <p className="text-xs text-text-muted mb-2">矿物灵材 / 灵植草药 / 灵兽异兽——结构化词条,可自定义字段、互相关联,并进入 AI 生成上下文。</p>
+              <CodexPanel project={project} fixedDomain="natural" embedded />
+            </div>
+            {/* 旧版自然资源(纯文本)——保留兼容,后续可一键转词条 */}
+            <details className="border-t border-border/60 pt-3">
+              <summary className="text-xs text-text-muted cursor-pointer hover:text-text-secondary">旧版「自然资源」纯文本(兼容保留,可继续编辑)</summary>
+              <div className="mt-2">
+                <NaturalResourcesEditor
+                  naturalResources={naturalResources}
+                  setNaturalResources={setNaturalResources}
+                  save={save}
+                />
+              </div>
+            </details>
           </div>
         </div>
       </div>

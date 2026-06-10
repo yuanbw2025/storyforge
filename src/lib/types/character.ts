@@ -55,21 +55,4 @@ export interface Character {
   updatedAt: number
 }
 
-/** 势力 */
-export interface Faction {
-  id?: number
-  projectId: number
-  name: string
-  description: string
-  leader: string             // 领导者
-  members: string            // 核心成员
-  goals: string              // 目标
-  resources: string          // 资源/实力
-  relationships: string      // 与其他势力关系
-  /** Phase 23.3: 绑定世界地图区域名（对应 Voronoi 地图的 regionName） */
-  mapRegion?: string
-  /** Phase 23.3: 势力颜色（十六进制，地图上标注用） */
-  color?: string
-  createdAt: number
-  updatedAt: number
-}
+// （Faction 接口已随 C2 / DB v29 删除：势力并入「势力」词条。）

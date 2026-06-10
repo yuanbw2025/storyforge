@@ -127,6 +127,33 @@ async function readChapterOutline(projectId: number, outlineNodeId?: number | nu
   return `【当前章节大纲】\n${node.title}${node.summary ? `\n${node.summary}` : ''}`
 }
 
+/**
+ * FB-9 修复:读取本章「场景细纲」(detailedOutlines)。
+ * 细纲此前只是 DB 表(写得进、删得掉),但从未登记成上下文源 → AI 生成读不到它。
+ * 这里按当前章节节点读出场景拆解(开头衔接/逐场景:标题·概要·冲突·地点/结尾悬念),
+ * 供正文等下游生成时注入,实现"用细纲指导正文",小上下文也能写出贴合的文字。
+ */
+async function readDetailedOutline(projectId: number, outlineNodeId?: number | null, chapterId?: number | null): Promise<string> {
+  let nodeId = outlineNodeId ?? null
+  if (nodeId == null && chapterId != null) {
+    const chapter = await db.chapters.get(chapterId)
+    nodeId = chapter?.outlineNodeId ?? null
+  }
+  if (nodeId == null) return ''
+  const rows = await db.detailedOutlines.where('projectId').equals(projectId).toArray()
+  const detail = rows.find(d => d.outlineNodeId === nodeId)
+  if (!detail || !Array.isArray(detail.scenes) || detail.scenes.length === 0) return ''
+  const parts: string[] = ['【本章细纲(场景拆解)】']
+  if (detail.openingHook) parts.push(`开头衔接:${detail.openingHook}`)
+  detail.scenes.forEach((s, i) => {
+    const bits = [s.summary, s.conflict ? `冲突:${s.conflict}` : '', s.location ? `地点:${s.location}` : '']
+      .filter(Boolean).join(' / ')
+    parts.push(`场景${i + 1} ${s.title || ''}: ${bits}`)
+  })
+  if (detail.endingCliffhanger) parts.push(`结尾悬念:${detail.endingCliffhanger}`)
+  return parts.join('\n')
+}
+
 export const CONTEXT_SOURCES: ContextSource[] = [
   {
     key: 'contextMemo',
@@ -144,6 +171,15 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 800,
     requiresOutlineNodeId: true,
     read: input => readChapterOutline(input.projectId, input.outlineNodeId, input.chapterId),
+  },
+  {
+    key: 'detailedOutline',
+    label: '本章细纲(场景拆解)',
+    scope: 'node',
+    layer: 'L1',
+    budgetTokens: 1500,
+    requiresOutlineNodeId: true,
+    read: input => readDetailedOutline(input.projectId, input.outlineNodeId, input.chapterId),
   },
   {
     key: 'previousChapterEnding',

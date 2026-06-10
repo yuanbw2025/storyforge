@@ -60,15 +60,51 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
   },
 
   ensureBuiltIns: async (projectId) => {
-    // 幂等：已存在任一内置分类则跳过
-    const existing = await db.codexCategories
-      .where('projectId').equals(projectId)
-      .filter(c => !!c.builtInKey)
-      .count()
-    if (existing > 0) return
+    // 自愈式幂等：先去重历史重复，再补齐缺失的内置分类。
+    // 旧实现是 check-then-add，非 race-safe——并发 loadAll（如独立词条面板 + 嵌入面板同时挂载）
+    // 会让两次调用都判定"不存在"而各播种一遍，产生每类两条的重复。此处改为自愈：
+    // ① 每个 builtInKey 只保留 id 最小的一条；多余分类下的词条/子分类改挂到保留项后删除多余分类。
+    // ② 再只播种当前缺失的内置 key。即便仍有 race 残留，下一次 load 会清理，最终一致。
+    const cats = await db.codexCategories.where('projectId').equals(projectId).toArray()
+    const builtins = cats.filter(c => !!c.builtInKey)
+
+    // ① 去重历史重复
+    const byKey = new Map<string, CodexCategory[]>()
+    for (const c of builtins) {
+      const arr = byKey.get(c.builtInKey!) ?? []
+      arr.push(c)
+      byKey.set(c.builtInKey!, arr)
+    }
+    for (const group of byKey.values()) {
+      if (group.length <= 1) continue
+      group.sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
+      const keep = group[0]
+      for (const extra of group.slice(1)) {
+        // 多余分类下的词条改挂到保留项，避免删分类时孤立词条
+        const orphanEntries = await db.codexEntries
+          .where('projectId').equals(projectId)
+          .filter(e => e.categoryId === extra.id)
+          .toArray()
+        for (const e of orphanEntries) {
+          await db.codexEntries.update(e.id!, { categoryId: keep.id! })
+        }
+        // 多余分类的子分类改挂到保留项
+        for (const child of cats.filter(c => c.parentId === extra.id)) {
+          await db.codexCategories.update(child.id!, { parentId: keep.id! })
+        }
+        await db.codexCategories.delete(extra.id!)
+        console.log('[Codex] 已合并重复内置分类:', extra.builtInKey, '#', extra.id, '→ #', keep.id)
+      }
+    }
+
+    // ② 补齐缺失的内置 key
+    const existingKeys = new Set([...byKey.keys()])
+    const missing = BUILTIN_CATEGORIES.filter(seed => !existingKeys.has(seed.builtInKey))
+    if (missing.length === 0) return
 
     const ts = now()
-    const rows: CodexCategory[] = BUILTIN_CATEGORIES.map((seed, i) => ({
+    const baseOrder = cats.length
+    const rows: CodexCategory[] = missing.map((seed, i) => ({
       projectId,
       domain: seed.domain,
       parentId: null,
@@ -77,13 +113,13 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       builtInKey: seed.builtInKey,
       fieldSchema: stringifyFieldSchema(seed.fields),
       hidden: false,
-      order: i,
+      order: baseOrder + i,
       worldGroupId: null,
       createdAt: ts,
       updatedAt: ts,
     }))
     await db.codexCategories.bulkAdd(rows)
-    console.log('[Codex] 已播种内置分类:', rows.length)
+    console.log('[Codex] 已播种缺失内置分类:', rows.length)
   },
 
   addCategory: async (c) => {

@@ -26,15 +26,24 @@ console.log(`[required-tables] ok: ${requiredTables.length} tables match schema.
 
 function extractSchemaTables(source) {
   const names = new Set()
+  const dropped = new Set()
   const storeBlockRe = /this\.version\(\d+\)\.stores\(\{([\s\S]*?)\n\s*\}\)/g
   let block
   while ((block = storeBlockRe.exec(source))) {
+    // 建表(带索引字符串)
     const tableRe = /\n\s*([A-Za-z]\w*)\s*:\s*'[^']*'/g
     let table
     while ((table = tableRe.exec(block[1]))) {
       names.add(table[1])
     }
+    // 删表(置 null):后续版本把某表设为 null = 删除该表
+    const dropRe = /\n\s*([A-Za-z]\w*)\s*:\s*null/g
+    let drop
+    while ((drop = dropRe.exec(block[1]))) {
+      dropped.add(drop[1])
+    }
   }
+  for (const name of dropped) names.delete(name)
   return [...names].sort()
 }
 

@@ -10,3 +10,4 @@ public/fmg/
 # 临时文件
 tree.txt
 *.bak
+coverage/

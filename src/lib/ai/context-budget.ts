@@ -160,20 +160,29 @@ export interface ContextBudget {
   safetyMargin: number
 }
 
-/** 计算上下文预算 */
+/** 计算上下文预算
+ * @param contextWindowOverride FB-8:用户为本地/自定义模型手填的上下文窗口(token)。
+ *   优先级:用户显式设置(>0) > 内置预设 > 8K 兜底。修复"本地256K模型被当8K、误报超窗"。
+ */
 export function calculateBudget(
   provider: AIProvider,
   model: string,
   segments: ContextSegment[],
+  contextWindowOverride?: number,
 ): ContextBudget {
   const preset = getModelPreset(provider, model)
-  const safetyMargin = Math.round(preset.maxContext * 0.05) // 5% 安全边际
-  const inputBudget = preset.maxContext - preset.maxOutput - safetyMargin
+  const maxContext = (contextWindowOverride && contextWindowOverride > 0)
+    ? contextWindowOverride
+    : preset.maxContext
+  // 输出预留不超过窗口一半(用户填的窗口若较小时收敛,避免 inputBudget 变负)
+  const maxOutput = Math.min(preset.maxOutput, Math.floor(maxContext * 0.5))
+  const safetyMargin = Math.round(maxContext * 0.05) // 5% 安全边际
+  const inputBudget = maxContext - maxOutput - safetyMargin
   const totalInputTokens = segments.reduce((sum, s) => sum + s.tokens, 0)
 
   return {
-    maxContext: preset.maxContext,
-    maxOutput: preset.maxOutput,
+    maxContext,
+    maxOutput,
     inputBudget,
     segments,
     totalInputTokens,

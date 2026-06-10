@@ -169,11 +169,6 @@ function GenericProps({ module }: { module: SidebarModule }) {
       title: '故事核心',
       tips: ['故事核心定义主线冲突与主题', '清晰的主角动机有助于AI保持人物一致性'],
     },
-    factions: {
-      icon: Users,
-      title: '势力',
-      tips: ['势力关系图谱影响政治剧情生成', '建议标注各势力的核心矛盾'],
-    },
     'power-system': {
       icon: Info,
       title: '力量体系',
@@ -183,11 +178,6 @@ function GenericProps({ module }: { module: SidebarModule }) {
       icon: Info,
       title: '历史年表',
       tips: ['历史事件会为伏笔提供时间参考', '标注影响当前剧情的关键节点'],
-    },
-    items: {
-      icon: Info,
-      title: '道具系统',
-      tips: ['重要道具应标注首次出现章节', '神兵利器建议写明来历和能力上限'],
     },
     rules: {
       icon: Info,

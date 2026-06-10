@@ -286,12 +286,55 @@ export async function applyChunkResult(
         }
       }
     }
+    // FB-6 修复:某些块的 AI 输出是「扁平章节列表」(无卷包裹)。若直接以 parentId=null
+    // 写入,会成为顶层孤儿章节——已入库但大纲面板只渲染「卷→章」,导致看不到(表现为
+    // "导入N块却只显示第1块")。这里把顶层章节统一挂到一个卷下:优先复用最后一个已有卷,
+    // 没有则建一个兜底卷「导入章节」。
+    const isVolumeNode = (node: Record<string, unknown>): boolean =>
+      node.type === 'volume' || (Array.isArray(node.children) && node.children.length > 0)
+    const hasOrphanChapter = result.outline.some(n => !isVolumeNode(n as Record<string, unknown>))
+
+    let fallbackVolumeId: number | null = null
+    const fallbackChildRef = { value: 0 }
+    if (hasOrphanChapter) {
+      const vols = existingNodes.filter(n => n.type === 'volume' && n.parentId === null)
+      if (vols.length > 0) {
+        fallbackVolumeId = vols[vols.length - 1].id ?? null
+        fallbackChildRef.value = existingNodes.filter(n => n.parentId === fallbackVolumeId).length
+      } else {
+        const adopted = await adopt({
+          projectId, worldGroupId: targetWorldGroupId,
+          target: 'outlineNodes', mode: 'add',
+          data: {
+            parentId: null, type: 'volume', worldGroupId: targetWorldGroupId,
+            title: '导入章节', summary: '',
+            order: existingNodes.filter(n => n.parentId === null).length,
+          },
+        })
+        fallbackVolumeId = adopted.written[0]?.id ?? null
+        if (fallbackVolumeId != null) {
+          existingNodes.push({
+            id: fallbackVolumeId, projectId, parentId: null, type: 'volume',
+            title: '导入章节', summary: '', order: 0, worldGroupId: targetWorldGroupId,
+            createdAt: Date.now(), updatedAt: Date.now(),
+          } as typeof existingNodes[number])
+          outlineAdded++
+        }
+      }
+    }
+
     // 顶层 order 接着已有大纲数量
     const startOrder = existingNodes
       .filter(n => n.parentId === null).length
     const ref = { value: startOrder }
     for (const n of result.outline) {
-      await writeNode(n as Record<string, unknown>, null, ref)
+      const node = n as Record<string, unknown>
+      if (!isVolumeNode(node) && fallbackVolumeId != null) {
+        // 顶层章节 → 挂到卷下(不再成为孤儿)
+        await writeNode(node, fallbackVolumeId, fallbackChildRef)
+      } else {
+        await writeNode(node, null, ref)
+      }
     }
     await olStore.loadAll(projectId)
   }

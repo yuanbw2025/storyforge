@@ -6,12 +6,12 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Plus, Trash2, EyeOff, Eye, FolderPlus, Boxes, ChevronRight,
+  Plus, Trash2, EyeOff, Eye, FolderPlus, Boxes, ChevronRight, Settings2, X, ChevronUp, ChevronDown,
 } from 'lucide-react'
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import { useCodexStore } from '../../stores/codex'
 import {
-  CODEX_DOMAIN_LABELS, parseFieldSchema, parseEntryFields, stringifyEntryFields,
+  CODEX_DOMAIN_LABELS, parseFieldSchema, stringifyFieldSchema, parseEntryFields, stringifyEntryFields,
   parseEntryRefs, stringifyEntryRefs,
   type CodexDomain, type CodexCategory, type CodexEntry, type CodexFieldDef,
 } from '../../lib/types/codex'
@@ -19,22 +19,29 @@ import type { Project } from '../../lib/types'
 
 interface Props {
   project: Project
+  /** B3:嵌入自然/人文面板时锁定领域并隐藏顶部切换标签(独立面板不传=完整两栏切换) */
+  fixedDomain?: CodexDomain
+  /** 嵌入模式:去掉外层标题/高度占满,适配面板内嵌 */
+  embedded?: boolean
 }
 
 const DOMAINS: CodexDomain[] = ['natural', 'humanity']
 
-export default function CodexPanel({ project }: Props) {
+export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
   const projectId = project.id!
   const {
     categories, entries, loadAll,
-    addCategory, deleteCategory, setCategoryHidden,
+    addCategory, deleteCategory, setCategoryHidden, updateCategory,
     addEntry, updateEntry, deleteEntry,
   } = useCodexStore()
 
-  const [domain, setDomain] = useState<CodexDomain>('natural')
+  const [domainState, setDomain] = useState<CodexDomain>(fixedDomain ?? 'natural')
+  const domain = fixedDomain ?? domainState
   const [activeCatId, setActiveCatId] = useState<number | null>(null)
   const [activeEntryId, setActiveEntryId] = useState<number | null>(null)
   const [showHidden, setShowHidden] = useState(false)
+  // B1:自定义字段管理弹窗
+  const [showFieldsEditor, setShowFieldsEditor] = useState(false)
 
   useEffect(() => { loadAll(projectId) }, [projectId, loadAll])
 
@@ -100,24 +107,29 @@ export default function CodexPanel({ project }: Props) {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* 顶部：领域切换 */}
+    <div className={embedded ? 'flex flex-col h-[30rem] border border-border rounded-xl overflow-hidden' : 'h-full flex flex-col'}>
+      {/* 顶部：领域切换(嵌入且锁定领域时隐藏) */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-        <Boxes className="w-5 h-5 text-accent" />
-        <h2 className="text-base font-semibold text-text-primary mr-2">设定词条</h2>
-        <div className="flex rounded-lg bg-bg-elevated p-0.5">
-          {DOMAINS.map(d => (
-            <button
-              key={d}
-              onClick={() => { setDomain(d); setActiveEntryId(null) }}
-              className={`px-3 py-1 text-sm rounded-md transition ${
-                domain === d ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'
-              }`}
-            >
-              {CODEX_DOMAIN_LABELS[d]}
-            </button>
-          ))}
-        </div>
+        {!fixedDomain && (
+          <>
+            <Boxes className="w-5 h-5 text-accent" />
+            <h2 className="text-base font-semibold text-text-primary mr-2">设定词条</h2>
+            <div className="flex rounded-lg bg-bg-elevated p-0.5">
+              {DOMAINS.map(d => (
+                <button
+                  key={d}
+                  onClick={() => { setDomain(d); setActiveEntryId(null) }}
+                  className={`px-3 py-1 text-sm rounded-md transition ${
+                    domain === d ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  {CODEX_DOMAIN_LABELS[d]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {fixedDomain && <span className="text-sm font-medium text-text-secondary">📚 词条({CODEX_DOMAIN_LABELS[fixedDomain]})</span>}
         <button
           onClick={() => setShowHidden(v => !v)}
           className="ml-auto text-xs text-text-muted hover:text-text-primary inline-flex items-center gap-1"
@@ -198,13 +210,24 @@ export default function CodexPanel({ project }: Props) {
               </div>
             ))}
           </div>
-          <button
-            onClick={handleAddEntry}
-            disabled={!activeCatId}
-            className="m-2 px-2 py-1.5 text-xs rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-40 inline-flex items-center justify-center gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" /> 新建词条
-          </button>
+          <div className="m-2 space-y-1.5">
+            <button
+              onClick={handleAddEntry}
+              disabled={!activeCatId}
+              className="w-full px-2 py-1.5 text-xs rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-40 inline-flex items-center justify-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> 新建词条
+            </button>
+            {/* B1:管理本分类的专属字段(增删改字段 schema) */}
+            <button
+              onClick={() => setShowFieldsEditor(true)}
+              disabled={!activeCat}
+              className="w-full px-2 py-1.5 text-xs rounded-lg border border-border text-text-secondary hover:text-accent hover:border-accent/50 disabled:opacity-40 inline-flex items-center justify-center gap-1"
+              title="自定义本分类下词条的专属字段"
+            >
+              <Settings2 className="w-3.5 h-3.5" /> 管理字段
+            </button>
+          </div>
         </div>
 
         {/* 右：词条详情 */}
@@ -222,6 +245,119 @@ export default function CodexPanel({ project }: Props) {
               {activeCat ? '从左侧选择或新建一个词条' : '请选择一个分类'}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* B1:自定义字段管理弹窗 — 编辑本分类的 fieldSchema(内置类也可改) */}
+      {showFieldsEditor && activeCat && (
+        <CategoryFieldsEditor
+          category={activeCat}
+          onClose={() => setShowFieldsEditor(false)}
+          onSave={(fieldSchema) => { updateCategory(activeCat.id!, { fieldSchema }); setShowFieldsEditor(false) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── 自定义字段管理弹窗（编辑分类 fieldSchema · B1） ───────────────────
+const FIELD_TYPES: { value: CodexFieldDef['type']; label: string }[] = [
+  { value: 'text', label: '单行文本' },
+  { value: 'longtext', label: '多行文本' },
+  { value: 'select', label: '下拉选项' },
+  { value: 'number', label: '数字' },
+  { value: 'ref', label: '关联词条' },
+]
+
+function CategoryFieldsEditor({
+  category, onClose, onSave,
+}: {
+  category: CodexCategory
+  onClose: () => void
+  onSave: (fieldSchema: string) => void
+}) {
+  const [defs, setDefs] = useState<CodexFieldDef[]>(() => parseFieldSchema(category.fieldSchema))
+
+  const update = (i: number, patch: Partial<CodexFieldDef>) =>
+    setDefs(defs.map((d, j) => (j === i ? { ...d, ...patch } : d)))
+  const remove = (i: number) => setDefs(defs.filter((_, j) => j !== i))
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir
+    if (j < 0 || j >= defs.length) return
+    const next = [...defs]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setDefs(next)
+  }
+  const add = () => setDefs([...defs, {
+    key: `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+    label: '新字段', type: 'text',
+  }])
+
+  const handleSave = () => {
+    // 去掉 label 为空的字段
+    onSave(stringifyFieldSchema(defs.filter(d => d.label.trim())))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-bg-surface border border-border rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+            <Settings2 className="w-4 h-4 text-accent" /> 管理「{category.name}」的专属字段
+          </h3>
+          <button onClick={onClose} className="p-1 text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {defs.length === 0 && <p className="text-xs text-text-muted text-center py-4">还没有专属字段,点下方「添加字段」。</p>}
+          {defs.map((def, i) => (
+            <div key={def.key} className="border border-border rounded-lg p-2 space-y-1.5 bg-bg-base">
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={def.label}
+                  onChange={e => update(i, { label: e.target.value })}
+                  placeholder="字段名(如:品级)"
+                  className="flex-1 px-2 py-1 text-sm rounded bg-bg-elevated border border-border focus:outline-none focus:border-accent"
+                />
+                <select
+                  value={def.type}
+                  onChange={e => update(i, { type: e.target.value as CodexFieldDef['type'] })}
+                  className="px-2 py-1 text-xs rounded bg-bg-elevated border border-border"
+                >
+                  {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <button onClick={() => move(i, -1)} disabled={i === 0} className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
+                <button onClick={() => move(i, 1)} disabled={i === defs.length - 1} className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
+                <button onClick={() => remove(i)} className="p-1 text-text-muted hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+              {def.type === 'select' && (
+                <input
+                  value={(def.options || []).join(' / ')}
+                  onChange={e => update(i, { options: e.target.value.split('/').map(s => s.trim()).filter(Boolean) })}
+                  placeholder="选项,用 / 分隔(如:常见 / 稀有 / 罕见)"
+                  className="w-full px-2 py-1 text-xs rounded bg-bg-elevated border border-border focus:outline-none focus:border-accent"
+                />
+              )}
+              {def.type === 'ref' && (
+                <input
+                  value={def.refCategory || ''}
+                  onChange={e => update(i, { refCategory: e.target.value.trim() || undefined })}
+                  placeholder="建议关联的内置类 key(可空,如:artifact / mineral)"
+                  className="w-full px-2 py-1 text-xs rounded bg-bg-elevated border border-border focus:outline-none focus:border-accent"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between px-3 py-2.5 border-t border-border">
+          <button onClick={add} className="px-2.5 py-1.5 text-xs rounded-lg border border-dashed border-border text-text-muted hover:text-accent hover:border-accent/50 inline-flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> 添加字段
+          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary">取消</button>
+            <button onClick={handleSave} className="px-3 py-1.5 text-xs rounded-lg bg-accent text-white hover:bg-accent/90">保存</button>
+          </div>
         </div>
       </div>
     </div>

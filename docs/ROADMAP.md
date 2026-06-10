@@ -3,7 +3,7 @@
 > 🔒 **接手者必读宪法**: [`/CLAUDE.md`](../CLAUDE.md) — 三注册表铁律 + 动手前的「四问」+ 反面教材
 > 📐 **施工权威**: [`docs/MASTER-BLUEPRINT.md`](MASTER-BLUEPRINT.md) — 重构 Phase 0/1/2/3 完整流程
 >
-> **最后更新**: 2026-06-09（社区反馈 FB-1~FB-8；FB-1 已修复；Phase 35 跑偏核对；新增「项目健康度与完善性专项」HEALTH-1~6）
+> **最后更新**: 2026-06-09（社区反馈 FB-1~FB-10 大部已修;FB-6/FB-7/BUG-INPUT-WITH-GEN 本轮修复;含导出导入往返验证）
 > **说明**: 本文档是唯一的功能规划文档。旧文档已归档至 `docs/archive/`。
 > **结构**: 上半部分「已完成」，下半部分「待开发」按优先级排列。完成后从待办挪到已完成区。
 > **重要**: 任何"加功能 / 修 bug"前，先过 CLAUDE.md 的「四问」。**头疼医头 = 永远拒绝**。
@@ -271,7 +271,7 @@
 - **完成判据**：开启后，新章节生成在 prompt 中可见文风画像注入；关闭则不注入；画像随项目导出/导入。
 - **设计输入(社区第2批 · 2026-06-09)**：群内已细化出 5 种实现路径,纳入本条设计参考——①修改注释+规则提炼(改稿时标一句修改理由,AI 提炼显式写作规则)②个人风格卡 Style Card(禁用词汇/句式偏好/描写习惯/叙事节奏,作系统指令前缀)③基于修改片段的 few-shot 动态构建(只提取 3-5 组「原文↔改文」对照,省 token)④「重写-对比-追问」互动校准⑤个人写作知识库(向量库存「原文-改文」配对,按情节检索)。建议落地顺序:②③(轻量、立即可用)→ ①④(交互)→ ⑤(长篇长期方案)。
 
-## 🔴 FB-6（P1 数据 bug · 待复现确认）— 分块导入：大纲只显示第 1 块，第 2~10 块丢失
+## ✅ FB-6（已修复 2026-06-09）— 分块导入：大纲只显示第 1 块，第 2~10 块丢失
 
 > 反馈人：Poseidon / zzjj。现象:导入《一念永恒》(1-500章,459,725 字)分 10 块全部成功,任务汇报"**大纲节点累计 116 个**",但「大纲」面板里**只出现"第1-14章(第1块)"这 1 个卷(15 章)**,第 2~10 块的大纲全不见。
 > 文件:`src/lib/import/chunk-writer.ts`(写大纲)、`src/lib/import/dedup.ts`(去重)、`src/lib/import/pipeline.ts`(逐块调度)
@@ -287,13 +287,13 @@
 - 保证每块章节都落在一个合法卷下(缺卷时按块合成"第N块"卷)。
 - **验证手段(无需真实 AI)**:写单测,给 `applyChunkResult` 喂 10 份合成 chunk 结果(卷标题相似),断言最终 DB 里有 10 个卷、章节总数=各块之和、无误并。**先复现再改**。
 
-## 🟠 FB-7（高频 · 并入 BUG-INPUT-WITH-GEN）— 提示词库工作流"输入不了文本"
+## ✅ FB-7（已修复 2026-06-09 · 见 BUG-INPUT-WITH-GEN）— 提示词库工作流"输入不了文本"
 
 > 反馈人：LV4 用户。"这里的提示词库工作流输入不了文本是什么原因"——工作流步骤卡是只读的(只显示 AI 输出 + 重新生成),用户无法在步骤里预先输入自己的内容(如一句话故事)。
 > **这正是 `BUG-INPUT-WITH-GEN` 点名的"重灾区"**(见下方「优先级:高」)。本条与之合并,并**再次抬升其优先级**:已有至少 3 位用户(含本条)因工作流步骤不能输入而受阻。
 > 改法见 BUG-INPUT-WITH-GEN:给每个步骤卡加可编辑输入框,点生成时把用户输入并入 ctx。
 
-## 🟠 FB-8（中 · 配置缺口）— 本地/自定义模型上下文窗口被误判为 8K，报"超出窗口限制"
+## ✅ FB-8（已修复 2026-06-09）— 本地/自定义模型上下文窗口可配置(原误判为 8K)
 
 > 反馈人：zzjj。本地 LM Studio 跑 Qwen3 35B,Context Length 设到 170K(模型支持 256K),但 StoryForge 上下文预算面板显示"模型窗口 8.0K"并报"⚠️ 上下文超出窗口限制 超出 4.8K token"。
 > 文件:`src/lib/ai/context-budget.ts`
@@ -305,6 +305,35 @@
 - `getModelPreset` 或预算解析处:**用户显式设置 > 预设表 > 8K 兜底**(用户填了就以用户为准);
 - 设置区"AI 模型配置"加一个"上下文窗口(高级,可选)"输入框,提示"本地/自定义模型请按实际填写,如 131072";
 - **完成判据**:本地模型填 170000 后,预算面板按 170K 计算,不再误报超窗。
+
+**✅ 已修复(2026-06-09,分支 `fix/fb-8-context-window`)**:AIConfig 加 `contextWindow` 字段;`calculateBudget` 优先级 用户>预设>8K兜底;设置区加"上下文窗口(高级·可选)"输入框;单测5条(含误报超窗复现)。验证全绿。
+
+## ✅ FB-9（已修复 2026-06-09）— 场景细纲(detailed outline)不被正文生成吃进去
+
+> 反馈人：zzjj。诉求:"让 AI 在生成正文的时候去吃这部分细纲的信息挺重要,这样用精度高的模型、较小上下文就能生成好文字"。
+> 文件:`src/lib/registry/context-sources.ts`、`src/components/editor/ChapterEditor.tsx`(分支 `fix/fb-9-detailed-outline-source`)
+
+**✅ 已修复 · 精确根因**(更正早先误判):细纲(detailedOutlines)**在"基础表"里其实是登记了的**——它是 DB 表、有 adopt 写回规则、有删除级联,所以写得进、删得掉、导得出。**唯独没有登记到"读"那一层(`CONTEXT_SOURCES`)** → `assembleContext` 从来没有任何入口去读它 → 正文/任何生成都吃不到细纲。一句话:**"存得下但读不到"**。(早先曾误写"正文没走 assembleContext",实际 ChapterEditor 已用 assembleContext,缺的是细纲这个**源**。)
+
+**改法**(标准三注册表"加一行·改一处"):① `context-sources.ts` 新增 `detailedOutline` 源(按当前章节节点读出开头衔接 + 逐场景拆解 + 结尾悬念);② ChapterEditor 正文生成 sourceKeys 加 `detailedOutline`(write/continue/expand/polish 共用,一并生效);③ 反例测试 R-FB9(3条)+ 重生成 AI 说明书。**零新增组件文件。**
+
+**遗留(可选)**:批量正文 runner 如需也吃细纲,可后续同样 `need:['detailedOutline']`。
+
+**改法(与旧代码清除联动)**:
+- 把 `detailedOutlines`(场景细纲)登记/确认为一个 `CONTEXT_SOURCE`(若未登记则加一行),正文生成 `assembleContext({ need:[...,'detailedOutline'] })` 自动带上。
+- 把 `ChapterEditor` 的正文生成从旧 `buildFullWorldCtx + buildChapterContentPrompt` 切到 `assembleContext`(属「旧代码清除」专项的一环)。
+- **完成判据**:有细纲的章节,正文生成的请求体里能看到细纲场景信息(可用网络抓包验证,同 FB-1 手法)。
+
+## ✅ FB-10（数据 bug · 已修复 2026-06-09）— 生成卷级大纲，点采纳后未写入
+
+> 反馈人：买辣椒也用券。"生成卷级大纲,点击采纳写入后,并未写入"。
+> 文件:`src/components/outline/OutlinePanel.tsx`(分支 `fix/fb-10-volume-adopt`)
+
+**✅ 已修复(2026-06-09)·根因单测坐实**:`OutlinePanel` 的采纳**确实走了** `adopt({target:'outlineNodes'})`,但 outlineNodes 的 AdoptionSchema 是 `duplicatePolicy:'skip'`(identity=parentId+type+title)。命中去重(同名卷/章,常见于"重新生成后再采纳"或 AI 产出标题与已有重复)时,adopt 进 `skipped`、**不写入也不抛错**,而 `handleConfirmVolumes/Chapters` 此前**完全不处理 skipped → 静默无反馈**,用户感知为"点了采纳没反应"。
+**改法**:`addOutlineNodeByAdopt` 返回 skip 原因;两个 confirm 回调统计 written/skipped,全跳过→明确 alert 原因+"想替换请先删同名卷",部分跳过→告知数量。反例测试 `R-FB10`(3条:新卷正常写入 / 同名被skip带原因 / 多卷都写入)。
+**遗留(UX 增强,非 bug)**:若希望"重新生成即自动替换同名卷"而非跳过,需另做替换交互,已另议。
+
+**改法**:定位该采纳入口 → 确认是否走 `adopt()` → 若是旧手写路径则切到 `adopt()` 并加失败提示;补反例测试(喂卷级大纲 AI 输出 → 断言 outlineNodes 实际写入)。**先复现/定位再改。** 与 FB-6(导入大纲丢失)、旧代码清除联动排查。
 
 ---
 
@@ -393,7 +422,7 @@
 四个阶段（必须严格串行）：
 - **Phase 0 · 紧急修复**（3–5 天）：7 项 P0 修复，含 `deleteGroup`/`migrateToMultiWorld` 事务作用域、`ensureSchema` 删库风险、`BUG-EXPORT-WG`、`importProjectJSON` 事务化、`deleteProject` 漏间接归属表、`deleteNode` 绕过 `deleteChapter`
 - **Phase 1 · 三支柱地基（强化版）**（10–15 天）：`PROJECT_TABLES`（含 JSON/数组/间接归属/Blob owner）+ `FIELD_REGISTRY + AdoptionSchema` + `CONTEXT_SOURCES + 真裁剪`
-- **Phase 2 · 内容完整性 + 多世界贯通**（7–10 天）：Phase 40 真实与幻想多世界化、chapter-adapter 接 worldRulesContext、AIFieldCard 传 currentValue、chunk-writer 支持 worldGroupId、批量正文 worldContextResolver、角色 JSON 引用 remap
+- **Phase 2 · 内容完整性 + 多世界贯通**（7–10 天）：Phase 40 真实与幻想多世界化、chapter-adapter 接 worldRulesContext、AIFieldCard 传 currentValue（注:`AIFieldCard` 组件后已被各面板内联编辑器取代并于 2026-06-09 旧代码清除中移除）、chunk-writer 支持 worldGroupId、批量正文 worldContextResolver、角色 JSON 引用 remap
 - **Phase 3 · 精品化**（10–15 天）：AI 说明书自动生成器、测试体系、CI lint、安全加固、性能、文档体系收口
 
 ---
@@ -419,17 +448,17 @@
 
 ---
 
-### BUG-INPUT-WITH-GEN — 文本框应可用户自行输入，且 AI 生成时带上用户已输入内容（通用原则）
+### ✅ BUG-INPUT-WITH-GEN（已修复 2026-06-09）— 文本框应可用户自行输入，且 AI 生成时带上用户已输入内容
 
 > 来源：社区反馈 + 用户明确诉求（2026-06-04）。最初表现：「从零到第一章」工作流第一步「一句话故事」用户无法输入。
-> 文件：`src/components/settings/prompt/WorkflowRunner.tsx`（重灾区）、`src/components/shared/AIFieldCard.tsx`、各调用 AIFieldCard/AI 生成按钮的面板。
+> 文件：`src/components/settings/prompt/WorkflowRunner.tsx`（重灾区）、各面板的**内联字段编辑器**（如 `WorldviewOriginPanel` 的 `TextFieldEditor`、`InlineEdit`）、各 AI 生成按钮的面板。（注:旧的 `AIFieldCard.tsx` 已于 2026-06-09 旧代码清除中移除,面板现统一用内联编辑器。）
 
 **用户诉求（通用原则，按此实现）**：
 > 每个文本框都应能让用户**自己输入**内容；当用户点击该文本框对应的「AI 生成」按钮时，**把用户已输入的内容自动带进提示词**，在用户写的基础上生成/扩展（而不是无视用户输入从零生成）。
 
 **已核实的现状**：
 1. **工作流步骤卡（WorkflowRunner StepCard）= 重灾区**：步骤卡**完全没有用户输入框**，只读地显示 AI 的 `result.output` + 一个「重新生成」按钮 → 用户连「一句话故事」都**没法自己敲**，更谈不上带着它去生成。这是本次反馈最直接的痛点。
-2. **普通字段组件 AIFieldCard**：用户**能**编辑字段值（`value`/`onChange`）、也能填一个独立的提示（`hint`）；但「AI 生成时是否把当前字段值（用户已写内容）带进 prompt」**取决于各调用方传入的 `buildMessages` 实现，不统一**——有的带、有的只带 hint 不带 value。
+2. **各面板内联字段编辑器**（如 `WorldviewOriginPanel` 的 `TextFieldEditor`/`InlineEdit`；原 `AIFieldCard` 已移除）：用户**能**编辑字段值（`value`/`onChange`）、也能填一个独立的提示（`hint`）；但「AI 生成时是否把当前字段值（用户已写内容）带进 prompt」**取决于各调用方传入的 `buildMessages` 实现，不统一**——有的带、有的只带 hint 不带 value。
 3. ✅ **（已修 · FB-1, 2026-06-09）** `WorkflowRunner` 裸 `renderPrompt` 不注入项目上下文的问题已修复——现每步走 `assembleContext` 注入 projectName/genres/worldContext/dimension + 步骤间链路贯通。**但步骤卡「可编辑输入框」本身仍未做**（本条 1 仍待办）。
 4. **章节大纲/章节摘要字段(下游自动总结)不可手改 = 首批审计对象**（来源 FB-3 · light莫言）：「读上游内容自动总结生成」的章节大纲，当前不能手动编辑或改了不保存；用户要能手改并保存，不必为改一句话反复整章重生成。这是本通用原则在「下游自动总结字段」方向的典型落点。
 
@@ -440,7 +469,7 @@
 - **首批审计对象清单（按用户实际撞到的优先）**：
   1. 🔴 工作流步骤卡（无输入框）
   2. 🔴 **章节大纲 / 章节摘要**（下游自动总结，不可改/不保存 · FB-3）
-  3. 🟠 各面板 AIFieldCard 字段（buildMessages 是否带 currentValue 不统一）
+  3. 🟠 各面板内联字段编辑器（buildMessages 是否带 currentValue 不统一）
 - **验证**：① 工作流每步可手动输入、且生成带上用户输入；② **章节大纲可手改→失焦保存→刷新仍在→再次生成是在手改基础上改写**；③ 抽查若干面板字段：先输入半句→点 AI 生成→产出是在用户输入基础上扩展而非另起。
 
 ---
@@ -704,6 +733,8 @@
 ---
 
 ### Phase 35 — 世界观词条化重构（自然/人文重新划分 + 道具系统拆分）
+
+> 🏗️ **施工权威**：`docs/CODEX-REFACTOR-PLAN.md`（Phase 35-b/c 分步施工蓝图,防跑偏)。设计依据 `docs/CODEX-REDESIGN.md`。
 
 > 来源：用户构想（2026-06-03） | 状态：**设计文档已完成、35-a 部分落地但跑偏** → `docs/CODEX-REDESIGN.md` | 规模：大重构（动 DB + 核心世界观面板）
 

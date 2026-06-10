@@ -26,8 +26,8 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(result.ok, result.errors.join('; ')).toBe(true)
     })
 
-    it('登记了全部 45 张表', () => {
-      expect(PROJECT_TABLES.length).toBe(45)
+    it('登记了全部 43 张表', () => {
+      expect(PROJECT_TABLES.length).toBe(43)   // v29 删除 itemSystems/factions 后:45→43
     })
 
     it('每张表名唯一', () => {

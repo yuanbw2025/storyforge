@@ -54,14 +54,17 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     title: string
     summary: string
     order: number
-  }): Promise<number | null> => {
+  }): Promise<{ id: number | null; reason?: string }> => {
+    // FB-10 修复:返回 skip 原因,供调用方反馈(此前 adopt 命中去重/必填/FK 失败时
+    // 进 skipped 静默不写、不报错,导致"点采纳却没写入也没提示")
     const result = await adopt({
       projectId: project.id!,
       target: 'outlineNodes',
       mode: 'add',
       data: node,
     })
-    return result.written[0]?.id ?? null
+    const id = result.written[0]?.id ?? null
+    return { id, reason: id == null ? (result.skipped[0]?.reason ?? '未知原因') : undefined }
   }, [project.id])
   const [batchResult, setBatchResult] = useState<Map<number, ParsedChapter[]> | null>(null)
 
@@ -300,32 +303,50 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     ai.reset()
     const existingCount = volumes.length
     let firstId: number | null = null
+    let written = 0
+    const skipReasons = new Set<string>()
     for (let i = 0; i < previewVolumes.length; i++) {
-      const id = await addOutlineNodeByAdopt({
+      const r = await addOutlineNodeByAdopt({
         parentId: null, type: 'volume',
         title: previewVolumes[i].title, summary: previewVolumes[i].summary,
         order: existingCount + i,
       })
-      if (i === 0) firstId = id
+      if (r.id != null) { written++; if (firstId == null) firstId = r.id }
+      else if (r.reason) skipReasons.add(r.reason)
     }
     await loadAll(project.id!)
     setPreviewVolumes(null)
     if (firstId) setSelectedVolId(firstId)
+    // FB-10:不再静默——全跳过/部分跳过都明确告知用户原因
+    if (written === 0) {
+      alert(`未写入任何卷。原因:${[...skipReasons].join('；') || '与已有卷标题重复(已跳过)'}。\n若想替换/更新同名卷,请先删除同名卷再采纳。`)
+    } else if (written < previewVolumes.length) {
+      alert(`已写入 ${written} 个卷,另有 ${previewVolumes.length - written} 个被跳过(${[...skipReasons].join('；') || '标题重复'})。`)
+    }
   }
 
   const handleConfirmChapters = async () => {
     if (!previewChapters || !selectedVol) return
     ai.reset()
     const existingCount = selectedVolChapters.length
+    let written = 0
+    const skipReasons = new Set<string>()
     for (let i = 0; i < previewChapters.length; i++) {
-      await addOutlineNodeByAdopt({
+      const r = await addOutlineNodeByAdopt({
         parentId: selectedVol.id!, type: 'chapter',
         title: previewChapters[i].title, summary: previewChapters[i].summary,
         order: existingCount + i,
       })
+      if (r.id != null) written++
+      else if (r.reason) skipReasons.add(r.reason)
     }
     await loadAll(project.id!)
     setPreviewChapters(null)
+    if (written === 0) {
+      alert(`未写入任何章节。原因:${[...skipReasons].join('；') || '与本卷已有章节标题重复(已跳过)'}。`)
+    } else if (written < previewChapters.length) {
+      alert(`已写入 ${written} 章,另有 ${previewChapters.length - written} 章被跳过(${[...skipReasons].join('；') || '标题重复'})。`)
+    }
   }
 
   const handleCancelPreview = () => {

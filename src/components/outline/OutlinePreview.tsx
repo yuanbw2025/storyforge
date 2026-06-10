@@ -8,7 +8,7 @@
  * - 相关伏笔（埋设/呼应/回收）
  * - 场景地点 + 情绪走向
  */
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { X, MapPin, Users, BookOpen, Zap, TrendingUp, Bookmark } from 'lucide-react'
 import { useDetailedOutlineStore } from '../../stores/detailed-outline'
 import { useCharacterStore } from '../../stores/character'
@@ -43,13 +43,17 @@ const PACE_LABELS: Record<ScenePace, string> = {
 }
 
 export default function OutlinePreview({ outlineNodeId, onClose }: Props) {
-  const { nodes } = useOutlineStore()
+  const { nodes, updateNode } = useOutlineStore()
   const { detailedOutlines } = useDetailedOutlineStore()
   const { characters } = useCharacterStore()
   const { foreshadows } = useForeshadowStore()
 
   const node = nodes.find(n => n.id === outlineNodeId)
   const detail = detailedOutlines.find(d => d.outlineNodeId === outlineNodeId)
+
+  // FB-3:章节大纲(摘要)可手动编辑 —— 此前只读显示,用户无法改了再用。
+  const [summaryDraft, setSummaryDraft] = useState('')
+  useEffect(() => { setSummaryDraft(node?.summary || '') }, [node?.summary])
 
   // 查找关联角色
   const appearingChars = useMemo(() => {
@@ -106,11 +110,18 @@ export default function OutlinePreview({ outlineNodeId, onClose }: Props) {
       </div>
 
       <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
-        {/* 章节摘要 */}
-        {node.summary && (
+        {/* 章节摘要(章节大纲)— FB-3:可手动编辑,失焦自动保存 */}
+        {(
           <div>
             <SectionLabel icon={<BookOpen className="w-3 h-3" />} label="章节摘要" />
-            <p className="text-sm text-text-secondary leading-relaxed">{node.summary}</p>
+            <textarea
+              value={summaryDraft}
+              onChange={e => setSummaryDraft(e.target.value)}
+              onBlur={() => { if (node.id != null && summaryDraft !== (node.summary || '')) updateNode(node.id, { summary: summaryDraft }) }}
+              rows={3}
+              placeholder="章节大纲/摘要(可手动编辑,失焦自动保存)"
+              className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm text-text-secondary leading-relaxed resize-y focus:outline-none focus:border-accent"
+            />
           </div>
         )}
 

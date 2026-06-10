@@ -109,8 +109,8 @@ export default defineConfig({
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-editor': ['@tiptap/react', '@tiptap/starter-kit', '@tiptap/extension-placeholder'],
-          'vendor-db': ['dexie', 'dexie-react-hooks'],
-          'vendor-d3': ['d3-force', 'd3-hierarchy'],
+          'vendor-db': ['dexie'],
+          'vendor-d3': ['d3-hierarchy'],
         },
       },
     },

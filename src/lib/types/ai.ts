@@ -24,6 +24,11 @@ export interface AIConfig {
   baseUrl: string
   temperature: number
   maxTokens: number
+  /**
+   * FB-8:用户手填的「上下文窗口大小」(token),用于本地/自定义模型(LM Studio/Ollama/中转/新模型)。
+   * 设了就以它为准,否则按内置预设、再否则 8K 兜底。0/undefined = 用预设。
+   */
+  contextWindow?: number
 }
 
 /** API 配置预设（多套配置一键切换） */

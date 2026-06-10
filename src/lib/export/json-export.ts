@@ -1,8 +1,9 @@
 import { db } from '../db/schema'
+import { importLegacyArraysToCodex } from '../migrations/legacy-to-codex-upgrade'
 import type {
   Project, Worldview, StoryCore, PowerSystem,
-  Character, Faction, OutlineNode, Chapter,
-  Foreshadow, Geography, History, ItemSystem,
+  Character, OutlineNode, Chapter,
+  Foreshadow, Geography, History,
   CreativeRules, CharacterRelation,
   DetailedOutline, EmotionBeatCard, StateCard,
   StoryArc, WorldNode, Note,
@@ -36,7 +37,6 @@ const PROJECT_TABLES_ALL = [
   db.creativeRules,
   db.detailedOutlines,
   db.emotionBeatCards,
-  db.factions,
   db.foreshadows,
   db.geographies,
   db.historicalKeywords,
@@ -48,7 +48,6 @@ const PROJECT_TABLES_ALL = [
   db.importSessions,
   db.importantLocations,
   db.itemLedger,
-  db.itemSystems,
   db.masterChapterBeats,
   db.masterChunkAnalysis,
   db.masterInsights,
@@ -221,13 +220,11 @@ export interface ProjectExportData {
   storyCores: Omit<StoryCore, 'id' | 'projectId'>[]
   powerSystems: (Omit<PowerSystem, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
   characters: (Omit<Character, 'id' | 'projectId' | 'homeWorldGroupId'> & HomeWorldGroupExportRef)[]
-  factions: Omit<Faction, 'id' | 'projectId'>[]
   outlineNodes: (Omit<OutlineNode, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef & { _exportId: number; _parentExportId: number | null })[]
   chapters: (Omit<Chapter, 'id' | 'projectId' | 'outlineNodeId'> & { _outlineExportId: number })[]
   foreshadows: Omit<Foreshadow, 'id' | 'projectId'>[]
   geographies: (Omit<Geography, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
   histories: (Omit<History, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
-  itemSystems: Omit<ItemSystem, 'id' | 'projectId'>[]
   creativeRules: Omit<CreativeRules, 'id' | 'projectId'>[]
   characterRelations: (Omit<CharacterRelation, 'id' | 'projectId' | 'fromCharacterId' | 'toCharacterId'> & {
     _fromCharacterIndex: number
@@ -278,8 +275,8 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
   // ── 并行查询所有表 ──
   const [
     worldviews, storyCores, powerSystems,
-    characters, factions, outlineNodes, chapters,
-    foreshadows, geographies, histories, itemSystems,
+    characters, outlineNodes, chapters,
+    foreshadows, geographies, histories,
     creativeRules, characterRelations,
     // v2 新增
     detailedOutlines, emotionBeatCards, stateCards,
@@ -294,13 +291,11 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     db.storyCores.where('projectId').equals(projectId).toArray(),
     db.powerSystems.where('projectId').equals(projectId).toArray(),
     db.characters.where('projectId').equals(projectId).toArray(),
-    db.factions.where('projectId').equals(projectId).toArray(),
     db.outlineNodes.where('projectId').equals(projectId).toArray(),
     db.chapters.where('projectId').equals(projectId).toArray(),
     db.foreshadows.where('projectId').equals(projectId).toArray(),
     db.geographies.where('projectId').equals(projectId).toArray(),
     db.histories.where('projectId').equals(projectId).toArray(),
-    db.itemSystems.where('projectId').equals(projectId).toArray(),
     db.creativeRules.where('projectId').equals(projectId).toArray(),
     db.characterRelations.where('projectId').equals(projectId).toArray(),
     // v2
@@ -418,7 +413,6 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     storyCores: storyCores.map(({ id: _, projectId: __, ...rest }) => rest),
     powerSystems: powerSystems.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
     characters: characters.map(({ id: _, projectId: __, ...rest }) => withHomeWorldGroupExportId(rest)),
-    factions: factions.map(({ id: _, projectId: __, ...rest }) => rest),
     outlineNodes: outlineNodes.map((n) => {
       const { id, projectId: __, ...rest } = n
       return {
@@ -437,7 +431,6 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     foreshadows: foreshadows.map(({ id: _, projectId: __, ...rest }) => rest),
     geographies: geographies.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
     histories: histories.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
-    itemSystems: itemSystems.map(({ id: _, projectId: __, ...rest }) => rest),
     creativeRules: creativeRules.map(({ id: _, projectId: __, ...rest }) => rest),
     characterRelations: characterRelations.map((r) => {
       const { id: _, projectId: __, fromCharacterId, toCharacterId, ...rest } = r
@@ -612,9 +605,15 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
     newCharIds.set(i, newId)
   }
 
-  // 4. 导入势力
-  for (const f of data.factions || []) {
-    await db.factions.add({ ...f, projectId: newProjectId } as Faction)
+  // (4. 旧版备份兼容:factions/itemSystems 表已删除,这两类数据并入「势力」/「人工器物」词条)
+  const legacyFactions = (data as any).factions as any[] | undefined
+  const legacyItemSystems = (data as any).itemSystems as any[] | undefined
+  if (legacyFactions?.length || legacyItemSystems?.length) {
+    await importLegacyArraysToCodex(db, newProjectId, {
+      factions: legacyFactions,
+      itemSystems: legacyItemSystems,
+    })
+    console.info('[import] 旧版备份的 势力/道具 已并入「势力」/「人工器物」词条。')
   }
 
   // 5. 导入大纲节点（重建 parentId）
@@ -660,9 +659,6 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   }
   for (const h of data.histories || []) {
     await db.histories.add({ ...importWorldScoped(h), projectId: newProjectId } as History)
-  }
-  for (const item of data.itemSystems || []) {
-    await db.itemSystems.add({ ...item, projectId: newProjectId } as ItemSystem)
   }
   for (const cr of data.creativeRules || []) {
     await db.creativeRules.add({ ...cr, projectId: newProjectId } as CreativeRules)

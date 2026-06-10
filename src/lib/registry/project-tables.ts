@@ -87,8 +87,7 @@ export const PROJECT_TABLES: TableSpec[] = [
       { field: 'toCharacterId', remapVia: 'characters' },
     ] },
 
-  { table: db.factions, name: 'factions', owner: 'project', exportable: true,
-    note: '旧实体,Phase 35-b 后并入 codex.faction' },
+  // (factions 表已于 DB v29 并入 codex.faction 词条并删除)
 
   // ───────────────────── 大纲 / 章节 / 细纲 ─────────────────────
   { table: db.outlineNodes, name: 'outlineNodes', owner: 'project', worldScoped: true,
@@ -143,8 +142,7 @@ export const PROJECT_TABLES: TableSpec[] = [
       { kind: 'array', field: 'citedInsightIds', itemTarget: 'masterInsights', onDelete: 'removeItem' },
     ] },
 
-  { table: db.itemSystems, name: 'itemSystems', owner: 'project', exportable: true,
-    note: '旧实体,Phase 35-b 后并入 codex.artifact' },
+  // (itemSystems 表已于 DB v29 并入 codex.artifact 词条并删除)
 
   // ───────────────────── 词条系统 ─────────────────────
   { table: db.codexCategories, name: 'codexCategories', owner: 'project', worldScoped: true,

@@ -322,6 +322,27 @@ export default function AIConfigPanel() {
             </div>
           </div>
 
+          {/* FB-8: 上下文窗口(高级·可选) — 本地/自定义模型按实际填写,修"误报超出窗口" */}
+          <div className="mb-4">
+            <label className="block text-sm text-text-secondary mb-1.5">
+              上下文窗口 <span className="text-text-muted font-normal">(高级 · 可选)</span>
+              {config.contextWindow
+                ? <span className="text-accent ml-1">{config.contextWindow.toLocaleString()} token</span>
+                : <span className="text-text-muted ml-1">按模型预设</span>}
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={config.contextWindow || ''}
+              onChange={(e) => setConfig({ contextWindow: Number(e.target.value) || undefined })}
+              placeholder="本地/自定义模型请按实际填写，如 131072；留空 = 用内置预设"
+              className="w-full px-3 py-2 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
+            />
+            <p className="text-[11px] text-text-muted mt-1">
+              识别不到的模型默认按 8K 计算,会误报「上下文超出窗口」。本地模型(LM Studio / Ollama)请在此填真实窗口,如 128000 / 262144。
+            </p>
+          </div>
+
           {/* 测试连接 */}
           <div className="pt-2 space-y-2">
             <div className="flex items-center gap-3">

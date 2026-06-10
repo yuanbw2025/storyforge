@@ -20,13 +20,18 @@ async function buildRulesSourceContext(projectId: number, worldGroupId: number |
 }
 
 /**
- * storyCore 缺口修复:世界起源生成时带上「一句话故事」(故事核心)。
- * 此前 buildCtx 只拼了世界观自身字段,漏了 storyCore 这个上游源,
- * 导致世界起源读不到用户写的一句话故事。storyCore 早已登记在 CONTEXT_SOURCES,
- * 这里只需让调用方 need 它。
+ * 下游 → 上游「反推」上下文:生成世界观时,结合用户已填的【下游内容】一起反推。
+ * 通过注册表一次性拉取 故事核心 + 角色 + 故事线(均为已登记的 CONTEXT_SOURCE),
+ * 这样"先填角色/故事、再生成世界观"时,AI 能读到它们并反向推导出一致的世界设定。
+ * 注:storyCore 是项目级、characters 是世界级——必须传 worldGroupId 才能召回当前世界的角色。
+ * (替代原先只取 storyCore 的单独调用,合并为一次装配,顺带补齐角色/故事线。)
  */
-async function buildStoryCoreSourceContext(projectId: number): Promise<string> {
-  return (await assembleContext({ projectId, sourceKeys: ['storyCore'] })).text
+async function buildDownstreamReverseContext(projectId: number, worldGroupId: number | null): Promise<string> {
+  return (await assembleContext({
+    projectId,
+    worldGroupId,
+    sourceKeys: ['storyCore', 'characters', 'storyArcs'],
+  })).text
 }
 
 // ── 常量 ───────────────────────────────────────────────────────
@@ -223,9 +228,9 @@ function TextFieldEditor({
   const handleGenerate = async () => {
     // Phase 32: 注入世界规则
     const rulesCtx = await buildRulesSourceContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
-    // storyCore 缺口修复:带上「一句话故事」作为上游依据
-    const storyCoreCtx = await buildStoryCoreSourceContext(project.id!)
-    const fullContext = [storyCoreCtx, contextSummary].filter(Boolean).join('\n\n')
+    // 下游 → 上游反推:带上用户已填的故事核心 + 角色 + 故事线,生成世界观时结合反推
+    const downstreamCtx = await buildDownstreamReverseContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
+    const fullContext = [downstreamCtx, contextSummary].filter(Boolean).join('\n\n')
     const opts = {
       parameterValues: {
         ...parameterValues,
@@ -309,9 +314,9 @@ function DivineFieldEditor({
 
   const handleGenerate = async () => {
     const rulesCtx = await buildRulesSourceContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
-    // storyCore 缺口修复:带上「一句话故事」作为上游依据
-    const storyCoreCtx = await buildStoryCoreSourceContext(project.id!)
-    const fullContext = [storyCoreCtx, contextSummary].filter(Boolean).join('\n\n')
+    // 下游 → 上游反推:带上用户已填的故事核心 + 角色 + 故事线,生成世界观时结合反推
+    const downstreamCtx = await buildDownstreamReverseContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
+    const fullContext = [downstreamCtx, contextSummary].filter(Boolean).join('\n\n')
     const opts = {
       parameterValues: {
         ...parameterValues,

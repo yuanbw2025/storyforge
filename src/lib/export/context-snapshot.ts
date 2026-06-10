@@ -19,7 +19,6 @@ export async function generateContextSnapshot(projectId: number): Promise<string
     storyCores,
     powerSystems,
     characters,
-    factions,
     outlineNodes,
     chapters,
     foreshadows,
@@ -29,7 +28,6 @@ export async function generateContextSnapshot(projectId: number): Promise<string
     db.storyCores.where('projectId').equals(projectId).toArray(),
     db.powerSystems.where('projectId').equals(projectId).toArray(),
     db.characters.where('projectId').equals(projectId).toArray(),
-    db.factions.where('projectId').equals(projectId).toArray(),
     db.outlineNodes.where('projectId').equals(projectId).toArray(),
     db.chapters.where('projectId').equals(projectId).toArray(),
     db.foreshadows.where('projectId').equals(projectId).toArray(),
@@ -97,13 +95,7 @@ export async function generateContextSnapshot(projectId: number): Promise<string
     sections.push(`## 角色\n${lines.join('\n')}`)
   }
 
-  // ── 势力 ──
-  if (factions.length) {
-    const lines = factions.map(f =>
-      `- **${f.name}**${f.description ? `：${compress(f.description, 100)}` : ''}`
-    )
-    sections.push(`## 势力\n${lines.join('\n')}`)
-  }
+  // (势力已并入「势力」词条,经词条上下文源进入生成上下文)
 
   // ── 大纲 + 章节摘要 ──
   if (outlineNodes.length) {
