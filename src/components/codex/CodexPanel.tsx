@@ -185,7 +185,27 @@ export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
           </button>
         </div>
 
-        {/* 中：词条列表 */}
+        {/* 右侧区域：竖向 —— 先「全貌」(上)，再「词条」(下) */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* 全貌（整体概述）：逻辑上先写整体，放最上方 */}
+          {activeCat && (
+            <div className="p-3 border-b border-border shrink-0">
+              <div className="text-xs text-text-muted mb-1">
+                📋 「{activeCat.name}」全貌 · 整体概述<span className="text-text-muted/70">（先写整体格局，再到下方细化为一个个词条）</span>
+              </div>
+              <CTextarea
+                value={activeCat.overview || ''}
+                onChange={(e) => updateCategory(activeCat.id!, { overview: e.target.value })}
+                placeholder={`描述「${activeCat.name}」的整体格局／概况……`}
+                rows={3}
+                className="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-sm resize-y"
+              />
+            </div>
+          )}
+
+          {/* 词条区（下方）：左词条列表 + 右词条详情 */}
+          <div className="flex-1 flex min-h-0">
+        {/* 词条列表 */}
         <div className="w-52 shrink-0 border-r border-border flex flex-col">
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
             {catEntries.length === 0 && (
@@ -230,21 +250,8 @@ export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
           </div>
         </div>
 
-        {/* 右：分类全貌 + 词条详情 */}
+        {/* 词条详情 */}
         <div className="flex-1 overflow-y-auto min-w-0">
-          {/* 全貌（概述）：分类层的整体描述,与下属具体词条互补 */}
-          {activeCat && (
-            <div className="p-3 border-b border-border">
-              <div className="text-xs text-text-muted mb-1">📋 「{activeCat.name}」全貌 · 整体概述</div>
-              <CTextarea
-                value={activeCat.overview || ''}
-                onChange={(e) => updateCategory(activeCat.id!, { overview: e.target.value })}
-                placeholder={`描述「${activeCat.name}」的整体格局／概况……下面可再逐条添加具体词条`}
-                rows={3}
-                className="w-full px-3 py-2 rounded-lg bg-bg-elevated border border-border text-sm resize-y"
-              />
-            </div>
-          )}
           {activeEntry && activeCat ? (
             <EntryDetail
               key={activeEntry.id}
@@ -259,6 +266,8 @@ export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
             </div>
           )}
         </div>
+          </div>{/* 词条区 end */}
+        </div>{/* 右侧区域 end */}
       </div>
 
       {/* B1:自定义字段管理弹窗 — 编辑本分类的 fieldSchema(内置类也可改) */}
