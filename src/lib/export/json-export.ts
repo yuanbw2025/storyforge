@@ -432,14 +432,17 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     geographies: geographies.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
     histories: histories.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
     creativeRules: creativeRules.map(({ id: _, projectId: __, ...rest }) => rest),
-    characterRelations: characterRelations.map((r) => {
-      const { id: _, projectId: __, fromCharacterId, toCharacterId, ...rest } = r
-      return {
-        ...rest,
-        _fromCharacterIndex: charIdMap.get(fromCharacterId) ?? -1,
-        _toCharacterIndex: charIdMap.get(toCharacterId) ?? -1,
-      }
-    }),
+    characterRelations: characterRelations
+      // 先剔除孤儿关系(端点角色已不存在),避免把 -1 脏映射写进备份
+      .filter(r => charIdMap.has(r.fromCharacterId) && charIdMap.has(r.toCharacterId))
+      .map((r) => {
+        const { id: _, projectId: __, fromCharacterId, toCharacterId, ...rest } = r
+        return {
+          ...rest,
+          _fromCharacterIndex: charIdMap.get(fromCharacterId)!,
+          _toCharacterIndex: charIdMap.get(toCharacterId)!,
+        }
+      }),
 
     // ── v2 新增 ──
     detailedOutlines: detailedOutlines.map((d) => {
@@ -665,10 +668,16 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   }
 
   // 9. 导入角色关系（重建 fromCharacterId/toCharacterId）
+  // 角色关系是次要数据:若某端角色已不存在(导出时记为 -1 的孤儿关系),跳过该条即可,
+  // 不像"章节→大纲"那种必需外键要 fail-fast、整体回滚(否则一条脏关系会拖垮整个备份导入)。
   for (const r of data.characterRelations || []) {
     const { _fromCharacterIndex, _toCharacterIndex, ...rest } = r
-    const fromId = requireMappedId(newCharIds, _fromCharacterIndex, 'characterRelations.fromCharacterId')
-    const toId = requireMappedId(newCharIds, _toCharacterIndex, 'characterRelations.toCharacterId')
+    const fromId = newCharIds.get(_fromCharacterIndex)
+    const toId = newCharIds.get(_toCharacterIndex)
+    if (fromId == null || toId == null) {
+      console.warn('[import] 跳过无效角色关系(端点角色缺失):', _fromCharacterIndex, '→', _toCharacterIndex)
+      continue
+    }
     await db.characterRelations.add({
       ...rest,
       fromCharacterId: fromId,
