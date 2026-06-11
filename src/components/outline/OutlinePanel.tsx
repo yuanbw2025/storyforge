@@ -257,15 +257,21 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
 
   const handleBatchConfirm = useCallback(async () => {
     if (!batchResult) return
-    for (const [volId, chapters] of batchResult) {
-      const existingCount = nodes.filter(n => n.parentId === volId && n.type === 'chapter').length
-      for (let i = 0; i < chapters.length; i++) {
-        await addOutlineNodeByAdopt({
-          parentId: volId, type: 'chapter',
-          title: chapters[i].title, summary: chapters[i].summary,
-          order: existingCount + i,
-        })
+    try {
+      for (const [volId, chapters] of batchResult) {
+        const existingCount = nodes.filter(n => n.parentId === volId && n.type === 'chapter').length
+        for (let i = 0; i < chapters.length; i++) {
+          await addOutlineNodeByAdopt({
+            parentId: volId, type: 'chapter',
+            title: chapters[i].title, summary: chapters[i].summary,
+            order: existingCount + i,
+          })
+        }
       }
+    } catch (err) {
+      console.error('[Outline] 批量写入章节失败:', err)
+      alert(`批量写入章节时出错: ${err instanceof Error ? err.message : '未知错误'}。\n请查看控制台获取详情。`)
+      return
     }
     await loadAll(project.id!)
     setBatchResult(null)
@@ -305,14 +311,20 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     let firstId: number | null = null
     let written = 0
     const skipReasons = new Set<string>()
-    for (let i = 0; i < previewVolumes.length; i++) {
-      const r = await addOutlineNodeByAdopt({
-        parentId: null, type: 'volume',
-        title: previewVolumes[i].title, summary: previewVolumes[i].summary,
-        order: existingCount + i,
-      })
-      if (r.id != null) { written++; if (firstId == null) firstId = r.id }
-      else if (r.reason) skipReasons.add(r.reason)
+    try {
+      for (let i = 0; i < previewVolumes.length; i++) {
+        const r = await addOutlineNodeByAdopt({
+          parentId: null, type: 'volume',
+          title: previewVolumes[i].title, summary: previewVolumes[i].summary,
+          order: existingCount + i,
+        })
+        if (r.id != null) { written++; if (firstId == null) firstId = r.id }
+        else if (r.reason) skipReasons.add(r.reason)
+      }
+    } catch (err) {
+      console.error('[Outline] 写入卷失败:', err)
+      alert(`写入卷时出错: ${err instanceof Error ? err.message : '未知错误'}。\n请查看控制台获取详情。`)
+      return
     }
     await loadAll(project.id!)
     setPreviewVolumes(null)
@@ -331,14 +343,20 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     const existingCount = selectedVolChapters.length
     let written = 0
     const skipReasons = new Set<string>()
-    for (let i = 0; i < previewChapters.length; i++) {
-      const r = await addOutlineNodeByAdopt({
-        parentId: selectedVol.id!, type: 'chapter',
-        title: previewChapters[i].title, summary: previewChapters[i].summary,
-        order: existingCount + i,
-      })
-      if (r.id != null) written++
-      else if (r.reason) skipReasons.add(r.reason)
+    try {
+      for (let i = 0; i < previewChapters.length; i++) {
+        const r = await addOutlineNodeByAdopt({
+          parentId: selectedVol.id!, type: 'chapter',
+          title: previewChapters[i].title, summary: previewChapters[i].summary,
+          order: existingCount + i,
+        })
+        if (r.id != null) written++
+        else if (r.reason) skipReasons.add(r.reason)
+      }
+    } catch (err) {
+      console.error('[Outline] 写入章节失败:', err)
+      alert(`写入章节时出错: ${err instanceof Error ? err.message : '未知错误'}。\n请查看控制台获取详情。`)
+      return
     }
     await loadAll(project.id!)
     setPreviewChapters(null)

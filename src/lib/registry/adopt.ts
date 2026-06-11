@@ -121,7 +121,8 @@ function normalizeAndValidate(
   for (const f of fieldSpecs) for (const a of f.aliases ?? []) byAlias.set(a, f)
 
   for (const [key, val] of Object.entries(raw)) {
-    if (val == null || val === '') continue
+    // 空字符串跳过;null 保留（如 parentId: null 表示顶层节点）
+    if (val === '') continue
     let spec = byName.get(key)
     let canonical = key
     if (!spec) {
@@ -135,6 +136,11 @@ function normalizeAndValidate(
       result.aliasMapped.push({ from: key, to: canonical })
     }
 
+    // null 值直接保留，不走类型转换（避免 String(null) → 'null'）
+    if (val == null) {
+      out[canonical] = null
+      continue
+    }
     const cleaned = validateAndCoerce(spec, val, result)
     if (cleaned !== undefined) out[canonical] = cleaned
   }
