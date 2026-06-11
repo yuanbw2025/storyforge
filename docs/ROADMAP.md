@@ -324,16 +324,22 @@
 - 把 `ChapterEditor` 的正文生成从旧 `buildFullWorldCtx + buildChapterContentPrompt` 切到 `assembleContext`(属「旧代码清除」专项的一环)。
 - **完成判据**:有细纲的章节,正文生成的请求体里能看到细纲场景信息(可用网络抓包验证,同 FB-1 手法)。
 
-## ✅ FB-10（数据 bug · 已修复 2026-06-09）— 生成卷级大纲，点采纳后未写入
+## ✅ FB-10 / FB-10b（数据 bug · 真正修复 2026-06-11）— 生成卷级大纲，点采纳后未写入
 
-> 反馈人：买辣椒也用券。"生成卷级大纲,点击采纳写入后,并未写入"。
-> 文件:`src/components/outline/OutlinePanel.tsx`(分支 `fix/fb-10-volume-adopt`)
+> 反馈人：买辣椒也用券。"生成卷级大纲,点击采纳写入后,并未写入"。社区 PR #12（贡献者）独立定位到第二根因。
+> 文件:`src/components/outline/OutlinePanel.tsx` + `src/lib/registry/adopt.ts`
 
-**✅ 已修复(2026-06-09)·根因单测坐实**:`OutlinePanel` 的采纳**确实走了** `adopt({target:'outlineNodes'})`,但 outlineNodes 的 AdoptionSchema 是 `duplicatePolicy:'skip'`(identity=parentId+type+title)。命中去重(同名卷/章,常见于"重新生成后再采纳"或 AI 产出标题与已有重复)时,adopt 进 `skipped`、**不写入也不抛错**,而 `handleConfirmVolumes/Chapters` 此前**完全不处理 skipped → 静默无反馈**,用户感知为"点了采纳没反应"。
-**改法**:`addOutlineNodeByAdopt` 返回 skip 原因;两个 confirm 回调统计 written/skipped,全跳过→明确 alert 原因+"想替换请先删同名卷",部分跳过→告知数量。反例测试 `R-FB10`(3条:新卷正常写入 / 同名被skip带原因 / 多卷都写入)。
-**遗留(UX 增强,非 bug)**:若希望"重新生成即自动替换同名卷"而非跳过,需另做替换交互,已另议。
+**两个独立根因,FB-10 只修了第一个,bug 仍在,FB-10b 才真正解决:**
 
-**改法**:定位该采纳入口 → 确认是否走 `adopt()` → 若是旧手写路径则切到 `adopt()` 并加失败提示;补反例测试(喂卷级大纲 AI 输出 → 断言 outlineNodes 实际写入)。**先复现/定位再改。** 与 FB-6(导入大纲丢失)、旧代码清除联动排查。
+**① FB-10(2026-06-09,已修)— 重复静默跳过**:outlineNodes 是 `duplicatePolicy:'skip'`,命中同名去重时 adopt 进 `skipped`、不写不报错,而 confirm 回调不处理 → 静默。已加 written/skipped 统计 + alert 反馈。
+
+**② FB-10b（2026-06-11,本次真正修复)— `parentId:null` 被 adopt 丢弃**:`normalizeAndValidate` 旧实现 `if (val == null) continue` 把 `null` 一并跳过 → 顶层卷采纳时 `parentId:null` 丢失,卷**其实写进了库但 parentId 存成 undefined**;而 `OutlinePanel` 用 `parentId === null`(严格)过滤顶层卷,`undefined === null` 为 false → **卷被藏起,表现为"采纳没反应"**。社区 PR #12 独立定位此因。
+**改法(采纳 PR #12 核心思路并补完整)**:
+- `adopt.ts`:`normalizeAndValidate` 保留 null(`parentId:null` 正确落库);**update 分支加防误清空守卫**(更新既有记录时 null 不覆盖,保持旧行为,规避全局保留 null 的副作用)。
+- `OutlinePanel.tsx`:顶层卷过滤改 `parentId == null`(宽松)——**同时修复存量坏数据**(修复前已采纳的卷 parentId=undefined 永远藏着);三个采纳回调加 try/catch+alert(承 PR #12,防其它静默抛错)。
+- 反例测试 `R-FB10` 补断言 `parentId === null`(此前只断言写入+标题,漏了 parentId,所以没拦住)。
+**致谢**:第二根因由社区 PR #12 贡献者独立定位。
+**遗留(UX 增强,非 bug)**:"重新生成即自动替换同名卷"需另做替换交互,已另议。
 
 ---
 
