@@ -37,7 +37,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
-  const [activeModuleKey, setActiveModuleKey] = useState<'outline.volume' | 'outline.chapter'>('outline.volume')
+  const [activeModuleKey, setActiveModuleKey] = useState<'outline.volume' | 'outline.chapter'>(selectedVolId != null ? 'outline.chapter' : 'outline.volume')
 
   // 采纳预览
   const [previewVolumes, setPreviewVolumes] = useState<ParsedVolume[] | null>(null)
@@ -92,12 +92,10 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   // 是否使用故事块模式
   const hasBlocks = selectedVolBlocks.length > 0
 
-  // 自动选中第一个卷
+  // 模板跟随上下文：有选中卷 → 章节，无选中卷 → 卷级
   useEffect(() => {
-    if (selectedVolId === null && volumes.length > 0) {
-      setSelectedVolId(volumes[0].id!)
-    }
-  }, [volumes, selectedVolId])
+    setActiveModuleKey(selectedVolId != null ? 'outline.chapter' : 'outline.volume')
+  }, [selectedVolId])
 
   const handleAddVolume = async () => {
     const id = await addNode({
@@ -172,7 +170,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   // ── AI 生成 ──
 
   const handleAIVolumes = async () => {
-    setActiveModuleKey('outline.volume')
     setPreviewVolumes(null)
     setPreviewChapters(null)
     const assembled = await buildOutlineAssembledContext(null)
@@ -186,7 +183,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
 
   const handleAIChapters = async () => {
     if (!selectedVol) return
-    setActiveModuleKey('outline.chapter')
     setPreviewVolumes(null)
     setPreviewChapters(null)
     const assembled = await buildOutlineAssembledContext(selectedVol.worldGroupId ?? null, selectedVol.id)
@@ -448,7 +444,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           return (
             <button
               key={vol.id}
-              onClick={() => setSelectedVolId(vol.id!)}
+              onClick={() => setSelectedVolId(selectedVolId === vol.id ? null : vol.id!)}
               className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left transition-all mb-0.5 ${
                 active
                   ? 'bg-accent/8 border-l-2 border-accent'
