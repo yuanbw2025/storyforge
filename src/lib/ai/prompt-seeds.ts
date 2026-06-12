@@ -327,7 +327,7 @@ export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
       { key: 'pace', label: '节奏', type: 'select',
         options: ['慢', '中', '快', '极快'], default: '中', optional: true },
       { key: 'chaptersPerVolume', label: '本卷章节数', type: 'slider',
-        min: 5, max: 60, step: 1, default: 20,
+        min: 5, max: 200, step: 1, default: 20,
         description: '默认每卷 15-25 章；短篇模式可设 5-10', optional: true },
     ],
     isActive: true,
