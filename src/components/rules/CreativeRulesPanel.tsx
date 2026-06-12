@@ -1,10 +1,9 @@
 import { CTextarea } from '../shared/CompositionInput'
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, X, Sparkles, Microscope, Check, Lightbulb } from 'lucide-react'
+import { Plus, X, Sparkles, Microscope, Check } from 'lucide-react'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useReferenceStore } from '../../stores/reference'
-import { useMasterStudyStore } from '../../stores/master-study'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildRulesGeneratePrompt } from '../../lib/ai/adapters/rules-adapter'
 import { adopt } from '../../lib/registry/adopt'
@@ -26,7 +25,6 @@ export default function CreativeRulesPanel({ project }: Props) {
   const { creativeRules, loadAll, save } = useCreativeRulesStore()
   const { worldview, storyCore, loadAll: loadWorldview } = useWorldviewStore()
   const { references, loadAll: loadRefs } = useReferenceStore()
-  const { insights, listInsights } = useMasterStudyStore()
   const [writingStyle, setWritingStyle] = useState('')
   const [narrativePOV, setNarrativePOV] = useState<NarrativePOV>('third-limited')
   const [toneAndMood, setToneAndMood] = useState('')
@@ -35,7 +33,6 @@ export default function CreativeRulesPanel({ project }: Props) {
   const [specialRequirements, setSpecialRequirements] = useState('')
   const [referenceWorks, setReferenceWorks] = useState<string[]>([])
   const [citedRefIds, setCitedRefIds] = useState<number[]>([])
-  const [citedInsightIds, setCitedInsightIds] = useState<number[]>([])
   const [aiTarget, setAiTarget] = useState<'writingStyle' | 'toneAndMood' | 'specialRequirements' | null>(null)
   const ai = useAIStream()
 
@@ -43,8 +40,7 @@ export default function CreativeRulesPanel({ project }: Props) {
     loadAll(project.id!)
     loadWorldview(project.id!)
     loadRefs(project.id!)
-    listInsights()
-  }, [project.id, loadAll, loadWorldview, loadRefs, listInsights])
+  }, [project.id, loadAll, loadWorldview, loadRefs])
 
   useEffect(() => {
     if (creativeRules) {
@@ -56,7 +52,6 @@ export default function CreativeRulesPanel({ project }: Props) {
       try { setConsistencyRules(JSON.parse(creativeRules.consistencyRules || '[]')) } catch { setConsistencyRules([]) }
       try { setReferenceWorks(JSON.parse(creativeRules.referenceWorks || '[]')) } catch { setReferenceWorks([]) }
       try { setCitedRefIds(JSON.parse(creativeRules.citedReferenceIds || '[]')) } catch { setCitedRefIds([]) }
-      try { setCitedInsightIds(JSON.parse(creativeRules.citedInsightIds || '[]')) } catch { setCitedInsightIds([]) }
     }
   }, [creativeRules])
 
@@ -342,60 +337,6 @@ export default function CreativeRulesPanel({ project }: Props) {
             </div>
           )
         })()}
-      </div>
-
-      {/* 大师洞察注入 —— Phase 19-d */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-text-secondary flex items-center gap-1.5">
-            <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-            大师洞察
-          </label>
-          <span className="text-[10px] text-text-muted">
-            勾选后，AI 写作时会参考这些跨作品方法论洞察
-          </span>
-        </div>
-        {insights.length === 0 ? (
-          <p className="text-text-muted text-xs py-3 text-center border border-dashed border-border rounded-lg">
-            暂无洞察。请在「作品学习 → 手法洞察」中归纳。
-          </p>
-        ) : (
-          <div className="space-y-1">
-            {insights.map(ins => {
-              const checked = citedInsightIds.includes(ins.id!)
-              return (
-                <button
-                  key={ins.id}
-                  onClick={() => {
-                    const next = checked
-                      ? citedInsightIds.filter(id => id !== ins.id!)
-                      : [...citedInsightIds, ins.id!]
-                    setCitedInsightIds(next)
-                    saveField({ citedInsightIds: JSON.stringify(next) })
-                  }}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all border ${
-                    checked
-                      ? 'border-amber-500/40 bg-amber-500/8'
-                      : 'border-border hover:border-text-muted bg-bg-surface'
-                  }`}
-                >
-                  <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-colors ${
-                    checked ? 'bg-amber-500 border-amber-500' : 'border-border'
-                  }`}>
-                    {checked && <Check className="w-3 h-3 text-white" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm text-text-primary">{ins.title}</span>
-                    {ins.genre && <span className="text-xs text-text-muted ml-1.5">{ins.genre}</span>}
-                  </div>
-                  <span className="text-[10px] text-text-muted shrink-0">
-                    {ins.bulletPoints.length} 条要点
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        )}
       </div>
 
       {/* 特殊创作要求 */}

@@ -23,12 +23,7 @@ import type {
   ImportLog,
   ImportFileBlob,
   PromptWorkflow,
-  MasterWork,
-  MasterChunkAnalysis,
-  MasterChapterBeat,
-  MasterStyleMetrics,
   Note,
-  MasterInsight,
   StateCard,
   EmotionBeatCard,
   WorldNode,
@@ -69,13 +64,6 @@ class StoryForgeDB extends Dexie {
   importLogs!: Table<ImportLog>
   importFiles!: Table<ImportFileBlob, number>
   promptWorkflows!: Table<PromptWorkflow>
-
-  // Phase 19 —— 作品学习系统（与创作数据物理隔离）
-  masterWorks!: Table<MasterWork, number>
-  masterChunkAnalysis!: Table<MasterChunkAnalysis, number>
-  masterChapterBeats!: Table<MasterChapterBeat, number>
-  masterStyleMetrics!: Table<MasterStyleMetrics, number>
-  masterInsights!: Table<MasterInsight, number>
 
   // Phase 20 —— 参考作品深度分析（八维分块分析）
   referenceChunkAnalysis!: Table<ReferenceChunkAnalysis, number>
@@ -318,6 +306,17 @@ class StoryForgeDB extends Dexie {
           r.analysisProgress = 0
         }
       })
+    })
+
+    // v32: 下线「作品学习」旧子系统（已被「项目参考·作品分析」取代）。
+    //   删除 5 张 master 表(masterWorks/masterChunkAnalysis/masterChapterBeats/
+    //   masterStyleMetrics/masterInsights)。仅作品分析数据,非手稿,直接置 null 删除。
+    this.version(32).stores({
+      masterWorks: null,
+      masterChunkAnalysis: null,
+      masterChapterBeats: null,
+      masterStyleMetrics: null,
+      masterInsights: null,
     })
   }
 }

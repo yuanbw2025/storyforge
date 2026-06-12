@@ -283,24 +283,6 @@ export async function buildRefAnalysisContext(refIds: number[]): Promise<string>
   return `【引用手法 — 请参考以下大师创作方法论来指导写作】\n\n${parts.join('\n\n')}\n\n【引用手法结束 — 请灵活运用上述方法论，不要生搬硬套】`
 }
 
-/**
- * Phase 19-d: 构建大师洞察上下文 —— 从 masterInsights 表读取洞察注入创作 prompt。
- */
-export async function buildMasterInsightContext(insightIds: number[]): Promise<string> {
-  if (!insightIds.length) return ''
-
-  const parts: string[] = []
-  for (const id of insightIds) {
-    const insight = await db.masterInsights.get(id)
-    if (!insight) continue
-    const bullets = insight.bulletPoints.map(b => `  - ${b}`).join('\n')
-    parts.push(`【${insight.title}】${insight.genre ? `（${insight.genre}）` : ''}\n${insight.description.slice(0, 500)}\n要点：\n${bullets}`)
-  }
-
-  if (!parts.length) return ''
-  return `【大师洞察 — 请参考以下创作方法论来指导写作】\n\n${parts.join('\n\n')}\n\n【大师洞察结束 — 请灵活运用，不要生搬硬套】`
-}
-
 /** 构建世界观各维度已有内容（用于 AI 生成时做参考） */
 // ── Phase 31.1: 历史模式上下文注入 ──────────────────────────────
 

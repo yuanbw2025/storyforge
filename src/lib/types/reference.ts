@@ -24,7 +24,7 @@ export interface Reference {
   /** 从导入解析得到的结构化数据（项目参考模式） */
   importedData?: ImportedReferenceData
 
-  // ── 深度分析字段（整合自 MasterWork） ──────────────
+  // ── 作品分析字段（深层分析用） ──────────────
   /** 作品流派标签（如"玄幻"、"都市"） */
   genre?: string
   /** 原文总字数 */
@@ -68,10 +68,10 @@ export interface ImportedReferenceData {
 
 export type CreateReferenceInput = Omit<Reference, 'id' | 'createdAt' | 'updatedAt'>
 
-// ── 八维深度分析（整合原 MasterChunkAnalysis 5 维 + WritingTechniques 12 维） ──
+// ── 作品分析（13 个小说维度 + 题材自适应历史维度） ──
 
 /**
- * 参考作品分块分析 —— 每块一行，8 个维度。
+ * 参考作品分块分析 —— 每块一行，13 维 + 历史维度。
  *
  * 维度设计理念：
  *   1. narrativeStructure  叙事架构 —— 视角、时间线、POV 切换

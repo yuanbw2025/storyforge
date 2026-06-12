@@ -151,27 +151,30 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
   it('assembleContext 真裁剪:预算不足时 L3 从最终文本移除', async () => {
     const now = Date.now()
     const projectId = await createProject()
-    const insightId = await db.masterInsights.add({
-      title: '长篇大师洞察',
-      genre: '玄幻',
-      description: '这是一段非常长的大师洞察。'.repeat(200),
-      bulletPoints: ['节奏控制'.repeat(100), '人物反转'.repeat(100)],
-      createdAt: now,
-      updatedAt: now,
+    // L3 源「引用手法」:参考作品 + 一条超长维度分析
+    const refId = await db.references.add({
+      projectId, title: '长篇参考作品', author: '某大师', type: 'reference',
+      analysisStatus: 'done', analysisProgress: 100,
+      createdAt: now, updatedAt: now,
     } as any) as number
+    await db.referenceChunkAnalysis.add({
+      referenceId: refId, chunkIndex: 0,
+      narrativeStyle: '这是一段非常长的叙事手法分析。'.repeat(200),
+      createdAt: now,
+    } as any)
 
     const assembled = await assembleContext({
       projectId,
-      sourceKeys: ['previousChapterEnding', 'masterInsights'],
+      sourceKeys: ['previousChapterEnding', 'references'],
       previousChapterEnding: '主角在城门前发现旧王印记。',
-      masterInsightIds: [insightId],
+      citedReferenceIds: [refId],
       inputBudgetTokens: 60,
     })
 
     expect(assembled.overBudgetBeforeTrim).toBe(true)
     expect(assembled.included).toEqual(['previousChapterEnding'])
-    expect(assembled.trimmed).toContain('masterInsights')
+    expect(assembled.trimmed).toContain('references')
     expect(assembled.text).toContain('旧王印记')
-    expect(assembled.text).not.toContain('长篇大师洞察')
+    expect(assembled.text).not.toContain('非常长的叙事手法分析')
   })
 })

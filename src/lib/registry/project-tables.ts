@@ -1,19 +1,16 @@
 /**
  * PROJECT_TABLES 注册表(Phase 1.1a)· 单一事实源
  *
- * 全部 45 张 Dexie 表的元信息登记在此。
+ * 全部项目 Dexie 表的元信息登记在此。
  * 导出/导入/删项目/删世界组/迁移多世界 全部从这里派生(见 lifecycle.ts)。
  *
  * ⚠️ 加新表 = 在此加一行 + schema.ts 加版本 + types 加类型。其它生命周期自动覆盖。
  *
- * 事实来源:docs/refactor/PROJECT_TABLES_ALL.md(45 表硬清单 + owner 分类 + refs)
+ * 事实来源:docs/refactor/PROJECT_TABLES_ALL.md(表硬清单 + owner 分类 + refs)
  * 设计依据:docs/MASTER-BLUEPRINT.md §5.1
  */
 import { db } from '../db/schema'
 import type { TableSpec } from './types'
-
-/** master blob 在 importFiles 表中的虚拟 sessionId 偏移(与 lib/master-study/pipeline.ts 一致) */
-export const MASTER_BLOB_OFFSET = 100000
 
 export const PROJECT_TABLES: TableSpec[] = [
   // ───────────────────────── 项目根表 ─────────────────────────
@@ -139,7 +136,6 @@ export const PROJECT_TABLES: TableSpec[] = [
   { table: db.creativeRules, name: 'creativeRules', owner: 'project', exportable: true,
     refs: [
       { kind: 'array', field: 'citedReferenceIds', itemTarget: 'references', onDelete: 'removeItem' },
-      { kind: 'array', field: 'citedInsightIds', itemTarget: 'masterInsights', onDelete: 'removeItem' },
     ] },
 
   // (itemSystems 表已于 DB v29 并入 codex.artifact 词条并删除)
@@ -176,7 +172,7 @@ export const PROJECT_TABLES: TableSpec[] = [
       { field: 'toGroupId', remapVia: 'worldGroups' },
     ] },
 
-  // ───────────────────── 参考书 / 作品学习 ─────────────────────
+  // ───────────────────── 参考书 / 作品分析 ─────────────────────
   { table: db.references, name: 'references', owner: 'project', exportable: true,
     refs: [{ kind: 'simple', field: 'id', target: 'referenceChunkAnalysis[referenceId]', onDelete: 'cascade' }] },
 
@@ -186,38 +182,6 @@ export const PROJECT_TABLES: TableSpec[] = [
       (await db.references.where('projectId').equals(projectId).primaryKeys()) as number[],
     refs: [{ kind: 'indirect', via: { table: 'references', field: 'referenceId', resolveProject: 'projectId' }, onDelete: 'cascade' }],
     exportRemap: [{ field: 'referenceId', remapVia: 'references' }] },
-
-  { table: db.masterWorks, name: 'masterWorks', owner: 'project', exportable: true,
-    refs: [
-      { kind: 'simple', field: 'id', target: 'masterChunkAnalysis[workId]', onDelete: 'cascade' },
-      { kind: 'simple', field: 'id', target: 'masterChapterBeats[workId]', onDelete: 'cascade' },
-      { kind: 'simple', field: 'id', target: 'masterStyleMetrics[workId]', onDelete: 'cascade' },
-      // master 原文 blob 复用 importFiles,虚拟 sessionId = MASTER_BLOB_OFFSET + workId
-      { kind: 'blob-owner', ownerTable: 'importFiles',
-        keyResolver: (row: any) => MASTER_BLOB_OFFSET + row.id, onDelete: 'cascade' },
-    ],
-    note: 'projectId 可空(null=全局学习库)' },
-
-  { table: db.masterChunkAnalysis, name: 'masterChunkAnalysis', owner: 'direct-child',
-    exportable: true,
-    projectResolver: async (projectId) =>
-      (await db.masterWorks.where('projectId').equals(projectId).primaryKeys()) as number[],
-    exportRemap: [{ field: 'workId', remapVia: 'masterWorks' }] },
-
-  { table: db.masterChapterBeats, name: 'masterChapterBeats', owner: 'direct-child',
-    exportable: true,
-    projectResolver: async (projectId) =>
-      (await db.masterWorks.where('projectId').equals(projectId).primaryKeys()) as number[],
-    exportRemap: [{ field: 'workId', remapVia: 'masterWorks' }] },
-
-  { table: db.masterStyleMetrics, name: 'masterStyleMetrics', owner: 'direct-child',
-    exportable: true,
-    projectResolver: async (projectId) =>
-      (await db.masterWorks.where('projectId').equals(projectId).primaryKeys()) as number[],
-    exportRemap: [{ field: 'workId', remapVia: 'masterWorks' }] },
-
-  { table: db.masterInsights, name: 'masterInsights', owner: 'global', exportable: true,
-    note: '按 genre 全局共享;导出全量,导入按 genre 去重' },
 
   // ───────────────────── 临时态 / blob ─────────────────────
   { table: db.importSessions, name: 'importSessions', owner: 'transient', exportable: false },
@@ -231,7 +195,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     refs: [{ kind: 'indirect', via: { table: 'importSessions', field: 'sessionId', resolveProject: 'projectId' }, onDelete: 'cascade' }] },
 
   { table: db.importFiles, name: 'importFiles', owner: 'blob', exportable: false,
-    note: '主键=sessionId;普通导入用 importSessions.id,master blob 用 MASTER_BLOB_OFFSET+workId' },
+    note: '主键=sessionId;导入原文 blob 复用 importSessions.id' },
 
   // ───────────────────── 全局 / 本地态 ─────────────────────
   { table: db.snapshots, name: 'snapshots', owner: 'project', exportable: false,

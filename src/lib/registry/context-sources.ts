@@ -8,7 +8,6 @@ import {
   buildCreativeRulesContext,
   buildHistoricalContext,
   buildLocationContext,
-  buildMasterInsightContext,
   buildRefAnalysisContext,
   buildCharacterContext,
   formatPowerSystemBlock,
@@ -316,15 +315,6 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 2000,
     enabled: input => !!input.citedReferenceIds?.length,
     read: input => buildRefAnalysisContext(input.citedReferenceIds ?? []),
-  },
-  {
-    key: 'masterInsights',
-    label: '大师洞察',
-    scope: 'project',
-    layer: 'L3',
-    budgetTokens: 1800,
-    enabled: input => !!input.masterInsightIds?.length,
-    read: input => buildMasterInsightContext(input.masterInsightIds ?? []),
   },
   {
     // FB-5 自适应文风学习:作者文风画像(enabled=true 才注入)。
