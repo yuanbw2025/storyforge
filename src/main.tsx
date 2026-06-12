@@ -8,7 +8,6 @@ import { usePromptStore } from './stores/prompt'
 import { useWorkflowStore } from './stores/workflow'
 import { ensureSchema, REQUIRED_TABLES_V26 } from './lib/db/ensure-schema'
 import { validateRegistry } from './lib/registry/validate'
-import { migrateMasterDataToReferences } from './lib/reference-analysis/migrate-master-data'
 import './index.css'
 
 // 从 localStorage 恢复主题（兼容旧主题名迁移）
@@ -50,13 +49,6 @@ async function bootstrap() {
     await useWorkflowStore.getState().init()
   } catch (e) {
     console.error('[bootstrap] workflow store init failed:', e)
-  }
-
-  // 4. Phase 20：迁移作品学习数据到项目参考（一次性，幂等）
-  try {
-    await migrateMasterDataToReferences()
-  } catch (e) {
-    console.error('[bootstrap] master→ref migration failed:', e)
   }
 
   ReactDOM.createRoot(document.getElementById('root')!).render(

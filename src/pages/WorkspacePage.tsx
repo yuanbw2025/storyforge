@@ -25,7 +25,7 @@ import UsageStatsPage from '../components/settings/UsageStatsPage'
 import VersionHistoryPanel from '../components/system/VersionHistoryPanel'
 import ImportDocPanel from '../components/system/ImportDocPanel'
 import PromptManagerPanel from '../components/settings/prompt/PromptManagerPanel'
-// MasterStudiesPanel 已整合进 ReferencePanel（Phase 20）
+// 旧「作品学习」面板已整合进 ReferencePanel（Phase 20，子系统于 v32 下线）
 import DataManagementPanel from '../components/data/DataManagementPanel'
 import WorldRulesPanel from '../components/worldview/WorldRulesPanel'
 import StoryCorePanel from '../components/worldview/StoryCorePanel'

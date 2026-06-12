@@ -54,10 +54,6 @@ export type PromptModuleKey =
   | 'story-timeline.extract'
   // —— Phase 27.2a 场景考证 ——
   | 'scene.verify'
-  // —— Phase 19 作品学习 ——
-  | 'master.analyze-chunk'
-  | 'master.extract-beats'
-  | 'master.generate-insights'
   // —— FB-5 自适应文风学习 ——
   | 'style.learn'
 

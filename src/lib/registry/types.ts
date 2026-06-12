@@ -62,7 +62,7 @@ export interface IndirectRef {
 /** Blob owner(blob 表用特殊 key 计算复用,如 importFiles 给 master 用 100000+workId) */
 export interface BlobOwnerRef {
   kind: 'blob-owner'
-  /** 拥有此 blob 的父表名(如 masterWorks) */
+  /** 拥有此 blob 的父表名 */
   ownerTable: string
   /** 由父表行计算出 blob 主键(如 row => 100000 + row.id) */
   keyResolver: (ownerRow: unknown) => number | string
@@ -186,7 +186,6 @@ export interface AssembleContextInput {
   /** Test/override hook. When set, this is the real input budget used for trimming. */
   inputBudgetTokens?: number
   citedReferenceIds?: number[]
-  masterInsightIds?: number[]
   previousChapterEnding?: string
   stateReferenceText?: string
   extraStateIds?: number[]

@@ -9,8 +9,6 @@ import type {
   StoryArc, WorldNode, Note,
   Reference, ReferenceChunkAnalysis,
   HistoricalTimelineEvent, HistoricalKeyword,
-  MasterWork, MasterChunkAnalysis, MasterChapterBeat,
-  MasterStyleMetrics, MasterInsight,
   WorldGroup, WorldGroupLink, ItemLedgerEntry, StoryTimelineEvent,
   ImportantLocation, WorldRulesProfile, CodexCategory, CodexEntry,
   UserStyleProfile,
@@ -49,11 +47,6 @@ const PROJECT_TABLES_ALL = [
   db.importSessions,
   db.importantLocations,
   db.itemLedger,
-  db.masterChapterBeats,
-  db.masterChunkAnalysis,
-  db.masterInsights,
-  db.masterStyleMetrics,
-  db.masterWorks,
   db.notes,
   db.outlineNodes,
   db.powerSystems,
@@ -117,7 +110,6 @@ async function assertImportedProjectIntegrity(
     chapterIds: Iterable<number>
     characterIds: Iterable<number>
     referenceIds: Iterable<number>
-    masterWorkIds: Iterable<number>
     worldGroupIds: Iterable<number>
     worldNodeIds: Iterable<number>
     locationIds: Iterable<number>
@@ -128,14 +120,12 @@ async function assertImportedProjectIntegrity(
   const chapterIds = new Set(ids.chapterIds)
   const characterIds = new Set(ids.characterIds)
   const referenceIds = new Set(ids.referenceIds)
-  const masterWorkIds = new Set(ids.masterWorkIds)
   const worldGroupIds = new Set(ids.worldGroupIds)
   const worldNodeIds = new Set(ids.worldNodeIds)
   const locationIds = new Set(ids.locationIds)
   const codexCategoryIds = new Set(ids.codexCategoryIds)
 
   const referenceIdList = [...referenceIds]
-  const masterWorkIdList = [...masterWorkIds]
 
   const [
     outlineNodes,
@@ -151,9 +141,6 @@ async function assertImportedProjectIntegrity(
     codexCategories,
     codexEntries,
     referenceChunks,
-    masterChunks,
-    masterBeats,
-    masterMetrics,
   ] = await Promise.all([
     db.outlineNodes.where('projectId').equals(newProjectId).toArray(),
     db.chapters.where('projectId').equals(newProjectId).toArray(),
@@ -168,9 +155,6 @@ async function assertImportedProjectIntegrity(
     db.codexCategories.where('projectId').equals(newProjectId).toArray(),
     db.codexEntries.where('projectId').equals(newProjectId).toArray(),
     referenceIdList.length > 0 ? db.referenceChunkAnalysis.where('referenceId').anyOf(referenceIdList).toArray() : [],
-    masterWorkIdList.length > 0 ? db.masterChunkAnalysis.where('workId').anyOf(masterWorkIdList).toArray() : [],
-    masterWorkIdList.length > 0 ? db.masterChapterBeats.where('workId').anyOf(masterWorkIdList).toArray() : [],
-    masterWorkIdList.length > 0 ? db.masterStyleMetrics.where('workId').anyOf(masterWorkIdList).toArray() : [],
   ])
 
   for (const n of outlineNodes) assertOptionalIdInSet(outlineIds, n.parentId, 'outlineNodes.parentId')
@@ -192,9 +176,6 @@ async function assertImportedProjectIntegrity(
   for (const c of codexCategories) assertOptionalIdInSet(codexCategoryIds, c.parentId, 'codexCategories.parentId')
   for (const e of codexEntries) assertRequiredIdInSet(codexCategoryIds, e.categoryId, 'codexEntries.categoryId')
   for (const a of referenceChunks) assertRequiredIdInSet(referenceIds, a.referenceId, 'referenceChunkAnalysis.referenceId')
-  for (const a of masterChunks) assertRequiredIdInSet(masterWorkIds, a.workId, 'masterChunkAnalysis.workId')
-  for (const b of masterBeats) assertRequiredIdInSet(masterWorkIds, b.workId, 'masterChapterBeats.workId')
-  for (const s of masterMetrics) assertRequiredIdInSet(masterWorkIds, s.workId, 'masterStyleMetrics.workId')
 }
 
 /**
@@ -205,9 +186,7 @@ async function assertImportedProjectIntegrity(
  *   2 — 补全全部项目数据（2026-05-27）：
  *       新增 detailedOutlines, emotionBeatCards, stateCards, storyArcs,
  *       worldNodes, notes, references, referenceChunkAnalysis,
- *       historicalTimelineEvents, historicalKeywords,
- *       masterWorks, masterChunkAnalysis, masterChapterBeats,
- *       masterStyleMetrics, masterInsights
+ *       historicalTimelineEvents, historicalKeywords
  *   3 — 多世界系统（2026-06-02，Phase 25.4）：
  *       新增 worldGroups, worldGroupLinks；
  *       现有表记录携带 worldGroupId / homeWorldGroupId / isCrossWorld 可选字段
@@ -246,11 +225,6 @@ export interface ProjectExportData {
   referenceChunkAnalysis?: (Omit<ReferenceChunkAnalysis, 'id' | 'referenceId'> & { _referenceExportId: number })[]
   historicalTimelineEvents?: (Omit<HistoricalTimelineEvent, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
   historicalKeywords?: (Omit<HistoricalKeyword, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
-  masterWorks?: (Omit<MasterWork, 'id'> & { _exportId: number })[]
-  masterChunkAnalysis?: (Omit<MasterChunkAnalysis, 'id' | 'workId'> & { _workExportId: number })[]
-  masterChapterBeats?: (Omit<MasterChapterBeat, 'id' | 'workId'> & { _workExportId: number })[]
-  masterStyleMetrics?: (Omit<MasterStyleMetrics, 'id' | 'workId'> & { _workExportId: number })[]
-  masterInsights?: Omit<MasterInsight, 'id'>[]
 
   // ── v3: 多世界系统（Phase 25.4）──
   worldGroups?: (Omit<WorldGroup, 'id' | 'projectId'> & { _exportId: number })[]
@@ -286,7 +260,6 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     detailedOutlines, emotionBeatCards, stateCards,
     storyArcs, worldNodes, notes,
     refs, historicalTimelineEvents, historicalKeywords,
-    masterWorks, masterInsights,
     // v3
     worldGroups, worldGroupLinks, itemLedger, storyTimelineEvents,
     importantLocations, worldRulesProfiles, codexCategories, codexEntries,
@@ -313,10 +286,6 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     db.references.where('projectId').equals(projectId).toArray(),
     db.historicalTimelineEvents.where('projectId').equals(projectId).toArray(),
     db.historicalKeywords.where('projectId').equals(projectId).toArray(),
-    // masterWorks: projectId 可选，取绑定到本项目的 + 全局的
-    db.masterWorks.where('projectId').equals(projectId).toArray(),
-    // masterInsights 没有 projectId，但按 genre 存储，全部导出
-    db.masterInsights.toArray(),
     // v3: 多世界系统
     db.worldGroups.where('projectId').equals(projectId).sortBy('order'),
     db.worldGroupLinks.where('projectId').equals(projectId).toArray(),
@@ -382,26 +351,12 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
   const refIdMap = new Map<number, number>()
   refs.forEach((r, i) => { if (r.id) refIdMap.set(r.id, i) })
 
-  // 作品学习 ID → 导出序号
-  const masterWorkIdMap = new Map<number, number>()
-  masterWorks.forEach((w, i) => { if (w.id) masterWorkIdMap.set(w.id, i) })
-
   // ── 查询依赖其他 ID 的子表 ──
   const refIds = refs.map(r => r.id!).filter(Boolean)
-  const masterWorkIds = masterWorks.map(w => w.id!).filter(Boolean)
 
-  const [refChunkAnalysis, masterChunks, masterBeats, masterStyles] = await Promise.all([
+  const [refChunkAnalysis] = await Promise.all([
     refIds.length > 0
       ? db.referenceChunkAnalysis.where('referenceId').anyOf(refIds).toArray()
-      : Promise.resolve([]),
-    masterWorkIds.length > 0
-      ? db.masterChunkAnalysis.where('workId').anyOf(masterWorkIds).toArray()
-      : Promise.resolve([]),
-    masterWorkIds.length > 0
-      ? db.masterChapterBeats.where('workId').anyOf(masterWorkIds).toArray()
-      : Promise.resolve([]),
-    masterWorkIds.length > 0
-      ? db.masterStyleMetrics.where('workId').anyOf(masterWorkIds).toArray()
       : Promise.resolve([]),
   ])
 
@@ -481,23 +436,6 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     }),
     historicalTimelineEvents: historicalTimelineEvents.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
     historicalKeywords: historicalKeywords.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
-    masterWorks: masterWorks.map((w) => {
-      const { id, ...rest } = w
-      return { ...rest, _exportId: masterWorkIdMap.get(id!) ?? 0 }
-    }),
-    masterChunkAnalysis: masterChunks.map((a) => {
-      const { id: _, workId, ...rest } = a
-      return { ...rest, _workExportId: masterWorkIdMap.get(workId) ?? 0 }
-    }),
-    masterChapterBeats: masterBeats.map((b) => {
-      const { id: _, workId, ...rest } = b
-      return { ...rest, _workExportId: masterWorkIdMap.get(workId) ?? 0 }
-    }),
-    masterStyleMetrics: masterStyles.map((s) => {
-      const { id: _, workId, ...rest } = s
-      return { ...rest, _workExportId: masterWorkIdMap.get(workId) ?? 0 }
-    }),
-    masterInsights: masterInsights.map(({ id: _, ...rest }) => rest),
 
     // v3: 多世界系统
     worldGroups: worldGroups.map(({ id, projectId: _, ...rest }) => ({
@@ -786,48 +724,6 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
     await db.historicalKeywords.add({ ...importWorldScoped(k), projectId: newProjectId } as HistoricalKeyword)
   }
 
-  // 20. 作品学习（记录新旧 ID）
-  const newMasterWorkIds = new Map<number, number>()
-  for (const w of data.masterWorks || []) {
-    const { _exportId, ...rest } = w
-    const newId = await db.masterWorks.add({
-      ...rest,
-      projectId: newProjectId,
-    } as MasterWork) as number
-    newMasterWorkIds.set(_exportId, newId)
-  }
-
-  // 21. 作品学习分块分析（重建 workId）
-  for (const a of data.masterChunkAnalysis || []) {
-    const { _workExportId, ...rest } = a
-    const newWorkId = requireMappedId(newMasterWorkIds, _workExportId, 'masterChunkAnalysis.workId')
-    await db.masterChunkAnalysis.add({ ...rest, workId: newWorkId } as MasterChunkAnalysis)
-  }
-
-  // 22. 章节节奏点（重建 workId）
-  for (const b of data.masterChapterBeats || []) {
-    const { _workExportId, ...rest } = b
-    const newWorkId = requireMappedId(newMasterWorkIds, _workExportId, 'masterChapterBeats.workId')
-    await db.masterChapterBeats.add({ ...rest, workId: newWorkId } as MasterChapterBeat)
-  }
-
-  // 23. 风格量化（重建 workId）
-  for (const s of data.masterStyleMetrics || []) {
-    const { _workExportId, ...rest } = s
-    const newWorkId = requireMappedId(newMasterWorkIds, _workExportId, 'masterStyleMetrics.workId')
-    await db.masterStyleMetrics.add({ ...rest, workId: newWorkId } as MasterStyleMetrics)
-  }
-
-  // 24. 大师洞察（全局，不绑定 projectId）
-  for (const i of data.masterInsights || []) {
-    // 按 genre 去重：如果已有同 genre 的洞察则跳过
-    if (i.genre) {
-      const existing = await db.masterInsights.where('genre').equals(i.genre).first()
-      if (existing) continue
-    }
-    await db.masterInsights.add(i as MasterInsight)
-  }
-
   // 26. 世界组关系
   for (const l of data.worldGroupLinks || []) {
     const { _fromGroupExportId, _toGroupExportId, ...rest } = l
@@ -914,7 +810,6 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
     chapterIds: newChapterIds.values(),
     characterIds: newCharIds.values(),
     referenceIds: newRefIds.values(),
-    masterWorkIds: newMasterWorkIds.values(),
     worldGroupIds: newWorldGroupIds.values(),
     worldNodeIds: newWorldNodeIds.values(),
     locationIds: newLocationIds.values(),
