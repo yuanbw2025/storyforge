@@ -70,7 +70,9 @@ export async function buildCodexContext(
   const blocks: string[] = ['【设定词条】（作者设定，写作时须遵守，勿自创冲突设定）']
 
   for (const cat of cats) {
-    const list = (entriesByCat.get(cat.id!) || []).sort((a, b) => a.order - b.order)
+    // 按重要度降序优先(高星地点等先占预算、截断时先保住),同星级再按 order
+    const list = (entriesByCat.get(cat.id!) || [])
+      .sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0) || a.order - b.order)
     if (list.length === 0) continue
 
     const schema = parseFieldSchema(cat.fieldSchema)
@@ -86,7 +88,8 @@ export async function buildCodexContext(
           return v ? `${d.label}:${v.slice(0, 40)}` : ''
         })
         .filter(Boolean)
-      const head = `- ${entry.name}${entry.summary ? `：${entry.summary.slice(0, 60)}` : ''}`
+      const stars = (entry.importance ?? 0) > 0 ? '★'.repeat(Math.min(5, entry.importance!)) + ' ' : ''
+      const head = `- ${stars}${entry.name}${entry.summary ? `：${entry.summary.slice(0, 60)}` : ''}`
       lines.push(attrs.length ? `${head}（${attrs.join('；')}）` : head)
     }
     blocks.push(lines.join('\n'))

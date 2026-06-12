@@ -8,7 +8,7 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 35 个 moduleKey。
+共 36 个 moduleKey。
 
 | moduleKey | 名称 | 说明 | 读取变量 |
 |---|---|---|---|
@@ -47,10 +47,11 @@
 | `master.analyze-chunk` | 内置-作品学习·五维分析 | 对一本网文 / 小说的某一块原文，从世界观范式 / 角色设计 / 情节节奏 / 伏笔悬念 / 文笔语言 五个维度提炼方法论。 | `chunkIndex` `totalChunks` `chunkChars` `chunkLabel` `workTitle` `workAuthor` `workGenre` `knownContext` `rawDocument` `depth` |
 | `master.extract-beats` | 内置-作品学习·章节节奏点 | 对一章原文提取关键节奏点（开场/冲突/反转/高潮/章末钩子/伏笔/松弛），用于绘制节奏时间线。 | `workTitle` `workAuthor` `chapterIndex` `chapterLabel` `chapterChars` `rawChapter` |
 | `master.generate-insights` | 内置-作品学习·跨作品洞察 | 综合多本作品的五维分析结果，归纳出可操作的共性创作方法论洞察卡片。 | `genre` `workCount` `insightCount` `analysisSummaries` |
+| `style.learn` | 内置-文风学习 | 从用户已定稿/润色的章节中,总结出其个人写作文风画像,供后续章节生成参考。 | `sampleCount` `sampleWords` `samples` `userHint` |
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 19 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 20 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -73,6 +74,7 @@
 | `stateCards` | 状态卡 | project | L2 | 1800 |
 | `references` | 引用手法 | project | L3 | 2000 |
 | `masterInsights` | 大师洞察 | project | L3 | 1800 |
+| `userStyleProfile` | 我的文风 | project | L2 | 700 |
 
 > 层级裁剪顺序:超预算时 L3 → L2 → L1 依次裁剪,L0 永不裁剪。
 
@@ -92,11 +94,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `outlineNodes` | `title` `summary` `parentId` `order` `worldGroupId` |
 | `storyArcs` | `name` `stages` `description` |
 | `storyCores` | `theme` `centralConflict` `plotPattern` `logline` `concept` `mainPlot` `subPlots` |
-| `worldviews` | `geography` `history` `society` `culture` `economy` `rules` `worldOrigin` `powerHierarchy` `divineDesign` `worldStructure` `worldDimensions` `continentLayout` `regionDimensions` `mountainsRivers` `climateByRegion` `naturalResources` `historyLine` `worldEvents` `races` `factionLayout` `politicsEconomyCulture` `internalConflicts` `itemDesign` |
+| `worldviews` | `geography` `history` `society` `culture` `economy` `rules` `worldOrigin` `powerHierarchy` `divineDesign` `worldStructure` `worldDimensions` `continentLayout` `regionDimensions` `mountainsRivers` `climateByRegion` `naturalResourceOverview` `naturalResources` `historyLine` `worldEvents` `races` `factionLayout` `politicsEconomyCulture` `internalConflicts` `itemDesign` |
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 16 个 category。
+共 17 个 category。
 
 | category | 触发文件 |
 |---|---|
@@ -114,9 +116,10 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `state.extract` | `src/components/editor/ChapterEditor.tsx` |
 | `story.generate` | `src/components/worldview/StoryCorePanel.tsx` |
 | `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx` |
+| `style.learn` | `src/components/style/StyleLearningPanel.tsx` |
 | `summary` | `src/components/editor/ChapterEditor.tsx` |
 | `technology` | `src/components/history/HistoryPanel.tsx` |
 
 ---
 
-生成时间基准:commit `e2edc85`
+生成时间基准:commit `5d46145`

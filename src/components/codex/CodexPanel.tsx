@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Plus, Trash2, EyeOff, Eye, FolderPlus, Boxes, ChevronRight, Settings2, X, ChevronUp, ChevronDown,
+  Plus, Trash2, EyeOff, Eye, FolderPlus, Boxes, ChevronRight, Settings2, X, ChevronUp, ChevronDown, Star,
 } from 'lucide-react'
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import { useCodexStore } from '../../stores/codex'
@@ -21,19 +21,29 @@ interface Props {
   project: Project
   /** B3:嵌入自然/人文面板时锁定领域并隐藏顶部切换标签(独立面板不传=完整两栏切换) */
   fixedDomain?: CodexDomain
+  /**
+   * 锁定到指定内置分类(builtInKey 列表)——用于"世界观每个方面下面只显示对应那一类词条"。
+   * 传 1 个 key:单分类模式(隐藏左侧分类树,只剩该类的词条)。
+   * 传多个 key(如自然资源 mineral/herb/beast):只显示这几类,可在它们间切换。
+   */
+  fixedCategoryKeys?: string[]
   /** 嵌入模式:去掉外层标题/高度占满,适配面板内嵌 */
   embedded?: boolean
 }
 
 const DOMAINS: CodexDomain[] = ['natural', 'humanity']
 
-export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
+export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, embedded }: Props) {
   const projectId = project.id!
   const {
     categories, entries, loadAll,
     addCategory, deleteCategory, setCategoryHidden, updateCategory,
     addEntry, updateEntry, deleteEntry,
   } = useCodexStore()
+
+  // 锁定单一分类:隐藏分类树,只展示该类词条
+  const lockedKeys = fixedCategoryKeys
+  const lockedSingle = (lockedKeys?.length ?? 0) === 1
 
   const [domainState, setDomain] = useState<CodexDomain>(fixedDomain ?? 'natural')
   const domain = fixedDomain ?? domainState
@@ -42,13 +52,22 @@ export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
   const [showHidden, setShowHidden] = useState(false)
   // B1:自定义字段管理弹窗
   const [showFieldsEditor, setShowFieldsEditor] = useState(false)
+  // 词条排序方式:order=手动顺序 / importance=重要度降序 / pinyin=拼音首字母
+  const [sortMode, setSortMode] = useState<'order' | 'importance' | 'pinyin'>('order')
 
   useEffect(() => { loadAll(projectId) }, [projectId, loadAll])
 
-  // 当前领域的分类（按 order）
+  // 当前领域的分类（按 order）。若锁定了 builtInKey 列表,则只取那几类(跨域亦可)。
   const domainCats = useMemo(
-    () => categories.filter(c => c.domain === domain).sort((a, b) => a.order - b.order),
-    [categories, domain],
+    () => {
+      if (lockedKeys && lockedKeys.length) {
+        return categories
+          .filter(c => c.builtInKey && lockedKeys.includes(c.builtInKey))
+          .sort((a, b) => lockedKeys.indexOf(a.builtInKey!) - lockedKeys.indexOf(b.builtInKey!))
+      }
+      return categories.filter(c => c.domain === domain).sort((a, b) => a.order - b.order)
+    },
+    [categories, domain, lockedKeys],
   )
   const visibleCats = useMemo(
     () => domainCats.filter(c => showHidden || !c.hidden),
@@ -63,10 +82,27 @@ export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
   }, [visibleCats, activeCatId])
 
   const activeCat = categories.find(c => c.id === activeCatId) || null
-  const catEntries = useMemo(
-    () => entries.filter(e => e.categoryId === activeCatId).sort((a, b) => a.order - b.order),
-    [entries, activeCatId],
-  )
+  const catEntries = useMemo(() => {
+    const list = entries.filter(e => e.categoryId === activeCatId)
+    if (sortMode === 'importance') {
+      return [...list].sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0) || a.order - b.order)
+    }
+    if (sortMode === 'pinyin') {
+      // localeCompare('zh') 按拼音排序,无需拼音库
+      return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-Hans-CN'))
+    }
+    return [...list].sort((a, b) => a.order - b.order)
+  }, [entries, activeCatId, sortMode])
+  // 同分类内重名的词条名集合(用于"已有同名"提示)
+  const dupNames = useMemo(() => {
+    const count = new Map<string, number>()
+    for (const e of entries) {
+      if (e.categoryId !== activeCatId) continue
+      const n = (e.name || '').trim()
+      if (n) count.set(n, (count.get(n) ?? 0) + 1)
+    }
+    return new Set([...count.entries()].filter(([, n]) => n > 1).map(([k]) => k))
+  }, [entries, activeCatId])
   const activeEntry = entries.find(e => e.id === activeEntryId) || null
 
   // ── 分类操作 ──
@@ -107,8 +143,11 @@ export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
   }
 
   return (
-    <div className={embedded ? 'flex flex-col h-[30rem] border border-border rounded-xl overflow-hidden' : 'h-full flex flex-col'}>
-      {/* 顶部：领域切换(嵌入且锁定领域时隐藏) */}
+    <div className={embedded
+      ? `flex flex-col ${lockedSingle ? 'h-80' : 'h-[30rem]'} border border-border rounded-xl overflow-hidden`
+      : 'h-full flex flex-col'}>
+      {/* 顶部：领域切换(嵌入且锁定领域时隐藏;单分类锁定时整条隐藏) */}
+      {!lockedSingle && (
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
         {!fixedDomain && (
           <>
@@ -139,9 +178,11 @@ export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
           {showHidden ? '隐藏项已显示' : '显示隐藏项'}
         </button>
       </div>
+      )}
 
       <div className="flex-1 flex min-h-0">
-        {/* 左：分类列表 */}
+        {/* 左：分类列表(单分类锁定时隐藏) */}
+        {!lockedSingle && (
         <div className="w-44 shrink-0 border-r border-border flex flex-col">
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
             {visibleCats.map(cat => (
@@ -177,17 +218,33 @@ export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
               </div>
             ))}
           </div>
-          <button
-            onClick={handleAddCategory}
-            className="m-2 px-2 py-1.5 text-xs rounded-lg border border-dashed border-border text-text-muted hover:text-accent hover:border-accent/50 inline-flex items-center justify-center gap-1"
-          >
-            <FolderPlus className="w-3.5 h-3.5" /> 新增分类
-          </button>
+          {!lockedKeys && (
+            <button
+              onClick={handleAddCategory}
+              className="m-2 px-2 py-1.5 text-xs rounded-lg border border-dashed border-border text-text-muted hover:text-accent hover:border-accent/50 inline-flex items-center justify-center gap-1"
+            >
+              <FolderPlus className="w-3.5 h-3.5" /> 新增分类
+            </button>
+          )}
         </div>
+        )}
 
         {/* 中：词条列表 */}
         <div className="w-52 shrink-0 border-r border-border flex flex-col">
-          <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+          {/* 排序下拉 */}
+          <div className="px-2 pt-2 pb-1 flex items-center gap-1.5">
+            <span className="text-[10px] text-text-muted shrink-0">排序</span>
+            <select
+              value={sortMode}
+              onChange={e => setSortMode(e.target.value as typeof sortMode)}
+              className="flex-1 text-[11px] bg-bg-elevated border border-border rounded px-1.5 py-1 text-text-secondary"
+            >
+              <option value="order">默认顺序</option>
+              <option value="importance">按重要度</option>
+              <option value="pinyin">按拼音首字母</option>
+            </select>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 pt-1 space-y-0.5">
             {catEntries.length === 0 && (
               <p className="text-xs text-text-muted px-2 py-3 text-center">暂无词条</p>
             )}
@@ -201,6 +258,9 @@ export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
               >
                 <span>{entry.icon || activeCat?.icon || '•'}</span>
                 <span className="truncate flex-1">{entry.name || '未命名'}</span>
+                {entry.name && dupNames.has(entry.name.trim()) && (
+                  <span className="text-amber-400 shrink-0" title="本分类下有同名词条">⚠</span>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteEntry(entry) }}
                   className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400"
@@ -238,11 +298,12 @@ export default function CodexPanel({ project, fixedDomain, embedded }: Props) {
               entry={activeEntry}
               category={activeCat}
               allEntries={entries}
+              nameDuplicate={!!activeEntry.name && dupNames.has(activeEntry.name.trim())}
               onChange={(patch) => updateEntry(activeEntry.id!, patch)}
             />
           ) : (
             <div className="h-full flex items-center justify-center text-text-muted text-sm">
-              {activeCat ? '从左侧选择或新建一个词条' : '请选择一个分类'}
+              {activeCat ? '从左侧选择或「新建词条」添加一个具体条目' : '请选择一个分类'}
             </div>
           )}
         </div>
@@ -367,11 +428,12 @@ function CategoryFieldsEditor({
 // ── 词条详情表单（fieldSchema 驱动） ──────────────────────────────
 
 function EntryDetail({
-  entry, category, allEntries, onChange,
+  entry, category, allEntries, nameDuplicate, onChange,
 }: {
   entry: CodexEntry
   category: CodexCategory
   allEntries: CodexEntry[]
+  nameDuplicate?: boolean
   onChange: (patch: Partial<CodexEntry>) => void
 }) {
   const schema = useMemo(() => parseFieldSchema(category.fieldSchema), [category.fieldSchema])
@@ -395,12 +457,40 @@ function EntryDetail({
           placeholder="图标"
           className="w-14 text-center px-2 py-2 rounded-lg bg-bg-elevated border border-border text-sm"
         />
-        <CInput
-          value={entry.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          placeholder="名称"
-          className="flex-1 px-3 py-2 rounded-lg bg-bg-elevated border border-border text-sm font-medium"
-        />
+        <div className="flex-1">
+          <CInput
+            value={entry.name}
+            onChange={(e) => onChange({ name: e.target.value })}
+            placeholder="名称"
+            className={`w-full px-3 py-2 rounded-lg bg-bg-elevated border text-sm font-medium ${nameDuplicate ? 'border-amber-400/60' : 'border-border'}`}
+          />
+          {nameDuplicate && (
+            <p className="mt-1 text-[11px] text-amber-400">⚠ 本分类下已有同名词条，注意是否重复</p>
+          )}
+        </div>
+      </div>
+      {/* 重要度星级（1-5）—— 主要用于地点类词条;点亮的星越多越重要,再点当前星可清空 */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-text-muted w-12">重要度</span>
+        <div className="flex items-center gap-0.5">
+          {[1, 2, 3, 4, 5].map(n => {
+            const active = (entry.importance ?? 0) >= n
+            return (
+              <button
+                key={n}
+                type="button"
+                title={`${n} 星`}
+                onClick={() => onChange({ importance: entry.importance === n ? 0 : n })}
+                className="p-0.5 hover:scale-110 transition-transform"
+              >
+                <Star className={`w-4 h-4 ${active ? 'fill-amber-400 text-amber-400' : 'text-text-muted'}`} />
+              </button>
+            )
+          })}
+        </div>
+        {(entry.importance ?? 0) > 0 && (
+          <span className="text-[11px] text-amber-400/80">{entry.importance} 星</span>
+        )}
       </div>
       <CInput
         value={entry.summary}

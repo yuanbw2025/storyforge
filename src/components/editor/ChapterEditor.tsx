@@ -145,7 +145,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       chapterId: currentChapter?.id ?? null,
       provider: aiConfig.provider,
       model: aiConfig.model,
-      sourceKeys: ['contextMemo', 'chapterOutline', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+      sourceKeys: ['contextMemo', 'chapterOutline', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations', 'userStyleProfile'],
     }).then(assembled => {
       if (cancelled) return
       const charIdx = assembled.included.indexOf('characters')
@@ -231,6 +231,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         'stateCards',
         'references',
         'masterInsights',
+        'userStyleProfile',
       ],
     })
 

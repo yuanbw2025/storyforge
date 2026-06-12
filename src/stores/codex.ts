@@ -38,6 +38,11 @@ interface CodexStore {
 
 const now = () => Date.now()
 
+// 并发锁:同一项目的 ensureBuiltIns 同一时刻只跑一次。
+// 防止并发调用(如 React StrictMode 开发期把 effect 跑两遍、或多个面板内嵌词条同时挂载)
+// 各自判定"内置分类缺失"而重复播种,产生每类两条的重复。
+const ensureBuiltInsInFlight = new Map<number, Promise<void>>()
+
 export const useCodexStore = create<CodexStore>((set, get) => ({
   categories: [],
   entries: [],
@@ -60,11 +65,14 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
   },
 
   ensureBuiltIns: async (projectId) => {
+    // 并发锁:同项目已有调用在跑就复用它,从根上杜绝并发重复播种;
+    // 内部仍保留自愈去重,清理历史/其它路径产生的重复。
+    const running = ensureBuiltInsInFlight.get(projectId)
+    if (running) return running
+    const task = (async () => {
     // 自愈式幂等：先去重历史重复，再补齐缺失的内置分类。
-    // 旧实现是 check-then-add，非 race-safe——并发 loadAll（如独立词条面板 + 嵌入面板同时挂载）
-    // 会让两次调用都判定"不存在"而各播种一遍，产生每类两条的重复。此处改为自愈：
     // ① 每个 builtInKey 只保留 id 最小的一条；多余分类下的词条/子分类改挂到保留项后删除多余分类。
-    // ② 再只播种当前缺失的内置 key。即便仍有 race 残留，下一次 load 会清理，最终一致。
+    // ② 再只播种当前缺失的内置 key。
     const cats = await db.codexCategories.where('projectId').equals(projectId).toArray()
     const builtins = cats.filter(c => !!c.builtInKey)
 
@@ -120,6 +128,9 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
     }))
     await db.codexCategories.bulkAdd(rows)
     console.log('[Codex] 已播种缺失内置分类:', rows.length)
+    })()
+    ensureBuiltInsInFlight.set(projectId, task)
+    try { await task } finally { ensureBuiltInsInFlight.delete(projectId) }
   },
 
   addCategory: async (c) => {

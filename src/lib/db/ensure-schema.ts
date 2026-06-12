@@ -39,6 +39,7 @@ export const REQUIRED_TABLES_V26 = [
   'storyArcs',
   'storyCores',
   'storyTimelineEvents',
+  'userStyleProfiles',
   'worldGroupLinks',
   'worldGroups',
   'worldNodes',

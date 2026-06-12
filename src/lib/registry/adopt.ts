@@ -91,7 +91,10 @@ async function adoptCollection(
       if (adoption.duplicatePolicy === 'skip') {
         result.skipped.push({ reason: '重复(skip)', data: raw })
       } else if (adoption.duplicatePolicy === 'update') {
-        const patch = { ...item, updatedAt: Date.now() }
+        // 防误清空:更新既有记录时,不让 null 覆盖既有字段值(保持旧行为——null 视为"不提供")。
+        // 新增记录(else 分支)仍保留 null(顶层卷 parentId 等需要)。
+        const patch: Record<string, unknown> = { updatedAt: Date.now() }
+        for (const [k, v] of Object.entries(item)) if (v !== null) patch[k] = v
         await tableSpec.table.update(existing.id, patch as any)
         result.written.push({ id: existing.id, fields: Object.keys(patch) })
       } else if (adoption.duplicatePolicy === 'merge') {
@@ -121,7 +124,10 @@ function normalizeAndValidate(
   for (const f of fieldSpecs) for (const a of f.aliases ?? []) byAlias.set(a, f)
 
   for (const [key, val] of Object.entries(raw)) {
-    if (val == null || val === '') continue
+    // 空字符串跳过;但 null 必须保留——如 outlineNodes 顶层卷的 parentId:null。
+    // 旧实现 `val == null` 一并跳过,导致顶层卷写库时丢了 parentId(存成 undefined),
+    // 而大纲面板用 `parentId === null` 严格过滤顶层卷 → 卷被藏起,表现为"采纳没反应"(FB-10b)。
+    if (val === '') continue
     let spec = byName.get(key)
     let canonical = key
     if (!spec) {
@@ -135,6 +141,11 @@ function normalizeAndValidate(
       result.aliasMapped.push({ from: key, to: canonical })
     }
 
+    // null 直接保留(不走类型转换,避免 String(null)→'null');是字段的合法显式值
+    if (val == null) {
+      out[canonical] = null
+      continue
+    }
     const cleaned = validateAndCoerce(spec, val, result)
     if (cleaned !== undefined) out[canonical] = cleaned
   }

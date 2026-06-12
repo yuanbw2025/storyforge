@@ -18,6 +18,7 @@ async function buildRulesSourceContext(projectId: number, worldGroupId: number |
 }
 import CurrencyPanel from './CurrencyPanel'
 import CodexPanel from '../codex/CodexPanel'
+import CodexSearchBar from '../codex/CodexSearchBar'
 
 // ── 字段定义（统一标签，兼容幻想与历史） ─────────────────────────
 
@@ -36,10 +37,23 @@ const FIELDS: FieldMeta[] = [
   { key: 'events',    field: 'worldEvents',            emoji: '📅', label: '世界大事记',     description: '改变世界格局的重大事件（战争、王朝兴替、灾劫……）', hint: '这里写大事概览；详细时间线事件请到「📜 历史年表」管理。' },
   { key: 'races',     field: 'races',                  emoji: '🧬', label: '种族与民族',     description: '不同种族 / 民族的特征、能力、历史与关系' },
   { key: 'factions',  field: 'factionLayout',          emoji: '⚔',  label: '势力分布',       description: '主要势力（门派 / 朝廷 / 商会 / 党派……）的格局和敌友关系' },
+  { key: 'cities',    field: 'regionDimensions',       emoji: '🏰', label: '城池重镇',       description: '核心城市、军事重镇、商业都会的分布与格局' },
   { key: 'pec',       field: 'politicsEconomyCulture', emoji: '🏛', label: '政治/经济/文化', description: '政体 / 货币 / 赋税 / 阶层制度 / 宗教信仰 / 风俗节庆' },
   { key: 'conflicts', field: 'internalConflicts',      emoji: '🔥', label: '矛盾冲突',       description: '社会内在矛盾 / 阶级冲突 / 个体与集体冲突 / 与外部世界的张力' },
   { key: 'items',     field: 'itemDesign',             emoji: '🗡', label: '道具与器物',     description: '武器 / 法器 / 工具 / 科技装备……物品的来源、品级、规则', hint: '这里写物品体系概述；具体道具条目请到本面板「📚 人文主体·人工器物」词条逐条管理，主角随身物品由「🎒 物品栏」自动追踪。' },
 ]
+
+// 每个方面(子页) → 其专属词条分类(builtInKey)。下方只显示该方面对应的词条。
+const HUMANITY_CODEX_KEYS: Record<string, string[] | undefined> = {
+  history: ['humEra'],
+  events: ['humEvent'],
+  races: ['race'],
+  factions: ['faction'],
+  cities: ['city'],
+  pec: ['humSociety'],
+  conflicts: ['humConflict'],
+  items: ['artifact'],
+}
 
 // ── 主面板 ─────────────────────────────────────────────────────
 
@@ -64,6 +78,7 @@ export default function WorldviewHumanityPanel({ project }: Props) {
       events:    worldview.worldEvents || '',
       races:     worldview.races || '',
       factions:  worldview.factionLayout || '',
+      cities:    worldview.regionDimensions || '',
       pec:       worldview.politicsEconomyCulture || '',
       conflicts: worldview.internalConflicts || '',
       items:     worldview.itemDesign || '',
@@ -117,6 +132,16 @@ export default function WorldviewHumanityPanel({ project }: Props) {
         <p className="text-xs text-text-muted mt-0.5">
           定义世界的历史、势力、政经文化与社会矛盾。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
         </p>
+        {/* 词条搜索:跨本面板所有方面,点结果跳到对应子页 */}
+        <div className="mt-3 max-w-xl">
+          <CodexSearchBar
+            categoryKeys={[...new Set(Object.values(HUMANITY_CODEX_KEYS).flat().filter(Boolean) as string[])]}
+            onJump={(catKey) => {
+              const sub = Object.keys(HUMANITY_CODEX_KEYS).find(k => HUMANITY_CODEX_KEYS[k]?.includes(catKey))
+              if (sub) setActiveKey(sub)
+            }}
+          />
+        </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -148,14 +173,7 @@ export default function WorldviewHumanityPanel({ project }: Props) {
         <div className="flex-1 min-w-0 overflow-y-auto p-6">
           {FIELDS.map(f => (
             <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
-              {/* B4: 人文主体词条(种族/势力/城池/器物)——结构化登记,可自定义字段、互相关联、进 AI 上下文 */}
-              {f.key === 'races' && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-text-primary mb-1">📚 人文主体(词条):种族 / 势力 / 城池重镇 / 人工器物</h3>
-                  <p className="text-xs text-text-muted mb-3">结构化登记人文设定——可自定义专属字段、互相关联，并进入 AI 生成上下文。下方旧版「种族与民族」纯文本兼容保留。</p>
-                  <CodexPanel project={project} fixedDomain="humanity" embedded />
-                </div>
-              )}
+              {/* 全貌（上）：现有字段本身就是这个方面的整体概述，带 AI 生成 */}
               <HumanityFieldEditor
                 meta={f}
                 value={values[f.key] || ''}
@@ -171,6 +189,14 @@ export default function WorldviewHumanityPanel({ project }: Props) {
               {f.key === 'pec' && (
                 <div className="mt-6 max-w-3xl">
                   <CurrencyPanel projectId={project.id!} />
+                </div>
+              )}
+              {/* 词条（下）：在全貌之下,把"本方面"细化为一个个具体条目(只显示对应那一类,可打星) */}
+              {HUMANITY_CODEX_KEYS[f.key] && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold text-text-primary mb-1">📚 {f.label} · 具体词条</h3>
+                  <p className="text-xs text-text-muted mb-3">在上面写完整体「全貌」后，这里把「{f.label}」逐条细化登记，可自定义字段、打重要度星级，并进入 AI 生成上下文。</p>
+                  <CodexPanel project={project} fixedCategoryKeys={HUMANITY_CODEX_KEYS[f.key]} embedded />
                 </div>
               )}
             </div>

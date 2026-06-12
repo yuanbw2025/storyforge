@@ -42,6 +42,7 @@ export interface Worldview {
   regionDimensions?: string               // 区域面积
   mountainsRivers?: string                // 山川河流
   climateByRegion?: string                // 分区域气候
+  naturalResourceOverview?: string        // 自然资源·全貌(整体概述;具体矿物/灵植/灵兽走词条)
   naturalResources?: NaturalResources
 
   // 人文环境

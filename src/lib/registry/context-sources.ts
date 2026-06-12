@@ -71,6 +71,13 @@ async function readForeshadows(projectId: number, chapterId?: number | null): Pr
   return `【伏笔状态】\n${lines.join('\n')}`
 }
 
+/** FB-5:作者文风画像。仅当画像存在且 enabled 时返回,否则空串(不进上下文)。 */
+async function readUserStyleProfile(projectId: number): Promise<string> {
+  const profile = await db.userStyleProfiles.where('projectId').equals(projectId).first()
+  if (!profile || !profile.enabled || !profile.profile.trim()) return ''
+  return `【作者文风偏好】\n请在本次写作中尽量贴合作者一贯的文风习惯:\n${profile.profile.trim()}`
+}
+
 async function readStoryArcs(projectId: number): Promise<string> {
   const arcs = await db.storyArcs.where('projectId').equals(projectId).toArray()
   if (!arcs.length) return ''
@@ -318,6 +325,15 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 1800,
     enabled: input => !!input.masterInsightIds?.length,
     read: input => buildMasterInsightContext(input.masterInsightIds ?? []),
+  },
+  {
+    // FB-5 自适应文风学习:作者文风画像(enabled=true 才注入)。
+    key: 'userStyleProfile',
+    label: '我的文风',
+    scope: 'project',
+    layer: 'L2',
+    budgetTokens: 700,
+    read: input => readUserStyleProfile(input.projectId),
   },
 ]
 

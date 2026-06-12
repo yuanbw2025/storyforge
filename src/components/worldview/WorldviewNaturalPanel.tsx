@@ -4,6 +4,7 @@ import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import CodexPanel from '../codex/CodexPanel'
+import CodexSearchBar from '../codex/CodexSearchBar'
 import { InlineTextarea } from '../shared/InlineEdit'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildWorldviewPrompt } from '../../lib/ai/adapters/worldview-adapter'
@@ -26,13 +27,21 @@ const FIELDS = [
   { key: 'worldStructure',   emoji: '🌐', label: '世界结构',   desc: '世界的物理层级——星球 / 大陆 / 行政区划 / 平行空间等', ctxKey: 'structure',  ctxLabel: '世界结构' },
   { key: 'worldDimensions',  emoji: '📐', label: '疆域尺寸',   desc: '世界整体大小、核心区域的疆域范围',                      ctxKey: 'dim',       ctxLabel: '疆域尺寸' },
   { key: 'continentLayout',  emoji: '🗺', label: '地貌分布',   desc: '主要大陆 / 山脉 / 平原 / 盆地的分布与地形特征',         ctxKey: 'continent', ctxLabel: '地貌分布' },
-  { key: 'regionDimensions', emoji: '🏰', label: '重镇分布',   desc: '核心城市、军事重镇、商业都会的地理位置',                 ctxKey: 'region',    ctxLabel: '重镇分布' },
   { key: 'mountainsRivers',  emoji: '⛰', label: '山川水系',   desc: '重要山脉、河流、湖泊、运河与水路',                       ctxKey: 'mountains', ctxLabel: '山川水系' },
   { key: 'climateByRegion',  emoji: '🌦', label: '气候环境',   desc: '不同区域的气候类型、季节特征与自然灾害',                 ctxKey: 'climate',   ctxLabel: '气候环境' },
 ] as const
 
-const ALL_KEYS = ['worldStructure', 'worldDimensions', 'continentLayout', 'regionDimensions', 'mountainsRivers', 'climateByRegion', 'naturalResources'] as const
+const ALL_KEYS = ['worldStructure', 'worldDimensions', 'continentLayout', 'mountainsRivers', 'climateByRegion', 'naturalResources'] as const
 type FieldKey = typeof ALL_KEYS[number]
+
+// 每个方面(子页) → 其专属词条分类(builtInKey)。(重镇/城池已移到人文环境;自然资源单独处理)
+const NATURAL_CODEX_KEYS: Record<string, string[] | undefined> = {
+  worldStructure: ['natStructure'],
+  worldDimensions: ['natDimension'],
+  continentLayout: ['natTerrain'],
+  mountainsRivers: ['natWater'],
+  climateByRegion: ['natClimate'],
+}
 
 // ── 主面板 ─────────────────────────────────────────────────────
 
@@ -60,6 +69,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
       regionDimensions: worldview.regionDimensions || '',
       mountainsRivers:  worldview.mountainsRivers || '',
       climateByRegion:  worldview.climateByRegion || '',
+      naturalResourceOverview: worldview.naturalResourceOverview || '',
     })
     setNaturalResources(worldview.naturalResources || {
       rareCreatures: '', herbs: '', minerals: '', others: '',
@@ -110,6 +120,16 @@ export default function WorldviewNaturalPanel({ project }: Props) {
         <p className="text-xs text-text-muted mt-0.5">
           定义世界的地理、气候与自然资源。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
         </p>
+        <div className="mt-3 max-w-xl">
+          <CodexSearchBar
+            categoryKeys={[...Object.values(NATURAL_CODEX_KEYS).flat().filter(Boolean) as string[], 'mineral', 'herb', 'beast']}
+            onJump={(catKey) => {
+              if (['mineral', 'herb', 'beast'].includes(catKey)) { setActiveKey('naturalResources'); return }
+              const sub = Object.keys(NATURAL_CODEX_KEYS).find(k => NATURAL_CODEX_KEYS[k]?.includes(catKey))
+              if (sub) setActiveKey(sub as FieldKey)
+            }}
+          />
+        </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -154,16 +174,36 @@ export default function WorldviewNaturalPanel({ project }: Props) {
                 contextSummary={buildCtx(f.ctxKey)}
                 onStreamingChange={streaming => handleStreamingChange(f.key, streaming)}
               />
+              {/* 全貌之下:本方面的专属词条(只显示对应那一类) */}
+              {NATURAL_CODEX_KEYS[f.key] && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold text-text-primary mb-1">📚 {f.label} · 具体词条</h3>
+                  <p className="text-xs text-text-muted mb-3">在上面写完整体「全貌」后，这里把「{f.label}」逐条细化登记，可自定义字段、打重要度星级，并进入 AI 生成上下文。</p>
+                  <CodexPanel project={project} fixedCategoryKeys={NATURAL_CODEX_KEYS[f.key]} embedded />
+                </div>
+              )}
             </div>
           ))}
           <div className={activeKey === 'naturalResources' ? 'space-y-4' : 'hidden'}>
-            {/* B3:自然物产词条化(矿物/草药/异兽)——嵌入式词条,主入口在此 */}
+            {/* 全貌(上):自然资源整体概述,带 AI 生成,与其它方面一致 */}
+            <SimpleFieldEditor
+              field={{ key: 'naturalResourceOverview', emoji: '🌿', label: '自然资源', desc: '矿产 / 灵材 / 动植物等自然产出的总体分布、丰饶程度与特点' }}
+              value={values.naturalResourceOverview || ''}
+              onChange={v => {
+                setValues(prev => ({ ...prev, naturalResourceOverview: v }))
+                save({ naturalResourceOverview: v })
+              }}
+              project={project}
+              contextSummary={buildCtx('resources')}
+              onStreamingChange={streaming => handleStreamingChange('naturalResources', streaming)}
+            />
+            {/* 自然资源:矿物/草药/异兽 三类词条 */}
             <div>
-              <h3 className="text-sm font-semibold text-text-primary mb-1">📚 自然物产(词条)</h3>
-              <p className="text-xs text-text-muted mb-2">矿物灵材 / 灵植草药 / 灵兽异兽——结构化词条,可自定义字段、互相关联,并进入 AI 生成上下文。</p>
-              <CodexPanel project={project} fixedDomain="natural" embedded />
+              <h3 className="text-sm font-semibold text-text-primary mb-1">📚 自然物产 · 具体词条</h3>
+              <p className="text-xs text-text-muted mb-2">矿物灵材 / 灵植草药 / 灵兽异兽——逐条登记,可自定义字段、互相关联、打星,并进入 AI 生成上下文。</p>
+              <CodexPanel project={project} fixedCategoryKeys={['mineral', 'herb', 'beast']} embedded />
             </div>
-            {/* 旧版自然资源(纯文本)——保留兼容,后续可一键转词条 */}
+            {/* 旧版自然资源(纯文本)——保留兼容 */}
             <details className="border-t border-border/60 pt-3">
               <summary className="text-xs text-text-muted cursor-pointer hover:text-text-secondary">旧版「自然资源」纯文本(兼容保留,可继续编辑)</summary>
               <div className="mt-2">
@@ -226,11 +266,6 @@ function SimpleFieldEditor({ field, value, onChange, project, contextSummary, on
       <div>
         <h3 className="text-lg font-semibold text-text-primary">{field.emoji} {field.label}</h3>
         <p className="mt-1 text-sm text-text-muted">{field.desc}</p>
-        {(field.key === 'continentLayout' || field.key === 'regionDimensions') && (
-          <p className="mt-1.5 text-xs text-accent/80 bg-accent/5 border border-accent/15 rounded px-2 py-1">
-            💡 这里写地貌/重镇概述；可视化地图与具体地点请到「🗺️ 世界地图」生成和管理。
-          </p>
-        )}
       </div>
 
       <div className="bg-bg-surface border border-border rounded-lg p-4">

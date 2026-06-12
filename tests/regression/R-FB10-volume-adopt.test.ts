@@ -43,6 +43,16 @@ describe('R-FB10 · 卷级大纲采纳写入', () => {
     expect(rows[0].title).toBe('第一卷 风起')
   })
 
+  it('顶层卷写入后 parentId 必须严格为 null(否则被大纲面板 ===null 过滤藏起 → "采纳没反应")', async () => {
+    const pid = await createProject()
+    await adoptVolume(pid, '第一卷 风起', 0)
+    const vol = (await db.outlineNodes.where('projectId').equals(pid).toArray())
+      .find(n => n.type === 'volume')!
+    // 根因坐实:adopt 旧实现丢弃 parentId:null → 存成 undefined → UI `parentId === null` 严格过滤把卷藏起
+    expect(vol.parentId).toBe(null)
+    expect(vol.parentId === null).toBe(true)
+  })
+
   it('同名卷再采纳:被 skip 且 written 为空、带可反馈的原因(不静默)', async () => {
     const pid = await createProject()
     await adoptVolume(pid, '第一卷 风起', 0)

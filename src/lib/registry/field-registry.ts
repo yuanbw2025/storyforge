@@ -111,6 +111,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   longtext('worldviews', 'regionDimensions', ['区域面积']),
   longtext('worldviews', 'mountainsRivers', ['山川河流']),
   longtext('worldviews', 'climateByRegion', ['climate', '气候']),
+  longtext('worldviews', 'naturalResourceOverview', ['自然资源概述', '自然资源全貌']),
   json('worldviews', 'naturalResources', ['resources', '自然资源']),
   longtext('worldviews', 'historyLine', ['history', 'worldHistory', '历史线']),
   longtext('worldviews', 'worldEvents', ['events', '大事记']),

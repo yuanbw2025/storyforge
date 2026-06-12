@@ -7,11 +7,12 @@
  */
 
 /** 词条所属领域 */
-export type CodexDomain = 'natural' | 'humanity'
+export type CodexDomain = 'natural' | 'humanity' | 'origin'
 
 export const CODEX_DOMAIN_LABELS: Record<CodexDomain, string> = {
   natural: '自然环境',
   humanity: '人文环境',
+  origin: '世界起源',
 }
 
 /** 字段类型 */
@@ -44,6 +45,10 @@ export type BuiltInCodexKey =
   | 'faction'   // 势力
   | 'city'      // 城池重镇
   | 'artifact'  // 人工器物
+  // 世界观各方面的"全貌+词条"分类（每个面板子页一个）
+  | 'natStructure' | 'natDimension' | 'natTerrain' | 'natWater' | 'natClimate' // 自然环境各方面
+  | 'humEra' | 'humEvent' | 'humSociety' | 'humConflict'                       // 人文环境各方面
+  | 'originPower' | 'originDeity'                                              // 世界起源:力量体系/神明信仰
 
 /** 词条分类（树状，内置 + 用户自定义） */
 export interface CodexCategory {
@@ -82,6 +87,11 @@ export interface CodexEntry {
   fields: string
   /** 与其它词条的关联（JSON：{ [fieldKey]: entryId[] }） */
   refs?: string
+  /**
+   * 重要度星级（1-5）。主要用于「地点」类词条标记重要程度，
+   * 也可用于任意词条。未设/0 表示未标记。非索引字段，零 DB 迁移。
+   */
+  importance?: number
   order: number
   worldGroupId?: number | null
   createdAt: number
@@ -240,6 +250,97 @@ export const BUILTIN_CATEGORIES: BuiltInCategorySeed[] = [
       { key: 'materials', label: '所需材料', type: 'ref', refCategory: 'mineral', refMulti: true },
       { key: 'origin', label: '来历', type: 'longtext' },
       { key: 'owner', label: '当前持有者', type: 'text' },
+    ],
+  },
+
+  // ── 自然环境各方面（全貌写在面板字段,这里逐条细化具体词条） ──
+  {
+    domain: 'natural', builtInKey: 'natStructure', name: '世界结构', icon: '🌐',
+    fields: [
+      { key: 'type', label: '层级类型', type: 'text', placeholder: '如 星球 / 大陆 / 位面 / 平行空间' },
+      { key: 'scope', label: '范围', type: 'text' },
+      { key: 'feature', label: '特征说明', type: 'longtext' },
+    ],
+  },
+  {
+    domain: 'natural', builtInKey: 'natDimension', name: '疆域版图', icon: '📐',
+    fields: [
+      { key: 'scale', label: '尺度范围', type: 'text' },
+      { key: 'feature', label: '区域特征', type: 'longtext' },
+    ],
+  },
+  {
+    domain: 'natural', builtInKey: 'natTerrain', name: '地貌', icon: '🗺️',
+    fields: [
+      { key: 'type', label: '类型', type: 'select', options: ['大陆', '山脉', '高原', '平原', '盆地', '丘陵', '峡谷', '沙漠', '森林', '其他'] },
+      { key: 'location', label: '位置', type: 'text' },
+      { key: 'feature', label: '地形特征', type: 'longtext' },
+    ],
+  },
+  {
+    domain: 'natural', builtInKey: 'natWater', name: '山川水系', icon: '⛰️',
+    fields: [
+      { key: 'type', label: '类型', type: 'select', options: ['山脉', '山峰', '河流', '湖泊', '海洋', '运河', '瀑布', '其他'] },
+      { key: 'scale', label: '规模', type: 'text' },
+      { key: 'feature', label: '特征', type: 'longtext' },
+    ],
+  },
+  {
+    domain: 'natural', builtInKey: 'natClimate', name: '气候带', icon: '🌦️',
+    fields: [
+      { key: 'region', label: '所在区域', type: 'text' },
+      { key: 'type', label: '气候类型', type: 'text', placeholder: '如 温带 / 苦寒 / 湿热' },
+      { key: 'hazard', label: '季节/自然灾害', type: 'longtext' },
+    ],
+  },
+
+  // ── 人文环境各方面 ──
+  {
+    domain: 'humanity', builtInKey: 'humEra', name: '历史时代', icon: '📜',
+    fields: [
+      { key: 'period', label: '时间/纪年', type: 'text' },
+      { key: 'feature', label: '时代特征/大事', type: 'longtext' },
+    ],
+  },
+  {
+    domain: 'humanity', builtInKey: 'humEvent', name: '重大事件', icon: '📅',
+    fields: [
+      { key: 'type', label: '类型', type: 'select', options: ['战争', '王朝兴替', '灾劫', '变法', '发现', '其他'] },
+      { key: 'time', label: '发生时间', type: 'text' },
+      { key: 'impact', label: '影响', type: 'longtext' },
+    ],
+  },
+  {
+    domain: 'humanity', builtInKey: 'humSociety', name: '政经文化', icon: '🏛️',
+    fields: [
+      { key: 'type', label: '类别', type: 'select', options: ['政体', '货币', '赋税', '阶层制度', '宗教信仰', '风俗节庆', '其他'] },
+      { key: 'detail', label: '说明', type: 'longtext' },
+    ],
+  },
+  {
+    domain: 'humanity', builtInKey: 'humConflict', name: '矛盾冲突', icon: '🔥',
+    fields: [
+      { key: 'type', label: '类型', type: 'text', placeholder: '如 阶级 / 种族 / 信仰 / 资源' },
+      { key: 'sides', label: '对立方', type: 'text' },
+      { key: 'tension', label: '张力/根源', type: 'longtext' },
+    ],
+  },
+
+  // ── 世界起源：力量体系 / 神明信仰 ──
+  {
+    domain: 'origin', builtInKey: 'originPower', name: '力量层级', icon: '⚡',
+    fields: [
+      { key: 'rank', label: '等级/层级', type: 'text' },
+      { key: 'mark', label: '核心标志', type: 'longtext' },
+      { key: 'condition', label: '晋升条件', type: 'longtext' },
+    ],
+  },
+  {
+    domain: 'origin', builtInKey: 'originDeity', name: '神明信仰', icon: '🌟',
+    fields: [
+      { key: 'type', label: '类型', type: 'select', options: ['主神', '次神', '半神', '国教', '民间信仰', '邪神', '其他'] },
+      { key: 'title', label: '名号/职司', type: 'text' },
+      { key: 'rule', label: '规则/禁忌', type: 'longtext' },
     ],
   },
 ]

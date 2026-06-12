@@ -44,6 +44,20 @@ describe('Codex B0 · 内置分类 seed', () => {
     expect(cnt).toBe(BUILTIN_CATEGORIES.length)
   })
 
+  it('并发锁:同时并发 ensureBuiltIns 不产生重复(根治 race)', async () => {
+    const projectId = await createProject()
+    const store = useCodexStore.getState()
+    // 并发触发两次(模拟 StrictMode 双调用 / 多面板同时挂载)
+    await Promise.all([store.ensureBuiltIns(projectId), store.ensureBuiltIns(projectId)])
+    const builtins = (await db.codexCategories.where('projectId').equals(projectId).toArray())
+      .filter(c => !!c.builtInKey)
+    // 每个内置 key 只有一条,总数 == 内置分类数(不翻倍)
+    expect(builtins.length).toBe(BUILTIN_CATEGORIES.length)
+    const byKey = new Map<string, number>()
+    for (const c of builtins) byKey.set(c.builtInKey!, (byKey.get(c.builtInKey!) ?? 0) + 1)
+    for (const n of byKey.values()) expect(n).toBe(1)
+  })
+
   it('自愈去重:历史重复的内置分类被合并,词条不丢失', async () => {
     const projectId = await createProject()
     const ts = Date.now()

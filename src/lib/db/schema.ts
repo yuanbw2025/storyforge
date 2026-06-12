@@ -37,6 +37,7 @@ import type {
   HistoricalKeyword,
   ImportantLocation,
   WorldRulesProfile,
+  UserStyleProfile,
   WorldGroup,
   WorldGroupLink,
   ItemLedgerEntry,
@@ -119,6 +120,9 @@ class StoryForgeDB extends Dexie {
   // Phase 35-a —— 词条系统（Codex）
   codexCategories!: Table<CodexCategory, number>
   codexEntries!: Table<CodexEntry, number>
+
+  // FB-5 —— 自适应文风学习（每项目一份 AI 文风画像）
+  userStyleProfiles!: Table<UserStyleProfile, number>
 
   // AI 消耗统计
   aiUsageLog!: Table<AIUsageEntry, number>
@@ -293,6 +297,11 @@ class StoryForgeDB extends Dexie {
       factions: null,
     }).upgrade(async (tx) => {
       await migrateLegacyTablesToCodex(tx)
+    })
+
+    // v30: 自适应文风学习（FB-5）—— 纯新增空表,无存量数据,无需迁移函数。
+    this.version(30).stores({
+      userStyleProfiles: '++id, projectId',
     })
   }
 }

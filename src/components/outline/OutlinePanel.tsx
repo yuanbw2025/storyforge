@@ -72,7 +72,9 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
 
-  const volumes = nodes.filter(n => n.type === 'volume' && n.parentId === null).sort((a, b) => a.order - b.order)
+  // 用 `== null`(宽松)而非 `=== null`:既匹配新写入的 parentId:null,也修复存量坏数据
+  // (FB-10b 修复前采纳的顶层卷 parentId 被存成 undefined,严格相等会把它们永远藏起)。
+  const volumes = nodes.filter(n => n.type === 'volume' && n.parentId == null).sort((a, b) => a.order - b.order)
   const selectedVol = volumes.find(v => v.id === selectedVolId) || null
 
   // 故事块和章节层级
@@ -257,15 +259,21 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
 
   const handleBatchConfirm = useCallback(async () => {
     if (!batchResult) return
-    for (const [volId, chapters] of batchResult) {
-      const existingCount = nodes.filter(n => n.parentId === volId && n.type === 'chapter').length
-      for (let i = 0; i < chapters.length; i++) {
-        await addOutlineNodeByAdopt({
-          parentId: volId, type: 'chapter',
-          title: chapters[i].title, summary: chapters[i].summary,
-          order: existingCount + i,
-        })
+    try {
+      for (const [volId, chapters] of batchResult) {
+        const existingCount = nodes.filter(n => n.parentId === volId && n.type === 'chapter').length
+        for (let i = 0; i < chapters.length; i++) {
+          await addOutlineNodeByAdopt({
+            parentId: volId, type: 'chapter',
+            title: chapters[i].title, summary: chapters[i].summary,
+            order: existingCount + i,
+          })
+        }
       }
+    } catch (err) {
+      console.error('[Outline] 批量写入章节失败:', err)
+      alert(`批量写入章节时出错：${err instanceof Error ? err.message : '未知错误'}。\n请查看控制台获取详情。`)
+      return
     }
     await loadAll(project.id!)
     setBatchResult(null)
@@ -305,14 +313,20 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     let firstId: number | null = null
     let written = 0
     const skipReasons = new Set<string>()
-    for (let i = 0; i < previewVolumes.length; i++) {
-      const r = await addOutlineNodeByAdopt({
-        parentId: null, type: 'volume',
-        title: previewVolumes[i].title, summary: previewVolumes[i].summary,
-        order: existingCount + i,
-      })
-      if (r.id != null) { written++; if (firstId == null) firstId = r.id }
-      else if (r.reason) skipReasons.add(r.reason)
+    try {
+      for (let i = 0; i < previewVolumes.length; i++) {
+        const r = await addOutlineNodeByAdopt({
+          parentId: null, type: 'volume',
+          title: previewVolumes[i].title, summary: previewVolumes[i].summary,
+          order: existingCount + i,
+        })
+        if (r.id != null) { written++; if (firstId == null) firstId = r.id }
+        else if (r.reason) skipReasons.add(r.reason)
+      }
+    } catch (err) {
+      console.error('[Outline] 写入卷失败:', err)
+      alert(`写入卷时出错：${err instanceof Error ? err.message : '未知错误'}。\n请查看控制台获取详情。`)
+      return
     }
     await loadAll(project.id!)
     setPreviewVolumes(null)
@@ -331,14 +345,20 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     const existingCount = selectedVolChapters.length
     let written = 0
     const skipReasons = new Set<string>()
-    for (let i = 0; i < previewChapters.length; i++) {
-      const r = await addOutlineNodeByAdopt({
-        parentId: selectedVol.id!, type: 'chapter',
-        title: previewChapters[i].title, summary: previewChapters[i].summary,
-        order: existingCount + i,
-      })
-      if (r.id != null) written++
-      else if (r.reason) skipReasons.add(r.reason)
+    try {
+      for (let i = 0; i < previewChapters.length; i++) {
+        const r = await addOutlineNodeByAdopt({
+          parentId: selectedVol.id!, type: 'chapter',
+          title: previewChapters[i].title, summary: previewChapters[i].summary,
+          order: existingCount + i,
+        })
+        if (r.id != null) written++
+        else if (r.reason) skipReasons.add(r.reason)
+      }
+    } catch (err) {
+      console.error('[Outline] 写入章节失败:', err)
+      alert(`写入章节时出错：${err instanceof Error ? err.message : '未知错误'}。\n请查看控制台获取详情。`)
+      return
     }
     await loadAll(project.id!)
     setPreviewChapters(null)
@@ -689,6 +709,16 @@ function ChapterRow({ ch, idx, onUpdate, onDelete, onOpen }: {
   onDelete: (id: number) => void
   onOpen?: (id: number) => void
 }) {
+  // FB-3:章节摘要(章节大纲)由单行 input 升级为多行自增 textarea —— 单行下改 1-2 句大纲很难受
+  //       (横向滚、看不全、改中间费劲)。本地草稿 + 失焦保存(IME 安全:组合输入结束后才 onBlur 写库)。
+  const [summaryDraft, setSummaryDraft] = useState(ch.summary || '')
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => { setSummaryDraft(ch.summary || '') }, [ch.summary])
+  useEffect(() => {
+    const ta = taRef.current
+    if (ta) { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight}px` }
+  }, [summaryDraft])
+
   return (
     <div className="flex items-start gap-2 px-3 py-2 bg-bg-surface border border-border rounded-md hover:border-accent/30 group transition-colors">
       <span className="text-xs text-text-muted mt-1.5 shrink-0 w-5 text-right">{idx + 1}</span>
@@ -698,11 +728,14 @@ function ChapterRow({ ch, idx, onUpdate, onDelete, onOpen }: {
           onChange={e => onUpdate(ch.id!, { title: e.target.value })}
           className="w-full bg-transparent text-text-primary text-sm font-medium outline-none"
         />
-        <CInput
-          value={ch.summary}
-          onChange={e => onUpdate(ch.id!, { summary: e.target.value })}
-          placeholder="章节摘要..."
-          className="w-full bg-transparent text-text-muted text-xs outline-none mt-0.5"
+        <textarea
+          ref={taRef}
+          value={summaryDraft}
+          onChange={e => setSummaryDraft(e.target.value)}
+          onBlur={() => { if (ch.id != null && summaryDraft !== (ch.summary || '')) onUpdate(ch.id, { summary: summaryDraft }) }}
+          rows={1}
+          placeholder="章节摘要（可编辑，失焦自动保存）"
+          className="w-full bg-transparent text-text-muted text-xs outline-none mt-0.5 resize-none overflow-hidden leading-relaxed"
         />
       </div>
       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1">

@@ -13,6 +13,7 @@ import type {
   MasterStyleMetrics, MasterInsight,
   WorldGroup, WorldGroupLink, ItemLedgerEntry, StoryTimelineEvent,
   ImportantLocation, WorldRulesProfile, CodexCategory, CodexEntry,
+  UserStyleProfile,
 } from '../types'
 
 type WorldGroupExportRef = {
@@ -66,6 +67,7 @@ const PROJECT_TABLES_ALL = [
   db.storyArcs,
   db.storyCores,
   db.storyTimelineEvents,
+  db.userStyleProfiles,
   db.worldGroupLinks,
   db.worldGroups,
   db.worldNodes,
@@ -235,6 +237,8 @@ export interface ProjectExportData {
   detailedOutlines?: (Omit<DetailedOutline, 'id' | 'projectId' | 'outlineNodeId'> & { _outlineExportId: number })[]
   emotionBeatCards?: (Omit<EmotionBeatCard, 'id' | 'projectId' | 'chapterId'> & { _chapterExportId: number })[]
   stateCards?: Omit<StateCard, 'id' | 'projectId'>[]
+  /** FB-5 文风画像(每项目单例) */
+  userStyleProfiles?: Omit<UserStyleProfile, 'id' | 'projectId'>[]
   storyArcs?: Omit<StoryArc, 'id' | 'projectId'>[]
   worldNodes?: (Omit<WorldNode, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef & { _exportId: number; _parentExportId: number | null })[]
   notes?: Omit<Note, 'id' | 'projectId'>[]
@@ -286,6 +290,7 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     // v3
     worldGroups, worldGroupLinks, itemLedger, storyTimelineEvents,
     importantLocations, worldRulesProfiles, codexCategories, codexEntries,
+    userStyleProfiles,
   ] = await Promise.all([
     db.worldviews.where('projectId').equals(projectId).toArray(),
     db.storyCores.where('projectId').equals(projectId).toArray(),
@@ -324,6 +329,7 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     db.worldRulesProfiles.where('projectId').equals(projectId).toArray(),
     db.codexCategories.where('projectId').equals(projectId).toArray(),
     db.codexEntries.where('projectId').equals(projectId).toArray(),
+    db.userStyleProfiles.where('projectId').equals(projectId).toArray(),
   ])
 
   // ── 构建 ID 映射 ──
@@ -432,14 +438,17 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
     geographies: geographies.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
     histories: histories.map(({ id: _, projectId: __, ...rest }) => withWorldGroupExportId(rest)),
     creativeRules: creativeRules.map(({ id: _, projectId: __, ...rest }) => rest),
-    characterRelations: characterRelations.map((r) => {
-      const { id: _, projectId: __, fromCharacterId, toCharacterId, ...rest } = r
-      return {
-        ...rest,
-        _fromCharacterIndex: charIdMap.get(fromCharacterId) ?? -1,
-        _toCharacterIndex: charIdMap.get(toCharacterId) ?? -1,
-      }
-    }),
+    characterRelations: characterRelations
+      // 先剔除孤儿关系(端点角色已不存在),避免把 -1 脏映射写进备份
+      .filter(r => charIdMap.has(r.fromCharacterId) && charIdMap.has(r.toCharacterId))
+      .map((r) => {
+        const { id: _, projectId: __, fromCharacterId, toCharacterId, ...rest } = r
+        return {
+          ...rest,
+          _fromCharacterIndex: charIdMap.get(fromCharacterId)!,
+          _toCharacterIndex: charIdMap.get(toCharacterId)!,
+        }
+      }),
 
     // ── v2 新增 ──
     detailedOutlines: detailedOutlines.map((d) => {
@@ -451,6 +460,7 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
       return { ...rest, _chapterExportId: chapterIdMap.get(chapterId) ?? 0 }
     }),
     stateCards: stateCards.map(({ id: _, projectId: __, ...rest }) => rest),
+    userStyleProfiles: userStyleProfiles.map(({ id: _, projectId: __, ...rest }) => rest),
     storyArcs: storyArcs.map(({ id: _, projectId: __, ...rest }) => rest),
     worldNodes: worldNodes.map((w) => {
       const { id, projectId: __, ...rest } = w
@@ -665,10 +675,16 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   }
 
   // 9. 导入角色关系（重建 fromCharacterId/toCharacterId）
+  // 角色关系是次要数据:若某端角色已不存在(导出时记为 -1 的孤儿关系),跳过该条即可,
+  // 不像"章节→大纲"那种必需外键要 fail-fast、整体回滚(否则一条脏关系会拖垮整个备份导入)。
   for (const r of data.characterRelations || []) {
     const { _fromCharacterIndex, _toCharacterIndex, ...rest } = r
-    const fromId = requireMappedId(newCharIds, _fromCharacterIndex, 'characterRelations.fromCharacterId')
-    const toId = requireMappedId(newCharIds, _toCharacterIndex, 'characterRelations.toCharacterId')
+    const fromId = newCharIds.get(_fromCharacterIndex)
+    const toId = newCharIds.get(_toCharacterIndex)
+    if (fromId == null || toId == null) {
+      console.warn('[import] 跳过无效角色关系(端点角色缺失):', _fromCharacterIndex, '→', _toCharacterIndex)
+      continue
+    }
     await db.characterRelations.add({
       ...rest,
       fromCharacterId: fromId,
@@ -704,6 +720,11 @@ export async function importProjectJSON(data: ProjectExportData): Promise<number
   // 12. 状态表
   for (const s of data.stateCards || []) {
     await db.stateCards.add({ ...s, projectId: newProjectId } as StateCard)
+  }
+
+  // FB-5 文风画像
+  for (const sp of data.userStyleProfiles || []) {
+    await db.userStyleProfiles.add({ ...sp, projectId: newProjectId } as UserStyleProfile)
   }
 
   // 13. 故事线

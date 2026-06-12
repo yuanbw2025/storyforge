@@ -162,6 +162,10 @@ export const PROJECT_TABLES: TableSpec[] = [
       { field: 'worldGroupId', remapVia: 'worldGroups' },
     ] },
 
+  // ───────────────────── 文风学习（FB-5） ─────────────────────
+  { table: db.userStyleProfiles, name: 'userStyleProfiles', owner: 'project', exportable: true,
+    note: '每项目一份 AI 文风画像;projectId 单例' },
+
   // ───────────────────── 多世界 ─────────────────────
   { table: db.worldGroups, name: 'worldGroups', owner: 'project', exportable: true,
     note: '导出用 _exportId(index)重映射,见 json-export BUG-EXPORT-WG 修复' },

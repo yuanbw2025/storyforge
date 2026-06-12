@@ -21,7 +21,7 @@ describe('Phase 3.1 · AI 说明书自动生成', () => {
     }).not.toThrow()
   })
 
-  it('generated.md 含全部 35 个 moduleKey', () => {
+  it('generated.md 含全部 moduleKey(动态校验,FB-5 后 36 个)', () => {
     const promptSrc = fs.readFileSync(path.join(root, 'src/lib/types/prompt.ts'), 'utf8')
     const block = promptSrc.match(/export type PromptModuleKey =([\s\S]*?)(?:\n\nexport|\n\/\*\*|\nexport interface)/)
     const keys = [...(block?.[1] ?? '').matchAll(/\|\s*'([a-zA-Z0-9._-]+)'/g)].map(m => m[1])

@@ -58,6 +58,8 @@ export type PromptModuleKey =
   | 'master.analyze-chunk'
   | 'master.extract-beats'
   | 'master.generate-insights'
+  // —— FB-5 自适应文风学习 ——
+  | 'style.learn'
 
 /** 模板可调参数定义（Phase 12） */
 export interface PromptParameter {

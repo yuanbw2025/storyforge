@@ -80,6 +80,7 @@ export function formatWorldviewBlock(wv: Worldview | null): string {
     wv.climateByRegion && `气候环境：${wv.climateByRegion.slice(0, 120)}`,
     wv.historyLine && `世界历史：${wv.historyLine.slice(0, 200)}`,
     wv.worldEvents && `世界大事记：${wv.worldEvents.slice(0, 200)}`,
+    wv.naturalResourceOverview && `自然资源：${wv.naturalResourceOverview.slice(0, 150)}`,
     formatNaturalResources(wv.naturalResources),
     wv.races && `种族民族：${wv.races.slice(0, 150)}`,
     wv.factionLayout && `势力分布：${wv.factionLayout.slice(0, 200)}`,

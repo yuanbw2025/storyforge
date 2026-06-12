@@ -10,6 +10,8 @@ import { buildWorldviewPrompt } from '../../lib/ai/adapters/worldview-adapter'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { streamChat } from '../../lib/ai/client'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import CodexPanel from '../codex/CodexPanel'
+import CodexSearchBar from '../codex/CodexSearchBar'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import AIFieldModeTabs from '../shared/AIFieldModeTabs'
 import type { Project, DivineDesign } from '../../lib/types'
@@ -128,6 +130,12 @@ export default function WorldviewOriginPanel({ project }: Props) {
         <p className="text-xs text-text-muted mt-0.5">
           定义世界的起源、力量体系与信仰体系。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
         </p>
+        <div className="mt-3 max-w-xl">
+          <CodexSearchBar
+            categoryKeys={['originPower', 'originDeity']}
+            onJump={(catKey) => setActive(catKey === 'originDeity' ? 'divine' : 'power')}
+          />
+        </div>
       </div>
 
       <div className="flex gap-4">
@@ -172,7 +180,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
             />
           </div>
 
-          {/* 力量体系 */}
+          {/* 力量体系:全貌(上) + 具体词条(下) */}
           <div className={active === 'power' ? '' : 'hidden'}>
             <TextFieldEditor
               field={FIELDS[1]}
@@ -182,9 +190,14 @@ export default function WorldviewOriginPanel({ project }: Props) {
               contextSummary={buildCtx('power')}
               onStreamingChange={streaming => handleStreamingChange('power', streaming)}
             />
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-text-primary mb-1">📚 力量层级 · 具体词条</h3>
+              <p className="text-xs text-text-muted mb-3">在上面写完力量体系「全貌」后，这里把各等级/层级逐条登记，可自定义字段、打重要度星级，并进入 AI 生成上下文。</p>
+              <CodexPanel project={project} fixedCategoryKeys={['originPower']} embedded />
+            </div>
           </div>
 
-          {/* 神明与信仰 */}
+          {/* 神明与信仰:全貌(上) + 具体词条(下) */}
           <div className={active === 'divine' ? '' : 'hidden'}>
             <DivineFieldEditor
               field={FIELDS[2]}
@@ -194,6 +207,11 @@ export default function WorldviewOriginPanel({ project }: Props) {
               contextSummary={buildCtx('divine')}
               onStreamingChange={streaming => handleStreamingChange('divine', streaming)}
             />
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-text-primary mb-1">📚 神明信仰 · 具体词条</h3>
+              <p className="text-xs text-text-muted mb-3">在上面写完信仰体系「全貌」后，这里把各神明/信仰逐条登记，可自定义字段、打重要度星级，并进入 AI 生成上下文。</p>
+              <CodexPanel project={project} fixedCategoryKeys={['originDeity']} embedded />
+            </div>
           </div>
         </div>
       </div>
