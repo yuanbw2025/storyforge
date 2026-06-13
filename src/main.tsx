@@ -22,7 +22,30 @@ if (THEME_MIGRATE[savedTheme]) {
 }
 document.documentElement.setAttribute('data-theme', savedTheme)
 
+/**
+ * FB-11 数据持久 · 启动期申请「持久化存储」。
+ * 不申请时浏览器把 IndexedDB 当 best-effort,可在磁盘压力/关闭清理/隐私插件下
+ * 直接驱逐整库 → 用户表现为"数据被重置"。persist() 在 Chrome 是静默授予(按使用度
+ * 启发式,不弹窗),被拒或不支持都不影响主流程,故 fire-and-forget。
+ */
+async function requestPersistentStorage() {
+  try {
+    if (navigator.storage?.persist) {
+      const already = await navigator.storage.persisted()
+      if (!already) {
+        const granted = await navigator.storage.persist()
+        console.info(`[bootstrap] persistent storage ${granted ? '已授予' : '未授予(浏览器启发式未满足,可稍后再试)'}`)
+      }
+    }
+  } catch (e) {
+    console.warn('[bootstrap] persist storage 申请失败(不影响运行):', e)
+  }
+}
+
 async function bootstrap() {
+  // 0. FB-11: 尽早申请持久化存储,降低 IndexedDB 被浏览器驱逐("重置")的概率。
+  void requestPersistentStorage()
+
   // 0. Phase 1.1b: 注册表完整性校验。开发环境 throw(立刻发现漏登记),生产环境只告警。
   try {
     validateRegistry({ throwOnError: import.meta.env.DEV })

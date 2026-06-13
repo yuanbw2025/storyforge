@@ -210,10 +210,19 @@
 
 ---
 
-## 🔴 FB-11（数据红线 · 待评估后开发）— 更新后项目数据"重置"/不持久
+## ✅ FB-11（数据红线 · 已根治 2026-06-13）— 更新后项目数据"重置"/不持久
 
 > 来源：社区群（买辣椒也用券 · LV6 管理员，2026-06-11）。
 > 反馈原文：「我连接了本地的文件夹，还照样会重置」。群主（淡然行远）确认需求：**希望每次更新之后能保留项目内的数据**。
+
+**✅ 根因已定位 + 三层修复(2026-06-13)**：
+- **根因**：① IndexedDB 从未在启动期申请持久化(`persist()` 只在打开导入面板时调一次)→ best-effort 存储被浏览器在磁盘压力/清理/隐私插件下**驱逐**=「重置」;② 「本地文件夹自动保存」是**只写不读的死信箱**——`handle` 仅存 React state(刷新即丢)、`writeFile` 仅绑定时/手动各写一次(并非"实时/自动")、且**无任何启动回读链路**→ 盘上有备份也不会自动恢复,故「连了文件夹还照样重置」。更新/部署本身不清库(schema 迁移生产 `allowReset=false` 锁死,R-17 守;SW 只管 cache 不碰 IndexedDB)。
+- **修复①(防驱逐)**：`main.tsx` 启动期 `navigator.storage.persist()`,降低 IndexedDB 被驱逐概率(纯增量,零数据风险)。
+- **修复②(真持久层·根治)**：句柄持久化到**独立 IndexedDB**(`storyforge-fsa`,不进 Dexie 主库/三注册表)→ 绑定跨刷新/更新不丢;启动重新授权(`ensureFolderPermission`);**真·自动写入**(`useFolderAutoBackup`:进项目即写 + 每 5 分钟,`WorkspacePage` 接线);首页**「从本地文件夹恢复」**回读 `storyforge-*.json` → `importProjectJSON` 新建项目(不覆盖)。文件夹卡虚假"实时写入磁盘"文案改诚实。
+- **修复③(兜底)**：Gist 云备份(含版本历史)提供离设备副本,与文件夹层互补。
+- 文件：`src/lib/storage/folder-handle-store.ts`、`src/lib/storage/folder-backup.ts`、`src/hooks/useFolderAutoBackup.ts`、`DataManagementPanel.tsx`、`HomePage.tsx`、`WorkspacePage.tsx`、`main.tsx`。测试 `R-folder-backup`(句柄存取 + 写盘回读导入往返)。删除只写不读的旧 `useFileSystemAccess.ts`。
+> ——以下为原始反馈与排查记录——
+
 > 群主现状说明：「这个目前功能确实没做，因为考虑到项目现在变动很大、时常有大的改动，做起来可能每次更新都要做调整，会比较麻烦」。
 
 **现象**：用户更新（或某些操作）后，项目数据被"重置"/丢失。即便接了「本地文件夹自动保存」，刷新/更新后仍重置。

@@ -1,13 +1,17 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Download, Upload, FileJson, FileText, FileType,
   Loader2, CheckCircle, AlertCircle, FolderOpen, X,
   History, Plus, Trash2, RotateCcw, HardDrive,
-  Sparkles, Brain,
+  Sparkles, Brain, ShieldAlert,
 } from 'lucide-react'
 import { exportProjectJSON, downloadJSON, importProjectJSON, type ProjectExportData } from '../../lib/export/json-export'
 import { exportProjectMarkdown, exportProjectTXT, downloadTextFile } from '../../lib/export/text-export'
-import { useFileSystemAccess, isFSASupported, type FSAHandle } from '../../hooks/useFileSystemAccess'
+import {
+  isFSASupported, pickFolder, ensureFolderPermission, folderPermissionGranted,
+  writeProjectJSONToFolder,
+} from '../../lib/storage/folder-backup'
+import { saveFolderHandle, loadFolderHandle, clearFolderHandle, projFolderKey, LAST_FOLDER_KEY } from '../../lib/storage/folder-handle-store'
 import { useBackupStore } from '../../stores/backup'
 import CloudBackupCard from './CloudBackupCard'
 import { useToast } from '../shared/Toast'
@@ -70,7 +74,25 @@ function ExportTab({ project, onImported }: Props) {
   const [status, setStatus] = useState<ExportStatus>('idle')
   const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { handle, writing, pickDirectory, writeFile, clearHandle } = useFileSystemAccess()
+
+  // ── 本地文件夹（句柄持久化 + 重新授权 + 自动备份，FB-11）──
+  const [folderHandle, setFolderHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  const [folderName, setFolderName] = useState('')
+  const [folderNeedsAuth, setFolderNeedsAuth] = useState(false)
+  const [folderBusy, setFolderBusy] = useState(false)
+
+  // 进面板时把该项目已持久化的绑定读回来；授权仍有效则直接显示已绑定，失效则提示重新授权
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const h = await loadFolderHandle(projFolderKey(project.id!))
+      if (!h || cancelled) return
+      setFolderHandle(h)
+      setFolderName(h.name)
+      setFolderNeedsAuth(!(await folderPermissionGranted(h)))
+    })()
+    return () => { cancelled = true }
+  }, [project.id])
 
   const show = (s: ExportStatus, msg: string) => {
     setStatus(s); setMessage(msg)
@@ -117,21 +139,52 @@ function ExportTab({ project, onImported }: Props) {
     } catch (e) { show('error', `导出失败：${(e as Error).message}`) }
   }
 
+  // 绑定文件夹：选目录 → 请求授权 → 持久化句柄 → 立刻写一次
   const handleBindFolder = async () => {
-    const fsaHandle = await pickDirectory()
-    if (!fsaHandle) return
-    await handleSaveToFolder(fsaHandle)
+    const h = await pickFolder()
+    if (!h) return
+    setFolderBusy(true)
+    try {
+      const ok = await ensureFolderPermission(h)
+      if (!ok) { show('error', '未授予文件夹写入权限'); return }
+      await saveFolderHandle(projFolderKey(project.id!), h)
+      await saveFolderHandle(LAST_FOLDER_KEY, h)
+      setFolderHandle(h); setFolderName(h.name); setFolderNeedsAuth(false)
+      const wrote = await writeProjectJSONToFolder(h, project.id!)
+      show(wrote ? 'success' : 'error', wrote ? `已绑定并保存到 / ${h.name}` : '绑定成功但写入失败')
+    } catch (e) { show('error', `绑定失败：${(e as Error).message}`) }
+    finally { setFolderBusy(false) }
   }
 
-  const handleSaveToFolder = async (fsaHandle?: FSAHandle | null) => {
+  // 重新授权（更新/刷新后浏览器把权限降回 prompt 时，一次手势恢复）
+  const handleReauthFolder = async () => {
+    if (!folderHandle) return
+    setFolderBusy(true)
+    try {
+      const ok = await ensureFolderPermission(folderHandle)
+      if (!ok) { show('error', '仍未获授权'); return }
+      setFolderNeedsAuth(false)
+      await writeProjectJSONToFolder(folderHandle, project.id!)
+      show('success', '已重新授权，本项目会自动写入该文件夹')
+    } catch (e) { show('error', `授权失败：${(e as Error).message}`) }
+    finally { setFolderBusy(false) }
+  }
+
+  const handleSaveToFolder = async () => {
+    if (!folderHandle) return
+    setFolderBusy(true)
     try {
       show('loading', '正在写入本地文件夹...')
-      const data = await exportProjectJSON(project.id!)
-      const filename = `storyforge-${project.name.replace(/[/\\?%*:|"<>]/g, '-')}.json`
-      const ok = await writeFile(filename, JSON.stringify(data, null, 2), fsaHandle)
-      if (ok) show('success', `已保存到本地文件夹 / ${filename}`)
-      else show('error', '写入失败，请重新绑定文件夹')
+      if (!(await ensureFolderPermission(folderHandle))) { show('error', '未获授权，无法写入'); setFolderNeedsAuth(true); return }
+      const ok = await writeProjectJSONToFolder(folderHandle, project.id!)
+      show(ok ? 'success' : 'error', ok ? '已保存到本地文件夹' : '写入失败，请重新绑定文件夹')
     } catch (e) { show('error', `写入失败：${(e as Error).message}`) }
+    finally { setFolderBusy(false) }
+  }
+
+  const handleUnbindFolder = async () => {
+    await clearFolderHandle(projFolderKey(project.id!))
+    setFolderHandle(null); setFolderName(''); setFolderNeedsAuth(false)
   }
 
   return (
@@ -185,25 +238,41 @@ function ExportTab({ project, onImported }: Props) {
       {/* 本地文件夹 */}
       <SectionCard
         icon={<FolderOpen className="w-5 h-5 text-orange-400" />}
-        title="本地文件夹自动保存"
-        desc="绑定本地文件夹，将项目 JSON 实时写入磁盘。"
+        title="本地文件夹自动备份"
+        desc="绑定后，进入本项目会自动把完整数据写入该文件夹（打开时 + 每 5 分钟）。绑定跨刷新/更新保留；换设备或数据重置后，可在首页「从本地文件夹恢复」。"
         badge={!isFSASupported() ? '仅 Chrome/Edge 支持' : undefined}
       >
-        {handle ? (
+        {folderHandle ? (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-green-400 bg-green-500/10 px-3 py-2 rounded-lg">
-              <FolderOpen className="w-4 h-4 shrink-0" />
-              <span className="flex-1 truncate">已绑定：{handle.path}</span>
-              <button onClick={clearHandle} className="text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
+            {folderNeedsAuth ? (
+              <div className="flex items-center gap-2 text-sm text-amber-400 bg-amber-500/10 px-3 py-2 rounded-lg">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span className="flex-1 truncate">已绑定「{folderName}」，但浏览器需重新授权才能自动写入</span>
+                <button onClick={handleUnbindFolder} className="text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-green-400 bg-green-500/10 px-3 py-2 rounded-lg">
+                <FolderOpen className="w-4 h-4 shrink-0" />
+                <span className="flex-1 truncate">已绑定：{folderName}（自动写入已生效）</span>
+                <button onClick={handleUnbindFolder} className="text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
+              </div>
+            )}
+            <div className="flex gap-2 flex-wrap">
+              {folderNeedsAuth && (
+                <ActionButton onClick={handleReauthFolder} disabled={folderBusy} variant="orange">
+                  {folderBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
+                  重新授权
+                </ActionButton>
+              )}
+              <ActionButton onClick={handleSaveToFolder} disabled={folderBusy || status === 'loading'} variant={folderNeedsAuth ? 'default' : 'orange'}>
+                {folderBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                {folderBusy ? '写入中...' : '立即保存'}
+              </ActionButton>
             </div>
-            <ActionButton onClick={() => handleSaveToFolder()} disabled={writing || status === 'loading'} variant="orange">
-              {writing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {writing ? '写入中...' : '立即保存'}
-            </ActionButton>
           </div>
         ) : (
-          <ActionButton onClick={handleBindFolder} disabled={!isFSASupported() || status === 'loading'} variant="orange">
-            <FolderOpen className="w-4 h-4" /> 选择本地文件夹
+          <ActionButton onClick={handleBindFolder} disabled={!isFSASupported() || folderBusy || status === 'loading'} variant="orange">
+            {folderBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderOpen className="w-4 h-4" />} 选择本地文件夹
           </ActionButton>
         )}
       </SectionCard>
