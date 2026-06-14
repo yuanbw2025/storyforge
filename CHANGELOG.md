@@ -1,5 +1,103 @@
 # Changelog
 
+## v3.4.0.2 — 2026-06-14 · 创作上下文透明化 · 高级模式 · budget 可调
+
+> 这一轮把项目里所有"AI 实际能看到 / 看不到什么"的内部参数从代码深处搬到台面上：
+>
+> - 新增 **「高级模式」总开关**（默认关，避免普通用户面对一长串内部参数）；
+> - 在所有作者写字的字段下加 **硬截断阈值文本提示与超限警告**（不阻断输入；普通用户也能看到，与高级模式解耦）；
+> - 在大纲 / 正文写作面板加 **「查看注入 prompt」按钮**，能完整展示送给 AI 的 messages、各上下文段与 token 占用；
+> - 把所有 **budget / 截断阈值** 集中到「高级设置」子面板，**支持运行时调整**并立刻生效（含 33 个 leaf：装配总闸 / 19 个 source 预算 / 6 类 reader / 字段格式化 / Prompt 引擎）。
+>
+> 数据安全：纯前端项目，**零 schema 变更、零数据迁移**；用户调整持久化在 localStorage（key = `storyforge.effectiveLimits.v1`），随时可一键全部恢复默认。
+
+### ✨ 高级模式总开关（设置 → 高级设置）
+
+- 顶部一个开关，OFF 时面板里只显示开关本身和说明文，**不暴露任何内部参数**；ON 后才展开 budget 表格，并解锁后续高级入口。
+- 设计原则：开源项目里普通用户不应被一长串技术参数淹没；只有显式同意进入高级模式才会看到这些。
+- 持久化在 localStorage，跨刷新 / 跨标签页保留状态；通过 `CustomEvent` 广播让所有订阅组件实时跟随。
+- **不受开关影响的内容（始终对所有用户可见）**：业务字段下的「硬截断阈值文本提示」与「超限警告」（见下一节）。
+
+### ✨ 字段硬截断 · 文本提示 + 超限软警告（始终可见）
+
+- 在故事核心、角色、创作规则、历史年表 4 个高优先级面板里，每个会被 AI 截断的字段下方加一行小字：
+  - 默认灰色：`截断阈值：N 字（当前 X）。<说明>`
+  - 超出阈值：升级为琥珀色 + AlertTriangle，显示"已超出 K 字 · 超出部分不会进入 AI 上下文"。
+- **不阻断输入**：作者粘贴 5000 字也不会被卡，超限提示只是软警告。
+- 字段示例：
+  - 故事核心：`故事主线（≤ 250 字）` / `故事复线（≤ 200 字）`
+  - 角色：`外貌 / 性格 / 动机 / 能力 / 弧光（≤ 150 字）`、`背景（≤ 200 字）`、`关系（仅 supporting 档位注入；≤ 80 字）`
+  - 创作规则：`写作风格 / 特殊要求（≤ 200 字）`、`基调氛围（≤ 150 字）`
+  - 历史年表：`事件描述（≤ 80 字）` / `关键词描述（≤ 40 字）`
+- `角色 · 关系` 的提示文案专门写明 **"主角 / 反派档位中此字段不会进入 AI 上下文"**，与 `buildCharacterContext` 的真实档位行为对齐，避免作者写完发现没用上。
+
+### ✨ 「查看注入 prompt」按钮（仅高级模式）
+
+- 大纲面板：「AI 生成卷级大纲」下方 + 选中卷后「AI 生成章节」旁，分别新增 `🔍 查看注入 prompt`。
+- 正文面板：「✨ 生成正文 / 📝 续写」之后，新增两个 `🔍 查看 prompt` 按钮（生成 / 续写各一个）。
+- 弹出的 Modal 三层信息：
+  - **顶部统计栏**：`message 总 token` / `assembleContext 总 token / 总闸` / `模型窗口占比` / `system / user message 数`。
+  - **上下文段表格**：每段 `label / layer / 字符 / token（估算）/ 是否被 source 预算截断`；列出 `trimmed`（被整层裁剪的源）和 `omitted`（缺前置条件 / enabled 返回 false / 字段为空）。
+  - **Messages 折叠区**：每条 `system / user` 都可单独展开看完整内容，带"复制"按钮。
+- **与真实生成完全同口径**：装配函数复用 `buildOutlineAssembledContext / buildFullWorldCtx`，调用同一组 adapter，确保看到的就是真实送给 AI 的 prompt。
+- 仅高级模式开启时按钮才存在；按钮可见性受开关控制，但 Modal 自身的渲染口径与运行时一致，没有"看到的不是真的发出的"这种漂移。
+
+### ✨ Budget / 截断阈值 · 集中可调（高级设置）
+
+将原本散落在多个文件的硬编码集中到 [src/lib/registry/budget-config.ts](src/lib/registry/budget-config.ts) 作为单点事实清单，并通过 [src/lib/registry/effective-limits.ts](src/lib/registry/effective-limits.ts) 提供 `getEffectiveLimit(key, fallback)` 同步读取层。所有运行时读取点改为「`getEffectiveLimit(key, 默认值)`」，未覆盖时行为完全等同于以前的硬编码。
+
+可调参数共 **33 个 leaf**，按 5 个分组列在「高级设置」子面板里：
+
+| 分组 | 数量 | 覆盖范围 |
+|---|---|---|
+| **装配总闸** | 1 | `assembleContext` 装配后总 token 上限（默认 24,000）。超出按 L3 → L2 → L1 整层裁剪。 |
+| **上下文源预算** | 19 | `CONTEXT_SOURCES` 各 source 的 `budgetTokens`（每个 source 自己的 token 硬上限，先于装配总闸生效）。 |
+| **Reader 截断** | 6 项（多子字段共 12 leaf） | 各 source 的 reader 函数内部写死的"条数 + 单条字符"，包括伏笔 / 故事线 / 状态卡 / 重要地点 / 历史时间线（含事件描述 80、关键词描述 40）/ 设定词条。 |
+| **字段格式化截断** | 13 | `context-builder` 序列化角色、故事核心、创作规则等字段时的 slice 上限。 |
+| **Prompt 引擎截断** | 4 | `renderPrompt` few-shot 数量、`buildContinuePrompt` 取尾长度、`ChapterEditor` 前一章结尾长度。 |
+
+操作行为：
+
+- 每行右侧一个数字输入框 + 「↺」单项恢复按钮；失焦或回车提交。
+- 留空 / 非正数 / 显式写回默认值 → 视为"恢复默认"，输入框边框回灰。
+- 已覆盖：边框琥珀色 + 「覆盖中」标签；提交成功 1.2 秒内显示绿色「已保存」。
+- 头部统计「已覆盖 N 项默认值」+ 「全部恢复默认」按钮（带 confirm）。
+- 跨标签页同步：监听原生 `storage` 事件，缓存自动失效。
+
+### 🛠 修复：业务面板的字段提示未跟随高级设置变化
+
+> 自查发现的回归：AI 写作链路读 `getEffectiveLimit`，但**面板上的 `FieldLimitHint` 仍然把 limit 写死为字面量**，导致用户在高级设置改了 `角色 · 外貌` 阈值后，注入 prompt 是新值，但角色面板下方的提示文案还是默认 150。
+
+- 新增 `useEffectiveLimit(key, fallback)` React hook，读 effective-limits 并自动订阅变更广播。
+- [`CharacterPanel`](src/components/character/CharacterPanel.tsx) / [`CreativeRulesPanel`](src/components/rules/CreativeRulesPanel.tsx) / [`StoryCorePanel`](src/components/worldview/StoryCorePanel.tsx) / [`HistoryPanel`](src/components/history/HistoryPanel.tsx) 的 `FieldLimitHint` `limit` prop 改为读 hook，UI 与 AI 实际截断口径**实时一致**。
+- 顺带：把历史年表里原本没在 budget-config 暴露的 `事件描述（80）` / `关键词描述（40）` 两条也补进 `reader.historical.*`，并让 `buildHistoricalContext` 走 `getEffectiveLimit`。这两条也成为「高级设置」可调 leaf。
+
+### 📦 新增 / 调整文件
+
+| 文件 | 角色 |
+|---|---|
+| [src/hooks/useAdvancedMode.ts](src/hooks/useAdvancedMode.ts) | 高级模式开关 hook（订阅 + 同步读 + 广播） |
+| [src/lib/registry/budget-config.ts](src/lib/registry/budget-config.ts) | budget / 截断阈值的单点事实清单 + `flattenBudgetEntry` |
+| [src/lib/registry/effective-limits.ts](src/lib/registry/effective-limits.ts) | user override 持久化 + `getEffectiveLimit` + `useEffectiveLimit` hook |
+| [src/lib/registry/assemble-context.ts](src/lib/registry/assemble-context.ts) | 装配总闸 + 各 source budget 接入可调层 |
+| [src/lib/registry/context-sources.ts](src/lib/registry/context-sources.ts) | reader 类（foreshadows / storyArcs / stateCards）接入可调层 |
+| [src/lib/ai/context-builder.ts](src/lib/ai/context-builder.ts) | reader / formatter 类（locations / historical / character / storyCore / creativeRules）接入可调层 |
+| [src/lib/ai/codex-context.ts](src/lib/ai/codex-context.ts) | codex reader 接入可调层 |
+| [src/lib/ai/prompt-engine.ts](src/lib/ai/prompt-engine.ts) | few-shot 数量上限接入可调层 |
+| [src/lib/ai/adapters/chapter-adapter.ts](src/lib/ai/adapters/chapter-adapter.ts) | 续写 `existingContent.slice(-N)` 接入可调层 |
+| [src/components/shared/FieldLimitHint.tsx](src/components/shared/FieldLimitHint.tsx) | 通用字段截断提示组件 |
+| [src/components/shared/PromptInjectionInspectorModal.tsx](src/components/shared/PromptInjectionInspectorModal.tsx) | 「查看注入 prompt」Modal |
+| [src/components/settings/AdvancedSettingsPanel.tsx](src/components/settings/AdvancedSettingsPanel.tsx) | 「高级设置」子面板：开关 + 5 分组可调表格 + 全部恢复 |
+| [src/components/settings/SettingsPage.tsx](src/components/settings/SettingsPage.tsx) | 接入 `<AdvancedSettingsPanel />` |
+| [src/components/outline/OutlinePanel.tsx](src/components/outline/OutlinePanel.tsx) | 接入「查看注入 prompt」按钮（卷级 / 章节级） |
+| [src/components/editor/ChapterEditor.tsx](src/components/editor/ChapterEditor.tsx) | 接入「查看 prompt」按钮（生成 / 续写）+ 前一章结尾长度可调 |
+| [src/components/character/CharacterPanel.tsx](src/components/character/CharacterPanel.tsx) | 7 个角色字段加截断提示，并接入 `useEffectiveLimit` |
+| [src/components/rules/CreativeRulesPanel.tsx](src/components/rules/CreativeRulesPanel.tsx) | 3 个规则字段加截断提示，并接入 `useEffectiveLimit` |
+| [src/components/worldview/StoryCorePanel.tsx](src/components/worldview/StoryCorePanel.tsx) | 主线 / 复线截断提示接入 `useEffectiveLimit` |
+| [src/components/history/HistoryPanel.tsx](src/components/history/HistoryPanel.tsx) | 事件 / 关键词描述截断提示接入 `useEffectiveLimit` |
+
+---
+
 ## v3.4.0.1 — 2026-06-14 · 历史年表升级 · 考据 / 风暴双 agent 解耦 · 提示词模板化
 
 > 本次围绕"历史年表"做了一次系统性升级：把单 agent 的"AI 考证 / 头脑风暴"二选一拆成了**两个并行的 agent**，把作者输入拆成了**四块互不污染的文本窗**，并让两个 agent 的提示词正式进入**「提示词库」可见、可克隆、可复盘**——以前是一段写死在面板里的 system prompt。
