@@ -1,6 +1,7 @@
 import type { ChatMessage } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
+import { getEffectiveLimit } from '../../registry/effective-limits'
 
 export interface RunOptions {
   parameterValues?: Record<string, unknown>
@@ -38,10 +39,12 @@ export function buildContinuePrompt(
   options?: RunOptions,
 ): ChatMessage[] {
   const tpl = usePromptStore.getState().getActive('chapter.continue')
+  // H5 — 续写时取已有正文末尾的字符数可调
+  const tailChars = getEffectiveLimit('engine.continueTail', 3000)
   const { messages } = renderPrompt(tpl, {
     chapterSummary,
     worldContext: worldContext || '（暂无）',
-    existingContent: existingContent.slice(-3000),
+    existingContent: existingContent.slice(-tailChars),
     userHint,
   }, options)
   return messages

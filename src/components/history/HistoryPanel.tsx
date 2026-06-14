@@ -16,6 +16,8 @@ import type { Project, HistoricalTimelineEvent, HistoricalEra, HistoricalKeyword
 import { HISTORICAL_ERA_LABELS, KEYWORD_CATEGORY_LABELS } from '../../lib/types/history'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import { useDialog } from '../shared/Dialog'
+import FieldLimitHint from '../shared/FieldLimitHint'
+import { useEffectiveLimit } from '../../lib/registry/effective-limits'
 
 interface Props {
   project: Project
@@ -92,6 +94,10 @@ export default function HistoryPanel({ project }: Props) {
   const consultAI = useAIStream()
   const stormAI = useAIStream()
   const { worldview, loadAll: loadWorldview } = useWorldviewStore()
+
+  // H3 — 历史年表 description 截断阈值（与 buildHistoricalContext 保持同步）
+  const limEventDesc = useEffectiveLimit('reader.historical.event描述', 80)
+  const limKeywordDesc = useEffectiveLimit('reader.historical.关键词描述', 40)
 
   // 多世界：让 worldview store 跟随当前世界标签，保证历史 AI 考证读到对的世界设定
   useEffect(() => {
@@ -662,6 +668,12 @@ export default function HistoryPanel({ project }: Props) {
                                 placeholder="作者打磨好的最终条目内容，将作为 AI 写作的历史背景注入。例如：『公元 712 年，李隆基即位为唐玄宗，开元之治始。』"
                                 className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
                               />
+                              <FieldLimitHint
+                                value={evt.description}
+                                limit={limEventDesc}
+                                unit="chars"
+                                note="注入大纲 / 正文写作时，事件描述会按此长度截断；事件名称、时间、地理范围另算。"
+                              />
                             </div>
 
                             {/* 对剧情/世界的影响（属于条目定稿的语义补充，紧跟其后；放在 AI 工作区之上） */}
@@ -1106,6 +1118,12 @@ export default function HistoryPanel({ project }: Props) {
                               onChange={e => updateKeyword(kw.id!, { description: e.target.value })}
                               placeholder="作者打磨好的最终条目内容，将作为 AI 写作的历史细节注入。例如：『飞钱：唐宪宗时期出现的汇兑凭证，由邸店或商号代为兑付。』"
                               className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+                            />
+                            <FieldLimitHint
+                              value={kw.description}
+                              limit={limKeywordDesc}
+                              unit="chars"
+                              note="注入大纲 / 正文写作时，关键词描述会按此长度截断；关键词名、分类、时期另算。"
                             />
                           </div>
 

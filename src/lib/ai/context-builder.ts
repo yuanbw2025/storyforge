@@ -4,6 +4,7 @@ import { KEYWORD_CATEGORY_LABELS } from '../types/history'
 import { DIMENSION_LABELS, ANALYSIS_DIMENSIONS } from '../types/reference'
 import { loadContextMemo } from '../export/context-snapshot'
 import { db } from '../db/schema'
+import { getEffectiveLimit } from '../registry/effective-limits'
 
 /** 获取已缓存的上下文快照（如果有） */
 export function getContextMemo(projectId: number): string {
@@ -23,13 +24,17 @@ const POV_LABELS: Record<string, string> = {
  */
 export function buildCreativeRulesContext(rules: CreativeRules | null): string {
   if (!rules) return ''
+  // H5 — 可调阈值
+  const styleChars = getEffectiveLimit('fmt.rules.style', 200)
+  const atmoChars = getEffectiveLimit('fmt.rules.atmosphere', 150)
+  const specialChars = getEffectiveLimit('fmt.rules.special', 200)
   const parts: string[] = []
-  if (rules.writingStyle) parts.push(`写作风格：${rules.writingStyle.slice(0, 200)}`)
+  if (rules.writingStyle) parts.push(`写作风格：${rules.writingStyle.slice(0, styleChars)}`)
   const pov = rules.narrativePOV
   if (pov) parts.push(`叙事视角：${POV_LABELS[pov] || pov}`)
   const atmosphere = rules.atmosphere || rules.toneAndMood
-  if (atmosphere) parts.push(`基调氛围：${atmosphere.slice(0, 150)}`)
-  if (rules.specialRequirements) parts.push(`特殊要求：${rules.specialRequirements.slice(0, 200)}`)
+  if (atmosphere) parts.push(`基调氛围：${atmosphere.slice(0, atmoChars)}`)
+  if (rules.specialRequirements) parts.push(`特殊要求：${rules.specialRequirements.slice(0, specialChars)}`)
   try {
     const proh: string[] = JSON.parse(rules.prohibitions || '[]')
     if (proh.length) parts.push(`禁止事项：${proh.join('；').slice(0, 200)}`)
@@ -100,13 +105,16 @@ export function formatWorldviewBlock(wv: Worldview | null): string {
 /** 格式化故事核心为【故事核心】块（全字段）。 */
 export function formatStoryCoreBlock(sc: StoryCore | null): string {
   if (!sc) return ''
+  // H5 — 可调阈值
+  const mainPlotChars = getEffectiveLimit('fmt.storyCore.mainPlot', 250)
+  const subPlotsChars = getEffectiveLimit('fmt.storyCore.subPlots', 200)
   const parts = [
     sc.logline && `一句话故事：${sc.logline}`,
     sc.theme && `主题：${sc.theme}`,
     sc.centralConflict && `核心冲突：${sc.centralConflict}`,
     sc.plotPattern && `情节模式：${sc.plotPattern}`,
-    (sc.mainPlot || sc.storyLines) && `主线：${(sc.mainPlot || sc.storyLines).slice(0, 250)}`,
-    sc.subPlots && `复线：${sc.subPlots.slice(0, 200)}`,
+    (sc.mainPlot || sc.storyLines) && `主线：${(sc.mainPlot || sc.storyLines).slice(0, mainPlotChars)}`,
+    sc.subPlots && `复线：${sc.subPlots.slice(0, subPlotsChars)}`,
   ].filter(Boolean)
   return parts.length ? `【故事核心】\n${parts.join('\n')}` : ''
 }
@@ -179,6 +187,15 @@ export function buildWorldContext(wv: Worldview | null, sc: StoryCore | null, ps
 export function buildCharacterContext(characters: Character[]): string {
   if (!characters.length) return ''
 
+  // H5 — 可调阈值
+  const appearanceChars = getEffectiveLimit('fmt.character.appearance', 150)
+  const personalityChars = getEffectiveLimit('fmt.character.personality', 150)
+  const backgroundChars = getEffectiveLimit('fmt.character.background', 200)
+  const motivationChars = getEffectiveLimit('fmt.character.motivation', 150)
+  const abilitiesChars = getEffectiveLimit('fmt.character.abilities', 150)
+  const arcChars = getEffectiveLimit('fmt.character.arc', 150)
+  const relChars = getEffectiveLimit('fmt.character.relationships', 80)
+
   const core = characters.filter(c => c.role === 'protagonist' || c.role === 'antagonist')
   const supporting = characters.filter(c => c.role === 'supporting')
   const others = characters.filter(c => c.role !== 'protagonist' && c.role !== 'antagonist' && c.role !== 'supporting')
@@ -191,12 +208,12 @@ export function buildCharacterContext(characters: Character[]): string {
       const details = [
         `${c.name}（${getRoleLabel(c.role)}）`,
         c.shortDescription ? `简介：${c.shortDescription}` : '',
-        c.appearance ? `外貌：${c.appearance.slice(0, 150)}` : '',
-        c.personality ? `性格：${c.personality.slice(0, 150)}` : '',
-        c.background ? `背景：${c.background.slice(0, 200)}` : '',
-        c.motivation ? `动机：${c.motivation.slice(0, 150)}` : '',
-        c.abilities ? `能力：${c.abilities.slice(0, 150)}` : '',
-        c.arc ? `成长弧线：${c.arc.slice(0, 150)}` : '',
+        c.appearance ? `外貌：${c.appearance.slice(0, appearanceChars)}` : '',
+        c.personality ? `性格：${c.personality.slice(0, personalityChars)}` : '',
+        c.background ? `背景：${c.background.slice(0, backgroundChars)}` : '',
+        c.motivation ? `动机：${c.motivation.slice(0, motivationChars)}` : '',
+        c.abilities ? `能力：${c.abilities.slice(0, abilitiesChars)}` : '',
+        c.arc ? `成长弧线：${c.arc.slice(0, arcChars)}` : '',
       ].filter(Boolean).join('；')
       parts.push(details)
     }
@@ -205,7 +222,7 @@ export function buildCharacterContext(characters: Character[]): string {
   if (supporting.length) {
     parts.push('【重要配角（一句话+关系）】')
     for (const c of supporting) {
-      parts.push(`${c.name}：${c.shortDescription || '（无描述）'}${c.relationships ? `，关系：${c.relationships.slice(0, 80)}` : ''}`)
+      parts.push(`${c.name}：${c.shortDescription || '（无描述）'}${c.relationships ? `，关系：${c.relationships.slice(0, relChars)}` : ''}`)
     }
   }
 
@@ -293,7 +310,10 @@ export async function buildRefAnalysisContext(refIds: number[]): Promise<string>
  * Token 预算控制：最多 2000 字（约上下文窗口的 10%）。
  */
 export async function buildHistoricalContext(projectId: number, worldGroupId?: number | null): Promise<string> {
-  const MAX_CHARS = 2000
+  // H5 — 可调阈值（注意 reader.historical 整体字符上限）
+  const MAX_CHARS = getEffectiveLimit('reader.historical', 2000)
+  const eventDescChars = getEffectiveLimit('reader.historical.event描述', 80)
+  const keywordDescChars = getEffectiveLimit('reader.historical.关键词描述', 40)
   const parts: string[] = []
   let charCount = 0
   const project = await db.projects.get(projectId)
@@ -311,7 +331,7 @@ export async function buildHistoricalContext(projectId: number, worldGroupId?: n
     const eventLines: string[] = ['【历史时间线】']
     for (const e of events) {
       const marker = e.isHistorical ? '📜史实' : '✨虚构'
-      const line = `- ${e.date}（${marker}）：${e.title}${e.description ? `——${e.description.slice(0, 80)}` : ''}`
+      const line = `- ${e.date}（${marker}）：${e.title}${e.description ? `——${e.description.slice(0, eventDescChars)}` : ''}`
       if (charCount + line.length > MAX_CHARS * 0.6) break // 事件最多占 60%
       eventLines.push(line)
       charCount += line.length
@@ -338,7 +358,7 @@ export async function buildHistoricalContext(projectId: number, worldGroupId?: n
     for (const [cat, kws] of byCategory) {
       const label = KEYWORD_CATEGORY_LABELS[cat] || cat
       const items = kws.map(k => {
-        const desc = k.description ? `（${k.description.slice(0, 40)}）` : ''
+        const desc = k.description ? `（${k.description.slice(0, keywordDescChars)}）` : ''
         return `${k.keyword}${desc}`
       }).join('、')
       const line = `· ${label}：${items}`
@@ -363,11 +383,14 @@ export async function buildHistoricalContext(projectId: number, worldGroupId?: n
 export async function buildLocationContext(projectId: number): Promise<string> {
   const locs = await db.importantLocations.where('projectId').equals(projectId).toArray()
   if (!locs.length) return ''
-  const sorted = locs.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).slice(0, 25)
+  // H5 — 可调阈值
+  const maxItems = getEffectiveLimit('reader.locations.最多条数', 25)
+  const totalChars = getEffectiveLimit('reader.locations.总字符上限', 1200)
+  const sorted = locs.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).slice(0, maxItems)
   const lines = sorted.map(l => {
     const sig = l.significance ? `（${l.significance.slice(0, 50)}）` : ''
     const desc = l.description ? `：${l.description.slice(0, 60)}` : ''
     return `- ${l.name}${sig}${desc}`
   })
-  return `【重要地点】\n${lines.join('\n')}`.slice(0, 1200)
+  return `【重要地点】\n${lines.join('\n')}`.slice(0, totalChars)
 }

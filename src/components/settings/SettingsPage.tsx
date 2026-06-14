@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BookOpen } from 'lucide-react'
 import AIConfigPanel from './AIConfigPanel'
+import AdvancedSettingsPanel from './AdvancedSettingsPanel'
 import { resetWelcomeGuide } from '../guide/WelcomeGuide'
 
 /**
@@ -14,6 +15,9 @@ export default function SettingsPage() {
   return (
     <div className="h-full overflow-auto p-6">
       <AIConfigPanel />
+
+      {/* H2 — 高级设置子面板：默认折叠隐藏；开关打开后暴露 budget / 截断阈值 */}
+      <AdvancedSettingsPanel />
 
       {/* 其他设置 */}
       <div className="max-w-2xl mt-6 p-4 bg-bg-surface border border-border rounded-xl">

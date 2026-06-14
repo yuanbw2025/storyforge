@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Plus, Trash2, Sparkles, ChevronRight, ChevronDown, Check, X, LayoutList, Layers, Loader2, GripVertical, CornerDownRight } from 'lucide-react'
+import { Plus, Trash2, Sparkles, ChevronRight, ChevronDown, Check, X, LayoutList, Layers, Loader2, GripVertical, CornerDownRight, Eye } from 'lucide-react'
 import { useOutlineStore } from '../../stores/outline'
 import { useDragReorder, type ItemDnD } from './useDragReorder'
 import { useWorldviewStore } from '../../stores/worldview'
@@ -23,6 +23,9 @@ import AutoResizeTextarea from '../shared/AutoResizeTextarea'
 import { CInput } from '../shared/CompositionInput'
 import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
+import PromptInjectionInspectorModal, { type InspectorPayload } from '../shared/PromptInjectionInspectorModal'
+import { useAdvancedMode } from '../../hooks/useAdvancedMode'
+import { getModelPreset } from '../../lib/ai/context-budget'
 import type { Project, StoryStructure } from '../../lib/types'
 import { STORY_STRUCTURES } from '../../lib/types/outline'
 
@@ -75,6 +78,10 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const [batchResult, setBatchResult] = useState<Map<number, ParsedChapter[]> | null>(null)
 
   const ai = useAIStream()
+
+  // H4 — 注入 prompt 预览（仅高级模式显示按钮 + Modal）
+  const [advancedMode] = useAdvancedMode()
+  const [inspectorOpen, setInspectorOpen] = useState<null | 'volume' | 'chapter'>(null)
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
 
@@ -223,6 +230,44 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     const messages = buildChapterOutlinePrompt(selectedVol.title, selectedVol.summary, worldCtx, prevSummary, hint, buildOpts(), charCtx, rulesCtx)
     ai.start(messages, undefined, { category: 'outline.chapter', projectId: project.id! })
   }
+
+  /** 装配预览 payload。装配口径与 handleAIVolumes / handleAIChapters 完全一致，避免漂移。 */
+  const buildInspectorPayload = useCallback(async (kind: 'volume' | 'chapter'): Promise<InspectorPayload | null> => {
+    if (kind === 'chapter' && !selectedVol) return null
+    const groupId = kind === 'volume' ? null : (selectedVol?.worldGroupId ?? null)
+    const nodeId = kind === 'volume' ? null : selectedVol?.id
+    const assembled = await buildOutlineAssembledContext(groupId, nodeId)
+    const worldCtx = assembled.text
+    const charCtx = contextPart(assembled, 'characters')
+    const rulesCtx = contextPart(assembled, 'worldRules')
+
+    let messages
+    if (kind === 'volume') {
+      const scCtx = storyCore
+        ? `主题：${storyCore.theme}\n冲突：${storyCore.centralConflict}\n主线：${storyCore.mainPlot || storyCore.storyLines || ''}${storyCore.subPlots ? `\n复线：${storyCore.subPlots}` : ''}`
+        : ''
+      messages = buildVolumeOutlinePrompt(
+        project.name, project.genre, worldCtx, scCtx, project.targetWordCount || 500000, hint, buildOpts(), charCtx, rulesCtx,
+      )
+    } else {
+      const volIdx = volumes.indexOf(selectedVol!)
+      const prevSummary = volIdx > 0 ? volumes[volIdx - 1].summary : ''
+      messages = buildChapterOutlinePrompt(
+        selectedVol!.title, selectedVol!.summary, worldCtx, prevSummary, hint, buildOpts(), charCtx, rulesCtx,
+      )
+    }
+    const preset = getModelPreset(aiConfig.provider, aiConfig.model)
+    const modelMaxContext = (aiConfig.contextWindow && aiConfig.contextWindow > 0)
+      ? aiConfig.contextWindow
+      : preset.maxContext
+    return {
+      messages,
+      assembled,
+      category: kind === 'volume' ? '卷级大纲' : '章节大纲展开',
+      modelMaxContext,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVol, storyCore, project.name, project.genre, project.targetWordCount, hint, volumes, aiConfig.provider, aiConfig.model, aiConfig.contextWindow, parameterValues, systemOverride, userOverride])
 
   // ── D1: 批量生成 ──
 
@@ -428,6 +473,16 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors">
           <Sparkles className="w-3.5 h-3.5" /> AI 生成卷级大纲
         </button>
+        {advancedMode && (
+          <button
+            onClick={() => setInspectorOpen('volume')}
+            disabled={batchRunning}
+            title="查看本次「AI 生成卷级大纲」会装入的所有上下文段、messages 与 token 占用"
+            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-[11px] bg-bg-elevated text-amber-400 rounded-md hover:bg-amber-500/10 border border-amber-500/30 disabled:opacity-50 transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" /> 查看注入 prompt（卷级）
+          </button>
+        )}
         {volumes.length >= 2 && (
           <button onClick={handleBatchGenerate} disabled={ai.isStreaming || batchRunning}
             className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-bg-elevated text-accent rounded-md hover:bg-accent/10 border border-accent/30 disabled:opacity-50 transition-colors">
@@ -602,6 +657,15 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors">
                   <Sparkles className="w-3.5 h-3.5" /> AI 生成章节
                 </button>
+                {advancedMode && (
+                  <button
+                    onClick={() => setInspectorOpen('chapter')}
+                    title="查看本次「AI 生成章节」会装入的所有上下文段、messages 与 token 占用"
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] bg-bg-elevated text-amber-400 rounded-md hover:bg-amber-500/10 border border-amber-500/30 transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> 查看 prompt
+                  </button>
+                )}
                 <button onClick={() => handleAddChapter()}
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-bg-elevated text-text-secondary rounded-md hover:text-text-primary border border-border transition-colors">
                   <Plus className="w-3.5 h-3.5" /> 添加章节
@@ -708,6 +772,13 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           </div>
         )}
       </div>
+
+      {/* H4 — 注入 prompt 预览 Modal（仅高级模式开启时按钮才会触发） */}
+      <PromptInjectionInspectorModal
+        open={inspectorOpen != null}
+        buildPayload={() => inspectorOpen ? buildInspectorPayload(inspectorOpen) : null}
+        onClose={() => setInspectorOpen(null)}
+      />
     </PanelLayout>
   )
 }

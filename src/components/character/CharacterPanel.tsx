@@ -3,6 +3,8 @@ import {
   Plus, Sparkles, Trash2, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import { InlineInput, InlineTextarea } from '../shared/InlineEdit'
+import FieldLimitHint from '../shared/FieldLimitHint'
+import { useEffectiveLimit } from '../../lib/registry/effective-limits'
 import { useCharacterStore } from '../../stores/character'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -353,14 +355,26 @@ function CharacterDetailCard({
   const [expanded, setExpanded] = useState(true)
   const glyphColor = GLYPH_COLORS[charIndex % GLYPH_COLORS.length]
 
-  const fields: { key: keyof Character; label: string }[] = [
-    { key: 'appearance',   label: '外貌' },
-    { key: 'personality',  label: '性格' },
-    { key: 'background',   label: '背景故事' },
-    { key: 'motivation',   label: '动机' },
-    { key: 'abilities',    label: '能力' },
-    { key: 'relationships', label: '人物关系' },
-    { key: 'arc',          label: '角色弧' },
+  // H3 — 各字段在 buildCharacterContext 里的 slice 阈值。读 effective-limits，
+  // 与高级设置面板里写的覆盖值实时同步（仅主角 / 反派档位会注入这些字段，
+  // supporting 档位只注入 shortDescription + relationships，其余档位完全只剩名字）。
+  const limAppearance   = useEffectiveLimit('fmt.character.appearance', 150)
+  const limPersonality  = useEffectiveLimit('fmt.character.personality', 150)
+  const limBackground   = useEffectiveLimit('fmt.character.background', 200)
+  const limMotivation   = useEffectiveLimit('fmt.character.motivation', 150)
+  const limAbilities    = useEffectiveLimit('fmt.character.abilities', 150)
+  const limArc          = useEffectiveLimit('fmt.character.arc', 150)
+  const limRelationship = useEffectiveLimit('fmt.character.relationships', 80)
+
+  const fields: { key: keyof Character; label: string; limit?: number; note?: string }[] = [
+    { key: 'appearance',    label: '外貌',     limit: limAppearance,   note: '主角 / 反派档位会注入；超出会被截断。' },
+    { key: 'personality',   label: '性格',     limit: limPersonality,  note: '主角 / 反派档位会注入；超出会被截断。' },
+    { key: 'background',    label: '背景故事', limit: limBackground,   note: '主角 / 反派档位会注入；超出会被截断。' },
+    { key: 'motivation',    label: '动机',     limit: limMotivation,   note: '主角 / 反派档位会注入；超出会被截断。' },
+    { key: 'abilities',     label: '能力',     limit: limAbilities,    note: '主角 / 反派档位会注入；超出会被截断。' },
+    { key: 'relationships', label: '人物关系', limit: limRelationship,
+      note: '注意：仅在「重要配角」档位时注入 prompt 并按上述长度截断；主角 / 反派档位中此字段不会进入 AI 上下文。' },
+    { key: 'arc',           label: '角色弧',   limit: limArc,          note: '主角 / 反派档位会注入；超出会被截断。' },
   ]
 
   return (
@@ -468,6 +482,14 @@ function CharacterDetailCard({
                     onChange={v => onUpdate(f.key, v)}
                     placeholder={`点击填写${f.label}…`}
                   />
+                  {f.limit !== undefined && (
+                    <FieldLimitHint
+                      value={val}
+                      limit={f.limit}
+                      unit="chars"
+                      note={f.note}
+                    />
+                  )}
                 </div>
               </div>
             )
