@@ -8,7 +8,7 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 33 个 moduleKey。
+共 35 个 moduleKey。
 
 | moduleKey | 名称 | 说明 | 读取变量 |
 |---|---|---|---|
@@ -44,6 +44,8 @@
 | `inventory.extract` | 内置-物品栏提取 | 从章节正文提取主角的物品获得/消耗事件，构建游戏包裹式物品栏。 | `chapterTitle` `chapterText` |
 | `story-timeline.extract` | 内置-故事年表提取 | 从章节正文提取剧情大事，构建故事进程年表（区别于世界背景历史）。 | `chapterTitle` `chapterText` |
 | `scene.verify` | 内置-场景考证 | 用户描述当前场景，AI 结合世界观/历史年表/世界规则给出符合背景的细节、时代错乱警示与情节灵感。 | `worldContext` `historyContext` `worldRulesContext` `scene` `sceneEra` `sceneLocation` |
+| `history.consult` | 内置-历史考据 agent | 历史年表条目的考据 agent。挑剔但合作，绝不顺着作者的错误假设编造细节；尊重作者已声明的艺术改造/架空范围。 | `itemMeta` `finalText` `conceptNote` `consultPrompt` `worldContext` |
+| `history.storm` | 内置-头脑风暴 agent | 历史年表条目的头脑风暴 agent。围绕作者已设定的方向发散可写素材，尊重作者声明的艺术改造范围。 | `itemMeta` `finalText` `conceptNote` `stormPrompt` `worldContext` |
 | `style.learn` | 内置-文风学习 | 从用户已定稿/润色的章节中,总结出其个人写作文风画像,供后续章节生成参考。 | `sampleCount` `sampleWords` `samples` `userHint` |
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
@@ -94,7 +96,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 41 个 category。
+共 39 个 category。
 未分类调用: 0 个。动态 category 调用: 1 个。
 
 | category | 触发文件 |
@@ -115,8 +117,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:158` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:110` |
 | `geography.world-map` | `src/components/geography/WorldMapPanel.tsx:98` |
-| `history.consult` | `src/components/history/HistoryPanel.tsx:221` |
-| `history.keyword` | `src/components/history/HistoryPanel.tsx:271` |
 | `inspiration.reverse` | `src/components/project/InspirationPanel.tsx:110` |
 | `inventory.extract` | `src/components/items/InventoryPanel.tsx:63` |
 | `outline.chapter` | `src/components/outline/OutlinePanel.tsx:224`<br/>`src/lib/ai/batch-outline-runner.ts:123` |
@@ -147,4 +147,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `81f3b1e`
+生成时间基准:commit `286a042`

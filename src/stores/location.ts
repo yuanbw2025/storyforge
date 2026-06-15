@@ -43,15 +43,24 @@ export const useLocationStore = create<LocationStore>((set, get) => ({
       ...data,
       createdAt: now,
       updatedAt: now,
-    } as ImportantLocation)
-    await get().loadAll(data.projectId)
-    return id as number
+    } as ImportantLocation) as number
+    // 局部 set：不触发 loading 闪烁，避免编辑中的 input 失焦
+    const newRow: ImportantLocation = { ...data, id, createdAt: now, updatedAt: now } as ImportantLocation
+    set({ locations: [...get().locations, newRow].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)) })
+    return id
   },
 
   updateLocation: async (id, patch) => {
-    await db.importantLocations.update(id, { ...patch, updatedAt: Date.now() })
-    const loc = await db.importantLocations.get(id)
-    if (loc) await get().loadAll(loc.projectId)
+    const now = Date.now()
+    await db.importantLocations.update(id, { ...patch, updatedAt: now })
+    // 关键修复：原实现走 loadAll(projectId)，会先 set({ loading: true })，
+    // 让 LocationPanel 顶层 `if (loading)` 分支命中 skeleton，导致正在编辑的
+    // input 被卸载重建、焦点丢失（表现为"每输入一个字符就退出编辑"）。
+    // 改为局部 patch：只替换数组里那一项，loading 不再翻转。
+    const next = get().locations.map(l =>
+      l.id === id ? ({ ...l, ...patch, updatedAt: now } as ImportantLocation) : l
+    )
+    set({ locations: next })
   },
 
   deleteLocation: async (id) => {
@@ -76,16 +85,21 @@ export const useLocationStore = create<LocationStore>((set, get) => ({
     collect(id)
 
     await db.importantLocations.bulkDelete([...toDelete])
-    await get().loadAll(loc.projectId)
+    // 局部 set，避免 loading 闪烁
+    set({ locations: get().locations.filter(l => l.id != null && !toDelete.has(l.id)) })
   },
 
   moveLocation: async (id, newParentId) => {
+    const now = Date.now()
     await db.importantLocations.update(id, {
       parentId: newParentId,
-      updatedAt: Date.now(),
+      updatedAt: now,
     })
-    const loc = await db.importantLocations.get(id)
-    if (loc) await get().loadAll(loc.projectId)
+    // 局部 set，避免 loading 闪烁
+    const next = get().locations.map(l =>
+      l.id === id ? ({ ...l, parentId: newParentId, updatedAt: now } as ImportantLocation) : l
+    )
+    set({ locations: next })
   },
 
   getTree: () => {

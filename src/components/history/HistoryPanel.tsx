@@ -9,7 +9,9 @@ import { useHistoricalStore } from '../../stores/historical'
 import { useChapterStore } from '../../stores/chapter'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
+import { usePromptStore } from '../../stores/prompt'
 import { useAIStream } from '../../hooks/useAIStream'
+import { renderPrompt } from '../../lib/ai/prompt-engine'
 import type { Project, HistoricalTimelineEvent, HistoricalEra, HistoricalKeyword, HistoricalKeywordCategory } from '../../lib/types'
 import { HISTORICAL_ERA_LABELS, KEYWORD_CATEGORY_LABELS } from '../../lib/types/history'
 import AIStreamOutput from '../shared/AIStreamOutput'
@@ -77,14 +79,18 @@ export default function HistoryPanel({ project }: Props) {
   // ── UI 状态 ──
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [expandedKeywordId, setExpandedKeywordId] = useState<number | null>(null)
-  const [aiEventId, setAiEventId] = useState<number | null>(null)
-  const [aiKeywordId, setAiKeywordId] = useState<number | null>(null)
+  // 双 agent 各自维护一个流：consult = 历史考据；storm = 头脑风暴
+  const [consultEventId, setConsultEventId] = useState<number | null>(null)
+  const [stormEventId, setStormEventId] = useState<number | null>(null)
+  const [consultKeywordId, setConsultKeywordId] = useState<number | null>(null)
+  const [stormKeywordId, setStormKeywordId] = useState<number | null>(null)
 
   // ── 筛选状态 ──
   const [filterCategory, setFilterCategory] = useState<HistoricalKeywordCategory | 'all'>('all')
   const [filterEra, setFilterEra] = useState<HistoricalEra | 'all'>('all')
 
-  const ai = useAIStream()
+  const consultAI = useAIStream()
+  const stormAI = useAIStream()
   const { worldview, loadAll: loadWorldview } = useWorldviewStore()
 
   // 多世界：让 worldview store 跟随当前世界标签，保证历史 AI 考证读到对的世界设定
@@ -174,115 +180,138 @@ export default function HistoryPanel({ project }: Props) {
     setExpandedKeywordId(newId)
   }
 
-  // ── AI 历史考证 ──
+  // ── AI 历史考据（consult agent）——
+  // System / user prompt 来自「提示词库」history.consult 模板，作者在提示词库可编辑。
   const handleAIConsult = (evt: HistoricalTimelineEvent) => {
     if (!evt.id) return
-    setAiEventId(evt.id)
-    setAiKeywordId(null)
-
-    const systemPrompt = `你是一位极其严谨、甚至有些挑剔的全球历史学家与小说考证顾问。
-你的首要原则是：**绝对不迎合、不顺从作者可能存在的错误假设，坚决捍卫历史真实性，杜绝时代错乱（Anachronism）**。
-
-请根据用户提供的事件信息，严格执行以下【三步考证法】：
-
-### 第一步：【前提真实性判定】（核心自查）
-- 仔细审视事件的“标题/描述”、“历史时期/年份”、“具体时间范围/区间”与“地理位置/范围”的组合。
-- 提出严厉的质疑：**在那个时代、那个地区，这个事物、技术、制度或事件真的存在吗？是否超前了？是否不符合当地的文化/科技水平？**
-- **如果作者提供了【具体时间范围/区间】或【地理位置/范围】**，你必须将考证精准锁定在这一特定的时间段和地理区域内（例如：如果地理位置是“江南地区”，细节应侧重于吴越文化、水乡特色、南方经济等；如果是“君士坦丁堡”，细节应侧重于拜占庭帝国、东正教、地中海贸易等）。
-- **如果发现时代错乱、地理错乱或史实硬伤**（例如：宋代出现近视眼镜、唐代出现红薯/辣椒/土豆、汉代出现铁锅炒菜、明代以前出现棉被等）：
-  1. 你必须**在回答的最开头，立即、明确、严厉地指出这一错误**，并用无可辩驳的史实解释为什么不对。
-  2. **绝对不能**顺着作者的错误假设去编造细节。
-  3. 给出【历史替代方案】：在当时的历史条件和地理环境下，人们实际上会怎么做？
-- **如果前提完全符合史实**：简要确认其真实性，并指出其在历史上的精确时间、关键人物和历史影响。
-
-### 第二步：【时代质感与名词考证】（仅在前提合理，或提供替代方案后进行）
-- 提供该事物/事件在当时、当地的专业称谓、行话、官职或细分类型（例如：如果是西方中世纪，使用符合当时封建领主制的称谓，避免中国古代官制词汇）。
-- 提供 2-3 个生动的、不为人知的历史细节（如当时的服饰、器物、称谓、社会风貌），帮助作者增加小说的真实感和沉浸感。
-- 提供史料出处（如《史记》《资治通鉴》《宋史 · 舆服志》或西方相关历史文献等）。
-
-### 第三步：【历史重力下的情节冲突】
-- 结合真实的历史限制（如当时的律法、技术、社会阶层、道德禁忌、地理环境），为作者提供 2 个极具张力的小说情节冲突灵感。
-
-请使用 Markdown 格式输出，排版清晰。语言要专业、严谨、有启发性，直接输出考证结果，不要有任何客套话。`
+    setConsultEventId(evt.id)
 
     const eraLabel = HISTORICAL_ERA_LABELS[evt.era as HistoricalEra] || evt.era
-    const worldCtx = getWorldContext()
-    const userPrompt = `【事件信息】
-- 标题：${evt.title}
-- 历史时期：${eraLabel}
-- 数字化年份：${evt.year} (公元 ${evt.year > 0 ? evt.year : '前 ' + Math.abs(evt.year)} 年)
-- 时间描述：${evt.date}
-${evt.customTimeRange ? `- 具体时间范围/区间：${evt.customTimeRange}` : ''}
-${evt.location ? `- 地理位置/范围：${evt.location}` : ''}
-- 事件描述：${evt.description}
-- 是否为真实史实：${evt.isHistorical ? '是 (史实考证模式)' : '否 (虚构细节头脑风暴模式)'}
-- 现有史料来源：${evt.source || '无'}${worldCtx}`
+    const itemMeta = [
+      `- 标题：${evt.title}`,
+      `- 历史时期：${eraLabel}`,
+      `- 数字化年份：${evt.year} (公元 ${evt.year > 0 ? evt.year : '前 ' + Math.abs(evt.year)} 年)`,
+      `- 时间描述：${evt.date}`,
+      evt.customTimeRange ? `- 具体时间范围/区间：${evt.customTimeRange}` : '',
+      evt.location ? `- 地理位置/范围：${evt.location}` : '',
+      `- 是否标记为真实史实：${evt.isHistorical ? '是' : '否（作者已声明为虚构 / 架空）'}`,
+      `- 现有史料来源：${evt.source || '无'}`,
+    ].filter(Boolean).join('\n')
 
-    ai.start([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ], undefined, { category: 'history.consult', projectId: project.id! })
+    const tpl = usePromptStore.getState().getActive('history.consult')
+    const { messages } = renderPrompt(tpl, {
+      itemMeta,
+      finalText: evt.description || '（条目定稿暂未填写）',
+      conceptNote: (evt.conceptNote || '').trim(),
+      consultPrompt: (evt.consultPrompt || '').trim(),
+      worldContext: getWorldContext().replace(/^\n\n=== [^\n]+ ===\n/, ''),
+    })
+
+    consultAI.start(messages, undefined, { category: 'history.consult', projectId: project.id! })
   }
 
-  // ── AI 关键词细节头脑风暴 ──
-  const handleAIKeywordStorm = (kw: HistoricalKeyword) => {
+  // ── AI 头脑风暴（storm agent）——
+  const handleAIStorm = (evt: HistoricalTimelineEvent) => {
+    if (!evt.id) return
+    setStormEventId(evt.id)
+
+    const eraLabel = HISTORICAL_ERA_LABELS[evt.era as HistoricalEra] || evt.era
+    const itemMeta = [
+      `- 标题：${evt.title}`,
+      `- 历史时期：${eraLabel}`,
+      `- 数字化年份：${evt.year} (公元 ${evt.year > 0 ? evt.year : '前 ' + Math.abs(evt.year)} 年)`,
+      `- 时间描述：${evt.date}`,
+      evt.customTimeRange ? `- 具体时间范围/区间：${evt.customTimeRange}` : '',
+      evt.location ? `- 地理位置/范围：${evt.location}` : '',
+      `- 作者标记：${evt.isHistorical ? '基于真实史实' : '虚构 / 架空，发散自由度更高'}`,
+    ].filter(Boolean).join('\n')
+
+    const tpl = usePromptStore.getState().getActive('history.storm')
+    const { messages } = renderPrompt(tpl, {
+      itemMeta,
+      finalText: evt.description || '（条目定稿暂未填写）',
+      conceptNote: (evt.conceptNote || '').trim(),
+      stormPrompt: (evt.stormPrompt || '').trim(),
+      worldContext: getWorldContext().replace(/^\n\n=== [^\n]+ ===\n/, ''),
+    })
+
+    stormAI.start(messages, undefined, { category: 'history.storm', projectId: project.id! })
+  }
+
+  // ── AI 关键词历史考据 ──
+  const handleAIKeywordConsult = (kw: HistoricalKeyword) => {
     if (!kw.id) return
-    setAiKeywordId(kw.id)
-    setAiEventId(null)
-
-    const systemPrompt = `你是一位极其严谨、精通全球物质文化史和文学创作的历史学家与小说顾问。
-你的首要原则是：**绝对不迎合、不顺从作者可能存在的错误假设，坚决捍卫历史真实性，杜绝时代错乱（Anachronism）**。
-
-请根据用户提供的关键词信息，严格执行以下【四步风暴法】：
-
-### 第一步：【存在性与时代判定】（核心自查）
-- 仔细审视“关键词”、“适用历史时期”、“具体时间范围/区间”与“地理位置/范围”的组合。
-- 提出严厉的质疑：**在那个时代、那个地区，这个东西、技术、制度或概念真的存在吗？是否超前了？是否不符合当地的文化/科技水平？**
-- **如果作者提供了【具体时间范围/区间】或【地理位置/范围】**，你必须将头脑风暴和细节精准锁定在这一特定的时间段和地理区域内（例如：如果地理位置是“江南地区”，细节应侧重于吴越文化、水乡特色、南方经济等；如果是“君士坦丁堡”，细节应侧重于拜占庭帝国、东正教、地中海贸易等）。
-- **如果发现时代错乱、地理错乱或史实硬伤**（例如：两宋出现近视眼镜、唐代出现红薯/辣椒/土豆、汉代出现铁锅炒菜、明代以前出现棉被等）：
-  1. 你必须**在回答的最开头，立即、明确、严厉地指出这一错误**，并用无可辩驳的史实解释为什么不对。
-  2. **绝对不能**顺着作者的错误假设去编造细节。
-  3. 给出【历史替代方案】：在当时的历史条件和地理环境下，最接近的替代事物是什么？
-- **如果完全符合时代背景**：简要确认其在当时的普及程度和历史定位。
-
-### 第二步：【时代质感与名词考证】（仅在前提合理，或提供替代方案后进行）
-- 提供该事物在当时、当地的专业称谓、行话、相关工具或细分类型。避免任何现代词汇，并使用符合当地文化背景的词汇。
-- 详细描述该事物是如何制造、运作、或该制度是如何执行的（例如：如果是织布机，描述丝织工艺、经纬线、提花楼；如果是科举，描述锁院、糊名、誊录、考棚一日三餐等）。
-
-### 第三步：【社会与生活图景】
-- 描述与该事物相关的社会阶层、日常生活、经济价值或风俗习惯（例如：机户的税负、文人对园林美学的追求、官吏的日常应酬等）。
-
-### 第四步：【历史重力下的情节冲突】
-- 结合真实的历史限制（如当时的律法、技术、社会阶层、道德禁忌、地理环境），为作者提供 2-3 个可直接写进小说的精彩场景或冲突灵感。
-
-请使用 Markdown 格式输出，排版清晰，多用要点列表。语言要专业、生动、有画面感，直接输出头脑风暴结果，不要有任何客套话。`
+    setConsultKeywordId(kw.id)
 
     const eraLabel = HISTORICAL_ERA_LABELS[kw.era as HistoricalEra] || kw.era
     const categoryLabel = KEYWORD_CATEGORY_LABELS[kw.category as HistoricalKeywordCategory] || kw.category
-    const kwWorldCtx = getWorldContext()
-    const userPrompt = `【关键词信息】
-- 关键词：${kw.keyword}
-- 分类：${categoryLabel}
-- 适用历史时期：${eraLabel}
-${kw.customTimeRange ? `- 具体时间范围/区间：${kw.customTimeRange}` : ''}
-${kw.location ? `- 地理位置/范围：${kw.location}` : ''}
-- 基础描述/备注：${kw.description}${kwWorldCtx}`
+    const itemMeta = [
+      `- 关键词：${kw.keyword}`,
+      `- 分类：${categoryLabel}`,
+      `- 适用历史时期：${eraLabel}`,
+      kw.customTimeRange ? `- 具体时间范围/区间：${kw.customTimeRange}` : '',
+      kw.location ? `- 地理位置/范围：${kw.location}` : '',
+    ].filter(Boolean).join('\n')
 
-    ai.start([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ], undefined, { category: 'history.keyword', projectId: project.id! })
+    const tpl = usePromptStore.getState().getActive('history.consult')
+    const { messages } = renderPrompt(tpl, {
+      itemMeta,
+      finalText: kw.description || '（条目定稿暂未填写）',
+      conceptNote: (kw.conceptNote || '').trim(),
+      consultPrompt: (kw.consultPrompt || '').trim(),
+      worldContext: getWorldContext().replace(/^\n\n=== [^\n]+ ===\n/, ''),
+    })
+
+    consultAI.start(messages, undefined, { category: 'history.consult', projectId: project.id! })
   }
 
-  const handleAcceptAI = (text: string) => {
-    if (aiEventId) {
-      updateEvent(aiEventId, { aiBrainstorm: text })
-      setAiEventId(null)
-    } else if (aiKeywordId) {
-      updateKeyword(aiKeywordId, { aiBrainstorm: text })
-      setAiKeywordId(null)
+  // ── AI 关键词头脑风暴 ──
+  const handleAIKeywordStorm = (kw: HistoricalKeyword) => {
+    if (!kw.id) return
+    setStormKeywordId(kw.id)
+
+    const eraLabel = HISTORICAL_ERA_LABELS[kw.era as HistoricalEra] || kw.era
+    const categoryLabel = KEYWORD_CATEGORY_LABELS[kw.category as HistoricalKeywordCategory] || kw.category
+    const itemMeta = [
+      `- 关键词：${kw.keyword}`,
+      `- 分类：${categoryLabel}`,
+      `- 适用历史时期：${eraLabel}`,
+      kw.customTimeRange ? `- 具体时间范围/区间：${kw.customTimeRange}` : '',
+      kw.location ? `- 地理位置/范围：${kw.location}` : '',
+    ].filter(Boolean).join('\n')
+
+    const tpl = usePromptStore.getState().getActive('history.storm')
+    const { messages } = renderPrompt(tpl, {
+      itemMeta,
+      finalText: kw.description || '（条目定稿暂未填写）',
+      conceptNote: (kw.conceptNote || '').trim(),
+      stormPrompt: (kw.stormPrompt || '').trim(),
+      worldContext: getWorldContext().replace(/^\n\n=== [^\n]+ ===\n/, ''),
+    })
+
+    stormAI.start(messages, undefined, { category: 'history.storm', projectId: project.id! })
+  }
+
+  const handleAcceptConsult = (text: string) => {
+    if (consultEventId) {
+      updateEvent(consultEventId, { aiConsult: text })
+      setConsultEventId(null)
+    } else if (consultKeywordId) {
+      updateKeyword(consultKeywordId, { aiConsult: text })
+      setConsultKeywordId(null)
     }
-    ai.reset()
+    consultAI.reset()
+  }
+
+  const handleAcceptStorm = (text: string) => {
+    if (stormEventId) {
+      updateEvent(stormEventId, { aiBrainstorm: text })
+      setStormEventId(null)
+    } else if (stormKeywordId) {
+      updateKeyword(stormKeywordId, { aiBrainstorm: text })
+      setStormKeywordId(null)
+    }
+    stormAI.reset()
   }
 
   // ── 过滤关键词 ──
@@ -621,29 +650,32 @@ ${kw.location ? `- 地理位置/范围：${kw.location}` : ''}
                               </div>
                             </div>
 
-                            {/* 描述与影响 */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">事件描述</label>
-                                <CTextarea
-                                  value={evt.description}
-                                  onChange={e => updateEvent(evt.id!, { description: e.target.value })}
-                                  placeholder="详细描述事件的起因、经过 and 结果..."
-                                  className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">对剧情/世界的影响 (可选)</label>
-                                <CTextarea
-                                  value={evt.impact || ''}
-                                  onChange={e => updateEvent(evt.id!, { impact: e.target.value })}
-                                  placeholder="该事件如何推动主角剧情，或者对架空世界线产生什么影响..."
-                                  className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                                />
-                              </div>
+                            {/* ── 四个解耦的文本窗口 ── */}
+                            {/* 1. 条目定稿（写作中实际使用；AI agent 不读取，避免污染） */}
+                            <div>
+                              <label className="block text-[11px] text-text-muted mb-1">
+                                📒 条目定稿（写作时会进入小说上下文；考据 / 风暴 agent <span className="text-amber-500">不会</span> 读取此字段）
+                              </label>
+                              <CTextarea
+                                value={evt.description}
+                                onChange={e => updateEvent(evt.id!, { description: e.target.value })}
+                                placeholder="作者打磨好的最终条目内容，将作为 AI 写作的历史背景注入。例如：『公元 712 年，李隆基即位为唐玄宗，开元之治始。』"
+                                className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+                              />
                             </div>
 
-                            {/* 关联章节 */}
+                            {/* 对剧情/世界的影响（属于条目定稿的语义补充，紧跟其后；放在 AI 工作区之上） */}
+                            <div>
+                              <label className="block text-[11px] text-text-muted mb-1">对剧情/世界的影响 (可选)</label>
+                              <CTextarea
+                                value={evt.impact || ''}
+                                onChange={e => updateEvent(evt.id!, { impact: e.target.value })}
+                                placeholder="该事件如何推动主角剧情，或者对架空世界线产生什么影响..."
+                                className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+                              />
+                            </div>
+
+                            {/* 关联章节（紧跟「条目定稿」，因为它属于条目定稿的归档元数据；放在 AI 工作区之上） */}
                             <div className="grid grid-cols-1 gap-3">
                               <div>
                                 <label className="block text-[11px] text-text-muted mb-1">关联章节</label>
@@ -679,58 +711,157 @@ ${kw.location ? `- 地理位置/范围：${kw.location}` : ''}
                               </div>
                             </div>
 
-                            {/* AI 考证与头脑风暴按钮 */}
-                            <div className="pt-2 border-t border-border/40 flex items-center justify-between">
-                              <button
-                                type="button"
-                                onClick={() => handleAIConsult(evt)}
-                                disabled={ai.isStreaming}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 text-accent text-xs font-medium rounded-lg hover:bg-accent/20 transition-colors disabled:opacity-50"
-                              >
-                                <Sparkles className="w-3.5 h-3.5" />
-                                {evt.isHistorical ? 'AI 历史考证' : 'AI 细节头脑风暴'}
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => { void handleDeleteEvent(evt.id!) }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-red-400 hover:bg-red-500/10 text-xs rounded-lg transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                删除事件
-                              </button>
+                            {/* 2. 概念与创作思路（AI agent 会读，作者迭代修正） */}
+                            <div>
+                              <label className="block text-[11px] text-text-muted mb-1">
+                                🧭 概念与创作思路（提交给 AI 之前的初步设定；得到 agent 反馈后可在此处修正）
+                              </label>
+                              <CTextarea
+                                value={evt.conceptNote || ''}
+                                onChange={e => updateEvent(evt.id!, { conceptNote: e.target.value })}
+                                placeholder="描述你为这条事件想达到的效果、能接受的艺术改造或架空范围、希望保留 / 偏离的史实点。例如：『允许把火药提前到本朝；其余制度仍按真实唐制写。』"
+                                className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+                              />
                             </div>
 
-                            {/* AI 结果展示 */}
-                            {aiEventId === evt.id && (ai.output || ai.isStreaming || ai.error) && (
+                            {/* 3 & 4. 双 agent 各自的额外指令 */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[11px] text-text-muted mb-1">
+                                  📝 给「历史考据 agent」的补充说明
+                                </label>
+                                <CTextarea
+                                  value={evt.consultPrompt || ''}
+                                  onChange={e => updateEvent(evt.id!, { consultPrompt: e.target.value })}
+                                  placeholder="例：本作允许将火药提前到唐代，不必再纠结这一项；请重点检查官制称谓和时令风俗。"
+                                  className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] text-text-muted mb-1">
+                                  💡 给「头脑风暴 agent」的补充说明
+                                </label>
+                                <CTextarea
+                                  value={evt.stormPrompt || ''}
+                                  onChange={e => updateEvent(evt.id!, { stormPrompt: e.target.value })}
+                                  placeholder="例：重点发散街市气味、市井人物对白、能引出主角第一次进城的可能场景。"
+                                  className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+                                />
+                              </div>
+                            </div>
+
+                            {/* 双 agent 触发按钮 */}
+                            <div className="pt-2 border-t border-border/40 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAIConsult(evt)}
+                                  disabled={consultAI.isStreaming || !canEdit}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-lg hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5" />
+                                  AI 历史考据
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAIStorm(evt)}
+                                  disabled={stormAI.isStreaming || !canEdit}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 text-purple-400 text-xs font-medium rounded-lg hover:bg-purple-500/20 transition-colors disabled:opacity-50"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                  AI 头脑风暴
+                                </button>
+                              </div>
+
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => { void handleDeleteEvent(evt.id!) }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-red-400 hover:bg-red-500/10 text-xs rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  删除事件
+                                </button>
+                              )}
+                            </div>
+
+                            {/* 历史考据 agent 的输出窗 */}
+                            {consultEventId === evt.id && (consultAI.output || consultAI.isStreaming || consultAI.error) && (
                               <div className="mt-3">
+                                <p className="text-[10px] text-blue-400 mb-1 flex items-center gap-1">
+                                  <ShieldCheck className="w-3 h-3" /> 历史考据 agent
+                                </p>
                                 <AIStreamOutput
-                                  output={ai.output}
-                                  isStreaming={ai.isStreaming}
-                                  error={ai.error}
-                                  tokenUsage={ai.tokenUsage}
-                                  onStop={ai.stop}
-                                  onAccept={handleAcceptAI}
+                                  output={consultAI.output}
+                                  isStreaming={consultAI.isStreaming}
+                                  error={consultAI.error}
+                                  tokenUsage={consultAI.tokenUsage}
+                                  onStop={consultAI.stop}
+                                  onAccept={handleAcceptConsult}
                                   onRetry={() => handleAIConsult(evt)}
                                 />
                               </div>
                             )}
 
-                            {/* 已保存的 AI 考证结果 */}
-                            {evt.aiBrainstorm && aiEventId !== evt.id && (
-                              <div className="mt-3 bg-bg-base border border-border/60 rounded-lg p-3 space-y-1.5">
+                            {/* 头脑风暴 agent 的输出窗 */}
+                            {stormEventId === evt.id && (stormAI.output || stormAI.isStreaming || stormAI.error) && (
+                              <div className="mt-3">
+                                <p className="text-[10px] text-purple-400 mb-1 flex items-center gap-1">
+                                  <Sparkles className="w-3 h-3" /> 头脑风暴 agent
+                                </p>
+                                <AIStreamOutput
+                                  output={stormAI.output}
+                                  isStreaming={stormAI.isStreaming}
+                                  error={stormAI.error}
+                                  tokenUsage={stormAI.tokenUsage}
+                                  onStop={stormAI.stop}
+                                  onAccept={handleAcceptStorm}
+                                  onRetry={() => handleAIStorm(evt)}
+                                />
+                              </div>
+                            )}
+
+                            {/* 已保存的「历史考据」结果 */}
+                            {evt.aiConsult && consultEventId !== evt.id && (
+                              <div className="mt-3 bg-bg-base border border-blue-400/30 rounded-lg p-3 space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-[10px] font-medium text-accent flex items-center gap-1">
-                                    <Sparkles className="w-3 h-3" />
-                                    AI 考证与细节库
+                                  <span className="text-[10px] font-medium text-blue-400 flex items-center gap-1">
+                                    <ShieldCheck className="w-3 h-3" />
+                                    AI 历史考据结果
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => updateEvent(evt.id!, { aiBrainstorm: undefined })}
-                                    className="text-[10px] text-text-muted hover:text-red-400"
-                                  >
-                                    清除
-                                  </button>
+                                  {canEdit && (
+                                    <button
+                                      type="button"
+                                      onClick={() => updateEvent(evt.id!, { aiConsult: undefined })}
+                                      className="text-[10px] text-text-muted hover:text-red-400"
+                                    >
+                                      清除
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap prose prose-invert max-h-60 overflow-y-auto">
+                                  {evt.aiConsult}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 已保存的「头脑风暴」结果 */}
+                            {evt.aiBrainstorm && stormEventId !== evt.id && (
+                              <div className="mt-3 bg-bg-base border border-purple-400/30 rounded-lg p-3 space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-medium text-purple-400 flex items-center gap-1">
+                                    <Sparkles className="w-3 h-3" />
+                                    AI 头脑风暴结果
+                                  </span>
+                                  {canEdit && (
+                                    <button
+                                      type="button"
+                                      onClick={() => updateEvent(evt.id!, { aiBrainstorm: undefined })}
+                                      className="text-[10px] text-text-muted hover:text-red-400"
+                                    >
+                                      清除
+                                    </button>
+                                  )}
                                 </div>
                                 <div className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap prose prose-invert max-h-60 overflow-y-auto">
                                   {evt.aiBrainstorm}
@@ -964,103 +1095,205 @@ ${kw.location ? `- 地理位置/范围：${kw.location}` : ''}
                             </div>
                           </div>
 
-                          {/* 描述与关联章节 */}
+                          {/* ── 四个解耦的文本窗口 ── */}
+                          {/* 1. 条目定稿（写作中实际使用；AI agent 不读取，避免污染） */}
+                          <div>
+                            <label className="block text-[11px] text-text-muted mb-1">
+                              📒 条目定稿（写作时会进入小说上下文；考据 / 风暴 agent <span className="text-amber-500">不会</span> 读取此字段）
+                            </label>
+                            <CTextarea
+                              value={kw.description}
+                              onChange={e => updateKeyword(kw.id!, { description: e.target.value })}
+                              placeholder="作者打磨好的最终条目内容，将作为 AI 写作的历史细节注入。例如：『飞钱：唐宪宗时期出现的汇兑凭证，由邸店或商号代为兑付。』"
+                              className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+                            />
+                          </div>
+
+                          {/* 关联章节（紧跟「条目定稿」，与事件卡保持一致；放在 AI 工作区之上） */}
+                          <div>
+                            <label className="block text-[11px] text-text-muted mb-1">关联章节</label>
+                            <div className="flex flex-wrap gap-1 p-1.5 bg-bg-base border border-border rounded-lg min-h-[40px] max-h-24 overflow-y-auto">
+                              {chapters.length === 0 ? (
+                                <span className="text-[10px] text-text-muted">暂无章节可关联</span>
+                              ) : (
+                                chapters.map(ch => {
+                                    const relatedIds = kw.relatedChapterIds || []
+                                    const isRelated = relatedIds.includes(ch.id!)
+                                    return (
+                                      <button
+                                        key={ch.id}
+                                        type="button"
+                                        onClick={() => {
+                                          const nextIds = isRelated
+                                            ? relatedIds.filter((id: number) => id !== ch.id!)
+                                            : [...relatedIds, ch.id!]
+                                          updateKeyword(kw.id!, { relatedChapterIds: nextIds })
+                                        }}
+                                      className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                                        isRelated
+                                          ? 'bg-accent/10 text-accent border border-accent/20'
+                                          : 'bg-bg-elevated text-text-muted hover:text-text-primary border border-transparent'
+                                      }`}
+                                    >
+                                      {ch.title}
+                                    </button>
+                                  )
+                                })
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 2. 概念与创作思路 */}
+                          <div>
+                            <label className="block text-[11px] text-text-muted mb-1">
+                              🧭 概念与创作思路（提交给 AI 之前的初步设定；得到 agent 反馈后可在此处修正）
+                            </label>
+                            <CTextarea
+                              value={kw.conceptNote || ''}
+                              onChange={e => updateKeyword(kw.id!, { conceptNote: e.target.value })}
+                              placeholder="描述你想为这个关键词达到的效果、能接受的艺术改造或架空范围。例如：『允许把飞钱的普及度写得比真实高一些；想要市井使用场景。』"
+                              className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+                            />
+                          </div>
+
+                          {/* 3 & 4. 双 agent 各自的额外指令 */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-[11px] text-text-muted mb-1">基础描述 / 备注</label>
+                              <label className="block text-[11px] text-text-muted mb-1">
+                                📝 给「历史考据 agent」的补充说明
+                              </label>
                               <CTextarea
-                                value={kw.description}
-                                onChange={e => updateKeyword(kw.id!, { description: e.target.value })}
-                                placeholder="输入该关键词的基础概念，或者您想在小说中借鉴的方面..."
+                                value={kw.consultPrompt || ''}
+                                onChange={e => updateKeyword(kw.id!, { consultPrompt: e.target.value })}
+                                placeholder="例：本作允许把飞钱写得普及度更高；请重点检查兑付流程和涉事衙门称谓。"
                                 className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
                               />
                             </div>
                             <div>
-                              <label className="block text-[11px] text-text-muted mb-1">关联章节</label>
-                              <div className="flex flex-wrap gap-1 p-1.5 bg-bg-base border border-border rounded-lg min-h-[80px] max-h-20 overflow-y-auto">
-                                {chapters.length === 0 ? (
-                                  <span className="text-[10px] text-text-muted">暂无章节可关联</span>
-                                ) : (
-                                  chapters.map(ch => {
-                                      const relatedIds = kw.relatedChapterIds || []
-                                      const isRelated = relatedIds.includes(ch.id!)
-                                      return (
-                                        <button
-                                          key={ch.id}
-                                          type="button"
-                                          onClick={() => {
-                                            const nextIds = isRelated
-                                              ? relatedIds.filter((id: number) => id !== ch.id!)
-                                              : [...relatedIds, ch.id!]
-                                            updateKeyword(kw.id!, { relatedChapterIds: nextIds })
-                                          }}
-                                        className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                                          isRelated
-                                            ? 'bg-accent/10 text-accent border border-accent/20'
-                                            : 'bg-bg-elevated text-text-muted hover:text-text-primary border border-transparent'
-                                        }`}
-                                      >
-                                        {ch.title}
-                                      </button>
-                                    )
-                                  })
-                                )}
-                              </div>
+                              <label className="block text-[11px] text-text-muted mb-1">
+                                💡 给「头脑风暴 agent」的补充说明
+                              </label>
+                              <CTextarea
+                                value={kw.stormPrompt || ''}
+                                onChange={e => updateKeyword(kw.id!, { stormPrompt: e.target.value })}
+                                placeholder="例：重点发散市井使用场景与可能的诈骗冲突。"
+                                className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+                              />
                             </div>
                           </div>
 
                           {/* 操作按钮 */}
-                          <div className="pt-2 border-t border-border/40 flex items-center justify-between">
-                            <button
-                              type="button"
-                              onClick={() => handleAIKeywordStorm(kw)}
-                              disabled={ai.isStreaming}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 text-accent text-xs font-medium rounded-lg hover:bg-accent/20 transition-colors disabled:opacity-50"
-                            >
-                              <Sparkles className="w-3.5 h-3.5" />
-                              AI 细节头脑风暴
-                            </button>
+                          <div className="pt-2 border-t border-border/40 flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleAIKeywordConsult(kw)}
+                                disabled={consultAI.isStreaming || !canEdit}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-lg hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                                AI 历史考据
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleAIKeywordStorm(kw)}
+                                disabled={stormAI.isStreaming || !canEdit}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 text-purple-400 text-xs font-medium rounded-lg hover:bg-purple-500/20 transition-colors disabled:opacity-50"
+                              >
+                                <Sparkles className="w-3.5 h-3.5" />
+                                AI 头脑风暴
+                              </button>
+                            </div>
 
-                            <button
-                              type="button"
-                              onClick={() => { void handleDeleteKeyword(kw.id!) }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-red-400 hover:bg-red-500/10 text-xs rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              删除关键词
-                            </button>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => { void handleDeleteKeyword(kw.id!) }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-red-400 hover:bg-red-500/10 text-xs rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                删除关键词
+                              </button>
+                            )}
                           </div>
 
-                          {/* AI 结果展示 */}
-                          {aiKeywordId === kw.id && (ai.output || ai.isStreaming || ai.error) && (
+                          {/* 历史考据 agent 的输出窗 */}
+                          {consultKeywordId === kw.id && (consultAI.output || consultAI.isStreaming || consultAI.error) && (
                             <div className="mt-3">
+                              <p className="text-[10px] text-blue-400 mb-1 flex items-center gap-1">
+                                <ShieldCheck className="w-3 h-3" /> 历史考据 agent
+                              </p>
                               <AIStreamOutput
-                                output={ai.output}
-                                isStreaming={ai.isStreaming}
-                                error={ai.error}
-                                tokenUsage={ai.tokenUsage}
-                                onStop={ai.stop}
-                                  onAccept={handleAcceptAI}
+                                output={consultAI.output}
+                                isStreaming={consultAI.isStreaming}
+                                error={consultAI.error}
+                                tokenUsage={consultAI.tokenUsage}
+                                onStop={consultAI.stop}
+                                onAccept={handleAcceptConsult}
+                                onRetry={() => handleAIKeywordConsult(kw)}
+                              />
+                            </div>
+                          )}
+
+                          {/* 头脑风暴 agent 的输出窗 */}
+                          {stormKeywordId === kw.id && (stormAI.output || stormAI.isStreaming || stormAI.error) && (
+                            <div className="mt-3">
+                              <p className="text-[10px] text-purple-400 mb-1 flex items-center gap-1">
+                                <Sparkles className="w-3 h-3" /> 头脑风暴 agent
+                              </p>
+                              <AIStreamOutput
+                                output={stormAI.output}
+                                isStreaming={stormAI.isStreaming}
+                                error={stormAI.error}
+                                tokenUsage={stormAI.tokenUsage}
+                                onStop={stormAI.stop}
+                                onAccept={handleAcceptStorm}
                                 onRetry={() => handleAIKeywordStorm(kw)}
                               />
                             </div>
                           )}
 
-                          {/* 已保存的 AI 头脑风暴结果 */}
-                          {kw.aiBrainstorm && aiKeywordId !== kw.id && (
-                            <div className="mt-3 bg-bg-base border border-border/60 rounded-lg p-3 space-y-1.5">
+                          {/* 已保存的「历史考据」结果 */}
+                          {kw.aiConsult && consultKeywordId !== kw.id && (
+                            <div className="mt-3 bg-bg-base border border-blue-400/30 rounded-lg p-3 space-y-1.5">
                               <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-medium text-accent flex items-center gap-1">
+                                <span className="text-[10px] font-medium text-blue-400 flex items-center gap-1">
+                                  <ShieldCheck className="w-3 h-3" />
+                                  AI 历史考据结果
+                                </span>
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateKeyword(kw.id!, { aiConsult: undefined })}
+                                    className="text-[10px] text-text-muted hover:text-red-400"
+                                  >
+                                    清除
+                                  </button>
+                                )}
+                              </div>
+                              <div className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap prose prose-invert max-h-60 overflow-y-auto">
+                                {kw.aiConsult}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 已保存的「头脑风暴」结果 */}
+                          {kw.aiBrainstorm && stormKeywordId !== kw.id && (
+                            <div className="mt-3 bg-bg-base border border-purple-400/30 rounded-lg p-3 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-medium text-purple-400 flex items-center gap-1">
                                   <Sparkles className="w-3 h-3" />
                                   AI 时代细节库
                                 </span>
-                                <button
-                                  type="button"
-                                  onClick={() => updateKeyword(kw.id!, { aiBrainstorm: undefined })}
-                                  className="text-[10px] text-text-muted hover:text-red-400"
-                                >
-                                  清除
-                                </button>
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateKeyword(kw.id!, { aiBrainstorm: undefined })}
+                                    className="text-[10px] text-text-muted hover:text-red-400"
+                                  >
+                                    清除
+                                  </button>
+                                )}
                               </div>
                               <div className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap prose prose-invert max-h-80 overflow-y-auto">
                                 {kw.aiBrainstorm}

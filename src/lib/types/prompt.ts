@@ -54,6 +54,9 @@ export type PromptModuleKey =
   | 'story-timeline.extract'
   // —— Phase 27.2a 场景考证 ——
   | 'scene.verify'
+  // —— H1.5 历史年表双 agent ——
+  | 'history.consult'
+  | 'history.storm'
   // —— FB-5 自适应文风学习 ——
   | 'style.learn'
 

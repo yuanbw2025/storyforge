@@ -1,5 +1,63 @@
 # Changelog
 
+## v3.4.0.1 — 2026-06-14 · 历史年表升级 · 考据 / 风暴双 agent 解耦 · 提示词模板化
+
+> 本次围绕"历史年表"做了一次系统性升级：把单 agent 的"AI 考证 / 头脑风暴"二选一拆成了**两个并行的 agent**，把作者输入拆成了**四块互不污染的文本窗**，并让两个 agent 的提示词正式进入**「提示词库」可见、可克隆、可复盘**——以前是一段写死在面板里的 system prompt。
+> 数据安全：纯前端项目，**仅新增可选字段，零结构变更，老数据照常**；旧的 `aiBrainstorm` 字段保持不动，新加的 `aiConsult / conceptNote / consultPrompt / stormPrompt` 都是 optional。
+
+### ✨ 双 agent 并行：历史考据 + 头脑风暴 各自独立
+
+- **不再二选一**：原来根据"是否史实"勾选去走 AI 考证或风暴，现在每条事件 / 每个关键词都同时拥有两个按钮——蓝色「AI 历史考据」、紫色「AI 头脑风暴」，可同时驱动、互不阻塞。
+- **两个独立流，两份独立结果**：考据 agent 的输出落到新字段 `aiConsult`（蓝色保存块），头脑风暴 agent 的输出仍落到 `aiBrainstorm`（紫色保存块），各自有"采纳 / 重试 / 清除"，**不再相互覆盖**。
+- **关键词面板补齐考据能力**：之前"历史细节风暴" tab 只有头脑风暴一个 agent；现在每个关键词条目同样支持"AI 历史考据"按钮，与时间线 tab 行为一致。
+
+### ✨ 四个解耦的文本窗口（条目卡的新输入结构）
+
+事件卡和关键词卡都改成对称结构：
+
+1. **📒 条目定稿（`description`）** —— **写作时会进入小说上下文**；考据 / 风暴 agent **不会读取**此字段。这一行带橙色提示标识，明确告知作者此处写"最终稿"，AI 校验另设。
+2. **🧭 概念与创作思路（`conceptNote`，新增字段）** —— 提交给 AI 之前的初步设定，**得到 agent 反馈后可在此处迭代修正**。允许声明艺术改造 / 架空 / 想达到的效果。
+3. **📝 给「历史考据 agent」的补充说明（`consultPrompt`，新增字段）** —— 仅交给考据 agent。
+4. **💡 给「头脑风暴 agent」的补充说明（`stormPrompt`，新增字段）** —— 仅交给风暴 agent。
+
+> 设计目的：让"作者最终落到小说里的设定"与"作者交给 AI 的素材 / 指令"彻底解耦，避免以前那种"一句话既是写作素材又是 prompt 指令"造成的语义污染。
+
+### 🧭 布局调整：「关联章节」上移
+
+- **关联章节**从原本紧跟在"对剧情/世界的影响"之后的位置，**上移到「条目定稿」之后、AI 工作区（概念思路 / 双 agent 指令 / 触发按钮 / 输出窗）之前**。
+- 设计逻辑：`relatedChapterIds` 属于条目定稿的归档元数据，与 AI 工作区在职能上分层；事件卡与关键词卡布局保持对称。
+
+### ✨ 提示词进入「提示词库」：`history.consult` / `history.storm`
+
+- 历史考据与头脑风暴的 system / user prompt **不再硬编码在面板**，作为两条系统模板（`scope: 'system'`, `isActive: true`）登记进 `prompt-seeds.ts`，对应新 `PromptModuleKey`：
+  - **`history.consult`**：内置-历史考据 agent
+  - **`history.storm`**：内置-头脑风暴 agent
+- `usePromptStore.init()` 启动时若 IndexedDB 中无匹配名称会**按 name key 自动补齐**，老用户首次进入即落库，**无需手动迁移**。
+- 前端面板改为 `usePromptStore.getActive(...)` + `renderPrompt(...)` 渲染，两个 agent 共用 5 个变量：`itemMeta / finalText / conceptNote / consultPrompt(或 stormPrompt) / worldContext`。
+- 用户在「提示词库」可以**查看完整内容、克隆为我的版本、对比、导出**——保持现有"系统模板不可直接编辑"的权限规则不变；开发者直接改 seed 文件即可全量更新。
+
+### 🛠 考据 prompt 微调（专业挑剔 + 不顺着错误编造）
+
+- 在保留"乐于合作、不严厉批评、尊重作者声明的艺术改造 / 架空"的基础上，**重申不可妥协的底线**：
+  - 绝不顺着作者可能存在的错误假设去编造细节；
+  - 不确定即标"待考"，不要凭印象写出"看起来对"的史料。
+- 工作流改造为显式 5 步：**前提识别 → 潜在问题清单（带 高 / 中 / 低 / 待考 信心等级） → 修改 / 折中方案 → 时代质感补充 → 写作触点（可选）**。
+- 头脑风暴 prompt 同步加入"对明显不存在 / 硬伤的元素，不要凭空编造细节，必要时给替代发散并注明"，与考据 agent 共享同源诚信底线。
+
+### 📦 数据模型新增字段（全部 optional）
+
+| 字段 | 出现表 | 作用 |
+|---|---|---|
+| `conceptNote?: string` | `historicalTimelineEvents` / `historicalKeywords` | 概念与创作思路（AI 读，作者迭代修正） |
+| `consultPrompt?: string` | `historicalTimelineEvents` / `historicalKeywords` | 给历史考据 agent 的补充指令 |
+| `stormPrompt?: string` | `historicalTimelineEvents` / `historicalKeywords` | 给头脑风暴 agent 的补充指令 |
+| `aiConsult?: string` | `historicalTimelineEvents` / `historicalKeywords` | 历史考据 agent 输出（与 `aiBrainstorm` 解耦保存） |
+
+- **DB 版本号未变更**（无 schema 迁移），所有字段可选；旧项目导出 / 导入照常。
+- `description` 注释升级为"条目定稿（会被写入小说写作上下文；AI agent 不读取此字段，避免污染）"，但语义对下游 `buildHistoricalContext` 完全兼容——大纲 / 正文写作链路不变。
+
+---
+
 ## v3.4.0 — 2026-06-12 · 世界地图升级 · 人地互动 · 世界观更真实
 
 > 本次让世界观与世界地图的 AI 生成"更懂地理"：地图生成不再漏读你填的设定，世界观/地图生成都内化了历史地理学的人地互动常识，并修了一个进工作区卡加载的问题。
