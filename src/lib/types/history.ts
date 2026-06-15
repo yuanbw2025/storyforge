@@ -67,11 +67,19 @@ export interface HistoricalTimelineEvent {
   year: number         // 数字化年份（例如：-221 表示公元前221年，712 表示公元712年），用于时间线绝对排序
   date: string         // 具体时间描述（例如："开元十三年"、"公元712年"）
   title: string        // 事件名称
-  description: string  // 事件描述
+  description: string  // 条目定稿（会被写入小说写作上下文；AI agent 不读取此字段，避免污染）
+  /** 概念与创作思路（作者初步设定 / 想达到的效果，AI agent 会读取，可在迭代后修正） */
+  conceptNote?: string
   impact?: string      // 对世界/剧情的影响
   isHistorical: boolean // 是否为真实史实（true=史实，false=虚构/架空）
   source?: string      // 史料来源/考证出处
-  aiBrainstorm?: string // AI 头脑风暴/考证细节
+  aiBrainstorm?: string // AI 头脑风暴 agent 输出结果（虚构/细节风暴）
+  /** AI 历史考据 agent 输出结果（与 aiBrainstorm 解耦保存） */
+  aiConsult?: string
+  /** 用户给「历史考据 agent」的额外指令（与 description 解耦，可声明艺术改造/容许架空范围等） */
+  consultPrompt?: string
+  /** 用户给「头脑风暴 agent」的额外指令（与 description 解耦，可声明虚构方向、想要的细节维度等） */
+  stormPrompt?: string
   relatedChapterIds?: number[] // 关联的章节 ID 列表
   customTimeRange?: string // 具体时间范围/区间（可选，如“公元712年-756年”）
   location?: string    // 地理位置/范围（可选，如“江南地区”、“君士坦丁堡”）
@@ -104,8 +112,16 @@ export interface HistoricalKeyword {
   keyword: string      // 关键词名称（如"织布机"）
   category: HistoricalKeywordCategory // 分类
   era: HistoricalEra | string // 适用历史时期
-  description: string  // 基础描述/用户备注
+  description: string  // 条目定稿（会被写入小说写作上下文；AI agent 不读取此字段，避免污染）
+  /** 概念与创作思路（作者初步设定 / 想达到的效果，AI agent 会读取，可在迭代后修正） */
+  conceptNote?: string
   aiBrainstorm?: string // AI 细节头脑风暴结果（保存时代质感细节）
+  /** AI 历史考据 agent 输出结果（与 aiBrainstorm 解耦保存） */
+  aiConsult?: string
+  /** 用户给「历史考据 agent」的额外指令（与 description / conceptNote 解耦） */
+  consultPrompt?: string
+  /** 用户给「头脑风暴 agent」的额外指令（与 description / conceptNote 解耦） */
+  stormPrompt?: string
   relatedChapterIds?: number[] // 关联的章节 ID 列表
   customTimeRange?: string // 具体时间范围/区间（可选，如“公元712年-756年”）
   location?: string    // 地理位置/范围（可选，如“江南地区”、“君士坦丁堡”）

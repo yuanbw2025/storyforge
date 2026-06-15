@@ -20,6 +20,7 @@ import { buildWorldRulesContext } from '../ai/world-rules-manifest'
 import { parseStages } from '../types/story-arc'
 import { parseFields } from '../types/state-card'
 import { parseBeats } from '../types/emotion-beat'
+import { getEffectiveLimit } from './effective-limits'
 import type { Character, Foreshadow, PowerSystem, Worldview } from '../types'
 import type { ContextSource } from './types'
 
@@ -54,8 +55,11 @@ async function readForeshadows(projectId: number, chapterId?: number | null): Pr
   const rows = await db.foreshadows.where('projectId').equals(projectId).toArray()
   const open = rows.filter(f => f.status !== 'resolved')
   if (!open.length) return ''
+  // H5 — 可调阈值
+  const maxItems = getEffectiveLimit('reader.foreshadows.最多条数', 25)
+  const perItemChars = getEffectiveLimit('reader.foreshadows.单条字符', 120)
   const selected = chapterId == null
-    ? open.slice(0, 25)
+    ? open.slice(0, maxItems)
     : open.filter(f => {
       if (f.plantChapterId === chapterId || f.resolveChapterId === chapterId || f.expectedResolveChapterId === chapterId) return true
       try {
@@ -66,7 +70,7 @@ async function readForeshadows(projectId: number, chapterId?: number | null): Pr
       }
     })
   if (!selected.length) return ''
-  const lines = selected.map((f: Foreshadow) => `- ${f.name}(${f.status}/${f.type}): ${f.description?.slice(0, 120) || ''}`)
+  const lines = selected.map((f: Foreshadow) => `- ${f.name}(${f.status}/${f.type}): ${f.description?.slice(0, perItemChars) || ''}`)
   return `【伏笔状态】\n${lines.join('\n')}`
 }
 
@@ -80,12 +84,17 @@ async function readUserStyleProfile(projectId: number): Promise<string> {
 async function readStoryArcs(projectId: number): Promise<string> {
   const arcs = await db.storyArcs.where('projectId').equals(projectId).toArray()
   if (!arcs.length) return ''
+  // H5 — 可调阈值
+  const maxArcs = getEffectiveLimit('reader.storyArcs.最多故事线', 8)
+  const maxStages = getEffectiveLimit('reader.storyArcs.每条阶段数', 6)
+  const descChars = getEffectiveLimit('reader.storyArcs.描述字符', 120)
+  const stageChars = getEffectiveLimit('reader.storyArcs.阶段字符', 120)
   const parts = ['【全局故事线】']
-  for (const arc of arcs.slice(0, 8)) {
+  for (const arc of arcs.slice(0, maxArcs)) {
     const stages = parseStages(arc.stages)
-    parts.push(`[${arc.type}] ${arc.name}${arc.description ? `:${arc.description.slice(0, 120)}` : ''}`)
-    for (const stage of stages.slice(0, 6)) {
-      parts.push(`- ${stage.title}: ${stage.description.slice(0, 120)}`)
+    parts.push(`[${arc.type}] ${arc.name}${arc.description ? `:${arc.description.slice(0, descChars)}` : ''}`)
+    for (const stage of stages.slice(0, maxStages)) {
+      parts.push(`- ${stage.title}: ${stage.description.slice(0, stageChars)}`)
     }
   }
   return parts.join('\n')
@@ -110,12 +119,15 @@ async function readStateCards(projectId: number, referenceText?: string, extraId
   if (!rows.length) return ''
   const extra = new Set(extraIds ?? [])
   const text = referenceText || ''
+  // H5 — 可调阈值
+  const maxNoRef = getEffectiveLimit('reader.stateCards.无引用文本时', 40)
+  const maxFields = getEffectiveLimit('reader.stateCards.每卡字段数', 8)
   const selected = text
     ? rows.filter(c => extra.has(c.id!) || text.includes(c.entityName))
-    : rows.slice(0, 40)
+    : rows.slice(0, maxNoRef)
   if (!selected.length) return ''
   const lines = selected.map(c => {
-    const fields = parseFields(c.fields).slice(0, 8).map(f => `${f.key}:${f.value}`).join(' | ')
+    const fields = parseFields(c.fields).slice(0, maxFields).map(f => `${f.key}:${f.value}`).join(' | ')
     return `- ${c.category}/${c.entityName}: ${fields}`
   })
   return `【当前状态表】\n${lines.join('\n')}`

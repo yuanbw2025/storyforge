@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Save, FileText, Eye, ClipboardList, CheckSquare, Square, BookOpenCheck, ShieldCheck, StickyNote } from 'lucide-react'
+import { Save, FileText, Eye, ClipboardList, CheckSquare, Square, BookOpenCheck, ShieldCheck, StickyNote, Search } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
 import { useStateCardStore } from '../../stores/state-card'
@@ -20,7 +20,7 @@ import { htmlToPlainText, plainTextToHtml, countWords } from '../../lib/utils/ht
 import AIStreamOutput from '../shared/AIStreamOutput'
 import ContextBudgetBar from '../shared/ContextBudgetBar'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { analyzeContextSegments, calculateBudget, type ContextBudget } from '../../lib/ai/context-budget'
+import { analyzeContextSegments, calculateBudget, getModelPreset, type ContextBudget } from '../../lib/ai/context-budget'
 import StateDiffModal from '../state/StateDiffModal'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
 import EmotionBeatCard from './EmotionBeatCard'
@@ -28,6 +28,9 @@ import OutlinePreview from '../outline/OutlinePreview'
 import ReviewPanel from './ReviewPanel'
 import NotePanel from './NotePanel'
 import FloatingToolbar from './FloatingToolbar'
+import PromptInjectionInspectorModal, { type InspectorPayload } from '../shared/PromptInjectionInspectorModal'
+import { useAdvancedMode } from '../../hooks/useAdvancedMode'
+import { getEffectiveLimit } from '../../lib/registry/effective-limits'
 import type { Project, StateDiffItem } from '../../lib/types'
 
 /** 生成任务类型(原 memory-builder 三层记忆已被 assembleContext 取代,此类型仅用于调试日志标签) */
@@ -247,7 +250,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const handleGenerate = async () => {
     if (!outlineNode) return
     const prevChapter = chapters.filter(c => c.order < (currentChapter?.order || 0)).pop()
-    const prevEnding = htmlToPlainText(prevChapter?.content || '').slice(-500)
+    const prevEnding = htmlToPlainText(prevChapter?.content || '').slice(-getEffectiveLimit('engine.previousEnding', 500))
     const { text: fullCtx, segments: assembledSegments, worldRulesContext } = await buildFullWorldCtx('write')
     const messages = buildChapterContentPrompt(
       outlineNode.title,
@@ -279,6 +282,70 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setAIAction('continue')
     ai.start(messages, undefined, { category: 'chapter.continue', projectId: project.id! })
   }
+
+  // ── H4 — 注入 prompt 预览（仅高级模式显示按钮 + Modal） ──
+  const [advancedMode] = useAdvancedMode()
+  const [inspectorOpen, setInspectorOpen] = useState<null | 'generate' | 'continue'>(null)
+
+  /** 与 handleGenerate / handleContinue 同口径地装配，再额外取一份 assembled 给 inspector 用。 */
+  const buildInspectorPayload = useCallback(async (kind: 'generate' | 'continue'): Promise<InspectorPayload | null> => {
+    if (!outlineNode) return null
+    if (kind === 'continue' && !plainText) return null
+
+    // 取与 buildFullWorldCtx 同套 sourceKeys 的 assembled 用于面板展示
+    let citedIds: number[] = []
+    try { citedIds = JSON.parse(creativeRules?.citedReferenceIds || '[]') } catch { /* ignore */ }
+    const stateRef = [
+      outlineNode?.title,
+      outlineNode?.summary,
+      currentChapter?.title,
+      plainText.slice(-2000),
+    ].filter(Boolean).join(' ')
+    const assembled = await assembleContext({
+      projectId: project.id!,
+      worldGroupId: chapterWorldGroupId ?? null,
+      outlineNodeId: outlineNode?.id ?? null,
+      chapterId: currentChapter?.id ?? null,
+      currentChapterOrder: currentChapter?.order ?? 0,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+      citedReferenceIds: citedIds,
+      stateReferenceText: stateRef,
+      extraStateIds,
+      sourceKeys: [
+        'contextMemo', 'chapterOutline', 'detailedOutline',
+        'worldview', 'storyCore', 'powerSystem', 'codex', 'characters',
+        'creativeRules', 'worldRules', 'historical', 'locations',
+        'foreshadows', 'storyArcs', 'emotionBeats', 'stateCards',
+        'references', 'userStyleProfile',
+      ],
+    })
+
+    // 复用 buildFullWorldCtx 拼出真实送给 AI 的 fullCtx（含 genre / style 注入），保证一致
+    const { text: fullCtx, worldRulesContext } = await buildFullWorldCtx('write')
+
+    let messages
+    if (kind === 'generate') {
+      const prevChapter = chapters.filter(c => c.order < (currentChapter?.order || 0)).pop()
+      const prevEnding = htmlToPlainText(prevChapter?.content || '').slice(-getEffectiveLimit('engine.previousEnding', 500))
+      messages = buildChapterContentPrompt(
+        outlineNode.title, outlineNode.summary, fullCtx, charCtx, prevEnding, worldRulesContext,
+      )
+    } else {
+      messages = buildContinuePrompt(plainText, outlineNode.summary, fullCtx)
+    }
+    const preset = getModelPreset(aiConfig.provider, aiConfig.model)
+    const modelMaxContext = (aiConfig.contextWindow && aiConfig.contextWindow > 0)
+      ? aiConfig.contextWindow
+      : preset.maxContext
+    return {
+      messages,
+      assembled,
+      category: kind === 'generate' ? '正文生成' : '正文续写',
+      modelMaxContext,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outlineNode, currentChapter, plainText, chapters, chapterWorldGroupId, project.id, aiConfig.provider, aiConfig.model, aiConfig.contextWindow, charCtx, creativeRules, extraStateIds])
 
   const handlePolish = () => {
     const selected = editorRef.current?.getSelectedText() || plainText.slice(-1000)
@@ -549,6 +616,26 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           className="px-3 py-1.5 bg-bg-elevated text-text-secondary text-xs rounded-md hover:text-text-primary disabled:opacity-50 transition-colors">
           📝 续写
         </button>
+        {advancedMode && (
+          <>
+            <button
+              onClick={() => setInspectorOpen('generate')}
+              disabled={!outlineNode}
+              title="查看本次「生成正文」会装入的所有上下文段、messages 与 token 占用"
+              className="flex items-center gap-1 px-3 py-1.5 bg-bg-elevated text-amber-400 text-xs rounded-md hover:bg-amber-500/10 border border-amber-500/30 disabled:opacity-50 transition-colors"
+            >
+              <Search className="w-3 h-3" /> 查看 prompt（生成）
+            </button>
+            <button
+              onClick={() => setInspectorOpen('continue')}
+              disabled={!outlineNode || !plainText}
+              title="查看本次「续写」会装入的所有上下文段、messages 与 token 占用"
+              className="flex items-center gap-1 px-3 py-1.5 bg-bg-elevated text-amber-400 text-xs rounded-md hover:bg-amber-500/10 border border-amber-500/30 disabled:opacity-50 transition-colors"
+            >
+              <Search className="w-3 h-3" /> 查看 prompt（续写）
+            </button>
+          </>
+        )}
         <button onClick={handleExpand} disabled={ai.isStreaming}
           className="px-3 py-1.5 bg-bg-elevated text-text-secondary text-xs rounded-md hover:text-text-primary disabled:opacity-50 transition-colors">
           📖 扩写
@@ -654,7 +741,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           characterContext={charCtx}
           prevChapterEnding={(() => {
             const prev = chapters.filter(c => c.order < (currentChapter?.order || 0)).pop()
-            return htmlToPlainText(prev?.content || '').slice(-500)
+            return htmlToPlainText(prev?.content || '').slice(-getEffectiveLimit('engine.previousEnding', 500))
           })()}
         />
       )}
@@ -745,6 +832,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           showSkip={autoProcessing !== 'idle'}
         />
       )}
+
+      {/* H4 — 注入 prompt 预览 Modal（仅高级模式开启时按钮才会触发） */}
+      <PromptInjectionInspectorModal
+        open={inspectorOpen != null}
+        buildPayload={() => inspectorOpen ? buildInspectorPayload(inspectorOpen) : null}
+        onClose={() => setInspectorOpen(null)}
+      />
     </div>
   )
 }

@@ -137,8 +137,12 @@ function extractAiCalls() {
   const dynamic = []
   const dirs = ['src/components', 'src/hooks', 'src/lib']
   const walk = (dir) => {
+    // 用 path.join(root, dir) 拼绝对路径供 fs 读取（Node 在 Win 上接受混合斜杠）；
+    // 但累加用于 markdown 输出的相对路径必须强制 POSIX 风格，否则 Windows 上生成的
+    // manual 是 `src\\components\\...`，Linux CI 跑 --check 时扫到 `src/components/...`，
+    // 对比立刻失败。这里统一走 POSIX 分隔符，保证跨平台输出一致。
     for (const ent of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
-      const rel = path.join(dir, ent.name)
+      const rel = `${dir}/${ent.name}`
       if (ent.isDirectory()) walk(rel)
       else if (/\.(ts|tsx)$/.test(ent.name)) {
         const src = read(rel)

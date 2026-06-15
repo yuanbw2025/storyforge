@@ -22,8 +22,10 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 function walk(dir, acc = []) {
+  // 累加用于匹配的相对路径必须强制 POSIX 分隔符，否则 Windows 上得到 'src\\hooks\\...'，
+  // 与下方 AI_META_FORWARDERS / 字面 prefix 比较失败，导致守卫误报。
   for (const ent of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
-    const rel = path.join(dir, ent.name)
+    const rel = `${dir}/${ent.name}`
     if (ent.isDirectory()) walk(rel, acc)
     else if (/\.(ts|tsx)$/.test(ent.name) && !/\.test\./.test(ent.name)) acc.push(rel)
   }

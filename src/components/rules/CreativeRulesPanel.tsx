@@ -8,6 +8,8 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { buildRulesGeneratePrompt } from '../../lib/ai/adapters/rules-adapter'
 import { adopt } from '../../lib/registry/adopt'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import FieldLimitHint from '../shared/FieldLimitHint'
+import { useEffectiveLimit } from '../../lib/registry/effective-limits'
 import type { Project, NarrativePOV } from '../../lib/types'
 
 const POV_OPTIONS: { value: NarrativePOV; label: string; desc: string }[] = [
@@ -35,6 +37,11 @@ export default function CreativeRulesPanel({ project }: Props) {
   const [citedRefIds, setCitedRefIds] = useState<number[]>([])
   const [aiTarget, setAiTarget] = useState<'writingStyle' | 'toneAndMood' | 'specialRequirements' | null>(null)
   const ai = useAIStream()
+
+  // H3 — 字段提示用 effective-limits，与高级设置实时同步
+  const limStyle = useEffectiveLimit('fmt.rules.style', 200)
+  const limAtmo = useEffectiveLimit('fmt.rules.atmosphere', 150)
+  const limSpecial = useEffectiveLimit('fmt.rules.special', 200)
 
   useEffect(() => {
     loadAll(project.id!)
@@ -203,6 +210,12 @@ export default function CreativeRulesPanel({ project }: Props) {
           placeholder="描述期望的写作风格，如：简洁凌厉、文笔华丽、幽默诙谐、冷峻写实..."
           className="w-full h-24 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
+        <FieldLimitHint
+          value={writingStyle}
+          limit={limStyle}
+          unit="chars"
+          note="超出会被截断后再注入 AI 上下文。"
+        />
         {aiTarget === 'writingStyle' && (ai.output || ai.isStreaming || ai.error) && (
           <div className="mt-2">
             <AIStreamOutput
@@ -256,6 +269,12 @@ export default function CreativeRulesPanel({ project }: Props) {
           onBlur={() => saveField({ toneAndMood })}
           placeholder="描述作品的整体基调和氛围，如：黑暗压抑、热血激昂、温馨治愈..."
           className="w-full h-20 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
+        />
+        <FieldLimitHint
+          value={toneAndMood}
+          limit={limAtmo}
+          unit="chars"
+          note="超出会被截断后再注入 AI 上下文。"
         />
         {aiTarget === 'toneAndMood' && (ai.output || ai.isStreaming || ai.error) && (
           <div className="mt-2">
@@ -357,6 +376,12 @@ export default function CreativeRulesPanel({ project }: Props) {
           onBlur={() => saveField({ specialRequirements })}
           placeholder="其他需要 AI 遵守的特殊创作要求..."
           className="w-full h-24 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
+        />
+        <FieldLimitHint
+          value={specialRequirements}
+          limit={limSpecial}
+          unit="chars"
+          note="超出会被截断后再注入 AI 上下文。"
         />
         {aiTarget === 'specialRequirements' && (ai.output || ai.isStreaming || ai.error) && (
           <div className="mt-2">

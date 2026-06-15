@@ -7,6 +7,8 @@ import { buildStoryGeneratePrompt } from '../../lib/ai/adapters/story-adapter'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import { InlineTextarea } from '../shared/InlineEdit'
+import FieldLimitHint from '../shared/FieldLimitHint'
+import { useEffectiveLimit } from '../../lib/registry/effective-limits'
 import AIFieldModeTabs from '../shared/AIFieldModeTabs'
 import type { Project } from '../../lib/types'
 import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
@@ -171,6 +173,10 @@ function FieldEditor({
   const [mode, setMode] = useState<FieldGenerationMode>('expand')
   const ai = useAIStream()
 
+  // H3 — 硬截断阈值，读 effective-limits（与高级设置实时同步）
+  const limMainPlot = useEffectiveLimit('fmt.storyCore.mainPlot', 250)
+  const limSubPlots = useEffectiveLimit('fmt.storyCore.subPlots', 200)
+
   // 通知父组件 streaming 状态
   useEffect(() => {
     onStreamingChange(ai.isStreaming)
@@ -208,6 +214,24 @@ function FieldEditor({
           placeholder={`点击填写${field.label}…`}
         />
       </div>
+
+      {/* H3 — 硬截断阈值提示（仅 mainPlot/subPlots 在 formatStoryCoreBlock 里有显式 slice） */}
+      {field.key === 'mainPlot' && (
+        <FieldLimitHint
+          value={value}
+          limit={limMainPlot}
+          unit="chars"
+          note="超出会被截断后再注入 AI 上下文。"
+        />
+      )}
+      {field.key === 'subPlots' && (
+        <FieldLimitHint
+          value={value}
+          limit={limSubPlots}
+          unit="chars"
+          note="超出会被截断后再注入 AI 上下文。"
+        />
+      )}
 
       {/* AI 生成区 */}
       <div className="space-y-3">

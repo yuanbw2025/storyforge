@@ -1,5 +1,6 @@
 import type { ChatMessage } from '../types'
 import type { PromptTemplate, PromptVariableContext } from '../types'
+import { getEffectiveLimit } from '../registry/effective-limits'
 
 /**
  * 渲染提示词模板。
@@ -62,8 +63,11 @@ export function renderPrompt(
   // P15: 拼接示例（few-shot）到 user prompt 末尾
   // - good 示例：作者标记的"输出风格参考"
   // - bad 示例：作者标记的"避免的输出"
-  const goodExamples = (template.examples?.good || []).filter(e => e.text.trim()).slice(0, 3)
-  const badExamples = (template.examples?.bad || []).filter(e => e.text.trim()).slice(0, 2)
+  // H5 — 数量上限可调
+  const goodMax = getEffectiveLimit('engine.fewShot.good', 3)
+  const badMax = getEffectiveLimit('engine.fewShot.bad', 2)
+  const goodExamples = (template.examples?.good || []).filter(e => e.text.trim()).slice(0, goodMax)
+  const badExamples = (template.examples?.bad || []).filter(e => e.text.trim()).slice(0, badMax)
   if (goodExamples.length > 0 || badExamples.length > 0) {
     const parts: string[] = ['', '---', '【参考示例】']
     if (goodExamples.length > 0) {

@@ -14,6 +14,7 @@ import {
   parseEntryFields, parseFieldSchema,
   type CodexCategory, type CodexEntry,
 } from '../types/codex'
+import { getEffectiveLimit } from '../registry/effective-limits'
 
 interface BuildOptions {
   /** 总长度预算（字符），默认 2500 */
@@ -33,9 +34,10 @@ export async function buildCodexContext(
   worldGroupId?: number | null,
   opts: BuildOptions = {},
 ): Promise<string> {
-  const maxChars = opts.maxChars ?? 2500
-  const maxPerCategory = opts.maxPerCategory ?? 30
-  const maxFields = opts.maxFieldsPerEntry ?? 3
+  // H5 — 可调阈值（opts 显式传入时优先于「高级设置」覆盖）
+  const maxChars = opts.maxChars ?? getEffectiveLimit('reader.codex.总字符上限', 2500)
+  const maxPerCategory = opts.maxPerCategory ?? getEffectiveLimit('reader.codex.每分类最多', 30)
+  const maxFields = opts.maxFieldsPerEntry ?? getEffectiveLimit('reader.codex.每条字段数', 3)
 
   const [allCats, allEntries] = await Promise.all([
     db.codexCategories.where('projectId').equals(projectId).toArray(),

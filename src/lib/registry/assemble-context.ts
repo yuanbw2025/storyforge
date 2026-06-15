@@ -5,6 +5,7 @@
  */
 import { estimateTokens, type ContextLayer, type ContextSegment } from '../ai/context-budget'
 import { CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
+import { getEffectiveLimit } from './effective-limits'
 import type { AssembleContextInput, AssembleContextResult, ContextSource } from './types'
 
 const DEFAULT_INPUT_BUDGET = 24_000
@@ -29,7 +30,9 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       omitted.push(source.key)
       continue
     }
-    const capped = capBySourceBudget(content, source.budgetTokens)
+    // H5：source 自身的 budgetTokens 允许在「高级设置」覆盖。key 形如 'src.contextMemo'
+    const effectiveBudget = getEffectiveLimit(`src.${source.key}`, source.budgetTokens)
+    const capped = capBySourceBudget(content, effectiveBudget)
     keyedSegments.push({
       key: source.key,
       segment: {
@@ -43,7 +46,9 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
   }
 
   const totalBeforeTrim = keyedSegments.reduce((sum, s) => sum + s.segment.tokens, 0)
-  const inputBudget = input.inputBudgetTokens ?? DEFAULT_INPUT_BUDGET
+  // H5：assemble 总闸允许覆盖。
+  const inputBudget = input.inputBudgetTokens
+    ?? getEffectiveLimit('assemble.defaultInputBudget', DEFAULT_INPUT_BUDGET)
   const overBudgetBeforeTrim = totalBeforeTrim > inputBudget
   const { kept, trimmed } = trimToFit(keyedSegments, inputBudget)
   const segments = kept.map(s => s.segment)
