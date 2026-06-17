@@ -75,6 +75,7 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
 
   // Agnes AI(清华系免费 · 1M 上下文)
   'agnes': { label: 'Agnes 默认', maxContext: 1_000_000, maxOutput: 8_192 },
+  'agnes:agnes-1.5-flash': { label: 'Agnes 1.5 Flash', maxContext: 1_000_000, maxOutput: 8_192 },
   'agnes:Agnes-2.0-Flash': { label: 'Agnes 2.0 Flash', maxContext: 1_000_000, maxOutput: 8_192 },
 
   // ModelScope

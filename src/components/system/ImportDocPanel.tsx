@@ -9,7 +9,7 @@ import { detectVolumeStructure, type VolumeDetectResult } from '../../lib/import
 import {
   runSession, pausePipeline, cancelPipeline, retryFailedChunks,
   registerChunkTexts, hasChunkTexts, clearChunkTexts,
-  applyReferenceFromSession,
+  applyReferenceFromSession, applyProjectFromSession,
 } from '../../lib/import/pipeline'
 import type { ReferenceAnalysisDepth } from '../../lib/types'
 import { useImportSessionStore } from '../../stores/import-session'
@@ -334,6 +334,28 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     })
   }
 
+  // ── 解析一次·多次落地:复用已完成会话,灌进当前项目设定库(世界观/角色/大纲),不再解析 ──
+  const handleReuseToProject = async () => {
+    if (!reusable?.id || applyingReuse) return
+    setApplyingReuse(true)
+    const statusStore = useImportStatusStore.getState()
+    statusStore.reset()
+    statusStore.setPhase('preparing')
+    statusStore.pushActivity('info', `♻️ 复用已解析《${reusable.filename}》→ 当前项目设定库（不重新解析）`)
+    try {
+      await applyProjectFromSession(project.id!, reusable, null, statusStore)
+      statusStore.setPhase('done')
+      setReusable(null)
+      toast.success('对标设定已灌入当前项目的世界观 / 角色 / 大纲')
+    } catch (err) {
+      console.error('[import] 复用应用到项目失败：', err)
+      statusStore.setPhase('failed')
+      toast.error(`复用失败：${err instanceof Error ? err.message : '未知错误'}`)
+    } finally {
+      setApplyingReuse(false)
+    }
+  }
+
   // ── 解析一次·多次落地:复用已完成会话,应用到项目参考(浅/深),不再解析 ──
   const handleReuseToReference = async (depth: ReferenceAnalysisDepth) => {
     if (!reusable?.id || applyingReuse) return
@@ -554,9 +576,13 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
             📦 检测到已解析《{reusable.filename}》（{reusable.totalChars.toLocaleString()} 字 · {reusable.totalChunks} 块）
           </div>
           <div className="text-text-muted mb-2 leading-relaxed">
-            无需重新上传或解析，可直接复用这份解析做「项目参考」13 维作品分析{!hasChunkTexts(reusable.id!) && '（原文已不在内存，深层将退回浅层；如需深层请重新上传）'}：
+            无需重新上传或解析（不再花 AI）。可<strong className="text-accent">直接灌进当前项目设定库</strong>（世界观/角色/大纲一键入库，不用一个个手填），或存为「项目参考」做 13 维分析{!hasChunkTexts(reusable.id!) && '（原文已不在内存，深层将退回浅层；如需深层请重新上传）'}：
           </div>
           <div className="flex flex-wrap gap-2">
+            <button disabled={applyingReuse} onClick={handleReuseToProject}
+              className="px-3 py-1.5 rounded bg-accent text-white hover:bg-accent/90 disabled:opacity-50 font-medium">
+              📥 灌进当前项目设定库
+            </button>
             <button disabled={applyingReuse} onClick={() => handleReuseToReference('quick')}
               className="px-3 py-1.5 rounded bg-purple-500/80 text-white hover:bg-purple-500 disabled:opacity-50">
               ♻️ 应用到 项目参考 · 浅层（免费）

@@ -101,7 +101,8 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'Qwen/Qwen3-4B', label: 'Qwen3 4B', desc: '超轻量' },
   ],
   agnes: [
-    { value: 'Agnes-2.0-Flash', label: 'Agnes 2.0 Flash', desc: '清华系免费·1M 上下文' },
+    { value: 'agnes-1.5-flash', label: 'Agnes 1.5 Flash', desc: '清华系免费·稳定可用·推荐' },
+    { value: 'Agnes-2.0-Flash', label: 'Agnes 2.0 Flash', desc: '1M 上下文·部分时段维护中' },
   ],
 }
 
@@ -161,7 +162,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
   },
   agnes: {
     baseUrl: 'https://apihub.agnes-ai.com/v1',
-    model: 'Agnes-2.0-Flash',
+    model: 'agnes-1.5-flash',
   },
   ollama: {
     baseUrl: 'http://localhost:11434/v1',

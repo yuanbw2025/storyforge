@@ -417,6 +417,23 @@ export async function applyReferenceFromSession(
   return refId
 }
 
+/**
+ * 从一份(已解析完成的) session 落地到「当前项目设定库」(世界观/角色/大纲),零重复解析。
+ * "解析一次·多次落地"的另一半:用户已解析过对标文(或导入过参考),想把设定搬进设定库时,
+ * 直接复用 session.merged 写库,**不再调用解析 AI**(省钱),也不必一个个手填。
+ */
+export async function applyProjectFromSession(
+  projectId: number,
+  session: ImportSession,
+  worldGroupId: number | null = null,
+  statusStore?: { pushActivity: (level: 'info' | 'success' | 'warn' | 'error', msg: string) => void },
+): Promise<ApplyChunkCounts> {
+  const merged = (session.merged ?? {}) as UnifiedParseResult
+  const counts = await applyChunkResult(projectId, merged, worldGroupId ?? session.targetWorldGroupId ?? null)
+  statusStore?.pushActivity('success', `📥 已灌入设定库：世界观 +${counts.worldviewFields} 字段 · 角色 +${counts.characters} · 大纲 +${counts.outlineNodes}`)
+  return counts
+}
+
 type ChunkPlanLite = { index: number; startChar: number; endChar: number; charCount: number; label?: string; text: string }
 
 /** 单独重试某个失败的块（用户在 ReportModal 里点的"重试失败块"） */
