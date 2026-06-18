@@ -371,10 +371,66 @@
 
 ## D 组 · 角色设计重构
 
-### D-1 `R1` 角色设计逻辑重构（戏份 + 阵营九宫格）🔴
-- **现象**：当前角色逻辑不合理。作者期望：把「主要角色」改成"角色生成页面"；每个角色两项属性——**戏份**（主要 / 次要 / NPC / 路人）+ **阵营**（正派 / 反派 / 中立，DnD 九宫格式）；按戏份分流到对应分支；新增独立的主要角色页。
-- **方案**：重构角色数据模型加两枚举字段（戏份 / 阵营），角色生成页统一录入后按戏份分流展示；阵营用九宫格选择。涉及字段 → 过三注册表 + 迁移测试。
-- **优先级**：🔴 高（结构性，工程量大，需先对齐设计再动手）。
+### D-1 `R1` 角色设计逻辑重构（戏份 + 阵营九宫格）🔴 — 施工文档（待开工，交给 GPT 实现）
+
+> 本节是已与作者对齐的**完整施工方案**，按此实现即可。改 DB schema = 数据红线：必写真实老库迁移夹具 + 导出/导入往返 + 迁移前自动快照。**务必等当前所有 schema 改动落地、无并行迁移再动工，避免 version 冲突。**
+
+**现象（根因）**：`Character.role`（6 值 protagonist/antagonist/supporting/minor/npc/extra）**把"戏份"和"阵营"两个正交维度混进一个字段**；`alignment` 只有 good/evil，形同虚设。于是"重要的反派""中立的主要角色"无处安放——这就是"角色逻辑不合理"。
+
+**作者已拍板的设计决策**：
+1. 阵营用**完整 DnD 九宫格**（3×3），**必选**（和戏份一样强制选，"绝对中立"也是其中一格，不留空）。
+2. **不加主角标记**：主角谁是谁作者自辨；模型只有两个轴（戏份 + 阵营），不引入 `isLead` 之类的额外字段。
+3. 戏份四档：主要 / 次要 / NPC / 路人。
+4. 「主要角色」面板 → 改成「角色生成页」；新增独立「主要角色」页；戏份与所有读 `role` 的面板**同步迁移**。
+
+**① 目标数据模型（characters 表加 3 个枚举字段，旧 `role` 保留为派生兼容字段）**：
+
+| 维度 | 新字段 | 取值 |
+|---|---|---|
+| 戏份 | `roleWeight` | `main` 主要 / `secondary` 次要 / `npc` / `extra` 路人 |
+| 阵营·道德轴 | `moralAxis` | `good` 善 / `neutral` 中 / `evil` 恶（横轴 = 正派/中立/反派） |
+| 阵营·秩序轴 | `orderAxis` | `lawful` 守序 / `neutral` 中立 / `chaotic` 混乱（纵轴） |
+
+- 存两个小轴（moral + order）而非 9 个字符串，便于"筛所有反派 = moralAxis==='evil'"。UI 是九宫格点选，**必填**。
+- **旧 `role` 保留并改为派生字段**（由新轴推导），让现有 20+ 个读 `role` 的消费方 v1 阶段零改动，之后再分批迁移。派生规则：`main+good→protagonist`、`main+evil→antagonist`、`main+neutral→supporting`、`secondary→minor`、`npc→npc`、`extra→extra`（多个 main+good 时统一映射 protagonist，因不再用 role 区分唯一主角，无副作用）。
+
+**② 迁移伪代码（schema version +1，只加字段、不删表、不删旧 role）**：
+```
+for each character:
+  roleWeight =
+    role in (protagonist, antagonist, supporting) ? 'main'
+    : role == 'minor' ? 'secondary'
+    : role == 'npc' ? 'npc' : 'extra'
+  moralAxis =
+    role == 'protagonist' ? 'good'
+    : role == 'antagonist' ? 'evil'
+    : (alignment == 'good' ? 'good' : alignment == 'evil' ? 'evil' : 'neutral')
+  orderAxis = 'neutral'   // 老数据无秩序轴信息，默认中立，用户后改
+  // role 字段保留原值；后续写入时由 (roleWeight, moralAxis) 重新派生
+```
+
+**③ 逐文件改动清单（协调点 · 已按代码实证列出）**：
+
+| 类别 | 文件 | 现状 | 改法 |
+|---|---|---|---|
+| 戏份分流面板 | `CharacterMinorPanel`/`CharacterNPCPanel`/`CharacterExtraPanel` | `c.role==='minor'/'npc'/'extra'` 筛选 + 新建时写死 role | 改读 `roleWeight==='secondary'/'npc'/'extra'`，新建写 `roleWeight` |
+| 主要角色页 | `CharacterPanel` | 管 protagonist/antagonist/supporting，roster 计数 | 改成「角色生成页」（录入戏份+九宫格阵营后按戏份分流）+ 独立「主要角色」列 `roleWeight==='main'` |
+| 属性统计栏 | `PropertiesPanel` | 按 6 值计数 | 改按 戏份×阵营 计数 |
+| 主角物品 | `StatePanel` | `role==='protagonist'` 取主角物品 | 改读派生 `role==='protagonist'`（兼容保留）即可，无需新逻辑 |
+| AI 上下文 | `DetailedOutlinePanel`（筛 protagonist\|supporting）、`CharacterDrivenPlotPanel`（排除 npc/extra） | 读 role | v1 继续读派生 `role`；v2 迁 `roleWeight` |
+| 写回/解析 | `AdoptionSchema`（`required:['name','role']`）、`parse-character-output`、`inspiration-reverse`、`restructure`（默认 `role:'supporting'`） | 产出/默认 role | 改产出/默认 `roleWeight`+九宫格阵营，`role` 转派生写回；`required` 改 `roleWeight` |
+| AI 反推别名 | `field-registry` `roleAliases` / `alignment` enum（good/evil） | good/evil + 正派/反派 别名 | 扩成九宫格：moralAxis(善/中/恶·正派→good)、orderAxis(守序/中立/混乱)、roleWeight(主要/次要/NPC/路人) |
+| 关系网 | `RelationGraph`、`relation-extractor` | 读 role 上色/标注 | v1 用派生 role；v2 增阵营上色 |
+
+> 其余 summary/emotion-beat/foreshadow/outline/state-extract 等 adapter 通过 `context-builder` 间接拿角色，跟着 `CONTEXT_SOURCES` 角色源走，不单独改。
+
+**④ 三注册表改动**：`FIELD_REGISTRY` 加 `roleWeight`/`moralAxis`/`orderAxis`（带反推别名）｜`AdoptionSchema` characters 的 `required` 从 `role` 换 `roleWeight`（role 派生写回）｜`CONTEXT_SOURCES` 角色源注入带戏份权重 + 阵营立场（让正文更懂人物）｜`PROJECT_TABLES` 不变（characters 已登记，只加字段）。
+
+**⑤ 测试计划** `R-R1-character-axes`：① 迁移夹具（旧 6 值 → 新轴正确）② role 派生正确（main+evil→antagonist）③ 九宫格往返导出/导入 ④ 三分流面板按 roleWeight 正确归位 ⑤ 必填校验（戏份/阵营缺一不可保存）。
+
+**⑥ 排期**：分两阶段——**v1**＝新字段 + 迁移 + 四个分流面板 + 角色生成页 + 主要角色页（role 派生托底，AI 消费方零改）；**v2**＝AI 上下文/关系网迁到新轴 + 阵营上色。
+
+- **优先级**：🔴 高（结构性，工程量大；改 schema，须在无并行迁移的窗口动工）。
 
 ## E 组 · 全局 UI / 状态 / 文案
 
