@@ -11,7 +11,6 @@ import { useOutlineStore } from '../../stores/outline'
 import { db } from '../db/schema'
 import { adopt } from '../registry/adopt'
 import type { UnifiedParseResult } from '../types'
-import type { CharacterRole } from '../types'
 import {
   deduplicateWorldviewText,
   checkCharacterDuplicate,
@@ -90,7 +89,13 @@ export async function applyChunkResult(
 
     for (const c of result.characters) {
       if (!c || typeof c.name !== 'string' || !c.name.trim()) continue
-      const role = (c.role as CharacterRole) || 'minor'
+      const axes = c.roleWeight
+        ? {
+            roleWeight: c.roleWeight,
+            moralAxis: c.moralAxis,
+            orderAxis: c.orderAxis,
+          }
+        : { role: c.role || 'minor' }
       const incomingFields: Record<string, string> = {
         shortDescription: String(c.shortDescription || ''),
         appearance: String(c.appearance || ''),
@@ -126,7 +131,7 @@ export async function applyChunkResult(
             mode: 'add',
             data: {
               name: c.name.trim(),
-              role,
+              ...axes,
               homeWorldGroupId: targetWorldGroupId,
               ...merged,
             },
@@ -143,7 +148,7 @@ export async function applyChunkResult(
           mode: 'add',
           data: {
             name: charName,
-            role,
+            ...axes,
             homeWorldGroupId: targetWorldGroupId,
             shortDescription: incomingFields.shortDescription,
             appearance: incomingFields.appearance,

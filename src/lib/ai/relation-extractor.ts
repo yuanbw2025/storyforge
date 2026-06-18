@@ -8,6 +8,7 @@ import { db } from '../db/schema'
 import type { Character, ChatMessage, RelationType } from '../types'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from './prompt-engine'
+import { characterAxesLabel } from '../character/character-axes'
 
 /** AI 返回的原始关系条目 */
 export interface ExtractedRelation {
@@ -36,7 +37,7 @@ export async function buildRelationExtractPrompt(
 ): Promise<ChatMessage[]> {
   // 1. 角色列表
   const characterList = characters
-    .map(c => `- ${c.name}（${c.role === 'protagonist' ? '主角' : c.role === 'antagonist' ? '反派' : c.role === 'supporting' ? '重要配角' : c.role === 'minor' ? '次要角色' : '路人'}）${c.shortDescription ? '：' + c.shortDescription : ''}`)
+    .map(c => `- ${c.name}（${characterAxesLabel(c)}）${c.shortDescription ? '：' + c.shortDescription : ''}`)
     .join('\n')
 
   // 2. 大纲摘要

@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import { migrateLegacyTablesToCodex } from '../migrations/legacy-to-codex-upgrade'
+import { migrateCharactersToAxes } from '../migrations/character-axes-upgrade'
 import type {
   Project,
   Worldview,
@@ -317,6 +318,14 @@ class StoryForgeDB extends Dexie {
       masterChapterBeats: null,
       masterStyleMetrics: null,
       masterInsights: null,
+    })
+
+    // v33: R1 角色模型拆成戏份权重 + DnD 九宫格双轴。
+    // 旧 role 保留为派生兼容字段；升级前先在 snapshots 写入受影响角色原始行。
+    this.version(33).stores({
+      characters: '++id, projectId, name, role, roleWeight, moralAxis, orderAxis',
+    }).upgrade(async (tx) => {
+      await migrateCharactersToAxes(tx)
     })
   }
 }

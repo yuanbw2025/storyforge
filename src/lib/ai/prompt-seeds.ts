@@ -735,7 +735,9 @@ export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
 
 JSON 字段定义（每个角色对象）：
 - name: 姓名（必填）
-- role: 'protagonist'|'antagonist'|'supporting'|'minor'|'npc'|'extra' （必填，根据描述合理判断）
+- roleWeight: 'main'|'secondary'|'npc'|'extra'（必填，按戏份判断）
+- moralAxis: 'good'|'neutral'|'evil'（必填）
+- orderAxis: 'lawful'|'neutral'|'chaotic'（必填）
 - shortDescription: 一句话简介
 - appearance: 外貌
 - personality: 性格
@@ -870,7 +872,9 @@ D) 以上的混合
   "characters": [
     {
       "name": "",
-      "role": "protagonist | antagonist | supporting | minor | npc | extra",
+      "roleWeight": "main | secondary | npc | extra",
+      "moralAxis": "good | neutral | evil",
+      "orderAxis": "lawful | neutral | chaotic",
       "shortDescription": "",
       "appearance": "",
       "personality": "",
@@ -909,7 +913,7 @@ D) 以上的混合
 
 ═══ 抽取规则 ═══
 1. **世界观**：没有明确设定集时，从正文里归纳（地理、势力、能力体系、历史等）；字段无内容就留空字符串，不要编造。
-2. **角色**：凡是出现并有辨识度的人物都要提取；主角一定标 protagonist；反派 antagonist；盟友 / 导师 supporting；戏份少的 minor / extra；纯路人不抽。\`relationships\` 写清跟其他角色的关系（如"男主的师父"）。
+2. **角色**：凡是出现并有辨识度的人物都要提取；按戏份写 roleWeight（主要 main / 次要 secondary / NPC / 路人），并按行为与价值观填写完整九宫格 moralAxis + orderAxis；纯路人可不抽。\`relationships\` 写清跟其他角色的关系（如"男主的师父"）。
 3. **大纲**：
    - 如果文档是成品小说 → 按章节拆：每章提取标题（没有就自造一个"第 N 章 · XX事件"）+ 一句话 summary（20-40 字）。
    - 如果篇幅很长（超过 20 章），要按情节拐点用 volume 分卷，每卷 5~15 章，volume 自己也要有 title + summary。
@@ -966,7 +970,8 @@ D) 以上的混合
 {
   "worldview": { "worldOrigin":"", "powerHierarchy":"", "worldStructure":"", "continentLayout":"", "mountainsRivers":"", "climateByRegion":"", "historyLine":"", "worldEvents":"", "races":"", "factionLayout":"", "politicsEconomyCulture":"", "itemDesign":"" },
   "characters": [
-    { "name":"", "role":"protagonist|antagonist|supporting|minor|npc|extra",
+    { "name":"", "roleWeight":"main|secondary|npc|extra",
+      "moralAxis":"good|neutral|evil", "orderAxis":"lawful|neutral|chaotic",
       "shortDescription":"", "appearance":"", "personality":"", "background":"",
       "motivation":"", "abilities":"", "relationships":"", "arc":"" }
   ],
@@ -1220,7 +1225,9 @@ D) 以上的混合
   "characters": [
     {
       "name": "角色名",
-      "role": "protagonist/antagonist/supporting",
+      "roleWeight": "main/secondary/npc/extra",
+      "moralAxis": "good/neutral/evil",
+      "orderAxis": "lawful/neutral/chaotic",
       "shortDescription": "一句话简介",
       "personality": "性格特点",
       "background": "背景故事",
@@ -1233,7 +1240,7 @@ D) 以上的混合
 
 注意：
 - 每个字段都要有实质内容，不要留空
-- 角色的 role 只能是 protagonist / antagonist / supporting
+- 角色必须填写 roleWeight、moralAxis、orderAxis，九宫格阵营不可留空
 - 一句话故事要精炼抓人`,
     userPromptTemplate: `{{#if projectName}}【作品名】{{projectName}}{{/if}}
 {{#if genres}}【倾向题材】{{genres}}{{/if}}
@@ -1293,7 +1300,9 @@ D) 以上的混合
   "characters": [
     {
       "name": "角色名",
-      "role": "protagonist/antagonist/supporting",
+      "roleWeight": "main/secondary/npc/extra",
+      "moralAxis": "good/neutral/evil",
+      "orderAxis": "lawful/neutral/chaotic",
       "shortDescription": "一句话简介",
       "personality": "性格",
       "background": "背景",

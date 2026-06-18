@@ -11,7 +11,7 @@ export const ADOPTION_SCHEMAS: CollectionAdoptionSpec[] = [
     target: 'characters',
     identity: { kind: 'composite', fields: ['homeWorldGroupId', 'name'] },
     duplicatePolicy: 'merge',
-    required: ['name', 'role'],
+    required: ['name', 'roleWeight', 'moralAxis', 'orderAxis'],
     autoStamps: ['projectId', 'homeWorldGroupId', 'createdAt', 'updatedAt'],
   },
   {

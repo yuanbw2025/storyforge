@@ -22,18 +22,10 @@ import {
 import AIStreamOutput from '../shared/AIStreamOutput'
 import AutoResizeTextarea from '../shared/AutoResizeTextarea'
 import type { Project } from '../../lib/types'
+import { characterAxesLabel } from '../../lib/character/character-axes'
 
 interface Props {
   project: Project
-}
-
-const ROLE_LABELS: Record<string, string> = {
-  protagonist: '主角',
-  antagonist: '反派',
-  supporting: '重要配角',
-  minor: '次要角色',
-  npc: 'NPC',
-  extra: '路人',
 }
 
 export default function CharacterDrivenPlotPanel({ project }: Props) {
@@ -57,7 +49,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
     const addedIds = new Set(arcs.map(a => a.characterId))
     return characters.filter(c =>
       c.id != null && !addedIds.has(c.id) &&
-      (c.role === 'protagonist' || c.role === 'antagonist' || c.role === 'supporting' || c.role === 'minor'),
+      (c.roleWeight === 'main' || c.roleWeight === 'secondary'),
     )
   }, [characters, arcs])
 
@@ -68,7 +60,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
     setArcs(prev => [...prev, {
       characterId: charId,
       name: ch.name,
-      role: ROLE_LABELS[ch.role] || ch.role,
+      role: characterAxesLabel(ch),
       initialState: '',
       targetState: '',
     }])
@@ -212,7 +204,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
                   <option value="">+ 添加角色</option>
                   {availableChars.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.name}（{ROLE_LABELS[c.role] || c.role}）
+                      {c.name}（{characterAxesLabel(c)}）
                     </option>
                   ))}
                 </select>

@@ -172,8 +172,8 @@ export default function DetailedOutlinePanel({ project }: Props) {
     const { worldContext: worldCtx } = await buildDetailContext(currentChapter.id!)
 
     const charCtx = characters
-      .filter(c => c.role === 'protagonist' || c.role === 'supporting')
-      .map(c => `[ID:${c.id}] ${c.name}（${c.role}）`)
+      .filter(c => c.roleWeight === 'main')
+      .map(c => `[ID:${c.id}] ${c.name}（${c.orderAxis}/${c.moralAxis}）`)
       .join('\n')
 
     const foreshadowCtx = foreshadows
@@ -264,8 +264,8 @@ export default function DetailedOutlinePanel({ project }: Props) {
     })
     const worldCtx = baseCtx.text
     const charCtx = characters
-      .filter(c => c.role === 'protagonist' || c.role === 'supporting')
-      .map(c => `[ID:${c.id}] ${c.name}（${c.role}）`)
+      .filter(c => c.roleWeight === 'main')
+      .map(c => `[ID:${c.id}] ${c.name}（${c.orderAxis}/${c.moralAxis}）`)
       .join('\n')
     const foreshadowCtx = foreshadows
       .filter(f => f.status !== 'resolved')

@@ -7,6 +7,7 @@ import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
 import { FIELD_BY_TARGET } from './field-registry'
 import { ADOPTION_BY_TARGET } from './adoption-schema'
 import type { AdoptInput, AdoptResult, CollectionAdoptionSpec, FieldSpec, TableSpec } from './types'
+import { normalizeCharacterAxes } from '../character/character-axes'
 
 export async function adopt(input: AdoptInput): Promise<AdoptResult> {
   const result = emptyResult()
@@ -51,8 +52,9 @@ async function adoptCollectionRecord(
     result.skipped.push({ reason: `record ${input.recordId} 不存在或不属于当前项目`, data: input.data })
     return result
   }
-  const patch = normalizeAndValidate(input.data, fieldSpecs, result)
+  let patch = normalizeAndValidate(input.data, fieldSpecs, result)
   if (!patch || Object.keys(patch).length === 0) return result
+  if (input.target === 'characters') patch = normalizeCharacterAxes(patch, target)
 
   if (input.mode === 'append') {
     for (const [field, val] of Object.entries(patch)) {
@@ -121,8 +123,9 @@ async function adoptCollection(
 
   const items = Array.isArray(input.data) ? input.data : [input.data as Record<string, unknown>]
   for (const raw of items) {
-    const item = normalizeAndValidate(raw, fieldSpecs, result)
+    let item = normalizeAndValidate(raw, fieldSpecs, result)
     if (!item) continue
+    if (input.target === 'characters') item = normalizeCharacterAxes(item)
     if (!applyRequired(item, raw, adoption, result)) continue
     if (!await applyFkChecks(item, raw, adoption, result)) continue
     await applyArrayMemberChecks(item, adoption, result)

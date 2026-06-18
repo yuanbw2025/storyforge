@@ -25,15 +25,10 @@ import { adopt } from '../../lib/registry/adopt'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import AutoResizeTextarea from '../shared/AutoResizeTextarea'
 import type { Project } from '../../lib/types'
+import { characterAxesLabel } from '../../lib/character/character-axes'
 
 interface Props {
   project: Project
-}
-
-const ROLE_LABELS: Record<string, string> = {
-  protagonist: '主角',
-  antagonist: '反派',
-  supporting: '配角',
 }
 
 export default function InspirationPanel({ project }: Props) {
@@ -189,7 +184,9 @@ export default function InspirationPanel({ project }: Props) {
           mode: 'add',
           data: {
             name: c.name,
-            role: c.role || 'supporting',
+            roleWeight: c.roleWeight,
+            moralAxis: c.moralAxis,
+            orderAxis: c.orderAxis,
             shortDescription: c.shortDescription || '',
             appearance: '',
             personality: c.personality || '',
@@ -238,7 +235,7 @@ export default function InspirationPanel({ project }: Props) {
         lines.push(`## 初始角色`)
         mwResult.characters.forEach(c => {
           const home = c.isCrossWorld ? '跨世界' : (c.homeWorld || '')
-          lines.push(`- **${c.name}**（${ROLE_LABELS[c.role] || c.role}${home ? ` · ${home}` : ''}）：${c.shortDescription}`)
+          lines.push(`- **${c.name}**（${characterAxesLabel(c)}${home ? ` · ${home}` : ''}）：${c.shortDescription}`)
         })
       }
     } else if (result) {
@@ -256,7 +253,7 @@ export default function InspirationPanel({ project }: Props) {
       if (sc.mainPlot) lines.push(`- 主线：${sc.mainPlot}`)
       if (result.characters.length) {
         lines.push(`\n## 初始角色`)
-        result.characters.forEach(c => lines.push(`- **${c.name}**（${ROLE_LABELS[c.role] || c.role}）：${c.shortDescription}`))
+        result.characters.forEach(c => lines.push(`- **${c.name}**（${characterAxesLabel(c)}）：${c.shortDescription}`))
       }
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
@@ -341,7 +338,9 @@ export default function InspirationPanel({ project }: Props) {
         mode: 'add',
         data: {
           name: c.name,
-          role: c.role || 'supporting',
+          roleWeight: c.roleWeight,
+          moralAxis: c.moralAxis,
+          orderAxis: c.orderAxis,
           shortDescription: c.shortDescription || '',
           appearance: '',
           personality: c.personality || '',
@@ -505,7 +504,7 @@ export default function InspirationPanel({ project }: Props) {
                 {mwResult.characters.map((c, i) => (
                   <div key={i} className="text-xs">
                     <span className="text-text-primary font-medium">{c.name}</span>
-                    <span className="text-text-muted"> · {ROLE_LABELS[c.role] || c.role}</span>
+                    <span className="text-text-muted"> · {characterAxesLabel(c)}</span>
                     {c.isCrossWorld ? <span className="ml-1 text-accent">🌐 跨世界</span> : c.homeWorld && <span className="ml-1 text-text-muted">@{c.homeWorld}</span>}
                     {c.shortDescription && <span className="text-text-muted"> — {c.shortDescription}</span>}
                   </div>
@@ -714,7 +713,7 @@ function CharacterCard({
         )}
         <span className="text-sm font-medium text-text-primary">{char.name}</span>
         <span className="text-xs px-1.5 py-0.5 bg-bg-hover rounded text-text-muted">
-          {ROLE_LABELS[char.role] || char.role}
+          {characterAxesLabel(char)}
         </span>
       </div>
       {char.shortDescription && (

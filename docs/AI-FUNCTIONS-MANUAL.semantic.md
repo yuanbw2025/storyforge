@@ -24,7 +24,12 @@
 
 ### 灵感反推 — `moduleKey: inspiration.reverse`
 - **业务意图**:用户写碎片想法,AI 反向生成世界观/故事核心/角色草稿。是"下游→上游"的反推流。
+- **角色模型**:角色草稿必须同时产出戏份权重与九宫格阵营两轴；旧 `role` 只作为派生兼容字段。
 - **坑**:写回经 `adopt()`,AI 输出的别名字段(如 `summary`→`worldOrigin`)自动归一,不再静默丢字段(Phase 1.2b 修复)。
+
+### 角色生成 — `moduleKey: character.generate`
+- **业务意图**:根据现有阵容与世界上下文设计角色；戏份(main/secondary/NPC/路人)与阵营(道德轴×秩序轴)彼此独立。
+- **写回约束**:`roleWeight`、`moralAxis`、`orderAxis` 三项必填；`role` 由注册表写回层统一派生，调用方不得手写兼容映射。
 
 ### 状态提取 — `moduleKey:`(无独立模板,走 state-extract-adapter)
 - **业务意图**:章节写完后自动从正文提取已登记角色的动态状态,写回角色状态卡。

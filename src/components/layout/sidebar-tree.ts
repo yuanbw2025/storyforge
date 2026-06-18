@@ -25,7 +25,8 @@ export type SidebarModule =
   | 'worldview-natural'     // 占位 (P5)
   | 'worldview-humanity'    // 占位 (P6)
   | 'story-design'          // = 旧 story-core
-  | 'characters'            // 主要角色（暂用 CharacterPanel 全量）
+  | 'characters'            // 角色生成
+  | 'characters-main'       // 主要角色
   | 'characters-minor'      // 占位 (P7)
   | 'characters-npc'        // 占位 (P7)
   | 'characters-extra'      // 占位 (P7)
@@ -152,7 +153,8 @@ export const NAV_TREE: TreeSection[] = [
         label: '角色设计',
         icon: UsersRound,
         children: [
-          leaf('characters',         '主要角色', UserCircle),
+          leaf('characters',         '角色生成', UserCircle),
+          leaf('characters-main',    '主要角色', UserCircle),
           leaf('characters-minor',   '次要角色', User),
           leaf('characters-npc',     'NPC',      UsersRound),
           leaf('characters-extra',   '路人',     Footprints),

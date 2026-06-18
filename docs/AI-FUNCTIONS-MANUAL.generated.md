@@ -90,7 +90,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | 目标表 | 可写字段 |
 |---|---|
 | `chapters` | `content` `notes` `order` `outlineNodeId` `status` `summary` `title` `wordCount` |
-| `characters` | `abilities` `activeChapterRange` `alignment` `appearance` `arc` `background` `ending` `exitChapterId` `firstAppearChapterId` `firstAppearance` `homeWorldGroupId` `isCrossWorld` `location` `motivation` `name` `personality` `relationships` `role` `shortDescription` `storyRole` |
+| `characters` | `abilities` `activeChapterRange` `alignment` `appearance` `arc` `background` `ending` `exitChapterId` `firstAppearChapterId` `firstAppearance` `homeWorldGroupId` `isCrossWorld` `location` `moralAxis` `motivation` `name` `orderAxis` `personality` `relationships` `role` `roleWeight` `shortDescription` `storyRole` |
 | `codexCategories` | `builtInKey` `domain` `fieldSchema` `hidden` `icon` `name` `order` `parentId` `worldGroupId` |
 | `codexEntries` | `categoryId` `description` `fields` `icon` `importance` `name` `order` `refs` `summary` `tags` `worldGroupId` |
 | `creativeRules` | `atmosphere` `citedInsightIds` `citedReferenceIds` `consistencyRules` `narrativePOV` `prohibitions` `referenceWorksV2` `specialRequirements` `writingStyle` |
@@ -120,8 +120,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:328` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:320` |
 | `chapter.toolbar` | `src/components/editor/FloatingToolbar.tsx:105` |
-| `character.generate` | `src/components/character/CharacterPanel.tsx:137` |
-| `character.structure` | `src/lib/ai/parse-character-output.ts:92` |
+| `character.generate` | `src/components/character/CharacterPanel.tsx:146` |
+| `character.structure` | `src/lib/ai/parse-character-output.ts:83` |
 | `codex.extract` | `src/components/codex/CodexPanel.tsx:204` |
 | `detail.scene` | `src/components/outline/DetailedOutlinePanel.tsx:163`<br/>`src/components/outline/ScenePanel.tsx:111`<br/>`src/lib/ai/batch-detail-runner.ts:109` |
 | `emotion.beat` | `src/components/editor/EmotionBeatCard.tsx:66` |
@@ -129,11 +129,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:159` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
 | `geography.world-map` | `src/components/geography/WorldMapPanel.tsx:103` |
-| `inspiration.reverse` | `src/components/project/InspirationPanel.tsx:111` |
+| `inspiration.reverse` | `src/components/project/InspirationPanel.tsx:106` |
 | `inventory.extract` | `src/components/items/InventoryPanel.tsx:84` |
 | `location.extract` | `src/components/location/LocationPanel.tsx:104` |
 | `outline.chapter` | `src/components/outline/OutlinePanel.tsx:376`<br/>`src/lib/ai/batch-outline-runner.ts:123` |
-| `outline.character-driven` | `src/components/outline/CharacterDrivenPlotPanel.tsx:116` |
+| `outline.character-driven` | `src/components/outline/CharacterDrivenPlotPanel.tsx:108` |
 | `outline.volume` | `src/components/outline/OutlinePanel.tsx:328` |
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:105` |
 | `reference.characters` | `src/components/project/AnalysisReportViewer.tsx:138` |
@@ -161,4 +161,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `48111b1`
+生成时间基准:commit `241a795`

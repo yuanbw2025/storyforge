@@ -76,20 +76,24 @@ function CharacterProps() {
   const { characters } = useCharacterStore()
   const { relations } = useCharacterRelationStore()
 
-  const roleCount = {
-    protagonist: characters.filter(c => c.role === 'protagonist').length,
-    antagonist: characters.filter(c => c.role === 'antagonist').length,
-    supporting: characters.filter(c => c.role === 'supporting').length,
-    minor: characters.filter(c => c.role === 'minor').length,
+  const weightCount = {
+    main: characters.filter(c => c.roleWeight === 'main').length,
+    secondary: characters.filter(c => c.roleWeight === 'secondary').length,
+    npc: characters.filter(c => c.roleWeight === 'npc').length,
+    extra: characters.filter(c => c.roleWeight === 'extra').length,
+  }
+  const moralCount = {
+    good: characters.filter(c => c.moralAxis === 'good').length,
+    neutral: characters.filter(c => c.moralAxis === 'neutral').length,
+    evil: characters.filter(c => c.moralAxis === 'evil').length,
   }
 
   return (
     <Section title="角色统计" icon={Users}>
       <Stat label="总角色数" value={characters.length} />
-      <Stat label="主角" value={roleCount.protagonist} />
-      <Stat label="反派" value={roleCount.antagonist} />
-      <Stat label="重要配角" value={roleCount.supporting} />
-      <Stat label="次要角色" value={roleCount.minor} />
+      <Stat label="主要 / 次要" value={`${weightCount.main} / ${weightCount.secondary}`} />
+      <Stat label="NPC / 路人" value={`${weightCount.npc} / ${weightCount.extra}`} />
+      <Stat label="善 / 中 / 恶" value={`${moralCount.good} / ${moralCount.neutral} / ${moralCount.evil}`} />
       <Stat label="关系连线" value={relations.length} />
     </Section>
   )

@@ -14,28 +14,19 @@ import { adopt } from '../../lib/registry/adopt'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
-import type { Project, Character, CharacterRole, CharacterAlignment } from '../../lib/types'
+import type {
+  Project, Character, CharacterMoralAxis, CharacterOrderAxis, CharacterRoleWeight,
+} from '../../lib/types'
 import CharacterStatusPanel from './CharacterStatusPanel'
+import CharacterAxesPicker from './CharacterAxesPicker'
+import {
+  MORAL_AXIS_LABELS,
+  ORDER_AXIS_LABELS,
+  ROLE_WEIGHT_LABELS,
+  filterCharactersByRoleWeight,
+} from '../../lib/character/character-axes'
 
 // ── 常量 ───────────────────────────────────────────────────────
-
-const ROLE_LABELS: Record<CharacterRole, string> = {
-  protagonist: '主角',
-  antagonist:  '反派',
-  supporting:  '配角',
-  minor:       '次要',
-  npc:         'NPC',
-  extra:       '路人',
-}
-
-const ROLE_COLORS: Record<CharacterRole, string> = {
-  protagonist: 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30',
-  antagonist:  'text-red-400 bg-red-400/10 border-red-400/30',
-  supporting:  'text-blue-400 bg-blue-400/10 border-blue-400/30',
-  minor:       'text-text-muted bg-bg-elevated border-border',
-  npc:         'text-purple-400 bg-purple-400/10 border-purple-400/30',
-  extra:       'text-text-muted bg-bg-base border-border',
-}
 
 // 首字圆的柔和色板（按角色 index 循环取色）
 const GLYPH_COLORS = [
@@ -47,11 +38,14 @@ const GLYPH_COLORS = [
   'bg-[#B06B7B]/15 text-[#B06B7B]',   // 玫红
 ]
 
-interface Props { project: Project }
+interface Props {
+  project: Project
+  view?: 'generator' | 'main'
+}
 
 // ── 主面板 ─────────────────────────────────────────────────────
 
-export default function CharacterPanel({ project }: Props) {
+export default function CharacterPanel({ project, view = 'generator' }: Props) {
   const { characters, loadAll, addCharacter, updateCharacter, deleteCharacter } = useCharacterStore()
   const { groups, activeGroupId } = useWorldGroupStore()
   const { config: aiConfig } = useAIConfigStore()
@@ -59,6 +53,11 @@ export default function CharacterPanel({ project }: Props) {
   const [hint, setHint] = useState('')
   const [parsing, setParsing] = useState(false)
   const [showRolePicker, setShowRolePicker] = useState(false)
+  const [draftAxes, setDraftAxes] = useState<{
+    roleWeight: CharacterRoleWeight | null
+    moralAxis: CharacterMoralAxis | null
+    orderAxis: CharacterOrderAxis | null
+  }>({ roleWeight: null, moralAxis: null, orderAxis: null })
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
@@ -73,11 +72,14 @@ export default function CharacterPanel({ project }: Props) {
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
 
   // 多世界过滤：跨世界角色在任意世界都显示
-  const displayedChars = !project.enableMultiWorld || worldFilter === 'all'
+  const worldFilteredChars = !project.enableMultiWorld || worldFilter === 'all'
     ? characters
     : worldFilter === 'cross'
       ? characters.filter(c => c.isCrossWorld)
       : characters.filter(c => c.isCrossWorld || c.homeWorldGroupId === worldFilter)
+  const displayedChars = view === 'main'
+    ? filterCharactersByRoleWeight(worldFilteredChars, 'main')
+    : worldFilteredChars
 
   const selectedChar = characters.find(c => c.id === selected)
 
@@ -89,15 +91,20 @@ export default function CharacterPanel({ project }: Props) {
     return activeGroupId
   }
 
-  const handleAdd = async (role: CharacterRole = 'supporting') => {
+  const handleAdd = async () => {
+    if (!draftAxes.roleWeight || !draftAxes.moralAxis || !draftAxes.orderAxis) return
     setShowRolePicker(false)
     const id = await addCharacter({
-      projectId: project.id!, name: '新角色', role,
+      projectId: project.id!, name: '新角色',
+      roleWeight: draftAxes.roleWeight,
+      moralAxis: draftAxes.moralAxis,
+      orderAxis: draftAxes.orderAxis,
       shortDescription: '', appearance: '', personality: '',
       background: '', motivation: '', abilities: '', relationships: '', arc: '',
       homeWorldGroupId: newCharHomeWorld(),
       isCrossWorld: project.enableMultiWorld && worldFilter === 'cross',
     })
+    setDraftAxes({ roleWeight: null, moralAxis: null, orderAxis: null })
     setSelected(id)
   }
 
@@ -107,12 +114,14 @@ export default function CharacterPanel({ project }: Props) {
 
   const handleAIGenerate = async () => {
     // 统计阵容缺口
-    const roleCounts: Record<CharacterRole, number> = {
-      protagonist: 0, antagonist: 0, supporting: 0, minor: 0, npc: 0, extra: 0,
+    const weightCounts: Record<CharacterRoleWeight, number> = {
+      main: 0, secondary: 0, npc: 0, extra: 0,
     }
-    characters.forEach(c => { roleCounts[c.role] = (roleCounts[c.role] || 0) + 1 })
-    const rosterGap = `当前阵容：主角 ${roleCounts.protagonist}、反派 ${roleCounts.antagonist}、配角 ${roleCounts.supporting}、次要 ${roleCounts.minor}、NPC ${roleCounts.npc}、路人 ${roleCounts.extra}`
-    const existing = characters.map(c => `${c.name}（${ROLE_LABELS[c.role]}）`).join('、')
+    characters.forEach(c => { weightCounts[c.roleWeight]++ })
+    const rosterGap = `当前阵容：主要 ${weightCounts.main}、次要 ${weightCounts.secondary}、NPC ${weightCounts.npc}、路人 ${weightCounts.extra}`
+    const existing = characters.map(c =>
+      `${c.name}（${ROLE_WEIGHT_LABELS[c.roleWeight]} · ${ORDER_AXIS_LABELS[c.orderAxis]}${MORAL_AXIS_LABELS[c.moralAxis]}）`,
+    ).join('、')
     const enrichedHint = [hint, rosterGap].filter(Boolean).join('\n')
     // 多世界：按当前选中/活跃世界读取上下文（此前写死单世界）
     const targetWorld = project.enableMultiWorld
@@ -141,47 +150,51 @@ export default function CharacterPanel({ project }: Props) {
     <div className="space-y-3">
       {/* 工具栏 */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative">
-          <button
-            onClick={() => setShowRolePicker(!showRolePicker)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-hover transition-colors"
-          >
-            <Plus className="w-4 h-4" /> 新建角色 <ChevronDown className="w-3 h-3 ml-0.5" />
-          </button>
-          {showRolePicker && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowRolePicker(false)} />
-              <div className="absolute top-full left-0 mt-1 z-50 bg-bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[140px]">
-                {(Object.entries(ROLE_LABELS) as [CharacterRole, string][]).map(([role, label]) => (
-                  <button
-                    key={role}
-                    onClick={() => handleAdd(role)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-bg-hover transition-colors"
-                  >
-                    <span className={`inline-block w-2 h-2 rounded-full ${ROLE_COLORS[role].split(' ')[0].replace('/10', '')}`} />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2 flex-1">
-          <input
-            value={hint}
-            onChange={e => setHint(e.target.value)}
-            placeholder="角色要求（可选）"
-            className="w-48 px-2 py-1.5 bg-bg-surface border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
-          />
-          <button
-            onClick={handleAIGenerate}
-            disabled={ai.isStreaming}
-            className="flex items-center gap-1.5 px-3 py-2 bg-bg-elevated text-text-secondary text-sm rounded-md hover:text-accent disabled:opacity-50 transition-colors border border-border hover:border-accent/50"
-          >
-            <Sparkles className="w-3.5 h-3.5" /> AI 设计角色
-          </button>
-        </div>
-        <span className="text-xs text-text-muted ml-auto">角色册 · {characters.length}</span>
+        {view === 'generator' && (
+          <>
+            <div className="relative">
+              <button
+                onClick={() => setShowRolePicker(!showRolePicker)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-hover transition-colors"
+              >
+                <Plus className="w-4 h-4" /> 新建角色 <ChevronDown className="w-3 h-3 ml-0.5" />
+              </button>
+              {showRolePicker && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowRolePicker(false)} />
+                  <div className="absolute top-full left-0 mt-1 z-50 bg-bg-surface border border-border rounded-lg shadow-lg p-3 w-[430px]">
+                    <CharacterAxesPicker {...draftAxes} onChange={setDraftAxes} compact />
+                    <button
+                      onClick={handleAdd}
+                      disabled={!draftAxes.roleWeight || !draftAxes.moralAxis || !draftAxes.orderAxis}
+                      className="mt-3 w-full px-3 py-2 bg-accent text-white text-sm rounded disabled:opacity-40"
+                    >
+                      创建并分流
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-1">
+              <input
+                value={hint}
+                onChange={e => setHint(e.target.value)}
+                placeholder="角色要求（可选）"
+                className="w-48 px-2 py-1.5 bg-bg-surface border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
+              />
+              <button
+                onClick={handleAIGenerate}
+                disabled={ai.isStreaming}
+                className="flex items-center gap-1.5 px-3 py-2 bg-bg-elevated text-text-secondary text-sm rounded-md hover:text-accent disabled:opacity-50 transition-colors border border-border hover:border-accent/50"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> AI 设计角色
+              </button>
+            </div>
+          </>
+        )}
+        <span className="text-xs text-text-muted ml-auto">
+          {view === 'main' ? '主要角色' : '角色生成'} · {displayedChars.length}
+        </span>
       </div>
 
       {/* 多世界：世界过滤器 */}
@@ -224,18 +237,20 @@ export default function CharacterPanel({ project }: Props) {
       )}
 
       {/* 调参浮窗 */}
-      <PromptRunPanel
-        moduleKey="character.generate"
-        parameterValues={parameterValues}
-        onParamChange={setParameterValues}
-        systemOverride={systemOverride}
-        onSystemOverrideChange={setSystemOverride}
-        userOverride={userOverride}
-        onUserOverrideChange={setUserOverride}
-      />
+      {view === 'generator' && (
+        <PromptRunPanel
+          moduleKey="character.generate"
+          parameterValues={parameterValues}
+          onParamChange={setParameterValues}
+          systemOverride={systemOverride}
+          onSystemOverrideChange={setSystemOverride}
+          userOverride={userOverride}
+          onUserOverrideChange={setUserOverride}
+        />
+      )}
 
       {/* AI 解析中提示 */}
-      {parsing && (
+      {view === 'generator' && parsing && (
         <div className="flex items-center gap-2 px-4 py-3 bg-accent/5 border border-accent/20 rounded-lg text-sm text-accent animate-pulse">
           <Sparkles className="w-4 h-4 shrink-0" />
           AI 正在将角色内容分字段整理，请稍候…
@@ -243,7 +258,7 @@ export default function CharacterPanel({ project }: Props) {
       )}
 
       {/* AI 输出 */}
-      {(ai.output || ai.isStreaming || ai.error) && (
+      {view === 'generator' && (ai.output || ai.isStreaming || ai.error) && (
         <AIStreamOutput
           output={ai.output}
           isStreaming={ai.isStreaming}
@@ -263,7 +278,9 @@ export default function CharacterPanel({ project }: Props) {
               mode: 'add',
               data: {
                 name:             parsed?.name             || fallbackName,
-                role:             parsed?.role             || 'supporting',
+                roleWeight:       parsed?.roleWeight       || 'main',
+                moralAxis:        parsed?.moralAxis        || 'neutral',
+                orderAxis:        parsed?.orderAxis        || 'neutral',
                 shortDescription: parsed?.shortDescription || '',
                 appearance:       parsed?.appearance       || '',
                 personality:      parsed?.personality      || '',
@@ -283,10 +300,12 @@ export default function CharacterPanel({ project }: Props) {
       )}
 
       {/* 主体：左侧列表 + 右侧详情 */}
-      {characters.length === 0 ? (
+      {displayedChars.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-text-muted gap-3">
           <div className="text-4xl opacity-20">📖</div>
-          <p className="text-sm">还没有角色，点击「新建角色」开始创作</p>
+          <p className="text-sm">
+            {view === 'main' ? '还没有主要角色，可在「角色生成」中创建或调整戏份。' : '还没有角色，点击「新建角色」开始创作'}
+          </p>
         </div>
       ) : (
         <div className="flex gap-4">
@@ -310,7 +329,9 @@ export default function CharacterPanel({ project }: Props) {
                   </span>
                   <div className="min-w-0">
                     <p className={`text-sm font-medium truncate ${active ? 'text-accent' : 'text-text-primary'}`}>{c.name}</p>
-                    <p className="text-[10px] text-text-muted truncate">{c.shortDescription?.slice(0, 10) || ROLE_LABELS[c.role]}</p>
+                    <p className="text-[10px] text-text-muted truncate">
+                      {c.shortDescription?.slice(0, 10) || `${ROLE_WEIGHT_LABELS[c.roleWeight]} · ${MORAL_AXIS_LABELS[c.moralAxis]}`}
+                    </p>
                   </div>
                 </button>
               )
@@ -380,17 +401,12 @@ function CharacterDetailCard({
         <div className="flex-1 min-w-0">
           {/* 角色元信息行 */}
           <div className="flex items-center gap-1.5 text-xs text-text-muted mb-0.5">
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${ROLE_COLORS[char.role]}`}>
-              {ROLE_LABELS[char.role]}
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-border bg-bg-elevated text-text-secondary">
+              {ROLE_WEIGHT_LABELS[char.roleWeight]}
             </span>
-            <select
-              value={char.alignment || 'good'}
-              onChange={e => char.id && updateCharacter(char.id, { alignment: e.target.value as CharacterAlignment })}
-              className="px-1.5 py-0.5 bg-bg-elevated text-text-secondary text-[10px] rounded border border-border focus:outline-none focus:border-accent cursor-pointer"
-            >
-              <option value="good">正派</option>
-              <option value="evil">反派</option>
-            </select>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-border bg-bg-elevated text-text-secondary">
+              {ORDER_AXIS_LABELS[char.orderAxis]}{MORAL_AXIS_LABELS[char.moralAxis]}
+            </span>
 
             {/* 多世界：归属世界 + 跨世界标记 */}
             {multiWorld && (
@@ -455,6 +471,17 @@ function CharacterDetailCard({
           </button>
         </div>
       </div>
+
+      <CharacterAxesPicker
+        roleWeight={char.roleWeight}
+        moralAxis={char.moralAxis}
+        orderAxis={char.orderAxis}
+        onChange={axes => {
+          if (!char.id || !axes.roleWeight || !axes.moralAxis || !axes.orderAxis) return
+          updateCharacter(char.id, axes as Pick<Character, 'roleWeight' | 'moralAxis' | 'orderAxis'>)
+        }}
+        compact
+      />
 
       {/* Phase 23.1: 动态状态面板 */}
       <CharacterStatusPanel projectId={projectId} characterName={char.name} />

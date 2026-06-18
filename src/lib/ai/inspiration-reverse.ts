@@ -4,7 +4,12 @@
  * 用户写碎片灵感 → AI 反向生成世界观草稿、故事核心、初始角色卡
  */
 
-import type { ChatMessage } from '../types'
+import type {
+  ChatMessage,
+  CharacterMoralAxis,
+  CharacterOrderAxis,
+  CharacterRoleWeight,
+} from '../types'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from './prompt-engine'
 
@@ -30,7 +35,9 @@ export interface ReverseStoryCore {
 
 export interface ReverseCharacter {
   name: string
-  role: 'protagonist' | 'antagonist' | 'supporting'
+  roleWeight: CharacterRoleWeight
+  moralAxis: CharacterMoralAxis
+  orderAxis: CharacterOrderAxis
   shortDescription: string
   personality: string
   background: string
@@ -76,6 +83,23 @@ export interface ReverseMultiWorldResult {
 }
 
 const VALID_WG_TYPES: WorldGroupType[] = ['primary', 'traversal', 'instance', 'parallel', 'ascension', 'custom']
+const VALID_WEIGHTS: CharacterRoleWeight[] = ['main', 'secondary', 'npc', 'extra']
+const VALID_MORAL: CharacterMoralAxis[] = ['good', 'neutral', 'evil']
+const VALID_ORDER: CharacterOrderAxis[] = ['lawful', 'neutral', 'chaotic']
+
+function parseAxes(c: Record<string, unknown>): Pick<ReverseCharacter, 'roleWeight' | 'moralAxis' | 'orderAxis'> {
+  return {
+    roleWeight: VALID_WEIGHTS.includes(c.roleWeight as CharacterRoleWeight)
+      ? c.roleWeight as CharacterRoleWeight
+      : 'main',
+    moralAxis: VALID_MORAL.includes(c.moralAxis as CharacterMoralAxis)
+      ? c.moralAxis as CharacterMoralAxis
+      : 'neutral',
+    orderAxis: VALID_ORDER.includes(c.orderAxis as CharacterOrderAxis)
+      ? c.orderAxis as CharacterOrderAxis
+      : 'neutral',
+  }
+}
 
 export function buildInspirationReverseMultiWorldPrompt(
   projectName: string,
@@ -123,7 +147,7 @@ export function parseReverseMultiWorldOutput(output: string): ReverseMultiWorldR
     const characters: ReverseCharacterMW[] = Array.isArray(p.characters)
       ? p.characters.map((c: Record<string, unknown>): ReverseCharacterMW => ({
           name: String(c.name || ''),
-          role: (['protagonist', 'antagonist', 'supporting'].includes(String(c.role)) ? c.role : 'supporting') as ReverseCharacter['role'],
+          ...parseAxes(c),
           shortDescription: String(c.shortDescription || ''),
           personality: String(c.personality || ''),
           background: String(c.background || ''),
@@ -188,9 +212,7 @@ export function parseReverseOutput(output: string): ReverseResult | null {
     const characters: ReverseCharacter[] = Array.isArray(parsed.characters)
       ? parsed.characters.map((c: Record<string, unknown>) => ({
           name: String(c.name || ''),
-          role: (['protagonist', 'antagonist', 'supporting'].includes(String(c.role))
-            ? c.role
-            : 'supporting') as ReverseCharacter['role'],
+          ...parseAxes(c),
           shortDescription: String(c.shortDescription || ''),
           personality: String(c.personality || ''),
           background: String(c.background || ''),

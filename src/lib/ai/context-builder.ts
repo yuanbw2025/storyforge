@@ -4,6 +4,12 @@ import { KEYWORD_CATEGORY_LABELS } from '../types/history'
 import { DIMENSION_LABELS, ANALYSIS_DIMENSIONS } from '../types/reference'
 import { loadContextMemo } from '../export/context-snapshot'
 import { db } from '../db/schema'
+import {
+  MORAL_AXIS_LABELS,
+  normalizeCharacterAxes,
+  ORDER_AXIS_LABELS,
+  ROLE_WEIGHT_LABELS,
+} from '../character/character-axes'
 
 /** 获取已缓存的上下文快照（如果有） */
 export function getContextMemo(projectId: number): string {
@@ -174,16 +180,22 @@ export function buildWorldContext(wv: Worldview | null, sc: StoryCore | null, ps
 /**
  * 构建角色上下文（分权重三层输出）
  *
- * - 核心角色（主角/反派）：完整信息（描述+性格+背景+动机+能力）
- * - 重要配角（supporting）：一句话描述+关系
- * - 其他（minor/npc/extra）：仅名字和定位
+ * - 主要角色：完整信息（描述+性格+背景+动机+能力）
+ * - 次要角色：一句话描述+关系
+ * - NPC/路人：仅名字、戏份与九宫格阵营
  */
 export function buildCharacterContext(characters: Character[]): string {
   if (!characters.length) return ''
+  const normalizedCharacters = characters.map(character => ({
+    ...character,
+    ...normalizeCharacterAxes(character as unknown as Record<string, unknown>),
+  })) as Character[]
 
-  const core = characters.filter(c => c.role === 'protagonist' || c.role === 'antagonist')
-  const supporting = characters.filter(c => c.role === 'supporting')
-  const others = characters.filter(c => c.role !== 'protagonist' && c.role !== 'antagonist' && c.role !== 'supporting')
+  const core = normalizedCharacters.filter(c => c.roleWeight === 'main')
+  const supporting = normalizedCharacters.filter(c => c.roleWeight === 'secondary')
+  const others = normalizedCharacters.filter(c => c.roleWeight === 'npc' || c.roleWeight === 'extra')
+  const axes = (c: Character) =>
+    `${ROLE_WEIGHT_LABELS[c.roleWeight]} · ${ORDER_AXIS_LABELS[c.orderAxis]}${MORAL_AXIS_LABELS[c.moralAxis]}`
 
   const parts: string[] = []
 
@@ -192,7 +204,7 @@ export function buildCharacterContext(characters: Character[]): string {
     for (const c of core) {
       // 核心角色:放开字段硬截断,完整注入(源级 token 软上限仍兜底)
       const details = [
-        `${c.name}（${getRoleLabel(c.role)}）`,
+        `${c.name}（${axes(c)}）`,
         c.shortDescription ? `简介：${c.shortDescription}` : '',
         c.appearance ? `外貌：${c.appearance}` : '',
         c.personality ? `性格：${c.personality}` : '',
@@ -206,7 +218,7 @@ export function buildCharacterContext(characters: Character[]): string {
   }
 
   if (supporting.length) {
-    parts.push('【重要配角（一句话+关系）】')
+    parts.push('【次要角色（一句话+关系）】')
     for (const c of supporting) {
       parts.push(`${c.name}：${c.shortDescription || '（无描述）'}${c.relationships ? `，关系：${c.relationships.slice(0, 80)}` : ''}`)
     }
@@ -214,7 +226,7 @@ export function buildCharacterContext(characters: Character[]): string {
 
   if (others.length) {
     parts.push('【其他角色（仅名字）】')
-    parts.push(others.map(c => `${c.name}（${getRoleLabel(c.role)}）`).join('、'))
+    parts.push(others.map(c => `${c.name}（${axes(c)}）`).join('、'))
   }
 
   return parts.join('\n')
@@ -222,27 +234,18 @@ export function buildCharacterContext(characters: Character[]): string {
 
 /**
  * Phase G2: 过滤活跃角色
- * 只保留在当前章节范围内活跃的角色（主角/反派始终保留）
+ * 只保留在当前章节范围内活跃的角色（主要角色始终保留）
  */
 export function filterActiveCharacters(characters: Character[], currentChapterId?: number): Character[] {
   if (!currentChapterId) return characters
   return characters.filter(c => {
-    // 主角和反派始终保留
-    if (c.role === 'protagonist' || c.role === 'antagonist') return true
+    if (c.roleWeight === 'main') return true
     // 如果设了退场章节且当前章节已过退场点，过滤掉
     if (c.exitChapterId && c.exitChapterId < currentChapterId) return false
     // 如果设了首次出场且当前章节还没到，过滤掉
     if (c.firstAppearChapterId && c.firstAppearChapterId > currentChapterId) return false
     return true
   })
-}
-
-function getRoleLabel(role: string): string {
-  const map: Record<string, string> = {
-    protagonist: '主角', antagonist: '反派',
-    supporting: '配角', minor: '次要',
-  }
-  return map[role] || role
 }
 
 /**

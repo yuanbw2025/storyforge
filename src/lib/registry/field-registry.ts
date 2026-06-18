@@ -22,6 +22,21 @@ const roleAliases: Record<string, string> = {
   龙套: 'extra',
 }
 
+const roleWeightAliases: Record<string, string> = {
+  主要: 'main',
+  主要角色: 'main',
+  核心角色: 'main',
+  主角: 'main',
+  反派: 'main',
+  重要配角: 'main',
+  次要: 'secondary',
+  次要角色: 'secondary',
+  NPC: 'npc',
+  npc: 'npc',
+  路人: 'extra',
+  龙套: 'extra',
+}
+
 const chapterStatusAliases: Record<string, string> = {
   大纲: 'outline',
   草稿: 'draft',
@@ -143,6 +158,35 @@ export const FIELD_REGISTRY: FieldSpec[] = [
     ['protagonist', 'antagonist', 'supporting', 'minor', 'npc', 'extra'],
     roleAliases,
     ['定位', '角色定位'],
+  ),
+  enumeration(
+    'characters',
+    'roleWeight',
+    ['main', 'secondary', 'npc', 'extra'],
+    roleWeightAliases,
+    ['戏份', '戏份权重', '角色权重'],
+  ),
+  enumeration(
+    'characters',
+    'moralAxis',
+    ['good', 'neutral', 'evil'],
+    {
+      善: 'good', 善良: 'good', 正派: 'good',
+      中: 'neutral', 中立: 'neutral', 绝对中立: 'neutral',
+      恶: 'evil', 邪恶: 'evil', 反派: 'evil',
+    },
+    ['道德轴', '善恶轴'],
+  ),
+  enumeration(
+    'characters',
+    'orderAxis',
+    ['lawful', 'neutral', 'chaotic'],
+    {
+      守序: 'lawful', 秩序: 'lawful',
+      中立: 'neutral', 绝对中立: 'neutral',
+      混乱: 'chaotic',
+    },
+    ['秩序轴', '守序混乱轴'],
   ),
   enumeration('characters', 'alignment', ['good', 'evil'], { 正派: 'good', 反派: 'evil', 善: 'good', 恶: 'evil' }, ['阵营']),
   longtext('characters', 'shortDescription', ['description', 'summary', '简介', '一句话简介']),

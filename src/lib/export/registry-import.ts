@@ -15,6 +15,7 @@ import { transactionTablesFor } from '../registry/lifecycle'
 import { importLegacyArraysToCodex } from '../migrations/legacy-to-codex-upgrade'
 import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
+import { normalizeCharacterAxes } from '../character/character-axes'
 
 /** 表级拓扑排序:被 remapVia 指向的表必须先导入(selfTree 不算表间依赖) */
 function deriveImportOrder(specs: TableSpec[]): TableSpec[] {
@@ -120,6 +121,9 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
         if (dropRow) continue
 
         if (spec.owner === 'project') obj.projectId = newProjectId
+        if (spec.name === 'characters') {
+          Object.assign(obj, normalizeCharacterAxes(obj))
+        }
 
         // JSON 引用字段(portals)先剥离,待全表映射建好后两阶段回填
         let stashed: Record<string, any> | null = null

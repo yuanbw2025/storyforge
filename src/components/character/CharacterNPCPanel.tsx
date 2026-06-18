@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useCharacterStore } from '../../stores/character'
 import type { Project, Character } from '../../lib/types'
+import { filterCharactersByRoleWeight } from '../../lib/character/character-axes'
 
 interface Props {
   project: Project
@@ -13,12 +14,14 @@ export default function CharacterNPCPanel({ project }: Props) {
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
 
-  const list = characters.filter(c => c.role === 'npc')
+  const list = filterCharactersByRoleWeight(characters, 'npc')
 
   const handleAdd = () => addCharacter({
     projectId: project.id!,
     name: '新 NPC',
-    role: 'npc',
+    roleWeight: 'npc',
+    moralAxis: 'neutral',
+    orderAxis: 'neutral',
     shortDescription: '',
     appearance: '', personality: '', background: '',
     motivation: '', abilities: '', relationships: '', arc: '',

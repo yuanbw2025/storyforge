@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, User } from 'lucide-react'
 import { useCharacterStore } from '../../stores/character'
 import type { Project, Character } from '../../lib/types'
+import { filterCharactersByRoleWeight } from '../../lib/character/character-axes'
 
 interface Props {
   project: Project
@@ -14,13 +15,15 @@ export default function CharacterMinorPanel({ project }: Props) {
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
 
-  const list = characters.filter(c => c.role === 'minor')
+  const list = filterCharactersByRoleWeight(characters, 'secondary')
 
   const handleAdd = async () => {
     const id = await addCharacter({
       projectId: project.id!,
       name: '新次要角色',
-      role: 'minor',
+      roleWeight: 'secondary',
+      moralAxis: 'neutral',
+      orderAxis: 'neutral',
       shortDescription: '',
       appearance: '', personality: '', background: '',
       motivation: '', abilities: '', relationships: '', arc: '',

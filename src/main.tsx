@@ -9,6 +9,8 @@ import { usePromptStore } from './stores/prompt'
 import { useWorkflowStore } from './stores/workflow'
 import { ensureSchema, REQUIRED_TABLES } from './lib/db/ensure-schema'
 import { validateRegistry } from './lib/registry/validate'
+import { db } from './lib/db/schema'
+import { finalizeCharacterAxesMigrationSnapshots } from './lib/migrations/finalize-character-axes-snapshots'
 import './index.css'
 
 // 从 localStorage 恢复主题（兼容旧主题名迁移）
@@ -57,6 +59,8 @@ async function bootstrap() {
   // 1. Schema 健康自检：开发环境可自动 reset，生产环境绝不自动删库。
   try {
     await ensureSchema(REQUIRED_TABLES, { allowReset: import.meta.env.DEV })
+    await db.open()
+    await finalizeCharacterAxesMigrationSnapshots()
   } catch (e) {
     console.error('[bootstrap] schema check failed:', e)
   }

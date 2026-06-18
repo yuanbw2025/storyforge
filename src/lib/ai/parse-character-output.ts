@@ -1,11 +1,14 @@
-import type { CharacterRole } from '../types'
+import type { CharacterMoralAxis, CharacterOrderAxis, CharacterRoleWeight } from '../types'
 import type { AIConfig } from '../types'
 import { chat } from './client'
+import { MORAL_AXES, ORDER_AXES, ROLE_WEIGHTS } from '../character/character-axes'
 
 /** 解析结果 —— 对应 Character 可写字段 */
 export interface ParsedCharacter {
   name: string
-  role: CharacterRole
+  roleWeight: CharacterRoleWeight
+  moralAxis: CharacterMoralAxis
+  orderAxis: CharacterOrderAxis
   shortDescription: string
   appearance: string
   personality: string
@@ -16,38 +19,24 @@ export interface ParsedCharacter {
   arc: string
 }
 
-const VALID_ROLES: CharacterRole[] = ['protagonist', 'antagonist', 'supporting', 'minor', 'npc', 'extra']
-
-/** 角色定位中文 → CharacterRole（仅当 AI 未按要求返回英文枚举时的兜底） */
-const ROLE_MAP: Record<string, CharacterRole> = {
-  '主角':    'protagonist',
-  '男主':    'protagonist',
-  '女主':    'protagonist',
-  '主人公':  'protagonist',
-  '反派':    'antagonist',
-  '大反派':  'antagonist',
-  '配角':    'supporting',
-  '重要配角':'supporting',
-  '次要':    'minor',
-  '次要角色':'minor',
-  'npc':     'npc',
-  'NPC':     'npc',
-  '路人':    'extra',
+const WEIGHT_MAP: Record<string, CharacterRoleWeight> = {
+  主要: 'main', 主角: 'main', 反派: 'main', 配角: 'main',
+  次要: 'secondary', NPC: 'npc', npc: 'npc', 路人: 'extra',
 }
 
-/**
- * 归一化 AI 返回的 role 字段。
- * 优先信任 AI 已按要求返回的英文枚举；仅当其非合法枚举时，才用中文关键词兜底，
- * 都不匹配则回退 supporting。
- */
-function normalizeRole(raw: string): CharacterRole {
+function normalizeEnum<T extends string>(
+  raw: string,
+  values: readonly T[],
+  aliases: Record<string, T>,
+  fallback: T,
+): T {
   const v = (raw || '').trim().toLowerCase()
-  const direct = VALID_ROLES.find(r => r === v)
+  const direct = values.find(item => item === v)
   if (direct) return direct
-  for (const [cn, role] of Object.entries(ROLE_MAP)) {
-    if (raw.includes(cn)) return role
+  for (const [alias, normalized] of Object.entries(aliases)) {
+    if (raw.includes(alias)) return normalized
   }
-  return 'supporting'
+  return fallback
 }
 
 /**
@@ -66,7 +55,9 @@ export async function parseCharacterOutput(
 
 {
   "name": "角色姓名（纯文字，不含符号）",
-  "role": "定位，只能是以下之一：protagonist / antagonist / supporting / minor / npc / extra",
+  "roleWeight": "戏份，只能是 main / secondary / npc / extra",
+  "moralAxis": "道德轴，只能是 good / neutral / evil",
+  "orderAxis": "秩序轴，只能是 lawful / neutral / chaotic",
   "shortDescription": "一句话简介（不超过 50 字）",
   "appearance": "外貌描述（去除 Markdown，纯文字段落）",
   "personality": "性格特点",
@@ -81,7 +72,7 @@ export async function parseCharacterOutput(
 - 所有字段值都是纯文字，不含 Markdown 标记（不含 **bold**、##标题、- 列表符号等）
 - 如果原文没有对应内容，该字段填空字符串 ""
 - 原文中的"金手指 / 系统 / 外挂 / 天赋 / 特殊能力 / 宝物能力"等属于角色能力设定时,统一并入 abilities,不要当成角色姓名或 relationships
-- role 字段必须是英文枚举值之一，根据原文定位描述来判断
+- roleWeight / moralAxis / orderAxis 必须使用英文枚举；九宫格阵营不可留空
 - 只输出 JSON，不要输出其他任何内容`
 
   const userPrompt = `请从以下角色设定文本中提取结构化数据：
@@ -106,7 +97,9 @@ ${rawText}`
 
     return {
       name:             parsed.name             || 'AI 生成角色',
-      role:             normalizeRole(parsed.role || ''),
+      roleWeight:       normalizeEnum(parsed.roleWeight || '', ROLE_WEIGHTS, WEIGHT_MAP, 'main'),
+      moralAxis:        normalizeEnum(parsed.moralAxis || '', MORAL_AXES, { 善: 'good', 正派: 'good', 中立: 'neutral', 恶: 'evil', 反派: 'evil' }, 'neutral'),
+      orderAxis:        normalizeEnum(parsed.orderAxis || '', ORDER_AXES, { 守序: 'lawful', 中立: 'neutral', 混乱: 'chaotic' }, 'neutral'),
       shortDescription: parsed.shortDescription || '',
       appearance:       parsed.appearance       || '',
       personality:      parsed.personality      || '',
