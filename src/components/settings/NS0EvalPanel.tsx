@@ -9,6 +9,11 @@ import {
   runEvalInBrowser,
 } from '../../lib/evals/long-consistency/runner'
 import type { EvalRunRecord } from '../../lib/evals/long-consistency/types'
+import {
+  buildSemanticJudgeMessages,
+  parseSemanticJudgeVerdict,
+  scoreWithSemanticVerdict,
+} from '../../lib/evals/long-consistency/semantic-judge'
 import { useAIConfigStore } from '../../stores/ai-config'
 
 function readStoredRecord(): EvalRunRecord | null {
@@ -63,6 +68,22 @@ async function evalChatWithRetry(
   throw lastError
 }
 
+async function judgeEvalOutput(
+  fixture: import('../../lib/evals/long-consistency/types').LongConsistencyFixture,
+  output: string,
+  config: import('../../lib/types').AIConfig,
+) {
+  const messages = buildSemanticJudgeMessages(fixture, output)
+  const response = await evalChatWithRetry(
+    messages,
+    { ...config, temperature: 0, maxTokens: 600 },
+    'eval.ns1.judge',
+  )
+  const verdict = parseSemanticJudgeVerdict(fixture, response.output)
+  if (!verdict) throw new Error(`语义裁判返回无法解析：${fixture.id}`)
+  return scoreWithSemanticVerdict(fixture, output, verdict)
+}
+
 export default function NS0EvalPanel() {
   const config = useAIConfigStore(state => state.config)
   const [record, setRecord] = useState<EvalRunRecord | null>(() => readStoredRecord())
@@ -106,6 +127,7 @@ export default function NS0EvalPanel() {
         variants: ['legacy-500-tail', 'handoff-tail-summary'],
         config,
         call: (messages, runConfig) => evalChatWithRetry(messages, runConfig, 'eval.ns1'),
+        judge: judgeEvalOutput,
         onRunComplete: (_completedRecord, completed, total) => setProgress(`${completed}/${total} 组`),
         onCaseProgress: (completedRuns, totalRuns, completedCases, totalCases) => {
           setProgress(`${completedRuns + 1}/${totalRuns} 组 · ${completedCases}/${totalCases} 例`)
@@ -133,7 +155,7 @@ export default function NS0EvalPanel() {
     <div data-testid="ns0-eval-panel" className="max-w-2xl mt-6 p-4 bg-bg-surface border border-border rounded-xl">
       <h3 className="text-sm font-semibold text-text-primary">NS-0 长期一致性基线（仅开发环境）</h3>
       <p className="mt-1 text-xs text-text-muted">
-        普通按钮运行 development 样例；NS-1 最终按钮运行冻结 held-out。最终盲测只展示 aggregate，不展开逐例输出。
+        普通按钮运行 development 样例；NS-1 最终按钮运行冻结 held-out，并用独立语义裁判评分。最终盲测只展示 aggregate，不展开逐例输出。
       </p>
       <div className="mt-3 flex items-center gap-3">
         <button

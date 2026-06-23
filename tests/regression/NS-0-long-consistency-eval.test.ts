@@ -9,6 +9,10 @@ import {
   runPairedEvalInBrowser,
   scoreOutput,
 } from '../../src/lib/evals/long-consistency/runner'
+import {
+  parseSemanticJudgeVerdict,
+  scoreWithSemanticVerdict,
+} from '../../src/lib/evals/long-consistency/semantic-judge'
 
 describe('NS-0 long-consistency evaluation harness', () => {
   it('freezes separate development and held-out fixture sets', () => {
@@ -26,12 +30,16 @@ describe('NS-0 long-consistency evaluation harness', () => {
       'held-v3-continuation-fourth-chime',
       'held-v3-expansion-porcelain',
       'held-v3-completion-salt-pass',
-    ])
-    expect(getFixtures('held-out').map(fixture => fixture.id)).toEqual([
       'held-v4-completion-archive',
       'held-v4-continuation-fifth-drop',
       'held-v4-expansion-bronze-cup',
       'held-v4-continuation-red-flag',
+    ])
+    expect(getFixtures('held-out').map(fixture => fixture.id)).toEqual([
+      'held-v5-completion-mirror-hall',
+      'held-v5-continuation-seventh-knock',
+      'held-v5-expansion-paper-bird',
+      'held-v5-continuation-green-lantern',
     ])
   })
 
@@ -81,6 +89,27 @@ describe('NS-0 long-consistency evaluation harness', () => {
     expect(score.futureLeakage).toBe(true)
     expect(score.wrongWorldLeakage).toBe(true)
     expect(score.evidenceCitationRecall).toBe(1)
+  })
+
+  it('uses a bounded semantic verdict for behavior constraints and contextual leakage', () => {
+    const fixture = getFixtures('development')[0]
+    const verdict = parseSemanticJudgeVerdict(fixture, JSON.stringify({
+      matchedRequiredFactIds: ['bronze-bell', 'unknown'],
+      satisfiedConstraintIds: ['signal', 'protect-identity'],
+      leakedFutureFactIds: [],
+      leakedForeignWorldFactIds: [],
+    }))
+    expect(verdict).toEqual({
+      matchedRequiredFactIds: ['bronze-bell'],
+      satisfiedConstraintIds: ['signal', 'protect-identity'],
+      leakedFutureFactIds: [],
+      leakedForeignWorldFactIds: [],
+    })
+    const score = scoreWithSemanticVerdict(fixture, '正文没有逐字复述禁令。', verdict!)
+    expect(score.requiredFactRecall).toBe(0.5)
+    expect(score.constraintRecall).toBe(1)
+    expect(score.futureLeakage).toBe(false)
+    expect(score.wrongWorldLeakage).toBe(false)
   })
 
   it('pre-registers fixed-budget and NS-1 acceptance gates before real baseline calls', () => {

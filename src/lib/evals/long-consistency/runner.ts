@@ -24,10 +24,10 @@ export const NS1_ACCEPTANCE_THRESHOLDS = Object.freeze({
 })
 
 export const NS0_FIXED_MAX_TOKENS = 1200
-export const NS0_RESULTS_STORAGE_KEY = 'storyforge-ns0-long-consistency-results-v4'
+export const NS0_RESULTS_STORAGE_KEY = 'storyforge-ns0-long-consistency-results-v5'
 // Bump this key for each sealed held-out attempt. Earlier versions remain in
 // browser storage as audit records and are never reused for tuning.
-export const NS0_PAIRED_RESULTS_STORAGE_KEY = 'storyforge-ns0-long-consistency-paired-v4'
+export const NS0_PAIRED_RESULTS_STORAGE_KEY = 'storyforge-ns0-long-consistency-paired-v5'
 
 export interface Ns1GateResult {
   passed: boolean
@@ -68,7 +68,7 @@ function appendExperimentalContext(messages: ChatMessage[], fixture: LongConsist
     '【实验性交接约束】',
     ...fixture.requiredConstraints.map(constraint => `${constraint.id}: ${constraint.aliases[0]}`),
     ...fixture.evidenceIds.map(id => `证据引用格式：[证据:${id}]`),
-    '输出契约：在正文前 40% 用可观察的动作逐项落实上述约束，并自然包含每条冒号后的中文短语；不得只暗示。',
+    '输出契约：在正文前 40% 用可观察的动作逐项落实上述约束，不得只暗示。',
     '不得把标为“未来计划”或“异世界档案”的信息写成当前已发生事实。',
   ].join('\n')
 
@@ -89,10 +89,9 @@ function buildEvalContinuity(fixture: LongConsistencyFixture, variant: EvalVaria
   const handoff = variant === 'handoff-tail-summary'
     ? [
         '【实验性交接约束】',
-        ...fixture.requiredFacts.map(fact => `必须保留事实 ${fact.id}: ${fact.aliases[0]}`),
         ...fixture.requiredConstraints.map(constraint => `${constraint.id}: ${constraint.aliases[0]}`),
         ...fixture.evidenceIds.map(id => `证据引用格式：[证据:${id}]`),
-        '输出契约：在正文前 40% 用可观察的动作逐项落实上述事实与约束，并自然包含每条冒号后的中文短语；不得只暗示。',
+        '输出契约：在正文前 40% 用可观察的动作逐项落实上述约束，不得只暗示。',
         '不得把标为“未来计划”或“异世界档案”的信息写成当前已发生事实。',
       ].join('\n')
     : undefined
@@ -235,6 +234,11 @@ export async function runEvalInBrowser(args: {
     messages: ChatMessage[],
     config: AIConfig,
   ) => Promise<{ output: string; usage?: TokenUsage }>
+  judge?: (
+    fixture: LongConsistencyFixture,
+    output: string,
+    config: AIConfig,
+  ) => Promise<CaseScore>
   onProgress?: (completed: number, total: number) => void
   persistStandalone?: boolean
 }): Promise<EvalRunRecord> {
@@ -249,6 +253,9 @@ export async function runEvalInBrowser(args: {
     const built = buildEvalCase(fixture, args.variant)
     const startedAt = performance.now()
     const response = await args.call(built.messages, runConfig)
+    const score = args.judge
+      ? await args.judge(fixture, response.output, runConfig)
+      : scoreOutput(fixture, response.output)
     results.push({
       fixtureId: fixture.id,
       messages: built.messages,
@@ -259,7 +266,7 @@ export async function runEvalInBrowser(args: {
       inputTokens: response.usage?.inputTokens ?? null,
       outputTokens: response.usage?.outputTokens ?? null,
       durationMs: Math.round(performance.now() - startedAt),
-      score: scoreOutput(fixture, response.output),
+      score,
     })
     args.onProgress?.(results.length, args.fixtures.length)
   }
@@ -292,6 +299,11 @@ export async function runPairedEvalInBrowser(args: {
     messages: ChatMessage[],
     config: AIConfig,
   ) => Promise<{ output: string; usage?: TokenUsage }>
+  judge?: (
+    fixture: LongConsistencyFixture,
+    output: string,
+    config: AIConfig,
+  ) => Promise<CaseScore>
   onRunComplete?: (record: EvalRunRecord, completed: number, total: number) => void
   onCaseProgress?: (
     completedRuns: number,
@@ -313,6 +325,7 @@ export async function runPairedEvalInBrowser(args: {
         budgetMode,
         config: args.config,
         call: args.call,
+        judge: args.judge,
         persistStandalone: false,
         onProgress: (completedCases, totalCases) => {
           args.onCaseProgress?.(records.length, total, completedCases, totalCases)
