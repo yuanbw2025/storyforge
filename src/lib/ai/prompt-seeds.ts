@@ -469,6 +469,57 @@ export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
     isActive: true,
   },
 
+  // NS-1: 章节摘要 + continuity handoff 单次结构化抽取
+  {
+    scope: 'system',
+    moduleKey: 'chapter.memory',
+    promptType: 'extract',
+    name: '内置-章节连续性记忆',
+    description: '一次调用同时提取章节摘要与下一章承接 handoff；引文 offset 由系统回查，不信任模型位置。',
+    isDefault: true,
+    systemPrompt: `你是长篇小说的章节连续性记忆抽取器。只根据给定正文提取，不补写、不推测未来、不混入其他章节信息。
+
+输出必须是一个 JSON 对象，不要 Markdown 围栏或解释：
+{
+  "summary": "100-200字客观摘要",
+  "handoff": {
+    "finalScene": {
+      "location": "结尾地点；未知则空字符串",
+      "storyTime": "结尾故事时间；未知则空字符串",
+      "activeCharacters": ["结尾现场角色"],
+      "lastAction": "正文最后已发生的关键动作；未知则空字符串"
+    },
+    "stateChanges": ["本章明确发生的状态变化"],
+    "knowledgeChanges": ["角色本章新获得或失去的知识"],
+    "commitments": ["明确承诺、命令、期限或必须履行的约束"],
+    "openLoops": ["章末仍未解决、下一章应承接的问题"],
+    "immediateNextIntent": "章末明确的下一步意图；未知则空字符串",
+    "evidenceQuotes": [
+      {
+        "quote": "从正文逐字复制的短引文",
+        "prefix": "用于同文重复时消歧的引文前短锚点；可空",
+        "suffix": "用于同文重复时消歧的引文后短锚点；可空"
+      }
+    ]
+  }
+}
+
+规则：
+1. summary 与 handoff 必须来自同一次阅读；
+2. finalScene、lastAction、openLoops、immediateNextIntent 以正文结尾为准；
+3. stateChanges、knowledgeChanges、commitments 要覆盖整章；
+4. evidenceQuotes 必须逐字复制正文，禁止编造；不要输出 offset；
+5. 没有依据的字段用空字符串或空数组，不要猜测。`,
+    userPromptTemplate: `【章节标题】{{chapterTitle}}
+
+【标准化后的完整章节正文】
+{{chapterText}}
+
+请输出 JSON：`,
+    variables: ['chapterTitle', 'chapterText'],
+    isActive: true,
+  },
+
   // 8. 章节-润色
   {
     scope: 'system',

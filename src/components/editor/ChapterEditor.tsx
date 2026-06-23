@@ -12,7 +12,7 @@ import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
 import { buildReviewRevisePrompt, type ReviewResult } from '../../lib/ai/adapters/review-adapter'
 import { buildStateExtractPrompt, parseStateDiffs } from '../../lib/ai/adapters/state-extract-adapter'
-import { buildSummaryPrompt } from '../../lib/ai/adapters/summary-adapter'
+import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { buildGenreConstraintContext } from '../../lib/ai/genre-metadata'
 import { buildStylePromptInjection } from '../../lib/ai/writing-styles'
 import { assembleContext } from '../../lib/registry/assemble-context'
@@ -60,7 +60,15 @@ interface Props {
 }
 
 export default function ChapterEditor({ project, outlineNodeId }: Props) {
-  const { chapters, currentChapter, selectChapter, addChapter, updateChapter, loadAll: loadChapters } = useChapterStore()
+  const {
+    chapters,
+    currentChapter,
+    selectChapter,
+    addChapter,
+    updateChapter,
+    refreshChapter,
+    loadAll: loadChapters,
+  } = useChapterStore()
   const { nodes } = useOutlineStore()
   const { cards: stateCards, loadAll: loadStateCards, buildStateContext, buildSelectiveStateContext, applyDiffs } = useStateCardStore()
   const { characters, loadAll: loadCharacters } = useCharacterStore()
@@ -85,11 +93,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     currentChapter?.id ?? outlineNodeId ?? 'unselected',
   ))
   const stateAI = useAIStream()
-  const summaryAI = useAIStream()
+  const memoryAI = useAIStream()
   const editorRef = useRef<RichEditorHandle>(null)
   const reviseReportRef = useRef<ReviewResult | null>(null)  // G8：记住上次"按报告修改"的报告，供重试
   // Phase A1: 自动流程标记
-  const [autoProcessing, setAutoProcessing] = useState<'idle' | 'extracting' | 'summarizing'>('idle')
+  const [autoProcessing, setAutoProcessing] = useState<'idle' | 'extracting' | 'memory'>('idle')
   const [showOutlinePreview, setShowOutlinePreview] = useState(false)
   const [showReviewPanel, setShowReviewPanel] = useState(false)
   const [showNotePanel, setShowNotePanel] = useState(false)
@@ -397,46 +405,65 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     stateAI.reset()
   }
 
-  // ── Phase A3: 自动生成章节摘要 ──
-  const handleAutoSummary = async (text: string) => {
-    if (!currentChapter?.id) return
-    setAutoProcessing('summarizing')
+  // ── NS-1: 单次生成 summary + continuity handoff ──
+  const handleChapterMemory = async (task: {
+    chapterId: number
+    chapterTitle: string
+    chapterContent: string
+  }) => {
+    setAutoProcessing('memory')
     try {
-      const chapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
-      const messages = buildSummaryPrompt(chapterTitle, text)
-      console.log('[Summary] 自动生成章节摘要:', chapterTitle)
-      const raw = await summaryAI.start(messages, undefined, { category: 'summary', projectId: project.id! })
-      if (raw) {
-        const summary = raw.trim()
-        await updateChapter(currentChapter.id, { summary })
-        console.log('[Summary] 摘要已保存:', summary.slice(0, 50) + '...')
+      console.log('[ChapterMemory] 开始统一抽取:', task.chapterTitle)
+      const result = await runChapterMemoryTask({
+        projectId: project.id!,
+        ...task,
+        call: messages => memoryAI.start(messages, undefined, {
+          category: 'chapter.memory',
+          projectId: project.id!,
+        }),
+      })
+      if (result.status === 'written') {
+        await refreshChapter(task.chapterId)
+        console.log('[ChapterMemory] summary + handoff 已原子写回')
+      } else if (result.status === 'stale') {
+        console.warn('[ChapterMemory] 正文已变化，旧任务结果已丢弃')
+      } else {
+        console.error('[ChapterMemory] 结构化输出解析失败，保留真实 tail 降级')
       }
     } catch (err) {
-      console.error('[Summary] 摘要生成失败:', err)
+      console.error('[ChapterMemory] 统一抽取失败，保留真实 tail 降级:', err)
     } finally {
       setAutoProcessing('idle')
-      summaryAI.reset()
+      memoryAI.reset()
     }
   }
 
-  // 手动「重新生成摘要」：改完终稿（如去 AI 味后贴回）能基于当前正文刷新摘要，
-  // 不必非走一次 AI 生成/续写才更新（社区反馈）。
-  const handleManualSummary = async () => {
-    if (!plainText.trim() || autoProcessing === 'summarizing') return
-    await handleAutoSummary(plainText)
+  const handleManualMemory = async () => {
+    if (!currentChapter?.id || !plainText.trim() || autoProcessing === 'memory') return
+    const chapterId = currentChapter.id
+    const chapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
+    const sourceHtml = editorRef.current?.getHTML() ?? content
+    const sourceText = editorRef.current?.getPlainText() ?? plainText
+    await updateChapter(chapterId, { content: sourceHtml, wordCount: countWords(sourceText) })
+    setSavedContent(sourceHtml)
+    await handleChapterMemory({ chapterId, chapterTitle, chapterContent: sourceHtml })
   }
 
   // ── Phase A1: 生成正文完成后的自动流程 ──
-  // 接受AI生成的文本后，自动触发状态提取 → 摘要生成
-  const handleAutoPostGenerate = async (text: string) => {
+  // 接受 AI 生成的文本后，自动触发状态提取 → 一次统一章节记忆抽取。
+  const handleAutoPostGenerate = async (task: {
+    chapterId: number
+    chapterTitle: string
+    chapterContent: string
+    chapterPlainText: string
+  }) => {
     // 1. 自动提取状态
     setAutoProcessing('extracting')
     try {
-      const stateCtx = buildSelectiveStateContext(text, extraStateIds).text
-      const chapterTitle = outlineNode?.title || currentChapter?.title || '未知章节'
+      const stateCtx = buildSelectiveStateContext(task.chapterPlainText, extraStateIds).text
       const characterNames = characters.map(character => character.name)
-      const messages = buildStateExtractPrompt(stateCtx, chapterTitle, text, characterNames)
-      console.log('[AutoPost] 自动提取状态:', chapterTitle)
+      const messages = buildStateExtractPrompt(stateCtx, task.chapterTitle, task.chapterPlainText, characterNames)
+      console.log('[AutoPost] 自动提取状态:', task.chapterTitle)
       const raw = await stateAI.start(messages, undefined, { category: 'state.extract', projectId: project.id! })
       const { diffs, error } = parseStateDiffs(raw, characterNames)
       if (error) {
@@ -451,12 +478,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       console.error('[AutoPost] 状态提取失败:', err)
     }
 
-    // 2. 同时自动生成摘要（不等状态审核完成）
-    await handleAutoSummary(text)
+    // 2. summary + handoff 只发起这一轮统一调用，不增加第三次正文读取。
+    await handleChapterMemory({
+      chapterId: task.chapterId,
+      chapterTitle: task.chapterTitle,
+      chapterContent: task.chapterContent,
+    })
   }
 
   const handleAcceptAI = async (text: string) => {
-    if (!editorRef.current) return
+    if (!editorRef.current || !currentChapter?.id) return
+    const acceptedChapterId = currentChapter.id
+    const acceptedChapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
     const aiAction = ai.operation
     if (
       (aiAction === 'polish' || aiAction === 'expand' || aiAction === 'deai')
@@ -489,11 +522,21 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
     ai.reset()
 
-    // Phase A1: 生成/续写完成后自动触发状态提取 + 摘要生成
+    // 先把完整正文落库，再启动带 hash CAS 的异步后处理。
     if (shouldAutoProcess) {
-      // 获取完整正文用于分析
+      const fullHtml = editorRef.current.getHTML()
       const fullText = editorRef.current.getPlainText()
-      handleAutoPostGenerate(fullText)
+      await updateChapter(acceptedChapterId, {
+        content: fullHtml,
+        wordCount: countWords(fullText),
+      })
+      setSavedContent(fullHtml)
+      void handleAutoPostGenerate({
+        chapterId: acceptedChapterId,
+        chapterTitle: acceptedChapterTitle,
+        chapterContent: fullHtml,
+        chapterPlainText: fullText,
+      })
     }
   }
 
@@ -787,7 +830,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           <div className="flex items-center gap-2 text-sm text-emerald-400">
             <ClipboardList className="w-3.5 h-3.5 animate-pulse" />
             {autoProcessing === 'extracting' && '正在自动提取状态变更...'}
-            {autoProcessing === 'summarizing' && '正在自动生成章节摘要...'}
+            {autoProcessing === 'memory' && '正在生成章节摘要与连续性交接记忆...'}
           </div>
         </div>
       )}
@@ -798,20 +841,20 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs text-text-muted">📝 章节摘要</p>
             <button
-              onClick={handleManualSummary}
-              disabled={!plainText || autoProcessing === 'summarizing' || summaryAI.isStreaming}
-              title="基于当前正文重新生成摘要（去 AI 味/手改后刷新）"
+              onClick={handleManualMemory}
+              disabled={!plainText || autoProcessing === 'memory' || memoryAI.isStreaming}
+              title="基于当前正文一次刷新摘要与连续性交接记忆"
               className="flex items-center gap-1 text-xs text-text-muted hover:text-accent disabled:opacity-50 transition-colors"
             >
               <FileText className="w-3 h-3" />
-              {autoProcessing === 'summarizing'
+              {autoProcessing === 'memory'
                 ? '生成中...'
-                : currentChapter?.summary ? '重新生成' : '生成摘要'}
+                : currentChapter?.summary ? '刷新章节记忆' : '生成章节记忆'}
             </button>
           </div>
           {currentChapter?.summary
             ? <p className="text-sm text-text-secondary">{currentChapter.summary}</p>
-            : <p className="text-xs text-text-muted/60">改完正文后点「生成摘要」，让后续章节读到最新前情。</p>}
+            : <p className="text-xs text-text-muted/60">改完正文后生成章节记忆，让后续章节获得可校验的前情与交接约束。</p>}
         </div>
       )}
 

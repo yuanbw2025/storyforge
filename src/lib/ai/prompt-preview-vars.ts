@@ -39,6 +39,7 @@ export const PREVIEW_VARS: PromptVariableContext = {
   chapterSummary: '主角醒来发现自己重生回十年前，决意改变命运。',
   previousChapterEnding: '黑衣人冷笑一声，转身没入夜色。',
   existingContent: '林玄缓缓睁开眼睛，发现窗外的月亮还是十年前的样子。\n他猛地坐起身，胸口剧烈起伏。这不是梦……他真的回来了。',
+  chapterText: '林玄在废墟中醒来，发现自己失去了十年的记忆。离开前，他把断剑藏进斗篷，并答应在天亮前找到沈璃。',
   // 编辑/润色
   text: '林玄拔剑，剑光闪过，敌人倒下。',
   instruction: '增加画面感和心理描写',

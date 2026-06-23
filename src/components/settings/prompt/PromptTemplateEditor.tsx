@@ -23,6 +23,7 @@ const ALL_MODULE_KEYS: { value: PromptModuleKey; label: string }[] = [
   { value: 'detail.scene',                label: '细纲 · 场景（待启用）' },
   { value: 'chapter.content',             label: '章节 · 正文生成' },
   { value: 'chapter.continue',            label: '章节 · 续写' },
+  { value: 'chapter.memory',              label: '章节 · 连续性记忆抽取' },
   { value: 'chapter.polish',              label: '章节 · 润色' },
   { value: 'chapter.expand',              label: '章节 · 扩写' },
   { value: 'chapter.de-ai',               label: '章节 · 去 AI 味' },

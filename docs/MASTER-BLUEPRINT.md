@@ -2156,6 +2156,16 @@ NS-2 + NS-4 + NS-5 → NS-6
 - 导入引擎新增注册表声明式 `selfIdPaths`，恢复项目时自动把 `continuityHandoff.chapterId` 改写为新章节主键；
 - 验证：T1/CAS/旧摘要状态/标准化专项 `4/4`，导出导入与 adopt 联测合计 `14/14`，TypeScript、架构检查、39 表检查通过。
 
+#### ✅ NS-1/T2 · 统一章节记忆抽取完成（2026-06-23 · 待 Claude 审查）
+
+- 新增系统 PromptModuleKey `chapter.memory`、内置 seed、Prompt 管理器入口与 usage category；生成版 AI manual 已登记；
+- 单次结构化调用同时产出 `summary + continuityHandoff`，旧 `summary-adapter` 与独立 `summary` 调用已删除，不增加第三轮正文读取；
+- 输入使用版本化标准化后的完整章节正文，不再执行旧 `.slice(0, 6000)` 头部截断；
+- 模型只返回 quote 与可选前后锚点；offset 由系统在标准化正文中定位，逐字回查失败或重复引文无法唯一消歧时直接丢弃；
+- 统一任务在启动时捕获固定 project/chapter/content/hash，解析失败稳定降级，正文等待期间被编辑则通过 T1 CAS 丢弃全部旧结果；
+- 编辑器采纳生成/续写后先落正文，再执行“状态提取 + 一次 chapter.memory”；手动入口同步升级为“刷新章节记忆”；
+- 验证：T2 adapter `4/4`、T3 单调用/竞态/失败降级 `3/3`、T1 回归 `4/4`，TypeScript 通过。T3 的老书有界惰性补建与生成前降级链仍在后续施工。
+
 ---
 
 ## 〆 终

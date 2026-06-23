@@ -8,7 +8,7 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 39 个 moduleKey。
+共 40 个 moduleKey。
 
 | moduleKey | 名称 | 说明 | 读取变量 |
 |---|---|---|---|
@@ -19,6 +19,7 @@
 | `outline.chapter` | 内置-章节大纲展开 | 将单卷展开为 15-25 章的章节大纲。 | `volumeTitle` `volumeSummary` `worldContext` `prevVolumeSummary` `characterContext` `worldRulesContext` `userHint` |
 | `chapter.content` | 内置-长篇连载（默认） | 通用男频网文风格的章节正文生成，支持基调/节奏/字数三个可调参数。 | `chapterTitle` `chapterSummary` `worldContext` `characters` `previousChapterEnding` `worldRulesContext` `userHint` |
 | `chapter.continue` | 内置-章节续写 | 从已有正文末尾继续往下写约 1000-2000 字。 | `chapterSummary` `worldContext` `existingContent` `userHint` |
+| `chapter.memory` | 内置-章节连续性记忆 | 一次调用同时提取章节摘要与下一章承接 handoff；引文 offset 由系统回查，不信任模型位置。 | `chapterTitle` `chapterText` |
 | `chapter.polish` | 内置-文本润色 | 按用户指令润色文本，保持原意不变。 | `instruction` `text` |
 | `chapter.expand` | 内置-文本扩写 | 将文本扩展丰富，增加细节、心理与环境，情节走向不变。 | `userHint` `text` |
 | `chapter.de-ai` | 内置-去 AI 味改写 | 把 AI 味重的文本改写得更像真人写的。 | `text` |
@@ -113,12 +114,12 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | category | 触发文件 |
 |---|---|
 | `ai.restructure` | `src/lib/ai/restructure.ts:52` |
-| `chapter.content` | `src/components/editor/ChapterEditor.tsx:302` |
+| `chapter.content` | `src/components/editor/ChapterEditor.tsx:310` |
 | `chapter.content.batch` | `src/lib/ai/batch-detail-runner.ts:256` |
-| `chapter.continue` | `src/components/editor/ChapterEditor.tsx:312` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:348` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:328` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:320` |
+| `chapter.continue` | `src/components/editor/ChapterEditor.tsx:320` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:356` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:336` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:328` |
 | `chapter.toolbar` | `src/components/editor/FloatingToolbar.tsx:105` |
 | `character.generate` | `src/components/character/CharacterPanel.tsx:146` |
 | `character.structure` | `src/lib/ai/parse-character-output.ts:83` |
@@ -143,7 +144,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:66` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:58` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:75` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:363` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:371` |
 | `rules.generate` | `src/components/rules/CreativeRulesPanel.tsx:80` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `story-arc.generate` | `src/components/outline/StoryArcPanel.tsx:84` |
@@ -162,4 +163,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `0c3bfcd`
+生成时间基准:commit `8fb943b`

@@ -22,11 +22,11 @@ describe('R-16: selective state extraction wiring', () => {
   it('auto post-generation state extraction uses selective recall from generated text', () => {
     const source = readFileSync(sourcePath, 'utf8')
     const body = source.slice(
-      source.indexOf('const handleAutoPostGenerate = async (text: string) => {'),
-      source.indexOf('const handleAcceptAI = (text: string) => {'),
+      source.indexOf('const handleAutoPostGenerate = async (task: {'),
+      source.indexOf('const handleAcceptAI = async (text: string) => {'),
     )
 
-    expect(body).toContain('buildSelectiveStateContext(text, extraStateIds).text')
+    expect(body).toContain('buildSelectiveStateContext(task.chapterPlainText, extraStateIds).text')
     expect(body).not.toContain('const stateCtx = buildStateContext()')
   })
 })

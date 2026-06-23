@@ -11,6 +11,8 @@ interface ChapterStore {
   selectChapter: (id: number) => void
   addChapter: (ch: Omit<Chapter, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
   updateChapter: (id: number, data: Partial<Chapter>) => Promise<void>
+  /** adopt()/事务写回后只刷新内存，不重复写数据库。 */
+  refreshChapter: (id: number) => Promise<void>
   deleteChapter: (id: number) => Promise<void>
   /**
    * 章节删除的【唯一入口】(Phase 0.7)。
@@ -59,6 +61,15 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
       ? { ...get().currentChapter!, ...updated }
       : get().currentChapter
     set({ chapters, currentChapter })
+  },
+
+  refreshChapter: async (id) => {
+    const fresh = await db.chapters.get(id)
+    if (!fresh) return
+    set({
+      chapters: get().chapters.map(chapter => chapter.id === id ? fresh : chapter),
+      currentChapter: get().currentChapter?.id === id ? fresh : get().currentChapter,
+    })
   },
 
   deleteChapter: async (id) => {
