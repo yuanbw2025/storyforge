@@ -1967,4 +1967,176 @@ jobs:
 
 ---
 
+## 十六、长期一致性引擎（NS-0～NS-6 · 2026-06-23 定稿）
+
+> **授权地位**：本节是长期一致性引擎的仓库内施工入口。桌面《StoryForge_长期一致性目标实现方案.md》保留完整论证、红队记录和作者答疑；实现与验收以本节及其后续阶段完成记录为准。
+>
+> **北极星**：用当前可落地的先进技术，把数百万字长篇小说的长期上下文一致性做到当前可达的最佳效果。
+
+### 16.1 成功判据与最终架构
+
+只按可重复测量的效果裁决：一致性错误密度、高严重度矛盾召回、误报、未来泄漏、世界串线、证据正确率、作者负担、成本与延迟。
+
+```text
+动态层级计划
+  ↕ 计划—正文对账
+多层叙事记忆
+  ↓
+叙事感知混合检索与上下文编排
+  ↓
+章节生成 / 续写
+  ↓
+证据化一致性校验
+  ↓
+Observation / Canon / stale 更新
+  └────────────→ 下一轮生成
+```
+
+- 时序事实账本是权威状态骨架，不独自承担全部一致性；
+- embedding 是 NS-5 的远距离语义召回通道，不是 NS-0～NS-4 前置条件；
+- 生成与续写必须共用同一连续性管线；
+- 任何阶段未证明净收益，能力必须可关闭或回滚。
+
+### 16.2 阶段依赖
+
+```text
+NS-0 → NS-1 → NS-2
+  └────→ NS-3（可在 NS-1 基线冻结后原型）
+NS-2 + NS-3 → NS-4
+NS-0 + NS-1 + NS-3 → NS-5
+NS-2 + NS-4 + NS-5 → NS-6
+```
+
+当前唯一执行包：**先完成 NS-0 + NS-1**。不得在 baseline 尚不可重复、NS-1 尚未证明收益前铺开新事实表、完整向量基础设施、递归摘要树或大规模 UI。
+
+### 16.3 NS-0 · 效果基线与评测基础
+
+交付：
+
+1. development / held-out 固定长篇夹具，只用合成、作者自有或授权去标识文本；
+2. continuation / expansion / completion runner；
+3. 当前“500 字尾部”生产管线快照和真实最终 messages；
+4. 自动评分：未来泄漏、错误世界串线、交接约束、跨章事实、证据回指；
+5. 配对 A/B，同时记录固定总预算与自然成本；
+6. 预注册 NS-1 硬门、阈值和成本护栏。
+
+首次 NS-1 放行允许一个代表性模型；双模型、隐藏标签盲评、置信区间是增强证据，不阻塞个人开发者首次交付。真实 API 结果不进普通 CI，模型凭证不得进入仓库或日志。
+
+### 16.4 NS-1 · 跨章承接最短闭环（T1～T8）
+
+#### T1 · 数据字段与原子写回
+
+- `Chapter` 增加可选 `continuityHandoff`、`summarySourceTextHash`、`summaryTextNormalizationVersion`，均为非索引字段，不 bump Dexie 版本；
+- 新字段进入 `FIELD_REGISTRY`，chapters 继续使用现有 AdoptionSchema；
+- 扩展 chapters `recordId` 定点 patch：比较当前正文 hash 与写 summary/handoff 必须在同一原子事务中完成。
+
+#### T2 · 统一 `chapter.memory`
+
+- 一次结构化调用同时返回 `{ summary, handoff }`，替换现有独立 summary 自动调用；
+- 新 PromptModuleKey、seed、usage category、Prompt 管理器与生成版 AI manual 同步登记；
+- 输入不得只取开头 6000 字；尾部负责 finalScene/openLoops，整章变化必须有全章覆盖依据；
+- 使用独立、无 DOM、版本化的 `normalizeChapterText()` 和异步 SHA-256；
+- 模型只给 quote/锚点，offset 由系统定位并精确 slice 回查。
+
+#### T3 · 触发、失效与老书兼容
+
+- 采纳后自动后处理最多“状态提取 + 一次 chapter.memory”两轮；
+- 异步任务捕获 projectId/chapterId/正文/hash，CAS 失败即丢弃旧结果；
+- 手写、粘贴、润色、去 AI 味和后改正文同样进入 stale 链；
+- 存量长篇禁止启动即全书扫描：直接前驱优先，当前世界最近 3～5 章按成本档后台惰性补建；
+- 无 verified summary 时稳定降级为真实 tail。
+
+#### T4/T5 · 规范章节顺序与上下文源
+
+- `resolveCanonicalChapterSequence()` 以 outline 树 parentId + 同级 order 为真相，`Chapter.order` 只兼容；
+- 返回 `{ sequence, anomalies }`，孤儿/环/重复 order/重复 Chapter 映射确定性降级；NS-1 不做健康报告 UI；
+- 新增 `chapterContinuityHandoff`、`recentChapterSummaries`；改造 `previousChapterEnding` 为自查源；
+- 全局直接前驱负责叙事转场，当前世界最近摘要负责世界内进展；
+- 同一次 `assembleContext` 批量预取并只解析一次规范序列。
+
+#### T6 · 最小上下文保护
+
+- 定义 `minimumContinuityEnvelope` 与各窗口 target envelope；
+- 核心顺序：本章指令/章纲 → handoff → tail；摘要和细纲按剩余预算压缩；
+- 同时验证 assembleContext 和最终 request-side messages；
+- 8K 验 minimum，32K/128K 验各自 target；物理预算不足必须显式降级。
+
+#### T7 · Prompt 契约
+
+- 统一 `continuityContext` slot；
+- `PromptTemplate.continuityMode?: 'inherit' | 'required' | 'off'`；
+- 默认可见追加一次，允许用户显式关闭，禁止重复注入。
+
+#### T8 · 硬门
+
+- 未来泄漏=0、错误世界事实串线=0；
+- hash/version stale 后旧 summary/handoff 不注入；
+- 手写、正文后改、跨世界直接前驱、缺记忆四路径全过；
+- reorder-after-drag 前驱跟随 outline 树；
+- 8K/32K/128K 最终 messages 达到预注册 envelope；
+- held-out 自动指标达到交接约束、跨章事实冲突率和成本护栏；
+- summary + handoff 不得增加第三轮 AI。
+
+### 16.5 NS-2～NS-6
+
+- **NS-2 计划—正文动态对账**：提取已完成/偏移/未完成/新增约束；下一章优先读实际进展；只提示和候选更新，不自动改正文。
+- **NS-3 证据化校验**：Fast Guard 抓高置信硬冲突，Deep Audit 查因果/动机/伏笔/故事线；无正确引文与证据链不得报 hard。
+- **NS-4 双层事实记忆**：Evidence Observation + Canon Assertion、时序有效区间、当前状态投影、exception-based review；真实旧库迁移夹具先于 Dexie 版本。
+- **NS-5 混合检索与层级摘要**：实体/关键词/状态/事件/因果/承诺/伏笔/故事线 + embedding，时间/世界/版本硬过滤，rerank、邻接扩展、章→卷→全书摘要；embedding 不可用时基本创作链路不受影响。
+- **NS-6 全闭环**：历史修改传播 stale，列出受影响章节，持续回归和成本档位；任何能力无收益时可独立关闭，永不自动级联重写用户正文。
+
+### 16.6 前沿技术对应关系
+
+| 技术 | NS 落点 |
+|---|---|
+| 超长上下文 + 上下文缓存 | NS-1 上下文编排与稳定前部 |
+| GraphRAG / 知识图谱 | NS-4 事实图 + NS-5 图上检索 |
+| 时序知识图谱 | NS-4 有效区间与影响反查 |
+| RAPTOR | NS-1 最近章摘要雏形 + NS-5 章→卷→全书 |
+| Agent memory / reflection | NS-4 Canon/状态投影 + NS-6 反思闭环 |
+| 草稿→校验→修订 | NS-2 对账 + NS-3 校验 + NS-6 闭环 |
+
+### 16.7 数据主权、备份与历史修改
+
+- 大项目数据安全必须通过“备份→清空测试库→恢复→正文/关键表校验”，不能只验收按钮；
+- 推荐 Gist + 本地文件夹双备份；私密 Gist 是第三方明文 JSON，不是端到端加密保险箱；
+- NS-4 提供人类可读事实/记忆导出；外部编辑导回只能成为候选 diff，经引用/时序/冲突校验和作者确认后通过 `adopt()` 写入；
+- 派生记忆 UI 区分 stale、等待重建、正在重建、已验证；
+- 被改章自身派生记忆按需重建；远距离影响由 NS-4/NS-6 列待复核清单，不自动改稿。
+
+### 16.8 永久红线
+
+1. AI 读走 CONTEXT_SOURCES/assembleContext，写走 FIELD_REGISTRY + AdoptionSchema/adopt，新表走 PROJECT_TABLES；
+2. 不丢正文、设定与 Canon；schema 变更先有真实旧库夹具和导入/导出往返；
+3. 不把摘要、embedding 或 observation 当不可质疑真相；
+4. 不允许未来章、错误世界、已删除或 stale 内容进入当前生成；
+5. AI 引文必须回查源文本；无法回查不得作为硬证据；
+6. 不得仅给当前正文补 hash 就把来源未知旧摘要宣称 verified；
+7. 不使用仅靠 `max(updatedAt)` 的章节顺序跨请求缓存；
+8. 不自动批量重写后续正文。
+
+### 16.9 开工基线与阶段完成记录
+
+**初始基线（分支 `refactor/phase-ns-task-0`，代码未改）**：
+
+- `npx tsc --noEmit`：通过；
+- `npm run check:architecture`：通过；
+- `npm run check:required-tables`：39 tables；
+- `npm run test`：63 files / 226 tests 通过；
+- `npm run build`：通过；
+- `npm run gen:ai-manual && npm run check:ai-manual`：通过，仅生成基准 commit 更新。
+
+每个 NS 阶段完成后，必须在本节追加：实现摘要、测试证据、真实 API 结果（如适用）、成本、未决参数和 Claude 审查状态。未达到效果闸门不得写“完成”。
+
+#### ✅ G0 · 开工前治理完成（2026-06-23 · 待 Claude 审查）
+
+- 已创建分支 `refactor/phase-ns-task-0`，所有治理改动均在非 main 分支；
+- 本节成为仓库内长期一致性唯一施工入口，ROADMAP 已替换旧“待外部审核”描述；
+- §26 的前沿技术对应表、备份恢复演练、候选 diff 导入、派生记忆四态和历史修改边界均已同步；
+- 初始基线全绿，未发现需要先修复的历史失败；
+- Agnes `agnes-1.5-flash` 预设连接成功，可用于后续 T0c 真实 baseline；密钥不进入仓库和测试输出；
+- 当前工作区原有 `public/icon-hd-*` 未跟踪文件未触碰、未纳入本阶段。
+
+---
+
 ## 〆 终
