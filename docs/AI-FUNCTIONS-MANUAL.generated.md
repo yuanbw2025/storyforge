@@ -89,7 +89,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 | 目标表 | 可写字段 |
 |---|---|
-| `chapters` | `content` `notes` `order` `outlineNodeId` `status` `summary` `title` `wordCount` |
+| `chapters` | `content` `continuityHandoff` `notes` `order` `outlineNodeId` `status` `summary` `summarySourceTextHash` `summaryTextNormalizationVersion` `title` `wordCount` |
 | `characters` | `abilities` `activeChapterRange` `alignment` `appearance` `arc` `background` `ending` `exitChapterId` `firstAppearChapterId` `firstAppearance` `homeWorldGroupId` `isCrossWorld` `location` `moralAxis` `motivation` `name` `orderAxis` `personality` `relationships` `role` `roleWeight` `shortDescription` `storyRole` |
 | `codexCategories` | `builtInKey` `domain` `fieldSchema` `hidden` `icon` `name` `order` `parentId` `worldGroupId` |
 | `codexEntries` | `categoryId` `description` `fields` `icon` `importance` `name` `order` `refs` `summary` `tags` `worldGroupId` |
@@ -162,4 +162,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `d85d551`
+生成时间基准:commit `0c3bfcd`

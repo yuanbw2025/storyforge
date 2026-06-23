@@ -118,6 +118,11 @@ export interface TableSpec<T = any> {
   projectResolver?: (projectId: number) => Promise<number[]>
   /** 是否带 worldGroupId(参与多世界隔离/盖章/删世界级联) */
   worldScoped?: boolean
+  /**
+   * 导入后必须改写为本行新主键的嵌套字段路径。
+   * 例：chapters.continuityHandoff.chapterId。
+   */
+  selfIdPaths?: string[]
   /** worldGroupId 的字段名(默认 'worldGroupId') */
   worldGroupField?: string
   /** 是否带 homeWorldGroupId(仅 characters) */
@@ -193,6 +198,15 @@ export interface AdoptInput {
   worldGroupId?: number | null
   /** 集合表中定点更新既有记录；AI 补全空卷/空章等场景使用。 */
   recordId?: number
+  /**
+   * NS-1: chapters 派生记忆的原子 compare-and-set。
+   * adopt() 必须在写 summary/handoff 的同一事务中重算当前正文 hash。
+   */
+  compareAndSet?: {
+    kind: 'chapter-source-text-hash'
+    expectedHash: string
+    textNormalizationVersion: string
+  }
   target: string
   data: Record<string, unknown> | Record<string, unknown>[]
   mode: 'replace' | 'append' | 'add' | 'add-many' | 'merge-diffs'

@@ -39,6 +39,31 @@ export type ChapterStatus =
   | 'polished'     // 已润色
   | 'final'        // 定稿
 
+export interface ChapterContinuityHandoff {
+  chapterId: number
+  sourceTextHash: string
+  schemaVersion: number
+  extractorVersion: string
+  textNormalizationVersion: string
+  finalScene: {
+    location?: string
+    storyTime?: string
+    activeCharacters: string[]
+    lastAction?: string
+  }
+  stateChanges: string[]
+  knowledgeChanges: string[]
+  commitments: string[]
+  openLoops: string[]
+  immediateNextIntent?: string
+  evidenceQuotes: Array<{
+    quote: string
+    startOffset: number
+    endOffset: number
+  }>
+  generatedAt: number
+}
+
 /** 章节 */
 export interface Chapter {
   id?: number
@@ -52,6 +77,12 @@ export interface Chapter {
   notes: string              // 作者笔记
   /** Phase A3: 章节摘要（100-200字），用于三层记忆的 Working Memory */
   summary?: string
+  /** NS-1: 下一章直接承接所需的派生记忆；非 Canon。 */
+  continuityHandoff?: ChapterContinuityHandoff
+  /** NS-1: summary 生成时对应的标准化正文 SHA-256。旧摘要无此字段即 unverified。 */
+  summarySourceTextHash?: string
+  /** NS-1: summary hash 所用的正文标准化算法版本。 */
+  summaryTextNormalizationVersion?: string
   createdAt: number
   updatedAt: number
 }

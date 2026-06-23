@@ -3,6 +3,9 @@
  *
  * 本文件是纯新增写回层;现有调用方在 1.2b 再逐步迁移。
  */
+import Dexie from 'dexie'
+import { db } from '../db/schema'
+import { hashChapterText, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../ai/chapter-memory/text-normalization'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
 import { FIELD_BY_TARGET } from './field-registry'
 import { ADOPTION_BY_TARGET } from './adoption-schema'
@@ -47,6 +50,9 @@ async function adoptCollectionRecord(
     result.skipped.push({ reason: 'recordId 定点更新只接受单条 data', data: input.data })
     return result
   }
+  if (input.compareAndSet) {
+    return adoptChapterMemoryRecordWithCas(input, fieldSpecs, tableSpec, result)
+  }
   const target = await tableSpec.table.get(input.recordId!)
   if (!target || target.projectId !== input.projectId) {
     result.skipped.push({ reason: `record ${input.recordId} 不存在或不属于当前项目`, data: input.data })
@@ -70,6 +76,82 @@ async function adoptCollectionRecord(
   await tableSpec.table.update(input.recordId!, patch as any)
   result.written.push({ id: input.recordId!, fields: Object.keys(patch) })
   return result
+}
+
+async function adoptChapterMemoryRecordWithCas(
+  input: AdoptInput,
+  fieldSpecs: FieldSpec[],
+  tableSpec: TableSpec,
+  result: AdoptResult,
+): Promise<AdoptResult> {
+  const cas = input.compareAndSet!
+  if (
+    input.target !== 'chapters'
+    || cas.kind !== 'chapter-source-text-hash'
+    || input.mode !== 'replace'
+  ) {
+    result.skipped.push({ reason: 'compareAndSet 仅支持 chapters recordId replace', data: input.data })
+    return result
+  }
+  if (cas.textNormalizationVersion !== CHAPTER_TEXT_NORMALIZATION_VERSION) {
+    result.skipped.push({ reason: `不支持的正文标准化版本 ${cas.textNormalizationVersion}`, data: input.data })
+    return result
+  }
+
+  const patch = normalizeAndValidate(input.data as Record<string, unknown>, fieldSpecs, result)
+  if (!patch || Object.keys(patch).length === 0) return result
+  if (!validateChapterMemoryProvenance(input.recordId!, patch, cas.expectedHash, cas.textNormalizationVersion, result, input.data)) {
+    return result
+  }
+
+  await db.transaction('rw', tableSpec.table, async () => {
+    const target = await tableSpec.table.get(input.recordId!)
+    if (!target || target.projectId !== input.projectId) {
+      result.skipped.push({ reason: `record ${input.recordId} 不存在或不属于当前项目`, data: input.data })
+      return
+    }
+    const currentHash = await Dexie.waitFor(hashChapterText(String(target.content ?? '')))
+    if (currentHash !== cas.expectedHash) {
+      result.skipped.push({ reason: 'CAS 失败：章节正文已变化，丢弃旧派生记忆', data: input.data })
+      return
+    }
+
+    patch.updatedAt = Date.now()
+    await tableSpec.table.update(input.recordId!, patch as any)
+    result.written.push({ id: input.recordId!, fields: Object.keys(patch) })
+  })
+  return result
+}
+
+function validateChapterMemoryProvenance(
+  chapterId: number,
+  patch: Record<string, unknown>,
+  expectedHash: string,
+  normalizationVersion: string,
+  result: AdoptResult,
+  raw: unknown,
+): boolean {
+  if (patch.summary != null) {
+    if (
+      patch.summarySourceTextHash !== expectedHash
+      || patch.summaryTextNormalizationVersion !== normalizationVersion
+    ) {
+      result.skipped.push({ reason: 'summary 来源 hash/version 与 CAS 条件不一致', data: raw })
+      return false
+    }
+  }
+  if (patch.continuityHandoff != null) {
+    const handoff = patch.continuityHandoff as Record<string, unknown>
+    if (
+      handoff.chapterId !== chapterId
+      || handoff.sourceTextHash !== expectedHash
+      || handoff.textNormalizationVersion !== normalizationVersion
+    ) {
+      result.skipped.push({ reason: 'handoff 来源 chapter/hash/version 与 CAS 条件不一致', data: raw })
+      return false
+    }
+  }
+  return true
 }
 
 async function adoptSingleton(

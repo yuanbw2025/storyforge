@@ -2147,6 +2147,15 @@ NS-2 + NS-4 + NS-5 → NS-6
 - 确定性验证：`npx tsc --noEmit` 通过；NS-0 专项 `6/6` 通过（含固定预算 / 自然成本成对执行契约）；密钥、真实 messages 与输出均未写入仓库；
 - 基线明确证明旧方案不足：仅靠尾部/局部文本无法稳定携带跨章事实和世界边界。下一施工阶段进入 NS-1，不调整已冻结 held-out 标签与硬门。
 
+#### ✅ NS-1/T1 · handoff 字段与原子写回完成（2026-06-23 · 待 Claude 审查）
+
+- `Chapter` 已增加非索引 `continuityHandoff`、`summarySourceTextHash`、`summaryTextNormalizationVersion`；Dexie 保持 v33、必需表保持 39；
+- handoff 以原生 object 进入 `FIELD_REGISTRY`，摘要来源元数据同步登记；旧摘要缺 hash 时明确识别为 `unverified`，不追认可信；
+- 新增无 DOM、版本化 `normalizeChapterText()` 与 SHA-256；浏览器、测试和后续 evidence offset 共用同一标准化文本；
+- chapters `recordId` 写回支持 `chapter-source-text-hash` CAS：同一 IndexedDB 事务内重算当前正文 hash，再原子写 summary + handoff；正文已变化则整组结果丢弃；
+- 导入引擎新增注册表声明式 `selfIdPaths`，恢复项目时自动把 `continuityHandoff.chapterId` 改写为新章节主键；
+- 验证：T1/CAS/旧摘要状态/标准化专项 `4/4`，导出导入与 adopt 联测合计 `14/14`，TypeScript、架构检查、39 表检查通过。
+
 ---
 
 ## 〆 终

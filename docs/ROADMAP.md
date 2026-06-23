@@ -489,7 +489,8 @@ for each character:
   - 未来泄漏、世界串线、交接约束、跨章事实、证据回指自动评分；
   - 已冻结 NS-1 指标、阈值和成本护栏；正式 held-out legacy 基线为事实召回 33.3%、约束召回 50%、错误世界泄漏 33.3%。
 - ⏳ **NS-1 · 跨章承接最短闭环（进行中）**
-  - 一次 `chapter.memory` 同时产 summary + continuity handoff；
+  - ✅ T1：非索引 handoff/summary 来源字段、版本化正文 hash、原子 CAS 写回与备份往返；
+  - ⏳ T2：一次 `chapter.memory` 同时产 summary + continuity handoff；
   - 全局叙事直接前驱 handoff + 真实 tail；
   - 当前世界 verified recent summaries；
   - 规范大纲树章节顺序、CAS、hash/version stale、8K/32K/128K 最小保护；

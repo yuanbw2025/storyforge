@@ -100,6 +100,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     ] },
 
   { table: db.chapters, name: 'chapters', owner: 'project', exportable: true,
+    selfIdPaths: ['continuityHandoff.chapterId'],
     refs: [
       { kind: 'simple', field: 'id', target: 'emotionBeatCards[chapterId]', onDelete: 'cascade' },
       // 软引用:itemLedger/storyTimelineEvents 的 chapterId 保留(独立产物,见 chapter store 注释)

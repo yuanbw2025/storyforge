@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { parseWorldPortals } from '../../src/lib/utils/world-portals'
+import { CHAPTER_TEXT_NORMALIZATION_VERSION, hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 
 const now = Date.now()
 
@@ -41,9 +42,28 @@ async function seedFullProject(): Promise<number> {
     scenes: [{ sceneId: 's1', title: '废墟苏醒', summary: '主角醒来', characterIds: [], location: '废墟', conflict: '失忆', pace: 'normal', estimatedWords: 800, notes: '' }],
     createdAt: now, updatedAt: now,
   } as any)
+  const chapterContent = '<p>主角在废墟中睁开眼，记忆一片空白……</p>'
+  const chapterHash = await hashChapterText(chapterContent)
   await db.chapters.add({
     projectId, outlineNodeId: chapNodeId, title: '第1章 觉醒',
-    content: '<p>主角在废墟中睁开眼，记忆一片空白……</p>', wordCount: 18, status: 'draft', order: 0, notes: '',
+    content: chapterContent, wordCount: 18, status: 'draft', order: 0, notes: '',
+    summary: '主角在废墟醒来并失忆。',
+    summarySourceTextHash: chapterHash,
+    summaryTextNormalizationVersion: CHAPTER_TEXT_NORMALIZATION_VERSION,
+    continuityHandoff: {
+      chapterId: 1,
+      sourceTextHash: chapterHash,
+      schemaVersion: 1,
+      extractorVersion: 'test',
+      textNormalizationVersion: CHAPTER_TEXT_NORMALIZATION_VERSION,
+      finalScene: { location: '废墟', activeCharacters: ['林惊羽'], lastAction: '睁开眼' },
+      stateChanges: ['林惊羽苏醒'],
+      knowledgeChanges: [],
+      commitments: [],
+      openLoops: ['失忆原因'],
+      evidenceQuotes: [{ quote: '主角在废墟中睁开眼', startOffset: 0, endOffset: 10 }],
+      generatedAt: now,
+    },
     createdAt: now, updatedAt: now,
   } as any)
   await db.characters.add({
@@ -105,6 +125,10 @@ describe('R-roundtrip · 全量内容导出→导入往返', () => {
     const chapter = await db.chapters.where('projectId').equals(newId).first()
     expect(chapter?.content).toContain('废墟中睁开眼')
     expect(chapter?.outlineNodeId).toBe(newChap.id) // 正文外键重映射正确
+    expect(chapter?.summarySourceTextHash).toHaveLength(64)
+    expect(chapter?.summaryTextNormalizationVersion).toBe(CHAPTER_TEXT_NORMALIZATION_VERSION)
+    expect(chapter?.continuityHandoff?.finalScene.location).toBe('废墟')
+    expect(chapter?.continuityHandoff?.chapterId).toBe(chapter?.id)
 
     const char = await db.characters.where('projectId').equals(newId).first()
     expect(char?.name).toBe('林惊羽')
