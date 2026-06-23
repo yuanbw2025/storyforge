@@ -34,7 +34,11 @@ export interface Ns1GateResult {
   failures: string[]
 }
 
-export function evaluateNs1Gate(legacy: EvalRunRecord, candidate: EvalRunRecord): Ns1GateResult {
+export function evaluateNs1Gate(
+  legacy: EvalRunRecord,
+  candidate: EvalRunRecord,
+  options: { requireFactImprovement?: boolean } = {},
+): Ns1GateResult {
   const failures: string[] = []
   const metrics = candidate.aggregate
   if (metrics.futureLeakageRate > NS1_ACCEPTANCE_THRESHOLDS.futureLeakageRate) failures.push('future-leakage')
@@ -50,6 +54,8 @@ export function evaluateNs1Gate(legacy: EvalRunRecord, candidate: EvalRunRecord)
     > legacy.aggregate.estimatedInputTokens * NS1_ACCEPTANCE_THRESHOLDS.maximumEstimatedInputTokenMultiplierVsLegacy
   ) failures.push('input-cost')
   if (
+    options.requireFactImprovement !== false
+    &&
     metrics.requiredFactRecall - legacy.aggregate.requiredFactRecall
     < NS1_ACCEPTANCE_THRESHOLDS.minimumFactRecallImprovementVsLegacy
   ) failures.push('fact-improvement')

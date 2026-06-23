@@ -222,5 +222,10 @@ describe('NS-0 long-consistency evaluation harness', () => {
       makeRecord('legacy-500-tail', 0.8, 0.8, 1000),
       makeRecord('handoff-tail-summary', 0.84, 0.9, 1700),
     ).passed).toBe(false)
+    expect(evaluateNs1Gate(
+      makeRecord('legacy-500-tail', 1, 0.9, 1000),
+      makeRecord('handoff-tail-summary', 1, 1, 1500),
+      { requireFactImprovement: false },
+    )).toEqual({ passed: true, failures: [] })
   })
 })

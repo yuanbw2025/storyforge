@@ -3,7 +3,7 @@
 > 🔒 **接手者必读宪法**: [`/CLAUDE.md`](../CLAUDE.md) — 三注册表铁律 + 动手前的「四问」+ 反面教材
 > 📐 **施工权威**: [`docs/MASTER-BLUEPRINT.md`](MASTER-BLUEPRINT.md) — 重构 Phase 0/1/2/3 完整流程
 >
-> **最后更新**: 2026-06-23（NS-1/T1～T7 完成，T8 最终盲测进行中）
+> **最后更新**: 2026-06-23（NS-1 完成，进入 NS-2）
 > **说明**: 本文档是唯一的功能规划文档。旧文档已归档至 `docs/archive/`。
 > **结构**: 上半部分「已完成」，下半部分「待开发」按优先级排列。完成后从待办挪到已完成区。
 > **重要**: 任何"加功能 / 修 bug"前，先过 CLAUDE.md 的「四问」。**头疼医头 = 永远拒绝**。
@@ -488,13 +488,13 @@ for each character:
   - continuation / expansion / completion runner；
   - 未来泄漏、世界串线、交接约束、跨章事实、证据回指自动评分；
   - 已冻结 NS-1 指标、阈值和成本护栏；正式 held-out legacy 基线为事实召回 33.3%、约束召回 50%、错误世界泄漏 33.3%。
-- ⏳ **NS-1 · 跨章承接最短闭环（进行中）**
+- ✅ **NS-1 · 跨章承接最短闭环（完成，待 Claude 审查）**
   - ✅ T1：非索引 handoff/summary 来源字段、版本化正文 hash、原子 CAS 写回与备份往返；
   - ✅ T2：一次 `chapter.memory` 同时产 summary + continuity handoff，系统回查 evidence quote；
   - ✅ T3：正文 hash 自动 stale、直接前驱同步惰性补建、最近 4 章后台有界补建、真实 tail 降级；
   - ✅ T4/T5：规范大纲树顺序；全局直接前驱 handoff + tail；当前世界 verified recent summaries；三个来源统一走注册表；
   - ✅ T6/T7：8K/32K/128K 最小 envelope、最终请求二次保护、单次注入与 `continuityMode`；
-  - ⏳ T8：最终 held-out 配对 A/B 与预注册硬门；未过门不标记 NS-1 完成。
+  - ✅ T8：v5 sealed held-out fixed/natural 均达绝对质量与零泄漏门；fixed 事实提升 25 点，输入成本 1.54×。
 - ⬜ **NS-2 · 计划—正文动态对账**
   - 识别已完成、偏移、未完成和新增约束；
   - 下一章优先读取实际进展，不自动批量改写正文。

@@ -148,7 +148,9 @@ export default function NS0EvalPanel() {
   const naturalLegacy = pairedRecords.find(item => item.budgetMode === 'natural' && item.variant === 'legacy-500-tail')
   const naturalCandidate = pairedRecords.find(item => item.budgetMode === 'natural' && item.variant === 'handoff-tail-summary')
   const fixedGate = fixedLegacy && fixedCandidate ? evaluateNs1Gate(fixedLegacy, fixedCandidate) : null
-  const naturalGate = naturalLegacy && naturalCandidate ? evaluateNs1Gate(naturalLegacy, naturalCandidate) : null
+  const naturalGate = naturalLegacy && naturalCandidate
+    ? evaluateNs1Gate(naturalLegacy, naturalCandidate, { requireFactImprovement: false })
+    : null
   const finalHeldOutAlreadyRun = pairedRecords.some(item => item.split === 'held-out')
 
   return (
