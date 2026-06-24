@@ -147,6 +147,13 @@ export interface TableSpec<T = any> {
   exportOrderBy?: string
   /** JSON 字段内引用的导出/导入重映射(仅 worldNodes.portalsJSON) */
   exportRefRemap?: ExportRefRemap[]
+  /**
+   * 导入兜底默认值：声明该表"非可选字段"在缺失时的默认值。
+   * 导入引擎写入前做 `{ ...defaults, ...row }`,保证老数据/跨版本导入的 JSON
+   * 即使缺某个非可选字段,落库时也满足类型不变量(如 outlineNodes.summary 恒为 string)。
+   * 这是「数据进入边界统一兜底」的单一来源,避免在每个读取处散补 `?.`。
+   */
+  defaults?: Record<string, unknown>
   /** 备注(说明为什么这样配) */
   note?: string
 }

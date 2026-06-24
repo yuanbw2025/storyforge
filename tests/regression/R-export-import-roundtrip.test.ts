@@ -151,6 +151,20 @@ describe('R-roundtrip · 全量内容导出→导入往返', () => {
     expect(portals[0].targetWorldId).not.toBe(sourceMirror.id)
   })
 
+  it('导入缺 summary 键的大纲节点 → 注册表 defaults 兜成空串（杜绝「chrome 导入后必现」）', async () => {
+    const srcId = await seedFullProject()
+    const exported = await exportProjectJSON(srcId)
+    // 模拟老版本/跨版本导出：outlineNodes 整体缺 summary 键（导出对 undefined 字段会省略）
+    for (const node of exported.outlineNodes as any[]) delete node.summary
+    const newId = await importProjectJSON(exported)
+    const nodes = await db.outlineNodes.where('projectId').equals(newId).toArray()
+    expect(nodes.length).toBeGreaterThan(0)
+    for (const n of nodes) {
+      expect(typeof n.summary).toBe('string') // 不变量:落库恒为 string，不再 undefined
+      expect(n.summary).toBe('')
+    }
+  })
+
   it('二次往返(导入后再导出再导入)仍完整(可反复导入)', async () => {
     const srcId = await seedFullProject()
     const e1 = await exportProjectJSON(srcId)

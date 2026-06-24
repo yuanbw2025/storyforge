@@ -23,7 +23,7 @@ export interface OutlineNode {
   parentId: number | null    // null = 顶层
   type: OutlineNodeType
   title: string
-  summary: string            // 情节摘要
+  summary: string            // 情节摘要（不变量：写入/导入边界保证恒为 string，绝不 undefined）
   order: number              // 排序
   /** 此卷/篇章发生在哪个世界组（Phase 25.4，null = 默认主世界） */
   worldGroupId?: number | null

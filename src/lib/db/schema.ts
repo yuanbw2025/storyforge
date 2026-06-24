@@ -327,6 +327,16 @@ class StoryForgeDB extends Dexie {
     }).upgrade(async (tx) => {
       await migrateCharactersToAxes(tx)
     })
+
+    // v34: 治存量脏数据。历史上 outlineNodes.summary 是非可选字段，但老数据/跨版本导入
+    // 的项目可能整体缺该键（卷通常无章纲摘要），落库即 undefined → 大纲渲染 `summary.trim()`
+    // 崩溃（社区「chrome 导入后必现」）。统一兜成 ''，恢复 summary 恒为 string 的不变量。
+    // 无 schema/索引变化，仅数据修复。新写入/导入由 PROJECT_TABLES.defaults 在边界兜底。
+    this.version(34).stores({}).upgrade(async (tx) => {
+      await tx.table('outlineNodes').toCollection().modify((node: any) => {
+        if (node.summary == null) node.summary = ''
+      })
+    })
   }
 }
 

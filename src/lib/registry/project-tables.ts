@@ -90,6 +90,9 @@ export const PROJECT_TABLES: TableSpec[] = [
   // ───────────────────── 大纲 / 章节 / 细纲 ─────────────────────
   { table: db.outlineNodes, name: 'outlineNodes', owner: 'project', worldScoped: true,
     exportable: true, tree: { parentField: 'parentId' }, exportIdField: true,
+    // summary 是非可选字段,但老数据/跨版本导入的 JSON 可能整体缺该键 → 导入兜成 ''，
+    // 保证 OutlineNode.summary 不变量(恒为 string),读取处无需散补 `?.`。
+    defaults: { summary: '' },
     refs: [
       { kind: 'simple', field: 'id', target: 'chapters[outlineNodeId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'detailedOutlines[outlineNodeId]', onDelete: 'cascade' },

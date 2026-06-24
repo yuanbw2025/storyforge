@@ -113,7 +113,9 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
       let exportIndex = -1
       for (const row of rows) {
         exportIndex++
-        const obj: any = { ...row }
+        // 注册表声明的兜底默认值先铺底，再用 row 覆盖：老数据/跨版本导入缺某非可选字段时，
+        // 落库仍满足类型不变量（如 outlineNodes.summary 恒为 string，杜绝「导入后大纲崩」）。
+        const obj: any = { ...spec.defaults, ...row }
         const exportId = obj._exportId
         delete obj._exportId
 

@@ -125,6 +125,31 @@ class UpgradedV29CodexDB extends Dexie {
   }
 }
 
+// v33 老库:outlineNodes 历史数据可能整体缺 summary 键(老数据/跨版本导入)
+class OldV33OutlineDB extends Dexie {
+  constructor(name: string) {
+    super(name)
+    this.version(33).stores({
+      outlineNodes: '++id, projectId, parentId, order, type',
+    })
+  }
+}
+
+// v34 升级:把 outlineNodes.summary 的 undefined/缺失统一兜成 ''(恢复 summary 恒为 string 不变量)
+class UpgradedV34OutlineDB extends Dexie {
+  constructor(name: string) {
+    super(name)
+    this.version(33).stores({
+      outlineNodes: '++id, projectId, parentId, order, type',
+    })
+    this.version(34).stores({}).upgrade(async (tx) => {
+      await tx.table('outlineNodes').toCollection().modify((node: any) => {
+        if (node.summary == null) node.summary = ''
+      })
+    })
+  }
+}
+
 describe('DB upgrade fixtures · real Dexie version transitions', () => {
   it('v30→v31 clears old reference analysis but preserves import session blobs', async () => {
     const name = nextName('upgrade-v31')
@@ -241,6 +266,27 @@ describe('DB upgrade fixtures · real Dexie version transitions', () => {
     expect(stores).not.toContain('factions')
     expect(stores).not.toContain('itemSystems')
     expect(stores).toContain('codexEntries')
+  })
+
+  it('v33→v34 治愈 outlineNodes 缺失/undefined 的 summary 为空串，且不覆盖已有值（社区「chrome 导入后必现」根因）', async () => {
+    const name = nextName('upgrade-v34')
+    const oldDb = track(new OldV33OutlineDB(name))
+    await oldDb.open()
+    // 老数据/导入数据：节点整体缺 summary 键
+    const volId = await oldDb.table('outlineNodes').add({ projectId: 1, parentId: null, type: 'volume', title: '无摘要卷', order: 0 })
+    const chapId = await oldDb.table('outlineNodes').add({ projectId: 1, parentId: volId, type: 'chapter', title: '无摘要章', order: 0, summary: undefined })
+    // 已有 summary 的节点：迁移绝不能覆盖
+    await oldDb.table('outlineNodes').add({ projectId: 1, parentId: volId, type: 'chapter', title: '有摘要章', order: 1, summary: '已有章纲' })
+    oldDb.close()
+
+    const upgradedDb = track(new UpgradedV34OutlineDB(name))
+    await upgradedDb.open()
+
+    const nodes = await upgradedDb.table('outlineNodes').toArray()
+    for (const n of nodes) expect(typeof n.summary).toBe('string') // 不变量恢复:恒为 string
+    expect((await upgradedDb.table('outlineNodes').get(volId)).summary).toBe('')
+    expect((await upgradedDb.table('outlineNodes').get(chapId)).summary).toBe('')
+    expect(nodes.find((n: any) => n.title === '有摘要章').summary).toBe('已有章纲') // 原值不动
   })
 })
 
