@@ -55,7 +55,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 29 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 30 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -65,6 +65,7 @@
 | `chapterOutline` | 当前章节大纲 | node | L1 | 800 |
 | `existingVolumeOutlines` | 已有卷大纲 | project | L1 | 2400 |
 | `currentFacts` | 当前有效事实(事实账本投影) | chapter | L1 | 2000 |
+| `retrievedPassages` | 相关前文召回(NS-5 混合检索) | chapter | L2 | 2500 |
 | `detailedOutline` | 本章细纲(场景拆解) | node | L1 | 1500 |
 | `previousChapterEnding` | 全局直接前驱原文尾部 | manual | L1 | 1800 |
 | `chapterContinuityHandoff` | 全局直接前驱连续性交接 | chapter | L1 | 1600 |
@@ -121,13 +122,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | category | 触发文件 |
 |---|---|
 | `ai.restructure` | `src/lib/ai/restructure.ts:52` |
-| `chapter.content` | `src/components/editor/ChapterEditor.tsx:419` |
+| `chapter.content` | `src/components/editor/ChapterEditor.tsx:421` |
 | `chapter.content.batch` | `src/lib/ai/batch-detail-runner.ts:256` |
-| `chapter.continue` | `src/components/editor/ChapterEditor.tsx:437` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:474` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:454` |
-| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:253` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:446` |
+| `chapter.continue` | `src/components/editor/ChapterEditor.tsx:439` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:476` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:456` |
+| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:254` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:448` |
 | `chapter.toolbar` | `src/components/editor/FloatingToolbar.tsx:105` |
 | `character.generate` | `src/components/character/CharacterPanel.tsx:146` |
 | `character.structure` | `src/lib/ai/parse-character-output.ts:83` |
@@ -151,7 +152,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:83` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:75` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:92` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:489` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:491` |
 | `rules.generate` | `src/components/rules/CreativeRulesPanel.tsx:80` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `story-arc.generate` | `src/components/outline/StoryArcPanel.tsx:84` |
@@ -172,4 +173,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `b11a3c1`
+生成时间基准:commit `d683d1b`

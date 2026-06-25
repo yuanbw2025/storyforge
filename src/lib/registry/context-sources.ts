@@ -6,6 +6,7 @@
 import { db } from '../db/schema'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { getFactPredicate } from './fact-predicate-registry'
+import { retrieveChunks } from '../retrieval/retrieval'
 import {
   buildCreativeRulesContext,
   buildHistoricalContext,
@@ -248,6 +249,31 @@ async function readCurrentFacts(projectId: number, chapterId?: number | null, wo
   return ['【当前有效事实（截止本章·已确认，请勿与之矛盾）】', ...lines].join('\n')
 }
 
+/**
+ * NS-5 · 相关前文召回（叙事感知混合检索的回报通道）。
+ * 按本章涉及的实体召回历史块（关键词通道，未来章硬过滤、世界隔离、按时间重组），
+ * 解决"几百章前的远距离细节/伏笔"被遗忘导致的矛盾。
+ */
+async function readRetrievedPassages(projectId: number, chapterId?: number | null, outlineNodeId?: number | null, worldGroupId?: number | null): Promise<string> {
+  if (chapterId == null) return ''
+  const [characters, node] = await Promise.all([
+    db.characters.where('projectId').equals(projectId).toArray(),
+    outlineNodeId != null ? db.outlineNodes.get(outlineNodeId) : Promise.resolve(undefined),
+  ])
+  const charNames = characters.map(c => c.name).filter(n => n && n.length >= 2)
+  const summary = node?.summary || ''
+  const mentioned = charNames.filter(n => summary.includes(n))
+  const queryTerms = mentioned.length ? mentioned : charNames // 摘要没提具体角色 → 用全部角色作宽召回
+  if (!queryTerms.length) return ''
+
+  const got = await retrieveChunks({ projectId, currentChapterId: chapterId, worldGroupId, queryTerms, topK: 6 })
+  if (!got.length) return ''
+  const chapters = await db.chapters.where('projectId').equals(projectId).toArray()
+  const titleOf = new Map(chapters.filter(c => c.id != null).map(c => [c.id!, c.title]))
+  const lines = got.map(r => `〖${titleOf.get(r.chunk.sourceChapterId) ?? '前文'}〗${r.chunk.text}`)
+  return ['【相关前文召回（防止远距离细节/伏笔矛盾，仅供参考）】', ...lines].join('\n')
+}
+
 export const CONTEXT_SOURCES: ContextSource[] = [
   {
     key: 'manualText',
@@ -304,6 +330,15 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 2000,
     requiresChapterId: true,
     read: input => readCurrentFacts(input.projectId, input.chapterId, input.worldGroupId),
+  },
+  {
+    key: 'retrievedPassages',
+    label: '相关前文召回(NS-5 混合检索)',
+    scope: 'chapter',
+    layer: 'L2',
+    budgetTokens: 2500,
+    requiresChapterId: true,
+    read: input => readRetrievedPassages(input.projectId, input.chapterId, input.outlineNodeId, input.worldGroupId),
   },
   {
     key: 'detailedOutline',

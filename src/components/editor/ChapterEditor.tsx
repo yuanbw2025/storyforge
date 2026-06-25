@@ -14,6 +14,7 @@ import { buildReviewRevisePrompt, type ReviewResult } from '../../lib/ai/adapter
 import { buildStateExtractPrompt, parseStateDiffs } from '../../lib/ai/adapters/state-extract-adapter'
 import { buildFactExtractPrompt, parseFactExtractResult } from '../../lib/ai/adapters/fact-extract-adapter'
 import { useFactLedgerStore } from '../../stores/fact-ledger'
+import { rebuildChapterChunks } from '../../lib/retrieval/retrieval'
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
 import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
@@ -337,6 +338,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         'emotionBeats',
         'stateCards',
         'currentFacts', // NS-4:当前章生效的已确认事实，回注生成防止前后矛盾
+        'retrievedPassages', // NS-5:相关前文召回，防远距离细节/伏笔矛盾
         'references',
         'userStyleProfile',
       ],
@@ -631,6 +633,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     chapterContent: string
     chapterPlainText: string
   }) => {
+    // 0. NS-5：重建本章检索块（非 AI，hash 守卫，便宜；供「相关前文召回」用）
+    try {
+      if (currentChapter) {
+        await rebuildChapterChunks({
+          projectId: project.id!,
+          chapter: { ...currentChapter, content: task.chapterContent },
+          worldGroupId: chapterWorldGroupId ?? null,
+          knownEntities: characters.map(c => c.name),
+        })
+      }
+    } catch (e) { console.error('[AutoPost] 检索块重建失败:', e) }
+
     // 1. 自动提取状态
     setAutoProcessing('extracting')
     try {
