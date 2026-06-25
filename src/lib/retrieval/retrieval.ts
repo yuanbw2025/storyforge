@@ -10,9 +10,10 @@
 import { db } from '../db/schema'
 import type { RetrievalChunk } from '../types/retrieval-chunk'
 import { cosineSimilarity } from '../types/retrieval-chunk'
-import type { Chapter } from '../types'
+import type { Chapter, EmbeddingConfig } from '../types'
 import { normalizeChapterText, hashChapterText } from '../ai/chapter-memory/text-normalization'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
+import { embedTexts, embeddingModelTag, isEmbeddingReady } from '../ai/adapters/embedding-adapter'
 
 const CHUNK_SIZE = 400
 
@@ -99,9 +100,11 @@ export async function retrieveChunks(args: {
   worldGroupId?: number | null
   queryTerms: string[]
   queryEmbedding?: number[] | null
+  /** 查询向量所属模型；只对同模型的块向量算余弦，绝不跨模型混算（不传则不限制） */
+  queryEmbeddingModel?: string | null
   topK?: number
 }): Promise<RetrievedChunk[]> {
-  const { projectId, currentChapterId, worldGroupId, queryTerms, queryEmbedding, topK = 6 } = args
+  const { projectId, currentChapterId, worldGroupId, queryTerms, queryEmbedding, queryEmbeddingModel, topK = 6 } = args
   const [chunks, outlineNodes, chapters] = await Promise.all([
     db.retrievalChunks.where('projectId').equals(projectId).toArray(),
     db.outlineNodes.where('projectId').equals(projectId).toArray(),
@@ -127,8 +130,9 @@ export async function retrieveChunks(args: {
       if (chunk.keywords.includes(t)) kw += 2
       else if (chunk.text.includes(t)) kw += 1
     }
-    // 可选 embedding 余弦
-    const sem = queryEmbedding ? cosineSimilarity(queryEmbedding, chunk.embedding) : 0
+    // 可选 embedding 余弦：仅当查询向量与块向量出自同一模型时才算（防跨模型混算）
+    const sameModel = !queryEmbeddingModel || chunk.embeddingModel === queryEmbeddingModel
+    const sem = queryEmbedding && sameModel ? cosineSimilarity(queryEmbedding, chunk.embedding) : 0
     const score = kw + sem * 3
     if (score > 0) scored.push({ chunk, score })
   }
@@ -139,4 +143,55 @@ export async function retrieveChunks(args: {
     (orderOf.get(a.chunk.sourceChapterId)! - orderOf.get(b.chunk.sourceChapterId)!) ||
     (a.chunk.chunkIndex - b.chunk.chunkIndex))
   return top
+}
+
+// ── Embedding 通道（NS-5 语义检索，可选；不可用时上面纯关键词照常工作） ──
+
+const EMBED_BATCH = 16
+
+/**
+ * 把查询文本嵌成向量供 retrieveChunks 混合打分用；不可用/失败返回 null（调用方退回纯关键词）。
+ */
+export async function embedQuery(text: string, cfg: EmbeddingConfig | null | undefined, projectId?: number | null): Promise<number[] | null> {
+  if (!isEmbeddingReady(cfg) || !text.trim()) return null
+  try {
+    const [vec] = await embedTexts([text], cfg, projectId)
+    return vec || null
+  } catch (err) {
+    console.warn('[NS-5] 查询嵌入失败，退回关键词通道:', err)
+    return null
+  }
+}
+
+/**
+ * 为项目内"缺向量或向量过期(换了模型)"的检索块批量回填 embedding。
+ * 幂等可续跑：每批落盘，再次运行只补未完成的；与当前模型不符的向量视为过期、重算。
+ * 任一批失败不丢已完成的，整体抛错由调用方提示。
+ */
+export async function ensureChunkEmbeddings(args: {
+  projectId: number
+  cfg: EmbeddingConfig
+  onProgress?: (done: number, total: number) => void
+  signal?: AbortSignal
+}): Promise<{ embedded: number; total: number; skipped: number }> {
+  const { projectId, cfg, onProgress, signal } = args
+  if (!isEmbeddingReady(cfg)) return { embedded: 0, total: 0, skipped: 0 }
+  const tag = embeddingModelTag(cfg)
+  const all = await db.retrievalChunks.where('projectId').equals(projectId).toArray()
+  const pending = all.filter(c => c.id != null && (!c.embedding || !c.embedding.length || c.embeddingModel !== tag))
+  const total = pending.length
+  let embedded = 0
+  for (let i = 0; i < pending.length; i += EMBED_BATCH) {
+    if (signal?.aborted) break
+    const batch = pending.slice(i, i + EMBED_BATCH)
+    const vectors = await embedTexts(batch.map(c => c.text), cfg, projectId, signal)
+    await db.transaction('rw', db.retrievalChunks, async () => {
+      for (let j = 0; j < batch.length; j++) {
+        await db.retrievalChunks.update(batch[j].id!, { embedding: vectors[j], embeddingModel: tag })
+      }
+    })
+    embedded += batch.length
+    onProgress?.(embedded, total)
+  }
+  return { embedded, total, skipped: all.length - total }
 }

@@ -32,6 +32,19 @@ export interface AIConfig {
   contextWindow?: number
 }
 
+/**
+ * NS-5 · Embedding（语义检索通道）配置。与聊天 AIConfig 分开存——换写作模型不影响向量。
+ * enabled=false（默认）时检索只走关键词通道（优雅降级）。走 OpenAI 兼容 /embeddings 端点。
+ */
+export interface EmbeddingConfig {
+  /** 是否启用语义检索通道（默认 false = 纯关键词，零额外成本/不外传） */
+  enabled: boolean
+  provider: AIProvider
+  apiKey: string
+  baseUrl: string
+  model: string
+}
+
 /** API 配置预设（多套配置一键切换） */
 export interface AIConfigPreset {
   id: string

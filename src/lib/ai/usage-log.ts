@@ -40,6 +40,7 @@ const CATEGORY_RULES: Array<{ test: (k: string) => boolean; meta: CategoryMeta }
   { test: k => k.startsWith('storyArc') || k.startsWith('story-arc'), meta: { label: '故事线生成', color: '#8BA86E' } },
   { test: k => k.startsWith('state.extract'), meta: { label: '主角状态提取', color: '#C07B7B' } },
   { test: k => k.startsWith('fact.extract'), meta: { label: '事实抽取(NS-4)', color: '#7B9BC0' } },
+  { test: k => k.startsWith('retrieval.embed'), meta: { label: '语义索引(NS-5)', color: '#6EA8B0' } },
   { test: k => k.startsWith('inventory'), meta: { label: '物品提取', color: '#C09B6E' } },
   { test: k => k.startsWith('relation'), meta: { label: '关系提取', color: '#9B6EB0' } },
   { test: k => k.startsWith('scene.verify'), meta: { label: '场景考证', color: '#6E9BC0' } },

@@ -6,7 +6,9 @@
 import { db } from '../db/schema'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { getFactPredicate } from './fact-predicate-registry'
-import { retrieveChunks } from '../retrieval/retrieval'
+import { retrieveChunks, embedQuery } from '../retrieval/retrieval'
+import { isEmbeddingReady, embeddingModelTag } from '../ai/adapters/embedding-adapter'
+import { useAIConfigStore } from '../../stores/ai-config'
 import {
   buildCreativeRulesContext,
   buildHistoricalContext,
@@ -266,7 +268,16 @@ async function readRetrievedPassages(projectId: number, chapterId?: number | nul
   const queryTerms = mentioned.length ? mentioned : charNames // 摘要没提具体角色 → 用全部角色作宽召回
   if (!queryTerms.length) return ''
 
-  const got = await retrieveChunks({ projectId, currentChapterId: chapterId, worldGroupId, queryTerms, topK: 6 })
+  // NS-5：若启用 embedding，按"章纲摘要 + 涉及角色"嵌一次查询向量 → 混合检索（失败自动退回关键词）
+  const embCfg = useAIConfigStore.getState().embedding
+  const queryEmbedding = isEmbeddingReady(embCfg)
+    ? await embedQuery([summary, ...queryTerms].filter(Boolean).join(' ').slice(0, 1000), embCfg, projectId)
+    : null
+
+  const got = await retrieveChunks({
+    projectId, currentChapterId: chapterId, worldGroupId, queryTerms, queryEmbedding,
+    queryEmbeddingModel: queryEmbedding ? embeddingModelTag(embCfg) : null, topK: 6,
+  })
   if (!got.length) return ''
   const chapters = await db.chapters.where('projectId').equals(projectId).toArray()
   const titleOf = new Map(chapters.filter(c => c.id != null).map(c => [c.id!, c.title]))

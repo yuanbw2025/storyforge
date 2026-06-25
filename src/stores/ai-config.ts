@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AIConfig, AIProvider, AIConfigPreset } from '../lib/types'
+import type { AIConfig, AIProvider, AIConfigPreset, EmbeddingConfig } from '../lib/types'
 import { PROVIDER_PRESETS } from '../lib/types'
 import { createLog, updateLog } from '../lib/ai/logger'
 import { nanoid } from '../lib/utils/id'
@@ -8,6 +8,8 @@ const STORAGE_KEY = 'storyforge-ai-config'
 const PRESETS_KEY = 'storyforge-ai-presets'
 const SESSION_API_KEY = 'storyforge-ai-api-key-session'
 const REMEMBER_API_KEY = 'storyforge-ai-api-key-remember'
+const EMBEDDING_KEY = 'storyforge-embedding-config'
+const EMBEDDING_SESSION_KEY = 'storyforge-embedding-key-session'
 
 const DEFAULT_CONFIG: AIConfig = {
   provider: 'deepseek',
@@ -16,6 +18,31 @@ const DEFAULT_CONFIG: AIConfig = {
   baseUrl: 'https://api.deepseek.com/v1',
   temperature: 0.7,
   maxTokens: 0,
+}
+
+/** NS-5 默认：关闭；隐私首选本地 Ollama + bge-m3（手稿不出本机）。 */
+const DEFAULT_EMBEDDING: EmbeddingConfig = {
+  enabled: false,
+  provider: 'ollama',
+  apiKey: '',
+  baseUrl: 'http://localhost:11434/v1',
+  model: 'bge-m3',
+}
+
+/** embedding 配置加载：key 复用与聊天 key 相同的「记住」开关（不记住→sessionStorage）。 */
+function loadEmbeddingConfig(rememberApiKey: boolean): EmbeddingConfig {
+  let saved: Partial<EmbeddingConfig> = {}
+  try { const raw = localStorage.getItem(EMBEDDING_KEY); if (raw) saved = JSON.parse(raw) } catch { /* ignore */ }
+  const sessionKey = sessionStorage.getItem(EMBEDDING_SESSION_KEY) || ''
+  return { ...DEFAULT_EMBEDDING, ...saved, apiKey: rememberApiKey ? (saved.apiKey || '') : sessionKey }
+}
+
+function persistEmbeddingConfig(cfg: EmbeddingConfig, rememberApiKey: boolean): void {
+  const persisted: EmbeddingConfig = rememberApiKey ? cfg : { ...cfg, apiKey: '' }
+  localStorage.setItem(EMBEDDING_KEY, JSON.stringify(persisted))
+  if (rememberApiKey) sessionStorage.removeItem(EMBEDDING_SESSION_KEY)
+  else if (cfg.apiKey) sessionStorage.setItem(EMBEDDING_SESSION_KEY, cfg.apiKey)
+  else sessionStorage.removeItem(EMBEDDING_SESSION_KEY)
 }
 
 /** 从 localStorage 加载预设列表 */
@@ -136,6 +163,9 @@ interface AIConfigStore {
   presets: AIConfigPreset[]
   /** 当前生效的预设 id（null = 未对应任何预设/已改动） */
   activePresetId: string | null
+  /** NS-5 语义检索（embedding）配置 */
+  embedding: EmbeddingConfig
+  setEmbeddingConfig: (partial: Partial<EmbeddingConfig>) => void
   setConfig: (config: Partial<AIConfig>) => void
   setRememberApiKey: (remember: boolean) => void
   switchProvider: (provider: AIProvider) => void
@@ -155,6 +185,13 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   rememberApiKey: initial.rememberApiKey,
   presets: loadPresets(),
   activePresetId: null,
+  embedding: loadEmbeddingConfig(initial.rememberApiKey),
+
+  setEmbeddingConfig: (partial: Partial<EmbeddingConfig>) => {
+    const next = { ...get().embedding, ...partial }
+    persistEmbeddingConfig(next, get().rememberApiKey)
+    set({ embedding: next })
+  },
 
   setConfig: (partial: Partial<AIConfig>) => {
     const newConfig = { ...get().config, ...partial }
@@ -165,6 +202,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
 
   setRememberApiKey: (remember: boolean) => {
     persistConfig(get().config, remember)
+    persistEmbeddingConfig(get().embedding, remember)
     set({ rememberApiKey: remember })
   },
 
