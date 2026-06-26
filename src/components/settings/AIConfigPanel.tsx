@@ -5,6 +5,7 @@ import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
 import { getLogs, subscribeLogs, clearLogs, formatLog } from '../../lib/ai/logger'
+import { applyStoryForgeTheme, resolveStoryForgeTheme, THEME_OPTIONS, type StoryForgeTheme } from '../../lib/theme'
 import { useDialog } from '../shared/Dialog'
 
 const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean; hint: string }[] = [
@@ -26,12 +27,6 @@ const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean; hint:
   { value: 'custom', label: '自定义', cors: true, hint: '填写任何兼容 OpenAI 格式的 API' },
 ]
 
-const THEME_OPTIONS = [
-  { value: 'forge',  label: '熔炉',   emoji: '🔥', desc: '暗夜琥珀 · 火光余烬', swatches: ['#1A0F0A', '#D97757', '#C8A155'] },
-  { value: 'scroll', label: '古卷',   emoji: '📜', desc: '旧纸染黄 · 铁胆墨香', swatches: ['#E5D5A8', '#7B3A1A', '#8B5E1A'] },
-  { value: 'paper',  label: '纸与墨', emoji: '🖊', desc: '素纸如雪 · 墨迹清朗', swatches: ['#FAF7F0', '#B85C3F', '#8A7E6A'] },
-]
-
 export default function AIConfigPanel() {
   const { config, setConfig, switchProvider, testConnection,
     rememberApiKey, setRememberApiKey,
@@ -43,6 +38,9 @@ export default function AIConfigPanel() {
   const [showLogs, setShowLogs] = useState(false)
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
+  const [currentTheme, setCurrentTheme] = useState<StoryForgeTheme>(() =>
+    resolveStoryForgeTheme(localStorage.getItem('storyforge-theme')),
+  )
 
   const handleSavePreset = () => {
     if (!presetName.trim()) return
@@ -54,7 +52,6 @@ export default function AIConfigPanel() {
   // 订阅日志变化
   const logs = useSyncExternalStore(subscribeLogs, getLogs)
 
-  const currentTheme = localStorage.getItem('storyforge-theme') || 'forge'
   const currentProviderInfo = PROVIDER_OPTIONS.find((p) => p.value === config.provider)
 
   const handleTest = async () => {
@@ -65,10 +62,9 @@ export default function AIConfigPanel() {
     setTesting(false)
   }
 
-  const handleThemeChange = (theme: string) => {
-    localStorage.setItem('storyforge-theme', theme)
-    document.documentElement.setAttribute('data-theme', theme)
-    window.dispatchEvent(new Event('themechange'))
+  const handleThemeChange = (theme: StoryForgeTheme) => {
+    setCurrentTheme(theme)
+    applyStoryForgeTheme(theme)
   }
 
   const handleRenamePreset = async (id: string, currentName: string) => {

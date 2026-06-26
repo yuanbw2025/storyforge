@@ -3,8 +3,9 @@
 @tailwind utilities;
 
 /* ============================================================
-   StoryForge · Design Tokens v2 — from storyforge-redesign
-   三主题：熔炉(forge) / 古卷(scroll) / 纸与墨(paper)
+   StoryForge · Design Tokens v3
+   六主题：暖白编辑室(warm) / 墨玉青(jade) / 冷灰银蓝(slate)
+          熔炉(forge) / 古卷(scroll) / 纸与墨(paper)
    ============================================================ */
 
 /* ---------- 全局不变量 ---------- */
@@ -16,9 +17,177 @@
 }
 
 /* ============================================================
-   熔炉 · Forge — 暗夜琥珀，火光余烬（默认）
+   暖白编辑室 · Warm Studio — 长时间写作默认主题
    ============================================================ */
 :root,
+[data-theme="warm"] {
+  --bg-base: #F4EFE7;
+  --bg-surface: #E9E0D4;
+  --bg-elevated: #FFFDF8;
+  --bg-hover: rgba(54, 45, 36, 0.05);
+
+  --text-primary: #2B2620;
+  --text-secondary: #6A5B4B;
+  --text-muted: #9A8A78;
+
+  --accent: #965A3A;
+  --accent-hover: #85492F;
+  --accent-muted: #D3A47C;
+
+  --success: #15803D;
+  --warning: #B45309;
+  --error: #B91C1C;
+  --info: #1D4ED8;
+
+  --border: rgba(54, 45, 36, 0.14);
+  --border-hover: rgba(54, 45, 36, 0.26);
+
+  --accent-soft: rgba(150, 90, 58, 0.12);
+  --border-subtle: rgba(54, 45, 36, 0.07);
+  --shadow-sm: 0 1px 3px rgba(54, 45, 36, 0.08);
+  --shadow-md: 0 6px 18px rgba(54, 45, 36, 0.10);
+  --shadow-lg: 0 16px 44px rgba(54, 45, 36, 0.14);
+
+  --editor-page-bg: #FFFDF8;
+  --editor-ruled-line: rgba(54, 45, 36, 0.08);
+  --editor-selection-bg: rgba(166, 106, 74, 0.22);
+  --editor-selection-text: #1E1711;
+
+  --editor-ink-primary: #2B2620;
+  --editor-ink-strong: #100D0A;
+  --editor-ink-cream: #6E421F;
+  --editor-ink-muted: #725A32;
+  --editor-ink-gold: #8A5B00;
+  --editor-ink-orange: #B54708;
+  --editor-ink-red: #B91C1C;
+  --editor-ink-blue: #1D4ED8;
+  --editor-ink-green: #15803D;
+  --editor-ink-purple: #7E22CE;
+
+  --editor-mark-yellow: #FFE45C;
+  --editor-mark-red: #FFD6D6;
+  --editor-mark-blue: #D7E8FF;
+  --editor-mark-green: #D8F5DF;
+  --editor-mark-purple: #EAD7FF;
+  --editor-mark-brown: #F1E3CD;
+  --editor-mark-ink: #E9DAC3;
+}
+
+/* ============================================================
+   墨玉青 · Jade Ink — 深色外壳 + 白纸正文
+   ============================================================ */
+[data-theme="jade"] {
+  --bg-base: #101A17;
+  --bg-surface: #16231F;
+  --bg-elevated: #20342E;
+  --bg-hover: rgba(101, 191, 168, 0.08);
+
+  --text-primary: #ECF4EE;
+  --text-secondary: #B1C8BD;
+  --text-muted: #6F8C80;
+
+  --accent: #65BFA8;
+  --accent-hover: #7DD3BF;
+  --accent-muted: #3B8C78;
+
+  --success: #6EE7B7;
+  --warning: #F6C77A;
+  --error: #FCA5A5;
+  --info: #93C5FD;
+
+  --border: rgba(163, 205, 189, 0.18);
+  --border-hover: rgba(163, 205, 189, 0.34);
+
+  --accent-soft: rgba(101, 191, 168, 0.16);
+  --border-subtle: rgba(163, 205, 189, 0.10);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.34);
+  --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 20px 64px rgba(0, 0, 0, 0.40);
+
+  --editor-page-bg: #F7F1E5;
+  --editor-ruled-line: rgba(30, 43, 37, 0.08);
+  --editor-selection-bg: rgba(77, 148, 130, 0.22);
+  --editor-selection-text: #15221E;
+
+  --editor-ink-primary: #1F2A25;
+  --editor-ink-strong: #0C1411;
+  --editor-ink-cream: #6E421F;
+  --editor-ink-muted: #6C5A35;
+  --editor-ink-gold: #8A5B00;
+  --editor-ink-orange: #B54708;
+  --editor-ink-red: #B91C1C;
+  --editor-ink-blue: #1D4ED8;
+  --editor-ink-green: #047857;
+  --editor-ink-purple: #7E22CE;
+
+  --editor-mark-yellow: #FFE45C;
+  --editor-mark-red: #FFD6D6;
+  --editor-mark-blue: #D7E8FF;
+  --editor-mark-green: #D8F5DF;
+  --editor-mark-purple: #EAD7FF;
+  --editor-mark-brown: #ECE0C7;
+  --editor-mark-ink: #D8C8A8;
+}
+
+/* ============================================================
+   冷灰银蓝 · Slate — 设定库 / 事实库 / 管理页生产力主题
+   ============================================================ */
+[data-theme="slate"] {
+  --bg-base: #EEF2F6;
+  --bg-surface: #E3EAF1;
+  --bg-elevated: #F8FAFC;
+  --bg-hover: rgba(23, 32, 51, 0.05);
+
+  --text-primary: #172033;
+  --text-secondary: #4B5B70;
+  --text-muted: #7A8796;
+
+  --accent: #3F6F96;
+  --accent-hover: #335D80;
+  --accent-muted: #8AA8C0;
+
+  --success: #047857;
+  --warning: #A16207;
+  --error: #B91C1C;
+  --info: #1D4ED8;
+
+  --border: rgba(23, 32, 51, 0.13);
+  --border-hover: rgba(23, 32, 51, 0.25);
+
+  --accent-soft: rgba(63, 111, 150, 0.12);
+  --border-subtle: rgba(23, 32, 51, 0.07);
+  --shadow-sm: 0 1px 3px rgba(23, 32, 51, 0.08);
+  --shadow-md: 0 6px 18px rgba(23, 32, 51, 0.10);
+  --shadow-lg: 0 16px 44px rgba(23, 32, 51, 0.13);
+
+  --editor-page-bg: #FFFFFF;
+  --editor-ruled-line: rgba(23, 32, 51, 0.07);
+  --editor-selection-bg: rgba(63, 111, 150, 0.22);
+  --editor-selection-text: #111827;
+
+  --editor-ink-primary: #172033;
+  --editor-ink-strong: #070B12;
+  --editor-ink-cream: #704214;
+  --editor-ink-muted: #5B5A36;
+  --editor-ink-gold: #8A5B00;
+  --editor-ink-orange: #B54708;
+  --editor-ink-red: #B91C1C;
+  --editor-ink-blue: #1D4ED8;
+  --editor-ink-green: #047857;
+  --editor-ink-purple: #7E22CE;
+
+  --editor-mark-yellow: #FFE45C;
+  --editor-mark-red: #FFD6D6;
+  --editor-mark-blue: #D7E8FF;
+  --editor-mark-green: #D8F5DF;
+  --editor-mark-purple: #EAD7FF;
+  --editor-mark-brown: #E8DED1;
+  --editor-mark-ink: #DDE5EE;
+}
+
+/* ============================================================
+   熔炉 · Forge — 暗夜琥珀，火光余烬
+   ============================================================ */
 [data-theme="forge"] {
   --bg-base: #1A0F0A;
   --bg-surface: #251810;
@@ -442,95 +611,59 @@ body {
 }
 
 /* 浅色主题下修正历史遗留的 Tailwind 亮色工具类：这些类原本面向暗色底，放到纸面上会发虚。 */
-[data-theme="paper"] .text-green-400,
-[data-theme="paper"] .text-emerald-400,
-[data-theme="paper"] [class*="text-green-400"],
-[data-theme="paper"] [class*="text-emerald-400"],
-[data-theme="scroll"] .text-green-400,
-[data-theme="scroll"] .text-emerald-400,
-[data-theme="scroll"] [class*="text-green-400"],
-[data-theme="scroll"] [class*="text-emerald-400"] {
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-green-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-emerald-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-green-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-emerald-400"] {
   color: #065F46 !important;
 }
 
-[data-theme="paper"] .text-sky-300,
-[data-theme="paper"] .text-sky-400,
-[data-theme="paper"] .text-blue-400,
-[data-theme="paper"] [class*="text-sky-300"],
-[data-theme="paper"] [class*="text-sky-400"],
-[data-theme="paper"] [class*="text-blue-400"],
-[data-theme="scroll"] .text-sky-300,
-[data-theme="scroll"] .text-sky-400,
-[data-theme="scroll"] .text-blue-400,
-[data-theme="scroll"] [class*="text-sky-300"],
-[data-theme="scroll"] [class*="text-sky-400"],
-[data-theme="scroll"] [class*="text-blue-400"] {
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-sky-300,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-sky-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-blue-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-sky-300"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-sky-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-blue-400"] {
   color: #1E40AF !important;
 }
 
-[data-theme="paper"] .text-yellow-400,
-[data-theme="paper"] .text-amber-300,
-[data-theme="paper"] .text-amber-400,
-[data-theme="paper"] .text-amber-500,
-[data-theme="paper"] [class*="text-yellow-400"],
-[data-theme="paper"] [class*="text-amber-300"],
-[data-theme="paper"] [class*="text-amber-400"],
-[data-theme="paper"] [class*="text-amber-500"],
-[data-theme="scroll"] .text-yellow-400,
-[data-theme="scroll"] .text-amber-300,
-[data-theme="scroll"] .text-amber-400,
-[data-theme="scroll"] .text-amber-500,
-[data-theme="scroll"] [class*="text-yellow-400"],
-[data-theme="scroll"] [class*="text-amber-300"],
-[data-theme="scroll"] [class*="text-amber-400"],
-[data-theme="scroll"] [class*="text-amber-500"] {
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-yellow-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-amber-300,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-amber-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-amber-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-yellow-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-amber-300"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-amber-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-amber-500"] {
   color: #92400E !important;
 }
 
-[data-theme="paper"] .text-red-400,
-[data-theme="paper"] .text-red-500,
-[data-theme="paper"] [class*="text-red-400"],
-[data-theme="paper"] [class*="text-red-500"],
-[data-theme="scroll"] .text-red-400,
-[data-theme="scroll"] .text-red-500,
-[data-theme="scroll"] [class*="text-red-400"],
-[data-theme="scroll"] [class*="text-red-500"] {
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-red-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-red-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-red-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-red-500"] {
   color: #B91C1C !important;
 }
 
-[data-theme="paper"] .text-purple-300,
-[data-theme="paper"] .text-purple-400,
-[data-theme="paper"] .text-purple-500,
-[data-theme="paper"] [class*="text-purple-300"],
-[data-theme="paper"] [class*="text-purple-400"],
-[data-theme="paper"] [class*="text-purple-500"],
-[data-theme="scroll"] .text-purple-300,
-[data-theme="scroll"] .text-purple-400,
-[data-theme="scroll"] .text-purple-500,
-[data-theme="scroll"] [class*="text-purple-300"],
-[data-theme="scroll"] [class*="text-purple-400"],
-[data-theme="scroll"] [class*="text-purple-500"] {
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-purple-300,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-purple-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-purple-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-purple-300"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-purple-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-purple-500"] {
   color: #7E22CE !important;
 }
 
-[data-theme="paper"] .text-pink-400,
-[data-theme="paper"] .text-pink-500,
-[data-theme="paper"] [class*="text-pink-400"],
-[data-theme="paper"] [class*="text-pink-500"],
-[data-theme="scroll"] .text-pink-400,
-[data-theme="scroll"] .text-pink-500,
-[data-theme="scroll"] [class*="text-pink-400"],
-[data-theme="scroll"] [class*="text-pink-500"] {
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-pink-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-pink-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-pink-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-pink-500"] {
   color: #BE185D !important;
 }
 
-[data-theme="paper"] .text-orange-400,
-[data-theme="paper"] .text-orange-500,
-[data-theme="paper"] [class*="text-orange-400"],
-[data-theme="paper"] [class*="text-orange-500"],
-[data-theme="scroll"] .text-orange-400,
-[data-theme="scroll"] .text-orange-500,
-[data-theme="scroll"] [class*="text-orange-400"],
-[data-theme="scroll"] [class*="text-orange-500"] {
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-orange-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-orange-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-orange-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-orange-500"] {
   color: #C2410C !important;
 }

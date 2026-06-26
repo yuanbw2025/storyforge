@@ -11,19 +11,11 @@ import { ensureSchema, REQUIRED_TABLES } from './lib/db/ensure-schema'
 import { validateRegistry } from './lib/registry/validate'
 import { db } from './lib/db/schema'
 import { finalizeCharacterAxesMigrationSnapshots } from './lib/migrations/finalize-character-axes-snapshots'
+import { applyStoryForgeTheme, resolveStoryForgeTheme } from './lib/theme'
 import './index.css'
 
 // 从 localStorage 恢复主题（兼容旧主题名迁移）
-let savedTheme = localStorage.getItem('storyforge-theme') || 'forge'
-const THEME_MIGRATE: Record<string, string> = {
-  work: 'forge', midnight: 'forge', ocean: 'forge', graphite: 'forge',
-  mist: 'paper', parchment: 'paper',
-}
-if (THEME_MIGRATE[savedTheme]) {
-  savedTheme = THEME_MIGRATE[savedTheme]
-  localStorage.setItem('storyforge-theme', savedTheme)
-}
-document.documentElement.setAttribute('data-theme', savedTheme)
+applyStoryForgeTheme(resolveStoryForgeTheme(localStorage.getItem('storyforge-theme')))
 
 /**
  * FB-11 数据持久 · 启动期申请「持久化存储」。
