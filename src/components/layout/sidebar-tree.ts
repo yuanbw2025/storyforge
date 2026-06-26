@@ -197,8 +197,8 @@ export const NAV_TREE: TreeSection[] = [
     label: '设置区',
     children: [
       leaf('version-history',  '版本历史', History),
-      leaf('import-doc',       '导入',     Upload),
-      leaf('export',           '导出',     Download),
+      leaf('import-doc',       '文档解析', Upload),
+      leaf('export',           '数据管理', Download),
       leaf('usage-stats',      '消耗统计', Coins),
       leaf('settings',         '设置',     Settings),
     ],
