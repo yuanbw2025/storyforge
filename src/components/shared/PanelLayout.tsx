@@ -105,15 +105,18 @@ export default function PanelLayout({
       )}
 
       {/* 主编辑区 */}
-      <div className="flex-1 min-w-0 overflow-y-auto">
+      <div className="relative flex-1 min-w-0 overflow-y-auto">
         {collapsed && (
-          <button
-            onClick={() => setCollapsed(false)}
-            className="fixed z-10 mt-2 ml-2 p-1.5 bg-bg-elevated border border-border rounded-md text-text-muted hover:text-text-primary shadow-sm"
-            title="展开侧栏"
-          >
-            <PanelLeft className="w-4 h-4" />
-          </button>
+          <div className="sticky top-3 z-40 h-0 pointer-events-none">
+            <button
+              onClick={() => setCollapsed(false)}
+              className="pointer-events-auto -ml-px inline-flex items-center gap-1.5 rounded-r-xl border border-l-0 border-border bg-bg-elevated/95 px-2.5 py-2 text-xs font-medium text-text-secondary shadow-theme-md backdrop-blur transition-colors hover:border-accent/60 hover:text-text-primary"
+              title="展开侧栏"
+            >
+              <PanelLeft className="h-4 w-4" />
+              {sidebarTitle && <span className="max-w-16 truncate">{sidebarTitle.replace(/^[^\p{L}\p{N}]+/u, '')}</span>}
+            </button>
+          </div>
         )}
         {children}
       </div>
