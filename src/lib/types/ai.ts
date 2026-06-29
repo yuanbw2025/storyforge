@@ -14,6 +14,7 @@ export type AIProvider =
   | 'modelscope'
   | 'nvidia'
   | 'agnes'
+  | 'opencode'
   | 'ollama'
   | 'custom'
 
@@ -117,6 +118,23 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'agnes-1.5-flash', label: 'Agnes 1.5 Flash', desc: '清华系免费·稳定可用·推荐' },
     { value: 'Agnes-2.0-Flash', label: 'Agnes 2.0 Flash', desc: '1M 上下文·部分时段维护中' },
   ],
+  opencode: [
+    { value: 'kimi-k2.5', label: 'Kimi K2.5 ⭐', desc: '推荐，256K 上下文，复杂编码' },
+    { value: 'kimi-k2.6', label: 'Kimi K2.6', desc: '最新 Kimi，代码质量最高' },
+    { value: 'glm-5.1', label: 'GLM-5.1', desc: '旗舰推理/编码，★★★★★' },
+    { value: 'glm-5', label: 'GLM-5', desc: '中文推理/数学' },
+    { value: 'minimax-m2.5', label: 'MiniMax M2.5', desc: '性价比最高，SWE-Bench 80.2%' },
+    { value: 'minimax-m2.7', label: 'MiniMax M2.7', desc: 'MiniMax 改进版' },
+    { value: 'minimax-m3', label: 'MiniMax M3', desc: '最新 MiniMax' },
+    { value: 'mimo-v2.5-pro', label: 'MiMo-V2.5-Pro', desc: '高质量编码' },
+    { value: 'mimo-v2.5', label: 'MiMo-V2.5', desc: '超值版' },
+    { value: 'qwen3.7-max', label: 'Qwen3.7 Max', desc: 'Qwen 最高质量' },
+    { value: 'qwen3.7-plus', label: 'Qwen3.7 Plus', desc: '均衡 Qwen' },
+    { value: 'qwen3.6-plus', label: 'Qwen3.6 Plus', desc: '高性价比' },
+    { value: 'qwen3.5-plus', label: 'Qwen3.5 Plus', desc: '最大请求量' },
+    { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', desc: '极致性价比' },
+    { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', desc: 'DS 最强' },
+  ],
 }
 
 /** 提供商预设 */
@@ -176,6 +194,10 @@ export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
   agnes: {
     baseUrl: 'https://apihub.agnes-ai.com/v1',
     model: 'agnes-1.5-flash',
+  },
+  opencode: {
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    model: 'kimi-k2.5',
   },
   ollama: {
     baseUrl: 'http://localhost:11434/v1',

@@ -85,6 +85,24 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
   // ModelScope
   'modelscope': { label: 'ModelScope 默认', maxContext: 32_000, maxOutput: 8_192 },
 
+  // OpenCode Go（月模型订阅服务 · 2026-06）
+  'opencode': { label: 'OpenCode Go 默认', maxContext: 128_000, maxOutput: 16_384 },
+  'opencode:kimi-k2.5': { label: 'Kimi K2.5', maxContext: 256_000, maxOutput: 16_384 },
+  'opencode:kimi-k2.6': { label: 'Kimi K2.6', maxContext: 256_000, maxOutput: 16_384 },
+  'opencode:glm-5.1': { label: 'GLM-5.1', maxContext: 128_000, maxOutput: 16_384 },
+  'opencode:glm-5': { label: 'GLM-5', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:minimax-m2.5': { label: 'MiniMax M2.5', maxContext: 245_000, maxOutput: 16_384 },
+  'opencode:minimax-m2.7': { label: 'MiniMax M2.7', maxContext: 245_000, maxOutput: 16_384 },
+  'opencode:minimax-m3': { label: 'MiniMax M3', maxContext: 245_000, maxOutput: 16_384 },
+  'opencode:mimo-v2.5-pro': { label: 'MiMo-V2.5-Pro', maxContext: 128_000, maxOutput: 16_384 },
+  'opencode:mimo-v2.5': { label: 'MiMo-V2.5', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:qwen3.7-max': { label: 'Qwen3.7 Max', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:qwen3.7-plus': { label: 'Qwen3.7 Plus', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:qwen3.6-plus': { label: 'Qwen3.6 Plus', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:qwen3.5-plus': { label: 'Qwen3.5 Plus', maxContext: 32_000, maxOutput: 8_192 },
+  'opencode:deepseek-v4-flash': { label: 'DeepSeek V4 Flash', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:deepseek-v4-pro': { label: 'DeepSeek V4 Pro', maxContext: 128_000, maxOutput: 16_384 },
+
   // Ollama (本地部署，窗口大小取决于模型)
   'ollama': { label: 'Ollama 默认', maxContext: 8_000, maxOutput: 4_096 },
 
