@@ -799,8 +799,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
   return (
     <div className="min-h-full bg-bg-base/40">
-      {/* 标题栏 */}
-      <div className="sticky top-0 z-20 border-b border-border bg-bg-base/95 backdrop-blur">
+      {/* 标题栏 —— sticky 固定在顶部，必须不透光，否则正文下滑时会从底下透出来 */}
+      <div className="sticky top-0 z-20 border-b border-border bg-bg-base">
       <div className="flex items-center justify-between px-6 py-3">
         <div className="flex items-center gap-3">
           <div>
