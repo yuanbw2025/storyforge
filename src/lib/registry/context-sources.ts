@@ -25,7 +25,8 @@ import { buildWorldRulesContext } from '../ai/world-rules-manifest'
 import { parseStages } from '../types/story-arc'
 import { parseFields } from '../types/state-card'
 import { parseBeats } from '../types/emotion-beat'
-import type { Character, Foreshadow, PowerSystem, Worldview } from '../types'
+import { buildForeshadowTaskContext } from '../foreshadow/context'
+import type { Character, PowerSystem, Worldview } from '../types'
 import type { ContextSource } from './types'
 import { htmlToPlainText } from '../utils/html'
 
@@ -57,23 +58,16 @@ async function readCharacters(projectId: number, worldGroupId?: number | null): 
 }
 
 async function readForeshadows(projectId: number, chapterId?: number | null): Promise<string> {
-  const rows = await db.foreshadows.where('projectId').equals(projectId).toArray()
-  const open = rows.filter(f => f.status !== 'resolved')
-  if (!open.length) return ''
-  const selected = chapterId == null
-    ? open.slice(0, 25)
-    : open.filter(f => {
-      if (f.plantChapterId === chapterId || f.resolveChapterId === chapterId || f.expectedResolveChapterId === chapterId) return true
-      try {
-        const echoIds: number[] = JSON.parse(f.echoChapterIds || '[]')
-        return echoIds.includes(chapterId)
-      } catch {
-        return false
-      }
-    })
-  if (!selected.length) return ''
-  const lines = selected.map((f: Foreshadow) => `- ${f.name}(${f.status}/${f.type}): ${f.description?.slice(0, 120) || ''}`)
-  return `【伏笔状态】\n${lines.join('\n')}`
+  const [rows, chapters, outlineNodes] = await Promise.all([
+    db.foreshadows.where('projectId').equals(projectId).toArray(),
+    db.chapters.where('projectId').equals(projectId).toArray(),
+    db.outlineNodes.where('projectId').equals(projectId).toArray(),
+  ])
+  return buildForeshadowTaskContext(rows, {
+    currentChapterId: chapterId ?? null,
+    chapters,
+    outlineNodes,
+  })
 }
 
 /** FB-5:作者文风画像。仅当画像存在且 enabled 时返回,否则空串(不进上下文)。 */
