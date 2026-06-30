@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import { buildForeshadowTaskContext } from '../lib/foreshadow/context'
-import type { Foreshadow, ForeshadowStatus, ForeshadowUrgency } from '../lib/types'
+import type { Chapter, Foreshadow, ForeshadowStatus, OutlineNode } from '../lib/types'
 
 interface ForeshadowStore {
   foreshadows: Foreshadow[]
@@ -13,16 +13,9 @@ interface ForeshadowStore {
   deleteForeshadow: (id: number) => Promise<void>
   updateStatus: (id: number, status: ForeshadowStatus) => Promise<void>
 
-  // ── Phase C1: 逾期检测 ──
-  /** 获取已逾期（超过预期回收章节但仍未回收）的伏笔 */
-  getOverdue: (currentChapterId: number) => Foreshadow[]
-  /** 获取即将需要回收的伏笔（在未来 range 章内） */
-  getUpcoming: (currentChapterId: number, range?: number) => Foreshadow[]
-  /** 计算单条伏笔的紧急度 */
-  computeUrgency: (f: Foreshadow, currentChapterId: number) => ForeshadowUrgency
-
   // ── Phase C2: 伏笔上下文构建（注入 AI prompt） ──
-  buildForeshadowContext: (currentChapterId: number) => string
+  // 逾期/临近检测已并入 buildForeshadowTaskContext（按 canonical 章序，需传 chapters/outlineNodes）
+  buildForeshadowContext: (currentChapterId: number, chapters?: Chapter[], outlineNodes?: OutlineNode[]) => string
 }
 
 const now = () => Date.now()
@@ -69,41 +62,9 @@ export const useForeshadowStore = create<ForeshadowStore>((set, get) => ({
     })
   },
 
-  // ── Phase C1 ──
-
-  getOverdue: (currentChapterId) => {
-    return get().foreshadows.filter(f => {
-      if (f.status === 'resolved') return false
-      if (!f.expectedResolveChapterId) return false
-      return f.expectedResolveChapterId < currentChapterId && !f.resolveChapterId
-    })
-  },
-
-  getUpcoming: (currentChapterId, range = 5) => {
-    return get().foreshadows.filter(f => {
-      if (f.status === 'resolved') return false
-      if (!f.expectedResolveChapterId) return false
-      const diff = f.expectedResolveChapterId - currentChapterId
-      return diff > 0 && diff <= range
-    })
-  },
-
-  computeUrgency: (f, currentChapterId) => {
-    if (f.status === 'resolved') return 'low'
-    if (!f.expectedResolveChapterId) {
-      // 没有预期回收，按重要度粗略判定
-      return (f.importance || 5) >= 8 ? 'medium' : 'low'
-    }
-    const diff = f.expectedResolveChapterId - currentChapterId
-    if (diff < 0) return 'critical'  // 已逾期
-    if (diff <= 2) return 'high'     // 即将到期
-    if (diff <= 5) return 'medium'   // 临近
-    return 'low'
-  },
-
   // ── Phase C2 ──
 
-  buildForeshadowContext: (currentChapterId) => {
-    return buildForeshadowTaskContext(get().foreshadows, { currentChapterId })
+  buildForeshadowContext: (currentChapterId, chapters = [], outlineNodes = []) => {
+    return buildForeshadowTaskContext(get().foreshadows, { currentChapterId, chapters, outlineNodes })
   },
 }))

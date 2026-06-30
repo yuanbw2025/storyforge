@@ -1031,7 +1031,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               const next = chapters.filter(c => c.order > (currentChapter?.order || 0)).shift()
               return next?.summary || ''
             })()}
-            foreshadowContext={currentChapter?.id ? buildForeshadowContext(currentChapter.id) : ''}
+            foreshadowContext={currentChapter?.id ? buildForeshadowContext(currentChapter.id, chapters, nodes) : ''}
             stateContext={stateCards.slice(0, 10).map(sc => `${sc.category}:${sc.entityName} — ${sc.fields?.slice(0, 50)}`).join('\n')}
             onClose={() => setShowReviewPanel(false)}
             onReviseByReport={handleReviseByReport}
