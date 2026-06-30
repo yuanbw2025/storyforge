@@ -129,11 +129,15 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
     const existing = characters.map(c =>
       `${c.name}（${ROLE_WEIGHT_LABELS[c.roleWeight]} · ${ORDER_AXIS_LABELS[c.orderAxis]}${MORAL_AXIS_LABELS[c.moralAxis]}）`,
     ).join('、')
-    // B：维度范围指令——非全选时,告诉 AI 只生成选中的维度,其余留空(不动基础模板)
+    // B：维度指令——始终告诉 AI 要设计哪些维度(基础提示词只覆盖老字段,新维度靠这里点名才会生成)。
+    // 全选→"完整设计全部"；部分→"只设计这些、其余留空"。走 CHARACTER_DIMENSIONS 单源,不动脆弱的基础模板。
     const allKeys = CHARACTER_DIMENSIONS.map(d => d.key)
-    const dimInstruction = genDims.size > 0 && genDims.size < allKeys.length
-      ? `本次只需设计以下维度，其余维度一律留空：${CHARACTER_DIMENSIONS.filter(d => genDims.has(d.key)).map(d => d.label).join('、')}`
-      : ''
+    const selectedLabels = CHARACTER_DIMENSIONS.filter(d => genDims.has(d.key)).map(d => d.label).join('、')
+    const dimInstruction = genDims.size === 0
+      ? ''
+      : genDims.size < allKeys.length
+        ? `本次只需设计以下维度，其余维度一律留空：${selectedLabels}`
+        : `请尽量完整设计以下全部维度（有内容才写，没有的留空，不要编造硬凑）：${selectedLabels}`
     const enrichedHint = [hint, rosterGap, dimInstruction].filter(Boolean).join('\n')
     // 多世界：按当前选中/活跃世界读取上下文（此前写死单世界）
     const targetWorld = project.enableMultiWorld
