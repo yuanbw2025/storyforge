@@ -98,6 +98,20 @@ export function normalizeNonCharacterConcepts(input: UnifiedParseResult): Unifie
  * - worldview: 每个字段以 "\n\n" 连接追加
  * - characters / outline: 直接 push（跨块重名由 runCharacterMerge 另行处理）
  */
+/** 世界观字段追加：段落级去重，已存在的段落不再重复拼接。 */
+function appendDedupParagraph(cur: string, add: string): string {
+  if (!add) return cur
+  if (!cur) return add
+  const existing = cur.split('\n\n').map(s => s.trim())
+  if (existing.includes(add)) return cur
+  return `${cur}\n\n${add}`
+}
+
+/** 大纲节点去重键：标题 + 摘要精确匹配。 */
+function olKey(n: Record<string, unknown>): string {
+  return `${String(n.title ?? '').trim()}¦${String(n.summary ?? '').trim()}`
+}
+
 export function mergeUnified(
   acc: UnifiedParseResult,
   fresh: UnifiedParseResult,
@@ -108,23 +122,45 @@ export function mergeUnified(
     outline: [...(acc.outline || [])],
     writingTechniques: { ...(acc.writingTechniques || {}) },
   }
+  // 世界观：段落级去重——每块常重述同一段设定，旧代码无脑 \n\n 拼接会拼成 N 份
+  // （社区反馈：导入后世界观同一句重复十几遍）。同一段落只保留一次。
   if (fresh.worldview) {
     for (const [k, v] of Object.entries(fresh.worldview)) {
       if (typeof v === 'string' && v.trim()) {
-        const cur = out.worldview![k] || ''
-        out.worldview![k] = cur ? `${cur}\n\n${v.trim()}` : v.trim()
+        out.worldview![k] = appendDedupParagraph(out.worldview![k] || '', v.trim())
       }
     }
   }
+  // 角色：按名字去重——每块都会重复吐出同一角色，旧代码无脑 push 堆到几百个。
+  // 同名只保留信息最全的一条（不同称呼的语义合并仍由「AI 整理角色卡」处理）。
   if (Array.isArray(fresh.characters)) {
+    const idxByName = new Map<string, number>()
+    out.characters!.forEach((c, i) => {
+      const n = String((c as Record<string, unknown>).name ?? '').trim()
+      if (n) idxByName.set(n, i)
+    })
     for (const c of fresh.characters) {
-      if (c && typeof c.name === 'string' && c.name.trim()) {
+      const name = c && typeof c.name === 'string' ? c.name.trim() : ''
+      if (!name) continue
+      const existingIdx = idxByName.get(name)
+      if (existingIdx == null) {
+        idxByName.set(name, out.characters!.length)
         out.characters!.push(c)
+      } else if (JSON.stringify(c).length > JSON.stringify(out.characters![existingIdx]).length) {
+        // 后出现的信息更全 → 用它替换（保留信息最多的一份）
+        out.characters![existingIdx] = c
       }
     }
   }
+  // 大纲：按「标题+摘要」精确去重（分块重叠会重复吐同一节点；不同章节标题/摘要不同，不会误删）。
   if (Array.isArray(fresh.outline)) {
-    for (const n of fresh.outline) out.outline!.push(n)
+    const seen = new Set(out.outline!.map(olKey))
+    for (const n of fresh.outline) {
+      const key = olKey(n as Record<string, unknown>)
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.outline!.push(n)
+    }
   }
   // 写作技法：每个字段追加拼接
   if (fresh.writingTechniques && typeof fresh.writingTechniques === 'object') {
