@@ -62,6 +62,9 @@ export default defineConfig({
   base: '/storyforge/',
   server: {
     port: 1111,
+    // CF-1: 端口被占用时直接失败报错，而不是静默换到 1112 —— 避免用户以为在 1111、
+    // 实际打开的却是被旧进程占用的 1111（错误服务 / 重定向循环）。
+    strictPort: true,
     open: '/storyforge/',
     proxy: {
       '/deepseek-proxy': {

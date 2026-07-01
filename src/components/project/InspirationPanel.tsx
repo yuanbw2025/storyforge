@@ -386,9 +386,13 @@ export default function InspirationPanel({ project }: Props) {
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
         {/* ── 灵感输入 ────────────────────────────── */}
         <section>
-          <label className="block text-sm font-medium text-text-primary mb-2">
+          <label className="block text-sm font-medium text-text-primary mb-1">
             写下你的灵感
           </label>
+          {/* CF-5: 明确适用边界，避免用户误把长篇正文粘进来 */}
+          <p className="text-xs text-text-muted mb-2">
+            适合<strong>短灵感 / 梗概 / 片段想法</strong>（几句到一两段）。要从<strong>整章 / 整本正文</strong>提取设定，请用「文档解析 / 项目参考导入」，效果更完整。
+          </p>
           <AutoResizeTextarea
             value={inspiration}
             onChange={e => setInspiration(e.target.value)}
@@ -396,6 +400,12 @@ export default function InspirationPanel({ project }: Props) {
             className="w-full text-sm bg-bg-base border border-border-default rounded-lg px-4 py-3 text-text-primary placeholder:text-text-muted resize-none"
             minRows={5}
           />
+          {/* CF-5: 超长非阻断提示——不静默截断，明确告知只适合短文本 */}
+          {inspiration.length > 1500 && (
+            <p className="mt-1.5 text-xs text-warning">
+              ⚠️ 当前输入约 {inspiration.length} 字，偏长。灵感反推面向短灵感设计，过长内容 AI 可能只吃前半段；长篇正文请改用「文档解析 / 项目参考导入」。
+            </p>
+          )}
         </section>
 
         {/* ── 补充说明 ────────────────────────────── */}

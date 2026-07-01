@@ -37,6 +37,32 @@
         });
       })();
     </script>
+    <script>
+      /*
+       * CF-1: 本地 .bat / .exe 用户在 localhost / 127.0.0.1 常因历史遗留的 service worker
+       * 缓存了旧导航回退 → 打开时提示「127.0.0.1 重定向次数过多 (ERR_TOO_MANY_REDIRECTS)」。
+       * 本地运行不需要 PWA / 离线缓存，页面一加载就注销 SW + 清 Cache Storage（workbox 运行时缓存）。
+       * ⚠️ 数据红线：只清 service worker 与 Cache Storage，绝不触碰 IndexedDB / localStorage
+       *   （用户的小说作品与 API 配置全在 IndexedDB / localStorage，必须原样保留）。
+       * 只在 localhost / 127.0.0.1 执行，不影响线上部署（Vercel）用户想要的正常 PWA。
+       */
+      (function () {
+        var h = location.hostname;
+        if (h !== 'localhost' && h !== '127.0.0.1' && h !== '[::1]') return;
+        try {
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations()
+              .then(function (rs) { rs.forEach(function (r) { r.unregister(); }); })
+              .catch(function () {});
+          }
+          if (window.caches && caches.keys) {
+            caches.keys()
+              .then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); })
+              .catch(function () {});
+          }
+        } catch (e) { /* 本地自愈失败不影响运行 */ }
+      })();
+    </script>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   </head>

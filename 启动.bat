@@ -88,6 +88,21 @@ exit /b 1
 echo   [2/4] 项目组件就绪
 echo.
 
+:: ========== CF-1：端口占用检测（避免连到被旧进程占用的错误服务，出现"重定向次数过多"） ==========
+netstat -ano | findstr ":1111" | findstr "LISTENING" >nul 2>&1
+if %ERRORLEVEL% neq 0 goto PORT_FREE
+echo.
+echo   [注意] 端口 1111 已经被占用！
+echo   多半是你已经开着另一个 StoryForge 窗口，或旧的 StoryForge.exe 还在后台运行。
+echo   如果现在继续，浏览器可能连到那个旧程序，出现"127.0.0.1 重定向次数过多"。
+echo.
+echo   建议：① 先关掉其它 StoryForge 黑窗口 / 任务栏里的 StoryForge.exe；
+echo         ② 再回来重新双击"启动.bat"。
+echo.
+echo   如果你确定 1111 就是本程序、只是想继续，按任意键继续；否则直接关闭本窗口。
+pause >nul
+:PORT_FREE
+
 :: ========== 第三、四步：启动 + 自动开浏览器 ==========
 echo   [3/4] 正在启动 StoryForge...
 echo   [4/4] 启动后会自动打开浏览器；如果没自动打开，
