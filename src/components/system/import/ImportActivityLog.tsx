@@ -10,7 +10,7 @@ const ICONS: Record<ImportLogLevel, typeof Info> = {
 }
 const COLORS: Record<ImportLogLevel, string> = {
   info: 'text-text-secondary',
-  warn: 'text-warn',
+  warn: 'text-warning',
   error: 'text-error',
   success: 'text-success',
 }

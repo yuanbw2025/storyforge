@@ -30,10 +30,10 @@ export default function ImportUnfinishedBanner({
   const remaining = unfinished.chunks.filter(c => c.status !== 'done').length
 
   return (
-    <div className="bg-warn/5 border border-warn/30 rounded-xl p-4 flex items-start gap-3">
-      <History className="w-5 h-5 text-warn mt-0.5 flex-shrink-0" />
+    <div className="bg-warning/5 border border-warning/30 rounded-xl p-4 flex items-start gap-3">
+      <History className="w-5 h-5 text-warning mt-0.5 flex-shrink-0" />
       <div className="flex-1">
-        <div className="text-sm font-semibold text-warn mb-1">
+        <div className="text-sm font-semibold text-warning mb-1">
           发现未完成的解析任务
         </div>
         <div className="text-xs text-text-secondary leading-relaxed">
@@ -56,14 +56,14 @@ export default function ImportUnfinishedBanner({
           {blobRestored ? (
             <button
               onClick={onResume}
-              className="flex items-center gap-1 px-3 py-1.5 bg-warn text-white text-xs rounded hover:bg-warn/90"
+              className="flex items-center gap-1 px-3 py-1.5 bg-warning text-white text-xs rounded hover:bg-warning/90"
             >
               <PlayCircle className="w-3.5 h-3.5" /> 立即续跑
             </button>
           ) : hasRawText ? (
             <button
               onClick={onResumeWithUploaded}
-              className="flex items-center gap-1 px-3 py-1.5 bg-warn text-white text-xs rounded hover:bg-warn/90"
+              className="flex items-center gap-1 px-3 py-1.5 bg-warning text-white text-xs rounded hover:bg-warning/90"
             >
               <PlayCircle className="w-3.5 h-3.5" /> 用当前文件续跑
             </button>

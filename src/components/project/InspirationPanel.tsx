@@ -369,7 +369,7 @@ export default function InspirationPanel({ project }: Props) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 顶部标题 */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-default bg-bg-surface">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-bg-surface">
         <Lightbulb className="w-5 h-5 text-yellow-500" />
         <h2 className="text-lg font-semibold text-text-primary">灵感反推</h2>
         <span className="text-xs text-text-muted ml-2">从碎片想法反推完整故事框架</span>
@@ -397,7 +397,7 @@ export default function InspirationPanel({ project }: Props) {
             value={inspiration}
             onChange={e => setInspiration(e.target.value)}
             placeholder={"随便写点什么...\n\n例如：\n- 一个在末世废墟中寻找失踪妹妹的退役军人\n- 古代宫廷里，一个替身公主发现了皇帝的秘密\n- 赛博朋克 + 修仙，用代码修炼的程序员\n- 甚至只是几个关键词：深海、孤岛、失忆、怪物"}
-            className="w-full text-sm bg-bg-base border border-border-default rounded-lg px-4 py-3 text-text-primary placeholder:text-text-muted resize-none"
+            className="w-full text-sm bg-bg-base border border-border rounded-lg px-4 py-3 text-text-primary placeholder:text-text-muted resize-none"
             minRows={5}
           />
           {/* CF-5: 超长非阻断提示——不静默截断，明确告知只适合短文本 */}
@@ -415,7 +415,7 @@ export default function InspirationPanel({ project }: Props) {
             value={userHint}
             onChange={e => setUserHint(e.target.value)}
             placeholder="例如：偏黑暗风格、需要感情线、主角要有反转..."
-            className="w-full text-sm bg-bg-base border border-border-default rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
+            className="w-full text-sm bg-bg-base border border-border rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
             minRows={2}
           />
         </section>
@@ -425,7 +425,7 @@ export default function InspirationPanel({ project }: Props) {
           <button
             onClick={handleGenerate}
             disabled={!inspiration.trim() || ai.isStreaming}
-            className="flex items-center gap-1.5 px-4 py-2 bg-brand-primary text-white rounded-lg text-sm font-medium hover:bg-brand-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {ai.isStreaming ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -655,7 +655,7 @@ function ResultCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="border border-border-default rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden">
       <div
         className="flex items-center justify-between px-4 py-2.5 bg-bg-surface cursor-pointer hover:bg-bg-hover transition-colors"
         onClick={onToggle}
@@ -681,7 +681,7 @@ function ResultCard({
         )}
       </div>
       {expanded && (
-        <div className="px-4 py-3 border-t border-border-default">
+        <div className="px-4 py-3 border-t border-border">
           {children}
         </div>
       )}
@@ -693,7 +693,7 @@ function FieldRow({ label, value, highlight }: { label: string; value: string; h
   return (
     <div>
       <span className="text-xs text-text-muted">{label}：</span>
-      <span className={`text-text-primary ${highlight ? 'font-medium text-brand-primary' : ''}`}>
+      <span className={`text-text-primary ${highlight ? 'font-medium text-accent' : ''}`}>
         {value}
       </span>
     </div>
@@ -709,14 +709,14 @@ function CharacterCard({
   adopted: boolean
 }) {
   return (
-    <div className={`border rounded-lg p-3 transition-colors ${selected ? 'border-brand-primary bg-brand-primary/5' : 'border-border-default'}`}>
+    <div className={`border rounded-lg p-3 transition-colors ${selected ? 'border-accent bg-accent/10' : 'border-border'}`}>
       <div className="flex items-center gap-2 mb-2">
         {!adopted && (
           <input
             type="checkbox"
             checked={selected}
             onChange={onToggle}
-            className="accent-brand-primary"
+            className="accent-accent"
           />
         )}
         <span className="text-sm font-medium text-text-primary">{char.name}</span>
@@ -725,7 +725,7 @@ function CharacterCard({
         </span>
       </div>
       {char.shortDescription && (
-        <p className="text-xs text-brand-primary mb-1">{char.shortDescription}</p>
+        <p className="text-xs text-accent mb-1">{char.shortDescription}</p>
       )}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-text-muted">
         {char.personality && <span>性格：{char.personality}</span>}

@@ -3,7 +3,7 @@
 > 🔒 **接手者必读宪法**: [`/CLAUDE.md`](../CLAUDE.md) — 三注册表铁律 + 动手前的「四问」+ 反面教材
 > 📐 **施工权威**: [`docs/MASTER-BLUEPRINT.md`](MASTER-BLUEPRINT.md) — 重构 Phase 0/1/2/3 完整流程
 >
-> **最后更新**: 2026-06-25（NS-4/5/6 北极星补强完成，待 Claude 最终复审；施工权威见 MASTER-BLUEPRINT §16.9）
+> **最后更新**: 2026-06-30（追加社区反馈待修复批次：Windows 启动、细纲采纳、故事主线约束、主题可读性等；施工权威见 MASTER-BLUEPRINT）
 > **说明**: 本文档是唯一的功能规划文档。旧文档已归档至 `docs/archive/`。
 > **结构**: 上半部分「已完成」，下半部分「待开发」按优先级排列。完成后从待办挪到已完成区。
 > **重要**: 任何"加功能 / 修 bug"前，先过 CLAUDE.md 的「四问」。**头疼医头 = 永远拒绝**。
@@ -207,6 +207,177 @@
 
 > 📐 **施工权威已转移**：项目重构请以 `docs/MASTER-BLUEPRINT.md`（v2 · 最终蓝图）为唯一依据。
 > 本 ROADMAP 中所有"架构地基级"任务均已纳入 MASTER-BLUEPRINT 的 Phase 0/1/2/3，本节保留索引但不再独立维护。
+
+---
+
+# ═══ 社区反馈批次（2026-06-30 · Windows 启动 / 细纲采纳 / 主线约束 / 主题可读性）═══
+
+> **来源**：2026-06-30 作者转述群内用户反馈 + Codex 本地只读定位。
+> **当前状态（2026-07-01 · Claude 已修复一轮）**：
+> - ✅ **CF-2 场景采纳崩溃** — 已修复并部署 main（`json→arr` + `normalizeDetailedScenes` 自愈，R-CF2）。
+> - ✅ **CF-3 大纲偏离主线** — 已修复并部署 main（卷纲/章纲 prompt 主线硬约束，R-CF3）。
+> - ✅ **CF-1 本地启动重定向** — 代码侧已修并部署 main（index.html localhost 注销遗留 SW + 清 Cache Storage，绝不碰 IndexedDB/localStorage；vite `strictPort`；`启动.bat` 端口占用检测）。**bat/exe/SW 在真实 Windows 的端到端验证需用户侧完成**。
+> - ✅ **CF-5 灵感反推边界提示** — 已修复并部署 main（输入区适用边界提示 + 超长非阻断警告）。
+> - ✅ **CF-7 分发引导** — 已修复并部署 main（README「Windows 一键启动·小白路径」+ bat 诊断）。
+> - ✅ **CF-4 主题可读性** — Codex 本批次已做，在 `codex/community-theme-tips` 分支（随该分支合并 main 生效）。
+> - ✅ **CF-6 伏笔边界说明** — 显示错位半边由 `d7a252f`(Codex)+`ca61d0f`(Claude 复审修复) 覆盖；作用边界 Tips `0563763` 已加，在 `codex/community-theme-tips` 分支。
+> **备注**：CF-1/2/3/5/7 已在 `origin/main`；CF-4/6 待 codex 分支合并 main。原始批次定位见下方各条。
+> **重要约束**：① 不改用户正文数据；② 涉及 AI 读写继续走 `CONTEXT_SOURCES / FIELD_REGISTRY / ADOPTION_SCHEMA / adopt()`；③ Windows 启动修复必须覆盖「源码 ZIP + 启动.bat」和「Release Portable + StoryForge.exe」两条路径；④ 主题修复必须按整体色彩系统处理，不能只补单个按钮。
+
+## 附图索引
+
+| 图 | 反馈点 | 截图 |
+|---|---|---|
+| 图 1 | 自动生成的大纲 / 故事设计与填写主线不一致 | ![自动大纲与故事主线不一致](assets/community-feedback-2026-06-30/CF-20260630-01-story-mainline-outline.png) |
+| 图 2 | 用户明确使用源码 ZIP 内的 `启动.bat` | ![源码 ZIP 内启动 bat](assets/community-feedback-2026-06-30/CF-20260630-02-source-zip-bat.png) |
+| 图 3 | 章节内「场景细纲 → 一键 AI 拆场景 → 采纳」可复现崩溃 | ![场景采纳用户反馈](assets/community-feedback-2026-06-30/CF-20260630-03-scene-adopt-user-report.png) |
+| 图 4 | 报错 `scenes.reduce is not a function` | ![scenes reduce 报错](assets/community-feedback-2026-06-30/CF-20260630-04-scenes-reduce-error.png) |
+| 图 5 | 复现路径：章节页右上角展开场景细纲 → AI 生成 → 采纳 → 崩溃 | ![场景采纳复现路径](assets/community-feedback-2026-06-30/CF-20260630-05-scene-adopt-flow.png) |
+| 图 6 | Release Portable `StoryForge.exe` 打开后 `ERR_TOO_MANY_REDIRECTS` | ![exe 重定向过多](assets/community-feedback-2026-06-30/CF-20260630-06-exe-too-many-redirects.png) |
+
+## 🔴 CF-20260630-1 — Windows 启动入口 `启动.bat` / `StoryForge.exe` 出现 `ERR_TOO_MANY_REDIRECTS`
+
+- **现象**：
+  - 用户 A：下载源码 ZIP，进入 `storyforge-main/storyforge-main`，明确双击图 2 中的 `启动.bat`，浏览器打开后提示 `127.0.0.1` 重定向次数过多。
+  - 用户 B：使用 Release Portable 包内 `StoryForge.exe`，打开 `http://127.0.0.1:1111/storyforge/` 后同样提示 `ERR_TOO_MANY_REDIRECTS`（图 6）。
+- **本地检查结论**：
+  - 当前 `启动.bat` 会执行 `npm run dev`；本地实测 Vite dev 服务：
+    - `http://127.0.0.1:1111/storyforge/` → `200 OK`
+    - `http://localhost:1111/storyforge/` → `200 OK`
+    - `http://127.0.0.1:1111/` → 仅一次 `302` 到 `/storyforge/`，不是循环。
+  - `packaging/desktop-server/main.go` 的 Go 启动器在监听 1111 失败时会直接打开浏览器指向 `http://127.0.0.1:1111/storyforge/`，但不会验证占用该端口的进程是否真是可用 StoryForge。
+  - `vite.config.ts` 启用了 PWA：`scope: '/storyforge/'` + `navigateFallback: '/storyforge/index.html'`。源码 dev、exe、旧版本都复用本地 `/storyforge/`，浏览器 service worker/cache 有污染风险；curl 看不到该问题，因为 curl 不执行浏览器 SW。
+- **初步根因判断**：
+  - HTTP 服务端自身没有显式重定向循环；更可能是：
+    1. 1111 端口被旧 StoryForge / 其他本地服务占用，当前入口打开了错误服务；
+    2. 旧 PWA service worker / Workbox cache 拦截 `/storyforge/` 导航；
+    3. `localhost` 与 `127.0.0.1` 混用导致用户侧状态分裂，进一步放大缓存 / 端口混乱。
+- **修复方案**：
+  1. `启动.bat` 启动前检测 1111 端口占用；占用时清晰提示用户关闭旧黑窗 / 旧 `StoryForge.exe` / 占用程序，不继续误导打开浏览器。
+  2. Vite `server.strictPort = true`，避免端口变化但说明仍指向 1111。
+  3. 本地环境（`localhost` / `127.0.0.1`）默认不注册 PWA，或启动期自动 unregister StoryForge SW + 清 Workbox cache；**不得清 IndexedDB / localStorage 中的用户作品和 API 配置**。
+  4. `StoryForge.exe` 监听 1111 失败时不要直接打开浏览器；先做健康检查，确认该端口返回的是当前 StoryForge，再打开；否则给端口占用提示。
+  5. 文档明确区分两种包：源码 ZIP 运行 `启动.bat`；Release Portable 运行 `StoryForge.exe`；不要混用。
+- **验证要求**：
+  - Windows 环境至少验证：
+    1. 无旧进程首次启动；
+    2. 1111 被占用；
+    3. 浏览器曾安装旧 PWA；
+    4. 源码 ZIP `启动.bat`；
+    5. Release Portable `StoryForge.exe`。
+  - 验证不得依赖开发者本机已有 node_modules。
+- **优先级**：🔴 高（新用户第一启动失败，直接影响传播与留存）。
+
+## 🔴 CF-20260630-2 — 场景细纲 AI 采纳后崩溃：`scenes.reduce is not a function`
+
+- **现象**：用户在章节页展开「场景细纲」，点击「一键 AI 拆场景」，生成结果后点「采纳」，页面崩溃并显示 `scenes.reduce is not a function`（图 3～5）。
+- **代码定位**：
+  - `src/lib/registry/field-registry.ts` 当前将 `detailedOutlines.scenes` 登记为 `json('detailedOutlines', 'scenes')`。
+  - `adopt()` 对 `json` 字段的行为是：对象 / 数组会被 `JSON.stringify` 后入库。
+  - 因此 `scenes` 原本应该是 `DetailedScene[]`，经过 `adopt()` 后会变成字符串。
+  - 渲染端直接调用：
+    - `currentDetailed.scenes.reduce(...)`
+    - `currentDetailed.scenes.map(...)`
+    - `currentDetailed.scenes.length`
+    一旦 `scenes` 是字符串就会崩溃。
+- **额外问题**：
+  - `DetailedOutlinePanel` 与 `ScenePanel` 的「AI 一键拆场景」采纳逻辑当前并没有结构化解析 AI 输出，只是把整段 AI 文本塞进第一个场景的 `notes`。
+  - 这与用户对“拆成多个场景卡片”的预期不一致，也会导致后续上下文质量偏低。
+- **修复方案**：
+  1. `FIELD_REGISTRY` 中 `detailedOutlines.scenes` 改为数组语义，避免被 `JSON.stringify`。
+  2. 增加读取兼容：旧库如果已有字符串形式 `scenes`，读取时尝试 JSON.parse 成数组；失败则降级为空数组并提示。
+  3. 「AI 一键拆场景」prompt 改为严格 JSON 数组或 JSON 对象，采纳时解析为 `DetailedScene[]`，字段包含 `title / summary / characterIds / location / conflict / pace / estimatedWords / notes`。
+  4. `ScenePanel` 与 `DetailedOutlinePanel` 共享同一个解析 / 归一函数，禁止两套采纳逻辑。
+  5. 渲染端统一使用 `normalizeDetailedScenes()`，任何 UI 访问前先确保 `Array.isArray(scenes)`。
+- **验证要求**：
+  - 新增回归测试：
+    - `adopt({ target:'detailedOutlines', data:{ scenes:[...] } })` 后 DB 中 `scenes` 仍为数组；
+    - 旧字符串 scenes 可被兼容读取；
+    - 章节页内嵌 `ScenePanel` 与独立细纲页采纳路径都不崩。
+  - 跑 `npx tsc --noEmit`、`npm run check:architecture`、对应 vitest、`npm run build`。
+- **优先级**：🔴 高（核心创作链路可复现崩溃）。
+
+## 🟠 CF-20260630-3 — 自动生成大纲与「故事设计 / 故事主线」不一致
+
+- **现象**：用户反馈自动生成的大纲、故事设计里填写的主线不一致（图 1）。
+- **代码定位**：
+  - 大纲面板直连生成链路会读取 `storyCore`：`OutlinePanel -> assembleContext(sourceKeys:['storyCore', ...]) -> buildVolumeOutlinePrompt(...)`。
+  - `formatStoryCoreBlock()` 会输出 `logline / theme / centralConflict / plotPattern / mainPlot || storyLines / subPlots`。
+  - 因此不是完全没读故事设计，而是约束强度不足。
+- **风险链路**：
+  - 大纲面板直接生成：有 storyCore 上下文，但 prompt 只把它作为参考，没有明确要求“必须以故事主线为骨架”。
+  - 工作流 / 一键起书：步骤上下文会装配已存设定 + 上一步输出，但内置流程第一步通常只写 `logline`，后续卷纲可能没有强绑定用户后来填写的完整 `mainPlot`。
+- **修复方案**：
+  1. `outline.volume` 和 `outline.chapter` prompt 增加硬约束：
+     - 必须服从 `故事主线 mainPlot`；
+     - 每卷 / 每章 summary 必须说明它推进了主线的哪一段；
+     - 不得另起主线，不得把 storyCore 当可选参考。
+  2. `buildVolumeOutlinePrompt()` 在 `storyCoreContext` 非空时追加「主线一致性硬约束」。
+  3. 工作流内置「极速起书」卷纲步骤同步注入同样约束，避免工作流链路绕过大纲面板增强。
+  4. 生成结果采纳前可增加轻量提示：如果用户已填写 `mainPlot`，预览区显示“本次生成已使用故事主线：xxx”。
+- **验证要求**：
+  - 单测 prompt 组装：storyCore.mainPlot 存在时，最终 messages 中必须出现“必须服从故事主线 / 不得另起主线”等硬约束。
+  - 浏览器/API 验证至少一次：填写明确主线 → 生成卷纲 → 检查各卷 summary 是否围绕该主线。
+- **优先级**：🟠 中高（不一定崩溃，但会破坏核心创作方向）。
+
+## 🟠 CF-20260630-4 — 暖白 / 新增主题整体可读性不足，不能只修单个按钮
+
+- **现象**：
+  - 用户反馈暖白主题下「灵感反推」的“开始反推”按钮无底色 / 字看不清；进一步反馈是暖白主题多处文字和按钮都不清楚，不只是一个按钮。
+  - 之前新增的「墨墨玉青 / 暖白编辑室 / 冷灰银蓝」三套主题需要整体复查，不能编辑页仍是白纸或按钮色与主题割裂。
+  - 熔炉主题暂时观感可接受，应保留。
+- **已明确的产品要求**：
+  - 主题色彩要系统性设计：基础背景、侧栏、面板、按钮、输入框、正文纸张、正文文字色、用户手动设置的文字颜色 / 背景色，在不同主题下都要可读。
+  - 字体颜色和背景色调色板要区分「正文高对比」与「UI 低饱和」，不能把正文标注色做成看不清的色块。
+- **修复方案**：
+  1. 建立主题 token 检查表：`bg-base / bg-surface / bg-elevated / text-primary / text-secondary / text-muted / border / accent / success / warning / error / editor-paper / editor-ink / mark-bg-* / mark-fg-*`。
+  2. 暖白、墨墨玉青、冷灰银蓝、古卷、纸与墨、熔炉逐套检查对比度。
+  3. 彩色正文标注采用每主题独立 palette，而不是同一组色在所有主题硬套。
+  4. 主题切换后编辑器纸张 / 正文区 / 工具栏必须跟主题统一，不允许三套新增主题编辑页全白。
+  5. UI 按钮至少满足“默认态可见、hover 可辨、disabled 不误导、彩色功能按钮不刺眼”。
+- **验证要求**：
+  - 浏览器逐主题检查：首页 / 设置 / 灵感反推 / 正文编辑器 / 章节页 / 伏笔 / 细纲。
+  - 覆盖用户提到的“暖白按钮看不清”和“正文彩色标注看不清”两类案例。
+- **优先级**：🟠 中高（不阻塞功能，但影响第一印象和可用性）。
+
+## 🟡 CF-20260630-5 — 灵感反推大文本使用边界需要明确提示
+
+- **现象**：用户把较长网文片段复制进「灵感反推」后，反馈只能识别前半截约 1.2 章。
+- **产品决策**：
+  - 不把「灵感反推」扩成大文本解析。灵感反推定位是小文本灵感碎片，不支持长篇正文；支持大文本会与「文档解析 / 导入」职责重合。
+- **待做**：
+  - 在灵感反推输入区加明确提示：适合短灵感 / 梗概 / 片段想法；长篇正文请使用「文档解析 / 项目参考导入」。
+  - 若输入超过合理长度，给非阻断提示，而不是静默截断造成误解。
+- **优先级**：🟡 中（说明边界，减少误用）。
+
+## 🟡 CF-20260630-6 — 伏笔功能边界与章节关联说明不足
+
+- **现象**：
+  - 用户问“自动生成的伏笔怎么添加到对应章节正文里”。
+  - 另有反馈：伏笔关联章节显示名称重复 / 与实际章节内容对不上。
+- **当前产品逻辑（需在 UI 里讲清楚）**：
+  - 伏笔系统当前作为“章节生成上下文 / 写作任务提醒”注入，不会自动改写用户已经写好的正文。
+  - 用户可给伏笔指定埋设章节、呼应章节、回收章节；生成 / 续写该章节时，AI 会把这些伏笔任务作为上下文参考。
+  - 系统没有“一键把伏笔插入已写正文”的按钮，这一点应明确提示，避免用户期待错误。
+- **已知代码风险**：
+  - 伏笔关联章节如果显示重复或与实际内容不符，需要检查 `plantChapterId / resolveChapterId / expectedResolveChapterId / echoChapterIds` 到章节 / 大纲节点的映射是否统一使用真实 `chapters` 表和 `outlineNodeId`，不要混用大纲节点标题与章节行标题。
+  - 本地分支已有 `fix(foreshadow): align chapter task context`，但仍需 Claude 复审确认覆盖该反馈。
+- **修复方案**：
+  1. 伏笔页面增加 Tips，沿用其他面板已有 Tips 格式。
+  2. Tips 文案说明：伏笔不会自动改写已写正文；它会在对应章节生成 / 续写时作为任务注入；如需插入已写正文，用户需手动或使用后续改稿功能。
+  3. 复核章节关联显示：统一章节名来源、去重、避免把同一章显示多次。
+- **优先级**：🟡 中（说明不足 + 显示可能错位）。
+
+## 🟡 CF-20260630-7 — Release / 源码 ZIP 分发体验需要整理
+
+- **现象**：
+  - 用户不懂命令行，不会 npm，倾向于下载 ZIP 后双击启动。
+  - 当前同时存在源码 ZIP 的 `启动.bat` 和 Release Portable 的 `StoryForge.exe`，用户容易混淆。
+- **待做**：
+  1. Release 页面写清：普通 Windows 用户优先下载 Portable 包并运行 `StoryForge.exe`；开发者 / 源码用户才使用 `启动.bat`。
+  2. 源码 ZIP 的 `启动.bat` 增加更强诊断：Node 未安装、npm install 失败、端口占用、浏览器打不开分别提示不同解决方案。
+  3. README 首页增加“Windows 小白启动路径”。
+- **优先级**：🟡 中（传播期高频问题，和 CF-20260630-1 联动）。
 
 ---
 

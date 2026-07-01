@@ -14,6 +14,8 @@ import { useDetailedOutlineStore } from '../../stores/detailed-outline'
 import { useCharacterStore } from '../../stores/character'
 import { useForeshadowStore } from '../../stores/foreshadow'
 import { useOutlineStore } from '../../stores/outline'
+import { useChapterStore } from '../../stores/chapter'
+import { parseForeshadowEchoChapterIds } from '../../lib/foreshadow/context'
 import type { EmotionArc, ScenePace } from '../../lib/types'
 
 interface Props {
@@ -47,9 +49,11 @@ export default function OutlinePreview({ outlineNodeId, onClose }: Props) {
   const { detailedOutlines } = useDetailedOutlineStore()
   const { characters } = useCharacterStore()
   const { foreshadows } = useForeshadowStore()
+  const { chapters } = useChapterStore()
 
   const node = nodes.find(n => n.id === outlineNodeId)
   const detail = detailedOutlines.find(d => d.outlineNodeId === outlineNodeId)
+  const chapterId = chapters.find(ch => ch.outlineNodeId === outlineNodeId)?.id ?? null
 
   // FB-3:章节大纲(摘要)可手动编辑 —— 此前只读显示,用户无法改了再用。
   const [summaryDraft, setSummaryDraft] = useState('')
@@ -71,19 +75,16 @@ export default function OutlinePreview({ outlineNodeId, onClose }: Props) {
       .filter(Boolean)
   }, [detail?.foreshadowIds, foreshadows])
 
-  // 本章涉及的伏笔（基于 plantChapterId / expectedResolveChapterId）
+  // 本章涉及的伏笔（伏笔表存 chapter.id，不是 outlineNodeId）
   const chapterForeshadows = useMemo(() => {
+    if (chapterId == null) return []
     return foreshadows.filter(f =>
-      f.plantChapterId === outlineNodeId ||
-      f.expectedResolveChapterId === outlineNodeId ||
-      (() => {
-        try {
-          const echoIds: number[] = JSON.parse(f.echoChapterIds || '[]')
-          return echoIds.includes(outlineNodeId)
-        } catch { return false }
-      })()
+      f.plantChapterId === chapterId ||
+      f.resolveChapterId === chapterId ||
+      f.expectedResolveChapterId === chapterId ||
+      parseForeshadowEchoChapterIds(f.echoChapterIds).includes(chapterId)
     )
-  }, [foreshadows, outlineNodeId])
+  }, [foreshadows, chapterId])
 
   // 合并两个来源的伏笔（去重）
   const allForeshadows = useMemo(() => {
@@ -179,8 +180,8 @@ export default function OutlinePreview({ outlineNodeId, onClose }: Props) {
             <div className="space-y-1">
               {allForeshadows.map(f => {
                 let role = ''
-                if (f.plantChapterId === outlineNodeId) role = '埋设'
-                else if (f.expectedResolveChapterId === outlineNodeId) role = '回收'
+                if (chapterId != null && f.plantChapterId === chapterId) role = '埋设'
+                else if (chapterId != null && (f.resolveChapterId === chapterId || f.expectedResolveChapterId === chapterId)) role = '回收'
                 else role = '呼应'
 
                 const roleColors: Record<string, string> = {

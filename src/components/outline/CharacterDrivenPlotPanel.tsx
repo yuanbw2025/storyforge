@@ -180,8 +180,8 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 顶部标题 */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-default bg-bg-surface">
-        <Users className="w-5 h-5 text-brand-primary" />
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-bg-surface">
+        <Users className="w-5 h-5 text-accent" />
         <h2 className="text-lg font-semibold text-text-primary">角色驱动剧情</h2>
         <span className="text-xs text-text-muted ml-2">从角色弧光反推情节大纲</span>
       </div>
@@ -194,7 +194,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
             {availableChars.length > 0 && (
               <div className="flex items-center gap-2">
                 <select
-                  className="text-xs bg-bg-base border border-border-default rounded px-2 py-1 text-text-primary"
+                  className="text-xs bg-bg-base border border-border rounded px-2 py-1 text-text-primary"
                   value=""
                   onChange={e => {
                     const id = Number(e.target.value)
@@ -213,7 +213,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
           </div>
 
           {arcs.length === 0 ? (
-            <div className="text-center py-8 text-text-muted text-sm border border-dashed border-border-default rounded-lg">
+            <div className="text-center py-8 text-text-muted text-sm border border-dashed border-border rounded-lg">
               <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
               <p>请从上方下拉框添加角色</p>
               <p className="text-xs mt-1">设定角色的起始状态和目标状态，AI 将推演中间情节</p>
@@ -221,7 +221,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
           ) : (
             <div className="space-y-4">
               {arcs.map((arc, i) => (
-                <div key={arc.characterId} className="bg-bg-surface border border-border-default rounded-lg p-4">
+                <div key={arc.characterId} className="bg-bg-surface border border-border rounded-lg p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-text-primary">{arc.name}</span>
@@ -230,7 +230,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleAutoFill(i)}
-                        className="text-xs text-brand-primary hover:underline"
+                        className="text-xs text-accent hover:underline"
                         title="从角色卡已有信息自动填充"
                       >
                         自动填充
@@ -253,7 +253,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
                         value={arc.initialState}
                         onChange={e => handleUpdateArc(i, 'initialState', e.target.value)}
                         placeholder="角色在故事开始时的状态、处境、性格特点..."
-                        className="w-full text-sm bg-bg-base border border-border-default rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
+                        className="w-full text-sm bg-bg-base border border-border rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
                         minRows={2}
                       />
                     </div>
@@ -265,7 +265,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
                         value={arc.targetState}
                         onChange={e => handleUpdateArc(i, 'targetState', e.target.value)}
                         placeholder="角色在故事结束时应达到的状态、成长结果..."
-                        className="w-full text-sm bg-bg-base border border-border-default rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
+                        className="w-full text-sm bg-bg-base border border-border rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
                         minRows={2}
                       />
                     </div>
@@ -275,7 +275,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
                   {arc.initialState && arc.targetState && (
                     <div className="mt-2 flex items-center gap-2 text-xs text-text-muted">
                       <span className="truncate max-w-[40%]">{arc.initialState.slice(0, 30)}...</span>
-                      <ArrowRight className="w-3.5 h-3.5 text-brand-primary flex-shrink-0" />
+                      <ArrowRight className="w-3.5 h-3.5 text-accent flex-shrink-0" />
                       <span className="truncate max-w-[40%]">{arc.targetState.slice(0, 30)}...</span>
                     </div>
                   )}
@@ -293,7 +293,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
               value={userHint}
               onChange={e => setUserHint(e.target.value)}
               placeholder="例如：控制在3卷以内、侧重战斗场景、需要感情线贯穿始终..."
-              className="w-full text-sm bg-bg-base border border-border-default rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
+              className="w-full text-sm bg-bg-base border border-border rounded px-3 py-2 text-text-primary placeholder:text-text-muted resize-none"
               minRows={2}
             />
           </section>
@@ -305,7 +305,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
             <button
               onClick={handleGenerate}
               disabled={!canGenerate}
-              className="flex items-center gap-1.5 px-4 py-2 bg-brand-primary text-white rounded-lg text-sm font-medium hover:bg-brand-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {ai.isStreaming ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -351,10 +351,10 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
 
         {/* ── 解析结果预览 ─────────────────────────── */}
         {parsedVolumes && parsedVolumes.length > 0 && !ai.isStreaming && (
-          <section className="border border-border-default rounded-lg overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-bg-surface border-b border-border-default">
+          <section className="border border-border rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-bg-surface border-b border-border">
               <div className="flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-brand-primary" />
+                <BookOpen className="w-4 h-4 text-accent" />
                 <span className="text-sm font-medium text-text-primary">
                   生成结果：{parsedVolumes.length} 卷，
                   {parsedVolumes.reduce((s, v) => s + v.chapters.length, 0)} 章
@@ -367,14 +367,14 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
                       ? new Set()
                       : new Set(parsedVolumes.map((_, i) => i)),
                   )}
-                  className="text-xs text-brand-primary hover:underline"
+                  className="text-xs text-accent hover:underline"
                 >
                   {selectedVolumes.size === parsedVolumes.length ? '取消全选' : '全选'}
                 </button>
               </div>
             </div>
 
-            <div className="divide-y divide-border-default max-h-[400px] overflow-y-auto">
+            <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
               {parsedVolumes.map((vol, vi) => (
                 <div key={vi}>
                   {/* 卷标题行 */}
@@ -387,7 +387,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
                       checked={selectedVolumes.has(vi)}
                       onChange={() => toggleSelect(vi)}
                       onClick={e => e.stopPropagation()}
-                      className="accent-brand-primary"
+                      className="accent-accent"
                     />
                     {expandedVolumes.has(vi) ? (
                       <ChevronDown className="w-3.5 h-3.5 text-text-muted" />
@@ -418,7 +418,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
                                 <span className="text-text-muted ml-1">— {ch.summary}</span>
                               )}
                               {ch.keyCharacters.length > 0 && (
-                                <span className="text-brand-primary ml-1">
+                                <span className="text-accent ml-1">
                                   [{ch.keyCharacters.join(', ')}]
                                 </span>
                               )}
@@ -433,7 +433,7 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
             </div>
 
             {/* 导入按钮 */}
-            <div className="flex items-center justify-between px-4 py-3 bg-bg-surface border-t border-border-default">
+            <div className="flex items-center justify-between px-4 py-3 bg-bg-surface border-t border-border">
               {importDone ? (
                 <div className="flex items-center gap-1.5 text-green-600 text-sm">
                   <Check className="w-4 h-4" />

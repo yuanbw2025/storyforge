@@ -614,25 +614,35 @@ body {
 /* 浅色主题下修正历史遗留的 Tailwind 亮色工具类：这些类原本面向暗色底，放到纸面上会发虚。 */
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-green-400,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-emerald-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-green-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-emerald-500,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-green-400"],
-:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-emerald-400"] {
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-emerald-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-green-500"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-emerald-500"] {
   color: #065F46 !important;
 }
 
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-sky-300,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-sky-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-blue-300,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-blue-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-blue-500,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-sky-300"],
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-sky-400"],
-:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-blue-400"] {
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-blue-300"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-blue-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-blue-500"] {
   color: #1E40AF !important;
 }
 
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-yellow-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-yellow-500,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-amber-300,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-amber-400,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-amber-500,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-yellow-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-yellow-500"],
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-amber-300"],
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-amber-400"],
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-amber-500"] {
@@ -641,14 +651,20 @@ body {
 
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-red-400,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-red-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-rose-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-rose-500,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-red-400"],
-:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-red-500"] {
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-red-500"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-rose-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-rose-500"] {
   color: #B91C1C !important;
 }
 
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-purple-200,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-purple-300,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-purple-400,
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-purple-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-purple-200"],
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-purple-300"],
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-purple-400"],
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-purple-500"] {
@@ -667,4 +683,91 @@ body {
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-orange-400"],
 :is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-orange-500"] {
   color: #C2410C !important;
+}
+
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-lime-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-lime-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-lime-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-lime-500"] {
+  color: #4D7C0F !important;
+}
+
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-teal-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-teal-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-cyan-400,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .text-cyan-500,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-teal-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-teal-500"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-cyan-400"],
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) [class*="text-cyan-500"] {
+  color: #0F766E !important;
+}
+
+/* 浅色主题下提高彩色徽标/按钮底色对比度；只覆盖旧 Tailwind 硬编码色，不影响主题 token 与熔炉深色主题。 */
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-green-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-green-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-green-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-green-500\/20,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-emerald-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-emerald-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-emerald-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-emerald-500\/20 {
+  background-color: rgba(5, 150, 105, 0.16) !important;
+}
+
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-sky-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-sky-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-sky-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-sky-500\/20,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-blue-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-blue-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-blue-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-blue-500\/20 {
+  background-color: rgba(37, 99, 235, 0.14) !important;
+}
+
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-yellow-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-yellow-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-yellow-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-yellow-500\/20,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-amber-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-amber-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-amber-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-amber-500\/20 {
+  background-color: rgba(217, 119, 6, 0.16) !important;
+}
+
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-red-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-red-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-red-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-red-500\/20,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-rose-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-rose-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-rose-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-rose-500\/20 {
+  background-color: rgba(220, 38, 38, 0.14) !important;
+}
+
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-purple-400\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-purple-400\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-purple-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-purple-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-purple-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-purple-500\/20,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-pink-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-pink-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-pink-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-pink-500\/20 {
+  background-color: rgba(126, 34, 206, 0.13) !important;
+}
+
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-cyan-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-cyan-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-cyan-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-cyan-500\/20,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-teal-500\/5,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-teal-500\/10,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-teal-500\/15,
+:is([data-theme="paper"], [data-theme="scroll"], [data-theme="warm"], [data-theme="slate"]) .bg-teal-500\/20 {
+  background-color: rgba(15, 118, 110, 0.13) !important;
 }

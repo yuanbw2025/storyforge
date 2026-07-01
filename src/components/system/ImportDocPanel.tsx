@@ -479,7 +479,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
             {isRunning && (
               <button
                 onClick={pausePipeline}
-                className="flex items-center gap-1 px-2 py-1 text-xs text-warn hover:bg-warn/10 rounded"
+                className="flex items-center gap-1 px-2 py-1 text-xs text-warning hover:bg-warning/10 rounded"
               >
                 <PauseCircle className="w-3.5 h-3.5" /> 暂停
               </button>
@@ -636,14 +636,14 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
           {(phase === 'done' || phase === 'failed') && (
             <div className="bg-bg-surface border border-border rounded-xl p-4 space-y-3">
               {status.failedChunks > 0 && (
-                <div className="bg-warn/10 border border-warn/30 rounded-lg p-3 flex items-center justify-between gap-3">
-                  <div className="text-sm text-warn flex items-center gap-1.5">
+                <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 flex items-center justify-between gap-3">
+                  <div className="text-sm text-warning flex items-center gap-1.5">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
                     <span>{status.failedChunks} 个块解析失败，可重新尝试</span>
                   </div>
                   <button
                     onClick={handleRetryFailed}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-warn text-white text-sm rounded hover:bg-warn/90 shrink-0"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-warning text-white text-sm rounded hover:bg-warning/90 shrink-0"
                   >
                     <RotateCcw className="w-4 h-4" /> 重试失败块
                   </button>

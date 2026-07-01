@@ -16,8 +16,8 @@ export default function ImportStatusBar() {
     switch (s.phase) {
       case 'preparing': return { Icon: Loader2, color: 'text-accent', text: '准备中...', spin: true }
       case 'running':   return { Icon: Sparkles, color: 'text-accent', text: `解析中 ${s.finishedChunks + s.failedChunks}/${s.totalChunks}（${pct}%）`, spin: false }
-      case 'merging':   return { Icon: Sparkles, color: 'text-warn', text: '🔀 跨块角色合并中...', spin: true }
-      case 'paused':    return { Icon: PauseCircle, color: 'text-warn', text: `已暂停（${pct}%）`, spin: false }
+      case 'merging':   return { Icon: Sparkles, color: 'text-warning', text: '🔀 跨块角色合并中...', spin: true }
+      case 'paused':    return { Icon: PauseCircle, color: 'text-warning', text: `已暂停（${pct}%）`, spin: false }
       case 'failed':    return { Icon: AlertTriangle, color: 'text-error', text: `失败（${s.failedChunks} 块）`, spin: false }
       case 'done':      return { Icon: CheckCircle2, color: 'text-success', text: '✓ 已完成', spin: false }
       default:          return null

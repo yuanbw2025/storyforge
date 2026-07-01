@@ -46,12 +46,12 @@ export default function ImportReportModal({
       <div className="bg-bg-surface border border-border rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className={`flex items-center justify-between px-5 py-4 border-b border-border ${
-          allSuccess ? 'bg-success/10' : 'bg-warn/10'
+          allSuccess ? 'bg-success/10' : 'bg-warning/10'
         }`}>
           <div className="flex items-center gap-2">
             {allSuccess
               ? <CheckCircle2 className="w-5 h-5 text-success" />
-              : <AlertTriangle className="w-5 h-5 text-warn" />}
+              : <AlertTriangle className="w-5 h-5 text-warning" />}
             <h3 className="text-base font-semibold text-text-primary">
               {allSuccess ? '✓ 全部解析完成' : `⚠ 解析完成（${failed} 块失败）`}
             </h3>
@@ -156,7 +156,7 @@ export default function ImportReportModal({
             {failedChunks.length > 0 && (
               <button
                 onClick={onRetryFailed}
-                className="flex items-center gap-1.5 px-4 py-2 bg-warn text-white text-sm rounded hover:bg-warn/90"
+                className="flex items-center gap-1.5 px-4 py-2 bg-warning text-white text-sm rounded hover:bg-warning/90"
               >
                 <RotateCcw className="w-4 h-4" /> 重试失败块（{failedChunks.length}）
               </button>

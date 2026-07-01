@@ -211,7 +211,7 @@ export default function ImportConfirmModal({
           </div>
 
           {/* 风险提示 */}
-          <div className="bg-warn/10 border border-warn/30 rounded-lg p-3 text-xs text-warn leading-relaxed flex items-start gap-1.5">
+          <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 text-xs text-warning leading-relaxed flex items-start gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <span>
               <strong>注意</strong>：页面在解析期间可切走做别的事，但<strong>不要关闭浏览器</strong>（关闭后内存中的原文会丢，下次续跑需要重新上传同文件）。
