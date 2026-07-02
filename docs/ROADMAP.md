@@ -214,7 +214,7 @@
 # ═══ 社区反馈批次（2026-07-02 · 角色弧光 / 生成一致性 / 本地模型 / 输入法 / 流派约束）═══
 
 > **来源**：2026-07-02 群内用户截图 + 录屏，附件包括 `QQ20260702-100105.mp4` 与 7 张截图。
-> **当前状态**：`codex/community-feedback-20260702` 分支已处理 CF-20260702-1 / 2 / 4 / 5 / 6 / 8；CF-20260702-9 已完成底层主线对齐修复，但“是否回写故事主线 / 新增角色驱动方案存储”仍需产品决策；CF-20260702-12 记录“已创作中途引入/修改角色弧光”的新增工作流方案；CF-20260702-3 / 7 属于生成依据面板与统一质量闸门，待确认交互范围后实施。
+> **当前状态**：`codex/community-feedback-20260702` 分支已处理 CF-20260702-1 / 2 / 4 / 5 / 6 / 8；CF-20260702-9 已完成底层主线对齐修复，作者已拍板下一步执行方案 C“角色驱动设计工作台”，待 Claude 审核正式方案；CF-20260702-12 记录“已创作中途引入/修改角色弧光”的新增工作流方案；CF-20260702-3 / 7 属于生成依据面板与统一质量闸门，待确认交互范围后实施。
 > **铁律复述**：① AI 读上下文必须经 `CONTEXT_SOURCES / assembleContext()`；② AI 写回必须经 `FIELD_REGISTRY / ADOPTION_SCHEMA / adopt()`；③ 涉及表/字段/生命周期改动必须同步 `PROJECT_TABLES`；④ 本批中“显示不全 / 输入粘连 / 设置连接失败”可先做 UI 修复，但任何 AI 生成链路调整不得绕过三注册表。
 
 ## 附件索引
@@ -344,7 +344,7 @@
   - 多选 `['kehuan','moshi']` 时能同时注入科幻与末世约束。
   - 旧项目 `project.genre` 仍兼容，不需要迁移清库。
 - **修复记录（Codex 分支）**：
-  1. `src/lib/ai/genre-metadata.ts` 新增 canonical/alias 映射：`kehuan -> scifi`，`qihuan/xifang/shishi/heian -> xifan` 等，旧项目保存值不迁移、不清库。
+  1. `src/lib/ai/genre-metadata.ts` 新增 canonical/alias 映射：`kehuan -> scifi`、`qihuan/xifang -> xifan`，并为 `shishi` / `heian` 补独立“史诗奇幻 / 黑暗奇幻”元数据；旧项目保存值不迁移、不清库。
   2. `buildGenreConstraintContext()` 支持单个 ID 与 ID 数组，按 canonical 去重后合并多个题材约束。
   3. `src/components/editor/ChapterEditor.tsx` 优先使用 `project.genres[]` 多选流派，`project.genre` 作为旧字段 fallback。
   4. `tests/regression/R-CF20260702-genre-metadata.test.ts` 覆盖别名、多选、去重和旧字段兼容。
@@ -467,7 +467,7 @@
   - `npm run build` ✅
 - **优先级**：✅ 已处理（生产崩溃级；应优先合入并请用户回测同一录屏路径）。
 
-## 🟠 CF-20260702-9 — 角色驱动剧情与「故事设计 / 主线」联动不足，生成大纲时对主线影响弱（底层已修，产品联动待确认）
+## 🟠 CF-20260702-9 — 角色驱动剧情与「故事设计 / 主线」联动不足，生成大纲时对主线影响弱（底层已修；下一步执行方案 C）
 
 - **现象**：用户认为「角色驱动剧情」这个想法很好，但实际使用时，角色弧光反推出来的情节大纲经常和「故事设计」里的主线对不上；当两者不一致时，后续生成大纲似乎更听故事设计主线，角色驱动剧情对主线几乎没有影响。
 - **已确认代码定位**：
@@ -496,26 +496,76 @@
      - 写入大纲并追加/修订 `storyCore.mainPlot`（必须走 `adopt({ target:'storyCores' })`）；
      - 暂存为“角色驱动方案”，供普通卷纲生成读取。若新增存储落点，必须先登记 `PROJECT_TABLES` 和 `CONTEXT_SOURCES`。
   6. 普通卷纲生成的“生成依据”面板中标明是否读取了角色驱动方案 / 已采纳的角色弧光推进，避免用户误以为两套功能互不相关。
-- **待决策方案（给 Claude 审核）**：
-  - 方案 A：不新增存储，采纳后只写入大纲，并在普通卷纲的“生成依据”里显示已采纳大纲包含 `【角色弧光推进】`。优点是安全、无 schema 风险；缺点是角色驱动不是独立权威来源。
-  - 方案 B：采纳时提供“同步修订故事主线”按钮，让 AI 给出 mainPlot 修订建议，用户确认后经 `adopt({ target:'storyCores' })` 写回。优点是主线真正被角色弧光反向影响；缺点是会改核心设定，必须强确认和可回退。
-  - 方案 C：新增 `characterDrivenPlans` 或复用现有计划型表作为“角色驱动方案”存储，并登记 `PROJECT_TABLES / CONTEXT_SOURCES`，普通卷纲生成可读取该方案。优点是功能语义最完整；缺点是新增数据生命周期和 UI 管理成本最高。
-  - Codex 倾向：先走方案 A + CF-3 生成依据面板；如果用户确实需要“角色驱动反过来改主线”，再做方案 B。方案 C 暂不建议第一轮上。
+- **作者拍板（2026-07-02，Claude 审核后）**：
+  - 执行方案 C：新增持久化的 **角色驱动设计工作台**，而不是只做一次性生成面板。
+  - 原因：现面板的 `arcs / userHint / parsedVolumes` 都是 `useState` 临时态，刷新即丢；A/B 只能解决“采纳后大纲怎么受益”，不能保存复杂、可迭代、可对比的角色驱动设计。
+  - 方案 C 只解决“角色驱动方案的持久化、管理、作为上下文源参与后续生成”；不在本任务里实现 CF-12 的“已写正文影响分析 / 中途重规划”，也不自动覆盖正文或故事主线。
+- **方案 C 正式设计：角色驱动设计工作台**：
+  1. 新增项目级表 `characterDrivenPlans`，保存输入与产出：
+     - `projectId`、`name`、`arcs`、`userHint`、`generatedVolumes`、`status`、`version`、`parentPlanId`、`createdAt`、`updatedAt`。
+     - `arcs` 沿用现有 `CharacterArcInput` 语义，持久化时存 `characterId + characterName` 快照，以及 `initialState / targetState`；可附带 `role` 快照但不能依赖角色仍存在。
+     - `generatedVolumes` 沿用现有 `PlotVolume[]` 解析结果；生成后落库，刷新或重新打开方案仍能看到结果。
+     - `status` 建议为 `draft | generated | adopted`；`generated` 表示已有生成结果，`adopted` 表示至少一次采纳到 `outlineNodes`。
+     - `version + parentPlanId` 支持“复制为新版 / v2 派生对比”；v1 不被覆盖，用户可回看旧方案。
+  2. 角色引用安全降级：
+     - 方案内必须同时保存 `characterId` 与 `characterName` 快照。
+     - 角色改名时 UI 优先显示当前角色名，并保留快照提示；角色删除时显示“已删除角色：{快照名}”，弧光文本仍可查看/复制/派生，不崩溃。
+     - 解析 `arcs/generatedVolumes` 时复用 world-portals 一类 safe-parse 思路：坏 JSON 或旧格式降级为空数组/只读异常提示，不能让面板崩。
+  3. 三注册表收口：
+     - `PROJECT_TABLES` 登记 `characterDrivenPlans`：`owner='project'`、`worldScoped=false`（角色驱动方案是项目级主线设计，不绑定某个世界组；如后续支持多世界专属方案再升级）、`refs=characters`（删除角色时 keep/降级显示，不级联删方案）、`exportable=true`。
+     - `CONTEXT_SOURCES` 新增 `characterDrivenPlan` 源：普通卷纲 / 章纲 / 正文生成可通过 `assembleContext({ sourceKeys:[..., 'characterDrivenPlan'] })` 读取“当前生效方案”。
+     - “当前生效方案”第一版建议在 `projects` 增加 `activeCharacterDrivenPlanId?: number | null`，或新增等价项目级设置；用户通过“设为当前参考方案”显式指定。没有 active 时 source 返回空，不自动猜最近方案。
+     - 方案 CRUD 属于用户工作台对象，可走普通 store + Dexie 表；AI 生成结果落入方案表不是“AI 采纳业务字段”，但写入边界仍要统一校验类型和默认值。
+     - “采纳到大纲”继续保留现逻辑，只写 `outlineNodes`，并必须走 `adopt({ target:'outlineNodes' })` 或现有受测试保护的规范入口；将来若做“反哺故事主线”，再经 `adopt({ target:'storyCores' })`。
+  4. 导出 / 导入 / 生命周期：
+     - 当前 `json-export.ts` 已是注册表派生门面，新增表必须进入 `PROJECT_TABLES` 才能被 `deriveExportProjectJSON / deriveImportProjectJSON` 自动覆盖。
+     - 仍需手动补 `ProjectExportData` 类型契约与必要的旧格式兼容注释，避免 TypeScript/外部备份格式漏字段；若未来又出现手写枚举路径，也必须同步补齐，不允许静默漏导出。
+     - 删除项目、备份恢复、导出导入往返、必需表检查都要覆盖 `characterDrivenPlans`。
+  5. 迁移红线：
+     - Dexie schema 版本 +1，只 add 表 / add 可选字段，绝不清库、不改老数据。
+     - 若采用 `projects.activeCharacterDrivenPlanId`，必须是可选字段，不迁移旧项目内容；旧项目默认无 active。
+     - 必写迁移测试：旧库升级后老项目/老表数据不变，只新增表；R-17“更新不自动清库”一起断言。
+  6. UI / 操作流：
+     - 面板顶部新增方案选择器：新建、打开、复制为新版、重命名、删除。
+     - 打开方案时回填 `arcs + userHint + generatedVolumes`，根治“输入留不住”。
+     - 点击生成后把 `generatedVolumes` 存进当前方案，而不是只放在临时 state；未保存方案时先创建草稿方案。
+     - 新增“设为当前参考方案”开关/按钮；只有 active 方案进入 `characterDrivenPlan` context source。
+     - 采纳按钮仍以“导入所选卷到大纲”为主，不自动修改 `storyCore.mainPlot`；采纳后方案 `status` 可更新为 `adopted`。
+     - 角色被删/改名时，方案列表和弧光编辑器都要显示降级状态，不阻止用户复制为新版修复引用。
+  7. 复用边界：
+     - 继续沿用现有 `CharacterArcInput`、`PlotVolume`、`buildCharacterDrivenPlotPrompt()`、`parsePlotOutput()`、自动填充逻辑和主线对齐硬约束。
+     - 本任务只加“持久化 + 方案管理 + 上下文源”，不重写角色驱动生成算法，不引入新的 prompt 子系统。
+  8. 与 CF-12 的边界：
+     - CF-9C 让“角色驱动方案”能长期保存、设为参考、参与后续生成。
+     - CF-12 再处理“已经写到第 50 章后，新增/修改角色弧光如何影响 1-50 已写正文与 51-200 后续大纲”的影响分析和 patch 工作流。
+     - CF-9C 的 active plan 会成为 CF-12 的重要输入，但 CF-12 不应反过来塞进本任务范围。
+- **DoD / 是否允许上线**：
+  - 正式 UI 上线必须一次做完：CRUD + 落库 + 打开回填 + 生成结果持久化 + active reference + `CONTEXT_SOURCES` + 采纳到大纲 + 导出导入 + 迁移 + 测试。
+  - 如果工期内只能做部分能力，必须藏在 Labs / 实验功能且默认隐藏；不能把半个工作台摆在正式侧栏里。
+  - 不允许新增表但不进 `PROJECT_TABLES`，不允许 active 方案进不了 `assembleContext()`，不允许方案导出静默丢失。
+- **测试要求 `R-CF9C`**：
+  1. 方案存取往返：新建方案、保存 arcs/userHint/generatedVolumes、刷新 store 后打开能完整回填。
+  2. 迁移安全：旧库升级只新增 `characterDrivenPlans` / 可选 active 字段，不改老项目数据、不触发清库；同时断言 R-17。
+  3. 上下文源：设置 active 方案后，`assembleContext({ sourceKeys:['characterDrivenPlan'] })` 能读到方案名、角色弧光、生成结果摘要；无 active 时返回 omitted/空内容。
+  4. 导出导入：备份 JSON 包含 `characterDrivenPlans`，导入新项目后方案内容、parent/version、active 引用策略符合设计。
+  5. 角色删除降级：删除角色后打开方案不崩，仍显示快照名和弧光文本；不会级联删除方案。
+  6. 采纳链路：从方案生成结果采纳所选卷后写入 `outlineNodes`，并保留现有 `【角色弧光推进】` 摘要标记。
 - **验证要求**：
   - 有明确 `storyCore.mainPlot` 时，角色驱动 prompt 最终 messages 必须包含主线文本和“不得另起主线 / 必须说明推进主线阶段”的硬约束。
   - 构造角色目标与主线冲突的输入，输出预览必须给出冲突提示或调整建议。
-  - 采纳“同步修订主线”时，`storyCore.mainPlot` 经 `adopt()` 更新，普通卷纲生成随后能读到更新后的主线。
-  - 回归测试覆盖 adapter 组装、采纳写回、普通卷纲读取三段链路。
+  - 设为 active 的角色驱动方案能被普通卷纲 / 章纲 / 正文生成读取；未设 active 时不污染上下文。
+  - 回归测试覆盖 adapter 组装、方案 CRUD、上下文读取、采纳写回、导出导入五段链路。
 - **修复记录（Codex 分支）**：
   1. `src/lib/ai/character-driven-plot.ts` 改为经 `assembleContext()` 读取 `worldview / storyCore / powerSystem / codex / characters / worldRules / existingVolumeOutlines`，不再手拼世界观 / 词条 / 世界规则 store。
   2. `storyCore` 注入改为来自注册表的完整故事核心块，覆盖 `logline / theme / centralConflict / plotPattern / mainPlot / storyLines / subPlots`。
-  3. prompt 追加“角色驱动与故事主线对齐硬约束”：不得另起主线，每卷说明推进主线阶段，每章 `arcProgress` 说明角色弧光如何推进本卷主线；冲突时标注冲突点与调整建议。
-  4. 同步加入 CF-20260702-2 的简体中文输出纪律。
-  5. 未擅自实现“采纳时改写 `storyCore.mainPlot`”或“新增角色驱动方案存储”，这两项涉及用户主线变更和新存储落点，需产品确认后走 `adopt()` / `PROJECT_TABLES` / `CONTEXT_SOURCES`。
+  3. `extractStoryCoreBlock()` 在标题切块失败时回退使用完整 `context.text`，避免 `CONTEXT_SOURCES` 的标题措辞调整后静默注入空故事核心。
+  4. prompt 追加“角色驱动与故事主线对齐硬约束”：不得另起主线，每卷说明推进主线阶段，每章 `arcProgress` 说明角色弧光如何推进本卷主线；冲突时标注冲突点与调整建议。
+  5. 同步加入 CF-20260702-2 的简体中文输出纪律。
+  6. 未擅自实现“采纳时改写 `storyCore.mainPlot`”或“新增角色驱动方案存储”，这两项涉及用户主线变更和新存储落点，需产品确认后走 `adopt()` / `PROJECT_TABLES` / `CONTEXT_SOURCES`。
 - **验证证据**：
   - `npx vitest run tests/regression/R-CF20260702-character-driven-mainline.test.ts tests/regression/R-CF20260702-character-arc-autofill.test.ts` ✅
   - `npx tsc --noEmit` ✅
-- **优先级**：🟠 底层主线对齐已处理；是否回写主线 / 暂存方案待确认。
+- **优先级**：🟠 底层主线对齐已处理；方案 C 已拍板，进入正式设计审核，审核通过后作为大功能单独实施。
 
 ## 🟠 CF-20260702-12 — 角色变更影响分析 / 角色弧光重规划（已创作中途新增人物或修改人物弧光）
 

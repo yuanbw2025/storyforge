@@ -97,7 +97,8 @@ async function resolveContextWorldGroupId(projectId: number): Promise<number | n
 
 function extractStoryCoreBlock(contextText: string): string {
   const match = contextText.match(/【故事核心】[\s\S]*?(?=\n\n【|$)/)
-  return match?.[0].replace(/^【故事核心】\n?/, '').trim() ?? ''
+  const storyCore = match?.[0].replace(/^【故事核心】\n?/, '').trim()
+  return storyCore || contextText.trim()
 }
 
 /**
