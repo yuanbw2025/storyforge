@@ -211,6 +211,16 @@
 
 ---
 
+## 🟡 PR-20260702-20 — OpenCode Go AI provider 接入
+
+- **来源**：外部贡献者 PR [#20 Opencode provider](https://github.com/yuanbw2025/storyforge/pull/20)。
+- **状态**：PR 当前与 `main` 冲突且无 checks；不直接合并，改由 Codex 在 `codex/opencode-provider` 分支参考实现，并在关闭 PR 时向贡献者致谢说明。
+- **改动范围**：仅新增 AI provider 枚举 / 模型列表 / 默认 Base URL / 设置页选项 / Vite 本地代理 / 上下文窗口预设；不改 DB schema，不新增 AI 动作，不涉及三注册表数据读写。
+- **实现注意**：StoryForge 当前 AI client 只调用 OpenAI-compatible `/chat/completions`；OpenCode Go 官方文档中 MiniMax/Qwen 等模型走 `/messages`，本轮先只暴露明确支持 `/chat/completions` 的模型，后续若支持 Anthropic messages 端点再扩。
+- **验证**：`check:required-tables` / `check:architecture` / `check:ai-manual` / `tsc` / targeted tests / build。
+
+---
+
 # ═══ 社区反馈批次（2026-07-02 · 角色弧光 / 生成一致性 / 本地模型 / 输入法 / 流派约束）═══
 
 > **来源**：2026-07-02 群内用户截图 + 录屏，附件包括 `QQ20260702-100105.mp4` 与 7 张截图。

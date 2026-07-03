@@ -24,6 +24,7 @@ const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean; hint:
   { value: 'modelscope', label: '魔搭社区', cors: true, hint: '获取 Key: modelscope.cn → 我的 → Access Token' },
   { value: 'agnes', label: 'Agnes AI（免费）', cors: true, hint: '清华系免费全模态 · 获取 Key: platform.agnes-ai.com（若连不上可点下方「切换到本地代理」）' },
   { value: 'longcat', label: 'LongCat（美团）', cors: false, hint: '获取 Key: longcat.chat 平台控制台；OpenAI 兼容接口（若浏览器直连 CORS 失败可切换本地代理）' },
+  { value: 'opencode', label: 'OpenCode Go（月付）', cors: false, hint: '获取 Key: opencode.ai → Zen → Go API Key（需点击下方「切换到本地代理」）' },
   { value: 'ollama', label: 'Ollama (本地)', cors: true, hint: '本地运行 Ollama，无需 API Key' },
   { value: 'custom', label: '自定义', cors: true, hint: '填写任何兼容 OpenAI 格式的 API' },
 ]
@@ -265,6 +266,7 @@ export default function AIConfigPanel() {
                   doubao:   { proxy: '/doubao-proxy/api/v3', direct: 'https://ark.cn-beijing.volces.com/api/v3' },
                   agnes:    { proxy: '/agnes-proxy/v1',    direct: 'https://apihub.agnes-ai.com/v1' },
                   longcat:  { proxy: '/longcat-proxy/openai/v1', direct: 'https://api.longcat.chat/openai/v1' },
+                  opencode: { proxy: '/opencode-proxy/v1',  direct: 'https://opencode.ai/zen/go/v1' },
                 }
                 const pm = PROXY_MAP[config.provider]
                 if (!pm) return null

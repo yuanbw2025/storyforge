@@ -15,6 +15,7 @@ export type AIProvider =
   | 'nvidia'
   | 'agnes'
   | 'longcat'
+  | 'opencode'
   | 'ollama'
   | 'custom'
 
@@ -121,6 +122,16 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
   longcat: [
     { value: 'LongCat-2.0', label: 'LongCat 2.0', desc: '美团 LongCat · OpenAI 兼容 · 1M 上下文' },
   ],
+  opencode: [
+    { value: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', desc: 'OpenCode Go · chat/completions' },
+    { value: 'kimi-k2.6', label: 'Kimi K2.6', desc: 'OpenCode Go · chat/completions' },
+    { value: 'glm-5.2', label: 'GLM-5.2', desc: 'OpenCode Go · chat/completions' },
+    { value: 'glm-5.1', label: 'GLM-5.1', desc: 'OpenCode Go · chat/completions' },
+    { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', desc: 'OpenCode Go · chat/completions' },
+    { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', desc: 'OpenCode Go · chat/completions' },
+    { value: 'mimo-v2.5-pro', label: 'MiMo-V2.5-Pro', desc: 'OpenCode Go · chat/completions' },
+    { value: 'mimo-v2.5', label: 'MiMo-V2.5', desc: 'OpenCode Go · chat/completions' },
+  ],
 }
 
 /** 提供商预设 */
@@ -184,6 +195,10 @@ export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
   longcat: {
     baseUrl: 'https://api.longcat.chat/openai/v1',
     model: 'LongCat-2.0',
+  },
+  opencode: {
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    model: 'kimi-k2.7-code',
   },
   ollama: {
     baseUrl: 'http://localhost:11434/v1',

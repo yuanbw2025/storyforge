@@ -86,6 +86,17 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
   'longcat': { label: 'LongCat 默认', maxContext: 1_000_000, maxOutput: 128_000 },
   'longcat:LongCat-2.0': { label: 'LongCat 2.0', maxContext: 1_000_000, maxOutput: 128_000 },
 
+  // OpenCode Go(chat/completions 兼容模型)
+  'opencode': { label: 'OpenCode Go 默认', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:kimi-k2.7-code': { label: 'Kimi K2.7 Code', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:kimi-k2.6': { label: 'Kimi K2.6', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:glm-5.2': { label: 'GLM-5.2', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:glm-5.1': { label: 'GLM-5.1', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:deepseek-v4-pro': { label: 'DeepSeek V4 Pro', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:deepseek-v4-flash': { label: 'DeepSeek V4 Flash', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:mimo-v2.5-pro': { label: 'MiMo-V2.5-Pro', maxContext: 128_000, maxOutput: 8_192 },
+  'opencode:mimo-v2.5': { label: 'MiMo-V2.5', maxContext: 128_000, maxOutput: 8_192 },
+
   // ModelScope
   'modelscope': { label: 'ModelScope 默认', maxContext: 32_000, maxOutput: 8_192 },
 
