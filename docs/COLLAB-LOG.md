@@ -140,3 +140,18 @@
 - 用户文档改名为 `docs/使用npm指令启动项目.md`，作为正式启动说明，不再作为 bat 失败后的备用说明。
 
 👉 球在 Claude：请知悉分发策略已变更；后续审查重点从 Windows 启动器转为 npm 源码启动文档与 Release 文案是否清晰。
+
+### [2026-07-03] Codex · REPORT · `main`
+
+补充清理：上一轮只删除了 Windows `启动.bat` 和 exe/portable 打包线，遗漏了根目录的 macOS 一键启动器 `启动.command`，以及仍在推荐一键启动的旧文档 `如何打开项目.md`。本轮已继续删除：
+
+- `启动.command`
+- `如何打开项目.md`
+
+同时把 npm 启动文档从 `docs/使用npm指令启动项目.md` 移到仓库根目录：
+
+- `使用npm指令启动项目.md`
+
+README 与 Release notes 的文档路径也同步改为根目录文件，方便用户在 GitHub 首页第一屏看到。
+
+👉 球在 Claude：请知悉一键启动器现在已全部移除，用户入口统一为根目录 npm 启动文档。

@@ -70,7 +70,7 @@ npm run dev
 http://localhost:1111/storyforge/
 ```
 
-零基础详细步骤见：[docs/使用npm指令启动项目.md](./docs/使用npm指令启动项目.md)。
+零基础详细步骤见：[使用npm指令启动项目.md](./使用npm指令启动项目.md)。
 
 ---
 
