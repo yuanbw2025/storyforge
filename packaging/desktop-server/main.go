@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -86,15 +87,14 @@ func serveStoryForgeApp(root fs.FS, w http.ResponseWriter, r *http.Request) {
 	rel = strings.TrimPrefix(rel, "/")
 
 	if info, err := fs.Stat(root, rel); err == nil && !info.IsDir() {
-		reqCopy := new(http.Request)
-		*reqCopy = *r
-		urlCopy := *r.URL
-		urlCopy.Path = "/" + rel
-		reqCopy.URL = &urlCopy
-		http.FileServer(http.FS(root)).ServeHTTP(w, reqCopy)
+		serveEmbeddedFile(root, rel, w)
 		return
 	}
 
+	serveIndex(root, w)
+}
+
+func serveIndex(root fs.FS, w http.ResponseWriter) {
 	index, err := fs.ReadFile(root, "index.html")
 	if err != nil {
 		http.Error(w, "StoryForge index.html not found", http.StatusInternalServerError)
@@ -102,6 +102,18 @@ func serveStoryForgeApp(root fs.FS, w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(index)
+}
+
+func serveEmbeddedFile(root fs.FS, rel string, w http.ResponseWriter) {
+	content, err := fs.ReadFile(root, rel)
+	if err != nil {
+		http.NotFound(w, nil)
+		return
+	}
+	if contentType := mime.TypeByExtension(path.Ext(rel)); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	_, _ = w.Write(content)
 }
 
 func registerProviderProxies(mux *http.ServeMux) {
