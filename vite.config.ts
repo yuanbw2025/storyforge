@@ -110,6 +110,12 @@ export default defineConfig({
         rewrite: (path: string) => path.replace(/^\/agnes-proxy/, ''),
         secure: true,
       },
+      '/longcat-proxy': {
+        target: 'https://api.longcat.chat',
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/longcat-proxy/, ''),
+        secure: true,
+      },
       // NS-5 embedding：国内嵌入服务本地代理（绕浏览器 CORS）
       '/siliconflow-proxy': {
         target: 'https://api.siliconflow.cn',

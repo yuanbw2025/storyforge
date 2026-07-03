@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { getModelPreset } from '../../src/lib/ai/context-budget'
+import { PROVIDER_MODELS, PROVIDER_PRESETS } from '../../src/lib/types'
 
 const CONFIG_KEY = 'storyforge-ai-config'
 const SESSION_KEY = 'storyforge-ai-api-key-session'
@@ -61,5 +63,20 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
 
     const presets = JSON.parse(localStorage.getItem('storyforge-ai-presets') || '[]')
     expect(presets[0].config.apiKey).toBe('')
+  })
+
+  it('LongCat provider 使用官方 OpenAI 兼容端点和 1M 上下文预设', async () => {
+    expect(PROVIDER_PRESETS.longcat?.baseUrl).toBe('https://api.longcat.chat/openai/v1')
+    expect(PROVIDER_PRESETS.longcat?.model).toBe('LongCat-2.0')
+    expect(PROVIDER_MODELS.longcat?.[0]?.value).toBe('LongCat-2.0')
+
+    const preset = getModelPreset('longcat', 'LongCat-2.0')
+    expect(preset.maxContext).toBe(1_000_000)
+    expect(preset.maxOutput).toBe(128_000)
+
+    const useAIConfigStore = await freshStore()
+    useAIConfigStore.getState().switchProvider('longcat')
+    expect(useAIConfigStore.getState().config.baseUrl).toBe('https://api.longcat.chat/openai/v1')
+    expect(useAIConfigStore.getState().config.model).toBe('LongCat-2.0')
   })
 })

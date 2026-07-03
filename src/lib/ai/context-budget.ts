@@ -82,6 +82,10 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
   'agnes:agnes-1.5-flash': { label: 'Agnes 1.5 Flash', maxContext: 1_000_000, maxOutput: 8_192 },
   'agnes:Agnes-2.0-Flash': { label: 'Agnes 2.0 Flash', maxContext: 1_000_000, maxOutput: 8_192 },
 
+  // LongCat(美团 · OpenAI 兼容 · 1M 上下文)
+  'longcat': { label: 'LongCat 默认', maxContext: 1_000_000, maxOutput: 128_000 },
+  'longcat:LongCat-2.0': { label: 'LongCat 2.0', maxContext: 1_000_000, maxOutput: 128_000 },
+
   // ModelScope
   'modelscope': { label: 'ModelScope 默认', maxContext: 32_000, maxOutput: 8_192 },
 

@@ -36,7 +36,7 @@ function buildRequest(config: AIConfig, messages: ChatMessage[], stream: boolean
   // 流式请求时要求返回 token 用量
   // stream_options 仅 OpenAI / DeepSeek / Qwen 等兼容 provider 支持
   // 智谱 GLM / 文心 / Poe / Gemini 等不支持，传了会报参数错误
-  const NO_STREAM_OPTIONS: Set<string> = new Set(['glm', 'wenxin', 'poe', 'gemini', 'ollama'])
+  const NO_STREAM_OPTIONS: Set<string> = new Set(['glm', 'wenxin', 'poe', 'gemini', 'ollama', 'longcat'])
   if (stream && !NO_STREAM_OPTIONS.has(config.provider)) {
     body.stream_options = { include_usage: true }
   }
@@ -59,6 +59,12 @@ function buildRequest(config: AIConfig, messages: ChatMessage[], stream: boolean
     // 智谱 GLM：temperature 范围 (0, 1]，超出会报 1210
     if (config.temperature !== undefined) {
       body.temperature = Math.min(Math.max(config.temperature, 0.01), 1.0)
+    }
+    if (config.maxTokens && config.maxTokens > 0) body.max_tokens = config.maxTokens
+  } else if (config.provider === 'longcat') {
+    // LongCat OpenAI 兼容端点：temperature 范围 0~1，且不声明 stream_options。
+    if (config.temperature !== undefined) {
+      body.temperature = Math.min(Math.max(config.temperature, 0), 1.0)
     }
     if (config.maxTokens && config.maxTokens > 0) body.max_tokens = config.maxTokens
   } else {

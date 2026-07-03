@@ -14,6 +14,7 @@ export type AIProvider =
   | 'modelscope'
   | 'nvidia'
   | 'agnes'
+  | 'longcat'
   | 'ollama'
   | 'custom'
 
@@ -117,6 +118,9 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'agnes-1.5-flash', label: 'Agnes 1.5 Flash', desc: '清华系免费·稳定可用·推荐' },
     { value: 'Agnes-2.0-Flash', label: 'Agnes 2.0 Flash', desc: '1M 上下文·部分时段维护中' },
   ],
+  longcat: [
+    { value: 'LongCat-2.0', label: 'LongCat 2.0', desc: '美团 LongCat · OpenAI 兼容 · 1M 上下文' },
+  ],
 }
 
 /** 提供商预设 */
@@ -176,6 +180,10 @@ export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
   agnes: {
     baseUrl: 'https://apihub.agnes-ai.com/v1',
     model: 'agnes-1.5-flash',
+  },
+  longcat: {
+    baseUrl: 'https://api.longcat.chat/openai/v1',
+    model: 'LongCat-2.0',
   },
   ollama: {
     baseUrl: 'http://localhost:11434/v1',
