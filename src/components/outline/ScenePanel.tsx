@@ -8,11 +8,13 @@ import { Plus, Trash2, Sparkles, ChevronDown, ChevronRight } from 'lucide-react'
 import { useDetailedOutlineStore } from '../../stores/detailed-outline'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildDetailSceneGeneratePrompt } from '../../lib/ai/adapters/detail-scene-adapter'
+import { buildDetailSceneGeneratePrompt, parseEnhancedDetailSmart } from '../../lib/ai/adapters/detail-scene-adapter'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import { nanoid } from '../../lib/utils/id'
 import { adopt } from '../../lib/registry/adopt'
 import { assembleContext } from '../../lib/registry/assemble-context'
+import { useAIConfigStore } from '../../stores/ai-config'
+import { useToast } from '../shared/Toast'
 import type { DetailedScene, ScenePace } from '../../lib/types'
 
 const PACE_LABELS: Record<ScenePace, string> = {
@@ -39,6 +41,8 @@ interface Props {
 export default function ScenePanel({ projectId, outlineNodeId, chapterTitle, chapterSummary }: Props) {
   const { detailedOutlines, loadAll, getOrCreate, save } = useDetailedOutlineStore()
   const ai = useAIStream(createAISessionKey(projectId, 'detail.scene', outlineNodeId))
+  const aiConfig = useAIConfigStore(s => s.config)
+  const toast = useToast()
   const [expanded, setExpanded] = useState(false)
 
   useEffect(() => { loadAll(projectId) }, [projectId, loadAll])
@@ -150,21 +154,34 @@ export default function ScenePanel({ projectId, outlineNodeId, chapterTitle, cha
               onStop={ai.stop}
               onAccept={async (text) => {
                 try {
-                  if (!detailed || detailed.scenes.length === 0) {
-                    const newScene: DetailedScene = {
-                      sceneId: nanoid(),
-                      title: '新场景', summary: '',
-                      characterIds: [], location: '', conflict: '',
-                      pace: 'medium', estimatedWords: 0, notes: text,
-                    }
-                    await adoptScenes([newScene])
-                  } else {
-                    await adoptScenes(detailed.scenes.map((s, i) =>
-                      i === 0 ? { ...s, notes: text } : s
-                    ))
+                  // 复用「完善细纲」同款结构化解析器（JSON 优先 → AI 重构兜底，不降级到正则）。
+                  // 修复前：整段 AI 原文被丢进第 0 个场景的 notes，title/summary/conflict 全空，
+                  // 而细纲注入(readDetailedOutline)只读 summary/conflict/location 不读 notes →
+                  // 场景堆一处、手动改不了、注入为空壳。改为解析成结构化 scenes 逐条落表。
+                  const parsed = await parseEnhancedDetailSmart(text, aiConfig)
+                  const parsedScenes = parsed?.scenes
+                  if (!parsedScenes || parsedScenes.length === 0) {
+                    toast.error('未能从 AI 输出解析出场景，请重试')
+                    return
                   }
+                  const VALID_PACE: ScenePace[] = ['slow', 'medium', 'fast', 'climax']
+                  const newScenes: DetailedScene[] = parsedScenes.map(s => ({
+                    sceneId: nanoid(),
+                    title: s.title || '未命名场景',
+                    summary: s.summary || '',
+                    characterIds: Array.isArray(s.characterIds) ? s.characterIds : [],
+                    location: s.location || '',
+                    conflict: s.conflict || '',
+                    pace: (VALID_PACE as string[]).includes(s.pace) ? (s.pace as ScenePace) : 'medium',
+                    estimatedWords: typeof s.estimatedWords === 'number' ? s.estimatedWords : 0,
+                    notes: '',
+                  }))
+                  const existing = detailed?.scenes || []
+                  await adoptScenes([...existing, ...newScenes])
+                  toast.success(`已采纳 ${newScenes.length} 个场景`)
                 } catch (err) {
                   console.error('[ScenePanel] 采纳失败:', err)
+                  toast.error('采纳场景失败，请重试')
                 }
                 ai.reset()
               }}

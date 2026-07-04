@@ -1134,14 +1134,21 @@ D) 以上的混合
 3. 每个场景必须有明确的"小目标"和"小冲突"
 4. 场景间用悬念或情绪转折衔接
 
-输出格式：使用编号列表，每个场景包含：
-- 场景标题
-- 一句话概要
-- 主要人物
-- 发生地点
-- 核心冲突
-- 节奏标签（慢/中/快/高潮）
-- 估算字数`,
+输出严格 JSON，不要加 markdown 代码块、不要任何解释文字：
+{
+  "scenes": [
+    {
+      "title": "场景标题",
+      "summary": "一句话场景概要",
+      "location": "发生地点",
+      "conflict": "核心冲突",
+      "pace": "slow|medium|fast|climax",
+      "estimatedWords": 2000
+    }
+  ]
+}
+
+pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords 为整数。`,
     userPromptTemplate: `章节标题：{{chapterTitle}}
 章节大纲：{{chapterSummary}}{{#if worldContext}}
 
