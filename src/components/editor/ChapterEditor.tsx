@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Save, FileText, Eye, ClipboardList, CheckSquare, Square, BookOpenCheck, ShieldCheck, StickyNote } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
+import { findPrevChapter, findNextChapter } from '../../lib/outline/selectors'
 import { useStateCardStore } from '../../stores/state-card'
 import { useCharacterStore } from '../../stores/character'
 import { useAIStream } from '../../hooks/useAIStream'
@@ -1024,11 +1025,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             worldContext={worldCtx}
             characterContext={charCtx}
             prevChapterSummary={(() => {
-              const prev = chapters.filter(c => c.order < (currentChapter?.order || 0)).pop()
+              const prev = findPrevChapter(nodes, chapters, currentChapter)
               return prev?.summary || ''
             })()}
             nextChapterSummary={(() => {
-              const next = chapters.filter(c => c.order > (currentChapter?.order || 0)).shift()
+              const next = findNextChapter(nodes, chapters, currentChapter)
               return next?.summary || ''
             })()}
             foreshadowContext={currentChapter?.id ? buildForeshadowContext(currentChapter.id, chapters, nodes) : ''}
@@ -1057,7 +1058,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           worldContext={worldCtx}
           characterContext={charCtx}
           prevChapterEnding={(() => {
-            const prev = chapters.filter(c => c.order < (currentChapter?.order || 0)).pop()
+            const prev = findPrevChapter(nodes, chapters, currentChapter)
             return htmlToPlainText(prev?.content || '').slice(-500)
           })()}
         />
