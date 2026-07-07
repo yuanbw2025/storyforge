@@ -18,6 +18,7 @@ import {
   type ConsistencyAuditResult,
 } from '../../lib/ai/adapters/consistency-audit-adapter'
 import { assembleContext } from '../../lib/registry/assemble-context'
+import { checkHeldItemAcquisition, readProjectHeldItems } from '../../lib/consistency/held-items'
 
 interface Props {
   projectId: number
@@ -112,6 +113,7 @@ export default function ReviewPanel(props: Props) {
         'worldRules',
         'characters',
         'stateCards',
+        'heldItems',
         'itemLedger',
         'storyTimeline',
         'characterRelations',
@@ -135,7 +137,17 @@ export default function ReviewPanel(props: Props) {
       chapterContent,
       evidenceContext: evidence.text,
     })
-    if (result) setConsistency(chapterId, result)
+    const deterministicFindings = await buildDeterministicConsistencyFindings({
+      projectId,
+      chapterId,
+      worldGroupId,
+      chapterContent,
+    })
+    const merged: ConsistencyAuditResult = {
+      mode: auditMode,
+      findings: [...deterministicFindings, ...(result?.findings ?? [])],
+    }
+    setConsistency(chapterId, merged)
   }
 
   const handleRun = () => {
@@ -260,6 +272,16 @@ export default function ReviewPanel(props: Props) {
       </div>
     </div>
   )
+}
+
+async function buildDeterministicConsistencyFindings(args: {
+  projectId: number
+  chapterId: number
+  worldGroupId?: number | null
+  chapterContent: string
+}): Promise<ConsistencyAuditResult['findings']> {
+  const heldItems = await readProjectHeldItems(args.projectId, args.chapterId, args.worldGroupId)
+  return checkHeldItemAcquisition(args.chapterContent, heldItems)
 }
 
 function ConsistencyResultView({ result }: { result: ConsistencyAuditResult }) {

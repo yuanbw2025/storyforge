@@ -342,6 +342,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         'emotionBeats',
         'stateCards',
         'currentFacts', // NS-4:当前章生效的已确认事实，回注生成防止前后矛盾
+        'heldItems', // CONSISTENCY-1:当前已持有物品，避免新章重复写首次获得
         'retrievedPassages', // NS-5:相关前文召回，防远距离细节/伏笔矛盾
         'references',
         'userStyleProfile',

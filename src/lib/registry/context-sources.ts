@@ -26,6 +26,7 @@ import { parseStages } from '../types/story-arc'
 import { parseFields } from '../types/state-card'
 import { parseBeats } from '../types/emotion-beat'
 import { buildForeshadowTaskContext } from '../foreshadow/context'
+import { formatHeldItemsContext, readProjectHeldItems } from '../consistency/held-items'
 import type { Character, PowerSystem, Worldview } from '../types'
 import type { ContextSource } from './types'
 import { htmlToPlainText } from '../utils/html'
@@ -178,6 +179,11 @@ async function readItemLedger(projectId: number): Promise<string> {
     ...rows.slice(-120).map(row =>
       `#${row.id ?? 0} ${row.chapterTitle ?? `章节#${row.chapterId ?? '?'}`}：${row.action === 'gain' ? '获得' : '消耗'} ${row.itemName} ×${row.quantity}${row.note ? `（${row.note}）` : ''}`),
   ].join('\n')
+}
+
+async function readHeldItems(projectId: number, chapterId?: number | null, worldGroupId?: number | null): Promise<string> {
+  if (chapterId == null) return ''
+  return formatHeldItemsContext(await readProjectHeldItems(projectId, chapterId, worldGroupId))
 }
 
 async function readStoryTimeline(projectId: number): Promise<string> {
@@ -552,6 +558,16 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L2',
     budgetTokens: 2400,
     read: input => readItemLedger(input.projectId),
+  },
+  {
+    key: 'heldItems',
+    label: '当前已持有物品',
+    scope: 'chapter',
+    layer: 'L1',
+    budgetTokens: 1000,
+    protectedFromTrim: true,
+    requiresChapterId: true,
+    read: input => readHeldItems(input.projectId, input.chapterId, input.worldGroupId),
   },
   {
     key: 'storyTimeline',
