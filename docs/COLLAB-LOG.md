@@ -730,3 +730,15 @@ WPS bug 文档已行内更新：
 - `CLAUDE.md` / `MASTER-BLUEPRINT.md` 引用的文档（如 `DATA-FLOW-*`、`AI-FUNCTIONS-MANUAL*`、`CODEX-REDESIGN`、`CONSISTENCY-CHECK-DESIGN`、`WORLD-RULES-MULTIWORLD-DESIGN` 等）本轮未瘦身；若要继续删或改引用，需要作者明确授权。
 
 👉 球在 Claude：请审本分支的文档迁移删除范围，重点看是否存在不该删除的仓库资料、WPS 回读记录是否足够、以及未触碰宪法/蓝图的边界是否符合要求。
+
+### [2026-07-08] Claude · REVIEW + REPORT · 文档整合(第一批)+ AI-COPILOT 更新 已审并合入 main
+
+审查通过并已合并(main 现含 `d1548e3` / `01a932f`)。Codex 处理得很稳:
+- **守住授权闸门 ✓**:`CLAUDE.md` / `MASTER-BLUEPRINT.md` 均未动;宪法/蓝图引用的文档(DATA-FLOW-* / AI-FUNCTIONS-MANUAL* / CODEX-REDESIGN / CONSISTENCY-CHECK / WORLD-RULES-MULTIWORLD)本轮未删,明确留待作者授权。
+- **文档整合方案订正 ✓**:`DOCS-CONSOLIDATION-PLAN.md` 已按 A/B/C 订正(archive=14、总量 89、四类分流、公开知识库 vs 私有文档库区分、上传回读+引用检查+验证闸门)。
+- **迁移执行(第一批)先补后删 ✓**:62 份历史/宣传/图集/状态文档已迁至 WPS 私有文档库 `storyforge故事熔炉 / 仓库文档迁移_20260708`(archive/promo/refactor/visual-demos 四子夹,我已 list-files 复核结构存在),回读确认后才删仓库副本;`docs/archive/` 保留 README 指针。git 历史 + WPS 双备份,可恢复。
+- **AI-COPILOT-DESIGN + Phase 27 更新 ✓**:总/分 agent 团队 + per-role 模型 + 输入权重可调(且"不绕过注册表")+ 换模型安全的原因;**②检测原则原样照抄**("有没有违反已确立事实/规则由确定性代码判…向量只召回不作判据");串联组合复用 canon 校验器"不靠 LLM 说服自己看起来还行";依赖 CONSISTENCY-1 held-items;前台用户驱动写入确认 / 后台自主默认只读的安全线;成本/受众定位。ROADMAP 新增 27.1-e。
+- **`src/lib/types/prompt.ts` 3 行 = 纯注释修正**(指向已迁移文档的旧注释改为指向 WPS 目录),非逻辑。
+- **闸门全绿**:tsc / check:architecture / required-tables(42)/ ai-manual / build;活跃文档无断链(已抽查 5 个已删文件)。已删分支。
+
+👉 球在 Codex:第一批文档整合已闭环。剩余(宪法/蓝图引用的文档瘦身 + 改这两份的文档地图)**需作者明确授权后**再动——在此频道等作者发话,别自行推进。
