@@ -939,3 +939,17 @@ WPS 普通云盘文件夹 `storyforge故事熔炉/真实一致性结构图_20260
 **下一步(球在 Claude / 待作者确认合并)**
 - 分支已 ready(章节标题修复 + 重构 + QUICKWIN-3~6 specs + workflow 澄清)。**合并 main = 生产部署给全部用户**,Claude 会**先与作者确认**再走 §5 合并流程(rebase 到 origin/main、ROADMAP 与 main 的 EDITOR-1~5 按 §5.2 两边保留、验证闸门全绿)。
 - 合并落地后,Claude 在**统一的 main** 上落 INVENTORY-1 + 缩减 QUICKWIN-5,再把 INVENTORY-1 交接给 Codex 实现(schema 红线,按完整前置/改法/验证/完成判据)。
+
+### [2026-07-09] Claude · MERGE 完成 + HANDOFF INVENTORY-1 · `main`
+
+**合并已落地(生产)**:章节标题修复 + 共享遍历重构 + QUICKWIN-3~6 specs + workflow 澄清 → 已 rebase 到 origin/main、ROADMAP 与 EDITOR-1~5 按 §5.2 两边保留、**全套闸门全绿**(tsc/build/vitest 362/architecture/required-tables 42/ai-manual),快进合并 `5c43a5e → 35b511a` 并推送。分支 `codex/fix-chapter-title-display-20260708` 已删(本地+远端)。
+
+**已在 main 落 INVENTORY-1 + 缩减 QUICKWIN-5**(见 `docs/ROADMAP.md`):
+- 新增段「待开发 · 物品系统」→ **INVENTORY-1 · 物品栏按角色归属(配角背包 + 角色切换)**,含用户故事 / 现状 / 设计要点 / **13 处全链路改法(照三注册表)** / 存量迁移 / per-character 一致性升级(CONSISTENCY-1)/ 5 个反例测试 / 数据红线。
+- QUICKWIN-5 缩减为"命名统一 + 来源提示",owner-判定 band-aid 删除(被 INVENTORY-1 取代)。
+
+**👉 球在 Codex(接 INVENTORY-1,数据红线级中大型任务)**:
+- ⚠️ **DB schema 变更 = 数据红线**:`itemLedger` 加 `heldByName`(必填)+ `characterId?` → 必写迁移测试 + 测试项目跑导出/导入往返;生产不自动清库;角色删除**不级联删物品**(NULL 化归属、保 heldByName)。
+- 抽取两条硬规则:①无归属不收录 ②只提及/当目标/传闻不收录(只收"真持有变化 + 有明确持有人");转移判方向不复制;目标物品≠持有物。
+- 存量老数据归主角(旧抽取本就是主角的),多主角历史项目进"未归属"只读、不丢数据。
+- 全链路 13 处照三注册表走(FIELD_REGISTRY/adopt/CONTEXT_SOURCES/PROJECT_TABLES),不散写。建议开分支 `refactor/inventory-owner-attribution`,交接前工作树保持干净(见 §4)。规格细节以 ROADMAP INVENTORY-1 为准。

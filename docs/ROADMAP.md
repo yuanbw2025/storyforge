@@ -58,6 +58,76 @@
 
 ---
 
+# ═══ 待开发 · 物品系统(中大型 · 数据红线) ═══
+
+## 🔴 INVENTORY-1 · 物品栏按角色归属(配角背包 + 角色切换)
+
+> 来源:作者拍板(2026-07-09)。把物品子系统从「项目级主角流水(owner-less)」升级为「**按角色归属**的流水」,支持主角/次要角色各自背包,物品栏按角色类型切换查看。同时**取代** QUICKWIN-5 的 `resolveInventoryOwner` band-aid(避免新旧并存 / 白干)。
+> **定位:数据红线级中大型任务。** 必须走完整「前置/改法/验证/完成判据」+ DB 迁移测试 + 导出导入往返。
+
+### 用户故事
+- 作为作者,我写的物品应该**属于具体角色**(主角或配角),而不是笼统进一个"主角流水"。
+- 我想在物品栏**按角色(或角色类型:主角/次要/npc)切换**,看每个角色各自的背包。
+- 角色状态卡里显示的持有物,应该就是**该角色自己**的物品,和物品栏一致,不再出现"状态卡持有物和物品栏对不上"。
+
+### 现状(已核代码)
+- `ItemLedgerEntry` = `{ itemName, action(获得/消耗), quantity, chapterId, chapterTitle, note }` —— **无任何持有人字段**。
+- 抽取 `inventory-extract-adapter.ts` 注释明写"提取**主角的**物品事件";"只主角"这个约束**只活在提示词里**,schema 层是 owner-less 项目级流水。
+- `StatePanel` 仅在 `role === 'protagonist'` 时把 `aggregateInventory(itemLedger)` 投影给角色卡 → 新 `roleWeight` 体系/导入数据下 `role` 不规范时回退显示 `stateCards.fields` 旧持有物 → 同步 bug。
+- `itemLedger` **已在三注册表登记齐全**(field-registry:323-328 / adoption-schema:89 / context-sources:175,555 / project-tables) → 加字段是"往注册表各加一行"的标准套路,不是散写。
+
+### 设计要点
+1. **归属存双份(软→硬)**:
+   - `heldByName: string`(**必填**,AI 抽取的持有人原文,软)
+   - `characterId?: number | null`(能匹配到已知角色就解析,硬;匹配不到就只留名字)
+   - 有名角色 → 链到角色卡(扛改名);无名/次要持有者("宝箱""路人甲")→ 保留名字、不强绑。符合项目"软→硬、作者确认为闸门"模式。
+2. **抽取两条硬规则**(作者定,2026-07-09):
+   - **无归属 → 不收录**:判不出谁持有的物品,直接丢。
+   - **只提及/当目标/传闻/假设 → 不收录**:只收"**真的发生持有变化 + 有明确持有人**"的。角色说"早晚要弄到那把神剑"= 目标,不记;哪章真拿到才记。
+   - **转移要判方向**:"A 把剑给了 B" = A 消耗 + B 获得,不能凭空复制。
+   - 抽取每条产出 `{ itemName, heldByName, action, quantity, 证据原文 }`,带**逐字证据**便于回查(接一致性逐字原则)。抽取不能只靠 GAIN_TRIGGERS 关键词,要 AI 判**实获 vs 空想**。
+3. **UI 切换**:物品栏按 `roleWeight` 分组(主角/次要/npc)选角色 → 看其背包。状态卡持有物区改成"该角色的物品(来自物品栏)"。
+4. **边界(写进规格,防混淆)**:**目标物品 ≠ 持有物**,角色"想要/图谋但未到手"的东西属剧情/目标线,**不进物品栏**。本期不做目标追踪。
+
+### 全链路改法(~13 处,照三注册表走)
+| 层 | 文件 | 改动 |
+|---|---|---|
+| Schema(红线) | `types/item-ledger.ts`、`db/schema.ts`、`ensure-schema.ts` | 加 `heldByName`(必填)+ `characterId?`;`db.version(n+1)` 迁移 |
+| FIELD_REGISTRY | `field-registry.ts` | 加 `heldByName`/`characterId` 两行(别名 `持有人/归属/持有者`) |
+| AdoptionSchema | `adoption-schema.ts` | 写回携带持有人;`adopt()` 解析 heldByName→characterId |
+| 抽取 | `inventory-extract-adapter.ts` | 提示词从"主角的物品"改为"谁获得/消耗了什么 + 两条硬规则";产出加 heldByName + 证据 |
+| CONTEXT_SOURCES | `context-sources.ts` | itemLedger 源改为**按角色**装配(assembleContext 支持传 characterId) |
+| PROJECT_TABLES | `project-tables.ts` | itemLedger 的 `refs` 加 characterId(角色删除时:其物品归 NULL 化 heldByName 保名 / 不级联删,**保数据**) |
+| 一致性 | `held-items.ts` | `projectHeldItems` → `characterHeldItems(characterId)`;`checkHeldItemAcquisition` 按角色判 → **CONSISTENCY-1 升级为按角色** |
+| UI | `InventoryPanel.tsx`、`StatePanel.tsx`、`ReviewPanel.tsx` | 角色切换器 + 各角色背包;删掉 protagonist-only 投影;删 `resolveInventoryOwner` band-aid |
+| Store | `stores/item-ledger.ts` | CRUD 带持有人;`aggregateInventory` 支持按角色过滤 |
+| 导出/导入 | `export/json-export.ts` | itemLedger 的 characterId 随角色 id **remap**(往返测试) |
+
+### 存量数据迁移(红线)
+- 老的 owner-less 条目 = 旧抽取本就是"主角的物品" → **整体归给该项目主角**(`heldByName = 主角名, characterId = 主角id`)。语义正确,**不需要"未归属"桶**。
+- 判不出唯一主角的历史项目(多 main/无 protagonist):这些条目 `characterId = null`,`heldByName` 填 `未知(历史数据)`,UI 归到一个"历史/未归属"只读区,提示作者手动认领。**不丢数据、不静默改值**。
+- 迁移必须:迁移测试 + 在测试项目跑导出/导入往返 + 迁移前不自动清库。
+
+### QUICKWIN-5 缩减(避免白干 / DoD 不新旧并存)
+- **删除** QUICKWIN-5 的 `resolveInventoryOwner` owner 判定 band-aid —— 被本条真方案取代。
+- **保留** QUICKWIN-5 里便宜且不浪费的部分:命名统一(归属势力→所属势力,已改)+ 状态卡"物品来源提示 + 去物品栏跳转"。
+- QUICKWIN-5 在 ROADMAP 中改为"并入 INVENTORY-1(见下),仅保留命名/来源提示"。
+
+### 验证判据(完成判据)
+- 抽取:有持有人+真获得才记;目标/提及/无主一律不记;转移不复制(新增 `R-INV1-extract-rules`)。
+- 归属:heldByName 必填,characterId 能匹配则解析、不匹配保名(`R-INV1-owner-resolve`)。
+- 一致性:`checkHeldItemAcquisition` 按角色判——角色 A 首次获得 A 已持有物才标,B 持有不影响 A(`R-INV1-per-character-consistency`,CONSISTENCY-1 升级)。
+- 迁移:老 owner-less → 主角;多 main → 未归属只读;导出/导入往返 characterId 正确 remap(`R-INV1-migration`)。
+- UI:物品栏按角色切换、状态卡显示各角色自己的物品、与物品栏一致。
+- 闸门全绿:`tsc` / `build` / `vitest` / `check:architecture` / `check:required-tables` / gen:ai-manual --check。
+
+### 数据红线复述
+- DB schema 变更 = 必迁移测试 + 往返验证;生产不自动清库。
+- 角色删除**不级联删其物品数据**(NULL 化归属、保 heldByName 名),防丢用户数据。
+- 扩字段 = 改全链路:上表 13 处一处不漏(展示/抽取/上下文/adopt/导出导入/迁移)。
+
+---
+
 # ═══ 待开发 · 快赢 ═══
 
 ## ✅ QUICKWIN-1 · 「Ollama(本地)」选项改为「本地模型」+ 兼容 LM Studio 等 · 已审并合入 main `ddff907`
@@ -221,68 +291,15 @@
 
 ---
 
-## 🟢 QUICKWIN-5 · 角色状态卡与物品栏同步一致性：只读聚合展示 + 命名统一
+## 🟢 QUICKWIN-5 · 状态卡/物品栏命名统一 + 来源提示（已并入 INVENTORY-1）
 
-> 来源:社区用户反馈(2026-07-08/2026-07-09)。用户看到“角色状态卡”里也有“持有物”相关内容,疑惑“既然如此物品栏存在是啥?” 后续确认:状态卡中的角色持有物与物品栏明显不同步。同时反馈展示态叫“归属势力”、编辑态叫“所属势力”,词条/字段命名不统一。
+> ⚠️ 缩减(2026-07-09):原「`resolveInventoryOwner` owner 判定 band-aid」**已删除不做**——被 INVENTORY-1（物品按角色归属）取代,做了就是白干(DoD 不新旧并存)。真正的「状态卡↔物品栏同步」修复见 **INVENTORY-1**。本条仅保留便宜且不浪费的部分。
 
-**现状(已核代码)**
-- `StatePanel.tsx` 是角色状态卡聚合视图:以 characters 为主卡,聚合 `stateCards`、章节、物品流水、角色基础地点与势力词条。
-- 对主角卡片,`protagonistItems={inventory.map(item => \`${item.itemName} ×${item.quantity}\`)}` 会把 `aggregateInventory(itemLedger)` 的当前持有物聚合进角色状态卡展示。
-- 展示态固定显示四个 Fact:`所在地点 / 归属势力 / 剧情进度 / 持有物`。其中“归属势力”已先改为“所属势力”(纯 UI 文案)。
-- 编辑态是自由 `StateField[]`,用户看到的字段可能是“所属势力/势力/归属/持有物”等任意 key;展示层用 `FACTION_KEYS / ITEM_KEYS` 模糊匹配后改成固定文案。
+**保留范围**
+- 命名统一:展示态「归属势力」→「所属势力」(已改,`StatePanel`)。
+- 状态卡持有物区加**来源提示**(来自物品栏 / 来自状态字段)+「去物品栏」跳转 —— 可在 INVENTORY-1 落地时一并做。
 
-**根因**
-- 信息架构没讲清楚:物品栏是主事实源(物品流水、获得/消耗、数量),状态卡只是角色聚合看板,但 UI 把物品栏摘要也叫“持有物”,容易被理解成重复功能。
-- 展示态和编辑态字段名不一致,因为展示层做了别名归一,编辑层仍暴露原始字段 key。
-- “持有物”既可能来自状态卡字段,也可能来自物品栏投影;来源不透明,用户不知道该去哪里改。
-- **同步错位高概率根因**:`itemLedger` 设计为项目级主角/核心视角人物物品流水,不含 `characterId`。`StatePanel` 目前只在 `character.role === 'protagonist'` 时把 `itemLedger` 投影给角色卡;而角色体系已升级为 `roleWeight/main/secondary/npc/extra + moralAxis/orderAxis`,旧 `role` 是兼容派生字段。若历史/导入数据中 `role` 未规范成 `protagonist`,或用户把主角标在新版戏份字段中,状态卡就会回退显示 `stateCards.fields` 里的旧“持有物”,造成与物品栏不同步。
-- 另一个设计边界:`itemLedger` 现在没有角色归属字段,所以它只能代表“项目级主角/核心视角持有物”,不能正确表达多个角色各自背包。若未来要支持多角色物品,需要另开 schema 方案。
-
-**方案(不删物品栏,澄清职责与来源)**
-1. 明确职责:
-   - **物品栏**:物品流水主事实源,负责获得/消耗、数量、时间线、AI 从正文提取。
-   - **角色状态卡**:角色当前状态聚合看板,可以展示物品栏摘要,但不替代物品栏。
-2. 统一物品栏投影判定:
-   - 抽纯 helper,例如 `resolveInventoryOwner(characters)`,只确定一个“项目级物品栏归属角色”。
-   - 优先级建议:`role === 'protagonist'` 明确主角 > 单一 `roleWeight === 'main' && moralAxis === 'good'` > 项目中仅有一个 `roleWeight === 'main'`。
-   - 若无法唯一判定(多个主要角色且无明确主角),状态卡不把同一份物品栏分配给所有角色,而显示“物品栏为项目级主角流水,当前未能唯一匹配角色”的轻提示。
-   - `StatePanel` 只给该唯一归属角色展示 `aggregateInventory(itemLedger)` 摘要;其他角色继续显示自身 `stateCards.fields` 中的持有物字段(若有),并标明来源。
-3. UI 文案调整:
-   - 状态卡中的物品区域改名为“物品栏摘要(只读)”或“当前持有物(来自物品栏)”。
-   - 在值旁显示轻量来源提示:例如“来自物品栏,到物品栏修改流水”。
-   - 若值来自 stateCards 的手写字段而非 itemLedger,显示“来自状态字段”;若两者都有,优先显示物品栏摘要,并可提示“状态字段中也有持有物记录”。
-4. 编辑态命名统一:
-   - 建议把展示文案“归属势力”统一为“所属势力”,与编辑字段建议一致。
-   - 新建字段时给推荐字段名,如 `所在地点 / 所属势力 / 当前状态 / 备注`,避免用户乱填同义字段。
-   - 对既有字段不迁移、不改值,只在 UI 显示别名归一。
-5. 可选跳转:
-   - 在“物品栏摘要(只读)”旁加“去物品栏”入口,让用户知道修改物品应去物品栏流水,不是在状态卡里改。
-
-**四问 checklist**
-- ① 读:继续读取既有 `stateCards / itemLedger / chapters / codex`；若需要更清晰来源,抽纯 helper 判断来源即可。
-- ② 写:第一版只改 UI 文案和编辑字段推荐;若保存状态字段,仍走既有 `useStateCardStore.updateCard/addCard`。
-- ③ 表生命周期:不新增表、不改 schema、不迁移旧字段。
-- ④ 注册表:不新增 AI 源/字段/表;若未来要让“状态字段别名”进入写回规范,再评估 `FIELD_REGISTRY`/状态字段规范化。
-
-**数据红线**
-- 不删除 `itemLedger`。
-- 不批量改写用户已有 `stateCards.fields`。
-- 不把物品栏流水并入状态卡,只做只读聚合展示。
-
-**验证判据**
-- 主角有物品栏流水时,状态卡显示“来自物品栏”的只读摘要,用户能看出物品栏是修改入口。
-- 历史数据中 `role !== 'protagonist'` 但只有一个新版 `roleWeight === 'main'` 的角色时,状态卡仍能把物品栏摘要挂到该角色,不再回退旧状态字段。
-- 多个主要角色且无明确主角时,不得把同一份项目级物品栏同时展示到多个角色;需要提示归属不明确。
-- 编辑态/展示态势力文案统一为“所属势力”或有清晰别名说明。
-- 无物品栏流水但状态字段有“持有物”时,仍能显示旧数据且标明来源为状态字段。
-- `tsc` / UI 文案回归测试或组件测试通过。
-
-**DoD**
-- 用户不会再把状态卡里的“持有物摘要”误认为物品栏重复/可删除。
-- 用户知道物品数量、获得/消耗历史应去物品栏维护。
-- 状态卡字段展示和编辑命名一致,降低理解成本。
-
----
+**已删除**:owner 判定优先级阶梯、多主角降级"未归属"轻提示 —— 全部由 INVENTORY-1 的真实按角色归属取代。
 
 ## 🟢 QUICKWIN-6 · 大纲章节支持跨卷拖动：从第一卷移动到第二卷
 
