@@ -12,6 +12,7 @@
  *   ⑤ PROJECT_TABLES exportable 表必须接入 JSON 导出/导入
  *   ⑥ components/hooks/pages 不得使用浏览器原生 alert/confirm/prompt
  *   ⑦ 正式 UI 不得出现"正在开发/即将推出/敬请期待"式死入口文案
+ *   ⑧ Agent 层不得导入 Zustand stores 或 Dexie schema
  *
  * 用法:node scripts/check-architecture.mjs
  */
@@ -33,6 +34,155 @@ function walk(dir, acc = []) {
 }
 
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8')
+
+function isIdentifierChar(char) {
+  return char !== undefined && /[A-Za-z0-9_$]/.test(char)
+}
+
+function skipTrivia(source, index) {
+  let cursor = index
+  while (cursor < source.length) {
+    if (/\s/.test(source[cursor])) {
+      cursor++
+      continue
+    }
+    if (source.startsWith('//', cursor)) {
+      const lineEnd = source.indexOf('\n', cursor + 2)
+      cursor = lineEnd === -1 ? source.length : lineEnd + 1
+      continue
+    }
+    if (source.startsWith('/*', cursor)) {
+      const commentEnd = source.indexOf('*/', cursor + 2)
+      cursor = commentEnd === -1 ? source.length : commentEnd + 2
+      continue
+    }
+    break
+  }
+  return cursor
+}
+
+function readQuotedSpecifier(source, index) {
+  const quote = source[index]
+  if (quote !== '\'' && quote !== '"') return null
+
+  let value = ''
+  for (let cursor = index + 1; cursor < source.length; cursor++) {
+    const char = source[cursor]
+    if (char === '\\') {
+      if (cursor + 1 < source.length) value += source[++cursor]
+      continue
+    }
+    if (char === quote) return { value, end: cursor + 1 }
+    if (char === '\n' || char === '\r') return null
+    value += char
+  }
+  return null
+}
+
+function skipStringOrTemplate(source, index) {
+  const quote = source[index]
+  if (quote !== '\'' && quote !== '"' && quote !== '`') return index + 1
+
+  for (let cursor = index + 1; cursor < source.length; cursor++) {
+    if (source[cursor] === '\\') {
+      cursor++
+      continue
+    }
+    if (source[cursor] === quote) return cursor + 1
+  }
+  return source.length
+}
+
+function findFromSpecifier(source, index) {
+  let cursor = index
+  while (cursor < source.length) {
+    cursor = skipTrivia(source, cursor)
+    if (source[cursor] === ';') return null
+    if (source[cursor] === '\'' || source[cursor] === '"' || source[cursor] === '`') {
+      cursor = skipStringOrTemplate(source, cursor)
+      continue
+    }
+    if (isIdentifierChar(source[cursor])) {
+      const start = cursor
+      while (isIdentifierChar(source[cursor])) cursor++
+      if (source.slice(start, cursor) === 'from') {
+        const specifier = readQuotedSpecifier(source, skipTrivia(source, cursor))
+        return specifier?.value ?? null
+      }
+      continue
+    }
+    cursor++
+  }
+  return null
+}
+
+function moduleSpecifiers(source) {
+  const specifiers = []
+  let cursor = 0
+
+  while (cursor < source.length) {
+    cursor = skipTrivia(source, cursor)
+    const char = source[cursor]
+    if (char === '\'' || char === '"' || char === '`') {
+      cursor = skipStringOrTemplate(source, cursor)
+      continue
+    }
+    if (!isIdentifierChar(char)) {
+      cursor++
+      continue
+    }
+
+    const start = cursor
+    while (isIdentifierChar(source[cursor])) cursor++
+    const word = source.slice(start, cursor)
+    if (source[start - 1] === '.') continue
+
+    if (word === 'import') {
+      const next = skipTrivia(source, cursor)
+      const sideEffect = readQuotedSpecifier(source, next)
+      if (sideEffect) {
+        specifiers.push(sideEffect.value)
+        cursor = sideEffect.end
+        continue
+      }
+      if (source[next] === '(') {
+        const dynamic = readQuotedSpecifier(source, skipTrivia(source, next + 1))
+        if (dynamic) specifiers.push(dynamic.value)
+        continue
+      }
+      const specifier = findFromSpecifier(source, next)
+      if (specifier) specifiers.push(specifier)
+      continue
+    }
+
+    if (word === 'export') {
+      const specifier = findFromSpecifier(source, cursor)
+      if (specifier) specifiers.push(specifier)
+      continue
+    }
+
+    if (word === 'require') {
+      const next = skipTrivia(source, cursor)
+      if (source[next] === '(') {
+        const required = readQuotedSpecifier(source, skipTrivia(source, next + 1))
+        if (required) specifiers.push(required.value)
+      }
+    }
+  }
+
+  return specifiers
+}
+
+function isForbiddenAgentImport(specifier) {
+  const normalized = specifier
+    .replace(/\\/g, '/')
+    .replace(/[?#].*$/, '')
+    .replace(/\.(?:[cm]?[jt]sx?)$/, '')
+    .replace(/\/index$/, '')
+  return /(^|\/)stores(\/|$)/.test(normalized)
+    || /(^|\/)db\/schema$/.test(normalized)
+}
+
 const violations = []
 
 // ── ① stores 手写事务表清单 ──
@@ -203,6 +353,19 @@ for (const dir of UI_DIRS) {
     if (!m) continue
     const line = src.slice(0, m.index).split('\n').length
     violations.push(`[⑦半成品文案] ${file}:${line}: 正式 UI 不得出现"${m[0]}"式死入口承诺;请隐藏入口、标记 Labs 禁用态,或指向已上线流程`)
+  }
+}
+
+// ── ⑧ Agent 层禁止绕过端口和三注册表 ──
+const agentDir = path.join(root, 'src/lib/agent')
+if (fs.existsSync(agentDir)) {
+  for (const file of walk('src/lib/agent')) {
+    const src = read(file)
+    for (const specifier of moduleSpecifiers(src)) {
+      if (isForbiddenAgentImport(specifier)) {
+        violations.push(`[⑧Agent越层] ${file}: Agent 层不得导入 ${specifier},应通过 Tool/Storage/Registry port`)
+      }
+    }
   }
 }
 
