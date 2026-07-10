@@ -1,7 +1,13 @@
-import type { StoryForgeTool, ToolExecutionContext, ToolScope } from './tool-types'
+import type {
+  StoryForgeTool,
+  ToolAvailability,
+  ToolExecutionContext,
+  ToolRisk,
+  ToolScope,
+} from './tool-types'
 
 function supportsPlatform(
-  availability: StoryForgeTool['availability'],
+  availability: ToolAvailability,
   platform: ToolExecutionContext['platform'],
 ): boolean {
   return availability === 'both' || availability === platform
@@ -14,40 +20,63 @@ function hasScopes(
   return required.every(scope => granted.has(scope))
 }
 
-export class ToolRegistry {
-  private readonly tools = new Map<string, StoryForgeTool<unknown, unknown>>()
+interface RegisteredToolSnapshot {
+  readonly tool: StoryForgeTool
+  readonly name: string
+  readonly risk: ToolRisk
+  readonly availability: ToolAvailability
+  readonly requiredScopes: readonly ToolScope[]
+  readonly execute: StoryForgeTool['execute']
+}
 
-  register<Input, Output>(tool: StoryForgeTool<Input, Output>): void {
-    if (this.tools.has(tool.name)) {
+function createSnapshot(tool: StoryForgeTool): RegisteredToolSnapshot {
+  return Object.freeze({
+    tool,
+    name: tool.name,
+    risk: tool.risk,
+    availability: tool.availability,
+    requiredScopes: Object.freeze([...tool.requiredScopes]),
+    execute: tool.execute.bind(tool),
+  })
+}
+
+export class ToolRegistry {
+  readonly #tools = new Map<string, RegisteredToolSnapshot>()
+
+  register(tool: StoryForgeTool): void {
+    if (this.#tools.has(tool.name)) {
       throw new Error(`[tool-registry] duplicate tool ${tool.name}`)
     }
 
-    this.tools.set(tool.name, tool as unknown as StoryForgeTool<unknown, unknown>)
+    const snapshot = createSnapshot(tool)
+    this.#tools.set(snapshot.name, snapshot)
   }
 
   get(name: string): StoryForgeTool | undefined {
-    return this.tools.get(name)
+    return this.#tools.get(name)?.tool
   }
 
   listAvailable(context: ToolExecutionContext): StoryForgeTool[] {
-    return Array.from(this.tools.values()).filter(tool =>
-      supportsPlatform(tool.availability, context.platform)
-      && hasScopes(tool.requiredScopes, context.scopes),
-    )
+    return Array.from(this.#tools.values())
+      .filter(snapshot =>
+        supportsPlatform(snapshot.availability, context.platform)
+        && hasScopes(snapshot.requiredScopes, context.scopes),
+      )
+      .map(snapshot => snapshot.tool)
   }
 
-  async execute<Input, Output>(
+  async execute(
     name: string,
     context: ToolExecutionContext,
-    input: Input,
-  ): Promise<Output> {
-    const tool = this.tools.get(name)
-    if (!tool) {
+    input: unknown,
+  ): Promise<unknown> {
+    const snapshot = this.#tools.get(name)
+    if (!snapshot) {
       throw new Error(`[tool-registry] unknown tool ${name}`)
     }
 
-    if (!supportsPlatform(tool.availability, context.platform)
-      || !hasScopes(tool.requiredScopes, context.scopes)) {
+    if (!supportsPlatform(snapshot.availability, context.platform)
+      || !hasScopes(snapshot.requiredScopes, context.scopes)) {
       throw new Error(`[tool-registry] tool ${name} is not available`)
     }
 
@@ -55,7 +84,6 @@ export class ToolRegistry {
       throw new DOMException('Agent run aborted', 'AbortError')
     }
 
-    const typedTool = tool as unknown as StoryForgeTool<Input, Output>
-    return typedTool.execute(context, input)
+    return snapshot.execute(context, input)
   }
 }
