@@ -966,3 +966,27 @@ WPS 普通云盘文件夹 `storyforge故事熔炉/真实一致性结构图_20260
 - `npm run build` → 通过。
 
 👉 球交回 Claude:请复审 `docs/FEATURE-GUIDE.md` 7.4 是否已与 `docs/ROADMAP.md` 的 INVENTORY-1 保持一致,确认不再与 main 规格新旧并存。
+
+### [2026-07-10] Claude · REVIEW(7.4 通过)+ HANDOFF(一致性/管线设计批 · 待作者+GPT审查) · `main`
+
+**① FEATURE-GUIDE 7.4 复核 ✅ 通过**
+7.4 已与 `ROADMAP` INVENTORY-1 对齐:`heldByName` 必填 + `characterId` 可选硬绑、无归属/仅提及/目标/传闻不收录、多主角→未归属只读不丢数据、明确删除 `resolveInventoryOwner` band-aid 表述。**无新旧并存,球关闭。**
+
+**② 本批已落 main 的设计文档 + ROADMAP(作者主导,Claude 起草)**
+- `docs/TRANSPARENT-GENERATION-PIPELINE.md` —— 可介入透明生成管线(GenerationNode 节点链:分阶段生成 / 提示词发送前可编辑 / agent 每节点可调,同一抽象三形态)。
+- `docs/CONSISTENCY-ENGINEERING-ROUTE.md` —— 软硬结合收敛路线总纲(第0-5步),从 WPS 搬入补 Codex 看不到 WPS 的缺口。
+- `docs/CONSISTENCY-COVERAGE-MAP.md` —— **诚实覆盖地图 + 反例基线**:逐类标 🟢硬/🟡软/🔴无检测 + advisory/blocking(附代码依据);含世界宪法+设定一致性校验设计。
+- ROADMAP 新增:`PIPELINE-1/2/3`、`CONSISTENCY-0(覆盖地图基线·先做)/2(认知账本)/3(世界宪法·设定互斥)`。
+
+**③ 诚实底片(所有排期的前提)**
+经代码核查:全项目确定性"矛盾判决"函数**只有 1 个**(`held-items`);其余是检索过滤/结构写回/状态覆盖(不判语义)或 LLM 软审(会漏、**不阻断**);**设定互斥类零代码覆盖**;**所有检测一律 advisory,无一 blocking**。之前"上下文一致"是把"装配成功"冒充"内容一致"的过度承诺,不再犯。
+
+**④ 排期(修正:诚实基线提到最前)**
+- **Wave 0(先做·便宜)**:`CONSISTENCY-0` 覆盖地图 + `tests/canon/` 反例目录 + 方法论铁律(任何一致性声明必须"🟢N类硬附反例+🟡M类软+🔴K类没覆盖",不许只说"一致了")。
+- 之后:Wave1 快赢+透明首刀(EDITOR-1 / PIPELINE-1 / QUICKWIN-2/3/6)→ Wave2 护城河地基(INVENTORY-1 → CONSISTENCY-2 → EDITOR-2)→ Wave3 旗舰(PIPELINE-2 / EDITOR-3)→ Wave4 打磨+agent(EDITOR-4/5 / PIPELINE-3)。
+- **每块一致性砖落地后必须回来更新覆盖地图 + 跑反例**(可证伪,不靠嘴)。
+- 注:此排期仅本季讨论项,ROADMAP 还有大量社区反馈批次/HEALTH-* 未纳入,全景更大。
+
+**⑤ `tests/canon/` 反例脚手架**:是写真·测试代码(不是文档)——已覆盖类(held-items)写真绿灯断言,未覆盖类写 `.skip`/`.todo`。**作者决定:先让 GPT 审文档,审后再决定搭。**
+
+**👉 球在作者 / GPT**:请外部审查本批一致性 + 管线设计(重点 `CONSISTENCY-COVERAGE-MAP.md` 的现状底片与反例基线是否与代码相符)。**审查放行前,Codex 不实施这批(继续手上 pr24-triage);放行后再按 Wave 0 起交接。**
