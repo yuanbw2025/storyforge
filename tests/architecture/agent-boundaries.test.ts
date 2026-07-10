@@ -31,6 +31,9 @@ describe('Agent architecture boundaries', () => {
     ['re-exported schema import', "export { db } from '../../db/schema'"],
     ['literal dynamic store import', "const store = import('../../stores/project-store')"],
     ['literal schema require', "const schema = require('../../db/schema')"],
+    ['template interpolation dynamic schema import', "const template = `${import('../../db/schema')}`"],
+    ['template interpolation store require', "const template = `${require('../../stores/project-store')}`"],
+    ['no-substitution template literal dynamic store import', 'const store = import(`../../stores/project-store`)'],
   ])('rejects %s', (_name, source) => {
     const result = runAgentImportProbe(source)
     const output = `${result.stdout}\n${result.stderr}`
