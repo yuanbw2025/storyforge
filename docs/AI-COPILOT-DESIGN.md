@@ -153,11 +153,11 @@ Tool Registry 只登记能力元数据、风险、scope 和 executor 绑定，**
 | `storyforge.project.inspect` | `low` / `project:read` | `CONTEXT_SOURCES.projectStatus` + `assembleContext({ need: ['projectStatus'] })` | 返回 `ProjectLocator` 摘要、活动存储类型和项目填写概况；不得直接查询存储 |
 | `storyforge.context.read` | `low` / `project:read` | `CONTEXT_SOURCES` + `assembleContext()` | 按 `need` 读取世界观、角色、纲要、正文、历史、规则、伏笔、物品、故事年表和多世界关系 |
 | `storyforge.settings.schema` | `low` / `project:read` | `FIELD_REGISTRY` + `ADOPTION_SCHEMAS` + 设置 schema 应用服务 | 返回可读写字段、alias、约束与目标类型，不从 store 类型临时推断 |
-| `storyforge.project.search` | `low` / `project:read` | `CONTEXT_SOURCES` + `assembleContext()` + 项目搜索应用服务 | 按关键词或结构化条件搜索已登记的章节正文与项目设定；首版可用包含匹配，后续可增加语义召回 |
+| `storyforge.settings.search` | `low` / `project:read` | `CONTEXT_SOURCES` + `assembleContext()` + 项目搜索应用服务 | 按关键词或结构化条件搜索已登记的章节正文与项目设定；首版可用包含匹配，后续可增加语义召回 |
 
 > `storyforge.project.inspect` 的实现前置：如果当前 `CONTEXT_SOURCES` 尚未登记独立的 `projectStatus` source，必须先登记该 source，再由 `assembleContext({ need: ['projectStatus'] })` 读取。`PROJECT_TABLES` 只提供表生命周期与 codec 元信息，不作为 Agent 项目内容读取入口。
 
-原 `read_project_status`、`read_worldview`、`read_story_core`、`read_characters`、`read_outline`、`read_chapter`、`read_history`、`read_world_rules`、`read_foreshadows`、`read_inventory`、`read_story_timeline`、`read_world_groups` 保留为未来兼容别名，统一构建在 `storyforge.project.inspect` / `storyforge.context.read` 之上；`search_text` 映射到 `storyforge.project.search`，继续覆盖跨章节正文与项目设定搜索，不得退化为仅搜索 settings。所有别名都不得各自实现 store 读取。
+原 `read_project_status`、`read_worldview`、`read_story_core`、`read_characters`、`read_outline`、`read_chapter`、`read_history`、`read_world_rules`、`read_foreshadows`、`read_inventory`、`read_story_timeline`、`read_world_groups` 保留为未来兼容别名，统一构建在 `storyforge.project.inspect` / `storyforge.context.read` 之上；`search_text` 映射到 `storyforge.settings.search`，继续覆盖跨章节正文与项目设定搜索，不得退化为仅搜索 settings。所有别名都不得各自实现 store 读取。
 
 ### 3.2 StoryForge 内部生成工具（只产候选，不写项目）
 
