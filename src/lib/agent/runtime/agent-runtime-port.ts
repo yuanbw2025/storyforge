@@ -30,5 +30,5 @@ export interface ApprovalDecision {
 export interface AgentRuntimePort {
   run(input: AgentRunInput): AsyncIterable<AgentEvent>
   resume(runId: string, decision?: ApprovalDecision): AsyncIterable<AgentEvent>
-  cancel(runId: string): AsyncIterable<AgentEvent>
+  cancel(runId: string): Promise<void>
 }

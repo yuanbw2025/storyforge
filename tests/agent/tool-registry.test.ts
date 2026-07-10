@@ -34,8 +34,8 @@ function createTool<Input = { value: string }, Output = string>(
 ): StoryForgeTool<Input, Output> {
   return {
     name: 'storyforge.test.read',
-    title: '????',
-    description: '????',
+    title: '测试读取',
+    description: '测试工具',
     inputSchema: { type: 'object' },
     risk: 'read',
     availability: 'both',
@@ -46,7 +46,7 @@ function createTool<Input = { value: string }, Output = string>(
 }
 
 describe('ToolRegistry', () => {
-  it('?????????????????', () => {
+  it('注册工具并拒绝重复名称', () => {
     const registry = new ToolRegistry()
     const tool = createTool()
 
@@ -56,7 +56,7 @@ describe('ToolRegistry', () => {
     expect(() => registry.register(tool)).toThrow('duplicate tool storyforge.test.read')
   })
 
-  it('?????? requiredScopes ??????', () => {
+  it('按平台和 requiredScopes 过滤可用工具', () => {
     const registry = new ToolRegistry()
     registry.register(createTool())
     registry.register(createTool({
@@ -79,7 +79,7 @@ describe('ToolRegistry', () => {
     })).map(tool => tool.name)).toEqual(['storyforge.desktop.write'])
   })
 
-  it('??????????? project:write ???', async () => {
+  it('在满足平台与 project:write 权限时执行写工具', async () => {
     const registry = new ToolRegistry()
     const execute = vi.fn(async () => 'written')
     registry.register(createTool({
@@ -101,7 +101,7 @@ describe('ToolRegistry', () => {
     expect(execute).toHaveBeenCalledOnce()
   })
 
-  it('? context ? input ???? execute', async () => {
+  it('将原始 context 与 input 透传给 execute', async () => {
     const registry = new ToolRegistry()
     const execute = vi.fn(async () => ({ ok: true }))
     const tool = createTool<{ nested: { value: string } }, { ok: boolean }>({ execute })
@@ -116,7 +116,7 @@ describe('ToolRegistry', () => {
     expect(execute.mock.calls[0]?.[1]).toBe(input)
   })
 
-  it('?? unknown ???? scope ??????', async () => {
+  it('拒绝未知工具与缺少 scope 的不可用工具', async () => {
     const registry = new ToolRegistry()
     registry.register(createTool({
       name: 'storyforge.desktop.write',
@@ -131,7 +131,7 @@ describe('ToolRegistry', () => {
       .rejects.toThrow('tool storyforge.desktop.write is not available')
   })
 
-  it('signal ? abort ??? AbortError ??????', async () => {
+  it('signal 已 abort 时抛出 AbortError 且不执行工具', async () => {
     const registry = new ToolRegistry()
     const execute = vi.fn(async () => 'must-not-run')
     const tool = createTool({ execute })
@@ -147,7 +147,7 @@ describe('ToolRegistry', () => {
     expect(execute).not.toHaveBeenCalled()
   })
 
-  it('???????????scope?actor?approval ????????', () => {
+  it('工具类型包含会话、作用域、actor 与 approval 元数据', () => {
     const actor: Actor = { id: 'background-1', kind: 'background-agent' }
     const approval: ApprovalReference = { approvalId: 'approval-1', planHash: 'sha256:plan' }
     const context: ToolExecutionContext = createContext({
@@ -169,13 +169,13 @@ describe('ToolRegistry', () => {
     expect(context.approval).toEqual(approval)
   })
 
-  it('?? runtime port ??????????', () => {
-    const scope: AgentScope = { chapterId: 4, selection: { text: '????' } }
+  it('锁定 runtime port 的输入与返回类型', () => {
+    const scope: AgentScope = { chapterId: 4, selection: { text: '选中的章节文本' } }
     const input: AgentRunInput = {
       conversationId: 'conversation-1',
       project: { backend: 'dexie', projectId: 1 },
       scope,
-      userMessage: '????',
+      userMessage: '请润色选中的章节',
     }
     const decision: ApprovalDecision = { approvalId: 'approval-1', decision: 'approved' }
 
@@ -188,7 +188,7 @@ describe('ToolRegistry', () => {
       (runId: string, decision?: ApprovalDecision) => AsyncIterable<AgentEvent>
     >()
     expectTypeOf<AgentRuntimePort['cancel']>().toEqualTypeOf<
-      (runId: string) => AsyncIterable<AgentEvent>
+      (runId: string) => Promise<void>
     >()
   })
 })
