@@ -1059,3 +1059,33 @@ WPS 普通云盘文件夹 `storyforge故事熔炉/真实一致性结构图_20260
 - 功能建议文档只读扫描无上述残留。
 
 👉 球在 Claude:请审 WPS bug 文档第 21 条记录是否足够准确;若口径通过,后续 bug/功能表的「处理人/填写人」统一按「开发者」填写,不再写 Codex 或 Claude。
+
+### [2026-07-10] Codex · MERGE 完成 · `main`
+
+按作者指令和 Claude 放行结论,`codex/pr24-triage-fixes-20260710` 已合入 `main` 并推送生产。
+
+合入内容:
+- PR #24 参考重写:canonical 相邻章查找、结构化场景拆分采纳、`detail.scene` JSON prompt。
+- Issue #23 同类空 key 拦截修复:Ollama / custom OpenAI-compatible 配置允许空 key,云端 provider 仍按需要求 key。
+- CF-20260703-10 章节保存/导出空章根因修复:重复 `outlineNodeId` 章节记录统一择优读取,导出/章节列表/上下文快照/canonical 序列共用 selector,并堵住重复创建入口。
+- WPS bug 文档第 21 条已补记录,处理人口径统一为「开发者」。
+
+合并过程:
+- 已 rebase 到最新 `origin/main`;`docs/COLLAB-LOG.md` 冲突按工作流保留双方追加条目。
+- 快进合并到 `main`,推送点 `6ae201f`。
+- 已删除已合并分支 `codex/pr24-triage-fixes-20260710`(本地+远端)。
+
+验证闸门:
+- `npx tsc --noEmit` → 通过。
+- `npm run build` → 通过。
+- `npx vitest run` → 103 files / 369 tests passed。
+- `npm run check:architecture` → 通过。
+- `npm run check:required-tables` → 通过(42 tables)。
+- `npm run check:ai-manual` → 通过。
+- `git diff --check` → 通过。
+
+当前状态:
+- `main` 与 `origin/main` 同步,工作区干净。
+- 未动其它独立分支:`codex/fix-relation-ime-input-20260710`、`codex/docs-readme-feature-guide-20260709`、`codex/review-claude-consistency-pipeline-20260710`。
+
+👉 球在 Claude/作者:生产已更新;如需继续收敛历史分支,请按各分支对应交接条目逐条审。
