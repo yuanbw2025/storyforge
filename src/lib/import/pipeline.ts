@@ -20,6 +20,7 @@
 import { renderPrompt } from '../ai/prompt-engine'
 import { usePromptStore } from '../../stores/prompt'
 import { useAIConfigStore } from '../../stores/ai-config'
+import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { useImportSessionStore } from '../../stores/import-session'
 import { useImportStatusStore } from '../../stores/import-status'
 import { extractJSON, IMPORT_MAX_TOKENS } from '../ai/adapters/import-adapter'
@@ -344,7 +345,7 @@ async function parseChunkOnce(args: {
   const baseConfig = useAIConfigStore.getState().config
   const overrideMax = Math.max(baseConfig.maxTokens ?? 4096, IMPORT_MAX_TOKENS.all)
   const config: AIConfig = { ...baseConfig, maxTokens: overrideMax }
-  if (!config.apiKey) throw new Error('未配置 AI API Key')
+  if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
 
   const output = await chatWithAbort(messages, config, args.signal, { category: 'import.parse-chunk', projectId: args.projectId })
   const obj = extractJSON(output) as UnifiedParseResult

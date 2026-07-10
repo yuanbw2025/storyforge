@@ -1,7 +1,8 @@
-import type { ChatMessage, AIConfig } from '../../types'
+import type { AIConfig, ChatMessage, DetailedScene, ScenePace } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
 import { aiRestructure } from '../restructure'
+import { nanoid } from '../../utils/id'
 
 /** 细纲场景生成 */
 export function buildDetailSceneGeneratePrompt(
@@ -150,4 +151,32 @@ export async function parseEnhancedDetailSmart(
   if (direct) return direct
   // JSON 解析失败 → AI 重构（不降级到正则）
   return await aiRestructure<EnhancedDetailResult>(raw, DETAIL_SCHEMA, config)
+}
+
+const VALID_PACES: ScenePace[] = ['slow', 'medium', 'fast', 'climax']
+
+export function normalizeParsedScenes(
+  scenes: EnhancedDetailResult['scenes'] | null | undefined,
+  filterCharacterIds: (ids: number[]) => number[] = ids => ids,
+): DetailedScene[] {
+  if (!Array.isArray(scenes)) return []
+
+  return scenes
+    .filter(scene => scene && (scene.title || scene.summary || scene.location || scene.conflict))
+    .map(scene => {
+      const pace = VALID_PACES.includes(scene.pace as ScenePace)
+        ? scene.pace as ScenePace
+        : 'medium'
+      return {
+        sceneId: nanoid(),
+        title: scene.title?.trim() || '未命名场景',
+        summary: scene.summary?.trim() || '',
+        characterIds: filterCharacterIds(Array.isArray(scene.characterIds) ? scene.characterIds : []),
+        location: scene.location?.trim() || '',
+        conflict: scene.conflict?.trim() || '',
+        pace,
+        estimatedWords: Number.isFinite(scene.estimatedWords) ? Math.max(0, Math.round(scene.estimatedWords)) : 0,
+        notes: '',
+      }
+    })
 }

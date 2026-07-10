@@ -10,6 +10,7 @@ import { useItemLedgerStore } from '../../stores/item-ledger'
 import { useChapterStore } from '../../stores/chapter'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat } from '../../lib/ai/client'
+import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import {
   buildInventoryExtractPrompt, parseInventoryEvents, type ExtractedItemEvent,
 } from '../../lib/ai/adapters/inventory-extract-adapter'
@@ -53,8 +54,8 @@ export default function InventoryPanel({ project }: Props) {
   )
 
   const handleExtract = async () => {
-    if (!aiConfig.apiKey) {
-      setExtractError('请先在「设置」中配置 AI API Key')
+    if (!isAIConfigReady(aiConfig)) {
+      setExtractError(getAIConfigRequiredMessage(aiConfig))
       return
     }
     if (writtenChapters.length === 0) {

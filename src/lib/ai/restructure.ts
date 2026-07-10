@@ -6,6 +6,7 @@
  */
 import type { AIConfig, ChatMessage } from '../types'
 import { chat } from './client'
+import { isAIConfigReady } from './config-readiness'
 
 /** 从文本中尽力提取 JSON（数组或对象）。仅做结构定位，非文本分析。 */
 function extractJson<T>(raw: string): T | null {
@@ -35,7 +36,7 @@ export async function aiRestructure<T>(
   schemaInstruction: string,
   config: AIConfig,
 ): Promise<T | null> {
-  if (!config.apiKey || !rawText.trim()) return null
+  if (!isAIConfigReady(config) || !rawText.trim()) return null
   const messages: ChatMessage[] = [
     {
       role: 'system',

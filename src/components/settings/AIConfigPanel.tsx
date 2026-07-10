@@ -4,6 +4,7 @@ import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
+import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { getLogs, subscribeLogs, clearLogs, formatLog } from '../../lib/ai/logger'
 import { applyStoryForgeTheme, resolveStoryForgeTheme, THEME_OPTIONS, type StoryForgeTheme } from '../../lib/theme'
 import { useDialog } from '../shared/Dialog'
@@ -429,7 +430,7 @@ export default function AIConfigPanel() {
             <div className="flex items-center gap-3">
               <button
                 onClick={handleTest}
-                disabled={testing || (!config.apiKey && !['custom', 'ollama'].includes(config.provider))}
+                disabled={testing || !isAIConfigReady(config)}
                 className="flex items-center gap-2 px-4 py-2 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 disabled:opacity-40 transition-colors text-sm"
               >
                 {testing ? (

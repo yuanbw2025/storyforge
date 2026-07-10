@@ -77,7 +77,7 @@ function buildRequest(config: AIConfig, messages: ChatMessage[], stream: boolean
     url: buildOpenAIEndpoint(config.baseUrl, 'chat/completions'),
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
+      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
     },
     body: JSON.stringify(body),
   }

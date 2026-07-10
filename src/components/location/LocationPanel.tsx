@@ -15,6 +15,7 @@ import LocationTreeView from './LocationTreeView'
 import { useChapterStore } from '../../stores/chapter'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat } from '../../lib/ai/client'
+import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import {
   buildLocationExtractPrompt, parseLocations, splitExtractionText, type ExtractedLocation,
 } from '../../lib/ai/adapters/structured-extract-adapter'
@@ -80,8 +81,8 @@ export default function LocationPanel({ project }: Props) {
   }
 
   const handleExtractLocations = async () => {
-    if (!aiConfig.apiKey) {
-      setExtractError('请先在「设置」中配置 AI API Key')
+    if (!isAIConfigReady(aiConfig)) {
+      setExtractError(getAIConfigRequiredMessage(aiConfig))
       return
     }
     const written = chapters.filter(chapter => htmlToPlainText(chapter.content || '').trim().length > 50)

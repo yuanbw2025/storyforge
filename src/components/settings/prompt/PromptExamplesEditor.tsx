@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus, Trash2, Sparkles, ThumbsUp, ThumbsDown, Loader2 } from 'lucide-react'
 import { useAIStream } from '../../../hooks/useAIStream'
 import { useAIConfigStore } from '../../../stores/ai-config'
+import { getAIConfigRequiredMessage, isAIConfigReady } from '../../../lib/ai/config-readiness'
 import type { PromptTemplate, PromptExample } from '../../../lib/types/prompt'
 import { useDialog } from '../../shared/Dialog'
 import { useToast } from '../../shared/Toast'
@@ -64,8 +65,8 @@ export default function PromptExamplesEditor({ template, onChange, readOnly }: P
   /** 让 AI 自动生成示例：用 meta-prompt 让 AI 基于模板生成 2 条示例 */
   const generateWithAI = async (kind: 'good' | 'bad') => {
     if (readOnly) return
-    if (!aiConfig.apiKey) {
-      toast.error('请先在「设置 → AI 配置」里配 API Key')
+    if (!isAIConfigReady(aiConfig)) {
+      toast.error(getAIConfigRequiredMessage(aiConfig))
       return
     }
     setGeneratingFor(kind)

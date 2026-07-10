@@ -5,6 +5,7 @@ import { useUserStyleStore } from '../../stores/user-style'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { buildStyleLearnPrompt } from '../../lib/ai/adapters/style-adapter'
 import { chat } from '../../lib/ai/client'
+import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import type { Project, Chapter, ChapterStatus } from '../../lib/types'
 
 interface Props {
@@ -64,8 +65,8 @@ export default function StyleLearningPanel({ project }: Props) {
 
   const handleLearn = async () => {
     if (selected.length === 0) return
-    if (!aiConfig.apiKey && !['ollama', 'custom'].includes(aiConfig.provider)) {
-      setError('未配置 API Key,请先到「设置」填好模型与密钥。')
+    if (!isAIConfigReady(aiConfig)) {
+      setError(getAIConfigRequiredMessage(aiConfig))
       return
     }
     setRunning(true)

@@ -14,6 +14,7 @@ import {
   parseSemanticJudgeVerdict,
   scoreWithSemanticVerdict,
 } from '../../lib/evals/long-consistency/semantic-judge'
+import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
 
 function readStoredRecord(): EvalRunRecord | null {
@@ -163,14 +164,14 @@ export default function NS0EvalPanel() {
       <div className="mt-3 flex items-center gap-3">
         <button
           onClick={() => { void run() }}
-          disabled={running || !config.apiKey}
+          disabled={running || !isAIConfigReady(config)}
           className="px-3 py-1.5 text-sm rounded-lg bg-accent/10 text-accent hover:bg-accent/20 disabled:opacity-40"
         >
           {running ? `运行中 ${progress}` : '运行 development 集'}
         </button>
         <button
           onClick={() => { void runPaired() }}
-          disabled={running || !config.apiKey || finalHeldOutAlreadyRun}
+          disabled={running || !isAIConfigReady(config) || finalHeldOutAlreadyRun}
           className="px-3 py-1.5 text-sm rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-40"
         >
           {finalHeldOutAlreadyRun ? 'NS-1 最终盲测已锁定' : 'NS-1 最终配对 A/B'}

@@ -20,6 +20,7 @@ import { propagateChapterEditStale, analyzeEditImpact } from '../../lib/consiste
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
 import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
+import { findNextCanonicalChapter, findPreviousCanonicalChapter } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import { chat } from '../../lib/ai/client'
 import { db } from '../../lib/db/schema'
 import { buildGenreConstraintContext } from '../../lib/ai/genre-metadata'
@@ -1029,11 +1030,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             worldContext={worldCtx}
             characterContext={charCtx}
             prevChapterSummary={(() => {
-              const prev = chapters.filter(c => c.order < (currentChapter?.order || 0)).pop()
+              const prev = findPreviousCanonicalChapter(nodes, chapters, currentChapter)
               return prev?.summary || ''
             })()}
             nextChapterSummary={(() => {
-              const next = chapters.filter(c => c.order > (currentChapter?.order || 0)).shift()
+              const next = findNextCanonicalChapter(nodes, chapters, currentChapter)
               return next?.summary || ''
             })()}
             foreshadowContext={currentChapter?.id ? buildForeshadowContext(currentChapter.id, chapters, nodes) : ''}
@@ -1062,7 +1063,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           worldContext={worldCtx}
           characterContext={charCtx}
           prevChapterEnding={(() => {
-            const prev = chapters.filter(c => c.order < (currentChapter?.order || 0)).pop()
+            const prev = findPreviousCanonicalChapter(nodes, chapters, currentChapter)
             return htmlToPlainText(prev?.content || '').slice(-500)
           })()}
         />

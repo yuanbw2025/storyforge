@@ -296,7 +296,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`,
+          ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
         },
         body: JSON.stringify({
           model: config.model,

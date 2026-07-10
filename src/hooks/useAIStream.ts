@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { streamChat, type StreamResult, type AICallMeta } from '../lib/ai/client'
+import { getAIConfigRequiredMessage, isAIConfigReady } from '../lib/ai/config-readiness'
 import { useAIConfigStore } from '../stores/ai-config'
 import {
   type AIGenerationSession,
@@ -119,9 +120,9 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
       ? { ...baseConfig, ...overrideConfig }
       : baseConfig
 
-    if (!config.apiKey) {
-      const errMsg = '请先在左侧栏底部「⚙️ 设置」中配置 AI API Key，选择服务商并填入密钥'
-      console.warn('[AI] 未配置 API Key，provider:', config.provider)
+    if (!isAIConfigReady(config)) {
+      const errMsg = getAIConfigRequiredMessage(config)
+      console.warn('[AI] 未配置可用 AI 服务，provider:', config.provider)
       if (sessionKey) {
         patchShared({ error: errMsg, isStreaming: false })
         sharedAbortControllers.delete(sessionKey)

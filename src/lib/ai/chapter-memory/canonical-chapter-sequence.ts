@@ -69,3 +69,34 @@ export function resolveCanonicalChapterSequence(
 
   return { sequence, anomalies }
 }
+
+export function findPreviousCanonicalChapter(
+  outlineNodes: OutlineNode[],
+  chapters: Chapter[],
+  currentChapter: Chapter | null | undefined,
+): Chapter | undefined {
+  return findAdjacentCanonicalChapter(outlineNodes, chapters, currentChapter, -1)
+}
+
+export function findNextCanonicalChapter(
+  outlineNodes: OutlineNode[],
+  chapters: Chapter[],
+  currentChapter: Chapter | null | undefined,
+): Chapter | undefined {
+  return findAdjacentCanonicalChapter(outlineNodes, chapters, currentChapter, 1)
+}
+
+function findAdjacentCanonicalChapter(
+  outlineNodes: OutlineNode[],
+  chapters: Chapter[],
+  currentChapter: Chapter | null | undefined,
+  offset: -1 | 1,
+): Chapter | undefined {
+  if (!currentChapter) return undefined
+  const { sequence } = resolveCanonicalChapterSequence(outlineNodes, chapters)
+  const index = sequence.findIndex(entry => {
+    if (currentChapter.id != null && entry.chapter.id != null) return entry.chapter.id === currentChapter.id
+    return entry.chapter.outlineNodeId === currentChapter.outlineNodeId
+  })
+  return index >= 0 ? sequence[index + offset]?.chapter : undefined
+}

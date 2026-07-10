@@ -8,11 +8,13 @@ import { Plus, Trash2, Sparkles, ChevronDown, ChevronRight } from 'lucide-react'
 import { useDetailedOutlineStore } from '../../stores/detailed-outline'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildDetailSceneGeneratePrompt } from '../../lib/ai/adapters/detail-scene-adapter'
+import { buildDetailSceneGeneratePrompt, normalizeParsedScenes, parseEnhancedDetailSmart } from '../../lib/ai/adapters/detail-scene-adapter'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import { nanoid } from '../../lib/utils/id'
 import { adopt } from '../../lib/registry/adopt'
 import { assembleContext } from '../../lib/registry/assemble-context'
+import { useAIConfigStore } from '../../stores/ai-config'
+import { useToast } from '../shared/Toast'
 import type { DetailedScene, ScenePace } from '../../lib/types'
 
 const PACE_LABELS: Record<ScenePace, string> = {
@@ -39,6 +41,8 @@ interface Props {
 export default function ScenePanel({ projectId, outlineNodeId, chapterTitle, chapterSummary }: Props) {
   const { detailedOutlines, loadAll, getOrCreate, save } = useDetailedOutlineStore()
   const ai = useAIStream(createAISessionKey(projectId, 'detail.scene', outlineNodeId))
+  const aiConfig = useAIConfigStore(s => s.config)
+  const toast = useToast()
   const [expanded, setExpanded] = useState(false)
 
   useEffect(() => { loadAll(projectId) }, [projectId, loadAll])
@@ -150,21 +154,17 @@ export default function ScenePanel({ projectId, outlineNodeId, chapterTitle, cha
               onStop={ai.stop}
               onAccept={async (text) => {
                 try {
-                  if (!detailed || detailed.scenes.length === 0) {
-                    const newScene: DetailedScene = {
-                      sceneId: nanoid(),
-                      title: '新场景', summary: '',
-                      characterIds: [], location: '', conflict: '',
-                      pace: 'medium', estimatedWords: 0, notes: text,
-                    }
-                    await adoptScenes([newScene])
-                  } else {
-                    await adoptScenes(detailed.scenes.map((s, i) =>
-                      i === 0 ? { ...s, notes: text } : s
-                    ))
+                  const parsed = await parseEnhancedDetailSmart(text, aiConfig)
+                  const newScenes = normalizeParsedScenes(parsed?.scenes)
+                  if (newScenes.length === 0) {
+                    toast.error('未能从 AI 输出解析出场景，请重试')
+                    return
                   }
+                  await adoptScenes([...(detailed?.scenes || []), ...newScenes])
+                  toast.success(`已采纳 ${newScenes.length} 个场景`)
                 } catch (err) {
                   console.error('[ScenePanel] 采纳失败:', err)
+                  toast.error('采纳场景失败，请重试')
                 }
                 ai.reset()
               }}

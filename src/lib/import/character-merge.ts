@@ -17,6 +17,7 @@ import { db } from '../db/schema'
 import { renderPrompt } from '../ai/prompt-engine'
 import { usePromptStore } from '../../stores/prompt'
 import { useAIConfigStore } from '../../stores/ai-config'
+import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { useCharacterStore } from '../../stores/character'
 import { useImportSessionStore } from '../../stores/import-session'
 import { useImportStatusStore } from '../../stores/import-status'
@@ -72,7 +73,7 @@ export async function runCharacterMerge(args: RunCharacterMergeArgs): Promise<vo
       ...baseConfig,
       maxTokens: Math.max(baseConfig.maxTokens ?? 4096, 4096),
     }
-    if (!config.apiKey) throw new Error('未配置 AI API Key')
+    if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
 
     const output = await chatWithAbort(messages, config, signal, { category: 'import.merge-characters', projectId })
     const parsed = extractJSON(output) as { mergeGroups?: Array<{

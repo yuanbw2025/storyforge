@@ -21,6 +21,7 @@ import {
   type MergedAnalysisResult, type MergedDimension, type AIMergedCharacter,
 } from '../../lib/reference-analysis/merge-analysis'
 import { chat } from '../../lib/ai/client'
+import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useReferenceStore } from '../../stores/reference'
 import { extractJSON } from '../../lib/ai/adapters/import-adapter'
@@ -105,7 +106,7 @@ export default function AnalysisReportViewer({ reference, chunks, isHistorical }
         reference.title, reference.author || '', merged, isHistorical,
       )
       const config = useAIConfigStore.getState().config
-      if (!config.apiKey) throw new Error('未配置 AI API Key')
+      if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
       const output = await chat(
         [{ role: 'system', content: system }, { role: 'user', content: user }],
         { ...config, maxTokens: 4096 },
@@ -131,7 +132,7 @@ export default function AnalysisReportViewer({ reference, chunks, isHistorical }
       const craftTexts = collectCharacterCraftTexts(chunks)
       if (craftTexts.length === 0) throw new Error('暂无人物塑造分析可供整理')
       const config = useAIConfigStore.getState().config
-      if (!config.apiKey) throw new Error('未配置 AI API Key')
+      if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
       const { system, user } = buildCharacterMergePrompt(
         reference.title, reference.author || '', craftTexts,
       )

@@ -10,6 +10,7 @@ import { useStoryTimelineStore } from '../../stores/story-timeline'
 import { useChapterStore } from '../../stores/chapter'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat } from '../../lib/ai/client'
+import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import {
   buildStoryTimelinePrompt, parseStoryEvents, type ExtractedStoryEvent,
 } from '../../lib/ai/adapters/story-timeline-adapter'
@@ -63,7 +64,7 @@ export default function StoryTimelinePanel({ project, onOpenChapter }: Props) {
   )
 
   const handleExtract = async () => {
-    if (!aiConfig.apiKey) { setError('请先在「设置」中配置 AI API Key'); return }
+    if (!isAIConfigReady(aiConfig)) { setError(getAIConfigRequiredMessage(aiConfig)); return }
     if (writtenChapters.length === 0) { setError('还没有已写正文的章节，先去写作再提取'); return }
     setExtracting(true)
     setError(null)

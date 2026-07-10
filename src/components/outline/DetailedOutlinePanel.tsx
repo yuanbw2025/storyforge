@@ -6,7 +6,7 @@ import { useCharacterStore } from '../../stores/character'
 import { useForeshadowStore } from '../../stores/foreshadow'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildDetailSceneGeneratePrompt, buildEnhancedDetailPrompt, parseEnhancedDetailSmart } from '../../lib/ai/adapters/detail-scene-adapter'
+import { buildDetailSceneGeneratePrompt, buildEnhancedDetailPrompt, normalizeParsedScenes, parseEnhancedDetailSmart } from '../../lib/ai/adapters/detail-scene-adapter'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { batchGenerateDetails, type BatchProgress } from '../../lib/ai/batch-detail-runner'
 import AIStreamOutput from '../shared/AIStreamOutput'
@@ -212,17 +212,10 @@ export default function DetailedOutlinePanel({ project }: Props) {
 
     // 如果 AI 返回了场景，也写入
     if (parsed.scenes && parsed.scenes.length > 0) {
-      const newScenes: DetailedScene[] = parsed.scenes.map(s => ({
-        sceneId: nanoid(),
-        title: s.title,
-        summary: s.summary,
-        characterIds: filterExistingIds(s.characterIds || [], validCharacterIds),
-        location: s.location || '',
-        conflict: s.conflict || '',
-        pace: (s.pace || 'medium') as ScenePace,
-        estimatedWords: s.estimatedWords || 0,
-        notes: '',
-      }))
+      const newScenes = normalizeParsedScenes(
+        parsed.scenes,
+        ids => filterExistingIds(ids, validCharacterIds),
+      )
       patch.scenes = newScenes
     }
 
@@ -443,31 +436,25 @@ export default function DetailedOutlinePanel({ project }: Props) {
                   output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
                   onStop={ai.stop}
                   onAccept={async (text) => {
-                    // AI 输出粘贴到第一个场景的备注里，让用户参考着手动拆
-                    // 后续 P10 可以做结构化解析
                     try {
                       if (!currentChapter.id) return
-                      if (!currentDetailed || currentDetailed.scenes.length === 0) {
-                        const newScene: DetailedScene = {
-                          sceneId: nanoid(),
-                          title: '新场景', summary: '',
-                          characterIds: [], location: '', conflict: '',
-                          pace: 'medium', estimatedWords: 0, notes: text,
-                        }
-                        await adoptDetailedPatch(currentChapter.id, {
-                          scenes: [newScene],
-                          lastUsedSummary: currentChapter.summary || '',
-                        })
-                      } else {
-                        await adoptDetailedPatch(currentChapter.id, {
-                          scenes: currentDetailed.scenes.map((s, i) =>
-                            i === 0 ? { ...s, notes: text } : s
-                          ),
-                          lastUsedSummary: currentChapter.summary || '',
-                        })
+                      const parsed = await parseEnhancedDetailSmart(text, aiConfig)
+                      const newScenes = normalizeParsedScenes(
+                        parsed?.scenes,
+                        ids => filterExistingIds(ids, validCharacterIds),
+                      )
+                      if (newScenes.length === 0) {
+                        toast.error('未能从 AI 输出解析出场景，请重试')
+                        return
                       }
+                      await adoptDetailedPatch(currentChapter.id, {
+                        scenes: [...(currentDetailed?.scenes || []), ...newScenes],
+                        lastUsedSummary: currentChapter.summary || '',
+                      })
+                      toast.success(`已采纳 ${newScenes.length} 个场景`)
                     } catch (err) {
                       console.error('[DetailedOutline] 采纳失败:', err)
+                      toast.error('采纳场景失败，请重试')
                     }
                     ai.reset()
                   }}
