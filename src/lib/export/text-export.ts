@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import type { OutlineNode, Chapter } from '../types'
 import { isHtml, htmlToPlainText } from '../utils/html'
+import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 
 /** HTML → Markdown（简化规则，覆盖 TipTap StarterKit 产出的常见结构） */
 function htmlToMarkdown(html: string): string {
@@ -57,9 +58,8 @@ export async function exportProjectMarkdown(projectId: number): Promise<string> 
     db.chapters.where('projectId').equals(projectId).toArray(),
   ])
 
-  // 按大纲结构组织
-  const chapterMap = new Map<number, Chapter>()
-  chapters.forEach(ch => { chapterMap.set(ch.outlineNodeId, ch) })
+  // 按大纲结构组织。历史项目可能存在同一大纲节点多条章节记录,这里必须择优取有正文的记录。
+  const chapterMap = buildBestChapterByOutlineMap(chapters)
 
   // 构建树
   const tree = buildTree(outlineNodes)
@@ -97,8 +97,7 @@ export async function exportProjectTXT(projectId: number): Promise<string> {
     db.chapters.where('projectId').equals(projectId).toArray(),
   ])
 
-  const chapterMap = new Map<number, Chapter>()
-  chapters.forEach(ch => { chapterMap.set(ch.outlineNodeId, ch) })
+  const chapterMap = buildBestChapterByOutlineMap(chapters)
 
   const tree = buildTree(outlineNodes)
   let txt = `${project.name}\n${'='.repeat(project.name.length * 2)}\n\n`

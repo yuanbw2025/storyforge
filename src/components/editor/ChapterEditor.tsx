@@ -27,6 +27,7 @@ import { buildGenreConstraintContext } from '../../lib/ai/genre-metadata'
 import { buildStylePromptInjection } from '../../lib/ai/writing-styles'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { resolveChapterDisplayMeta } from '../../lib/outline/chapter-display'
+import { pickBestChapterForOutline } from '../../lib/chapters/selectors'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
 import { useStoryArcStore } from '../../stores/story-arc'
 import { useForeshadowStore } from '../../stores/foreshadow'
@@ -75,7 +76,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     chapters,
     currentChapter,
     selectChapter,
-    addChapter,
+    getOrCreateByOutlineNode,
     updateChapter,
     refreshChapter,
     loadAll: loadChapters,
@@ -111,6 +112,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const factAI = useAIStream()
   const editorRef = useRef<RichEditorHandle>(null)
   const memoryRebuildInFlightRef = useRef(new Set<number>())
+  const creatingChapterForOutlineRef = useRef(new Set<number>())
   const reviseReportRef = useRef<ReviewResult | null>(null)  // G8：记住上次"按报告修改"的报告，供重试
   // Phase A1: 自动流程标记
   const [autoProcessing, setAutoProcessing] = useState<'idle' | 'extracting' | 'memory'>('idle')
@@ -137,20 +139,39 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   // 如果从大纲进入，选择/创建对应章节（自动创建）
   useEffect(() => {
     if (!outlineNodeId) return
-    const existing = chapters.find(c => c.outlineNodeId === outlineNodeId)
+    const existing = pickBestChapterForOutline(chapters.filter(c => c.outlineNodeId === outlineNodeId))
     if (existing?.id) {
       selectChapter(existing.id)
-    } else {
-      // 自动创建 chapter 记录
-      const node = nodes.find(n => n.id === outlineNodeId)
-      if (node) {
-        addChapter({
-          projectId: project.id!, outlineNodeId, title: node.title,
-          content: '', wordCount: 0, status: 'outline', order: chapters.length, notes: '',
-        })
-      }
+      return
     }
-  }, [outlineNodeId, chapters, selectChapter, nodes, addChapter, project.id])
+
+    const node = nodes.find(n => n.id === outlineNodeId)
+    if (!node || creatingChapterForOutlineRef.current.has(outlineNodeId)) return
+
+    creatingChapterForOutlineRef.current.add(outlineNodeId)
+    void getOrCreateByOutlineNode(project.id!, outlineNodeId, {
+      title: node.title,
+      content: '', wordCount: 0, status: 'outline', order: chapters.length, notes: '',
+    })
+      .then(chapter => {
+        if (chapter.id) selectChapter(chapter.id)
+      })
+      .finally(() => {
+        creatingChapterForOutlineRef.current.delete(outlineNodeId)
+      })
+  }, [outlineNodeId, chapters, selectChapter, nodes, getOrCreateByOutlineNode, project.id])
+
+  const persistCurrentEditorContent = useCallback(async (): Promise<{ html: string; plain: string; wordCount: number } | null> => {
+    if (!currentChapter?.id) return null
+    const html = editorRef.current?.getHTML() ?? content
+    const plain = editorRef.current?.getPlainText() ?? htmlToPlainText(html)
+    const wc = countWords(plain)
+    await updateChapter(currentChapter.id, { content: html, wordCount: wc })
+    setContent(html)
+    setPlainText(plain)
+    setSavedContent(html)
+    return { html, plain, wordCount: wc }
+  }, [content, currentChapter?.id, updateChapter])
 
   // 切换章节：同步到本地 state（RichEditor 会基于 value 重建内容）
   useEffect(() => {
@@ -240,10 +261,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!outlineNodeId) return
     const node = nodes.find(n => n.id === outlineNodeId)
     if (!node) return
-    await addChapter({
-      projectId: project.id!, outlineNodeId, title: node.title,
+    const chapter = await getOrCreateByOutlineNode(project.id!, outlineNodeId, {
+      title: node.title,
       content: '', wordCount: 0, status: 'outline', order: chapters.length, notes: '',
     })
+    if (chapter.id) selectChapter(chapter.id)
   }
 
   // AI 操作 —— 所有 AI 交互都基于纯文本
@@ -555,8 +577,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setAnalyzingImpact(true)
     try {
       // 先把当前正文真正落盘，再据落盘正文判断证据是否失效
-      const wc = countWords(htmlToPlainText(content))
-      await updateChapter(currentChapter.id, { content, wordCount: wc })
+      await persistCurrentEditorContent()
       const { demotedFacts } = await propagateChapterEditStale(project.id, currentChapter.id)
       const { factsFromChapter, downstreamChapterIds } = await analyzeEditImpact(project.id, currentChapter.id)
       const parts = [
@@ -621,11 +642,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!currentChapter?.id || !plainText.trim() || autoProcessing === 'memory') return
     const chapterId = currentChapter.id
     const chapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
-    const sourceHtml = editorRef.current?.getHTML() ?? content
-    const sourceText = editorRef.current?.getPlainText() ?? plainText
-    await updateChapter(chapterId, { content: sourceHtml, wordCount: countWords(sourceText) })
-    setSavedContent(sourceHtml)
-    await handleChapterMemory({ chapterId, chapterTitle, chapterContent: sourceHtml })
+    const persisted = await persistCurrentEditorContent()
+    if (!persisted) return
+    await handleChapterMemory({ chapterId, chapterTitle, chapterContent: persisted.html })
   }
 
   const handleConfirmActualProgress = async () => {
@@ -760,6 +779,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         content: fullHtml,
         wordCount: countWords(fullText),
       })
+      setContent(fullHtml)
+      setPlainText(fullText)
       setSavedContent(fullHtml)
       void handleAutoPostGenerate({
         chapterId: acceptedChapterId,
@@ -837,7 +858,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-text-primary">
             <Eye className="w-3.5 h-3.5" /> 上下文
           </button>
-          <button onClick={() => currentChapter.id && updateChapter(currentChapter.id, { content, wordCount })}
+          <button onClick={() => { void persistCurrentEditorContent() }}
             className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-accent">
             <Save className="w-3.5 h-3.5" /> 保存
           </button>

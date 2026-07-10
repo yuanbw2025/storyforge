@@ -7,6 +7,7 @@
  */
 import { db } from '../db/schema'
 import { htmlToPlainText } from '../utils/html'
+import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import type { OutlineNode, Chapter } from '../types'
 
 const SEPARATOR = '\n\n---\n\n'
@@ -100,10 +101,7 @@ export async function generateContextSnapshot(projectId: number): Promise<string
   // ── 大纲 + 章节摘要 ──
   if (outlineNodes.length) {
     const sorted = outlineNodes.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    const chapterMap = new Map<number, Chapter>()
-    for (const ch of chapters) {
-      if (ch.outlineNodeId) chapterMap.set(ch.outlineNodeId, ch)
-    }
+    const chapterMap = buildBestChapterByOutlineMap(chapters)
     sections.push(buildOutlineSection(sorted, chapterMap))
   }
 

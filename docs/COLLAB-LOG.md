@@ -985,3 +985,33 @@ WPS 普通云盘文件夹 `storyforge故事熔炉/真实一致性结构图_20260
 当前未合 main;待验证与 GitHub 回复完成后推送交 Claude 审。
 
 👉 球在 Claude:请审本轮是否同意“#24 参考重写而非直接 merge”以及 #19/#21/#23 的回复口径。
+
+### [2026-07-10] Codex · REPORT · CF-20260703-10 章节保存/导出空章根因修复 / 分支 `codex/pr24-triage-fixes-20260710`
+
+按作者要求,处理“Markdown/TXT 导出只有大纲、章节正文导不出”的已确认代码风险。本轮只修确定的底层 bug,没有擅自把“章纲/细纲文案导出为正文”做成新功能。
+
+本次完成:
+- 新增 `src/lib/chapters/selectors.ts`,统一 `pickBestChapterForOutline()` / `buildBestChapterByOutlineMap()`。历史数据里同一 `outlineNodeId` 有多条 `chapters` 记录时,优先选择真正有正文、有效字数更大、更新时间更新的记录,而不是让遍历顺序或最低 id 决定。
+- `text-export.ts` 的 Markdown/TXT 导出改用同一择优 map,修复“有正文记录被重复空章覆盖,最终导出只剩大纲/空章”的根因。
+- `ChaptersListPanel`、`context-snapshot`、`resolveCanonicalChapterSequence()` 同步接入同一择优规则,避免章节列表 0 字、上下文快照/连续性链路拿错空记录。
+- `useChapterStore` 新增 `getOrCreateByOutlineNode()` 事务入口:进入章节时先按 DB 查同一大纲节点已有记录并择优返回,没有才创建;`ChapterEditor` 自动创建与“创建章节并开始写作”改走该入口,并加 in-flight guard,降低重复章节记录继续产生的概率。
+- `ChapterEditor` 抽出 `persistCurrentEditorContent()`:保存按钮、影响分析、刷新章节记忆都直接从 `editorRef.current.getHTML()/getPlainText()` 取最新富文本内容落库,不再依赖可能滞后的 React state。
+- AI 采纳生成/续写后的落库同时同步本地 `content/plainText/savedContent`,避免 UI 字数/未保存判断短暂错位。
+- 新增回归测试 `R-CF20260703-10-chapter-save-export`:构造同一大纲节点“一条有正文、一条空重复章”,锁定择优、canonical 序列异常标记、Markdown/TXT 导出正文不丢。
+- 同步生成 `docs/AI-FUNCTIONS-MANUAL.generated.md`(仅行号/基准 commit 更新)。
+
+未做/需产品决策:
+- 当前 Markdown/TXT 的定义仍是“正文导出”:只导 `chapters.content`。如果作者希望“章纲/细纲里的场景、开头衔接、结尾悬念也可导出”,这属于新增导出模式/选项设计,本轮未擅自改,建议另立方案后审。
+- 本轮不做历史重复章节的自动合并/删除,只做读路径择优与新建入口防重复;若要一键清理历史重复记录,需另做数据维护方案,避免误删用户手稿。
+
+验证已跑:
+- `npx tsc --noEmit` → 通过。
+- `npm run build` → 通过。
+- `npx vitest run` → 103 files / 369 tests passed。
+- `npm run check:architecture` → 通过。
+- `npm run check:required-tables` → 通过(42 tables)。
+- `npm run check:ai-manual` → 通过。
+- `git diff --check` → 通过。
+- 内置预览浏览器打开 `http://127.0.0.1:1111/storyforge/workspace/1` → 章节页正常渲染,可见章节正文编辑器和“保存”按钮。
+
+👉 球在 Claude:请审本轮是否同意“先择优读取 + 防重复创建 + 保存读 editor ref”的根因修复范围;并判断是否需要把“章纲/细纲另行导出”列为新功能方案。

@@ -11,6 +11,7 @@ import { useChapterStore } from '../../stores/chapter'
 import PanelLayout from '../shared/PanelLayout'
 import ScenePanel from '../outline/ScenePanel'
 import ChapterEditor from './ChapterEditor'
+import { buildBestChapterByOutlineMap } from '../../lib/chapters/selectors'
 import type { Project, ChapterStatus } from '../../lib/types'
 
 interface Props {
@@ -61,6 +62,7 @@ export default function ChaptersListPanel({ project, initialNodeId }: Props) {
         .sort((a, b) => a.order - b.order),
     }))
   }, [nodes])
+  const chapterByOutline = useMemo(() => buildBestChapterByOutlineMap(chapters), [chapters])
 
   // 自动展开包含选中章节的卷
   useEffect(() => {
@@ -130,7 +132,7 @@ export default function ChaptersListPanel({ project, initialNodeId }: Props) {
                 {/* 章节列表 */}
                 {volExpanded && grp.chapters.map((ch, idx) => {
                   const active = selectedNodeId === ch.id
-                  const chRec = chapters.find(c => c.outlineNodeId === ch.id)
+                  const chRec = ch.id != null ? chapterByOutline.get(ch.id) : undefined
                   const status = chRec?.status || 'outline'
                   const wc = chRec?.wordCount || 0
                   return (

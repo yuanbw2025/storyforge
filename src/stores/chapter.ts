@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import { detachTemporalFactsForDeletedChapters } from '../lib/fact-ledger/lifecycle'
+import { pickBestChapterForOutline } from '../lib/chapters/selectors'
 import { transactionTablesFor } from '../lib/registry/lifecycle'
 import type { Chapter } from '../lib/types'
 
@@ -12,6 +13,11 @@ interface ChapterStore {
   loadAll: (projectId: number) => Promise<void>
   selectChapter: (id: number) => void
   addChapter: (ch: Omit<Chapter, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
+  getOrCreateByOutlineNode: (
+    projectId: number,
+    outlineNodeId: number,
+    create: Omit<Chapter, 'id' | 'projectId' | 'outlineNodeId' | 'createdAt' | 'updatedAt'>,
+  ) => Promise<Chapter>
   updateChapter: (id: number, data: Partial<Chapter>) => Promise<void>
   /** adopt()/事务写回后只刷新内存，不重复写数据库。 */
   refreshChapter: (id: number) => Promise<void>
@@ -51,6 +57,38 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
     const withId = { ...newCh, id }
     set({ chapters: [...get().chapters, withId] })
     return id
+  },
+
+  getOrCreateByOutlineNode: async (projectId, outlineNodeId, create) => {
+    const chapter = await db.transaction('rw', db.chapters, async () => {
+      const existing = await db.chapters
+        .where('outlineNodeId')
+        .equals(outlineNodeId)
+        .and(row => row.projectId === projectId)
+        .toArray()
+      const best = pickBestChapterForOutline(existing)
+      if (best?.id) return best
+
+      const ts = now()
+      const newChapter: Chapter = {
+        ...create,
+        projectId,
+        outlineNodeId,
+        createdAt: ts,
+        updatedAt: ts,
+      }
+      const id = await db.chapters.add(newChapter) as number
+      return { ...newChapter, id }
+    })
+
+    const current = get().chapters
+    const known = current.some(row => row.id === chapter.id)
+    set({
+      chapters: known
+        ? current.map(row => row.id === chapter.id ? chapter : row)
+        : [...current, chapter],
+    })
+    return chapter
   },
 
   updateChapter: async (id, data) => {
