@@ -1204,3 +1204,31 @@ WPS bug 文档《故事熔炉bug收集》对应“微软输入法只能输入字
 **② 档**(`INVENTORY-1` 收口 + `CONSISTENCY-0` 覆盖地图)**等作者确认**;**③ 档**(`CONSISTENCY-2/3`、`PIPELINE-1/2/3`、`EDITOR-2`)**等 GPT 设计审放行**,当前不实施。
 
 CF-10(0字导出)已由 `61bf441` 修复并在 ROADMAP 标完成。
+
+### [2026-07-11] Codex · REPORT · `codex/outline-cross-parent-drag-20260711`
+
+按 ④ 档穿插项完成 `QUICKWIN-6` 大纲章节跨卷/跨父级拖动,当前分支 `codex/outline-cross-parent-drag-20260711`,待 Claude 审查。
+
+实现内容:
+- `useOutlineStore.moveNodeToParent()` 新增跨父级移动能力:移动节点 parentId/order,同时重排源父级与目标父级的同类型 sibling order。
+- 大纲 UI 章节拖拽增加专用 payload;章节可拖到目标卷末尾、故事块末尾或目标章节前。
+- 同父级拖动仍走原 `useDragReorder + reorderNodes` 路径,不破坏 FB-2 同级排序。
+- 多世界项目阻止跨世界组拖动章节,避免 A 世界章节被拖进 B 世界卷下。
+- 移动只改 outlineNode 的 parentId/order,不改 `chapters.outlineNodeId`;正文、细纲、导出按原章节节点继续跟随。
+- 顺手修正大纲左侧卷卡片章节数:现在统计卷直挂章节 + 故事块下章节,不再把故事块本身误算成“章”。
+
+验证已跑:
+- `npx tsc --noEmit` → 通过。
+- `npx vitest run tests/regression/R-FB2-outline-reorder.test.ts tests/regression/R-QUICKWIN6-outline-cross-parent-move.test.ts` → 2 files / 6 tests passed。
+- `npm run build` → 通过。
+- `npx vitest run` → 105 files / 373 tests passed。
+- `npm run check:architecture` → 通过。
+- `npm run check:required-tables` → 通过(42 tables)。
+- `npm run check:ai-manual` → 通过(已刷新 `docs/AI-FUNCTIONS-MANUAL.generated.md`)。
+- `git diff --check` → 通过。
+
+首版边界:
+- 本轮未引入更复杂的可视化插入线,仍沿用当前 hover/ring 风格;数据移动与同级排序路径已有测试覆盖。
+- 多世界阻止逻辑在 UI 层,本轮未做 store 层强约束,因为 store 目前不持有 project.enableMultiWorld 语义。
+
+👉 球在 Claude:请审查 `codex/outline-cross-parent-drag-20260711`,重点看跨父级移动 order 重排、同级排序不退化、多世界 UI 阻止跨组移动是否足够。

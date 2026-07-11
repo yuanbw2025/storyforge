@@ -22,6 +22,11 @@ interface OutlineStore {
     siblingIds: number[],
     index: number,
   ) => Promise<number>
+  /**
+   * 跨父级移动节点（QUICKWIN-6）。用于把章节从卷 A 拖进卷 B / 故事块,
+   * 并同时重排源父级与目标父级的同类型 sibling order。
+   */
+  moveNodeToParent: (id: number, parentId: number | null, index: number) => Promise<void>
 }
 
 const now = () => Date.now()
@@ -126,5 +131,57 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
     next.splice(clamped, 0, newId)
     await get().reorderNodes(next)
     return newId
+  },
+
+  moveNodeToParent: async (id, parentId, index) => {
+    const current = get().nodes.find(n => n.id === id) ?? await db.outlineNodes.get(id)
+    if (!current) return
+    if (current.parentId === parentId) {
+      const siblingIds = get().nodes
+        .filter(n => n.parentId === parentId && n.type === current.type && n.id != null)
+        .sort((a, b) => a.order - b.order)
+        .map(n => n.id!)
+      const next = siblingIds.filter(item => item !== id)
+      next.splice(Math.max(0, Math.min(index, next.length)), 0, id)
+      await get().reorderNodes(next)
+      return
+    }
+
+    const ts = now()
+    const sourceSiblings = get().nodes
+      .filter(n => n.parentId === current.parentId && n.type === current.type && n.id != null && n.id !== id)
+      .sort((a, b) => a.order - b.order)
+      .map(n => n.id!)
+    const targetSiblings = get().nodes
+      .filter(n => n.parentId === parentId && n.type === current.type && n.id != null && n.id !== id)
+      .sort((a, b) => a.order - b.order)
+      .map(n => n.id!)
+    const targetIndex = Math.max(0, Math.min(index, targetSiblings.length))
+    targetSiblings.splice(targetIndex, 0, id)
+
+    await db.transaction('rw', db.outlineNodes, async () => {
+      await db.outlineNodes.update(id, { parentId, order: targetIndex, updatedAt: ts })
+      for (let order = 0; order < sourceSiblings.length; order++) {
+        await db.outlineNodes.update(sourceSiblings[order], { order, updatedAt: ts })
+      }
+      for (let order = 0; order < targetSiblings.length; order++) {
+        await db.outlineNodes.update(targetSiblings[order], { order, updatedAt: ts })
+      }
+    })
+
+    const sourceOrder = new Map(sourceSiblings.map((nodeId, order) => [nodeId, order]))
+    const targetOrder = new Map(targetSiblings.map((nodeId, order) => [nodeId, order]))
+    set({
+      nodes: get().nodes.map(n => {
+        if (n.id === id) return normalizeOutlineNode({ ...n, parentId, order: targetIndex, updatedAt: ts })
+        if (n.id != null && sourceOrder.has(n.id)) {
+          return normalizeOutlineNode({ ...n, order: sourceOrder.get(n.id)!, updatedAt: ts })
+        }
+        if (n.id != null && targetOrder.has(n.id)) {
+          return normalizeOutlineNode({ ...n, order: targetOrder.get(n.id)!, updatedAt: ts })
+        }
+        return n
+      }),
+    })
   },
 }))
