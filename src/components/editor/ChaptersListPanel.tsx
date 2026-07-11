@@ -5,12 +5,14 @@
  * 右侧编辑区：场景细纲 + 正文编辑器
  */
 import { useState, useEffect, useMemo } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { useOutlineStore } from '../../stores/outline'
 import { useChapterStore } from '../../stores/chapter'
+import { useCharacterStore } from '../../stores/character'
 import PanelLayout from '../shared/PanelLayout'
 import ScenePanel from '../outline/ScenePanel'
 import ChapterEditor from './ChapterEditor'
+import FindReplacePanel from './FindReplacePanel'
 import { buildBestChapterByOutlineMap } from '../../lib/chapters/selectors'
 import type { Project, ChapterStatus } from '../../lib/types'
 
@@ -39,13 +41,27 @@ const STATUS_DOT: Record<ChapterStatus, string> = {
 export default function ChaptersListPanel({ project, initialNodeId }: Props) {
   const { nodes, loadAll: loadOutline } = useOutlineStore()
   const { chapters, loadAll: loadChapters } = useChapterStore()
+  const loadCharacters = useCharacterStore(state => state.loadAll)
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(initialNodeId ?? null)
   const [expandedVols, setExpandedVols] = useState<Set<number>>(new Set())
+  const [showFindReplace, setShowFindReplace] = useState(false)
 
   useEffect(() => {
     loadOutline(project.id!)
     loadChapters(project.id!)
-  }, [project.id, loadOutline, loadChapters])
+    loadCharacters(project.id!)
+  }, [project.id, loadOutline, loadChapters, loadCharacters])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'f') return
+      event.preventDefault()
+      setShowFindReplace(true)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // 外部传入的 initialNodeId 变化时同步
   useEffect(() => {
@@ -185,8 +201,33 @@ export default function ChaptersListPanel({ project, initialNodeId }: Props) {
     >
       {selectedNode ? (
         <div className="h-full flex flex-col">
+          <div className="px-4 pt-4">
+            <div className="mb-2 flex justify-end">
+              <button
+                onClick={() => setShowFindReplace(value => !value)}
+                className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs transition-colors ${
+                  showFindReplace
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border bg-bg-elevated text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <Search className="h-3.5 w-3.5" />
+                查找替换
+              </button>
+            </div>
+            {showFindReplace && (
+              <FindReplacePanel
+                projectId={project.id!}
+                chapters={chapters}
+                outlineNodes={nodes}
+                selectedOutlineNodeId={selectedNodeId}
+                onSelectOutlineNode={setSelectedNodeId}
+                onClose={() => setShowFindReplace(false)}
+              />
+            )}
+          </div>
           {/* 场景细纲（可折叠） */}
-          <div className="px-4 pt-4 pb-2">
+          <div className="px-4 pt-2 pb-2">
             <ScenePanel
               projectId={project.id!}
               outlineNodeId={selectedNode.id!}

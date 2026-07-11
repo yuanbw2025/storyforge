@@ -1260,4 +1260,35 @@ CF-10(0字导出)已由 `61bf441` 修复并在 ROADMAP 标完成。
 - Codex 预览浏览器的自动 `drag` 指令仍无法触发该页面原生 HTML5 drag/drop,对原同级排序也不生效,因此不冒充 UI 手测通过。
 - 当前开发服务器已切到修复分支并加载 `/storyforge/workspace/2`;需要作者按同一路径再拖一次做最终人工 UI 确认。若仍回弹,继续定位,不合 main。
 
-👉 球在作者:请在当前预览页抓住章节行首手柄,拖到左侧「第2卷」整行并松手;确认左侧变为第1卷 2 章 / 第2卷 1 章。确认后球到 Claude 审查。
+作者于 2026-07-13 按上述真实路径复测确认跨卷拖拽成功,UI 用户路径闭环。
+
+👉 球在 Claude:请审查该分支；作者已授权验证通过后合入 main 并发布。
+
+### [2026-07-11] Codex · REPORT · `codex/editor-find-replace-20260711`
+
+按 ① 档施工顺序完成 `EDITOR-1` 全书查找替换首版,当前在分支 `codex/editor-find-replace-20260711`,待 Claude 审查。
+
+实现内容:
+- 章节页新增「查找替换」面板与 Ctrl/Cmd+F 快捷入口;打开后查找框自动聚焦,命中区支持上一处 / 下一处循环跳转。
+- 支持单章 / 全书查找,单处 / 本章全部 / 全书替换,大小写敏感、全字匹配、正则替换(`$1` / `$&` / `$$`)。
+- 全书目标按 canonical 大纲顺序生成,并复用 `buildBestChapterByOutlineMap()` 只处理同一大纲节点下的 canonical 正文章节,避免历史重复空章节被误搜/误替换。
+- 富文本替换按 DOM text node 执行,保留段落、加粗等标签,不做整段 HTML 字符串替换。
+- 批量替换安全阀:替换前确认「N 处 / M 章」,执行前创建项目快照;本次会话保存 undo patch,可一键撤销刚才替换。
+- 全字匹配增加角色名长词保护,用于避免把「李明轩」里的「李明」误替换。
+
+首版边界:
+- 查找替换基于已保存正文;如果当前 TipTap 编辑器里有未保存草稿,需要先点正文页「保存」。UI 已在确认框提示。
+- 不匹配跨富文本节点的连续文本,例如 `李<strong>明</strong>` 搜 `李明` 首版不会命中;单个 text node 内的富文本标签会保留。
+- 本轮不做按卷 / 世界组限定,ROADMAP 原文标为可选项。
+
+验证闸门:
+- `npx tsc --noEmit` → 通过。
+- `npx vitest run tests/regression/R-EDITOR1-find-replace.test.ts` → 9 tests passed。
+- `npm run build` → 通过。
+- `npx vitest run` → 105 files / 379 tests passed。
+- `npm run check:architecture` → 通过。
+- `npm run check:required-tables` → 通过(42 tables)。
+- `npm run check:ai-manual` → 通过。
+- `git diff --check` → 通过。
+
+👉 球在 Claude:请审查 `codex/editor-find-replace-20260711` 的 EDITOR-1 实现,重点看批量替换数据安全、canonical 章节目标选择、富文本 text-node 替换边界是否可接受。
