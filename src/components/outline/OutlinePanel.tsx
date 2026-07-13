@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import type { DragEvent as ReactDragEvent } from 'react'
 import { Plus, Trash2, Sparkles, ChevronRight, ChevronDown, Check, X, LayoutList, Layers, Loader2, GripVertical, CornerDownRight } from 'lucide-react'
 import { useOutlineStore } from '../../stores/outline'
 import { useDragReorder, type ItemDnD } from './useDragReorder'
@@ -32,68 +31,14 @@ import { useToast } from '../shared/Toast'
 import type { Project, StoryStructure } from '../../lib/types'
 import { STORY_STRUCTURES } from '../../lib/types/outline'
 import OutlineGenerationBasis from './OutlineGenerationBasis'
-
-const OUTLINE_CHAPTER_DRAG_MIME = 'application/x-storyforge-outline-chapter'
-
-interface ChapterDragPayload {
-  chapterId: number
-  sourceParentId: number | null
-}
-
-function readChapterDragPayload(event: ReactDragEvent): ChapterDragPayload | null {
-  const raw = event.dataTransfer?.getData(OUTLINE_CHAPTER_DRAG_MIME) ?? ''
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as Partial<ChapterDragPayload>
-    const chapterId = Number(parsed.chapterId)
-    const sourceParentId = parsed.sourceParentId == null ? null : Number(parsed.sourceParentId)
-    if (!Number.isFinite(chapterId)) return null
-    if (sourceParentId != null && !Number.isFinite(sourceParentId)) return null
-    return { chapterId, sourceParentId }
-  } catch {
-    const legacyId = Number(raw)
-    return Number.isFinite(legacyId) ? { chapterId: legacyId, sourceParentId: null } : null
-  }
-}
-
-function hasChapterDragPayload(event: ReactDragEvent): boolean {
-  return Array.from(event.dataTransfer?.types ?? []).includes(OUTLINE_CHAPTER_DRAG_MIME)
-}
-
-type GetActiveChapterDrag = () => ChapterDragPayload | null
-
-export function chapterDropProps({
-  targetParentId,
-  targetIndex,
-  onMoveChapter,
-  getActiveChapterDrag,
-  clearActiveChapterDrag,
-}: {
-  targetParentId: number
-  targetIndex: number
-  onMoveChapter: (chapterId: number, targetParentId: number, index: number) => Promise<void>
-  getActiveChapterDrag: GetActiveChapterDrag
-  clearActiveChapterDrag: () => void
-}) {
-  return {
-    onDragOver: (event: ReactDragEvent) => {
-      if (!getActiveChapterDrag() && !hasChapterDragPayload(event)) return
-      event.preventDefault()
-      event.dataTransfer.dropEffect = 'move'
-    },
-    onDrop: async (event: ReactDragEvent) => {
-      const payload = readChapterDragPayload(event) ?? getActiveChapterDrag()
-      if (!payload) return
-      event.preventDefault()
-      event.stopPropagation()
-      try {
-        await onMoveChapter(payload.chapterId, targetParentId, targetIndex)
-      } finally {
-        clearActiveChapterDrag()
-      }
-    },
-  }
-}
+import {
+  OUTLINE_CHAPTER_DRAG_MIME,
+  chapterDropProps,
+  hasChapterDragPayload,
+  readChapterDragPayload,
+  type ChapterDragPayload,
+  type GetActiveChapterDrag,
+} from './chapter-drag'
 
 interface Props {
   project: Project

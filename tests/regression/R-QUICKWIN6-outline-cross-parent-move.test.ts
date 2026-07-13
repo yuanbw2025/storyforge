@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useOutlineStore } from '../../src/stores/outline'
-import { chapterDropProps } from '../../src/components/outline/OutlinePanel'
+import { chapterDropProps } from '../../src/components/outline/chapter-drag'
 
 async function createProject(): Promise<number> {
   return await db.projects.add({
