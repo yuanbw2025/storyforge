@@ -31,14 +31,16 @@ export function assembleWorkflowStepVars(params: {
   genres?: string
   assembledContext?: string
   worldRulesContext?: string
+  userInput?: string
 }): Record<string, string | number | undefined> {
-  const { step, prevOutput, projectName, genres, assembledContext, worldRulesContext } = params
+  const { step, prevOutput, projectName, genres, assembledContext, worldRulesContext, userInput } = params
   const ctx: Record<string, string | number | undefined> = {}
 
   ctx.projectName = projectName ?? ''
   ctx.genres = genres ?? ''
   ctx.dimension = step.label ?? ''
-  if (step.userHint) ctx.userHint = step.userHint
+  const mergedUserHint = [step.userHint?.trim(), userInput?.trim()].filter(Boolean).join('\n')
+  if (mergedUserHint) ctx.userHint = mergedUserHint
 
   // 保留 inputMapping 中非 worldContext 的特定变量(worldContext 由下方通用槽位统一处理)
   if (step.inputMapping && prevOutput) {

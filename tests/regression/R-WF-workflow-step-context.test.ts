@@ -77,4 +77,15 @@ describe('R-WF · 工作流步骤上下文整形', () => {
     expect(ctx.worldContext).toBeUndefined()
     expect(ctx.projectName).toBe('测试书')
   })
+
+  it('R-WF-6:步骤预填内容必须与配置提示一起进入 userHint', () => {
+    const ctx = assembleWorkflowStepVars({
+      step: { label: '一句话故事', userHint: '保留悬疑感' },
+      prevOutput: '',
+      projectName: '测试书',
+      genres: '悬疑',
+      userInput: '一个失忆侦探发现自己是凶手。',
+    })
+    expect(ctx.userHint).toBe('保留悬疑感\n一个失忆侦探发现自己是凶手。')
+  })
 })

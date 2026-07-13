@@ -27,7 +27,7 @@ interface RunnerProps {
   onClose: () => void
 }
 
-interface StepResult {
+export interface StepResult {
   stepId: string
   output: string
   status: 'pending' | 'running' | 'done' | 'skipped' | 'failed'
@@ -248,12 +248,8 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
       genres: project?.genre,
       assembledContext: assembledText,
       worldRulesContext: worldRulesText,
+      userInput: userInputsRef.current.get(step.stepId),
     })
-    // FB-7:把用户为本步输入的内容并入 userHint(在用户已写的基础上生成/扩展)
-    const userInput = userInputsRef.current.get(step.stepId)?.trim()
-    if (userInput) {
-      ctx.userHint = [ctx.userHint, userInput].filter(Boolean).join('\n')
-    }
     return ctx
   }
 
@@ -408,7 +404,7 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
   )
 }
 
-function StepCard({
+export function StepCard({
   step, index, result, isCurrent, onSkip, onRetry,
   onSave, onUserInputChange, saved, hasProject,
 }: {
