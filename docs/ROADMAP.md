@@ -2538,7 +2538,7 @@ for each character:
 
 ## 🟡 HEALTH-5（P2 · 低优先 · 穿插做）— 死代码清理 + i18n 渐进迁移 + 包体积
 
-> **2026-07-13 确定性清理进度**：全仓按生产 / 测试引用复核后，删除两个真实孤儿：未挂载到任何面板的 `EventTimeline.tsx`，以及从未接入 UI / prompt / store 的 `methodology.ts`。保留旧 `Project.methodologyId` 可选字段，避免把代码清理误做成用户数据迁移。构建产物复核显示首屏应用块约 **200 KB gzip**，已低于本条 `<300 KB gzip` 目标；另一个约 131 KB gzip 的大块是 `react-force-graph-2d`，只随关系面板动态加载，章节编辑器、导入、地图等重面板也均为 lazy chunk，因此不为数字继续制造碎片化分包。WorldMap 的 `3D Labs` 是已明确标识且禁用的实验入口，不当死代码误删。**本条剩余仅为 i18n 产品里程碑**，需等是否做英文版的产品决策；当前中文版本不盲目迁 100+ 组件。
+> **2026-07-13 确定性清理进度**：全仓按生产 / 测试引用复核后，删除五个真实孤儿：未挂载到任何面板的 `EventTimeline.tsx`、从未接入 UI / prompt / store 的 `methodology.ts`，以及已被 `world-map/engine/*` 取代的旧 Canvas 地图 `interaction/perlin/renderer.ts`。保留旧 `Project.methodologyId` 可选字段，避免把代码清理误做成用户数据迁移。新增 `check:source-reachability`，从生产入口沿静态 / 动态 import 检查源码文件可达性并接入 CI；i18n 脚手架作为产品明确保留的未来入口单独声明。构建产物复核显示首屏应用块约 **200 KB gzip**，已低于本条 `<300 KB gzip` 目标；另一个约 131 KB gzip 的大块是 `react-force-graph-2d`，只随关系面板动态加载，章节编辑器、导入、地图等重面板也均为 lazy chunk，因此不为数字继续制造碎片化分包。WorldMap 的 `3D Labs` 是已明确标识且禁用的实验入口，不当死代码误删。**本条剩余仅为 i18n 产品里程碑**，需等是否做英文版的产品决策；当前中文版本不盲目迁 100+ 组件。
 
 **问题**：可能存在死代码(WorldMap3DCanvas)、108 组件硬编码中文未 i18n、主包仍偏大(gzip 415KB)。
 
