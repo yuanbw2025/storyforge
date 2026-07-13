@@ -1,7 +1,7 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it } from 'vitest'
-import { OutlineGenerationBasis } from '../../src/components/outline/OutlinePanel'
+import OutlineGenerationBasis from '../../src/components/outline/OutlineGenerationBasis'
 import type { AssembleContextResult } from '../../src/lib/registry/types'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
