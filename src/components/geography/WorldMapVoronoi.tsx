@@ -114,22 +114,6 @@ export default function WorldMapVoronoi({ config, onMapGenerated }: Props) {
     }
   }, [configKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── 重新渲染（不重新生成） ──
-  const rerender = useCallback(() => {
-    const md = mapDataRef.current
-    if (!md) return
-    const dpr = window.devicePixelRatio || 1
-    const offscreen = document.createElement('canvas')
-    renderMap(offscreen, md, {
-      scale: Math.min(dpr, 3),
-      kmPerPixel: kmPerPixelRef.current,
-      stylePreset: stylePresetRef.current,
-      layers: layersRef.current,
-    })
-    offscreenRef.current = offscreen
-    paint()
-  }, [])
-
   // ── 绘制到显示 canvas ──
   const paint = useCallback(() => {
     const canvas = canvasRef.current
@@ -159,6 +143,22 @@ export default function WorldMapVoronoi({ config, onMapGenerated }: Props) {
     const mapH = md?.height || offscreen.height
     ctx.drawImage(offscreen, 0, 0, offscreen.width, offscreen.height, 0, 0, mapW, mapH)
   }, [])
+
+  // ── 重新渲染（不重新生成） ──
+  const rerender = useCallback(() => {
+    const md = mapDataRef.current
+    if (!md) return
+    const dpr = window.devicePixelRatio || 1
+    const offscreen = document.createElement('canvas')
+    renderMap(offscreen, md, {
+      scale: Math.min(dpr, 3),
+      kmPerPixel: kmPerPixelRef.current,
+      stylePreset: stylePresetRef.current,
+      layers: layersRef.current,
+    })
+    offscreenRef.current = offscreen
+    paint()
+  }, [paint])
 
   useEffect(() => {
     if (!mapData) return

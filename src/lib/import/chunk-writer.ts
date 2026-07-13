@@ -165,7 +165,7 @@ export async function applyChunkResult(
       if (n.type === 'volume' && n.parentId === null && n.id != null) {
         volumeMap.set(n.title, n.id)
         // 也存去掉前导空格和装饰符号的版本
-        const clean = n.title.replace(/^[\s　【】\[\]]+|[\s　【】\[\]]+$/g, '')
+        const clean = n.title.replace(/^[\s\u3000【】[\]]+|[\s\u3000【】[\]]+$/g, '')
         if (clean !== n.title) volumeMap.set(clean, n.id)
       }
     }

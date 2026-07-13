@@ -11,7 +11,7 @@ import type { ImportSession } from '../types'
 const CHARACTER_LIKE_SYSTEM_WORDS = /精灵|器灵|人格|助手|伙伴|化身|宿主|管理员|管家/
 
 function normalizeConceptName(name: string): string {
-  return name.replace(/[\s　:：\-—_【】\[\]（）()]/g, '').trim()
+  return name.replace(/[\s\u3000:：—_【】[\]（）()-]/g, '').trim()
 }
 
 function isNonCharacterConceptName(name: string): boolean {

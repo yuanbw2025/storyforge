@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { PROJECT_TABLES, REGISTRY_BY_NAME } from '../../src/lib/registry/project-tables'
+import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
 import { checkRegistry } from '../../src/lib/registry/validate'
 import {
   projectScopedTables, worldScopedTables, exportableTables,

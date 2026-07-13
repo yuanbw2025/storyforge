@@ -2177,7 +2177,8 @@ for each character:
 - **做法**（§11.5 决策③）：装 ESLint 9 + typescript-eslint 8 + eslint-plugin-react-hooks 7 + eslint-plugin-import；扁平配置 `eslint.config.mjs`。**观察期策略**：默认全 warning（噪音大的 `no-explicit-any` 等降 warn/off）、仅 `react-hooks/rules-of-hooks` 设 error；`package.json` 加 `lint`/`lint:fix`；**`lint` 不进 `ci` 脚本**（CI 暂不因 lint fail）。
 - **现状基线**：`npm run lint` = 0 error / 29 warning（已 `--fix` 安全项，剩余为观察期允许的真实但低优先问题）。
 - **验收达成**：`npm run lint` 可跑；CI 不因 lint fail；rules-of-hooks 为 error 守住。
-- **待续**：type-aware 规则（`no-floating-promises` 等）未启用（需 type-checked config，lint 变慢）；`import/order` 已装插件未启用（避免一次性大量重排噪音）。后续清理一轮再收紧 + 接入 CI。
+- **2026-07-13 收紧完成**：清理全仓 33 条现存 warning（Set 切换无副作用表达式、Hook 稳定依赖、正则全角空格表示、无用导入/注释等），`npm run lint` 改为 `eslint . --max-warnings=0` 并接入本地 `npm run ci` 与 GitHub Actions。规则严重度仍按风险分 error/warn/off，但当前零 warning 成为硬基线，任何新 warning 都会阻断。两个刻意只随实体 ID 重置的 Hook（章节保存基线、提示词本地草稿）保留精确局部豁免并写明原因，避免为清 warning 改坏用户编辑状态。
+- **待续**：type-aware 规则（`no-floating-promises` 等）未启用（需 type-checked config，lint 变慢）；`import/order` 已装插件未启用（避免一次性大量重排噪音）。后续按收益再收紧，不一次性制造格式噪音。
 
 ### ✅ AUDIT-4（已完成 2026-06-16 · 安全）— SVG XSS 回归测试 + 清死代码
 - **核实现状（2026-06-16）**：① HTML/EPUB 导出**已随 B 段死代码清理下线** → `sanitize-html.ts` 成死代码（生产无引用），本次删除（连带删 `R-18` 里测该死功能的 `sanitizeExportHtml` 用例）；② 真正的 XSS 面是 `GeographyPanel` 用 `dangerouslySetInnerHTML` 渲染 AI 生成的 SVG 概念地图，由 `sanitize-svg.ts` 清洗——它**已是 DOM 解析 + 黑名单剔除**（非 ROADMAP 旧述的"正则式"），比正则可靠。

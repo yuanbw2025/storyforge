@@ -1,8 +1,7 @@
 // ESLint 扁平配置(AUDIT-3 · §11.5 决策③)
 //
-// 策略:观察期。`npm run lint` 供开发者本地查看,**暂不进 ci 脚本、不阻断 CI**。
-// 噪音大的规则降级为 warn/off(项目体量大,一次性全 error 会淹没真问题);
-// 仅高价值规则(react-hooks/rules-of-hooks)设 error。后续清理一轮后再逐步收紧。
+// 策略:规则严重度仍按风险分 error/warn/off,但 npm script 使用 --max-warnings=0，
+// 当前零 warning 基线进入 CI；新增 warning 也会阻断，防止观察期债务回潮。
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'

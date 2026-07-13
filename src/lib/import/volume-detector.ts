@@ -62,11 +62,11 @@ const NUM_PATTERN = `[${CN_NUM}\\d０-９]+`
  *  - 第一部 xxx / 第一篇 xxx
  */
 const VOLUME_REGEX = new RegExp(
-  `^[\\s　]*(?:` +
+  `^\\s*(?:` +
     `第\\s*${NUM_PATTERN}\\s*[卷部篇]` +    // 第X卷 / 第X部 / 第X篇
     `|[卷部篇]\\s*${NUM_PATTERN}` +          // 卷X / 部X / 篇X
     `|【第\\s*${NUM_PATTERN}\\s*[卷部篇]】` + // 【第X卷】
-  `)[\\s　：:·—\\-]*[^\\n]{0,40}$`,
+  `)[\\s：:·—-]*[^\\n]{0,40}$`,
   'gm'
 )
 
@@ -79,14 +79,14 @@ const VOLUME_REGEX = new RegExp(
  *  - Chapter 1: xxx
  */
 const CHAPTER_REGEX = new RegExp(
-  `^[\\s　]*(?:` +
+  `^\\s*(?:` +
     `第\\s*${NUM_PATTERN}\\s*[章回节]` +      // 第X章 / 第X回 / 第X节
     `|[章回节]\\s*${NUM_PATTERN}` +            // 章X / 回X
     `|【第\\s*${NUM_PATTERN}\\s*[章回节]】` +  // 【第X章】
     `|[Cc]hapter\\s*\\d+` +                    // Chapter 1
     // 非数字式的特殊章节标题（楔子/序章/引子/尾声/终章/番外/外传/后记 等）
     `|【?(?:楔子|序章|序言|序幕|引子|开篇|尾声|终章|结语|后记|番外(?:篇)?|外传|完本感言|作品相关)】?` +
-  `)[\\s　：:·—\\-]*[^\\n]{0,60}$`,
+  `)[\\s：:·—-]*[^\\n]{0,60}$`,
   'gm'
 )
 

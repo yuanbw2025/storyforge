@@ -20,7 +20,8 @@ interface Props {
 export default function CharacterDimensionPicker({ selected, onChange }: Props) {
   const toggle = (key: CharacterDimensionKey) => {
     const next = new Set(selected)
-    next.has(key) ? next.delete(key) : next.add(key)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
     onChange(next)
   }
   const applyPreset = (weight: CharacterRoleWeight) => onChange(new Set(defaultDimensionsForWeight(weight)))

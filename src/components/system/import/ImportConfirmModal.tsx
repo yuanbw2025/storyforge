@@ -56,7 +56,7 @@ export default function ImportConfirmModal({
       estRmbLow,
       estRmbHigh,
     }
-  }, [chunks, chunkSize, totalChars, estSecondsPerChunk])
+  }, [chunks, totalChars, estSecondsPerChunk])
 
   // 深层分析额外成本估算（浅层随解析免费,深层逐块深析:15k/块,每维 ~400 字 → ~5k 输出/块）
   const deepCost = useMemo(() => {

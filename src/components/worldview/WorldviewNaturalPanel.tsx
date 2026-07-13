@@ -32,8 +32,7 @@ const FIELDS = [
   { key: 'climateByRegion',  emoji: '🌦', label: '气候环境',   desc: '不同区域的气候类型、季节特征与自然灾害',                 ctxKey: 'climate',   ctxLabel: '气候环境' },
 ] as const
 
-const ALL_KEYS = ['worldStructure', 'worldDimensions', 'continentLayout', 'mountainsRivers', 'climateByRegion', 'naturalResources'] as const
-type FieldKey = typeof ALL_KEYS[number]
+type FieldKey = typeof FIELDS[number]['key'] | 'naturalResources'
 
 // 每个方面(子页) → 其专属词条分类(builtInKey)。(重镇/城池已移到人文环境;自然资源单独处理)
 const NATURAL_CODEX_KEYS: Record<string, string[] | undefined> = {

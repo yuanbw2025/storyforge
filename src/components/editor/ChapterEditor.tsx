@@ -195,7 +195,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   // 切换章节时同步 savedContent（只在章节 id 变化时）
   useEffect(() => {
     setSavedContent(currentChapter?.content || '')
-  }, [currentChapter?.id])
+  }, [currentChapter?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- 保存基线只在切章时重置，自动保存不能重置脏状态
 
   useEffect(() => {
     setCompareSourceHtml(null)

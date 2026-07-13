@@ -105,7 +105,8 @@ export default function ChaptersListPanel({ project, initialNodeId }: Props) {
   const toggleVol = (volId: number) => {
     setExpandedVols(prev => {
       const s = new Set(prev)
-      s.has(volId) ? s.delete(volId) : s.add(volId)
+      if (s.has(volId)) s.delete(volId)
+      else s.add(volId)
       return s
     })
   }

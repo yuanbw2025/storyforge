@@ -57,7 +57,7 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   useEffect(() => {
     setDraft(template)
     setDirty(false)
-  }, [template?.id])
+  }, [template?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- 只在切换模板时重建草稿，外部同模板刷新不能覆盖未保存编辑
 
   // 实时预览（draft 即使没保存也能看效果）
   const preview = useMemo(() => {

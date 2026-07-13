@@ -37,6 +37,9 @@ jobs:
       - name: 源码可达性(防孤儿文件回潮)
         run: npm run check:source-reachability
 
+      - name: ESLint 零 warning
+        run: npm run lint
+
       - name: TypeScript 严格类型检查
         run: npx tsc --noEmit
 

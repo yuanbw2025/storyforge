@@ -30,7 +30,7 @@ const DEFAULT_TARGET = 30000
 const DEFAULT_OVERLAP = 500
 
 /** 匹配中文章节标题（行首，可前后有空格） */
-const CHAPTER_REGEX = /^[\s　]*第\s*[一二三四五六七八九十百千万零〇两\d０-９]+\s*[章回节卷部篇][\s　\S]{0,30}$/gm
+const CHAPTER_REGEX = /^\s*第\s*[一二三四五六七八九十百千万零〇两\d０-９]+\s*[章回节卷部篇][\s\S]{0,30}$/gm
 
 export function chunkDocument(text: string, opts: ChunkOptions = {}): ChunkPlan[] {
   const target = Math.max(5000, opts.targetChars ?? DEFAULT_TARGET)

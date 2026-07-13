@@ -268,7 +268,8 @@ export default function InspirationPanel({ project }: Props) {
   const toggleSection = (key: string) => {
     setExpandedSections(prev => {
       const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
@@ -276,7 +277,8 @@ export default function InspirationPanel({ project }: Props) {
   const toggleChar = (idx: number) => {
     setSelectedChars(prev => {
       const next = new Set(prev)
-      next.has(idx) ? next.delete(idx) : next.add(idx)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
       return next
     })
   }

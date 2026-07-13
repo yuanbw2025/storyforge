@@ -166,7 +166,8 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
   const toggleExpand = (idx: number) => {
     setExpandedVolumes(prev => {
       const next = new Set(prev)
-      next.has(idx) ? next.delete(idx) : next.add(idx)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
       return next
     })
   }
@@ -175,7 +176,8 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
   const toggleSelect = (idx: number) => {
     setSelectedVolumes(prev => {
       const next = new Set(prev)
-      next.has(idx) ? next.delete(idx) : next.add(idx)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
       return next
     })
   }

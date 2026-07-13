@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Info, X } from 'lucide-react'
 import {
   setBackupDialogAdapter,
@@ -54,14 +54,14 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  const api: DialogContextValue = {
+  const api = useMemo<DialogContextValue>(() => ({
     alert: async (options) => { await open('alert', options) },
     confirm: async (options) => Boolean(await open('confirm', options)),
     prompt: async (options) => {
       const value = await open('prompt', options)
       return typeof value === 'string' ? value : null
     },
-  }
+  }), [open])
 
   useEffect(() => {
     setBackupDialogAdapter({

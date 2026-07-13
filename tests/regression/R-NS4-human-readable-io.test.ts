@@ -21,7 +21,7 @@ describe('NS-4 · human-readable IO', () => {
   afterEach(async () => { db.close() })
 
   it('导出 Markdown 同时包含事实账本和层级摘要节点', async () => {
-    const { pid, charId, ch, ch2 } = await seed()
+    const { pid, charId, ch } = await seed()
     await db.temporalFacts.add({
       projectId: pid, characterId: charId, subjectName: '林飞', predicate: 'location', factKind: 'state', value: '洛阳',
       sourceType: 'chapter', sourceChapterId: ch, sourceQuote: '林飞在洛阳', status: 'confirmed', locked: false,

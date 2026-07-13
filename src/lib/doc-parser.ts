@@ -8,7 +8,6 @@
  * AI 解析阶段仍会被 import-adapter 的 MAX_CHARS 再截断一次。
  */
 // Vite URL import — pdfjs 的 worker 必须走 URL 引入（仅 URL 字符串，不进主包）
-// @ts-ignore - Vite 的 ?url 后缀 import TS 无法识别
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 
 // pdfjs / mammoth 体积大（~870KB）且仅在用户导入文件时才需要，改为动态导入按需加载，

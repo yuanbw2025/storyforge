@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import {
   Trash2, Library, BookMarked, Palette, Upload,
   Globe, Users2, ListTree, ChevronDown, ChevronRight,
@@ -218,15 +218,18 @@ function ReferenceDetailCard({
   const characters = data?.characters || []
   const outline = data?.outline || []
 
-  const availableTabs: { key: DetailTab; label: string; icon: React.ComponentType<{ className?: string }>; count?: number }[] = []
-  // 作品分析(13 维统一):始终显示。「写作技法」已并入此处,不再单独成页。
-  availableTabs.push({ key: 'deep-analysis', label: '作品分析', icon: Microscope })
-  if (hasTabs) {
-    if (worldviewEntries.length > 0) availableTabs.push({ key: 'worldview', label: '世界观', icon: Globe, count: worldviewEntries.length })
-    if (characters.length > 0) availableTabs.push({ key: 'characters', label: '角色', icon: Users2, count: characters.length })
-    if (outline.length > 0) availableTabs.push({ key: 'outline', label: '大纲', icon: ListTree, count: outline.length })
-  }
-  availableTabs.push({ key: 'info', label: '基本信息', icon: BookMarked })
+  const availableTabs = useMemo(() => {
+    const tabs: { key: DetailTab; label: string; icon: React.ComponentType<{ className?: string }>; count?: number }[] = []
+    // 作品分析(13 维统一):始终显示。「写作技法」已并入此处,不再单独成页。
+    tabs.push({ key: 'deep-analysis', label: '作品分析', icon: Microscope })
+    if (hasTabs) {
+      if (worldviewEntries.length > 0) tabs.push({ key: 'worldview', label: '世界观', icon: Globe, count: worldviewEntries.length })
+      if (characters.length > 0) tabs.push({ key: 'characters', label: '角色', icon: Users2, count: characters.length })
+      if (outline.length > 0) tabs.push({ key: 'outline', label: '大纲', icon: ListTree, count: outline.length })
+    }
+    tabs.push({ key: 'info', label: '基本信息', icon: BookMarked })
+    return tabs
+  }, [characters.length, hasTabs, outline.length, worldviewEntries.length])
 
   const [activeTab, setActiveTab] = useState<DetailTab>(availableTabs[0]?.key || 'info')
 
@@ -234,7 +237,7 @@ function ReferenceDetailCard({
   useEffect(() => {
     const valid = availableTabs.map(t => t.key)
     if (!valid.includes(activeTab)) setActiveTab(valid[0] || 'info')
-  }, [reference.id])
+  }, [activeTab, availableTabs])
 
   return (
     <div className="space-y-4">
