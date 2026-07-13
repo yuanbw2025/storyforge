@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import {
-  BookOpenCheck, Download, Edit3, MapPin, Package, Save, Shield, Sparkles, UserRound, X,
+  ArrowRight, BookOpenCheck, Download, Edit3, MapPin, Package, Save, Shield, Sparkles, UserRound, X,
 } from 'lucide-react'
 import type { Character, Project, StateCard, StateField } from '../../lib/types'
 import { parseFields, stringifyFields } from '../../lib/types/state-card'
@@ -20,6 +20,7 @@ import { CInput } from '../shared/CompositionInput'
 
 interface Props {
   project: Project
+  onOpenInventory?: () => void
 }
 
 const LOCATION_KEYS = ['位置', '地点', '所在地', '当前地点', 'location']
@@ -31,7 +32,7 @@ function findField(fields: StateField[], keys: string[]): string {
   return fields.find(field => normalized.some(key => field.key.toLocaleLowerCase().includes(key)))?.value || ''
 }
 
-export default function StatePanel({ project }: Props) {
+export default function StatePanel({ project, onOpenInventory }: Props) {
   const projectId = project.id!
   const { cards, loading, loadAll, addCard, updateCard, buildStateContext } = useStateCardStore()
   const { characters, loadAll: loadCharacters } = useCharacterStore()
@@ -127,6 +128,8 @@ export default function StatePanel({ project }: Props) {
                 card={card}
                 chapterTitle={card?.lastChapterId ? chapterById.get(card.lastChapterId)?.title : undefined}
                 protagonistItems={character.role === 'protagonist' ? inventory.map(item => `${item.itemName} ×${item.quantity}`) : []}
+                inventoryBacked={character.role === 'protagonist' && inventory.length > 0}
+                onOpenInventory={onOpenInventory}
                 knownFactions={factionNames}
                 editing={editingCharacter === character.id}
                 onToggleEdit={() => setEditingCharacter(editingCharacter === character.id ? null : character.id!)}
@@ -162,12 +165,15 @@ function Summary({ label, value, accent }: { label: string; value: number; accen
 }
 
 function CharacterStateCard({
-  character, card, chapterTitle, protagonistItems, knownFactions, editing, onToggleEdit, onSave,
+  character, card, chapterTitle, protagonistItems, inventoryBacked, onOpenInventory,
+  knownFactions, editing, onToggleEdit, onSave,
 }: {
   character: Character
   card: StateCard | null
   chapterTitle?: string
   protagonistItems: string[]
+  inventoryBacked: boolean
+  onOpenInventory?: () => void
   knownFactions: string[]
   editing: boolean
   onToggleEdit: () => void
@@ -247,7 +253,11 @@ function CharacterStateCard({
             <Fact icon={MapPin} label="所在地点" value={location} />
             <Fact icon={Shield} label="所属势力" value={faction} />
             <Fact icon={BookOpenCheck} label="剧情进度" value={chapterTitle || '未记录'} />
-            <Fact icon={Package} label="持有物" value={heldItems} />
+            <InventoryFact
+              value={heldItems}
+              source={inventoryBacked ? 'inventory' : 'state'}
+              onOpenInventory={onOpenInventory}
+            />
           </div>
           <div className="mt-3 pt-3 border-t border-border/50">
             <p className="text-[10px] uppercase tracking-wide text-text-muted flex items-center gap-1">
@@ -268,6 +278,41 @@ function CharacterStateCard({
         </>
       )}
     </article>
+  )
+}
+
+export function InventoryFact({
+  value,
+  source,
+  onOpenInventory,
+}: {
+  value: string
+  source: 'inventory' | 'state'
+  onOpenInventory?: () => void
+}) {
+  return (
+    <div className="rounded-lg bg-bg-elevated/60 p-2.5 min-w-0" data-testid="state-inventory-fact">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] text-text-muted flex min-w-0 items-center gap-1">
+          <Package className="w-3 h-3 shrink-0" /> 持有物
+          <span className="truncate text-[9px] text-text-muted/70">
+            · {source === 'inventory' ? '来自物品栏' : '来自状态字段'}
+          </span>
+        </p>
+        {onOpenInventory && (
+          <button
+            type="button"
+            onClick={onOpenInventory}
+            title="去物品栏"
+            aria-label="去物品栏"
+            className="shrink-0 rounded p-0.5 text-text-muted hover:bg-accent/10 hover:text-accent"
+          >
+            <ArrowRight className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-text-secondary mt-1 line-clamp-2">{value}</p>
+    </div>
   )
 }
 

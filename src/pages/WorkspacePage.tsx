@@ -238,7 +238,7 @@ export default function WorkspacePage() {
       case 'story-arc':
         return <StoryArcPanel project={project} />
       case 'state-table':
-        return <StatePanel project={project} />
+        return <StatePanel project={project} onOpenInventory={() => setActiveModule('inventory')} />
       case 'inventory':
         return <InventoryPanel project={project} />
       case 'fact-library':
