@@ -45,3 +45,6 @@ jobs:
 
       - name: 生产构建
         run: npm run build
+
+      - name: 构建产物体积预算
+        run: npm run check:bundle-size
