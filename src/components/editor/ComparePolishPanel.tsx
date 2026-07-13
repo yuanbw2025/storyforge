@@ -13,6 +13,7 @@ import {
   saveComparePolishDraft,
 } from '../../lib/editor/compare-polish-operation'
 import { countWords, htmlToPlainText } from '../../lib/utils/html'
+import type { EditorEntityReference } from '../../lib/editor/entity-reference'
 
 interface Props {
   projectId: number
@@ -20,6 +21,7 @@ interface Props {
   chapterTitle: string
   worldGroupId?: number | null
   sourceHtml: string
+  entityReferences?: readonly EditorEntityReference[]
   onSaved: (result: { html: string; plainText: string; wordCount: number }) => void
   onClose: () => void
 }
@@ -30,6 +32,7 @@ export default function ComparePolishPanel({
   chapterTitle,
   worldGroupId,
   sourceHtml,
+  entityReferences = [],
   onSaved,
   onClose,
 }: Props) {
@@ -158,6 +161,7 @@ export default function ComparePolishPanel({
             placeholder="在这里对照原稿逐段改写..."
             minHeight={560}
             className="sf-manuscript-editor"
+            entityReferences={entityReferences}
           />
         </div>
       </div>

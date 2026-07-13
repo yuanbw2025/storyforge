@@ -544,6 +544,17 @@ body {
   color: var(--editor-selection-text);
 }
 
+.tiptap-editor .sf-entity-ref {
+  border-bottom: 1px dotted color-mix(in srgb, var(--accent) 65%, transparent);
+  cursor: help;
+  text-decoration: none;
+}
+
+.tiptap-editor .sf-entity-ref-character { border-bottom-color: #c06b9b; }
+.tiptap-editor .sf-entity-ref-item { border-bottom-color: #b8873c; }
+.tiptap-editor .sf-entity-ref-location { border-bottom-color: #3f8f78; }
+.tiptap-editor .sf-entity-ref-codex { border-bottom-color: #557bb8; }
+
 .tiptap-editor p {
   margin: 0 0 0.75em 0;
 }

@@ -46,6 +46,10 @@ import ReviewPanel from './ReviewPanel'
 import NotePanel from './NotePanel'
 import FloatingToolbar from './FloatingToolbar'
 import ComparePolishPanel from './ComparePolishPanel'
+import { useItemLedgerStore } from '../../stores/item-ledger'
+import { useLocationStore } from '../../stores/location'
+import { useCodexStore } from '../../stores/codex'
+import { buildEditorEntityReferences } from '../../lib/editor/entity-reference'
 import type { ChapterStatus, Project, StateDiffItem } from '../../lib/types'
 
 /** 生成任务类型(原 memory-builder 三层记忆已被 assembleContext 取代,此类型仅用于调试日志标签) */
@@ -88,6 +92,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const { creativeRules } = useCreativeRulesStore()
   const { loadAll: loadArcs } = useStoryArcStore()
   const { buildForeshadowContext, loadAll: loadForeshadows } = useForeshadowStore()
+  const { entries: itemEntries, loadAll: loadItemLedger } = useItemLedgerStore()
+  const { locations, loadAll: loadLocations } = useLocationStore()
+  const { categories: codexCategories, entries: codexEntries, loadExisting: loadCodex } = useCodexStore()
 
   // content 为 HTML 字符串；旧数据是纯文本，RichEditor 内部会自动包装
   const [content, setContent] = useState('')
@@ -137,6 +144,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   useEffect(() => { loadCharacters(project.id!) }, [project.id, loadCharacters])
   useEffect(() => { loadArcs(project.id!) }, [project.id, loadArcs])
   useEffect(() => { loadForeshadows(project.id!) }, [project.id, loadForeshadows])
+  useEffect(() => { loadItemLedger(project.id!) }, [project.id, loadItemLedger])
+  useEffect(() => { loadLocations(project.id!) }, [project.id, loadLocations])
+  useEffect(() => { loadCodex(project.id!) }, [project.id, loadCodex])
 
   // 如果从大纲进入，选择/创建对应章节（自动创建）
   useEffect(() => {
@@ -228,6 +238,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
     return null
   }, [project.enableMultiWorld, outlineNode, nodes])
+  const entityReferences = useMemo(() => buildEditorEntityReferences({
+    characters,
+    itemEntries,
+    locations,
+    codexCategories,
+    codexEntries,
+    worldGroupId: project.enableMultiWorld ? chapterWorldGroupId : undefined,
+  }), [characters, itemEntries, locations, codexCategories, codexEntries, project.enableMultiWorld, chapterWorldGroupId])
 
   const [worldCtx, setWorldCtx] = useState('')
   const [charCtx, setCharCtx] = useState('')
@@ -1240,6 +1258,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           chapterTitle={chapterDisplay?.title ?? currentChapter.title}
           worldGroupId={chapterWorldGroupId}
           sourceHtml={compareSourceHtml}
+          entityReferences={entityReferences}
           onSaved={result => {
             setContent(result.html)
             setPlainText(result.plainText)
@@ -1259,6 +1278,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           placeholder="开始写作..."
           minHeight={560}
           className="sf-manuscript-editor border-0 bg-transparent shadow-none"
+          entityReferences={entityReferences}
           contentHeader={
             <div className="mb-8 mt-8 text-center">
               <p className="text-[11px] uppercase tracking-[0.28em] text-text-muted">

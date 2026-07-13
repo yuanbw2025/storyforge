@@ -1,7 +1,9 @@
-import { forwardRef, useImperativeHandle, useEffect, useRef, useState, type ReactNode } from 'react'
+import { forwardRef, useCallback, useImperativeHandle, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Extension } from '@tiptap/core'
 import { useEditor, EditorContent, type Editor } from '@tiptap/react'
 import type { EditorView } from '@tiptap/pm/view'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import {
@@ -28,6 +30,10 @@ import {
 } from 'lucide-react'
 import { toHtml, countWords } from '../../lib/utils/html'
 import { loadEditorTypography, saveEditorTypography, applyEditorTypography, type EditorTypography } from '../../lib/editor-typography'
+import {
+  filterEditorEntityReferences,
+  type EditorEntityReference,
+} from '../../lib/editor/entity-reference'
 
 const FONT_FAMILY_OPTIONS = [
   {
@@ -225,6 +231,8 @@ interface Props {
   disabled?: boolean
   /** 是否显示格式工具栏；只读对照视图可关闭。 */
   showToolbar?: boolean
+  /** 项目实体档案；提供 @ 补全和正文内悬浮查看，不写入正文 HTML。 */
+  entityReferences?: readonly EditorEntityReference[]
   /** 工具栏与正文之间的内容（例如章节标题）；用于让格式工具栏固定在最上方 */
   contentHeader?: ReactNode
 }
@@ -235,7 +243,7 @@ interface Props {
  * - value 允许传入旧的纯文本（自动包装为 <p>），新内容以 HTML 保存
  */
 const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
-  { value, onChange, placeholder = '开始写作...', className = '', minHeight = 400, disabled = false, showToolbar = true, contentHeader },
+  { value, onChange, placeholder = '开始写作...', className = '', minHeight = 400, disabled = false, showToolbar = true, entityReferences = [], contentHeader },
   ref,
 ) {
   // 避免 onChange 引起 editor 重建
@@ -245,6 +253,15 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
   const pendingTextStyleRef = useRef<PendingTextStyle>({})
   const [pendingTextStyle, setPendingTextStyle] = useState<PendingTextStyle>({})
   const [, setThemeRevision] = useState(0)
+  const [entityMenu, setEntityMenu] = useState<{ query: string; from: number; to: number; x: number; y: number } | null>(null)
+  const [entityMenuIndex, setEntityMenuIndex] = useState(0)
+  const [hoveredEntity, setHoveredEntity] = useState<{ reference: EditorEntityReference; x: number; y: number } | null>(null)
+  const entityReferencesRef = useRef(entityReferences)
+  entityReferencesRef.current = entityReferences
+  const entityCandidates = useMemo(
+    () => entityMenu ? filterEditorEntityReferences(entityReferences, entityMenu.query) : [],
+    [entityMenu, entityReferences],
+  )
 
   // 全局排版偏好(字体/字号/行距/段距):跨章保持、刷新不丢、不写进正文、不移动光标/滚动。
   const [typography, setTypography] = useState<EditorTypography>(loadEditorTypography)
@@ -329,12 +346,118 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
       const html = editor.getHTML()
       const plain = editor.getText()
       onChangeRef.current(html, plain)
+      updateEntityMenu(editor)
     },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection
       savedSelectionRef.current = { from, to }
+      updateEntityMenu(editor)
     },
   })
+
+  function updateEntityMenu(currentEditor: Editor) {
+    if (disabled || entityReferencesRef.current.length === 0) {
+      setEntityMenu(null)
+      return
+    }
+    const { from, empty } = currentEditor.state.selection
+    if (!empty) { setEntityMenu(null); return }
+    const before = currentEditor.state.doc.textBetween(Math.max(0, from - 40), from, '\n', '\0')
+    const match = before.match(/(?:^|[\s，。！？；：、(（])@([^@\s，。！？；：、()（）]{0,20})$/)
+    if (!match) { setEntityMenu(null); return }
+    const query = match[1] ?? ''
+    const start = from - query.length - 1
+    const coords = currentEditor.view.coordsAtPos(from)
+    setEntityMenu({ query, from: start, to: from, x: coords.left, y: coords.bottom + 6 })
+    setEntityMenuIndex(0)
+  }
+
+  useEffect(() => {
+    if (!editor) return
+    const pluginKey = new PluginKey('storyforgeEntityReferences')
+    const plugin = new Plugin({
+      key: pluginKey,
+      props: {
+        decorations(state) {
+          if (entityReferencesRef.current.length === 0) return DecorationSet.empty
+          const decorations: Decoration[] = []
+          state.doc.descendants((node, pos) => {
+            if (!node.isText || !node.text) return
+            const matches = entityReferencesRef.current
+              .filter(reference => reference.name.length >= 2 && node.text!.includes(reference.name))
+              .sort((a, b) => b.name.length - a.name.length)
+            const occupied = new Set<number>()
+            for (const reference of matches) {
+              let index = node.text.indexOf(reference.name)
+              while (index >= 0) {
+                const end = index + reference.name.length
+                const overlaps = [...Array(end - index).keys()].some(offset => occupied.has(index + offset))
+                if (!overlaps) {
+                  for (let offset = index; offset < end; offset++) occupied.add(offset)
+                  decorations.push(Decoration.inline(pos + index, pos + end, {
+                    class: `sf-entity-ref sf-entity-ref-${reference.kind}`,
+                    'data-entity-id': reference.id,
+                  }))
+                }
+                index = node.text.indexOf(reference.name, end)
+              }
+            }
+          })
+          return DecorationSet.create(state.doc, decorations)
+        },
+        handleDOMEvents: {
+          mouseover: (_view, event) => {
+            const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-entity-id]') : null
+            const reference = target ? entityReferencesRef.current.find(item => item.id === target.dataset.entityId) : null
+            if (!target || !reference) return false
+            const rect = target.getBoundingClientRect()
+            setHoveredEntity({ reference, x: rect.left, y: rect.bottom + 6 })
+            return false
+          },
+          mouseout: (_view, event) => {
+            const target = event.target instanceof Element ? event.target.closest('[data-entity-id]') : null
+            if (target) setHoveredEntity(null)
+            return false
+          },
+        },
+      },
+    })
+    editor.registerPlugin(plugin)
+    return () => { editor.unregisterPlugin(pluginKey) }
+  }, [editor, entityReferences])
+
+  const insertEntityReference = useCallback((reference: EditorEntityReference) => {
+    if (!editor || !entityMenu) return
+    editor.chain().focus().deleteRange({ from: entityMenu.from, to: entityMenu.to }).insertContent({
+      type: 'text',
+      text: reference.name,
+    }).run()
+    setEntityMenu(null)
+  }, [editor, entityMenu])
+
+  useEffect(() => {
+    if (!editor || !entityMenu || entityCandidates.length === 0) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229) return
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setEntityMenuIndex(index => (index + 1) % entityCandidates.length)
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setEntityMenuIndex(index => (index - 1 + entityCandidates.length) % entityCandidates.length)
+      } else if (event.key === 'Enter') {
+        event.preventDefault()
+        insertEntityReference(entityCandidates[entityMenuIndex] ?? entityCandidates[0])
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        setEntityMenu(null)
+      }
+    }
+    // Capture before ProseMirror's own keydown handler so Enter selects a candidate
+    // instead of first inserting a paragraph into the manuscript.
+    editor.view.dom.addEventListener('keydown', handleKeyDown, true)
+    return () => editor.view.dom.removeEventListener('keydown', handleKeyDown, true)
+  }, [editor, entityMenu, entityCandidates, entityMenuIndex, insertEntityReference])
 
   // 外部 value 变化（切换章节、AI 整段替换）时同步编辑器内容
   // 但避免每次 onChange 触发的 value 回流导致光标丢失
@@ -710,6 +833,44 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
       >
         <EditorContent editor={editor} />
       </div>
+      {entityMenu && entityCandidates.length > 0 && (
+        <div className="fixed z-[80] w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded border border-border bg-bg-surface shadow-xl" style={{ left: Math.max(16, Math.min(entityMenu.x, window.innerWidth - 304)), top: entityMenu.y }}>
+          {entityCandidates.map((reference, index) => (
+            <button
+              key={reference.id}
+              type="button"
+              onMouseDown={event => event.preventDefault()}
+              onClick={() => insertEntityReference(reference)}
+              className={`block w-full px-3 py-2 text-left ${index === entityMenuIndex ? 'bg-accent/10' : 'hover:bg-bg-hover'}`}
+            >
+              <span className="flex items-center justify-between gap-3 text-xs">
+                <strong className="truncate text-text-primary">{reference.name}</strong>
+                <span className="shrink-0 text-text-muted">{reference.kindLabel}</span>
+              </span>
+              {reference.summary && <span className="mt-1 block truncate text-[11px] text-text-muted">{reference.summary}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {hoveredEntity && !entityMenu && (
+        <div className="pointer-events-none fixed z-[70] w-72 max-w-[calc(100vw-2rem)] rounded border border-border bg-bg-surface p-3 shadow-xl" style={{ left: Math.max(16, Math.min(hoveredEntity.x, window.innerWidth - 304)), top: hoveredEntity.y }}>
+          <div className="flex items-center justify-between gap-3">
+            <strong className="truncate text-sm text-text-primary">{hoveredEntity.reference.name}</strong>
+            <span className="shrink-0 text-[11px] text-accent">{hoveredEntity.reference.kindLabel}</span>
+          </div>
+          {hoveredEntity.reference.summary && <p className="mt-1 text-xs leading-5 text-text-secondary">{hoveredEntity.reference.summary}</p>}
+          {hoveredEntity.reference.details.length > 0 && (
+            <dl className="mt-2 space-y-1 border-t border-border pt-2 text-[11px]">
+              {hoveredEntity.reference.details.map(item => (
+                <div key={item.label} className="grid grid-cols-[4rem_minmax(0,1fr)] gap-2">
+                  <dt className="text-text-muted">{item.label}</dt>
+                  <dd className="text-text-secondary">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      )}
     </div>
   )
 })

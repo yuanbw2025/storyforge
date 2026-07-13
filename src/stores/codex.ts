@@ -18,6 +18,8 @@ interface CodexStore {
   loadedProjectId: number | null
 
   loadAll: (projectId: number) => Promise<void>
+  /** 只读加载现有分类/词条，不播种内置分类（供正文档案提示等纯读入口）。 */
+  loadExisting: (projectId: number) => Promise<void>
   ensureBuiltIns: (projectId: number) => Promise<void>
 
   // 分类
@@ -60,6 +62,20 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       set({ categories, entries, loading: false, loadedProjectId: projectId })
     } catch (err) {
       console.error('[Codex] loadAll 失败:', err)
+      set({ loading: false })
+    }
+  },
+
+  loadExisting: async (projectId) => {
+    set({ loading: true })
+    try {
+      const [categories, entries] = await Promise.all([
+        db.codexCategories.where('projectId').equals(projectId).toArray(),
+        db.codexEntries.where('projectId').equals(projectId).toArray(),
+      ])
+      set({ categories, entries, loading: false, loadedProjectId: projectId })
+    } catch (err) {
+      console.error('[Codex] loadExisting 失败:', err)
       set({ loading: false })
     }
   },
