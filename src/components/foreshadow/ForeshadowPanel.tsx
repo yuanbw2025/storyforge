@@ -8,7 +8,7 @@ import { useAIConfigStore } from '../../stores/ai-config'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildForeshadowSuggestPrompt, buildForeshadowStructurePrompt, parseForeshadowStructured } from '../../lib/ai/adapters/foreshadow-adapter'
-import { chat } from '../../lib/ai/client'
+import { chat, resolveRequestConfig } from '../../lib/ai/client'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { adopt } from '../../lib/registry/adopt'
 import { assembleContext } from '../../lib/registry/assemble-context'
@@ -192,7 +192,7 @@ export default function ForeshadowPanel({ project }: Props) {
 
   // AI 建议伏笔
   const handleAISuggest = async () => {
-    if (!isAIConfigReady(config)) return
+    if (!isAIConfigReady(resolveRequestConfig(config, { category: 'foreshadow.suggest' }).config)) return
     setShowAI(true)
     const assembled = await assembleContext({
       projectId: project.id!,
@@ -233,7 +233,7 @@ export default function ForeshadowPanel({ project }: Props) {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleAISuggest}
-            disabled={ai.isStreaming || !isAIConfigReady(config)}
+            disabled={ai.isStreaming || !isAIConfigReady(resolveRequestConfig(config, { category: 'foreshadow.suggest' }).config)}
             className="flex items-center gap-1.5 rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm text-text-secondary transition-colors hover:text-accent disabled:opacity-40"
             title="AI 建议伏笔">
             {ai.isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}

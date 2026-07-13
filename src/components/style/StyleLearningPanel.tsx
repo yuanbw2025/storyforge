@@ -4,7 +4,7 @@ import { useChapterStore } from '../../stores/chapter'
 import { useUserStyleStore } from '../../stores/user-style'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { buildStyleLearnPrompt } from '../../lib/ai/adapters/style-adapter'
-import { chat } from '../../lib/ai/client'
+import { chat, resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import type { Project, Chapter, ChapterStatus } from '../../lib/types'
 
@@ -65,8 +65,9 @@ export default function StyleLearningPanel({ project }: Props) {
 
   const handleLearn = async () => {
     if (selected.length === 0) return
-    if (!isAIConfigReady(aiConfig)) {
-      setError(getAIConfigRequiredMessage(aiConfig))
+    const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'style.learn' }).config
+    if (!isAIConfigReady(effectiveConfig)) {
+      setError(getAIConfigRequiredMessage(effectiveConfig))
       return
     }
     setRunning(true)

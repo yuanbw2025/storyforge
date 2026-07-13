@@ -125,7 +125,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 | category | 触发文件 |
 |---|---|
-| `ai.restructure` | `src/lib/ai/restructure.ts:53` |
+| `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `chapter.content` | `src/components/editor/ChapterEditor.tsx:453` |
 | `chapter.content.batch` | `src/lib/ai/batch-detail-runner.ts:256` |
 | `chapter.continue` | `src/components/editor/ChapterEditor.tsx:471` |
@@ -137,7 +137,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `character.generate` | `src/components/character/CharacterPanel.tsx:163` |
 | `character.structure` | `src/lib/ai/parse-character-output.ts:80` |
 | `character.supplement` | `src/components/character/CharacterSupplementAction.tsx:80` |
-| `codex.extract` | `src/components/codex/CodexPanel.tsx:205` |
+| `codex.extract` | `src/components/codex/CodexPanel.tsx:206` |
 | `detail.scene` | `src/components/outline/DetailedOutlinePanel.tsx:163`<br/>`src/components/outline/ScenePanel.tsx:115`<br/>`src/lib/ai/batch-detail-runner.ts:109` |
 | `emotion.beat` | `src/components/editor/EmotionBeatCard.tsx:66` |
 | `foreshadow.structure` | `src/components/foreshadow/ForeshadowPanel.tsx:67` |
@@ -145,14 +145,14 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
 | `geography.world-map` | `src/components/geography/WorldMapPanel.tsx:103` |
 | `inspiration.reverse` | `src/components/project/InspirationPanel.tsx:107` |
-| `inventory.extract` | `src/components/items/InventoryPanel.tsx:85` |
-| `location.extract` | `src/components/location/LocationPanel.tsx:105` |
+| `inventory.extract` | `src/components/items/InventoryPanel.tsx:86` |
+| `location.extract` | `src/components/location/LocationPanel.tsx:106` |
 | `outline.chapter` | `src/components/outline/OutlinePanel.tsx:491`<br/>`src/lib/ai/batch-outline-runner.ts:123` |
 | `outline.character-driven` | `src/components/outline/CharacterDrivenPlotPanel.tsx:113` |
 | `outline.volume` | `src/components/outline/OutlinePanel.tsx:443` |
-| `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:106` |
-| `reference.characters` | `src/components/project/AnalysisReportViewer.tsx:139` |
-| `reference.summary` | `src/components/project/AnalysisReportViewer.tsx:110` |
+| `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
+| `reference.characters` | `src/components/project/AnalysisReportViewer.tsx:143` |
+| `reference.summary` | `src/components/project/AnalysisReportViewer.tsx:112` |
 | `relation.extract` | `src/components/relations/CharacterRelationPanel.tsx:98` |
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:87` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:79` |
@@ -162,8 +162,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `story-arc.generate` | `src/components/outline/StoryArcPanel.tsx:84` |
 | `story.generate` | `src/components/worldview/StoryCorePanel.tsx:193` |
-| `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:84` |
-| `style.learn` | `src/components/style/StyleLearningPanel.tsx:77` |
+| `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:85` |
+| `style.learn` | `src/components/style/StyleLearningPanel.tsx:78` |
 | `world-group.expand` | `src/components/world-group/WorldGroupDetail.tsx:98` |
 | `world-group.suggest` | `src/components/world-group/WorldGroupOverview.tsx:57` |
 | `worldview.dimension` | `src/components/worldview/WorldviewHumanityPanel.tsx:252`<br/>`src/components/worldview/WorldviewNaturalPanel.tsx:282`<br/>`src/components/worldview/WorldviewOriginPanel.tsx:287` |
@@ -178,4 +178,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `74b6bae`
+生成时间基准:commit `2a2dd0c`

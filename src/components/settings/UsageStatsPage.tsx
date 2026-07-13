@@ -28,6 +28,13 @@ function fmtCny(n: number): string {
   return '¥' + n.toFixed(n < 0.01 ? 4 : 2)
 }
 
+const TASK_KIND_LABELS = {
+  creation: '创作',
+  extraction: '提取',
+  analysis: '分析',
+  review: '审查',
+} as const
+
 export default function UsageStatsPage({ project }: Props) {
   const dialog = useDialog()
   const { entries, loading, loadAll, clearAll } = useAIUsageStore()
@@ -145,7 +152,14 @@ export default function UsageStatsPage({ project }: Props) {
                       {meta.label}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-text-muted text-xs whitespace-nowrap max-w-[180px] truncate" title={e.model}>{e.model}</td>
+                  <td className="px-3 py-2 text-text-muted text-xs whitespace-nowrap max-w-[180px]" title={`${e.provider ?? ''} ${e.model}`}>
+                    <div className="truncate">{e.model}</div>
+                    {(e.provider || e.taskKind) && (
+                      <div className="truncate text-[10px] text-text-muted/70">
+                        {[e.provider, e.taskKind ? TASK_KIND_LABELS[e.taskKind] : null].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right text-text-secondary tabular-nums">{e.inputTokens.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right text-text-secondary tabular-nums">{e.outputTokens.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">

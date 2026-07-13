@@ -26,6 +26,7 @@ import { useImportStatusStore } from '../../stores/import-status'
 import { extractJSON, IMPORT_MAX_TOKENS } from '../ai/adapters/import-adapter'
 import type { UnifiedParseResult } from '../types'
 import type { AIConfig } from '../types'
+import { resolveRequestConfig } from '../ai/client'
 import type { ImportSession, ChunkState } from '../types'
 import {
   registerChunkTexts as _registerChunkTexts,
@@ -345,9 +346,15 @@ async function parseChunkOnce(args: {
   const baseConfig = useAIConfigStore.getState().config
   const overrideMax = Math.max(baseConfig.maxTokens ?? 4096, IMPORT_MAX_TOKENS.all)
   const config: AIConfig = { ...baseConfig, maxTokens: overrideMax }
-  if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
+  const meta = {
+    category: 'import.parse-chunk',
+    projectId: args.projectId,
+    configOverrides: { maxTokens: overrideMax },
+  } as const
+  const effectiveConfig = resolveRequestConfig(config, meta).config
+  if (!isAIConfigReady(effectiveConfig)) throw new Error(getAIConfigRequiredMessage(effectiveConfig))
 
-  const output = await chatWithAbort(messages, config, args.signal, { category: 'import.parse-chunk', projectId: args.projectId })
+  const output = await chatWithAbort(messages, config, args.signal, meta)
   const obj = extractJSON(output) as UnifiedParseResult
   return normalizeUnified(obj)
 }

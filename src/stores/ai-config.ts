@@ -4,6 +4,11 @@ import { PROVIDER_PRESETS } from '../lib/types'
 import { createLog, updateLog } from '../lib/ai/logger'
 import { nanoid } from '../lib/utils/id'
 import { buildOpenAIEndpoint, normalizeOpenAIBaseUrl } from '../lib/ai/openai-endpoint'
+import {
+  sanitizeAITaskRoutes,
+  type AITaskKind,
+  type AITaskRoutes,
+} from '../lib/ai/task-routing'
 
 const STORAGE_KEY = 'storyforge-ai-config'
 const PRESETS_KEY = 'storyforge-ai-presets'
@@ -11,6 +16,7 @@ const SESSION_API_KEY = 'storyforge-ai-api-key-session'
 const REMEMBER_API_KEY = 'storyforge-ai-api-key-remember'
 const EMBEDDING_KEY = 'storyforge-embedding-config'
 const EMBEDDING_SESSION_KEY = 'storyforge-embedding-key-session'
+export const TASK_ROUTES_KEY = 'storyforge-ai-task-routes'
 
 const DEFAULT_CONFIG: AIConfig = {
   provider: 'deepseek',
@@ -60,6 +66,19 @@ function loadPresets(): AIConfigPreset[] {
 
 function savePresets(presets: AIConfigPreset[]) {
   localStorage.setItem(PRESETS_KEY, JSON.stringify(presets))
+}
+
+function loadTaskRoutes(): AITaskRoutes {
+  try {
+    const saved = localStorage.getItem(TASK_ROUTES_KEY)
+    return saved ? sanitizeAITaskRoutes(JSON.parse(saved)) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveTaskRoutes(routes: AITaskRoutes): void {
+  localStorage.setItem(TASK_ROUTES_KEY, JSON.stringify(routes))
 }
 
 /** 根据 HTTP 状态码和英文错误信息，返回中文解释 */
@@ -162,6 +181,7 @@ interface AIConfigStore {
   config: AIConfig
   rememberApiKey: boolean
   presets: AIConfigPreset[]
+  taskRoutes: AITaskRoutes
   /** 当前生效的预设 id（null = 未对应任何预设/已改动） */
   activePresetId: string | null
   /** 最近一次应用/保存的预设 id；表单改动后仍保留,用于显式覆盖当前预设。 */
@@ -179,6 +199,7 @@ interface AIConfigStore {
   updatePresetFromCurrent: (id: string) => void
   renamePreset: (id: string, name: string) => void
   deletePreset: (id: string) => void
+  setTaskRoute: (taskKind: AITaskKind, presetId: string | null) => void
 }
 
 const initial = loadInitialConfig()
@@ -187,6 +208,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   config: initial.config,
   rememberApiKey: initial.rememberApiKey,
   presets: loadPresets(),
+  taskRoutes: loadTaskRoutes(),
   activePresetId: null,
   editingPresetId: null,
   embedding: loadEmbeddingConfig(initial.rememberApiKey),
@@ -248,12 +270,28 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
 
   deletePreset: (id: string) => {
     const presets = get().presets.filter(p => p.id !== id)
+    const taskRoutes = Object.fromEntries(
+      Object.entries(get().taskRoutes).filter(([, presetId]) => presetId !== id),
+    ) as AITaskRoutes
     savePresets(presets)
+    saveTaskRoutes(taskRoutes)
     set({
       presets,
+      taskRoutes,
       activePresetId: get().activePresetId === id ? null : get().activePresetId,
       editingPresetId: get().editingPresetId === id ? null : get().editingPresetId,
     })
+  },
+
+  setTaskRoute: (taskKind, presetId) => {
+    const taskRoutes = { ...get().taskRoutes }
+    if (presetId && get().presets.some(preset => preset.id === presetId)) {
+      taskRoutes[taskKind] = presetId
+    } else {
+      delete taskRoutes[taskKind]
+    }
+    saveTaskRoutes(taskRoutes)
+    set({ taskRoutes })
   },
 
   switchProvider: (provider: AIProvider) => {

@@ -9,7 +9,7 @@ import { Package, Sparkles, Loader2, Trash2, ChevronDown, ChevronRight, Plus, Ar
 import { useItemLedgerStore } from '../../stores/item-ledger'
 import { useChapterStore } from '../../stores/chapter'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { chat } from '../../lib/ai/client'
+import { chat, resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import {
   buildInventoryExtractPrompt, parseInventoryEvents, type ExtractedItemEvent,
@@ -54,8 +54,9 @@ export default function InventoryPanel({ project }: Props) {
   )
 
   const handleExtract = async () => {
-    if (!isAIConfigReady(aiConfig)) {
-      setExtractError(getAIConfigRequiredMessage(aiConfig))
+    const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'inventory.extract' }).config
+    if (!isAIConfigReady(effectiveConfig)) {
+      setExtractError(getAIConfigRequiredMessage(effectiveConfig))
       return
     }
     if (writtenChapters.length === 0) {

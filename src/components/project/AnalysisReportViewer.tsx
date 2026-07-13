@@ -20,7 +20,7 @@ import {
   collectCharacterCraftTexts, buildCharacterMergePrompt, parseCharacterMergeOutput,
   type MergedAnalysisResult, type MergedDimension, type AIMergedCharacter,
 } from '../../lib/reference-analysis/merge-analysis'
-import { chat } from '../../lib/ai/client'
+import { chat, resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useReferenceStore } from '../../stores/reference'
@@ -106,11 +106,13 @@ export default function AnalysisReportViewer({ reference, chunks, isHistorical }
         reference.title, reference.author || '', merged, isHistorical,
       )
       const config = useAIConfigStore.getState().config
-      if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
+      const meta = { category: 'reference.summary', projectId: reference.projectId, configOverrides: { maxTokens: 4096 } } as const
+      const effectiveConfig = resolveRequestConfig(config, meta).config
+      if (!isAIConfigReady(effectiveConfig)) throw new Error(getAIConfigRequiredMessage(effectiveConfig))
       const output = await chat(
         [{ role: 'system', content: system }, { role: 'user', content: user }],
         { ...config, maxTokens: 4096 },
-        { category: 'reference.summary', projectId: reference.projectId },
+        { category: 'reference.summary', projectId: reference.projectId, configOverrides: { maxTokens: 4096 } },
       )
       const json = extractJSON(output)
       if (json) {
@@ -132,14 +134,16 @@ export default function AnalysisReportViewer({ reference, chunks, isHistorical }
       const craftTexts = collectCharacterCraftTexts(chunks)
       if (craftTexts.length === 0) throw new Error('暂无人物塑造分析可供整理')
       const config = useAIConfigStore.getState().config
-      if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
+      const meta = { category: 'reference.characters', projectId: reference.projectId, configOverrides: { maxTokens: 4096 } } as const
+      const effectiveConfig = resolveRequestConfig(config, meta).config
+      if (!isAIConfigReady(effectiveConfig)) throw new Error(getAIConfigRequiredMessage(effectiveConfig))
       const { system, user } = buildCharacterMergePrompt(
         reference.title, reference.author || '', craftTexts,
       )
       const output = await chat(
         [{ role: 'system', content: system }, { role: 'user', content: user }],
         { ...config, maxTokens: 4096 },
-        { category: 'reference.characters', projectId: reference.projectId },
+        { category: 'reference.characters', projectId: reference.projectId, configOverrides: { maxTokens: 4096 } },
       )
       const characters = parseCharacterMergeOutput(output)
       if (characters.length === 0) throw new Error('AI 未能解析出角色，请重试')

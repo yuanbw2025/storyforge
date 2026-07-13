@@ -5,7 +5,7 @@
  * 而是再调用一次 AI 把它重新整理成干净的 JSON。
  */
 import type { AIConfig, ChatMessage } from '../types'
-import { chat } from './client'
+import { chat, resolveRequestConfig } from './client'
 import { isAIConfigReady } from './config-readiness'
 
 /** 从文本中尽力提取 JSON（数组或对象）。仅做结构定位，非文本分析。 */
@@ -36,7 +36,8 @@ export async function aiRestructure<T>(
   schemaInstruction: string,
   config: AIConfig,
 ): Promise<T | null> {
-  if (!isAIConfigReady(config) || !rawText.trim()) return null
+  const effectiveConfig = resolveRequestConfig(config, { category: 'ai.restructure' }).config
+  if (!isAIConfigReady(effectiveConfig) || !rawText.trim()) return null
   const messages: ChatMessage[] = [
     {
       role: 'system',

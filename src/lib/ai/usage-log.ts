@@ -6,6 +6,8 @@
  * 映射为友好中文标签展示。
  */
 import { db } from '../db/schema'
+import type { AIProvider } from '../types'
+import type { AITaskKind } from './task-routing'
 
 /** 一条 AI 消耗记录 */
 export interface AIUsageEntry {
@@ -14,7 +16,11 @@ export interface AIUsageEntry {
   timestamp: number
   /** 消耗类型标识（moduleKey 或显式 category，如 'chapter.content'） */
   category: string
+  /** 实际发出请求的 provider；旧记录可能没有。 */
+  provider?: AIProvider
   model: string
+  /** 统一任务路由分类；旧记录和未知 category 可能没有。 */
+  taskKind?: AITaskKind
   inputTokens: number
   outputTokens: number
   /** 计算所得费用（美元） */

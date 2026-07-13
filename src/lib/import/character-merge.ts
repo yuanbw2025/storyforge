@@ -23,6 +23,7 @@ import { useImportSessionStore } from '../../stores/import-session'
 import { useImportStatusStore } from '../../stores/import-status'
 import { extractJSON } from '../ai/adapters/import-adapter'
 import type { AIConfig, Character } from '../types'
+import { resolveRequestConfig } from '../ai/client'
 import { chatWithAbort } from './chat-with-abort'
 import { CHARACTER_DIMENSIONS } from '../character/character-dimensions'
 
@@ -73,9 +74,15 @@ export async function runCharacterMerge(args: RunCharacterMergeArgs): Promise<vo
       ...baseConfig,
       maxTokens: Math.max(baseConfig.maxTokens ?? 4096, 4096),
     }
-    if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
+    const meta = {
+      category: 'import.merge-characters',
+      projectId,
+      configOverrides: { maxTokens: config.maxTokens },
+    } as const
+    const effectiveConfig = resolveRequestConfig(config, meta).config
+    if (!isAIConfigReady(effectiveConfig)) throw new Error(getAIConfigRequiredMessage(effectiveConfig))
 
-    const output = await chatWithAbort(messages, config, signal, { category: 'import.merge-characters', projectId })
+    const output = await chatWithAbort(messages, config, signal, meta)
     const parsed = extractJSON(output) as { mergeGroups?: Array<{
       canonical: string
       aliases: string[]

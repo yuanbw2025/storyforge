@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
-import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText, RotateCcw, RefreshCw } from 'lucide-react'
+import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText, RotateCcw, RefreshCw, Pencil, X } from 'lucide-react'
 import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
@@ -11,6 +11,14 @@ import { useDialog } from '../shared/Dialog'
 import { parseContextWindowInput } from '../../lib/ai/context-window-input'
 import { fetchOpenAIModels } from '../../lib/ai/model-list'
 import { normalizeOpenAIBaseUrl } from '../../lib/ai/openai-endpoint'
+import { AI_TASK_KINDS, type AITaskKind } from '../../lib/ai/task-routing'
+
+const TASK_ROUTE_META: Record<AITaskKind, { label: string; description: string }> = {
+  creation: { label: '创作生成', description: '正文、大纲、细纲、世界观与角色生成' },
+  extraction: { label: '结构提取', description: '状态、事实、物品、关系、词条与导入解析' },
+  analysis: { label: '分析总结', description: '参考资料、摘要、文风学习与检索分析' },
+  review: { label: '审查校验', description: '章节审校、一致性检查、场景与历史考证' },
+}
 
 export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean; hint: string }[] = [
   { value: 'deepseek', label: 'DeepSeek', cors: false, hint: '获取 Key: platform.deepseek.com → API Keys（需点击下方「切换到本地代理」）' },
@@ -36,7 +44,7 @@ export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean
 export default function AIConfigPanel() {
   const { config, setConfig, switchProvider, testConnection,
     rememberApiKey, setRememberApiKey,
-    presets, activePresetId, editingPresetId, saveAsPreset, applyPreset, updatePresetFromCurrent, renamePreset, deletePreset } = useAIConfigStore()
+    presets, taskRoutes, setTaskRoute, activePresetId, editingPresetId, saveAsPreset, applyPreset, updatePresetFromCurrent, renamePreset, deletePreset } = useAIConfigStore()
   const dialog = useDialog()
   const [showKey, setShowKey] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -234,18 +242,57 @@ export default function AIConfigPanel() {
                     onClick={() => { void handleRenamePreset(p.id, p.name) }}
                     title="重命名"
                     className="opacity-0 group-hover:opacity-70 hover:opacity-100"
-                  >✎</button>
+                    aria-label={`重命名预设 ${p.name}`}
+                  ><Pencil className="h-3 w-3" /></button>
                   <button
                     onClick={() => { void handleDeletePreset(p.id, p.name) }}
                     title="删除"
                     className="opacity-0 group-hover:opacity-70 hover:opacity-100 hover:text-red-400"
-                  >✕</button>
+                    aria-label={`删除预设 ${p.name}`}
+                  ><X className="h-3 w-3" /></button>
                 </div>
               ))}
             </div>
           )}
           {presets.length > 0 && (
             <p className="mt-2 text-[11px] text-text-muted">点击预设会应用整套配置，包括上下文窗口；修改表单后需点击上方按钮才会写回该预设。</p>
+          )}
+        </div>
+
+        <div className="mb-4 border-b border-border/50 pb-4">
+          <div className="mb-2">
+            <h4 className="text-sm font-medium text-text-secondary">任务模型路由</h4>
+            <p className="mt-1 text-[11px] text-text-muted">
+              按任务自动使用已保存预设；未绑定、预设被删除或专用预设缺少 API Key 时，回退到当前全局模型。云端预设会接收对应任务的提示词与上下文。
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {AI_TASK_KINDS.map(taskKind => {
+              const selectedPreset = presets.find(preset => preset.id === taskRoutes[taskKind])
+              const routeMeta = TASK_ROUTE_META[taskKind]
+              return (
+                <label key={taskKind} className="block rounded border border-border bg-bg-base p-2.5">
+                  <span className="block text-xs font-medium text-text-primary">{routeMeta.label}</span>
+                  <span className="mb-2 block min-h-8 text-[11px] leading-4 text-text-muted">{routeMeta.description}</span>
+                  <select
+                    value={selectedPreset?.id ?? ''}
+                    onChange={event => setTaskRoute(taskKind, event.target.value || null)}
+                    aria-label={`${routeMeta.label}模型预设`}
+                    className="w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
+                  >
+                    <option value="">使用当前全局模型</option>
+                    {presets.map(preset => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.name} · {preset.config.provider}/{preset.config.model}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )
+            })}
+          </div>
+          {presets.length === 0 && (
+            <p className="mt-2 text-[11px] text-amber-400">先保存至少一个配置预设，才能给任务绑定专用模型。</p>
           )}
         </div>
 

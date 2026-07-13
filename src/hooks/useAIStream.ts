@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { streamChat, type StreamResult, type AICallMeta } from '../lib/ai/client'
+import { resolveRequestConfig, streamChat, type StreamResult, type AICallMeta } from '../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../lib/ai/config-readiness'
 import { useAIConfigStore } from '../stores/ai-config'
 import {
@@ -119,10 +119,12 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
     const config: AIConfig = overrideConfig
       ? { ...baseConfig, ...overrideConfig }
       : baseConfig
+    meta = overrideConfig ? { ...meta, configOverrides: overrideConfig } : meta
+    const effectiveConfig = resolveRequestConfig(config, meta).config
 
-    if (!isAIConfigReady(config)) {
-      const errMsg = getAIConfigRequiredMessage(config)
-      console.warn('[AI] 未配置可用 AI 服务，provider:', config.provider)
+    if (!isAIConfigReady(effectiveConfig)) {
+      const errMsg = getAIConfigRequiredMessage(effectiveConfig)
+      console.warn('[AI] 未配置可用 AI 服务，provider:', effectiveConfig.provider)
       if (sessionKey) {
         patchShared({ error: errMsg, isStreaming: false })
         sharedAbortControllers.delete(sessionKey)

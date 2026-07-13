@@ -14,7 +14,7 @@ import LocationTagPicker from './LocationTagPicker'
 import LocationTreeView from './LocationTreeView'
 import { useChapterStore } from '../../stores/chapter'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { chat } from '../../lib/ai/client'
+import { chat, resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import {
   buildLocationExtractPrompt, parseLocations, splitExtractionText, type ExtractedLocation,
@@ -81,8 +81,9 @@ export default function LocationPanel({ project }: Props) {
   }
 
   const handleExtractLocations = async () => {
-    if (!isAIConfigReady(aiConfig)) {
-      setExtractError(getAIConfigRequiredMessage(aiConfig))
+    const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'location.extract' }).config
+    if (!isAIConfigReady(effectiveConfig)) {
+      setExtractError(getAIConfigRequiredMessage(effectiveConfig))
       return
     }
     const written = chapters.filter(chapter => htmlToPlainText(chapter.content || '').trim().length > 50)

@@ -11,7 +11,7 @@
  *   · 状态写回 Reference 的 analysisStatus / analysisProgress。
  */
 import { db } from '../db/schema'
-import { chat, type AICallMeta } from '../ai/client'
+import { chat, resolveRequestConfig, type AICallMeta } from '../ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chunkDocument, quickHash, type ChunkPlan } from '../import/chunker'
@@ -405,8 +405,14 @@ ${depthGuide}
 
   const baseConfig = useAIConfigStore.getState().config
   const config: AIConfig = { ...baseConfig, maxTokens: args.maxTokens }
-  if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
-  const output = await chatWithAbort(messages, config, args.signal, { category: 'reference.analysis', projectId: args.ref.projectId })
+  const meta = {
+    category: 'reference.analysis',
+    projectId: args.ref.projectId,
+    configOverrides: { maxTokens: args.maxTokens },
+  } as const
+  const effectiveConfig = resolveRequestConfig(config, meta).config
+  if (!isAIConfigReady(effectiveConfig)) throw new Error(getAIConfigRequiredMessage(effectiveConfig))
+  const output = await chatWithAbort(messages, config, args.signal, meta)
   const obj = extractJSON(output) as RawAnalysis
   return obj || {}
 }
