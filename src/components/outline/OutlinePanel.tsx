@@ -31,6 +31,8 @@ import { useToast } from '../shared/Toast'
 import type { Project, StoryStructure } from '../../lib/types'
 import { STORY_STRUCTURES } from '../../lib/types/outline'
 import OutlineGenerationBasis from './OutlineGenerationBasis'
+import OutlinePreviewPanel from './OutlinePreviewPanel'
+import OutlineStructureMenu from './OutlineStructureMenu'
 import {
   OUTLINE_CHAPTER_DRAG_MIME,
   chapterDropProps,
@@ -998,7 +1000,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
 
         {/* 采纳预览：卷 */}
         {previewVolumes && (
-          <PreviewPanel
+          <OutlinePreviewPanel
             label={previewTargetId != null ? '将补全当前卷的卷纲' : `将创建 ${previewVolumes.length} 个卷`}
             items={previewVolumes}
             onConfirm={handleConfirmVolumes}
@@ -1008,7 +1010,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
 
         {/* 采纳预览：章节 */}
         {previewChapters && (
-          <PreviewPanel
+          <OutlinePreviewPanel
             label={previewTargetId != null
               ? '将补全当前章节的章纲'
               : `将在「${selectedVol?.title}」下创建 ${previewChapters.length} 个章节`}
@@ -1089,7 +1091,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
                   <span className="text-text-muted font-normal ml-1">（{selectedVolChapters.length + normalizedNodes.filter(n => selectedVolBlocks.some(b => b.id === n.parentId) && n.type === 'chapter').length} 章）</span>
                 </h3>
                 {!hasBlocks && (
-                  <StructureMenu onSelect={handleAddStructure} />
+                  <OutlineStructureMenu onSelect={handleAddStructure} />
                 )}
               </div>
 
@@ -1161,45 +1163,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
         )}
       </div>
     </PanelLayout>
-  )
-}
-
-// ── 预览面板 ──
-
-function PreviewPanel({
-  label, items, onConfirm, onCancel,
-}: {
-  label: string
-  items: { title: string; summary: string }[]
-  onConfirm: () => void
-  onCancel: () => void
-}) {
-  return (
-    <div className="border border-accent/50 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-accent/10">
-        <span className="text-sm font-medium text-accent">{label}</span>
-        <div className="flex gap-2">
-          <button onClick={onCancel}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text-primary rounded transition-colors">
-            <X className="w-3 h-3" /> 取消
-          </button>
-          <button onClick={onConfirm}
-            className="flex items-center gap-1 px-3 py-1 text-xs bg-accent text-white rounded hover:bg-accent-hover transition-colors">
-            <Check className="w-3 h-3" /> 确认写入
-          </button>
-        </div>
-      </div>
-      <div className="divide-y divide-border max-h-60 overflow-y-auto">
-        {items.map((item, i) => (
-          <div key={i} className="px-3 py-2 bg-bg-surface">
-            <div className="text-sm font-medium text-text-primary">{item.title}</div>
-            {item.summary && (
-              <div className="text-xs text-text-muted mt-1 line-clamp-2">{item.summary}</div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
   )
 }
 
@@ -1467,37 +1430,6 @@ function StoryBlockSection({
             ))
           )}
         </div>
-      )}
-    </div>
-  )
-}
-
-// ── 故事结构选择菜单 ──
-
-function StructureMenu({ onSelect }: { onSelect: (s: StoryStructure) => void }) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div className="relative">
-      <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-accent border border-border rounded-md transition-colors">
-        <LayoutList className="w-3 h-3" /> 添加故事结构
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-20 bg-bg-elevated border border-border rounded-lg shadow-lg py-1 min-w-[160px]">
-            {(Object.entries(STORY_STRUCTURES) as [StoryStructure, { label: string; blocks: string[] }][]).map(([key, def]) => (
-              <button key={key} onClick={() => { onSelect(key); setOpen(false) }}
-                className="w-full px-3 py-1.5 text-left text-xs text-text-primary hover:bg-bg-hover transition-colors">
-                <span className="font-medium">{def.label}</span>
-                {def.blocks.length > 0 && (
-                  <span className="text-text-muted ml-1">（{def.blocks.length} 块）</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </>
       )}
     </div>
   )
