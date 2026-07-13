@@ -1339,3 +1339,18 @@ Claude 暂时不可用,按作者要求由 Codex 在预览浏览器自行测试 `
 - `git diff --check` → 通过。
 
 👉 球在 Claude:请审 `codex/quickwin-written-progress-outline-20260713`,重点看 `writtenChapterProgress` 是否正确走注册表、是否存在跨卷/跨世界误读,以及 prompt 的“已写正文优先”边界是否足够克制。
+
+### [2026-07-13] Codex · RELEASE REPORT · `codex/release-v3.8.0`
+
+作者确认 QUICKWIN-6 跨卷拖拽真实 UI 流程通过,并授权将此前通过验证的功能直接推送发布。Codex 已从最新 `origin/main` 建立集成分支,按串行方式整合:
+- QUICKWIN-6:章节跨卷/跨故事块拖动,含浏览器丢失自定义拖拽 MIME 时的会话状态兜底。
+- EDITOR-1:单章/全书查找替换、快照、撤销、正则/全字匹配;预览浏览器已实测单处、本章、全书、撤销流程。
+- QUICKWIN-4:卷纲/章纲生成经 `CONTEXT_SOURCES.writtenChapterProgress` 读取目标卷已写正文事实边界。
+- 版本号根治:`APP_VERSION` 直接读取 `package.json.version`;本次按语义化版本提升为 `3.8.0`。
+
+版本含义按 SemVer:
+- 第一位 `3`:重大版本,用于不兼容或产品代际变化。
+- 第二位 `8`:向后兼容的新功能版本;本次包含三项用户功能,所以 `3.7.5 → 3.8.0`。
+- 第三位 `0`:当前功能版本下的补丁号;后续只修兼容 bug 时依次为 `3.8.1`、`3.8.2`。
+
+👉 球在 Codex:完成集成全套闸门后快进合并 `main`,推送 `v3.8.0` 标签并确认 GitHub Source Release 发布成功。

@@ -55,7 +55,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 33 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 34 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -64,6 +64,7 @@
 | `contextMemo` | 上下文快照 | project | L3 | 1500 |
 | `chapterOutline` | 当前章节大纲 | node | L1 | 800 |
 | `existingVolumeOutlines` | 已有卷大纲 | project | L1 | 2400 |
+| `writtenChapterProgress` | 本卷已写正文进度 | node | L1 | 3000 |
 | `currentFacts` | 当前有效事实(事实账本投影) | chapter | L1 | 2000 |
 | `retrievedPassages` | 相关前文召回(NS-5 混合检索) | chapter | L2 | 2500 |
 | `detailedOutline` | 本章细纲(场景拆解) | node | L1 | 1500 |
@@ -146,9 +147,9 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `inspiration.reverse` | `src/components/project/InspirationPanel.tsx:107` |
 | `inventory.extract` | `src/components/items/InventoryPanel.tsx:85` |
 | `location.extract` | `src/components/location/LocationPanel.tsx:105` |
-| `outline.chapter` | `src/components/outline/OutlinePanel.tsx:489`<br/>`src/lib/ai/batch-outline-runner.ts:123` |
+| `outline.chapter` | `src/components/outline/OutlinePanel.tsx:490`<br/>`src/lib/ai/batch-outline-runner.ts:123` |
 | `outline.character-driven` | `src/components/outline/CharacterDrivenPlotPanel.tsx:113` |
-| `outline.volume` | `src/components/outline/OutlinePanel.tsx:441` |
+| `outline.volume` | `src/components/outline/OutlinePanel.tsx:442` |
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:106` |
 | `reference.characters` | `src/components/project/AnalysisReportViewer.tsx:139` |
 | `reference.summary` | `src/components/project/AnalysisReportViewer.tsx:110` |
@@ -177,4 +178,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `bda02c5`
+生成时间基准:commit `50637db`
