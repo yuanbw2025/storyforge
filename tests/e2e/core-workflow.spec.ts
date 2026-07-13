@@ -122,3 +122,47 @@ test('手动快照可恢复为新项目且不覆盖原项目', async ({ page }) 
   await expect(page.getByText(projectName, { exact: true })).toBeVisible()
   await expect(page.getByText(`${projectName}（导入）`, { exact: true })).toBeVisible()
 })
+
+test('删除项目经过双重安全门且不影响其它项目', async ({ page }) => {
+  const deletedProject = 'E2E 待删除项目'
+  const keptProject = 'E2E 保留项目'
+  await createBookWithSavedChapter(page, deletedProject, '删除项目时应由注册表级联清理的正文。')
+  await page.getByRole('button', { name: '返回首页', exact: true }).click()
+  await createProject(page, keptProject)
+  await page.getByRole('button', { name: '返回首页', exact: true }).click()
+
+  const deletedRow = page.getByText(deletedProject, { exact: true })
+    .locator('xpath=ancestor::div[contains(@class,"group")][1]')
+  await deletedRow.getByTitle('删除').click()
+  await expect(deletedRow.getByRole('button', { name: '确认', exact: true })).toBeVisible()
+  await expect(page.getByText(deletedProject, { exact: true })).toBeVisible()
+
+  await deletedRow.getByRole('button', { name: '确认', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '危险操作:删除项目' })).toBeVisible()
+  await page.getByRole('button', { name: '继续', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '是否立即下载备份(JSON 文件到本地)?' })).toBeVisible()
+  await page.getByRole('button', { name: '已备份，继续', exact: true }).click()
+
+  await expect(page.getByText(deletedProject, { exact: true })).toHaveCount(0)
+  await expect(page.getByText(keptProject, { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /共有 1 部作品/ })).toBeVisible()
+})
+
+test('取消删除安全门后项目与正文都保留', async ({ page }) => {
+  const projectName = 'E2E 取消删除'
+  const chapterText = '取消危险操作后这段正文必须仍然存在。'
+  await createBookWithSavedChapter(page, projectName, chapterText)
+  await page.getByRole('button', { name: '返回首页', exact: true }).click()
+
+  const projectRow = page.getByText(projectName, { exact: true })
+    .locator('xpath=ancestor::div[contains(@class,"group")][1]')
+  await projectRow.getByTitle('删除').click()
+  await projectRow.getByRole('button', { name: '确认', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '危险操作:删除项目' })).toBeVisible()
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+
+  await expect(page.getByText(projectName, { exact: true })).toBeVisible()
+  await page.getByText(projectName, { exact: true }).click()
+  await page.getByRole('button', { name: '章节', exact: true }).click()
+  await expect(page.locator('.tiptap-editor')).toContainText(chapterText)
+})
