@@ -25,6 +25,7 @@ async function mount(result: StepResult) {
   const root = createRoot(host)
   const onSave = vi.fn()
   const onUserInputChange = vi.fn()
+  const onOutputChange = vi.fn()
 
   await act(async () => {
     root.render(createElement(StepCard, {
@@ -36,12 +37,13 @@ async function mount(result: StepResult) {
       onRetry: vi.fn(),
       onSave,
       onUserInputChange,
+      onOutputChange,
       saved: false,
       hasProject: true,
     }))
   })
 
-  return { host, root, onSave, onUserInputChange }
+  return { host, root, onSave, onUserInputChange, onOutputChange }
 }
 
 describe('HEALTH-4 · 工作流步骤卡用户路径', () => {
@@ -62,6 +64,7 @@ describe('HEALTH-4 · 工作流步骤卡用户路径', () => {
     expect(textareas).toHaveLength(2)
 
     await act(async () => setTextareaValue(textareas[1], '用户修改后的结果'))
+    expect(mounted.onOutputChange).toHaveBeenLastCalledWith('用户修改后的结果')
     const saveButton = Array.from(mounted.host.querySelectorAll('button'))
       .find(button => button.textContent?.includes('保存到'))!
     await act(async () => saveButton.click())

@@ -385,6 +385,10 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
             onRetry={() => handleRetryStep(idx)}
             onSave={(output, target) => handleSaveTarget(step.stepId, output, target)}
             onUserInputChange={(v) => userInputsRef.current.set(step.stepId, v)}
+            onOutputChange={(output) => {
+              stepOutputsRef.current.set(step.stepId, output)
+              updateResult(step.stepId, { output })
+            }}
             saved={savedSteps.has(step.stepId)}
             hasProject={!!project?.id}
           />
@@ -406,7 +410,7 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
 
 export function StepCard({
   step, index, result, isCurrent, onSkip, onRetry,
-  onSave, onUserInputChange, saved, hasProject,
+  onSave, onUserInputChange, onOutputChange, saved, hasProject,
 }: {
   step: PromptWorkflowStep
   index: number
@@ -416,6 +420,7 @@ export function StepCard({
   onRetry: () => void
   onSave: (output: string, target: SaveTarget) => void
   onUserInputChange: (v: string) => void
+  onOutputChange: (v: string) => void
   saved: boolean
   hasProject: boolean
 }) {
@@ -499,7 +504,10 @@ export function StepCard({
             <>
               <textarea
                 value={editedOutput}
-                onChange={e => setEditedOutput(e.target.value)}
+                onChange={e => {
+                  setEditedOutput(e.target.value)
+                  onOutputChange(e.target.value)
+                }}
                 rows={8}
                 className="w-full text-xs text-text-primary font-sans max-h-72 p-2 bg-bg-surface border border-border rounded resize-y focus:outline-none focus:border-accent"
               />
