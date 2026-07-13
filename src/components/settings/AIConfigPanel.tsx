@@ -1,5 +1,5 @@
-import { useState, useEffect, useSyncExternalStore } from 'react'
-import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText } from 'lucide-react'
+import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
+import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText, RotateCcw } from 'lucide-react'
 import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
@@ -8,6 +8,7 @@ import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { getLogs, subscribeLogs, clearLogs, formatLog } from '../../lib/ai/logger'
 import { applyStoryForgeTheme, resolveStoryForgeTheme, THEME_OPTIONS, type StoryForgeTheme } from '../../lib/theme'
 import { useDialog } from '../shared/Dialog'
+import { parseContextWindowInput } from '../../lib/ai/context-window-input'
 
 export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean; hint: string }[] = [
   { value: 'deepseek', label: 'DeepSeek', cors: false, hint: '获取 Key: platform.deepseek.com → API Keys（需点击下方「切换到本地代理」）' },
@@ -41,6 +42,9 @@ export default function AIConfigPanel() {
   const [showLogs, setShowLogs] = useState(false)
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
+  const [contextWindowDraft, setContextWindowDraft] = useState(() => config.contextWindow ? String(config.contextWindow) : '')
+  const [contextWindowError, setContextWindowError] = useState('')
+  const submittedContextWindowRef = useRef(config.contextWindow)
   const [currentTheme, setCurrentTheme] = useState<StoryForgeTheme>(() =>
     resolveStoryForgeTheme(localStorage.getItem('storyforge-theme')),
   )
@@ -57,6 +61,27 @@ export default function AIConfigPanel() {
 
   const currentProviderInfo = PROVIDER_OPTIONS.find((p) => p.value === config.provider)
   const editingPreset = editingPresetId ? presets.find(p => p.id === editingPresetId) : null
+
+  useEffect(() => {
+    if (config.contextWindow === submittedContextWindowRef.current) return
+    submittedContextWindowRef.current = config.contextWindow
+    setContextWindowDraft(config.contextWindow ? String(config.contextWindow) : '')
+    setContextWindowError('')
+  }, [config.contextWindow])
+
+  const handleContextWindowChange = (raw: string) => {
+    setContextWindowDraft(raw)
+    const parsed = parseContextWindowInput(raw)
+    if (parsed.kind === 'invalid') {
+      setContextWindowError(parsed.message)
+      return
+    }
+
+    const next = parsed.kind === 'valid' ? parsed.value : undefined
+    setContextWindowError('')
+    submittedContextWindowRef.current = next
+    setConfig({ contextWindow: next })
+  }
 
   const handleTest = async () => {
     setTesting(true)
@@ -188,6 +213,9 @@ export default function AIConfigPanel() {
                 </div>
               ))}
             </div>
+          )}
+          {presets.length > 0 && (
+            <p className="mt-2 text-[11px] text-text-muted">点击预设会应用整套配置，包括上下文窗口；修改表单后需点击上方按钮才会写回该预设。</p>
           )}
         </div>
 
@@ -412,14 +440,37 @@ export default function AIConfigPanel() {
                 ? <span className="text-accent ml-1">{config.contextWindow.toLocaleString()} token</span>
                 : <span className="text-text-muted ml-1">按模型预设</span>}
             </label>
-            <input
-              type="number"
-              min={0}
-              value={config.contextWindow || ''}
-              onChange={(e) => setConfig({ contextWindow: Number(e.target.value) || undefined })}
-              placeholder="本地/自定义模型请按实际填写，如 131072；留空 = 用内置预设"
-              className="w-full px-3 py-2 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={contextWindowDraft}
+                onChange={(e) => handleContextWindowChange(e.target.value)}
+                aria-invalid={Boolean(contextWindowError)}
+                placeholder="本地/自定义模型请按实际填写，如 131072；留空 = 用内置预设"
+                className={`min-w-0 flex-1 px-3 py-2 bg-bg-base border rounded text-sm text-text-primary focus:outline-none ${contextWindowError ? 'border-red-400 focus:border-red-400' : 'border-border focus:border-accent'}`}
+              />
+              <button
+                type="button"
+                onClick={() => handleContextWindowChange('')}
+                disabled={!contextWindowDraft && !contextWindowError}
+                title="重置为模型预设"
+                aria-label="重置上下文窗口为模型预设"
+                className="p-2 rounded border border-border text-text-muted hover:text-accent hover:border-accent/50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </div>
+            {contextWindowError ? (
+              <p className="mt-1 text-[11px] text-red-400">{contextWindowError}；已保存值未改变。</p>
+            ) : (
+              <p className="mt-1 flex items-center gap-1 text-[11px] text-green-400/80">
+                <CheckCircle className="w-3 h-3" />
+                {editingPreset && activePresetId === null
+                  ? `已自动保存到当前配置，尚未写回「${editingPreset.name}」`
+                  : '已自动保存到当前配置'}
+              </p>
+            )}
             <p className="text-[11px] text-text-muted mt-1">
               识别不到的模型默认按 8K 计算,会误报「上下文超出窗口」。本地模型(LM Studio / Ollama)请在此填真实窗口,如 128000 / 262144。
             </p>
