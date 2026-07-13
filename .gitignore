@@ -11,6 +11,8 @@ public/fmg/
 tree.txt
 *.bak
 coverage/
+test-results/
+playwright-report/
 
 # Release packaging outputs
 release/

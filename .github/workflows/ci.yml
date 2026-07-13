@@ -51,3 +51,9 @@ jobs:
 
       - name: 构建产物体积预算
         run: npm run check:bundle-size
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: 核心用户路径浏览器冒烟
+        run: npm run ci:e2e

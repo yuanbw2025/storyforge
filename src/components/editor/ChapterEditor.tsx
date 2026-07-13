@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Save, FileText, Eye, ClipboardList, CheckSquare, Square, BookOpenCheck, ShieldCheck, StickyNote, Columns2 } from 'lucide-react'
+import { Save, FileText, Eye, ClipboardList, CheckSquare, Square, BookOpenCheck, ShieldCheck, StickyNote, Columns2, Loader2 } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
 import { useStateCardStore } from '../../stores/state-card'
@@ -100,6 +100,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [content, setContent] = useState('')
   const [plainText, setPlainText] = useState('')
   const [savedContent, setSavedContent] = useState('')
+  const [manualSaving, setManualSaving] = useState(false)
+  const [manualSaveError, setManualSaveError] = useState('')
   const [showContext, setShowContext] = useState(false)
   const [customInstruction, setCustomInstruction] = useState('')
   const [extracting, setExtracting] = useState(false)
@@ -185,6 +187,19 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     return { html, plain, wordCount: wc }
   }, [content, currentChapter?.id, updateChapter])
 
+  const handleManualSave = useCallback(async () => {
+    if (manualSaving) return
+    setManualSaving(true)
+    setManualSaveError('')
+    try {
+      await persistCurrentEditorContent()
+    } catch (error) {
+      setManualSaveError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setManualSaving(false)
+    }
+  }, [manualSaving, persistCurrentEditorContent])
+
   // 切换章节：同步到本地 state（RichEditor 会基于 value 重建内容）
   useEffect(() => {
     const raw = currentChapter?.content || ''
@@ -195,6 +210,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   // 切换章节时同步 savedContent（只在章节 id 变化时）
   useEffect(() => {
     setSavedContent(currentChapter?.content || '')
+    setManualSaveError('')
   }, [currentChapter?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- 保存基线只在切章时重置，自动保存不能重置脏状态
 
   useEffect(() => {
@@ -899,10 +915,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           >
             <Columns2 className="h-3.5 w-3.5" /> 对照润色
           </button>
-          <button onClick={() => { void persistCurrentEditorContent() }}
-            disabled={compareSourceHtml != null}
-            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-accent disabled:cursor-not-allowed disabled:opacity-40">
-            <Save className="w-3.5 h-3.5" /> 保存
+          <button onClick={() => { void handleManualSave() }}
+            disabled={compareSourceHtml != null || manualSaving}
+            title={manualSaveError ? `保存失败：${manualSaveError}` : undefined}
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40 ${
+              manualSaveError ? 'text-error' : content === savedContent ? 'text-success' : 'text-text-muted hover:text-accent'
+            }`}>
+            {manualSaving
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Save className="w-3.5 h-3.5" />}
+            {manualSaving ? '保存中...' : manualSaveError ? '保存失败' : content === savedContent ? '已保存' : '保存'}
           </button>
         </div>
       </div>
@@ -1274,6 +1296,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onChange={(html, plain) => {
             setContent(html)
             setPlainText(plain)
+            setManualSaveError('')
           }}
           placeholder="开始写作..."
           minHeight={560}

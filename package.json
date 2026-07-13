@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
     "check:required-tables": "node scripts/check-required-tables.mjs",
     "check:source-reachability": "node scripts/check-source-reachability.mjs",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
@@ -20,7 +21,8 @@
     "check:architecture": "node scripts/check-architecture.mjs",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
-    "ci": "npm run check:required-tables && npm run check:ai-manual && npm run check:architecture && npm run check:source-reachability && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size"
+    "ci": "npm run check:required-tables && npm run check:ai-manual && npm run check:architecture && npm run check:source-reachability && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size",
+    "ci:e2e": "npm run test:e2e"
   },
   "dependencies": {
     "@tiptap/extension-placeholder": "^3.22.3",
@@ -44,6 +46,7 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",

@@ -44,6 +44,12 @@ jobs:
       - name: Run production release gates
         run: npm run ci
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser release smoke tests
+        run: npm run ci:e2e
+
       - name: Prepare release notes
         run: |
           mkdir -p release
