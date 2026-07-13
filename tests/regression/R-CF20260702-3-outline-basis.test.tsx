@@ -8,13 +8,16 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 
-async function renderBasis(context: AssembleContextResult) {
+async function renderBasis(
+  context: AssembleContextResult | null,
+  { loading = false, error = '' }: { loading?: boolean; error?: string } = {},
+) {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
   mounted.push({ host, root })
   await act(async () => {
-    root.render(createElement(OutlineGenerationBasis, { context, loading: false, error: '' }))
+    root.render(createElement(OutlineGenerationBasis, { context, loading, error }))
   })
   return host
 }
@@ -43,6 +46,19 @@ afterEach(async () => {
 })
 
 describe('CF-20260702-3 · 大纲生成依据面板', () => {
+  it('读取中、失败和未准备三种状态不会误显示旧依据', async () => {
+    const loading = await renderBasis(null, { loading: true })
+    expect(loading.textContent).toContain('正在读取本次生成依据')
+    expect(loading.querySelector('[data-testid="outline-generation-basis"]')).toBeNull()
+
+    const failed = await renderBasis(null, { error: '上下文装配失败' })
+    expect(failed.getAttribute('role')).toBeNull()
+    expect(failed.querySelector('[role="alert"]')?.textContent).toContain('生成依据读取失败：上下文装配失败')
+
+    const idle = await renderBasis(null)
+    expect(idle.textContent).toBe('')
+  })
+
   it('按注册表名称显示已读取来源与故事核心摘要', async () => {
     const host = await renderBasis(makeContext({
       included: ['storyCore', 'worldview'],
