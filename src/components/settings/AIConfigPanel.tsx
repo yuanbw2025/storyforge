@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
-import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText, RotateCcw } from 'lucide-react'
+import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText, RotateCcw, RefreshCw } from 'lucide-react'
 import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
@@ -9,6 +9,8 @@ import { getLogs, subscribeLogs, clearLogs, formatLog } from '../../lib/ai/logge
 import { applyStoryForgeTheme, resolveStoryForgeTheme, THEME_OPTIONS, type StoryForgeTheme } from '../../lib/theme'
 import { useDialog } from '../shared/Dialog'
 import { parseContextWindowInput } from '../../lib/ai/context-window-input'
+import { fetchOpenAIModels } from '../../lib/ai/model-list'
+import { normalizeOpenAIBaseUrl } from '../../lib/ai/openai-endpoint'
 
 export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean; hint: string }[] = [
   { value: 'deepseek', label: 'DeepSeek', cors: false, hint: '获取 Key: platform.deepseek.com → API Keys（需点击下方「切换到本地代理」）' },
@@ -44,6 +46,9 @@ export default function AIConfigPanel() {
   const [presetName, setPresetName] = useState('')
   const [contextWindowDraft, setContextWindowDraft] = useState(() => config.contextWindow ? String(config.contextWindow) : '')
   const [contextWindowError, setContextWindowError] = useState('')
+  const [fetchedModels, setFetchedModels] = useState<string[]>([])
+  const [refreshingModels, setRefreshingModels] = useState(false)
+  const [modelListError, setModelListError] = useState('')
   const submittedContextWindowRef = useRef(config.contextWindow)
   const [currentTheme, setCurrentTheme] = useState<StoryForgeTheme>(() =>
     resolveStoryForgeTheme(localStorage.getItem('storyforge-theme')),
@@ -81,6 +86,26 @@ export default function AIConfigPanel() {
     setContextWindowError('')
     submittedContextWindowRef.current = next
     setConfig({ contextWindow: next })
+  }
+
+  const handleRefreshModels = async () => {
+    setRefreshingModels(true)
+    setModelListError('')
+    try {
+      const normalized = normalizeOpenAIBaseUrl(config.baseUrl)
+      if (normalized.changed) setConfig({ baseUrl: normalized.baseUrl })
+      const models = await fetchOpenAIModels({
+        baseUrl: normalized.baseUrl,
+        apiKey: config.apiKey,
+      })
+      setFetchedModels(models)
+      if (models.length === 0) setModelListError('服务返回了空模型列表；仍可手动填写模型名')
+    } catch (error) {
+      setFetchedModels([])
+      setModelListError(error instanceof Error ? error.message : '刷新模型列表失败')
+    } finally {
+      setRefreshingModels(false)
+    }
   }
 
   const handleTest = async () => {
@@ -122,6 +147,11 @@ export default function AIConfigPanel() {
   useEffect(() => {
     setTestResult(null)
   }, [config.provider])
+
+  useEffect(() => {
+    setFetchedModels([])
+    setModelListError('')
+  }, [config.baseUrl, config.provider])
 
   return (
     <div className="max-w-2xl">
@@ -339,7 +369,32 @@ export default function AIConfigPanel() {
               })()}
             </div>
             <div>
-              <label className="block text-sm text-text-secondary mb-1.5">模型</label>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <label className="block text-sm text-text-secondary">模型</label>
+                {['custom', 'ollama'].includes(config.provider) && (
+                  <button
+                    type="button"
+                    onClick={() => { void handleRefreshModels() }}
+                    disabled={refreshingModels || !config.baseUrl.trim()}
+                    title="从当前服务刷新模型列表"
+                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${refreshingModels ? 'animate-spin' : ''}`} />
+                    {refreshingModels ? '刷新中' : '刷新模型'}
+                  </button>
+                )}
+              </div>
+              {['custom', 'ollama'].includes(config.provider) && fetchedModels.length > 0 && (
+                <select
+                  value={fetchedModels.includes(config.model) ? config.model : ''}
+                  onChange={(e) => { if (e.target.value) setConfig({ model: e.target.value }) }}
+                  aria-label="服务返回的模型列表"
+                  className="mb-1.5 w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+                >
+                  <option value="">选择服务返回的模型（{fetchedModels.length}）</option>
+                  {fetchedModels.map(model => <option key={model} value={model}>{model}</option>)}
+                </select>
+              )}
               {PROVIDER_MODELS[config.provider] ? (
                 <>
                   <select
@@ -373,8 +428,13 @@ export default function AIConfigPanel() {
                   type="text"
                   value={config.model}
                   onChange={(e) => setConfig({ model: e.target.value })}
+                  placeholder="手动输入模型名"
                   className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
                 />
+              )}
+              {modelListError && <p className="mt-1 text-[11px] text-amber-400">{modelListError}</p>}
+              {config.provider === 'ollama' && (
+                <p className="mt-1 text-[11px] text-text-muted">未安装的模型请先在 Ollama 中拉取，完成后回到这里刷新。</p>
               )}
             </div>
           </div>
