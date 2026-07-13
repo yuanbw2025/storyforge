@@ -5,6 +5,7 @@
  * 内置 IME 组合输入保护。
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { containTextareaWheel, parseCssPixels } from './textarea-scroll'
 
 /* ── InlineInput（单行） ────────────────────────────────────── */
 
@@ -71,12 +72,14 @@ export function InlineInput({
 /* ── InlineTextarea（多行） ──────────────────────────────────── */
 
 export function InlineTextarea({
-  value, onChange, placeholder, className,
+  value, onChange, placeholder, className, minRows = 2, maxRows = 16,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
   className?: string
+  minRows?: number
+  maxRows?: number
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
@@ -89,10 +92,17 @@ export function InlineTextarea({
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = Math.max(32, el.scrollHeight) + 'px'
-  }, [])
+    const computed = getComputedStyle(el)
+    const lineHeight = parseCssPixels(computed.lineHeight) || 20
+    const paddingY = parseCssPixels(computed.paddingTop) + parseCssPixels(computed.paddingBottom)
+    const minHeight = lineHeight * minRows + paddingY
+    const maxHeight = lineHeight * maxRows + paddingY
+    const height = Math.min(maxHeight, Math.max(minHeight, el.scrollHeight))
+    el.style.height = `${height}px`
+    el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [maxRows, minRows])
 
-  useEffect(() => { if (editing) resize() }, [editing, resize])
+  useEffect(() => { if (editing) resize() }, [draft, editing, resize])
 
   const commit = () => {
     setEditing(false)
@@ -109,7 +119,8 @@ export function InlineTextarea({
           composingRef.current = false
           setDraft((e.target as HTMLTextAreaElement).value)
         }}
-        onChange={e => { setDraft(e.target.value); resize() }}
+        onChange={e => { setDraft(e.target.value) }}
+        onWheel={containTextareaWheel}
         onBlur={commit}
         onKeyDown={e => { if (e.key === 'Escape') { setDraft(value); setEditing(false) } }}
         placeholder={placeholder}

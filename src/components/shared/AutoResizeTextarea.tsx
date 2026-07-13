@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback, type TextareaHTMLAttributes } from 'react'
+import { containTextareaWheel, parseCssPixels } from './textarea-scroll'
 
 interface Props extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'rows'> {
   /** 最小行数 */
@@ -18,6 +19,7 @@ export default function AutoResizeTextarea({
   maxRows = 20,
   value: externalValue,
   onChange,
+  onWheel,
   className = '',
   ...rest
 }: Props) {
@@ -37,8 +39,8 @@ export default function AutoResizeTextarea({
     if (!el) return
     el.style.height = 'auto'
     const computed = getComputedStyle(el)
-    const lineHeight = parseFloat(computed.lineHeight) || 20
-    const paddingY = parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom)
+    const lineHeight = parseCssPixels(computed.lineHeight) || 20
+    const paddingY = parseCssPixels(computed.paddingTop) + parseCssPixels(computed.paddingBottom)
     const minH = lineHeight * minRows + paddingY
     const maxH = lineHeight * maxRows + paddingY
     const targetH = Math.min(maxH, Math.max(minH, el.scrollHeight))
@@ -67,6 +69,10 @@ export default function AutoResizeTextarea({
         if (!composingRef.current) {
           onChange?.(e)
         }
+      }}
+      onWheel={(e) => {
+        onWheel?.(e)
+        if (!e.defaultPrevented) containTextareaWheel(e)
       }}
     />
   )

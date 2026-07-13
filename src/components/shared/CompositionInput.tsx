@@ -9,6 +9,7 @@
  * 组合结束后再同步给外部。
  */
 import { useState, useEffect, useRef, forwardRef } from 'react'
+import { containTextareaWheel } from './textarea-scroll'
 
 /* ── CInput ────────────────────────────────────────────────── */
 
@@ -54,7 +55,7 @@ CInput.displayName = 'CInput'
 export const CTextarea = forwardRef<
   HTMLTextAreaElement,
   React.TextareaHTMLAttributes<HTMLTextAreaElement>
->(({ value: externalValue, onChange, ...rest }, ref) => {
+>(({ value: externalValue, onChange, onWheel, ...rest }, ref) => {
   const [localValue, setLocalValue] = useState(String(externalValue ?? ''))
   const composingRef = useRef(false)
 
@@ -81,6 +82,10 @@ export const CTextarea = forwardRef<
         if (!composingRef.current) {
           onChange?.(e)
         }
+      }}
+      onWheel={(e) => {
+        onWheel?.(e)
+        if (!e.defaultPrevented) containTextareaWheel(e)
       }}
     />
   )
