@@ -11,6 +11,7 @@
  */
 import type { PromptSeed } from './prompt-seeds'
 import { EXTENDED_GENRE_PACK_SEEDS } from './prompt-seeds-genre-packs-extended'
+import { VOLUME_OUTLINE_PARAMETERS } from './prompt-seed-params'
 
 // ── 仙侠修真包 ─────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ const XIANXIA: PromptSeed[] = [
 
 用户补充：{{userHint}}{{/if}}`,
     variables: ['projectName', 'targetWordCount', 'estimatedVolumes', 'worldContext', 'storyCore', 'userHint'],
+    parameters: VOLUME_OUTLINE_PARAMETERS,
     isActive: false,
   },
   {
@@ -274,6 +276,7 @@ const YANQING: PromptSeed[] = [
 
 用户补充：{{userHint}}{{/if}}`,
     variables: ['projectName', 'targetWordCount', 'worldContext', 'storyCore', 'userHint'],
+    parameters: VOLUME_OUTLINE_PARAMETERS,
     isActive: false,
   },
   {
@@ -449,6 +452,7 @@ const REALISM: PromptSeed[] = [
 
 用户补充：{{userHint}}{{/if}}`,
     variables: ['projectName', 'targetWordCount', 'worldContext', 'storyCore', 'userHint'],
+    parameters: VOLUME_OUTLINE_PARAMETERS,
     isActive: false,
   },
   {
@@ -629,6 +633,7 @@ const SUSPENSE: PromptSeed[] = [
 
 用户补充：{{userHint}}{{/if}}`,
     variables: ['projectName', 'targetWordCount', 'worldContext', 'storyCore', 'userHint'],
+    parameters: VOLUME_OUTLINE_PARAMETERS,
     isActive: false,
   },
   {
@@ -842,6 +847,7 @@ const HISTORICAL: PromptSeed[] = [
 
 用户补充：{{userHint}}{{/if}}`,
     variables: ['projectName', 'targetWordCount', 'estimatedVolumes', 'worldContext', 'storyCore', 'userHint'],
+    parameters: VOLUME_OUTLINE_PARAMETERS,
     isActive: false,
   },
   {

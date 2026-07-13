@@ -6,6 +6,7 @@
  * 每个包聚焦最关键的 2 个模板，其他模块复用通用包。
  */
 import type { PromptSeed } from './prompt-seeds'
+import { VOLUME_OUTLINE_PARAMETERS } from './prompt-seed-params'
 
 // ── 玄幻 ──────────────────────────────────────────
 
@@ -64,16 +65,31 @@ const XUANHUAN: PromptSeed[] = [
 3. 卷末必须有更强大的反派/势力出现，推动下一卷
 4. 金手指/宝物/功法的获取要分散到各卷，不能一次给完
 
-输出格式：JSON 数组 [{title, summary, keyEvents}]`,
-    userPromptTemplate: `根据以下世界观和故事核心，规划卷级大纲：
+输出格式：JSON 数组 [{title, summary}]`,
+    userPromptTemplate: `小说：{{projectName}}（{{genres}}）
+目标字数：约 {{targetWordCount}} 字
+建议卷数：约 {{estimatedVolumes}} 卷
 
-故事核心：{{storySeed}}
-世界观：{{worldContext}}
-主角：{{protagonist}}
-目标章数：约 {{totalChapters}} 章{{#if userHint}}
+世界观：
+{{worldContext}}
+
+故事核心：
+{{storyCore}}
+{{#if characterContext}}
+
+已创建角色：
+{{characterContext}}
+{{/if}}{{#if worldRulesContext}}
+
+{{worldRulesContext}}
+{{/if}}{{#if existingVolumesContext}}
+
+{{existingVolumesContext}}
+{{/if}}
+请按玄幻节奏生成卷级大纲，每卷围绕一个地图阶段、境界突破或势力冲突。{{#if userHint}}
 额外要求：{{userHint}}{{/if}}`,
-    variables: ['storySeed', 'worldContext', 'protagonist', 'totalChapters', 'userHint'],
-    parameters: [],
+    variables: ['projectName', 'genres', 'targetWordCount', 'estimatedVolumes', 'worldContext', 'storyCore', 'characterContext', 'worldRulesContext', 'existingVolumesContext', 'userHint'],
+    parameters: VOLUME_OUTLINE_PARAMETERS,
     isActive: false,
   },
 ]
@@ -214,27 +230,43 @@ const LISHI: PromptSeed[] = [
     scope: 'system', moduleKey: 'outline.volume', promptType: 'generate',
     name: '历史包-卷大纲', description: '历史题材卷级大纲，含史实风险提示。',
     genres: ['lishi'],
-    systemPrompt: `你是一位历史小说的大纲策划师。请为本卷设计章节大纲。
+    systemPrompt: `你是一位历史小说的大纲策划师。请为全书设计卷级大纲。
 
 要点：
 1. 历史小说的节奏：朝堂→民间→战场→密室→朝堂，多线交织
-2. 每章标注涉及的真实历史事件/人物，方便作者后续核实
+2. 每卷标注涉及的真实历史事件/人物，方便作者后续核实
 3. 权谋线要有伏笔和反转，不能一路平推
 4. 战争线注意补给、地形、士气等现实要素
 5. 感情线要克制，符合时代背景下的人际关系
 
 【史实风险提示】
-在大纲中，如果某个章节的核心情节依赖真实历史事件或人物，请在该章节备注中标注：
-  ⚠️ 本章涉及真实史实：[具体事件/人物]，建议作者核实后再展开
-这样作者在写细纲和正文之前就知道哪些章节需要查资料。`,
-    userPromptTemplate: `请为以下卷设计章节大纲：
+在卷纲中，如果某卷的核心情节依赖真实历史事件或人物，请在该卷摘要中标注：
+  ⚠️ 本卷涉及真实史实：[具体事件/人物]，建议作者核实后再展开
+这样作者在写细纲和正文之前就知道哪些卷需要查资料。`,
+    userPromptTemplate: `小说：{{projectName}}（{{genres}}）
+目标字数：约 {{targetWordCount}} 字
+建议卷数：约 {{estimatedVolumes}} 卷
 
-卷名/阶段：{{volumeTitle}}
-故事背景：{{worldContext}}
-本卷主线：{{volumeSummary}}
-主要角色：{{characters}}{{#if userHint}}
+历史背景与地理考据：
+{{worldContext}}
+
+故事核心：
+{{storyCore}}
+{{#if characterContext}}
+
+主要角色：
+{{characterContext}}
+{{/if}}{{#if worldRulesContext}}
+
+{{worldRulesContext}}
+{{/if}}{{#if existingVolumesContext}}
+
+{{existingVolumesContext}}
+{{/if}}
+请按历史小说节奏生成全书卷级大纲。{{#if userHint}}
 额外要求：{{userHint}}{{/if}}`,
-    variables: ['volumeTitle', 'worldContext', 'volumeSummary', 'characters', 'userHint'],
+    variables: ['projectName', 'genres', 'targetWordCount', 'estimatedVolumes', 'worldContext', 'storyCore', 'characterContext', 'worldRulesContext', 'existingVolumesContext', 'userHint'],
+    parameters: VOLUME_OUTLINE_PARAMETERS,
     isActive: false,
   },
 ]

@@ -35,7 +35,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const raw = await db.projects.get(id)
     if (!raw) return undefined
     const project = migrateGenre(raw)
-    set({ currentProjectId: id })
+    const projects = get().projects
+    const exists = projects.some(p => p.id === id)
+    const nextProjects = exists
+      ? projects.map(p => p.id === id ? project : p)
+      : [...projects, project].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+    set({ currentProjectId: id, projects: nextProjects })
     return project
   },
 

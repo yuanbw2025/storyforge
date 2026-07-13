@@ -84,6 +84,10 @@ export function buildVolumeOutlinePrompt(
   } else {
     constraints.push('用户未指定卷数。请根据目标字数、世界观、故事核心、主线阶段和已有卷进度合理决定后续卷数；不得套用固定 2 卷或其他固定值。')
   }
+  const pace = options?.parameterValues?.pace
+  if (typeof pace === 'string' && pace.trim()) {
+    constraints.push(`用户设定整体节奏为「${pace.trim()}」，卷纲设计必须体现这个信息密度与冲突推进速度。`)
+  }
   return appendSimplifiedChineseOutputConstraint(
     appendUserConstraint(messages, constraints.join('\n')),
   )

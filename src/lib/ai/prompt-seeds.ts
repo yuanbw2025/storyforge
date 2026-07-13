@@ -1,5 +1,6 @@
 import type { PromptTemplate } from '../types'
 import { GENRE_PACK_SEEDS } from './prompt-seeds-genre-packs'
+import { VOLUME_OUTLINE_PARAMETERS } from './prompt-seed-params'
 
 /**
  * 系统级内置提示词模板。
@@ -309,14 +310,7 @@ export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
 
 用户补充要求：{{userHint}}{{/if}}`,
     variables: ['projectName', 'genres', 'targetWordCount', 'worldContext', 'storyCore', 'characterContext', 'worldRulesContext', 'existingVolumesContext', 'userHint'],
-    parameters: [
-      { key: 'pace', label: '整体节奏', type: 'select',
-        options: ['慢', '中', '快', '极快'],
-        default: '中', description: '影响每卷信息密度', optional: true },
-      { key: 'volumeCount', label: '建议卷数', type: 'slider',
-        min: 1, max: 30, step: 1, default: 5,
-        description: '不指定则按目标字数自动估算', optional: true },
-    ],
+    parameters: VOLUME_OUTLINE_PARAMETERS,
     isActive: true,
   },
 
