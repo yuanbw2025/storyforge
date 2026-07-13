@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Plus, Trash2, ArrowRightLeft, ArrowRight, Users, GitFork, List, Sparkles, Check, X, AlertCircle } from 'lucide-react'
 import { useCharacterRelationStore } from '../../stores/character-relation'
 import { useCharacterStore } from '../../stores/character'
@@ -7,6 +7,8 @@ import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildRelationExtractPrompt, parseRelationOutput, matchRelations, type MatchedRelation } from '../../lib/ai/relation-extractor'
 import type { Project, RelationType } from '../../lib/types'
 import { CInput, CTextarea } from '../shared/CompositionInput'
+import { useToast } from '../shared/Toast'
+import { syncRelationToCharacterFields } from '../../lib/relations/relationship-summary'
 import RelationGraph from './RelationGraph'
 
 const RELATION_TYPES: { value: RelationType; label: string }[] = [
@@ -29,6 +31,7 @@ interface Props {
 export default function CharacterRelationPanel({ project }: Props) {
   const { relations, addRelation, updateRelation, deleteRelation } = useCharacterRelationStore()
   const { characters } = useCharacterStore()
+  const toast = useToast()
   const projectId = project.id!
 
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -41,6 +44,27 @@ export default function CharacterRelationPanel({ project }: Props) {
   const [extractedRelations, setExtractedRelations] = useState<MatchedRelation[]>([])
   const [selectedExtracted, setSelectedExtracted] = useState<Set<number>>(new Set())
   const [showExtractPanel, setShowExtractPanel] = useState(false)
+  const [savingId, setSavingId] = useState<number | null>(null)
+  const [savedId, setSavedId] = useState<number | null>(null)
+
+  const projectCharacters = useMemo(
+    () => characters.filter((c) => c.projectId === projectId),
+    [characters, projectId],
+  )
+  const projectRelations = useMemo(
+    () => relations.filter((r) => r.projectId === projectId),
+    [relations, projectId],
+  )
+  const projectCharacterIds = useMemo(
+    () => new Set(projectCharacters.map((c) => c.id).filter((id): id is number => id != null)),
+    [projectCharacters],
+  )
+  const validProjectRelations = useMemo(
+    () => projectRelations.filter((r) =>
+      projectCharacterIds.has(r.fromCharacterId) && projectCharacterIds.has(r.toCharacterId),
+    ),
+    [projectRelations, projectCharacterIds],
+  )
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -57,35 +81,50 @@ export default function CharacterRelationPanel({ project }: Props) {
     if (!ai.isStreaming && ai.output) {
       setShowExtractPanel(true)
       const parsed = parseRelationOutput(ai.output)
-      const matched = matchRelations(parsed, characters, relations)
+      const matched = matchRelations(parsed, projectCharacters, validProjectRelations)
       setExtractedRelations(matched)
       // 默认选中所有非重复的
       const sel = new Set<number>()
       matched.forEach((r, i) => { if (!r.isDuplicate) sel.add(i) })
       setSelectedExtracted(sel)
     }
-  }, [ai.isStreaming, ai.output, characters, relations])
+  }, [ai.isStreaming, ai.output, projectCharacters, validProjectRelations])
 
   const handleAIExtract = useCallback(async () => {
     setShowExtractPanel(true)
     setExtractedRelations([])
     setSelectedExtracted(new Set())
-    const messages = await buildRelationExtractPrompt(projectId, characters)
+    const messages = await buildRelationExtractPrompt(projectId, projectCharacters)
     ai.start(messages, undefined, { category: 'relation.extract', projectId })
-  }, [projectId, characters, ai])
+  }, [projectId, projectCharacters, ai])
 
   const handleAcceptExtracted = async () => {
-    for (const [i, rel] of extractedRelations.entries()) {
-      if (!selectedExtracted.has(i)) continue
-      await addRelation({
-        projectId,
-        fromCharacterId: rel.fromCharacterId,
-        toCharacterId: rel.toCharacterId,
-        relationType: rel.type,
-        label: rel.label,
-        description: rel.description,
-        isBidirectional: rel.bidirectional,
-      })
+    let written = 0
+    try {
+      for (const [i, rel] of extractedRelations.entries()) {
+        if (!selectedExtracted.has(i)) continue
+        if (!projectCharacterIds.has(rel.fromCharacterId) || !projectCharacterIds.has(rel.toCharacterId)) {
+          toast.error('存在不属于当前项目的角色关系，已跳过。')
+          continue
+        }
+        const relation = {
+          projectId,
+          fromCharacterId: rel.fromCharacterId,
+          toCharacterId: rel.toCharacterId,
+          relationType: rel.type,
+          label: rel.label,
+          description: rel.description,
+          isBidirectional: rel.bidirectional,
+        }
+        await addRelation(relation)
+        await syncRelationToCharacterFields({ projectId, relation, characters: projectCharacters })
+        written++
+      }
+      if (written > 0) await useCharacterStore.getState().loadAll(projectId)
+      toast.success(`已导入 ${written} 条关系，并同步到角色词条。`)
+    } catch (err) {
+      toast.error(`导入关系失败：${err instanceof Error ? err.message : '未知错误'}`)
+      return
     }
     setShowExtractPanel(false)
     setExtractedRelations([])
@@ -94,23 +133,56 @@ export default function CharacterRelationPanel({ project }: Props) {
 
   // 新建关系
   const handleAdd = async () => {
-    if (characters.length < 2) return
-    await addRelation({
+    if (projectCharacters.length < 2) return
+    const relation = {
       projectId,
-      fromCharacterId: characters[0]?.id ?? 0,
-      toCharacterId: characters[1]?.id ?? 0,
-      relationType: 'friend',
+      fromCharacterId: projectCharacters[0]?.id ?? 0,
+      toCharacterId: projectCharacters[1]?.id ?? 0,
+      relationType: 'friend' as RelationType,
       label: '新关系',
       description: '',
       isBidirectional: true,
-    })
+    }
+    try {
+      await addRelation(relation)
+      toast.success('关系已保存。')
+    } catch (err) {
+      toast.error(`保存关系失败：${err instanceof Error ? err.message : '未知错误'}`)
+    }
+  }
+
+  const handleUpdateRelation = async (
+    id: number,
+    data: Parameters<typeof updateRelation>[1],
+    options: { notify?: boolean } = {},
+  ) => {
+    setSavingId(id)
+    try {
+      await updateRelation(id, data)
+      setSavedId(id)
+      window.setTimeout(() => {
+        setSavedId(current => current === id ? null : current)
+      }, 1600)
+      if (options.notify) toast.success('关系已保存。')
+    } catch (err) {
+      toast.error(`保存关系失败：${err instanceof Error ? err.message : '未知错误'}`)
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const handleDeleteRelation = async (id: number) => {
+    try {
+      await deleteRelation(id)
+      toast.success('关系已删除。')
+    } catch (err) {
+      toast.error(`删除关系失败：${err instanceof Error ? err.message : '未知错误'}`)
+    }
   }
 
   const getCharacterName = (id: number) => {
-    return characters.find((c) => c.id === id)?.name || `角色#${id}`
+    return projectCharacters.find((c) => c.id === id)?.name || `角色#${id}`
   }
-
-  const projectRelations = relations.filter((r) => r.projectId === projectId)
 
   return (
     <div className="max-w-4xl mx-auto space-y-6" ref={containerRef}>
@@ -143,7 +215,7 @@ export default function CharacterRelationPanel({ project }: Props) {
           </div>
           <button
             onClick={handleAIExtract}
-            disabled={characters.length < 2 || ai.isStreaming}
+            disabled={projectCharacters.length < 2 || ai.isStreaming}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-sm hover:bg-accent/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="AI 从大纲和章节中自动提取角色关系"
           >
@@ -152,9 +224,9 @@ export default function CharacterRelationPanel({ project }: Props) {
           </button>
           <button
             onClick={handleAdd}
-            disabled={characters.length < 2}
+            disabled={projectCharacters.length < 2}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white rounded-lg text-sm hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title={characters.length < 2 ? '需要至少 2 个角色才能创建关系' : '添加关系'}
+            title={projectCharacters.length < 2 ? '需要至少 2 个当前项目角色才能创建关系' : '添加关系'}
           >
             <Plus className="w-4 h-4" />
             添加关系
@@ -202,8 +274,8 @@ export default function CharacterRelationPanel({ project }: Props) {
               </div>
               <div className="max-h-[300px] overflow-y-auto space-y-2">
                 {extractedRelations.map((rel, i) => {
-                  const fromName = characters.find(c => c.id === rel.fromCharacterId)?.name || rel.char1
-                  const toName = characters.find(c => c.id === rel.toCharacterId)?.name || rel.char2
+                  const fromName = projectCharacters.find(c => c.id === rel.fromCharacterId)?.name || rel.char1
+                  const toName = projectCharacters.find(c => c.id === rel.toCharacterId)?.name || rel.char2
                   const typeLabel = RELATION_TYPES.find(t => t.value === rel.type)?.label || rel.type
                   const isSelected = selectedExtracted.has(i)
                   return (
@@ -278,18 +350,18 @@ export default function CharacterRelationPanel({ project }: Props) {
 
       {/* 关系图视图 */}
       {view === 'graph' && (
-        <RelationGraph width={graphWidth} height={480} />
+        <RelationGraph characters={projectCharacters} relations={validProjectRelations} width={graphWidth} height={480} />
       )}
 
       {/* 提示 */}
-      {characters.length < 2 && (
+      {projectCharacters.length < 2 && (
         <div className="bg-accent/10 border border-accent/20 rounded-lg p-4 text-sm text-text-secondary">
           💡 请先在「角色」模块中创建至少 2 个角色，才能建立角色关系。
         </div>
       )}
 
       {/* 列表视图 */}
-      {view === 'list' && projectRelations.length === 0 && characters.length >= 2 && (
+      {view === 'list' && validProjectRelations.length === 0 && projectCharacters.length >= 2 && (
         <div className="text-center py-16 text-text-muted">
           <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
           <p>还没有角色关系</p>
@@ -298,7 +370,7 @@ export default function CharacterRelationPanel({ project }: Props) {
       )}
 
       {view === 'list' && <div className="space-y-3">
-        {projectRelations.map((rel) => {
+        {validProjectRelations.map((rel) => {
           const isEditing = editingId === rel.id
           return (
             <div
@@ -311,11 +383,11 @@ export default function CharacterRelationPanel({ project }: Props) {
                 <select
                   value={rel.fromCharacterId}
                   onChange={(e) =>
-                    updateRelation(rel.id!, { fromCharacterId: Number(e.target.value) })
+                    handleUpdateRelation(rel.id!, { fromCharacterId: Number(e.target.value) }, { notify: true })
                   }
                   className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary flex-1 max-w-[180px]"
                 >
-                  {characters.map((c) => (
+                  {projectCharacters.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
@@ -325,7 +397,7 @@ export default function CharacterRelationPanel({ project }: Props) {
                 {/* 方向指示器 */}
                 <button
                   onClick={() =>
-                    updateRelation(rel.id!, { isBidirectional: !rel.isBidirectional })
+                    handleUpdateRelation(rel.id!, { isBidirectional: !rel.isBidirectional }, { notify: true })
                   }
                   className="text-accent hover:text-accent/80 transition-colors"
                   title={rel.isBidirectional ? '双向关系（点击改为单向）' : '单向关系（点击改为双向）'}
@@ -341,11 +413,11 @@ export default function CharacterRelationPanel({ project }: Props) {
                 <select
                   value={rel.toCharacterId}
                   onChange={(e) =>
-                    updateRelation(rel.id!, { toCharacterId: Number(e.target.value) })
+                    handleUpdateRelation(rel.id!, { toCharacterId: Number(e.target.value) }, { notify: true })
                   }
                   className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary flex-1 max-w-[180px]"
                 >
-                  {characters.map((c) => (
+                  {projectCharacters.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
@@ -356,7 +428,7 @@ export default function CharacterRelationPanel({ project }: Props) {
                 <select
                   value={rel.relationType}
                   onChange={(e) =>
-                    updateRelation(rel.id!, { relationType: e.target.value as RelationType })
+                    handleUpdateRelation(rel.id!, { relationType: e.target.value as RelationType }, { notify: true })
                   }
                   className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary"
                 >
@@ -374,8 +446,10 @@ export default function CharacterRelationPanel({ project }: Props) {
                 >
                   {isEditing ? '收起' : '编辑'}
                 </button>
+                {savingId === rel.id && <span className="text-xs text-text-muted">保存中...</span>}
+                {savingId !== rel.id && savedId === rel.id && <span className="text-xs text-accent">已自动保存</span>}
                 <button
-                  onClick={() => deleteRelation(rel.id!)}
+                  onClick={() => handleDeleteRelation(rel.id!)}
                   className="text-text-muted hover:text-red-400 transition-colors"
                   title="删除关系"
                 >
@@ -394,7 +468,7 @@ export default function CharacterRelationPanel({ project }: Props) {
                 {isEditing ? (
                   <CInput
                     value={rel.label}
-                    onChange={(e) => updateRelation(rel.id!, { label: e.target.value })}
+                    onChange={(e) => handleUpdateRelation(rel.id!, { label: e.target.value })}
                     className="bg-bg-base border border-border rounded px-2 py-1 text-sm text-text-primary flex-1"
                     placeholder="关系标签，如：父子、宿敌、暗恋对象"
                   />
@@ -409,7 +483,7 @@ export default function CharacterRelationPanel({ project }: Props) {
                   <label className="block text-xs text-text-muted mb-1">关系描述</label>
                   <CTextarea
                     value={rel.description}
-                    onChange={(e) => updateRelation(rel.id!, { description: e.target.value })}
+                    onChange={(e) => handleUpdateRelation(rel.id!, { description: e.target.value })}
                     rows={3}
                     className="w-full bg-bg-base border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted resize-none focus:outline-none focus:border-accent"
                     placeholder="描述这段关系的背景、变化、冲突等..."
