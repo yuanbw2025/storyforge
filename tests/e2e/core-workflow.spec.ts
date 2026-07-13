@@ -17,11 +17,19 @@ async function createProject(page: Page, name: string) {
   await expect(page.getByTitle(name)).toBeVisible()
 }
 
+function sidebarButton(page: Page, name: string) {
+  return page.getByRole('navigation').getByRole('button', { name, exact: true })
+}
+
 async function expectInputValue(page: Page, value: string) {
   await expect.poll(() => page.locator('input').evaluateAll(
     (inputs, expected) => inputs.some(input => input.value === expected),
     value,
   )).toBe(true)
+}
+
+async function expectNumericInputValue(locator: ReturnType<Page['getByPlaceholder']>, expected: number) {
+  await expect.poll(async () => Number((await locator.inputValue()).replaceAll(',', ''))).toBe(expected)
 }
 
 async function createBookWithSavedChapter(page: Page, projectName: string, chapterText: string) {
@@ -165,4 +173,72 @@ test('取消删除安全门后项目与正文都保留', async ({ page }) => {
   await page.getByText(projectName, { exact: true }).click()
   await page.getByRole('button', { name: '章节', exact: true }).click()
   await expect(page.locator('.tiptap-editor')).toContainText(chapterText)
+})
+
+test('上下文窗口与四类任务模型路由跨模块和刷新保留', async ({ page }) => {
+  await openCleanHome(page)
+  await createProject(page, 'E2E AI 配置持久化')
+  await sidebarButton(page, '设置').click()
+
+  const contextWindow = page.getByPlaceholder('本地/自定义模型请按实际填写，如 131072；留空 = 用内置预设')
+  await contextWindow.fill('2,100,000')
+  await expect(page.getByText('2,100,000 token', { exact: false })).toBeVisible()
+  await expect(page.getByText('已自动保存到当前配置', { exact: true })).toBeVisible()
+
+  await sidebarButton(page, '数据管理').click()
+  await sidebarButton(page, '设置').click()
+  await expectNumericInputValue(contextWindow, 2_100_000)
+
+  await page.getByRole('button', { name: '＋ 保存当前为预设', exact: true }).click()
+  const presetName = page.getByPlaceholder('预设名称，如「DeepSeek 主力」')
+  await presetName.fill('创作模型')
+  await presetName.locator('xpath=..').getByRole('button', { name: '保存', exact: true }).click()
+
+  await page.getByPlaceholder('或手动输入模型名（列表中没有的型号）').fill('deepseek-review')
+  await page.getByRole('button', { name: '另存为新预设', exact: true }).click()
+  await presetName.fill('审查模型')
+  await presetName.locator('xpath=..').getByRole('button', { name: '保存', exact: true }).click()
+
+  await page.getByLabel('创作生成模型预设').selectOption({ label: '创作模型 · deepseek/deepseek-chat' })
+  await page.getByLabel('结构提取模型预设').selectOption({ label: '创作模型 · deepseek/deepseek-chat' })
+  await page.getByLabel('分析总结模型预设').selectOption({ label: '审查模型 · deepseek/deepseek-review' })
+  await page.getByLabel('审查校验模型预设').selectOption({ label: '审查模型 · deepseek/deepseek-review' })
+
+  await page.reload()
+  await sidebarButton(page, '设置').click()
+  await expectNumericInputValue(contextWindow, 2_100_000)
+  await expect(page.getByLabel('创作生成模型预设')).toHaveValue(await page.getByLabel('结构提取模型预设').inputValue())
+  await expect(page.getByLabel('分析总结模型预设')).toHaveValue(await page.getByLabel('审查校验模型预设').inputValue())
+  await expect(page.getByLabel('创作生成模型预设').locator('option:checked')).toContainText('创作模型')
+  await expect(page.getByLabel('分析总结模型预设').locator('option:checked')).toContainText('审查模型')
+})
+
+test('本地 OpenAI 兼容服务可刷新并保存模型列表', async ({ page }) => {
+  await page.route('http://localhost:1234/v1/models', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [{ id: 'qwen-local' }, { id: 'deepseek-local' }] }),
+    })
+  })
+  await openCleanHome(page)
+  await createProject(page, 'E2E 本地模型刷新')
+  await sidebarButton(page, '设置').click()
+
+  const provider = page.locator('label:has-text("提供商") + select')
+  await provider.selectOption('ollama')
+  const baseUrl = page.locator('label:has-text("Base URL") + input')
+  await baseUrl.fill('http://localhost:1234/v1/models')
+  await page.getByRole('button', { name: '刷新模型', exact: true }).click()
+
+  const modelList = page.getByLabel('服务返回的模型列表')
+  await expect(modelList).toBeVisible()
+  await expect(modelList.locator('option')).toHaveCount(3)
+  await modelList.selectOption('qwen-local')
+  await expect(baseUrl).toHaveValue('http://localhost:1234/v1')
+
+  await page.reload()
+  await sidebarButton(page, '设置').click()
+  await expect(page.locator('input[placeholder="手动输入模型名"]')).toHaveValue('qwen-local')
+  await expect(baseUrl).toHaveValue('http://localhost:1234/v1')
 })
