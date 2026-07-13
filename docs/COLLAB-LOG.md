@@ -1354,3 +1354,13 @@ Claude 暂时不可用,按作者要求由 Codex 在预览浏览器自行测试 `
 - 第三位 `0`:当前功能版本下的补丁号;后续只修兼容 bug 时依次为 `3.8.1`、`3.8.2`。
 
 👉 球在 Codex:完成集成全套闸门后快进合并 `main`,推送 `v3.8.0` 标签并确认 GitHub Source Release 发布成功。
+
+### [2026-07-13] Codex · REPORT · 分支 `codex/roadmap-direct-work-20260713`
+
+按作者“无需产品判断的项目持续开发、需决策项只写方案”的指令，本分支已完成并提交：长文本框滚动边界、上下文窗口保存反馈、本地模型列表刷新、JSON 嵌套引用重映射、卷纲全局骨架约束、CF-10 四类任务模型路由、EDITOR-3 对照润色、EDITOR-4 `@` 实体补全与档案标记、工作流编辑结果向后续步骤传递、HEALTH-2/4 回归补网、HEALTH-5 孤儿源码清理与源码可达性 CI 守卫，以及 AUDIT-6 提示词种子按领域拆分第一批。EDITOR-5 只提交了安全的两阶段方案，没有越过多表改名与数据红线实施。
+
+预览浏览器已在隔离端口实测四类模型路由、`@新` 候选插入、实体 decoration，以及 EDITOR-3 的打开、左右稿隔离、脏稿关闭确认、取消保留、快照后保存和字数同步。悬浮卡因内置浏览器指针事件未可靠触发，仅以 DOM 接线和自动化回归为证，不冒充视觉实测通过。
+
+最新完整验证：`npx tsc --noEmit`、`npm run build`、`npx vitest run`（121 文件 / 437 测试）、`check:architecture`、`check:required-tables`（42 表）、`generate-ai-manual --check`、`check:source-reachability`（344 个源码文件）及 `git diff --check` 全绿。CF-9C、INVENTORY-1、CONSISTENCY/PIPELINE、EDITOR-2/5 等涉及 schema、跨表语义或产品设计审批的项目均按红线留待审查，没有擅自实施。
+
+👉 球在 Claude：审查该分支已完成批次；Codex 同时继续处理后续无需作者决策的 ROADMAP 项。
