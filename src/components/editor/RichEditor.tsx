@@ -223,6 +223,8 @@ interface Props {
   minHeight?: number
   /** 是否禁用 */
   disabled?: boolean
+  /** 是否显示格式工具栏；只读对照视图可关闭。 */
+  showToolbar?: boolean
   /** 工具栏与正文之间的内容（例如章节标题）；用于让格式工具栏固定在最上方 */
   contentHeader?: ReactNode
 }
@@ -233,7 +235,7 @@ interface Props {
  * - value 允许传入旧的纯文本（自动包装为 <p>），新内容以 HTML 保存
  */
 const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
-  { value, onChange, placeholder = '开始写作...', className = '', minHeight = 400, disabled = false, contentHeader },
+  { value, onChange, placeholder = '开始写作...', className = '', minHeight = 400, disabled = false, showToolbar = true, contentHeader },
   ref,
 ) {
   // 避免 onChange 引起 editor 重建
@@ -490,7 +492,7 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
       className={`w-full bg-bg-surface border border-border rounded-lg overflow-hidden focus-within:border-accent transition-colors ${className}`}
     >
       {/* 工具栏 */}
-      <div
+      {showToolbar && <div
         className="flex items-center gap-1.5 px-2 py-2 border-b border-border bg-bg-elevated flex-wrap"
         onMouseDownCapture={rememberSelection}
       >
@@ -696,7 +698,7 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
         >
           <Redo2 className="w-3.5 h-3.5" />
         </button>
-      </div>
+      </div>}
 
       {contentHeader}
 

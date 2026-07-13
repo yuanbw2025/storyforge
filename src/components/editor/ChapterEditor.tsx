@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Save, FileText, Eye, ClipboardList, CheckSquare, Square, BookOpenCheck, ShieldCheck, StickyNote } from 'lucide-react'
+import { Save, FileText, Eye, ClipboardList, CheckSquare, Square, BookOpenCheck, ShieldCheck, StickyNote, Columns2 } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
 import { useStateCardStore } from '../../stores/state-card'
@@ -45,6 +45,7 @@ import OutlinePreview from '../outline/OutlinePreview'
 import ReviewPanel from './ReviewPanel'
 import NotePanel from './NotePanel'
 import FloatingToolbar from './FloatingToolbar'
+import ComparePolishPanel from './ComparePolishPanel'
 import type { ChapterStatus, Project, StateDiffItem } from '../../lib/types'
 
 /** 生成任务类型(原 memory-builder 三层记忆已被 assembleContext 取代,此类型仅用于调试日志标签) */
@@ -119,6 +120,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [showOutlinePreview, setShowOutlinePreview] = useState(false)
   const [showReviewPanel, setShowReviewPanel] = useState(false)
   const [showNotePanel, setShowNotePanel] = useState(false)
+  const [compareSourceHtml, setCompareSourceHtml] = useState<string | null>(null)
   const [contextBudget, setContextBudget] = useState<ContextBudget | null>(null)
   const [planReconciliationCurrent, setPlanReconciliationCurrent] = useState(false)
   const aiConfig = useAIConfigStore(s => s.config)
@@ -183,6 +185,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   // 切换章节时同步 savedContent（只在章节 id 变化时）
   useEffect(() => {
     setSavedContent(currentChapter?.content || '')
+  }, [currentChapter?.id])
+
+  useEffect(() => {
+    setCompareSourceHtml(null)
   }, [currentChapter?.id])
 
   useEffect(() => {
@@ -266,6 +272,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       content: '', wordCount: 0, status: 'outline', order: chapters.length, notes: '',
     })
     if (chapter.id) selectChapter(chapter.id)
+  }
+
+  const handleOpenComparePolish = async () => {
+    const saved = await persistCurrentEditorContent()
+    if (!saved?.plain.trim()) {
+      await dialog.alert({ title: '暂无正文可供对照', message: '请先写入或生成本章正文，再打开对照润色。' })
+      return
+    }
+    setCompareSourceHtml(saved.html)
   }
 
   // AI 操作 —— 所有 AI 交互都基于纯文本
@@ -858,8 +873,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-text-primary">
             <Eye className="w-3.5 h-3.5" /> 上下文
           </button>
+          <button
+            type="button"
+            onClick={() => { void handleOpenComparePolish() }}
+            disabled={!plainText || compareSourceHtml != null}
+            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-accent disabled:opacity-40"
+          >
+            <Columns2 className="h-3.5 w-3.5" /> 对照润色
+          </button>
           <button onClick={() => { void persistCurrentEditorContent() }}
-            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-accent">
+            disabled={compareSourceHtml != null}
+            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-accent disabled:cursor-not-allowed disabled:opacity-40">
             <Save className="w-3.5 h-3.5" /> 保存
           </button>
         </div>
@@ -932,7 +956,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       )}
 
       {/* AI 工具栏 */}
-      <div className="flex flex-wrap gap-2 border-t border-border/60 bg-bg-surface/35 px-6 py-3">
+      {compareSourceHtml == null && <div className="flex flex-wrap gap-2 border-t border-border/60 bg-bg-surface/35 px-6 py-3">
         <button onClick={handleGenerate} disabled={ai.isStreaming}
           className="rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50 transition-colors">
           ✨ 生成正文
@@ -1013,7 +1037,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         <CInput value={customInstruction} onChange={e => setCustomInstruction(e.target.value)}
           placeholder="自定义指令..."
           className="min-w-[220px] flex-1 rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent" />
-      </div>
+      </div>}
       </div>
 
       <div className="mx-auto max-w-6xl space-y-4 px-6 py-6">
@@ -1207,7 +1231,23 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         </div>
       )}
 
-      {/* TipTap 富文本编辑器 */}
+      {/* TipTap 富文本编辑器 / 对照润色模式 */}
+      {compareSourceHtml != null ? (
+        <ComparePolishPanel
+          key={currentChapter.id}
+          projectId={project.id!}
+          chapterId={currentChapter.id!}
+          chapterTitle={chapterDisplay?.title ?? currentChapter.title}
+          worldGroupId={chapterWorldGroupId}
+          sourceHtml={compareSourceHtml}
+          onSaved={result => {
+            setContent(result.html)
+            setPlainText(result.plainText)
+            setSavedContent(result.html)
+          }}
+          onClose={() => setCompareSourceHtml(null)}
+        />
+      ) : (
       <div className="mx-auto max-w-3xl rounded-2xl border border-border bg-bg-elevated px-8 py-8 shadow-theme-md">
         <RichEditor
           ref={editorRef}
@@ -1232,9 +1272,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           }
         />
       </div>
+      )}
 
       {/* Phase 24.3: 选中文本浮动工具栏 */}
-      <FloatingToolbar
+      {compareSourceHtml == null && <FloatingToolbar
         getSelectedText={() => editorRef.current?.getSelectedText() || ''}
         getSelectionRect={() => {
           const sel = window.getSelection()
@@ -1245,7 +1286,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           editorRef.current?.replaceSelection(text)
         }}
         disabled={ai.isStreaming}
-      />
+      />}
 
       {/* 作者笔记 */}
       <div className="mt-3">
