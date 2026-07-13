@@ -14,6 +14,7 @@
     "check:required-tables": "node scripts/check-required-tables.mjs",
     "check:source-reachability": "node scripts/check-source-reachability.mjs",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
+    "check:release-metadata": "node scripts/check-release-metadata.mjs",
     "gen:ai-manual": "node scripts/generate-ai-manual.mjs",
     "check:ai-manual": "node scripts/generate-ai-manual.mjs --check",
     "check:architecture": "node scripts/check-architecture.mjs",

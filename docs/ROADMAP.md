@@ -2185,6 +2185,7 @@ for each character:
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。
 
 ### 🟡 AUDIT-7（P2-1 / 3.7 · 测试与发布护栏）— Playwright 核心路径 E2E + 崩溃上报 + 发布清单
+- **2026-07-13 发布护栏进度**：新增 `check:release-metadata`，强制 Release tag、`package.json.version` 与 `CHANGELOG.md` 版本标题三方一致；源码 Release 工作流在创建/修改 Release 前先运行完整 `npm run ci`（含类型、测试、构建、架构、注册表、AI manual、源码可达性和体积预算）。手动发版遇到同名 tag 时还会验证该 tag 必须指向当前 release commit，禁止旧 tag 配新源码的错版发布。`R-AUDIT7-release-metadata` 覆盖正常发版与 tag/日志双错位。剩余 Playwright 商业 smoke、诊断包/错误上报和升级前自动快照仍未完成，不冒充整个专项闭环。
 - **改法**：① Playwright 5 条商业级 smoke（建项目/配 AI/生成/采纳/导出导入/备份恢复）；② 可关闭的匿名错误上报或本地诊断包导出；③ release checklist（升级前自动快照、变更说明、回滚方案、已知问题）。
 - **验收**：核心路径 E2E 通过；有发布前自动快照与回滚预案。
 - **注**：与现有 HEALTH-2/HEALTH-5 重叠，实施时合并推进，勿重复立项。

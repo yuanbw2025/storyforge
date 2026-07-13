@@ -29,6 +29,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release version and changelog
+        run: npm run check:release-metadata -- "${RELEASE_TAG}"
+
+      - name: Run production release gates
+        run: npm run ci
+
       - name: Prepare release notes
         run: |
           mkdir -p release
@@ -66,7 +81,12 @@ jobs:
       - name: Ensure tag exists for manual dispatch
         if: github.event_name == 'workflow_dispatch'
         run: |
-          if ! git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+          if git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            if [ "$(git rev-list -n 1 "${RELEASE_TAG}")" != "$(git rev-parse HEAD)" ]; then
+              echo "Tag ${RELEASE_TAG} does not point to the current release commit." >&2
+              exit 1
+            fi
+          else
             git tag "${RELEASE_TAG}"
             git push origin "${RELEASE_TAG}"
           fi
