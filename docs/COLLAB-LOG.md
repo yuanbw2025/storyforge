@@ -1364,3 +1364,22 @@ Claude 暂时不可用,按作者要求由 Codex 在预览浏览器自行测试 `
 最新完整验证：`npx tsc --noEmit`、`npm run build`、`npx vitest run`（121 文件 / 437 测试）、`check:architecture`、`check:required-tables`（42 表）、`generate-ai-manual --check`、`check:source-reachability`（344 个源码文件）及 `git diff --check` 全绿。CF-9C、INVENTORY-1、CONSISTENCY/PIPELINE、EDITOR-2/5 等涉及 schema、跨表语义或产品设计审批的项目均按红线留待审查，没有擅自实施。
 
 👉 球在 Claude：审查该分支已完成批次；Codex 同时继续处理后续无需作者决策的 ROADMAP 项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第二批 / `codex/roadmap-direct-work-20260713`
+
+在上一批基础上继续完成 7 项可独立验收的工程与功能改进：
+- `fd1c8fe`：新增构建产物体积预算并接入 CI，分别约束入口、普通异步/vendor chunk、CSS 与 PDF worker。
+- `e77da0f`：收紧源码 Release 闸门，校验 tag / package / CHANGELOG 版本一致；Release workflow 改跑完整 `npm run ci`，并拒绝复用指向旧提交的 tag。
+- `5fd50d1`：数据管理页新增本地隐私诊断报告下载；仅含版本、浏览器、schema、各表计数和脱敏错误位置，不导出业务记录、API key、localStorage 或错误正文。
+- `1c607f8`（CF-3）：卷纲生成前展示真实 `assembleContext()` 的 included / omitted / trimmed 来源、token 预算、故事核心与已有卷摘录；实际生成复用同一上下文快照。
+- `6575c58`（QUICKWIN-5）：状态卡持有物明确区分“来自物品栏”和“来自状态字段”，并提供跳转物品栏入口。
+- `054e6ae`（CF-7）：只完成保守方案，首版限定为会话内 advisory 提示；拒绝用关键词伪装 `mainlineWeak` / `genreWeak` 确定性检测，未越权实施。
+- `b46aa92`：清零既有 33 条 ESLint warning，并以 `--max-warnings=0` 接入本地与 GitHub CI；保留的 ID-only reset hook 有局部说明，不做宽泛禁用。
+
+预览浏览器证据：CF-3 生成依据面板已显示真实来源与省略原因；QUICKWIN-5 两种持有物来源均有组件测试，且实测可跳转物品栏；本地诊断入口与成功反馈已实测，浏览器工具未捕获系统下载事件，因此不冒充已验证下载文件内容。
+
+完整 `npm run ci` 全绿：42 required tables、AI manual、architecture、source reachability（345 个源码文件）、ESLint 0 warning、TypeScript、126 files / 447 tests；覆盖率 statements/lines 67.32%、branches 73.59%、functions 66.51%；生产 build 与 bundle-size budget 通过。
+
+审批边界：CF-9C、INVENTORY-1、CONSISTENCY-0/2/3、PIPELINE-1/2/3、EDITOR-2/5、HEALTH-1 通用迁移快照策略、i18n 与第三方崩溃上报均未实施；CF-7 也停在方案等待审查。
+
+👉 球在 Claude：审查本分支两批已完成改动；Codex 继续按 ROADMAP 处理无需作者判断的后续项。
