@@ -71,6 +71,9 @@ export function buildVolumeOutlinePrompt(
       ? `除本次指定补全的空卷《${request.targetVolumeTitle}》外，禁止改写、复述或重新生成其他已有卷。`
       : '必须从已有卷之后继续规划；禁止改写、复述或重新生成已有卷。新卷剧情必须承接已有卷末状态。')
   }
+  if (worldContext.includes('【本卷已写正文进度')) {
+    constraints.push('【已写正文优先·硬约束】上文「本卷已写正文进度」来自用户已保存正文，是事实边界。补卷纲时必须承认并承接这些已写事件；不得否认、重排、要求重写已写章节；若旧规划与已写正文冲突，以已写正文为准。')
+  }
   if (request?.targetVolumeTitle) {
     constraints.push(`本次只补全现有空卷《${request.targetVolumeTitle}》的卷纲。`)
     constraints.push(`只输出 1 个 JSON 元素；title 必须保持为“${request.targetVolumeTitle}”，summary 写完整的本卷核心冲突、情绪走向、主角状态变化和卷末钩子。`)
@@ -109,10 +112,14 @@ export function buildChapterOutlinePrompt(
     userHint,
   }, options)
   // CF-3：章纲必须服从本卷 summary 所承载的主线方向，不得另起支线压过主线。
+  const constraints = ['【主线一致性·硬约束】本卷大纲已承载故事主线，章纲必须服从本卷 summary 的主线方向：每章 summary 说明它推进了本卷/主线的哪一步；可以有支线，但不得另起或让支线压过主线。']
+  if (worldContext.includes('【本卷已写正文进度')) {
+    constraints.push('【已写正文优先·硬约束】上文「本卷已写正文进度」来自用户已保存正文，是本次章纲生成的事实边界。已写章节不得被重写、否认或重排；只为未写/目标章节补后续章纲，并承接已写正文的结尾状态、角色状态和实际剧情进展。')
+  }
   return appendSimplifiedChineseOutputConstraint(
     appendUserConstraint(
       messages,
-      '【主线一致性·硬约束】本卷大纲已承载故事主线，章纲必须服从本卷 summary 的主线方向：每章 summary 说明它推进了本卷/主线的哪一步；可以有支线，但不得另起或让支线压过主线。',
+      constraints.join('\n'),
     ),
   )
 }

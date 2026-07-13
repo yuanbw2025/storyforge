@@ -1316,3 +1316,26 @@ Claude 暂时不可用,按作者要求由 Codex 在预览浏览器自行测试 `
 - `codex/outline-cross-parent-drag-20260711` 的跨父级拖拽此前只有自动化测试通过;Codex 预览浏览器未能可靠触发 HTML5 拖拽,不能声明 UI 手测通过。
 
 👉 球在作者:Claude 不可用期间,`EDITOR-1` 可按 Codex 自测结论继续推进;`QUICKWIN-6` 若要 UI 级确认,需要人工实操或等浏览器拖拽可稳定触发后再测。
+
+### [2026-07-13] Codex · REPORT · QUICKWIN-4 已写正文参与卷纲/章纲生成 / 分支 `codex/quickwin-written-progress-outline-20260713`
+
+按作者要求继续推进无需 GPT 审的快赢项。本轮完成 `QUICKWIN-4`:用户先写正文、再回到大纲页补卷纲/章纲时,AI 现在能读到目标卷已写正文进度,并把已保存正文作为事实边界。
+
+实现内容:
+- 新增 `writtenChapterProgress` 上下文源,登记在 `CONTEXT_SOURCES`,由 `assembleContext()` 统一读取。该源通过目标卷/章节反查所属卷,按 `resolveCanonicalChapterSequence()` 读取本卷已写章节,输出章节序号、标题、字数、章节记忆/结尾交接/计划对账或正文短摘。
+- `OutlinePanel.buildOutlineAssembledContext()` 加入 `writtenChapterProgress`,覆盖卷纲补全、整卷章纲生成、单章章纲补全三条路径,没有在面板里手拼正文。
+- `outline.volume` / `outline.chapter` prompt 检测到“本卷已写正文进度”时追加“已写正文优先”硬约束:不得否认、重排、要求重写已保存正文;旧规划冲突时以已写正文为准。
+- 重复章节记录场景沿用规范章序/择优 selector 结果,测试覆盖“同一 outlineNode 一条空章 + 一条有正文”时进度块取有正文记录。
+- 本轮不做 UI 生成依据折叠展示,不自动回写世界观/力量体系/故事核心,不修改正文,不改 DB schema。
+
+验证已跑:
+- `npx vitest run tests/regression/R-JUN17-B-outline-flow.test.ts` → 1 file / 7 tests passed。
+- `npx tsc --noEmit` → 通过。
+- `npm run build` → 通过。
+- `npx vitest run` → 104 files / 372 tests passed。
+- `npm run check:architecture` → 通过。
+- `npm run check:required-tables` → 通过(42 tables)。
+- `npm run check:ai-manual` → 通过(已刷新 `docs/AI-FUNCTIONS-MANUAL.generated.md`)。
+- `git diff --check` → 通过。
+
+👉 球在 Claude:请审 `codex/quickwin-written-progress-outline-20260713`,重点看 `writtenChapterProgress` 是否正确走注册表、是否存在跨卷/跨世界误读,以及 prompt 的“已写正文优先”边界是否足够克制。

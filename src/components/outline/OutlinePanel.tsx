@@ -356,6 +356,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
         'historical',
         'locations',
         'existingVolumeOutlines',
+        'writtenChapterProgress',
       ],
     })
   }, [project.id, aiConfig.provider, aiConfig.model])

@@ -22,14 +22,16 @@ import {
 } from '../ai/context-builder'
 import { buildCodexContext } from '../ai/codex-context'
 import { buildWorldRulesContext } from '../ai/world-rules-manifest'
+import { formatHandoff } from '../ai/chapter-memory/handoff-format'
+import { getChapterDerivedMemoryStatus, normalizeChapterText } from '../ai/chapter-memory/text-normalization'
 import { parseStages } from '../types/story-arc'
 import { parseFields } from '../types/state-card'
 import { parseBeats } from '../types/emotion-beat'
 import { buildForeshadowTaskContext } from '../foreshadow/context'
 import { formatHeldItemsContext, readProjectHeldItems } from '../consistency/held-items'
-import type { Character, PowerSystem, Worldview } from '../types'
+import type { Chapter, Character, OutlineNode, PowerSystem, Worldview } from '../types'
 import type { ContextSource } from './types'
-import { htmlToPlainText } from '../utils/html'
+import { countWords, htmlToPlainText } from '../utils/html'
 
 async function readWorldview(projectId: number, worldGroupId?: number | null): Promise<Worldview | null> {
   const rows = await db.worldviews.where('projectId').equals(projectId).toArray()
@@ -141,6 +143,105 @@ async function readExistingVolumeOutlines(projectId: number): Promise<string> {
     ...volumes.map((volume, index) => (
       `${index + 1}. ${volume.title}${volume.summary ? `\n   ${volume.summary}` : '\n   （尚未填写卷纲）'}`
     )),
+  ].join('\n')
+}
+
+function findVolumeAncestor(nodeId: number, nodesById: Map<number, OutlineNode>): OutlineNode | null {
+  let current = nodesById.get(nodeId) ?? null
+  const visited = new Set<number>()
+  while (current) {
+    if (current.type === 'volume') return current
+    if (current.parentId == null || visited.has(current.id ?? -1)) return null
+    if (current.id != null) visited.add(current.id)
+    current = nodesById.get(current.parentId) ?? null
+  }
+  return null
+}
+
+function excerptChapterText(chapter: Chapter, maxChars = 360): string {
+  const text = normalizeChapterText(chapter.content || '')
+  if (!text) return ''
+  if (text.length <= maxChars) return text
+  const edge = Math.max(100, Math.floor(maxChars / 2))
+  return `${text.slice(0, edge)}\n...\n${text.slice(-edge)}`
+}
+
+async function summarizeWrittenChapterForOutline(entry: {
+  ordinal: number
+  chapter: Chapter
+  outlineNode: OutlineNode | null
+}): Promise<string> {
+  const title = entry.outlineNode?.title ?? entry.chapter.title
+  const plain = normalizeChapterText(entry.chapter.content || '')
+  const words = Math.max(entry.chapter.wordCount || 0, countWords(htmlToPlainText(entry.chapter.content || '').trim()))
+  const lines = [`第 ${entry.ordinal} 章 ${title}（已写正文，约 ${words} 字）`]
+
+  const memory = await getChapterDerivedMemoryStatus(entry.chapter)
+  if (entry.chapter.summary?.trim() && memory.summary === 'verified') {
+    lines.push(`章节记忆:${entry.chapter.summary.trim()}`)
+  } else if (entry.outlineNode?.summary?.trim()) {
+    lines.push(`原章纲:${entry.outlineNode.summary.trim()}`)
+  }
+
+  if (entry.chapter.continuityHandoff && memory.handoff === 'verified') {
+    const handoffLines = formatHandoff(entry.chapter.continuityHandoff).slice(0, 8)
+    if (handoffLines.length) lines.push(`结尾交接:${handoffLines.join('；')}`)
+  }
+
+  const reconciliation = entry.chapter.planReconciliation
+  if (reconciliation?.confirmedActualProgress?.trim()) {
+    lines.push(`作者确认实际进展:${reconciliation.confirmedActualProgress.trim()}`)
+  } else if (reconciliation) {
+    const deltas = [
+      ...reconciliation.deviations.map(item => `实际偏移:${item.text}`),
+      ...reconciliation.newConstraints.map(item => `新增约束:${item.text}`),
+      ...reconciliation.nextChapterImpacts.map(item => `后续影响:${item.text}`),
+    ].slice(0, 6)
+    if (deltas.length) lines.push(`计划-正文对账:${deltas.join('；')}`)
+  }
+
+  if (plain && !entry.chapter.summary?.trim()) {
+    lines.push(`正文短摘:${excerptChapterText(entry.chapter)}`)
+  }
+
+  return `- ${lines.join('\n  ')}`
+}
+
+async function readWrittenChapterProgress(
+  projectId: number,
+  outlineNodeId?: number | null,
+  worldGroupId?: number | null,
+): Promise<string> {
+  if (outlineNodeId == null) return ''
+  const [outlineNodes, chapters] = await Promise.all([
+    db.outlineNodes.where('projectId').equals(projectId).toArray(),
+    db.chapters.where('projectId').equals(projectId).toArray(),
+  ])
+  const nodesById = new Map(outlineNodes.filter(node => node.id != null).map(node => [node.id!, node]))
+  const target = nodesById.get(outlineNodeId)
+  if (!target) return ''
+  const targetVolume = target.type === 'volume' ? target : findVolumeAncestor(outlineNodeId, nodesById)
+  if (!targetVolume?.id) return ''
+
+  const { sequence } = resolveCanonicalChapterSequence(outlineNodes, chapters)
+  const written = sequence
+    .filter(entry => entry.outlineNode && findVolumeAncestor(entry.outlineNode.id!, nodesById)?.id === targetVolume.id)
+    .filter(entry => worldGroupId === undefined || entry.worldGroupId === (worldGroupId ?? null))
+    .filter(entry => normalizeChapterText(entry.chapter.content || '').length > 0)
+    .slice(0, 40)
+
+  if (!written.length) return ''
+
+  const lines = await Promise.all(written.map((entry, index) => summarizeWrittenChapterForOutline({
+    ordinal: sequence.findIndex(item => item.chapter === entry.chapter) + 1 || index + 1,
+    chapter: entry.chapter,
+    outlineNode: entry.outlineNode,
+  })))
+
+  return [
+    `【本卷已写正文进度 · ${targetVolume.title}】`,
+    '以下内容来自已保存章节正文/章节记忆，是补卷纲或章纲时必须尊重的事实边界；不要改写、否认、重排这些已写内容。',
+    ...lines,
   ].join('\n')
 }
 
@@ -372,6 +473,16 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 2400,
     read: input => readExistingVolumeOutlines(input.projectId),
+  },
+  {
+    key: 'writtenChapterProgress',
+    label: '本卷已写正文进度',
+    scope: 'node',
+    layer: 'L1',
+    budgetTokens: 3000,
+    protectedFromTrim: true,
+    requiresOutlineNodeId: true,
+    read: input => readWrittenChapterProgress(input.projectId, input.outlineNodeId, input.worldGroupId),
   },
   {
     key: 'currentFacts',
