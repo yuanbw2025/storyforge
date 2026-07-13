@@ -9,7 +9,7 @@
  *   - 各包内的模板默认 isActive=false，由 UI 切换器/用户激活
  *   - 默认包（玄幻爽文）的 system 模板已在 prompt-seeds.ts 主文件，标记 genres=['xuanhuan-shuangwen']
  */
-import type { PromptSeed } from './prompt-seeds'
+import type { PromptSeed } from './prompt-seed-type'
 import { EXTENDED_GENRE_PACK_SEEDS } from './prompt-seeds-genre-packs-extended'
 import { VOLUME_OUTLINE_PARAMETERS } from './prompt-seed-params'
 

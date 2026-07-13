@@ -2179,6 +2179,7 @@ for each character:
 - **验收**：新用户能在 onboarding 内完成"建项目→配 Key→生成/导入→采纳→导出"；首屏信息密度可控。
 
 ### 🟡 AUDIT-6（3.5 / P2-2 · 可维护性）— 拆分巨型组件 / prompt 文件
+- **2026-07-13 第一批完成**：将 1845 行 `prompt-seeds.ts` 收口为 18 行唯一有序聚合入口；基础创作模板与导入/分析/提取工具模板分别落到 `prompt-seeds-core.ts` / `prompt-seeds-tools.ts`，题材包保持独立。`PromptSeed` 抽到无依赖类型文件，解除题材包反向导入聚合模块的循环。新增 `R-AUDIT6-prompt-seed-integrity`，对全部 86 条模板的数量、顺序和序列化内容做 SHA-256 指纹锁，保证纯拆分不改变运行时模板。生成版 AI manual 已按新源码位置刷新。两个领域文件仍为 787 / 1055 行，后续按稳定领域继续拆；本批不冒充整个专项完成。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。
