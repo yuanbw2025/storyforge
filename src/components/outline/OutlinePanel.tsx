@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import type { DragEvent as ReactDragEvent } from 'react'
-import { Plus, Trash2, Sparkles, ChevronRight, ChevronDown, Check, X, LayoutList, Layers, Loader2, GripVertical, CornerDownRight } from 'lucide-react'
+import { Plus, Trash2, Sparkles, ChevronRight, ChevronDown, Check, X, LayoutList, Layers, Loader2, GripVertical, CornerDownRight, AlertTriangle, BookOpenCheck } from 'lucide-react'
 import { useOutlineStore } from '../../stores/outline'
 import { useDragReorder, type ItemDnD } from './useDragReorder'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -22,6 +22,7 @@ import { adopt } from '../../lib/registry/adopt'
 import { getTopLevelVolumes, estimateChaptersPerVolume, DEFAULT_WORDS_PER_CHAPTER } from '../../lib/outline/selectors'
 import { normalizeOutlineNode } from '../../lib/outline/normalize'
 import type { AssembleContextResult } from '../../lib/registry/types'
+import { CONTEXT_SOURCE_BY_KEY } from '../../lib/registry/context-sources'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import PanelLayout from '../shared/PanelLayout'
@@ -105,6 +106,100 @@ type OutlineGenerationRequest =
   | { kind: 'single-volume'; volumeId: number }
   | { kind: 'single-chapter'; chapterId: number }
 
+interface PreparedGenerationContext {
+  operation: string
+  assembled: AssembleContextResult
+}
+
+function contextSourceLabel(key: string): string {
+  return CONTEXT_SOURCE_BY_KEY.get(key)?.label ?? key
+}
+
+function contextExcerpt(assembled: AssembleContextResult, key: string, maxChars = 180): string {
+  const index = assembled.included.indexOf(key)
+  const content = index >= 0 ? assembled.segments[index]?.content ?? '' : ''
+  const compact = content
+    .replace(/^【[^】]+】\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (compact.length <= maxChars) return compact
+  return `${compact.slice(0, maxChars)}...`
+}
+
+export function OutlineGenerationBasis({
+  context,
+  loading,
+  error,
+}: {
+  context: AssembleContextResult | null
+  loading: boolean
+  error: string
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-text-muted" data-testid="outline-basis-loading">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> 正在读取本次生成依据...
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-start gap-2 text-xs text-error" role="alert">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>生成依据读取失败：{error}</span>
+      </div>
+    )
+  }
+
+  if (!context) return null
+
+  const storyCore = contextExcerpt(context, 'storyCore')
+  const existingVolumes = contextExcerpt(context, 'existingVolumeOutlines')
+
+  return (
+    <div className="space-y-2 text-xs" data-testid="outline-generation-basis">
+      <div className="flex items-center gap-2 text-text-primary">
+        <BookOpenCheck className="h-3.5 w-3.5 text-accent" />
+        <span className="font-medium">本次生成依据</span>
+        <span className="text-[10px] text-text-muted">
+          约 {context.totalInputTokens.toLocaleString()} / {context.inputBudget.toLocaleString()} tokens
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5" aria-label="已读取来源">
+        {context.included.map(key => (
+          <span key={key} className="rounded bg-accent/10 px-1.5 py-0.5 text-accent">
+            {contextSourceLabel(key)}
+          </span>
+        ))}
+        {context.included.length === 0 && <span className="text-warning">没有读取到已登记的作品资料</span>}
+      </div>
+
+      {storyCore ? (
+        <p className="leading-5 text-text-secondary"><span className="text-text-muted">故事核心：</span>{storyCore}</p>
+      ) : (
+        <p className="leading-5 text-warning">未填写故事主线，AI 将主要依据世界观、角色、已有大纲与额外要求生成。</p>
+      )}
+      {existingVolumes && (
+        <p className="leading-5 text-text-secondary"><span className="text-text-muted">已有卷纲：</span>{existingVolumes}</p>
+      )}
+
+      {context.omitted.length > 0 && (
+        <p className="text-text-muted">
+          无可用内容：{context.omitted.map(contextSourceLabel).join('、')}
+        </p>
+      )}
+      {context.trimmed.length > 0 && (
+        <p className="text-warning">
+          因模型上下文预算未发送：{context.trimmed.map(contextSourceLabel).join('、')}
+        </p>
+      )}
+      <p className="text-text-muted">未采纳的灵感草稿不会进入生成上下文。</p>
+    </div>
+  )
+}
+
 function encodeGenerationOperation(request: OutlineGenerationRequest): string {
   if (request.kind === 'volumes') return 'outline.volume:batch'
   if (request.kind === 'chapters') return `outline.chapter:batch:${request.volumeId}`
@@ -137,10 +232,14 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const [userOverride, setUserOverride] = useState<string | null>(null)
   const [activeModuleKey, setActiveModuleKey] = useState<'outline.volume' | 'outline.chapter'>('outline.volume')
   const [pendingGeneration, setPendingGeneration] = useState<OutlineGenerationRequest | null>(null)
+  const [preparedContext, setPreparedContext] = useState<PreparedGenerationContext | null>(null)
+  const [contextLoading, setContextLoading] = useState(false)
+  const [contextError, setContextError] = useState('')
   const [promptPanelOpen, setPromptPanelOpen] = useState(false)
   const [activeChapterDrag, setActiveChapterDrag] = useState<ChapterDragPayload | null>(null)
   const [chapterDropTargetId, setChapterDropTargetId] = useState<number | null>(null)
   const activeChapterDragRef = useRef<ChapterDragPayload | null>(null)
+  const contextRequestRef = useRef(0)
 
   const beginChapterDrag = useCallback((payload: ChapterDragPayload) => {
     activeChapterDragRef.current = payload
@@ -369,18 +468,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
 
   // ── AI 生成 ──
 
-  const prepareGeneration = (request: OutlineGenerationRequest) => {
-    const moduleKey = request.kind === 'volumes' || request.kind === 'single-volume'
-      ? 'outline.volume'
-      : 'outline.chapter'
-    setActiveModuleKey(moduleKey)
-    setPendingGeneration(request)
-    setPromptPanelOpen(true)
-    setPreviewVolumes(null)
-    setPreviewChapters(null)
-    setPreviewTargetId(null)
-  }
-
   const findVolumeForChapter = (chapterId: number) => {
     const chapter = nodes.find(node => node.id === chapterId && node.type === 'chapter')
     if (!chapter) return null
@@ -392,7 +479,47 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     return null
   }
 
-  const executeGeneration = async (request: OutlineGenerationRequest) => {
+  const prepareGeneration = async (request: OutlineGenerationRequest) => {
+    const requestId = contextRequestRef.current + 1
+    contextRequestRef.current = requestId
+    const moduleKey = request.kind === 'volumes' || request.kind === 'single-volume'
+      ? 'outline.volume'
+      : 'outline.chapter'
+    const operation = encodeGenerationOperation(request)
+    setActiveModuleKey(moduleKey)
+    setPendingGeneration(request)
+    setPreparedContext(null)
+    setContextLoading(true)
+    setContextError('')
+    setPromptPanelOpen(true)
+    setPreviewVolumes(null)
+    setPreviewChapters(null)
+    setPreviewTargetId(null)
+
+    try {
+      const targetVolume = request.kind === 'single-volume' || request.kind === 'chapters'
+        ? volumes.find(volume => volume.id === request.volumeId) ?? null
+        : request.kind === 'single-chapter'
+          ? findVolumeForChapter(request.chapterId)
+          : null
+      const assembled = await buildOutlineAssembledContext(
+        targetVolume?.worldGroupId ?? null,
+        targetVolume?.id,
+      )
+      if (contextRequestRef.current !== requestId) return
+      setPreparedContext({ operation, assembled })
+    } catch (error) {
+      if (contextRequestRef.current !== requestId) return
+      setContextError((error as Error).message || '未知错误')
+    } finally {
+      if (contextRequestRef.current === requestId) setContextLoading(false)
+    }
+  }
+
+  const executeGeneration = async (
+    request: OutlineGenerationRequest,
+    contextSnapshot?: AssembleContextResult | null,
+  ) => {
     const moduleKey = request.kind === 'volumes' || request.kind === 'single-volume'
       ? 'outline.volume'
       : 'outline.chapter'
@@ -423,7 +550,8 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
         toast.error('要补全的卷不存在，请重新选择。')
         return
       }
-      const assembled = await buildOutlineAssembledContext(targetVolume?.worldGroupId ?? null, targetVolume?.id)
+      const assembled = contextSnapshot
+        ?? await buildOutlineAssembledContext(targetVolume?.worldGroupId ?? null, targetVolume?.id)
       const messages = buildVolumeOutlinePrompt(
         project.name,
         project.genre,
@@ -451,7 +579,8 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       toast.error('要生成章纲的卷不存在，请重新选择。')
       return
     }
-    const assembled = await buildOutlineAssembledContext(volume.worldGroupId ?? null, volume.id)
+    const assembled = contextSnapshot
+      ?? await buildOutlineAssembledContext(volume.worldGroupId ?? null, volume.id)
     const volIdx = volumes.indexOf(volume)
     const prevSummary = volIdx > 0 ? volumes[volIdx - 1].summary : ''
     const charCtx = contextPart(assembled, 'characters')
@@ -491,15 +620,19 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     await ai.start(messages, undefined, { category: 'outline.chapter', projectId: project.id! })
   }
 
-  const handleAIVolumes = () => prepareGeneration({ kind: 'volumes' })
+  const handleAIVolumes = () => { void prepareGeneration({ kind: 'volumes' }) }
   const handleAIChapters = () => {
-    if (selectedVol?.id) prepareGeneration({ kind: 'chapters', volumeId: selectedVol.id })
+    if (selectedVol?.id) void prepareGeneration({ kind: 'chapters', volumeId: selectedVol.id })
   }
   const handleConfirmGeneration = () => {
-    if (!pendingGeneration) return
+    if (!pendingGeneration || contextLoading || contextError) return
     const request = pendingGeneration
+    const operation = encodeGenerationOperation(request)
+    const contextSnapshot = preparedContext?.operation === operation ? preparedContext.assembled : null
+    if (!contextSnapshot) return
     setPendingGeneration(null)
-    void executeGeneration(request)
+    setPreparedContext(null)
+    void executeGeneration(request, contextSnapshot)
   }
   const handleRetryGeneration = () => {
     const request = decodeGenerationOperation(ai.operation)
@@ -585,7 +718,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     await loadAll(project.id!)
     setBatchResult(null)
     setBatchProgress(null)
-  }, [batchResult, nodes, addOutlineNodeByAdopt, loadAll, project.id])
+  }, [batchResult, nodes, addOutlineNodeByAdopt, loadAll, project.id, toast])
 
   // ── 采纳预览 + 确认 ──
 
@@ -937,33 +1070,57 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
         />
 
         {pendingGeneration && (
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
-            <div className="text-xs text-text-secondary">
-              <span className="font-medium text-text-primary">
-                {pendingGeneration.kind === 'volumes' && '批量生成卷级大纲'}
-                {pendingGeneration.kind === 'chapters' && '生成本卷所有章节'}
-                {pendingGeneration.kind === 'single-volume' && 'AI 生成本卷卷纲'}
-                {pendingGeneration.kind === 'single-chapter' && 'AI 生成本章章纲'}
-              </span>
-              <span className="ml-2">
-                {pendingGeneration.kind === 'single-chapter'
-                  ? '单章补全固定只生成当前 1 章；上方“本卷章节数”不参与本次调用。确认后才会调用 API。'
-                  : '请先调整上方参数，确认后才会调用 API。'}
-              </span>
+          <div className="space-y-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="text-xs leading-5 text-text-secondary">
+                <span className="font-medium text-text-primary">
+                  {pendingGeneration.kind === 'volumes' && '批量生成卷级大纲'}
+                  {pendingGeneration.kind === 'chapters' && '生成本卷所有章节'}
+                  {pendingGeneration.kind === 'single-volume' && 'AI 生成本卷卷纲'}
+                  {pendingGeneration.kind === 'single-chapter' && 'AI 生成本章章纲'}
+                </span>
+                <span className="ml-2">
+                  {pendingGeneration.kind === 'single-chapter'
+                    ? '单章补全固定只生成当前 1 章；上方“本卷章节数”不参与本次调用。确认后才会调用 API。'
+                    : '请先调整上方参数，确认后才会调用 API。'}
+                </span>
+              </div>
+              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                {contextError && (
+                  <button
+                    onClick={() => { void prepareGeneration(pendingGeneration) }}
+                    className="px-2.5 py-1 text-xs text-accent border border-accent/30 rounded hover:bg-accent/10"
+                  >
+                    重新读取
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    contextRequestRef.current += 1
+                    setPendingGeneration(null)
+                    setPreparedContext(null)
+                    setContextLoading(false)
+                    setContextError('')
+                  }}
+                  className="px-2.5 py-1 text-xs text-text-muted border border-border rounded hover:text-text-primary"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleConfirmGeneration}
+                  disabled={contextLoading || !!contextError || !preparedContext}
+                  className="px-2.5 py-1 text-xs text-white bg-accent rounded hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  确认生成
+                </button>
+              </div>
             </div>
-            <div className="flex shrink-0 gap-2">
-              <button
-                onClick={() => setPendingGeneration(null)}
-                className="px-2.5 py-1 text-xs text-text-muted border border-border rounded hover:text-text-primary"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleConfirmGeneration}
-                className="px-2.5 py-1 text-xs text-white bg-accent rounded hover:bg-accent-hover"
-              >
-                确认生成
-              </button>
+            <div className="border-t border-accent/20 pt-3">
+              <OutlineGenerationBasis
+                context={preparedContext?.assembled ?? null}
+                loading={contextLoading}
+                error={contextError}
+              />
             </div>
           </div>
         )}
@@ -1017,7 +1174,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
               <div className="flex items-center gap-1.5">
                 {!selectedVol.summary.trim() && (
                   <button
-                    onClick={() => prepareGeneration({ kind: 'single-volume', volumeId: selectedVol.id! })}
+                    onClick={() => { void prepareGeneration({ kind: 'single-volume', volumeId: selectedVol.id! }) }}
                     disabled={ai.isStreaming}
                     className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-bg-elevated text-accent rounded-md hover:bg-accent/10 border border-accent/30 disabled:opacity-50 transition-colors"
                   >
@@ -1096,7 +1253,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
                         onOpenChapter={onOpenChapter}
                         onReorder={(ids) => reorderNodes(ids)}
                         onInsertAfter={(chId) => handleInsertChapterAfter(chId, block.id!)}
-                        onGenerateChapter={(chapterId) => prepareGeneration({ kind: 'single-chapter', chapterId })}
+                        onGenerateChapter={(chapterId) => { void prepareGeneration({ kind: 'single-chapter', chapterId }) }}
                         onMoveChapter={handleMoveChapter}
                         activeChapterDrag={activeChapterDrag}
                         getActiveChapterDrag={getActiveChapterDrag}
@@ -1126,7 +1283,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
                         onUpdate={updateNode} onDelete={deleteNode} onOpen={onOpenChapter}
                         dnd={directChaptersDnD.itemDnD(ch.id)}
                         onInsertAfter={() => handleInsertChapterAfter(ch.id!, selectedVol.id!)}
-                        onGenerate={() => prepareGeneration({ kind: 'single-chapter', chapterId: ch.id! })}
+                        onGenerate={() => { void prepareGeneration({ kind: 'single-chapter', chapterId: ch.id! }) }}
                         parentId={selectedVol.id!}
                         onMoveChapter={handleMoveChapter}
                         activeChapterDrag={activeChapterDrag}
