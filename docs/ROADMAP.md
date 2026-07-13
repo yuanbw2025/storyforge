@@ -2536,6 +2536,8 @@ for each character:
 
 ## 🟡 HEALTH-5（P2 · 低优先 · 穿插做）— 死代码清理 + i18n 渐进迁移 + 包体积
 
+> **2026-07-13 确定性清理进度**：全仓按生产 / 测试引用复核后，删除两个真实孤儿：未挂载到任何面板的 `EventTimeline.tsx`，以及从未接入 UI / prompt / store 的 `methodology.ts`。保留旧 `Project.methodologyId` 可选字段，避免把代码清理误做成用户数据迁移。构建产物复核显示首屏应用块约 **200 KB gzip**，已低于本条 `<300 KB gzip` 目标；另一个约 131 KB gzip 的大块是 `react-force-graph-2d`，只随关系面板动态加载，章节编辑器、导入、地图等重面板也均为 lazy chunk，因此不为数字继续制造碎片化分包。WorldMap 的 `3D Labs` 是已明确标识且禁用的实验入口，不当死代码误删。**本条剩余仅为 i18n 产品里程碑**，需等是否做英文版的产品决策；当前中文版本不盲目迁 100+ 组件。
+
 **问题**：可能存在死代码(WorldMap3DCanvas)、108 组件硬编码中文未 i18n、主包仍偏大(gzip 415KB)。
 
 **方案**：①死代码扫描工具(如 knip/ts-prune)跑一遍,移除确认无用的;②i18n 按 `docs/refactor/I18N-GUIDE.md` 逐面板渐进迁移(优先 common/nav/设置/导出);③包体积继续拆(章节编辑器懒加载,目标主包 gzip <300KB)。**排期**：低优先,穿插在其它任务间。
