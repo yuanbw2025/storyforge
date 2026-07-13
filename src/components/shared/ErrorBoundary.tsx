@@ -1,5 +1,6 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { recordRuntimeDiagnosticError } from '../../lib/diagnostics/local-diagnostic-report'
 
 interface Props {
   children: ReactNode
@@ -22,6 +23,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    recordRuntimeDiagnosticError(error, 'react')
     console.error('[StoryForge ErrorBoundary]', error, errorInfo)
   }
 

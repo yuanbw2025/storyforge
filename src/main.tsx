@@ -13,11 +13,13 @@ import { db } from './lib/db/schema'
 import { finalizeCharacterAxesMigrationSnapshots } from './lib/migrations/finalize-character-axes-snapshots'
 import { applyStoryForgeTheme, resolveStoryForgeTheme } from './lib/theme'
 import { registerStoryForgeServiceWorker } from './lib/pwa/register-service-worker'
+import { installRuntimeDiagnostics } from './lib/diagnostics/local-diagnostic-report'
 import './index.css'
 
 // 从 localStorage 恢复主题（兼容旧主题名迁移）
 applyStoryForgeTheme(resolveStoryForgeTheme(localStorage.getItem('storyforge-theme')))
 registerStoryForgeServiceWorker()
+installRuntimeDiagnostics()
 
 /**
  * FB-11 数据持久 · 启动期申请「持久化存储」。

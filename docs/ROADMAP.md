@@ -2185,7 +2185,8 @@ for each character:
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。
 
 ### 🟡 AUDIT-7（P2-1 / 3.7 · 测试与发布护栏）— Playwright 核心路径 E2E + 崩溃上报 + 发布清单
-- **2026-07-13 发布护栏进度**：新增 `check:release-metadata`，强制 Release tag、`package.json.version` 与 `CHANGELOG.md` 版本标题三方一致；源码 Release 工作流在创建/修改 Release 前先运行完整 `npm run ci`（含类型、测试、构建、架构、注册表、AI manual、源码可达性和体积预算）。手动发版遇到同名 tag 时还会验证该 tag 必须指向当前 release commit，禁止旧 tag 配新源码的错版发布。`R-AUDIT7-release-metadata` 覆盖正常发版与 tag/日志双错位。剩余 Playwright 商业 smoke、诊断包/错误上报和升级前自动快照仍未完成，不冒充整个专项闭环。
+- **2026-07-13 发布护栏进度**：新增 `check:release-metadata`，强制 Release tag、`package.json.version` 与 `CHANGELOG.md` 版本标题三方一致；源码 Release 工作流在创建/修改 Release 前先运行完整 `npm run ci`（含类型、测试、构建、架构、注册表、AI manual、源码可达性和体积预算）。手动发版遇到同名 tag 时还会验证该 tag 必须指向当前 release commit，禁止旧 tag 配新源码的错版发布。`R-AUDIT7-release-metadata` 覆盖正常发版与 tag/日志双错位。
+- **2026-07-13 本地诊断包进度**：数据管理新增用户主动下载的本地诊断 JSON，内容仅限应用/浏览器版本、数据库 schema、各注册表表的记录数量和本次页面会话错误的类型/堆栈位置；明确不读取表行内容、作品文本、API Key、localStorage 或错误 message，也不联网自动上传。表枚举复用 `PROJECT_TABLES`，React ErrorBoundary 与全局 error/unhandledrejection 只保留最近 20 条脱敏位置。`R-AUDIT7-local-diagnostics` 用书名/正文/API Key/错误消息哨兵证明均未泄露；隔离预览浏览器实测入口、隐私说明与成功反馈。内置浏览器未捕获 Blob 下载事件，因此只认定生成/触发成功，不冒充落盘事件自动化通过。剩余 Playwright 商业 smoke、第三方匿名错误上报（涉及隐私/服务商，待决策）和升级前自动快照仍未完成。
 - **改法**：① Playwright 5 条商业级 smoke（建项目/配 AI/生成/采纳/导出导入/备份恢复）；② 可关闭的匿名错误上报或本地诊断包导出；③ release checklist（升级前自动快照、变更说明、回滚方案、已知问题）。
 - **验收**：核心路径 E2E 通过；有发布前自动快照与回滚预案。
 - **注**：与现有 HEALTH-2/HEALTH-5 重叠，实施时合并推进，勿重复立项。
