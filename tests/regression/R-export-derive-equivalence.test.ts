@@ -26,6 +26,12 @@ function normalize(data: any) {
   for (const t of ['outlineNodes', 'worldNodes']) {
     for (const row of (data as any)[t] ?? []) delete row.parentId
   }
+  for (const row of data.detailedOutlines ?? []) {
+    delete row._appearingCharacterIndexes
+    delete row._foreshadowIndexes
+    delete row._sceneCharacterIndexes
+  }
+  for (const row of data.creativeRules ?? []) delete row._citedReferenceIndexes
   return data
 }
 

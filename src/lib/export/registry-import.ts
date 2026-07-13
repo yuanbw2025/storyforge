@@ -27,9 +27,13 @@ function deriveImportOrder(specs: TableSpec[]): TableSpec[] {
     if (guard++ > specs.length + 2) throw new Error('[deriveImport] 表依赖存在环,无法拓扑排序')
     for (const spec of specs) {
       if (done.has(spec.name)) continue
-      const deps = (spec.exportRemap ?? [])
+      const fieldDeps = (spec.exportRemap ?? [])
         .filter(rm => !rm.selfTree && rm.remapVia !== spec.name)
         .map(rm => rm.remapVia)
+      const refDeps = (spec.exportRefRemap ?? [])
+        .filter(ref => ref.remapVia !== spec.name)
+        .map(ref => ref.remapVia)
+      const deps = [...new Set([...fieldDeps, ...refDeps])]
       if (deps.every(d => done.has(d))) {
         order.push(spec)
         done.add(spec.name)
@@ -150,7 +154,15 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
         let stashed: Record<string, any> | null = null
         if ((spec.exportRefRemap ?? []).length > 0) {
           stashed = {}
-          for (const rr of spec.exportRefRemap!) { stashed[rr.field] = obj[rr.field]; delete obj[rr.field] }
+          for (const rr of spec.exportRefRemap!) {
+            if (rr.kind === 'portals') {
+              stashed[rr.field] = obj[rr.field]
+              delete obj[rr.field]
+            } else {
+              stashed[rr.exportAs] = obj[rr.exportAs]
+              delete obj[rr.exportAs]
+            }
+          }
         }
 
         const newId = await (db as any)[spec.name].add(obj) as number
@@ -173,6 +185,19 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
             const remapped = remapWorldPortalTargets(p.stashed[rr.field], (exportId: number) => refMap.get(exportId))
             if (remapped) await (db as any)[spec.name].update(p.newId, { [rr.field]: remapped, updatedAt: now })
           }
+        } else {
+          const refMap = newIdMaps.get(rr.remapVia)
+          if (!refMap) continue
+          for (const pending of pendingRefRemap) {
+            const portableRefs = pending.stashed[rr.exportAs]
+            if (portableRefs == null) continue // 旧备份没有影子字段：保留原值，不猜测旧 db id。
+            const patch = rr.kind === 'id-array'
+              ? remapPortableIdArray(portableRefs, refMap, rr.storage === 'json-string')
+              : await remapSceneCharacterIndexes((db as any)[spec.name], pending.newId, rr.field, portableRefs, refMap)
+            if (patch !== undefined) {
+              await (db as any)[spec.name].update(pending.newId, { [rr.field]: patch, updatedAt: now })
+            }
+          }
         }
       }
 
@@ -187,5 +212,33 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
     }
 
     return newProjectId
+  })
+}
+
+function remapPortableIdArray(value: unknown, idMap: Map<number, number>, stringify: boolean): number[] | string {
+  const mapped = Array.isArray(value)
+    ? value.map(index => typeof index === 'number' ? idMap.get(index) : undefined).filter((id): id is number => id != null)
+    : []
+  return stringify ? JSON.stringify(mapped) : mapped
+}
+
+async function remapSceneCharacterIndexes(
+  table: any,
+  rowId: number,
+  field: string,
+  portableRefs: unknown,
+  idMap: Map<number, number>,
+): Promise<unknown[] | undefined> {
+  if (!Array.isArray(portableRefs)) return undefined
+  const row = await table.get(rowId)
+  const scenes = row?.[field]
+  if (!Array.isArray(scenes)) return undefined
+  return scenes.map((scene: unknown, sceneIndex: number) => {
+    if (!scene || typeof scene !== 'object') return scene
+    const indexes = portableRefs[sceneIndex]
+    const characterIds = Array.isArray(indexes)
+      ? indexes.map(index => typeof index === 'number' ? idMap.get(index) : undefined).filter((id): id is number => id != null)
+      : []
+    return { ...(scene as Record<string, unknown>), characterIds }
   })
 }

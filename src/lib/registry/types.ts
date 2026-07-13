@@ -97,12 +97,23 @@ export interface ExportRemapField {
 
 /**
  * JSON 字段内引用的导出重映射(区别于 refs:refs 管删除级联,这里管导出/导入重映射)。
- * 目前仅 worldNodes.portalsJSON 一种结构(kind: 'portals')。
+ * exportAs 是新增的便携影子字段；保留原字段保证旧版导出契约可读，新版导入优先用影子字段重映射。
  */
-export interface ExportRefRemap {
+export type ExportRefRemap = {
   field: string
   remapVia: string
   kind: 'portals'
+} | {
+  field: string
+  remapVia: string
+  kind: 'id-array'
+  exportAs: string
+  storage?: 'array' | 'json-string'
+} | {
+  field: string
+  remapVia: string
+  kind: 'scene-character-ids'
+  exportAs: string
 }
 
 /**

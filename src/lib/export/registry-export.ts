@@ -62,10 +62,32 @@ function toExportRow(
     if (rr.kind === 'portals') {
       const map = idMaps.get(rr.remapVia)
       obj[rr.field] = remapWorldPortalTargets(obj[rr.field], (targetId: number) => map?.get(targetId))
+    } else if (rr.kind === 'id-array') {
+      const map = idMaps.get(rr.remapVia)
+      const raw = parseIdArray(obj[rr.field])
+      obj[rr.exportAs] = raw.map(id => map?.get(id)).filter((id): id is number => id != null)
+    } else if (rr.kind === 'scene-character-ids') {
+      const map = idMaps.get(rr.remapVia)
+      obj[rr.exportAs] = Array.isArray(obj[rr.field])
+        ? obj[rr.field].map((scene: any) => Array.isArray(scene?.characterIds)
+          ? scene.characterIds.map((id: unknown) => typeof id === 'number' ? map?.get(id) : undefined).filter((id: unknown): id is number => typeof id === 'number')
+          : [])
+        : []
     }
   }
 
   return obj
+}
+
+function parseIdArray(value: unknown): number[] {
+  if (Array.isArray(value)) return value.filter((id): id is number => typeof id === 'number')
+  if (typeof value !== 'string') return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : []
+  } catch {
+    return []
+  }
 }
 
 /**

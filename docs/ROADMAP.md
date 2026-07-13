@@ -2125,7 +2125,9 @@ for each character:
 - **安全网（数据红线）**：`R-export-fullcoverage`（全 31 表 + 双世界组往返）锁当前行为 → `R-export-derive-equivalence`（派生导出 ≡ 真实旧格式 fixture，逐字段）→ `R-export-derive-roundtrip`（派生往返 + 旧 fixture 向后兼容）。等价仅两处无害差异：派生版去掉了旧版冗余的 outlineNodes/worldNodes 原始 parentId 死字段。
 - **验收达成**：新增 exportable 表只登记注册表即自动进出导出/导入；旧备份/Gist 云存档格式不变（fixture 锁死）；往返测试全绿。
 
-### 🟢 AUDIT-1b（AUDIT-1 派生时发现 · 待修）— 细纲数组/JSON 内的角色引用导入未重映射
+### ✅ AUDIT-1b（2026-07-13 完成）— 细纲数组/JSON 内的角色引用导入未重映射
+
+- **完成状态**：`exportRefRemap` 已扩展便携 ID 数组与场景角色 ID 类型。新备份为细纲出场角色、场景角色、伏笔以及创作规则引用写显式导出索引，导入在目标表 ID 映射完成后二阶段回填；旧备份没有影子索引时保持旧字段，不猜测无法可靠恢复的历史 DB ID。全量往返测试已恢复精确重映射断言。
 - **现状**：`detailedOutlines.appearingCharacterIds`（number[]）与 `scenes[].characterIds`（JSON 内）当前导入**未重映射**到新角色 id（注册表 `refs` 已声明为 character 引用，但导出/导入只处理 `exportRemap` 字段，不处理 refs 里的 array/json 引用）。同类：`creativeRules.citedReferenceIds` → references。
 - **影响**：导入后细纲「本章出场角色」可能指向错误/不存在的角色。属次要元数据，非正文/主外键，不致命。
 - **改法**：派生引擎已统一架构，后续可让 `refs` 中 `kind: 'array' | 'json'` 且指向 exportable 表的引用也纳入导出/导入重映射（开启后 `R-export-fullcoverage` 里被锁的 `appearingCharacterIds` 断言可恢复为「重映射到新 id」）。
