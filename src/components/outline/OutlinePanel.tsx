@@ -355,6 +355,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
         'worldRules',
         'historical',
         'locations',
+        'foreshadows',
         'existingVolumeOutlines',
         'writtenChapterProgress',
       ],

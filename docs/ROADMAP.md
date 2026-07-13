@@ -1046,10 +1046,10 @@
   - 连续快速进入同一大纲节点、切页再回来，不会创建重复章节记录。
   - 回归测试覆盖：`getOrCreateByOutlineNode()` 防重复、`pickBestChapterForOutline()` 择优、导出重复章节时不丢正文、保存按钮从 editor ref 取最新 HTML。
 - **优先级**：🔴 高（用户会以为正文和导出丢失；涉及核心手稿安全与导出可信度）。
-## 🟡 PR-20260702-20 — OpenCode Go AI provider 接入
+## ✅ PR-20260702-20 — OpenCode Go AI provider 接入（已进入 v3.8.0 主线）
 
 - **来源**：外部贡献者 PR [#20 Opencode provider](https://github.com/yuanbw2025/storyforge/pull/20)。
-- **状态**：PR 当前与 `main` 冲突且无 checks；不直接合并，改由 Codex 在 `codex/opencode-provider` 分支参考实现，并在关闭 PR 时向贡献者致谢说明。
+- **状态**：未直接合并冲突 PR；当前主线已吸收 provider 枚举、OpenAI-compatible Base URL、本地代理、兼容模型清单与 128K 上下文预算，`R-opencode-provider` 锁定端点和模型边界。
 - **改动范围**：仅新增 AI provider 枚举 / 模型列表 / 默认 Base URL / 设置页选项 / Vite 本地代理 / 上下文窗口预设；不改 DB schema，不新增 AI 动作，不涉及三注册表数据读写。
 - **实现注意**：StoryForge 当前 AI client 只调用 OpenAI-compatible `/chat/completions`；OpenCode Go 官方文档中 MiniMax/Qwen 等模型走 `/messages`，本轮先只暴露明确支持 `/chat/completions` 的模型，后续若支持 Anthropic messages 端点再扩。
 - **验证**：`check:required-tables` / `check:architecture` / `check:ai-manual` / `tsc` / targeted tests / build。
@@ -2239,7 +2239,9 @@ for each character:
 
 ---
 
-## 🟢 ENH-OUTLINE-1（提示词增强 · 低优先 · 部分完成 2026-06-16）— 把"番茄方法论卷纲"精华内化进纲要提示词
+## ✅ ENH-OUTLINE-1（2026-07-13 完成）— 把"番茄方法论卷纲"精华内化进纲要提示词
+
+> **完成状态**：在既有情绪公式/爽点密度/卷内节奏基础上补齐“全局骨架先行”：卷纲生成前内部对齐一句话主线、成长坐标、角色进退场和伏笔收放，但仍只输出原有卷纲 JSON。已有伏笔通过 `CONTEXT_SOURCES.foreshadows + assembleContext()` 正式读取，不新造角色表/伏笔表或旁路上下文；统一约束位于 adapter，因此内置与题材包模板都生效。
 
 > **已内化(2026-06-16)**：`OUTLINE_SYSTEM` 已吸收番茄方法论的「情绪公式(蓄力→爆发→余韵)、爽点密度(每3-5章钩子)、必含结构要素(坠落时刻/选择困境/信息差/伏笔/悬念交替)、节奏段设计(开局蓄力/矛盾升级/高潮爆发/收尾过渡)」;`outline.volume` summary 要求升级为「4-6句覆盖核心冲突+情绪走向+主角变化+卷末钩子」。JSON 输出格式与 `parseVolumeOutlineSmart` 未变。
 > **待续**：「全局骨架先行」那层(一句话主线/升级体系坐标/核心角色总表/伏笔总表 作为生成卷纲前的前置结构)尚未并入——需复用既有 storyCore/foreshadows/角色数据源,避免另起并行结构。优先级仍 🟢 低。

@@ -75,6 +75,8 @@ describe('CF-20260703-2 · 题材包卷级大纲参数与变量契约', () => {
     expect(full).toContain('最终总卷数为 30 卷')
     expect(full).toContain('整体节奏为「快」')
     expect(full).toContain('【角色】林澈')
+    expect(full).toContain('【全局骨架先行】')
+    expect(full).toContain('不得改变规定的 JSON 数组格式')
     expect(full).not.toContain('{{storySeed}}')
     expect(full).not.toContain('{{protagonist}}')
     expect(full).not.toContain('{{totalChapters}}')

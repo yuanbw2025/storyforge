@@ -34,6 +34,11 @@ describe('R-JUN17-B · 大纲生成流程', () => {
     expect(full).toContain('当前已有 2 卷')
     expect(full).toContain('只生成后续缺少的 18 卷')
     expect(full).toContain('禁止改写、复述或重新生成已有卷')
+    expect(full).toContain('【全局骨架先行】')
+    expect(full).toContain('一句话主线')
+    expect(full).toContain('角色进退场')
+    expect(full).toContain('伏笔收放')
+    expect(full).toContain('不要额外输出骨架表')
   })
 
   it('B-1: 未启用建议卷数时由故事设定合理规划，不回退固定 2 卷', () => {
@@ -83,6 +88,24 @@ describe('R-JUN17-B · 大纲生成流程', () => {
     expect(result.text).toContain('第一卷')
     expect(result.text).toContain('宗门大战')
     expect(result.text).toContain('禁止重复')
+  })
+
+  it('ENH-OUTLINE-1: 卷纲上下文通过正式 foreshadows 源读取既有伏笔', async () => {
+    expect(CONTEXT_SOURCE_BY_KEY.has('foreshadows')).toBe(true)
+    const now = Date.now()
+    const projectId = await db.projects.add({
+      name: '伏笔骨架测试', genre: '', description: '', targetWordCount: 500_000,
+      enableMultiWorld: false, createdAt: now, updatedAt: now,
+    } as any) as number
+    await db.foreshadows.add({
+      projectId, name: '断裂玉佩', type: 'chekhov', status: 'planted',
+      description: '指向主角身世', createdAt: now, updatedAt: now,
+    } as any)
+
+    const result = await assembleContext({ projectId, sourceKeys: ['foreshadows'] })
+    expect(result.included).toContain('foreshadows')
+    expect(result.text).toContain('【伏笔状态】')
+    expect(result.text).toContain('断裂玉佩')
   })
 
   it('QUICKWIN-4: 章纲/卷纲上下文经 CONTEXT_SOURCES 读取目标卷已写正文进度', async () => {
