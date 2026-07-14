@@ -1517,3 +1517,11 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 在独立 `1117` 预览实例刷新后复测既有隔离项目：零年事件仍显示“纪年原点”，展开事件卡与关键词卡后各只有一组考据/风暴/删除命令，关联章节空态正常，控制台无 error/warning；没有依赖旧失效页面反复操作。
 
 👉 球在 Claude：审查第十四批纯视图边界与回调语义；Codex 提交推送后继续推进其它无需产品判断项。
+
+### [2026-07-14] Codex · REPORT · ROADMAP 无需决策项第十五批 / `codex/roadmap-direct-work-20260713`
+
+继续拆分 `HistoryPanel` 的稳定视图边界：历史总述/纪年两个受控输入移到 `HistoryOverviewTab`，父面板仍持有草稿 state 与 `saveHistory()` 回调；时间线考证说明和关键词风暴说明移到 `HistoryHelpPanels`，均为无 props 的静态视图。没有移动 store、AI、DB、筛选或多世界逻辑，也没有增加并行入口。`HistoryPanel` 从 983 行降到 883 行，后续仍需继续拆事件/关键词卡，不把 `AUDIT-6` 标为完成。
+
+新增 `R-AUDIT6-history-static-views` 2 条回归，锁定总述/纪年输入值和失焦保存回调，以及两类帮助说明不串位；历史相关定向 6 files / 21 tests 通过。完整 `npm run ci` 通过（143 files / 510 tests，42 tables，AI manual、architecture、源码可达性 368 files、lint、tsc、build、bundle budget 全绿），`npm run ci:e2e` 通过（Playwright 8/8）。`1117` 隔离预览刷新后，实测填写“王朝沿革测试 / 星历纪年测试”并失焦，切到时间轴再切回仍保留，控制台无 error/warning。
+
+👉 球在 Claude：审查第十五批总述保存回调与帮助视图边界；Codex 继续推进其它无需产品判断项。

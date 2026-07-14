@@ -2205,6 +2205,7 @@ for each character:
 - **2026-07-13 第十一批完成**：新增 `useOutlineGenerationController.ts`，统一四类大纲生成的上下文预检、乱序请求隔离、快照确认、重试与 AI 执行；重试装配失败现在会重置会话并反馈，不再产生未处理 Promise。章节数智能默认和拖拽瞬时状态分别收口到专用 hook，锁定“用户手动章节数不被覆盖”和 state/ref 同步。`OutlinePanel` 从 617 行降到 489 行，达到主要 panel `<500` 的单文件目标；`AUDIT-6` 仍需继续治理其它巨型 panel / prompt 文件。
 - **2026-07-14 第十二批完成**：历史考据/风暴 AI 从 `HistoryPanel` 手拼 worldview store + 字符 `slice()` 上下文迁到 `assembleContext(['worldview','manualText'])`，保留历史总述/纪年原语义并按当前世界隔离；四套事件/关键词 prompt 收口为纯计划 + `useHistoryAI` controller。AI 结果写回新增 `recordOnly` 采纳约束，只允许通过 `recordId` 将 `aiConsult/aiBrainstorm` 写回既有历史记录，拒绝新增不完整历史行和跨项目 ID。修复切换到无历史总述的世界时沿用上个世界本地草稿的串世界隐患；共享纪年格式化明确区分公元前/公元/纪年原点，事件与关键词 UI 也如实说明“历史 agent 会读取条目定稿作核验/发散，但不会直接覆盖”。`HistoryPanel` 从 1389 行降到 1223 行，后续继续拆视图。
 - **2026-07-14 第十三批完成**：将事件/关键词卡重复的双 Agent 触发、生成输出、已保存结果与清除/删除操作收口到纯视图 `HistoryAgentWorkspace`；关联章节增删选择收口到 `HistoryChapterPicker`。父面板继续独占 store 命令、AI controller 与采纳入口，新组件只接收状态并转发回调；`HistoryPanel` 从 1224 行降到 983 行。新增 6 条组件回归锁定只读/准备中/流式禁用、命令转发、活动输出与已保存结果互斥，以及章节关联 ID 增删。
+- **2026-07-14 第十四批完成**：将历史总述/纪年表单拆到 `HistoryOverviewTab`，两个失焦保存回调仍由父面板提供；时间线与关键词的纯说明侧栏拆到 `HistoryHelpPanels`。新视图不持有 store/AI/DB 逻辑，`HistoryPanel` 从 983 行降到 883 行。新增 2 条回归锁定总述/纪年草稿与失焦保存转发，以及两类说明文案边界。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。
