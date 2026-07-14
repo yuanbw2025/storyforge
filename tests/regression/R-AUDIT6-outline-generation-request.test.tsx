@@ -8,7 +8,7 @@ import {
   outlineGenerationModuleKey,
   type OutlineGenerationRequest,
   type PreparedGenerationContext,
-} from '../../src/components/outline/outline-generation'
+} from '../../src/lib/outline/generation-request'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

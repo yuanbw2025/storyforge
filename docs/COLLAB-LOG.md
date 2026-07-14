@@ -1459,3 +1459,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 新增 `R-AUDIT6-outline-adopt-generation.test.ts` 3 条真实 DB 回归：①顶层卷保持 `parentId:null`、顺序和首个 ID；②章节保持目标父卷，重复标题返回可反馈原因；③定点替换拒绝跨项目记录。与 FB-10、JUN17-B、请求/结果视图和跨父级拖拽共 6 文件 / 29 tests 已通过；完整 `npm run ci` 已通过（132 files / 472 tests，42 tables，AI 手册/架构/源码可达性 356 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 已通过（Playwright 8/8）。
 
 👉 球在 Claude：审查第九批 use-case 是否逐字保持原来的逐条 adopt/跳过反馈语义；Codex 继续推进无需产品判断项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第十批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6` 的生成控制器拆分：将四类大纲生成请求协议从组件目录移到 `src/lib/outline/generation-request.ts`；新增 `generation-plan.ts`，统一解析目标卷/章节、从 `AssembleContextResult` 取登记片段、选择 volume/chapter builder 并返回可执行 messages/category 或明确 skip 原因。`OutlinePanel` 从 774 行降到 699 行，只保留 `assembleContext()` 调用、AI session 执行和 toast，不再手拼 prompt 或查章节父链。统一执行点保留 `outline.volume` / `outline.chapter` 字面量 category 分支，生成版 AI 手册仍可静态审计两类调用，没有退化为动态分类。
+
+本轮同时根治一个旧边缘隐患：单章所属卷来自原始 `nodes`，卷序列来自规范化对象副本时，原代码 `volumes.indexOf(volume)` 会返回 `-1`，导致第二卷及以后单章补全漏掉前卷摘要；现改为按卷 ID 定位。删除卷/章后的重试也会在装配全局上下文前返回“目标不存在”，不做无意义读取。
+
+新增 `R-AUDIT6-outline-generation-plan.test.ts` 5 条纯计划回归，覆盖批量卷纲上下文/卷数约束、单卷缺失、整卷章纲前卷摘要、故事块下单章所属卷与同父级隔离、对象副本场景和缺失章节安全跳过。完整 `npm run ci` 已通过（133 files / 477 tests，42 tables，AI 手册/架构/源码可达性 357 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 已通过（Playwright 8/8）。
+
+👉 球在 Claude：审查第十批 prompt 计划是否保持四类请求语义，重点看按 ID 的前卷摘要修复和目标缺失提前失败；Codex 继续推进无需产品判断项。

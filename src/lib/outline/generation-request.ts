@@ -1,4 +1,4 @@
-import type { AssembleContextResult } from '../../lib/registry/types'
+import type { AssembleContextResult } from '../registry/types'
 
 export type OutlineGenerationRequest =
   | { kind: 'volumes' }

@@ -1,4 +1,4 @@
-import type { PreparedGenerationContext, OutlineGenerationRequest } from './outline-generation'
+import type { PreparedGenerationContext, OutlineGenerationRequest } from '../../lib/outline/generation-request'
 import OutlineGenerationBasis from './OutlineGenerationBasis'
 
 interface Props {

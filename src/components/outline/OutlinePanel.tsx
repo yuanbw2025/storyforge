@@ -3,11 +3,6 @@ import { useOutlineStore } from '../../stores/outline'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
-import {
-  buildVolumeOutlinePrompt,
-  buildChapterOutlinePrompt,
-  buildSingleChapterOutlinePrompt,
-} from '../../lib/ai/adapters/outline-adapter'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import {
   parseVolumeOutlineSmart, parseChapterOutlineSmart,
@@ -18,6 +13,11 @@ import { runBatchOutlineGeneration, type BatchOutlineProgress } from '../../lib/
 import { getTopLevelVolumes, estimateChaptersPerVolume, DEFAULT_WORDS_PER_CHAPTER } from '../../lib/outline/selectors'
 import { normalizeOutlineNode } from '../../lib/outline/normalize'
 import { adoptGeneratedOutlineItems, adoptGeneratedOutlineSummary } from '../../lib/outline/adopt-generation'
+import {
+  buildOutlineGenerationPlan,
+  findGenerationTargetVolume,
+  outlineGenerationTargetError,
+} from '../../lib/outline/generation-plan'
 import type { AssembleContextResult } from '../../lib/registry/types'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import PanelLayout from '../shared/PanelLayout'
@@ -37,7 +37,7 @@ import {
   outlineGenerationModuleKey,
   type OutlineGenerationRequest,
   type PreparedGenerationContext,
-} from './outline-generation'
+} from '../../lib/outline/generation-request'
 
 interface Props {
   project: Project
@@ -254,17 +254,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
 
   // ── AI 生成 ──
 
-  const findVolumeForChapter = (chapterId: number) => {
-    const chapter = nodes.find(node => node.id === chapterId && node.type === 'chapter')
-    if (!chapter) return null
-    const parent = nodes.find(node => node.id === chapter.parentId)
-    if (parent?.type === 'volume') return parent
-    if (parent?.type === 'storyBlock') {
-      return nodes.find(node => node.id === parent.parentId && node.type === 'volume') ?? null
-    }
-    return null
-  }
-
   const prepareGeneration = async (request: OutlineGenerationRequest) => {
     const requestId = contextRequestRef.current + 1
     contextRequestRef.current = requestId
@@ -281,11 +270,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     setPreviewTargetId(null)
 
     try {
-      const targetVolume = request.kind === 'single-volume' || request.kind === 'chapters'
-        ? volumes.find(volume => volume.id === request.volumeId) ?? null
-        : request.kind === 'single-chapter'
-          ? findVolumeForChapter(request.chapterId)
-          : null
+      const targetVolume = findGenerationTargetVolume(request, nodes, volumes)
       const assembled = await buildOutlineAssembledContext(
         targetVolume?.worldGroupId ?? null,
         targetVolume?.id,
@@ -311,95 +296,35 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     setPreviewChapters(null)
     setPreviewTargetId(null)
 
-    if (request.kind === 'volumes' || request.kind === 'single-volume') {
-      const explicitCount = Number(parameterValues.volumeCount)
-      if (
-        request.kind === 'volumes' &&
-        parameterValues.volumeCount !== '' &&
-        parameterValues.volumeCount != null &&
-        Number.isFinite(explicitCount) &&
-        explicitCount > 0 &&
-        explicitCount <= volumes.length
-      ) {
-        ai.reset()
-        toast.info(`当前已有 ${volumes.length} 卷，已达到你设定的 ${Math.floor(explicitCount)} 卷，无需继续生成。`)
-        return
-      }
-      const targetVolume = request.kind === 'single-volume'
-        ? volumes.find(volume => volume.id === request.volumeId)
-        : null
-      if (request.kind === 'single-volume' && !targetVolume) {
-        toast.error('要补全的卷不存在，请重新选择。')
-        return
-      }
-      const assembled = contextSnapshot
-        ?? await buildOutlineAssembledContext(targetVolume?.worldGroupId ?? null, targetVolume?.id)
-      const messages = buildVolumeOutlinePrompt(
-        project.name,
-        project.genre,
-        assembled.text,
-        contextPart(assembled, 'storyCore'),
-        project.targetWordCount || 500000,
-        hint,
-        buildOpts(),
-        contextPart(assembled, 'characters'),
-        contextPart(assembled, 'worldRules'),
-        {
-          existingVolumesContext: contextPart(assembled, 'existingVolumeOutlines'),
-          existingVolumeCount: volumes.length,
-          targetVolumeTitle: targetVolume?.title,
-        },
-      )
-      await ai.start(messages, undefined, { category: 'outline.volume', projectId: project.id! })
+    const targetError = outlineGenerationTargetError(request, nodes, volumes)
+    if (targetError) {
+      ai.reset()
+      toast.error(targetError)
       return
     }
-
-    const volume = request.kind === 'chapters'
-      ? volumes.find(item => item.id === request.volumeId)
-      : findVolumeForChapter(request.chapterId)
-    if (!volume) {
-      toast.error('要生成章纲的卷不存在，请重新选择。')
-      return
-    }
+    const targetVolume = findGenerationTargetVolume(request, nodes, volumes)
     const assembled = contextSnapshot
-      ?? await buildOutlineAssembledContext(volume.worldGroupId ?? null, volume.id)
-    const volIdx = volumes.indexOf(volume)
-    const prevSummary = volIdx > 0 ? volumes[volIdx - 1].summary : ''
-    const charCtx = contextPart(assembled, 'characters')
-    const rulesCtx = contextPart(assembled, 'worldRules')
-    const messages = request.kind === 'single-chapter'
-      ? (() => {
-        const chapter = nodes.find(node => node.id === request.chapterId && node.type === 'chapter')!
-        const siblings = nodes
-          .filter(node => node.type === 'chapter' && node.parentId === chapter.parentId && node.id !== chapter.id)
-          .sort((a, b) => a.order - b.order)
-        const siblingContext = siblings.length
-          ? `同级已有章节：\n${siblings.map(item => `- ${item.title}${item.summary ? `：${item.summary}` : ''}`).join('\n')}`
-          : ''
-        return buildSingleChapterOutlinePrompt(
-          volume.title,
-          volume.summary,
-          chapter.title,
-          siblingContext,
-          assembled.text,
-          prevSummary,
-          hint,
-          buildOpts(),
-          charCtx,
-          rulesCtx,
-        )
-      })()
-      : buildChapterOutlinePrompt(
-        volume.title,
-        volume.summary,
-        assembled.text,
-        prevSummary,
-        hint,
-        buildOpts(),
-        charCtx,
-        rulesCtx,
-      )
-    await ai.start(messages, undefined, { category: 'outline.chapter', projectId: project.id! })
+      ?? await buildOutlineAssembledContext(targetVolume?.worldGroupId ?? null, targetVolume?.id)
+    const plan = buildOutlineGenerationPlan({
+      request,
+      project,
+      nodes,
+      volumes,
+      assembled,
+      hint,
+      options: buildOpts(),
+    })
+    if (plan.status === 'skip') {
+      ai.reset()
+      if (plan.reason.includes('无需继续生成')) toast.info(plan.reason)
+      else toast.error(plan.reason)
+      return
+    }
+    if (plan.category === 'outline.volume') {
+      await ai.start(plan.messages, undefined, { category: 'outline.volume', projectId: project.id! })
+    } else {
+      await ai.start(plan.messages, undefined, { category: 'outline.chapter', projectId: project.id! })
+    }
   }
 
   const handleAIVolumes = () => { void prepareGeneration({ kind: 'volumes' }) }
