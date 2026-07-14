@@ -2210,6 +2210,7 @@ for each character:
 - **2026-07-14 第十六批完成**：将历史时间线事件卡与历史关键词卡拆到 `HistoryTimelineEventCard` / `HistoryKeywordCard`，字段编辑、章节关联和双 Agent 工作区均通过 patch/命令回调转发；父面板继续独占多世界过滤、store、AI controller、删除确认和当前展开/生成目标。`HistoryPanel` 从 883 行降到 482 行，达到该主要 panel `<500` 的单文件目标。新增 6 条组件回归，锁定纪年原点/世界徽标、史实/虚构、事件与关键词字段、章节关联和 Agent 命令；刷新恢复实测通过。
 - **2026-07-14 第十七批完成**：将章节摘要、章节记忆生成状态、计划—正文对账分类/证据/失效提示及两种确认命令拆到纯视图 `ChapterMemoryPanel`；父级继续负责正文/章纲 hash 校验、AI 抽取、store 与章纲写回。`ChapterEditor` 从 1313 行降到 1248 行。新增 3 条组件回归，锁定空摘要/忙碌态、失效对账和当前待确认对账的命令转发。
 - **2026-07-14 第十八批完成**：将世界观/角色/章纲上下文预览与状态卡注入计数/调整列表拆到纯视图 `ChapterContextPreview`；父级继续独占选择性状态匹配和手动额外 ID 规则。状态分类文案复用 `STATE_CATEGORY_LABELS`，移除旧内联五分支；`ChapterEditor` 从 1248 行降到 1206 行。新增 3 条回归锁定截断边界、注入计数、自动/手动/未选标签和卡片命令。
+- **2026-07-14 第十九批完成**：继续按“父级保留业务控制器、子级只承载稳定视图/交互”的边界治理四个主要面板。`ChapterEditor` 抽出 AI 工具栏并将状态差异、章纲预览、审查、笔记、对照润色五个条件面板改为按需加载（1206→1168 行）；`RichEditor` 抽出格式工具栏、实体补全/悬浮层与主题规范化/段间距扩展（878→499 行）；`AIConfigPanel` 抽出预设、任务路由、连接日志、连接测试、主题选择，并将代理/直连端点元数据下沉到 `lib/ai`（719→491 行）；`WorldviewOriginPanel` 抽出受控三页签侧栏（528→498 行）。新增 6 组组件/纯逻辑回归并同步原结构测试，父级继续独占 TipTap、Zustand 持久化、网络请求、AI、store/DB 写入和上下游上下文；完整 CI 154 files / 544 tests、Chromium E2E 8/8 及全新预览项目实测通过。`AUDIT-6` 仍未完成：`ChapterEditor`、`CodexPanel`、`InspirationPanel`、`ReferencePanel`、`ImportDocPanel` 等仍需按可测试边界继续治理。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。
@@ -2564,7 +2565,7 @@ for each character:
 
 ## 🟡 HEALTH-4（P2 · 持续补网）— UI 层测试覆盖率补强
 
-> **2026-07-13 进度**：新增工作流步骤卡 DOM 回归，锁住“生成前用户输入确实传给运行器”和“编辑 AI 输出后保存使用编辑值”；同时把输入与 `step.userHint` 的合并收口到 `assembleWorkflowStepVars()` 并补纯逻辑反例。已有角色维度草稿、长文本内滚动两组组件测试。本轮补齐 CF-3 生成依据的加载/失败/空态，以及数据管理诊断下载的 Blob/MIME/内容/隐私/成功反馈组件测试；另建立 8 条 Chromium E2E，覆盖创建、正文保存刷新、Markdown/诊断下载、JSON 往返、快照恢复、删除确认/取消、AI 设置持久化和本地模型刷新。剩余按世界观生成等高风险面板逐批补，不追求低价值全局覆盖率数字。
+> **2026-07-14 进度**：新增工作流步骤卡 DOM 回归，锁住“生成前用户输入确实传给运行器”和“编辑 AI 输出后保存使用编辑值”；同时把输入与 `step.userHint` 的合并收口到 `assembleWorkflowStepVars()` 并补纯逻辑反例。已有角色维度草稿、长文本内滚动两组组件测试。本轮补齐 CF-3 生成依据的加载/失败/空态，以及数据管理诊断下载的 Blob/MIME/内容/隐私/成功反馈组件测试；另建立 8 条 Chromium E2E，覆盖创建、正文保存刷新、Markdown/诊断下载、JSON 往返、快照恢复、删除确认/取消、AI 设置持久化和本地模型刷新。第十九批再补章节 AI 工具栏、富文本格式栏/主题/实体浮层、AI 设置子区及世界来源页签共 6 组组件/纯逻辑回归；完整测试现为 154 files / 544 tests。剩余按世界观生成等高风险面板逐批补，不追求低价值全局覆盖率数字。
 
 **问题**：整体覆盖率偏低,UI 层很薄(核心逻辑层~86%,UI 接近裸奔)。盲目追全局百分比性价比低。
 
@@ -2573,6 +2574,7 @@ for each character:
 ## 🟡 HEALTH-5（P2 · 低优先 · 穿插做）— 死代码清理 + i18n 渐进迁移 + 包体积
 
 > **2026-07-13 确定性清理进度**：全仓按生产 / 测试引用复核后，删除五个真实孤儿：未挂载到任何面板的 `EventTimeline.tsx`、从未接入 UI / prompt / store 的 `methodology.ts`，以及已被 `world-map/engine/*` 取代的旧 Canvas 地图 `interaction/perlin/renderer.ts`。保留旧 `Project.methodologyId` 可选字段，避免把代码清理误做成用户数据迁移。新增 `check:source-reachability`，从生产入口沿静态 / 动态 import 检查源码文件可达性并接入 CI；i18n 脚手架作为产品明确保留的未来入口单独声明。构建产物复核显示首屏应用块约 **200 KB gzip**，已低于本条 `<300 KB gzip` 目标；另一个约 131 KB gzip 的大块是 `react-force-graph-2d`，只随关系面板动态加载，章节编辑器、导入、地图等重面板也均为 lazy chunk，因此不为数字继续制造碎片化分包。新增 `check:bundle-size` 并接入本地 `npm run ci` 与 GitHub Actions：从构建后的 `index.html` 识别真实入口，分别限制入口、普通 JS chunk、CSS 和 PDF worker 的 raw/gzip 体积，超限时报告具体文件，防止依赖意外回灌首屏。当前入口约 616 KiB / 196 KiB gzip，最大普通异步块约 491 KiB / 128 KiB gzip，均在预算内。WorldMap 的 `3D Labs` 是已明确标识且禁用的实验入口，不当死代码误删。**本条剩余仅为 i18n 产品里程碑**，需等是否做英文版的产品决策；当前中文版本不盲目迁 100+ 组件。
+> **2026-07-14 按需加载补充**：正文编辑器的状态差异、章纲预览、审查、笔记与对照润色五个条件面板改为 `React.lazy`，继续降低未使用功能进入当前编辑路径的成本；构建体积闸门保持通过。此项只记为既有包体积工作的有界增量，不代表 i18n 已实施；英文版决策仍待负责人确认。
 
 **问题**：可能存在死代码(WorldMap3DCanvas)、108 组件硬编码中文未 i18n、主包仍偏大(gzip 415KB)。
 

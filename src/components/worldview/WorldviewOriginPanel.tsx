@@ -15,6 +15,10 @@ import CodexPanel from '../codex/CodexPanel'
 import CodexSearchBar from '../codex/CodexSearchBar'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import AIFieldModeTabs from '../shared/AIFieldModeTabs'
+import WorldviewOriginSidebar, {
+  WORLDVIEW_ORIGIN_FIELDS,
+  type WorldviewOriginFieldKey,
+} from './WorldviewOriginSidebar'
 import type { Project, DivineDesign } from '../../lib/types'
 import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
 
@@ -37,16 +41,6 @@ async function buildDownstreamReverseContext(projectId: number, worldGroupId: nu
   })).text
 }
 
-// ── 常量 ───────────────────────────────────────────────────────
-
-type FieldKey = 'origin' | 'power' | 'divine'
-
-const FIELDS: { key: FieldKey; label: string; icon: string; desc: string }[] = [
-  { key: 'origin', label: '世界来源', icon: '🌌', desc: '创世神话 / 历史时期 / 文明起源……世界从何而来？' },
-  { key: 'power',  label: '力量体系', icon: '⚡', desc: '修真等级 / 社会等级 / 科技层级……力量如何分层、怎么晋升？' },
-  { key: 'divine', label: '神明与信仰', icon: '🌟', desc: '是否存在神明或宗教？神明 / 信仰的层级、名号、规则与限制。' },
-]
-
 interface Props {
   project: Project
 }
@@ -58,7 +52,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
   const { worldview, saveWorldview, loadAll } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
 
-  const [active, setActive] = useState<FieldKey>('origin')
+  const [active, setActive] = useState<WorldviewOriginFieldKey>('origin')
   const [worldOrigin, setWorldOrigin] = useState('')
   const [powerHierarchy, setPowerHierarchy] = useState('')
   const [divineDesign, setDivineDesign] = useState<DivineDesign>({
@@ -141,38 +135,14 @@ export default function WorldviewOriginPanel({ project }: Props) {
 
       <div className="flex gap-4">
         {/* ── 左侧边栏 ── */}
-        <div className="w-fit min-w-32 max-w-44 shrink-0 space-y-0.5 pt-1">
-          {FIELDS.map(f => {
-            const isActive = active === f.key
-            const isFieldStreaming = streamingKeys.has(f.key)
-            return (
-              <button
-                key={f.key}
-                onClick={() => setActive(f.key)}
-                className={`w-full flex items-center gap-2.5 px-2 py-2.5 rounded-lg text-left transition-all ${
-                  isActive
-                    ? 'bg-accent/8 border-l-2 border-accent'
-                    : 'hover:bg-bg-hover border-l-2 border-transparent'
-                }`}
-              >
-                <span className="text-base shrink-0">{f.icon}</span>
-                <span className={`text-sm font-medium truncate flex-1 ${isActive ? 'text-accent' : 'text-text-primary'}`}>
-                  {f.label}
-                </span>
-                {isFieldStreaming && !isActive && (
-                  <span className="w-2 h-2 rounded-full bg-accent animate-pulse shrink-0" />
-                )}
-              </button>
-            )
-          })}
-        </div>
+        <WorldviewOriginSidebar active={active} streamingKeys={streamingKeys} onSelect={setActive} />
 
         {/* ── 右侧：所有字段同时渲染，hidden 控制显示 ── */}
         <div className="flex-1 min-w-0">
           {/* 世界来源 */}
           <div className={active === 'origin' ? '' : 'hidden'}>
             <TextFieldEditor
-              field={FIELDS[0]}
+              field={WORLDVIEW_ORIGIN_FIELDS[0]}
               value={worldOrigin}
               onChange={v => { setWorldOrigin(v); save({ worldOrigin: v }) }}
               project={project}
@@ -184,7 +154,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
           {/* 力量体系:全貌(上) + 具体词条(下) */}
           <div className={active === 'power' ? '' : 'hidden'}>
             <TextFieldEditor
-              field={FIELDS[1]}
+              field={WORLDVIEW_ORIGIN_FIELDS[1]}
               value={powerHierarchy}
               onChange={v => { setPowerHierarchy(v); save({ powerHierarchy: v }) }}
               project={project}
@@ -206,7 +176,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
           {/* 神明与信仰:全貌(上) + 具体词条(下) */}
           <div className={active === 'divine' ? '' : 'hidden'}>
             <DivineFieldEditor
-              field={FIELDS[2]}
+              field={WORLDVIEW_ORIGIN_FIELDS[2]}
               divineDesign={divineDesign}
               onDivineChange={async (next) => {
                 setDivineDesign(next)
@@ -242,7 +212,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
 function TextFieldEditor({
   field, value, onChange, project, contextSummary, onStreamingChange,
 }: {
-  field: typeof FIELDS[number]
+  field: typeof WORLDVIEW_ORIGIN_FIELDS[number]
   value: string
   onChange: (v: string) => void
   project: Project
@@ -333,7 +303,7 @@ function TextFieldEditor({
 function DivineFieldEditor({
   field, divineDesign, onDivineChange, project, contextSummary, onStreamingChange,
 }: {
-  field: typeof FIELDS[number]
+  field: typeof WORLDVIEW_ORIGIN_FIELDS[number]
   divineDesign: DivineDesign
   onDivineChange: (next: DivineDesign) => Promise<void>
   project: Project
