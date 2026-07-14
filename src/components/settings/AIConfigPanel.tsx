@@ -1,5 +1,5 @@
-import { useState, useEffect, useSyncExternalStore } from 'react'
-import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
+import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText, RefreshCw, ChevronDown } from 'lucide-react'
 import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
@@ -10,6 +10,8 @@ import {
   isCustomProxyBaseUrl,
   toCustomProxyBaseUrl,
 } from '../../lib/ai/custom-proxy'
+import { listOpenAIModels } from '../../lib/ai/list-models'
+import { normalizeOpenAIBaseUrl } from '../../lib/ai/openai-endpoint'
 import { getLogs, subscribeLogs, clearLogs, formatLog } from '../../lib/ai/logger'
 import { applyStoryForgeTheme, resolveStoryForgeTheme, THEME_OPTIONS, type StoryForgeTheme } from '../../lib/theme'
 import { useDialog } from '../shared/Dialog'
@@ -46,6 +48,12 @@ export default function AIConfigPanel() {
   const [showLogs, setShowLogs] = useState(false)
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
+  const [fetchedModels, setFetchedModels] = useState<string[]>([])
+  const [hasFetchedModels, setHasFetchedModels] = useState(false)
+  const [refreshingModels, setRefreshingModels] = useState(false)
+  const [modelListError, setModelListError] = useState('')
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const modelComboboxRef = useRef<HTMLDivElement>(null)
   const [currentTheme, setCurrentTheme] = useState<StoryForgeTheme>(() =>
     resolveStoryForgeTheme(localStorage.getItem('storyforge-theme')),
   )
@@ -71,6 +79,35 @@ export default function AIConfigPanel() {
       setTestResult(result)
     } finally {
       setTesting(false)
+    }
+  }
+
+  const handleRefreshModels = async () => {
+    setRefreshingModels(true)
+    setModelListError('')
+    try {
+      const normalized = normalizeOpenAIBaseUrl(config.baseUrl)
+      if (normalized.changed) setConfig({ baseUrl: normalized.baseUrl })
+      const result = await listOpenAIModels({
+        baseUrl: normalized.baseUrl,
+        apiKey: config.apiKey,
+        provider: config.provider,
+        model: config.model,
+      })
+      setHasFetchedModels(true)
+      if (result.ok) {
+        setFetchedModels(result.models)
+        if (result.models.length === 0) {
+          setModelListError('未返回模型，可手动填写模型名')
+        } else {
+          setModelMenuOpen(true)
+        }
+      } else {
+        setFetchedModels([])
+        setModelListError(result.message)
+      }
+    } finally {
+      setRefreshingModels(false)
     }
   }
 
@@ -102,6 +139,37 @@ export default function AIConfigPanel() {
   useEffect(() => {
     setTestResult(null)
   }, [config.provider])
+
+  // 换 provider / Base URL 后丢弃内存中的远程模型列表
+  useEffect(() => {
+    setFetchedModels([])
+    setHasFetchedModels(false)
+    setModelListError('')
+    setModelMenuOpen(false)
+  }, [config.provider, config.baseUrl])
+
+  // 模型 combobox：点击外部关闭
+  useEffect(() => {
+    if (!modelMenuOpen) return
+    const onPointerDown = (e: MouseEvent) => {
+      if (!modelComboboxRef.current?.contains(e.target as Node)) {
+        setModelMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [modelMenuOpen])
+
+  const staticModels = PROVIDER_MODELS[config.provider]?.map((m) => m.value) ?? []
+  const modelCatalog = hasFetchedModels ? fetchedModels : staticModels
+  const modelFilter = config.model.trim().toLowerCase()
+  const modelMenuOptions = useMemo(() => {
+    if (!modelFilter) return modelCatalog
+    return modelCatalog.filter((id) => id.toLowerCase().includes(modelFilter))
+  }, [modelCatalog, modelFilter])
+  const selectedStaticDesc = !hasFetchedModels
+    ? PROVIDER_MODELS[config.provider]?.find((m) => m.value === config.model)?.desc
+    : undefined
 
   return (
     <div className="max-w-2xl">
@@ -355,42 +423,106 @@ export default function AIConfigPanel() {
               })()}
             </div>
             <div>
-              <label className="block text-sm text-text-secondary mb-1.5">模型</label>
-              {PROVIDER_MODELS[config.provider] ? (
-                <>
-                  <select
-                    value={config.model}
-                    onChange={(e) => setConfig({ model: e.target.value })}
-                    className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
-                  >
-                    {PROVIDER_MODELS[config.provider].map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.value}
-                      </option>
-                    ))}
-                  </select>
-                  {(() => {
-                    const selected = PROVIDER_MODELS[config.provider]?.find((m) => m.value === config.model)
-                    return selected?.desc ? (
-                      <p className="mt-1 text-xs text-text-muted">{selected.desc}</p>
-                    ) : null
-                  })()}
-                  {/* 自定义模型名：列表里没有的模型可手动输入 */}
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <label className="block text-sm text-text-secondary">模型</label>
+                <button
+                  type="button"
+                  onClick={() => { void handleRefreshModels() }}
+                  disabled={refreshingModels || !isAIConfigReady(config)}
+                  title="从当前 Base URL 拉取 /models 列表"
+                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${refreshingModels ? 'animate-spin' : ''}`} />
+                  {refreshingModels ? '刷新中' : '刷新模型'}
+                </button>
+              </div>
+
+              {/* 一体 combobox：可手输 + 下拉选列表项 */}
+              <div ref={modelComboboxRef} className="relative">
+                <div className="flex items-stretch rounded-lg border border-border bg-bg-base focus-within:border-accent transition-colors">
                   <input
                     type="text"
                     value={config.model}
-                    onChange={(e) => setConfig({ model: e.target.value })}
-                    placeholder="或手动输入模型名（列表中没有的型号）"
-                    className="mt-1.5 w-full px-3 py-1.5 bg-bg-base border border-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-accent transition-colors"
+                    onChange={(e) => {
+                      setConfig({ model: e.target.value })
+                      if (modelCatalog.length > 0) setModelMenuOpen(true)
+                    }}
+                    onFocus={() => {
+                      if (modelCatalog.length > 0) setModelMenuOpen(true)
+                    }}
+                    placeholder={
+                      hasFetchedModels
+                        ? '输入或从列表选择模型'
+                        : modelCatalog.length > 0
+                          ? '输入或从列表选择模型'
+                          : '输入模型名，或点刷新获取列表'
+                    }
+                    aria-autocomplete="list"
+                    aria-expanded={modelMenuOpen}
+                    aria-controls="ai-model-combobox-list"
+                    className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none"
                   />
-                </>
-              ) : (
-                <input
-                  type="text"
-                  value={config.model}
-                  onChange={(e) => setConfig({ model: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
-                />
+                  <button
+                    type="button"
+                    onClick={() => setModelMenuOpen((open) => !open)}
+                    disabled={modelCatalog.length === 0 && !hasFetchedModels}
+                    title={modelCatalog.length === 0 ? '暂无列表，可手输或先刷新' : '展开模型列表'}
+                    className="flex items-center px-2.5 text-text-muted hover:text-text-secondary disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="展开模型列表"
+                  >
+                    <ChevronDown className={`h-4 w-4 transition-transform ${modelMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
+
+                {modelMenuOpen && (
+                  <div
+                    id="ai-model-combobox-list"
+                    role="listbox"
+                    className="absolute z-30 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-border bg-bg-surface shadow-lg"
+                  >
+                    {hasFetchedModels && fetchedModels.length === 0 && (
+                      <p className="px-3 py-2 text-xs text-text-muted">未返回模型，可直接在上方输入</p>
+                    )}
+                    {!hasFetchedModels && modelCatalog.length === 0 && (
+                      <p className="px-3 py-2 text-xs text-text-muted">点击「刷新模型」拉取列表，或直接输入</p>
+                    )}
+                    {modelMenuOptions.length === 0 && modelCatalog.length > 0 && (
+                      <p className="px-3 py-2 text-xs text-text-muted">无匹配项，可继续手输当前内容</p>
+                    )}
+                    {modelMenuOptions.map((model) => (
+                      <button
+                        key={model}
+                        type="button"
+                        role="option"
+                        aria-selected={config.model === model}
+                        onClick={() => {
+                          setConfig({ model })
+                          setModelMenuOpen(false)
+                        }}
+                        className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-accent/10 ${
+                          config.model === model ? 'bg-accent/15 text-accent' : 'text-text-primary'
+                        }`}
+                      >
+                        {model}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {selectedStaticDesc && (
+                <p className="mt-1 text-xs text-text-muted">{selectedStaticDesc}</p>
+              )}
+              {modelListError && (
+                <p className="mt-1 text-[11px] text-amber-400">{modelListError}</p>
+              )}
+              {hasFetchedModels && !modelListError && (
+                <p className="mt-1 text-[11px] text-text-muted">
+                  已加载 {fetchedModels.length} 个远程模型；可下拉选择，也可直接改输入框。
+                </p>
+              )}
+              {config.provider === 'ollama' && (
+                <p className="mt-1 text-[11px] text-text-muted">未安装的模型请先在 Ollama 拉取，完成后再点刷新。</p>
               )}
             </div>
           </div>
