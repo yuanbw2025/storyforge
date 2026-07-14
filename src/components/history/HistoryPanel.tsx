@@ -1,7 +1,6 @@
-import { CTextarea, CInput } from '../shared/CompositionInput'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
-  Plus, ChevronDown, ChevronRight, Clock,
+  Plus, Clock,
   BookOpen, Calendar, Loader2, Tag, Filter
 } from 'lucide-react'
 import { useHistoryStore } from '../../stores/project-singletons'
@@ -15,12 +14,11 @@ import type { Project, HistoricalTimelineEvent, HistoricalEra, HistoricalKeyword
 import { HISTORICAL_ERA_LABELS, KEYWORD_CATEGORY_LABELS } from '../../lib/types/history'
 import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
-import HistoryAgentWorkspace from './HistoryAgentWorkspace'
-import HistoryChapterPicker from './HistoryChapterPicker'
 import { KeywordHistoryHelp, TimelineHistoryHelp } from './HistoryHelpPanels'
 import HistoryOverviewTab from './HistoryOverviewTab'
+import HistoryKeywordCard from './HistoryKeywordCard'
+import HistoryTimelineEventCard from './HistoryTimelineEventCard'
 import { useHistoryAI } from './useHistoryAI'
-import { formatHistoricalYear } from '../../lib/history/year'
 
 interface Props {
   project: Project
@@ -332,275 +330,40 @@ export default function HistoryPanel({ project }: Props) {
               </div>
             ) : (
               <div className="relative pl-6 border-l border-border/80 space-y-4 ml-3">
-                {scopedEvents.map((evt) => {
-                  const isExpanded = expandedId === evt.id
-                  const eraLabel = HISTORICAL_ERA_LABELS[evt.era as HistoricalEra] || evt.era
-                  const yearText = formatHistoricalYear(evt.year)
-
+                {scopedEvents.map(event => {
+                  const expanded = expandedId === event.id
+                  const group = event.worldGroupId != null
+                    ? groups.find(candidate => candidate.id === event.worldGroupId)
+                    : undefined
+                  const worldBadge = isMW && worldTab === 'all' && event.worldGroupId != null
+                    ? { icon: group?.icon || '🌐', name: group?.name || '未知世界' }
+                    : undefined
                   return (
-                    <div key={evt.id} className="relative">
-                      {/* 时间轴圆点 */}
-                      <span className={`absolute -left-[31px] top-3.5 w-2.5 h-2.5 rounded-full border-2 bg-bg-base transition-colors ${
-                        evt.isHistorical
-                          ? 'border-blue-500 ring-4 ring-blue-500/10'
-                          : 'border-purple-500 ring-4 ring-purple-500/10'
-                      }`} />
-
-                      {/* 卡片 */}
-                      <div className={`rounded-xl border bg-bg-surface transition-all ${
-                        isExpanded
-                          ? 'border-accent/40 shadow-sm'
-                          : 'border-border hover:border-border-hover'
-                      }`}>
-                        {/* 头部点击展开 */}
-                        <button
-                          onClick={() => setExpandedId(isExpanded ? null : evt.id || null)}
-                          className="w-full flex items-start gap-3 px-4 py-3.5 text-left"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap mb-1">
-                              <span className="text-xs font-mono font-semibold text-text-secondary">
-                                {evt.date} ({yearText})
-                              </span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted">
-                                {eraLabel}
-                              </span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                                evt.isHistorical
-                                  ? 'border-blue-500/20 text-blue-400 bg-blue-500/5'
-                                  : 'border-purple-500/20 text-purple-400 bg-purple-500/5'
-                              }`}>
-                                {evt.isHistorical ? '⚓ 史实锚点' : '✨ 虚构/架空'}
-                              </span>
-                              {evt.isHistorical && (
-                                <span className="text-[10px] text-amber-400/70" title="此事件为史实锚点，AI 生成时不可违反">
-                                  AI 不可违反
-                                </span>
-                              )}
-                              {/* 一览模式：显示事件所属世界 */}
-                              {isMW && worldTab === 'all' && evt.worldGroupId != null && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
-                                  {groups.find(g => g.id === evt.worldGroupId)?.icon || '🌐'}
-                                  {groups.find(g => g.id === evt.worldGroupId)?.name || '未知世界'}
-                                </span>
-                              )}
-                            </div>
-                            <h4 className="text-sm font-medium text-text-primary truncate">{evt.title}</h4>
-                            {!isExpanded && evt.description && (
-                              <p className="text-xs text-text-muted line-clamp-1 mt-1">{evt.description}</p>
-                            )}
-                          </div>
-                          {isExpanded ? (
-                            <ChevronDown className="w-4 h-4 text-text-muted shrink-0 mt-1" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4 text-text-muted shrink-0 mt-1" />
-                          )}
-                        </button>
-
-                        {/* 展开编辑区 */}
-                        {isExpanded && evt.id && (
-                          <div className="px-4 pb-4 border-t border-border/50 pt-4 space-y-4">
-                            {/* 基础字段 */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">事件名称</label>
-                                <CInput
-                                  value={evt.title}
-                                  onChange={e => updateEvent(evt.id!, { title: e.target.value })}
-                                  className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">历史时期</label>
-                                <select
-                                  value={evt.era}
-                                  onChange={e => updateEvent(evt.id!, { era: e.target.value as HistoricalEra })}
-                                  className="w-full px-2 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                                >
-                                  {Object.entries(HISTORICAL_ERA_LABELS).map(([k, v]) => (
-                                    <option key={k} value={k}>{v}</option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">数字化年份 (排序用)</label>
-                                <input
-                                  type="number"
-                                  value={evt.year}
-                                  onChange={e => updateEvent(evt.id!, { year: parseInt(e.target.value) || 0 })}
-                                  placeholder="负数表示公元前"
-                                  className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">具体时间描述</label>
-                                <CInput
-                                  value={evt.date}
-                                  onChange={e => updateEvent(evt.id!, { date: e.target.value })}
-                                  placeholder="如：开元十三年、公元725年"
-                                  className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">具体时间范围/区间 (可选)</label>
-                                <CInput
-                                  value={evt.customTimeRange || ''}
-                                  onChange={e => updateEvent(evt.id!, { customTimeRange: e.target.value })}
-                                  placeholder="如：公元712年-756年、18世纪中叶"
-                                  className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">地理位置/范围 (可选)</label>
-                                <CInput
-                                  value={evt.location || ''}
-                                  onChange={e => updateEvent(evt.id!, { location: e.target.value })}
-                                  placeholder="如：江南地区、君士坦丁堡、中原"
-                                  className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">事件属性</label>
-                                <div className="flex gap-2 h-[30px] items-center">
-                                  <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                                    <input
-                                      type="radio"
-                                      checked={evt.isHistorical}
-                                      onChange={() => updateEvent(evt.id!, { isHistorical: true })}
-                                      className="accent-blue-500"
-                                    />
-                                    <span className="text-text-secondary">真实史实</span>
-                                  </label>
-                                  <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                                    <input
-                                      type="radio"
-                                      checked={!evt.isHistorical}
-                                      onChange={() => updateEvent(evt.id!, { isHistorical: false })}
-                                      className="accent-purple-500"
-                                    />
-                                    <span className="text-text-secondary">虚构/架空</span>
-                                  </label>
-                                </div>
-                              </div>
-                              <div className="md:col-span-2">
-                                <label className="block text-[11px] text-text-muted mb-1">
-                                  {evt.isHistorical ? '史料来源 / 考证出处' : '虚构设定备注'}
-                                </label>
-                                <CInput
-                                  value={evt.source || ''}
-                                  onChange={e => updateEvent(evt.id!, { source: e.target.value })}
-                                  placeholder={evt.isHistorical ? '如：《旧唐书 · 舆服志》、《资治通鉴》卷二百' : '如：参考了宋代水车结构进行架空改动'}
-                                  className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                                />
-                              </div>
-                            </div>
-
-                            {/* ── 四个解耦的文本窗口 ── */}
-                            {/* 1. 条目定稿（写作中实际使用；历史 agent 只核验/发散，不直接覆盖） */}
-                            <div>
-                              <label className="block text-[11px] text-text-muted mb-1">
-                                📒 条目定稿（写作时会进入小说上下文；考据 / 风暴 agent 会读取作为核验或发散对象，但<span className="text-amber-500">不会直接覆盖</span>）
-                              </label>
-                              <CTextarea
-                                value={evt.description}
-                                onChange={e => updateEvent(evt.id!, { description: e.target.value })}
-                                placeholder="作者打磨好的最终条目内容，将作为 AI 写作的历史背景注入。例如：『公元 712 年，李隆基即位为唐玄宗，开元之治始。』"
-                                className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                              />
-                            </div>
-
-                            {/* 对剧情/世界的影响（属于条目定稿的语义补充，紧跟其后；放在 AI 工作区之上） */}
-                            <div>
-                              <label className="block text-[11px] text-text-muted mb-1">对剧情/世界的影响 (可选)</label>
-                              <CTextarea
-                                value={evt.impact || ''}
-                                onChange={e => updateEvent(evt.id!, { impact: e.target.value })}
-                                placeholder="该事件如何推动主角剧情，或者对架空世界线产生什么影响..."
-                                className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                              />
-                            </div>
-
-                            {/* 关联章节（紧跟「条目定稿」，因为它属于条目定稿的归档元数据；放在 AI 工作区之上） */}
-                            <div className="grid grid-cols-1 gap-3">
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">关联章节</label>
-                                <HistoryChapterPicker
-                                  chapters={chapters}
-                                  relatedChapterIds={evt.relatedChapterIds}
-                                  onChange={relatedChapterIds => updateEvent(evt.id!, { relatedChapterIds })}
-                                />
-                              </div>
-                            </div>
-
-                            {/* 2. 概念与创作思路（AI agent 会读，作者迭代修正） */}
-                            <div>
-                              <label className="block text-[11px] text-text-muted mb-1">
-                                🧭 概念与创作思路（提交给 AI 之前的初步设定；得到 agent 反馈后可在此处修正）
-                              </label>
-                              <CTextarea
-                                value={evt.conceptNote || ''}
-                                onChange={e => updateEvent(evt.id!, { conceptNote: e.target.value })}
-                                placeholder="描述你为这条事件想达到的效果、能接受的艺术改造或架空范围、希望保留 / 偏离的史实点。例如：『允许把火药提前到本朝；其余制度仍按真实唐制写。』"
-                                className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                              />
-                            </div>
-
-                            {/* 3 & 4. 双 agent 各自的额外指令 */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">
-                                  📝 给「历史考据 agent」的补充说明
-                                </label>
-                                <CTextarea
-                                  value={evt.consultPrompt || ''}
-                                  onChange={e => updateEvent(evt.id!, { consultPrompt: e.target.value })}
-                                  placeholder="例：本作允许将火药提前到唐代，不必再纠结这一项；请重点检查官制称谓和时令风俗。"
-                                  className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[11px] text-text-muted mb-1">
-                                  💡 给「头脑风暴 agent」的补充说明
-                                </label>
-                                <CTextarea
-                                  value={evt.stormPrompt || ''}
-                                  onChange={e => updateEvent(evt.id!, { stormPrompt: e.target.value })}
-                                  placeholder="例：重点发散街市气味、市井人物对白、能引出主角第一次进城的可能场景。"
-                                  className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                                />
-                              </div>
-                            </div>
-
-                            <HistoryAgentWorkspace
-                              canEdit={canEdit}
-                              consultActive={consultEventId === evt.id}
-                              stormActive={stormEventId === evt.id}
-                              consultPreparing={historyAI.consultPreparing}
-                              stormPreparing={historyAI.stormPreparing}
-                              consultAI={consultAI}
-                              stormAI={stormAI}
-                              savedConsult={evt.aiConsult}
-                              savedStorm={evt.aiBrainstorm}
-                              savedStormLabel="AI 头脑风暴结果"
-                              deleteLabel="删除事件"
-                              onConsult={() => handleAIConsult(evt)}
-                              onStorm={() => handleAIStorm(evt)}
-                              onDelete={() => { void handleDeleteEvent(evt.id!) }}
-                              onAcceptConsult={handleAcceptConsult}
-                              onAcceptStorm={handleAcceptStorm}
-                              onClearConsult={() => updateEvent(evt.id!, { aiConsult: undefined })}
-                              onClearStorm={() => updateEvent(evt.id!, { aiBrainstorm: undefined })}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <HistoryTimelineEventCard
+                      key={event.id}
+                      event={event}
+                      chapters={chapters}
+                      expanded={expanded}
+                      canEdit={canEdit}
+                      worldBadge={worldBadge}
+                      consultActive={consultEventId === event.id}
+                      stormActive={stormEventId === event.id}
+                      consultPreparing={historyAI.consultPreparing}
+                      stormPreparing={historyAI.stormPreparing}
+                      consultAI={consultAI}
+                      stormAI={stormAI}
+                      onToggle={() => setExpandedId(expanded ? null : event.id || null)}
+                      onChange={patch => {
+                        if (event.id) void updateEvent(event.id, patch)
+                      }}
+                      onConsult={() => handleAIConsult(event)}
+                      onStorm={() => handleAIStorm(event)}
+                      onDelete={() => {
+                        if (event.id) void handleDeleteEvent(event.id)
+                      }}
+                      onAcceptConsult={handleAcceptConsult}
+                      onAcceptStorm={handleAcceptStorm}
+                    />
                   )
                 })}
               </div>
@@ -678,197 +441,33 @@ export default function HistoryPanel({ project }: Props) {
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredKeywords.map((kw: HistoricalKeyword) => {
-                  const isExpanded = expandedKeywordId === kw.id
-                  const eraLabel = HISTORICAL_ERA_LABELS[kw.era as HistoricalEra] || kw.era
-                  const categoryLabel = KEYWORD_CATEGORY_LABELS[kw.category as HistoricalKeywordCategory] || kw.category
-
+                {filteredKeywords.map((keyword: HistoricalKeyword) => {
+                  const expanded = expandedKeywordId === keyword.id
                   return (
-                    <div
-                      key={kw.id}
-                      className={`rounded-xl border bg-bg-surface transition-all ${
-                        isExpanded
-                          ? 'border-accent/40 shadow-sm'
-                          : 'border-border hover:border-border-hover'
-                      }`}
-                    >
-                      {/* 头部点击展开 */}
-                      <button
-                        onClick={() => setExpandedKeywordId(isExpanded ? null : kw.id || null)}
-                        className="w-full flex items-start gap-3 px-4 py-3.5 text-left"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="text-xs font-semibold text-accent">
-                              #{kw.keyword}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted">
-                              {categoryLabel}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted">
-                              {eraLabel}
-                            </span>
-                          </div>
-                          {kw.description && !isExpanded && (
-                            <p className="text-xs text-text-muted line-clamp-1 mt-1">{kw.description}</p>
-                          )}
-                        </div>
-                        {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-text-muted shrink-0 mt-1" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-text-muted shrink-0 mt-1" />
-                        )}
-                      </button>
-
-                      {/* 展开编辑区 */}
-                      {isExpanded && kw.id && (
-                        <div className="px-4 pb-4 border-t border-border/50 pt-4 space-y-4">
-                          {/* 基础字段 */}
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-[11px] text-text-muted mb-1">关键词名称</label>
-                              <CInput
-                                value={kw.keyword}
-                                onChange={e => updateKeyword(kw.id!, { keyword: e.target.value })}
-                                className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[11px] text-text-muted mb-1">分类</label>
-                              <select
-                                value={kw.category}
-                                onChange={e => updateKeyword(kw.id!, { category: e.target.value as HistoricalKeywordCategory })}
-                                className="w-full px-2 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                              >
-                                {Object.entries(KEYWORD_CATEGORY_LABELS).map(([k, v]) => (
-                                  <option key={k} value={k}>{v}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-[11px] text-text-muted mb-1">适用历史时期</label>
-                              <select
-                                value={kw.era}
-                                onChange={e => updateKeyword(kw.id!, { era: e.target.value as HistoricalEra })}
-                                className="w-full px-2 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                              >
-                                {Object.entries(HISTORICAL_ERA_LABELS).map(([k, v]) => (
-                                  <option key={k} value={k}>{v}</option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-
-                          {/* 时间与地理范围 */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-[11px] text-text-muted mb-1">具体时间范围/区间 (可选)</label>
-                              <CInput
-                                value={kw.customTimeRange || ''}
-                                onChange={e => updateKeyword(kw.id!, { customTimeRange: e.target.value })}
-                                placeholder="如：公元712年-756年、18世纪中叶"
-                                className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[11px] text-text-muted mb-1">地理位置/范围 (可选)</label>
-                              <CInput
-                                value={kw.location || ''}
-                                onChange={e => updateKeyword(kw.id!, { location: e.target.value })}
-                                placeholder="如：江南地区、君士坦丁堡、中原"
-                                className="w-full px-2.5 py-1.5 bg-bg-base border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                              />
-                            </div>
-                          </div>
-
-                          {/* ── 四个解耦的文本窗口 ── */}
-                          {/* 1. 条目定稿（写作中实际使用；历史 agent 只核验/发散，不直接覆盖） */}
-                          <div>
-                            <label className="block text-[11px] text-text-muted mb-1">
-                              📒 条目定稿（写作时会进入小说上下文；考据 / 风暴 agent 会读取作为核验或发散对象，但<span className="text-amber-500">不会直接覆盖</span>）
-                            </label>
-                            <CTextarea
-                              value={kw.description}
-                              onChange={e => updateKeyword(kw.id!, { description: e.target.value })}
-                              placeholder="作者打磨好的最终条目内容，将作为 AI 写作的历史细节注入。例如：『飞钱：唐宪宗时期出现的汇兑凭证，由邸店或商号代为兑付。』"
-                              className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                            />
-                          </div>
-
-                          {/* 关联章节（紧跟「条目定稿」，与事件卡保持一致；放在 AI 工作区之上） */}
-                          <div>
-                            <label className="block text-[11px] text-text-muted mb-1">关联章节</label>
-                            <HistoryChapterPicker
-                              chapters={chapters}
-                              relatedChapterIds={kw.relatedChapterIds}
-                              spacious
-                              onChange={relatedChapterIds => updateKeyword(kw.id!, { relatedChapterIds })}
-                            />
-                          </div>
-
-                          {/* 2. 概念与创作思路 */}
-                          <div>
-                            <label className="block text-[11px] text-text-muted mb-1">
-                              🧭 概念与创作思路（提交给 AI 之前的初步设定；得到 agent 反馈后可在此处修正）
-                            </label>
-                            <CTextarea
-                              value={kw.conceptNote || ''}
-                              onChange={e => updateKeyword(kw.id!, { conceptNote: e.target.value })}
-                              placeholder="描述你想为这个关键词达到的效果、能接受的艺术改造或架空范围。例如：『允许把飞钱的普及度写得比真实高一些；想要市井使用场景。』"
-                              className="w-full h-24 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                            />
-                          </div>
-
-                          {/* 3 & 4. 双 agent 各自的额外指令 */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-[11px] text-text-muted mb-1">
-                                📝 给「历史考据 agent」的补充说明
-                              </label>
-                              <CTextarea
-                                value={kw.consultPrompt || ''}
-                                onChange={e => updateKeyword(kw.id!, { consultPrompt: e.target.value })}
-                                placeholder="例：本作允许把飞钱写得普及度更高；请重点检查兑付流程和涉事衙门称谓。"
-                                className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[11px] text-text-muted mb-1">
-                                💡 给「头脑风暴 agent」的补充说明
-                              </label>
-                              <CTextarea
-                                value={kw.stormPrompt || ''}
-                                onChange={e => updateKeyword(kw.id!, { stormPrompt: e.target.value })}
-                                placeholder="例：重点发散市井使用场景与可能的诈骗冲突。"
-                                className="w-full h-20 p-2 bg-bg-base border border-border rounded-lg text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-                              />
-                            </div>
-                          </div>
-
-                          <HistoryAgentWorkspace
-                            canEdit={canEdit}
-                            consultActive={consultKeywordId === kw.id}
-                            stormActive={stormKeywordId === kw.id}
-                            consultPreparing={historyAI.consultPreparing}
-                            stormPreparing={historyAI.stormPreparing}
-                            consultAI={consultAI}
-                            stormAI={stormAI}
-                            savedConsult={kw.aiConsult}
-                            savedStorm={kw.aiBrainstorm}
-                            savedStormLabel="AI 时代细节库"
-                            savedStormMaxHeight="80"
-                            deleteLabel="删除关键词"
-                            onConsult={() => handleAIKeywordConsult(kw)}
-                            onStorm={() => handleAIKeywordStorm(kw)}
-                            onDelete={() => { void handleDeleteKeyword(kw.id!) }}
-                            onAcceptConsult={handleAcceptConsult}
-                            onAcceptStorm={handleAcceptStorm}
-                            onClearConsult={() => updateKeyword(kw.id!, { aiConsult: undefined })}
-                            onClearStorm={() => updateKeyword(kw.id!, { aiBrainstorm: undefined })}
-                          />
-                        </div>
-                      )}
-                    </div>
+                    <HistoryKeywordCard
+                      key={keyword.id}
+                      keyword={keyword}
+                      chapters={chapters}
+                      expanded={expanded}
+                      canEdit={canEdit}
+                      consultActive={consultKeywordId === keyword.id}
+                      stormActive={stormKeywordId === keyword.id}
+                      consultPreparing={historyAI.consultPreparing}
+                      stormPreparing={historyAI.stormPreparing}
+                      consultAI={consultAI}
+                      stormAI={stormAI}
+                      onToggle={() => setExpandedKeywordId(expanded ? null : keyword.id || null)}
+                      onChange={patch => {
+                        if (keyword.id) void updateKeyword(keyword.id, patch)
+                      }}
+                      onConsult={() => handleAIKeywordConsult(keyword)}
+                      onStorm={() => handleAIKeywordStorm(keyword)}
+                      onDelete={() => {
+                        if (keyword.id) void handleDeleteKeyword(keyword.id)
+                      }}
+                      onAcceptConsult={handleAcceptConsult}
+                      onAcceptStorm={handleAcceptStorm}
+                    />
                   )
                 })}
               </div>

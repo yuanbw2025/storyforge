@@ -2,7 +2,7 @@ import { ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import type { UseAIStreamReturn } from '../../hooks/useAIStream'
 import AIStreamOutput from '../shared/AIStreamOutput'
 
-type AgentViewState = Pick<
+export type HistoryAgentViewState = Pick<
   UseAIStreamReturn,
   'output' | 'isStreaming' | 'error' | 'tokenUsage' | 'stop'
 >
@@ -13,8 +13,8 @@ interface Props {
   stormActive: boolean
   consultPreparing: boolean
   stormPreparing: boolean
-  consultAI: AgentViewState
-  stormAI: AgentViewState
+  consultAI: HistoryAgentViewState
+  stormAI: HistoryAgentViewState
   savedConsult?: string
   savedStorm?: string
   savedStormLabel: string

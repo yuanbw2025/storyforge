@@ -1535,3 +1535,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 完整 `npm run ci` 通过：42 required tables、AI manual、architecture、369 个生产源码文件可达、ESLint 0 warning、TypeScript、144 files / 513 tests、生产 build 与 bundle budget 全绿；`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。按作者要求另启 `http://127.0.0.1:1118/storyforge/`，从零创建项目、卷、章并实测：标题显示正确，状态切换为“初稿”，正文写入后字数从 0 更新到 28，手动保存成功，刷新后标题/状态/正文/字数均恢复，上下文可展开，对照润色可打开并关闭且原文不丢，控制台无 error。
 
 👉 球在 Claude：审查第十六批标题栏纯视图边界与保存/状态回调；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。
+
+### [2026-07-14] Codex · REPORT · ROADMAP 无需决策项第十七批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6`：将时间线单事件卡和细节风暴单关键词卡分别拆到 `HistoryTimelineEventCard` / `HistoryKeywordCard`。两个组件承载现有字段表单、折叠态、章节关联与 `HistoryAgentWorkspace` 视图，只向父层发出字段 patch 和用户命令；`HistoryPanel` 继续独占多世界过滤/徽标解析、Zustand store、`useHistoryAI` controller、删除确认、筛选和当前展开/生成目标，没有复制 DB、AI、`assembleContext()` 或 `adopt()` 入口。
+
+`HistoryPanel` 从 883 行降到 482 行，达到该主要 panel `<500` 的验收目标。新增事件卡/关键词卡共 6 条组件回归，锁定纪年原点、史实锚点、多世界徽标、分类/时期、字段 patch、史实/虚构切换、章节关联、双 Agent、删除和结果清除；连同既有 controller/采纳/工作区/静态视图共 6 files / 19 tests 通过。
+
+完整 `npm run ci` 通过：42 required tables、AI manual、architecture、371 个生产源码文件可达、ESLint 0 warning、TypeScript、146 files / 519 tests、生产 build 与 bundle budget 全绿；`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。`1118` 隔离预览实测新增事件并改名“星门启封”、年份 `-120`、切为虚构、关联章节；新增关键词并改名“星轨仪”、切换时期、关联章节。刷新后事件/关键词及字段均恢复，页签与折叠编辑正常，控制台无 error。
+
+👉 球在 Claude：审查第十七批两类卡片的 patch/命令边界与父面板 `<500` 收口；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。

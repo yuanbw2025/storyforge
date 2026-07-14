@@ -2207,6 +2207,7 @@ for each character:
 - **2026-07-14 第十三批完成**：将事件/关键词卡重复的双 Agent 触发、生成输出、已保存结果与清除/删除操作收口到纯视图 `HistoryAgentWorkspace`；关联章节增删选择收口到 `HistoryChapterPicker`。父面板继续独占 store 命令、AI controller 与采纳入口，新组件只接收状态并转发回调；`HistoryPanel` 从 1224 行降到 983 行。新增 6 条组件回归锁定只读/准备中/流式禁用、命令转发、活动输出与已保存结果互斥，以及章节关联 ID 增删。
 - **2026-07-14 第十四批完成**：将历史总述/纪年表单拆到 `HistoryOverviewTab`，两个失焦保存回调仍由父面板提供；时间线与关键词的纯说明侧栏拆到 `HistoryHelpPanels`。新视图不持有 store/AI/DB 逻辑，`HistoryPanel` 从 983 行降到 883 行。新增 2 条回归锁定总述/纪年草稿与失焦保存转发，以及两类说明文案边界。
 - **2026-07-14 第十五批完成**：将正文编辑器的章节标题、字数、五种章节状态、上下文/对照润色/保存命令及保存中/失败/完成展示拆到纯视图 `ChapterEditorHeader`；父组件继续独占章节 store 写回、编辑器内容、AI、上下文和对照润色状态，新组件只转发回调。`ChapterEditor` 从 1362 行降到 1313 行。新增 3 条组件回归，并同步迁移旧源码结构断言，锁定五状态写回、命令转发和保存状态；新端口实测覆盖标题、字数、状态、上下文、手动保存、刷新恢复与对照润色开关。
+- **2026-07-14 第十六批完成**：将历史时间线事件卡与历史关键词卡拆到 `HistoryTimelineEventCard` / `HistoryKeywordCard`，字段编辑、章节关联和双 Agent 工作区均通过 patch/命令回调转发；父面板继续独占多世界过滤、store、AI controller、删除确认和当前展开/生成目标。`HistoryPanel` 从 883 行降到 482 行，达到该主要 panel `<500` 的单文件目标。新增 6 条组件回归，锁定纪年原点/世界徽标、史实/虚构、事件与关键词字段、章节关联和 Agent 命令；刷新恢复实测通过。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。
