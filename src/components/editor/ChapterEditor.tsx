@@ -1,12 +1,11 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { FileText, ClipboardList, BookOpenCheck, ShieldCheck, StickyNote } from 'lucide-react'
+import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { FileText, ClipboardList } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
 import { useStateCardStore } from '../../stores/state-card'
 import { useCharacterStore } from '../../stores/character'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
-import { CInput } from '../shared/CompositionInput'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
@@ -38,22 +37,28 @@ import { useDialog } from '../shared/Dialog'
 import { useReviewResultStore } from '../../stores/review-result'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { analyzeContextSegments, calculateBudget, getModelPreset, type ContextBudget } from '../../lib/ai/context-budget'
-import StateDiffModal from '../state/StateDiffModal'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
 import EmotionBeatCard from './EmotionBeatCard'
-import OutlinePreview from '../outline/OutlinePreview'
-import ReviewPanel from './ReviewPanel'
-import NotePanel from './NotePanel'
 import FloatingToolbar from './FloatingToolbar'
-import ComparePolishPanel from './ComparePolishPanel'
 import ChapterEditorHeader from './ChapterEditorHeader'
 import ChapterMemoryPanel from './ChapterMemoryPanel'
 import ChapterContextPreview from './ChapterContextPreview'
+import ChapterEditorToolbar from './ChapterEditorToolbar'
 import { useItemLedgerStore } from '../../stores/item-ledger'
 import { useLocationStore } from '../../stores/location'
 import { useCodexStore } from '../../stores/codex'
 import { buildEditorEntityReferences } from '../../lib/editor/entity-reference'
 import type { Project, StateDiffItem } from '../../lib/types'
+
+const StateDiffModal = lazy(() => import('../state/StateDiffModal'))
+const OutlinePreview = lazy(() => import('../outline/OutlinePreview'))
+const ReviewPanel = lazy(() => import('./ReviewPanel'))
+const NotePanel = lazy(() => import('./NotePanel'))
+const ComparePolishPanel = lazy(() => import('./ComparePolishPanel'))
+
+function LazyPanelFallback() {
+  return <div className="rounded-lg border border-border bg-bg-surface p-4 text-sm text-text-muted">面板加载中...</div>
+}
 
 /** 生成任务类型(原 memory-builder 三层记忆已被 assembleContext 取代,此类型仅用于调试日志标签) */
 type MemoryTaskType = 'write' | 'plan' | 'review'
@@ -906,88 +911,35 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       )}
 
       {/* AI 工具栏 */}
-      {compareSourceHtml == null && <div className="flex flex-wrap gap-2 border-t border-border/60 bg-bg-surface/35 px-6 py-3">
-        <button onClick={handleGenerate} disabled={ai.isStreaming}
-          className="rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50 transition-colors">
-          ✨ 生成正文
-        </button>
-        <button onClick={handleContinue} disabled={ai.isStreaming || !plainText}
-          className="rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50 transition-colors">
-          📝 续写
-        </button>
-        <button onClick={handleExpand} disabled={ai.isStreaming}
-          className="rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50 transition-colors">
-          📖 扩写
-        </button>
-        <button onClick={handlePolish} disabled={ai.isStreaming}
-          className="rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50 transition-colors">
-          💎 润色
-        </button>
-        <button onClick={handleDeAI} disabled={ai.isStreaming}
-          className="rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50 transition-colors">
-          🔥 去AI味
-        </button>
-        <button onClick={handleExtractState} disabled={ai.isStreaming || extracting || !plainText}
-          title="AI 分析本章内容，提取角色/地点/物品等状态变更"
-          className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs rounded-md hover:bg-emerald-500/20 disabled:opacity-50 transition-colors">
-          <ClipboardList className="w-3 h-3" />
-          {extracting ? '提取中...' : '提取状态'}
-        </button>
-        <button onClick={handleExtractFacts} disabled={factAI.isStreaming || extractingFacts || !plainText}
-          title="NS-4：AI 从本章正文抽取受控事实，落入事实账本候选（作者确认后注回后续生成，长期一致性）"
-          className="flex items-center gap-1 px-3 py-1.5 bg-sky-500/10 text-sky-400 text-xs rounded-md hover:bg-sky-500/20 disabled:opacity-50 transition-colors">
-          <ClipboardList className="w-3 h-3" />
-          {extractingFacts ? '抽取中...' : '提取事实'}
-        </button>
-        <button onClick={handleEditImpact} disabled={analyzingImpact || !plainText}
-          title="NS-6：改了历史章后，检查源自本章的事实证据是否失效（失效则降级待复核），并列出需复核的后续章节。不会自动改正文。"
-          className="flex items-center gap-1 px-3 py-1.5 bg-amber-500/10 text-amber-400 text-xs rounded-md hover:bg-amber-500/20 disabled:opacity-50 transition-colors">
-          <ClipboardList className="w-3 h-3" />
-          {analyzingImpact ? '分析中...' : '影响分析'}
-        </button>
-        {impactInfo && (
-          <span className="flex items-center gap-2 px-2 py-1 text-xs text-amber-300/90 bg-amber-500/5 rounded-md">
-            {impactInfo}
-            <button onClick={() => setImpactInfo(null)} className="text-text-muted hover:text-text-primary">×</button>
-          </span>
-        )}
-        {outlineNodeId && (
-          <button onClick={() => setShowOutlinePreview(!showOutlinePreview)}
-            title="大纲预览"
-            className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
-              showOutlinePreview
-                ? 'bg-accent/10 text-accent'
-                : 'bg-bg-elevated text-text-secondary hover:text-text-primary'
-            }`}>
-            <BookOpenCheck className="w-3 h-3" />
-            大纲预览
-          </button>
-        )}
-        <button onClick={() => setShowReviewPanel(!showReviewPanel)}
-          disabled={!plainText}
-          title="质量审校"
-          className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md transition-colors disabled:opacity-50 ${
-            showReviewPanel
-              ? 'bg-success/10 text-success'
-              : 'bg-bg-elevated text-text-secondary hover:text-text-primary'
-          }`}>
-          <ShieldCheck className="w-3 h-3" />
-          质量审校
-        </button>
-        <button onClick={() => setShowNotePanel(!showNotePanel)}
-          title="便签"
-          className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
-            showNotePanel
-              ? 'bg-yellow-500/10 text-yellow-600'
-              : 'bg-bg-elevated text-text-secondary hover:text-text-primary'
-          }`}>
-          <StickyNote className="w-3 h-3" />
-          便签
-        </button>
-        <CInput value={customInstruction} onChange={e => setCustomInstruction(e.target.value)}
-          placeholder="自定义指令..."
-          className="min-w-[220px] flex-1 rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent" />
-      </div>}
+      {compareSourceHtml == null && (
+        <ChapterEditorToolbar
+          isStreaming={ai.isStreaming}
+          hasText={!!plainText}
+          extractingState={extracting}
+          extractingFacts={extractingFacts}
+          factStreaming={factAI.isStreaming}
+          analyzingImpact={analyzingImpact}
+          impactInfo={impactInfo}
+          hasOutline={!!outlineNodeId}
+          showOutlinePreview={showOutlinePreview}
+          showReviewPanel={showReviewPanel}
+          showNotePanel={showNotePanel}
+          customInstruction={customInstruction}
+          onGenerate={() => { void handleGenerate() }}
+          onContinue={() => { void handleContinue() }}
+          onExpand={handleExpand}
+          onPolish={handlePolish}
+          onDeAI={() => { void handleDeAI() }}
+          onExtractState={() => { void handleExtractState() }}
+          onExtractFacts={() => { void handleExtractFacts() }}
+          onAnalyzeImpact={() => { void handleEditImpact() }}
+          onDismissImpact={() => setImpactInfo(null)}
+          onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}
+          onToggleReviewPanel={() => setShowReviewPanel(!showReviewPanel)}
+          onToggleNotePanel={() => setShowNotePanel(!showNotePanel)}
+          onCustomInstructionChange={setCustomInstruction}
+        />
+      )}
       </div>
 
       <div className="mx-auto max-w-6xl space-y-4 px-6 py-6">
@@ -1008,42 +960,48 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       {/* D3: 大纲预览 */}
       {showOutlinePreview && outlineNodeId && (
         <div className="mb-3">
-          <OutlinePreview outlineNodeId={outlineNodeId} onClose={() => setShowOutlinePreview(false)} />
+          <Suspense fallback={<LazyPanelFallback />}>
+            <OutlinePreview outlineNodeId={outlineNodeId} onClose={() => setShowOutlinePreview(false)} />
+          </Suspense>
         </div>
       )}
 
       {/* F: 质量审校面板 */}
       {showReviewPanel && (
         <div className="mb-3">
-          <ReviewPanel
-            projectId={project.id!}
-            chapterId={currentChapter.id!}
-            outlineNodeId={currentChapter.outlineNodeId}
-            worldGroupId={chapterWorldGroupId}
-            chapterContent={plainText}
-            chapterTitle={outlineNode?.title || currentChapter?.title || ''}
-            worldContext={worldCtx}
-            characterContext={charCtx}
-            prevChapterSummary={(() => {
-              const prev = findPreviousCanonicalChapter(nodes, chapters, currentChapter)
-              return prev?.summary || ''
-            })()}
-            nextChapterSummary={(() => {
-              const next = findNextCanonicalChapter(nodes, chapters, currentChapter)
-              return next?.summary || ''
-            })()}
-            foreshadowContext={currentChapter?.id ? buildForeshadowContext(currentChapter.id, chapters, nodes) : ''}
-            stateContext={stateCards.slice(0, 10).map(sc => `${sc.category}:${sc.entityName} — ${sc.fields?.slice(0, 50)}`).join('\n')}
-            onClose={() => setShowReviewPanel(false)}
-            onReviseByReport={handleReviseByReport}
-          />
+          <Suspense fallback={<LazyPanelFallback />}>
+            <ReviewPanel
+              projectId={project.id!}
+              chapterId={currentChapter.id!}
+              outlineNodeId={currentChapter.outlineNodeId}
+              worldGroupId={chapterWorldGroupId}
+              chapterContent={plainText}
+              chapterTitle={outlineNode?.title || currentChapter?.title || ''}
+              worldContext={worldCtx}
+              characterContext={charCtx}
+              prevChapterSummary={(() => {
+                const prev = findPreviousCanonicalChapter(nodes, chapters, currentChapter)
+                return prev?.summary || ''
+              })()}
+              nextChapterSummary={(() => {
+                const next = findNextCanonicalChapter(nodes, chapters, currentChapter)
+                return next?.summary || ''
+              })()}
+              foreshadowContext={currentChapter?.id ? buildForeshadowContext(currentChapter.id, chapters, nodes) : ''}
+              stateContext={stateCards.slice(0, 10).map(sc => `${sc.category}:${sc.entityName} — ${sc.fields?.slice(0, 50)}`).join('\n')}
+              onClose={() => setShowReviewPanel(false)}
+              onReviseByReport={handleReviseByReport}
+            />
+          </Suspense>
         </div>
       )}
 
       {/* H3: 便签面板 */}
       {showNotePanel && (
         <div className="mb-3">
-          <NotePanel projectId={project.id!} chapterId={currentChapter?.id} onClose={() => setShowNotePanel(false)} />
+          <Suspense fallback={<LazyPanelFallback />}>
+            <NotePanel projectId={project.id!} chapterId={currentChapter?.id} onClose={() => setShowNotePanel(false)} />
+          </Suspense>
         </div>
       )}
 
@@ -1117,21 +1075,23 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {/* TipTap 富文本编辑器 / 对照润色模式 */}
       {compareSourceHtml != null ? (
-        <ComparePolishPanel
-          key={currentChapter.id}
-          projectId={project.id!}
-          chapterId={currentChapter.id!}
-          chapterTitle={chapterDisplay?.title ?? currentChapter.title}
-          worldGroupId={chapterWorldGroupId}
-          sourceHtml={compareSourceHtml}
-          entityReferences={entityReferences}
-          onSaved={result => {
-            setContent(result.html)
-            setPlainText(result.plainText)
-            setSavedContent(result.html)
-          }}
-          onClose={() => setCompareSourceHtml(null)}
-        />
+        <Suspense fallback={<LazyPanelFallback />}>
+          <ComparePolishPanel
+            key={currentChapter.id}
+            projectId={project.id!}
+            chapterId={currentChapter.id!}
+            chapterTitle={chapterDisplay?.title ?? currentChapter.title}
+            worldGroupId={chapterWorldGroupId}
+            sourceHtml={compareSourceHtml}
+            entityReferences={entityReferences}
+            onSaved={result => {
+              setContent(result.html)
+              setPlainText(result.plainText)
+              setSavedContent(result.html)
+            }}
+            onClose={() => setCompareSourceHtml(null)}
+          />
+        </Suspense>
       ) : (
       <div className="mx-auto max-w-3xl rounded-2xl border border-border bg-bg-elevated px-8 py-8 shadow-theme-md">
         <RichEditor
@@ -1193,13 +1153,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {/* 状态变更审核弹窗 */}
       {pendingDiffs !== null && (
-        <StateDiffModal
-          diffs={pendingDiffs}
-          chapterTitle={outlineNode?.title || currentChapter.title || ''}
-          onConfirm={handleAcceptDiffs}
-          onCancel={() => { setPendingDiffs(null); stateAI.reset() }}
-          showSkip={autoProcessing !== 'idle'}
-        />
+        <Suspense fallback={null}>
+          <StateDiffModal
+            diffs={pendingDiffs}
+            chapterTitle={outlineNode?.title || currentChapter.title || ''}
+            onConfirm={handleAcceptDiffs}
+            onCancel={() => { setPendingDiffs(null); stateAI.reset() }}
+            showSkip={autoProcessing !== 'idle'}
+          />
+        </Suspense>
       )}
     </div>
   )

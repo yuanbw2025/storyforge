@@ -17,7 +17,7 @@ const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8')
 describe('R-E-group-ui-and-divine · E 组收尾', () => {
   it('E-2: 世界观与故事设计二级导航使用内容自适应宽度', () => {
     const files = [
-      'src/components/worldview/WorldviewOriginPanel.tsx',
+      'src/components/worldview/WorldviewOriginSidebar.tsx',
       'src/components/worldview/WorldviewNaturalPanel.tsx',
       'src/components/worldview/WorldviewHumanityPanel.tsx',
       'src/components/worldview/StoryCorePanel.tsx',

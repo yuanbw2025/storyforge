@@ -42,12 +42,14 @@ describe('R-EDITOR4 · editor entity references', () => {
 
   it('wires non-persistent decorations, @ completion and hover cards into RichEditor', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/editor/RichEditor.tsx'), 'utf8')
+    const overlays = readFileSync(resolve(process.cwd(), 'src/components/editor/RichEditorEntityOverlays.tsx'), 'utf8')
     expect(source).toContain("new PluginKey('storyforgeEntityReferences')")
     expect(source).toContain("'data-entity-id': reference.id")
     expect(source).toContain('insertEntityReference')
     expect(source).toContain("type: 'text'")
     expect(source).toContain('event.isComposing')
-    expect(source).toContain('hoveredEntity.reference.details')
+    expect(source).toContain('<RichEditorEntityOverlays')
+    expect(overlays).toContain('hovered.reference.details')
     expect(source).toContain("addEventListener('keydown', handleKeyDown, true)")
     expect(source).not.toContain('data-entity-id=')
 

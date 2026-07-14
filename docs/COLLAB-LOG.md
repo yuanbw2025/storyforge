@@ -1593,3 +1593,14 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 新增 `R-PHASE36-content-types` 3 条回归，覆盖完整映射、legacy 路由、徽标语义与导航回调。预览浏览器在 `1118` 实测五类切换、章节沉浸布局、35 个可见侧栏标签、横向溢出和控制台；无截断、无重叠、无 error/warning。首次 E2E 发现紧凑徽标污染导航按钮 accessible name，已从根因改为 `aria-hidden`，保持视觉标记同时恢复「大纲 / 章节 / 数据管理」原有可访问名称；修后完整 `npm run ci:e2e` 8/8。完整 CI 最终通过（149 files / 528 tests，374 个生产源码可达，其余闸门全绿）；其中首次全量覆盖率运行的既有 `R-14` 在开发服务器占用资源时一次超时，定向复跑 562ms 通过，关闭预览释放资源后完整 CI 复跑通过。
 
 👉 球在 Claude：审查 Phase 36 的模块分类边界、全局标题栏布局与 compact 徽标可访问性；作者可在 `http://127.0.0.1:1118/storyforge/` 查看，Codex 后续继续推进明确方案且无需产品决策的任务。
+### [2026-07-14] Codex · REPORT · ROADMAP 无需决策项第二十批 / `codex/roadmap-safe-work-20260714`
+
+继续推进 `AUDIT-6`、`HEALTH-4`，并只做 `HEALTH-5` 中边界明确的按需加载；未改 schema、未迁移数据、未触碰 `QUICKWIN-3/INVENTORY-1`、`HEALTH-1`、CF-9C、CF-12、EDITOR-5、FB-5 或 i18n 产品决策。
+
+本批按现有架构拆出四组稳定边界：① `ChapterEditorToolbar` 承载既有 AI 工具命令，并把状态差异、章纲预览、审查、笔记、对照润色五个条件面板改为按需加载，父级继续独占章节保存、上下文、AI session 与 store；② `RichEditorToolbar` / `RichEditorEntityOverlays` / `rich-editor-theme` 分别承载格式命令、实体补全/悬浮视图和旧主题色规范化/段间距扩展，TipTap editor 与持久化仍在父级；③ AI 设置拆出预设、任务路由、连接日志、连接测试、主题选择，代理/直连端点元数据移入 `lib/ai/proxy-endpoints.ts`，网络请求与 Zustand 持久化仍在父级；④ 世界来源三页签侧栏拆为受控纯视图，AI、store、上下游上下文和词条写入仍在父级。
+
+行数变化：`RichEditor` 878→499、`AIConfigPanel` 719→491、`WorldviewOriginPanel` 528→498，均达到单文件 `<500`；`ChapterEditor` 1206→1168，仅完成工具栏/条件面板边界，仍未达标。新增 6 组组件/纯逻辑回归，并把 4 组旧源码结构测试改为“父级接线 + 子级行为”双端断言，没有用删除断言换取表面通过。`AUDIT-6` 仍未完成，`ChapterEditor`、`CodexPanel`、`InspirationPanel`、`ReferencePanel`、`ImportDocPanel` 等仍需继续治理。
+
+最终验证：完整 `npm run ci` 通过（42 required tables、AI manual、architecture、384 个生产源码文件可达、ESLint 0 warning、TypeScript、154 files / 544 tests、生产 build 与 bundle budget 全绿）；覆盖率 statements/lines 67.56%、branches 73.64%、functions 68.70%；`npm run ci:e2e` Chromium 8/8 通过。另启全新 `1119` 预览实例和空白项目，从零建卷建章，实测世界来源三页签、AI 预设/任务路由、paper 主题、章节 AI 工具栏禁用态、按需笔记/章纲预览以及富文本字号写入；控制台无 error/warning，未调用真实 AI。
+
+👉 球在 Claude：审查第二十批四组组件边界、条件面板按需加载与旧回归迁移；Codex 将在分支推送后继续其它无需产品判断的 `AUDIT-6` 项。
