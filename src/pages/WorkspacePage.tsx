@@ -18,6 +18,8 @@ import { useGistAutoBackup } from '../hooks/useGistAutoBackup'
 import { useFolderAutoBackup } from '../hooks/useFolderAutoBackup'
 import { PanelRight } from 'lucide-react'
 import Sidebar, { type SidebarModule } from '../components/layout/Sidebar'
+import ContentTypeBadge from '../components/layout/ContentTypeBadge'
+import { getModuleContentType } from '../components/layout/sidebar-tree'
 import PropertiesPanel from '../components/layout/PropertiesPanel'
 import ProjectInfoPanel from '../components/project/ProjectInfoPanel'
 // 旧「作品学习」面板已整合进 ReferencePanel（Phase 20，子系统于 v32 下线）
@@ -295,24 +297,28 @@ export default function WorkspacePage() {
 
       {/* 主面板 */}
       <main
-        className={`relative flex-1 overflow-y-auto ${
+        className={`relative flex min-w-0 flex-1 flex-col overflow-hidden ${
           isImmersiveModule
             ? 'bg-[radial-gradient(circle_at_top_left,var(--border-subtle)_1px,transparent_1px)] [background-size:32px_32px]'
-            : 'p-6'
+            : ''
         }`}
       >
-        {/* 属性面板切换按钮 */}
-        <button
-          onClick={() => setShowProperties(v => !v)}
-          title={showProperties ? '关闭属性面板' : '打开属性面板'}
-          className={`absolute top-4 right-4 z-30 rounded p-1.5 text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary ${showProperties ? 'text-accent' : ''}`}
-        >
-          <PanelRight className="w-4 h-4" />
-        </button>
-        {/* Phase 3.5: 懒加载面板(地图类)加载时显示 fallback */}
-        <Suspense fallback={<div className="flex items-center justify-center h-64 text-text-muted text-sm">面板加载中…</div>}>
-          {renderMainPanel()}
-        </Suspense>
+        <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-bg-surface/70 px-4">
+          <ContentTypeBadge contentType={getModuleContentType(activeModule)} showDescription />
+          <button
+            onClick={() => setShowProperties(v => !v)}
+            title={showProperties ? '关闭属性面板' : '打开属性面板'}
+            className={`shrink-0 rounded p-1.5 text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary ${showProperties ? 'text-accent' : ''}`}
+          >
+            <PanelRight className="w-4 h-4" />
+          </button>
+        </div>
+        <div className={`min-h-0 flex-1 overflow-y-auto ${isImmersiveModule ? '' : 'p-6'}`}>
+          {/* Phase 3.5: 懒加载面板(地图类)加载时显示 fallback */}
+          <Suspense fallback={<div className="flex items-center justify-center h-64 text-text-muted text-sm">面板加载中…</div>}>
+            {renderMainPanel()}
+          </Suspense>
+        </div>
       </main>
 
       {/* 右侧属性面板 */}
