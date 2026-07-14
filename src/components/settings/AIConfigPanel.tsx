@@ -5,6 +5,11 @@ import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
+import {
+  fromCustomProxyBaseUrl,
+  isCustomProxyBaseUrl,
+  toCustomProxyBaseUrl,
+} from '../../lib/ai/custom-proxy'
 import { getLogs, subscribeLogs, clearLogs, formatLog } from '../../lib/ai/logger'
 import { applyStoryForgeTheme, resolveStoryForgeTheme, THEME_OPTIONS, type StoryForgeTheme } from '../../lib/theme'
 import { useDialog } from '../shared/Dialog'
@@ -27,7 +32,7 @@ export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean
   { value: 'longcat', label: 'LongCat（美团）', cors: false, hint: '获取 Key: longcat.chat 平台控制台；OpenAI 兼容接口（若浏览器直连 CORS 失败可切换本地代理）' },
   { value: 'opencode', label: 'OpenCode Go（月付）', cors: false, hint: '获取 Key: opencode.ai → Zen → Go API Key（需点击下方「切换到本地代理」）' },
   { value: 'ollama', label: '本地模型 (Ollama / LM Studio 等)', cors: true, hint: '本地 OpenAI-compatible /v1 接口；Ollama 常用 http://localhost:11434/v1，LM Studio 常用 http://localhost:1234/v1；通常无需 API Key。' },
-  { value: 'custom', label: '自定义', cors: true, hint: '填写任何兼容 OpenAI 格式的 API' },
+  { value: 'custom', label: '自定义', cors: true, hint: '填写任何兼容 OpenAI 格式的 API。若浏览器报 CORS/网络错误，本地开发可点「切换到本地代理」（仅 npm run dev）' },
 ]
 
 export default function AIConfigPanel() {
@@ -309,6 +314,45 @@ export default function AIConfigPanel() {
                   </div>
                 )
               })()}
+              {config.provider === 'custom' && import.meta.env.DEV && (() => {
+                const isProxy = isCustomProxyBaseUrl(config.baseUrl)
+                let canToggle = isProxy
+                if (!canToggle) {
+                  try {
+                    const u = new URL(config.baseUrl)
+                    canToggle = u.protocol === 'http:' || u.protocol === 'https:'
+                  } catch {
+                    canToggle = false
+                  }
+                }
+                if (!canToggle) return null
+                return (
+                  <div className="mt-1.5 space-y-1">
+                    <div className="flex flex-wrap gap-2">
+                      {!isProxy ? (
+                        <button
+                          onClick={() => setConfig({ baseUrl: toCustomProxyBaseUrl(config.baseUrl) })}
+                          className="text-xs px-2 py-1 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
+                        >
+                          🔄 切换到本地代理
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setConfig({ baseUrl: fromCustomProxyBaseUrl(config.baseUrl) })}
+                          className="text-xs px-2 py-1 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
+                        >
+                          🔗 恢复直连
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-amber-500/90">
+                      {isProxy
+                        ? '当前经 Vite 本地代理转发（仅 npm run dev）。'
+                        : '网关不支持浏览器 CORS 时点此；请求经本机 Vite 转发，仅开发环境有效。'}
+                    </p>
+                  </div>
+                )
+              })()}
             </div>
             <div>
               <label className="block text-sm text-text-secondary mb-1.5">模型</label>
@@ -462,12 +506,13 @@ export default function AIConfigPanel() {
               </div>
             )}
             {/* CORS 错误提示 */}
-            {testResult && !testResult.ok && config.provider === 'deepseek' &&
+            {testResult && !testResult.ok &&
+              (config.provider === 'deepseek' || config.provider === 'custom') &&
               (testResult.message.includes('CORS') || testResult.message.includes('网络错误')) && (
               <p className="text-xs text-amber-400 px-1">
                 {import.meta.env.DEV
-                  ? '💡 本地运行时，可点击「切换到本地代理」解决此问题'
-                  : '💡 建议改用 Gemini（支持浏览器直调）或在本地运行此工具'}
+                  ? '💡 本地运行时，可点击 Base URL 下方「切换到本地代理」解决 CORS/网络错误（自定义网关与 DeepSeek 等均适用）'
+                  : '💡 该地址可能不支持浏览器直连（CORS）。请改用支持 CORS 的接口、自建中转，或在本地 npm run dev 下使用「本地代理」'}
               </p>
             )}
           </div>
