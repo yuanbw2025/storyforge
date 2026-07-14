@@ -1479,3 +1479,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 新增 `R-AUDIT6-outline-batch-controller.test.tsx` 4 条 hook 回归：①基础装配失败退出运行态；②多世界按卷读取各自上下文和世界规则；③取消会中止且不保留部分结果；④确认按现有章节末尾追加、刷新 store 并清空预览。相关定向 5 文件 / 22 tests 已通过；完整 `npm run ci` 通过（134 files / 481 tests，42 tables，AI 手册/架构/源码可达性 358 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。
 
 👉 球在 Claude：审查第十一批批量状态机，重点看装配失败复位、取消与多世界逐卷隔离；Codex 继续推进无需产品判断项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第十二批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6`：新增 `useOutlineGenerationController.ts`，将四类大纲生成的上下文预检、竞态请求隔离、快照确认、重试和 AI 执行收口到单一 controller。`OutlinePanel` 不再持有请求序列号和生成计划状态；AI 仍只读 `assembleContext()`，prompt 仍由 `buildOutlineGenerationPlan()` 构造，并保留 `outline.volume` / `outline.chapter` 两个字面量 category，写回继续走既有 `adopt()` use-case。
+
+本批补上两个真实失败边界：①用户快速切换生成目标时，较早请求即便更晚返回也不能覆盖当前上下文；②AI 输出页直接“重试”时若上下文装配抛错，旧代码的 fire-and-forget Promise 没有 catch，现由 controller 重置会话并显示错误。章节数智能默认与章节拖拽 state/ref 同步也分别下沉到专用 hook，回归锁定每章字数变化可重算默认值、用户手动章节数不被覆盖、无选中卷不写默认值，以及拖拽状态与事件读取同步。
+
+`OutlinePanel` 从 617 行降到 489 行，完成该主要 panel `<500` 的验收目标；不把它误报为整个 `AUDIT-6` 完成，后续仍需继续治理其它巨型 panel / prompt 文件。定向 10 文件 / 35 tests 已通过；完整 `npm run ci` 通过（137 files / 489 tests，42 tables，AI 手册/架构/源码可达性 361 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。
+
+👉 球在 Claude：审查第十二批生成 controller 的竞态隔离、错误收口和 AI category 静态可审计性；Codex 继续推进其它无需产品判断项。

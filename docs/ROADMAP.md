@@ -2202,6 +2202,7 @@ for each character:
 - **2026-07-13 第八批完成**：新增 `src/lib/outline/adopt-generation.ts`，将 AI 生成卷/章的顺序新增、重复原因汇总和单卷/单章摘要定点替换收口为正式 use-case，所有写入仍逐条经过 `adopt()`；`OutlinePanel` 降到 774 行，只保留目标选择、store 刷新与用户反馈。新增 3 条真实 DB 回归，锁定顶层卷 `parentId:null`/顺序/首个 ID、章节父卷归属/重复原因及跨项目定点更新拒绝。
 - **2026-07-13 第九批完成**：将四类请求协议移入 `lib/outline/generation-request.ts`，新增 `generation-plan.ts` 统一目标卷/章解析、注册表上下文片段读取和 volume/chapter prompt 计划构造；`OutlinePanel` 降到 699 行，只执行上下文装配与 AI session。修复单章所属卷来自原始 nodes、卷序列来自规范化副本时用对象 `indexOf` 漏掉前卷摘要的旧隐患，改为按卷 ID 定位；删除目标后的重试在装配上下文前明确失败。新增 5 条纯计划回归覆盖四类请求、故事块单章、同父级隔离、卷数已满足与缺失目标。
 - **2026-07-13 第十批完成**：新增 `useOutlineBatchGeneration.ts`，将批量章纲的上下文装配、逐卷多世界解析、AbortController、进度/结果状态和确认写回收口到专用 controller；`OutlinePanel` 降到 617 行。修复基础上下文装配在原 `try/finally` 外抛错后 `batchRunning` 永久卡住的状态机根因。新增 4 条 hook 回归锁定失败复位、多世界逐卷上下文、取消不保留部分结果和确认追加/刷新/清空。
+- **2026-07-13 第十一批完成**：新增 `useOutlineGenerationController.ts`，统一四类大纲生成的上下文预检、乱序请求隔离、快照确认、重试与 AI 执行；重试装配失败现在会重置会话并反馈，不再产生未处理 Promise。章节数智能默认和拖拽瞬时状态分别收口到专用 hook，锁定“用户手动章节数不被覆盖”和 state/ref 同步。`OutlinePanel` 从 617 行降到 489 行，达到主要 panel `<500` 的单文件目标；`AUDIT-6` 仍需继续治理其它巨型 panel / prompt 文件。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。

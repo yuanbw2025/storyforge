@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useOutlineStore } from '../../stores/outline'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
@@ -9,15 +9,9 @@ import {
   type ParsedVolume, type ParsedChapter,
 } from '../../lib/ai/parse-outline-output'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { getTopLevelVolumes, estimateChaptersPerVolume, DEFAULT_WORDS_PER_CHAPTER } from '../../lib/outline/selectors'
+import { getTopLevelVolumes } from '../../lib/outline/selectors'
 import { normalizeOutlineNode } from '../../lib/outline/normalize'
 import { adoptGeneratedOutlineItems, adoptGeneratedOutlineSummary } from '../../lib/outline/adopt-generation'
-import {
-  buildOutlineGenerationPlan,
-  findGenerationTargetVolume,
-  outlineGenerationTargetError,
-} from '../../lib/outline/generation-plan'
-import type { AssembleContextResult } from '../../lib/registry/types'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import PanelLayout from '../shared/PanelLayout'
 import { CInput } from '../shared/CompositionInput'
@@ -30,14 +24,10 @@ import OutlineVolumeDetail from './OutlineVolumeDetail'
 import OutlineGenerationRequestPanel from './OutlineGenerationRequestPanel'
 import OutlineGenerationResultPanel from './OutlineGenerationResultPanel'
 import { useOutlineBatchGeneration } from './useOutlineBatchGeneration'
-import type { ChapterDragPayload } from './chapter-drag'
-import {
-  decodeGenerationOperation,
-  encodeGenerationOperation,
-  outlineGenerationModuleKey,
-  type OutlineGenerationRequest,
-  type PreparedGenerationContext,
-} from '../../lib/outline/generation-request'
+import { useOutlineGenerationController } from './useOutlineGenerationController'
+import { useOutlineChapterCountEstimate } from './useOutlineChapterCountEstimate'
+import { useOutlineChapterDrag } from './useOutlineChapterDrag'
+import { decodeGenerationOperation } from '../../lib/outline/generation-request'
 
 interface Props {
   project: Project
@@ -55,40 +45,20 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
-  const [activeModuleKey, setActiveModuleKey] = useState<'outline.volume' | 'outline.chapter'>('outline.volume')
-  const [pendingGeneration, setPendingGeneration] = useState<OutlineGenerationRequest | null>(null)
-  const [preparedContext, setPreparedContext] = useState<PreparedGenerationContext | null>(null)
-  const [contextLoading, setContextLoading] = useState(false)
-  const [contextError, setContextError] = useState('')
   const [promptPanelOpen, setPromptPanelOpen] = useState(false)
-  const [activeChapterDrag, setActiveChapterDrag] = useState<ChapterDragPayload | null>(null)
-  const activeChapterDragRef = useRef<ChapterDragPayload | null>(null)
-  const contextRequestRef = useRef(0)
-
-  const beginChapterDrag = useCallback((payload: ChapterDragPayload) => {
-    activeChapterDragRef.current = payload
-    setActiveChapterDrag(payload)
-  }, [])
-
-  const clearActiveChapterDrag = useCallback(() => {
-    activeChapterDragRef.current = null
-    setActiveChapterDrag(null)
-  }, [])
-
-  const getActiveChapterDrag = useCallback(() => activeChapterDragRef.current, [])
+  const { activeChapterDrag, beginChapterDrag, clearActiveChapterDrag, getActiveChapterDrag } = useOutlineChapterDrag()
 
   // 采纳预览
   const [previewVolumes, setPreviewVolumes] = useState<ParsedVolume[] | null>(null)
   const [previewChapters, setPreviewChapters] = useState<ParsedChapter[] | null>(null)
   const [previewTargetId, setPreviewTargetId] = useState<number | null>(null)
+  const clearGenerationPreview = useCallback(() => {
+    setPreviewVolumes(null)
+    setPreviewChapters(null)
+    setPreviewTargetId(null)
+  }, [])
 
   const ai = useAIStream(createAISessionKey(project.id!, 'outline.generate'))
-  const sessionModuleKey: 'outline.volume' | 'outline.chapter' =
-    pendingGeneration
-      ? (pendingGeneration.kind === 'volumes' || pendingGeneration.kind === 'single-volume' ? 'outline.volume' : 'outline.chapter')
-      : ai.operation?.startsWith('outline.chapter') ? 'outline.chapter'
-      : ai.operation?.startsWith('outline.volume') ? 'outline.volume'
-        : activeModuleKey
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
 
@@ -96,25 +66,14 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const volumes = getTopLevelVolumes(normalizedNodes)
   const selectedVol = volumes.find(v => v.id === selectedVolId) || null
 
-  // 修复「长卷被压成 ~20 章」：选中卷 / 改「每章字数」时，按「卷字数 ÷ 每章字数」自动估算
-  // 「本卷章节数」的智能默认值。用 ref 记住上次的估算值以区分：
-  //  · 当前章节数 == 上次估算值（用户没手动改）→ 用新估算覆盖（改每章字数能联动重算）；
-  //  · 当前章节数 ≠ 上次估算值（用户手动滑/填过）→ 保留用户值，绝不覆盖。
-  // 这样既有智能默认避坑，又完全尊重用户自定义。
-  const lastChapterEstimateRef = useRef<number | null>(null)
-  useEffect(() => {
-    if (!selectedVol) return
-    const wpc = Number(parameterValues.wordsPerChapter) || DEFAULT_WORDS_PER_CHAPTER
-    const est = estimateChaptersPerVolume(project.targetWordCount, volumes.length, wpc)
-    setParameterValues(prev => {
-      const cur = prev.chaptersPerVolume
-      const untouched = cur == null || cur === '' || cur === lastChapterEstimateRef.current
-      if (!untouched) return prev
-      lastChapterEstimateRef.current = est
-      return { ...prev, chaptersPerVolume: est }
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedVolId, parameterValues.wordsPerChapter])
+  useOutlineChapterCountEstimate({
+    selectedVolumeId: selectedVolId,
+    selectedVolumeExists: selectedVol != null,
+    targetWordCount: project.targetWordCount,
+    volumeCount: volumes.length,
+    parameterValues,
+    setParameterValues,
+  })
 
   // 自动选中第一个卷
   useEffect(() => {
@@ -208,13 +167,13 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     }
   }
 
-  const buildOpts = () => ({
+  const generationRunOptions = useMemo(() => ({
     parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
     overrides: (systemOverride != null || userOverride != null) ? {
       systemPrompt: systemOverride ?? undefined,
       userPromptTemplate: userOverride ?? undefined,
     } : undefined,
-  })
+  }), [parameterValues, systemOverride, userOverride])
 
   const buildOutlineAssembledContext = useCallback(async (worldGroupId: number | null, outlineNodeId?: number | null) => {
     return await assembleContext({
@@ -240,98 +199,23 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     })
   }, [project.id, aiConfig.provider, aiConfig.model])
 
-  // ── AI 生成 ──
+  const generation = useOutlineGenerationController({
+    project,
+    nodes,
+    volumes,
+    hint,
+    runOptions: generationRunOptions,
+    ai,
+    assembleContext: buildOutlineAssembledContext,
+    openPromptPanel: () => setPromptPanelOpen(true),
+    clearPreview: clearGenerationPreview,
+    onInfo: toast.info,
+    onError: toast.error,
+  })
 
-  const prepareGeneration = async (request: OutlineGenerationRequest) => {
-    const requestId = contextRequestRef.current + 1
-    contextRequestRef.current = requestId
-    const moduleKey = outlineGenerationModuleKey(request)
-    const operation = encodeGenerationOperation(request)
-    setActiveModuleKey(moduleKey)
-    setPendingGeneration(request)
-    setPreparedContext(null)
-    setContextLoading(true)
-    setContextError('')
-    setPromptPanelOpen(true)
-    setPreviewVolumes(null)
-    setPreviewChapters(null)
-    setPreviewTargetId(null)
-
-    try {
-      const targetVolume = findGenerationTargetVolume(request, nodes, volumes)
-      const assembled = await buildOutlineAssembledContext(
-        targetVolume?.worldGroupId ?? null,
-        targetVolume?.id,
-      )
-      if (contextRequestRef.current !== requestId) return
-      setPreparedContext({ operation, assembled })
-    } catch (error) {
-      if (contextRequestRef.current !== requestId) return
-      setContextError((error as Error).message || '未知错误')
-    } finally {
-      if (contextRequestRef.current === requestId) setContextLoading(false)
-    }
-  }
-
-  const executeGeneration = async (
-    request: OutlineGenerationRequest,
-    contextSnapshot?: AssembleContextResult | null,
-  ) => {
-    const moduleKey = outlineGenerationModuleKey(request)
-    setActiveModuleKey(moduleKey)
-    ai.setOperation(encodeGenerationOperation(request))
-    setPreviewVolumes(null)
-    setPreviewChapters(null)
-    setPreviewTargetId(null)
-
-    const targetError = outlineGenerationTargetError(request, nodes, volumes)
-    if (targetError) {
-      ai.reset()
-      toast.error(targetError)
-      return
-    }
-    const targetVolume = findGenerationTargetVolume(request, nodes, volumes)
-    const assembled = contextSnapshot
-      ?? await buildOutlineAssembledContext(targetVolume?.worldGroupId ?? null, targetVolume?.id)
-    const plan = buildOutlineGenerationPlan({
-      request,
-      project,
-      nodes,
-      volumes,
-      assembled,
-      hint,
-      options: buildOpts(),
-    })
-    if (plan.status === 'skip') {
-      ai.reset()
-      if (plan.reason.includes('无需继续生成')) toast.info(plan.reason)
-      else toast.error(plan.reason)
-      return
-    }
-    if (plan.category === 'outline.volume') {
-      await ai.start(plan.messages, undefined, { category: 'outline.volume', projectId: project.id! })
-    } else {
-      await ai.start(plan.messages, undefined, { category: 'outline.chapter', projectId: project.id! })
-    }
-  }
-
-  const handleAIVolumes = () => { void prepareGeneration({ kind: 'volumes' }) }
+  const handleAIVolumes = () => { void generation.prepare({ kind: 'volumes' }) }
   const handleAIChapters = () => {
-    if (selectedVol?.id) void prepareGeneration({ kind: 'chapters', volumeId: selectedVol.id })
-  }
-  const handleConfirmGeneration = () => {
-    if (!pendingGeneration || contextLoading || contextError) return
-    const request = pendingGeneration
-    const operation = encodeGenerationOperation(request)
-    const contextSnapshot = preparedContext?.operation === operation ? preparedContext.assembled : null
-    if (!contextSnapshot) return
-    setPendingGeneration(null)
-    setPreparedContext(null)
-    void executeGeneration(request, contextSnapshot)
-  }
-  const handleRetryGeneration = () => {
-    const request = decodeGenerationOperation(ai.operation)
-    if (request) void executeGeneration(request)
+    if (selectedVol?.id) void generation.prepare({ kind: 'chapters', volumeId: selectedVol.id })
   }
 
   // ── 采纳预览 + 确认 ──
@@ -340,7 +224,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const handlePreviewAccept = async (text: string) => {
     setRestructuring(true)
     try {
-      if (sessionModuleKey === 'outline.volume') {
+      if (generation.moduleKey === 'outline.volume') {
         const parsed = await parseVolumeOutlineSmart(text, aiConfig)
         if (parsed.length === 0) {
           toast.error('未能从 AI 输出中解析出卷级大纲，请检查输出内容或重试。')
@@ -478,12 +362,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     setSelectedVolId(null)
   }
 
-  const handleCancelPreview = () => {
-    setPreviewVolumes(null)
-    setPreviewChapters(null)
-    setPreviewTargetId(null)
-  }
-
   const batch = useOutlineBatchGeneration({
     projectId: project.id!,
     multiWorldEnabled: Boolean(project.enableMultiWorld),
@@ -540,7 +418,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           className="w-full px-3 py-2 bg-bg-surface border border-border rounded-md text-text-primary text-sm focus:outline-none focus:border-accent" />
 
         <PromptRunPanel
-          moduleKey={sessionModuleKey}
+          moduleKey={generation.moduleKey}
           parameterValues={parameterValues}
           onParamChange={setParameterValues}
           systemOverride={systemOverride}
@@ -551,21 +429,15 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           onOpenChange={setPromptPanelOpen}
         />
 
-        {pendingGeneration && (
+        {generation.pendingRequest && (
           <OutlineGenerationRequestPanel
-            request={pendingGeneration}
-            preparedContext={preparedContext}
-            loading={contextLoading}
-            error={contextError}
-            onRetry={() => { void prepareGeneration(pendingGeneration) }}
-            onCancel={() => {
-              contextRequestRef.current += 1
-              setPendingGeneration(null)
-              setPreparedContext(null)
-              setContextLoading(false)
-              setContextError('')
-            }}
-            onConfirm={handleConfirmGeneration}
+            request={generation.pendingRequest}
+            preparedContext={generation.preparedContext}
+            loading={generation.contextLoading}
+            error={generation.contextError}
+            onRetry={() => { void generation.prepare(generation.pendingRequest!) }}
+            onCancel={generation.cancel}
+            onConfirm={() => { void generation.confirm() }}
           />
         )}
 
@@ -574,7 +446,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           isStreaming={ai.isStreaming}
           error={ai.error}
           tokenUsage={ai.tokenUsage}
-          moduleKey={sessionModuleKey}
+          moduleKey={generation.moduleKey}
           restructuring={restructuring}
           previewVolumes={previewVolumes}
           previewChapters={previewChapters}
@@ -582,10 +454,10 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           selectedVolumeTitle={selectedVol?.title}
           onStop={ai.stop}
           onAccept={handlePreviewAccept}
-          onRetry={handleRetryGeneration}
+          onRetry={() => { void generation.retry() }}
           onConfirmVolumes={() => { void handleConfirmVolumes() }}
           onConfirmChapters={() => { void handleConfirmChapters() }}
-          onCancelPreview={handleCancelPreview}
+          onCancelPreview={clearGenerationPreview}
         />
 
         <OutlineVolumeDetail
@@ -600,13 +472,13 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           onChapterDragEnd={clearActiveChapterDrag}
           onUpdateNode={updateNode}
           onDeleteNode={deleteNode}
-          onGenerateVolume={volumeId => { void prepareGeneration({ kind: 'single-volume', volumeId }) }}
+          onGenerateVolume={volumeId => { void generation.prepare({ kind: 'single-volume', volumeId }) }}
           onGenerateAllChapters={handleAIChapters}
           onAddChapter={parentId => { void handleAddChapter(parentId) }}
           onDeleteVolume={() => { void handleDeleteSelectedVolume() }}
           onAddStructure={structure => { void handleAddStructure(structure) }}
           onInsertChapterAfter={(chapterId, parentId) => { void handleInsertChapterAfter(chapterId, parentId) }}
-          onGenerateChapter={chapterId => { void prepareGeneration({ kind: 'single-chapter', chapterId }) }}
+          onGenerateChapter={chapterId => { void generation.prepare({ kind: 'single-chapter', chapterId }) }}
           onOpenChapter={onOpenChapter}
           onReorderNodes={orderedIds => { void reorderNodes(orderedIds) }}
           onMoveChapter={handleMoveChapter}
