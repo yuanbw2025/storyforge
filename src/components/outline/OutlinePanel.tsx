@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Plus, Trash2, Sparkles, ChevronRight, ChevronDown, Check, X, LayoutList, Layers, Loader2, GripVertical, CornerDownRight } from 'lucide-react'
+import { Plus, Trash2, Sparkles, Check, X, Layers, Loader2, GripVertical } from 'lucide-react'
 import { useOutlineStore } from '../../stores/outline'
-import { useDragReorder, type ItemDnD } from './useDragReorder'
+import { useDragReorder } from './useDragReorder'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
@@ -33,13 +33,11 @@ import { STORY_STRUCTURES } from '../../lib/types/outline'
 import OutlineGenerationBasis from './OutlineGenerationBasis'
 import OutlinePreviewPanel from './OutlinePreviewPanel'
 import OutlineStructureMenu from './OutlineStructureMenu'
+import { OutlineChapterRow, OutlineStoryBlockSection } from './OutlineChapterTree'
 import {
-  OUTLINE_CHAPTER_DRAG_MIME,
   chapterDropProps,
   hasChapterDragPayload,
-  readChapterDragPayload,
   type ChapterDragPayload,
-  type GetActiveChapterDrag,
 } from './chapter-drag'
 
 interface Props {
@@ -1101,7 +1099,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
                   {selectedVolBlocks.map(block => {
                     const blockChapters = normalizedNodes.filter(n => n.parentId === block.id && n.type === 'chapter').sort((a, b) => a.order - b.order)
                     return (
-                      <StoryBlockSection
+                      <OutlineStoryBlockSection
                         key={block.id}
                         block={block}
                         chapters={blockChapters}
@@ -1136,7 +1134,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
                 ) : (
                   <div className="space-y-1">
                     {selectedVolChapters.map((ch, idx) => (
-                      <ChapterRow
+                      <OutlineChapterRow
                         key={ch.id} ch={ch} idx={idx}
                         onUpdate={updateNode} onDelete={deleteNode} onOpen={onOpenChapter}
                         dnd={directChaptersDnD.itemDnD(ch.id)}
@@ -1163,274 +1161,5 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
         )}
       </div>
     </PanelLayout>
-  )
-}
-
-// ── 章节行 ──
-
-function ChapterRow({
-  ch,
-  idx,
-  onUpdate,
-  onDelete,
-  onOpen,
-  dnd,
-  onInsertAfter,
-  onGenerate,
-  parentId,
-  onMoveChapter,
-  activeChapterDrag,
-  getActiveChapterDrag,
-  onChapterDragStart,
-  onChapterDragEnd,
-}: {
-  ch: { id?: number; title: string; summary: string }
-  idx: number
-  onUpdate: (id: number, patch: Record<string, string>) => void
-  onDelete: (id: number) => void
-  onOpen?: (id: number) => void
-  dnd?: ItemDnD
-  onInsertAfter?: () => void
-  onGenerate?: () => void
-  parentId?: number
-  onMoveChapter?: (chapterId: number, targetParentId: number, index: number) => Promise<void>
-  activeChapterDrag: ChapterDragPayload | null
-  getActiveChapterDrag: GetActiveChapterDrag
-  onChapterDragStart: (payload: ChapterDragPayload) => void
-  onChapterDragEnd: () => void
-}) {
-  // FB-3:章节摘要(章节大纲)由单行 input 升级为多行自增 textarea —— 单行下改 1-2 句大纲很难受
-  //       (横向滚、看不全、改中间费劲)。本地草稿 + 失焦保存(IME 安全:组合输入结束后才 onBlur 写库)。
-  const [summaryDraft, setSummaryDraft] = useState(ch.summary || '')
-  const taRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => { setSummaryDraft(ch.summary || '') }, [ch.summary])
-  useEffect(() => {
-    const ta = taRef.current
-    if (ta) { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight}px` }
-  }, [summaryDraft])
-
-  const crossParentDrop = parentId != null && onMoveChapter
-    ? chapterDropProps({
-      targetParentId: parentId,
-      targetIndex: idx,
-      onMoveChapter,
-      getActiveChapterDrag,
-      clearActiveChapterDrag: onChapterDragEnd,
-    })
-    : null
-  const baseDropProps = dnd?.dropProps
-  const isCrossParentTarget = activeChapterDrag != null && activeChapterDrag.sourceParentId !== parentId
-  const isOver = dnd?.isOver || isCrossParentTarget
-
-  return (
-    <div
-      {...(baseDropProps ?? {})}
-      onDragOver={(event) => {
-        if (isCrossParentTarget) {
-          crossParentDrop?.onDragOver(event)
-          return
-        }
-        baseDropProps?.onDragOver(event)
-      }}
-      onDrop={(event) => {
-        const payload = readChapterDragPayload(event) ?? getActiveChapterDrag()
-        if (crossParentDrop && payload && payload.sourceParentId !== parentId) {
-          void crossParentDrop.onDrop(event)
-          return
-        }
-        baseDropProps?.onDrop(event)
-      }}
-      className={`flex items-start gap-1 px-2 py-2 bg-bg-surface border rounded-md group transition-colors ${
-        isOver ? 'border-accent ring-1 ring-accent/50' : 'border-border hover:border-accent/30'
-      } ${dnd?.isDragging ? 'opacity-40' : ''}`}
-    >
-      {/* FB-2 拖拽手柄（抓这里拖动排序） */}
-      {dnd && (
-        <span
-          {...dnd.dragHandleProps}
-          onDragStart={(event) => {
-            dnd.dragHandleProps.onDragStart(event)
-            if (ch.id != null) {
-              const payload = {
-                chapterId: ch.id,
-                sourceParentId: parentId ?? null,
-              } satisfies ChapterDragPayload
-              onChapterDragStart(payload)
-              event.dataTransfer.setData(OUTLINE_CHAPTER_DRAG_MIME, JSON.stringify(payload))
-            }
-          }}
-          onDragEnd={() => {
-            dnd.dragHandleProps.onDragEnd()
-            onChapterDragEnd()
-          }}
-          data-outline-chapter-id={ch.id}
-          title="拖动调整章节顺序"
-          className="shrink-0 mt-1 cursor-grab active:cursor-grabbing text-text-muted/40 group-hover:text-text-muted"
-        >
-          <GripVertical className="w-3.5 h-3.5" />
-        </span>
-      )}
-      <span className="text-xs text-text-muted mt-1.5 shrink-0 w-5 text-right">{idx + 1}</span>
-      <div className="flex-1 min-w-0">
-        <CInput
-          value={ch.title}
-          onChange={e => onUpdate(ch.id!, { title: e.target.value })}
-          className="w-full bg-transparent text-text-primary text-sm font-medium outline-none"
-        />
-        <textarea
-          ref={taRef}
-          value={summaryDraft}
-          onChange={e => setSummaryDraft(e.target.value)}
-          onBlur={() => { if (ch.id != null && summaryDraft !== (ch.summary || '')) onUpdate(ch.id, { summary: summaryDraft }) }}
-          rows={1}
-          placeholder="章节摘要（可编辑，失焦自动保存）"
-          className="w-full bg-transparent text-text-muted text-xs outline-none mt-0.5 resize-none overflow-hidden leading-relaxed"
-        />
-      </div>
-      <div className={`flex items-center gap-0.5 transition-opacity shrink-0 mt-1 ${
-        !ch.summary.trim() && onGenerate ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-      }`}>
-        {!ch.summary.trim() && onGenerate && (
-          <button onClick={onGenerate} className="p-1 text-text-muted hover:text-accent rounded" title="AI 生成本章章纲">
-            <Sparkles className="w-3.5 h-3.5" />
-          </button>
-        )}
-        {onInsertAfter && (
-          <button onClick={onInsertAfter} className="p-1 text-text-muted hover:text-accent rounded" title="在此章下方插入一章">
-            <CornerDownRight className="w-3.5 h-3.5" />
-          </button>
-        )}
-        {onOpen && (
-          <button onClick={() => onOpen(ch.id!)} className="p-1 text-text-muted hover:text-accent rounded" title="编辑章节">
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        )}
-        <button onClick={() => onDelete(ch.id!)} className="p-1 text-text-muted hover:text-error rounded">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── 故事块区域 ──
-
-function StoryBlockSection({
-  block,
-  chapters,
-  onUpdateNode,
-  onDeleteNode,
-  onAddChapter,
-  onOpenChapter,
-  onReorder,
-  onInsertAfter,
-  onGenerateChapter,
-  onMoveChapter,
-  activeChapterDrag,
-  getActiveChapterDrag,
-  onChapterDragStart,
-  onChapterDragEnd,
-}: {
-  block: { id?: number; title: string; summary: string }
-  chapters: { id?: number; title: string; summary: string }[]
-  onUpdateNode: (id: number, patch: Record<string, string>) => void
-  onDeleteNode: (id: number) => void
-  onAddChapter: () => void
-  onOpenChapter?: (id: number) => void
-  onReorder: (orderedIds: number[]) => void
-  onInsertAfter: (chapterId: number) => void
-  onGenerateChapter: (chapterId: number) => void
-  onMoveChapter: (chapterId: number, targetParentId: number, index: number) => Promise<void>
-  activeChapterDrag: ChapterDragPayload | null
-  getActiveChapterDrag: GetActiveChapterDrag
-  onChapterDragStart: (payload: ChapterDragPayload) => void
-  onChapterDragEnd: () => void
-}) {
-  const dialog = useDialog()
-  const [expanded, setExpanded] = useState(true)
-  const blockChaptersDnD = useDragReorder(chapters.map(c => c.id), onReorder)
-  const handleDeleteBlock = async () => {
-    if (!block.id) return
-    const ok = await dialog.confirm({
-      title: `删除故事块「${block.title}」？`,
-      message: '其下章节也会被删除，此操作不可恢复。',
-      confirmText: '删除',
-      tone: 'danger',
-    })
-    if (ok) onDeleteNode(block.id)
-  }
-  const dropToBlockEnd = block.id != null
-    ? chapterDropProps({
-      targetParentId: block.id,
-      targetIndex: chapters.length,
-      onMoveChapter,
-      getActiveChapterDrag,
-      clearActiveChapterDrag: onChapterDragEnd,
-    })
-    : null
-
-  return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      {/* 故事块头 */}
-      <div
-        onDragOver={(event) => dropToBlockEnd?.onDragOver(event)}
-        onDrop={(event) => { if (dropToBlockEnd) void dropToBlockEnd.onDrop(event) }}
-        className="flex items-center gap-2 px-3 py-2 bg-bg-elevated"
-      >
-        <button onClick={() => setExpanded(!expanded)} className="text-text-muted hover:text-text-primary">
-          {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-        </button>
-        <LayoutList className="w-3.5 h-3.5 text-accent/60" />
-        <CInput
-          value={block.title}
-          onChange={e => onUpdateNode(block.id!, { title: e.target.value })}
-          className="flex-1 bg-transparent text-text-primary text-sm font-medium outline-none"
-        />
-        <span className="text-[10px] text-text-muted">{chapters.length} 章</span>
-        <button onClick={onAddChapter} className="p-1 text-text-muted hover:text-accent rounded" title="添加章节">
-          <Plus className="w-3 h-3" />
-        </button>
-        <button onClick={() => { void handleDeleteBlock() }} className="p-1 text-text-muted hover:text-error rounded">
-          <Trash2 className="w-3 h-3" />
-        </button>
-      </div>
-      {/* 故事块摘要 */}
-      <CInput
-        value={block.summary}
-        onChange={e => onUpdateNode(block.id!, { summary: e.target.value })}
-        placeholder="故事块描述..."
-        className="w-full px-3 py-1.5 bg-bg-surface text-text-muted text-xs border-b border-border focus:outline-none"
-      />
-      {/* 章节列表 */}
-      {expanded && (
-        <div className="p-2 space-y-1">
-          {chapters.length === 0 ? (
-            <div
-              onDragOver={(event) => dropToBlockEnd?.onDragOver(event)}
-              onDrop={(event) => { if (dropToBlockEnd) void dropToBlockEnd.onDrop(event) }}
-              className="text-center py-3 text-text-muted text-xs border border-dashed border-transparent hover:border-accent/40 rounded"
-            >
-              点击 + 添加章节
-            </div>
-          ) : (
-            chapters.map((ch, idx) => (
-              <ChapterRow
-                key={ch.id} ch={ch} idx={idx}
-                onUpdate={onUpdateNode} onDelete={onDeleteNode} onOpen={onOpenChapter}
-                dnd={blockChaptersDnD.itemDnD(ch.id)}
-                onInsertAfter={() => onInsertAfter(ch.id!)}
-                onGenerate={() => onGenerateChapter(ch.id!)}
-                parentId={block.id!}
-                onMoveChapter={onMoveChapter}
-                activeChapterDrag={activeChapterDrag}
-                getActiveChapterDrag={getActiveChapterDrag}
-                onChapterDragStart={onChapterDragStart}
-                onChapterDragEnd={onChapterDragEnd}
-              />
-            ))
-          )}
-        </div>
-      )}
-    </div>
   )
 }

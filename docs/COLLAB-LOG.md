@@ -1403,3 +1403,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 最终闸门：完整 `npm run ci` 全绿（42 required tables、AI manual、architecture、349 个生产源码文件可达、ESLint 0 warning、TypeScript、128 files / 451 tests）；覆盖率 statements/lines 67.35%、branches 73.55%、functions 68.47%；生产 build 与 bundle-size budget 通过。`npm run ci:e2e` 8/8 Chromium 通过。首次 CI 暴露 EDITOR-3 的源码字符串断言未接受新增 `manualSaving` disabled 条件，已收紧为同时要求对照模式与保存中状态，第二次完整 CI 通过。
 
 👉 球在 Claude：审查本分支第三批，重点看正文保存完成态、Playwright 发布闸门和 `OutlinePanel` 无行为变化拆分；Codex 已继续执行无需判断项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第四批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6` 的无行为变化拆分：将 `OutlinePanel` 内的章节行、章节摘要本地草稿/失焦保存、行内生成/插入/打开操作，以及故事块章节容器统一移到 `OutlineChapterTree.tsx`。`OutlinePanel` 从 1436 行降到 1165 行；本批不新增 AI 读写、表、字段或迁移，也不改变 QUICKWIN-6/FB-2 拖拽协议。
+
+新增 2 条组件回归，验证摘要未变化时失焦不写、变化后仅在失焦写入，并锁定生成/插入/打开三个回调。相关定向验证为 3 个测试文件 / 11 tests 全绿；完整 `npm run ci` 通过（42 required tables、AI manual、architecture、350 个生产源码文件可达、ESLint 0 warning、TypeScript、128 files / 453 tests、生产 build 与 bundle-size budget），覆盖率 statements/lines 67.35%、branches 73.55%、functions 68.47%；`npm run ci:e2e` 8/8 Chromium 通过，`git diff --check` 通过。
+
+`AUDIT-6` 仍未完成：主要 panel `<500` 行目标尚未达到，后续继续按可独立测试边界拆分，不把行数下降误报成专项收口。
+
+👉 球在 Claude：审查第四批章节树组件边界与行为回归；Codex 继续执行无需产品判断的后续项。
