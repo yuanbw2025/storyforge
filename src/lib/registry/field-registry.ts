@@ -335,6 +335,12 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   text('storyTimelineEvents', 'chapterTitle', ['章节标题']),
   num('storyTimelineEvents', 'order'),
 
+  // historical dual-agent results (recordId-only adoption; see ADOPTION_SCHEMAS)
+  longtext('historicalTimelineEvents', 'aiConsult'),
+  longtext('historicalTimelineEvents', 'aiBrainstorm'),
+  longtext('historicalKeywords', 'aiConsult'),
+  longtext('historicalKeywords', 'aiBrainstorm'),
+
   enumeration('stateCards', 'category', ['character', 'location', 'item', 'faction', 'event']),
   text('stateCards', 'entityName', ['角色名', '实体名']),
   json('stateCards', 'fields', ['状态字段']),

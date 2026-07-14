@@ -213,6 +213,10 @@ async function adoptCollection(
 ): Promise<AdoptResult> {
   const adoption = ADOPTION_BY_TARGET.get(input.target)
   if (!adoption) throw new Error(`[adopt] target ${input.target} 是集合写回但未在 ADOPTION_SCHEMAS 登记`)
+  if (adoption.recordOnly) {
+    result.skipped.push({ reason: `target ${input.target} 仅允许 recordId 定点更新`, data: input.data })
+    return result
+  }
 
   const items = Array.isArray(input.data) ? input.data : [input.data as Record<string, unknown>]
   for (const raw of items) {

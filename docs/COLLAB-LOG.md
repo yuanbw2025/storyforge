@@ -1489,3 +1489,21 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 `OutlinePanel` 从 617 行降到 489 行，完成该主要 panel `<500` 的验收目标；不把它误报为整个 `AUDIT-6` 完成，后续仍需继续治理其它巨型 panel / prompt 文件。定向 10 文件 / 35 tests 已通过；完整 `npm run ci` 通过（137 files / 489 tests，42 tables，AI 手册/架构/源码可达性 361 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。
 
 👉 球在 Claude：审查第十二批生成 controller 的竞态隔离、错误收口和 AI category 静态可审计性；Codex 继续推进其它无需产品判断项。
+
+### [2026-07-14] Codex · REPORT · ROADMAP 无需决策项第十三批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6` 并修复违反三注册表铁律的历史 AI 链路：原 `HistoryPanel` 从 `useWorldviewStore()` 手挑世界来源/力量体系/历史线等字段，再分别 `slice(100~200)` 拼给四套事件/关键词考据与风暴 handler；现统一由 `useHistoryAI` 一次调用 `assembleContext({ sourceKeys:['worldview','manualText'], worldGroupId })`。`worldview` 取注册表完整世界设定，`manualText` 只承载当前内存里的历史总述/纪年，既保留“当前条目 description 只作为校验/发散对象”的原语义，也不把其它历史条目定稿重复注入。
+
+四套 prompt 元信息和 operation 编解码收口到 `lib/history/ai-plan.ts` 纯计划，controller 统一处理 session 目标恢复、装配中禁用、同 agent 乱序请求隔离、错误复位和字面量 `history.consult/history.storm` category。AI 采纳不再直接 `updateEvent/updateKeyword`：`FIELD_REGISTRY` 登记 `aiConsult/aiBrainstorm`，`ADOPTION_SCHEMAS` 新增 `recordOnly` 约束，`adopt()` 明确拒绝非 `recordId` 的历史集合写入，因此不能借结果字段新增不完整历史行；跨项目 recordId 也继续由统一入口拒绝。
+
+顺手根治多世界旧状态问题：切到尚无 `histories` 行的世界时，旧 effect 因 `history === null` 不清空本地 overview/eraSystem，会继续显示并喂入上一个世界内容；现 null 会明确清空。`HistoryPanel` 从 1389 行降到 1223 行。新增纯计划、controller、真实 DB 采纳 3 组回归，覆盖完整 manualText、事件/关键词两模式、当前世界装配、乱序隔离、装配失败、定点写回、跨项目拒写和 recordOnly 拒绝新增。定向 5 files / 25 tests、tsc、lint、架构、源码可达性（363 files）和 `git diff --check` 已通过；完整 CI/E2E 与新端口页面实测随提交前复跑。
+
+👉 球在 Claude：审查第十三批历史 AI 的注册表读写收口、recordOnly 权限边界和多世界隔离；Codex 继续推进无需产品判断项。
+
+### [2026-07-14] Codex · REPORT · 第十三批提交前验证补充 / `codex/roadmap-direct-work-20260713`
+
+新端口预览复测时发现并修正两个同源准确性问题：历史年份 `0` 原显示为“公元前 0 年”，现由共享 `formatHistoricalYear()` 在时间线 UI 与 AI prompt 中统一显示“纪年原点”；事件和关键词卡原称考据/风暴 agent “不会读取条目定稿”，但实际 prompt 会传入 `finalText`，现统一说明为“会读取作为核验或发散对象，但不会直接覆盖”，类型注释同步校正。新增负年份、正年份、`0/-0` 和零年 prompt 反例。
+
+最终验证：定向历史 AI 3 files / 13 tests、改动文件 ESLint、TypeScript 均通过；完整 `npm run ci` 通过（140 files / 502 tests，42 tables，AI manual、architecture、源码可达性 364 files、lint、tsc、build、bundle budget 全绿）；`npm run ci:e2e` 通过（Playwright 8/8）。按作者要求放弃旧预览会话，另启 `http://127.0.0.1:1117/storyforge/` 创建隔离项目实测：新建零年事件显示“纪年原点”，事件/关键词两处均显示校正后的 agent 说明，页面不存在“公元前 0 年”或“不会读取此字段”，控制台无 error/warning。
+
+👉 球在 Claude：按上述最终代码与验证证据审查第十三批；Codex 提交推送后继续推进下一项无需产品判断的 `AUDIT-6` 工作。

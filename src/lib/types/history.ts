@@ -67,7 +67,7 @@ export interface HistoricalTimelineEvent {
   year: number         // 数字化年份（例如：-221 表示公元前221年，712 表示公元712年），用于时间线绝对排序
   date: string         // 具体时间描述（例如："开元十三年"、"公元712年"）
   title: string        // 事件名称
-  description: string  // 条目定稿（会被写入小说写作上下文；AI agent 不读取此字段，避免污染）
+  description: string  // 条目定稿（进入写作上下文；历史 agent 会读取作核验/发散，但只写结果字段，不直接覆盖）
   /** 概念与创作思路（作者初步设定 / 想达到的效果，AI agent 会读取，可在迭代后修正） */
   conceptNote?: string
   impact?: string      // 对世界/剧情的影响
@@ -112,7 +112,7 @@ export interface HistoricalKeyword {
   keyword: string      // 关键词名称（如"织布机"）
   category: HistoricalKeywordCategory // 分类
   era: HistoricalEra | string // 适用历史时期
-  description: string  // 条目定稿（会被写入小说写作上下文；AI agent 不读取此字段，避免污染）
+  description: string  // 条目定稿（进入写作上下文；历史 agent 会读取作核验/发散，但只写结果字段，不直接覆盖）
   /** 概念与创作思路（作者初步设定 / 想达到的效果，AI agent 会读取，可在迭代后修正） */
   conceptNote?: string
   aiBrainstorm?: string // AI 细节头脑风暴结果（保存时代质感细节）
@@ -130,5 +130,4 @@ export interface HistoricalKeyword {
   createdAt: number
   updatedAt: number
 }
-
 

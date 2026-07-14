@@ -102,6 +102,22 @@ export const ADOPTION_SCHEMAS: CollectionAdoptionSpec[] = [
     fkChecks: [{ field: 'chapterId', target: 'chapters' }],
   },
   {
+    target: 'historicalTimelineEvents',
+    identity: 'id',
+    recordOnly: true,
+    duplicatePolicy: 'update',
+    required: [],
+    autoStamps: ['projectId', 'worldGroupId', 'createdAt', 'updatedAt'],
+  },
+  {
+    target: 'historicalKeywords',
+    identity: 'id',
+    recordOnly: true,
+    duplicatePolicy: 'update',
+    required: [],
+    autoStamps: ['projectId', 'worldGroupId', 'createdAt', 'updatedAt'],
+  },
+  {
     target: 'stateCards',
     identity: { kind: 'composite', fields: ['category', 'entityName'] },
     duplicatePolicy: 'merge',

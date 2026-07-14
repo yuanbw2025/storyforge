@@ -109,6 +109,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `creativeRules` | `atmosphere` `citedInsightIds` `citedReferenceIds` `consistencyRules` `narrativePOV` `prohibitions` `referenceWorksV2` `specialRequirements` `writingStyle` |
 | `detailedOutlines` | `appearingCharacterIds` `emotionArc` `endingCliffhanger` `foreshadowIds` `lastUsedSummary` `openingHook` `outlineNodeId` `sceneLocation` `scenes` |
 | `foreshadows` | `description` `echoChapterIds` `expectedResolveChapterId` `importance` `name` `notes` `plantChapterId` `resolveChapterId` `status` `timelinePosition` `type` `urgency` |
+| `historicalKeywords` | `aiBrainstorm` `aiConsult` |
+| `historicalTimelineEvents` | `aiBrainstorm` `aiConsult` |
 | `importantLocations` | `description` `name` `parentId` `significance` `sortOrder` `tags` |
 | `itemLedger` | `action` `chapterId` `chapterTitle` `itemName` `note` `quantity` |
 | `outlineNodes` | `order` `parentId` `summary` `title` `type` `worldGroupId` |
@@ -120,7 +122,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 44 个 category。
+共 46 个 category。
 未分类调用: 0 个。动态 category 调用: 3 个。
 
 | category | 触发文件 |
@@ -144,6 +146,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:216` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
 | `geography.world-map` | `src/components/geography/WorldMapPanel.tsx:103` |
+| `history.consult` | `src/components/history/useHistoryAI.ts:118` |
+| `history.storm` | `src/components/history/useHistoryAI.ts:120` |
 | `inspiration.reverse` | `src/components/project/InspirationPanel.tsx:107` |
 | `inventory.extract` | `src/components/items/InventoryPanel.tsx:86` |
 | `location.extract` | `src/components/location/LocationPanel.tsx:106` |
@@ -178,4 +182,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `c84dee7`
+生成时间基准:commit `daff257`
