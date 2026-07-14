@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { FileText, ClipboardList, CheckSquare, Square, BookOpenCheck, ShieldCheck, StickyNote } from 'lucide-react'
+import { FileText, ClipboardList, BookOpenCheck, ShieldCheck, StickyNote } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
 import { useStateCardStore } from '../../stores/state-card'
@@ -48,6 +48,7 @@ import FloatingToolbar from './FloatingToolbar'
 import ComparePolishPanel from './ComparePolishPanel'
 import ChapterEditorHeader from './ChapterEditorHeader'
 import ChapterMemoryPanel from './ChapterMemoryPanel'
+import ChapterContextPreview from './ChapterContextPreview'
 import { useItemLedgerStore } from '../../stores/item-ledger'
 import { useLocationStore } from '../../stores/location'
 import { useCodexStore } from '../../stores/codex'
@@ -881,70 +882,27 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onSave={() => { void handleManualSave() }}
         />
 
-      {/* 上下文查看器 */}
       {showContext && (
-        <div className="mx-6 mb-3 max-h-64 overflow-y-auto rounded-xl border border-border bg-bg-elevated p-3 text-xs text-text-muted shadow-theme-sm">
-          <p className="font-medium text-text-secondary mb-1">📋 发送给 AI 的上下文：</p>
-          <div className="whitespace-pre-wrap">
-            {worldCtx && <p>【世界观】{worldCtx.slice(0, 500)}...</p>}
-            {charCtx && <p>【角色】{charCtx.slice(0, 300)}...</p>}
-            {outlineNode && <p>【章节大纲】{outlineNode.title}：{outlineNode.summary}</p>}
-          </div>
-
-          {/* A2: 状态卡注入预览 */}
-          {stateCards.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-border">
-              <div className="flex items-center justify-between mb-1">
-                <p className="font-medium text-text-secondary">
-                  📋 状态卡注入（{selectiveState.matchedIds.length}/{selectiveState.allIds.length}）
-                </p>
-                <button onClick={() => setShowStatePreview(!showStatePreview)}
-                  className="text-accent hover:text-accent-hover text-xs">
-                  {showStatePreview ? '收起' : '展开调整'}
-                </button>
-              </div>
-              {showStatePreview && (
-                <div className="space-y-1 mt-1">
-                  {stateCards.map(card => {
-                    const isMatched = selectiveState.matchedIds.includes(card.id!)
-                    const isExtra = extraStateIds.includes(card.id!)
-                    return (
-                      <label key={card.id} className="flex items-center gap-1.5 cursor-pointer hover:bg-bg-hover rounded px-1 py-0.5">
-                        <button
-                          onClick={() => {
-                            if (isExtra) {
-                              setExtraStateIds(extraStateIds.filter(id => id !== card.id))
-                            } else if (!isMatched) {
-                              setExtraStateIds([...extraStateIds, card.id!])
-                            } else {
-                              // 已自动匹配的，不允许取消（用户可通过不勾选来忽略）
-                            }
-                          }}
-                          className="flex-shrink-0"
-                        >
-                          {isMatched || isExtra
-                            ? <CheckSquare className="w-3.5 h-3.5 text-accent" />
-                            : <Square className="w-3.5 h-3.5 text-text-muted" />
-                          }
-                        </button>
-                        <span className={`px-1 py-0.5 rounded text-[10px] ${
-                          card.category === 'character' ? 'bg-blue-500/10 text-blue-400' :
-                          card.category === 'location' ? 'bg-green-500/10 text-green-400' :
-                          card.category === 'item' ? 'bg-yellow-500/10 text-yellow-400' :
-                          card.category === 'faction' ? 'bg-purple-500/10 text-purple-400' :
-                          'bg-red-500/10 text-red-400'
-                        }`}>{card.category === 'character' ? '角色' : card.category === 'location' ? '地点' : card.category === 'item' ? '物品' : card.category === 'faction' ? '势力' : '事件'}</span>
-                        <span className={isMatched || isExtra ? 'text-text-primary' : 'text-text-muted'}>{card.entityName}</span>
-                        {isMatched && !isExtra && <span className="text-[10px] text-accent/60">自动匹配</span>}
-                        {isExtra && <span className="text-[10px] text-warning">手动添加</span>}
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <ChapterContextPreview
+          worldContext={worldCtx}
+          characterContext={charCtx}
+          outlineNode={outlineNode ?? undefined}
+          stateCards={stateCards}
+          matchedIds={selectiveState.matchedIds}
+          allIds={selectiveState.allIds}
+          extraIds={extraStateIds}
+          stateListExpanded={showStatePreview}
+          onToggleStateList={() => setShowStatePreview(!showStatePreview)}
+          onToggleStateCard={cardId => {
+            const isExtra = extraStateIds.includes(cardId)
+            const isMatched = selectiveState.matchedIds.includes(cardId)
+            if (isExtra) {
+              setExtraStateIds(extraStateIds.filter(id => id !== cardId))
+            } else if (!isMatched) {
+              setExtraStateIds([...extraStateIds, cardId])
+            }
+          }}
+        />
       )}
 
       {/* AI 工具栏 */}

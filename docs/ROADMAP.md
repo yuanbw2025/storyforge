@@ -2209,6 +2209,7 @@ for each character:
 - **2026-07-14 第十五批完成**：将正文编辑器的章节标题、字数、五种章节状态、上下文/对照润色/保存命令及保存中/失败/完成展示拆到纯视图 `ChapterEditorHeader`；父组件继续独占章节 store 写回、编辑器内容、AI、上下文和对照润色状态，新组件只转发回调。`ChapterEditor` 从 1362 行降到 1313 行。新增 3 条组件回归，并同步迁移旧源码结构断言，锁定五状态写回、命令转发和保存状态；新端口实测覆盖标题、字数、状态、上下文、手动保存、刷新恢复与对照润色开关。
 - **2026-07-14 第十六批完成**：将历史时间线事件卡与历史关键词卡拆到 `HistoryTimelineEventCard` / `HistoryKeywordCard`，字段编辑、章节关联和双 Agent 工作区均通过 patch/命令回调转发；父面板继续独占多世界过滤、store、AI controller、删除确认和当前展开/生成目标。`HistoryPanel` 从 883 行降到 482 行，达到该主要 panel `<500` 的单文件目标。新增 6 条组件回归，锁定纪年原点/世界徽标、史实/虚构、事件与关键词字段、章节关联和 Agent 命令；刷新恢复实测通过。
 - **2026-07-14 第十七批完成**：将章节摘要、章节记忆生成状态、计划—正文对账分类/证据/失效提示及两种确认命令拆到纯视图 `ChapterMemoryPanel`；父级继续负责正文/章纲 hash 校验、AI 抽取、store 与章纲写回。`ChapterEditor` 从 1313 行降到 1248 行。新增 3 条组件回归，锁定空摘要/忙碌态、失效对账和当前待确认对账的命令转发。
+- **2026-07-14 第十八批完成**：将世界观/角色/章纲上下文预览与状态卡注入计数/调整列表拆到纯视图 `ChapterContextPreview`；父级继续独占选择性状态匹配和手动额外 ID 规则。状态分类文案复用 `STATE_CATEGORY_LABELS`，移除旧内联五分支；`ChapterEditor` 从 1248 行降到 1206 行。新增 3 条回归锁定截断边界、注入计数、自动/手动/未选标签和卡片命令。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。

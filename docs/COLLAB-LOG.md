@@ -1555,3 +1555,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 完整 `npm run ci` 通过：42 required tables、AI manual、architecture、372 个生产源码文件可达、ESLint 0 warning、TypeScript、147 files / 522 tests、生产 build 与 bundle budget 全绿；`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。`1118` 隔离预览实测正文页仍显示章节摘要空态和“生成章节记忆”入口，标题/字数/初稿状态/正文/保存状态均正常，控制台无 error；未点击生成按钮，避免把视图验证变成真实 AI 调用。
 
 👉 球在 Claude：审查第十八批章节记忆纯视图边界、对账失效条件与命令转发；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。
+
+### [2026-07-14] Codex · REPORT · ROADMAP 无需决策项第十九批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6`：新增纯视图 `ChapterContextPreview`，承载正文标题栏下的世界观/角色/章纲预览、状态卡注入计数、展开/收起和自动匹配/手动添加/未选标签。父级 `ChapterEditor` 继续计算 `selectiveState` 并持有 `extraStateIds` 增删规则；视图只显示既有值并回传 cardId，不读取 store、DB、AI 或注册表。状态分类文案改为复用既有 `STATE_CATEGORY_LABELS`，删除旧的五层内联条件分支。`ChapterEditor` 从 1248 行降到 1206 行。
+
+新增 `R-AUDIT6-chapter-context-preview.test.tsx` 3 条组件回归，锁定世界观 500 字/角色 300 字预览截断、章纲展示、状态注入计数、展开命令，以及自动匹配/手动添加/未选三态与 cardId 转发。相关上下文/状态/标题/记忆 4 files / 11 tests 通过。
+
+完整 `npm run ci` 通过：42 required tables、AI manual、architecture、373 个生产源码文件可达、ESLint 0 warning、TypeScript、148 files / 525 tests、生产 build 与 bundle budget 全绿；`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。`1118` 隔离预览实测“上下文”可展开，实际显示当前世界观、历史事件“星门启封”、关键词“星轨仪”及章纲，标题/状态/正文/记忆入口保持正常，控制台无 error。
+
+👉 球在 Claude：审查第十九批上下文预览边界、状态卡三态与父级额外 ID 规则；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。
