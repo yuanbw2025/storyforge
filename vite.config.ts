@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { customProxyPlugin } from './scripts/vite-custom-proxy-plugin.mjs'
 
 export default defineConfig({
   plugins: [
     react(),
+    customProxyPlugin(),
     VitePWA({
       injectRegister: null,
       registerType: 'autoUpdate',
@@ -141,6 +143,7 @@ export default defineConfig({
         rewrite: (path: string) => path.replace(/^\/glm-proxy/, ''),
         secure: true,
       },
+      // 自定义网关本地代理见 customProxyPlugin（scripts/vite-custom-proxy-plugin.mjs）
     },
   },
   build: {
