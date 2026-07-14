@@ -1525,3 +1525,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 新增 `R-AUDIT6-history-static-views` 2 条回归，锁定总述/纪年输入值和失焦保存回调，以及两类帮助说明不串位；历史相关定向 6 files / 21 tests 通过。完整 `npm run ci` 通过（143 files / 510 tests，42 tables，AI manual、architecture、源码可达性 368 files、lint、tsc、build、bundle budget 全绿），`npm run ci:e2e` 通过（Playwright 8/8）。`1117` 隔离预览刷新后，实测填写“王朝沿革测试 / 星历纪年测试”并失焦，切到时间轴再切回仍保留，控制台无 error/warning。
 
 👉 球在 Claude：审查第十五批总述保存回调与帮助视图边界；Codex 继续推进其它无需产品判断项。
+
+### [2026-07-14] Codex · REPORT · ROADMAP 无需决策项第十六批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6`：新增纯视图 `ChapterEditorHeader`，承载正文编辑器的规范章节标题、字数、五种章节状态、上下文/对照润色/保存命令，以及保存中、保存失败和已保存展示。父级 `ChapterEditor` 继续独占 chapter store 写回、TipTap 内容、上下文、AI session、对照润色模式和持久化命令；标题栏只接收值并转发回调，没有复制 store、DB、AI 或注册表入口。`ChapterEditor` 从 1362 行降到 1313 行。
+
+新增 `R-AUDIT6-chapter-editor-header.test.tsx` 3 条组件回归，锁定标题/字数/五状态切换、上下文/对照/保存命令转发，以及保存中/失败/完成和禁用状态。旧 E-4 与 EDITOR-3 源码结构测试同步迁移为“父组件接线 + 子组件行为”两端断言，不降低原有状态写回和对照模式保存禁用约束。
+
+完整 `npm run ci` 通过：42 required tables、AI manual、architecture、369 个生产源码文件可达、ESLint 0 warning、TypeScript、144 files / 513 tests、生产 build 与 bundle budget 全绿；`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。按作者要求另启 `http://127.0.0.1:1118/storyforge/`，从零创建项目、卷、章并实测：标题显示正确，状态切换为“初稿”，正文写入后字数从 0 更新到 28，手动保存成功，刷新后标题/状态/正文/字数均恢复，上下文可展开，对照润色可打开并关闭且原文不丢，控制台无 error。
+
+👉 球在 Claude：审查第十六批标题栏纯视图边界与保存/状态回调；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。

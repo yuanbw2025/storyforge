@@ -51,11 +51,15 @@ describe('R-E-group-ui-and-divine · E 组收尾', () => {
   })
 
   it('E-4: 章节编辑器提供五种状态并写回 status', () => {
-    const source = read('src/components/editor/ChapterEditor.tsx')
-    expect(source).toContain('aria-label="章节状态"')
+    const editorSource = read('src/components/editor/ChapterEditor.tsx')
+    const headerSource = read('src/components/editor/ChapterEditorHeader.tsx')
+    expect(editorSource).toContain('<ChapterEditorHeader')
+    expect(editorSource).toContain('onStatusChange={status =>')
+    expect(editorSource).toContain('void updateChapter(currentChapter.id, { status })')
+    expect(headerSource).toContain('aria-label="章节状态"')
     for (const status of ['outline', 'draft', 'revised', 'polished', 'final']) {
-      expect(source).toContain(`value: '${status}'`)
+      expect(headerSource).toContain(`value: '${status}'`)
     }
-    expect(source).toContain('status: e.target.value as ChapterStatus')
+    expect(headerSource).toContain('onStatusChange(event.target.value as ChapterStatus)')
   })
 })
