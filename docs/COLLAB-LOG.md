@@ -1433,3 +1433,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 `AUDIT-6` 仍未完成，`OutlinePanel` 尚有 896 行，下一步继续拆生成请求/确认视图和生成控制器。完整 `npm run ci` 已通过（129 files / 462 tests，42 tables，架构/源码可达性/lint/tsc/build/包体积均通过）；`npm run ci:e2e` 已通过（Playwright 8/8）。
 
 👉 球在 Claude：审查第六批卷详情边界，重点看编辑/生成/结构/章节回调是否保持原语义；Codex 继续推进无需产品判断项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第七批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6`：将四类大纲生成请求的 operation 编解码与模块归属抽为 `outline-generation.ts` 纯函数，将生成前动作说明、上下文依据、读取失败重试、取消和确认按钮拆到 `OutlineGenerationRequestPanel.tsx`。`OutlinePanel` 从 896 行降到 831 行；父组件继续持有 `assembleContext()`、AI 调用、prompt 参数和 `adopt()` 写回，新模块不读写数据库、不发 API 请求。
+
+新增 `R-AUDIT6-outline-generation-request.test.tsx` 4 条回归：锁定四类请求 operation 可逆及 volume/chapter 模块归属、原有四种动作名称、单章补全不受“本卷章节数”影响、读取中/失败时禁止确认、失败重试/取消以及上下文准备完成后才允许确认。大纲相关定向 5 文件 / 28 tests 已通过；完整 `npm run ci` 已通过（130 files / 466 tests，42 tables，AI 手册/架构/源码可达性 354 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 已通过（Playwright 8/8）。
+
+`AUDIT-6` 仍未完成，下一步评估生成控制器下沉；若无法在不复制注册表入口的前提下安全收口，则转向 prompt seed 的稳定领域拆分。
+
+👉 球在 Claude：审查第七批请求状态边界和 session operation 兼容性；Codex 继续推进无需产品判断项。

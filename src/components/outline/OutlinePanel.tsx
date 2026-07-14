@@ -28,45 +28,22 @@ import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
 import type { Project, StoryStructure } from '../../lib/types'
 import { STORY_STRUCTURES } from '../../lib/types/outline'
-import OutlineGenerationBasis from './OutlineGenerationBasis'
 import OutlinePreviewPanel from './OutlinePreviewPanel'
 import OutlineVolumeSidebar from './OutlineVolumeSidebar'
 import OutlineVolumeDetail from './OutlineVolumeDetail'
+import OutlineGenerationRequestPanel from './OutlineGenerationRequestPanel'
 import type { ChapterDragPayload } from './chapter-drag'
+import {
+  decodeGenerationOperation,
+  encodeGenerationOperation,
+  outlineGenerationModuleKey,
+  type OutlineGenerationRequest,
+  type PreparedGenerationContext,
+} from './outline-generation'
 
 interface Props {
   project: Project
   onOpenChapter?: (nodeId: number) => void
-}
-
-type OutlineGenerationRequest =
-  | { kind: 'volumes' }
-  | { kind: 'chapters'; volumeId: number }
-  | { kind: 'single-volume'; volumeId: number }
-  | { kind: 'single-chapter'; chapterId: number }
-
-interface PreparedGenerationContext {
-  operation: string
-  assembled: AssembleContextResult
-}
-
-function encodeGenerationOperation(request: OutlineGenerationRequest): string {
-  if (request.kind === 'volumes') return 'outline.volume:batch'
-  if (request.kind === 'chapters') return `outline.chapter:batch:${request.volumeId}`
-  if (request.kind === 'single-volume') return `outline.volume:single:${request.volumeId}`
-  return `outline.chapter:single:${request.chapterId}`
-}
-
-function decodeGenerationOperation(operation: string | null): OutlineGenerationRequest | null {
-  if (!operation) return null
-  if (operation === 'outline.volume' || operation === 'outline.volume:batch') return { kind: 'volumes' }
-  const parts = operation.split(':')
-  const id = Number(parts[2])
-  if (!Number.isFinite(id)) return null
-  if (parts[0] === 'outline.volume' && parts[1] === 'single') return { kind: 'single-volume', volumeId: id }
-  if (parts[0] === 'outline.chapter' && parts[1] === 'batch') return { kind: 'chapters', volumeId: id }
-  if (parts[0] === 'outline.chapter' && parts[1] === 'single') return { kind: 'single-chapter', chapterId: id }
-  return null
 }
 
 export default function OutlinePanel({ project, onOpenChapter }: Props) {
@@ -311,9 +288,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const prepareGeneration = async (request: OutlineGenerationRequest) => {
     const requestId = contextRequestRef.current + 1
     contextRequestRef.current = requestId
-    const moduleKey = request.kind === 'volumes' || request.kind === 'single-volume'
-      ? 'outline.volume'
-      : 'outline.chapter'
+    const moduleKey = outlineGenerationModuleKey(request)
     const operation = encodeGenerationOperation(request)
     setActiveModuleKey(moduleKey)
     setPendingGeneration(request)
@@ -349,9 +324,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     request: OutlineGenerationRequest,
     contextSnapshot?: AssembleContextResult | null,
   ) => {
-    const moduleKey = request.kind === 'volumes' || request.kind === 'single-volume'
-      ? 'outline.volume'
-      : 'outline.chapter'
+    const moduleKey = outlineGenerationModuleKey(request)
     setActiveModuleKey(moduleKey)
     ai.setOperation(encodeGenerationOperation(request))
     setPreviewVolumes(null)
@@ -775,59 +748,21 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
         />
 
         {pendingGeneration && (
-          <div className="space-y-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="text-xs leading-5 text-text-secondary">
-                <span className="font-medium text-text-primary">
-                  {pendingGeneration.kind === 'volumes' && '批量生成卷级大纲'}
-                  {pendingGeneration.kind === 'chapters' && '生成本卷所有章节'}
-                  {pendingGeneration.kind === 'single-volume' && 'AI 生成本卷卷纲'}
-                  {pendingGeneration.kind === 'single-chapter' && 'AI 生成本章章纲'}
-                </span>
-                <span className="ml-2">
-                  {pendingGeneration.kind === 'single-chapter'
-                    ? '单章补全固定只生成当前 1 章；上方“本卷章节数”不参与本次调用。确认后才会调用 API。'
-                    : '请先调整上方参数，确认后才会调用 API。'}
-                </span>
-              </div>
-              <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                {contextError && (
-                  <button
-                    onClick={() => { void prepareGeneration(pendingGeneration) }}
-                    className="px-2.5 py-1 text-xs text-accent border border-accent/30 rounded hover:bg-accent/10"
-                  >
-                    重新读取
-                  </button>
-                )}
-                <button
-                  onClick={() => {
-                    contextRequestRef.current += 1
-                    setPendingGeneration(null)
-                    setPreparedContext(null)
-                    setContextLoading(false)
-                    setContextError('')
-                  }}
-                  className="px-2.5 py-1 text-xs text-text-muted border border-border rounded hover:text-text-primary"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleConfirmGeneration}
-                  disabled={contextLoading || !!contextError || !preparedContext}
-                  className="px-2.5 py-1 text-xs text-white bg-accent rounded hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  确认生成
-                </button>
-              </div>
-            </div>
-            <div className="border-t border-accent/20 pt-3">
-              <OutlineGenerationBasis
-                context={preparedContext?.assembled ?? null}
-                loading={contextLoading}
-                error={contextError}
-              />
-            </div>
-          </div>
+          <OutlineGenerationRequestPanel
+            request={pendingGeneration}
+            preparedContext={preparedContext}
+            loading={contextLoading}
+            error={contextError}
+            onRetry={() => { void prepareGeneration(pendingGeneration) }}
+            onCancel={() => {
+              contextRequestRef.current += 1
+              setPendingGeneration(null)
+              setPreparedContext(null)
+              setContextLoading(false)
+              setContextError('')
+            }}
+            onConfirm={handleConfirmGeneration}
+          />
         )}
 
         {/* AI 输出（就地显示） */}
