@@ -2196,6 +2196,7 @@ for each character:
 - **2026-07-13 第二批完成**：`OutlinePanel` 将 CF-3 生成依据纯视图、QUICKWIN-6 章节拖拽协议、AI 采纳预览和故事结构菜单分别拆到 `OutlineGenerationBasis.tsx` / `chapter-drag.ts` / `OutlinePreviewPanel.tsx` / `OutlineStructureMenu.tsx`；面板不再同时维护上下文来源标签/摘要渲染、DataTransfer payload 编解码和两块纯 UI。原 CF-3、QUICKWIN-6/FB-2 与新增纯视图共 12 条反例持续绿，源码可达性守卫确认新模块均从生产入口可达。`OutlinePanel` 从本轮开始的 1648 行降到 1436 行；章节行/故事块等后续继续按可独立测试边界拆，不冒充已达成 `<500` 行目标。
 - **2026-07-13 第三批完成**：将章节行、摘要草稿/失焦保存、行内操作和故事块章节容器拆到 `OutlineChapterTree.tsx`，`OutlinePanel` 降到 1165 行。新增组件回归锁定“摘要未变不写、变化后失焦写入”及生成/插入/打开回调；QUICKWIN-6 跨父级移动与 FB-2 同级排序共 11 条相关测试持续绿。该专项仍未达到 `<500` 行目标，后续继续按生成控制器、侧栏和卷详情边界拆分。
 - **2026-07-13 第四批完成**：将卷操作栏、批量生成进度/结果、卷排序、章节跨卷投放区与卷空态拆到 `OutlineVolumeSidebar.tsx`，`OutlinePanel` 降到 1035 行。独立组件回归锁定直挂+故事块章节计数、多世界标记、命令禁用、进度取消、结果确认/关闭、空态操作，以及章节投放到目标卷直挂章节末尾；相关定向 16 tests 全绿。父组件仍持有 AI 执行、store 命令与移动规则，未复制业务入口。
+- **2026-07-13 第五批完成**：将卷标题/摘要/所属世界编辑、卷操作栏、故事块/直挂章节列表和未选卷空态拆到 `OutlineVolumeDetail.tsx`，`OutlinePanel` 降到 896 行。新增独立卷详情测试文件，锁定编辑回调、AI/新增/删除命令、已有卷纲时按钮显隐、故事结构入口、直挂+块内总章数与自定义故事块命令；相关定向 4 文件 / 20 tests 全绿。父组件继续独占 AI 调用、`assembleContext()`、`adopt()`、store 写入和跨世界移动校验。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。

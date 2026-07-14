@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Loader2, Plus, Trash2, Sparkles } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useOutlineStore } from '../../stores/outline'
-import { useDragReorder } from './useDragReorder'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
@@ -24,7 +23,6 @@ import type { AssembleContextResult } from '../../lib/registry/types'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import PanelLayout from '../shared/PanelLayout'
-import AutoResizeTextarea from '../shared/AutoResizeTextarea'
 import { CInput } from '../shared/CompositionInput'
 import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
@@ -32,9 +30,8 @@ import type { Project, StoryStructure } from '../../lib/types'
 import { STORY_STRUCTURES } from '../../lib/types/outline'
 import OutlineGenerationBasis from './OutlineGenerationBasis'
 import OutlinePreviewPanel from './OutlinePreviewPanel'
-import OutlineStructureMenu from './OutlineStructureMenu'
-import { OutlineChapterRow, OutlineStoryBlockSection } from './OutlineChapterTree'
 import OutlineVolumeSidebar from './OutlineVolumeSidebar'
+import OutlineVolumeDetail from './OutlineVolumeDetail'
 import type { ChapterDragPayload } from './chapter-drag'
 
 interface Props {
@@ -169,27 +166,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedVolId, parameterValues.wordsPerChapter])
 
-  // 故事块和章节层级
-  const selectedVolBlocks = useMemo(() => {
-    if (!selectedVol) return []
-    return normalizedNodes.filter(n => n.parentId === selectedVol.id && n.type === 'storyBlock').sort((a, b) => a.order - b.order)
-  }, [normalizedNodes, selectedVol])
-
-  // 直接挂在卷下的章节（无故事块归属）
-  const selectedVolChapters = useMemo(() => {
-    if (!selectedVol) return []
-    return normalizedNodes.filter(n => n.parentId === selectedVol.id && n.type === 'chapter').sort((a, b) => a.order - b.order)
-  }, [normalizedNodes, selectedVol])
-
-  // 是否使用故事块模式
-  const hasBlocks = selectedVolBlocks.length > 0
-
-  // FB-2 拖动排序：直挂章节列表；卷列表由 OutlineVolumeSidebar 管理
-  const directChaptersDnD = useDragReorder(
-    selectedVolChapters.map(c => c.id),
-    (ids) => reorderNodes(ids),
-  )
-
   // 自动选中第一个卷
   useEffect(() => {
     if (selectedVolId === null && volumes.length > 0) {
@@ -264,16 +240,19 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const handleAddStructure = async (structure: StoryStructure) => {
     if (!selectedVol) return
     const def = STORY_STRUCTURES[structure]
+    const currentBlocks = normalizedNodes
+      .filter(node => node.parentId === selectedVol.id && node.type === 'storyBlock')
+      .sort((a, b) => a.order - b.order)
     if (structure === 'custom') {
       await addNode({
         projectId: project.id!, parentId: selectedVol.id!, type: 'storyBlock',
-        title: '自定义故事块', summary: '', order: selectedVolBlocks.length,
+        title: '自定义故事块', summary: '', order: currentBlocks.length,
       })
     } else {
       for (let i = 0; i < def.blocks.length; i++) {
         await addNode({
           projectId: project.id!, parentId: selectedVol.id!, type: 'storyBlock',
-          title: def.blocks[i], summary: '', order: selectedVolBlocks.length + i,
+          title: def.blocks[i], summary: '', order: currentBlocks.length + i,
         })
       }
     }
@@ -888,147 +867,29 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           />
         )}
 
-        {/* ── 选中卷的详情编辑 ── */}
-        {selectedVol ? (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <CInput
-                value={selectedVol.title}
-                onChange={e => updateNode(selectedVol.id!, { title: e.target.value })}
-                className="text-lg font-bold bg-transparent text-text-primary outline-none flex-1"
-              />
-              <div className="flex items-center gap-1.5">
-                {!selectedVol.summary.trim() && (
-                  <button
-                    onClick={() => { void prepareGeneration({ kind: 'single-volume', volumeId: selectedVol.id! }) }}
-                    disabled={ai.isStreaming}
-                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-bg-elevated text-accent rounded-md hover:bg-accent/10 border border-accent/30 disabled:opacity-50 transition-colors"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" /> AI 生成本卷卷纲
-                  </button>
-                )}
-                <button onClick={handleAIChapters} disabled={ai.isStreaming}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors">
-                  <Sparkles className="w-3.5 h-3.5" /> 生成本卷所有章节
-                </button>
-                <button onClick={() => handleAddChapter()}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-bg-elevated text-text-secondary rounded-md hover:text-text-primary border border-border transition-colors">
-                  <Plus className="w-3.5 h-3.5" /> 添加章节
-                </button>
-                <button onClick={() => { void handleDeleteSelectedVolume() }} className="p-1.5 text-text-muted hover:text-error rounded transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* 多世界：本卷所属世界 */}
-            {project.enableMultiWorld && worldGroups.length > 1 && (
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-text-muted">本卷所属世界</label>
-                <select
-                  value={selectedVol.worldGroupId ?? ''}
-                  onChange={e => updateNode(selectedVol.id!, { worldGroupId: e.target.value ? Number(e.target.value) : null })}
-                  className="px-2 py-1 bg-bg-surface border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent cursor-pointer"
-                >
-                  <option value="">未指定</option>
-                  {worldGroups.map(g => (
-                    <option key={g.id} value={g.id}>{g.icon || '🌐'} {g.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* 卷摘要 */}
-            <div>
-              <label className="text-xs text-text-muted mb-1 block">卷情节摘要</label>
-              <AutoResizeTextarea
-                value={selectedVol.summary}
-                onChange={e => updateNode(selectedVol.id!, { summary: e.target.value })}
-                placeholder="描述本卷的核心冲突、关键转折和主要情节..."
-                minRows={3}
-                maxRows={10}
-                className="w-full px-3 py-2 bg-bg-surface border border-border rounded-md text-text-secondary text-sm focus:outline-none focus:border-accent"
-              />
-            </div>
-
-            {/* 故事结构 + 章节列表 */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-text-primary">
-                  {hasBlocks ? '故事结构' : '章节列表'}
-                  <span className="text-text-muted font-normal ml-1">（{selectedVolChapters.length + normalizedNodes.filter(n => selectedVolBlocks.some(b => b.id === n.parentId) && n.type === 'chapter').length} 章）</span>
-                </h3>
-                {!hasBlocks && (
-                  <OutlineStructureMenu onSelect={handleAddStructure} />
-                )}
-              </div>
-
-              {/* 故事块模式 */}
-              {hasBlocks && (
-                <div className="space-y-3 mb-3">
-                  {selectedVolBlocks.map(block => {
-                    const blockChapters = normalizedNodes.filter(n => n.parentId === block.id && n.type === 'chapter').sort((a, b) => a.order - b.order)
-                    return (
-                      <OutlineStoryBlockSection
-                        key={block.id}
-                        block={block}
-                        chapters={blockChapters}
-                        onUpdateNode={updateNode}
-                        onDeleteNode={deleteNode}
-                        onAddChapter={() => handleAddChapter(block.id!)}
-                        onOpenChapter={onOpenChapter}
-                        onReorder={(ids) => reorderNodes(ids)}
-                        onInsertAfter={(chId) => handleInsertChapterAfter(chId, block.id!)}
-                        onGenerateChapter={(chapterId) => { void prepareGeneration({ kind: 'single-chapter', chapterId }) }}
-                        onMoveChapter={handleMoveChapter}
-                        activeChapterDrag={activeChapterDrag}
-                        getActiveChapterDrag={getActiveChapterDrag}
-                        onChapterDragStart={beginChapterDrag}
-                        onChapterDragEnd={clearActiveChapterDrag}
-                      />
-                    )
-                  })}
-                  <button onClick={() => handleAddStructure('custom')}
-                    className="w-full py-2 text-xs text-text-muted border border-dashed border-border rounded-lg hover:text-accent hover:border-accent/50 transition-colors">
-                    + 添加故事块
-                  </button>
-                </div>
-              )}
-
-              {/* 无故事块：直接章节列表 */}
-              {!hasBlocks && (
-                selectedVolChapters.length === 0 ? (
-                  <div className="text-center py-8 text-text-muted text-sm border border-dashed border-border rounded-lg">
-                    还没有章节，点击「生成本卷所有章节」或「添加章节」
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {selectedVolChapters.map((ch, idx) => (
-                      <OutlineChapterRow
-                        key={ch.id} ch={ch} idx={idx}
-                        onUpdate={updateNode} onDelete={deleteNode} onOpen={onOpenChapter}
-                        dnd={directChaptersDnD.itemDnD(ch.id)}
-                        onInsertAfter={() => handleInsertChapterAfter(ch.id!, selectedVol.id!)}
-                        onGenerate={() => { void prepareGeneration({ kind: 'single-chapter', chapterId: ch.id! }) }}
-                        parentId={selectedVol.id!}
-                        onMoveChapter={handleMoveChapter}
-                        activeChapterDrag={activeChapterDrag}
-                        getActiveChapterDrag={getActiveChapterDrag}
-                        onChapterDragStart={beginChapterDrag}
-                        onChapterDragEnd={clearActiveChapterDrag}
-                      />
-                    ))}
-                  </div>
-                )
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-text-muted gap-3">
-            <div className="text-4xl opacity-20">📖</div>
-            <p className="text-sm">选择左侧的卷开始编辑，或点击「批量生成卷级大纲」</p>
-          </div>
-        )}
+        <OutlineVolumeDetail
+          volume={selectedVol}
+          nodes={normalizedNodes}
+          multiWorldEnabled={Boolean(project.enableMultiWorld)}
+          worldGroups={worldGroups}
+          aiStreaming={ai.isStreaming}
+          activeChapterDrag={activeChapterDrag}
+          getActiveChapterDrag={getActiveChapterDrag}
+          onChapterDragStart={beginChapterDrag}
+          onChapterDragEnd={clearActiveChapterDrag}
+          onUpdateNode={updateNode}
+          onDeleteNode={deleteNode}
+          onGenerateVolume={volumeId => { void prepareGeneration({ kind: 'single-volume', volumeId }) }}
+          onGenerateAllChapters={handleAIChapters}
+          onAddChapter={parentId => { void handleAddChapter(parentId) }}
+          onDeleteVolume={() => { void handleDeleteSelectedVolume() }}
+          onAddStructure={structure => { void handleAddStructure(structure) }}
+          onInsertChapterAfter={(chapterId, parentId) => { void handleInsertChapterAfter(chapterId, parentId) }}
+          onGenerateChapter={chapterId => { void prepareGeneration({ kind: 'single-chapter', chapterId }) }}
+          onOpenChapter={onOpenChapter}
+          onReorderNodes={orderedIds => { void reorderNodes(orderedIds) }}
+          onMoveChapter={handleMoveChapter}
+        />
       </div>
     </PanelLayout>
   )

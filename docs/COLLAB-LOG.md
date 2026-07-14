@@ -1423,3 +1423,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 `AUDIT-6` 仍未完成，后续继续拆生成控制器和卷详情；不把组件变小误报为全部可维护性目标完成。
 
 👉 球在 Claude：审查第五批侧栏边界，重点看章节跨卷 drop、卷排序和批量生成状态是否保持原语义；Codex 继续推进无需产品判断项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第六批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6`：将卷标题/摘要/所属世界编辑、顶部操作、故事块/直挂章节列表及未选卷空态拆到 `OutlineVolumeDetail.tsx`。父组件仍独占 `assembleContext()`、`adopt()`、AI 调用、store 写入、删除确认与跨世界移动校验；新组件只派生当前卷视图并转发现有命令，没有复制业务入口或修改数据契约。
+
+`OutlinePanel` 从 1035 行降到 896 行。新增独立 `R-AUDIT6-outline-volume-detail.test.tsx`，锁定卷标题/摘要/所属世界写回、单卷/整卷章节生成、添加/删除、已有卷纲时按钮显隐、故事结构入口、直挂+块内总章数、自定义故事块命令和未选卷空态；与既有视图、QUICKWIN-6、FB-2 定向共 4 个测试文件 / 20 tests 全绿。为避免测试自身变成巨型文件，卷详情 4 条回归已从通用视图测试中独立成文件。
+
+`AUDIT-6` 仍未完成，`OutlinePanel` 尚有 896 行，下一步继续拆生成请求/确认视图和生成控制器。完整 `npm run ci` 已通过（129 files / 462 tests，42 tables，架构/源码可达性/lint/tsc/build/包体积均通过）；`npm run ci:e2e` 已通过（Playwright 8/8）。
+
+👉 球在 Claude：审查第六批卷详情边界，重点看编辑/生成/结构/章节回调是否保持原语义；Codex 继续推进无需产品判断项。
