@@ -1507,3 +1507,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 最终验证：定向历史 AI 3 files / 13 tests、改动文件 ESLint、TypeScript 均通过；完整 `npm run ci` 通过（140 files / 502 tests，42 tables，AI manual、architecture、源码可达性 364 files、lint、tsc、build、bundle budget 全绿）；`npm run ci:e2e` 通过（Playwright 8/8）。按作者要求放弃旧预览会话，另启 `http://127.0.0.1:1117/storyforge/` 创建隔离项目实测：新建零年事件显示“纪年原点”，事件/关键词两处均显示校正后的 agent 说明，页面不存在“公元前 0 年”或“不会读取此字段”，控制台无 error/warning。
 
 👉 球在 Claude：按上述最终代码与验证证据审查第十三批；Codex 提交推送后继续推进下一项无需产品判断的 `AUDIT-6` 工作。
+
+### [2026-07-14] Codex · REPORT · ROADMAP 无需决策项第十四批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6` 的历史面板视图拆分：新增 `HistoryAgentWorkspace`，统一事件/关键词卡重复的考据/风暴触发按钮、准备/流式禁用、当前生成输出、采纳/重试、已保存结果、清除与删除命令视图；新增 `HistoryChapterPicker`，统一两类条目的章节关联增删和空态。两个组件均不读 store、不访问 DB、不装配上下文、不调用 AI，只根据 props 渲染并转发父级现有命令，因此没有复制 `assembleContext()` / `adopt()` 或形成并行业务入口。
+
+`HistoryPanel` 从 1224 行降到 983 行；`AUDIT-6` 仍未完成，后续继续按事件卡/关键词卡或 tab 边界拆分。新增 2 files / 6 tests，锁定考据/风暴/删除转发、只读/准备中/流式禁用、活动输出隐藏同类旧结果、采纳/重试目标保持、两类已保存结果独立清除，以及章节关联 ID 追加/移除。历史相关定向 5 files / 19 tests 通过；完整 `npm run ci` 通过（142 files / 508 tests，42 tables，AI manual、architecture、源码可达性 366 files、lint、tsc、build、bundle budget 全绿），`npm run ci:e2e` 通过（Playwright 8/8）。
+
+在独立 `1117` 预览实例刷新后复测既有隔离项目：零年事件仍显示“纪年原点”，展开事件卡与关键词卡后各只有一组考据/风暴/删除命令，关联章节空态正常，控制台无 error/warning；没有依赖旧失效页面反复操作。
+
+👉 球在 Claude：审查第十四批纯视图边界与回调语义；Codex 提交推送后继续推进其它无需产品判断项。

@@ -1,7 +1,7 @@
 import { CTextarea, CInput } from '../shared/CompositionInput'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
-  Plus, Trash2, ChevronDown, ChevronRight, Clock, Sparkles,
+  Plus, ChevronDown, ChevronRight, Clock, Sparkles,
   BookOpen, Calendar, ShieldCheck, HelpCircle, Loader2, Tag, Filter
 } from 'lucide-react'
 import { useHistoryStore } from '../../stores/project-singletons'
@@ -13,9 +13,10 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import type { Project, HistoricalTimelineEvent, HistoricalEra, HistoricalKeyword, HistoricalKeywordCategory } from '../../lib/types'
 import { HISTORICAL_ERA_LABELS, KEYWORD_CATEGORY_LABELS } from '../../lib/types/history'
-import AIStreamOutput from '../shared/AIStreamOutput'
 import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
+import HistoryAgentWorkspace from './HistoryAgentWorkspace'
+import HistoryChapterPicker from './HistoryChapterPicker'
 import { useHistoryAI } from './useHistoryAI'
 import { formatHistoricalYear } from '../../lib/history/year'
 
@@ -546,35 +547,11 @@ export default function HistoryPanel({ project }: Props) {
                             <div className="grid grid-cols-1 gap-3">
                               <div>
                                 <label className="block text-[11px] text-text-muted mb-1">关联章节</label>
-                                <div className="flex flex-wrap gap-1 p-1.5 bg-bg-base border border-border rounded-lg min-h-[32px] max-h-20 overflow-y-auto">
-                                  {chapters.length === 0 ? (
-                                    <span className="text-[10px] text-text-muted">暂无章节可关联</span>
-                                  ) : (
-                                    chapters.map(ch => {
-                                      const relatedIds = evt.relatedChapterIds || []
-                                      const isRelated = relatedIds.includes(ch.id!)
-                                      return (
-                                        <button
-                                          key={ch.id}
-                                          type="button"
-                                          onClick={() => {
-                                            const nextIds = isRelated
-                                              ? relatedIds.filter(id => id !== ch.id!)
-                                              : [...relatedIds, ch.id!]
-                                            updateEvent(evt.id!, { relatedChapterIds: nextIds })
-                                          }}
-                                          className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                                            isRelated
-                                              ? 'bg-accent/10 text-accent border border-accent/20'
-                                              : 'bg-bg-elevated text-text-muted hover:text-text-primary border border-transparent'
-                                          }`}
-                                        >
-                                          {ch.title}
-                                        </button>
-                                      )
-                                    })
-                                  )}
-                                </div>
+                                <HistoryChapterPicker
+                                  chapters={chapters}
+                                  relatedChapterIds={evt.relatedChapterIds}
+                                  onChange={relatedChapterIds => updateEvent(evt.id!, { relatedChapterIds })}
+                                />
                               </div>
                             </div>
 
@@ -617,124 +594,26 @@ export default function HistoryPanel({ project }: Props) {
                               </div>
                             </div>
 
-                            {/* 双 agent 触发按钮 */}
-                            <div className="pt-2 border-t border-border/40 flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAIConsult(evt)}
-                                  disabled={consultAI.isStreaming || historyAI.consultPreparing || !canEdit}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-lg hover:bg-blue-500/20 transition-colors disabled:opacity-50"
-                                >
-                                  <ShieldCheck className="w-3.5 h-3.5" />
-                                  AI 历史考据
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAIStorm(evt)}
-                                  disabled={stormAI.isStreaming || historyAI.stormPreparing || !canEdit}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 text-purple-400 text-xs font-medium rounded-lg hover:bg-purple-500/20 transition-colors disabled:opacity-50"
-                                >
-                                  <Sparkles className="w-3.5 h-3.5" />
-                                  AI 头脑风暴
-                                </button>
-                              </div>
-
-                              {canEdit && (
-                                <button
-                                  type="button"
-                                  onClick={() => { void handleDeleteEvent(evt.id!) }}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-red-400 hover:bg-red-500/10 text-xs rounded-lg transition-colors"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  删除事件
-                                </button>
-                              )}
-                            </div>
-
-                            {/* 历史考据 agent 的输出窗 */}
-                            {consultEventId === evt.id && (consultAI.output || consultAI.isStreaming || consultAI.error) && (
-                              <div className="mt-3">
-                                <p className="text-[10px] text-blue-400 mb-1 flex items-center gap-1">
-                                  <ShieldCheck className="w-3 h-3" /> 历史考据 agent
-                                </p>
-                                <AIStreamOutput
-                                  output={consultAI.output}
-                                  isStreaming={consultAI.isStreaming}
-                                  error={consultAI.error}
-                                  tokenUsage={consultAI.tokenUsage}
-                                  onStop={consultAI.stop}
-                                  onAccept={handleAcceptConsult}
-                                  onRetry={() => handleAIConsult(evt)}
-                                />
-                              </div>
-                            )}
-
-                            {/* 头脑风暴 agent 的输出窗 */}
-                            {stormEventId === evt.id && (stormAI.output || stormAI.isStreaming || stormAI.error) && (
-                              <div className="mt-3">
-                                <p className="text-[10px] text-purple-400 mb-1 flex items-center gap-1">
-                                  <Sparkles className="w-3 h-3" /> 头脑风暴 agent
-                                </p>
-                                <AIStreamOutput
-                                  output={stormAI.output}
-                                  isStreaming={stormAI.isStreaming}
-                                  error={stormAI.error}
-                                  tokenUsage={stormAI.tokenUsage}
-                                  onStop={stormAI.stop}
-                                  onAccept={handleAcceptStorm}
-                                  onRetry={() => handleAIStorm(evt)}
-                                />
-                              </div>
-                            )}
-
-                            {/* 已保存的「历史考据」结果 */}
-                            {evt.aiConsult && consultEventId !== evt.id && (
-                              <div className="mt-3 bg-bg-base border border-blue-400/30 rounded-lg p-3 space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[10px] font-medium text-blue-400 flex items-center gap-1">
-                                    <ShieldCheck className="w-3 h-3" />
-                                    AI 历史考据结果
-                                  </span>
-                                  {canEdit && (
-                                    <button
-                                      type="button"
-                                      onClick={() => updateEvent(evt.id!, { aiConsult: undefined })}
-                                      className="text-[10px] text-text-muted hover:text-red-400"
-                                    >
-                                      清除
-                                    </button>
-                                  )}
-                                </div>
-                                <div className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap prose prose-invert max-h-60 overflow-y-auto">
-                                  {evt.aiConsult}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* 已保存的「头脑风暴」结果 */}
-                            {evt.aiBrainstorm && stormEventId !== evt.id && (
-                              <div className="mt-3 bg-bg-base border border-purple-400/30 rounded-lg p-3 space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[10px] font-medium text-purple-400 flex items-center gap-1">
-                                    <Sparkles className="w-3 h-3" />
-                                    AI 头脑风暴结果
-                                  </span>
-                                  {canEdit && (
-                                    <button
-                                      type="button"
-                                      onClick={() => updateEvent(evt.id!, { aiBrainstorm: undefined })}
-                                      className="text-[10px] text-text-muted hover:text-red-400"
-                                    >
-                                      清除
-                                    </button>
-                                  )}
-                                </div>
-                                <div className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap prose prose-invert max-h-60 overflow-y-auto">
-                                  {evt.aiBrainstorm}
-                                </div>
-                              </div>
-                            )}
+                            <HistoryAgentWorkspace
+                              canEdit={canEdit}
+                              consultActive={consultEventId === evt.id}
+                              stormActive={stormEventId === evt.id}
+                              consultPreparing={historyAI.consultPreparing}
+                              stormPreparing={historyAI.stormPreparing}
+                              consultAI={consultAI}
+                              stormAI={stormAI}
+                              savedConsult={evt.aiConsult}
+                              savedStorm={evt.aiBrainstorm}
+                              savedStormLabel="AI 头脑风暴结果"
+                              deleteLabel="删除事件"
+                              onConsult={() => handleAIConsult(evt)}
+                              onStorm={() => handleAIStorm(evt)}
+                              onDelete={() => { void handleDeleteEvent(evt.id!) }}
+                              onAcceptConsult={handleAcceptConsult}
+                              onAcceptStorm={handleAcceptStorm}
+                              onClearConsult={() => updateEvent(evt.id!, { aiConsult: undefined })}
+                              onClearStorm={() => updateEvent(evt.id!, { aiBrainstorm: undefined })}
+                            />
                           </div>
                         )}
                       </div>
@@ -979,35 +858,12 @@ export default function HistoryPanel({ project }: Props) {
                           {/* 关联章节（紧跟「条目定稿」，与事件卡保持一致；放在 AI 工作区之上） */}
                           <div>
                             <label className="block text-[11px] text-text-muted mb-1">关联章节</label>
-                            <div className="flex flex-wrap gap-1 p-1.5 bg-bg-base border border-border rounded-lg min-h-[40px] max-h-24 overflow-y-auto">
-                              {chapters.length === 0 ? (
-                                <span className="text-[10px] text-text-muted">暂无章节可关联</span>
-                              ) : (
-                                chapters.map(ch => {
-                                    const relatedIds = kw.relatedChapterIds || []
-                                    const isRelated = relatedIds.includes(ch.id!)
-                                    return (
-                                      <button
-                                        key={ch.id}
-                                        type="button"
-                                        onClick={() => {
-                                          const nextIds = isRelated
-                                            ? relatedIds.filter((id: number) => id !== ch.id!)
-                                            : [...relatedIds, ch.id!]
-                                          updateKeyword(kw.id!, { relatedChapterIds: nextIds })
-                                        }}
-                                      className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                                        isRelated
-                                          ? 'bg-accent/10 text-accent border border-accent/20'
-                                          : 'bg-bg-elevated text-text-muted hover:text-text-primary border border-transparent'
-                                      }`}
-                                    >
-                                      {ch.title}
-                                    </button>
-                                  )
-                                })
-                              )}
-                            </div>
+                            <HistoryChapterPicker
+                              chapters={chapters}
+                              relatedChapterIds={kw.relatedChapterIds}
+                              spacious
+                              onChange={relatedChapterIds => updateKeyword(kw.id!, { relatedChapterIds })}
+                            />
                           </div>
 
                           {/* 2. 概念与创作思路 */}
@@ -1049,124 +905,27 @@ export default function HistoryPanel({ project }: Props) {
                             </div>
                           </div>
 
-                          {/* 操作按钮 */}
-                          <div className="pt-2 border-t border-border/40 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleAIKeywordConsult(kw)}
-                                disabled={consultAI.isStreaming || historyAI.consultPreparing || !canEdit}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-lg hover:bg-blue-500/20 transition-colors disabled:opacity-50"
-                              >
-                                <ShieldCheck className="w-3.5 h-3.5" />
-                                AI 历史考据
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleAIKeywordStorm(kw)}
-                                disabled={stormAI.isStreaming || historyAI.stormPreparing || !canEdit}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 text-purple-400 text-xs font-medium rounded-lg hover:bg-purple-500/20 transition-colors disabled:opacity-50"
-                              >
-                                <Sparkles className="w-3.5 h-3.5" />
-                                AI 头脑风暴
-                              </button>
-                            </div>
-
-                            {canEdit && (
-                              <button
-                                type="button"
-                                onClick={() => { void handleDeleteKeyword(kw.id!) }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-red-400 hover:bg-red-500/10 text-xs rounded-lg transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                删除关键词
-                              </button>
-                            )}
-                          </div>
-
-                          {/* 历史考据 agent 的输出窗 */}
-                          {consultKeywordId === kw.id && (consultAI.output || consultAI.isStreaming || consultAI.error) && (
-                            <div className="mt-3">
-                              <p className="text-[10px] text-blue-400 mb-1 flex items-center gap-1">
-                                <ShieldCheck className="w-3 h-3" /> 历史考据 agent
-                              </p>
-                              <AIStreamOutput
-                                output={consultAI.output}
-                                isStreaming={consultAI.isStreaming}
-                                error={consultAI.error}
-                                tokenUsage={consultAI.tokenUsage}
-                                onStop={consultAI.stop}
-                                onAccept={handleAcceptConsult}
-                                onRetry={() => handleAIKeywordConsult(kw)}
-                              />
-                            </div>
-                          )}
-
-                          {/* 头脑风暴 agent 的输出窗 */}
-                          {stormKeywordId === kw.id && (stormAI.output || stormAI.isStreaming || stormAI.error) && (
-                            <div className="mt-3">
-                              <p className="text-[10px] text-purple-400 mb-1 flex items-center gap-1">
-                                <Sparkles className="w-3 h-3" /> 头脑风暴 agent
-                              </p>
-                              <AIStreamOutput
-                                output={stormAI.output}
-                                isStreaming={stormAI.isStreaming}
-                                error={stormAI.error}
-                                tokenUsage={stormAI.tokenUsage}
-                                onStop={stormAI.stop}
-                                onAccept={handleAcceptStorm}
-                                onRetry={() => handleAIKeywordStorm(kw)}
-                              />
-                            </div>
-                          )}
-
-                          {/* 已保存的「历史考据」结果 */}
-                          {kw.aiConsult && consultKeywordId !== kw.id && (
-                            <div className="mt-3 bg-bg-base border border-blue-400/30 rounded-lg p-3 space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-medium text-blue-400 flex items-center gap-1">
-                                  <ShieldCheck className="w-3 h-3" />
-                                  AI 历史考据结果
-                                </span>
-                                {canEdit && (
-                                  <button
-                                    type="button"
-                                    onClick={() => updateKeyword(kw.id!, { aiConsult: undefined })}
-                                    className="text-[10px] text-text-muted hover:text-red-400"
-                                  >
-                                    清除
-                                  </button>
-                                )}
-                              </div>
-                              <div className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap prose prose-invert max-h-60 overflow-y-auto">
-                                {kw.aiConsult}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 已保存的「头脑风暴」结果 */}
-                          {kw.aiBrainstorm && stormKeywordId !== kw.id && (
-                            <div className="mt-3 bg-bg-base border border-purple-400/30 rounded-lg p-3 space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-medium text-purple-400 flex items-center gap-1">
-                                  <Sparkles className="w-3 h-3" />
-                                  AI 时代细节库
-                                </span>
-                                {canEdit && (
-                                  <button
-                                    type="button"
-                                    onClick={() => updateKeyword(kw.id!, { aiBrainstorm: undefined })}
-                                    className="text-[10px] text-text-muted hover:text-red-400"
-                                  >
-                                    清除
-                                  </button>
-                                )}
-                              </div>
-                              <div className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap prose prose-invert max-h-80 overflow-y-auto">
-                                {kw.aiBrainstorm}
-                              </div>
-                            </div>
-                          )}
+                          <HistoryAgentWorkspace
+                            canEdit={canEdit}
+                            consultActive={consultKeywordId === kw.id}
+                            stormActive={stormKeywordId === kw.id}
+                            consultPreparing={historyAI.consultPreparing}
+                            stormPreparing={historyAI.stormPreparing}
+                            consultAI={consultAI}
+                            stormAI={stormAI}
+                            savedConsult={kw.aiConsult}
+                            savedStorm={kw.aiBrainstorm}
+                            savedStormLabel="AI 时代细节库"
+                            savedStormMaxHeight="80"
+                            deleteLabel="删除关键词"
+                            onConsult={() => handleAIKeywordConsult(kw)}
+                            onStorm={() => handleAIKeywordStorm(kw)}
+                            onDelete={() => { void handleDeleteKeyword(kw.id!) }}
+                            onAcceptConsult={handleAcceptConsult}
+                            onAcceptStorm={handleAcceptStorm}
+                            onClearConsult={() => updateKeyword(kw.id!, { aiConsult: undefined })}
+                            onClearStorm={() => updateKeyword(kw.id!, { aiBrainstorm: undefined })}
+                          />
                         </div>
                       )}
                     </div>
