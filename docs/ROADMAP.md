@@ -2195,6 +2195,7 @@ for each character:
 - **2026-07-13 第一批完成**：将 1845 行 `prompt-seeds.ts` 收口为 18 行唯一有序聚合入口；基础创作模板与导入/分析/提取工具模板分别落到 `prompt-seeds-core.ts` / `prompt-seeds-tools.ts`，题材包保持独立。`PromptSeed` 抽到无依赖类型文件，解除题材包反向导入聚合模块的循环。新增 `R-AUDIT6-prompt-seed-integrity`，对全部 86 条模板的数量、顺序和序列化内容做 SHA-256 指纹锁，保证纯拆分不改变运行时模板。生成版 AI manual 已按新源码位置刷新。两个领域文件仍为 787 / 1055 行，后续按稳定领域继续拆；本批不冒充整个专项完成。
 - **2026-07-13 第二批完成**：`OutlinePanel` 将 CF-3 生成依据纯视图、QUICKWIN-6 章节拖拽协议、AI 采纳预览和故事结构菜单分别拆到 `OutlineGenerationBasis.tsx` / `chapter-drag.ts` / `OutlinePreviewPanel.tsx` / `OutlineStructureMenu.tsx`；面板不再同时维护上下文来源标签/摘要渲染、DataTransfer payload 编解码和两块纯 UI。原 CF-3、QUICKWIN-6/FB-2 与新增纯视图共 12 条反例持续绿，源码可达性守卫确认新模块均从生产入口可达。`OutlinePanel` 从本轮开始的 1648 行降到 1436 行；章节行/故事块等后续继续按可独立测试边界拆，不冒充已达成 `<500` 行目标。
 - **2026-07-13 第三批完成**：将章节行、摘要草稿/失焦保存、行内操作和故事块章节容器拆到 `OutlineChapterTree.tsx`，`OutlinePanel` 降到 1165 行。新增组件回归锁定“摘要未变不写、变化后失焦写入”及生成/插入/打开回调；QUICKWIN-6 跨父级移动与 FB-2 同级排序共 11 条相关测试持续绿。该专项仍未达到 `<500` 行目标，后续继续按生成控制器、侧栏和卷详情边界拆分。
+- **2026-07-13 第四批完成**：将卷操作栏、批量生成进度/结果、卷排序、章节跨卷投放区与卷空态拆到 `OutlineVolumeSidebar.tsx`，`OutlinePanel` 降到 1035 行。独立组件回归锁定直挂+故事块章节计数、多世界标记、命令禁用、进度取消、结果确认/关闭、空态操作，以及章节投放到目标卷直挂章节末尾；相关定向 16 tests 全绿。父组件仍持有 AI 执行、store 命令与移动规则，未复制业务入口。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import OutlinePreviewPanel from '../../src/components/outline/OutlinePreviewPanel'
 import OutlineStructureMenu from '../../src/components/outline/OutlineStructureMenu'
 import { OutlineChapterRow } from '../../src/components/outline/OutlineChapterTree'
+import OutlineVolumeSidebar from '../../src/components/outline/OutlineVolumeSidebar'
+import type { OutlineNode } from '../../src/lib/types'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -16,6 +18,54 @@ async function mount(element: React.ReactElement) {
   mounted.push({ host, root })
   await act(async () => root.render(element))
   return host
+}
+
+function outlineNode(
+  id: number,
+  type: OutlineNode['type'],
+  parentId: number | null,
+  title: string,
+  patch: Partial<OutlineNode> = {},
+): OutlineNode {
+  return {
+    id,
+    projectId: 1,
+    parentId,
+    type,
+    title,
+    summary: '',
+    order: id,
+    createdAt: 1,
+    updatedAt: 1,
+    ...patch,
+  }
+}
+
+function sidebarProps(patch: Record<string, unknown> = {}) {
+  return {
+    volumes: [] as OutlineNode[],
+    nodes: [] as OutlineNode[],
+    selectedVolumeId: null,
+    multiWorldEnabled: false,
+    worldGroups: [],
+    aiStreaming: false,
+    batchRunning: false,
+    batchProgress: null,
+    batchResult: null,
+    activeChapterDrag: null,
+    getActiveChapterDrag: () => null,
+    onClearActiveChapterDrag: vi.fn(),
+    onSelectVolume: vi.fn(),
+    onAddVolume: vi.fn(),
+    onGenerateVolumes: vi.fn(),
+    onGenerateAllChapters: vi.fn(),
+    onCancelBatch: vi.fn(),
+    onConfirmBatch: vi.fn(),
+    onDismissBatch: vi.fn(),
+    onReorderVolumes: vi.fn(),
+    onMoveChapter: vi.fn().mockResolvedValue(undefined),
+    ...patch,
+  }
 }
 
 afterEach(async () => {
@@ -116,5 +166,124 @@ describe('AUDIT-6 · 大纲纯视图拆分', () => {
     expect(onInsertAfter).toHaveBeenCalledOnce()
     expect(onOpen).toHaveBeenCalledOnce()
     expect(onOpen).toHaveBeenCalledWith(34)
+  })
+
+  it('卷侧栏统计直挂与故事块章节并保留多世界标记和选中回调', async () => {
+    const volume = outlineNode(1, 'volume', null, '第一卷', { summary: '启程', worldGroupId: 7 })
+    const secondVolume = outlineNode(2, 'volume', null, '第二卷')
+    const storyBlock = outlineNode(10, 'storyBlock', 1, '第一幕')
+    const onSelectVolume = vi.fn()
+    const host = await mount(createElement(OutlineVolumeSidebar, sidebarProps({
+      volumes: [volume, secondVolume],
+      nodes: [volume, secondVolume, storyBlock, outlineNode(11, 'chapter', 1, '直挂章'), outlineNode(12, 'chapter', 10, '故事块章')],
+      selectedVolumeId: 1,
+      multiWorldEnabled: true,
+      worldGroups: [{ id: 7, icon: 'W' }],
+      onSelectVolume,
+    })))
+
+    expect(host.textContent).toContain('W')
+    expect(host.textContent).toContain('2 章 · 启程...')
+    expect(host.textContent).toContain('批量生成所有卷的章节')
+    await act(async () => host.querySelector<HTMLElement>('[data-outline-volume-id="2"] button')!.click())
+    expect(onSelectVolume).toHaveBeenCalledWith(2)
+  })
+
+  it('卷侧栏在生成忙碌时禁用命令并保留批量进度取消', async () => {
+    const onCancelBatch = vi.fn()
+    const volumes = [outlineNode(1, 'volume', null, '第一卷'), outlineNode(2, 'volume', null, '第二卷')]
+    const host = await mount(createElement(OutlineVolumeSidebar, sidebarProps({
+      volumes,
+      nodes: volumes,
+      aiStreaming: true,
+      batchRunning: true,
+      batchProgress: {
+        currentVolumeIndex: 0,
+        totalVolumes: 2,
+        currentVolumeTitle: '第一卷',
+        parsedChapters: [],
+        completedVolumes: 1,
+        stage: '正在生成第二卷',
+      },
+      onCancelBatch,
+    })))
+
+    const generationButtons = Array.from(host.querySelectorAll('button')).filter(button => button.textContent?.includes('批量生成'))
+    expect(generationButtons).toHaveLength(2)
+    expect(generationButtons.every(button => button.disabled)).toBe(true)
+    expect(host.textContent).toContain('1/2 卷')
+    expect(host.textContent).toContain('正在生成第二卷')
+    await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.trim() === '取消')!.click())
+    expect(onCancelBatch).toHaveBeenCalledOnce()
+  })
+
+  it('卷侧栏汇总批量结果并回传确认和关闭', async () => {
+    const onConfirmBatch = vi.fn()
+    const onDismissBatch = vi.fn()
+    const host = await mount(createElement(OutlineVolumeSidebar, sidebarProps({
+      batchResult: new Map([
+        [1, [{ title: '第一章', summary: '' }, { title: '第二章', summary: '' }]],
+        [2, [{ title: '第三章', summary: '' }]],
+      ]),
+      onConfirmBatch,
+      onDismissBatch,
+    })))
+
+    expect(host.textContent).toContain('批量生成完成：3 章')
+    await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('全部写入'))!.click())
+    await act(async () => host.querySelector<HTMLButtonElement>('button[title="关闭批量生成结果"]')!.click())
+    expect(onConfirmBatch).toHaveBeenCalledOnce()
+    expect(onDismissBatch).toHaveBeenCalledOnce()
+  })
+
+  it('卷侧栏空态仍可添加卷和启动卷纲生成', async () => {
+    const onAddVolume = vi.fn()
+    const onGenerateVolumes = vi.fn()
+    const host = await mount(createElement(OutlineVolumeSidebar, sidebarProps({ onAddVolume, onGenerateVolumes })))
+
+    expect(host.textContent).toContain('还没有卷')
+    await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('添加卷'))!.click())
+    await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('批量生成卷级大纲'))!.click())
+    expect(onAddVolume).toHaveBeenCalledOnce()
+    expect(onGenerateVolumes).toHaveBeenCalledOnce()
+  })
+
+  it('卷侧栏接收章节投放并移动到目标卷直挂章节末尾', async () => {
+    const volume = outlineNode(2, 'volume', null, '第二卷')
+    const directChapter = outlineNode(20, 'chapter', 2, '已有章节')
+    const activeDrag = { chapterId: 11, sourceParentId: 1 }
+    const onMoveChapter = vi.fn().mockResolvedValue(undefined)
+    const onClearActiveChapterDrag = vi.fn()
+    const host = await mount(createElement(OutlineVolumeSidebar, sidebarProps({
+      volumes: [volume],
+      nodes: [volume, directChapter],
+      activeChapterDrag: activeDrag,
+      getActiveChapterDrag: () => activeDrag,
+      onMoveChapter,
+      onClearActiveChapterDrag,
+    })))
+    const target = host.querySelector<HTMLElement>('[data-outline-volume-id="2"]')!
+    const createDragEvent = (type: string) => {
+      const event = new Event(type, { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'dataTransfer', {
+        value: {
+          types: [],
+          getData: () => '',
+          setData: vi.fn(),
+          dropEffect: 'none',
+          effectAllowed: 'all',
+        },
+      })
+      return event
+    }
+
+    await act(async () => {
+      target.dispatchEvent(createDragEvent('dragover'))
+      target.dispatchEvent(createDragEvent('drop'))
+      await Promise.resolve()
+    })
+
+    expect(onMoveChapter).toHaveBeenCalledWith(11, 2, 1)
+    expect(onClearActiveChapterDrag).toHaveBeenCalledOnce()
   })
 })

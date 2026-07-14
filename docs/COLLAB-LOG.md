@@ -1413,3 +1413,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 `AUDIT-6` 仍未完成：主要 panel `<500` 行目标尚未达到，后续继续按可独立测试边界拆分，不把行数下降误报成专项收口。
 
 👉 球在 Claude：审查第四批章节树组件边界与行为回归；Codex 继续执行无需产品判断的后续项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第五批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6`：把 `OutlinePanel` 的卷侧栏拆为 `OutlineVolumeSidebar.tsx`，收口卷操作栏、批量生成进度/结果、卷排序、QUICKWIN-6 章节跨卷投放区、章节计数和空态。父组件继续持有 AI 执行、store 命令、跨世界校验和章节移动规则；本批只是视图/交互边界拆分，没有新增并行业务入口、AI 读写、表、字段或迁移。
+
+`OutlinePanel` 从 1165 行降到 1035 行。侧栏新增 5 条组件回归，锁定直挂章节+故事块章节计数、多世界图标/选中、AI 忙碌禁用、批量进度取消、结果总数/确认/关闭、空态操作，以及章节投放到目标卷直挂章节末尾；连同 QUICKWIN-6/FB-2 定向共 3 个测试文件 / 16 tests 全绿。完整 `npm run ci` 通过（42 required tables、AI manual、architecture、351 个生产源码文件可达、ESLint 0 warning、TypeScript、128 files / 458 tests、生产 build 与 bundle-size budget），覆盖率 statements/lines 67.35%、branches 73.55%、functions 68.47%；`npm run ci:e2e` 8/8 Chromium 通过，`git diff --check` 通过。
+
+`AUDIT-6` 仍未完成，后续继续拆生成控制器和卷详情；不把组件变小误报为全部可维护性目标完成。
+
+👉 球在 Claude：审查第五批侧栏边界，重点看章节跨卷 drop、卷排序和批量生成状态是否保持原语义；Codex 继续推进无需产品判断项。

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Plus, Trash2, Sparkles, Check, X, Layers, Loader2, GripVertical } from 'lucide-react'
+import { Loader2, Plus, Trash2, Sparkles } from 'lucide-react'
 import { useOutlineStore } from '../../stores/outline'
 import { useDragReorder } from './useDragReorder'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -34,11 +34,8 @@ import OutlineGenerationBasis from './OutlineGenerationBasis'
 import OutlinePreviewPanel from './OutlinePreviewPanel'
 import OutlineStructureMenu from './OutlineStructureMenu'
 import { OutlineChapterRow, OutlineStoryBlockSection } from './OutlineChapterTree'
-import {
-  chapterDropProps,
-  hasChapterDragPayload,
-  type ChapterDragPayload,
-} from './chapter-drag'
+import OutlineVolumeSidebar from './OutlineVolumeSidebar'
+import type { ChapterDragPayload } from './chapter-drag'
 
 interface Props {
   project: Project
@@ -93,7 +90,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const [contextError, setContextError] = useState('')
   const [promptPanelOpen, setPromptPanelOpen] = useState(false)
   const [activeChapterDrag, setActiveChapterDrag] = useState<ChapterDragPayload | null>(null)
-  const [chapterDropTargetId, setChapterDropTargetId] = useState<number | null>(null)
   const activeChapterDragRef = useRef<ChapterDragPayload | null>(null)
   const contextRequestRef = useRef(0)
 
@@ -105,7 +101,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const clearActiveChapterDrag = useCallback(() => {
     activeChapterDragRef.current = null
     setActiveChapterDrag(null)
-    setChapterDropTargetId(null)
   }, [])
 
   const getActiveChapterDrag = useCallback(() => activeChapterDragRef.current, [])
@@ -189,8 +184,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   // 是否使用故事块模式
   const hasBlocks = selectedVolBlocks.length > 0
 
-  // FB-2 拖动排序：卷列表（侧栏）、直挂章节列表各一套
-  const volumeDnD = useDragReorder(volumes.map(v => v.id), (ids) => reorderNodes(ids))
+  // FB-2 拖动排序：直挂章节列表；卷列表由 OutlineVolumeSidebar 管理
   const directChaptersDnD = useDragReorder(
     selectedVolChapters.map(c => c.id),
     (ids) => reorderNodes(ids),
@@ -748,153 +742,29 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   // ── 侧栏：卷列表 ──
 
   const sidebarContent = (
-    <div className="flex flex-col h-full">
-      {/* 操作栏 */}
-      <div className="p-2 space-y-1.5">
-        <button onClick={handleAddVolume}
-          className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-bg-elevated text-text-secondary rounded-md hover:text-text-primary border border-border transition-colors">
-          <Plus className="w-3.5 h-3.5" /> 添加卷
-        </button>
-        <button onClick={handleAIVolumes} disabled={ai.isStreaming || batchRunning}
-          className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors">
-          <Sparkles className="w-3.5 h-3.5" /> 批量生成卷级大纲
-        </button>
-        {volumes.length >= 2 && (
-          <button onClick={handleBatchGenerate} disabled={ai.isStreaming || batchRunning}
-            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-bg-elevated text-accent rounded-md hover:bg-accent/10 border border-accent/30 disabled:opacity-50 transition-colors">
-            <Layers className="w-3.5 h-3.5" /> 批量生成所有卷的章节
-          </button>
-        )}
-      </div>
-
-      {/* 批量生成进度 */}
-      {(batchRunning || batchResult) && (
-        <div className="px-2 pb-2">
-          <div className="bg-bg-surface border border-border rounded-lg p-2 space-y-1.5">
-            {batchRunning && batchProgress && (
-              <>
-                <div className="flex items-center gap-1.5 text-xs text-accent">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>{batchProgress.completedVolumes}/{batchProgress.totalVolumes} 卷</span>
-                </div>
-                <div className="w-full bg-border rounded-full h-1.5">
-                  <div
-                    className="bg-accent h-1.5 rounded-full transition-all"
-                    style={{ width: `${(batchProgress.completedVolumes / batchProgress.totalVolumes) * 100}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-text-muted truncate">{batchProgress.stage}</p>
-                <button onClick={handleBatchCancel}
-                  className="w-full px-2 py-1 text-[10px] text-error border border-error/30 rounded hover:bg-error/10 transition-colors">
-                  取消
-                </button>
-              </>
-            )}
-            {!batchRunning && batchResult && (
-              <>
-                <p className="text-xs text-success">
-                  批量生成完成：{Array.from(batchResult.values()).reduce((s, chs) => s + chs.length, 0)} 章
-                </p>
-                <div className="flex gap-1">
-                  <button onClick={handleBatchConfirm}
-                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] bg-accent text-white rounded hover:bg-accent-hover transition-colors">
-                    <Check className="w-3 h-3" /> 全部写入
-                  </button>
-                  <button onClick={() => { setBatchResult(null); setBatchProgress(null) }}
-                    className="px-2 py-1 text-[10px] text-text-muted border border-border rounded hover:text-text-primary transition-colors">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 卷列表 */}
-      <div className="flex-1 overflow-y-auto px-1">
-        {volumes.map(vol => {
-          const blockIds = new Set(nodes.filter(n => n.parentId === vol.id && n.type === 'storyBlock').map(n => n.id))
-          const childCount = nodes.filter(n =>
-            n.type === 'chapter'
-            && (n.parentId === vol.id || blockIds.has(n.parentId ?? undefined)),
-          ).length
-          const active = selectedVolId === vol.id
-          const d = volumeDnD.itemDnD(vol.id)
-          const dropToVolumeProps = chapterDropProps({
-            targetParentId: vol.id!,
-            targetIndex: normalizedNodes.filter(n => n.parentId === vol.id && n.type === 'chapter').length,
-            onMoveChapter: handleMoveChapter,
-            getActiveChapterDrag,
-            clearActiveChapterDrag,
-          })
-          const isChapterDropTarget = chapterDropTargetId === vol.id && activeChapterDrag != null
-          return (
-            <div
-              key={vol.id}
-              {...d.dropProps}
-              data-outline-volume-id={vol.id}
-              data-chapter-drop-target={isChapterDropTarget ? 'true' : undefined}
-              onDragEnter={(event) => {
-                d.dropProps.onDragEnter()
-                if (getActiveChapterDrag() || hasChapterDragPayload(event)) setChapterDropTargetId(vol.id!)
-              }}
-              onDragLeave={(event) => {
-                d.dropProps.onDragLeave()
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                  setChapterDropTargetId(current => current === vol.id ? null : current)
-                }
-              }}
-              onDragOver={(event) => {
-                if (getActiveChapterDrag() || hasChapterDragPayload(event)) {
-                  setChapterDropTargetId(vol.id!)
-                  dropToVolumeProps.onDragOver(event)
-                  return
-                }
-                d.dropProps.onDragOver(event)
-              }}
-              onDrop={(event) => {
-                if (getActiveChapterDrag() || hasChapterDragPayload(event)) {
-                  void dropToVolumeProps.onDrop(event)
-                  return
-                }
-                d.dropProps.onDrop(event)
-              }}
-              className={`group/vol flex items-center rounded-lg mb-0.5 transition-all ${
-                active ? 'bg-accent/8 border-l-2 border-accent' : 'hover:bg-bg-hover border-l-2 border-transparent'
-              } ${d.isDragging ? 'opacity-40' : ''} ${d.isOver || isChapterDropTarget ? 'ring-1 ring-accent/60 bg-accent/10' : ''}`}
-            >
-              <span
-                {...d.dragHandleProps}
-                title="拖动调整卷顺序"
-                className="shrink-0 pl-1 pr-0.5 py-2 cursor-grab active:cursor-grabbing text-text-muted/40 group-hover/vol:text-text-muted"
-              >
-                <GripVertical className="w-3.5 h-3.5" />
-              </span>
-              <button
-                onClick={() => setSelectedVolId(vol.id!)}
-                className="min-w-0 flex-1 text-left px-1 py-2"
-              >
-                <p className={`text-sm font-medium truncate ${active ? 'text-accent' : 'text-text-primary'}`}>
-                  {project.enableMultiWorld && vol.worldGroupId != null && (
-                    <span className="mr-1">{worldGroups.find(g => g.id === vol.worldGroupId)?.icon || '🌐'}</span>
-                  )}
-                  {vol.title}
-                </p>
-                <p className="text-[10px] text-text-muted">
-                  {childCount} 章{vol.summary ? ` · ${vol.summary.slice(0, 20)}...` : ''}
-                </p>
-              </button>
-            </div>
-          )
-        })}
-        {volumes.length === 0 && (
-          <div className="text-center py-8 text-text-muted text-xs">
-            还没有卷
-          </div>
-        )}
-      </div>
-    </div>
+    <OutlineVolumeSidebar
+      volumes={volumes}
+      nodes={normalizedNodes}
+      selectedVolumeId={selectedVolId}
+      multiWorldEnabled={Boolean(project.enableMultiWorld)}
+      worldGroups={worldGroups}
+      aiStreaming={ai.isStreaming}
+      batchRunning={batchRunning}
+      batchProgress={batchProgress}
+      batchResult={batchResult}
+      activeChapterDrag={activeChapterDrag}
+      getActiveChapterDrag={getActiveChapterDrag}
+      onClearActiveChapterDrag={clearActiveChapterDrag}
+      onSelectVolume={setSelectedVolId}
+      onAddVolume={() => { void handleAddVolume() }}
+      onGenerateVolumes={handleAIVolumes}
+      onGenerateAllChapters={() => { void handleBatchGenerate() }}
+      onCancelBatch={handleBatchCancel}
+      onConfirmBatch={() => { void handleBatchConfirm() }}
+      onDismissBatch={() => { setBatchResult(null); setBatchProgress(null) }}
+      onReorderVolumes={reorderNodes}
+      onMoveChapter={handleMoveChapter}
+    />
   )
 
   // ── 右侧编辑区 ──
