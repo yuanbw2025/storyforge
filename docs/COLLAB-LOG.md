@@ -1577,3 +1577,15 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 最终验证：完整 `npm run ci` 通过（42 required tables、AI manual、architecture、384 个生产源码文件可达、ESLint 0 warning、TypeScript、154 files / 544 tests、生产 build 与 bundle budget 全绿）；覆盖率 statements/lines 67.56%、branches 73.64%、functions 68.70%；`npm run ci:e2e` Chromium 8/8 通过。另启全新 `1119` 预览实例和空白项目，从零建卷建章，实测世界来源三页签、AI 预设/任务路由、paper 主题、章节 AI 工具栏禁用态、按需笔记/章纲预览以及富文本字号写入；控制台无 error/warning，未调用真实 AI。
 
 👉 球在 Claude：审查第二十批四组组件边界、条件面板按需加载与旧回归迁移；Codex 将在分支推送后继续其它无需产品判断的 `AUDIT-6` 项。
+
+### [2026-07-14] Codex · REPORT · ROADMAP 无需决策项第二十一批 / `codex/roadmap-safe-work-20260714`
+
+继续推进 `AUDIT-6/HEALTH-4` 的无行为变化拆分，本批未改 schema、未迁移数据、未新增 AI/DB/store 写入入口，也未触碰任何待负责人/GPT 决策项。
+
+交付四组受控视图边界：① `CharacterDetailCard` 承载角色元信息、完整维度、动态状态和人物关系，所有字段/patch/刷新/删除回调统一交还 `CharacterPanel`，父级 542→396 行；② `WorldRulesNavigation` / `WorldRuleEntryEditor` 承载两级导航、自定义节点输入和双文本/冲突优先级编辑，profile 加载、历史数据读取、清单构建、确认弹窗和 world-rules store 写入仍在 `WorldRulesPanel`，父级 619→406 行；③ `WorkflowStepCard` 迁出原本已公开的步骤卡，并从 `WorkflowRunner` 保留 `StepCard/StepResult` 兼容导出，运行顺序、ref 累加器、上下文装配、AI 和 `adopt()` 不变，父级 585→403 行；④ `DetailedOutlineSidebar` / `DetailedSceneCard` 承载章节选择/批量进度和单场景表单，细纲 AI、批量 controller、`assembleContext()`、`adopt()`、store 保存仍在父级，594→474 行。
+
+新增角色详情 2 条、真实与幻想 3 条、细纲视图 3 条回归；工作流原 2 条“用户输入进入运行器 / 编辑 AI 输出后按编辑值保存”持续直接通过。完整 `npm run ci` 通过（42 required tables、AI manual、architecture、390 个生产源码文件可达、ESLint 0 warning、TypeScript、157 files / 552 tests、生产 build 与 bundle budget 全绿）；覆盖率 statements/lines 67.56%、branches 73.61%、functions 68.70%；`npm run ci:e2e` Chromium 8/8 通过。
+
+`1119` 全新隔离项目预览复测：真实与幻想可切到“历史时期”并显示双文本/均衡优先级；从零新建“主要+守序善良”角色后，23 个维度、人物关系与详情折叠/展开正常；默认“极速起书”五步工作流可打开，五张步骤卡、用户输入和 4 个需确认标记正常，未调用真实 AI；控制台无 error/warning。诚实边界：独立 `DetailedOutlinePanel` 当前被侧栏别名映射到合并后的“章节”体验，没有独立可见菜单入口，本批只以组件回归验证其受控视图，不宣称做过可见入口实测，也未擅自恢复旧入口。
+
+👉 球在 Claude：审查第二十一批父级写入边界、工作流兼容导出及细纲旧入口边界；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。

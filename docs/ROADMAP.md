@@ -2211,6 +2211,7 @@ for each character:
 - **2026-07-14 第十七批完成**：将章节摘要、章节记忆生成状态、计划—正文对账分类/证据/失效提示及两种确认命令拆到纯视图 `ChapterMemoryPanel`；父级继续负责正文/章纲 hash 校验、AI 抽取、store 与章纲写回。`ChapterEditor` 从 1313 行降到 1248 行。新增 3 条组件回归，锁定空摘要/忙碌态、失效对账和当前待确认对账的命令转发。
 - **2026-07-14 第十八批完成**：将世界观/角色/章纲上下文预览与状态卡注入计数/调整列表拆到纯视图 `ChapterContextPreview`；父级继续独占选择性状态匹配和手动额外 ID 规则。状态分类文案复用 `STATE_CATEGORY_LABELS`，移除旧内联五分支；`ChapterEditor` 从 1248 行降到 1206 行。新增 3 条回归锁定截断边界、注入计数、自动/手动/未选标签和卡片命令。
 - **2026-07-14 第十九批完成**：继续按“父级保留业务控制器、子级只承载稳定视图/交互”的边界治理四个主要面板。`ChapterEditor` 抽出 AI 工具栏并将状态差异、章纲预览、审查、笔记、对照润色五个条件面板改为按需加载（1206→1168 行）；`RichEditor` 抽出格式工具栏、实体补全/悬浮层与主题规范化/段间距扩展（878→499 行）；`AIConfigPanel` 抽出预设、任务路由、连接日志、连接测试、主题选择，并将代理/直连端点元数据下沉到 `lib/ai`（719→491 行）；`WorldviewOriginPanel` 抽出受控三页签侧栏（528→498 行）。新增 6 组组件/纯逻辑回归并同步原结构测试，父级继续独占 TipTap、Zustand 持久化、网络请求、AI、store/DB 写入和上下游上下文；完整 CI 154 files / 544 tests、Chromium E2E 8/8 及全新预览项目实测通过。`AUDIT-6` 仍未完成：`ChapterEditor`、`CodexPanel`、`InspirationPanel`、`ReferencePanel`、`ImportDocPanel` 等仍需按可测试边界继续治理。
+- **2026-07-14 第二十批完成**：四个超标面板继续按受控视图边界收口。`CharacterPanel` 将角色详情卡改为父级统一转发字段/patch/刷新/删除（542→396 行）；`WorldRulesPanel` 将两级导航/自定义节点输入和规则编辑区拆出，profile 加载、历史数据读取、清单构建及 store 写入仍在父级（619→406 行）；`WorkflowRunner` 将原已导出的步骤卡迁到独立组件并保留兼容导出，顺序状态机、上下文装配和采纳写回不动（585→403 行）；`DetailedOutlinePanel` 将章节批量侧栏和单场景卡拆出，AI/批量 controller/`assembleContext()`/`adopt()` 不动（594→474 行）。新增 3 组 / 8 条组件回归，完整 CI 157 files / 552 tests、Chromium E2E 8/8 通过。预览浏览器实测真实与幻想、从零建角色后的详情折叠及默认五步工作流；独立细纲旧页面当前被侧栏别名映射到合并后的“章节”体验，因此只记组件回归，不冒充可见入口实测。`AUDIT-6` 仍未完成，下一批继续治理 `ChapterEditor`、`CodexPanel`、`InspirationPanel`、`ReferencePanel`、`ImportDocPanel` 等。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。
@@ -2565,7 +2566,7 @@ for each character:
 
 ## 🟡 HEALTH-4（P2 · 持续补网）— UI 层测试覆盖率补强
 
-> **2026-07-14 进度**：新增工作流步骤卡 DOM 回归，锁住“生成前用户输入确实传给运行器”和“编辑 AI 输出后保存使用编辑值”；同时把输入与 `step.userHint` 的合并收口到 `assembleWorkflowStepVars()` 并补纯逻辑反例。已有角色维度草稿、长文本内滚动两组组件测试。本轮补齐 CF-3 生成依据的加载/失败/空态，以及数据管理诊断下载的 Blob/MIME/内容/隐私/成功反馈组件测试；另建立 8 条 Chromium E2E，覆盖创建、正文保存刷新、Markdown/诊断下载、JSON 往返、快照恢复、删除确认/取消、AI 设置持久化和本地模型刷新。第十九批再补章节 AI 工具栏、富文本格式栏/主题/实体浮层、AI 设置子区及世界来源页签共 6 组组件/纯逻辑回归；完整测试现为 154 files / 544 tests。剩余按世界观生成等高风险面板逐批补，不追求低价值全局覆盖率数字。
+> **2026-07-14 进度**：新增工作流步骤卡 DOM 回归，锁住“生成前用户输入确实传给运行器”和“编辑 AI 输出后保存使用编辑值”；同时把输入与 `step.userHint` 的合并收口到 `assembleWorkflowStepVars()` 并补纯逻辑反例。已有角色维度草稿、长文本内滚动两组组件测试。本轮补齐 CF-3 生成依据的加载/失败/空态，以及数据管理诊断下载的 Blob/MIME/内容/隐私/成功反馈组件测试；另建立 8 条 Chromium E2E，覆盖创建、正文保存刷新、Markdown/诊断下载、JSON 往返、快照恢复、删除确认/取消、AI 设置持久化和本地模型刷新。第十九批补章节 AI 工具栏、富文本格式栏/主题/实体浮层、AI 设置子区及世界来源页签；第二十批再补角色详情、真实与幻想导航/编辑、工作流步骤卡兼容迁移、细纲章节侧栏/场景卡共 3 组 / 8 条组件回归；完整测试现为 157 files / 552 tests。剩余按世界观生成等高风险面板逐批补，不追求低价值全局覆盖率数字。
 
 **问题**：整体覆盖率偏低,UI 层很薄(核心逻辑层~86%,UI 接近裸奔)。盲目追全局百分比性价比低。
 
