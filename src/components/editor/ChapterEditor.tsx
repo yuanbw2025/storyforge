@@ -47,6 +47,7 @@ import NotePanel from './NotePanel'
 import FloatingToolbar from './FloatingToolbar'
 import ComparePolishPanel from './ComparePolishPanel'
 import ChapterEditorHeader from './ChapterEditorHeader'
+import ChapterMemoryPanel from './ChapterMemoryPanel'
 import { useItemLedgerStore } from '../../stores/item-ledger'
 import { useLocationStore } from '../../stores/location'
 import { useCodexStore } from '../../stores/codex'
@@ -1145,82 +1146,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         </div>
       )}
 
-      {/* Phase A3: 章节摘要显示 + 手动重新生成（改完终稿可基于当前正文刷新） */}
-      {(currentChapter?.summary || plainText) && (
-        <div className="mb-3 p-3 bg-bg-elevated border border-border rounded-lg">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-xs text-text-muted">📝 章节摘要</p>
-            <button
-              onClick={handleManualMemory}
-              disabled={!plainText || autoProcessing === 'memory' || memoryAI.isStreaming}
-              title="基于当前正文一次刷新摘要与连续性交接记忆"
-              className="flex items-center gap-1 text-xs text-text-muted hover:text-accent disabled:opacity-50 transition-colors"
-            >
-              <FileText className="w-3 h-3" />
-              {autoProcessing === 'memory'
-                ? '生成中...'
-                : currentChapter?.summary ? '刷新章节记忆' : '生成章节记忆'}
-            </button>
-          </div>
-          {currentChapter?.summary
-            ? <p className="text-sm text-text-secondary">{currentChapter.summary}</p>
-            : <p className="text-xs text-text-muted/60">改完正文后生成章节记忆，让后续章节获得可校验的前情与交接约束。</p>}
-        </div>
-      )}
-
-      {currentChapter.planReconciliation
-        && !planReconciliationCurrent
-        && (currentChapter.planReconciliation.reviewStatus === 'pending'
-          || currentChapter.planReconciliation.reviewStatus === 'confirmed-constraint') && (
-        <div className="mb-3 px-3 py-2 text-xs text-text-muted bg-bg-elevated border border-border rounded-lg">
-          计划对账已因正文或章纲变化而失效；刷新章节记忆后再处理。
-        </div>
-      )}
-
-      {currentChapter.planReconciliation && planReconciliationCurrent && (
-        <div className="mb-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-medium text-amber-300">计划—正文对账</p>
-            <span className="text-[10px] text-text-muted">
-              {currentChapter.planReconciliation.reviewStatus === 'pending' ? '待确认' : '已处理'}
-            </span>
-          </div>
-          <div className="mt-2 space-y-1 text-xs text-text-secondary">
-            {([
-              ['已完成', currentChapter.planReconciliation.completedGoals],
-              ['未完成', currentChapter.planReconciliation.unfinishedGoals],
-              ['实际偏移', currentChapter.planReconciliation.deviations],
-              ['新增约束', currentChapter.planReconciliation.newConstraints],
-              ['下一章影响', currentChapter.planReconciliation.nextChapterImpacts],
-            ] as const).flatMap(([label, items]) => items.map((item, index) => (
-              <div key={`${label}:${index}`}>
-                <p><span className="text-amber-300/80">{label}：</span>{item.text}</p>
-                {item.evidenceQuotes[0] && (
-                  <p className="pl-3 text-[11px] text-text-muted">证据：“{item.evidenceQuotes[0].quote}”</p>
-                )}
-              </div>
-            )))}
-          </div>
-          {currentChapter.planReconciliation.reviewStatus === 'pending' && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                onClick={() => { void handleConfirmActualProgress() }}
-                className="px-2 py-1 text-xs rounded bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
-              >
-                确认并附加实际进展约束
-              </button>
-              {currentChapter.planReconciliation.proposedOutlineSummary && (
-                <button
-                  onClick={() => { void handleApplyOutlineCandidate() }}
-                  className="px-2 py-1 text-xs rounded bg-accent/10 text-accent hover:bg-accent/20"
-                >
-                  用候选更新本章章纲
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      <ChapterMemoryPanel
+        summary={currentChapter.summary}
+        hasText={!!plainText}
+        memoryBusy={autoProcessing === 'memory' || memoryAI.isStreaming}
+        reconciliation={currentChapter.planReconciliation}
+        reconciliationCurrent={planReconciliationCurrent}
+        onGenerateMemory={() => { void handleManualMemory() }}
+        onConfirmActualProgress={() => { void handleConfirmActualProgress() }}
+        onApplyOutlineCandidate={() => { void handleApplyOutlineCandidate() }}
+      />
 
       {/* TipTap 富文本编辑器 / 对照润色模式 */}
       {compareSourceHtml != null ? (

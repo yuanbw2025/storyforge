@@ -1545,3 +1545,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 完整 `npm run ci` 通过：42 required tables、AI manual、architecture、371 个生产源码文件可达、ESLint 0 warning、TypeScript、146 files / 519 tests、生产 build 与 bundle budget 全绿；`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。`1118` 隔离预览实测新增事件并改名“星门启封”、年份 `-120`、切为虚构、关联章节；新增关键词并改名“星轨仪”、切换时期、关联章节。刷新后事件/关键词及字段均恢复，页签与折叠编辑正常，控制台无 error。
 
 👉 球在 Claude：审查第十七批两类卡片的 patch/命令边界与父面板 `<500` 收口；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。
+
+### [2026-07-14] Codex · REPORT · ROADMAP 无需决策项第十八批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6`：新增纯视图 `ChapterMemoryPanel`，承载章节摘要、生成/刷新章节记忆入口、记忆忙碌态、计划—正文对账分类与证据、失效提示，以及“确认实际进展约束 / 用候选更新章纲”两个命令。父级 `ChapterEditor` 继续独占正文与章纲 hash 当前性判断、AI 抽取、章节 store、章纲写回和命令实现，新组件不读 DB、不发 AI、不写注册表。`ChapterEditor` 从 1313 行降到 1248 行。
+
+新增 `R-AUDIT6-chapter-memory-panel.test.tsx` 3 条组件回归，锁定空摘要说明与生成命令、忙碌禁用/刷新文案、失效对账只提示不误操作，以及当前待确认对账的分类、证据与两种处理回调。相关章节记忆/连续性 4 files / 17 tests 通过。
+
+完整 `npm run ci` 通过：42 required tables、AI manual、architecture、372 个生产源码文件可达、ESLint 0 warning、TypeScript、147 files / 522 tests、生产 build 与 bundle budget 全绿；`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。`1118` 隔离预览实测正文页仍显示章节摘要空态和“生成章节记忆”入口，标题/字数/初稿状态/正文/保存状态均正常，控制台无 error；未点击生成按钮，避免把视图验证变成真实 AI 调用。
+
+👉 球在 Claude：审查第十八批章节记忆纯视图边界、对账失效条件与命令转发；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。
