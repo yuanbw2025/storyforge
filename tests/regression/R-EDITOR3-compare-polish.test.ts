@@ -72,7 +72,7 @@ describe('R-EDITOR3 · compare polish workflow', () => {
     expect(panel).toContain('value={draftHtml}')
     expect(panel).toContain('createSnapshot')
     expect(panel).toContain('updateChapter')
-    expect(chapterEditor).toContain('disabled={compareSourceHtml != null}')
+    expect(chapterEditor).toContain('disabled={compareSourceHtml != null || manualSaving}')
     expect(chapterEditor).toContain('compareSourceHtml == null && <div')
     expect(chapterEditor).toContain('setCompareSourceHtml(null)')
   })

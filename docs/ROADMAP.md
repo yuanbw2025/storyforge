@@ -2193,7 +2193,7 @@ for each character:
 
 ### 🟡 AUDIT-6（3.5 / P2-2 · 可维护性）— 拆分巨型组件 / prompt 文件
 - **2026-07-13 第一批完成**：将 1845 行 `prompt-seeds.ts` 收口为 18 行唯一有序聚合入口；基础创作模板与导入/分析/提取工具模板分别落到 `prompt-seeds-core.ts` / `prompt-seeds-tools.ts`，题材包保持独立。`PromptSeed` 抽到无依赖类型文件，解除题材包反向导入聚合模块的循环。新增 `R-AUDIT6-prompt-seed-integrity`，对全部 86 条模板的数量、顺序和序列化内容做 SHA-256 指纹锁，保证纯拆分不改变运行时模板。生成版 AI manual 已按新源码位置刷新。两个领域文件仍为 787 / 1055 行，后续按稳定领域继续拆；本批不冒充整个专项完成。
-- **2026-07-13 第二批完成**：`OutlinePanel` 将 CF-3 生成依据纯视图和 QUICKWIN-6 章节拖拽协议分别拆到 `OutlineGenerationBasis.tsx` / `chapter-drag.ts`；面板不再同时维护上下文来源标签/摘要渲染和 DataTransfer payload 编解码。原 CF-3 DOM 回归与 QUICKWIN-6/FB-2 共 10 条反例持续绿，源码可达性守卫确认新模块均从生产入口可达。本批是无行为变化的职责拆分，`OutlinePanel` 仍约 1500 行，预览/章节行/故事块等后续继续按可独立测试边界拆，不冒充已达成 `<500` 行目标。
+- **2026-07-13 第二批完成**：`OutlinePanel` 将 CF-3 生成依据纯视图、QUICKWIN-6 章节拖拽协议、AI 采纳预览和故事结构菜单分别拆到 `OutlineGenerationBasis.tsx` / `chapter-drag.ts` / `OutlinePreviewPanel.tsx` / `OutlineStructureMenu.tsx`；面板不再同时维护上下文来源标签/摘要渲染、DataTransfer payload 编解码和两块纯 UI。原 CF-3、QUICKWIN-6/FB-2 与新增纯视图共 12 条反例持续绿，源码可达性守卫确认新模块均从生产入口可达。`OutlinePanel` 从本轮开始的 1648 行降到 1436 行；章节行/故事块等后续继续按可独立测试边界拆，不冒充已达成 `<500` 行目标。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。
@@ -2201,7 +2201,7 @@ for each character:
 ### 🟡 AUDIT-7（P2-1 / 3.7 · 测试与发布护栏）— Playwright 核心路径 E2E + 崩溃上报 + 发布清单
 - **2026-07-13 发布护栏进度**：新增 `check:release-metadata`，强制 Release tag、`package.json.version` 与 `CHANGELOG.md` 版本标题三方一致；源码 Release 工作流在创建/修改 Release 前先运行完整 `npm run ci`（含类型、测试、构建、架构、注册表、AI manual、源码可达性和体积预算）。手动发版遇到同名 tag 时还会验证该 tag 必须指向当前 release commit，禁止旧 tag 配新源码的错版发布。`R-AUDIT7-release-metadata` 覆盖正常发版与 tag/日志双错位。
 - **2026-07-13 本地诊断包进度**：数据管理新增用户主动下载的本地诊断 JSON，内容仅限应用/浏览器版本、数据库 schema、各注册表表的记录数量和本次页面会话错误的类型/堆栈位置；明确不读取表行内容、作品文本、API Key、localStorage 或错误 message，也不联网自动上传。表枚举复用 `PROJECT_TABLES`，React ErrorBoundary 与全局 error/unhandledrejection 只保留最近 20 条脱敏位置。`R-AUDIT7-local-diagnostics` 用书名/正文/API Key/错误消息哨兵证明均未泄露；隔离预览浏览器实测入口、隐私说明与成功反馈。内置浏览器未捕获 Blob 下载事件，因此只认定生成/触发成功，不冒充落盘事件自动化通过。剩余 Playwright 商业 smoke、第三方匿名错误上报（涉及隐私/服务商，待决策）和升级前自动快照仍未完成。
-- **2026-07-13 Playwright 浏览器闸门完成**：新增独立 Chromium E2E 配置与 4 条真实用户路径，覆盖①首页新建项目并进入工作区；②UI 建卷/建章、输入正文、手动保存完成、刷新恢复、Markdown 下载正文与隐私诊断 JSON 下载；③完整 JSON 导出后从 UI 重新导入并验证正文；④手动快照恢复为新项目且原项目仍保留。测试接入 GitHub CI 和 Release workflow，失败保留 trace/screenshot/video。本轮 E2E 抓出“点保存后立刻刷新可能发生异步写入竞态”，正文保存按钮现明确显示`保存中... / 已保存 / 保存失败`，只有 IndexedDB 写入完成才进入已保存态。剩余第三方匿名错误上报仍需隐私/服务商决策；不实施。
+- **2026-07-13 Playwright 浏览器闸门完成**：新增独立 Chromium E2E 配置与 8 条真实用户路径，覆盖①首页新建项目并进入工作区；②UI 建卷/建章、输入正文、手动保存完成、刷新恢复、Markdown 下载正文与隐私诊断 JSON 下载；③完整 JSON 导出后从 UI 重新导入并验证正文；④手动快照恢复为新项目且原项目仍保留；⑤删除项目经过列表二次确认、危险操作确认和备份选择三层安全门，且不误删其它项目；⑥取消删除后项目与正文保留；⑦上下文窗口、两个预设和四类任务路由跨模块/刷新持久化；⑧本地 OpenAI 兼容服务 `/v1/models` 刷新、URL 归一化、选中模型刷新保留。测试接入 GitHub CI 和 Release workflow，失败保留 trace/screenshot/video。本轮 E2E 抓出“点保存后立刻刷新可能发生异步写入竞态”，正文保存按钮现明确显示`保存中... / 已保存 / 保存失败`，只有 IndexedDB 写入完成才进入已保存态。剩余第三方匿名错误上报仍需隐私/服务商决策；不实施。
 - **改法**：① Playwright 5 条商业级 smoke（建项目/配 AI/生成/采纳/导出导入/备份恢复）；② 可关闭的匿名错误上报或本地诊断包导出；③ release checklist（升级前自动快照、变更说明、回滚方案、已知问题）。
 - **验收**：核心路径 E2E 通过；有发布前自动快照与回滚预案。
 - **注**：与现有 HEALTH-2/HEALTH-5 重叠，实施时合并推进，勿重复立项。
@@ -2548,7 +2548,7 @@ for each character:
 
 ## 🟡 HEALTH-4（P2 · 持续补网）— UI 层测试覆盖率补强
 
-> **2026-07-13 进度**：新增工作流步骤卡 DOM 回归，锁住“生成前用户输入确实传给运行器”和“编辑 AI 输出后保存使用编辑值”；同时把输入与 `step.userHint` 的合并收口到 `assembleWorkflowStepVars()` 并补纯逻辑反例。已有角色维度草稿、长文本内滚动两组组件测试。本轮补齐 CF-3 生成依据的加载/失败/空态，以及数据管理诊断下载的 Blob/MIME/内容/隐私/成功反馈组件测试；另建立 4 条 Chromium E2E，覆盖创建、正文保存刷新、Markdown/诊断下载、JSON 往返和快照恢复。剩余按世界观生成、删除等高风险面板逐批补，不追求低价值全局覆盖率数字。
+> **2026-07-13 进度**：新增工作流步骤卡 DOM 回归，锁住“生成前用户输入确实传给运行器”和“编辑 AI 输出后保存使用编辑值”；同时把输入与 `step.userHint` 的合并收口到 `assembleWorkflowStepVars()` 并补纯逻辑反例。已有角色维度草稿、长文本内滚动两组组件测试。本轮补齐 CF-3 生成依据的加载/失败/空态，以及数据管理诊断下载的 Blob/MIME/内容/隐私/成功反馈组件测试；另建立 8 条 Chromium E2E，覆盖创建、正文保存刷新、Markdown/诊断下载、JSON 往返、快照恢复、删除确认/取消、AI 设置持久化和本地模型刷新。剩余按世界观生成等高风险面板逐批补，不追求低价值全局覆盖率数字。
 
 **问题**：整体覆盖率偏低,UI 层很薄(核心逻辑层~86%,UI 接近裸奔)。盲目追全局百分比性价比低。
 

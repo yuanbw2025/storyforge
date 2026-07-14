@@ -1383,3 +1383,23 @@ Claude 暂时不可用,按作者要求由 Codex 在预览浏览器自行测试 `
 审批边界：CF-9C、INVENTORY-1、CONSISTENCY-0/2/3、PIPELINE-1/2/3、EDITOR-2/5、HEALTH-1 通用迁移快照策略、i18n 与第三方崩溃上报均未实施；CF-7 也停在方案等待审查。
 
 👉 球在 Claude：审查本分支两批已完成改动；Codex 继续按 ROADMAP 处理无需作者判断的后续项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第三批 / `codex/roadmap-direct-work-20260713`
+
+本批继续推进 `AUDIT-6/7` 与 `HEALTH-4`，未改 schema、未做迁移、未触碰需作者/GPT 放行的功能设计。
+
+交付内容：
+- `efbe29f`：从 `OutlinePanel` 拆出 CF-3 生成依据纯视图，原 DOM 回归直接指向独立组件。
+- `52e9ac4`：补生成依据加载/失败/空态与数据管理诊断下载组件测试；诊断下载现验证 Blob、MIME、JSON 内容、隐私哨兵和成功反馈。
+- `65aef14`：引入 Playwright Chromium 发布闸门，接入 GitHub CI / Release；E2E 首次运行抓出“正文点保存后立即刷新可能早于 IndexedDB 写完”的真实竞态，保存按钮现显示`保存中... / 已保存 / 保存失败`，只在写入完成后进入已保存态。
+- `a33a245`：从 `OutlinePanel` 拆出 QUICKWIN-6 章节拖拽协议/payload 编解码，跨卷 MIME 丢失兜底回归继续通过。
+- `303e1a3`：拆出 AI 采纳预览与故事结构菜单纯 UI，并新增确认/取消/选择组件测试；`OutlinePanel` 从本轮开始的 1648 行降到 1436 行。
+- `2864d9d` / `e388ea6` 及后续测试扩展：Chromium E2E 已增至 8 条，覆盖创建项目、UI 建卷建章、正文保存刷新、Markdown/隐私诊断下载、完整 JSON 导出导入、手动快照恢复为新项目、删除项目三层安全门与取消保留、本地上下文窗口/预设/四类任务路由持久化、`/v1/models` 刷新与 URL 归一化。
+
+浏览器测试使用 Playwright 独立 `4178` 端口与全新浏览器上下文，不读取/修改作者当前预览项目，不调用真实 AI，也不唤起前台 Chrome。失败会保留 trace / screenshot / video。
+
+ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行；`AUDIT-7` 的第三方匿名上报仍需隐私/服务商决策；世界观生成与一致性相关测试不越过 `CONSISTENCY-3/PIPELINE` 审批边界。
+
+最终闸门：完整 `npm run ci` 全绿（42 required tables、AI manual、architecture、349 个生产源码文件可达、ESLint 0 warning、TypeScript、128 files / 451 tests）；覆盖率 statements/lines 67.35%、branches 73.55%、functions 68.47%；生产 build 与 bundle-size budget 通过。`npm run ci:e2e` 8/8 Chromium 通过。首次 CI 暴露 EDITOR-3 的源码字符串断言未接受新增 `manualSaving` disabled 条件，已收紧为同时要求对照模式与保存中状态，第二次完整 CI 通过。
+
+👉 球在 Claude：审查本分支第三批，重点看正文保存完成态、Playwright 发布闸门和 `OutlinePanel` 无行为变化拆分；Codex 已继续执行无需判断项。
