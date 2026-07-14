@@ -15,9 +15,9 @@ import {
 } from '../../lib/ai/parse-outline-output'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { runBatchOutlineGeneration, type BatchOutlineProgress } from '../../lib/ai/batch-outline-runner'
-import { adopt } from '../../lib/registry/adopt'
 import { getTopLevelVolumes, estimateChaptersPerVolume, DEFAULT_WORDS_PER_CHAPTER } from '../../lib/outline/selectors'
 import { normalizeOutlineNode } from '../../lib/outline/normalize'
+import { adoptGeneratedOutlineItems, adoptGeneratedOutlineSummary } from '../../lib/outline/adopt-generation'
 import type { AssembleContextResult } from '../../lib/registry/types'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import PanelLayout from '../shared/PanelLayout'
@@ -87,24 +87,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const [batchRunning, setBatchRunning] = useState(false)
   const batchAbortRef = useRef<AbortController | null>(null)
 
-  const addOutlineNodeByAdopt = useCallback(async (node: {
-    parentId: number | null
-    type: 'volume' | 'chapter'
-    title: string
-    summary: string
-    order: number
-  }): Promise<{ id: number | null; reason?: string }> => {
-    // FB-10 修复:返回 skip 原因,供调用方反馈(此前 adopt 命中去重/必填/FK 失败时
-    // 进 skipped 静默不写、不报错,导致"点采纳却没写入也没提示")
-    const result = await adopt({
-      projectId: project.id!,
-      target: 'outlineNodes',
-      mode: 'add',
-      data: node,
-    })
-    const id = result.written[0]?.id ?? null
-    return { id, reason: id == null ? (result.skipped[0]?.reason ?? '未知原因') : undefined }
-  }, [project.id])
   const [batchResult, setBatchResult] = useState<Map<number, ParsedChapter[]> | null>(null)
 
   const ai = useAIStream(createAISessionKey(project.id!, 'outline.generate'))
@@ -502,13 +484,13 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     try {
       for (const [volId, chapters] of batchResult) {
         const existingCount = nodes.filter(n => n.parentId === volId && n.type === 'chapter').length
-        for (let i = 0; i < chapters.length; i++) {
-          await addOutlineNodeByAdopt({
-            parentId: volId, type: 'chapter',
-            title: chapters[i].title, summary: chapters[i].summary,
-            order: existingCount + i,
-          })
-        }
+        await adoptGeneratedOutlineItems({
+          projectId: project.id!,
+          parentId: volId,
+          type: 'chapter',
+          items: chapters,
+          startingOrder: existingCount,
+        })
       }
     } catch (err) {
       console.error('[Outline] 批量写入章节失败:', err)
@@ -518,7 +500,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     await loadAll(project.id!)
     setBatchResult(null)
     setBatchProgress(null)
-  }, [batchResult, nodes, addOutlineNodeByAdopt, loadAll, project.id, toast])
+  }, [batchResult, nodes, loadAll, project.id, toast])
 
   // ── 采纳预览 + 确认 ──
 
@@ -565,15 +547,9 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     const targetId = previewTargetId
     ai.reset()
     if (targetId != null) {
-      const result = await adopt({
-        projectId: project.id!,
-        target: 'outlineNodes',
-        recordId: targetId,
-        mode: 'replace',
-        data: { summary: previewVolumes[0]?.summary ?? '' },
-      })
-      if (result.written.length === 0) {
-        toast.error(`未能写入本卷卷纲：${result.skipped[0]?.reason ?? '结果为空'}`)
+      const result = await adoptGeneratedOutlineSummary(project.id!, targetId, previewVolumes[0]?.summary ?? '')
+      if (!result.written) {
+        toast.error(`未能写入本卷卷纲：${result.reason}`)
         return
       }
       await loadAll(project.id!)
@@ -583,19 +559,15 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       return
     }
     const existingCount = volumes.length
-    let firstId: number | null = null
-    let written = 0
-    const skipReasons = new Set<string>()
+    let result: Awaited<ReturnType<typeof adoptGeneratedOutlineItems>>
     try {
-      for (let i = 0; i < previewVolumes.length; i++) {
-        const r = await addOutlineNodeByAdopt({
-          parentId: null, type: 'volume',
-          title: previewVolumes[i].title, summary: previewVolumes[i].summary,
-          order: existingCount + i,
-        })
-        if (r.id != null) { written++; if (firstId == null) firstId = r.id }
-        else if (r.reason) skipReasons.add(r.reason)
-      }
+      result = await adoptGeneratedOutlineItems({
+        projectId: project.id!,
+        parentId: null,
+        type: 'volume',
+        items: previewVolumes,
+        startingOrder: existingCount,
+      })
     } catch (err) {
       console.error('[Outline] 写入卷失败:', err)
       toast.error(`写入卷时出错：${err instanceof Error ? err.message : '未知错误'}。请查看控制台获取详情。`)
@@ -604,14 +576,14 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     await loadAll(project.id!)
     setPreviewVolumes(null)
     setPreviewTargetId(null)
-    if (firstId) setSelectedVolId(firstId)
+    if (result.firstId) setSelectedVolId(result.firstId)
     // FB-10:不再静默——全跳过/部分跳过都明确告知用户原因
-    if (written === 0) {
-      toast.error(`未写入任何卷。原因:${[...skipReasons].join('；') || '与已有卷标题重复(已跳过)'}。若想替换/更新同名卷,请先删除同名卷再采纳。`)
-    } else if (written < previewVolumes.length) {
-      toast.info(`已写入 ${written} 个卷,另有 ${previewVolumes.length - written} 个被跳过(${[...skipReasons].join('；') || '标题重复'})。`)
+    if (result.writtenCount === 0) {
+      toast.error(`未写入任何卷。原因:${result.skippedReasons.join('；') || '与已有卷标题重复(已跳过)'}。若想替换/更新同名卷,请先删除同名卷再采纳。`)
+    } else if (result.writtenCount < previewVolumes.length) {
+      toast.info(`已写入 ${result.writtenCount} 个卷,另有 ${previewVolumes.length - result.writtenCount} 个被跳过(${result.skippedReasons.join('；') || '标题重复'})。`)
     } else {
-      toast.success(`已写入 ${written} 个卷。`)
+      toast.success(`已写入 ${result.writtenCount} 个卷。`)
     }
   }
 
@@ -621,15 +593,9 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     const operation = decodeGenerationOperation(ai.operation)
     ai.reset()
     if (targetId != null) {
-      const result = await adopt({
-        projectId: project.id!,
-        target: 'outlineNodes',
-        recordId: targetId,
-        mode: 'replace',
-        data: { summary: previewChapters[0]?.summary ?? '' },
-      })
-      if (result.written.length === 0) {
-        toast.error(`未能写入本章章纲：${result.skipped[0]?.reason ?? '结果为空'}`)
+      const result = await adoptGeneratedOutlineSummary(project.id!, targetId, previewChapters[0]?.summary ?? '')
+      if (!result.written) {
+        toast.error(`未能写入本章章纲：${result.reason}`)
         return
       }
       await loadAll(project.id!)
@@ -643,18 +609,15 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       : selectedVol
     if (!destinationVolume) return
     const existingCount = nodes.filter(node => node.parentId === destinationVolume.id && node.type === 'chapter').length
-    let written = 0
-    const skipReasons = new Set<string>()
+    let result: Awaited<ReturnType<typeof adoptGeneratedOutlineItems>>
     try {
-      for (let i = 0; i < previewChapters.length; i++) {
-        const r = await addOutlineNodeByAdopt({
-          parentId: destinationVolume.id!, type: 'chapter',
-          title: previewChapters[i].title, summary: previewChapters[i].summary,
-          order: existingCount + i,
-        })
-        if (r.id != null) written++
-        else if (r.reason) skipReasons.add(r.reason)
-      }
+      result = await adoptGeneratedOutlineItems({
+        projectId: project.id!,
+        parentId: destinationVolume.id!,
+        type: 'chapter',
+        items: previewChapters,
+        startingOrder: existingCount,
+      })
     } catch (err) {
       console.error('[Outline] 写入章节失败:', err)
       toast.error(`写入章节时出错：${err instanceof Error ? err.message : '未知错误'}。请查看控制台获取详情。`)
@@ -663,10 +626,10 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     await loadAll(project.id!)
     setPreviewChapters(null)
     setPreviewTargetId(null)
-    if (written === 0) {
-      toast.error(`未写入任何章节。原因:${[...skipReasons].join('；') || '与本卷已有章节标题重复(已跳过)'}。`)
-    } else if (written < previewChapters.length) {
-      toast.info(`已写入 ${written} 章,另有 ${previewChapters.length - written} 章被跳过(${[...skipReasons].join('；') || '标题重复'})。`)
+    if (result.writtenCount === 0) {
+      toast.error(`未写入任何章节。原因:${result.skippedReasons.join('；') || '与本卷已有章节标题重复(已跳过)'}。`)
+    } else if (result.writtenCount < previewChapters.length) {
+      toast.info(`已写入 ${result.writtenCount} 章,另有 ${previewChapters.length - result.writtenCount} 章被跳过(${result.skippedReasons.join('；') || '标题重复'})。`)
     }
   }
 

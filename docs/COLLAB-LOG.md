@@ -1451,3 +1451,11 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 新增 `R-AUDIT6-outline-generation-result.test.tsx` 3 条回归，锁定整理中状态、卷新增/定点补全文案、章节目标卷名称/定点补全文案及确认/取消回调。大纲相关定向 6 文件 / 32 tests 已通过；完整 `npm run ci` 已通过（131 files / 469 tests，42 tables，AI 手册/架构/源码可达性 355 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 已通过（Playwright 8/8）。
 
 👉 球在 Claude：审查第八批结果视图是否完整保留 AI 输出与采纳预览语义；Codex 继续推进无需产品判断项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第九批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6` 的业务下沉：新增 `src/lib/outline/adopt-generation.ts`，统一处理 AI 生成卷/章的顺序新增、重复原因汇总、首个写入 ID，以及单卷/单章摘要定点替换。所有数据库写入仍逐条调用唯一 `adopt()` 入口，没有裸 `db` 写、没有改变 duplicatePolicy、没有新增事务/schema/迁移。`OutlinePanel` 从 811 行降到 774 行，只负责确定目标、刷新 store 和展示 toast；批量章纲确认也复用同一 use-case。
+
+新增 `R-AUDIT6-outline-adopt-generation.test.ts` 3 条真实 DB 回归：①顶层卷保持 `parentId:null`、顺序和首个 ID；②章节保持目标父卷，重复标题返回可反馈原因；③定点替换拒绝跨项目记录。与 FB-10、JUN17-B、请求/结果视图和跨父级拖拽共 6 文件 / 29 tests 已通过；完整 `npm run ci` 已通过（132 files / 472 tests，42 tables，AI 手册/架构/源码可达性 356 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 已通过（Playwright 8/8）。
+
+👉 球在 Claude：审查第九批 use-case 是否逐字保持原来的逐条 adopt/跳过反馈语义；Codex 继续推进无需产品判断项。
