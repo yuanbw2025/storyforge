@@ -9,7 +9,6 @@ import {
   type ParsedVolume, type ParsedChapter,
 } from '../../lib/ai/parse-outline-output'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { runBatchOutlineGeneration, type BatchOutlineProgress } from '../../lib/ai/batch-outline-runner'
 import { getTopLevelVolumes, estimateChaptersPerVolume, DEFAULT_WORDS_PER_CHAPTER } from '../../lib/outline/selectors'
 import { normalizeOutlineNode } from '../../lib/outline/normalize'
 import { adoptGeneratedOutlineItems, adoptGeneratedOutlineSummary } from '../../lib/outline/adopt-generation'
@@ -30,6 +29,7 @@ import OutlineVolumeSidebar from './OutlineVolumeSidebar'
 import OutlineVolumeDetail from './OutlineVolumeDetail'
 import OutlineGenerationRequestPanel from './OutlineGenerationRequestPanel'
 import OutlineGenerationResultPanel from './OutlineGenerationResultPanel'
+import { useOutlineBatchGeneration } from './useOutlineBatchGeneration'
 import type { ChapterDragPayload } from './chapter-drag'
 import {
   decodeGenerationOperation,
@@ -81,13 +81,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const [previewVolumes, setPreviewVolumes] = useState<ParsedVolume[] | null>(null)
   const [previewChapters, setPreviewChapters] = useState<ParsedChapter[] | null>(null)
   const [previewTargetId, setPreviewTargetId] = useState<number | null>(null)
-
-  // D1: 批量生成状态
-  const [batchProgress, setBatchProgress] = useState<BatchOutlineProgress | null>(null)
-  const [batchRunning, setBatchRunning] = useState(false)
-  const batchAbortRef = useRef<AbortController | null>(null)
-
-  const [batchResult, setBatchResult] = useState<Map<number, ParsedChapter[]> | null>(null)
 
   const ai = useAIStream(createAISessionKey(project.id!, 'outline.generate'))
   const sessionModuleKey: 'outline.volume' | 'outline.chapter' =
@@ -247,11 +240,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     })
   }, [project.id, aiConfig.provider, aiConfig.model])
 
-  const contextPart = (assembled: AssembleContextResult, key: string): string => {
-    const idx = assembled.included.indexOf(key)
-    return idx >= 0 ? assembled.segments[idx]?.content ?? '' : ''
-  }
-
   // ── AI 生成 ──
 
   const prepareGeneration = async (request: OutlineGenerationRequest) => {
@@ -345,87 +333,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     const request = decodeGenerationOperation(ai.operation)
     if (request) void executeGeneration(request)
   }
-
-  // ── D1: 批量生成 ──
-
-  const handleBatchGenerate = useCallback(async () => {
-    if (volumes.length === 0) return
-    setBatchRunning(true)
-    setBatchResult(null)
-    setBatchProgress(null)
-
-    const controller = new AbortController()
-    batchAbortRef.current = controller
-
-    const assembled = await buildOutlineAssembledContext(null)
-    const worldCtx = assembled.text
-    const charCtx = contextPart(assembled, 'characters')
-    const rulesCtx = contextPart(assembled, 'worldRules')
-
-    try {
-      const result = await runBatchOutlineGeneration({
-        volumes,
-        worldContext: worldCtx,
-        // 多世界：逐卷用本卷所属世界的上下文
-        worldContextResolver: project.enableMultiWorld
-          ? async (volId) => {
-            const vol = nodes.find(n => n.id === volId)
-            const resolved = await buildOutlineAssembledContext(vol?.worldGroupId ?? null, volId)
-            return resolved.text
-          }
-          : undefined,
-        worldRulesContextResolver: project.enableMultiWorld
-          ? async (volId) => {
-            const vol = nodes.find(n => n.id === volId)
-            const resolved = await buildOutlineAssembledContext(vol?.worldGroupId ?? null, volId)
-            return contextPart(resolved, 'worldRules')
-          }
-          : undefined,
-        userHint: hint || undefined,
-        characterContext: charCtx,
-        worldRulesContext: rulesCtx,
-        signal: controller.signal,
-        onProgress: setBatchProgress,
-      })
-      if (!result.cancelled) {
-        setBatchResult(result.chaptersByVolume)
-      }
-    } catch (err) {
-      console.error('[BatchOutline] 失败:', err)
-    } finally {
-      setBatchRunning(false)
-      batchAbortRef.current = null
-    }
-  }, [volumes, nodes, project.enableMultiWorld, hint, buildOutlineAssembledContext])
-
-  const handleBatchCancel = useCallback(() => {
-    batchAbortRef.current?.abort()
-    batchAbortRef.current = null
-    setBatchRunning(false)
-  }, [])
-
-  const handleBatchConfirm = useCallback(async () => {
-    if (!batchResult) return
-    try {
-      for (const [volId, chapters] of batchResult) {
-        const existingCount = nodes.filter(n => n.parentId === volId && n.type === 'chapter').length
-        await adoptGeneratedOutlineItems({
-          projectId: project.id!,
-          parentId: volId,
-          type: 'chapter',
-          items: chapters,
-          startingOrder: existingCount,
-        })
-      }
-    } catch (err) {
-      console.error('[Outline] 批量写入章节失败:', err)
-      toast.error(`批量写入章节时出错：${err instanceof Error ? err.message : '未知错误'}。请查看控制台获取详情。`)
-      return
-    }
-    await loadAll(project.id!)
-    setBatchResult(null)
-    setBatchProgress(null)
-  }, [batchResult, nodes, loadAll, project.id, toast])
 
   // ── 采纳预览 + 确认 ──
 
@@ -577,6 +484,17 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     setPreviewTargetId(null)
   }
 
+  const batch = useOutlineBatchGeneration({
+    projectId: project.id!,
+    multiWorldEnabled: Boolean(project.enableMultiWorld),
+    volumes,
+    nodes,
+    hint,
+    assembleContext: buildOutlineAssembledContext,
+    reloadOutline: () => loadAll(project.id!),
+    onError: toast.error,
+  })
+
   // ── 侧栏：卷列表 ──
 
   const sidebarContent = (
@@ -587,19 +505,19 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       multiWorldEnabled={Boolean(project.enableMultiWorld)}
       worldGroups={worldGroups}
       aiStreaming={ai.isStreaming}
-      batchRunning={batchRunning}
-      batchProgress={batchProgress}
-      batchResult={batchResult}
+      batchRunning={batch.running}
+      batchProgress={batch.progress}
+      batchResult={batch.result}
       activeChapterDrag={activeChapterDrag}
       getActiveChapterDrag={getActiveChapterDrag}
       onClearActiveChapterDrag={clearActiveChapterDrag}
       onSelectVolume={setSelectedVolId}
       onAddVolume={() => { void handleAddVolume() }}
       onGenerateVolumes={handleAIVolumes}
-      onGenerateAllChapters={() => { void handleBatchGenerate() }}
-      onCancelBatch={handleBatchCancel}
-      onConfirmBatch={() => { void handleBatchConfirm() }}
-      onDismissBatch={() => { setBatchResult(null); setBatchProgress(null) }}
+      onGenerateAllChapters={() => { void batch.generate() }}
+      onCancelBatch={batch.cancel}
+      onConfirmBatch={() => { void batch.confirm() }}
+      onDismissBatch={batch.dismiss}
       onReorderVolumes={reorderNodes}
       onMoveChapter={handleMoveChapter}
     />

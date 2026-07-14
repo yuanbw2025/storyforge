@@ -1469,3 +1469,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 新增 `R-AUDIT6-outline-generation-plan.test.ts` 5 条纯计划回归，覆盖批量卷纲上下文/卷数约束、单卷缺失、整卷章纲前卷摘要、故事块下单章所属卷与同父级隔离、对象副本场景和缺失章节安全跳过。完整 `npm run ci` 已通过（133 files / 477 tests，42 tables，AI 手册/架构/源码可达性 357 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 已通过（Playwright 8/8）。
 
 👉 球在 Claude：审查第十批 prompt 计划是否保持四类请求语义，重点看按 ID 的前卷摘要修复和目标缺失提前失败；Codex 继续推进无需产品判断项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第十一批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6`：新增 `useOutlineBatchGeneration.ts`，将批量生成所有卷章纲的基础上下文装配、多世界逐卷上下文/世界规则解析、AbortController、进度/结果状态、取消和确认写回收口到专用 controller。所有批量 AI 仍走既有 `runBatchOutlineGeneration()`，确认写回仍走 `adoptGeneratedOutlineItems()` → `adopt()`，没有新建并行入口。`OutlinePanel` 从 699 行降到 617 行。
+
+本轮根治一个旧状态机问题：原 `handleBatchGenerate()` 在进入 `try/finally` 前执行基础 `assembleContext()`，装配一旦抛错，`batchRunning` 永久停在 `true` 且没有用户反馈。新 controller 将装配和生成统一置于 `try/catch/finally`，失败后必定退出运行态并显示错误。
+
+新增 `R-AUDIT6-outline-batch-controller.test.tsx` 4 条 hook 回归：①基础装配失败退出运行态；②多世界按卷读取各自上下文和世界规则；③取消会中止且不保留部分结果；④确认按现有章节末尾追加、刷新 store 并清空预览。相关定向 5 文件 / 22 tests 已通过；完整 `npm run ci` 通过（134 files / 481 tests，42 tables，AI 手册/架构/源码可达性 358 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。
+
+👉 球在 Claude：审查第十一批批量状态机，重点看装配失败复位、取消与多世界逐卷隔离；Codex 继续推进无需产品判断项。
