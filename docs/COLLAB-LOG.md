@@ -1443,3 +1443,11 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 `AUDIT-6` 仍未完成，下一步评估生成控制器下沉；若无法在不复制注册表入口的前提下安全收口，则转向 prompt seed 的稳定领域拆分。
 
 👉 球在 Claude：审查第七批请求状态边界和 session operation 兼容性；Codex 继续推进无需产品判断项。
+
+### [2026-07-13] Codex · REPORT · ROADMAP 无需决策项第八批 / `codex/roadmap-direct-work-20260713`
+
+继续推进 `AUDIT-6`：新增 `OutlineGenerationResultPanel.tsx`，统一承载 AI 流输出、结构化解析进度、卷/章节新增预览及单卷/单章定点补全预览。`OutlinePanel` 从 831 行降到 811 行；解析器、AI session、生成重试和 `adopt()` 写回仍在父级，新组件只根据 props 渲染并转发确认/取消命令。
+
+新增 `R-AUDIT6-outline-generation-result.test.tsx` 3 条回归，锁定整理中状态、卷新增/定点补全文案、章节目标卷名称/定点补全文案及确认/取消回调。大纲相关定向 6 文件 / 32 tests 已通过；完整 `npm run ci` 已通过（131 files / 469 tests，42 tables，AI 手册/架构/源码可达性 355 files/lint/tsc/build/包体积均通过），`npm run ci:e2e` 已通过（Playwright 8/8）。
+
+👉 球在 Claude：审查第八批结果视图是否完整保留 AI 输出与采纳预览语义；Codex 继续推进无需产品判断项。

@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Loader2 } from 'lucide-react'
 import { useOutlineStore } from '../../stores/outline'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
@@ -20,7 +19,6 @@ import { adopt } from '../../lib/registry/adopt'
 import { getTopLevelVolumes, estimateChaptersPerVolume, DEFAULT_WORDS_PER_CHAPTER } from '../../lib/outline/selectors'
 import { normalizeOutlineNode } from '../../lib/outline/normalize'
 import type { AssembleContextResult } from '../../lib/registry/types'
-import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import PanelLayout from '../shared/PanelLayout'
 import { CInput } from '../shared/CompositionInput'
@@ -28,10 +26,10 @@ import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
 import type { Project, StoryStructure } from '../../lib/types'
 import { STORY_STRUCTURES } from '../../lib/types/outline'
-import OutlinePreviewPanel from './OutlinePreviewPanel'
 import OutlineVolumeSidebar from './OutlineVolumeSidebar'
 import OutlineVolumeDetail from './OutlineVolumeDetail'
 import OutlineGenerationRequestPanel from './OutlineGenerationRequestPanel'
+import OutlineGenerationResultPanel from './OutlineGenerationResultPanel'
 import type { ChapterDragPayload } from './chapter-drag'
 import {
   decodeGenerationOperation,
@@ -765,42 +763,24 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           />
         )}
 
-        {/* AI 输出（就地显示） */}
-        {(ai.output || ai.isStreaming || ai.error) && (
-          <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
-            onStop={ai.stop}
-            onAccept={handlePreviewAccept}
-            onRetry={handleRetryGeneration}
-            moduleKey={sessionModuleKey} />
-        )}
-
-        {restructuring && (
-          <div className="flex items-center gap-2 text-xs text-accent">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" /> 正在用 AI 整理大纲结构…
-          </div>
-        )}
-
-        {/* 采纳预览：卷 */}
-        {previewVolumes && (
-          <OutlinePreviewPanel
-            label={previewTargetId != null ? '将补全当前卷的卷纲' : `将创建 ${previewVolumes.length} 个卷`}
-            items={previewVolumes}
-            onConfirm={handleConfirmVolumes}
-            onCancel={handleCancelPreview}
-          />
-        )}
-
-        {/* 采纳预览：章节 */}
-        {previewChapters && (
-          <OutlinePreviewPanel
-            label={previewTargetId != null
-              ? '将补全当前章节的章纲'
-              : `将在「${selectedVol?.title}」下创建 ${previewChapters.length} 个章节`}
-            items={previewChapters}
-            onConfirm={handleConfirmChapters}
-            onCancel={handleCancelPreview}
-          />
-        )}
+        <OutlineGenerationResultPanel
+          output={ai.output}
+          isStreaming={ai.isStreaming}
+          error={ai.error}
+          tokenUsage={ai.tokenUsage}
+          moduleKey={sessionModuleKey}
+          restructuring={restructuring}
+          previewVolumes={previewVolumes}
+          previewChapters={previewChapters}
+          previewTargetId={previewTargetId}
+          selectedVolumeTitle={selectedVol?.title}
+          onStop={ai.stop}
+          onAccept={handlePreviewAccept}
+          onRetry={handleRetryGeneration}
+          onConfirmVolumes={() => { void handleConfirmVolumes() }}
+          onConfirmChapters={() => { void handleConfirmChapters() }}
+          onCancelPreview={handleCancelPreview}
+        />
 
         <OutlineVolumeDetail
           volume={selectedVol}

@@ -2198,6 +2198,7 @@ for each character:
 - **2026-07-13 第四批完成**：将卷操作栏、批量生成进度/结果、卷排序、章节跨卷投放区与卷空态拆到 `OutlineVolumeSidebar.tsx`，`OutlinePanel` 降到 1035 行。独立组件回归锁定直挂+故事块章节计数、多世界标记、命令禁用、进度取消、结果确认/关闭、空态操作，以及章节投放到目标卷直挂章节末尾；相关定向 16 tests 全绿。父组件仍持有 AI 执行、store 命令与移动规则，未复制业务入口。
 - **2026-07-13 第五批完成**：将卷标题/摘要/所属世界编辑、卷操作栏、故事块/直挂章节列表和未选卷空态拆到 `OutlineVolumeDetail.tsx`，`OutlinePanel` 降到 896 行。新增独立卷详情测试文件，锁定编辑回调、AI/新增/删除命令、已有卷纲时按钮显隐、故事结构入口、直挂+块内总章数与自定义故事块命令；相关定向 4 文件 / 20 tests 全绿。父组件继续独占 AI 调用、`assembleContext()`、`adopt()`、store 写入和跨世界移动校验。
 - **2026-07-13 第六批完成**：将四类大纲生成请求的 operation 编解码/模块归属收口到纯函数模块，并把生成前确认、上下文依据、读取失败重试与取消/确认操作拆到 `OutlineGenerationRequestPanel.tsx`，`OutlinePanel` 降到 831 行。新增 4 条回归锁定四类请求往返、原按钮文案、单章参数边界、读取中/失败禁用确认及准备完成后放行；父组件仍独占上下文装配、AI 调用和采纳写回。
+- **2026-07-13 第七批完成**：将 AI 流输出、结构化解析进度、卷/章节新增与定点补全预览收口到 `OutlineGenerationResultPanel.tsx`，`OutlinePanel` 降到 811 行。新增 3 条组件回归锁定整理中状态、卷/章新增和定点补全文案、目标卷名称与确认/取消回调；解析、AI session 和 `adopt()` 写回仍由父级控制器持有。
 - **位置**：`prompt-seeds.ts`、`json-export.ts`（800+ 行）、大型 panel（多个 600-1500 行混 prompt/UI/业务）。
 - **改法**：按领域拆 prompt pack / service / hook / view；大 panel 先拆状态逻辑与纯 UI；形成 use-case/service 层（`importProjectUseCase()` / `generateChapterUseCase()`）。
 - **验收**：主要 panel 单文件尽量 <500 行；业务逻辑下沉；测试不退化。
