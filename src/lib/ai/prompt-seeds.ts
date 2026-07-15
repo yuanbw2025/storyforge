@@ -1,6 +1,7 @@
 import { CORE_PROMPT_SEEDS } from './prompt-seeds-core'
 import { TOOL_PROMPT_SEEDS } from './prompt-seeds-tools'
 import { GENRE_PACK_SEEDS } from './prompt-seeds-genre-packs'
+import { NOVEL_PROMPT_LIBRARY_SEEDS } from './prompt-library-seeds'
 import type { PromptSeed } from './prompt-seed-type'
 
 export type { PromptSeed } from './prompt-seed-type'
@@ -15,4 +16,5 @@ export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
   ...CORE_PROMPT_SEEDS,
   ...TOOL_PROMPT_SEEDS,
   ...GENRE_PACK_SEEDS,
+  ...NOVEL_PROMPT_LIBRARY_SEEDS,
 ]

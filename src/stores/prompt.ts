@@ -3,6 +3,9 @@ import { db } from '../lib/db/schema'
 import type { PromptTemplate, PromptModuleKey } from '../lib/types/prompt'
 import { SYSTEM_PROMPT_SEEDS } from '../lib/ai/prompt-seeds'
 
+const systemSeedIdentity = (template: Pick<PromptTemplate, 'name' | 'library'>): string =>
+  template.library?.assetId ? `library:${template.library.assetId}` : `name:${template.name}`
+
 interface PromptStore {
   templates: PromptTemplate[]
   loaded: boolean
@@ -52,11 +55,11 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
       // 已有库：补缺 seed + 更新现有 system seed 的内容（保留用户的 isActive 选择）
       // Phase 13: 同一 moduleKey 下可能有多套 seed（不同 genre），用 name 作为唯一键
       const existingSystemMap = new Map(
-        existing.filter(t => t.scope === 'system').map(t => [t.name, t])
+        existing.filter(t => t.scope === 'system').map(t => [systemSeedIdentity(t), t])
       )
 
       for (const seed of SYSTEM_PROMPT_SEEDS) {
-        const old = existingSystemMap.get(seed.name)
+        const old = existingSystemMap.get(systemSeedIdentity(seed))
         if (!old) {
           // 缺 → 补
           await db.promptTemplates.add({ ...seed, createdAt: now, updatedAt: now })
@@ -77,6 +80,7 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
             examples: seed.examples,
             lengthMode: seed.lengthMode,
             continuityMode: seed.continuityMode,
+            library: seed.library,
             updatedAt: now,
           }
           await db.promptTemplates.update(old.id!, refreshed)

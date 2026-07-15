@@ -65,6 +65,88 @@ export type PromptModuleKey =
   | 'history.storm'
   // —— FB-5 自适应文风学习 ——
   | 'style.learn'
+  // —— 小说创作 Prompt 资产库（独立运行，不参与业务模块激活） ——
+  | 'library.run'
+
+export type PromptLibraryStage =
+  | 'project-brief'
+  | 'ideation'
+  | 'positioning'
+  | 'story-core'
+  | 'research'
+  | 'worldbuilding'
+  | 'character'
+  | 'plot'
+  | 'structure'
+  | 'long-form'
+  | 'short-story'
+  | 'serialization'
+  | 'chapter-planning'
+  | 'drafting'
+  | 'continuity'
+  | 'developmental-editing'
+  | 'line-editing'
+  | 'reader-validation'
+  | 'packaging'
+  | 'prompt-operations'
+
+export type PromptLibraryTaskType =
+  | 'decision'
+  | 'generate'
+  | 'plan'
+  | 'diagnose'
+  | 'revise'
+  | 'extract'
+  | 'meta'
+
+export type PromptProjectField =
+  | 'name'
+  | 'genres'
+  | 'description'
+  | 'targetWordCount'
+  | 'lengthMode'
+  | 'serializationMode'
+
+/** 一项 Prompt 变量如何从 StoryForge 获得值。 */
+export interface PromptLibraryInputBinding {
+  variable: string
+  label: string
+  description?: string
+  /** 经 CONTEXT_SOURCES + assembleContext() 读取；多个源按声明顺序合并。 */
+  sourceKeys?: string[]
+  /** 从当前项目元信息派生，不读取故事事实。 */
+  projectField?: PromptProjectField
+  /** 没有自动来源时由用户在运行前填写。 */
+  manual?: boolean
+  required?: boolean
+  placeholder?: string
+}
+
+export interface PromptLibraryOutputContract {
+  format: 'markdown' | 'plain-text' | 'json-object' | 'json-array'
+  /** preview 不写数据库；adopt 必须经 FIELD_REGISTRY + adopt()。 */
+  mode: 'preview' | 'adopt'
+  suggestedDestination: string
+  target?: string
+  field?: string
+  adoptMode?: 'replace' | 'append' | 'add' | 'add-many' | 'merge-diffs'
+  recordScope?: 'chapter'
+}
+
+export interface PromptLibraryMetadata {
+  assetId: string
+  stage: PromptLibraryStage
+  taskType: PromptLibraryTaskType
+  order: number
+  inputs: PromptLibraryInputBinding[]
+  output: PromptLibraryOutputContract
+  applicability?: {
+    lengthModes?: ('short' | 'medium' | 'long')[]
+    serializationModes?: ('standalone' | 'serial')[]
+    /** StoryForge 项目 genre value；空数组表示通用。 */
+    genres?: string[]
+  }
+}
 
 /** 模板可调参数定义（Phase 12） */
 export interface PromptParameter {
@@ -136,6 +218,8 @@ export interface PromptTemplate {
   lengthMode?: 'short' | 'medium' | 'long'
   /** NS-1: 连续性保护块策略。 */
   continuityMode?: 'inherit' | 'required' | 'off'
+  /** 小说创作 Prompt 资产库元数据；存在时由库运行器声明式装配输入。 */
+  library?: PromptLibraryMetadata
 
   createdAt: number
   updatedAt: number

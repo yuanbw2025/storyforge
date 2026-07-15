@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Plus, Upload, Download, Layers, FileText, Workflow } from 'lucide-react'
+import { Plus, Upload, Download, Layers, FileText, Workflow, BookOpen } from 'lucide-react'
 import { usePromptStore } from '../../../stores/prompt'
 import type { PromptTemplate } from '../../../lib/types/prompt'
 import type { Project } from '../../../lib/types'
@@ -7,6 +7,7 @@ import { GENRE_PACKS } from '../../../lib/ai/prompt-seeds-genre-packs'
 import PromptTemplateList from './PromptTemplateList'
 import PromptTemplateEditor from './PromptTemplateEditor'
 import PromptWorkflowsPanel from './PromptWorkflowsPanel'
+import PromptLibraryPanel from './PromptLibraryPanel'
 import { useToast } from '../../shared/Toast'
 
 type ScopeFilter = 'all' | 'system' | 'user'
@@ -28,7 +29,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
   const [genrePack, setGenrePack] = useState<string>(() => {
     try { return localStorage.getItem('sf-genre-pack') || 'general' } catch { return 'general' }
   })
-  const [tab, setTab] = useState<'templates' | 'workflows'>('templates')
+  const [tab, setTab] = useState<'library' | 'templates' | 'workflows'>('library')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // 持久化题材包选择（切换时写入 + 挂载时从上面的 useState 初始化器读取）
@@ -42,7 +43,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
     if (genreId === 'general') {
       // 默认包：把没 genres 字段或含 'general' 的 system 模板激活
       const candidates = templates.filter(t =>
-        t.scope === 'system' && (!t.genres || t.genres.length === 0 || t.genres.includes('general'))
+        !t.library && t.scope === 'system' && (!t.genres || t.genres.length === 0 || t.genres.includes('general'))
       )
       const seenModuleKeys = new Set<string>()
       for (const t of candidates) {
@@ -53,7 +54,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
       }
     } else {
       // 题材包：找到该 genre 的模板批量激活
-      const packTpls = templates.filter(t => t.genres?.includes(genreId))
+      const packTpls = templates.filter(t => !t.library && t.genres?.includes(genreId))
       for (const t of packTpls) {
         if (!t.isActive) await setActive(t.id!)
       }
@@ -62,11 +63,12 @@ export default function PromptManagerPanel({ project }: Props = {}) {
 
   // 过滤后的模板
   const filtered = templates.filter(t => {
+    if (t.library) return false
     if (scopeFilter === 'all') return true
     return t.scope === scopeFilter
   })
 
-  const selected = selectedId ? templates.find(t => t.id === selectedId) : null
+  const selected = selectedId ? templates.find(t => t.id === selectedId && !t.library) : null
 
   /** 新建一个空模板（user scope） */
   const handleNew = async () => {
@@ -90,7 +92,8 @@ export default function PromptManagerPanel({ project }: Props = {}) {
 
   /** 导出全部模板为 JSON */
   const handleExportAll = () => {
-    const blob = new Blob([JSON.stringify(templates, null, 2)], { type: 'application/json' })
+    // 创作库由代码版本管理，常规模板导出不重复携带 118 个系统资产。
+    const blob = new Blob([JSON.stringify(templates.filter(template => !template.library), null, 2)], { type: 'application/json' })
     triggerDownload(blob, `storyforge-prompts-${new Date().toISOString().slice(0, 10)}.json`)
   }
 
@@ -131,8 +134,18 @@ export default function PromptManagerPanel({ project }: Props = {}) {
 
   return (
     <div className="h-full flex flex-col">
-      {/* 二级 Tab：模板 / 工作流 */}
+      {/* 二级 Tab：创作库 / 模板 / 工作流 */}
       <div className="flex items-center gap-1 border-b border-border px-3 pt-2 flex-shrink-0">
+        <button
+          onClick={() => setTab('library')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-t border-b-2 transition-colors ${
+            tab === 'library'
+              ? 'border-accent text-accent font-medium'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          <BookOpen className="w-3.5 h-3.5" /> 小说创作库
+        </button>
         <button
           onClick={() => setTab('templates')}
           className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-t border-b-2 transition-colors ${
@@ -155,7 +168,11 @@ export default function PromptManagerPanel({ project }: Props = {}) {
         </button>
       </div>
 
-      {tab === 'workflows' ? (
+      {tab === 'library' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <PromptLibraryPanel project={project} />
+        </div>
+      ) : tab === 'workflows' ? (
         <div className="flex-1 overflow-y-auto">
           <PromptWorkflowsPanel project={project} />
         </div>

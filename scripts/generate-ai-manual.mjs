@@ -8,6 +8,7 @@
  *   ③ CONTEXT_SOURCES 上下文源       (src/lib/registry/context-sources.ts) — key/label/scope/layer
  *   ④ FIELD_REGISTRY 可写字段        (src/lib/registry/field-registry.ts) — target/field/aliases
  *   ⑤ AI 调用点 category             (src/components, src/lib) — category + 文件位置
+ *   ⑥ 小说 Prompt 资产库             (prompt-library-seeds.ts) — 阶段/输入源/输出契约
  *
  * 全部正则解析声明性字面量,零依赖、不需要编译/IndexedDB,CI 友好。
  *
@@ -53,6 +54,15 @@ function extractSeeds() {
     seeds.push({ key: positions[i].key, name, description, variables })
   }
   return seeds
+}
+
+// ── ②-b 小说创作 Prompt 资产库 ──
+function extractNovelPromptLibrary() {
+  const src = read('src/lib/ai/prompt-library-seeds.ts')
+  const start = src.indexOf('= [')
+  const end = src.lastIndexOf(']')
+  if (start < 0 || end < start) return []
+  return JSON.parse(src.slice(start + 2, end + 1))
 }
 
 // ── ③ CONTEXT_SOURCES ──
@@ -180,6 +190,7 @@ function buildMarkdown() {
   const sources = extractContextSources()
   const fields = extractFields()
   const aiCallScan = extractAiCalls()
+  const librarySeeds = extractNovelPromptLibrary()
   const aiCalls = aiCallScan.byCategory
   const seedByKey = Object.fromEntries(seeds.map(s => [s.key, s]))
 
@@ -204,6 +215,31 @@ function buildMarkdown() {
     const s = seedByKey[k]
     const vars = s?.variables?.length ? '`' + s.variables.join('` `') + '`' : '—'
     lines.push(`| \`${k}\` | ${s?.name ?? '—'} | ${s?.description ?? '—'} | ${vars} |`)
+  }
+  lines.push('')
+
+  lines.push('### 小说创作 Prompt 资产库')
+  lines.push('')
+  lines.push(`共 ${librarySeeds.length} 个独立资产。项目事实输入均按下表声明，并经 \`assembleContext({ sourceKeys })\` 装配。`)
+  lines.push('')
+  lines.push('| 资产 | 阶段 | 名称 | 输入绑定 | 输出契约 |')
+  lines.push('|---|---|---|---|---|')
+  for (const seed of librarySeeds) {
+    const meta = seed.library
+    const bindings = meta.inputs.map(input => {
+      const sources = [
+        ...(input.sourceKeys ?? []).map(key => `source:${key}`),
+        ...(input.projectField ? [`project:${input.projectField}`] : []),
+        ...(!input.sourceKeys?.length && !input.projectField ? ['manual'] : []),
+      ]
+      return `\`${input.variable}\` ← ${sources.join(' + ')}`
+    }).join('<br/>')
+    const output = meta.output.mode === 'adopt'
+      ? `adopt → \`${meta.output.target}.${meta.output.field}\` (${meta.output.adoptMode})`
+      : `preview → ${meta.output.suggestedDestination}`
+    const titlePrefix = `小说库-${meta.assetId}-`
+    const title = seed.name.startsWith(titlePrefix) ? seed.name.slice(titlePrefix.length) : seed.name
+    lines.push(`| \`${meta.assetId}\` | ${meta.stage} | ${title} | ${bindings || '—'} | ${output} |`)
   }
   lines.push('')
 
