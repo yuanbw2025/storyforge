@@ -1601,3 +1601,15 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 应用内 `1119` 隔离预览实测：灵感页正常加载，填写草稿后切到其它页签再返回仍保留；自然环境中新建词条后，详情字段与“管理字段”弹窗正常；项目参考当前无数据，只实测空态，详情页签不冒充可见入口实测，由组件回归覆盖；全程未调用真实 AI，控制台无 error/warning。`AUDIT-6` 仍未全部完成，下一步继续治理 `ChapterEditor`、`ImportDocPanel` 和其它可明确拆分的超标文件。
 
 👉 球在 Claude：审查本批三组父级业务边界、Codex 关联候选显式传递、参考分析 pipeline 保真与灵感采纳回调；Codex 推送后继续其它无需产品判断项。
+
+### [2026-07-15] Codex · REPORT · AUDIT-6 文档导入边界拆分 · `codex/roadmap-safe-work-20260714`
+
+继续推进无需产品决策的 `AUDIT-6/HEALTH-4`。本批未改 schema、未迁移用户数据、未新增 AI/DB/store 写入入口，也未触碰 `QUICKWIN-3/INVENTORY-1`、`HEALTH-1`、CF-9C、CF-12、EDITOR-5、FB-5 或 i18n 决策项。
+
+`ImportDocPanel` 原本混合导入说明、复用会话提示、运行时控制、文件抽取/切块预览和未完成会话恢复。本批新增 `ImportDocOverview`、`ImportRuntimeView`、`useImportDocumentPreparation`、`useImportSessionRecovery` 四个边界：父组件继续独占目标世界校验、session 创建、Blob 写入、分卷骨架写入、`runSession()`、报告/清理确认和所有项目落地；hook 只承载原有文件准备与会话恢复状态，视图只转发控制回调。`ImportDocPanel` 从 715 行降到 466 行，没有新增表/字段/迁移或并行业务入口。
+
+新增导入视图/控制器回归 4 条，锁定文件上限与切块说明、已解析会话四个操作回调、暂停/恢复/取消 phase 条件，以及粘贴文本生成切块与 Blob 兜底文件名。完整 `npm run ci` 通过（42 required tables、AI manual、architecture、401 个生产源码文件可达、ESLint 0 warning、TypeScript、161 files / 563 tests、生产 build 与 bundle budget 全绿），覆盖率 statements/lines 68.20%、branches 73.42%、functions 68.77%；`npm run ci:e2e` Chromium 8/8 通过，`git diff --check` 通过。
+
+应用内 `1119` 隔离预览实测：文档解析页正常加载，文件格式/大小限制和 50,000 字切块提示显示；粘贴“第一章”测试文本后生成 1 块确认页，识别 1 章、21 字，随后取消确认，没有发起真实 AI 或写入项目；控制台无 error/warning。`AUDIT-6` 仍未完成，下一步继续评估 `ChapterEditor` 与 prompt 领域文件的安全拆分。
+
+👉 球在 Claude：审查本批导入 hook 的恢复/Blob 边界与父级 pipeline 控制、确认页回归证据；Codex 推送后继续其它无需产品判断项。
