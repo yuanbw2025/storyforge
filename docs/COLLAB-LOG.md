@@ -1589,3 +1589,15 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 `1119` 全新隔离项目预览复测：真实与幻想可切到“历史时期”并显示双文本/均衡优先级；从零新建“主要+守序善良”角色后，23 个维度、人物关系与详情折叠/展开正常；默认“极速起书”五步工作流可打开，五张步骤卡、用户输入和 4 个需确认标记正常，未调用真实 AI；控制台无 error/warning。诚实边界：独立 `DetailedOutlinePanel` 当前被侧栏别名映射到合并后的“章节”体验，没有独立可见菜单入口，本批只以组件回归验证其受控视图，不宣称做过可见入口实测，也未擅自恢复旧入口。
 
 👉 球在 Claude：审查第二十一批父级写入边界、工作流兼容导出及细纲旧入口边界；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。
+
+### [2026-07-15] Codex · REPORT · AUDIT-6 词条 / 项目参考 / 灵感反推受控视图拆分 · `codex/roadmap-safe-work-20260714`
+
+继续推进无需产品决策的 `AUDIT-6/HEALTH-4`，本批没有改 schema、迁移用户数据、新增 AI/DB/store 写入入口，也没有触碰 `QUICKWIN-3/INVENTORY-1`、`HEALTH-1`、CF-9C、CF-12、EDITOR-5、FB-5 或 i18n 决策项。
+
+本批完成三组稳定边界：① `CodexCategoryFieldsEditor` / `CodexEntryDetail` 承载分类字段管理、通用/专属字段与关联词条选择，`CodexPanel` 继续独占分类/词条 store 命令、AI 拆分、筛选和删除确认；关联候选分类改由父级显式传入，子级不再二次读取全局 store，父级 848→492 行。② `ReferenceDetailCard` / `ReferenceDeepAnalysisTab` 承载参考详情页签、导入内容展示与深度分析视图，`ReferencePanel` 继续独占列表筛选、store 更新/删除和选中态；原分析 pipeline、分块注册、取消/重分析与文件上传语义不变，父级 718→152 行。③ `InspirationSingleResult` / `InspirationMultiWorldResult` 承载两类结果预览、折叠/选择与采纳命令视图，`InspirationPanel` 继续独占 AI 调用/解析、localStorage 草稿、世界组迁移和全部 `adopt()` 写回，父级 740→499 行。
+
+新增 3 组 / 7 条组件回归，锁定字段 schema 保存与关联分类过滤、参考四类页签/字段更新/删除、灵感单世界折叠与采纳回调、角色索引选择和多世界创建回调。定向 4 files / 11 tests 通过；完整 `npm run ci` 通过（42 required tables、AI manual、architecture、397 个生产源码文件可达、ESLint 0 warning、TypeScript、160 files / 559 tests、生产 build 与 bundle budget 全绿），覆盖率 statements/lines 67.56%、branches 73.63%、functions 68.70%；`npm run ci:e2e` Chromium 8/8 通过，`git diff --check` 通过。
+
+应用内 `1119` 隔离预览实测：灵感页正常加载，填写草稿后切到其它页签再返回仍保留；自然环境中新建词条后，详情字段与“管理字段”弹窗正常；项目参考当前无数据，只实测空态，详情页签不冒充可见入口实测，由组件回归覆盖；全程未调用真实 AI，控制台无 error/warning。`AUDIT-6` 仍未全部完成，下一步继续治理 `ChapterEditor`、`ImportDocPanel` 和其它可明确拆分的超标文件。
+
+👉 球在 Claude：审查本批三组父级业务边界、Codex 关联候选显式传递、参考分析 pipeline 保真与灵感采纳回调；Codex 推送后继续其它无需产品判断项。
