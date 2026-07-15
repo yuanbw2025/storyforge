@@ -5,6 +5,8 @@
 **交流与教程**
 
 - GitHub: https://github.com/yuanbw2025/storyforge
+- 个人网站主页: https://yuanbw.vercel.app/
+- 个人知乎主页: https://www.zhihu.com/people/dan-ran-xing-yuan-59
 - 知乎专栏文档: https://zhuanlan.zhihu.com/p/2038714210188780594
 - B 站项目视频说明书: https://www.bilibili.com/video/BV1q37j6QExh/
 - QQ 交流群: 1082374587
