@@ -17,6 +17,10 @@
 - 大纲生成确认区新增“本次生成依据”：在调用 API 前展示实际读取/空缺/因预算省略的来源、故事核心与已有卷纲摘要；无主线或灵感未采纳时明确提示，不再让用户靠结果猜 AI 读了什么。
 - 角色状态卡的“持有物”现在明确标注来自物品栏流水还是状态字段，并可一键跳转到物品栏；按角色背包的数据同步仍留待独立方案实施。
 - 工程质量门禁收紧：清理现存 ESLint warning 并将“零 warning”接入本地与 GitHub CI，后续新增 Hook 依赖、无效表达式或静态代码警告会直接阻断合并。
+- `AUDIT-6` 持续拆分巨型组件：`OutlinePanel`、`HistoryPanel`、`RichEditor`、`AIConfigPanel`、`WorldviewOriginPanel`、`CharacterPanel`、`WorldRulesPanel`、`WorkflowRunner`、`DetailedOutlinePanel`、`CodexPanel`、`ReferencePanel`、`InspirationPanel` 与 `ImportDocPanel` 已按 controller / hook / controlled view 边界收口；父级继续独占 store、数据库、AI、上下文装配与采纳写回，未新增并行业务入口。
+- `ImportDocPanel` 的文件准备与未完成会话恢复分别收口到专用 hook，说明、复用提示和运行时操作拆为受控视图；主面板 715→466 行，session 创建、Blob 写入、目标世界校验、分卷骨架和 pipeline 执行语义保持不变。
+- `CodexPanel` 848→492 行、`ReferencePanel` 718→152 行、`InspirationPanel` 740→499 行；词条关联候选由父级显式传递，参考深度分析沿用原 pipeline，灵感草稿、多世界迁移与 `adopt()` 仍留在父级。
+- `HEALTH-4/5` 补充受控视图、controller、导入、章节、历史、工作流等回归覆盖，并新增生产源码可达性守卫与按需加载边界；当前完整质量闸门为 161 个测试文件 / 563 条测试、Chromium E2E 8/8，覆盖率 statements/lines 68.20%、branches 73.42%、functions 68.77%。
 
 ## v3.8.0 — 2026-07-13 · 大纲续写衔接 + 跨卷拖拽 + 全书查找替换
 
