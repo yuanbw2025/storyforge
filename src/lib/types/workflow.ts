@@ -51,6 +51,8 @@ export interface PromptWorkflowStep {
   parameterValues?: Record<string, unknown>
   /** 给 AI 的额外提示（每步可独立设置） */
   userHint?: string
+  /** 模板变量的作者补充；键来自 PromptTemplate.variableBindings.variable。 */
+  inputValues?: Record<string, string>
   /** Phase 17：本步输出的自动写回目标 */
   saveTarget?: SaveTarget
 }

@@ -11,6 +11,7 @@ import { useForeshadowStore } from '../../../stores/foreshadow'
 import { useWorldGroupStore } from '../../../stores/world-group'
 import { useAIStream } from '../../../hooks/useAIStream'
 import { renderPrompt } from '../../../lib/ai/prompt-engine'
+import { assembleBoundPrompt } from '../../../lib/ai/prompt-variable-bindings'
 import { extractJSON } from '../../../lib/ai/adapters/import-adapter'
 import { adopt } from '../../../lib/registry/adopt'
 import { assembleContext } from '../../../lib/registry/assemble-context'
@@ -257,15 +258,38 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
   const runStep = async (idx: number) => {
     const step = workflow.steps[idx]
     if (!step) return
-    const tpl = usePromptStore.getState().getActive(step.promptModuleKey)
+    const promptState = usePromptStore.getState()
+    const tpl = step.templateId != null
+      ? promptState.templates.find(template => template.id === step.templateId)
+        ?? promptState.getActive(step.promptModuleKey)
+      : promptState.getActive(step.promptModuleKey)
 
     updateResult(step.stepId, { status: 'running', output: '', error: undefined })
 
     try {
-      const ctx = await buildStepContext(step, idx)
-      const { messages } = renderPrompt(tpl, ctx, {
-        parameterValues: step.parameterValues,
-      })
+      let messages
+      if (tpl.variableBindings?.length) {
+        const wg = project?.enableMultiWorld ? activeGroupId : null
+        const bound = await assembleBoundPrompt({
+          template: tpl,
+          project,
+          worldGroupId: wg,
+          previousOutput: idx > 0 ? stepOutputsRef.current.get(workflow.steps[idx - 1].stepId) : '',
+          userHint: userInputsRef.current.get(step.stepId),
+          manualValues: step.inputValues,
+          parameterValues: step.parameterValues,
+        })
+        if (bound.missingScopes.length) {
+          throw new Error(`当前模板需要${bound.missingScopes.join('、')}范围，请先补齐对应项目/章节选择`)
+        }
+        if (bound.missingVariables.length) {
+          throw new Error(`请填写必填字段：${bound.missingVariables.join('、')}`)
+        }
+        messages = bound.messages
+      } else {
+        const ctx = await buildStepContext(step, idx)
+        messages = renderPrompt(tpl, ctx, { parameterValues: step.parameterValues }).messages
+      }
       const output = await ai.start(messages, undefined, { category: step.promptModuleKey, projectId: project?.id })
       // FB-1 修复 · 缺陷 A：把本步输出存进 ref(而非只存 React state),供下一步取用
       stepOutputsRef.current.set(step.stepId, output)

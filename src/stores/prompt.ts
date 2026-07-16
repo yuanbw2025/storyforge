@@ -79,6 +79,9 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
             examples: seed.examples,
             lengthMode: seed.lengthMode,
             continuityMode: seed.continuityMode,
+            assetId: seed.assetId,
+            variableBindings: seed.variableBindings,
+            applicability: seed.applicability,
             updatedAt: now,
           }
           await db.promptTemplates.update(old.id!, refreshed)

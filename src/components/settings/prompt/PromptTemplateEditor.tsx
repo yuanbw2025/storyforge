@@ -84,7 +84,13 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   const preview = useMemo(() => {
     if (!draft) return null
     try {
-      return renderPrompt(draft, PREVIEW_VARS)
+      const previewVars = { ...PREVIEW_VARS }
+      for (const binding of draft.variableBindings ?? []) {
+        if (previewVars[binding.variable] == null || previewVars[binding.variable] === '') {
+          previewVars[binding.variable] = `（示例：${binding.label}）`
+        }
+      }
+      return renderPrompt(draft, previewVars)
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
@@ -370,6 +376,38 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
           ))}
         </div>
       </div>
+
+      {draft.variableBindings?.length ? (
+        <div className="bg-bg-surface border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-text-primary">变量字段绑定</label>
+            {draft.assetId && <span className="text-xs font-mono text-accent">{draft.assetId}</span>}
+          </div>
+          <div className="space-y-2">
+            {draft.variableBindings.map(binding => (
+              <div key={binding.variable} className="border-b border-border/60 pb-2 last:border-0 last:pb-0">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <code className="text-accent">{binding.variable}</code>
+                  <span className="text-text-primary">{binding.label}</span>
+                  {binding.required && <span className="text-error">必填</span>}
+                  {binding.manual && <span className="text-text-muted">可人工补充</span>}
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-text-secondary">
+                  {binding.projectField && (
+                    <span className="px-1.5 py-0.5 bg-bg-base rounded">项目字段：{binding.projectField}</span>
+                  )}
+                  {binding.sourceKeys?.map(sourceKey => (
+                    <span key={sourceKey} className="px-1.5 py-0.5 bg-bg-base rounded">上下文：{sourceKey}</span>
+                  ))}
+                  {!binding.projectField && !binding.sourceKeys?.length && (
+                    <span className="px-1.5 py-0.5 bg-bg-base rounded">人工输入</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* 实时预览 */}
       <div className="bg-bg-surface border border-border rounded-xl p-4">

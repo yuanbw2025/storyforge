@@ -199,8 +199,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 - `src/components/editor/ReviewPanel.tsx:130 · ai.start`
 - `src/components/settings/NS0EvalPanel.tsx:50 · chat`
-- `src/components/settings/prompt/WorkflowRunner.tsx:269 · ai.start`
+- `src/components/settings/prompt/WorkflowRunner.tsx:293 · ai.start`
 
 ---
 
-生成时间基准:commit `416338b`
+生成时间基准:commit `7678931`

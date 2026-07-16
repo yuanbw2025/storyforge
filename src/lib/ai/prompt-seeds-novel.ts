@@ -1,10 +1,11 @@
 import type { PromptSeed } from './prompt-seed-type'
+import { NOVEL_PROMPT_SEED_BINDINGS } from './prompt-seed-bindings-novel'
 
 /**
  * 从一次性 Prompt 资产实验中整理回主线模板体系的小说创作内容。
  * 这些条目只使用现有 PromptTemplate / PromptModuleKey / WorkflowRunner 框架。
  */
-export const NOVEL_CONTENT_PROMPT_SEEDS: PromptSeed[] = [
+const NOVEL_CONTENT_PROMPT_SEEDS_RAW: PromptSeed[] = [
   {
     scope: 'system',
     moduleKey: 'story.brief',
@@ -1304,3 +1305,25 @@ export const NOVEL_CONTENT_PROMPT_SEEDS: PromptSeed[] = [
     isActive: false,
   },
 ]
+
+function assetIdFromSeedName(name: string): string | undefined {
+  const tail = name.match(/^小说内容-(.+?)-/)?.[1]
+  if (!tail) return undefined
+  const candidates = Object.keys(NOVEL_PROMPT_SEED_BINDINGS)
+    .filter(id => name.startsWith(`小说内容-${id}-`))
+    .sort((a, b) => b.length - a.length)
+  return candidates[0] ?? tail
+}
+
+/** 将实验版的输入声明转成普通模板可选元数据，不引入独立运行入口。 */
+export const NOVEL_CONTENT_PROMPT_SEEDS: PromptSeed[] = NOVEL_CONTENT_PROMPT_SEEDS_RAW.map(seed => {
+  const assetId = assetIdFromSeedName(seed.name)
+  const binding = assetId ? NOVEL_PROMPT_SEED_BINDINGS[assetId] : undefined
+  if (!binding) throw new Error(`[prompt-seeds-novel] missing binding for ${seed.name}`)
+  return {
+    ...seed,
+    assetId: binding.assetId,
+    variableBindings: binding.variableBindings,
+    applicability: binding.applicability,
+  }
+})
