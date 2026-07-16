@@ -45,6 +45,10 @@ describe('R-CF20260702-10 · task classification and resolution', () => {
     ['review.quality', 'review'],
     ['chapter.deai', 'review'],
     ['scene.verify', 'review'],
+    ['library.creation', 'creation'],
+    ['library.extraction', 'extraction'],
+    ['library.analysis', 'analysis'],
+    ['library.review', 'review'],
   ] as const)('classifies %s as %s', (category, taskKind) => {
     expect(classifyAITask(category)).toBe(taskKind)
   })

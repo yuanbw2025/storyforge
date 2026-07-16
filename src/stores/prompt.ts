@@ -1,17 +1,91 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { PromptTemplate, PromptModuleKey } from '../lib/types/prompt'
-import { SYSTEM_PROMPT_SEEDS } from '../lib/ai/prompt-seeds'
+import { SYSTEM_PROMPT_SEEDS, type PromptSeed } from '../lib/ai/prompt-seeds'
 
 const systemSeedIdentity = (template: Pick<PromptTemplate, 'name' | 'library'>): string =>
   template.library?.assetId ? `library:${template.library.assetId}` : `name:${template.name}`
 
+const systemSeedComparable = (template: PromptTemplate | PromptSeed) => ({
+  scope: template.scope,
+  name: template.name,
+  moduleKey: template.moduleKey,
+  description: template.description,
+  systemPrompt: template.systemPrompt,
+  userPromptTemplate: template.userPromptTemplate,
+  variables: template.variables,
+  promptType: template.promptType,
+  modelOverride: template.modelOverride,
+  isDefault: template.isDefault,
+  genres: template.genres,
+  parameters: template.parameters,
+  examples: template.examples,
+  lengthMode: template.lengthMode,
+  continuityMode: template.continuityMode,
+  library: template.library,
+})
+
+export function systemSeedNeedsRefresh(existing: PromptTemplate, seed: PromptSeed): boolean {
+  return JSON.stringify(systemSeedComparable(existing)) !== JSON.stringify(systemSeedComparable(seed))
+}
+
+function materializeSystemSeed(seed: PromptSeed, old: PromptTemplate, now: number): PromptTemplate {
+  return {
+    id: old.id,
+    scope: seed.scope,
+    moduleKey: seed.moduleKey,
+    promptType: seed.promptType,
+    name: seed.name,
+    description: seed.description,
+    systemPrompt: seed.systemPrompt,
+    userPromptTemplate: seed.userPromptTemplate,
+    variables: seed.variables,
+    modelOverride: seed.modelOverride,
+    isActive: old.isActive,
+    isDefault: seed.isDefault,
+    genres: seed.genres,
+    parameters: seed.parameters,
+    examples: seed.examples,
+    lengthMode: seed.lengthMode,
+    continuityMode: seed.continuityMode,
+    library: seed.library,
+    createdAt: old.createdAt,
+    updatedAt: now,
+  }
+}
+
+async function syncSystemSeeds(seeds: readonly PromptSeed[], existing: PromptTemplate[]): Promise<void> {
+  const now = Date.now()
+  const existingSystemMap = new Map(
+    existing.filter(template => template.scope === 'system').map(template => [systemSeedIdentity(template), template]),
+  )
+  const changedRows: PromptTemplate[] = []
+  for (const seed of seeds) {
+    const old = existingSystemMap.get(systemSeedIdentity(seed))
+    if (!old) {
+      changedRows.push({ ...seed, createdAt: now, updatedAt: now })
+    } else if (systemSeedNeedsRefresh(old, seed)) {
+      changedRows.push(materializeSystemSeed(seed, old, now))
+    }
+  }
+  if (!changedRows.length) return
+  await db.transaction('rw', db.promptTemplates, async () => {
+    await db.promptTemplates.bulkPut(changedRows)
+  })
+}
+
+let libraryLoadPromise: Promise<void> | null = null
+
 interface PromptStore {
   templates: PromptTemplate[]
   loaded: boolean
+  libraryLoaded: boolean
 
   /** 启动时调用一次：从 IndexedDB 加载，若空则注入系统 seed。 */
   init(): Promise<void>
+
+  /** 用户进入小说创作库时动态加载并增量同步 118 个资产。 */
+  ensureLibraryLoaded(): Promise<void>
 
   /** 同步获取某 moduleKey 当前激活的模板。
    *  正常情况从内存里取；若 store 未初始化或没找到，fallback 到 seed 数组兜底。
@@ -37,59 +111,29 @@ interface PromptStore {
 export const usePromptStore = create<PromptStore>((set, get) => ({
   templates: [],
   loaded: false,
+  libraryLoaded: false,
 
   init: async () => {
     if (get().loaded) return
     const existing = await db.promptTemplates.toArray()
-    const now = Date.now()
-
-    if (existing.length === 0) {
-      // 全新库：注入全部 seed
-      const rows: PromptTemplate[] = SYSTEM_PROMPT_SEEDS.map(seed => ({
-        ...seed,
-        createdAt: now,
-        updatedAt: now,
-      }))
-      await db.promptTemplates.bulkAdd(rows)
-    } else {
-      // 已有库：补缺 seed + 更新现有 system seed 的内容（保留用户的 isActive 选择）
-      // Phase 13: 同一 moduleKey 下可能有多套 seed（不同 genre），用 name 作为唯一键
-      const existingSystemMap = new Map(
-        existing.filter(t => t.scope === 'system').map(t => [systemSeedIdentity(t), t])
-      )
-
-      for (const seed of SYSTEM_PROMPT_SEEDS) {
-        const old = existingSystemMap.get(systemSeedIdentity(seed))
-        if (!old) {
-          // 缺 → 补
-          await db.promptTemplates.add({ ...seed, createdAt: now, updatedAt: now })
-        } else {
-          // 已有 → 用代码里的最新内容刷新（除了 isActive，保留用户的激活选择）
-          const refreshed: Partial<PromptTemplate> = {
-            name: seed.name,
-            moduleKey: seed.moduleKey,
-            description: seed.description,
-            systemPrompt: seed.systemPrompt,
-            userPromptTemplate: seed.userPromptTemplate,
-            variables: seed.variables,
-            promptType: seed.promptType,
-            modelOverride: seed.modelOverride,
-            isDefault: seed.isDefault,
-            genres: seed.genres,
-            parameters: seed.parameters,
-            examples: seed.examples,
-            lengthMode: seed.lengthMode,
-            continuityMode: seed.continuityMode,
-            library: seed.library,
-            updatedAt: now,
-          }
-          await db.promptTemplates.update(old.id!, refreshed)
-        }
-      }
-    }
+    await syncSystemSeeds(SYSTEM_PROMPT_SEEDS, existing)
 
     const reloaded = await db.promptTemplates.toArray()
     set({ templates: reloaded, loaded: true })
+  },
+
+  ensureLibraryLoaded: async () => {
+    if (get().libraryLoaded) return
+    if (!libraryLoadPromise) {
+      libraryLoadPromise = (async () => {
+        const { NOVEL_PROMPT_LIBRARY_SEEDS } = await import('../lib/ai/prompt-library-seeds')
+        const existing = await db.promptTemplates.toArray()
+        await syncSystemSeeds(NOVEL_PROMPT_LIBRARY_SEEDS, existing)
+        const reloaded = await db.promptTemplates.toArray()
+        set({ templates: reloaded, libraryLoaded: true })
+      })().finally(() => { libraryLoadPromise = null })
+    }
+    await libraryLoadPromise
   },
 
   getActive: (key: PromptModuleKey): PromptTemplate => {

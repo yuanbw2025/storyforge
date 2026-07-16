@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { db } from '../../src/lib/db/schema'
 import { NOVEL_PROMPT_LIBRARY_SEEDS } from '../../src/lib/ai/prompt-library-seeds'
 import {
   assembleLibraryPromptVariables,
@@ -131,5 +132,76 @@ describe('小说创作 Prompt 资产库', () => {
       const publicText = [seed.name, seed.description, seed.systemPrompt, seed.userPromptTemplate].join('\n')
       expect(publicText, seed.library!.assetId).not.toMatch(/\/Users\/|https?:\/\/|kdocs\.cn|\.codex-tmp/)
     }
+  })
+})
+
+describe('小说创作 Prompt 最终请求', () => {
+  beforeEach(async () => {
+    await db.delete()
+    await db.open()
+    await db.storyCores.add({
+      projectId: 991,
+      theme: 'UNIQUE_STORY_CORE_MARKER',
+      centralConflict: '冲突',
+      plotPattern: '成长',
+      storyLines: '主线',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  })
+
+  afterEach(() => db.close())
+
+  it('同一自动来源即使绑定多个变量，正文也只注入一次', async () => {
+    const source = asTemplate('P11-A')
+    const template: PromptTemplate = {
+      ...source,
+      library: {
+        ...source.library!,
+        output: { format: 'markdown', mode: 'preview', suggestedDestination: '测试' },
+        inputs: [
+          { variable: 'brief', label: '创作简报', sourceKeys: ['storyCore'] },
+          { variable: 'core', label: '故事核心', sourceKeys: ['storyCore'] },
+        ],
+      },
+      userPromptTemplate: '{{brief}}\n{{core}}',
+      variables: ['brief', 'core'],
+    }
+    const result = await assembleLibraryPromptVariables({
+      template,
+      project: project(),
+      worldGroupId: null,
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+    })
+    const finalText = result.messages.map(message => message.content).join('\n')
+    expect(finalText.match(/UNIQUE_STORY_CORE_MARKER/g)).toHaveLength(1)
+    expect(String(result.variables.brief)).not.toContain('UNIQUE_STORY_CORE_MARKER')
+    expect(String(result.variables.brief)).toContain('创作简报')
+    expect(finalText.match(/<storyforge_project_context>/g)).toHaveLength(1)
+  })
+
+  it('最终预算包含固定模板和手动输入，超限时在请求前阻断', async () => {
+    const source = asTemplate('P00-A')
+    const template: PromptTemplate = {
+      ...source,
+      systemPrompt: '系统规则'.repeat(300),
+      userPromptTemplate: '{{raw_intent}}',
+      variables: ['raw_intent'],
+      library: {
+        ...source.library!,
+        inputs: [{ variable: 'raw_intent', label: '作者原始想法', manual: true, required: true }],
+      },
+    }
+    await expect(assembleLibraryPromptVariables({
+      template,
+      project: project(),
+      worldGroupId: null,
+      manualValues: { raw_intent: '手动资料'.repeat(300) },
+      provider: 'custom',
+      model: 'tiny-model',
+      contextWindow: 1_000,
+      maxOutputTokens: 100,
+    })).rejects.toThrow('固定指令与手动输入')
   })
 })

@@ -112,7 +112,7 @@ export interface PromptLibraryInputBinding {
   variable: string
   label: string
   description?: string
-  /** 经 CONTEXT_SOURCES + assembleContext() 读取；多个源按声明顺序合并。 */
+  /** 经 CONTEXT_SOURCES + assembleContext() 读取，并在最终 Prompt 中统一注入一次。 */
   sourceKeys?: string[]
   /** 从当前项目元信息派生，不读取故事事实。 */
   projectField?: PromptProjectField

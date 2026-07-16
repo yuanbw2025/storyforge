@@ -10,9 +10,10 @@ import { useOutlineStore } from '../../../stores/outline'
 import { useChapterStore } from '../../../stores/chapter'
 import { useAIConfigStore } from '../../../stores/ai-config'
 import { useAIStream } from '../../../hooks/useAIStream'
-import { renderPrompt } from '../../../lib/ai/prompt-engine'
+import { resolveRequestConfig } from '../../../lib/ai/client'
 import {
   assembleLibraryPromptVariables,
+  getLibraryTaskCategory,
   getLibraryScopeNeeds,
   getLibrarySourceKeys,
   libraryTemplateMatchesProject,
@@ -20,7 +21,13 @@ import {
   PROMPT_LIBRARY_TASK_LABELS,
 } from '../../../lib/ai/prompt-library'
 import { CONTEXT_SOURCE_BY_KEY } from '../../../lib/registry/context-sources'
-import { adopt } from '../../../lib/registry/adopt'
+import { resolveNodeWorldGroupId, resolvePromptLibraryScope } from '../../../lib/ai/prompt-library-scope'
+import {
+  adoptPromptLibraryChapterOutput,
+  canAdoptPromptLibraryRun,
+  type PromptLibraryCompletedRun,
+} from '../../../lib/editor/prompt-library-chapter-adoption'
+import { useAIGenerationSessionStore } from '../../../stores/ai-generation-session'
 import { useDialog } from '../../shared/Dialog'
 import { useToast } from '../../shared/Toast'
 
@@ -33,6 +40,7 @@ type TaskFilter = 'all' | PromptLibraryTaskType
 
 export default function PromptLibraryPanel({ project }: Props) {
   const templates = usePromptStore(s => s.templates)
+  const ensureLibraryLoaded = usePromptStore(s => s.ensureLibraryLoaded)
   const libraryTemplates = useMemo(
     () => templates.filter(template => template.library).sort((a, b) => a.library!.order - b.library!.order),
     [templates],
@@ -44,6 +52,10 @@ export default function PromptLibraryPanel({ project }: Props) {
   const [currentOnly, setCurrentOnly] = useState(false)
   const [mobileDetail, setMobileDetail] = useState(false)
   const detailScrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    void ensureLibraryLoaded()
+  }, [ensureLibraryLoaded])
 
   const filtered = useMemo(() => libraryTemplates.filter(template => {
     const meta = template.library!
@@ -198,7 +210,8 @@ function PromptLibraryRunner({
   const toast = useToast()
   const dialog = useDialog()
   const aiConfig = useAIConfigStore(s => s.config)
-  const ai = useAIStream(`prompt-library:${project.id}:${meta.assetId}`)
+  const aiSessionKey = `prompt-library:${project.id}:${meta.assetId}`
+  const ai = useAIStream(aiSessionKey)
   const groups = useWorldGroupStore(s => s.groups)
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const loadGroups = useWorldGroupStore(s => s.loadAll)
@@ -214,6 +227,10 @@ function PromptLibraryRunner({
   const [userHint, setUserHint] = useState('')
   const [copied, setCopied] = useState(false)
   const [adopted, setAdopted] = useState(false)
+  const [adopting, setAdopting] = useState(false)
+  const [preparing, setPreparing] = useState(false)
+  const [completedRun, setCompletedRun] = useState<PromptLibraryCompletedRun | null>(null)
+  const runSequenceRef = useRef(0)
   const scopeNeeds = getLibraryScopeNeeds(template)
   const sourceKeys = getLibrarySourceKeys(template)
 
@@ -222,30 +239,85 @@ function PromptLibraryRunner({
   }, [project.id, loadNodes, loadChapters, loadGroups])
 
   useEffect(() => {
-    if (project.enableMultiWorld) setWorldGroupId(activeGroupId)
-  }, [project.enableMultiWorld, activeGroupId])
+    if (project.enableMultiWorld && chapterId == null && outlineNodeId == null) setWorldGroupId(activeGroupId)
+  }, [project.enableMultiWorld, activeGroupId, chapterId, outlineNodeId])
 
   const handleChapterChange = (value: string) => {
     const next = value ? Number(value) : null
     setChapterId(next)
     const chapter = chapters.find(item => item.id === next)
-    if (chapter) setOutlineNodeId(chapter.outlineNodeId)
+    if (!chapter) return
+    setOutlineNodeId(chapter.outlineNodeId)
+    const node = nodes.find(item => item.id === chapter.outlineNodeId)
+    if (node) setWorldGroupId(project.enableMultiWorld ? resolveNodeWorldGroupId(node, nodes) : null)
+  }
+
+  const handleOutlineChange = (value: string) => {
+    const next = value ? Number(value) : null
+    setOutlineNodeId(next)
+    const node = nodes.find(item => item.id === next)
+    if (node) setWorldGroupId(project.enableMultiWorld ? resolveNodeWorldGroupId(node, nodes) : null)
+  }
+
+  const resolvedScope = useMemo(() => resolvePromptLibraryScope({
+    template,
+    project,
+    chapters,
+    nodes,
+    groups,
+    selection: { worldGroupId, outlineNodeId, chapterId },
+  }), [template, project, chapters, nodes, groups, worldGroupId, outlineNodeId, chapterId])
+
+  const startRoutedLibraryPrompt = (
+    messages: Parameters<typeof ai.start>[0],
+    modelOverride: Parameters<typeof ai.start>[1],
+  ) => {
+    const call = (category: 'library.creation' | 'library.extraction' | 'library.analysis' | 'library.review') => {
+      switch (category) {
+        case 'library.creation':
+          return ai.start(messages, modelOverride, { category: 'library.creation', projectId: project.id })
+        case 'library.extraction':
+          return ai.start(messages, modelOverride, { category: 'library.extraction', projectId: project.id })
+        case 'library.review':
+          return ai.start(messages, modelOverride, { category: 'library.review', projectId: project.id })
+        default:
+          return ai.start(messages, modelOverride, { category: 'library.analysis', projectId: project.id })
+      }
+    }
+    return call(getLibraryTaskCategory(meta.taskType))
   }
 
   const handleRun = async () => {
-    if (!project.id) return
+    if (!project.id || preparing || ai.isStreaming) return
+    const runSequence = ++runSequenceRef.current
     setAdopted(false)
+    setCompletedRun(null)
+    setPreparing(true)
+    ai.reset()
     try {
+      if (resolvedScope.errors.length) {
+        toast.error(resolvedScope.errors.join(' '))
+        return
+      }
+      const category = getLibraryTaskCategory(meta.taskType)
+      const requestedConfig = { ...aiConfig, ...(template.modelOverride ?? {}) }
+      const effectiveConfig = resolveRequestConfig(requestedConfig, {
+        category,
+        projectId: project.id,
+        configOverrides: template.modelOverride,
+      }).config
       const result = await assembleLibraryPromptVariables({
         template,
         project,
-        worldGroupId: project.enableMultiWorld ? worldGroupId : null,
-        outlineNodeId,
-        chapterId,
+        worldGroupId: resolvedScope.worldGroupId,
+        outlineNodeId: resolvedScope.outlineNodeId,
+        chapterId: resolvedScope.chapterId,
         manualValues,
         userHint,
-        provider: aiConfig.provider,
-        model: aiConfig.model,
+        provider: effectiveConfig.provider,
+        model: effectiveConfig.model,
+        contextWindow: effectiveConfig.contextWindow,
+        maxOutputTokens: effectiveConfig.maxTokens,
       })
       if (result.missingScopes.length) {
         const scopeLabels = result.missingScopes.map(scope => ({
@@ -258,14 +330,32 @@ function PromptLibraryRunner({
         toast.error(`请补充必填资料：${result.missingVariables.join('、')}`)
         return
       }
-      const { messages, modelOverride } = renderPrompt(template, result.variables)
-      await ai.start(messages, modelOverride, {
-        category: `library.${meta.stage}`,
+      if (runSequence !== runSequenceRef.current) return
+      setPreparing(false)
+      const output = await startRoutedLibraryPrompt(result.messages, result.modelOverride)
+      const session = useAIGenerationSessionStore.getState().sessions[aiSessionKey]
+      if (runSequence !== runSequenceRef.current || session?.error || !output.trim()) return
+      setCompletedRun({
+        assetId: meta.assetId,
         projectId: project.id,
+        chapterId: resolvedScope.chapterId,
+        outlineNodeId: resolvedScope.outlineNodeId,
+        worldGroupId: resolvedScope.worldGroupId,
+        output,
+        completedAt: Date.now(),
       })
     } catch (error) {
       toast.error(`运行失败：${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      if (runSequence === runSequenceRef.current) setPreparing(false)
     }
+  }
+
+  const handleStop = () => {
+    runSequenceRef.current += 1
+    setCompletedRun(null)
+    setPreparing(false)
+    ai.stop()
   }
 
   const handleCopy = async () => {
@@ -277,12 +367,8 @@ function PromptLibraryRunner({
 
   const handleAdopt = async () => {
     const contract = meta.output
-    if (contract.mode !== 'adopt' || !contract.target || !contract.field || !project.id || !ai.output) return
-    if (contract.recordScope === 'chapter' && chapterId == null) {
-      toast.error('请先选择要写入的章节。')
-      return
-    }
-    const chapter = chapters.find(item => item.id === chapterId)
+    if (contract.mode !== 'adopt' || !project.id || !completedRun || ai.isStreaming || adopting) return
+    const chapter = chapters.find(item => item.id === completedRun.chapterId)
     const ok = await dialog.confirm({
       title: contract.adoptMode === 'append' ? '把结果追加到章节正文？' : '用结果替换章节正文？',
       message: contract.adoptMode === 'append'
@@ -292,24 +378,27 @@ function PromptLibraryRunner({
       tone: contract.adoptMode === 'append' ? 'info' : 'danger',
     })
     if (!ok) return
-    const result = await adopt({
-      projectId: project.id,
-      worldGroupId: project.enableMultiWorld ? worldGroupId : null,
-      target: contract.target,
-      recordId: chapterId ?? undefined,
-      mode: contract.adoptMode ?? 'replace',
-      data: { [contract.field]: ai.output },
-    })
-    if (!result.written.length) {
-      toast.error('没有写入任何内容，请检查章节和输出。')
-      return
+    setAdopting(true)
+    try {
+      const result = await adoptPromptLibraryChapterOutput({ project, template, run: completedRun })
+      await refreshChapter(result.chapterId)
+      setAdopted(true)
+      toast.success(`已写入「${chapter?.title ?? '生成时所选章节'}」，并创建采纳前快照`)
+      if (result.warnings.length) toast.info(`正文已保存；${result.warnings.join('；')}`)
+    } catch (error) {
+      toast.error(`采纳失败：${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setAdopting(false)
     }
-    if (chapterId != null) await refreshChapter(chapterId)
-    setAdopted(true)
-    toast.success(`已写入「${chapter?.title ?? '当前章节'}」`)
   }
 
   const sourceLabels = sourceKeys.map(key => CONTEXT_SOURCE_BY_KEY.get(key)?.label ?? key)
+  const canAdopt = canAdoptPromptLibraryRun({
+    run: completedRun,
+    assetId: meta.assetId,
+    isStreaming: ai.isStreaming,
+    adopted: adopted || adopting,
+  })
 
   return (
     <div className="p-4 md:p-5 space-y-5">
@@ -361,7 +450,7 @@ function PromptLibraryRunner({
         <section>
           <h3 className="text-sm font-medium text-text-primary mb-2">运行范围</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {project.enableMultiWorld && scopeNeeds.world && (
+            {project.enableMultiWorld && scopeNeeds.world && !scopeNeeds.outline && !scopeNeeds.chapter && meta.output.recordScope !== 'chapter' && (
               <label className="text-xs text-text-secondary">
                 世界
                 <select
@@ -387,12 +476,12 @@ function PromptLibraryRunner({
                 </select>
               </label>
             )}
-            {scopeNeeds.outline && (
+            {scopeNeeds.outline && !scopeNeeds.chapter && meta.output.recordScope !== 'chapter' && (
               <label className="text-xs text-text-secondary">
                 大纲节点
                 <select
                   value={outlineNodeId ?? ''}
-                  onChange={event => setOutlineNodeId(event.target.value ? Number(event.target.value) : null)}
+                  onChange={event => handleOutlineChange(event.target.value)}
                   className="mt-1 w-full px-2 py-2 bg-bg-base border border-border rounded text-sm text-text-primary"
                 >
                   <option value="">请选择大纲节点</option>
@@ -401,6 +490,11 @@ function PromptLibraryRunner({
               </label>
             )}
           </div>
+          {(resolvedScope.chapterId != null || resolvedScope.outlineNodeId != null) && (
+            <p className="mt-2 text-xs text-text-muted">
+              章纲与世界由所选{resolvedScope.chapterId != null ? '章节' : '大纲节点'}自动确定，生成后不会随选择器切换而改变。
+            </p>
+          )}
         </section>
       )}
 
@@ -414,7 +508,7 @@ function PromptLibraryRunner({
                 {binding.required && <span className="text-[10px] text-error">必填</span>}
                 {(binding.sourceKeys?.length || binding.projectField) && (
                   <span className="text-[10px] text-info">
-                    自动：{[
+                    统一项目上下文：{[
                       ...(binding.sourceKeys ?? []).map(key => CONTEXT_SOURCE_BY_KEY.get(key)?.label ?? key),
                       ...(binding.projectField ? ['项目信息'] : []),
                     ].join('、')}
@@ -446,7 +540,7 @@ function PromptLibraryRunner({
       <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
         {ai.isStreaming ? (
           <button
-            onClick={ai.stop}
+            onClick={handleStop}
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-error/10 text-error text-sm rounded hover:bg-error/20"
           >
             <Square className="w-4 h-4" /> 停止
@@ -454,9 +548,10 @@ function PromptLibraryRunner({
         ) : (
           <button
             onClick={handleRun}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm rounded hover:bg-accent-hover"
+            disabled={preparing}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm rounded hover:bg-accent-hover disabled:opacity-50"
           >
-            <Play className="w-4 h-4" /> 运行 Prompt
+            <Play className="w-4 h-4" /> {preparing ? '准备中…' : '运行 Prompt'}
           </button>
         )}
         {ai.output && (
@@ -468,10 +563,10 @@ function PromptLibraryRunner({
             {copied ? '已复制' : '复制结果'}
           </button>
         )}
-        {ai.output && meta.output.mode === 'adopt' && (
+        {completedRun && meta.output.mode === 'adopt' && (
           <button
             onClick={handleAdopt}
-            disabled={adopted}
+            disabled={!canAdopt}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-success/10 text-success text-sm rounded hover:bg-success/20 disabled:opacity-50"
           >
             {adopted ? <Check className="w-4 h-4" /> : <WandSparkles className="w-4 h-4" />}
@@ -480,6 +575,12 @@ function PromptLibraryRunner({
         )}
         {ai.error && <span className="text-xs text-error">{ai.error}</span>}
       </div>
+
+      {completedRun?.chapterId != null && (
+        <p className="text-xs text-text-muted">
+          此结果固定写入：{chapters.find(item => item.id === completedRun.chapterId)?.title ?? `章节 #${completedRun.chapterId}`}
+        </p>
+      )}
 
       {(ai.output || ai.isStreaming) && (
         <section>

@@ -14,6 +14,7 @@ export interface ResolvedAITaskConfig {
 }
 
 const EXTRACTION_PREFIXES = [
+  'library.extraction',
   'state.extract',
   'fact.extract',
   'inventory.extract',
@@ -29,6 +30,7 @@ const EXTRACTION_PREFIXES = [
 ]
 
 const ANALYSIS_PREFIXES = [
+  'library.analysis',
   'reference.',
   'summary.',
   'style.learn',
@@ -37,6 +39,7 @@ const ANALYSIS_PREFIXES = [
 ]
 
 const REVIEW_PREFIXES = [
+  'library.review',
   'review.',
   'scene.verify',
   'history.consult',
@@ -45,6 +48,7 @@ const REVIEW_PREFIXES = [
 ]
 
 const CREATION_PREFIXES = [
+  'library.creation',
   'chapter.',
   'outline.',
   'detail.',

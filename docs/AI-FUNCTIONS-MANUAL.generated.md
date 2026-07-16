@@ -98,7 +98,7 @@
 | `P10-D` | chapter-planning | 章节情绪节拍 | `scenes` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline<br/>`baseline` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline + source:characters + source:characterRelations + source:stateCards + source:chapterContinuityHandoff + source:previousPlanReconciliation + source:recentChapterSummaries + source:currentFacts + source:stateCards + source:heldItems + source:itemLedger + source:storyTimeline + source:foreshadows<br/>`target_arc` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline | preview → 章纲或场景细纲（审核后整理） |
 | `P10-E` | chapter-planning | 章节标题生成与筛选 | `summary` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline<br/>`style` ← source:creativeRules + source:userStyleProfile<br/>`neighbors` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline | preview → 章节标题候选 |
 | `P11-A` | drafting | 首章草稿 | `brief` ← source:storyCore<br/>`core` ← source:storyCore<br/>`plan` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline<br/>`characters` ← source:characters + source:characterRelations + source:stateCards<br/>`world` ← source:worldview + source:worldRules + source:powerSystem + source:codex + source:historical + source:locations<br/>`style` ← source:creativeRules + source:userStyleProfile<br/>`words` ← manual | adopt → `chapters.content` (replace) |
-| `P11-B` | drafting | 按章场任务写正文 | `task` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline<br/>`scenes` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline<br/>`continuity` ← source:chapterContinuityHandoff + source:previousPlanReconciliation + source:recentChapterSummaries + source:currentFacts + source:stateCards + source:heldItems + source:itemLedger + source:storyTimeline + source:foreshadows<br/>`voices` ← source:characters + source:characterRelations + source:stateCards<br/>`rules` ← source:creativeRules + source:userStyleProfile<br/>`instruction` ← manual<br/>`words` ← manual | adopt → `chapters.content` (replace) |
+| `P11-B` | drafting | 按章场任务写正文 | `task` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline<br/>`scenes` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline<br/>`continuity` ← source:chapterContinuityHandoff + source:previousPlanReconciliation + source:recentChapterSummaries + source:currentFacts + source:stateCards + source:heldItems + source:itemLedger + source:storyTimeline + source:foreshadows<br/>`voices` ← source:characters + source:characterRelations + source:stateCards<br/>`rules` ← source:worldview + source:worldRules + source:powerSystem + source:codex + source:creativeRules + source:userStyleProfile<br/>`instruction` ← manual<br/>`words` ← manual | adopt → `chapters.content` (replace) |
 | `P11-C` | drafting | 连续续写 | `text` ← source:chapterContent<br/>`handoff` ← source:chapterContinuityHandoff + source:previousPlanReconciliation + source:recentChapterSummaries + source:currentFacts + source:stateCards + source:heldItems + source:itemLedger + source:storyTimeline + source:foreshadows<br/>`next_task` ← source:existingVolumeOutlines + source:storyArcs + source:chapterOutline + source:detailedOutline<br/>`continuity` ← source:chapterContinuityHandoff + source:previousPlanReconciliation + source:recentChapterSummaries + source:currentFacts + source:stateCards + source:heldItems + source:itemLedger + source:storyTimeline + source:foreshadows<br/>`style` ← source:creativeRules + source:userStyleProfile<br/>`words` ← manual | adopt → `chapters.content` (append) |
 | `P11-D` | drafting | 对白与潜台词 | `goal` ← manual<br/>`participants` ← source:characters + source:characterRelations + source:stateCards<br/>`knowledge` ← source:characters + source:characterRelations + source:currentFacts<br/>`relationship` ← source:characters + source:characterRelations + source:stateCards<br/>`setting` ← source:locations + source:worldview | preview → 章节正文（预览后手动采用） |
 | `P11-E` | drafting | 动作与空间连续性 | `goal` ← manual<br/>`space` ← source:locations + source:worldview<br/>`states` ← source:chapterContinuityHandoff + source:previousPlanReconciliation + source:recentChapterSummaries + source:currentFacts + source:stateCards + source:heldItems + source:itemLedger + source:storyTimeline + source:foreshadows<br/>`abilities` ← source:characters + source:characterRelations + source:stateCards<br/>`outcome` ← manual | preview → 章节正文（预览后手动采用） |
@@ -248,8 +248,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 46 个 category。
-未分类调用: 0 个。动态 category 调用: 4 个。
+共 50 个 category。
+未分类调用: 0 个。动态 category 调用: 3 个。
 
 | category | 触发文件 |
 |---|---|
@@ -276,6 +276,10 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `history.storm` | `src/components/history/useHistoryAI.ts:120` |
 | `inspiration.reverse` | `src/components/project/InspirationPanel.tsx:107` |
 | `inventory.extract` | `src/components/items/InventoryPanel.tsx:86` |
+| `library.analysis` | `src/components/settings/prompt/PromptLibraryPanel.tsx:284` |
+| `library.creation` | `src/components/settings/prompt/PromptLibraryPanel.tsx:278` |
+| `library.extraction` | `src/components/settings/prompt/PromptLibraryPanel.tsx:280` |
+| `library.review` | `src/components/settings/prompt/PromptLibraryPanel.tsx:282` |
 | `location.extract` | `src/components/location/LocationPanel.tsx:106` |
 | `outline.chapter` | `src/components/outline/useOutlineGenerationController.ts:106`<br/>`src/lib/ai/batch-outline-runner.ts:123` |
 | `outline.character-driven` | `src/components/outline/CharacterDrivenPlotPanel.tsx:113` |
@@ -304,9 +308,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 - `src/components/editor/ReviewPanel.tsx:130 · ai.start`
 - `src/components/settings/NS0EvalPanel.tsx:50 · chat`
-- `src/components/settings/prompt/PromptLibraryPanel.tsx:262 · ai.start`
 - `src/components/settings/prompt/WorkflowRunner.tsx:263 · ai.start`
 
 ---
 
-生成时间基准:commit `d5325fb`
+生成时间基准:commit `921ab03`

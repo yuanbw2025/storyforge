@@ -3000,6 +3000,10 @@ export const NOVEL_PROMPT_LIBRARY_SEEDS: PromptSeed[] = [
           "variable": "rules",
           "label": "规则",
           "sourceKeys": [
+            "worldview",
+            "worldRules",
+            "powerSystem",
+            "codex",
             "creativeRules",
             "userStyleProfile"
           ],
