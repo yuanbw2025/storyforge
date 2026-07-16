@@ -61,8 +61,15 @@ export function assembleWorkflowStepVars(params: {
 /** WorkflowEditor 下拉选项使用的模块键列表（与 prompt-seeds 的 system moduleKey 保持一致） */
 export const ALL_MODULE_KEYS_FOR_WORKFLOW = [
   'worldview.dimension', 'character.generate', 'character.dimension',
+  'worldview.worldbuilding', 'character.design',
+  'story.brief', 'story.ideation', 'story.positioning', 'story.core', 'story.packaging',
+  'research.method', 'prompt.operations',
   'outline.volume', 'outline.chapter',
+  'outline.plot', 'outline.structure', 'outline.long-form', 'outline.short-story', 'outline.serialization',
+  'detail.chapter-planning',
   'chapter.content', 'chapter.continue', 'chapter.polish', 'chapter.expand', 'chapter.de-ai',
+  'chapter.drafting', 'chapter.continuity', 'chapter.line-editing',
+  'review.developmental', 'review.line-editing', 'review.reader-validation',
   'foreshadow.generate', 'story.generate', 'rules.generate', 'detail.scene',
   'geography.concept-map', 'geography.image-map-prompt',
 ] as const

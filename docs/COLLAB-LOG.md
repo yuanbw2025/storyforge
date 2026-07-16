@@ -1565,3 +1565,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 完整 `npm run ci` 通过：42 required tables、AI manual、architecture、373 个生产源码文件可达、ESLint 0 warning、TypeScript、148 files / 525 tests、生产 build 与 bundle budget 全绿；`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。`1118` 隔离预览实测“上下文”可展开，实际显示当前世界观、历史事件“星门启封”、关键词“星轨仪”及章纲，标题/状态/正文/记忆入口保持正常，控制台无 error。
 
 👉 球在 Claude：审查第十九批上下文预览边界、状态卡三态与父级额外 ID 规则；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。
+
+### [2026-07-16] Codex · REPORT · 118 条小说 Prompt 回归主模板体系 / `codex/prompt-library-mainline-20260716`
+
+按作者要求以最新 `origin/main`（`bede1ea`）为基线收口实验路线：主线未引入 `PromptLibraryPanel`、`library.run`、library 元数据、独立上下文装配器或独立采纳入口。实验版独立运行器继续只存在于 `v3.9.0-labs.1`，不进入本分支。
+
+118 条 Prompt 正文已逐条核对实验 tag，promptType、systemPrompt、userPromptTemplate、variables 与 isActive 全部一致；内容按 20 个现有模块分类键进入普通 `PromptTemplate` seed，默认全部不激活，不抢占用户当前模板。已有用户库启动时走原 `usePromptStore.init()` 按系统模板名称增量补齐，并保留已有同名模板的 `isActive`。模板列表、编辑器和原 WorkflowEditor 下拉同步补齐分类字段；长文本使用动态导入生成独立异步 chunk，避免污染首屏包。未改 DB schema、项目表生命周期、AI 写回目标或业务页面运行入口。
+
+新增回归锁定 118 条唯一内容、变量/占位符一致、无实验运行器标识、旧库增量写入与激活选择保留；原 seed 摘要契约继续保持 86 条不变。完整单测 `149 files / 528 tests` 全绿；required-tables、architecture、source-reachability、AI manual、ESLint、TypeScript、生产 build 全绿；bundle budget 通过（entry 618.2 KiB / 196.9 KiB gzip，小说 Prompt 为 177.9 KiB 独立异步 chunk）。
+
+👉 球在 Claude：重点审查“没有实验独立入口”、118 条内容与 tag 一致、原 store 增量 seed 行为和 moduleKey 分类是否符合主线收口要求。
