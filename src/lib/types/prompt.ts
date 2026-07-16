@@ -29,9 +29,30 @@ export type PromptModuleKey =
   | 'geography.image-map-prompt'
   // —— 后续 Phase 启用 ——
   | 'worldview.generate'
+  | 'worldview.worldbuilding'
   | 'story.generate'
+  | 'story.brief'
+  | 'story.ideation'
+  | 'story.positioning'
+  | 'story.core'
+  | 'story.packaging'
   | 'rules.generate'
+  | 'research.method'
+  | 'prompt.operations'
   | 'detail.scene'
+  | 'detail.chapter-planning'
+  | 'character.design'
+  | 'outline.plot'
+  | 'outline.structure'
+  | 'outline.long-form'
+  | 'outline.short-story'
+  | 'outline.serialization'
+  | 'chapter.drafting'
+  | 'chapter.continuity'
+  | 'chapter.line-editing'
+  | 'review.developmental'
+  | 'review.line-editing'
+  | 'review.reader-validation'
   | 'import.parse-character'
   | 'import.parse-worldview'
   | 'import.parse-outline'
@@ -65,6 +86,35 @@ export type PromptModuleKey =
   | 'history.storm'
   // —— FB-5 自适应文风学习 ——
   | 'style.learn'
+
+export type PromptProjectField =
+  | 'name'
+  | 'genres'
+  | 'description'
+  | 'targetWordCount'
+  | 'lengthMode'
+  | 'serializationMode'
+
+/** 普通 PromptTemplate 的单个变量如何从项目或作者输入获得值。 */
+export interface PromptVariableBinding {
+  variable: string
+  label: string
+  description?: string
+  /** 统一从 CONTEXT_SOURCES 读取；运行时只装配一次，避免重复注入。 */
+  sourceKeys?: string[]
+  /** 从项目元信息派生，不读取故事事实。 */
+  projectField?: PromptProjectField
+  /** 是否允许作者在工作流步骤中补充或修正。 */
+  manual?: boolean
+  required?: boolean
+  placeholder?: string
+}
+
+export interface PromptApplicability {
+  lengthModes?: ('short' | 'medium' | 'long')[]
+  serializationModes?: ('standalone' | 'serial')[]
+  genres?: string[]
+}
 
 /** 模板可调参数定义（Phase 12） */
 export interface PromptParameter {
@@ -136,6 +186,12 @@ export interface PromptTemplate {
   lengthMode?: 'short' | 'medium' | 'long'
   /** NS-1: 连续性保护块策略。 */
   continuityMode?: 'inherit' | 'required' | 'off'
+  /** 外部内容资产的稳定编号，只用于普通模板识别，不建立独立运行入口。 */
+  assetId?: string
+  /** 模板变量的声明式字段绑定，由原 WorkflowRunner 统一装配。 */
+  variableBindings?: PromptVariableBinding[]
+  /** 该内容模板适用的篇幅、连载形态或题材。 */
+  applicability?: PromptApplicability
 
   createdAt: number
   updatedAt: number

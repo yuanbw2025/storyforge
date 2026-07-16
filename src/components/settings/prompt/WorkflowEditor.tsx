@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Save, Plus, X, Trash2 } from 'lucide-react'
 import { useWorkflowStore } from '../../../stores/workflow'
+import { usePromptStore } from '../../../stores/prompt'
 import type { PromptWorkflow, PromptWorkflowStep } from '../../../lib/types/workflow'
 import {
   ALL_MODULE_KEYS_FOR_WORKFLOW,
@@ -26,6 +27,7 @@ export default function WorkflowEditor({
   const toast = useToast()
   const saveWorkflow = useWorkflowStore(s => s.save)
   const removeWorkflow = useWorkflowStore(s => s.remove)
+  const templates = usePromptStore(s => s.templates)
   const [draft, setDraft] = useState<PromptWorkflow>(workflow)
   const [dirty, setDirty] = useState(false)
 
@@ -213,6 +215,35 @@ export default function WorkflowEditor({
                     className="w-full px-2 py-1 bg-bg-surface border border-border rounded text-xs text-text-primary resize-none focus:outline-none focus:border-accent"
                   />
                 </div>
+                {(() => {
+                  const template = s.templateId != null
+                    ? templates.find(t => t.id === s.templateId)
+                    : templates.find(t => t.moduleKey === s.promptModuleKey && t.isActive)
+                      ?? templates.find(t => t.moduleKey === s.promptModuleKey)
+                  const bindings = template?.variableBindings ?? []
+                  if (!bindings.length) return null
+                  return (
+                    <div className="border-t border-border pt-2 space-y-2">
+                      <p className="text-[10px] text-text-muted">模板字段：自动读取已登记项目资料；可在此补充或修正</p>
+                      {bindings.map(binding => (
+                        <div key={binding.variable}>
+                          <label className="block text-[10px] text-text-muted mb-0.5">
+                            {binding.label}{binding.required ? ' *' : ''}
+                          </label>
+                          <textarea
+                            value={s.inputValues?.[binding.variable] || ''}
+                            onChange={e => updateStep(idx, {
+                              inputValues: { ...(s.inputValues || {}), [binding.variable]: e.target.value },
+                            })}
+                            rows={2}
+                            placeholder={binding.placeholder || '可留空，使用项目自动资料'}
+                            className="w-full px-2 py-1 bg-bg-surface border border-border rounded text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
                 <div className="flex items-center gap-3 text-xs">
                   <label className="flex items-center gap-1 text-text-secondary">
                     <input

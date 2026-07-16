@@ -39,10 +39,12 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
     if (get().loaded) return
     const existing = await db.promptTemplates.toArray()
     const now = Date.now()
+    const { NOVEL_CONTENT_PROMPT_SEEDS } = await import('../lib/ai/prompt-seeds-novel')
+    const allSystemSeeds = [...SYSTEM_PROMPT_SEEDS, ...NOVEL_CONTENT_PROMPT_SEEDS]
 
     if (existing.length === 0) {
       // 全新库：注入全部 seed
-      const rows: PromptTemplate[] = SYSTEM_PROMPT_SEEDS.map(seed => ({
+      const rows: PromptTemplate[] = allSystemSeeds.map(seed => ({
         ...seed,
         createdAt: now,
         updatedAt: now,
@@ -55,7 +57,7 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
         existing.filter(t => t.scope === 'system').map(t => [t.name, t])
       )
 
-      for (const seed of SYSTEM_PROMPT_SEEDS) {
+      for (const seed of allSystemSeeds) {
         const old = existingSystemMap.get(seed.name)
         if (!old) {
           // 缺 → 补
@@ -77,6 +79,9 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
             examples: seed.examples,
             lengthMode: seed.lengthMode,
             continuityMode: seed.continuityMode,
+            assetId: seed.assetId,
+            variableBindings: seed.variableBindings,
+            applicability: seed.applicability,
             updatedAt: now,
           }
           await db.promptTemplates.update(old.id!, refreshed)

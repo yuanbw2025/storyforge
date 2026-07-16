@@ -8,7 +8,7 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 40 个 moduleKey。
+共 61 个 moduleKey。
 
 | moduleKey | 名称 | 说明 | 读取变量 |
 |---|---|---|---|
@@ -27,9 +27,30 @@
 | `geography.concept-map` | — | — | — |
 | `geography.image-map-prompt` | — | — | — |
 | `worldview.generate` | — | — | — |
+| `worldview.worldbuilding` | — | — | — |
 | `story.generate` | — | — | — |
+| `story.brief` | — | — | — |
+| `story.ideation` | — | — | — |
+| `story.positioning` | — | — | — |
+| `story.core` | — | — | — |
+| `story.packaging` | — | — | — |
 | `rules.generate` | — | — | — |
+| `research.method` | — | — | — |
+| `prompt.operations` | — | — | — |
 | `detail.scene` | — | — | — |
+| `detail.chapter-planning` | — | — | — |
+| `character.design` | — | — | — |
+| `outline.plot` | — | — | — |
+| `outline.structure` | — | — | — |
+| `outline.long-form` | — | — | — |
+| `outline.short-story` | — | — | — |
+| `outline.serialization` | — | — | — |
+| `chapter.drafting` | — | — | — |
+| `chapter.continuity` | — | — | — |
+| `chapter.line-editing` | — | — | — |
+| `review.developmental` | — | — | — |
+| `review.line-editing` | — | — | — |
+| `review.reader-validation` | — | — | — |
 | `import.parse-character` | — | — | — |
 | `import.parse-worldview` | — | — | — |
 | `import.parse-outline` | — | — | — |
@@ -178,8 +199,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 - `src/components/editor/ReviewPanel.tsx:130 · ai.start`
 - `src/components/settings/NS0EvalPanel.tsx:50 · chat`
-- `src/components/settings/prompt/WorkflowRunner.tsx:269 · ai.start`
+- `src/components/settings/prompt/WorkflowRunner.tsx:293 · ai.start`
 
 ---
 
-生成时间基准:commit `f87cff3`
+生成时间基准:commit `7678931`

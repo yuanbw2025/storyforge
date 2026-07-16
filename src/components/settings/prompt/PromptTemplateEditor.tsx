@@ -14,19 +14,40 @@ import { useToast } from '../../shared/Toast'
 const ALL_MODULE_KEYS: { value: PromptModuleKey; label: string }[] = [
   { value: 'worldview.dimension',         label: '世界观 · 维度生成' },
   { value: 'worldview.generate',          label: '世界观 · 完整生成（待启用）' },
+  { value: 'worldview.worldbuilding',     label: '世界观 · 阶段任务' },
   { value: 'character.generate',          label: '角色 · 完整设计' },
   { value: 'character.dimension',         label: '角色 · 维度补全' },
+  { value: 'character.design',            label: '角色 · 创作阶段' },
   { value: 'story.generate',              label: '故事 · 整体生成（待启用）' },
+  { value: 'story.brief',                 label: '故事 · 立项简报' },
+  { value: 'story.ideation',              label: '故事 · 灵感' },
+  { value: 'story.positioning',           label: '故事 · 定位' },
+  { value: 'story.core',                  label: '故事 · 故事核心' },
+  { value: 'story.packaging',             label: '故事 · 作品包装' },
   { value: 'rules.generate',              label: '创作规则 · 生成（待启用）' },
+  { value: 'research.method',             label: '研究考证 · 研究方法' },
+  { value: 'prompt.operations',           label: 'Prompt · 管理与评测' },
   { value: 'outline.volume',              label: '大纲 · 卷级' },
   { value: 'outline.chapter',             label: '大纲 · 章节级' },
+  { value: 'outline.plot',                label: '大纲 · 剧情设计' },
+  { value: 'outline.structure',           label: '大纲 · 结构设计' },
+  { value: 'outline.long-form',           label: '大纲 · 长篇架构' },
+  { value: 'outline.short-story',         label: '大纲 · 短篇架构' },
+  { value: 'outline.serialization',       label: '大纲 · 连载架构' },
   { value: 'detail.scene',                label: '细纲 · 场景（待启用）' },
+  { value: 'detail.chapter-planning',     label: '细纲 · 章场规划' },
   { value: 'chapter.content',             label: '章节 · 正文生成' },
   { value: 'chapter.continue',            label: '章节 · 续写' },
+  { value: 'chapter.drafting',            label: '章节 · 正文创作' },
+  { value: 'chapter.continuity',          label: '章节 · 连续性' },
+  { value: 'chapter.line-editing',        label: '章节 · 语言修订' },
   { value: 'chapter.memory',              label: '章节 · 连续性记忆抽取' },
   { value: 'chapter.polish',              label: '章节 · 润色' },
   { value: 'chapter.expand',              label: '章节 · 扩写' },
   { value: 'chapter.de-ai',               label: '章节 · 去 AI 味' },
+  { value: 'review.developmental',        label: '审校 · 宏观修订' },
+  { value: 'review.line-editing',         label: '审校 · 语言修订' },
+  { value: 'review.reader-validation',    label: '审校 · 读者验证' },
   { value: 'foreshadow.generate',         label: '伏笔 · 建议' },
   { value: 'geography.concept-map',       label: '地理 · 概念地图 SVG' },
   { value: 'geography.image-map-prompt',  label: '地理 · 图像 Prompt' },
@@ -63,7 +84,13 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
   const preview = useMemo(() => {
     if (!draft) return null
     try {
-      return renderPrompt(draft, PREVIEW_VARS)
+      const previewVars = { ...PREVIEW_VARS }
+      for (const binding of draft.variableBindings ?? []) {
+        if (previewVars[binding.variable] == null || previewVars[binding.variable] === '') {
+          previewVars[binding.variable] = `（示例：${binding.label}）`
+        }
+      }
+      return renderPrompt(draft, previewVars)
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
@@ -349,6 +376,38 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
           ))}
         </div>
       </div>
+
+      {draft.variableBindings?.length ? (
+        <div className="bg-bg-surface border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-text-primary">变量字段绑定</label>
+            {draft.assetId && <span className="text-xs font-mono text-accent">{draft.assetId}</span>}
+          </div>
+          <div className="space-y-2">
+            {draft.variableBindings.map(binding => (
+              <div key={binding.variable} className="border-b border-border/60 pb-2 last:border-0 last:pb-0">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <code className="text-accent">{binding.variable}</code>
+                  <span className="text-text-primary">{binding.label}</span>
+                  {binding.required && <span className="text-error">必填</span>}
+                  {binding.manual && <span className="text-text-muted">可人工补充</span>}
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-text-secondary">
+                  {binding.projectField && (
+                    <span className="px-1.5 py-0.5 bg-bg-base rounded">项目字段：{binding.projectField}</span>
+                  )}
+                  {binding.sourceKeys?.map(sourceKey => (
+                    <span key={sourceKey} className="px-1.5 py-0.5 bg-bg-base rounded">上下文：{sourceKey}</span>
+                  ))}
+                  {!binding.projectField && !binding.sourceKeys?.length && (
+                    <span className="px-1.5 py-0.5 bg-bg-base rounded">人工输入</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* 实时预览 */}
       <div className="bg-bg-surface border border-border rounded-xl p-4">

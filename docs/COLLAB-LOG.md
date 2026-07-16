@@ -1565,3 +1565,21 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 完整 `npm run ci` 通过：42 required tables、AI manual、architecture、373 个生产源码文件可达、ESLint 0 warning、TypeScript、148 files / 525 tests、生产 build 与 bundle budget 全绿；`npm run ci:e2e` 通过（Playwright 8/8），`git diff --check` 通过。`1118` 隔离预览实测“上下文”可展开，实际显示当前世界观、历史事件“星门启封”、关键词“星轨仪”及章纲，标题/状态/正文/记忆入口保持正常，控制台无 error。
 
 👉 球在 Claude：审查第十九批上下文预览边界、状态卡三态与父级额外 ID 规则；Codex 提交推送后继续其它无需产品判断的 `AUDIT-6` 项。
+
+### [2026-07-16] Codex · REPORT · 118 条小说 Prompt 回归主模板体系 / `codex/prompt-library-mainline-20260716`
+
+按作者要求以最新 `origin/main`（`bede1ea`）为基线收口实验路线：主线未引入 `PromptLibraryPanel`、`library.run`、library 元数据、独立上下文装配器或独立采纳入口。实验版独立运行器继续只存在于 `v3.9.0-labs.1`，不进入本分支。
+
+118 条 Prompt 正文已逐条核对实验 tag，promptType、systemPrompt、userPromptTemplate、variables 与 isActive 全部一致；内容按 20 个现有模块分类键进入普通 `PromptTemplate` seed，默认全部不激活，不抢占用户当前模板。已有用户库启动时走原 `usePromptStore.init()` 按系统模板名称增量补齐，并保留已有同名模板的 `isActive`。模板列表、编辑器和原 WorkflowEditor 下拉同步补齐分类字段；长文本使用动态导入生成独立异步 chunk，避免污染首屏包。未改 DB schema、项目表生命周期、AI 写回目标或业务页面运行入口。
+
+新增回归锁定 118 条唯一内容、变量/占位符一致、无实验运行器标识、旧库增量写入与激活选择保留；原 seed 摘要契约继续保持 86 条不变。完整单测 `149 files / 528 tests` 全绿；required-tables、architecture、source-reachability、AI manual、ESLint、TypeScript、生产 build 全绿；bundle budget 通过（entry 618.2 KiB / 196.9 KiB gzip，小说 Prompt 为 177.9 KiB 独立异步 chunk）。
+
+👉 球在 Claude：重点审查“没有实验独立入口”、118 条内容与 tag 一致、原 store 增量 seed 行为和 moduleKey 分类是否符合主线收口要求。
+
+#### [2026-07-16] Codex · 补充审计：118 条模板字段绑定与生成链路
+
+作者追问后重新逐条审计，确认此前只迁移正文和 moduleKey 不足以保证生成体验：模板里的 225 个语义变量虽然都声明了，但原 WorkflowRunner 只会提供固定的 `worldContext/userHint`，不能正确填充 `task/scenes/continuity/voices/rules` 等字段。现已补齐实验资产中经过验证的 118 份输入映射，并转为普通 `PromptTemplate.variableBindings`，没有恢复独立运行器。
+
+所有项目事实仍只经 `CONTEXT_SOURCES + assembleContext()` 读取；同一来源在最终请求中只注入一次，变量槽位保留语义说明和作者补充，避免重复上下文。项目名、题材、篇幅与连载状态由项目字段派生；章纲、正文、连续性、人物关系、世界规则、文风等按模板功能分别绑定；必填资料和多世界/章纲/章节范围在请求前阻断。原 WorkflowEditor 新增按模板显示的字段输入，Runner 支持 `templateId` 精确运行具体模板；编辑器详情页直接展示每个变量的来源，便于审查。
+
+新增回归覆盖 118 条模板的占位符—binding 一一对应、所有 sourceKey 已登记、P11-B 正文语义映射、P12-E 计划—正文对账、项目事实单次注入、必填阻断以及题材/篇幅/连载适用性。完整单测现为 `149 files / 532 tests` 全绿；TypeScript、ESLint、architecture、required tables、source reachability、AI manual、生产 build 与 bundle budget 全绿。预览 `http://127.0.0.1:4179/storyforge/` 已打开“Prompt 模板验收项目 → 提示词库 → P11-B”，页面可见 204 条模板及完整变量字段绑定。
