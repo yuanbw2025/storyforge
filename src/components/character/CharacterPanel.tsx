@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
-  Plus, Sparkles, Trash2, ChevronDown, ChevronRight,
+  Plus, Sparkles, ChevronDown,
 } from 'lucide-react'
-import { InlineInput, InlineTextarea } from '../shared/InlineEdit'
 import { CInput } from '../shared/CompositionInput'
 import { useCharacterStore } from '../../stores/character'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -18,12 +17,10 @@ import PromptRunPanel from '../shared/PromptRunPanel'
 import type {
   Project, Character, CharacterMoralAxis, CharacterOrderAxis, CharacterRoleWeight,
 } from '../../lib/types'
-import CharacterStatusPanel from './CharacterStatusPanel'
 import CharacterDimensionPicker from './CharacterDimensionPicker'
-import CharacterDimensionFields from './CharacterDimensionFields'
-import CharacterSupplementAction from './CharacterSupplementAction'
 import { CHARACTER_DIMENSIONS, type CharacterDimensionKey } from '../../lib/character/character-dimensions'
 import CharacterAxesPicker from './CharacterAxesPicker'
+import CharacterDetailCard from './CharacterDetailCard'
 import {
   MORAL_AXIS_LABELS,
   ORDER_AXIS_LABELS,
@@ -377,9 +374,11 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
             {selectedChar ? (
               <CharacterDetailCard
                 char={selectedChar}
-                charIndex={characters.findIndex(c => c.id === selectedChar.id)}
+                glyphColor={GLYPH_COLORS[characters.findIndex(c => c.id === selectedChar.id) % GLYPH_COLORS.length]}
                 projectId={project.id!}
-                onUpdate={handleUpdate}
+                onUpdateField={handleUpdate}
+                onPatch={patch => updateCharacter(selectedChar.id!, patch)}
+                onReload={() => loadAll(project.id!)}
                 onDelete={() => { deleteCharacter(selectedChar.id!); setSelected(null) }}
                 multiWorld={!!project.enableMultiWorld}
                 worldGroups={groups}
@@ -389,151 +388,6 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
                 ← 选择一个角色查看详情
               </div>
             )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── 角色详情卡（design 风格） ────────────────────────────────────
-
-function CharacterDetailCard({
-  char, charIndex, projectId, onUpdate, onDelete, multiWorld, worldGroups,
-}: {
-  char: Character
-  charIndex: number
-  projectId: number
-  onUpdate: (f: keyof Character, v: string) => void
-  onDelete: () => void
-  multiWorld?: boolean
-  worldGroups?: import('../../lib/types').WorldGroup[]
-}) {
-  const { updateCharacter, loadAll } = useCharacterStore()
-  const [expanded, setExpanded] = useState(true)
-  const glyphColor = GLYPH_COLORS[charIndex % GLYPH_COLORS.length]
-
-  return (
-    <div className="space-y-4">
-      {/* 头部：大号首字 + 名字 + 标签 */}
-      <div className="flex items-start gap-4">
-        {/* 大号首字 */}
-        <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-3xl font-serif font-bold shrink-0 ${glyphColor}`}>
-          {char.name.charAt(0)}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          {/* 角色元信息行 */}
-          <div className="flex items-center gap-1.5 text-xs text-text-muted mb-0.5">
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-border bg-bg-elevated text-text-secondary">
-              {ROLE_WEIGHT_LABELS[char.roleWeight]}
-            </span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-border bg-bg-elevated text-text-secondary">
-              {ORDER_AXIS_LABELS[char.orderAxis]}{MORAL_AXIS_LABELS[char.moralAxis]}
-            </span>
-
-            {/* 多世界：归属世界 + 跨世界标记 */}
-            {multiWorld && (
-              <>
-                <select
-                  value={char.isCrossWorld ? 'cross' : (char.homeWorldGroupId ?? '')}
-                  onChange={e => {
-                    if (!char.id) return
-                    const v = e.target.value
-                    if (v === 'cross') {
-                      updateCharacter(char.id, { isCrossWorld: true, homeWorldGroupId: null })
-                    } else {
-                      updateCharacter(char.id, { isCrossWorld: false, homeWorldGroupId: v ? Number(v) : null })
-                    }
-                  }}
-                  className="px-1.5 py-0.5 bg-bg-elevated text-text-secondary text-[10px] rounded border border-border focus:outline-none focus:border-accent cursor-pointer"
-                  title="角色所属世界"
-                >
-                  <option value="cross">🌐 跨世界</option>
-                  {(worldGroups || []).map(g => (
-                    <option key={g.id} value={g.id}>{g.icon || '🌐'} {g.name}</option>
-                  ))}
-                </select>
-              </>
-            )}
-          </div>
-
-          {/* 名字（可编辑） */}
-          <InlineInput
-            value={char.name}
-            onChange={v => onUpdate('name', v)}
-            className="text-2xl font-bold font-serif text-text-primary"
-          />
-
-          {/* 一句话简介（引号样式） */}
-          {char.shortDescription ? (
-            <InlineInput
-              value={char.shortDescription}
-              onChange={v => onUpdate('shortDescription', v)}
-              className="text-sm text-text-secondary mt-1 italic"
-              prefix={"“"}
-              suffix={"”"}
-              placeholder="点击添加一句话简介…"
-            />
-          ) : (
-            <InlineInput
-              value=""
-              onChange={v => onUpdate('shortDescription', v)}
-              className="text-sm text-text-muted mt-1 italic"
-              placeholder="点击添加一句话简介…"
-            />
-          )}
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex items-center gap-1 shrink-0">
-          <CharacterSupplementAction
-            character={char}
-            projectId={projectId}
-            worldGroupId={char.homeWorldGroupId ?? null}
-            onDone={() => loadAll(projectId)}
-          />
-          <button onClick={() => setExpanded(!expanded)} className="p-1.5 text-text-muted hover:text-text-primary rounded transition-colors">
-            {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-          <button onClick={onDelete} className="p-1.5 text-text-muted hover:text-error rounded transition-colors">
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      <CharacterAxesPicker
-        roleWeight={char.roleWeight}
-        moralAxis={char.moralAxis}
-        orderAxis={char.orderAxis}
-        onChange={axes => {
-          if (!char.id || !axes.roleWeight || !axes.moralAxis || !axes.orderAxis) return
-          updateCharacter(char.id, axes as Pick<Character, 'roleWeight' | 'moralAxis' | 'orderAxis'>)
-        }}
-        compact
-      />
-
-      {/* Phase 23.1: 动态状态面板 */}
-      <CharacterStatusPanel projectId={projectId} characterName={char.name} />
-
-      {/* 完整维度（含 A 扩充的 13 维）——与 NPC/次要同源渲染，主角生成/补全的内容都看得见、能改 */}
-      {expanded && (
-        <div className="space-y-4">
-          <CharacterDimensionFields
-            character={char}
-            onChange={patch => { if (char.id) updateCharacter(char.id, patch) }}
-            exclude={['shortDescription']}
-          />
-          {/* 人物关系非 CHARACTER_DIMENSIONS 成员（由关系网单独管），单列保留，避免丢失 */}
-          <div className="flex gap-2">
-            <span className="w-20 flex-shrink-0 pt-1.5 text-xs text-text-muted">人物关系</span>
-            <div className="flex-1 min-w-0">
-              <InlineTextarea
-                value={char.relationships || ''}
-                onChange={v => onUpdate('relationships', v)}
-                placeholder="点击填写人物关系…"
-              />
-            </div>
           </div>
         </div>
       )}

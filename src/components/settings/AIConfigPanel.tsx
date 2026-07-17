@@ -1,24 +1,22 @@
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
-import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText, RotateCcw, RefreshCw, Pencil, X } from 'lucide-react'
+import { Eye, EyeOff, CheckCircle, RotateCcw, RefreshCw } from 'lucide-react'
 import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
-import { getLogs, subscribeLogs, clearLogs, formatLog } from '../../lib/ai/logger'
-import { applyStoryForgeTheme, resolveStoryForgeTheme, THEME_OPTIONS, type StoryForgeTheme } from '../../lib/theme'
+import { getLogs, subscribeLogs, clearLogs } from '../../lib/ai/logger'
+import { applyStoryForgeTheme, resolveStoryForgeTheme, type StoryForgeTheme } from '../../lib/theme'
 import { useDialog } from '../shared/Dialog'
 import { parseContextWindowInput } from '../../lib/ai/context-window-input'
 import { fetchOpenAIModels } from '../../lib/ai/model-list'
 import { normalizeOpenAIBaseUrl } from '../../lib/ai/openai-endpoint'
-import { AI_TASK_KINDS, type AITaskKind } from '../../lib/ai/task-routing'
-
-const TASK_ROUTE_META: Record<AITaskKind, { label: string; description: string }> = {
-  creation: { label: '创作生成', description: '正文、大纲、细纲、世界观与角色生成' },
-  extraction: { label: '结构提取', description: '状态、事实、物品、关系、词条与导入解析' },
-  analysis: { label: '分析总结', description: '参考资料、摘要、文风学习与检索分析' },
-  review: { label: '审查校验', description: '章节审校、一致性检查、场景与历史考证' },
-}
+import { AI_PROXY_ENDPOINTS } from '../../lib/ai/proxy-endpoints'
+import AIConfigPresetSection from './AIConfigPresetSection'
+import AITaskRoutingSection from './AITaskRoutingSection'
+import AIConnectionLogPanel from './AIConnectionLogPanel'
+import AIConnectionTestSection from './AIConnectionTestSection'
+import ThemeSelector from './ThemeSelector'
 
 export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean; hint: string }[] = [
   { value: 'deepseek', label: 'DeepSeek', cors: false, hint: '获取 Key: platform.deepseek.com → API Keys（需点击下方「切换到本地代理」）' },
@@ -172,129 +170,23 @@ export default function AIConfigPanel() {
           API Key 默认仅保存在本次浏览器会话；勾选“记住在本机”才会写入 localStorage。发起 AI 生成、测试连接或使用自定义 baseUrl 时，相关提示词和上下文会发送到你配置的模型服务。
         </p>
 
-        {/* ── API 配置预设（多套一键切换） ── */}
-        <div className="mb-4 pb-4 border-b border-border/50">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-sm text-text-secondary">配置预设</label>
-            {editingPreset && !savingPreset ? (
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => updatePresetFromCurrent(editingPreset.id)}
-                  title={`用当前表单内容覆盖「${editingPreset.name}」`}
-                  className="text-xs px-2.5 py-1 rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors"
-                >
-                  保存修改到「{editingPreset.name}」
-                </button>
-                <button
-                  onClick={() => setSavingPreset(true)}
-                  className="text-xs px-2.5 py-1 rounded-lg bg-bg-elevated text-text-secondary border border-border hover:text-accent hover:border-accent/50 transition-colors"
-                >
-                  另存为新预设
-                </button>
-              </div>
-            ) : savingPreset ? (
-              <div className="flex items-center gap-1.5">
-                <input
-                  autoFocus
-                  value={presetName}
-                  onChange={e => setPresetName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleSavePreset(); if (e.key === 'Escape') setSavingPreset(false) }}
-                  placeholder="预设名称，如「DeepSeek 主力」"
-                  className="px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent w-44"
-                />
-                <button onClick={handleSavePreset} className="px-2 py-1 text-xs bg-accent text-white rounded hover:bg-accent-hover">保存</button>
-                <button onClick={() => setSavingPreset(false)} className="px-2 py-1 text-xs text-text-muted hover:text-text-primary">取消</button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setSavingPreset(true)}
-                className="text-xs px-2.5 py-1 rounded-lg bg-bg-elevated text-text-secondary border border-border hover:text-accent hover:border-accent/50 transition-colors"
-              >
-                ＋ 保存当前为预设
-              </button>
-            )}
-          </div>
+        <AIConfigPresetSection
+          presets={presets}
+          activePresetId={activePresetId}
+          editingPreset={editingPreset ?? null}
+          savingPreset={savingPreset}
+          presetName={presetName}
+          onPresetNameChange={setPresetName}
+          onStartSaving={() => setSavingPreset(true)}
+          onCancelSaving={() => setSavingPreset(false)}
+          onSavePreset={handleSavePreset}
+          onApplyPreset={applyPreset}
+          onUpdatePreset={updatePresetFromCurrent}
+          onRenamePreset={(id, name) => { void handleRenamePreset(id, name) }}
+          onDeletePreset={(id, name) => { void handleDeletePreset(id, name) }}
+        />
 
-          {presets.length === 0 ? (
-            <p className="text-xs text-text-muted">还没有预设。配好一套 API 后点「保存当前为预设」，之后可一键切换。</p>
-          ) : (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {presets.map(p => (
-                <div
-                  key={p.id}
-                  className={`group flex items-center gap-1 pl-2.5 pr-1 py-1 text-xs rounded-full border transition-colors ${
-                    activePresetId === p.id
-                      ? 'bg-accent text-white border-accent'
-                      : 'bg-bg-base text-text-secondary border-border hover:border-accent/50'
-                  }`}
-                >
-                  <button onClick={() => applyPreset(p.id)} title={`${p.config.provider} · ${p.config.model}`}>
-                    {p.name}
-                  </button>
-                  {activePresetId === p.id && (
-                    <button
-                      onClick={() => updatePresetFromCurrent(p.id)}
-                      title="用当前配置覆盖此预设"
-                      className="opacity-70 hover:opacity-100"
-                    >保存</button>
-                  )}
-                  <button
-                    onClick={() => { void handleRenamePreset(p.id, p.name) }}
-                    title="重命名"
-                    className="opacity-0 group-hover:opacity-70 hover:opacity-100"
-                    aria-label={`重命名预设 ${p.name}`}
-                  ><Pencil className="h-3 w-3" /></button>
-                  <button
-                    onClick={() => { void handleDeletePreset(p.id, p.name) }}
-                    title="删除"
-                    className="opacity-0 group-hover:opacity-70 hover:opacity-100 hover:text-red-400"
-                    aria-label={`删除预设 ${p.name}`}
-                  ><X className="h-3 w-3" /></button>
-                </div>
-              ))}
-            </div>
-          )}
-          {presets.length > 0 && (
-            <p className="mt-2 text-[11px] text-text-muted">点击预设会应用整套配置，包括上下文窗口；修改表单后需点击上方按钮才会写回该预设。</p>
-          )}
-        </div>
-
-        <div className="mb-4 border-b border-border/50 pb-4">
-          <div className="mb-2">
-            <h4 className="text-sm font-medium text-text-secondary">任务模型路由</h4>
-            <p className="mt-1 text-[11px] text-text-muted">
-              按任务自动使用已保存预设；未绑定、预设被删除或专用预设缺少 API Key 时，回退到当前全局模型。云端预设会接收对应任务的提示词与上下文。
-            </p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {AI_TASK_KINDS.map(taskKind => {
-              const selectedPreset = presets.find(preset => preset.id === taskRoutes[taskKind])
-              const routeMeta = TASK_ROUTE_META[taskKind]
-              return (
-                <label key={taskKind} className="block rounded border border-border bg-bg-base p-2.5">
-                  <span className="block text-xs font-medium text-text-primary">{routeMeta.label}</span>
-                  <span className="mb-2 block min-h-8 text-[11px] leading-4 text-text-muted">{routeMeta.description}</span>
-                  <select
-                    value={selectedPreset?.id ?? ''}
-                    onChange={event => setTaskRoute(taskKind, event.target.value || null)}
-                    aria-label={`${routeMeta.label}模型预设`}
-                    className="w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
-                  >
-                    <option value="">使用当前全局模型</option>
-                    {presets.map(preset => (
-                      <option key={preset.id} value={preset.id}>
-                        {preset.name} · {preset.config.provider}/{preset.config.model}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )
-            })}
-          </div>
-          {presets.length === 0 && (
-            <p className="mt-2 text-[11px] text-amber-400">先保存至少一个配置预设，才能给任务绑定专用模型。</p>
-          )}
-        </div>
+        <AITaskRoutingSection presets={presets} routes={taskRoutes} onSetRoute={setTaskRoute} />
 
         <div className="space-y-4">
           <div>
@@ -379,19 +271,7 @@ export default function AIConfigPanel() {
                 </p>
               )}
               {(() => {
-                // 需要代理的 provider 及其代理路径 / 原始地址映射
-                const PROXY_MAP: Record<string, { proxy: string; direct: string }> = {
-                  deepseek: { proxy: '/deepseek-proxy/v1', direct: 'https://api.deepseek.com/v1' },
-                  openai:   { proxy: '/openai-proxy/v1',   direct: 'https://api.openai.com/v1' },
-                  kimi:     { proxy: '/kimi-proxy/v1',     direct: 'https://api.moonshot.cn/v1' },
-                  claude:   { proxy: '/claude-proxy/v1',   direct: 'https://api.anthropic.com/v1' },
-                  nvidia:   { proxy: '/nvidia-proxy/v1',   direct: 'https://integrate.api.nvidia.com/v1' },
-                  doubao:   { proxy: '/doubao-proxy/api/v3', direct: 'https://ark.cn-beijing.volces.com/api/v3' },
-                  agnes:    { proxy: '/agnes-proxy/v1',    direct: 'https://apihub.agnes-ai.com/v1' },
-                  longcat:  { proxy: '/longcat-proxy/openai/v1', direct: 'https://api.longcat.chat/openai/v1' },
-                  opencode: { proxy: '/opencode-proxy/v1',  direct: 'https://opencode.ai/zen/go/v1' },
-                }
-                const pm = PROXY_MAP[config.provider]
+                const pm = AI_PROXY_ENDPOINTS[config.provider]
                 if (!pm) return null
                 const isProxy = config.baseUrl.startsWith('/' + config.provider)
                 return (
@@ -584,51 +464,17 @@ export default function AIConfigPanel() {
           </div>
 
           {/* 测试连接 */}
-          <div className="pt-2 space-y-2">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleTest}
-                disabled={testing || !isAIConfigReady(config)}
-                className="flex items-center gap-2 px-4 py-2 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 disabled:opacity-40 transition-colors text-sm"
-              >
-                {testing ? (
-                  <span className="animate-spin">⏳</span>
-                ) : testResult?.ok ? (
-                  <CheckCircle className="w-4 h-4" />
-                ) : testResult && !testResult.ok ? (
-                  <WifiOff className="w-4 h-4" />
-                ) : (
-                  <Wifi className="w-4 h-4" />
-                )}
-                {testing ? '测试中...' : '测试连接'}
-              </button>
-              <button
-                onClick={() => setShowLogs(!showLogs)}
-                className="flex items-center gap-1.5 px-3 py-2 text-text-muted hover:text-text-secondary text-sm transition-colors"
-              >
-                <ScrollText className="w-4 h-4" />
-                日志 {logs.length > 0 && `(${logs.length})`}
-              </button>
-            </div>
-            {/* 测试结果详情 */}
-            {testResult && (
-              <div className={`text-sm px-3 py-2 rounded-lg ${testResult.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                <p>{testResult.message}</p>
-                {testResult.duration && (
-                  <p className="text-xs mt-0.5 opacity-70">耗时 {testResult.duration}ms</p>
-                )}
-              </div>
-            )}
-            {/* CORS 错误提示 */}
-            {testResult && !testResult.ok && config.provider === 'deepseek' &&
-              (testResult.message.includes('CORS') || testResult.message.includes('网络错误')) && (
-              <p className="text-xs text-amber-400 px-1">
-                {import.meta.env.DEV
-                  ? '💡 本地运行时，可点击「切换到本地代理」解决此问题'
-                  : '💡 建议改用 Gemini（支持浏览器直调）或在本地运行此工具'}
-              </p>
-            )}
-          </div>
+          <AIConnectionTestSection
+            testing={testing}
+            result={testResult}
+            configReady={isAIConfigReady(config)}
+            provider={config.provider}
+            logCount={logs.length}
+            showLogs={showLogs}
+            isDevelopment={import.meta.env.DEV}
+            onTest={() => { void handleTest() }}
+            onToggleLogs={() => setShowLogs(!showLogs)}
+          />
         </div>
       </div>
 
@@ -636,84 +482,10 @@ export default function AIConfigPanel() {
       <EmbeddingConfigCard />
 
       {/* 日志面板 */}
-      {showLogs && (
-        <div className="bg-bg-surface border border-border rounded-xl p-4 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-text-primary">连接日志</h3>
-            <button
-              onClick={clearLogs}
-              className="flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary"
-            >
-              <Trash2 className="w-3 h-3" /> 清空
-            </button>
-          </div>
-          <div className="max-h-[200px] overflow-y-auto space-y-1 font-mono text-xs">
-            {logs.length === 0 ? (
-              <p className="text-text-muted">暂无日志，点击「测试连接」生成</p>
-            ) : (
-              logs.map((log) => (
-                <pre key={log.id} className="text-text-secondary whitespace-pre-wrap break-all">
-                  {formatLog(log)}
-                </pre>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+      {showLogs && <AIConnectionLogPanel logs={logs} onClear={clearLogs} />}
 
       {/* 主题切换 */}
-      <div className="bg-bg-surface border border-border rounded-xl p-5">
-        <h3 className="text-base font-semibold text-text-primary mb-4">主题</h3>
-        <div className="flex flex-col gap-3">
-          {THEME_OPTIONS.map((theme) => {
-            const isActive = currentTheme === theme.value
-            return (
-              <button
-                key={theme.value}
-                onClick={() => handleThemeChange(theme.value)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-                  isActive
-                    ? 'border-accent bg-accent/10'
-                    : 'border-border hover:border-border-hover hover:bg-bg-hover'
-                }`}
-              >
-                {/* 色块预览 */}
-                <div className="flex items-end gap-1 flex-shrink-0">
-                  {theme.swatches.map((c, j) => (
-                    <div
-                      key={j}
-                      style={{
-                        width: j === 0 ? 28 : 18,
-                        height: j === 0 ? 28 : 18,
-                        background: c,
-                        borderRadius: j === 0 ? 6 : 4,
-                        border: '1px solid rgba(0,0,0,0.08)',
-                        marginBottom: j === 0 ? 0 : 5,
-                        flexShrink: 0,
-                      }}
-                    />
-                  ))}
-                </div>
-                {/* 文字 */}
-                <div className="flex-1">
-                  <p className="text-sm text-text-primary font-medium leading-none mb-1">
-                    {theme.emoji} {theme.label}
-                  </p>
-                  <p className="text-xs text-text-muted">{theme.desc}</p>
-                </div>
-                {/* 选中标记 */}
-                {isActive && (
-                  <div className="w-5 h-5 rounded-full bg-accent flex items-center justify-center flex-shrink-0">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 6 9 17 4 12"/>
-                    </svg>
-                  </div>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <ThemeSelector value={currentTheme} onChange={handleThemeChange} />
     </div>
   )
 }

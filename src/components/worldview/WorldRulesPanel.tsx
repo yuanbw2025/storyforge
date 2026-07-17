@@ -5,12 +5,11 @@
  * 底部：规则预览 + Token 估算
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Trash2, Eye, EyeOff, X, Check } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useWorldRulesStore } from '../../stores/world-rules'
 import { useWorldGroupStore } from '../../stores/world-group'
 import {
   WORLD_RULE_TREE,
-  CONFLICT_PRIORITY_LABELS,
   isEntryEmpty,
   createEmptyEntry,
 } from '../../lib/types/world-rules'
@@ -28,6 +27,9 @@ import type { Project } from '../../lib/types'
 import type { HistoricalTimelineEvent, HistoricalKeyword } from '../../lib/types/history'
 import { db } from '../../lib/db/schema'
 import { useDialog } from '../shared/Dialog'
+import WorldRuleEntryEditor from './WorldRuleEntryEditor'
+import WorldRulesNavigation from './WorldRulesNavigation'
+import type { WorldRuleNavigationNode } from './WorldRulesNavigation'
 
 interface Props {
   project: Project
@@ -41,7 +43,7 @@ function getL2Nodes(
   predefined: WorldRuleNodeDef | undefined,
   customNodes: CustomWorldRuleNode[],
 ): { id: string; label: string; icon: string; hints?: string[]; isCustom: boolean }[] {
-  const result: { id: string; label: string; icon: string; hints?: string[]; isCustom: boolean }[] = []
+  const result: WorldRuleNavigationNode[] = []
   // 预定义 L2
   if (predefined?.children) {
     for (const l2 of predefined.children) {
@@ -80,11 +82,6 @@ export default function WorldRulesPanel({ project }: Props) {
   const [previewText, setPreviewText] = useState('')
   const [previewTokens, setPreviewTokens] = useState(0)
   const [worldTab, setWorldTab] = useState<number | null>(null)
-
-  // 自定义节点新增
-  const [addingL1, setAddingL1] = useState(false)
-  const [addingL2, setAddingL2] = useState(false)
-  const [newNodeLabel, setNewNodeLabel] = useState('')
 
   // 时间线 & 关键词（用于预览）
   const [timelineEvents, setTimelineEvents] = useState<HistoricalTimelineEvent[]>([])
@@ -143,7 +140,7 @@ export default function WorldRulesPanel({ project }: Props) {
 
   // 所有 L1 节点（预定义 + 自定义顶级）
   const l1Nodes = useMemo(() => {
-    const nodes: { id: string; label: string; icon: string; isCustom: boolean; hints?: string[] }[] = []
+    const nodes: WorldRuleNavigationNode[] = []
     for (const l1 of WORLD_RULE_TREE) {
       nodes.push({ id: l1.id, label: l1.label, icon: l1.icon, isCustom: false, hints: l1.hints })
     }
@@ -277,21 +274,15 @@ export default function WorldRulesPanel({ project }: Props) {
   }, [])
 
   // 新增自定义 L1
-  const handleAddL1 = useCallback(async () => {
-    if (!newNodeLabel.trim()) return
-    await addCustomNode({ parentId: null, label: newNodeLabel.trim(), icon: '🔖' })
-    setNewNodeLabel('')
-    setAddingL1(false)
-  }, [newNodeLabel, addCustomNode])
+  const handleAddL1 = useCallback(async (label: string) => {
+    await addCustomNode({ parentId: null, label, icon: '🔖' })
+  }, [addCustomNode])
 
   // 新增自定义 L2
-  const handleAddL2 = useCallback(async () => {
-    if (!newNodeLabel.trim()) return
-    const id = await addCustomNode({ parentId: selectedL1, label: newNodeLabel.trim(), icon: '📝' })
-    setNewNodeLabel('')
-    setAddingL2(false)
+  const handleAddL2 = useCallback(async (label: string) => {
+    const id = await addCustomNode({ parentId: selectedL1, label, icon: '📝' })
     if (id) setSelectedNode(id)
-  }, [newNodeLabel, addCustomNode, selectedL1])
+  }, [addCustomNode, selectedL1])
 
   // 检查节点是否为自定义节点
   const isCustomNode = useCallback((nodeId: string): boolean => {
@@ -351,233 +342,29 @@ export default function WorldRulesPanel({ project }: Props) {
 
       {/* 三列布局 */}
       <div className="flex gap-0 border border-border rounded-xl overflow-hidden bg-bg-base" style={{ minHeight: 520 }}>
-        {/* ── 第一列：L1 大类导航 ─────────────────────────── */}
-        <div className="w-48 shrink-0 bg-bg-elevated border-r border-border overflow-y-auto">
-          <div className="p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider px-3 pt-3">
-            大类
-          </div>
-          {l1Nodes.map(l1 => {
-            const count = countL1Filled(l1.id)
-            const active = l1.id === selectedL1
-            return (
-              <button
-                key={l1.id}
-                onClick={() => { setSelectedL1(l1.id); setSelectedNode(null) }}
-                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
-                  active
-                    ? 'bg-accent/10 text-accent font-medium border-r-2 border-accent'
-                    : 'text-text-secondary hover:bg-bg-hover'
-                }`}
-              >
-                <span className="text-base">{l1.icon}</span>
-                <span className="flex-1 truncate">{l1.label}</span>
-                {count > 0 && (
-                  <span className="text-[10px] bg-accent/20 text-accent px-1.5 py-0.5 rounded-full">
-                    {count}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-          {/* 新增自定义 L1 */}
-          {addingL1 ? (
-            <div className="px-2 py-1.5 flex gap-1">
-              <input
-                autoFocus
-                value={newNodeLabel}
-                onChange={e => setNewNodeLabel(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAddL1(); if (e.key === 'Escape') setAddingL1(false) }}
-                placeholder="新大类名称"
-                className="flex-1 text-xs px-2 py-1 rounded border border-border bg-bg-base text-text-primary"
-              />
-              <button onClick={handleAddL1} className="text-green-500 hover:text-green-400"><Check className="w-3.5 h-3.5" /></button>
-              <button onClick={() => setAddingL1(false)} className="text-text-muted hover:text-text-primary"><X className="w-3.5 h-3.5" /></button>
-            </div>
-          ) : (
-            <button
-              onClick={() => { setAddingL1(true); setNewNodeLabel('') }}
-              className="w-full text-left px-3 py-2 text-xs text-text-muted hover:text-accent flex items-center gap-1.5 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> 添加大类
-            </button>
-          )}
-        </div>
-
-        {/* ── 第二列：L2 子类列表 ──────────────────────────── */}
-        <div className="w-52 shrink-0 border-r border-border overflow-y-auto">
-          <div className="p-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider px-3 pt-3 flex items-center justify-between">
-            <span>子类</span>
-          </div>
-          {/* L1 自身也可编辑（如果有 hints 或是自定义节点） */}
-          <button
-            onClick={() => setSelectedNode(selectedL1)}
-            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
-              selectedNode === selectedL1
-                ? 'bg-accent/10 text-accent font-medium'
-                : 'text-text-secondary hover:bg-bg-hover'
-            }`}
-          >
-            <span className="text-base">📋</span>
-            <span className="flex-1 truncate">总览</span>
-            {!isEntryEmpty(profile.entries[selectedL1]) && (
-              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-            )}
-          </button>
-          {l2Nodes.map(l2 => {
-            const active = selectedNode === l2.id
-            const hasFill = !isEntryEmpty(profile.entries[l2.id])
-            return (
-              <button
-                key={l2.id}
-                onClick={() => setSelectedNode(l2.id)}
-                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors group ${
-                  active
-                    ? 'bg-accent/10 text-accent font-medium'
-                    : 'text-text-secondary hover:bg-bg-hover'
-                }`}
-              >
-                <span className="text-base">{l2.icon}</span>
-                <span className="flex-1 truncate">{l2.label}</span>
-                {hasFill && <span className="w-1.5 h-1.5 rounded-full bg-accent" />}
-                {l2.isCustom && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void handleDeleteCustomNode(l2.id, l2.label)
-                    }}
-                    className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
-              </button>
-            )
-          })}
-          {/* 新增自定义 L2 */}
-          {addingL2 ? (
-            <div className="px-2 py-1.5 flex gap-1">
-              <input
-                autoFocus
-                value={newNodeLabel}
-                onChange={e => setNewNodeLabel(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAddL2(); if (e.key === 'Escape') setAddingL2(false) }}
-                placeholder="新子类名称"
-                className="flex-1 text-xs px-2 py-1 rounded border border-border bg-bg-base text-text-primary"
-              />
-              <button onClick={handleAddL2} className="text-green-500 hover:text-green-400"><Check className="w-3.5 h-3.5" /></button>
-              <button onClick={() => setAddingL2(false)} className="text-text-muted hover:text-text-primary"><X className="w-3.5 h-3.5" /></button>
-            </div>
-          ) : (
-            <button
-              onClick={() => { setAddingL2(true); setNewNodeLabel('') }}
-              className="w-full text-left px-3 py-2 text-xs text-text-muted hover:text-accent flex items-center gap-1.5 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> 添加子类
-            </button>
-          )}
-        </div>
-
-        {/* ── 第三列：编辑区 ───────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto p-5">
-          {selectedNode ? (
-            <div className="space-y-5">
-              {/* 节点标题 + 删除按钮 */}
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-text-primary">{currentLabel}</h3>
-                <div className="flex items-center gap-2">
-                  {isCustomNode(selectedNode) && (
-                    <button
-                      onClick={() => { void handleDeleteCustomNode(selectedNode, currentLabel) }}
-                      className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3 h-3" /> 删除节点
-                    </button>
-                  )}
-                  {!isEntryEmpty(currentEntry) && (
-                    <button
-                      onClick={() => { void handleClearEntry(selectedNode) }}
-                      className="text-xs text-text-muted hover:text-red-400 flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3 h-3" /> 清空
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* L3 提示标签 */}
-              {currentHints.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {currentHints.map(h => (
-                    <span key={h} className="text-xs px-2 py-0.5 rounded-full bg-bg-elevated text-text-muted border border-border">
-                      {h}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* 📜 取自真实 */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1.5">
-                  📜 取自真实（历史考据 / 现实原型）
-                </label>
-                <textarea
-                  value={currentEntry.historicalAnchors}
-                  onChange={e => handleFieldChange('historicalAnchors', e.target.value)}
-                  placeholder="这个维度中有哪些内容是取自真实历史或现实的？例如：使用唐朝开元年间真实官制三省六部"
-                  rows={5}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-base text-text-primary placeholder:text-text-muted/50 focus:ring-1 focus:ring-accent focus:border-accent resize-y"
-                />
-              </div>
-
-              {/* ✨ 架空改造 */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1.5">
-                  ✨ 架空改造（虚构 / 改编 / 原创设定）
-                </label>
-                <textarea
-                  value={currentEntry.fictionalAdaptations}
-                  onChange={e => handleFieldChange('fictionalAdaptations', e.target.value)}
-                  placeholder="这个维度中有哪些内容是虚构或改编的？例如：在真实官制基础上增设灵修院，专管修士事务"
-                  rows={5}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-base text-text-primary placeholder:text-text-muted/50 focus:ring-1 focus:ring-accent focus:border-accent resize-y"
-                />
-              </div>
-
-              {/* ⚖️ 冲突优先级 */}
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">
-                  ⚖️ 当真实与架空冲突时
-                </label>
-                <div className="flex gap-2">
-                  {(Object.entries(CONFLICT_PRIORITY_LABELS) as [ConflictPriority, string][]).map(([value, label]) => (
-                    <button
-                      key={value}
-                      onClick={() => handleFieldChange('priority', value)}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
-                        currentEntry.priority === value
-                          ? value === 'historical'
-                            ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
-                            : value === 'fictional'
-                              ? 'bg-purple-500/20 border-purple-500/40 text-purple-400'
-                              : 'bg-accent/20 border-accent/40 text-accent'
-                          : 'border-border text-text-muted hover:border-text-muted'
-                      }`}
-                    >
-                      {value === 'historical' ? '📜 ' : value === 'fictional' ? '✨ ' : '⚖️ '}
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-text-muted">
-              <span className="text-4xl mb-3">⚖️</span>
-              <p className="text-sm">选择左侧的子类开始设定</p>
-              <p className="text-xs mt-1">或点击「总览」设定大类级别的规则</p>
-            </div>
-          )}
-        </div>
+        <WorldRulesNavigation
+          l1Nodes={l1Nodes}
+          l2Nodes={l2Nodes}
+          entries={profile.entries}
+          selectedL1={selectedL1}
+          selectedNode={selectedNode}
+          countL1Filled={countL1Filled}
+          onSelectL1={l1Id => { setSelectedL1(l1Id); setSelectedNode(null) }}
+          onSelectNode={setSelectedNode}
+          onAddL1={handleAddL1}
+          onAddL2={handleAddL2}
+          onDeleteCustomNode={(nodeId, label) => { void handleDeleteCustomNode(nodeId, label) }}
+        />
+        <WorldRuleEntryEditor
+          selectedNode={selectedNode}
+          currentLabel={currentLabel}
+          currentHints={currentHints}
+          currentEntry={currentEntry}
+          isCustomNode={selectedNode ? isCustomNode(selectedNode) : false}
+          onFieldChange={(field, value) => { void handleFieldChange(field, value) }}
+          onDeleteNode={() => { if (selectedNode) void handleDeleteCustomNode(selectedNode, currentLabel) }}
+          onClearEntry={() => { if (selectedNode) void handleClearEntry(selectedNode) }}
+        />
       </div>
 
       {/* 全局补充说明 */}
