@@ -149,19 +149,19 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | category | 触发文件 |
 |---|---|
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
-| `chapter.content` | `src/components/editor/ChapterEditor.tsx:489` |
+| `chapter.content` | `src/components/editor/ChapterEditor.tsx:494` |
 | `chapter.content.batch` | `src/lib/ai/batch-detail-runner.ts:256` |
-| `chapter.continue` | `src/components/editor/ChapterEditor.tsx:507` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:544` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:524` |
-| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:321` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:516` |
+| `chapter.continue` | `src/components/editor/ChapterEditor.tsx:512` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:549` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:529` |
+| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:326` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:521` |
 | `chapter.toolbar` | `src/components/editor/FloatingToolbar.tsx:105` |
-| `character.generate` | `src/components/character/CharacterPanel.tsx:163` |
+| `character.generate` | `src/components/character/CharacterPanel.tsx:160` |
 | `character.structure` | `src/lib/ai/parse-character-output.ts:80` |
 | `character.supplement` | `src/components/character/CharacterSupplementAction.tsx:80` |
 | `codex.extract` | `src/components/codex/CodexPanel.tsx:206` |
-| `detail.scene` | `src/components/outline/DetailedOutlinePanel.tsx:163`<br/>`src/components/outline/ScenePanel.tsx:115`<br/>`src/lib/ai/batch-detail-runner.ts:109` |
+| `detail.scene` | `src/components/outline/DetailedOutlinePanel.tsx:151`<br/>`src/components/outline/ScenePanel.tsx:115`<br/>`src/lib/ai/batch-detail-runner.ts:109` |
 | `emotion.beat` | `src/components/editor/EmotionBeatCard.tsx:66` |
 | `foreshadow.structure` | `src/components/foreshadow/ForeshadowPanel.tsx:67` |
 | `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:216` |
@@ -182,7 +182,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:87` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:79` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:96` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:559` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:564` |
 | `rules.generate` | `src/components/rules/CreativeRulesPanel.tsx:80` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `story-arc.generate` | `src/components/outline/StoryArcPanel.tsx:84` |
@@ -191,16 +191,16 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `style.learn` | `src/components/style/StyleLearningPanel.tsx:79` |
 | `world-group.expand` | `src/components/world-group/WorldGroupDetail.tsx:98` |
 | `world-group.suggest` | `src/components/world-group/WorldGroupOverview.tsx:57` |
-| `worldview.dimension` | `src/components/worldview/WorldviewHumanityPanel.tsx:252`<br/>`src/components/worldview/WorldviewNaturalPanel.tsx:281`<br/>`src/components/worldview/WorldviewOriginPanel.tsx:287` |
-| `worldview.divine` | `src/components/worldview/WorldviewOriginPanel.tsx:386` |
-| `worldview.divine.split` | `src/components/worldview/WorldviewOriginPanel.tsx:410` |
+| `worldview.dimension` | `src/components/worldview/WorldviewHumanityPanel.tsx:252`<br/>`src/components/worldview/WorldviewNaturalPanel.tsx:281`<br/>`src/components/worldview/WorldviewOriginPanel.tsx:257` |
+| `worldview.divine` | `src/components/worldview/WorldviewOriginPanel.tsx:356` |
+| `worldview.divine.split` | `src/components/worldview/WorldviewOriginPanel.tsx:380` |
 
 ### 动态 category 调用
 
 - `src/components/editor/ReviewPanel.tsx:130 · ai.start`
 - `src/components/settings/NS0EvalPanel.tsx:50 · chat`
-- `src/components/settings/prompt/WorkflowRunner.tsx:293 · ai.start`
+- `src/components/settings/prompt/WorkflowRunner.tsx:287 · ai.start`
 
 ---
 
-生成时间基准:commit `7678931`
+生成时间基准:commit `8ef3272`
