@@ -1583,3 +1583,13 @@ ROADMAP 已同步真实范围：`AUDIT-6` 仍未达到所有大面板 `<500` 行
 所有项目事实仍只经 `CONTEXT_SOURCES + assembleContext()` 读取；同一来源在最终请求中只注入一次，变量槽位保留语义说明和作者补充，避免重复上下文。项目名、题材、篇幅与连载状态由项目字段派生；章纲、正文、连续性、人物关系、世界规则、文风等按模板功能分别绑定；必填资料和多世界/章纲/章节范围在请求前阻断。原 WorkflowEditor 新增按模板显示的字段输入，Runner 支持 `templateId` 精确运行具体模板；编辑器详情页直接展示每个变量的来源，便于审查。
 
 新增回归覆盖 118 条模板的占位符—binding 一一对应、所有 sourceKey 已登记、P11-B 正文语义映射、P12-E 计划—正文对账、项目事实单次注入、必填阻断以及题材/篇幅/连载适用性。完整单测现为 `149 files / 532 tests` 全绿；TypeScript、ESLint、architecture、required tables、source reachability、AI manual、生产 build 与 bundle budget 全绿。预览 `http://127.0.0.1:4179/storyforge/` 已打开“Prompt 模板验收项目 → 提示词库 → P11-B”，页面可见 204 条模板及完整变量字段绑定。
+
+### [2026-07-14] Codex · REPORT · 既有批次合入主线 + Phase 36 内容类型标记 / `codex/phase36-content-type-labels`
+
+按作者指令完成既有开发批次收口：`codex/roadmap-direct-work-20260713` 先 rebase 最新远程 `main`（保留同期 `5d6920d` 流量归档），完整 `npm run ci` 通过（148 files / 525 tests，42 tables、AI manual、architecture、源码可达性、lint、tsc、build、bundle budget 全绿），`npm run ci:e2e` 8/8；随后 fast-forward 合入并推送 `main@ef5cf51`。已删除该本地/远程完成分支，清理后本地与远程均只剩 `main`，SHA 一致、工作树干净。
+
+从最新主线新建 `codex/phase36-content-type-labels`，实现 ROADMAP Phase 36：在 `sidebar-tree.ts` 建立完整 `SidebarModule → upstream/writing/downstream/tool/system` 单一映射，当前导航叶子与 legacy 路由均显式覆盖；新增共享 `ContentTypeBadge`，工作区固定标题栏显示当前页面的「设定 / 创作 / 产物 / AI 工具 / 系统」及说明，侧栏叶子同步显示紧凑标记。四问结论：只读模块元数据，无 AI 读写、无 DB/schema、无表生命周期变化，不触发数据红线。
+
+新增 `R-PHASE36-content-types` 3 条回归，覆盖完整映射、legacy 路由、徽标语义与导航回调。预览浏览器在 `1118` 实测五类切换、章节沉浸布局、35 个可见侧栏标签、横向溢出和控制台；无截断、无重叠、无 error/warning。首次 E2E 发现紧凑徽标污染导航按钮 accessible name，已从根因改为 `aria-hidden`，保持视觉标记同时恢复「大纲 / 章节 / 数据管理」原有可访问名称；修后完整 `npm run ci:e2e` 8/8。完整 CI 最终通过（149 files / 528 tests，374 个生产源码可达，其余闸门全绿）；其中首次全量覆盖率运行的既有 `R-14` 在开发服务器占用资源时一次超时，定向复跑 562ms 通过，关闭预览释放资源后完整 CI 复跑通过。
+
+👉 球在 Claude：审查 Phase 36 的模块分类边界、全局标题栏布局与 compact 徽标可访问性；作者可在 `http://127.0.0.1:1118/storyforge/` 查看，Codex 后续继续推进明确方案且无需产品决策的任务。
