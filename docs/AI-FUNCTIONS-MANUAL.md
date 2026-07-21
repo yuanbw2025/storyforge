@@ -1250,6 +1250,6 @@
 - `DATA-FLOW-DIAGRAM.md` — Mermaid 可视化（侧重关系图）
 - **本文档** — AI 行为目录（侧重"每个 AI 动作的读 / 写"）
 - `ARCHITECTURE-REFACTOR.md` — 重构方案（三根支柱的工程实现细节）
-- `ROADMAP.md` — 待开发清单（含本说明书引用的 Phase 38/39/40 等）
+- `roadmap/README.md` — 当前功能体系与待开发入口；旧 Phase 38/39/40 规格回查 `ROADMAP-LEGACY.md`
 
 四份文档"四位一体"，覆盖同一个事实源的不同切片。改其一须同步另三个。

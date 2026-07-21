@@ -2,7 +2,7 @@
 
 > Phase 35（世界观词条化重构）+ Phase 37（修炼体系）+ 关联 Phase 34（力量阶段追踪）/ Phase 36（上下游标记）
 > 状态：**设计定稿**（4 项决策已拍板，修炼体系支持分叉）| 作者构想 + 实现设计
-> 配套：`docs/ROADMAP.md`（Phase 34/35/36/37 概要）
+> 配套：`docs/roadmap/README.md`（WORLD-1 当前归属与施工顺序）；原 Phase 34/35/36/37 完整历史见 `docs/ROADMAP-LEGACY.md`。
 
 ---
 

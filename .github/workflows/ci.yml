@@ -37,6 +37,9 @@ jobs:
       - name: 源码可达性(防孤儿文件回潮)
         run: npm run check:source-reachability
 
+      - name: 路线图迁移与文档链接完整性
+        run: npm run check:roadmap
+
       - name: ESLint 零 warning
         run: npm run lint
 

@@ -16,12 +16,13 @@
     "check:source-reachability": "node scripts/check-source-reachability.mjs",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "check:release-metadata": "node scripts/check-release-metadata.mjs",
+    "check:roadmap": "node scripts/check-roadmap.mjs",
     "gen:ai-manual": "node scripts/generate-ai-manual.mjs",
     "check:ai-manual": "node scripts/generate-ai-manual.mjs --check",
     "check:architecture": "node scripts/check-architecture.mjs",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
-    "ci": "npm run check:required-tables && npm run check:ai-manual && npm run check:architecture && npm run check:source-reachability && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size",
+    "ci": "npm run check:required-tables && npm run check:ai-manual && npm run check:architecture && npm run check:source-reachability && npm run check:roadmap && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size",
     "ci:e2e": "npm run test:e2e"
   },
   "dependencies": {

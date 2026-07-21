@@ -1,7 +1,7 @@
 # StoryForge Refactor Progress
 
 > ## ✅ COMPLETE — Phases 0/1/2/3 all done, merged to `main` and deployed (2026-06-09)
-> Merge commit `6dd652d`; deployed via my-website + Vercel. Final gates: tsc=0 / 87 tests / architecture lint clean / 45 required tables / generated AI manual matches code / build OK. This board is now a historical record. Remaining items in `/docs/ROADMAP.md` (FB-2/4/5/6/7/8, Phase 34-37, Phase 35-b/c, BUG-INPUT-WITH-GEN) are NEW features/bugs, not part of this refactor.
+> Merge commit `6dd652d`; deployed via my-website + Vercel. Final gates: tsc=0 / 87 tests / architecture lint clean / 45 required tables / generated AI manual matches code / build OK. This board is now a historical record. 当时的 remaining items 原文保存在 `/docs/ROADMAP-LEGACY.md`；当前状态必须以 `/docs/roadmap/README.md` 与 `CAPABILITY-BASELINE.md` 为准，不能按本历史清单重新施工。
 >
 > Purpose: single progress board for the whole refactor. `PHASE-0-STATUS.md` records detailed Phase 0 execution logs; this file shows the complete project-level picture.
 

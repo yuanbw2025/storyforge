@@ -9,5 +9,5 @@
 
 - `CLAUDE.md`
 - `docs/MASTER-BLUEPRINT.md`
-- `docs/ROADMAP.md`
+- `docs/roadmap/README.md`、`CAPABILITY-BASELINE.md`、`COMPLETED.md`（`docs/ROADMAP.md` 为兼容入口）
 - `docs/AI-FUNCTIONS-MANUAL.generated.md`

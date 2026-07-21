@@ -34,9 +34,11 @@
 
 ---
 
-## 第三动作：找到你被分配的任务
+## 第三动作：读路线图与当前能力基线
 
-按 MASTER-BLUEPRINT §4 找对应 Phase 的任务 ID（如 `0.1` / `1.2` / `2.7`），严格按「前置 → 改法 → 验证 → 完成判据」执行。
+先读 [`docs/roadmap/README.md`](docs/roadmap/README.md)，确认任务的唯一功能体系归属；再读 [`docs/roadmap/CAPABILITY-BASELINE.md`](docs/roadmap/CAPABILITY-BASELINE.md)，确认已有代码、注册表和测试，禁止重复开发。
+
+若任务属于 MASTER-BLUEPRINT Phase 0/1/2/3，再按对应任务 ID（如 `0.1` / `1.2` / `2.7`）严格执行「前置 → 改法 → 验证 → 完成判据」。历史背景按原任务 ID 查 [`docs/ROADMAP-LEGACY.md`](docs/ROADMAP-LEGACY.md)，不要把历史快照当作当前 backlog。
 
 ---
 

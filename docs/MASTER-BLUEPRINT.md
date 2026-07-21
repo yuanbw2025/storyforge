@@ -41,7 +41,9 @@
 | `DATA-FLOW-DIAGRAM.md` | 🟢 可视化辅助 | Mermaid 流程图，看关系全貌（注意：图中"已修"标记部分实为无效修复） |
 | `AI-FUNCTIONS-MANUAL.md` | ⚠️ 已废弃手写版 | **不可信** — 21 处 prompt key 错、多处读写关系错。重生成机制见 §6 |
 | `ARCHITECTURE-REFACTOR.md` | 🔴 v1 已废弃 | 被本文档取代（§0.4） |
-| `ROADMAP.md` | 🟢 任务清单 | 高/中/低优先级任务索引（部分需根据本文档重新分级） |
+| `roadmap/README.md` | 🟢 当前任务清单 | 按功能体系组织的待开发组合；Phase 0/1/2/3 仍以本文档为施工权威 |
+| `roadmap/CAPABILITY-BASELINE.md` | 🟢 当前能力基线 | 开工前核对已有代码、注册表、测试与禁止重复建设边界 |
+| `roadmap/COMPLETED.md` | 🟡 完成索引 | 已完成开发单位及历史证据入口 |
 | `CHANGELOG.md` | ⚠️ 不完整 | 仅记录前几批修复；本轮后期修复未补，且有数条"修了实际无效"的（见 §1.3） |
 | `WORLD-RULES-MULTIWORLD-DESIGN.md` | 🟢 待实施 | Phase 40 多世界化（本蓝图 Phase 2.1 实施） |
 | `CODEX-REDESIGN.md` | 🟢 待实施 | Phase 35 词条化（本蓝图后续） |
@@ -74,7 +76,7 @@
 
 **Day 4–5**：开始 Phase 0 第一个任务（§4.0.1 `deleteGroup` 事务声明）。**严格按"前置条件 → 改法 → 验证"流程执行**，不省略验证。
 
-**任何时候你不确定**：停下，写到 ROADMAP 待开发列表里，提问，不要"我觉得这样应该 OK"。
+**任何时候你不确定**：停下，写到 `roadmap/README.md` 对应功能体系，提问，不要"我觉得这样应该 OK"。
 
 ---
 
@@ -177,7 +179,7 @@ AI：35 个 PromptModuleKey + 59 处实际 ai.start/chat 调用（39 处未传 m
 | `ARCHITECTURE-REFACTOR.md` | 🔴 低 | 已被本文档取代 |
 | `WORLD-RULES-MULTIWORLD-DESIGN.md` | 🟢 高 | 设计正确，待落地 |
 | `CODEX-REDESIGN.md` | 🟢 高 | 设计文档完整 |
-| `ROADMAP.md` | 🟡 中 | 任务列表正确，优先级需按本文档 §1.2 重排 |
+| `roadmap/README.md` | 🟡 中 | 当前功能组合索引；具体施工仍需与本文档和能力基线共同核对 |
 | `CHANGELOG.md` | 🔴 低 | 不完整 + 部分"已修"无效 |
 
 ---
@@ -1708,7 +1710,7 @@ jobs:
 - 不确定一个动作是否会丢用户数据
 - 文档与代码冲突且不知如何裁决
 
-→ 停下，写到 ROADMAP，开 issue，等决策。
+→ 停下，写到 `roadmap/README.md` 对应功能体系，开 issue，等决策。
 
 ---
 
@@ -1924,7 +1926,7 @@ jobs:
 
 | 文档 | 操作 |
 |---|---|
-| `ROADMAP.md` | 按本蓝图 §1.2 重排优先级；高优先级移除已纳入 Phase 0 的；添加 Phase 1/2/3 |
+| `roadmap/README.md` | 按功能体系维护当前优先级；Phase 0/1/2/3 任务继续以本蓝图为施工权威 |
 | `DATA-FLOW-MAP.md` | "已修"标签按 §1.3 逐条复核 |
 | `DATA-FLOW-DIAGRAM.md` | 图八（生命周期×表矩阵）的"已修"标签同上 |
 
