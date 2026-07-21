@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 import {
-  Plus, Sparkles, ChevronDown,
+  Plus, Sparkles, Trash2, ChevronDown, ChevronRight,
+  CheckSquare, Square, X,
 } from 'lucide-react'
+import { useDialog } from '../shared/Dialog'
+import { useToast } from '../shared/Toast'
+import { InlineInput, InlineTextarea } from '../shared/InlineEdit'
 import { CInput } from '../shared/CompositionInput'
 import { useCharacterStore } from '../../stores/character'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -17,10 +21,12 @@ import PromptRunPanel from '../shared/PromptRunPanel'
 import type {
   Project, Character, CharacterMoralAxis, CharacterOrderAxis, CharacterRoleWeight,
 } from '../../lib/types'
+import CharacterStatusPanel from './CharacterStatusPanel'
 import CharacterDimensionPicker from './CharacterDimensionPicker'
+import CharacterDimensionFields from './CharacterDimensionFields'
+import CharacterSupplementAction from './CharacterSupplementAction'
 import { CHARACTER_DIMENSIONS, type CharacterDimensionKey } from '../../lib/character/character-dimensions'
 import CharacterAxesPicker from './CharacterAxesPicker'
-import CharacterDetailCard from './CharacterDetailCard'
 import {
   MORAL_AXIS_LABELS,
   ORDER_AXIS_LABELS,
@@ -51,9 +57,16 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
   const { characters, loadAll, addCharacter, updateCharacter, deleteCharacter } = useCharacterStore()
   const { groups, activeGroupId } = useWorldGroupStore()
   const { config: aiConfig } = useAIConfigStore()
+  const dialog = useDialog()
+  const toast = useToast()
   const [selected, setSelected] = useState<number | null>(null)
   const [hint, setHint] = useState('')
   const [parsing, setParsing] = useState(false)
+  // 角色多选删除
+  const [multiSelectMode, setMultiSelectMode] = useState(false)
+  const [selectedCharIds, setSelectedCharIds] = useState<Set<number>>(new Set())
+  // 戏份分类过滤：'all' | 'main' | 'secondary' | 'npc' | 'extra'
+  const [roleFilter, setRoleFilter] = useState<'all' | CharacterRoleWeight>('all')
   const [showRolePicker, setShowRolePicker] = useState(false)
   const [draftAxes, setDraftAxes] = useState<{
     roleWeight: CharacterRoleWeight | null
@@ -82,9 +95,12 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
     : worldFilter === 'cross'
       ? characters.filter(c => c.isCrossWorld)
       : characters.filter(c => c.isCrossWorld || c.homeWorldGroupId === worldFilter)
+  // 戏份分类过滤：view='main' 永远只看主要角色；generator 模式受 roleFilter 控制
   const displayedChars = view === 'main'
     ? filterCharactersByRoleWeight(worldFilteredChars, 'main')
-    : worldFilteredChars
+    : roleFilter === 'all'
+      ? worldFilteredChars
+      : worldFilteredChars.filter(c => c.roleWeight === roleFilter)
 
   const selectedChar = characters.find(c => c.id === selected)
 
@@ -115,6 +131,53 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
 
   const handleUpdate = (field: keyof Character, value: string) => {
     if (selectedChar?.id) updateCharacter(selectedChar.id, { [field]: value })
+  }
+
+  // ── 多选删除：角色 ──
+
+  const toggleCharSelect = (id: number) => {
+    setSelectedCharIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleCharSelectAll = () => {
+    setSelectedCharIds(prev => {
+      if (prev.size === displayedChars.length && displayedChars.length > 0) return new Set()
+      return new Set(displayedChars.map(c => c.id!))
+    })
+  }
+
+  const handleEnterMultiSelect = () => {
+    setMultiSelectMode(true)
+    setSelectedCharIds(new Set())
+    setSelected(null)
+  }
+
+  const handleExitMultiSelect = () => {
+    setMultiSelectMode(false)
+    setSelectedCharIds(new Set())
+  }
+
+  const handleBatchDeleteCharacters = async () => {
+    if (selectedCharIds.size === 0) return
+    const ok = await dialog.confirm({
+      title: `删除选中的 ${selectedCharIds.size} 个角色？`,
+      message: '这些角色及其关联数据将被删除，此操作不可恢复。',
+      confirmText: '删除',
+      tone: 'danger',
+    })
+    if (!ok) return
+    const ids = Array.from(selectedCharIds)
+    for (const id of ids) {
+      deleteCharacter(id)
+    }
+    setSelectedCharIds(new Set())
+    setMultiSelectMode(false)
+    toast.success(`已删除 ${ids.length} 个角色。`)
   }
 
   const handleAIGenerate = async () => {
@@ -215,7 +278,7 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
               </div>
               <button
                 onClick={handleAIGenerate}
-                disabled={ai.isStreaming}
+                disabled={ai.isStreaming || multiSelectMode}
                 className="flex items-center gap-1.5 px-3 py-2 bg-bg-elevated text-text-secondary text-sm rounded-md hover:text-accent disabled:opacity-50 transition-colors border border-border hover:border-accent/50"
               >
                 <Sparkles className="w-3.5 h-3.5" /> AI 设计角色
@@ -223,10 +286,85 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
             </div>
           </>
         )}
+        {/* 多选删除按钮 / 退出多选 */}
+        {displayedChars.length > 0 && (
+          !multiSelectMode ? (
+            <button
+              onClick={handleEnterMultiSelect}
+              className="flex items-center gap-1 px-2.5 py-2 text-xs text-text-secondary hover:text-error border border-border rounded-md transition-colors"
+              title="进入多选删除"
+            >
+              <CheckSquare className="w-3.5 h-3.5" /> 多选删除
+            </button>
+          ) : (
+            <button
+              onClick={handleExitMultiSelect}
+              className="flex items-center gap-1 px-2.5 py-2 text-xs text-text-secondary hover:text-text-primary border border-border rounded-md transition-colors"
+            >
+              <X className="w-3.5 h-3.5" /> 退出多选
+            </button>
+          )
+        )}
         <span className="text-xs text-text-muted ml-auto">
           {view === 'main' ? '主要角色' : '角色生成'} · {displayedChars.length}
         </span>
       </div>
+
+      {/* 多选模式操作栏 */}
+      {multiSelectMode && (
+        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-bg-surface border border-border rounded-md">
+          <button
+            onClick={toggleCharSelectAll}
+            disabled={displayedChars.length === 0}
+            className="flex items-center gap-1.5 px-2 py-1 text-xs text-text-secondary hover:text-accent disabled:opacity-40"
+          >
+            {selectedCharIds.size === displayedChars.length && displayedChars.length > 0
+              ? <CheckSquare className="w-3.5 h-3.5 text-accent" />
+              : <Square className="w-3.5 h-3.5 text-text-muted" />}
+            {selectedCharIds.size === displayedChars.length && displayedChars.length > 0 ? '取消全选' : '全选'}
+          </button>
+          <span className="text-xs text-text-muted">已选 {selectedCharIds.size}/{displayedChars.length}</span>
+          <button
+            onClick={handleBatchDeleteCharacters}
+            disabled={selectedCharIds.size === 0}
+            className="flex items-center gap-1 px-2 py-1 text-xs text-error bg-error/10 border border-error/40 rounded hover:bg-error/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> 删除选中 ({selectedCharIds.size})
+          </button>
+        </div>
+      )}
+
+      {/* 戏份分类过滤（仅 generator 模式） */}
+      {view === 'generator' && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {(['all', 'main', 'secondary', 'npc', 'extra'] as const).map(key => {
+            const labelMap: Record<typeof key, string> = {
+              all: '全部',
+              main: '主要',
+              secondary: '次要',
+              npc: 'NPC',
+              extra: '路人',
+            }
+            const count = key === 'all'
+              ? worldFilteredChars.length
+              : worldFilteredChars.filter(c => c.roleWeight === key).length
+            const active = roleFilter === key
+            return (
+              <button
+                key={key}
+                onClick={() => setRoleFilter(key)}
+                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                  active
+                    ? 'bg-accent text-white border-accent'
+                    : 'bg-bg-base text-text-secondary border-border hover:border-accent/50'
+                }`}
+              >
+                {labelMap[key]} <span className="opacity-70">({count})</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* 多世界：世界过滤器 */}
       {project.enableMultiWorld && groups.length > 1 && (
@@ -330,7 +468,7 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
         />
       )}
 
-      {/* 主体：左侧列表 + 右侧详情 */}
+      {/* 主体：响应式六列网格 + 详情弹窗 */}
       {displayedChars.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-text-muted gap-3">
           <div className="text-4xl opacity-20">📖</div>
@@ -339,29 +477,45 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
           </p>
         </div>
       ) : (
-        <div className="flex gap-4">
-          {/* 左侧角色列表 */}
-          <div className="w-40 shrink-0 space-y-0.5">
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
             {displayedChars.map((c, i) => {
-              const active = selected === c.id
               const colorClass = GLYPH_COLORS[i % GLYPH_COLORS.length]
+              const checked = c.id != null && selectedCharIds.has(c.id)
               return (
                 <button
                   key={c.id}
-                  onClick={() => setSelected(active ? null : c.id!)}
-                  className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-left transition-all ${
-                    active
-                      ? 'bg-accent/8 border-l-2 border-accent'
-                      : 'hover:bg-bg-hover border-l-2 border-transparent'
+                  onClick={() => {
+                    if (multiSelectMode) {
+                      if (c.id != null) toggleCharSelect(c.id)
+                    } else {
+                      setSelected(c.id!)
+                    }
+                  }}
+                  className={`relative text-left p-2 rounded-lg border transition-all ${
+                    multiSelectMode && checked
+                      ? 'border-accent ring-1 ring-accent/40 bg-accent/5'
+                      : 'border-border hover:border-accent/40 hover:bg-bg-hover'
                   }`}
                 >
-                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${colorClass}`}>
-                    {c.name.charAt(0)}
-                  </span>
-                  <div className="min-w-0">
-                    <p className={`text-sm font-medium truncate ${active ? 'text-accent' : 'text-text-primary'}`}>{c.name}</p>
-                    <p className="text-[10px] text-text-muted truncate">
-                      {c.shortDescription?.slice(0, 10) || `${ROLE_WEIGHT_LABELS[c.roleWeight]} · ${MORAL_AXIS_LABELS[c.moralAxis]}`}
+                  {/* 多选模式下右上角复选框 */}
+                  {multiSelectMode && (
+                    <span className="absolute top-1 right-1 z-10">
+                      {checked
+                        ? <CheckSquare className="w-4 h-4 text-accent" />
+                        : <Square className="w-4 h-4 text-text-muted" />}
+                    </span>
+                  )}
+                  <div className="flex flex-col items-center text-center">
+                    <span className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold shrink-0 ${colorClass}`}>
+                      {c.name.charAt(0)}
+                    </span>
+                    <p className="mt-1 text-xs font-medium truncate w-full text-text-primary">{c.name}</p>
+                    <p className="text-[10px] text-text-muted truncate w-full">
+                      {ROLE_WEIGHT_LABELS[c.roleWeight]} · {ORDER_AXIS_LABELS[c.orderAxis]}{MORAL_AXIS_LABELS[c.moralAxis]}
+                    </p>
+                    <p className="text-[10px] text-text-muted/80 line-clamp-2 w-full leading-tight mt-0.5 min-h-[2.4em]">
+                      {c.shortDescription || '—'}
                     </p>
                   </div>
                 </button>
@@ -369,25 +523,186 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
             })}
           </div>
 
-          {/* 右侧详情卡 */}
-          <div className="flex-1 min-w-0">
-            {selectedChar ? (
-              <CharacterDetailCard
-                char={selectedChar}
-                glyphColor={GLYPH_COLORS[characters.findIndex(c => c.id === selectedChar.id) % GLYPH_COLORS.length]}
-                projectId={project.id!}
-                onUpdateField={handleUpdate}
-                onPatch={patch => updateCharacter(selectedChar.id!, patch)}
-                onReload={() => loadAll(project.id!)}
-                onDelete={() => { deleteCharacter(selectedChar.id!); setSelected(null) }}
-                multiWorld={!!project.enableMultiWorld}
-                worldGroups={groups}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-64 text-text-muted text-sm">
-                ← 选择一个角色查看详情
+          {/* 详情弹窗 */}
+          {selectedChar && !multiSelectMode && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+              onClick={() => setSelected(null)}
+            >
+              <div
+                className="relative bg-bg-base border border-border rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* 弹窗头：标题 + 关闭 */}
+                <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
+                  <span className="text-sm font-medium text-text-primary">角色详情</span>
+                  <button
+                    onClick={() => setSelected(null)}
+                    className="p-1 text-text-muted hover:text-text-primary rounded transition-colors"
+                    title="关闭"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                {/* 弹窗内容：独立滚动 */}
+                <div className="overflow-y-auto p-4">
+                  <CharacterDetailCard
+                    char={selectedChar}
+                    charIndex={characters.findIndex(c => c.id === selectedChar.id)}
+                    projectId={project.id!}
+                    onUpdate={handleUpdate}
+                    onDelete={() => { deleteCharacter(selectedChar.id!); setSelected(null) }}
+                    multiWorld={!!project.enableMultiWorld}
+                    worldGroups={groups}
+                  />
+                </div>
               </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── 角色详情卡（design 风格） ────────────────────────────────────
+
+function CharacterDetailCard({
+  char, charIndex, projectId, onUpdate, onDelete, multiWorld, worldGroups,
+}: {
+  char: Character
+  charIndex: number
+  projectId: number
+  onUpdate: (f: keyof Character, v: string) => void
+  onDelete: () => void
+  multiWorld?: boolean
+  worldGroups?: import('../../lib/types').WorldGroup[]
+}) {
+  const { updateCharacter, loadAll } = useCharacterStore()
+  const [expanded, setExpanded] = useState(true)
+  const glyphColor = GLYPH_COLORS[charIndex % GLYPH_COLORS.length]
+
+  return (
+    <div className="space-y-4">
+      {/* 头部：大号首字 + 名字 + 标签 */}
+      <div className="flex items-start gap-4">
+        {/* 大号首字 */}
+        <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-3xl font-serif font-bold shrink-0 ${glyphColor}`}>
+          {char.name.charAt(0)}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {/* 角色元信息行 */}
+          <div className="flex items-center gap-1.5 text-xs text-text-muted mb-0.5">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-border bg-bg-elevated text-text-secondary">
+              {ROLE_WEIGHT_LABELS[char.roleWeight]}
+            </span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-border bg-bg-elevated text-text-secondary">
+              {ORDER_AXIS_LABELS[char.orderAxis]}{MORAL_AXIS_LABELS[char.moralAxis]}
+            </span>
+
+            {/* 多世界：归属世界 + 跨世界标记 */}
+            {multiWorld && (
+              <>
+                <select
+                  value={char.isCrossWorld ? 'cross' : (char.homeWorldGroupId ?? '')}
+                  onChange={e => {
+                    if (!char.id) return
+                    const v = e.target.value
+                    if (v === 'cross') {
+                      updateCharacter(char.id, { isCrossWorld: true, homeWorldGroupId: null })
+                    } else {
+                      updateCharacter(char.id, { isCrossWorld: false, homeWorldGroupId: v ? Number(v) : null })
+                    }
+                  }}
+                  className="px-1.5 py-0.5 bg-bg-elevated text-text-secondary text-[10px] rounded border border-border focus:outline-none focus:border-accent cursor-pointer"
+                  title="角色所属世界"
+                >
+                  <option value="cross">🌐 跨世界</option>
+                  {(worldGroups || []).map(g => (
+                    <option key={g.id} value={g.id}>{g.icon || '🌐'} {g.name}</option>
+                  ))}
+                </select>
+              </>
             )}
+          </div>
+
+          {/* 名字（可编辑） */}
+          <InlineInput
+            value={char.name}
+            onChange={v => onUpdate('name', v)}
+            className="text-2xl font-bold font-serif text-text-primary"
+          />
+
+          {/* 一句话简介（引号样式） */}
+          {char.shortDescription ? (
+            <InlineInput
+              value={char.shortDescription}
+              onChange={v => onUpdate('shortDescription', v)}
+              className="text-sm text-text-secondary mt-1 italic"
+              prefix={"“"}
+              suffix={"”"}
+              placeholder="点击添加一句话简介…"
+            />
+          ) : (
+            <InlineInput
+              value=""
+              onChange={v => onUpdate('shortDescription', v)}
+              className="text-sm text-text-muted mt-1 italic"
+              placeholder="点击添加一句话简介…"
+            />
+          )}
+        </div>
+
+        {/* 操作按钮 */}
+        <div className="flex items-center gap-1 shrink-0">
+          <CharacterSupplementAction
+            character={char}
+            projectId={projectId}
+            worldGroupId={char.homeWorldGroupId ?? null}
+            onDone={() => loadAll(projectId)}
+          />
+          <button onClick={() => setExpanded(!expanded)} className="p-1.5 text-text-muted hover:text-text-primary rounded transition-colors">
+            {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
+          <button onClick={onDelete} className="p-1.5 text-text-muted hover:text-error rounded transition-colors">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <CharacterAxesPicker
+        roleWeight={char.roleWeight}
+        moralAxis={char.moralAxis}
+        orderAxis={char.orderAxis}
+        onChange={axes => {
+          if (!char.id || !axes.roleWeight || !axes.moralAxis || !axes.orderAxis) return
+          updateCharacter(char.id, axes as Pick<Character, 'roleWeight' | 'moralAxis' | 'orderAxis'>)
+        }}
+        compact
+      />
+
+      {/* Phase 23.1: 动态状态面板 */}
+      <CharacterStatusPanel projectId={projectId} characterName={char.name} />
+
+      {/* 完整维度（含 A 扩充的 13 维）——与 NPC/次要同源渲染，主角生成/补全的内容都看得见、能改 */}
+      {expanded && (
+        <div className="space-y-4">
+          <CharacterDimensionFields
+            character={char}
+            onChange={patch => { if (char.id) updateCharacter(char.id, patch) }}
+            exclude={['shortDescription']}
+          />
+          {/* 人物关系非 CHARACTER_DIMENSIONS 成员（由关系网单独管），单列保留，避免丢失 */}
+          <div className="flex gap-2">
+            <span className="w-20 flex-shrink-0 pt-1.5 text-xs text-text-muted">人物关系</span>
+            <div className="flex-1 min-w-0">
+              <InlineTextarea
+                value={char.relationships || ''}
+                onChange={v => onUpdate('relationships', v)}
+                placeholder="点击填写人物关系…"
+              />
+            </div>
           </div>
         </div>
       )}
