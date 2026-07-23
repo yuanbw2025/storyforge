@@ -9,6 +9,8 @@ import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildWorldviewPrompt } from '../../lib/ai/adapters/worldview-adapter'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import CrossSettingToggle from '../shared/CrossSettingToggle'
+import { assembleCrossSettingContext } from '../../lib/ai/cross-setting-context'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import AIFieldModeTabs from '../shared/AIFieldModeTabs'
 import type { Project } from '../../lib/types'
@@ -66,6 +68,7 @@ export default function WorldviewHumanityPanel({ project }: Props) {
   const [values, setValues] = useState<Record<string, string>>({})
   const [activeKey, setActiveKey] = useState(FIELDS[0].key)
   const [streamingKeys, setStreamingKeys] = useState<Set<string>>(new Set())
+  const [crossSettingMode, setCrossSettingMode] = useState(true) // 默认全局协调
 
   useEffect(() => {
     loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
@@ -129,6 +132,9 @@ export default function WorldviewHumanityPanel({ project }: Props) {
           </h2>
           {project.enableMultiWorld && <WorldGroupSwitcher />}
         </div>
+        <div className="flex items-center gap-2 mt-1">
+          <CrossSettingToggle enabled={crossSettingMode} onChange={setCrossSettingMode} />
+        </div>
         <p className="text-xs text-text-muted mt-0.5">
           定义世界的历史、势力、政经文化与社会矛盾。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
         </p>
@@ -184,6 +190,7 @@ export default function WorldviewHumanityPanel({ project }: Props) {
                 project={project}
                 contextSummary={buildCtx(f.key)}
                 onStreamingChange={streaming => handleStreamingChange(f.key, streaming)}
+                crossSettingMode={crossSettingMode}
               />
               {/* 词条（下）：在全貌之下,把"本方面"细化为一个个具体条目(只显示对应那一类,可打星) */}
               {HUMANITY_CODEX_KEYS[f.key] && (
@@ -209,7 +216,7 @@ export default function WorldviewHumanityPanel({ project }: Props) {
 // ── 单字段编辑器（各自独立的 AI 流） ──────────────────────────
 
 function HumanityFieldEditor({
-  meta, value, onChange, project, contextSummary, onStreamingChange,
+  meta, value, onChange, project, contextSummary, onStreamingChange, crossSettingMode,
 }: {
   meta: FieldMeta
   value: string
@@ -217,6 +224,7 @@ function HumanityFieldEditor({
   project: Project
   contextSummary: string
   onStreamingChange: (streaming: boolean) => void
+  crossSettingMode: boolean
 }) {
   const [hint, setHint] = useState('')
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
@@ -236,6 +244,11 @@ function HumanityFieldEditor({
 
   const handleGenerate = async () => {
     const rulesCtx = await buildRulesSourceContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
+    // 全局协调模式：装配全部设定源确保一致性
+    const crossCtx = crossSettingMode
+      ? await assembleCrossSettingContext({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null })
+      : ''
+    const fullContext = [crossCtx, contextSummary].filter(Boolean).join('\n\n')
     const opts = {
       parameterValues: {
         ...parameterValues,
@@ -247,7 +260,7 @@ function HumanityFieldEditor({
       } : undefined,
     }
     const messages = buildWorldviewPrompt(
-      meta.label, project.name, project.genre || '', contextSummary, hint, opts, value, mode,
+      meta.label, project.name, project.genre || '', fullContext, hint, opts, value, mode,
     )
     ai.start(messages, undefined, { category: 'worldview.dimension', projectId: project.id! })
   }

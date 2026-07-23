@@ -9,6 +9,8 @@ import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildRulesGeneratePrompt } from '../../lib/ai/adapters/rules-adapter'
 import { adopt } from '../../lib/registry/adopt'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import CrossSettingToggle from '../shared/CrossSettingToggle'
+import { assembleCrossSettingContext } from '../../lib/ai/cross-setting-context'
 import type { Project, NarrativePOV } from '../../lib/types'
 
 const POV_OPTIONS: { value: NarrativePOV; label: string; desc: string }[] = [
@@ -35,6 +37,7 @@ export default function CreativeRulesPanel({ project }: Props) {
   const [referenceWorks, setReferenceWorks] = useState<string[]>([])
   const [citedRefIds, setCitedRefIds] = useState<number[]>([])
   const [aiTarget, setAiTarget] = useState<'writingStyle' | 'toneAndMood' | 'specialRequirements' | null>(null)
+  const [crossSettingMode, setCrossSettingMode] = useState(true) // 默认全局协调
   const ai = useAIStream(createAISessionKey(project.id!, 'rules.generate'))
   const currentAITarget = (ai.operation as typeof aiTarget) ?? aiTarget
 
@@ -62,7 +65,7 @@ export default function CreativeRulesPanel({ project }: Props) {
   }, [project.id, save])
 
   /** AI 生成某字段：调 rules.generate 模板 */
-  const generateField = (target: 'writingStyle' | 'toneAndMood' | 'specialRequirements') => {
+  const generateField = async (target: 'writingStyle' | 'toneAndMood' | 'specialRequirements') => {
     const dimensionMap = {
       writingStyle: '写作风格',
       toneAndMood: '基调和氛围',
@@ -70,11 +73,16 @@ export default function CreativeRulesPanel({ project }: Props) {
     }
     setAiTarget(target)
     ai.setOperation(target)
+    // 全局协调模式：装配全部设定源确保一致性
+    const crossCtx = crossSettingMode
+      ? await assembleCrossSettingContext({ projectId: project.id! })
+      : ''
+    const worldCtx = [crossCtx, worldview?.summary || worldview?.worldOrigin?.slice(0, 200) || ''].filter(Boolean).join('\n\n')
     const messages = buildRulesGeneratePrompt(
       dimensionMap[target],
       project.name,
       project.genre || '',
-      worldview?.summary || worldview?.worldOrigin?.slice(0, 200) || '',
+      worldCtx,
       storyCore?.theme || storyCore?.centralConflict || '',
     )
     ai.start(messages, undefined, { category: 'rules.generate', projectId: project.id! })
@@ -185,7 +193,10 @@ export default function CreativeRulesPanel({ project }: Props) {
 
   return (
     <div className="max-w-4xl">
-      <h2 className="text-xl font-bold text-text-primary mb-4">📐 创作规则</h2>
+      <div className="flex items-center gap-3 mb-4">
+        <h2 className="text-xl font-bold text-text-primary">📐 创作规则</h2>
+        <CrossSettingToggle enabled={crossSettingMode} onChange={setCrossSettingMode} />
+      </div>
 
       {/* 写作风格 */}
       <div className="mb-6">

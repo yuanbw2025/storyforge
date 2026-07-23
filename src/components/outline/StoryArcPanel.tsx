@@ -11,6 +11,8 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildStoryArcPrompt, parseStoryArcResult } from '../../lib/ai/adapters/story-arc-adapter'
 import { assembleContext } from '../../lib/registry/assemble-context'
+import CrossSettingToggle from '../shared/CrossSettingToggle'
+import { CROSS_SETTING_SOURCE_KEYS } from '../../lib/ai/cross-setting-context'
 import { CInput } from '../shared/CompositionInput'
 import { CTextarea } from '../shared/CompositionInput'
 import AIStreamOutput from '../shared/AIStreamOutput'
@@ -30,6 +32,7 @@ export default function StoryArcPanel({ project }: Props) {
   const { nodes, loadAll: loadOutline } = useOutlineStore()
   const ai = useAIStream(createAISessionKey(project.id!, 'story-arc.generate'))
   const [genType, setGenType] = useState<StoryArcType>('main')
+  const [crossSettingMode, setCrossSettingMode] = useState(true) // 默认全局协调
 
   useEffect(() => {
     loadAll(project.id!)
@@ -58,7 +61,7 @@ export default function StoryArcPanel({ project }: Props) {
     const assembled = await assembleContext({
       projectId: project.id!,
       worldGroupId: null,
-      sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+      sourceKeys: crossSettingMode ? CROSS_SETTING_SOURCE_KEYS : ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
     })
     const worldCtx = assembled.text
     const storyCoreCtx = [
@@ -125,7 +128,10 @@ export default function StoryArcPanel({ project }: Props) {
 
   return (
     <div className="max-w-4xl">
-      <h2 className="text-xl font-bold text-text-primary mb-4">🧵 全局故事线</h2>
+      <div className="flex items-center gap-3 mb-4">
+        <h2 className="text-xl font-bold text-text-primary">🧵 全局故事线</h2>
+        <CrossSettingToggle enabled={crossSettingMode} onChange={setCrossSettingMode} />
+      </div>
 
       {/* 故事线 Tab 切换 */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">

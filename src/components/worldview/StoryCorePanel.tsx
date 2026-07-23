@@ -6,6 +6,8 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildStoryGeneratePrompt } from '../../lib/ai/adapters/story-adapter'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import CrossSettingToggle from '../shared/CrossSettingToggle'
+import { assembleCrossSettingContext } from '../../lib/ai/cross-setting-context'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import { InlineTextarea } from '../shared/InlineEdit'
 import AIFieldModeTabs from '../shared/AIFieldModeTabs'
@@ -45,6 +47,7 @@ export default function StoryCorePanel({ project }: Props) {
   const [activeKey, setActiveKey] = useState(FIELDS[0].key)
   // 跟踪哪些字段正在 streaming（用于侧边栏小圆点）
   const [streamingKeys, setStreamingKeys] = useState<Set<string>>(new Set())
+  const [crossSettingMode, setCrossSettingMode] = useState(true) // 默认全局协调
 
   useEffect(() => {
     loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
@@ -95,7 +98,11 @@ export default function StoryCorePanel({ project }: Props) {
   }, [])
 
   return (
-    <div className="flex gap-4 max-w-5xl">
+    <div className="max-w-5xl space-y-3">
+      <div className="flex items-center gap-2">
+        <CrossSettingToggle enabled={crossSettingMode} onChange={setCrossSettingMode} />
+      </div>
+      <div className="flex gap-4">
       {/* ── 左侧导航 ── */}
       <div className="w-fit min-w-32 max-w-40 shrink-0 space-y-0.5 pt-1">
         {FIELDS.map(f => {
@@ -146,10 +153,12 @@ export default function StoryCorePanel({ project }: Props) {
               worldCtx={worldCtx}
               sessionEntity={`${activeGroupId ?? 'global'}:${f.key}`}
               onStreamingChange={streaming => handleStreamingChange(f.key, streaming)}
+              crossSettingMode={crossSettingMode}
             />
           </div>
         ))}
       </div>
+    </div>
     </div>
   )
 }
@@ -157,7 +166,7 @@ export default function StoryCorePanel({ project }: Props) {
 // ── 单字段编辑器（各自独立的 AI 流） ──────────────────────────
 
 function FieldEditor({
-  field, value, onChange, project, worldCtx, sessionEntity, onStreamingChange,
+  field, value, onChange, project, worldCtx, sessionEntity, onStreamingChange, crossSettingMode,
 }: {
   field: FieldDef
   value: string
@@ -166,12 +175,14 @@ function FieldEditor({
   worldCtx: () => string
   sessionEntity: string
   onStreamingChange: (streaming: boolean) => void
+  crossSettingMode: boolean
 }) {
   const [hint, setHint] = useState('')
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
   const [mode, setMode] = useState<FieldGenerationMode>('expand')
+  const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const ai = useAIStream(createAISessionKey(project.id!, 'story.generate', sessionEntity))
 
   // 通知父组件 streaming 状态
@@ -179,7 +190,12 @@ function FieldEditor({
     onStreamingChange(ai.isStreaming)
   }, [ai.isStreaming, onStreamingChange])
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    // 全局协调模式：装配全部设定源确保一致性
+    const crossCtx = crossSettingMode
+      ? await assembleCrossSettingContext({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null })
+      : ''
+    const fullContext = [crossCtx, worldCtx()].filter(Boolean).join('\n\n')
     const opts = {
       parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
       overrides: (systemOverride != null || userOverride != null) ? {
@@ -188,7 +204,7 @@ function FieldEditor({
       } : undefined,
     }
     const messages = buildStoryGeneratePrompt(
-      field.dimension, project.name, project.genre || '', worldCtx(), hint, opts, value, mode,
+      field.dimension, project.name, project.genre || '', fullContext, hint, opts, value, mode,
     )
     ai.start(messages, undefined, { category: 'story.generate', projectId: project.id! })
   }

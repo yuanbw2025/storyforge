@@ -6,6 +6,8 @@ import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildConceptMapPrompt, buildImageMapPrompt } from '../../lib/ai/adapters/geography-adapter'
+import CrossSettingToggle from '../shared/CrossSettingToggle'
+import { assembleCrossSettingContext } from '../../lib/ai/cross-setting-context'
 import type { Project, Location, LocationType } from '../../lib/types'
 import { nanoid } from '../../lib/utils/id'
 import { sanitizeSvg } from '../../lib/utils/sanitize-svg'
@@ -50,6 +52,7 @@ export default function GeographyPanel({ project }: Props) {
   const [svgContent, setSvgContent] = useState<string>('')
   const [imagePrompt, setImagePrompt] = useState<string>('')
   const [copied, setCopied] = useState(false)
+  const [crossSettingMode, setCrossSettingMode] = useState(true) // 默认全局协调
   const ai = useAIStream(createAISessionKey(
     project.id!,
     'geography.concept-map',
@@ -123,7 +126,12 @@ export default function GeographyPanel({ project }: Props) {
   const handleGenerateConceptMap = async () => {
     setSvgContent('')
     setView('aimap')
-    const messages = buildConceptMapPrompt(overview, locations)
+    // 全局协调模式：装配全部设定源确保地图与设定一致
+    const crossCtx = crossSettingMode
+      ? await assembleCrossSettingContext({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null })
+      : ''
+    const fullOverview = [crossCtx, overview].filter(Boolean).join('\n\n')
+    const messages = buildConceptMapPrompt(fullOverview, locations)
     const result = await ai.start(messages, undefined, { category: 'geography.concept-map', projectId: project.id! })
     // 提取 SVG 代码（去掉可能的 markdown code block）
     const svg = result
@@ -150,6 +158,7 @@ export default function GeographyPanel({ project }: Props) {
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-text-primary">🗺️ 地理环境</h2>
+        <CrossSettingToggle enabled={crossSettingMode} onChange={setCrossSettingMode} />
         {project.enableMultiWorld && <WorldGroupSwitcher />}
       </div>
 

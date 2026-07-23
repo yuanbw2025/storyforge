@@ -60,6 +60,7 @@ const InventoryPanel = lazy(() => import('../components/items/InventoryPanel'))
 const FactLibraryPanel = lazy(() => import('../components/facts/FactLibraryPanel'))
 const StoryTimelinePanel = lazy(() => import('../components/timeline/StoryTimelinePanel'))
 const SceneVerifyPanel = lazy(() => import('../components/scene/SceneVerifyPanel'))
+const SettingsAlignmentPanel = lazy(() => import('../components/settings/SettingsAlignmentPanel'))
 const WorldGroupOverview = lazy(() => import('../components/world-group/WorldGroupOverview'))
 import { useLocationStore } from '../stores/location'
 import { useWorldGroupStore } from '../stores/world-group'
@@ -277,6 +278,8 @@ export default function WorkspacePage() {
       case 'backup':
       case 'export':
         return <DataManagementPanel project={project} onImported={(newId) => navigate(`/workspace/${newId}`)} />
+      case 'settings-alignment':
+        return <SettingsAlignmentPanel project={project} />
       default:
         return null
     }

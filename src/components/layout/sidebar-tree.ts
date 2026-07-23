@@ -6,6 +6,7 @@ import {
   FileCog, History, Upload, Download, Settings,
   Map, ClipboardList, GitBranch, Clock, MapPin, Scale,
   Drama, Package, CalendarClock, ScanSearch, Coins, Feather, Database,
+  SearchCheck,
 } from 'lucide-react'
 
 /**
@@ -59,6 +60,7 @@ export type SidebarModule =
   | 'usage-stats'           // = UsageStatsPage（AI 消耗统计）
   | 'settings'              // = AIConfigPanel
   | 'data-management'       // 数据管理
+  | 'settings-alignment'    // = 设定对齐检查
 
   // 状态表（A1）
   | 'state-table'
@@ -162,6 +164,7 @@ export const MODULE_CONTENT_TYPES: Record<SidebarModule, ModuleContentType> = {
   'world-map': 'upstream',
   'power-system': 'upstream',
   'story-core': 'upstream',
+  'settings-alignment': 'tool',
   backup: 'system',
 }
 
@@ -287,6 +290,7 @@ export const NAV_TREE: TreeSection[] = [
       leaf('export',           '数据管理', Download),
       leaf('usage-stats',      '消耗统计', Coins),
       leaf('settings',         '设置',     Settings),
+      leaf('settings-alignment', '设定对齐', SearchCheck),
     ],
   },
 ]

@@ -11,6 +11,8 @@ import { buildWorldviewPrompt } from '../../lib/ai/adapters/worldview-adapter'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { streamChat } from '../../lib/ai/client'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import CrossSettingToggle from '../shared/CrossSettingToggle'
+import { assembleCrossSettingContext } from '../../lib/ai/cross-setting-context'
 import CodexPanel from '../codex/CodexPanel'
 import CodexSearchBar from '../codex/CodexSearchBar'
 import PromptRunPanel from '../shared/PromptRunPanel'
@@ -62,6 +64,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
     divineRules: '',
   })
   const [streamingKeys, setStreamingKeys] = useState<Set<string>>(new Set())
+  const [crossSettingMode, setCrossSettingMode] = useState(true) // 默认全局协调
 
   // 多世界模式下按当前世界组加载，单世界传 null 走原逻辑
   useEffect(() => {
@@ -120,7 +123,10 @@ export default function WorldviewOriginPanel({ project }: Props) {
           <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
             🌌 世界起源与核心设定
           </h2>
-          {project.enableMultiWorld && <WorldGroupSwitcher />}
+          <div className="flex items-center gap-2">
+            <CrossSettingToggle enabled={crossSettingMode} onChange={setCrossSettingMode} />
+            {project.enableMultiWorld && <WorldGroupSwitcher />}
+          </div>
         </div>
         <p className="text-xs text-text-muted mt-0.5">
           定义世界的起源、力量体系与信仰体系。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
@@ -148,6 +154,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
               project={project}
               contextSummary={buildCtx('origin')}
               onStreamingChange={streaming => handleStreamingChange('origin', streaming)}
+              crossSettingMode={crossSettingMode}
             />
           </div>
 
@@ -160,6 +167,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
               project={project}
               contextSummary={buildCtx('power')}
               onStreamingChange={streaming => handleStreamingChange('power', streaming)}
+              crossSettingMode={crossSettingMode}
             />
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-text-primary mb-1">📚 力量层级 · 具体词条</h3>
@@ -185,6 +193,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
               project={project}
               contextSummary={buildCtx('divine')}
               onStreamingChange={streaming => handleStreamingChange('divine', streaming)}
+              crossSettingMode={crossSettingMode}
             />
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-text-primary mb-1">📚 神明信仰 · 具体词条</h3>
@@ -210,7 +219,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
 // ── 文本字段编辑器（世界来源 / 力量体系） ────────────────────────
 
 function TextFieldEditor({
-  field, value, onChange, project, contextSummary, onStreamingChange,
+  field, value, onChange, project, contextSummary, onStreamingChange, crossSettingMode,
 }: {
   field: typeof WORLDVIEW_ORIGIN_FIELDS[number]
   value: string
@@ -218,6 +227,7 @@ function TextFieldEditor({
   project: Project
   contextSummary: string
   onStreamingChange: (streaming: boolean) => void
+  crossSettingMode: boolean
 }) {
   const [hint, setHint] = useState('')
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
@@ -240,7 +250,11 @@ function TextFieldEditor({
     const rulesCtx = await buildRulesSourceContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
     // 下游 → 上游反推:带上用户已填的故事核心 + 角色 + 故事线,生成世界观时结合反推
     const downstreamCtx = await buildDownstreamReverseContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
-    const fullContext = [downstreamCtx, contextSummary].filter(Boolean).join('\n\n')
+    // 全局协调模式：装配全部设定源确保一致性
+    const crossCtx = crossSettingMode
+      ? await assembleCrossSettingContext({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null })
+      : ''
+    const fullContext = [crossCtx, downstreamCtx, contextSummary].filter(Boolean).join('\n\n')
     const opts = {
       parameterValues: {
         ...parameterValues,
@@ -301,7 +315,7 @@ function TextFieldEditor({
 // ── 神明与信仰编辑器（独立 AI 流） ─────────────────────────────────
 
 function DivineFieldEditor({
-  field, divineDesign, onDivineChange, project, contextSummary, onStreamingChange,
+  field, divineDesign, onDivineChange, project, contextSummary, onStreamingChange, crossSettingMode,
 }: {
   field: typeof WORLDVIEW_ORIGIN_FIELDS[number]
   divineDesign: DivineDesign
@@ -309,6 +323,7 @@ function DivineFieldEditor({
   project: Project
   contextSummary: string
   onStreamingChange: (streaming: boolean) => void
+  crossSettingMode: boolean
 }) {
   const [hint, setHint] = useState('')
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
@@ -330,7 +345,11 @@ function DivineFieldEditor({
     const rulesCtx = await buildRulesSourceContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
     // 下游 → 上游反推:带上用户已填的故事核心 + 角色 + 故事线,生成世界观时结合反推
     const downstreamCtx = await buildDownstreamReverseContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
-    const fullContext = [downstreamCtx, contextSummary].filter(Boolean).join('\n\n')
+    // 全局协调模式：装配全部设定源确保一致性
+    const crossCtx = crossSettingMode
+      ? await assembleCrossSettingContext({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null })
+      : ''
+    const fullContext = [crossCtx, downstreamCtx, contextSummary].filter(Boolean).join('\n\n')
     const opts = {
       parameterValues: {
         ...parameterValues,

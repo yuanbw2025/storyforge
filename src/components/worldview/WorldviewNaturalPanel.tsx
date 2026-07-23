@@ -11,6 +11,8 @@ import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildWorldviewPrompt } from '../../lib/ai/adapters/worldview-adapter'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import CrossSettingToggle from '../shared/CrossSettingToggle'
+import { assembleCrossSettingContext } from '../../lib/ai/cross-setting-context'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import AIFieldModeTabs from '../shared/AIFieldModeTabs'
 import type { Project, NaturalResources } from '../../lib/types'
@@ -55,6 +57,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
   })
   const [activeKey, setActiveKey] = useState<FieldKey>('worldStructure')
   const [streamingKeys, setStreamingKeys] = useState<Set<string>>(new Set())
+  const [crossSettingMode, setCrossSettingMode] = useState(true) // 默认全局协调
 
   useEffect(() => {
     loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
@@ -117,6 +120,9 @@ export default function WorldviewNaturalPanel({ project }: Props) {
           </h2>
           {project.enableMultiWorld && <WorldGroupSwitcher />}
         </div>
+        <div className="flex items-center gap-2 mt-1">
+          <CrossSettingToggle enabled={crossSettingMode} onChange={setCrossSettingMode} />
+        </div>
         <p className="text-xs text-text-muted mt-0.5">
           定义世界的地理、气候与自然资源。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
         </p>
@@ -173,6 +179,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
                 project={project}
                 contextSummary={buildCtx(f.ctxKey)}
                 onStreamingChange={streaming => handleStreamingChange(f.key, streaming)}
+                crossSettingMode={crossSettingMode}
               />
               {/* 全貌之下:本方面的专属词条(只显示对应那一类) */}
               {NATURAL_CODEX_KEYS[f.key] && (
@@ -201,6 +208,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
               project={project}
               contextSummary={buildCtx('resources')}
               onStreamingChange={streaming => handleStreamingChange('naturalResources', streaming)}
+              crossSettingMode={crossSettingMode}
             />
             {/* 自然资源:矿物/草药/异兽 三类词条 */}
             <div>
@@ -239,13 +247,14 @@ export default function WorldviewNaturalPanel({ project }: Props) {
 
 // ── 单字段编辑器（各自独立的 AI 流） ──────────────────────────
 
-function SimpleFieldEditor({ field, value, onChange, project, contextSummary, onStreamingChange }: {
+function SimpleFieldEditor({ field, value, onChange, project, contextSummary, onStreamingChange, crossSettingMode }: {
   field: { key: string; emoji: string; label: string; desc: string }
   value: string
   onChange: (v: string) => void
   project: Project
   contextSummary: string
   onStreamingChange: (streaming: boolean) => void
+  crossSettingMode: boolean
 }) {
   const [hint, setHint] = useState('')
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
@@ -265,6 +274,11 @@ function SimpleFieldEditor({ field, value, onChange, project, contextSummary, on
 
   const handleGenerate = async () => {
     const rulesCtx = await buildRulesSourceContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
+    // 全局协调模式：装配全部设定源确保一致性
+    const crossCtx = crossSettingMode
+      ? await assembleCrossSettingContext({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null })
+      : ''
+    const fullContext = [crossCtx, contextSummary].filter(Boolean).join('\n\n')
     const opts = {
       parameterValues: {
         ...parameterValues,
@@ -276,7 +290,7 @@ function SimpleFieldEditor({ field, value, onChange, project, contextSummary, on
       } : undefined,
     }
     const messages = buildWorldviewPrompt(
-      field.label, project.name, project.genre || '', contextSummary, hint, opts, value, mode,
+      field.label, project.name, project.genre || '', fullContext, hint, opts, value, mode,
     )
     ai.start(messages, undefined, { category: 'worldview.dimension', projectId: project.id! })
   }

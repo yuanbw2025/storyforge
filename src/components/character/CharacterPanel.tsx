@@ -14,6 +14,7 @@ import { adopt } from '../../lib/registry/adopt'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
+import CrossSettingToggle from '../shared/CrossSettingToggle'
 import type {
   Project, Character, CharacterMoralAxis, CharacterOrderAxis, CharacterRoleWeight,
 } from '../../lib/types'
@@ -64,6 +65,7 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
   // B：AI 生成时选哪些维度（默认全选；可按戏份预设/增减）
   const [genDims, setGenDims] = useState<Set<CharacterDimensionKey>>(() => new Set(CHARACTER_DIMENSIONS.map(d => d.key)))
   const [showDimPicker, setShowDimPicker] = useState(false)
+  const [crossSettingMode, setCrossSettingMode] = useState(true) // 默认全局协调
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
   // 多世界：角色世界过滤器（'all' | 'cross' | 世界组 id）
@@ -141,12 +143,16 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
     const targetWorld = project.enableMultiWorld
       ? (typeof worldFilter === 'number' ? worldFilter : activeGroupId)
       : null
+    // 全局协调模式：装配全部 14 个设定源；仅本面板模式：保持原有 9 源
+    const sourceKeys = crossSettingMode
+      ? ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations', 'storyArcs', 'storyTimeline', 'characterRelations', 'foreshadows']
+      : ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations']
     const assembled = await assembleContext({
       projectId: project.id!,
       worldGroupId: targetWorld,
       provider: aiConfig.provider,
       model: aiConfig.model,
-      sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+      sourceKeys,
     })
     const worldCtx = assembled.text
     const opts = {
@@ -213,6 +219,7 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
                   </>
                 )}
               </div>
+              <CrossSettingToggle enabled={crossSettingMode} onChange={setCrossSettingMode} />
               <button
                 onClick={handleAIGenerate}
                 disabled={ai.isStreaming}

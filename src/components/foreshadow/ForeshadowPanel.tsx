@@ -15,6 +15,8 @@ import { assembleContext } from '../../lib/registry/assemble-context'
 import { resolveCanonicalChapterSequence } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import { parseForeshadowEchoChapterIds } from '../../lib/foreshadow/context'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import CrossSettingToggle from '../shared/CrossSettingToggle'
+import { CROSS_SETTING_SOURCE_KEYS } from '../../lib/ai/cross-setting-context'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import ForeshadowKanban from './ForeshadowKanban'
 import type { Project, Foreshadow, ForeshadowStatus, ForeshadowType } from '../../lib/types'
@@ -51,6 +53,7 @@ export default function ForeshadowPanel({ project }: Props) {
   const [userOverride, setUserOverride] = useState<string | null>(null)
   const [adopting, setAdopting] = useState(false)
   const [adoptMsg, setAdoptMsg] = useState<string | null>(null)
+  const [crossSettingMode, setCrossSettingMode] = useState(true) // 默认全局协调
 
   useEffect(() => {
     loadForeshadows(project.id!)
@@ -199,7 +202,7 @@ export default function ForeshadowPanel({ project }: Props) {
       worldGroupId: null,
       provider: config.provider,
       model: config.model,
-      sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+      sourceKeys: crossSettingMode ? CROSS_SETTING_SOURCE_KEYS : ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
     })
     const charIdx = assembled.included.indexOf('characters')
     const worldCtx = assembled.text
@@ -232,6 +235,7 @@ export default function ForeshadowPanel({ project }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <CrossSettingToggle enabled={crossSettingMode} onChange={setCrossSettingMode} />
           <button onClick={handleAISuggest}
             disabled={ai.isStreaming || !isAIConfigReady(resolveRequestConfig(config, { category: 'foreshadow.suggest' }).config)}
             className="flex items-center gap-1.5 rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm text-text-secondary transition-colors hover:text-accent disabled:opacity-40"

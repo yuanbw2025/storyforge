@@ -129,7 +129,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
       outlineNodeId,
       provider: aiConfig.provider,
       model: aiConfig.model,
-      sourceKeys: ['chapterOutline', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+      sourceKeys: ['chapterOutline', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations', 'storyArcs', 'storyTimeline', 'characterRelations', 'foreshadows'],
     })
     const charIdx = assembled.included.indexOf('characters')
     return {
@@ -241,7 +241,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
       worldGroupId: null,
       provider: aiConfig.provider,
       model: aiConfig.model,
-      sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+      sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations', 'storyArcs', 'storyTimeline', 'characterRelations', 'foreshadows'],
     })
     const worldCtx = baseCtx.text
     const charCtx = characters
