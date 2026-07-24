@@ -98,7 +98,9 @@ npm run ci
 | `docs/MASTER-BLUEPRINT.md` | 重构施工蓝图 |
 | `docs/AI-FUNCTIONS-MANUAL.generated.md` | AI 行为清单(自动生成) |
 | `docs/DATA-FLOW-DIAGRAM.md` | 数据流可视化 |
-| `docs/ROADMAP.md` | 路线图 |
+| `docs/roadmap/README.md` | 当前与未来路线图 |
+| `docs/roadmap/CAPABILITY-BASELINE.md` | 当前能力基线（开工前必读） |
+| `docs/roadmap/COMPLETED.md` | 已完成开发索引 |
 
 ---
 

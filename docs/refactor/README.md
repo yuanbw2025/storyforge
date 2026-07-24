@@ -6,15 +6,15 @@
 >
 > - **重构已结束,不要再当"待办任务"来做。** Phase 0/1/2/3 全部完成,已合并到 `main`(merge commit `6dd652d`),并经 Vercel 部署到线上真实用户。
 > - **本文件夹现在是「历史存档 + 审查参照」,不是「施工任务书」。** 下方所有"你已被分配重构任务""动手前先读""下一步做什么"等,都是**完成前**的语气,**保留作历史记录,现已不生效**——一切状态以本横幅为准。
-> - **如果你这次的角色是「评审 / 审计」**(检查重构后还有没有问题):请对照 `TARGET-STATE.md`(最终形态规约)+ `/CLAUDE.md`(三注册表铁律)逐项核验**当前代码现状**,把发现的问题写进 `/docs/ROADMAP.md`。**不要直接改 main,走分支 + 等作者确认。**
+> - **如果你这次的角色是「评审 / 审计」**(检查重构后还有没有问题):请对照 `TARGET-STATE.md`(最终形态规约)+ `/CLAUDE.md`(三注册表铁律)逐项核验**当前代码现状**,把发现的问题写进 `/docs/roadmap/README.md` 的对应功能体系。**不要直接改 main,走分支 + 等作者确认。**
 > - **重构目标已达成**:三注册表上线并全项目使用、8 个 P0 数据 bug 根治、CI 6 道关、87 测试、删除/导出/迁移可逆(实测零孤儿)、AI 说明书自动生成与代码一致。
-> - **不属于重构、仍在 ROADMAP 待办的**:社区反馈 FB-2/4/5/6/7/8、Phase 34-37、Phase 35-b/c(词条化"整合+消重")、BUG-INPUT-WITH-GEN。这些是**新功能/新 bug**,与"重构地基"是两回事。
+> - **当时不属于重构、仍在旧 ROADMAP 待办的**:社区反馈 FB-2/4/5/6/7/8、Phase 34-37、Phase 35-b/c(词条化"整合+消重")、BUG-INPUT-WITH-GEN。这是历史口径；当前状态只能查 `/docs/roadmap/README.md` 与能力基线，不能按本清单施工。
 > - **本文件夹以后可能不再需要**;保留是为留存重构全过程的决策与验证证据,供审查或复盘。
 >
 > **验证证据**:tsc=0 / 87 测试 / 架构 lint 0 违规 / 必需表 45 / AI 说明书一致 / build OK;
 > 浏览器实测(新建·持久化·导出·多世界迁移·删除级联零孤儿·真实 AI 生成·FB-1 抓包)全过。
 > **唯一未清的人工关口**:真实老用户数据(v27/v28 迁移)未实测——上线后靠自动备份兜底 + 观察期监控。
-> **回滚路径**:见 `/docs/ROADMAP.md` 部署记录 / revert my-website 的同步提交即可回到旧版。
+> **回滚路径**:历史部署记录见 `/docs/ROADMAP-LEGACY.md` / revert my-website 的同步提交即可回到旧版。
 
 ---
 
@@ -91,7 +91,9 @@ docs/refactor/
 /docs/MASTER-BLUEPRINT.md           ← 施工权威(Phase 0/1/2/3)
 /docs/DATA-FLOW-MAP.md              ← 历史审计记录
 /docs/DATA-FLOW-DIAGRAM.md          ← 数据流可视化(Mermaid)
-/docs/ROADMAP.md                    ← 任务索引
+/docs/roadmap/README.md             ← 当前任务索引
+/docs/roadmap/CAPABILITY-BASELINE.md← 当前能力基线
+/docs/roadmap/COMPLETED.md          ← 已完成索引
 /tests/regression/                  ← 反例测试网(部分已就绪)
 /src/lib/safety/require-backup-before.ts  ← 数据保护红线(已就绪)
 ```

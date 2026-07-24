@@ -60,13 +60,14 @@ describe('C group: structured extraction foundation', () => {
     expect(joined).toContain('疗伤丹')
   })
 
-  it('inventory parser rejects non-items with empty names and normalizes quantities', () => {
+  it('inventory parser rejects non-items with empty names or empty holders and normalizes quantities', () => {
     const parsed = parseInventoryEvents(JSON.stringify([
-      { itemName: '疗伤丹', action: 'consume', quantity: 1.6, note: '疗伤' },
-      { itemName: '', action: 'gain', quantity: 1, note: 'invalid' },
+      { itemName: '疗伤丹', heldByName: '林风', action: 'consume', quantity: 1.6, note: '疗伤' },
+      { itemName: '', heldByName: '林风', action: 'gain', quantity: 1, note: 'invalid' },
+      { itemName: '剑', heldByName: '', action: 'gain', quantity: 1, note: 'no holder' },
     ]))
     expect(parsed).toEqual([
-      { itemName: '疗伤丹', action: 'consume', quantity: 2, note: '疗伤' },
+      { itemName: '疗伤丹', heldByName: '林风', action: 'consume', quantity: 2, note: '疗伤' },
     ])
   })
 

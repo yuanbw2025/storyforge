@@ -10,7 +10,7 @@
 import { db } from '../db/schema'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
 import { FIELD_REGISTRY, FIELD_BY_TARGET } from './field-registry'
-import { ADOPTION_SCHEMAS } from './adoption-schema'
+import { ADOPTION_EXTENSIONS, ADOPTION_SCHEMAS } from './adoption-schema'
 import { CONTEXT_SOURCES } from './context-sources'
 
 /** 解析 'tableName[field]' → tableName */
@@ -112,6 +112,27 @@ export function checkRegistry(): RegistryValidationResult {
     for (const arr of schema.arrayMemberChecks ?? []) {
       if (!fields.has(arr.field)) errors.push(`${schema.target}.arrayMemberChecks 字段未在 FIELD_REGISTRY 登记: ${arr.field}`)
       if (!REGISTRY_BY_NAME.has(arr.itemTarget)) errors.push(`${schema.target}.arrayMemberChecks 指向不存在的表: ${arr.itemTarget}`)
+    }
+    for (const scopeField of schema.replaceScope ?? []) {
+      if (!fields.has(scopeField)) errors.push(`${schema.target}.replaceScope 字段未在 FIELD_REGISTRY 登记: ${scopeField}`)
+    }
+  }
+
+  const extensionIds = new Set<string>()
+  const extensionTargets = new Set<string>()
+  for (const extension of ADOPTION_EXTENSIONS) {
+    if (extensionIds.has(extension.id)) errors.push(`ADOPTION_EXTENSIONS id 重复登记: ${extension.id}`)
+    if (extensionTargets.has(extension.target)) errors.push(`ADOPTION_EXTENSIONS target 重复登记: ${extension.target}`)
+    extensionIds.add(extension.id)
+    extensionTargets.add(extension.target)
+    if (!REGISTRY_BY_NAME.has(extension.target)) {
+      errors.push(`ADOPTION_EXTENSIONS 指向不存在的表: ${extension.target}`)
+    }
+    if (!extension.entrypoints.length) errors.push(`ADOPTION_EXTENSIONS 缺少入口: ${extension.id}`)
+    if (!extension.policyRegistry.trim()) errors.push(`ADOPTION_EXTENSIONS 缺少领域策略注册表: ${extension.id}`)
+    if (!extension.reason.trim()) errors.push(`ADOPTION_EXTENSIONS 缺少例外理由: ${extension.id}`)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(extension.reviewAfter)) {
+      errors.push(`ADOPTION_EXTENSIONS reviewAfter 不是 ISO 日期: ${extension.id}`)
     }
   }
 

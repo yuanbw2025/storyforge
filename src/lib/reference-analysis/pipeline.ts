@@ -17,6 +17,7 @@ import { useAIConfigStore } from '../../stores/ai-config'
 import { chunkDocument, quickHash, type ChunkPlan } from '../import/chunker'
 import { extractJSON } from '../ai/adapters/import-adapter'
 import type { AIConfig, ChatMessage, Reference, ReferenceChunkAnalysis, ReferenceAnalysisDepth } from '../types'
+import { adopt, clearAdoptedCollection } from '../registry/adopt'
 
 /** 两档:浅层(大块·轻析) / 深层(小块·深析) */
 const DEPTH_PRESET: Record<ReferenceAnalysisDepth, {
@@ -86,8 +87,14 @@ export async function writeShallowAnalysisFromTechniques(
   refId: number,
   wt: import('../types').WritingTechniques | undefined,
 ): Promise<void> {
+  const ref = await db.references.get(refId)
+  if (!ref) throw new Error(`参考 #${refId} 不存在`)
   // 清掉旧分析(可能之前跑过)
-  await db.referenceChunkAnalysis.where('referenceId').equals(refId).delete()
+  await clearAdoptedCollection({
+    projectId: ref.projectId,
+    target: 'referenceChunkAnalysis',
+    scope: { referenceId: refId },
+  })
   const w = wt || {}
   const hasAny = Object.values(w).some(v => typeof v === 'string' && v.trim())
   if (hasAny) {
@@ -110,9 +117,9 @@ export async function writeShallowAnalysisFromTechniques(
       otherTechniques: trim(w.otherTechniques),
       createdAt: Date.now(),
     }
-    await db.referenceChunkAnalysis.add(row)
+    await writeAnalysisRow(ref.projectId, row)
   }
-  await patchRef(refId, {
+  await patchRef(ref.projectId, refId, {
     analysisDepth: 'quick',
     analysisStatus: hasAny ? 'done' : 'failed',
     analysisProgress: 100,
@@ -135,7 +142,7 @@ export async function runRefAnalysis(refId: number): Promise<void> {
   }
   const chunks = IN_MEM_CHUNKS[refId]
   if (!chunks || chunks.length === 0) {
-    await patchRef(refId, {
+    await patchRef(ref.projectId, refId, {
       analysisStatus: 'failed',
       analysisError: '找不到分块原文（可能页面刷新过，请重新上传文件）',
     })
@@ -149,7 +156,7 @@ export async function runRefAnalysis(refId: number): Promise<void> {
   activePaused = { value: false }
   activeRefId = refId
 
-  await patchRef(refId, { analysisStatus: 'analyzing', analysisProgress: 0, analysisError: undefined })
+  await patchRef(ref.projectId, refId, { analysisStatus: 'analyzing', analysisProgress: 0, analysisError: undefined })
   listener.onActivity?.('info', `▶ 开始分析「${ref.title}」共 ${chunks.length} 块（${depth}）`)
 
   // 已有分析 → 断点续跑
@@ -166,7 +173,7 @@ export async function runRefAnalysis(refId: number): Promise<void> {
     for (const chunk of chunks) {
       if (activePaused.value) {
         listener.onActivity?.('warn', '⏸ 分析已中止')
-        await patchRef(refId, { analysisStatus: 'failed', analysisError: '用户取消' })
+        await patchRef(ref.projectId, refId, { analysisStatus: 'failed', analysisError: '用户取消' })
         listener.onDone?.(refId, false)
         return
       }
@@ -217,10 +224,10 @@ export async function runRefAnalysis(refId: number): Promise<void> {
             rawExcerpt:         trim(analysis.rawExcerpt),
             createdAt: Date.now(),
           }
-          await db.referenceChunkAnalysis.add(row)
+          await writeAnalysisRow(ref.projectId, row)
           completed++
           const progress = Math.min(100, Math.round((completed / total) * 100))
-          await patchRef(refId, { analysisProgress: progress })
+          await patchRef(ref.projectId, refId, { analysisProgress: progress })
           listener.onProgress?.(progress, `块 ${chunk.index + 1} 完成`)
           listener.onActivity?.('success', `✓ 块 ${chunk.index + 1} 完成`)
           rollingContext = buildRollingContext(rollingContext, row)
@@ -248,7 +255,7 @@ export async function runRefAnalysis(refId: number): Promise<void> {
     const errMsg = successRatio < 1
       ? `共 ${total} 块，成功 ${finalAnalyses.length}，失败 ${total - finalAnalyses.length}`
       : undefined
-    await patchRef(refId, {
+    await patchRef(ref.projectId, refId, {
       analysisStatus: finalStatus as Reference['analysisStatus'],
       analysisProgress: Math.round(successRatio * 100),
       analysisError: errMsg,
@@ -260,9 +267,9 @@ export async function runRefAnalysis(refId: number): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err)
     if ((err as Error).name === 'AbortError') {
       listener.onActivity?.('warn', '已中止')
-      await patchRef(refId, { analysisStatus: 'failed', analysisError: '用户取消' })
+      await patchRef(ref.projectId, refId, { analysisStatus: 'failed', analysisError: '用户取消' })
     } else {
-      await patchRef(refId, { analysisStatus: 'failed', analysisError: msg })
+      await patchRef(ref.projectId, refId, { analysisStatus: 'failed', analysisError: msg })
       listener.onActivity?.('error', `分析异常：${msg}`)
     }
     listener.onDone?.(refId, false)
@@ -442,8 +449,29 @@ function buildRollingContext(prev: string, row: ReferenceChunkAnalysis): string 
   return merged.length > 1500 ? merged.slice(-1500) : merged
 }
 
-async function patchRef(refId: number, changes: Partial<Reference>) {
-  await db.references.update(refId, { ...changes, updatedAt: Date.now() })
+async function writeAnalysisRow(projectId: number, row: ReferenceChunkAnalysis): Promise<void> {
+  const result = await adopt({
+    projectId,
+    target: 'referenceChunkAnalysis',
+    mode: 'add',
+    data: row as unknown as Record<string, unknown>,
+  })
+  if (result.written.length === 0) {
+    throw new Error(`参考分析写回被拒绝: ${result.skipped[0]?.reason ?? result.fkErrors[0]?.field ?? 'unknown'}`)
+  }
+}
+
+async function patchRef(projectId: number, refId: number, changes: Partial<Reference>) {
+  const result = await adopt({
+    projectId,
+    target: 'references',
+    recordId: refId,
+    mode: 'replace',
+    data: changes as Record<string, unknown>,
+  })
+  if (result.written.length === 0) {
+    throw new Error(`参考状态写回被拒绝: ${result.skipped[0]?.reason ?? 'unknown'}`)
+  }
 }
 
 function trim(s: string | undefined): string | undefined {

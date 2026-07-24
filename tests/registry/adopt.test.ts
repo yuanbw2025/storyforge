@@ -6,9 +6,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { FIELD_REGISTRY, FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
-import { ADOPTION_SCHEMAS, ADOPTION_BY_TARGET } from '../../src/lib/registry/adoption-schema'
+import { ADOPTION_EXTENSIONS, ADOPTION_SCHEMAS, ADOPTION_BY_TARGET } from '../../src/lib/registry/adoption-schema'
 import { REGISTRY_BY_NAME } from '../../src/lib/registry/project-tables'
-import { adopt } from '../../src/lib/registry/adopt'
+import { adopt, clearAdoptedCollection } from '../../src/lib/registry/adopt'
 
 async function createProject(): Promise<number> {
   const now = Date.now()
@@ -42,6 +42,17 @@ describe('Phase 1.2a · 统一写回层', () => {
       expect(REGISTRY_BY_NAME.has(schema.target), `ADOPTION_SCHEMA target 缺表:${schema.target}`).toBe(true)
       expect(FIELD_BY_TARGET.has(schema.target), `ADOPTION_SCHEMA target 缺字段:${schema.target}`).toBe(true)
       expect(ADOPTION_BY_TARGET.get(schema.target)).toBe(schema)
+    }
+    expect(ADOPTION_EXTENSIONS.map(extension => extension.id)).toEqual([
+      'fact-ledger',
+      'character-merge-lifecycle',
+    ])
+    for (const extension of ADOPTION_EXTENSIONS) {
+      expect(REGISTRY_BY_NAME.has(extension.target), `ADOPTION_EXTENSION target 缺表:${extension.target}`).toBe(true)
+      expect(extension.entrypoints.length).toBeGreaterThan(0)
+      expect(extension.policyRegistry).not.toBe('')
+      expect(extension.reason).not.toBe('')
+      expect(extension.reviewAfter).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     }
   })
 
@@ -233,5 +244,49 @@ describe('Phase 1.2a · 统一写回层', () => {
     expect(result.fkErrors).toContainEqual({ field: 'appearingCharacterIds[]', refValue: 9999 })
     const row = await db.detailedOutlines.where('projectId').equals(projectId).first()
     expect(row?.appearingCharacterIds).toEqual([characterId])
+  })
+
+  it('参考分析写回按 referenceId 继承项目归属，并支持注册式整批替换', async () => {
+    const projectId = await createProject()
+    const otherProjectId = await createProject()
+    const now = Date.now()
+    const referenceId = await db.references.add({
+      projectId,
+      title: '本项目参考',
+      author: '',
+      type: 'story',
+      note: '',
+      url: '',
+      createdAt: now,
+      updatedAt: now,
+    } as any) as number
+
+    const rejected = await adopt({
+      projectId: otherProjectId,
+      target: 'referenceChunkAnalysis',
+      mode: 'add',
+      data: { referenceId, chunkIndex: 0, narrativeStyle: '不应跨项目写入' },
+    })
+    expect(rejected.fkErrors).toContainEqual({ field: 'referenceId', refValue: referenceId })
+    expect(await db.referenceChunkAnalysis.count()).toBe(0)
+
+    await adopt({
+      projectId,
+      target: 'referenceChunkAnalysis',
+      mode: 'add',
+      data: [
+        { referenceId, chunkIndex: 0, narrativeStyle: '第一块' },
+        { referenceId, chunkIndex: 1, narrativeStyle: '第二块' },
+      ],
+    })
+    expect(await db.referenceChunkAnalysis.where('referenceId').equals(referenceId).count()).toBe(2)
+
+    const deleted = await clearAdoptedCollection({
+      projectId,
+      target: 'referenceChunkAnalysis',
+      scope: { referenceId },
+    })
+    expect(deleted).toBe(2)
+    expect(await db.referenceChunkAnalysis.where('referenceId').equals(referenceId).count()).toBe(0)
   })
 })

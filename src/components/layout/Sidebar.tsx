@@ -1,6 +1,6 @@
 import { useState, type ComponentType, type ReactElement } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Settings } from 'lucide-react'
-import { APP_VERSION } from '../../lib/version'
+import { APP_BUILD_ID } from '../../lib/version'
 import {
   MODULE_CONTENT_TYPE_DEFINITIONS, NAV_TREE, getBranchChain,
   type SidebarModule, type TreeLeaf, type TreeNode,
@@ -135,7 +135,7 @@ export default function Sidebar({
         </button>
         {!collapsed && (
           <span className="text-[10px] text-text-muted font-mono" title="当前版本号">
-            {APP_VERSION}
+            {APP_BUILD_ID}
           </span>
         )}
         <button

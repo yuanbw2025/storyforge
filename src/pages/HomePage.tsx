@@ -7,7 +7,7 @@ import {
   isFSASupported, pickFolder, ensureFolderPermission, readStoryforgeBackups,
 } from '../lib/storage/folder-backup'
 import { importProjectJSON } from '../lib/export/json-export'
-import { APP_VERSION } from '../lib/version'
+import { APP_BUILD_ID } from '../lib/version'
 import {
   GENRE_OPTIONS, PROJECT_STATUS_LABELS,
   type ProjectStatus, type CreateProjectInput,
@@ -162,7 +162,7 @@ export default function HomePage() {
               style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)' }}
               title="当前版本号（与 GitHub Releases / 更新日志对照即可知是否最新）"
             >
-              {APP_VERSION}
+              {APP_BUILD_ID}
             </span>
           </div>
         </div>

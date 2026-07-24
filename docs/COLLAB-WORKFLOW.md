@@ -43,7 +43,7 @@
 - Codex 开发完：`push feat/xxx` → 开 PR，PR 描述写清「改了什么 / 为什么 / 怎么验证」。
 - Claude 审查：`git fetch` → 读 diff → 跑测试 → 结论。发现问题：① 在 PR 留评论让 Codex 改；或 ② 直接把修复 commit 押到该分支（commit message 注明「审查修复」）。
 - **文档（ROADMAP 等）只承载"要做什么"（backlog / bug 清单）**——这部分文档配合是高效的，保留。**不要用文档传"这段代码是什么"。**
-- **人话对话走 `docs/COLLAB-LOG.md`**（沟通频道）：Codex 交付报告、Claude 审查答复在此来回追加，替代作者人工转达。**它只承载对话（做了什么 / 哪个分支 / 审查结论 / 待决策），不贴代码（走 Git）、不写 backlog（进 ROADMAP）。** 规则见该文件头部。
+- **人话对话走 `docs/COLLAB-LOG.md`**（沟通频道）：Codex 交付报告、Claude 审查答复在此来回追加，替代作者人工转达。**它只承载对话（做了什么 / 哪个分支 / 审查结论 / 待决策），不贴代码（走 Git）、不写 backlog（进 `docs/roadmap/README.md` 对应体系）。** 规则见该文件头部。
 - **⚠️ 交接前工作树必须干净（2026-07-09 澄清，纠正之前"COLLAB-LOG 只在 main"的误读）**：活干完，代码 + 你碰过的文档（含 `COLLAB-LOG` / `ROADMAP`）**全部提交到你自己的分支**，交接时 `git status` 必须干净。**从来没有"不许在 feature 分支提交文档"这回事——不提交才是错的**：共享单树里留未提交改动 = 把脏树甩给对方 = 堵死对方往 `main` 落任何东西。`COLLAB-LOG` / `ROADMAP` 提交到当前分支即可，**合并到 `main` 时把两边拼一起**（见 §5.2）。"提交前核对分支" 只为**防误提交到对方分支**（随手写的 main 级笔记别落错），**不是禁止在分支提交**。审查天然只读（`git fetch` 看 diff/PR，不切共享树），不产生脏树。
 
 ---
@@ -77,6 +77,6 @@
 - [x] §3 工作区隔离（各用各的 checkout） —— 认可 / 修改：认可。
 - [x] §4 交接走 Git（分支 + PR） —— 认可 / 修改：认可。
 - [x] §5 合并串行 + rebase + 验证闸门 —— 认可 / 修改：认可。
-- [x] 其它想补充的：人话沟通继续走 `docs/COLLAB-LOG.md`，功能规格/bug backlog 仍进 `docs/ROADMAP.md`；`COLLAB-LOG.md` 提交前确认当前分支，避免再次污染 feature 分支。
+- [x] 其它想补充的：人话沟通继续走 `docs/COLLAB-LOG.md`；当前功能规格/backlog 进 `docs/roadmap/README.md`，开工前核对 `docs/roadmap/CAPABILITY-BASELINE.md`；旧 `docs/ROADMAP.md` 仅保留兼容入口。`COLLAB-LOG.md` 提交前确认当前分支，避免再次污染 feature 分支。
 
 确认后本契约生效，双方按此协作。

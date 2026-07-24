@@ -8,6 +8,7 @@ import { renderPrompt } from '../prompt-engine'
 
 export interface ExtractedItemEvent {
   itemName: string
+  heldByName: string
   action: ItemLedgerAction
   quantity: number
   note: string
@@ -18,12 +19,14 @@ export function buildInventoryExtractPrompt(
   chapterTitle: string,
   chapterText: string,
   knownItemNames: string[] = [],
+  characterNames: string[] = [],
 ): ChatMessage[] {
   const tpl = usePromptStore.getState().getActive('inventory.extract')
   const { messages } = renderPrompt(tpl, {
     chapterTitle,
     chapterText,
     knownItemNames: knownItemNames.join('、') || '无',
+    characterNames: characterNames.join('、') || '未提供',
   })
   return messages
 }
@@ -43,11 +46,12 @@ export function parseInventoryEvents(raw: string): ExtractedItemEvent[] {
     return arr
       .map((e: Record<string, unknown>): ExtractedItemEvent => ({
         itemName: String(e.itemName || '').trim(),
+        heldByName: String(e.heldByName || '').trim(),
         action: e.action === 'consume' ? 'consume' : 'gain',
         quantity: Math.max(1, Math.round(Number(e.quantity) || 1)),
         note: String(e.note || '').trim(),
       }))
-      .filter(e => e.itemName)
+      .filter(e => e.itemName && e.heldByName)
   } catch {
     return []
   }

@@ -35,6 +35,8 @@ describe('QUICKWIN-2 · 物品栏编辑保存', () => {
     const entryId = await store.addEntry({
       projectId,
       itemName: '旧剑',
+      heldByName: '主角',
+      characterId: null,
       action: 'gain',
       quantity: 1,
       chapterId: null,

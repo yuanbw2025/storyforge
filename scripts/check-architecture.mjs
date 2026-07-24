@@ -1,3 +1,5 @@
+/* global console, process */
+
 /**
  * 架构守护 lint(Phase 3.3)
  *
@@ -18,6 +20,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -34,6 +37,38 @@ function walk(dir, acc = []) {
 
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8')
 const violations = []
+
+function parseSource(rel) {
+  return ts.createSourceFile(rel, read(rel), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+}
+
+function visit(node, callback) {
+  callback(node)
+  ts.forEachChild(node, child => visit(child, callback))
+}
+
+function propertyName(node) {
+  if (!node?.name) return null
+  if (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) return node.name.text
+  return null
+}
+
+function objectProperty(object, name) {
+  return object.properties.find(property =>
+    ts.isPropertyAssignment(property) && propertyName(property) === name,
+  )
+}
+
+function stringValue(node) {
+  return node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+    ? node.text
+    : null
+}
+
+function stringArrayValue(node) {
+  if (!node || !ts.isArrayLiteralExpression(node)) return []
+  return node.elements.map(stringValue).filter(value => value != null)
+}
 
 // ── ① stores 手写事务表清单 ──
 // 允许小事务(≤2 表,如 chapter 的 chapters+emotionBeatCards),禁止大表清单(≥5 表)
@@ -204,6 +239,122 @@ for (const dir of UI_DIRS) {
     const line = src.slice(0, m.index).split('\n').length
     violations.push(`[⑦半成品文案] ${file}:${line}: 正式 UI 不得出现"${m[0]}"式死入口承诺;请隐藏入口、标记 Labs 禁用态,或指向已上线流程`)
   }
+}
+
+// ── ⑧ src/lib 的 AI/结构化写回不得绕过 adopt 或已登记领域扩展 ──
+const fieldRegistryAst = parseSource('src/lib/registry/field-registry.ts')
+const governedWriteTargets = new Set()
+const fieldHelpers = new Set(['text', 'longtext', 'num', 'bool', 'json', 'object', 'arr', 'enumeration', 'enumField', 'field'])
+visit(fieldRegistryAst, node => {
+  if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || !fieldHelpers.has(node.expression.text)) return
+  const target = stringValue(node.arguments[0])
+  if (target) governedWriteTargets.add(target)
+})
+
+const adoptionAst = parseSource('src/lib/registry/adoption-schema.ts')
+const extensionEntrypoints = new Map()
+visit(adoptionAst, node => {
+  if (!ts.isObjectLiteralExpression(node)) return
+  const target = stringValue(objectProperty(node, 'target')?.initializer)
+  const policyRegistry = stringValue(objectProperty(node, 'policyRegistry')?.initializer)
+  const reviewAfter = stringValue(objectProperty(node, 'reviewAfter')?.initializer)
+  const entrypoints = stringArrayValue(objectProperty(node, 'entrypoints')?.initializer)
+  if (!target || !policyRegistry || !reviewAfter || !entrypoints.length) return
+  governedWriteTargets.add(target)
+  for (const entrypoint of entrypoints) {
+    const targets = extensionEntrypoints.get(entrypoint) ?? new Set()
+    targets.add(target)
+    extensionEntrypoints.set(entrypoint, targets)
+  }
+  if (reviewAfter < new Date().toISOString().slice(0, 10)) {
+    violations.push(`[⑧扩展到期] ${target}: ADOPTION_EXTENSIONS 已到复审日期 ${reviewAfter}`)
+  }
+})
+
+const writeMethods = new Set(['add', 'update', 'put', 'delete', 'bulkDelete', 'bulkPut', 'clear'])
+function dbTableFromExpression(node) {
+  if (ts.isPropertyAccessExpression(node)) {
+    if (ts.isIdentifier(node.expression) && node.expression.text === 'db') return node.name.text
+    return dbTableFromExpression(node.expression)
+  }
+  if (ts.isCallExpression(node)) return dbTableFromExpression(node.expression)
+  return null
+}
+
+function findDbWrites(sourceFile) {
+  const writes = []
+  visit(sourceFile, node => {
+    if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return
+    const method = node.expression.name.text
+    if (!writeMethods.has(method)) return
+    const target = dbTableFromExpression(node.expression.expression)
+    if (!target) return
+    writes.push({
+      target,
+      method,
+      line: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
+    })
+  })
+  return writes
+}
+
+for (const file of walk('src/lib')) {
+  if (file === 'src/lib/registry/adopt.ts' || file.startsWith('src/lib/registry/')) continue
+  const sourceFile = parseSource(file)
+  for (const { target, method, line } of findDbWrites(sourceFile)) {
+    if (!governedWriteTargets.has(target)) continue
+    if (extensionEntrypoints.get(file)?.has(target)) continue
+    violations.push(`[⑧lib写回旁路] ${file}:${line}: db.${target}.${method}(...) 必须走 adopt() 或 ADOPTION_EXTENSIONS 登记入口`)
+  }
+}
+
+// ── ⑨ 旧 context builder 不得绕过 CONTEXT_SOURCES ──
+const legacyContextBuilders = new Set([
+  'buildWorldContext',
+  'buildCharacterContext',
+  'buildCodexContext',
+  'buildHistoricalContext',
+  'buildLocationContext',
+  'buildRefAnalysisContext',
+  'buildWorldRulesContext',
+])
+function findLegacyContextCalls(sourceFile) {
+  const calls = []
+  visit(sourceFile, node => {
+    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) return
+    if (!legacyContextBuilders.has(node.expression.text)) return
+    calls.push({
+      name: node.expression.text,
+      line: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
+    })
+  })
+  return calls
+}
+
+for (const dir of ['src/components', 'src/hooks', 'src/pages', 'src/lib']) {
+  for (const file of walk(dir)) {
+    if (file === 'src/lib/registry/context-sources.ts') continue
+    const sourceFile = parseSource(file)
+    for (const { name, line } of findLegacyContextCalls(sourceFile)) {
+      violations.push(`[⑨上下文旁路] ${file}:${line}: ${name}(...) 必须由 CONTEXT_SOURCES + assembleContext() 调用`)
+    }
+  }
+}
+
+// 守卫自测：防止 AST 扫描器自身退化后与被检查代码一起“假绿”。
+const selfTestSource = ts.createSourceFile(
+  'architecture-self-test.ts',
+  "await db.references.update(1, {}); await db.referenceChunkAnalysis.where('referenceId').equals(1).delete(); buildCodexContext(1, null)",
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+)
+const selfTestWrites = findDbWrites(selfTestSource).map(write => `${write.target}.${write.method}`)
+if (!selfTestWrites.includes('references.update') || !selfTestWrites.includes('referenceChunkAnalysis.delete')) {
+  violations.push('[⑧守卫自测] lib 写回 AST 扫描器未识别基准违规')
+}
+if (!findLegacyContextCalls(selfTestSource).some(call => call.name === 'buildCodexContext')) {
+  violations.push('[⑨守卫自测] context builder AST 扫描器未识别基准违规')
 }
 
 // ── 报告 ──

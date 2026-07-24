@@ -1,3 +1,5 @@
+/* global console, process */
+
 /**
  * AI 行为说明书自动生成器(Phase 3.1)
  *
@@ -9,7 +11,7 @@
  *   ④ FIELD_REGISTRY 可写字段        (src/lib/registry/field-registry.ts) — target/field/aliases
  *   ⑤ AI 调用点 category             (src/components, src/lib) — category + 文件位置
  *
- * 全部正则解析声明性字面量,零依赖、不需要编译/IndexedDB,CI 友好。
+ * 用 TypeScript AST 解析声明性事实，不执行应用代码/IndexedDB，CI 友好。
  *
  * 用法:
  *   node scripts/generate-ai-manual.mjs          # 生成
@@ -19,77 +21,160 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
+import ts from 'typescript'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = path.join(root, 'docs/AI-FUNCTIONS-MANUAL.generated.md')
 
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8')
 
+const PROMPT_SEED_FILES = [
+  'src/lib/ai/prompt-seeds-core.ts',
+  'src/lib/ai/prompt-seeds-tools.ts',
+  'src/lib/ai/prompt-seeds-genre-packs.ts',
+  'src/lib/ai/prompt-seeds-genre-packs-extended.ts',
+  'src/lib/ai/prompt-seeds-novel.ts',
+]
+
+function parseSource(rel) {
+  return ts.createSourceFile(rel, read(rel), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+}
+
+function visit(node, callback) {
+  callback(node)
+  ts.forEachChild(node, child => visit(child, callback))
+}
+
+function propertyName(node) {
+  if (!node?.name) return null
+  if (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) return node.name.text
+  return null
+}
+
+function objectProperty(object, name) {
+  return object.properties.find(property =>
+    ts.isPropertyAssignment(property) && propertyName(property) === name,
+  )
+}
+
+function stringValue(node) {
+  return node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+    ? node.text
+    : null
+}
+
+function booleanValue(node) {
+  if (node?.kind === ts.SyntaxKind.TrueKeyword) return true
+  if (node?.kind === ts.SyntaxKind.FalseKeyword) return false
+  return null
+}
+
+function numberValue(node, sourceFile) {
+  if (!node || !ts.isNumericLiteral(node)) return null
+  return Number(node.getText(sourceFile).replaceAll('_', ''))
+}
+
+function stringArrayValue(node) {
+  if (!node || !ts.isArrayLiteralExpression(node)) return []
+  return node.elements.map(stringValue).filter(value => value != null)
+}
+
 // ── ① PromptModuleKey 枚举 ──
 function extractModuleKeys() {
-  const src = read('src/lib/types/prompt.ts')
-  const block = src.match(/export type PromptModuleKey =([\s\S]*?)(?:\n\nexport|\n\/\*\*|\nexport interface)/)
-  const scope = block ? block[1] : src
-  return [...scope.matchAll(/\|\s*'([a-zA-Z0-9._-]+)'/g)].map(m => m[1])
+  const sourceFile = parseSource('src/lib/types/prompt.ts')
+  const keys = []
+  visit(sourceFile, node => {
+    if (!ts.isTypeAliasDeclaration(node) || node.name.text !== 'PromptModuleKey') return
+    visit(node.type, child => {
+      if (ts.isLiteralTypeNode(child) && ts.isStringLiteral(child.literal)) {
+        keys.push(child.literal.text)
+      }
+    })
+  })
+  const duplicates = keys.filter((key, index) => keys.indexOf(key) !== index)
+  if (duplicates.length) {
+    throw new Error(`PromptModuleKey 重复声明: ${[...new Set(duplicates)].join(', ')}`)
+  }
+  return keys
 }
 
 // ── ② prompt 种子 ──
 function extractSeeds() {
-  const src = read('src/lib/ai/prompt-seeds.ts')
   const seeds = []
-  // 按 moduleKey: '...' 分块
-  const re = /moduleKey:\s*'([a-zA-Z0-9._-]+)'/g
-  let m
-  const positions = []
-  while ((m = re.exec(src))) positions.push({ key: m[1], idx: m.index })
-  for (let i = 0; i < positions.length; i++) {
-    const start = positions[i].idx
-    const end = i + 1 < positions.length ? positions[i + 1].idx : src.length
-    const chunk = src.slice(start, end)
-    const name = chunk.match(/name:\s*'([^']*)'/)?.[1] ?? ''
-    const description = chunk.match(/description:\s*'([^']*)'/)?.[1] ?? ''
-    const varsRaw = chunk.match(/variables:\s*\[([^\]]*)\]/)?.[1] ?? ''
-    const variables = [...varsRaw.matchAll(/'([^']+)'/g)].map(x => x[1])
-    seeds.push({ key: positions[i].key, name, description, variables })
+  for (const rel of PROMPT_SEED_FILES) {
+    const sourceFile = parseSource(rel)
+    visit(sourceFile, node => {
+      if (!ts.isObjectLiteralExpression(node)) return
+      const key = stringValue(objectProperty(node, 'moduleKey')?.initializer)
+      if (!key) return
+      seeds.push({
+        key,
+        name: stringValue(objectProperty(node, 'name')?.initializer) ?? '',
+        description: stringValue(objectProperty(node, 'description')?.initializer) ?? '',
+        variables: stringArrayValue(objectProperty(node, 'variables')?.initializer),
+        genres: stringArrayValue(objectProperty(node, 'genres')?.initializer),
+        isActive: booleanValue(objectProperty(node, 'isActive')?.initializer),
+        source: rel,
+      })
+    })
   }
   return seeds
 }
 
 // ── ③ CONTEXT_SOURCES ──
 function extractContextSources() {
-  const src = read('src/lib/registry/context-sources.ts')
   const out = []
-  const re = /\bkey:\s*'([a-zA-Z0-9._-]+)'/g
-  let m
-  const positions = []
-  while ((m = re.exec(src))) positions.push({ key: m[1], idx: m.index })
-  for (let i = 0; i < positions.length; i++) {
-    const start = positions[i].idx
-    const end = i + 1 < positions.length ? positions[i + 1].idx : src.length
-    const chunk = src.slice(start, end)
-    const label = chunk.match(/label:\s*'([^']*)'/)?.[1] ?? ''
-    const scope = chunk.match(/scope:\s*'([^']*)'/)?.[1] ?? ''
-    const layer = chunk.match(/layer:\s*'([^']*)'/)?.[1] ?? ''
-    const budget = chunk.match(/budgetTokens:\s*(\d+)/)?.[1] ?? ''
-    out.push({ key: positions[i].key, label, scope, layer, budget })
-  }
+  const sourceFile = parseSource('src/lib/registry/context-sources.ts')
+  visit(sourceFile, node => {
+    if (!ts.isObjectLiteralExpression(node)) return
+    const key = stringValue(objectProperty(node, 'key')?.initializer)
+    const budget = numberValue(objectProperty(node, 'budgetTokens')?.initializer, sourceFile)
+    if (!key || budget == null) return
+    out.push({
+      key,
+      label: stringValue(objectProperty(node, 'label')?.initializer) ?? '',
+      scope: stringValue(objectProperty(node, 'scope')?.initializer) ?? '',
+      layer: stringValue(objectProperty(node, 'layer')?.initializer) ?? '',
+      budget: String(budget),
+    })
+  })
   return out
 }
 
 // ── ④ FIELD_REGISTRY 可写字段(target → field 列表) ──
 function extractFields() {
-  const src = read('src/lib/registry/field-registry.ts')
+  const sourceFile = parseSource('src/lib/registry/field-registry.ts')
   const byTarget = {}
-  // 形如 text('worldviews', 'worldOrigin', ['summary'])、enumeration(...) 等。
-  // 注意:字段说明书必须跟 FIELD_REGISTRY 的 helper 命名同步;此前漏扫 enumeration() 会丢枚举字段。
-  for (const m of src.matchAll(/\b(?:text|longtext|num|bool|json|object|arr|enumeration|enumField|field)\(\s*'([a-zA-Z0-9_]+)'\s*,\s*'([a-zA-Z0-9_]+)'/g)) {
-    const [, target, field] = m
-    ;(byTarget[target] ??= new Set()).add(field)
-  }
+  const helpers = new Set(['text', 'longtext', 'num', 'bool', 'json', 'object', 'arr', 'enumeration', 'enumField', 'field'])
+  visit(sourceFile, node => {
+    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || !helpers.has(node.expression.text)) return
+    const target = stringValue(node.arguments[0])
+    const field = stringValue(node.arguments[1])
+    if (target && field) (byTarget[target] ??= new Set()).add(field)
+  })
   for (const target of Object.keys(byTarget)) {
     byTarget[target] = [...byTarget[target]].sort()
   }
   return byTarget
+}
+
+function extractAdoptionExtensions() {
+  const sourceFile = parseSource('src/lib/registry/adoption-schema.ts')
+  const extensions = []
+  visit(sourceFile, node => {
+    if (!ts.isObjectLiteralExpression(node)) return
+    const id = stringValue(objectProperty(node, 'id')?.initializer)
+    const policyRegistry = stringValue(objectProperty(node, 'policyRegistry')?.initializer)
+    if (!id || !policyRegistry) return
+    extensions.push({
+      id,
+      target: stringValue(objectProperty(node, 'target')?.initializer) ?? '',
+      policyRegistry,
+      entrypoints: stringArrayValue(objectProperty(node, 'entrypoints')?.initializer),
+      reviewAfter: stringValue(objectProperty(node, 'reviewAfter')?.initializer) ?? '',
+    })
+  })
+  return extensions
 }
 
 // ── ⑤ AI 调用点 category ──
@@ -179,9 +264,10 @@ function buildMarkdown() {
   const seeds = extractSeeds()
   const sources = extractContextSources()
   const fields = extractFields()
+  const adoptionExtensions = extractAdoptionExtensions()
   const aiCallScan = extractAiCalls()
   const aiCalls = aiCallScan.byCategory
-  const seedByKey = Object.fromEntries(seeds.map(s => [s.key, s]))
+  const seedsByKey = new Map(keys.map(key => [key, seeds.filter(seed => seed.key === key)]))
 
   const lines = []
   lines.push('# AI 行为说明书（自动生成 · 请勿手动编辑）')
@@ -196,14 +282,17 @@ function buildMarkdown() {
   // 一、Prompt 模板清单
   lines.push('## 一、Prompt 模板清单（PromptModuleKey 事实源）')
   lines.push('')
-  lines.push(`共 ${keys.length} 个 moduleKey。`)
+  lines.push(`共 ${keys.length} 个唯一 moduleKey，${seeds.length} 条内置模板定义。`)
   lines.push('')
-  lines.push('| moduleKey | 名称 | 说明 | 读取变量 |')
-  lines.push('|---|---|---|---|')
+  lines.push('| moduleKey | 模板数 | 代表名称 | 说明 | 读取变量 |')
+  lines.push('|---|---:|---|---|---|')
   for (const k of keys) {
-    const s = seedByKey[k]
+    const candidates = seedsByKey.get(k) ?? []
+    const s = candidates.find(seed => seed.genres.length === 0 && seed.isActive !== false)
+      ?? candidates.find(seed => seed.isActive !== false)
+      ?? candidates[0]
     const vars = s?.variables?.length ? '`' + s.variables.join('` `') + '`' : '—'
-    lines.push(`| \`${k}\` | ${s?.name ?? '—'} | ${s?.description ?? '—'} | ${vars} |`)
+    lines.push(`| \`${k}\` | ${candidates.length} | ${s?.name ?? '—'} | ${s?.description ?? '—'} | ${vars} |`)
   }
   lines.push('')
 
@@ -230,6 +319,15 @@ function buildMarkdown() {
   lines.push('|---|---|')
   for (const target of Object.keys(fields).sort()) {
     lines.push(`| \`${target}\` | ${fields[target].map(f => '`' + f + '`').join(' ')} |`)
+  }
+  lines.push('')
+
+  lines.push('### 领域写回扩展（不是第二套通用 adopt）')
+  lines.push('')
+  lines.push('| ID | 目标表 | 领域策略注册表 | 唯一入口 | 复审日期 |')
+  lines.push('|---|---|---|---|---|')
+  for (const extension of adoptionExtensions) {
+    lines.push(`| \`${extension.id}\` | \`${extension.target}\` | \`${extension.policyRegistry}\` | ${extension.entrypoints.map(item => `\`${item}\``).join('<br/>')} | ${extension.reviewAfter} |`)
   }
   lines.push('')
 

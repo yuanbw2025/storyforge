@@ -1064,7 +1064,7 @@ flowchart TB
   Old --> Unassigned["多主角 / 无主角<br/>未归属只读区<br/>不丢数据"]
 ```
 
-INVENTORY-1 的方向是把物品栏从“项目级主角流水”升级为“按角色归属的流水”。细节以 `docs/ROADMAP.md` 的 INVENTORY-1 为准，本节只说明用户能感知的目标：
+INV-1 的方向是把物品栏从“项目级主角流水”升级为“按角色归属的流水”。当前范围以 `docs/roadmap/README.md` 为准，已有能力以 `docs/roadmap/CAPABILITY-BASELINE.md` 为准；原 INVENTORY-1 完整规格保留在 `docs/ROADMAP-LEGACY.md`。本节只说明用户能感知的目标：
 
 - `itemLedger` 增加 `heldByName` 和 `characterId`：`heldByName` 必填，保存 AI 看到的持有人名字；如果能匹配到角色卡，再写入 `characterId` 形成硬绑定。
 - 物品不再默认归给“唯一主角”，也不再使用 `resolveInventoryOwner(characters)` 这种临时判定。谁持有，就归到谁名下。

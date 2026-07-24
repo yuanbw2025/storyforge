@@ -75,8 +75,6 @@ export type PromptModuleKey =
   | 'codex.extract'
   // —— C-6 重要地点提取 ——
   | 'location.extract'
-  | 'codex.extract'
-  | 'location.extract'
   // —— Phase 25.5.2-a 故事进程年表 ——
   | 'story-timeline.extract'
   // —— Phase 27.2a 场景考证 ——

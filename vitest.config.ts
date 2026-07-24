@@ -38,22 +38,35 @@ export default defineConfig({
         'src/**/*.test.{ts,tsx}',
         'src/lib/world-map/**',      // 纯视觉地图渲染算法
         'src/lib/ai/client.ts',      // 真实网络请求,需 E2E
+        'src/lib/ai/prompt-seed*.ts',
+        'src/lib/ai/prompt-seeds*.ts',
+        'src/lib/ai/writing-styles.ts', // 大型静态声明不能抬高运行时代码覆盖率
         'src/**/*.d.ts',
       ],
       thresholds: {
-        // 门槛 = "防退化基线"(略低于当前实际值),不是逼写低价值测试。
-        // 数据正确性由 parser 测试 + 16 个反例测试 + registry 单测三重保证;
-        // prompt 字符串拼接(buildXxxPrompt)与 UI 不强制覆盖(业界惯例,靠集成/E2E)。
-        lines: 42,
-        functions: 42,
-        statements: 42,
-        branches: 55,
+        // 静态 Prompt 数据已排除；门槛约束真实 parser/runner/import/registry 运行时代码。
+        lines: 58,
+        functions: 50,
+        statements: 58,
+        branches: 60,
         // 注册表是地基(单一事实源),要求更高
         'src/lib/registry/**/*.ts': {
           lines: 75,
           functions: 70,
           statements: 75,
           branches: 70,
+        },
+        'src/lib/ai/**/*.ts': {
+          lines: 50,
+          functions: 40,
+          statements: 50,
+          branches: 50,
+        },
+        'src/lib/import/**/*.ts': {
+          lines: 35,
+          functions: 35,
+          statements: 35,
+          branches: 55,
         },
       },
     },

@@ -84,7 +84,9 @@
 | **`docs/MASTER-BLUEPRINT.md`** | 🔴 唯一施工权威 | 重构全流程 Phase 0/1/2/3 + 三注册表数据结构 |
 | `docs/DATA-FLOW-MAP.md` | 🟡 历史审计记录 | 数据流总表 + 已修 bug 清单 |
 | `docs/DATA-FLOW-DIAGRAM.md` | 🟢 可视化辅助 | 15 张 Mermaid 流程图 |
-| `docs/ROADMAP.md` | 🟢 任务索引 | 待开发清单（按 MASTER-BLUEPRINT 重排优先级） |
+| `docs/roadmap/README.md` | 🟢 当前任务索引 | 按功能体系组织的待开发组合、依赖与施工顺序 |
+| `docs/roadmap/CAPABILITY-BASELINE.md` | 🟢 当前能力事实 | 开工前核对已有代码、注册表和测试，防重复开发 |
+| `docs/roadmap/COMPLETED.md` | 🟡 完成索引 | 已交付能力与历史证据入口；完整旧文见 `ROADMAP-LEGACY.md` |
 | `docs/WORLD-RULES-MULTIWORLD-DESIGN.md` | 🟢 待实施设计 | Phase 40（多世界化真实与幻想） |
 | `docs/CODEX-REDESIGN.md` | 🟢 待实施设计 | Phase 35 词条化重构 |
 | `docs/CONSISTENCY-CHECK-DESIGN.md` | 🟢 待实施设计 | Phase 38/39 |
@@ -153,7 +155,7 @@
 
 ## 🛑 立刻停下来的信号
 
-任何接手者遇到以下情况 → **立刻停下，写到 ROADMAP，开 issue，等决策。不要"我觉得应该可以"**：
+任何接手者遇到以下情况 → **立刻停下，写到 `docs/roadmap/README.md` 对应体系，开 issue，等决策。不要"我觉得应该可以"**：
 
 - 反例测试某条失败且 30 分钟内修不好
 - tsc 错误不能解

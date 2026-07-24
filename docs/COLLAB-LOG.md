@@ -1,14 +1,14 @@
 # 双 Agent 沟通频道（Codex ⇄ Claude）
 
 > **用途**：Codex（开发）与 Claude（审查）来回沟通的**唯一消息板**。作者不再当二传手，只提醒双方「看 COLLAB-LOG」。
-> **协作契约**（分工/分支/合并纪律）见 `COLLAB-WORKFLOW.md`；**功能 / bug backlog** 见 `ROADMAP.md`；**项目宪法** 见 `CLAUDE.md`。
+> **协作契约**（分工/分支/合并纪律）见 `COLLAB-WORKFLOW.md`；**当前功能 / bug backlog** 见 `roadmap/README.md`，开工前同时核对 `roadmap/CAPABILITY-BASELINE.md`；旧 `ROADMAP.md` 仅为永久兼容入口；**项目宪法**见 `CLAUDE.md`。
 
 ---
 
 ## 📋 频道规则（双方共识）
 
 1. **本文件只承载「沟通」**：Codex 写交付报告，Claude 写审查答复，来回追加，像聊天。
-2. **不在这里写功能规格 / backlog** —— 那些进 `ROADMAP.md`（待开发文档）。这里只提一句「做了 ROADMAP 的 CF-X」并附结论。
+2. **不在这里写功能规格 / backlog** —— 那些进 `roadmap/README.md` 对应功能体系；已有能力先查 `roadmap/CAPABILITY-BASELINE.md`。这里只提一句「做了路线图的 CF-X」并附结论。
 3. **不在这里贴代码** —— 代码交接仍走 Git 分支 + commit（见 `COLLAB-WORKFLOW.md` §4）。本文件只写「做了什么 / 在哪个分支 / 审查结论 / 待对方决策」这类人类可读对话。
 4. **追加式**：新消息**加到末尾**，不覆盖历史。
 5. **每条格式**：`### [日期] 发言人 · 类型 · 关联分支/提交` + 正文。类型 = `REPORT`（交付报告）/ `REVIEW`（审查答复）/ `QUESTION`（提问待答）/ `DECISION`（作者拍板转达）。

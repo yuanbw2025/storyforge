@@ -61,7 +61,7 @@ rg -n "AI-FUNCTIONS-MANUAL|ARCHITECTURE-REFACTOR|DATA-FLOW-MAP|DATA-FLOW-DIAGRAM
 
 ### 3.2 待实施设计闸门
 
-下列设计文档如果要外迁，必须先把有效方案摘要写入 `docs/ROADMAP.md`：
+下列设计文档如果要外迁，必须先把有效方案摘要写入 `docs/roadmap/README.md`：
 
 - `docs/WORLD-RULES-MULTIWORLD-DESIGN.md`
 - `docs/CODEX-REDESIGN.md`
@@ -92,7 +92,9 @@ rg -n "AI-FUNCTIONS-MANUAL|ARCHITECTURE-REFACTOR|DATA-FLOW-MAP|DATA-FLOW-DIAGRAM
 | `AGENTS.md` | AI 接手入口 |
 | `CONTRIBUTING.md` | 贡献规则 |
 | `CHANGELOG.md` / `docs/CHANGELOG.md` | 版本变更记录 |
-| `docs/ROADMAP.md` | 待开发与施工索引 |
+| `docs/roadmap/README.md` | 当前待开发与施工索引；`docs/ROADMAP.md` 保留兼容入口 |
+| `docs/roadmap/CAPABILITY-BASELINE.md` | 当前能力事实，防止重复开发 |
+| `docs/roadmap/COMPLETED.md` | 已完成开发单位索引 |
 | `docs/MASTER-BLUEPRINT.md` | 施工权威 |
 | `docs/COLLAB-LOG.md` | Codex / Claude 沟通频道 |
 | `docs/COLLAB-WORKFLOW.md` | 双 Agent 协作流程 |
@@ -140,7 +142,7 @@ rg -n "AI-FUNCTIONS-MANUAL|ARCHITECTURE-REFACTOR|DATA-FLOW-MAP|DATA-FLOW-DIAGRAM
 ### Phase D1：只建方案与索引，不删文件
 
 - 新增本方案。
-- 把待迁移但仍有效的设计结论补入 `ROADMAP.md`。
+- 把待迁移但仍有效的设计结论补入 `docs/roadmap/README.md`。
 - 在 `COLLAB-LOG.md` 写 REPORT，等待 Claude / 作者确认。
 
 ### Phase D2：WPS 分流上传 + 回读
