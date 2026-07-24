@@ -55,6 +55,7 @@ const OutlinePreview = lazy(() => import('../outline/OutlinePreview'))
 const ReviewPanel = lazy(() => import('./ReviewPanel'))
 const NotePanel = lazy(() => import('./NotePanel'))
 const ComparePolishPanel = lazy(() => import('./ComparePolishPanel'))
+const SettingLookupPanel = lazy(() => import('./SettingLookupPanel'))
 
 function LazyPanelFallback() {
   return <div className="rounded-lg border border-border bg-bg-surface p-4 text-sm text-text-muted">面板加载中...</div>
@@ -121,6 +122,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [showOutlinePreview, setShowOutlinePreview] = useState(false)
   const [showReviewPanel, setShowReviewPanel] = useState(false)
   const [showNotePanel, setShowNotePanel] = useState(false)
+  const [showSettingsLookup, setShowSettingsLookup] = useState(false)
   const [compareSourceHtml, setCompareSourceHtml] = useState<string | null>(null)
   const [contextBudget, setContextBudget] = useState<ContextBudget | null>(null)
   const [planReconciliationCurrent, setPlanReconciliationCurrent] = useState(false)
@@ -924,6 +926,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           showOutlinePreview={showOutlinePreview}
           showReviewPanel={showReviewPanel}
           showNotePanel={showNotePanel}
+          showSettingsLookup={showSettingsLookup}
           customInstruction={customInstruction}
           onGenerate={() => { void handleGenerate() }}
           onContinue={() => { void handleContinue() }}
@@ -937,6 +940,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}
           onToggleReviewPanel={() => setShowReviewPanel(!showReviewPanel)}
           onToggleNotePanel={() => setShowNotePanel(!showNotePanel)}
+          onToggleSettingsLookup={() => setShowSettingsLookup(!showSettingsLookup)}
           onCustomInstructionChange={setCustomInstruction}
         />
       )}
@@ -1001,6 +1005,19 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         <div className="mb-3">
           <Suspense fallback={<LazyPanelFallback />}>
             <NotePanel projectId={project.id!} chapterId={currentChapter?.id} onClose={() => setShowNotePanel(false)} />
+          </Suspense>
+        </div>
+      )}
+
+      {/* H4: 设定查询面板 */}
+      {showSettingsLookup && (
+        <div className="mb-3">
+          <Suspense fallback={<LazyPanelFallback />}>
+            <SettingLookupPanel
+              aiConfig={aiConfig}
+              projectId={project.id!}
+              onClose={() => setShowSettingsLookup(false)}
+            />
           </Suspense>
         </div>
       )}

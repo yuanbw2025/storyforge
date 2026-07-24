@@ -61,6 +61,7 @@ const FactLibraryPanel = lazy(() => import('../components/facts/FactLibraryPanel
 const StoryTimelinePanel = lazy(() => import('../components/timeline/StoryTimelinePanel'))
 const SceneVerifyPanel = lazy(() => import('../components/scene/SceneVerifyPanel'))
 const WorldGroupOverview = lazy(() => import('../components/world-group/WorldGroupOverview'))
+const GlobalReplacePanel = lazy(() => import('../components/tools/GlobalReplacePanel'))
 import { useLocationStore } from '../stores/location'
 import { useWorldGroupStore } from '../stores/world-group'
 
@@ -255,6 +256,8 @@ export default function WorkspacePage() {
         />
       case 'scene-verify':
         return <SceneVerifyPanel project={project} />
+      case 'global-replace':
+        return <GlobalReplacePanel project={project} />
 
       // 作品学习已整合进项目参考 → 深度分析 tab（Phase 20）
       case 'master-studies':
