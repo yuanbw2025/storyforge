@@ -13,7 +13,7 @@
 
 | 体系 | 已交付开发单位 / 原 ID | 当前可复用能力 | 主要证据 |
 |---|---|---|---|
-| **GOV-1 架构与数据安全** | Phase 0/1/2/3 基础；`AUDIT-1/1b/2/3/4`；`HEALTH-2/3/6`；R1-R6 审查 | 三注册表、生命周期派生、迁移/导入导出、Dialog、架构守卫、DoD | `CLAUDE.md`、`MASTER-BLUEPRINT.md`、`scripts/check-architecture.mjs`、`scripts/check-required-tables.mjs` |
+| **GOV-1 架构与数据安全** | Phase 0/1/2/3 基础；`AUDIT-1/1b/2/3/4`；`HEALTH-2/3/6`；R1-R6 审查；GOV-1 P1 | 三注册表、生命周期派生、参考分析 adopt 收口、领域扩展、真实 AI Manual、依赖/覆盖率/规模/构建发布守卫 | `CLAUDE.md`、`MASTER-BLUEPRINT.md`、`scripts/check-architecture.mjs`、`scripts/generate-ai-manual.mjs`、`scripts/generate-project-metrics.mjs` |
 | **INV-1 物品与状态** | `CONSISTENCY-1`；`QUICKWIN-1/2/5`；C-3/C-4；物品/状态基础 | itemLedger、held-items、状态卡聚合、物品编辑、来源提示 | `R-CONSISTENCY1-held-items`、`R-QUICKWIN2-inventory-edit`、`R-QUICKWIN5-state-inventory-source` |
 | **CANON-1 连续性与记忆** | Phase A/B/C；NS-1/T1-T8、NS-2、NS-3、NS-4/5/6 代码基础 | 章节记忆、handoff、计划对账、规范章序、temporalFacts、检索、层级摘要、影响分析、事实审查 | `tests/regression/R-NS1-*`、`R-NS3-*`、`R-NS4-*`、`R-NS5-*`、`R-NS6-*` |
 | **PIPE-1 创作与大纲** | Phase D/F；B 组；`QUICKWIN-4/6`；`EDITOR-1/3/4`；`ENH-OUTLINE-1` | 大纲生成、空节点补全、已写正文进度、跨卷拖动、全文查找替换、对照润色、实体补全 | `R-AUDIT6-*`、`R-EDITOR1-*`、`R-EDITOR3-*`、`R-EDITOR4-*`、`R-QUICKWIN6-*` |

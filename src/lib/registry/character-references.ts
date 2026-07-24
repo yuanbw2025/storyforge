@@ -190,3 +190,16 @@ async function remapCharacterStateCards(
   const fromIds = fromCards.map(c => c.id).filter((id): id is number => id != null)
   if (fromIds.length) await db.stateCards.bulkDelete(fromIds)
 }
+
+/** 删除角色时，遍历 itemLedger 将 characterId 置 null，保留 heldByName。 */
+export async function nullifyItemLedgerCharacterRefs(projectId: number, fromCharacterId: number): Promise<void> {
+  const rows = await db.itemLedger
+    .where('projectId').equals(projectId)
+    .filter(e => e.characterId === fromCharacterId)
+    .toArray()
+  for (const row of rows) {
+    if (row.id != null) {
+      await db.itemLedger.update(row.id, { characterId: null })
+    }
+  }
+}

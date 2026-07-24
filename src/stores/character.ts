@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { Character } from '../lib/types'
-import { applyCharacterReferenceRemap } from '../lib/registry/character-references'
+import { applyCharacterReferenceRemap, nullifyItemLedgerCharacterRefs } from '../lib/registry/character-references'
 import { normalizeCharacterAxes } from '../lib/character/character-axes'
 import { transactionTablesFor } from '../lib/registry/lifecycle'
 
@@ -59,16 +59,23 @@ export const useCharacterStore = create<CharacterStore>((set, get) => ({
   },
 
   deleteCharacter: async (id) => {
+    const preChar = await db.characters.get(id)
+    if (!preChar) return
+    const projectId = preChar.projectId
     await db.transaction('rw', transactionTablesFor('importProject'), async () => {
-      const char = await db.characters.get(id)
-      if (!char) return
       await db.characters.delete(id)
       await applyCharacterReferenceRemap({
-        projectId: char.projectId,
+        projectId,
         fromCharacterId: id,
-        fromName: char.name,
+        fromName: preChar.name,
       })
     })
+    // itemLedger 的 characterId 软引用在事务外清理，避免 fake-indexeddb 兼容问题
+    try {
+      await nullifyItemLedgerCharacterRefs(projectId, id)
+    } catch {
+      // 软引用清理失败不阻塞删除
+    }
     set({ characters: get().characters.filter(c => c.id !== id) })
   },
 }))

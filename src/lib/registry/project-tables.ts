@@ -71,7 +71,7 @@ export const PROJECT_TABLES: TableSpec[] = [
   { table: db.characters, name: 'characters', owner: 'project', homeWorldScoped: true,
     exportable: true,
     refs: [
-      // 删角色 → 关系级联删 + 细纲数组引用清理(Phase 2.6 实现 JSON/array 级联)
+      // 删角色 → 关系级联删 + 细纲数组引用清理
       { kind: 'simple', field: 'id', target: 'characterRelations[fromCharacterId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'characterRelations[toCharacterId]', onDelete: 'cascade' },
       { kind: 'array', field: 'appearingCharacterIds', itemTarget: 'detailedOutlines', onDelete: 'removeItem' },
@@ -135,8 +135,14 @@ export const PROJECT_TABLES: TableSpec[] = [
   { table: db.stateCards, name: 'stateCards', owner: 'project', exportable: true },
 
   { table: db.itemLedger, name: 'itemLedger', owner: 'project', exportable: true,
-    exportRemap: [{ field: 'chapterId', remapVia: 'chapters', exportAs: '_chapterExportId' }],
-    note: 'chapterId 软引用;诸天流主角跨世界携带物品' },
+    refs: [
+      { kind: 'simple', field: 'characterId', target: 'characters[id]', onDelete: 'setNull' },
+    ],
+    exportRemap: [
+      { field: 'chapterId', remapVia: 'chapters', exportAs: '_chapterExportId' },
+      { field: 'characterId', remapVia: 'characters', exportAs: '_characterExportId' },
+    ],
+    note: 'chapterId 与 characterId 均为软引用；角色删除时 NULL 化 characterId、保留 heldByName' },
 
   { table: db.storyTimelineEvents, name: 'storyTimelineEvents', owner: 'project', exportable: true,
     exportRemap: [{ field: 'chapterId', remapVia: 'chapters', exportAs: '_chapterExportId' }] },

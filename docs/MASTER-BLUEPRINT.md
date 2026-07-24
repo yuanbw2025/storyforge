@@ -84,14 +84,21 @@
 
 ### 1.1 规模与技术栈
 
-```
-代码：282 个源文件 / 59020 行（src/**/*.{ts,tsx}）
-DB：Dexie.js IndexedDB v26 / 45 张表（其中约 27 张项目级数据 + 5 张全局 + 13 张衍生/临时）
-组件：~70 个面板 + 子组件
-AI：35 个 PromptModuleKey + 59 处实际 ai.start/chat 调用（39 处未传 meta category）
-栈：React 19 / TypeScript 5 / Zustand 5 / Dexie.js / Vite / TipTap
-特殊：纯前端，无后端；所有数据在用户浏览器 IndexedDB；AI 通过 OpenAI 兼容协议直连各 provider
-```
+<!-- project-metrics:start -->
+> 本区块由 `npm run gen:project-metrics` 从当前代码生成；`npm run check:project-metrics` 在 CI 中防止漂移。
+
+| 当前事实 | 数值 | 单一事实源 |
+|---|---:|---|
+| 应用语义版本 | `3.8.0` | `package.json` |
+| TypeScript 生产源码 | 405 个文件 / 77165 行 | `tsconfig.json` |
+| IndexedDB schema | v37 / 42 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
+| PROJECT_TABLES | 42 张表 | `project-tables.ts` |
+| Prompt 主线 | 59 个 moduleKey / 204 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
+| CONTEXT_SOURCES | 34 个上下文源 | `context-sources.ts` |
+| 写回治理 | 16 个通用 adopt target / 2 个领域扩展 | `adoption-schema.ts` |
+<!-- project-metrics:end -->
+
+技术栈：React 19 / TypeScript 5 / Zustand 5 / Dexie.js / Vite / TipTap。项目为纯前端应用，无自建后端；用户数据保存在浏览器 IndexedDB，AI 通过 OpenAI 兼容协议直连用户配置的 provider。
 
 ### 1.2 已确认的严重漏洞（按优先级）
 

@@ -22,15 +22,19 @@
 - `CONTEXT_SOURCES` + `assembleContext()` 统一 AI 读取；当前上下文注册表已有多种 scope、预算和优先级。
 - `FIELD_REGISTRY` + `ADOPTION_SCHEMA` + `adopt()` 统一 AI 结构化写回。
 - `PROJECT_TABLES` 驱动表生命周期、导出/导入、级联删除、世界作用域和引用重映射。
-- `check:architecture`、`check:required-tables`、`check:source-reachability`、AI manual 检查和 CI 已存在。
+- `check:architecture` 覆盖 UI 与 `src/lib/**` 的受治理写回、旧 context builder 和领域扩展复审；检查器带 AST 自测，避免自身假绿。
+- AI Manual 用 TypeScript AST 扫描真实 Prompt 源文件，并由运行时测试独立核对 key 唯一性、模板元数据和数字预算。
+- 参考分析写回已进入 `FIELD_REGISTRY`、`ADOPTION_SCHEMAS`、`adopt()`；事实账本和角色合并是显式、有复审日期的领域扩展。
+- 生产依赖审计、真实运行时代码覆盖率、源码可达性、Blueprint 实时规模和 bundle budget 已进入 CI。
+- UI 用 package 语义版本 + commit build SHA 标识每次生产构建；Release tag / changelog 仍由发布闸门三方校验。
 - 数据迁移、导入导出、备份、删除和关键 UI 流程已有大量回归测试。
 
-### 当前边界 / 尚未完成
+### 持续治理边界
 
-- 参考作品分析 pipeline 仍需正式收口到字段注册与 adopt 约束。
-- AI manual 生成与检查逻辑仍需独立、可证明地避免“假绿”。
-- 架构检查仍需扩大到 `src/lib/**` 的旁路和文档语义真实性。
-- 生产依赖安全、运行时覆盖率、发布元数据和 Blueprint 规模状态仍需治理。
+- `ChapterEditor` 仍是复杂度热点；后续按保存、上下文、AI 和连续性 controller 的稳定边界继续拆，不能为降行数搬运复杂度。
+- AI runner / parser / import 的覆盖已设分层防退化门槛，但低覆盖文件仍应随相关功能开发补关键路径测试。
+- Playwright 商业 smoke、升级前自动快照和第三方匿名错误上报仍分别归 `AUDIT-7` / PRODUCT-1；涉及隐私或产品决策的内容不能擅自启用。
+- 依赖、例外复审日期和 Blueprint 指标是持续门槛，P1 完成不代表以后可以停止维护。
 
 ### 新功能必须复用
 

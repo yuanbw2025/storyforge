@@ -26,6 +26,10 @@ export interface ItemLedgerEntry {
   action: ItemLedgerAction
   /** 数量（正数，符号由 action 决定） */
   quantity: number
+  /** 持有人名称（AI 抽取的原文持有者，必填） */
+  heldByName: string
+  /** 关联角色 ID（能匹配到已知角色则链，否则 null） */
+  characterId?: number | null
   /** 关联章节 ID（来源） */
   chapterId?: number | null
   /** 章节标题（冗余存储，便于展示） */
@@ -40,14 +44,21 @@ export interface InventoryItem {
   itemName: string
   /** 当前持有数量 = 获得总和 - 消耗总和 */
   quantity: number
+  /** 持有人名称 */
+  heldByName: string
+  /** 关联角色 ID */
+  characterId?: number | null
   /** 该物品的全部流水（按时间/章节排序） */
   entries: ItemLedgerEntry[]
 }
 
 /** 把流水聚合为物品栏 */
-export function aggregateInventory(entries: ItemLedgerEntry[]): InventoryItem[] {
+export function aggregateInventory(entries: ItemLedgerEntry[], characterId?: number | null): InventoryItem[] {
+  const filtered = characterId != null
+    ? entries.filter(e => (e.characterId ?? null) === (characterId ?? null))
+    : entries
   const map = new Map<string, ItemLedgerEntry[]>()
-  for (const e of entries) {
+  for (const e of filtered) {
     const key = e.itemName.trim()
     if (!key) continue
     const list = map.get(key) || []
@@ -63,7 +74,15 @@ export function aggregateInventory(entries: ItemLedgerEntry[]): InventoryItem[] 
       return a.createdAt - b.createdAt
     })
     const quantity = sorted.reduce((sum, e) => sum + (e.action === 'gain' ? e.quantity : -e.quantity), 0)
-    result.push({ itemName, quantity, entries: sorted })
+    // 取最近一条的持有人作为聚合显示
+    const last = sorted[sorted.length - 1]
+    result.push({
+      itemName,
+      quantity,
+      heldByName: last.heldByName ?? '',
+      characterId: last.characterId ?? null,
+      entries: sorted,
+    })
   }
   // 当前持有量降序，持有为 0/负的排后面
   return result.sort((a, b) => b.quantity - a.quantity)

@@ -303,6 +303,7 @@ npm run ci
 | [docs/roadmap/CAPABILITY-BASELINE.md](./docs/roadmap/CAPABILITY-BASELINE.md) | 当前已有能力与禁止重复建设边界 |
 | [docs/roadmap/COMPLETED.md](./docs/roadmap/COMPLETED.md) | 已完成开发单位与历史证据入口 |
 | [docs/AI-FUNCTIONS-MANUAL.generated.md](./docs/AI-FUNCTIONS-MANUAL.generated.md) | 由代码生成的 AI 功能清单 |
+| [SECURITY.md](./SECURITY.md) | 漏洞报告、响应流程与支持版本政策 |
 
 ---
 

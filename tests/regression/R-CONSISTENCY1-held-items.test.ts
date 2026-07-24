@@ -79,10 +79,10 @@ describe('CONSISTENCY-1 · heldItems 投影与确定性校验', () => {
   it('按规范章序计算 gain-consume：未来章不计入，当前章首次获得不误算，按世界隔离', async () => {
     const { projectId, worldA, worldB, chapterIds } = await seedProject()
     const entries: ItemLedgerEntry[] = [
-      { projectId, itemName: '青铜铃', action: 'gain', quantity: 2, chapterId: chapterIds[0], chapterTitle: '第1章', createdAt: now },
-      { projectId, itemName: '青铜铃', action: 'consume', quantity: 1, chapterId: chapterIds[1], chapterTitle: '第2章', createdAt: now + 1 },
-      { projectId, itemName: '赤羽令', action: 'gain', quantity: 1, chapterId: chapterIds[2], chapterTitle: '第3章', createdAt: now + 2 },
-      { projectId, itemName: '异界钥匙', action: 'gain', quantity: 1, chapterId: chapterIds[3], chapterTitle: '第4章', createdAt: now + 3 },
+      { projectId, itemName: '青铜铃', heldByName: '主角', characterId: null, action: 'gain', quantity: 2, chapterId: chapterIds[0], chapterTitle: '第1章', createdAt: now },
+      { projectId, itemName: '青铜铃', heldByName: '主角', characterId: null, action: 'consume', quantity: 1, chapterId: chapterIds[1], chapterTitle: '第2章', createdAt: now + 1 },
+      { projectId, itemName: '赤羽令', heldByName: '主角', characterId: null, action: 'gain', quantity: 1, chapterId: chapterIds[2], chapterTitle: '第3章', createdAt: now + 2 },
+      { projectId, itemName: '异界钥匙', heldByName: '主角', characterId: null, action: 'gain', quantity: 1, chapterId: chapterIds[3], chapterTitle: '第4章', createdAt: now + 3 },
     ] as any
     await db.itemLedger.bulkAdd(entries)
     const [outlineNodes, chapters] = await Promise.all([
@@ -136,6 +136,8 @@ describe('CONSISTENCY-1 · heldItems 投影与确定性校验', () => {
     await db.itemLedger.add({
       projectId,
       itemName: '青铜铃',
+      heldByName: '主角',
+      characterId: null,
       action: 'gain',
       quantity: 1,
       chapterId: chapterIds[0],

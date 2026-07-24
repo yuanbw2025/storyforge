@@ -1,7 +1,7 @@
 import type { Table } from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
-import { APP_VERSION } from '../version'
+import { APP_BUILD_ID } from '../version'
 
 const MAX_RUNTIME_ERRORS = 20
 const MAX_STACK_FRAMES = 8
@@ -128,7 +128,7 @@ export async function buildLocalDiagnosticReport(): Promise<LocalDiagnosticRepor
     formatVersion: 1,
     generatedAt: new Date().toISOString(),
     application: {
-      version: APP_VERSION,
+      version: APP_BUILD_ID,
       routePattern: routePattern(),
     },
     environment: {

@@ -4,7 +4,7 @@
  * 不改 DB schema：以 characters 为主卡，聚合 stateCards、章节、物品流水、
  * 角色基础地点与势力词条。旧的非角色状态卡保留在库中，但不再作为正式 UI 展示。
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ArrowRight, BookOpenCheck, Download, Edit3, MapPin, Package, Save, Shield, Sparkles, UserRound, X,
 } from 'lucide-react'
@@ -55,8 +55,8 @@ export default function StatePanel({ project, onOpenInventory }: Props) {
     () => cards.filter(card => card.category === 'character'),
     [cards],
   )
-  const inventory = useMemo(
-    () => aggregateInventory(itemEntries).filter(item => item.quantity > 0),
+  const charInventory = useCallback(
+    (characterId: number) => aggregateInventory(itemEntries, characterId).filter(item => item.quantity > 0),
     [itemEntries],
   )
   const chapterById = useMemo(
@@ -127,8 +127,8 @@ export default function StatePanel({ project, onOpenInventory }: Props) {
                 character={character}
                 card={card}
                 chapterTitle={card?.lastChapterId ? chapterById.get(card.lastChapterId)?.title : undefined}
-                protagonistItems={character.role === 'protagonist' ? inventory.map(item => `${item.itemName} ×${item.quantity}`) : []}
-                inventoryBacked={character.role === 'protagonist' && inventory.length > 0}
+                protagonistItems={(() => { const items = charInventory(character.id!); return items.map(item => `${item.itemName} ×${item.quantity}`) })()}
+                inventoryBacked={charInventory(character.id!).length > 0}
                 onOpenInventory={onOpenInventory}
                 knownFactions={factionNames}
                 editing={editingCharacter === character.id}

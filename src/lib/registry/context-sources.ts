@@ -272,19 +272,22 @@ async function readDetailedOutline(projectId: number, outlineNodeId?: number | n
   return parts.join('\n')
 }
 
-async function readItemLedger(projectId: number): Promise<string> {
+async function readItemLedger(projectId: number, characterId?: number | null): Promise<string> {
   const rows = await db.itemLedger.where('projectId').equals(projectId).toArray()
-  if (!rows.length) return ''
+  const filtered = characterId != null
+    ? rows.filter(r => (r.characterId ?? null) === (characterId ?? null))
+    : rows
+  if (!filtered.length) return ''
   return [
     '【物品流水证据】',
-    ...rows.slice(-120).map(row =>
-      `#${row.id ?? 0} ${row.chapterTitle ?? `章节#${row.chapterId ?? '?'}`}：${row.action === 'gain' ? '获得' : '消耗'} ${row.itemName} ×${row.quantity}${row.note ? `（${row.note}）` : ''}`),
+    ...filtered.slice(-120).map(row =>
+      `#${row.id ?? 0} ${row.chapterTitle ?? `章节#${row.chapterId ?? '?'}`}：${row.action === 'gain' ? '获得' : '消耗'} ${row.itemName} ×${row.quantity}${row.heldByName ? `（${row.heldByName}）` : ''}${row.note ? ` ${row.note}` : ''}`),
   ].join('\n')
 }
 
-async function readHeldItems(projectId: number, chapterId?: number | null, worldGroupId?: number | null): Promise<string> {
+async function readHeldItems(projectId: number, chapterId?: number | null, worldGroupId?: number | null, characterId?: number | null): Promise<string> {
   if (chapterId == null) return ''
-  return formatHeldItemsContext(await readProjectHeldItems(projectId, chapterId, worldGroupId))
+  return formatHeldItemsContext(await readProjectHeldItems(projectId, chapterId, worldGroupId, characterId))
 }
 
 async function readStoryTimeline(projectId: number): Promise<string> {
@@ -668,7 +671,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L2',
     budgetTokens: 2400,
-    read: input => readItemLedger(input.projectId),
+    read: input => readItemLedger(input.projectId, input.characterId),
   },
   {
     key: 'heldItems',
@@ -678,7 +681,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 1000,
     protectedFromTrim: true,
     requiresChapterId: true,
-    read: input => readHeldItems(input.projectId, input.chapterId, input.worldGroupId),
+    read: input => readHeldItems(input.projectId, input.chapterId, input.worldGroupId, input.characterId),
   },
   {
     key: 'storyTimeline',

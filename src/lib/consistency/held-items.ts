@@ -15,6 +15,7 @@ export interface ProjectHeldItemsInput {
   chapters: Chapter[]
   chapterId: number
   worldGroupId?: number | null
+  characterId?: number | null
 }
 
 const GAIN_TRIGGERS = [
@@ -63,6 +64,7 @@ export function projectHeldItems(input: ProjectHeldItemsInput): HeldItemProjecti
 
   const grouped = new Map<string, { displayName: string; quantity: number; evidence: ItemLedgerEntry[] }>()
   for (const entry of input.entries) {
+    if (input.characterId != null && (entry.characterId ?? null) !== (input.characterId ?? null)) continue
     const key = normalizeItemName(entry.itemName)
     if (!key) continue
     const entryChapterId = entry.chapterId ?? null
@@ -83,13 +85,13 @@ export function projectHeldItems(input: ProjectHeldItemsInput): HeldItemProjecti
     .map(item => ({ itemName: item.displayName, quantity: item.quantity, evidence: item.evidence }))
 }
 
-export async function readProjectHeldItems(projectId: number, chapterId: number, worldGroupId?: number | null): Promise<HeldItemProjection[]> {
+export async function readProjectHeldItems(projectId: number, chapterId: number, worldGroupId?: number | null, characterId?: number | null): Promise<HeldItemProjection[]> {
   const [entries, outlineNodes, chapters] = await Promise.all([
     db.itemLedger.where('projectId').equals(projectId).toArray(),
     db.outlineNodes.where('projectId').equals(projectId).toArray(),
     db.chapters.where('projectId').equals(projectId).toArray(),
   ])
-  return projectHeldItems({ entries, outlineNodes, chapters, chapterId, worldGroupId })
+  return projectHeldItems({ entries, outlineNodes, chapters, chapterId, worldGroupId, characterId })
 }
 
 export function formatHeldItemsContext(items: HeldItemProjection[]): string {

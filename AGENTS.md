@@ -54,7 +54,7 @@
 ## 项目背景速览
 
 - 纯前端 React + TypeScript + IndexedDB（Dexie）
-- 约 56k 行 / 275+ 源文件 / 39 required tables；具体规模以当前仓库扫描、`schema.ts`、`REQUIRED_TABLES`、`PROJECT_TABLES` 和生成版 AI manual 为准
+- 实时规模由 `npm run check:project-metrics` 锁定在 `docs/MASTER-BLUEPRINT.md` §1.1；禁止在接手指南重复手写文件数、行数、schema 或表数量
 - 已有真实用户，数据全在浏览器
 - 没有 staging 环境，main 即生产
 

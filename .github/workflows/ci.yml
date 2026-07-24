@@ -40,6 +40,12 @@ jobs:
       - name: 路线图迁移与文档链接完整性
         run: npm run check:roadmap
 
+      - name: Blueprint 实时规模与代码一致
+        run: npm run check:project-metrics
+
+      - name: 生产依赖漏洞门槛
+        run: npm run check:dependencies
+
       - name: ESLint 零 warning
         run: npm run lint
 

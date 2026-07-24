@@ -212,6 +212,22 @@ export interface CollectionAdoptionSpec {
   /** 数组成员校验:过滤不存在的成员,并记录 fkErrors */
   arrayMemberChecks?: { field: string; itemTarget: string }[]
   mergeStrategy?: 'overwrite-non-empty' | 'append-text' | 'union-array'
+  /** 允许统一写回入口按这些字段清空旧集合，再写入新结果。 */
+  replaceScope?: string[]
+}
+
+/**
+ * 不适合通用 FIELD_REGISTRY/adopt() 语义的领域写回扩展。
+ * 扩展必须声明自己的策略注册表和唯一入口，禁止演变成平行通用写回层。
+ */
+export interface AdoptionExtensionSpec {
+  id: string
+  target: string
+  entrypoints: string[]
+  policyRegistry: string
+  reason: string
+  /** 到期后 CI 必须重新审查，而不是让例外永久沉积。ISO 日期。 */
+  reviewAfter: string
 }
 
 export interface AdoptInput {
@@ -264,6 +280,8 @@ export interface AssembleContextInput {
   manualSourceText?: string
   /** C2 反向哺喂：以某角色为主体，召回剧情里关于 TA 的事实/正文证据（characterFacts/characterPassages 源用）。 */
   subjectCharacterName?: string
+  /** INV-1: 按角色过滤物品流水/持有投影。 */
+  characterId?: number | null
   /** assembleContext 内部批量预取；调用方无需传。 */
   continuitySnapshot?: PreparedContinuityContext
 }

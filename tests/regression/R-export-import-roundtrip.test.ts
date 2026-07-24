@@ -75,7 +75,7 @@ async function seedFullProject(): Promise<number> {
     fields: JSON.stringify([{ key: '境界', value: '炼气一层' }]), createdAt: now, updatedAt: now,
   } as any)
   await db.itemLedger.add({
-    projectId, itemName: '青锋剑', action: 'gain', quantity: 1, chapterId: null,
+    projectId, itemName: '青锋剑', heldByName: '主角', characterId: null, action: 'gain', quantity: 1, chapterId: null,
     chapterTitle: '第1章 觉醒', createdAt: now, updatedAt: now,
   } as any)
 

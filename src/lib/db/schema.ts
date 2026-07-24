@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie'
 import { migrateLegacyTablesToCodex } from '../migrations/legacy-to-codex-upgrade'
 import { migrateCharactersToAxes } from '../migrations/character-axes-upgrade'
 import { migrateStateCardsToTemporalFactCandidates } from '../migrations/state-cards-to-temporal-facts'
+import { migrateItemLedgerToCharacterOwnership } from '../migrations/item-ledger-character-ownership'
 import type {
   Project,
   Worldview,
@@ -368,6 +369,16 @@ class StoryForgeDB extends Dexie {
     // 老项目通过设置页“建立检索索引”或生成上下文前按需重建。
     this.version(37).stores({
       narrativeSummaryNodes: '++id, projectId, worldGroupId, level, sourceChapterId, sourceOutlineNodeId, status',
+    })
+
+    // v38: itemLedger 加 heldByName + characterId（INV-1 按角色归属）
+    this.version(38).stores({
+    }).upgrade(async (tx) => {
+      try {
+        await migrateItemLedgerToCharacterOwnership(tx)
+      } catch (err) {
+        console.error('[v38 upgrade] itemLedger 迁移失败:', err)
+      }
     })
   }
 }

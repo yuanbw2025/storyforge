@@ -68,24 +68,27 @@ describe('Phase 3.2 · parseStateDiffs', () => {
 describe('Phase 3.2 · parseInventoryEvents', () => {
   it('解析物品流水 + 归一 action/quantity', () => {
     const raw = JSON.stringify([
-      { itemName: '令牌', action: 'gain', quantity: 2, note: '掌门所赐' },
-      { itemName: '丹药', action: 'consume', quantity: '3', note: '' },
+      { itemName: '令牌', heldByName: '林风', action: 'gain', quantity: 2, note: '掌门所赐' },
+      { itemName: '丹药', heldByName: '林风', action: 'consume', quantity: '3', note: '' },
     ])
     const events = parseInventoryEvents(raw)
     expect(events).toHaveLength(2)
-    expect(events[0]).toMatchObject({ itemName: '令牌', action: 'gain', quantity: 2 })
-    expect(events[1]).toMatchObject({ itemName: '丹药', action: 'consume', quantity: 3 })
+    expect(events[0]).toMatchObject({ itemName: '令牌', heldByName: '林风', action: 'gain', quantity: 2 })
+    expect(events[1]).toMatchObject({ itemName: '丹药', heldByName: '林风', action: 'consume', quantity: 3 })
   })
 
   it('未知 action 默认 gain;quantity 缺省/非法归一为 1', () => {
-    const raw = JSON.stringify([{ itemName: '剑', action: 'weird', note: '' }])
+    const raw = JSON.stringify([{ itemName: '剑', heldByName: '张铁', action: 'weird', note: '' }])
     const events = parseInventoryEvents(raw)
     expect(events[0].action).toBe('gain')
     expect(events[0].quantity).toBe(1)
   })
 
-  it('空 itemName 被过滤', () => {
-    const raw = JSON.stringify([{ itemName: '', action: 'gain', quantity: 1 }])
+  it('空 itemName 或空 heldByName 被过滤', () => {
+    const raw = JSON.stringify([
+      { itemName: '', heldByName: '林风', action: 'gain', quantity: 1 },
+      { itemName: '剑', heldByName: '', action: 'gain', quantity: 1 },
+    ])
     expect(parseInventoryEvents(raw)).toHaveLength(0)
   })
 

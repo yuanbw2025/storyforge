@@ -32,6 +32,13 @@ function normalize(data: any) {
     delete row._sceneCharacterIndexes
   }
   for (const row of data.creativeRules ?? []) delete row._citedReferenceIndexes
+  // INV-1: itemLedger now carries heldByName + characterId + _characterExportId;
+  // legacy fixture predates these fields. Strip them for format-compat comparison.
+  for (const row of data.itemLedger ?? []) {
+    delete row.heldByName
+    delete row.characterId
+    delete row._characterExportId
+  }
   return data
 }
 

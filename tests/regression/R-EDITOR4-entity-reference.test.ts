@@ -16,7 +16,7 @@ describe('R-EDITOR4 · editor entity references', () => {
         { id: 2, name: '异界人', shortDescription: '不可见', homeWorldGroupId: 3 } as any,
         { id: 3, name: '旅者', shortDescription: '跨界', homeWorldGroupId: 3, isCrossWorld: true } as any,
       ],
-      itemEntries: [{ id: 1, projectId: 1, itemName: '林舟', action: 'gain', quantity: 1, createdAt: 1 }],
+      itemEntries: [{ id: 1, projectId: 1, itemName: '林舟', heldByName: '主角', action: 'gain', quantity: 1, createdAt: 1 }],
       locations: [{ id: 1, projectId: 1, name: '青石城', tags: '["城市"]', description: '边城', significance: '', parentId: null, sortOrder: 0, createdAt: 1, updatedAt: 1 }],
       codexCategories: [{ id: 10, projectId: 1, name: '势力', domain: 'humanity', parentId: null, fieldSchema: '[]', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1 }],
       codexEntries: [
