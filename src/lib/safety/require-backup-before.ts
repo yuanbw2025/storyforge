@@ -186,12 +186,8 @@ function confirmFallback(options: SafetyConfirmOptions): Promise<boolean> {
 }
 
 /**
- * 测试环境检测(vitest 自动设置 NODE_ENV=test;happy-dom 中 process 可用)。
+ * 测试环境检测（vitest 下 Vite 会把 import.meta.env.MODE 设为 'test'）。
  */
 function isTestEnv(): boolean {
-  try {
-    return typeof process !== 'undefined' && process.env?.NODE_ENV === 'test'
-  } catch {
-    return false
-  }
+  return import.meta.env.MODE === 'test'
 }

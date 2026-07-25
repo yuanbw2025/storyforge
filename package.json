@@ -29,6 +29,7 @@
     "ci:e2e": "npm run test:e2e"
   },
   "dependencies": {
+    "@tiptap/core": "^3.28.0",
     "@tiptap/extension-placeholder": "^3.28.0",
     "@tiptap/extension-text-style": "^3.28.0",
     "@tiptap/pm": "^3.28.0",
