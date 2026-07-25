@@ -7,7 +7,7 @@
  * 产出设定彼此矛盾（驴唇不对马嘴）。
  *
  * 本文件是"全局设定大数据库"的唯一入口：每次生成设定时，调用
- * assembleCrossSettingContext() 即可装配全部 14 个上下文源，
+ * assembleCrossSettingContext() 即可装配全部设定源（见 CROSS_SETTING_SOURCE_KEYS），
  * 确保 AI 在生成任一设定时都能读到其他所有已填写的设定。
  *
  * 符合 CLAUDE.md 铁律：读走 CONTEXT_SOURCES + assembleContext。
@@ -46,7 +46,7 @@ export interface CrossSettingContextInput {
 /**
  * 装配"全局设定大数据库"上下文。
  *
- * 一次性读取全部已登记的设定源（14 个），让 AI 在生成任一设定时
+ * 一次性读取 CROSS_SETTING_SOURCE_KEYS 中全部已登记设定源，让 AI 在生成任一设定时
  * 都能看到其他所有设定，避免产出互相矛盾的内容。
  *
  * 返回的 text 可直接拼接到 AI prompt 的 worldContext / existingContext 参数中。

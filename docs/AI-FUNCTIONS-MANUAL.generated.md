@@ -8,7 +8,7 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 61 个 moduleKey。
+共 67 个 moduleKey。
 
 | moduleKey | 名称 | 说明 | 读取变量 |
 |---|---|---|---|
@@ -73,6 +73,12 @@
 | `history.consult` | — | — | — |
 | `history.storm` | — | — | — |
 | `style.learn` | — | — | — |
+| `name` | — | — | — |
+| `genres` | — | — | — |
+| `description` | — | — | — |
+| `targetWordCount` | — | — | — |
+| `lengthMode` | — | — | — |
+| `serializationMode` | — | — | — |
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
@@ -143,7 +149,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 46 个 category。
+共 47 个 category。
 未分类调用: 0 个。动态 category 调用: 3 个。
 
 | category | 触发文件 |
@@ -157,15 +163,15 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.memory` | `src/components/editor/ChapterEditor.tsx:326` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:521` |
 | `chapter.toolbar` | `src/components/editor/FloatingToolbar.tsx:105` |
-| `character.generate` | `src/components/character/CharacterPanel.tsx:160` |
+| `character.generate` | `src/components/character/CharacterPanel.tsx:167` |
 | `character.structure` | `src/lib/ai/parse-character-output.ts:80` |
 | `character.supplement` | `src/components/character/CharacterSupplementAction.tsx:80` |
 | `codex.extract` | `src/components/codex/CodexPanel.tsx:206` |
 | `detail.scene` | `src/components/outline/DetailedOutlinePanel.tsx:151`<br/>`src/components/outline/ScenePanel.tsx:115`<br/>`src/lib/ai/batch-detail-runner.ts:109` |
 | `emotion.beat` | `src/components/editor/EmotionBeatCard.tsx:66` |
-| `foreshadow.structure` | `src/components/foreshadow/ForeshadowPanel.tsx:67` |
-| `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:216` |
-| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
+| `foreshadow.structure` | `src/components/foreshadow/ForeshadowPanel.tsx:70` |
+| `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:219` |
+| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:135` |
 | `geography.world-map` | `src/components/geography/WorldMapPanel.tsx:103` |
 | `history.consult` | `src/components/history/useHistoryAI.ts:118` |
 | `history.storm` | `src/components/history/useHistoryAI.ts:120` |
@@ -183,17 +189,18 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:79` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:96` |
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:564` |
-| `rules.generate` | `src/components/rules/CreativeRulesPanel.tsx:80` |
+| `rules.generate` | `src/components/rules/CreativeRulesPanel.tsx:93` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
-| `story-arc.generate` | `src/components/outline/StoryArcPanel.tsx:84` |
-| `story.generate` | `src/components/worldview/StoryCorePanel.tsx:193` |
+| `settings.alignment` | `src/components/settings/SettingsAlignmentPanel.tsx:73` |
+| `story-arc.generate` | `src/components/outline/StoryArcPanel.tsx:87` |
+| `story.generate` | `src/components/worldview/StoryCorePanel.tsx:209` |
 | `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:85` |
 | `style.learn` | `src/components/style/StyleLearningPanel.tsx:79` |
 | `world-group.expand` | `src/components/world-group/WorldGroupDetail.tsx:98` |
 | `world-group.suggest` | `src/components/world-group/WorldGroupOverview.tsx:57` |
-| `worldview.dimension` | `src/components/worldview/WorldviewHumanityPanel.tsx:252`<br/>`src/components/worldview/WorldviewNaturalPanel.tsx:281`<br/>`src/components/worldview/WorldviewOriginPanel.tsx:257` |
-| `worldview.divine` | `src/components/worldview/WorldviewOriginPanel.tsx:356` |
-| `worldview.divine.split` | `src/components/worldview/WorldviewOriginPanel.tsx:380` |
+| `worldview.dimension` | `src/components/worldview/WorldviewHumanityPanel.tsx:265`<br/>`src/components/worldview/WorldviewNaturalPanel.tsx:295`<br/>`src/components/worldview/WorldviewOriginPanel.tsx:271` |
+| `worldview.divine` | `src/components/worldview/WorldviewOriginPanel.tsx:375` |
+| `worldview.divine.split` | `src/components/worldview/WorldviewOriginPanel.tsx:399` |
 
 ### 动态 category 调用
 
@@ -203,4 +210,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `8ef3272`
+生成时间基准:commit `c3de396`

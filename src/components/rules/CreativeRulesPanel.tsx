@@ -4,6 +4,7 @@ import { Plus, X, Sparkles, Microscope, Check } from 'lucide-react'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useReferenceStore } from '../../stores/reference'
+import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildRulesGeneratePrompt } from '../../lib/ai/adapters/rules-adapter'
@@ -28,6 +29,7 @@ export default function CreativeRulesPanel({ project }: Props) {
   const { creativeRules, loadAll, save } = useCreativeRulesStore()
   const { worldview, storyCore, loadAll: loadWorldview } = useWorldviewStore()
   const { references, loadAll: loadRefs } = useReferenceStore()
+  const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const [writingStyle, setWritingStyle] = useState('')
   const [narrativePOV, setNarrativePOV] = useState<NarrativePOV>('third-limited')
   const [toneAndMood, setToneAndMood] = useState('')
@@ -73,9 +75,12 @@ export default function CreativeRulesPanel({ project }: Props) {
     }
     setAiTarget(target)
     ai.setOperation(target)
-    // 全局协调模式：装配全部设定源确保一致性
+    // 全局协调模式：装配全部设定源确保一致性（必须显式传 worldGroupId，否则 requiresWorldGroupId 源会被跳过）
     const crossCtx = crossSettingMode
-      ? await assembleCrossSettingContext({ projectId: project.id! })
+      ? await assembleCrossSettingContext({
+          projectId: project.id!,
+          worldGroupId: project.enableMultiWorld ? activeGroupId : null,
+        })
       : ''
     const worldCtx = [crossCtx, worldview?.summary || worldview?.worldOrigin?.slice(0, 200) || ''].filter(Boolean).join('\n\n')
     const messages = buildRulesGeneratePrompt(

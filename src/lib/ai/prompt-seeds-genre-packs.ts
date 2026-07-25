@@ -1175,4 +1175,6 @@ export const GENRE_PACKS: GenrePackMeta[] = [
     description: '魔法世界、种族纷争、史诗冒险。' },
   { id: 'youxi',      label: '游戏',                  emoji: '🎯',
     description: '游戏世界、副本挑战、竞技对抗。' },
+  { id: 'coldwar',    label: '冷战氛围',              emoji: '📡',
+    description: '近现代科技异世界：阵营对峙、信息延迟、体制摩擦；不复刻地球冷战史。' },
 ]

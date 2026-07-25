@@ -67,6 +67,7 @@ export const GENRE_OPTIONS = [
   { group: '其他', value: 'xuanyi',         label: '悬疑灵异' },
   { group: '其他', value: 'zhentan',        label: '侦探推理' },
   { group: '其他', value: 'kongbu',         label: '恐怖惊悚' },
+  { group: '其他', value: 'coldwar',        label: '冷战氛围' },
   { group: '其他', value: 'other',          label: '其他' },
 ] as const
 

@@ -1,9 +1,9 @@
 /**
  * 全局协调 Toggle · 设定生成模式切换
  *
- * 在每个设定生成面板的 AI 生成区增加此切换：
- * - 🎯 仅本面板（默认）：保持现有行为，仅读取同面板内其他字段
- * - 🌐 全局协调：调用 assembleCrossSettingContext() 读取全部 14 个设定源
+ * 在设定生成面板的 AI 生成区增加此切换：
+ * - 🎯 仅本面板：保持局部上下文
+ * - 🌐 全局协调（面板默认开启）：调用 assembleCrossSettingContext() 读取 CROSS_SETTING_SOURCE_KEYS
  */
 
 interface Props {

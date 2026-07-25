@@ -15,6 +15,7 @@ import { assembleContext } from '../../lib/registry/assemble-context'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import CrossSettingToggle from '../shared/CrossSettingToggle'
+import { CROSS_SETTING_SOURCE_KEYS } from '../../lib/ai/cross-setting-context'
 import type {
   Project, Character, CharacterMoralAxis, CharacterOrderAxis, CharacterRoleWeight,
 } from '../../lib/types'
@@ -143,9 +144,9 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
     const targetWorld = project.enableMultiWorld
       ? (typeof worldFilter === 'number' ? worldFilter : activeGroupId)
       : null
-    // 全局协调模式：装配全部 14 个设定源；仅本面板模式：保持原有 9 源
+    // 全局协调模式：装配 CROSS_SETTING_SOURCE_KEYS；仅本面板模式：保持原有局部源
     const sourceKeys = crossSettingMode
-      ? ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations', 'storyArcs', 'storyTimeline', 'characterRelations', 'foreshadows']
+      ? CROSS_SETTING_SOURCE_KEYS
       : ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations']
     const assembled = await assembleContext({
       projectId: project.id!,
