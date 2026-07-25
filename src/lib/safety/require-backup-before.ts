@@ -185,9 +185,32 @@ function confirmFallback(options: SafetyConfirmOptions): Promise<boolean> {
   return Promise.resolve(globalThis.confirm(lines))
 }
 
+export type TestEnvSignals = {
+  /** Vitest 注入的 import.meta.env.VITEST；`vite --mode test` 不会设置 */
+  vitestFlag?: boolean
+  /** Node/happy-dom 的 process.env（经 globalThis 读取，不引入 @types/node） */
+  processEnv?: Record<string, string | undefined>
+}
+
 /**
- * 测试环境检测（vitest 下 Vite 会把 import.meta.env.MODE 设为 'test'）。
+ * 纯判定：是否处于自动化测试运行时。
+ *
+ * 不能只靠 import.meta.env.MODE === 'test'：真实浏览器跑 `vite --mode test`
+ * 也会把 MODE 设为 test，从而误跳过高危操作的备份/二次确认。
  */
+export function detectTestEnv(signals: TestEnvSignals): boolean {
+  if (signals.vitestFlag) return true
+  if (signals.processEnv?.VITEST) return true
+  return signals.processEnv?.NODE_ENV === 'test'
+}
+
 function isTestEnv(): boolean {
-  return import.meta.env.MODE === 'test'
+  const processLike = (globalThis as {
+    process?: { env?: Record<string, string | undefined> }
+  }).process
+
+  return detectTestEnv({
+    vitestFlag: Boolean(import.meta.env.VITEST),
+    processEnv: processLike?.env,
+  })
 }
