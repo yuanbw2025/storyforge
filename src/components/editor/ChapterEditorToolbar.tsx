@@ -1,5 +1,6 @@
 import { BookOpenCheck, ClipboardList, ShieldCheck, StickyNote } from 'lucide-react'
 import { CInput } from '../shared/CompositionInput'
+import PromptPreviewToggle from '../shared/PromptPreviewToggle'
 
 interface Props {
   isStreaming: boolean
@@ -66,6 +67,7 @@ export default function ChapterEditorToolbar({
         className="rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50 transition-colors">
         📝 续写
       </button>
+      <PromptPreviewToggle compact />
       <button onClick={onExpand} disabled={isStreaming}
         className="rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50 transition-colors">
         📖 扩写

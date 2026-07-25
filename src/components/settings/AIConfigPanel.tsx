@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { Eye, EyeOff, CheckCircle, RotateCcw, RefreshCw } from 'lucide-react'
 import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
+import PromptPreviewToggle from '../shared/PromptPreviewToggle'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
@@ -238,6 +239,7 @@ export default function AIConfigPanel() {
                 在本机记住 API Key（写入 localStorage）。不勾选时仅本次浏览器会话有效。
               </span>
             </label>
+            <PromptPreviewToggle />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

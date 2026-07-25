@@ -5,6 +5,7 @@ import App from './App'
 import ErrorBoundary from './components/shared/ErrorBoundary'
 import { DialogProvider } from './components/shared/Dialog'
 import { ToastProvider } from './components/shared/Toast'
+import PromptPreviewGateHost from './components/shared/PromptPreviewGate'
 import { usePromptStore } from './stores/prompt'
 import { useWorkflowStore } from './stores/workflow'
 import { ensureSchema, REQUIRED_TABLES } from './lib/db/ensure-schema'
@@ -82,6 +83,7 @@ async function bootstrap() {
           <ToastProvider>
             <DialogProvider>
               <App />
+              <PromptPreviewGateHost />
             </DialogProvider>
           </ToastProvider>
         </BrowserRouter>

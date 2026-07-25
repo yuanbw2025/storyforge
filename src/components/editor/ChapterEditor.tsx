@@ -37,6 +37,7 @@ import { useDialog } from '../shared/Dialog'
 import { useReviewResultStore } from '../../stores/review-result'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { analyzeContextSegments, calculateBudget, getModelPreset, type ContextBudget } from '../../lib/ai/context-budget'
+import { maybePreviewMessages } from '../../stores/prompt-preview'
 import RichEditor, { type RichEditorHandle } from './RichEditor'
 import EmotionBeatCard from './EmotionBeatCard'
 import FloatingToolbar from './FloatingToolbar'
@@ -491,7 +492,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setContextBudget(calculateBudget(aiConfig.provider, aiConfig.model, segments, aiConfig.contextWindow))
 
     ai.setOperation('generate')
-    void ai.start(messages, undefined, { category: 'chapter.content', projectId: project.id! })
+    const toSend = await maybePreviewMessages(messages, {
+      title: '正文生成 · 发送前提示词',
+      subtitle: `章节「${outlineNode.title}」· 可编辑本次最终提示词，不会写回模板`,
+    })
+    if (!toSend) return
+    void ai.start(toSend, undefined, { category: 'chapter.content', projectId: project.id! })
     scheduleRecentMemoryRebuild(backgroundMemoryIds)
   }
 
@@ -509,7 +515,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       { continuity, continuityBudgetTokens },
     )
     ai.setOperation('continue')
-    void ai.start(messages, undefined, { category: 'chapter.continue', projectId: project.id! })
+    const toSend = await maybePreviewMessages(messages, {
+      title: '续写 · 发送前提示词',
+      subtitle: `章节「${outlineNode.title}」· 可编辑本次最终提示词，不会写回模板`,
+    })
+    if (!toSend) return
+    void ai.start(toSend, undefined, { category: 'chapter.continue', projectId: project.id! })
     scheduleRecentMemoryRebuild(backgroundMemoryIds)
   }
 

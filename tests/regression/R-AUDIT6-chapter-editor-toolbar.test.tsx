@@ -106,7 +106,8 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     await act(async () => button(host, '×').click())
     expect(props.onDismissImpact).toHaveBeenCalledOnce()
 
-    const input = host.querySelector('input')!
+    const input = host.querySelector('input[placeholder="自定义指令..."]') as HTMLInputElement
+    expect(input).toBeTruthy()
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
       setter.call(input, '保持冷峻语气')

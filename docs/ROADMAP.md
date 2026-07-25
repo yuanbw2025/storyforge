@@ -565,8 +565,9 @@
 
 > 权威设计见 `docs/TRANSPARENT-GENERATION-PIPELINE.md`。核心:把所有 AI 生成收口到"可介入节点链"——**分阶段生成、提示词发送前可编辑、agent 每节点可调,是同一抽象(GenerationNode)的三种形态**。不是新子系统,是现有生成流的泛化(读经 assembleContext、写经 adopt、新表进 PROJECT_TABLES)。是 `AI-COPILOT-DESIGN.md` AgentRunner 的执行层补充;节点 gate 复用一致性校验器;节点内容消费社区「元写作 Skill」方法论。
 
-## 🔴 PIPELINE-1 · 发送前提示词预览 + 编辑(首刀 · 最便宜 · 立刻兑现"透明")
-在"messages 拼好 → `ai.start`"之间插一个**可选**预览/编辑环节;拼接后的最终提示词可看、可改,一次性覆盖不写回模板/字段;默认关、渐进披露(高级/折叠)。现状已有 `analyzeContextSegments` 分段 + `PromptRunPanel` 模板覆盖,缺"最终整块可编辑"。详见设计文档 §4.1 / 测试 `R-PIPELINE1`。
+## ✅ PIPELINE-1 · 发送前提示词预览 + 编辑(首刀 · 最便宜 · 立刻兑现"透明")（本分支）
+
+在"messages 拼好 → `ai.start`"之间插一个**可选**预览/编辑环节;拼接后的最终提示词可看、可改,一次性覆盖不写回模板/字段;默认关、渐进披露(设置页 + 正文工具栏开关)。正文生成/续写已接入。详见设计文档 §4.1 / 测试 `R-PIPELINE1`。
 
 ## 🔴 PIPELINE-2 · 分阶段章纲工坊(旗舰 · 把一次性拆成节点链)
 现状:`OutlinePanel` 卷→章已粗分阶段,章内仍一次性。改为 5 节点管线:现状扫描 → 动机推演 → 碰撞预演 → 质检闸门 → 场景卡+不可写清单;节点 prompt 填「元写作 Skill」方法论(§6),质检节点接确定性校验(held-items/认知账本)。**保留"一键快速生成"两档并存**(快速=便宜 / 工坊=深)。详见 §4.2、§6 / 测试 `R-PIPELINE2`。数据红线:若新增 `outlinePipelineArtifacts` 表 → 迁移测试 + 导出/导入往返。
