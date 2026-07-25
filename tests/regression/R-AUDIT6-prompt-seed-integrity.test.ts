@@ -8,7 +8,7 @@ function seedDigest(): string {
 
 describe('AUDIT-6 · 提示词领域拆分完整性', () => {
   it('聚合后的模板数量、顺序和内容保持逐字段一致', () => {
-    expect(SYSTEM_PROMPT_SEEDS).toHaveLength(86)
-    expect(seedDigest()).toBe('ab87774fdda1e803d32ce0fb8dd850fe399280dde41e2b8717cd9aeca5f56ed1')
+    expect(SYSTEM_PROMPT_SEEDS).toHaveLength(91)
+    expect(seedDigest()).toBe('5ffc847e0bc3e44daa1e1f1ed180e913d2727c2cddbda1475dd9ba4da2fbb404')
   })
 })

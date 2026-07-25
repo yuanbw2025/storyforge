@@ -84,11 +84,12 @@ describe('CF-20260703-4/5 · 角色关系保存反馈与角色词条同步', () 
   })
 
   it('只在采纳 AI 抽取关系后同步角色词条，手动占位关系不会污染人物关系描述', () => {
-    const syncCalls = panelSource.match(/await syncRelationToCharacterFields/g) ?? []
+    const normalized = panelSource.replace(/\r\n/g, '\n')
+    const syncCalls = normalized.match(/await syncRelationToCharacterFields/g) ?? []
     expect(syncCalls).toHaveLength(1)
-    expect(panelSource).toContain('await addRelation(relation)\n        await syncRelationToCharacterFields')
-    expect(panelSource).not.toContain("toast.success('关系已保存，并同步到角色词条。')")
-    expect(panelSource).toContain("toast.success('关系已保存。')")
+    expect(normalized).toContain('await addRelation(relation)\n        await syncRelationToCharacterFields')
+    expect(normalized).not.toContain("toast.success('关系已保存，并同步到角色词条。')")
+    expect(normalized).toContain("toast.success('关系已保存。')")
   })
 
   it('构建角色卡人物关系补丁时保留手写内容、双向追加、重复关系不重复写', async () => {
