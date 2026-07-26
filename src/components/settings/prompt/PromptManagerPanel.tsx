@@ -5,7 +5,6 @@ import type { PromptTemplate } from '../../../lib/types/prompt'
 import type { Project } from '../../../lib/types'
 import { GENRE_PACKS } from '../../../lib/ai/prompt-seeds-genre-packs'
 import PromptTemplateList from './PromptTemplateList'
-import PromptTemplateEditor from './PromptTemplateEditor'
 import PromptWorkflowsPanel from './PromptWorkflowsPanel'
 import { useToast } from '../../shared/Toast'
 
@@ -66,7 +65,7 @@ export default function PromptManagerPanel({ project }: Props = {}) {
     return t.scope === scopeFilter
   })
 
-  const selected = selectedId ? templates.find(t => t.id === selectedId) : null
+  // selected 仅在 PromptTemplatesView 内通过 selectedId 索引，外层不再单独取对象
 
   /** 新建一个空模板（user scope） */
   const handleNew = async () => {
@@ -163,7 +162,6 @@ export default function PromptManagerPanel({ project }: Props = {}) {
         <PromptTemplatesView
           templates={templates}
           filtered={filtered}
-          selected={selected}
           selectedId={selectedId}
           setSelectedId={setSelectedId}
           scopeFilter={scopeFilter}
@@ -185,7 +183,6 @@ export default function PromptManagerPanel({ project }: Props = {}) {
 interface TemplatesViewProps {
   templates: PromptTemplate[]
   filtered: PromptTemplate[]
-  selected: PromptTemplate | null | undefined
   selectedId: number | null
   setSelectedId: (id: number | null) => void
   scopeFilter: ScopeFilter
@@ -201,7 +198,7 @@ interface TemplatesViewProps {
 }
 
 function PromptTemplatesView({
-  filtered, selected, selectedId, setSelectedId, scopeFilter, setScopeFilter,
+  filtered, selectedId, setSelectedId, scopeFilter, setScopeFilter,
   genrePack, handleGenrePackChange, handleNew, handleImportClick,
   handleExportAll, handleImportFile, fileInputRef, reload,
 }: TemplatesViewProps) {
@@ -273,22 +270,15 @@ function PromptTemplatesView({
         </div>
       </div>
 
-      {/* 主区：左列表 + 右编辑器 */}
-      <div className="flex-1 flex overflow-hidden">
-        <div className="w-80 flex-shrink-0 border-r border-border overflow-y-auto">
-          <PromptTemplateList
-            templates={filtered}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <PromptTemplateEditor
-            template={selected ?? null}
-            onChanged={() => reload()}
-            onDeleted={() => setSelectedId(null)}
-          />
-        </div>
+      {/* 主区：两级网格 + 详情弹窗（全部由 PromptTemplateList 接管） */}
+      <div className="flex-1 overflow-y-auto">
+        <PromptTemplateList
+          templates={filtered}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onChanged={() => reload()}
+          onDeleted={() => setSelectedId(null)}
+        />
       </div>
     </div>
   )
