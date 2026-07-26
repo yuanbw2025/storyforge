@@ -85,7 +85,29 @@ export const PROJECT_TABLES: TableSpec[] = [
       { field: 'toCharacterId', remapVia: 'characters', exportAs: '_toCharacterIndex', onUnmapped: 'drop' },
     ] },
 
-  // (factions 表已于 DB v29 并入 codex.faction 词条并删除)
+  // ───────────────────── 势力（v38 重新独立，曾于 v29 并入 codex 词条后删除） ─────────────────────
+  { table: db.factions, name: 'factions', owner: 'project', worldScoped: true,
+    exportable: true, exportIdField: true,
+    refs: [
+      // 删势力 → 关系级联删
+      { kind: 'simple', field: 'id', target: 'factionRelations[fromFactionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'factionRelations[toFactionId]', onDelete: 'cascade' },
+      // 删角色 → 从势力成员列表移除该 id（多对多 ArrayRef，与 detailedOutlines.appearingCharacterIds 同模式）
+      { kind: 'array', field: 'memberCharacterIds', itemTarget: 'characters', onDelete: 'removeItem' },
+    ],
+    exportRefRemap: [
+      { field: 'memberCharacterIds', remapVia: 'characters', kind: 'id-array', exportAs: '_memberCharacterIndexes' },
+    ],
+    exportRemap: [
+      { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
+    ] },
+
+  { table: db.factionRelations, name: 'factionRelations', owner: 'project',
+    exportable: true,
+    exportRemap: [
+      { field: 'fromFactionId', remapVia: 'factions', exportAs: '_fromFactionExportId', onUnmapped: 'drop' },
+      { field: 'toFactionId', remapVia: 'factions', exportAs: '_toFactionExportId', onUnmapped: 'drop' },
+    ] },
 
   // ───────────────────── 大纲 / 章节 / 细纲 ─────────────────────
   { table: db.outlineNodes, name: 'outlineNodes', owner: 'project', worldScoped: true,

@@ -86,6 +86,9 @@ export type PromptModuleKey =
   | 'history.storm'
   // —— FB-5 自适应文风学习 ——
   | 'style.learn'
+  // —— 势力模块 ——
+  | 'faction.generate'
+  | 'faction.relations'
 
 export type PromptProjectField =
   | 'name'

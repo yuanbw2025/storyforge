@@ -100,9 +100,13 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
       updatedAt: now,
     } as any) as number
 
-    // 旧版备份兼容:factions/itemSystems 表已删除 → 并入「势力」/「人工器物」词条
-    const legacyFactions = (data as any).factions as any[] | undefined
+    // 旧版备份兼容:v29 删除的 itemSystems / 旧 factions 表 → 并入「人工器物」/「势力」词条
+    // ⚠️ v38 重新独立了 factions 表（注册为 exportable，导出时也产出 factions 数组）。
+    //    新格式 factions 行带 _exportId（exportIdField: true）；旧格式（v1/v2 备份）不带。
+    //    必须按此区分，否则新格式 factions 会被误判为 legacy 二次导入 codex（产生孤儿分类）。
+    const rawFactions = (data as any).factions as any[] | undefined
     const legacyItemSystems = (data as any).itemSystems as any[] | undefined
+    const legacyFactions = rawFactions?.some(f => f?._exportId == null) ? rawFactions : undefined
     if (legacyFactions?.length || legacyItemSystems?.length) {
       await importLegacyArraysToCodex(db, newProjectId, { factions: legacyFactions, itemSystems: legacyItemSystems })
     }

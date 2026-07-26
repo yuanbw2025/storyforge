@@ -125,6 +125,28 @@ export const ADOPTION_SCHEMAS: CollectionAdoptionSpec[] = [
     autoStamps: ['projectId', 'createdAt', 'updatedAt'],
     fkChecks: [{ field: 'lastChapterId', target: 'chapters' }],
   },
+  {
+    target: 'factions',
+    identity: 'name',
+    duplicatePolicy: 'merge',
+    required: ['name', 'type'],
+    autoStamps: ['projectId', 'worldGroupId', 'createdAt', 'updatedAt'],
+    arrayMemberChecks: [
+      // 写入前过滤不存在的角色 id，并记录 fkErrors
+      { field: 'memberCharacterIds', itemTarget: 'characters' },
+    ],
+  },
+  {
+    target: 'factionRelations',
+    identity: { kind: 'composite', fields: ['fromFactionId', 'toFactionId', 'relationType'] },
+    duplicatePolicy: 'update',
+    required: ['fromFactionId', 'toFactionId', 'relationType'],
+    autoStamps: ['projectId', 'createdAt', 'updatedAt'],
+    fkChecks: [
+      { field: 'fromFactionId', target: 'factions' },
+      { field: 'toFactionId', target: 'factions' },
+    ],
+  },
 ]
 
 export const ADOPTION_BY_TARGET: ReadonlyMap<string, CollectionAdoptionSpec> = new Map(

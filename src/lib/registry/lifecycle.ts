@@ -50,11 +50,20 @@ export function transactionTablesFor(
   }
   if (op === 'deleteGroup') {
     // 删世界组:所有 worldScoped 表 + 角色(homeWorldGroupId setNull)+ 大纲(worldGroupId setNull)+ 世界组本身
+    // + 被 worldScoped 表 simple cascade refs 引用的目标表(避免删该组行后留下孤儿引用)
     const set = new Set<Table>(worldScopedTables().map(s => s.table))
     set.add(db.characters)
     set.add(db.outlineNodes)
     set.add(db.worldGroups)
     set.add(db.worldGroupLinks)
+    for (const spec of worldScopedTables()) {
+      for (const ref of spec.refs ?? []) {
+        if (ref.kind !== 'simple' || ref.onDelete !== 'cascade') continue
+        const tableName = ref.target.split('[')[0]
+        const targetSpec = PROJECT_TABLES.find(s => s.name === tableName)
+        if (targetSpec) set.add(targetSpec.table)
+      }
+    }
     return [...set]
   }
   // migrate:所有 worldScoped 表
@@ -144,6 +153,36 @@ async function deleteBlobsInTransaction(
 
 export async function cascadeDeleteGroup(projectId: number, wgId: number): Promise<void> {
   await db.transaction('rw', transactionTablesFor('deleteGroup'), async () => {
+    // ── Step A: 收集 worldScoped 表中待删行的 id，并按 simple cascade refs 级联删引用方 ──
+    // 必须在 Step B 删除之前做，否则待删行的 id 丢失，无法定位引用记录。
+    // 仅处理 owner: 'project' 且非特殊处理的 worldScoped 表（codexCategories/outlineNodes 跳过）。
+    const cascadeTargets: { target: TableSpec; field: string; ids: number[] }[] = []
+    for (const spec of worldScopedTables()) {
+      if (spec.name === 'codexCategories' || spec.name === 'outlineNodes') continue
+      const wgField = spec.worldGroupField ?? 'worldGroupId'
+      const rows = await spec.table.where('projectId').equals(projectId).toArray()
+      const ids = rows
+        .filter((r: any) => r[wgField] === wgId)
+        .map((r: any) => r.id)
+        .filter((id: unknown): id is number => typeof id === 'number')
+      if (!ids.length) continue
+      // 收集 simple cascade refs（field === 'id'，onDelete === 'cascade'）
+      for (const ref of spec.refs ?? []) {
+        if (ref.kind !== 'simple' || ref.onDelete !== 'cascade' || ref.field !== 'id') continue
+        const tableName = ref.target.split('[')[0]
+        const fieldMatch = ref.target.match(/\[([^\]]+)\]/)
+        if (!fieldMatch) continue
+        const targetSpec = PROJECT_TABLES.find(s => s.name === tableName)
+        if (!targetSpec) continue
+        cascadeTargets.push({ target: targetSpec, field: fieldMatch[1], ids })
+      }
+    }
+    // 执行 simple cascade refs 级联删除
+    for (const { target, field, ids } of cascadeTargets) {
+      await (target.table as any).where(field).anyOf(ids).delete()
+    }
+
+    // ── Step B: 删除 worldScoped 表中 worldGroupId === wgId 的行 ──
     for (const spec of worldScopedTables()) {
       const wgField = spec.worldGroupField ?? 'worldGroupId'
 

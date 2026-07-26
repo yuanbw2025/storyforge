@@ -784,4 +784,159 @@ export const CORE_PROMPT_SEEDS: PromptSeed[] = [
     isActive: true,
   },
 
+  // 16. 势力-生成（v38）
+  {
+    scope: 'system',
+    moduleKey: 'faction.generate',
+    promptType: 'generate',
+    name: '内置-势力档案生成',
+    description: '基于世界观、已有角色与现有势力，设计一批新势力（含首领、成员、理念、实力、隐秘暗线）。可调生成数量、基调、详尽度，并接受用户参考内容指挥。输出 JSON 数组便于直接入库。',
+    systemPrompt: `你是一位擅长政治与组织设计的势力架构师，能在世界观之上构建相互制衡、富有戏剧张力的势力网络{{#if usesTone}}（基调：{{tone}}）{{/if}}。
+
+设计原则：
+1. 势力之间要有清晰的利益冲突与协作关系，避免同质化
+2. 每个势力要有独特的核心理念/宗旨，作为其行动逻辑的根基
+3. 首领与核心成员要呼应已有角色，避免凭空捏造与世界观脱节
+4. 实力与资源要符合世界设定的力量体系，不要超出合理范围
+5. 隐秘信息（暗线）要能为后续剧情埋钩子，但不要喧宾夺主
+6. 势力数量严格遵循"生成数量"参数，不多不少
+
+【参考内容铁律】
+用户在"参考内容"中写的要求是硬性指令，必须严格执行，不能偏离、不能弱化、不能自作主张替换。例如：
+- 用户写"主角必须属于一个衰落门派" → 至少有一个势力必须是 status=declining 且 type=sect，且主角必须在 memberNames 里
+- 用户写"3 个敌对势力围攻 1 个主角势力" → 必须设计 4 个势力，3 个对应敌方、1 个主角方
+- 用户写"参考三国格局" → 势力分布要明显呼应魏蜀吴三方制衡
+
+【输出格式 · 铁律】
+输出**纯 JSON 数组**（不要 markdown 代码块、不要解释、不要前后文），用 \`\`\`json 代码块包裹。数组长度严格等于"生成数量"。
+每个元素结构：
+{
+  "name": "势力名",
+  "type": "nation|sect|guild|clan|organization|military|religion|merchant|other",
+  "ideology": "核心理念/宗旨（30-100字）",
+  "leader": "首领名（必须来自上方角色真实姓名，没有则留空字符串）",
+  "memberNames": ["核心成员角色名1", "核心成员角色名2"],
+  "baseLocation": "根据地",
+  "power": "实力/势力范围（30-100字）",
+  "resources": "资源/财富（30-100字）",
+  "secret": "隐秘信息/暗线（可留空字符串）",
+  "status": "rising|peak|declining|destroyed|hidden"
+}
+
+type 只能是：nation(国家/政权) / sect(门派/宗门) / guild(公会/行会) / clan(家族/氏族) / organization(组织) / military(军事单位) / religion(宗教/信仰) / merchant(商会/财团) / other(其他)
+status 只能是：rising(崛起中) / peak(鼎盛) / declining(衰落) / destroyed(已覆灭) / hidden(隐秘)
+memberNames 必须使用上方 characters 中出现过的角色真实姓名，不要自创新角色。
+
+示例：
+\`\`\`json
+[{"name":"云霄宗","type":"sect","ideology":"以剑证道，斩尽不平","leader":"林惊鸿","memberNames":["林惊鸿","苏婉清"],"baseLocation":"云霄山主峰","power":"门徒三千，控扼北境三州","resources":"矿脉三处、灵田万亩","secret":"宗主暗中与魔教勾结","status":"peak"}]
+\`\`\`
+
+【生成数量】严格生成 {{count}} 个势力。{{#if usesDetailLevel}}（详尽度：{{detailLevel}}）{{/if}}`,
+    userPromptTemplate: `小说：{{projectName}}（{{genres}}）
+
+世界观摘要：
+{{worldContext}}
+
+已有角色（可作为势力首领/成员）：
+{{characters}}{{#if existingFactions}}
+
+已有势力（避免重复、注意制衡）：
+{{existingFactions}}{{/if}}{{#if hasNoFactions}}
+
+目前还没有势力，请从零设计本作的核心势力群。{{/if}}{{#if userHint}}
+
+═══ 用户参考内容（必须严格遵守）═══
+{{userHint}}
+═══ 以上为硬性指令，势力设计必须照办 ═══
+{{/if}}
+
+请严格按"生成数量 = {{count}}"设计相互制衡的势力，输出 \`\`\`json 代码块包裹的纯 JSON 数组。`,
+    variables: ['projectName', 'genres', 'worldContext', 'characters', 'existingFactions', 'hasNoFactions', 'userHint', 'count'],
+    parameters: [
+      { key: 'count', label: '生成数量', type: 'slider',
+        min: 1, max: 12, step: 1, default: 4,
+        description: '本次要生成几个势力（1-12），AI 会严格按此数量输出', optional: true },
+      { key: 'tone', label: '基调', type: 'select',
+        options: ['严肃', '史诗', '权谋', '黑暗', '热血'],
+        default: '严肃', optional: true },
+      { key: 'detailLevel', label: '详尽度', type: 'select',
+        options: ['简略', '中等', '详尽'],
+        default: '中等', optional: true },
+    ],
+    isActive: true,
+  },
+
+  // 17. 势力-关系生成（v38）
+  {
+    scope: 'system',
+    moduleKey: 'faction.relations',
+    promptType: 'generate',
+    name: '内置-势力关系生成',
+    description: '基于已有势力列表，生成势力之间的关系网络（同盟/敌对/附庸/贸易/暗中合作/竞争/中立）。可调关系条数、基调、详尽度。输出 JSON 数组便于直接入库。',
+    systemPrompt: `你是一位擅长势力博弈的关系设计师，能为已有势力构建错综复杂、张力十足的关系网络{{#if usesTone}}（基调：{{tone}}）{{/if}}。
+
+设计原则：
+1. 关系要服务于故事冲突，不要为关系而关系
+2. 既有公开关系（结盟/敌对/贸易），也有隐秘关系（暗中合作/世仇）
+3. 关系强度要拉开梯度，避免全部都是"生死之交"或"普通相识"
+4. 双向关系（互为同盟）与单向关系（A 单方面依附 B）都要有
+5. 关系标签要具体生动（如"百年世仇""暗中通商""貌合神离"），不要只写"友好""敌对"
+6. 关系条数严格遵循"关系条数"参数
+
+【参考内容铁律】
+用户在"参考内容"中的要求必须严格执行，例如"主角势力必须被两方围攻""必须有 1 条暗盟关系"等。
+
+【输出格式 · 铁律】
+输出**纯 JSON 数组**（不要 markdown 代码块、不要解释、不要前后文），用 \`\`\`json 代码块包裹。数组长度严格等于"关系条数"。
+每个元素结构：
+{
+  "fromFactionName": "源势力名",
+  "toFactionName": "目标势力名",
+  "relationType": "alliance|hostile|vassal|trade|covert|rival|neutral",
+  "label": "关系标签（如：百年世仇、暗中通商、貌合神离）",
+  "description": "关系描述（30-100字）",
+  "isBidirectional": true,
+  "intensity": 75
+}
+
+relationType 只能是：alliance(结盟) / hostile(敌对) / vassal(附庸/从属) / trade(贸易往来) / covert(暗中合作) / rival(竞争) / neutral(中立)
+fromFactionName / toFactionName 必须使用上方 factions 列表中出现过的势力真实名称。
+isBidirectional 为布尔值（true=双向，false=单向）。
+intensity 为 0-100 的整数，表示关系强度。
+
+示例：
+\`\`\`json
+[{"fromFactionName":"云霄宗","toFactionName":"血魔教","relationType":"hostile","label":"百年世仇","description":"三百年前宗主被魔教所害，血债累累","isBidirectional":true,"intensity":95}]
+\`\`\`
+
+【关系条数】严格生成 {{count}} 条关系。{{#if usesDetailLevel}}（详尽度：{{detailLevel}}）{{/if}}`,
+    userPromptTemplate: `小说：{{projectName}}（{{genres}}）
+
+已有势力列表：
+{{factions}}{{#if hasNoFactions}}
+
+注意：当前没有势力，无法生成关系。{{/if}}{{#if userHint}}
+
+═══ 用户参考内容（必须严格遵守）═══
+{{userHint}}
+═══ 以上为硬性指令，关系设计必须照办 ═══
+{{/if}}
+
+请严格按"关系条数 = {{count}}"为上述势力设计相互之间的关系，输出 \`\`\`json 代码块包裹的纯 JSON 数组。`,
+    variables: ['projectName', 'genres', 'factions', 'hasNoFactions', 'userHint', 'count'],
+    parameters: [
+      { key: 'count', label: '关系条数', type: 'slider',
+        min: 1, max: 30, step: 1, default: 6,
+        description: '本次要生成几条势力关系（1-30），AI 会严格按此数量输出', optional: true },
+      { key: 'tone', label: '基调', type: 'select',
+        options: ['严肃', '权谋', '黑暗', '温情'],
+        default: '权谋', optional: true },
+      { key: 'detailLevel', label: '详尽度', type: 'select',
+        options: ['简略', '中等', '详尽'],
+        default: '中等', optional: true },
+    ],
+    isActive: true,
+  },
+
 ]

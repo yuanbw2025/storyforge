@@ -41,6 +41,8 @@ import type {
   StoryTimelineEvent,
   CodexCategory,
   CodexEntry,
+  Faction,
+  FactionRelation,
 } from '../types'
 import type { AIUsageEntry } from '../ai/usage-log'
 import type { TemporalFact } from '../types/temporal-fact'
@@ -60,6 +62,8 @@ class StoryForgeDB extends Dexie {
   histories!: Table<History>
   creativeRules!: Table<CreativeRules>
   characterRelations!: Table<CharacterRelation>
+  factions!: Table<Faction, number>
+  factionRelations!: Table<FactionRelation, number>
   snapshots!: Table<Snapshot>
   references!: Table<Reference>
   promptTemplates!: Table<PromptTemplate>
@@ -368,6 +372,14 @@ class StoryForgeDB extends Dexie {
     // 老项目通过设置页“建立检索索引”或生成上下文前按需重建。
     this.version(37).stores({
       narrativeSummaryNodes: '++id, projectId, worldGroupId, level, sourceChapterId, sourceOutlineNodeId, status',
+    })
+
+    // v38: 势力模块 —— 重新独立两张表（v1 曾有 factions 表，v29 并入 codex 词条后删除；
+    //   本次因需表达"势力间关系图 + 势力含角色"的图结构，重新独立）。
+    //   纯新增空表，无存量数据，无需迁移函数。老库升级后两表为空，不影响现有数据。
+    this.version(38).stores({
+      factions: '++id, projectId, worldGroupId, name, type, status, sortOrder',
+      factionRelations: '++id, projectId, fromFactionId, toFactionId, relationType',
     })
   }
 }

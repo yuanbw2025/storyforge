@@ -311,6 +311,40 @@ async function readCharacterRelations(projectId: number): Promise<string> {
   ].join('\n')
 }
 
+/** 势力档案上下文：读当前世界的所有势力 + 成员角色名映射 */
+async function readFactions(projectId: number, worldGroupId?: number | null): Promise<string> {
+  const [factions, characters] = await Promise.all([
+    db.factions.where('projectId').equals(projectId)
+      .filter(f => worldGroupId == null || f.worldGroupId == null || f.worldGroupId === worldGroupId)
+      .toArray(),
+    db.characters.where('projectId').equals(projectId).toArray(),
+  ])
+  if (!factions.length) return ''
+  const charName = new Map(characters.filter(c => c.id != null).map(c => [c.id!, c.name]))
+  return [
+    '【势力档案】',
+    ...factions.sort((a, b) => (a.sortOrder - b.sortOrder) || (a.id! - b.id!)).map(f => {
+      const members = f.memberCharacterIds.map(id => charName.get(id) ?? `#${id}`).join('、') || '无'
+      return `# ${f.name} [${f.type}/${f.status}] 首领:${f.leader || '未定'} 成员:${members}\n  理念:${f.ideology || '无'}  势力范围:${f.power || '未定'}  根据地:${f.baseLocation || '未定'}${f.secret ? `\n  [暗线]${f.secret}` : ''}`
+    }),
+  ].join('\n')
+}
+
+/** 势力关系上下文：读全项目势力间关系（含关系标签+强度） */
+async function readFactionRelations(projectId: number): Promise<string> {
+  const [relations, factions] = await Promise.all([
+    db.factionRelations.where('projectId').equals(projectId).toArray(),
+    db.factions.where('projectId').equals(projectId).toArray(),
+  ])
+  if (!relations.length) return ''
+  const fname = new Map(factions.filter(f => f.id != null).map(f => [f.id!, f.name]))
+  return [
+    '【势力关系】',
+    ...relations.slice(0, 100).map(r =>
+      `${fname.get(r.fromFactionId) ?? `势力#${r.fromFactionId}`} -[${r.relationType}${r.isBidirectional ? '/双向' : '/单向'}]→ ${fname.get(r.toFactionId) ?? `势力#${r.toFactionId}`}：${r.label}${r.description ? `（${r.description}）` : ''} 强度:${r.intensity}`),
+  ].join('\n')
+}
+
 /**
  * NS-4 · 当前有效事实投影（事实账本 → 生成上下文）。
  * 只注入 confirmed（Canon）事实，按【规范章序】实时解析 validFrom/To（绝不缓存 order）判定"截止本章是否有效"，
@@ -695,6 +729,23 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L2',
     budgetTokens: 2200,
     read: input => readCharacterRelations(input.projectId),
+  },
+  {
+    key: 'factions',
+    label: '势力档案',
+    scope: 'world',
+    layer: 'L2',
+    budgetTokens: 3000,
+    requiresWorldGroupId: true,
+    read: input => readFactions(input.projectId, input.worldGroupId),
+  },
+  {
+    key: 'factionRelations',
+    label: '势力关系',
+    scope: 'project',
+    layer: 'L2',
+    budgetTokens: 1500,
+    read: input => readFactionRelations(input.projectId),
   },
   {
     key: 'references',

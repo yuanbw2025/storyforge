@@ -20,6 +20,7 @@ import {
   type ReverseMultiWorldResult,
 } from '../../lib/ai/inspiration-reverse'
 import { adopt } from '../../lib/registry/adopt'
+import { db } from '../../lib/db/schema'
 import { CHARACTER_DIMENSIONS } from '../../lib/character/character-dimensions'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import AutoResizeTextarea from '../shared/AutoResizeTextarea'
@@ -43,7 +44,7 @@ export default function InspirationPanel({ project }: Props) {
   const [result, setResult] = useState<ReverseResult | null>(null)
   const [mwResult, setMwResult] = useState<ReverseMultiWorldResult | null>(null)
   const [mwAdopted, setMwAdopted] = useState(false)
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['worldview', 'storyCore', 'characters']))
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['worldview', 'storyCore', 'characters', 'factions', 'factionRelations']))
   const [adoptedSections, setAdoptedSections] = useState<Set<string>>(new Set())
   const [selectedChars, setSelectedChars] = useState<Set<number>>(new Set())
   const [adopting, setAdopting] = useState(false)
@@ -57,9 +58,19 @@ export default function InspirationPanel({ project }: Props) {
         const d = JSON.parse(saved)
         setInspiration(d.inspiration || '')
         setUserHint(d.userHint || '')
-        if (d.result) setResult(d.result)
+        // 兜底：v38 之前生成的旧 result 没有 factions / factionRelations 字段，访问 .length 会崩。
+        // 这里给旧数据补齐空数组，确保下游 InspirationSingleResult 渲染时不报 undefined。
+        if (d.result) setResult({
+          ...d.result,
+          factions: Array.isArray(d.result.factions) ? d.result.factions : [],
+          factionRelations: Array.isArray(d.result.factionRelations) ? d.result.factionRelations : [],
+        })
         if (d.mwResult) {
-          setMwResult(d.mwResult)
+          setMwResult({
+            ...d.mwResult,
+            factions: Array.isArray(d.mwResult.factions) ? d.mwResult.factions : [],
+            factionRelations: Array.isArray(d.mwResult.factionRelations) ? d.mwResult.factionRelations : [],
+          })
           setMwAdopted(!!d.mwAdopted)
         }
         if (d.result?.characters) setSelectedChars(new Set(d.result.characters.map((_: unknown, i: number) => i)))
@@ -356,6 +367,76 @@ export default function InspirationPanel({ project }: Props) {
     setAdopting(false)
   }
 
+  // ── 采纳势力 ─────────────────────────────────────
+  const handleAdoptFactions = async () => {
+    if (!result || adoptedSections.has('factions')) return
+    setAdopting(true)
+    // 单世界模式下 worldGroupId = null（与世界观单例一致，由 adopt 的 autoStamps 兜底）
+    const worldGroupId = null
+    for (const f of result.factions) {
+      // memberNames 转 memberCharacterIds：按名匹配现有 characters
+      let memberCharacterIds: number[] = []
+      if (f.memberNames.length) {
+        const chars = await db.characters.where('projectId').equals(project.id!).toArray()
+        const nameToId = new Map(chars.filter(c => c.id != null).map(c => [c.name, c.id!]))
+        memberCharacterIds = f.memberNames.map(n => nameToId.get(n)).filter((id): id is number => typeof id === 'number')
+      }
+      await adopt({
+        projectId: project.id!,
+        target: 'factions',
+        mode: 'add',
+        data: {
+          name: f.name,
+          type: f.type,
+          ideology: f.ideology,
+          leader: f.leader,
+          memberCharacterIds,
+          baseLocation: f.baseLocation,
+          power: f.power,
+          resources: f.resources,
+          secret: f.secret,
+          status: f.status,
+          color: '#3b82f6',
+          sortOrder: 0,
+          worldGroupId,
+        },
+      })
+    }
+    setAdoptedSections(prev => new Set(prev).add('factions'))
+    setAdopting(false)
+  }
+
+  // ── 采纳势力关系 ─────────────────────────────────
+  const handleAdoptFactionRelations = async () => {
+    if (!result || adoptedSections.has('factionRelations')) return
+    // 依赖势力先采纳：按名匹配已入库的 factions
+    if (!adoptedSections.has('factions')) await handleAdoptFactions()
+    setAdopting(true)
+    const factions = await db.factions.where('projectId').equals(project.id!).toArray()
+    const nameToId = new Map(factions.filter(f => f.id != null).map(f => [f.name, f.id!]))
+    for (const r of result.factionRelations) {
+      const fromFactionId = nameToId.get(r.fromFactionName)
+      const toFactionId = nameToId.get(r.toFactionName)
+      if (!fromFactionId || !toFactionId) continue
+      await adopt({
+        projectId: project.id!,
+        target: 'factionRelations',
+        mode: 'add',
+        data: {
+          fromFactionId,
+          toFactionId,
+          relationType: r.relationType,
+          label: r.label,
+          description: r.description,
+          isBidirectional: r.isBidirectional,
+          intensity: r.intensity,
+        },
+      })
+    }
+    setAdoptedSections(prev => new Set(prev).add('factionRelations'))
+    setAdopting(false)
+  }
+
   // ── 一键全部采纳 ─────────────────────────────────
   const handleAdoptAll = async () => {
     if (!result) return
@@ -363,6 +444,8 @@ export default function InspirationPanel({ project }: Props) {
     if (!adoptedSections.has('worldview')) await handleAdoptWorldview()
     if (!adoptedSections.has('storyCore')) await handleAdoptStoryCore()
     if (!adoptedSections.has('characters')) await handleAdoptCharacters()
+    if (!adoptedSections.has('factions')) await handleAdoptFactions()
+    if (!adoptedSections.has('factionRelations')) await handleAdoptFactionRelations()
     setAdopting(false)
   }
 
@@ -490,6 +573,8 @@ export default function InspirationPanel({ project }: Props) {
             onAdoptWorldview={handleAdoptWorldview}
             onAdoptStoryCore={handleAdoptStoryCore}
             onAdoptCharacters={handleAdoptCharacters}
+            onAdoptFactions={handleAdoptFactions}
+            onAdoptFactionRelations={handleAdoptFactionRelations}
             onAdoptAll={handleAdoptAll}
           />
         )}

@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "exportedAt": 1782304513952,
+  "exportedAt": 1785073637300,
   "project": {
     "name": "全量作品",
     "genre": "fantasy",
@@ -155,6 +155,69 @@
       "_toCharacterIndex": 1
     }
   ],
+  "factions": [
+    {
+      "name": "青云宗",
+      "type": "sect",
+      "ideology": "正道为先",
+      "leader": "林惊羽",
+      "memberCharacterIds": [
+        1,
+        2
+      ],
+      "baseLocation": "青云山",
+      "power": "门徒三千",
+      "resources": "灵矿",
+      "secret": "宗主身世",
+      "status": "peak",
+      "color": "#3b82f6",
+      "sortOrder": 0,
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000,
+      "_worldGroupExportId": 0,
+      "_exportId": 0,
+      "_memberCharacterIndexes": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "血煞门",
+      "type": "sect",
+      "ideology": "杀伐证道",
+      "leader": "苏长歌",
+      "memberCharacterIds": [
+        2
+      ],
+      "baseLocation": "血煞谷",
+      "power": "邪修数百",
+      "resources": "血晶",
+      "secret": "勾结魔教",
+      "status": "rising",
+      "color": "#ef4444",
+      "sortOrder": 1,
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000,
+      "_worldGroupExportId": 0,
+      "_exportId": 1,
+      "_memberCharacterIndexes": [
+        1
+      ]
+    }
+  ],
+  "factionRelations": [
+    {
+      "relationType": "hostile",
+      "label": "百年世仇",
+      "description": "正邪不两立",
+      "isBidirectional": true,
+      "intensity": 90,
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000,
+      "_fromFactionExportId": 0,
+      "_toFactionExportId": 1
+    }
+  ],
   "outlineNodes": [
     {
       "type": "volume",
@@ -212,7 +275,16 @@
       ],
       "createdAt": 1700000000000,
       "updatedAt": 1700000000000,
-      "_outlineExportId": 1
+      "_outlineExportId": 1,
+      "_appearingCharacterIndexes": [
+        0
+      ],
+      "_foreshadowIndexes": [],
+      "_sceneCharacterIndexes": [
+        [
+          0
+        ]
+      ]
     }
   ],
   "emotionBeatCards": [
@@ -286,7 +358,10 @@
       ],
       "content": "多爽点",
       "createdAt": 1700000000000,
-      "updatedAt": 1700000000000
+      "updatedAt": 1700000000000,
+      "_citedReferenceIndexes": [
+        0
+      ]
     }
   ],
   "codexCategories": [

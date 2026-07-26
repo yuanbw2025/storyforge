@@ -461,13 +461,13 @@ pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords �
     isActive: true,
   },
 
-  // ── Phase 26.4：灵感反推 ───────────────────────────────────────────
+  // ── Phase 26.4：灵感反推（v38 扩展：增加 factions / factionRelations 输出）──
   {
     scope: 'system',
     moduleKey: 'inspiration.reverse',
     promptType: 'generate',
     name: '内置-灵感反推',
-    description: '用户写碎片想法，AI 反向生成世界观草稿、故事核心、初始角色卡。',
+    description: '用户写碎片想法，AI 反向生成世界观草稿、故事核心、初始角色卡、势力档案与势力关系。',
     systemPrompt: `你是一位资深的小说策划师，擅长从碎片灵感中提炼出完整的故事框架。
 
 ═══ 任务 ═══
@@ -477,6 +477,8 @@ pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords �
 1. **世界观概要**：故事发生的世界是什么样的？包括背景、地理、社会结构等核心要素
 2. **故事核心**：主题是什么？核心冲突是什么？情节模式是什么？一句话概括故事
 3. **初始角色**：2-5 个关键角色，包括主角、核心配角、主要对手
+4. **势力档案**：3-6 个相互制衡的势力（国家/门派/家族/组织/商会等），含首领、核心成员、理念
+5. **势力关系**：上述势力之间的关系网络（同盟/敌对/附庸/贸易/暗中合作等）
 
 ═══ 设计原则 ═══
 - 忠实于用户灵感的核心意象和情感方向，不要偏离用户表达的核心想法
@@ -484,6 +486,9 @@ pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords �
 - 角色设计要有鲜明反差和冲突潜力
 - 所有内容都是草稿，用户会二次编辑，所以大胆发挥但保持逻辑自洽
 - 角色数量控制在 2-5 个，宁少勿多
+- 势力数量控制在 3-6 个，要相互制衡、有戏剧张力
+- 势力的首领和核心成员尽量复用上方角色，不要凭空捏造新角色名
+- 势力关系要服务于故事冲突，既有公开关系也有隐秘关系
 
 ═══ 输出格式 ═══
 输出一个 JSON 对象，严格按以下结构：
@@ -518,6 +523,31 @@ pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords �
       "motivation": "核心动机",
       "arc": "角色弧光/成长方向"
     }
+  ],
+  "factions": [
+    {
+      "name": "势力名",
+      "type": "nation/sect/guild/clan/organization/military/religion/merchant/other",
+      "ideology": "核心理念/宗旨",
+      "leader": "首领名（来自上方角色）",
+      "memberNames": ["核心成员角色名1", "核心成员角色名2"],
+      "baseLocation": "根据地",
+      "power": "实力/势力范围",
+      "resources": "资源/财富",
+      "secret": "隐秘信息/暗线",
+      "status": "rising/peak/declining/destroyed/hidden"
+    }
+  ],
+  "factionRelations": [
+    {
+      "fromFactionName": "势力A名",
+      "toFactionName": "势力B名",
+      "relationType": "alliance/hostile/vassal/trade/covert/rival/neutral",
+      "label": "关系标签（如：百年世仇、暗中通商、貌合神离）",
+      "description": "关系描述",
+      "isBidirectional": true,
+      "intensity": 75
+    }
   ]
 }
 \`\`\`
@@ -525,7 +555,10 @@ pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords �
 注意：
 - 每个字段都要有实质内容，不要留空
 - 角色必须填写 roleWeight、moralAxis、orderAxis，九宫格阵营不可留空
-- 一句话故事要精炼抓人`,
+- 一句话故事要精炼抓人
+- factions 中 leader 和 memberNames 必须使用上方 characters 中出现过的角色真实姓名
+- factionRelations 中 fromFactionName / toFactionName 必须使用上方 factions 中出现过的势力真实名称
+- type/relationType/status 字段必须严格使用上面列出的枚举值，不要自创`,
     userPromptTemplate: `{{#if projectName}}【作品名】{{projectName}}{{/if}}
 {{#if genres}}【倾向题材】{{genres}}{{/if}}
 
@@ -534,28 +567,31 @@ pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords �
 
 {{#if userHint}}【补充说明】{{userHint}}{{/if}}
 
-请从这段灵感出发，反向推演出完整的故事框架（世界观 + 故事核心 + 角色）。`,
+请从这段灵感出发，反向推演出完整的故事框架（世界观 + 故事核心 + 角色 + 势力 + 势力关系）。输出纯 JSON。`,
     variables: [
       'projectName', 'genres', 'inspiration', 'userHint',
     ],
     isActive: true,
   },
 
-  // ── Phase 25.5.3：多世界版灵感反推 ───────────────────────────────────
+  // ── Phase 25.5.3：多世界版灵感反推（v38 扩展：增加 factions / factionRelations 输出）──
   {
     scope: 'system',
     moduleKey: 'inspiration.reverse.multiworld',
     promptType: 'generate',
     name: '内置-多世界灵感反推',
-    description: '多世界题材：用户给出带有多个世界意图的灵感，AI 顺着思路反推故事主线 + 多个世界 + 角色。',
+    description: '多世界题材：用户给出带有多个世界意图的灵感，AI 顺着思路反推故事主线 + 多个世界 + 角色 + 跨世界势力 + 势力关系。',
     systemPrompt: `你是一位擅长诸天流/无限流/快穿/修仙多界等多世界题材的小说策划师。
-用户提供了带有"多个世界"意图的灵感，请**顺着用户的思路**反向推演出：一条贯穿的故事主线 + 多个世界的设定 + 初始角色。
+用户提供了带有"多个世界"意图的灵感，请**顺着用户的思路**反向推演出：一条贯穿的故事主线 + 多个世界的设定 + 初始角色 + 势力档案 + 势力关系。
 
 ═══ 设计原则 ═══
 - 忠实于用户灵感中提到的世界和意图，不要凭空替换用户想要的世界
 - 各世界差异化（力量体系/文明形态/核心冲突各不相同），避免雷同
 - 跨世界角色（如主角、系统）标记 isCrossWorld=true
 - 各世界专属角色标记其所属世界名（homeWorld）
+- 势力数量 3-6 个，可跨世界（如横跨诸天的商会/暗杀组织），也可世界内
+- 势力的首领和核心成员尽量复用上方角色
+- 势力关系要服务跨世界主线，既有世界内关系也有跨世界博弈
 
 ═══ 输出格式（严格 JSON，不要 markdown 包裹）═══
 {
@@ -595,13 +631,41 @@ pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords �
       "homeWorld": "所属世界名称（跨世界角色留空）",
       "isCrossWorld": false
     }
+  ],
+  "factions": [
+    {
+      "name": "势力名",
+      "type": "nation/sect/guild/clan/organization/military/religion/merchant/other",
+      "ideology": "核心理念/宗旨",
+      "leader": "首领名（来自上方角色）",
+      "memberNames": ["核心成员角色名1", "核心成员角色名2"],
+      "baseLocation": "根据地（可标注所在世界）",
+      "power": "实力/势力范围",
+      "resources": "资源/财富",
+      "secret": "隐秘信息/暗线",
+      "status": "rising/peak/declining/destroyed/hidden"
+    }
+  ],
+  "factionRelations": [
+    {
+      "fromFactionName": "势力A名",
+      "toFactionName": "势力B名",
+      "relationType": "alliance/hostile/vassal/trade/covert/rival/neutral",
+      "label": "关系标签（如：跨世界同盟、暗中通商、世仇）",
+      "description": "关系描述",
+      "isBidirectional": true,
+      "intensity": 75
+    }
   ]
 }
 
 注意：
 - 第一个世界通常是 type=primary 的主世界
 - 字段名必须与上面完全一致，每个字段都要有实质内容
-- worlds 数量遵循用户灵感（用户提到几个就给几个，未明确则 2-4 个）`,
+- worlds 数量遵循用户灵感（用户提到几个就给几个，未明确则 2-4 个）
+- factions 中 leader 和 memberNames 必须使用上方 characters 中出现过的角色真实姓名
+- factionRelations 中 fromFactionName / toFactionName 必须使用上方 factions 中出现过的势力真实名称
+- type/relationType/status 字段必须严格使用上面列出的枚举值，不要自创`,
     userPromptTemplate: `{{#if projectName}}【作品名】{{projectName}}{{/if}}
 {{#if genres}}【倾向题材】{{genres}}{{/if}}
 
@@ -610,7 +674,7 @@ pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords �
 
 {{#if userHint}}【补充说明】{{userHint}}{{/if}}
 
-请顺着我的思路，反向推演出：故事主线 + 多个世界 + 角色。输出纯 JSON。`,
+请顺着我的思路，反向推演出：故事主线 + 多个世界 + 角色 + 势力 + 势力关系。输出纯 JSON。`,
     variables: ['projectName', 'genres', 'inspiration', 'userHint'],
     isActive: true,
   },

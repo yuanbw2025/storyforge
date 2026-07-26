@@ -345,6 +345,52 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   text('stateCards', 'entityName', ['角色名', '实体名']),
   json('stateCards', 'fields', ['状态字段']),
   num('stateCards', 'lastChapterId'),
+
+  // ───────────────────── 势力模块（v38） ─────────────────────
+  text('factions', 'name', ['势力名称', '势力名']),
+  enumeration('factions', 'type', ['nation', 'sect', 'guild', 'clan', 'organization', 'military', 'religion', 'merchant', 'other'], {
+    国家: 'nation', 政权: 'nation',
+    门派: 'sect', 宗门: 'sect',
+    公会: 'guild', 行会: 'guild',
+    家族: 'clan', 氏族: 'clan',
+    组织: 'organization',
+    军事: 'military', 军队: 'military',
+    宗教: 'religion', 信仰: 'religion',
+    商会: 'merchant', 财团: 'merchant',
+    其他: 'other',
+  }, ['势力类型']),
+  longtext('factions', 'ideology', ['理念', '宗旨']),
+  text('factions', 'leader', ['首领', '首领名']),
+  arr('factions', 'memberCharacterIds', ['成员角色id', '成员id']),
+  text('factions', 'baseLocation', ['根据地', '领地']),
+  longtext('factions', 'power', ['实力', '势力范围']),
+  longtext('factions', 'resources', ['资源', '财富']),
+  longtext('factions', 'secret', ['隐秘', '暗线']),
+  enumeration('factions', 'status', ['rising', 'peak', 'declining', 'destroyed', 'hidden'], {
+    崛起: 'rising', 崛起中: 'rising',
+    鼎盛: 'peak', 巅峰: 'peak',
+    衰落: 'declining', 衰退: 'declining',
+    覆灭: 'destroyed', 已覆灭: 'destroyed', 灭亡: 'destroyed',
+    隐秘: 'hidden', 隐藏: 'hidden', 暗中: 'hidden',
+  }, ['势力状态']),
+  text('factions', 'color', ['颜色', '配色']),
+  num('factions', 'sortOrder', ['排序']),
+
+  num('factionRelations', 'fromFactionId', ['源势力id']),
+  num('factionRelations', 'toFactionId', ['目标势力id']),
+  enumeration('factionRelations', 'relationType', ['alliance', 'hostile', 'vassal', 'trade', 'covert', 'rival', 'neutral'], {
+    结盟: 'alliance', 联盟: 'alliance', 同盟: 'alliance',
+    敌对: 'hostile', 敌视: 'hostile', 仇敌: 'hostile',
+    附庸: 'vassal', 从属: 'vassal', 藩属: 'vassal',
+    贸易: 'trade', 通商: 'trade',
+    暗中合作: 'covert', 秘密同盟: 'covert', 暗盟: 'covert',
+    竞争: 'rival', 对手: 'rival',
+    中立: 'neutral',
+  }, ['关系类型']),
+  text('factionRelations', 'label', ['关系标签']),
+  longtext('factionRelations', 'description', ['关系描述']),
+  bool('factionRelations', 'isBidirectional', ['是否双向', '双向']),
+  num('factionRelations', 'intensity', ['强度']),
 ]
 
 export const FIELD_BY_TARGET: ReadonlyMap<string, FieldSpec[]> = new Map(

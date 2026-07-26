@@ -46,6 +46,11 @@ export async function seedFullProject() {
   const char2 = await db.characters.add({ projectId, isCrossWorld: true, name: '苏长歌', role: 'supporting', createdAt: now, updatedAt: now } as any) as number
   await db.characterRelations.add({ projectId, fromCharacterId: char1, toCharacterId: char2, type: 'ally', description: '同门', createdAt: now, updatedAt: now } as any)
 
+  // ── 势力（v38 worldScoped，wgA；含成员角色引用）──
+  const faction1 = await db.factions.add({ projectId, worldGroupId: wgA, name: '青云宗', type: 'sect', ideology: '正道为先', leader: '林惊羽', memberCharacterIds: [char1, char2], baseLocation: '青云山', power: '门徒三千', resources: '灵矿', secret: '宗主身世', status: 'peak', color: '#3b82f6', sortOrder: 0, createdAt: now, updatedAt: now } as any) as number
+  const faction2 = await db.factions.add({ projectId, worldGroupId: wgA, name: '血煞门', type: 'sect', ideology: '杀伐证道', leader: '苏长歌', memberCharacterIds: [char2], baseLocation: '血煞谷', power: '邪修数百', resources: '血晶', secret: '勾结魔教', status: 'rising', color: '#ef4444', sortOrder: 1, createdAt: now, updatedAt: now } as any) as number
+  await db.factionRelations.add({ projectId, fromFactionId: faction1, toFactionId: faction2, relationType: 'hostile', label: '百年世仇', description: '正邪不两立', isBidirectional: true, intensity: 90, createdAt: now, updatedAt: now } as any)
+
   // ── 大纲(树,wgA)+ 章节 + 细纲 + 情感卡 ──
   const vol = await db.outlineNodes.add({ projectId, worldGroupId: wgA, parentId: null, type: 'volume', title: '第一卷', summary: '开篇', order: 0, createdAt: now, updatedAt: now } as any) as number
   const chapNode = await db.outlineNodes.add({ projectId, worldGroupId: wgA, parentId: vol, type: 'chapter', title: '第1章', summary: '觉醒', order: 0, createdAt: now, updatedAt: now } as any) as number

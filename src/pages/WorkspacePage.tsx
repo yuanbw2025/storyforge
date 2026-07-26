@@ -37,6 +37,7 @@ const WorldviewOriginPanel = lazy(() => import('../components/worldview/Worldvie
 const WorldviewNaturalPanel = lazy(() => import('../components/worldview/WorldviewNaturalPanel'))
 const WorldviewHumanityPanel = lazy(() => import('../components/worldview/WorldviewHumanityPanel'))
 const CharacterPanel = lazy(() => import('../components/character/CharacterPanel'))
+const FactionPanel = lazy(() => import('../components/faction/FactionPanel'))
 const CharacterMainPanel = lazy(() => import('../components/character/CharacterMainPanel'))
 const CharacterMinorPanel = lazy(() => import('../components/character/CharacterMinorPanel'))
 const CharacterNPCPanel = lazy(() => import('../components/character/CharacterNPCPanel'))
@@ -204,9 +205,11 @@ export default function WorkspacePage() {
       case 'story-core':
         return <StoryCorePanel project={project} />
 
-      // ── 设定库 - 角色设计 ──────────────────────────────────────────
+      // ── 设定库 - 角色设计 ───────────────────────────────────────────
       case 'characters':
         return <CharacterPanel project={project} />
+      case 'factions':
+        return <FactionPanel project={project} />
       case 'characters-main':
         return <CharacterMainPanel project={project} />
       case 'characters-minor':

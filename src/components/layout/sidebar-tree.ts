@@ -25,6 +25,7 @@ export type SidebarModule =
   | 'worldview-natural'     // 占位 (P5)
   | 'worldview-humanity'    // 占位 (P6)
   | 'story-design'          // = 旧 story-core
+  | 'factions'              // 势力（v38 重新独立）
   | 'characters'            // 角色生成
   | 'characters-main'       // 主要角色
   | 'characters-minor'      // 占位 (P7)
@@ -128,6 +129,7 @@ export const MODULE_CONTENT_TYPES: Record<SidebarModule, ModuleContentType> = {
   'worldview-natural': 'upstream',
   'worldview-humanity': 'upstream',
   'story-design': 'upstream',
+  factions: 'upstream',
   characters: 'upstream',
   'characters-main': 'upstream',
   'characters-minor': 'upstream',
@@ -236,6 +238,7 @@ export const NAV_TREE: TreeSection[] = [
         ],
       },
       leaf('story-design', '故事设计', BookOpen),
+      leaf('factions', '势力', Network),
       {
         kind: 'branch',
         branchId: 'lib.characters',

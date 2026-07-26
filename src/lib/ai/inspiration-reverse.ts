@@ -10,6 +10,11 @@ import type {
   CharacterOrderAxis,
   CharacterRoleWeight,
 } from '../types'
+import type {
+  FactionType,
+  FactionStatus,
+  FactionRelationType,
+} from '../types/faction'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from './prompt-engine'
 import { extractJSON } from './adapters/import-adapter'
@@ -50,6 +55,32 @@ export interface ReverseResult {
   worldview: ReverseWorldview
   storyCore: ReverseStoryCore
   characters: ReverseCharacter[]
+  // 势力模块（v38 扩展，向下兼容：老反推无此字段时为空数组）
+  factions: ReverseFaction[]
+  factionRelations: ReverseFactionRelation[]
+}
+
+export interface ReverseFaction {
+  name: string
+  type: FactionType
+  ideology: string
+  leader: string
+  memberNames: string[]
+  baseLocation: string
+  power: string
+  resources: string
+  secret: string
+  status: FactionStatus
+}
+
+export interface ReverseFactionRelation {
+  fromFactionName: string
+  toFactionName: string
+  relationType: FactionRelationType
+  label: string
+  description: string
+  isBidirectional: boolean
+  intensity: number
 }
 
 // ── 多世界版类型 ─────────────────────────────────────────────────────────
@@ -81,12 +112,54 @@ export interface ReverseMultiWorldResult {
   storyCore: ReverseStoryCore
   worlds: ReverseWorld[]
   characters: ReverseCharacterMW[]
+  // 势力模块（v38 扩展，向下兼容：老反推无此字段时为空数组）
+  factions: ReverseFaction[]
+  factionRelations: ReverseFactionRelation[]
 }
 
 const VALID_WG_TYPES: WorldGroupType[] = ['primary', 'traversal', 'instance', 'parallel', 'ascension', 'custom']
 const VALID_WEIGHTS: CharacterRoleWeight[] = ['main', 'secondary', 'npc', 'extra']
 const VALID_MORAL: CharacterMoralAxis[] = ['good', 'neutral', 'evil']
 const VALID_ORDER: CharacterOrderAxis[] = ['lawful', 'neutral', 'chaotic']
+
+// 势力枚举校验（与 faction.ts 保持一致）
+const VALID_FACTION_TYPES: FactionType[] = ['nation', 'sect', 'guild', 'clan', 'organization', 'military', 'religion', 'merchant', 'other']
+const VALID_FACTION_STATUSES: FactionStatus[] = ['rising', 'peak', 'declining', 'destroyed', 'hidden']
+const VALID_RELATION_TYPES: FactionRelationType[] = ['alliance', 'hostile', 'vassal', 'trade', 'covert', 'rival', 'neutral']
+
+function parseFactions(raw: unknown): ReverseFaction[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map((f: Record<string, unknown>): ReverseFaction => ({
+    name: String(f.name || '').trim(),
+    type: VALID_FACTION_TYPES.includes(f.type as FactionType) ? (f.type as FactionType) : 'other',
+    ideology: String(f.ideology || '').trim(),
+    leader: String(f.leader || '').trim(),
+    memberNames: Array.isArray(f.memberNames)
+      ? f.memberNames.filter((n): n is string => typeof n === 'string' && n.trim().length > 0).map((n: string) => n.trim())
+      : [],
+    baseLocation: String(f.baseLocation || '').trim(),
+    power: String(f.power || '').trim(),
+    resources: String(f.resources || '').trim(),
+    secret: String(f.secret || '').trim(),
+    status: VALID_FACTION_STATUSES.includes(f.status as FactionStatus) ? (f.status as FactionStatus) : 'rising',
+  })).filter(f => f.name)
+}
+
+function parseFactionRelations(raw: unknown): ReverseFactionRelation[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map((r: Record<string, unknown>): ReverseFactionRelation => ({
+    fromFactionName: String(r.fromFactionName || '').trim(),
+    toFactionName: String(r.toFactionName || '').trim(),
+    relationType: VALID_RELATION_TYPES.includes(r.relationType as FactionRelationType)
+      ? (r.relationType as FactionRelationType) : 'neutral',
+    label: String(r.label || '').trim(),
+    description: String(r.description || '').trim(),
+    isBidirectional: Boolean(r.isBidirectional),
+    intensity: typeof r.intensity === 'number'
+      ? Math.max(0, Math.min(100, Math.round(r.intensity)))
+      : 50,
+  })).filter(r => r.fromFactionName && r.toFactionName)
+}
 
 function parseAxes(c: Record<string, unknown>): Pick<ReverseCharacter, 'roleWeight' | 'moralAxis' | 'orderAxis'> {
   return {
@@ -159,7 +232,11 @@ export function parseReverseMultiWorldOutput(output: string): ReverseMultiWorldR
         }))
       : []
     if (worlds.length === 0) return null
-    return { storyCore, worlds, characters }
+    return {
+      storyCore, worlds, characters,
+      factions: parseFactions(p.factions),
+      factionRelations: parseFactionRelations(p.factionRelations),
+    }
   } catch {
     return null
   }
@@ -220,7 +297,11 @@ export function parseReverseOutput(output: string): ReverseResult | null {
         }))
       : []
 
-    return { worldview, storyCore, characters }
+    return {
+      worldview, storyCore, characters,
+      factions: parseFactions(parsed.factions),
+      factionRelations: parseFactionRelations(parsed.factionRelations),
+    }
   } catch {
     return null
   }

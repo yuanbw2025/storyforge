@@ -6,11 +6,13 @@ import {
   ChevronRight,
   Globe,
   Loader2,
+  Network,
   UserCircle,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { ReverseCharacter, ReverseResult } from '../../lib/ai/inspiration-reverse'
 import { characterAxesLabel } from '../../lib/character/character-axes'
+import { FACTION_TYPES, FACTION_STATUSES, FACTION_RELATION_TYPES } from '../../lib/types/faction'
 
 interface Props {
   result: ReverseResult
@@ -23,6 +25,8 @@ interface Props {
   onAdoptWorldview: () => void
   onAdoptStoryCore: () => void
   onAdoptCharacters: () => void
+  onAdoptFactions: () => void
+  onAdoptFactionRelations: () => void
   onAdoptAll: () => void
 }
 
@@ -37,11 +41,15 @@ export default function InspirationSingleResult({
   onAdoptWorldview,
   onAdoptStoryCore,
   onAdoptCharacters,
+  onAdoptFactions,
+  onAdoptFactionRelations,
   onAdoptAll,
 }: Props) {
   const allAdopted = adoptedSections.has('worldview')
     && adoptedSections.has('storyCore')
     && adoptedSections.has('characters')
+    && adoptedSections.has('factions')
+    && adoptedSections.has('factionRelations')
 
   return (
     <section className="space-y-3">
@@ -120,6 +128,74 @@ export default function InspirationSingleResult({
             />
           ))}
         </div>
+      </ResultCard>
+
+      <ResultCard
+        title={`势力（${result.factions.length} 个）`}
+        icon={<Network className="w-4 h-4 text-cyan-500" />}
+        expanded={expandedSections.has('factions')}
+        onToggle={() => onToggleSection('factions')}
+        adopted={adoptedSections.has('factions')}
+        onAdopt={onAdoptFactions}
+        adopting={adopting}
+        adoptLabel="写入势力库"
+      >
+        {result.factions.length === 0 ? (
+          <p className="text-xs text-text-muted">本次反推未生成势力建议</p>
+        ) : (
+          <div className="space-y-2 text-sm">
+            {result.factions.map((f, i) => (
+              <div key={i} className="border border-border rounded p-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium text-text-primary">{f.name}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-bg-hover rounded text-text-muted">
+                    {FACTION_TYPES.find(t => t.value === f.type)?.label ?? f.type}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-bg-hover rounded text-text-muted">
+                    {FACTION_STATUSES.find(s => s.value === f.status)?.label ?? f.status}
+                  </span>
+                </div>
+                {f.leader && <FieldRow label="首领" value={f.leader} />}
+                {f.memberNames.length > 0 && <FieldRow label="成员" value={f.memberNames.join('、')} />}
+                {f.ideology && <FieldRow label="理念" value={f.ideology} />}
+                {f.baseLocation && <FieldRow label="根据地" value={f.baseLocation} />}
+                {f.power && <FieldRow label="实力" value={f.power} />}
+                {f.resources && <FieldRow label="资源" value={f.resources} />}
+                {f.secret && <FieldRow label="暗线" value={f.secret} />}
+              </div>
+            ))}
+          </div>
+        )}
+      </ResultCard>
+
+      <ResultCard
+        title={`势力关系（${result.factionRelations.length} 条）`}
+        icon={<Network className="w-4 h-4 text-rose-500" />}
+        expanded={expandedSections.has('factionRelations')}
+        onToggle={() => onToggleSection('factionRelations')}
+        adopted={adoptedSections.has('factionRelations')}
+        onAdopt={onAdoptFactionRelations}
+        adopting={adopting}
+        adoptLabel="写入势力关系"
+      >
+        {result.factionRelations.length === 0 ? (
+          <p className="text-xs text-text-muted">本次反推未生成势力关系建议</p>
+        ) : (
+          <div className="space-y-2 text-sm">
+            {result.factionRelations.map((r, i) => (
+              <div key={i} className="border border-border rounded p-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-text-primary">{r.fromFactionName}</span>
+                  <span className="text-text-muted">—[{FACTION_RELATION_TYPES.find(t => t.value === r.relationType)?.label ?? r.relationType}{r.isBidirectional ? '/双向' : '/单向'}]→</span>
+                  <span className="text-text-primary">{r.toFactionName}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-bg-hover rounded text-text-muted">强度 {r.intensity}</span>
+                </div>
+                {r.label && <FieldRow label="标签" value={r.label} />}
+                {r.description && <FieldRow label="描述" value={r.description} />}
+              </div>
+            ))}
+          </div>
+        )}
       </ResultCard>
     </section>
   )
