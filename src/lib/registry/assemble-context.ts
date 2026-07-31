@@ -7,6 +7,7 @@ import { estimateTokens, getModelPreset, type ContextLayer, type ContextSegment 
 import { CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
 import type { AssembleContextInput, AssembleContextResult, ContextSource } from './types'
 import { prepareContinuityContext } from '../ai/chapter-memory/continuity-context'
+import { getContextBudgetOverrides, getTotalBudgetOverride } from '../../stores/context-budget'
 
 /** 拿不到模型时的保守默认输入预算(原固定 24K 偏紧,放宽避免内部提前裁) */
 const FALLBACK_INPUT_BUDGET = 48_000
@@ -15,9 +16,13 @@ const LAYERS_BY_TRIM_PRIORITY: ContextLayer[] = ['L3', 'L2', 'L1']
 /**
  * 输入预算 = 所选模型的上下文窗口(减输出预留与安全边际)。
  * 这样上下文只在「真的接近模型窗口」时才按优先级软裁,而不是被固定小预算提前砍。
+ *
+ * 优先级：调用方显式传入 > 设置区「总窗口预算」覆盖 > 模型预设 > 兜底。
  */
 function deriveInputBudget(input: AssembleContextInput): number {
   if (input.inputBudgetTokens && input.inputBudgetTokens > 0) return input.inputBudgetTokens
+  const userTotal = getTotalBudgetOverride()
+  if (userTotal && userTotal > 0) return userTotal
   if (input.provider && input.model) {
     const preset = getModelPreset(input.provider, input.model)
     const budget = preset.maxContext - preset.maxOutput - Math.round(preset.maxContext * 0.05)
@@ -29,6 +34,8 @@ function deriveInputBudget(input: AssembleContextInput): number {
 export async function assembleContext(input: AssembleContextInput): Promise<AssembleContextResult> {
   const selected = selectSources(input)
   const inputBudget = deriveInputBudget(input)
+  // 设置区「提示词预算」面板的覆盖值：sourceKey → 自定义预算（无覆盖则用默认）。
+  const budgetOverrides = getContextBudgetOverrides()
   const needsContinuity = selected.some(source => (
     source.key === 'previousChapterEnding'
     || source.key === 'chapterContinuityHandoff'
@@ -63,7 +70,8 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
     }
     // 单一源也不能突破整个请求预算。L0/protected 只表示不得整段丢弃，
     // 不表示可以绕过总窗口；截断会留下显式标记并进入 tokens 元数据。
-    const capped = capBySourceBudget(content, Math.min(source.budgetTokens, inputBudget))
+    const sourceBudget = budgetOverrides[source.key] ?? source.budgetTokens
+    const capped = capBySourceBudget(content, Math.min(sourceBudget, inputBudget))
     keyedSegments.push({
       key: source.key,
       segment: {
