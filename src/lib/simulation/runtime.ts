@@ -2,6 +2,8 @@ import { db } from '../db/schema'
 import { transactionTablesForReferences } from '../registry/lifecycle'
 import {
   EMPTY_SIMULATION_STATE,
+  NARRATIVE_MODULE_KINDS,
+  NARRATIVE_NODE_KINDS,
   RUNTIME_ENTITY_KINDS,
   RUNTIME_LIFECYCLE_STATUSES,
   SIMULATION_EVENT_TYPES,
@@ -14,6 +16,8 @@ import {
   type SimulationEventType,
   type SimulationNpcEvolutionCandidate,
   type SimulationNpcEvolutionProposal,
+  type SimulationNarrativeNodeSnapshot,
+  type SimulationNarrativeState,
   type SimulationRuntimeState,
   type SimulationSession,
   type SimulationSessionKind,
@@ -39,6 +43,12 @@ import {
   type SimulationTtrpgState,
   type SimulationTtrpgTurnCandidate,
 } from '../types'
+import {
+  applyNarrativeEffects,
+  evaluateNarrativeCondition,
+  parseNarrativeCondition,
+  parseNarrativeEffects,
+} from '../narrative/blueprint'
 
 type JsonObject = Record<string, unknown>
 
@@ -80,6 +90,114 @@ function assertFiniteInteger(value: unknown, label: string, min: number, max: nu
     throw new Error(`${label} 必须是 ${min}..${max} 的整数。`)
   }
   return Number(value)
+}
+
+function optionalPositiveInteger(value: unknown, label: string): number | null {
+  if (value == null) return null
+  return assertFiniteInteger(value, label, 1, Number.MAX_SAFE_INTEGER)
+}
+
+function optionalPortableInteger(value: unknown, label: string): number | null {
+  if (value == null) return null
+  return assertFiniteInteger(value, label, 0, Number.MAX_SAFE_INTEGER)
+}
+
+function narrativeKeyArray(value: unknown, label: string, keys?: Set<string>): string[] {
+  if (!Array.isArray(value)) throw new Error(`${label} 必须是数组。`)
+  const result = value.map(item => String(item).trim())
+  if (result.some(item => !item || item.length > 200) || new Set(result).size !== result.length) {
+    throw new Error(`${label} 包含空值、超长值或重复值。`)
+  }
+  if (keys && result.some(item => !keys.has(item))) throw new Error(`${label} 引用了不存在的叙事节点。`)
+  return result
+}
+
+function parseSimulationNarrativeNode(value: unknown): SimulationNarrativeNodeSnapshot {
+  if (!isObject(value)) throw new Error('冻结叙事节点必须是对象。')
+  const key = String(value.key ?? '').trim()
+  const kind = String(value.kind ?? '')
+  const title = String(value.title ?? '').trim()
+  const summary = String(value.summary ?? '').trim()
+  const conditionJson = String(value.conditionJson ?? '{}')
+  const effectsJson = String(value.effectsJson ?? '[]')
+  if (!key || key.length > 200 || !/^[a-zA-Z0-9._:-]+$/.test(key)) throw new Error('冻结叙事节点 key 无效。')
+  if (!NARRATIVE_NODE_KINDS.includes(kind as typeof NARRATIVE_NODE_KINDS[number])) throw new Error(`冻结叙事节点类型无效: ${kind}`)
+  if (!title || title.length > 500 || summary.length > 20_000) throw new Error(`冻结叙事节点内容无效: ${key}`)
+  parseNarrativeCondition(conditionJson)
+  parseNarrativeEffects(effectsJson)
+  return {
+    key,
+    kind: kind as SimulationNarrativeNodeSnapshot['kind'],
+    title,
+    summary,
+    conditionJson,
+    effectsJson,
+    successorKeys: narrativeKeyArray(value.successorKeys, `${key}.successorKeys`),
+  }
+}
+
+function parseSimulationNarrativeState(value: unknown): SimulationNarrativeState | null {
+  if (value == null) return null
+  if (!isObject(value) || value.schema !== 'storyforge.simulation-narrative' || value.version !== 1) {
+    throw new Error('不支持的冻结叙事状态。')
+  }
+  if (!Array.isArray(value.nodes) || value.nodes.length === 0 || value.nodes.length > 5_000) {
+    throw new Error('冻结叙事必须包含 1..5000 个节点。')
+  }
+  const nodes = value.nodes.map(parseSimulationNarrativeNode)
+  const keys = new Set(nodes.map(node => node.key))
+  if (keys.size !== nodes.length) throw new Error('冻结叙事节点 key 不能重复。')
+  for (const node of nodes) {
+    if (node.successorKeys.some(key => !keys.has(key))) throw new Error(`冻结叙事节点 ${node.key} 存在悬空后继。`)
+  }
+  const moduleKind = String(value.moduleKind ?? '')
+  const moduleTitle = String(value.moduleTitle ?? '').trim()
+  const sourceHash = String(value.sourceHash ?? '').trim()
+  if (!NARRATIVE_MODULE_KINDS.includes(moduleKind as typeof NARRATIVE_MODULE_KINDS[number])) throw new Error('冻结叙事模块类型无效。')
+  if (!moduleTitle || moduleTitle.length > 500 || !sourceHash || sourceHash.length > 128) throw new Error('冻结叙事模块身份无效。')
+  const currentNodeKey = value.currentNodeKey == null ? null : String(value.currentNodeKey).trim()
+  if (currentNodeKey != null && !keys.has(currentNodeKey)) throw new Error('冻结叙事当前节点不存在。')
+  if (!isObject(value.variables)) throw new Error('冻结叙事变量必须是对象。')
+  if (typeof value.completed !== 'boolean') throw new Error('冻结叙事完成状态无效。')
+  return {
+    schema: 'storyforge.simulation-narrative',
+    version: 1,
+    sourceModuleId: optionalPositiveInteger(value.sourceModuleId, '叙事来源模块 ID'),
+    sourceModuleExportId: optionalPortableInteger(value.sourceModuleExportId, '叙事来源便携 ID'),
+    moduleKind: moduleKind as SimulationNarrativeState['moduleKind'],
+    moduleTitle,
+    sourceHash,
+    nodes,
+    currentNodeKey,
+    visitedNodeKeys: narrativeKeyArray(value.visitedNodeKeys, '叙事已访问节点', keys),
+    availableNodeKeys: narrativeKeyArray(value.availableNodeKeys, '叙事可选节点', keys),
+    variables: structuredClone(value.variables),
+    completed: value.completed,
+  }
+}
+
+function enterFrozenNarrativeNode(
+  narrative: SimulationNarrativeState,
+  targetKey: string,
+): SimulationNarrativeState {
+  const target = narrative.nodes.find(node => node.key === targetKey)
+  if (!target) throw new Error(`冻结叙事节点不存在: ${targetKey}`)
+  if (!evaluateNarrativeCondition(parseNarrativeCondition(target.conditionJson), narrative.variables)) {
+    throw new Error(`冻结叙事节点条件未满足: ${targetKey}`)
+  }
+  const variables = applyNarrativeEffects(parseNarrativeEffects(target.effectsJson), narrative.variables)
+  const availableNodeKeys = target.successorKeys.filter(key => {
+    const node = narrative.nodes.find(candidate => candidate.key === key)!
+    return evaluateNarrativeCondition(parseNarrativeCondition(node.conditionJson), variables)
+  })
+  return {
+    ...narrative,
+    currentNodeKey: targetKey,
+    visitedNodeKeys: [...narrative.visitedNodeKeys, targetKey],
+    availableNodeKeys,
+    variables,
+    completed: target.kind === 'ending',
+  }
 }
 
 function assertRuntimeAttributes(value: unknown): RuntimeAttributes {
@@ -706,6 +824,7 @@ export function parseSimulationState(value: string | SimulationRuntimeState): Si
     narratives,
     ttrpg: parseTtrpgState(parsed.ttrpg),
     chat: parseChatState(parsed.chat),
+    narrative: parseSimulationNarrativeState(parsed.narrative),
     lastSequence,
   }
 }
@@ -787,6 +906,17 @@ export function applySimulationEvent(
       const text = String(payload.text ?? '').trim()
       if (!text || text.length > 20_000) throw new Error('运行时叙事文本无效。')
       state.narratives.push({ eventSequence: event.sequence, text })
+      break
+    }
+    case 'narrative.node.advanced': {
+      if (!state.narrative || state.narrative.completed || !state.narrative.currentNodeKey) {
+        throw new Error('当前会话没有可推进的冻结叙事。')
+      }
+      const fromNodeKey = String(payload.fromNodeKey ?? '').trim()
+      const toNodeKey = String(payload.toNodeKey ?? '').trim()
+      if (fromNodeKey !== state.narrative.currentNodeKey) throw new Error('冻结叙事推进来源节点已变化。')
+      if (!state.narrative.availableNodeKeys.includes(toNodeKey)) throw new Error('冻结叙事目标不是当前可选后继。')
+      state.narrative = enterFrozenNarrativeNode(state.narrative, toNodeKey)
       break
     }
     case 'chat.session.configured': {
@@ -1291,6 +1421,7 @@ export async function appendSimulationEvent(input: {
     || input.type === 'chat.session.configured'
     || input.type === 'chat.message.recorded'
     || input.type === 'chat.reply.recorded'
+    || input.type === 'narrative.node.advanced'
   ) {
     throw new Error('受治理的互动事件只能通过对应的专用 API 生成。')
   }
@@ -1314,6 +1445,36 @@ export async function appendSimulationEvent(input: {
       actorKey: input.actorKey ?? null,
       targetKey: input.targetKey ?? null,
       payloadJson: JSON.stringify(payload),
+    }
+  })
+}
+
+export async function advanceSimulationNarrative(input: {
+  sessionId: number
+  targetNodeKey: string
+  baseSequence?: number
+}): Promise<SimulationEvent> {
+  const targetNodeKey = input.targetNodeKey.trim()
+  if (!targetNodeKey) throw new Error('请选择要进入的叙事节点。')
+  return appendBuiltEvent(input.sessionId, ({ state }) => {
+    const narrative = state.narrative
+    if (!narrative || narrative.completed || !narrative.currentNodeKey) {
+      throw new Error('当前会话没有可推进的冻结叙事。')
+    }
+    const baseSequence = input.baseSequence ?? state.lastSequence
+    if (baseSequence !== state.lastSequence) throw new Error('叙事分支已变化，请刷新后重试。')
+    if (!narrative.availableNodeKeys.includes(targetNodeKey)) {
+      throw new Error('所选节点不是当前条件允许的后继。')
+    }
+    return {
+      type: 'narrative.node.advanced',
+      actorKey: null,
+      targetKey: targetNodeKey,
+      payloadJson: JSON.stringify({
+        fromNodeKey: narrative.currentNodeKey,
+        toNodeKey: targetNodeKey,
+        baseSequence,
+      }),
     }
   })
 }
@@ -2255,6 +2416,7 @@ export async function branchSimulationSession(input: {
     workId: parent.workId ?? null,
     worldReleaseId: parent.worldReleaseId ?? null,
     narrativeModuleId: parent.narrativeModuleId ?? null,
+    narrativeModuleExportId: parent.narrativeModuleExportId ?? null,
     draftSnapshotHash: parent.draftSnapshotHash ?? null,
   })
   return {
@@ -2265,6 +2427,7 @@ export async function branchSimulationSession(input: {
     workId: parent.workId ?? null,
     worldReleaseId: parent.worldReleaseId ?? null,
     narrativeModuleId: parent.narrativeModuleId ?? null,
+    narrativeModuleExportId: parent.narrativeModuleExportId ?? null,
     draftSnapshotHash: parent.draftSnapshotHash ?? null,
   }
 }

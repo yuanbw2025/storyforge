@@ -1,9 +1,37 @@
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
-import type { NarrativeModule, WorldRelease, WorldReleaseManifestV2, WorldRevision, WorkspaceScope } from '../types'
+import type {
+  NarrativeModule,
+  WorldRelease,
+  WorldReleaseManifestV2,
+  WorldRevision,
+  WorkspaceScope,
+} from '../types'
+import type { WorldReleaseSection } from '../registry/types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables } from './scope'
 import type { ProjectExportData } from '../export/json-export'
 import { deriveStrictExportProjectSnapshot } from '../export/registry-export'
+import { validateNarrativeModule } from '../narrative/blueprint'
+
+export const WORLD_RELEASE_SECTIONS: ReadonlyArray<{
+  key: WorldReleaseSection
+  label: string
+  description: string
+}> = [
+  { key: 'foundation', label: '世界基础', description: '自然、人文、规则、地点、词条与世界结构' },
+  { key: 'characters', label: '角色资产', description: '角色主档、关系与本作品角色作用' },
+  { key: 'narrative', label: '故事设计', description: '故事核心、主线支线与已选叙事蓝图' },
+  { key: 'outline', label: '大纲与细纲', description: '卷纲、章纲及场景级细纲，不包含正文' },
+]
+
+export function worldReleaseSectionTables(section: WorldReleaseSection): string[] {
+  return PROJECT_TABLES
+    .filter(spec => spec.communityShare === 'world'
+      && spec.releaseSection === section
+      && spec.name !== 'worldReleases')
+    .map(spec => spec.name)
+}
 
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
@@ -17,7 +45,10 @@ function stableJson(value: unknown): string {
 }
 
 async function sha256(value: unknown): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableJson(value)))
+  const digestPromise = crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableJson(value)))
+  const digest = Dexie.currentTransaction
+    ? await Dexie.waitFor(digestPromise)
+    : await digestPromise
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
@@ -80,7 +111,9 @@ async function buildPortableReleaseProject(input: {
   }
   const portable: Record<string, unknown> = {
     version: backup.version,
-    exportedAt: backup.exportedAt,
+    // Release content hashes must depend on content, not the wall clock used
+    // while deriving an otherwise identical portable snapshot.
+    exportedAt: 0,
     ownership: { contractVersion: 1, worldExportId: portableWorldId, workExportId: portableWorkId },
     project,
     worlds: [clone(worldRoot)],
@@ -121,6 +154,14 @@ export async function buildWorldReleaseManifest(input: {
     const module = await db.narrativeModules.get(moduleId)
     if (!module || !await assertRecordInScope(scope, 'narrativeModules', module)) {
       throw new Error(`[release] 叙事模块 ${moduleId} 不属于当前 scope`)
+    }
+    const report = await validateNarrativeModule(scope, moduleId)
+    if (!report.valid) {
+      throw new Error(`[release] 叙事模块 ${module.title} 不可执行:${[
+        ...report.errors,
+        ...report.danglingSuccessors.map(item => `${item.nodeKey}->${item.successorKey}`),
+        ...report.unreachableKeys.map(key => `不可达:${key}`),
+      ].join('；')}`)
     }
     modules.push(module)
   }
@@ -171,13 +212,19 @@ export async function createWorldRevision(input: {
   const manifest = await buildWorldReleaseManifest({ ...input, scope })
   const manifestJson = stableJson(manifest)
   const contentHash = await sha256(manifest)
-  return db.transaction('rw', scopeTransactionTables(db.worldRevisions), async () => {
+  return db.transaction('rw', scopeTransactionTables(
+    ...PROJECT_TABLES.map(spec => spec.table),
+  ), async () => {
     const currentScope = await resolveScope({ scope })
     if (input.parentRevisionId != null) {
       const parent = await db.worldRevisions.get(input.parentRevisionId)
       if (!parent || parent.worldId !== currentScope.worldId || parent.projectId !== currentScope.projectId) {
         throw new Error('[release] 父修订不属于当前 World')
       }
+    }
+    const currentManifest = await buildWorldReleaseManifest({ ...input, scope: currentScope })
+    if (stableJson(currentManifest) !== manifestJson) {
+      throw new Error('[release] 世界内容在修订冻结过程中发生变化，请重试')
     }
     const revisions = await db.worldRevisions.where('worldId').equals(currentScope.worldId).toArray()
     const ts = Date.now()

@@ -113,7 +113,7 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
       projectId,
       worldGroupId: null,
       outlineNodeId,
-      sourceKeys: ['chapterOutline', 'canonAssertions', 'worldview', 'storyCore', 'characterDrivenPlan', 'powerSystem', 'cultivationProgress', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+      sourceKeys: ['chapterOutline', 'canonAssertions', 'worldview', 'storyCore', 'activeNarrativeBlueprint', 'characterDrivenPlan', 'powerSystem', 'cultivationProgress', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
     })
     const charIdx = assembled.included.indexOf('characters')
     const messages = buildDetailSceneGeneratePrompt(

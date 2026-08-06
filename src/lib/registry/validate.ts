@@ -41,6 +41,12 @@ export function checkRegistry(): RegistryValidationResult {
 
   // ref / remap target 表名存在性
   for (const spec of PROJECT_TABLES) {
+    if (spec.communityShare === 'world' && !spec.releaseSection) {
+      errors.push(`${spec.name}.communityShare=world 必须登记 releaseSection`)
+    }
+    if (spec.releaseSection && spec.communityShare !== 'world') {
+      errors.push(`${spec.name}.releaseSection 只能用于 world 可发布表`)
+    }
     if (spec.owner !== 'global' && !spec.domainOwner) {
       errors.push(`${spec.name}.domainOwner 未登记逻辑归属`)
     }

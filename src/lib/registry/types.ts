@@ -30,6 +30,7 @@ export type TableOwner =
  * 世界工作台、完整度和发布预检都从同一份表登记派生，避免组件再次手写表清单。
  */
 export type WorldDomainArea = 'foundation' | 'assets' | 'narrative' | 'structure' | 'runtime'
+export type WorldReleaseSection = 'foundation' | 'characters' | 'narrative' | 'outline'
 
 /** WORLD-2C product ownership, separate from the physical project lifecycle owner. */
 export type DomainOwnerKind = 'workspace' | 'world' | 'work' | 'instance'
@@ -197,6 +198,8 @@ export interface TableSpec<T = any> {
   exportable: boolean
   /** PLATFORM-1：允许进入本地世界分享包；未显式登记的表默认禁止发布。 */
   communityShare?: 'world'
+  /** WORLD-2E：发布选择 UI 的注册表派生分区；不得在组件手写表清单。 */
+  releaseSection?: WorldReleaseSection
   /** 导出时需要的 ID 重映射 */
   exportRemap?: ExportRemapField[]
   /**

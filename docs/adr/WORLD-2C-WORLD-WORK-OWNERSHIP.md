@@ -352,6 +352,10 @@ C3 已将核心世界/作品表 locator 切换为显式 `field` / `exclusive-fie
 v1-v3 兼容、损坏/越界 owner 写库前拒绝，以及 Workspace/World/Work 的注册表派生删除。C5 已开放同 World
 多 Work 创建、切换和确认删除，并由隔离浏览器 E2E 验证刷新后的活动作品。
 
+2026-08-07 的 WORLD-2D..2F 收口继续验证了 C3 的读取边界：新增 `activeNarrativeBlueprint` 到既有
+`CONTEXT_SOURCES`，由当前 `WorkspaceScope.workId` 解析活动模块；大纲、细纲、章纲、场景、正文/大纲
+Copilot、角色驱动剧情和 Agent 工具都消费同一登记源。双 Work 回归证明活动蓝图不会跨作品进入上下文。
+
 随后 WORLD-2D/2E 引入的四张表使 DB 升至 v50、`PROJECT_TABLES` 升至 66 张；它们沿用同一 owner 和生命周期
 合同。`changeRecordScope()` 仅允许注册表声明的 `exclusive-fields` 记录在当前 Work/World 间原子转换，事务内
 检查注册表派生入向引用，发现其它作品引用即拒绝，并把不含正文的转换凭证追加到 ownership receipt。
@@ -421,6 +425,7 @@ World/Work 根对象由领域 service 创建，不允许 AI 直接生成 ID。�
 结论（2026-08-06）：以上门槛均已有自动化与浏览器证据，`WORLD-2C` 标记为 **COMPLETE**。兼容镜像的未来
 删除需另立 ADR；PLATFORM-1B 社区后端和 HARNESS-2 分步骤 Agent 工程均不属于本 ADR 的遗留。
 
-最终验证证据（2026-08-06）：`npm run ci` 通过全部架构、三注册表、依赖、类型、覆盖率、构建和包体闸门，
-264 个测试文件 / 996 项测试全绿；`npm run ci:e2e` 在独立 Chromium 数据中 36/36 通过，覆盖同 World 双 Work
-切换、叙事同步、冻结修订、不可变 Release、世界包 v2 往返和绑定文字游戏实例。
+最终复验（2026-08-07）：`npm run ci` 通过全部架构、三注册表、依赖、lint、类型、覆盖率、构建和包体闸门，
+265 个测试文件 / 1001 项测试全绿；`npm run ci:e2e` 在独立 Chromium 数据中 37/37 通过，覆盖同 World 双 Work
+切换、活动叙事上下文、冻结修订、不可变
+Release、世界包 v2 往返、绑定文字游戏实例和 390px 窄屏布局。

@@ -76,7 +76,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 47 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 48 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -104,6 +104,7 @@
 | `recentChapterSummaries` | 当前世界最近已验证摘要 | chapter | L1 | 2200 |
 | `worldview` | 世界观 | world | L2 | 8000 |
 | `storyCore` | 故事核心 | project | L1 | 4000 |
+| `activeNarrativeBlueprint` | 当前选定叙事蓝图 | project | L1 | 5000 |
 | `characterDrivenPlan` | 当前生效角色驱动方案 | project | L1 | 5000 |
 | `powerSystem` | 力量体系 | world | L2 | 4000 |
 | `codex` | 设定词条 | world | L2 | 6000 |
@@ -260,12 +261,12 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/components/settings/NS0EvalPanel.tsx:50 · chat`
 - `src/lib/agent/character-copilot.ts:427 · chat`
 - `src/lib/agent/inspiration-copilot.ts:283 · chat`
-- `src/lib/agent/outline-copilot.ts:473 · chat`
-- `src/lib/agent/prose-copilot.ts:525 · chat`
+- `src/lib/agent/outline-copilot.ts:474 · chat`
+- `src/lib/agent/prose-copilot.ts:526 · chat`
 - `src/lib/agent/world-origin-copilot.ts:207 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/node-authoring/executor.ts:367 · chat`
 
 ---
 
-生成时间基准:commit `29ff36c`
+生成时间基准:commit `b80287e`

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import {
   appendSimulationEvent,
+  advanceSimulationNarrative,
   appendChatMessage,
   appendChatReply,
   configureChatSession,
@@ -82,6 +83,7 @@ interface SimulationRuntimeStore {
   recordChatReply(input: { replyToSequence: number; text: string; baseSequence: number; supersedesSequence?: number | null }): Promise<void>
   advanceTime(amount: number): Promise<void>
   recordNarrative(text: string): Promise<void>
+  advanceNarrative(targetNodeKey: string): Promise<void>
   proposeNpcEvolution(candidate: SimulationNpcEvolutionCandidate): Promise<void>
   acceptNpcEvolution(proposalSequence: number): Promise<void>
   rejectNpcEvolution(proposalSequence: number, reason?: string): Promise<void>
@@ -266,6 +268,17 @@ export const useSimulationRuntimeStore = create<SimulationRuntimeStore>((set, ge
         sessionId,
         type: 'narrative.recorded',
         payload: { text },
+      })
+      await refreshSelected()
+    },
+
+    advanceNarrative: async targetNodeKey => {
+      const sessionId = get().selectedSessionId
+      if (sessionId == null) throw new Error('请先选择运行时会话。')
+      await advanceSimulationNarrative({
+        sessionId,
+        targetNodeKey,
+        baseSequence: get().runtimeState.lastSequence,
       })
       await refreshSelected()
     },

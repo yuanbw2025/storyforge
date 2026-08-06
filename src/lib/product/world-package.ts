@@ -71,11 +71,36 @@ const LICENSES = new Set<CommunityWorldLicense>([
 
 const ROOT_TABLES = ['worlds', 'works'] as const
 
+// Frozen at PLATFORM-1 v1 (commit 60df0b4). Later world-engine tables are
+// optional when importing an existing v1 package, even if current v1 exports include them.
+const V1_REQUIRED_SHAREABLE_TABLES = [
+  'worldviews',
+  'powerSystems',
+  'cultivationSystems',
+  'geographies',
+  'histories',
+  'worldNodes',
+  'historicalTimelineEvents',
+  'historicalKeywords',
+  'importantLocations',
+  'worldRulesProfiles',
+  'characters',
+  'characterRelations',
+  'codexCategories',
+  'codexEntries',
+  'worldGroups',
+  'worldGroupLinks',
+] as const
+
+const RELEASE_SHAREABLE_TABLES = PROJECT_TABLES
+  .filter(spec => spec.communityShare === 'world'
+    && spec.name !== 'projects'
+    && spec.name !== 'worldReleases')
+  .map(spec => spec.name)
+
 const SHAREABLE_TABLES = [...new Set([
   ...ROOT_TABLES,
-  ...PROJECT_TABLES
-  .filter(spec => spec.exportable && spec.communityShare === 'world' && spec.name !== 'projects')
-    .map(spec => spec.name),
+  ...RELEASE_SHAREABLE_TABLES,
 ])]
 
 const PRIVATE_TABLES = PROJECT_TABLES
@@ -270,18 +295,63 @@ export async function inspectWorldPackage(input: unknown): Promise<WorldPackageT
 
   const portable = portableInput
   if (isRecord(portable)) {
-    const v2SelectedTables = v2Manifest && Array.isArray(v2Manifest.selectedTables)
-      ? v2Manifest.selectedTables.filter((name): name is string => typeof name === 'string')
+    const rawV2SelectedTables = v2Manifest && Array.isArray(v2Manifest.selectedTables)
+      ? v2Manifest.selectedTables
       : []
+    const v2SelectedTables = rawV2SelectedTables.filter((name): name is string => typeof name === 'string')
     if (input.packageVersion === WORLD_PACKAGE_V2_VERSION
-      && (!v2Manifest || v2SelectedTables.length !== (v2Manifest.selectedTables as unknown[] | undefined)?.length)) {
+      && (!v2Manifest
+        || v2SelectedTables.length !== rawV2SelectedTables.length
+        || new Set(v2SelectedTables).size !== v2SelectedTables.length
+        || v2SelectedTables.some(name => !RELEASE_SHAREABLE_TABLES.includes(name)))) {
       errors.push('世界包 v2 的模块表清单无效。')
     }
     const expectedShareableTables = input.packageVersion === WORLD_PACKAGE_V2_VERSION && v2Manifest
       ? [...new Set([...ROOT_TABLES, ...v2SelectedTables])]
-      : SHAREABLE_TABLES
+      : V1_REQUIRED_SHAREABLE_TABLES
     for (const tableName of expectedShareableTables) {
       if (!Array.isArray(portable[tableName])) errors.push(`分享包缺少世界表「${tableName}」。`)
+    }
+    if (input.packageVersion === WORLD_PACKAGE_V2_VERSION && v2Manifest) {
+      const selected = new Set(v2SelectedTables)
+      for (const tableName of RELEASE_SHAREABLE_TABLES) {
+        if (!selected.has(tableName) && Array.isArray(portable[tableName]) && portable[tableName].length > 0) {
+          errors.push(`世界包 v2 含有未在清单选择的表「${tableName}」。`)
+        }
+      }
+      if (!isRecord(v2Manifest.records)) {
+        errors.push('世界包 v2 缺少逐表冻结记录。')
+      } else {
+        const recordNames = Object.keys(v2Manifest.records)
+        if (recordNames.length !== v2SelectedTables.length
+          || recordNames.some(name => !selected.has(name))) {
+          errors.push('世界包 v2 的冻结记录与模块表清单不一致。')
+        }
+        for (const tableName of v2SelectedTables) {
+          if (!Array.isArray(v2Manifest.records[tableName])) {
+            errors.push(`世界包 v2 缺少冻结记录「${tableName}」。`)
+          } else if (!Array.isArray(portable[tableName])
+            || canonicalStringify(v2Manifest.records[tableName]) !== canonicalStringify(portable[tableName])) {
+            errors.push(`世界包 v2 的便携数据与冻结记录「${tableName}」不一致。`)
+          }
+        }
+      }
+      if (!Array.isArray(v2Manifest.dependencies)
+        || v2Manifest.dependencies.length !== v2SelectedTables.length
+        || new Set(v2Manifest.dependencies.map(item => item?.table)).size !== v2Manifest.dependencies.length) {
+        errors.push('世界包 v2 的依赖锁清单无效。')
+      } else if (isRecord(v2Manifest.records)) {
+        for (const dependency of v2Manifest.dependencies) {
+          const rows = v2Manifest.records[dependency.table]
+          if (!selected.has(dependency.table)
+            || !Array.isArray(rows)
+            || dependency.rowCount !== rows.length
+            || !/^[0-9a-f]{64}$/.test(dependency.contentHash)
+            || await sha256(canonicalStringify(rows)) !== dependency.contentHash) {
+            errors.push(`世界包 v2 的依赖锁「${dependency.table}」无效。`)
+          }
+        }
+      }
     }
     for (const tableName of PRIVATE_TABLES) {
       if (Array.isArray(portable[tableName]) && portable[tableName].length > 0) {
@@ -408,3 +478,4 @@ export function downloadWorldPackage(pkg: WorldPackage | WorldPackageV2, filenam
 }
 
 export const WORLD_PACKAGE_SHAREABLE_TABLES = [...SHAREABLE_TABLES]
+export const WORLD_PACKAGE_V1_REQUIRED_TABLES = [...V1_REQUIRED_SHAREABLE_TABLES]

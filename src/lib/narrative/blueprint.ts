@@ -211,6 +211,46 @@ export async function createNarrativeModule(input: {
   })
 }
 
+/** Create the smallest valid executable graph for a product-facing narrative entry. */
+export async function createStarterNarrativeModule(input: {
+  scope: WorkspaceScope
+  owner: 'world' | 'work'
+  kind: NarrativeModuleKind
+  title: string
+  description?: string
+}): Promise<NarrativeModule> {
+  return db.transaction('rw', scopeTransactionTables(
+    db.narrativeModules,
+    db.narrativeNodes,
+    db.outlineNodes,
+  ), async () => {
+    const module = await createNarrativeModule({
+      ...input,
+      sourceProjection: 'custom',
+    })
+    await addNarrativeNode({
+      scope: input.scope,
+      moduleId: module.id!,
+      key: 'entry',
+      kind: 'entry',
+      title: `${input.title.trim()} · 入口`,
+      successorKeys: ['ending'],
+      order: 0,
+    })
+    await addNarrativeNode({
+      scope: input.scope,
+      moduleId: module.id!,
+      key: 'ending',
+      kind: 'ending',
+      title: input.kind === 'free' ? '结束本次探索' : `${input.title.trim()} · 结局`,
+      order: 1,
+    })
+    const created = await db.narrativeModules.get(module.id!)
+    if (!created) throw new Error('[narrative] 初始叙事创建失败')
+    return created
+  })
+}
+
 export async function addNarrativeNode(input: {
   scope: WorkspaceScope
   moduleId: number
@@ -277,13 +317,19 @@ export async function validateNarrativeModule(scope: WorkspaceScope, moduleId: n
   const module = await db.narrativeModules.get(moduleId)
   if (!module || !await assertRecordInScope(scope, 'narrativeModules', module)) throw new Error('[narrative] 模块不属于当前 scope')
   const nodes = (await db.narrativeNodes.where('moduleId').equals(moduleId).toArray()).sort((a, b) => a.order - b.order)
+  const errors: string[] = []
   const keys = new Set(nodes.map(node => node.key))
+  if (keys.size !== nodes.length) errors.push('[narrative] 模块包含重复节点 key')
+  if (nodes.some(node => node.projectId !== scope.projectId || node.moduleId !== moduleId)) {
+    errors.push('[narrative] 模块包含身份错配节点')
+  }
   const entryKey = module.entryNodeKey && keys.has(module.entryNodeKey)
     ? module.entryNodeKey
     : nodes.find(node => node.kind === 'entry')?.key ?? nodes[0]?.key ?? null
+  if (!module.entryNodeKey) errors.push('[narrative] 模块未登记入口节点')
+  else if (!keys.has(module.entryNodeKey)) errors.push('[narrative] 模块登记的入口节点不存在')
   const edges = new Map<string, string[]>()
   const danglingSuccessors: Array<{ nodeKey: string; successorKey: string }> = []
-  const errors: string[] = []
   for (const node of nodes) {
     try {
       const successors = parseStringArray(node.successorKeysJson, `${node.key}.successorKeysJson`)

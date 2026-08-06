@@ -38,6 +38,7 @@ export const PROSE_COPILOT_SOURCE_KEYS = [
   'recentChapterSummaries',
   'worldview',
   'storyCore',
+  'activeNarrativeBlueprint',
   'characterDrivenPlan',
   'powerSystem',
   'cultivationProgress',

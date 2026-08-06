@@ -123,6 +123,7 @@ export default function ChapterOutlineWorkshop({
           sourceKeys: [
             'chapterOutline',
             'storyCore',
+            'activeNarrativeBlueprint',
             'characterDrivenPlan',
             'characters',
             'foreshadows',

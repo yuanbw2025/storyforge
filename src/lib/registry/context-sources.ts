@@ -35,7 +35,7 @@ import { formatCanonAssertionsContext, readCanonAssertions } from '../fact-ledge
 import { readStorylineProgressContext } from '../storyline/storyline-progress'
 import { analyzeEditImpact } from '../consistency/impact-analysis'
 import { readCultivationProgressContext } from '../cultivation/progress'
-import type { Chapter, Character, OutlineNode, PowerSystem, Worldview } from '../types'
+import type { Chapter, Character, NarrativeModule, NarrativeNode, OutlineNode, PowerSystem, Worldview } from '../types'
 import {
   parseCharacterDrivenPlanArcs,
   parseCharacterDrivenPlotVolumes,
@@ -66,6 +66,36 @@ import { readSimulationState } from '../simulation/runtime'
 import type { AssembleContextInput } from './types'
 import { readOwnedRows, resolveScope, assertRecordInScope } from '../world-engine/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
+
+async function readActiveNarrativeBlueprint(input: AssembleContextInput): Promise<string> {
+  const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
+  const work = await db.works.get(scope.workId)
+  const moduleId = work?.activeNarrativeModuleId
+  if (moduleId == null) return ''
+  const module = await db.narrativeModules.get(moduleId) as NarrativeModule | undefined
+  if (!module || !await assertRecordInScope(scope, 'narrativeModules', module)) return ''
+  const nodes = (await db.narrativeNodes.where('moduleId').equals(moduleId).sortBy('order')) as NarrativeNode[]
+  const nodeLines = nodes.map(node => {
+    const successors = (() => {
+      try {
+        const parsed = JSON.parse(node.successorKeysJson)
+        return Array.isArray(parsed) ? parsed.filter(item => typeof item === 'string') : []
+      } catch { return [] }
+    })()
+    const condition = node.conditionJson !== '{}' ? `｜条件 ${node.conditionJson}` : ''
+    const effects = node.effectsJson !== '[]' ? `｜效果 ${node.effectsJson}` : ''
+    return `- [${node.key}] ${node.kind}｜${node.title}${node.summary ? `｜${node.summary}` : ''}${condition}${effects}${successors.length ? `｜后继 ${successors.join('、')}` : ''}`
+  })
+  return [
+    '【当前选定叙事蓝图】',
+    `类型：${module.kind}`,
+    `名称：${module.title}`,
+    module.description ? `说明：${module.description}` : '',
+    `入口：${module.entryNodeKey ?? '未设置'}`,
+    ...nodeLines,
+    '后续卷纲、章纲、细纲和正文必须服务该叙事蓝图；若现有材料冲突，应明确指出而不是静默改写蓝图。',
+  ].filter(Boolean).join('\n')
+}
 
 async function readSimulationRuntimeContext(input: AssembleContextInput): Promise<string> {
   if (input.simulationSessionId == null) return ''
@@ -934,6 +964,16 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 4000, // 放宽:容下完整故事核心(主线/复线)
     ownerFrom: 'work',
     read: async input => formatStoryCoreBlock((await readOwnedRows<any>(input.scope!, 'storyCores', { owner: 'work' }))[0] ?? null),
+  },
+  {
+    key: 'activeNarrativeBlueprint',
+    label: '当前选定叙事蓝图',
+    scope: 'project',
+    layer: 'L1',
+    budgetTokens: 5000,
+    protectedFromTrim: true,
+    ownerFrom: 'work',
+    read: readActiveNarrativeBlueprint,
   },
   {
     key: 'characterDrivenPlan',

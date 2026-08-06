@@ -581,9 +581,12 @@ resolver、并发幂等和有边界回滚；C3-C5 已继续完成 Store/AI scope
 
 完成判据：同一世界至少可定义一条主线和两条支线；分步骤写作可选择其中一条创作，运行时可从对应入口启动。
 
-实施状态（2026-08-06）：**COMPLETE**。`narrativeModules` / `narrativeNodes` 已进入 schema 与三注册表；现有
-StoryArc 主线/支线可重复同步为同一投影，严格校验入口、结局、可达性、悬空后继、条件和效果 JSON。Work
-保存当前 NarrativeModule；用户可把模块保留在本作品或原子提升为整个 World 可复用叙事。
+实施状态（2026-08-07）：**COMPLETE**。`narrativeModules` / `narrativeNodes` 已进入 schema 与三注册表；用户可
+原子创建主线、支线、任务、开局和自由探索五类正式入口，每次创建都同时产生可执行的 `entry -> ending` 最小图。
+现有 StoryArc 主线/支线仍可重复同步为同一投影；图验证会拒绝身份错配、重复 key、悬空后继、入口缺失、
+不可达节点以及非法条件/效果。Work 保存当前 NarrativeModule，`activeNarrativeBlueprint` 作为登记上下文源按
+当前 Work 隔离，并供大纲、细纲、章纲、场景、正文/大纲 Copilot、角色驱动剧情和 Agent 读取；用户也可把
+模块从本作品原子提升为整个 World 可复用叙事。
 
 ### WORLD-2E · 世界修订、版本与发布包 v2
 
@@ -596,9 +599,12 @@ StoryArc 主线/支线可重复同步为同一投影，严格校验入口、结�
 
 完成判据：发布 v1 后修改草稿不影响旧实例；发布 v2 可显示差异；干净浏览器能导入并选择主线/支线。
 
-实施状态（2026-08-06）：**COMPLETE**。`worldRevisions` 保存父链、逐表依赖锁、稳定 SHA-256 和差异；
-`worldReleases` 事务化幂等发布不可变 manifest。世界包 v2 裁出单 World/Work 的严格 v4 便携快照并保留来源，
-世界包 v1 继续兼容；浏览器已完成 v2 下载、预检、导入和当前叙事恢复。
+实施状态（2026-08-07）：**COMPLETE**。发布范围的世界基础、角色、叙事和大纲四个分区完全由
+`PROJECT_TABLES` 派生，用户可选择分区和具体 NarrativeModule；正文与私有参考不属于任何可发布分区。
+`worldRevisions` 保存父链、逐表依赖锁、稳定 SHA-256 和最新修订差异：哈希排除导出时间，冻结在覆盖全部
+登记表的同一事务中重建 manifest，若源记录在冻结期间变化则整体拒绝。`worldReleases` 事务化幂等发布不可变
+manifest。世界包 v2 严格验证表清单、records、portable project、依赖闭包和逐表 hash 一致；历史 v1 使用其
+原始表合同继续兼容。隔离浏览器已完成 v2 下载、预检、导入、来源和当前叙事恢复。
 
 ### WORLD-2F · 状态机与多产品实例统一
 
@@ -611,10 +617,11 @@ StoryArc 主线/支线可重复同步为同一投影，严格校验入口、结�
 
 完成判据：同一发布版本建立四类隔离实例；回放确定；任何实例不能修改世界发布物或其它实例。
 
-实施状态（2026-08-06）：**COMPLETE**。SIM session 显式绑定 World、Work、Release 或草稿快照哈希及
-NarrativeModule，分支继承冻结绑定；跑团、角色聊天、文字游戏和 NPC 演进统一使用原 SIM
-event/reducer/checkpoint。创建会话与绑定在同一事务中完成，四类实例隔离、确定回放和 Release 不可变已有反例；
-运行结果仍只形成 SIM 提案/事件，不自动改写作者 Canon。
+实施状态（2026-08-07）：**COMPLETE**。SIM session 显式绑定 World、Work、可验证的 SIM Canon 快照以及
+Release 的便携 NarrativeModule ID；草稿实例则绑定草稿快照 hash 和本地 NarrativeModule。节点图、条件、效果、
+选择与运行变量在创建实例时冻结，之后修改草稿不会改变旧实例。确定性推进 API 校验允许后继和 base sequence，
+应用闭集效果并拒绝伪造叙事事件；事件回放、检查点验证和分支继承都复用同一 reducer。跑团、角色聊天、文字游戏
+和 NPC 演进四类实例在同一 Release 上相互隔离，运行结果仍只形成 SIM 提案/事件，不自动改写作者 Canon。
 
 ### PLATFORM-1B · 社区发布与发现
 
@@ -674,9 +681,12 @@ Harness/Agent 执行体系。整体架构达到稳定基线后，HARNESS-2 先�
 6. 删除世界、作品、叙事模块、实例和本地副本的正反生命周期测试。
 7. `npm run ci`、适用的 `npm run ci:e2e` 和隔离真实浏览器项目验证。
 
-本地基座最终证据（2026-08-06）：`npm run ci` 的 264 个测试文件 / 996 项测试全部通过，依赖审计 0 漏洞，
-生产构建和包体预算通过；`npm run ci:e2e` 在独立 Chromium 数据中 36/36 通过。线上账号、云发布、发现、
-订阅、fork、协作与治理没有借此标记完成，仍由 PLATFORM-1B/1C 单独验收。
+本地基座最终证据（2026-08-07）：`npm run ci` 通过三注册表、架构、来源可达性、路线图、Canon、依赖、
+lint、类型、265 个测试文件 / 1001 项测试的全量覆盖率、生产构建和包体门禁；
+`R-WORLD2D-2F-runtime-closure` 覆盖五类入口、双 Work 上下文、
+发布裁剪、防篡改、冻结抗草稿变更、确定推进、回放、检查点、分支与四类实例。`npm run ci:e2e` 在独立
+Chromium 数据中 37/37 通过，覆盖完整 WORLD-2 Golden Path 和 390px 窄屏。线上账号、云发布、发现、订阅、fork、协作与
+治理没有借此标记完成，仍由 PLATFORM-1B/1C 单独验收。
 
 ## 14. 文档迁移与旧方案处理
 

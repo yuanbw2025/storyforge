@@ -186,6 +186,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
         'canonAssertions',
         'worldview',
         'storyCore',
+        'activeNarrativeBlueprint',
         'characterDrivenPlan',
         'powerSystem',
         'cultivationProgress',

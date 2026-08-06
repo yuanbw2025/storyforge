@@ -51,6 +51,18 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
         allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
       })
     })
+
+    it('所有世界发布表都从同一注册表声明用户可选分区', () => {
+      const publishable = PROJECT_TABLES.filter(spec => spec.communityShare === 'world')
+      expect(publishable.length).toBeGreaterThan(0)
+      expect(publishable.every(spec => spec.releaseSection != null)).toBe(true)
+      expect(publishable.filter(spec => spec.releaseSection === 'outline').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['outlineNodes', 'detailedOutlines']))
+      expect(publishable.filter(spec => spec.releaseSection === 'narrative').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['storyCores', 'storyArcs', 'narrativeModules', 'narrativeNodes']))
+      expect(publishable.filter(spec => spec.releaseSection === 'characters').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['characters', 'characterRelations', 'workCharacterBindings']))
+    })
   })
 
   describe('派生选择器', () => {

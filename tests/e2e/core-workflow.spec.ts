@@ -141,12 +141,16 @@ test('世界引擎从主线冻结发布并创建绑定文字游戏实例', async
   await narrativeButtons.click()
   await pipeline.getByLabel('共享范围 主线').selectOption('world')
   await expect(pipeline.getByRole('status')).toContainText('“主线”已设为整个世界可复用的叙事。')
+  await pipeline.getByLabel('角色资产').uncheck()
   await pipeline.getByPlaceholder('例如：世界修订 1').fill('E2E 首发修订')
   await pipeline.getByRole('button', { name: '冻结修订', exact: true }).click()
   await expect(pipeline.getByRole('status')).toContainText('已冻结新的世界草稿修订。')
+  await pipeline.getByLabel('修订名称').fill('E2E 发布修订')
+  await pipeline.getByRole('button', { name: '冻结修订', exact: true }).click()
+  await expect(pipeline.getByRole('region', { name: '最新修订差异' })).toContainText('相对修订 1')
   await pipeline.getByRole('button', { name: '发布版本', exact: true }).click()
   const publishDialog = page.getByRole('dialog')
-  await expect(publishDialog).toContainText('发布修订 1？')
+  await expect(publishDialog).toContainText('发布修订 2？')
   await publishDialog.getByRole('button', { name: '发布版本', exact: true }).click()
   await expect(pipeline.getByRole('status')).toContainText('不可变世界版本已发布。')
 
@@ -157,6 +161,10 @@ test('世界引擎从主线冻结发布并创建绑定文字游戏实例', async
   await expect(page).toHaveURL(/\/storyforge\/workspace\/\d+\?module=simulation-runtime$/)
   await expect(page.getByRole('heading', { name: 'E2E 主线文字游戏', exact: true })).toBeVisible()
   await expect(page.getByText('体验中心 · 文字游戏', { exact: true })).toBeVisible()
+  const frozenNarrative = page.getByRole('region', { name: '冻结叙事进度' })
+  await expect(frozenNarrative).toContainText('主线')
+  await frozenNarrative.getByRole('button').click()
+  await expect(frozenNarrative).toContainText('已到达结局')
 
   await page.goto('./')
   await page.getByRole('button', { name: '世界引擎', exact: true }).click()
@@ -168,6 +176,10 @@ test('世界引擎从主线冻结发布并创建绑定文字游戏实例', async
   const packageDownload = await download
   const packagePath = await packageDownload.path()
   expect(packagePath).not.toBeNull()
+  const packageJson = JSON.parse(await (await import('node:fs/promises')).readFile(packagePath!, 'utf8'))
+  expect(packageJson.release.manifest.selectedTables).not.toContain('characters')
+  expect(packageJson.release.manifest.selectedTables).toContain('narrativeModules')
+  expect(packageJson.release.manifest.selectedTables).toContain('outlineNodes')
   await expect(sharing.getByRole('status')).toContainText('世界分享包 v2 已生成')
 
   const fileChooser = page.waitForEvent('filechooser')
@@ -178,6 +190,38 @@ test('世界引擎从主线冻结发布并创建绑定文字游戏实例', async
   await expect(page.getByRole('heading', { name: '发布实例世界（导入）', exact: true })).toBeVisible()
   await expect(page.getByText(/社区导入 · W-/)).toBeVisible()
   await expect(page.locator('.sf-world-module-row.active')).toContainText('主线')
+})
+
+test('世界引擎叙事发布面板在窄屏纵向排列且没有横向溢出', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge_guide_completed', 'e2e')
+  })
+  await page.goto('./')
+  await page.getByRole('main').getByRole('button', { name: '新建内容', exact: true }).first().click()
+  await page.getByRole('button', { name: /世界引擎.*从零创建/ }).click()
+  await page.getByPlaceholder('例如：潮汐之后').fill('窄屏世界')
+  await page.getByRole('button', { name: '创建世界引擎', exact: true }).click()
+
+  const pipeline = page.getByRole('region', { name: '叙事蓝图与世界发布' })
+  await expect(pipeline).toBeVisible()
+  await pipeline.getByLabel('新叙事类型').selectOption('opening')
+  await pipeline.getByLabel('新叙事名称').fill('窄屏开局')
+  await pipeline.getByRole('button', { name: '创建叙事' }).click()
+  await expect(pipeline.getByText('窄屏开局', { exact: true })).toBeVisible()
+  await expect(pipeline.getByLabel('世界基础')).toBeVisible()
+  await expect(pipeline.getByLabel('大纲与细纲')).toBeVisible()
+
+  const stageBoxes = await pipeline.locator('.sf-world-pipeline-stage').evaluateAll(elements => (
+    elements.map(element => {
+      const box = element.getBoundingClientRect()
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom }
+    })
+  ))
+  expect(stageBoxes).toHaveLength(3)
+  expect(stageBoxes[1].top).toBeGreaterThanOrEqual(stageBoxes[0].bottom - 1)
+  expect(stageBoxes[2].top).toBeGreaterThanOrEqual(stageBoxes[1].bottom - 1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
 test('世界引擎可生成并预检本地世界分享包，再导入为新编号副本', async ({ page }) => {

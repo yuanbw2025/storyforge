@@ -44,6 +44,7 @@ export const OUTLINE_COPILOT_SOURCE_KEYS = [
   'canonAssertions',
   'worldview',
   'storyCore',
+  'activeNarrativeBlueprint',
   'characterDrivenPlan',
   'powerSystem',
   'cultivationProgress',

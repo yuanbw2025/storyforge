@@ -10,6 +10,7 @@ import {
   type SimulationCanonSource,
   type SimulationRuntimeState,
   type WorkspaceScope,
+  type WorldReleaseManifestV2,
 } from '../types'
 import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScope } from '../world-engine/scope'
 
@@ -330,6 +331,45 @@ export async function buildSimulationCanonSnapshot(input: {
   return {
     snapshot,
     initialState: { ...structuredClone(EMPTY_SIMULATION_STATE), entities },
+  }
+}
+
+/** Build a verifiable SIM Canon envelope from an immutable WORLD-2E release. */
+export async function buildReleaseSimulationCanonSnapshot(
+  manifest: WorldReleaseManifestV2,
+  createdAt: number,
+): Promise<SimulationCanonSnapshotV1> {
+  const sources: SimulationCanonSource[] = []
+  for (const dependency of manifest.dependencies) {
+    const candidate: SimulationCanonCandidate = {
+      sourceKey: `release-table:${dependency.table}`,
+      kind: 'world',
+      recordId: null,
+      name: dependency.table,
+      summary: `${dependency.rowCount} 条冻结记录`,
+      fields: {
+        table: dependency.table,
+        rowCount: String(dependency.rowCount),
+        tableHash: dependency.contentHash,
+      },
+      updatedAt: createdAt,
+    }
+    sources.push({
+      ...candidate,
+      contentHash: await sha256(sourceHashInput(candidate)),
+    })
+  }
+  const snapshotBase: Omit<SimulationCanonSnapshotV1, 'snapshotHash'> = {
+    schema: 'storyforge.simulation-canon',
+    version: 1,
+    createdAt,
+    worldGroupId: null,
+    worldLabel: manifest.worldName,
+    sources,
+  }
+  return {
+    ...snapshotBase,
+    snapshotHash: await sha256(snapshotHashInput(snapshotBase)),
   }
 }
 

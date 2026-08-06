@@ -117,8 +117,10 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     const scopeB = { ...ownership.scope, workId: workB.id! }
     const moduleA = await createNarrativeModule({ scope: scopeA, owner: 'work', kind: 'main', title: 'A 主线' })
     const moduleB = await createNarrativeModule({ scope: scopeB, owner: 'work', kind: 'main', title: 'B 主线' })
-    await addNarrativeNode({ scope: scopeA, moduleId: moduleA.id!, key: 'a', kind: 'entry', title: 'A 入口' })
-    await addNarrativeNode({ scope: scopeB, moduleId: moduleB.id!, key: 'b', kind: 'entry', title: 'B 入口' })
+    await addNarrativeNode({ scope: scopeA, moduleId: moduleA.id!, key: 'a', kind: 'entry', title: 'A 入口', successorKeys: ['a-end'] })
+    await addNarrativeNode({ scope: scopeA, moduleId: moduleA.id!, key: 'a-end', kind: 'ending', title: 'A 结局' })
+    await addNarrativeNode({ scope: scopeB, moduleId: moduleB.id!, key: 'b', kind: 'entry', title: 'B 入口', successorKeys: ['b-end'] })
+    await addNarrativeNode({ scope: scopeB, moduleId: moduleB.id!, key: 'b-end', kind: 'ending', title: 'B 结局' })
     await db.worldviews.add({
       projectId: scopeA.projectId,
       worldId: scopeA.worldId,
@@ -142,7 +144,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     expect(await db.simulationSessions.where('workId').equals(workA.id!).count()).toBe(0)
     expect(await db.works.get(workB.id!)).toBeDefined()
     expect(await db.narrativeModules.get(moduleB.id!)).toBeDefined()
-    expect(await db.narrativeNodes.where('moduleId').equals(moduleB.id!).count()).toBe(1)
+    expect(await db.narrativeNodes.where('moduleId').equals(moduleB.id!).count()).toBe(2)
     expect((await db.worldviews.toArray()).filter(row => row.worldId === scopeA.worldId)).toHaveLength(1)
   })
 
@@ -385,6 +387,8 @@ describe('WORLD-2D · executable narrative blueprint completion', () => {
     const scopeB = { ...ownership.scope, workId: workB.id! }
     await createNarrativeModule({ scope: ownership.scope, owner: 'work', kind: 'main', title: 'A 主线' })
     const moduleB = await createNarrativeModule({ scope: scopeB, owner: 'work', kind: 'main', title: 'B 主线' })
+    await addNarrativeNode({ scope: scopeB, moduleId: moduleB.id!, key: 'entry', kind: 'entry', title: 'B 入口', successorKeys: ['end'] })
+    await addNarrativeNode({ scope: scopeB, moduleId: moduleB.id!, key: 'end', kind: 'ending', title: 'B 结局' })
     const revision = await createWorldRevision({
       scope: scopeB,
       label: 'B 的修订',
@@ -481,6 +485,8 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
 
   it('同一 Release 建立四类隔离实例，事件确定回放且分支继承冻结绑定', async () => {
     const seeded = await seedRelease()
+    const manifest = JSON.parse(seeded.release.manifestJson) as WorldReleaseManifestV2
+    const narrativeModuleExportId = manifest.selectedNarrativeModules[0].exportId
     const kinds: SimulationSessionKind[] = ['ttrpg', 'chatgame', 'storygame', 'npc-evolution']
     const sessions = []
     for (const kind of kinds) {
@@ -489,7 +495,7 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
         kind,
         title: `${kind} 实例`,
         releaseId: seeded.release.id,
-        narrativeModuleId: seeded.modules[0].id,
+        releaseNarrativeModuleExportId: narrativeModuleExportId,
         seed: `seed-${kind}`,
       }))
     }
@@ -510,7 +516,8 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
       worldId: seeded.ownership.scope.worldId,
       workId: seeded.ownership.scope.workId,
       worldReleaseId: seeded.release.id,
-      narrativeModuleId: seeded.modules[0].id,
+      narrativeModuleId: null,
+      narrativeModuleExportId,
     })
     expect((await db.worldReleases.get(seeded.release.id!))?.manifestJson).toBe(seeded.release.manifestJson)
   })

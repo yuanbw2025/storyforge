@@ -106,6 +106,7 @@ export async function buildCharacterDrivenPlotPrompt(
     sourceKeys: [
       'worldview',
       'storyCore',
+      'activeNarrativeBlueprint',
       'powerSystem',
       'cultivationProgress',
       'codex',
