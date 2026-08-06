@@ -334,6 +334,8 @@ StoryForge 使用 [MIT License](./LICENSE) 开源。你可以自由使用、复�
 
 StoryForge 的全部功能与后续更新不会因是否赞助而有任何区别：赞助不会获得额外功能或特殊权益，不赞助也不会失去任何功能或更新，一切完全自愿。赞助款将用于缓解开发者的大模型订阅成本，并在一定程度上帮助加快项目开发。
 
+感谢每一份自愿支持。我会继续认真开发和维护 StoryForge，也希望它能帮助你把脑海中的世界变成故事、游戏与更多有趣的体验，让你在使用和创作的过程中获得快乐、灵感与满足感。
+
 <p align="center">
   <img src="./docs/assets/support/afdian-aloneone.jpeg" alt="StoryForge 爱发电赞助二维码" width="420" />
 </p>
