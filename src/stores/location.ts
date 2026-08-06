@@ -6,6 +6,7 @@ import { db } from '../lib/db/schema'
 import type { ImportantLocation } from '../lib/types'
 import { clearImportantLocationReferences } from '../lib/location/lifecycle'
 import { transactionTablesForReferences } from '../lib/registry/lifecycle'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 /** 树形节点（带 children，UI 用） */
 export interface LocationTreeNode extends ImportantLocation {
@@ -16,7 +17,7 @@ interface LocationStore {
   locations: ImportantLocation[]
   loading: boolean
 
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   addLocation: (data: Omit<ImportantLocation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
   updateLocation: (id: number, patch: Partial<ImportantLocation>) => Promise<void>
   deleteLocation: (id: number) => Promise<void>
@@ -30,30 +31,38 @@ export const useLocationStore = create<LocationStore>((set, get) => ({
   locations: [],
   loading: false,
 
-  loadAll: async (projectId: number) => {
+  loadAll: async (scopeInput: WorkspaceScopeLike) => {
     set({ loading: true })
-    const locations = await db.importantLocations
-      .where('projectId')
-      .equals(projectId)
-      .sortBy('sortOrder')
+    const locations = (await readOwnedRows<ImportantLocation>(await resolveScopeLike(scopeInput), 'importantLocations', { owner: 'world' }))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
     set({ locations, loading: false })
   },
 
   addLocation: async (data) => {
     const now = Date.now()
-    const id = await db.importantLocations.add({
+    const scope = await resolveScopeLike(data.projectId)
+    if (data.parentId != null) {
+      const parent = await db.importantLocations.get(data.parentId)
+      if (!parent || !await assertRecordInScope(scope, 'importantLocations', parent, { owner: 'world' })) {
+        throw new Error('[Location] 父地点不属于当前 World')
+      }
+    }
+    const row = stampNewRecord(scope, 'importantLocations', {
       ...data,
       createdAt: now,
       updatedAt: now,
-    } as ImportantLocation) as number
+    } as ImportantLocation, { owner: 'world' }) as ImportantLocation
+    const id = await db.importantLocations.add(row) as number
     // 局部 set：不触发 loading 闪烁，避免编辑中的 input 失焦
-    const newRow: ImportantLocation = { ...data, id, createdAt: now, updatedAt: now } as ImportantLocation
+    const newRow: ImportantLocation = { ...row, id }
     set({ locations: [...get().locations, newRow].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)) })
     return id
   },
 
   updateLocation: async (id, patch) => {
     const now = Date.now()
+    const current = get().locations.find(l => l.id === id) ?? await db.importantLocations.get(id)
+    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'importantLocations', current, { owner: 'world' })) return
     await db.importantLocations.update(id, { ...patch, updatedAt: now })
     // 关键修复：原实现走 loadAll(projectId)，会先 set({ loading: true })，
     // 让 LocationPanel 顶层 `if (loading)` 分支命中 skeleton，导致正在编辑的
@@ -68,12 +77,11 @@ export const useLocationStore = create<LocationStore>((set, get) => ({
   deleteLocation: async (id) => {
     const loc = await db.importantLocations.get(id)
     if (!loc) return
+    const scope = await resolveScopeLike(loc.projectId)
+    if (!await assertRecordInScope(scope, 'importantLocations', loc, { owner: 'world' })) return
 
     // 递归删除所有子地点
-    const allLocs = await db.importantLocations
-      .where('projectId')
-      .equals(loc.projectId)
-      .toArray()
+    const allLocs = await readOwnedRows<ImportantLocation>(scope, 'importantLocations', { owner: 'world' })
 
     const toDelete = new Set<number>()
     const collect = (parentId: number) => {
@@ -100,6 +108,14 @@ export const useLocationStore = create<LocationStore>((set, get) => ({
 
   moveLocation: async (id, newParentId) => {
     const now = Date.now()
+    const current = get().locations.find(l => l.id === id) ?? await db.importantLocations.get(id)
+    if (!current) return
+    const scope = await resolveScopeLike(current.projectId)
+    if (!await assertRecordInScope(scope, 'importantLocations', current, { owner: 'world' })) return
+    if (newParentId != null) {
+      const parent = await db.importantLocations.get(newParentId)
+      if (!parent || !await assertRecordInScope(scope, 'importantLocations', parent, { owner: 'world' })) return
+    }
     await db.importantLocations.update(id, {
       parentId: newParentId,
       updatedAt: now,

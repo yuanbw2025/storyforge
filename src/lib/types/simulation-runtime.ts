@@ -3,6 +3,7 @@ export const SIMULATION_SESSION_KINDS = [
   'npc-evolution',
   'ttrpg',
   'chatgame',
+  'storygame',
 ] as const
 export type SimulationSessionKind = typeof SIMULATION_SESSION_KINDS[number]
 
@@ -305,6 +306,12 @@ export interface SimulationSession {
   id?: number
   projectId: number
   worldGroupId?: number | null
+  /** WORLD-2F immutable release binding; legacy sessions may omit it. */
+  worldId?: number | null
+  workId?: number | null
+  worldReleaseId?: number | null
+  narrativeModuleId?: number | null
+  draftSnapshotHash?: string | null
   kind: SimulationSessionKind
   title: string
   status: SimulationSessionStatus

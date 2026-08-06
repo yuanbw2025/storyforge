@@ -19,6 +19,7 @@ export type DerivedMemoryReviewStatus = 'pending' | 'rebuilding' | 'verified' | 
 export interface NarrativeSummaryNode {
   id?: number
   projectId: number
+  workId?: number | null
   worldGroupId?: number | null
   level: NarrativeSummaryLevel
 

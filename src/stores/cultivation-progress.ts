@@ -1,12 +1,12 @@
 import { create } from 'zustand'
-import { db } from '../lib/db/schema'
 import type { CultivationProgress } from '../lib/types'
 import { deleteCultivationProgressEvent } from '../lib/cultivation/progress'
+import { readOwnedRows, resolveReadScopeLike, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 interface CultivationProgressStore {
   events: CultivationProgress[]
   loading: boolean
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   deleteEvent: (id: number) => Promise<void>
 }
 
@@ -14,9 +14,10 @@ export const useCultivationProgressStore = create<CultivationProgressStore>((set
   events: [],
   loading: false,
 
-  loadAll: async (projectId) => {
+  loadAll: async (scopeInput) => {
     set({ loading: true })
-    const events = await db.cultivationProgress.where('projectId').equals(projectId).toArray()
+    const scope = await resolveReadScopeLike(scopeInput)
+    const events = await readOwnedRows<CultivationProgress>(scope, 'cultivationProgress', { owner: 'work' })
     set({ events, loading: false })
   },
 

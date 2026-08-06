@@ -31,10 +31,6 @@ const LEGACY_WORLD_OR_WORK_OWNER = {
   },
 } as const satisfies DomainOwnershipSpec
 
-const LEGACY_INSTANCE_OWNER = {
-  allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'compat-project' },
-} as const satisfies DomainOwnershipSpec
-
 export const PROJECT_TABLES: TableSpec[] = [
   // ───────────────────────── 项目根表 ─────────────────────────
   { table: db.projects, name: 'projects', owner: 'project', exportable: true,
@@ -53,16 +49,26 @@ export const PROJECT_TABLES: TableSpec[] = [
   // WORLD-2C C1 added empty roots; C2 now creates/adopts them lazily on workspace entry.
   { table: db.worlds, name: 'worlds', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: WORKSPACE_DOMAIN_OWNER,
-    refs: [{ kind: 'simple', field: 'id', target: 'works[worldId]', onDelete: 'cascade' }],
+    refs: [
+      { kind: 'simple', field: 'id', target: 'works[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'worldRevisions[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'worldReleases[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'simulationSessions[worldId]', onDelete: 'cascade' },
+    ],
     note: 'WORLD-2C 显式世界根；公开身份和世界版本的未来权威' },
 
   { table: db.works, name: 'works', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
-    refs: [{ kind: 'simple', field: 'id', target: 'workCharacterBindings[workId]', onDelete: 'cascade' }],
+    refs: [
+      { kind: 'simple', field: 'id', target: 'workCharacterBindings[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'simulationSessions[workId]', onDelete: 'cascade' },
+    ],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'activeCharacterDrivenPlanId', remapVia: 'characterDrivenPlans',
         exportAs: '_activeCharacterDrivenPlanExportId' },
+      { field: 'activeNarrativeModuleId', remapVia: 'narrativeModules',
+        exportAs: '_activeNarrativeModuleExportId' },
     ],
     note: 'WORLD-2C 显式作品根；同一 World 可包含多部隔离作品' },
 
@@ -77,6 +83,26 @@ export const PROJECT_TABLES: TableSpec[] = [
   { table: db.ownershipMigrations, name: 'ownershipMigrations', owner: 'transient', exportable: false,
     domainOwner: WORKSPACE_DOMAIN_OWNER,
     note: 'WORLD-2C 惰性迁移的紧凑 before-image 和恢复凭证，不保存手稿正文' },
+
+  { table: db.worldRevisions, name: 'worldRevisions', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
+    worldDomains: ['foundation', 'narrative'],
+    tree: { parentField: 'parentRevisionId' },
+    refs: [{ kind: 'simple', field: 'id', target: 'worldReleases[revisionId]', onDelete: 'keep' }],
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'parentRevisionId', remapVia: 'worldRevisions', selfTree: true, exportAs: '_parentExportId' },
+    ],
+    note: 'WORLD-2E 可比较的世界草稿修订；manifest 为冻结快照' },
+
+  { table: db.worldReleases, name: 'worldReleases', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
+    worldDomains: ['foundation', 'narrative'], communityShare: 'world',
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'revisionId', remapVia: 'worldRevisions', exportAs: '_revisionExportId', onUnmapped: 'require' },
+    ],
+    note: 'WORLD-2E 不可变发布版本；运行实例只绑定该记录或显式草稿快照' },
 
   // ───────────────────── 世界观/设定(world-scoped 多)─────────────────────
   { table: db.worldviews, name: 'worldviews', owner: 'project', worldScoped: true, communityShare: 'world',
@@ -268,6 +294,23 @@ export const PROJECT_TABLES: TableSpec[] = [
       { kind: 'simple', field: 'id', target: 'storylineCrossings[arcIdB]', onDelete: 'cascade' },
     ] },
 
+  { table: db.narrativeModules, name: 'narrativeModules', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
+    worldDomains: ['narrative'], communityShare: 'world',
+    refs: [{ kind: 'simple', field: 'id', target: 'narrativeNodes[moduleId]', onDelete: 'cascade' }],
+    defaults: { description: '', status: 'draft', sourceProjection: 'custom', entryNodeKey: null },
+    note: 'WORLD-2D 主线/支线/任务/开局的单一可执行叙事来源' },
+
+  { table: db.narrativeNodes, name: 'narrativeNodes', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
+    worldDomains: ['narrative'], communityShare: 'world',
+    exportRemap: [
+      { field: 'moduleId', remapVia: 'narrativeModules', exportAs: '_moduleExportId', onUnmapped: 'require' },
+      { field: 'sourceOutlineNodeId', remapVia: 'outlineNodes', exportAs: '_sourceOutlineExportId' },
+    ],
+    defaults: { summary: '', conditionJson: '{}', effectsJson: '[]', successorKeysJson: '[]', order: 0 },
+    note: 'WORLD-2D 条件、选择、效果、后继和结局节点' },
+
   { table: db.characterDrivenPlans, name: 'characterDrivenPlans', owner: 'project',
     domainOwner: LEGACY_WORK_OWNER,
     exportable: true, exportIdField: true, tree: { parentField: 'parentPlanId' },
@@ -435,7 +478,7 @@ export const PROJECT_TABLES: TableSpec[] = [
 
   // ───────────────────── SIM-1 共享互动运行时 ─────────────────────
   { table: db.simulationSessions, name: 'simulationSessions', owner: 'project',
-    domainOwner: LEGACY_INSTANCE_OWNER,
+    domainOwner: { allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'field', owner: 'instance', field: 'id' } },
     worldScoped: true, exportable: true, exportIdField: true,
     worldDomains: ['runtime'],
     tree: { parentField: 'parentSessionId' },
@@ -448,6 +491,10 @@ export const PROJECT_TABLES: TableSpec[] = [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
       { field: 'parentSessionId', remapVia: 'simulationSessions', selfTree: true,
         exportAs: '_parentSessionExportId' },
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId' },
+      { field: 'worldReleaseId', remapVia: 'worldReleases', exportAs: '_worldReleaseExportId' },
+      { field: 'narrativeModuleId', remapVia: 'narrativeModules', exportAs: '_narrativeModuleExportId' },
     ],
     defaults: {
       kind: 'sandbox',
@@ -459,7 +506,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'SIM-1 独立互动世界实例；冻结创作来源，不反写 Canon；分支拥有独立事件流' },
 
   { table: db.simulationEvents, name: 'simulationEvents', owner: 'project',
-    domainOwner: LEGACY_INSTANCE_OWNER,
+    domainOwner: { allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'parent', owner: 'instance', table: 'simulationSessions', field: 'sessionId' } },
     worldScoped: true, exportable: true,
     worldDomains: ['runtime'],
     exportRemap: [
@@ -471,7 +518,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'SIM-1 严格追加事件；(sessionId,sequence) 唯一，状态、骰子、记忆和叙事均从事件回放' },
 
   { table: db.simulationCheckpoints, name: 'simulationCheckpoints', owner: 'project',
-    domainOwner: LEGACY_INSTANCE_OWNER,
+    domainOwner: { allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'parent', owner: 'instance', table: 'simulationSessions', field: 'sessionId' } },
     worldScoped: true, exportable: true,
     worldDomains: ['runtime'],
     exportRemap: [

@@ -6,7 +6,7 @@
  */
 import { PROJECT_TABLES } from '../registry/project-tables'
 
-export const CURRENT_BACKUP_VERSION = 3
+export const CURRENT_BACKUP_VERSION = 4
 
 export interface BackupTrustReport {
   valid: boolean

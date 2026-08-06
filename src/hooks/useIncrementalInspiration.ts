@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAIStream } from './useAIStream'
 import { createAISessionKey } from '../stores/ai-generation-session'
 import { useInspirationWorkspaceStore } from '../stores/inspiration-workspace'
@@ -18,6 +18,7 @@ import {
 } from '../lib/inspiration/workspace'
 import { assembleContext } from '../lib/registry/assemble-context'
 import type { Project } from '../lib/types'
+import type { WorkspaceScope } from '../lib/types/world-ownership'
 import type {
   InspirationResultMode,
   InspirationSourceKind,
@@ -30,9 +31,16 @@ export function useIncrementalInspiration(
 ) {
   const isMultiWorld = !!project.enableMultiWorld
   const mode: InspirationResultMode = isMultiWorld ? 'multiworld' : 'single'
-  const ai = useAIStream(createAISessionKey(project.id!, 'inspiration.reverse'))
+  const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
+    project.id != null && project.activeWorldId != null && project.activeWorkId != null
+      ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
+      : undefined
+  ), [project.activeWorkId, project.activeWorldId, project.id])
+  const scopeInput = workspaceScope ?? project.id!
+  const scopeKey = `${project.activeWorldId ?? 'legacy'}:${project.activeWorkId ?? 'legacy'}`
+  const ai = useAIStream(createAISessionKey(project.id!, 'inspiration.reverse', scopeKey))
   const workspace = useInspirationWorkspaceStore()
-  const draftKey = `sf-inspiration-draft-${project.id}`
+  const draftKey = `sf-inspiration-draft-${project.id}-${scopeKey}`
   const draftLoaded = useRef(false)
 
   const [inspiration, setInspiration] = useState('')
@@ -73,7 +81,7 @@ export function useIncrementalInspiration(
     setPendingParent(null)
     setAwaitingResult(false)
     setFusionError('')
-    void workspace.load(project.id!).then(() => {
+    void workspace.load(scopeInput).then(() => {
       if (!active) return
       const state = useInspirationWorkspaceStore.getState()
       setSelectedFragmentIds(new Set(state.fragments.map(fragment => fragment.id)))
@@ -84,7 +92,7 @@ export function useIncrementalInspiration(
     return () => { active = false }
   // Store methods are stable Zustand actions; mode changes reload the matching latest version.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.id, mode])
+  }, [project.id, mode, scopeInput])
 
   useEffect(() => {
     try {
@@ -158,7 +166,7 @@ export function useIncrementalInspiration(
       return null
     }
     try {
-      const fragment = await workspace.addFragment(project.id!, {
+      const fragment = await workspace.addFragment(scopeInput, {
         text: inspiration,
         label: fragmentLabel,
         sourceKind,
@@ -188,6 +196,7 @@ export function useIncrementalInspiration(
     const previousVersion = latestInspirationVersion(state.versions, mode)
     const assembled = await assembleContext({
       projectId: project.id!,
+      scope: workspaceScope,
       sourceKeys: ['inspirationWorkspace'],
       inspirationFragmentIds: [...selectedIds],
       inspirationMode: mode,
@@ -220,7 +229,7 @@ export function useIncrementalInspiration(
     if (!pendingResult || pendingDiff === null) return
     setConfirmingFusion(true)
     try {
-      await workspace.saveVersion(project.id!, {
+      await workspace.saveVersion(scopeInput, {
         mode,
         parentVersionId: pendingParent?.id ?? null,
         fragmentIds: pendingFragmentIds,
@@ -254,7 +263,7 @@ export function useIncrementalInspiration(
 
   const removeFragment = async (fragmentId: string) => {
     try {
-      await workspace.removeFragment(project.id!, fragmentId)
+      await workspace.removeFragment(scopeInput, fragmentId)
       setFusionError('')
       setSelectedFragmentIds(current => {
         const next = new Set(current)

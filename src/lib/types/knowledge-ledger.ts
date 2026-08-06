@@ -16,6 +16,7 @@ export type KnowledgeEventStatus =
 export interface KnowledgeLedgerEntry {
   id?: number
   projectId: number
+  workId?: number | null
   worldGroupId?: number | null
 
   /** 角色删除时置空但保留 characterName 和事件，避免静默丢记录。 */

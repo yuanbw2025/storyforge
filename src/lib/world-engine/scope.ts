@@ -4,7 +4,8 @@
  * 逻辑归属只从 PROJECT_TABLES.domainOwner 派生。这个模块不维护第二份表清单，
  * 也不允许调用方把 AI 返回的 owner id 当成可信输入。
  */
-import { resolveWorkspaceScope } from './ownership'
+import { resolveExistingWorkspaceScope, resolveWorkspaceScope } from './ownership'
+import type { Table } from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type { DomainOwnerKind, TableSpec } from '../registry/types'
@@ -21,6 +22,28 @@ export interface ScopeReadOptions {
   owner?: ScopeOwner
 }
 
+const LEGACY_READ_OWNER_ID = 0
+
+/** Transitional adapter: callers may still pass the physical project id, but
+ * new boundaries should carry the complete World/Work scope. */
+export type WorkspaceScopeLike = number | WorkspaceScope
+
+export function asScopeInput(value: WorkspaceScopeLike): ScopeInput {
+  return typeof value === 'number' ? { projectId: value } : { scope: value }
+}
+
+export function scopeProjectId(value: WorkspaceScopeLike): number {
+  return typeof value === 'number' ? value : value.projectId
+}
+
+export async function resolveScopeLike(value: WorkspaceScopeLike): Promise<WorkspaceScope> {
+  return resolveScope(asScopeInput(value))
+}
+
+export async function resolveReadScopeLike(value: WorkspaceScopeLike): Promise<WorkspaceScope> {
+  return resolveReadScope(asScopeInput(value))
+}
+
 const REGISTRY_BY_NAME = new Map(PROJECT_TABLES.map(spec => [spec.name, spec] as const))
 
 function fail(message: string): never {
@@ -30,7 +53,14 @@ function fail(message: string): never {
 export async function resolveScope(input: ScopeInput): Promise<WorkspaceScope> {
   if (input.scope) {
     const scope = input.scope
-    if (!Number.isInteger(scope.projectId) || !Number.isInteger(scope.worldId) || !Number.isInteger(scope.workId)) {
+    if (
+      !Number.isInteger(scope.projectId)
+      || !Number.isInteger(scope.worldId)
+      || !Number.isInteger(scope.workId)
+      || scope.projectId <= 0
+      || scope.worldId <= 0
+      || scope.workId <= 0
+    ) {
       fail('WorkspaceScope 必须包含有效的 projectId/worldId/workId')
     }
     if (input.projectId != null && input.projectId !== scope.projectId) {
@@ -48,6 +78,36 @@ export async function resolveScope(input: ScopeInput): Promise<WorkspaceScope> {
   }
   if (input.projectId == null) fail('缺少 projectId 或 WorkspaceScope')
   return resolveWorkspaceScope(input.projectId)
+}
+
+/**
+ * Read-only scope resolver. Fully migrated workspaces use their real roots;
+ * untouched legacy workspaces receive an internal sentinel that can only match
+ * rows with no World/Work owner fields. It never performs ownership migration.
+ */
+export async function resolveReadScope(input: ScopeInput): Promise<WorkspaceScope> {
+  if (input.scope) {
+    if (!isLegacyReadScope(input.scope)) return resolveScope(input)
+    const existing = await resolveExistingWorkspaceScope(input.scope.projectId)
+    if (existing) fail('旧项目只读 scope 不能用于已迁移的工作区')
+    return input.scope
+  }
+  if (input.projectId == null) fail('缺少 projectId 或 WorkspaceScope')
+  const existing = await resolveExistingWorkspaceScope(input.projectId)
+  return existing ?? {
+    projectId: input.projectId,
+    worldId: LEGACY_READ_OWNER_ID,
+    workId: LEGACY_READ_OWNER_ID,
+  }
+}
+
+export function isLegacyReadScope(scope: WorkspaceScope): boolean {
+  return scope.worldId === LEGACY_READ_OWNER_ID && scope.workId === LEGACY_READ_OWNER_ID
+}
+
+/** Tables required when a caller invokes a scope-validating write inside its own transaction. */
+export function scopeTransactionTables(...tables: Table[]): Table[] {
+  return [...new Set([db.projects, db.worlds, db.works, ...tables])]
 }
 
 export function getTableSpec(tableName: string): TableSpec {
@@ -80,10 +140,28 @@ function locatorOwner(spec: TableSpec, requested?: ScopeOwner): ScopeOwner | nul
 }
 
 function directOwnerMatches(spec: TableSpec, row: Record<string, unknown>, scope: WorkspaceScope, requested?: ScopeOwner): boolean {
-  if (rowProjectId(row) !== scope.projectId && spec.owner !== 'global') return false
+  const physicalProjectId = rowProjectId(row)
+  if (
+    spec.owner !== 'global'
+    && (
+      (spec.owner === 'project' || spec.owner === 'transient')
+        ? physicalProjectId !== scope.projectId
+        : physicalProjectId != null && physicalProjectId !== scope.projectId
+    )
+  ) return false
   const domain = spec.domainOwner
   if (!domain) return spec.owner === 'global' || rowProjectId(row) === scope.projectId
   const locator = domain.locator
+  if (isLegacyReadScope(scope)) {
+    if (locator.kind === 'workspace') return rowProjectId(row) === scope.projectId
+    if (locator.kind === 'exclusive-fields') {
+      return row[locator.worldField] == null && row[locator.workField] == null
+    }
+    if (locator.kind === 'field') return row[locator.field] == null
+    if (locator.kind === 'compat-project') return row.worldId == null && row.workId == null
+    // Parent locators are validated recursively by assertRecordInScope().
+    return rowProjectId(row) === scope.projectId
+  }
   if (locator.kind === 'workspace') return rowProjectId(row) === scope.projectId
   if (locator.kind === 'compat-project') {
     const owner = requested ?? (domain.legacyDefault as ScopeOwner)
@@ -161,6 +239,7 @@ export function stampNewRecord<T>(
   input: T,
   options: ScopeReadOptions = {},
 ): T {
+  if (isLegacyReadScope(scope)) fail(`${tableName} 不得使用只读兼容 scope 写入`)
   const spec = getTableSpec(tableName)
   const result: Record<string, unknown> = { ...(input as Record<string, unknown>), projectId: scope.projectId }
   const owner = locatorOwner(spec, options.owner)

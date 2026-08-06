@@ -201,8 +201,12 @@ describe('R-JUN17-B · 大纲生成流程', () => {
     expect(result.written).toHaveLength(1)
     expect((await db.outlineNodes.get(nodeId))?.summary).toBe('AI 补全后的卷纲')
 
+    const otherProjectId = await db.projects.add({
+      name: '其它定点采纳项目', genre: '', description: '', targetWordCount: 0,
+      enableMultiWorld: false, createdAt: now, updatedAt: now,
+    } as any) as number
     const rejected = await adopt({
-      projectId: projectId + 999,
+      projectId: otherProjectId,
       target: 'outlineNodes',
       recordId: nodeId,
       mode: 'replace',

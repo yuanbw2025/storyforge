@@ -16,6 +16,7 @@ import { inspectAuthoringGraphFreshness } from '../../src/lib/node-authoring/fre
 import { adoptAuthoringCandidate, runAuthoringGraph } from '../../src/lib/node-authoring/executor'
 import { buildRagLibrary } from '../../src/lib/retrieval/rag-library'
 import type { AIConfig, NodeFlow, Project } from '../../src/lib/types'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
 
 const project: Project = {
   id: 73003,
@@ -86,6 +87,19 @@ const detailDraft = JSON.stringify({
   }],
 })
 
+async function addNodeFlow(name: string, graphJson: string): Promise<number> {
+  const scope = await resolveScopeLike(project.id!)
+  return await db.nodeFlows.add(stampNewRecord(scope, 'nodeFlows', {
+    projectId: project.id!,
+    worldGroupId: null,
+    name,
+    description: '',
+    graphJson,
+    createdAt: 1,
+    updatedAt: 1,
+  }, { owner: 'work' }) as NodeFlow) as number
+}
+
 describe('FLOW-3C · 领域节点专用执行器', () => {
   beforeEach(async () => {
     await db.delete()
@@ -113,10 +127,10 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
   it('角色节点使用结构化角色 parser，并通过 roster 快照采纳', async () => {
     vi.mocked(chat).mockResolvedValue(characterDraft())
     const graphNode = node('character.profile', { request: '创建一名听见海床回声的主角' })
-    const flowId = await db.nodeFlows.add({
-      projectId: project.id!, worldGroupId: null, name: '角色领域节点', description: '',
-      graphJson: JSON.stringify({ ...emptyAuthoringGraph(), nodes: [graphNode] }), createdAt: 1, updatedAt: 1,
-    }) as number
+    const flowId = await addNodeFlow(
+      '角色领域节点',
+      JSON.stringify({ ...emptyAuthoringGraph(), nodes: [graphNode] }),
+    )
     const flow = await db.nodeFlows.get(flowId) as NodeFlow
     const graphRun = await runAuthoringGraph({ flow })
     expect(graphRun.candidates[graphNode.id].domain?.kind).toBe('character')
@@ -277,10 +291,10 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
       ref: { documentId: target!.documentId, fieldKey: 'motivation', target: 'characters' },
     }
     vi.mocked(chat).mockResolvedValue('为了让沉没城市重见天日。')
-    const flowId = await db.nodeFlows.add({
-      projectId: project.id!, worldGroupId: null, name: '角色维度绑定', description: '',
-      graphJson: JSON.stringify({ ...emptyAuthoringGraph(), nodes: [graphNode] }), createdAt: 1, updatedAt: 1,
-    }) as number
+    const flowId = await addNodeFlow(
+      '角色维度绑定',
+      JSON.stringify({ ...emptyAuthoringGraph(), nodes: [graphNode] }),
+    )
     const flow = await db.nodeFlows.get(flowId) as NodeFlow
     const result = await runAuthoringGraph({ flow })
     const adopted = await adoptAuthoringCandidate({ flow, nodeId: graphNode.id, output: result.candidates[graphNode.id].output })
@@ -303,10 +317,7 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
       }
     })
     const { graph, nodeIds } = buildAuthoringCreationChainGraph()
-    const flowId = await db.nodeFlows.add({
-      projectId: project.id!, worldGroupId: null, name: '完整创作链', description: '',
-      graphJson: JSON.stringify(graph), createdAt: 1, updatedAt: 1,
-    }) as number
+    const flowId = await addNodeFlow('完整创作链', JSON.stringify(graph))
     const flow = await db.nodeFlows.get(flowId) as NodeFlow
 
     const runAndAdopt = async (nodeId: string) => {

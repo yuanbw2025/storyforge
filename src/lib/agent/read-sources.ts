@@ -180,8 +180,8 @@ export async function readAgentSearchResults(input: AssembleContextInput): Promi
     kinds.has('location') && input.scope ? readOwnedRows<any>(input.scope, 'importantLocations', { owner: 'world' }) : [],
   ])
   const nodeById = new Map(outlineNodes.flatMap(node => node.id == null ? [] : [[node.id, node] as const]))
-  if (!outlineNodes.length && chapters.length) {
-    const projectNodes = await db.outlineNodes.where('projectId').equals(input.projectId).toArray()
+  if (!outlineNodes.length && chapters.length && input.scope) {
+    const projectNodes = await readOwnedRows<OutlineNode>(input.scope, 'outlineNodes', { owner: 'work' })
     for (const node of projectNodes) if (node.id != null) nodeById.set(node.id, node)
   }
   const targetWorld = normalizeWorldGroupId(input.worldGroupId)

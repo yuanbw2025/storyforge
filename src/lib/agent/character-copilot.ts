@@ -26,7 +26,15 @@ import type {
   CharacterMoralAxis,
   CharacterOrderAxis,
   CharacterRoleWeight,
+  WorkspaceScope,
 } from '../types'
+import {
+  isLegacyReadScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScope,
+  scopeTransactionTables,
+} from '../world-engine/scope'
 import {
   mergeContextEvidence,
   resolveAgentContextPolicy,
@@ -56,6 +64,7 @@ export interface CharacterRosterSnapshot {
 
 export interface CharacterCopilotInput {
   projectId: number
+  scope?: WorkspaceScope
   projectName: string
   genres: string
   worldGroupId: number | null
@@ -122,8 +131,10 @@ function isVisibleInScope(character: Character, worldGroupId: number | null): bo
 export async function readCharacterRosterSnapshot(
   projectId: number,
   worldGroupId: number | null,
+  scope?: WorkspaceScope,
 ): Promise<CharacterRosterSnapshot> {
-  const rows = await db.characters.where('projectId').equals(projectId).toArray()
+  const resolved = scope ?? await resolveReadScopeLike(projectId)
+  const rows = await readOwnedRows<Character>(resolved, 'characters', { owner: 'world' })
   const serialized = JSON.stringify(
     rows
       .map(character => ({
@@ -301,6 +312,7 @@ function candidateIssues(
 
 export async function prepareCharacterCopilot(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   authorRequest: string
   /** 主 Agent 可把尚未写库的上游候选作为本轮显式证据传入，绝不冒充 Canon。 */
@@ -318,7 +330,9 @@ export async function prepareCharacterCopilot(input: {
     throw new Error('多世界项目必须先选择一个世界，才能生成角色。')
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
-  const beforeRead = await readCharacterRosterSnapshot(input.projectId, worldGroupId)
+  const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
+  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const beforeRead = await readCharacterRosterSnapshot(input.projectId, worldGroupId, scope)
   const routingCategory = input.routingCategory ?? 'character.generate'
   const config = input.configOverride ?? resolveRequestConfig(
     useAIConfigStore.getState().config,
@@ -339,11 +353,12 @@ export async function prepareCharacterCopilot(input: {
   ])
   if (!worldview.ok) throw new Error(worldview.error || '无法读取当前世界观。')
   if (!characters.ok) throw new Error(characters.error || '无法读取当前角色。')
-  const afterRead = await readCharacterRosterSnapshot(input.projectId, worldGroupId)
+  const afterRead = await readCharacterRosterSnapshot(input.projectId, worldGroupId, scope)
   if (beforeRead.serialized !== afterRead.serialized) throw new CharacterCopilotStaleError()
 
   const nodeInput: CharacterCopilotInput = {
     projectId: input.projectId,
+    scope,
     projectName: project.name,
     genres: project.genres?.join('/') || project.genre || '',
     worldGroupId,
@@ -380,14 +395,15 @@ export function createCharacterCopilotNode(
   dependencies: CharacterCopilotDependencies = {},
 ): GenerationNode<CharacterCopilotInput, CharacterCopilotCandidate, AdoptResult> {
   const readCurrent = dependencies.readCurrent
-    ?? (() => readCharacterRosterSnapshot(input.projectId, input.worldGroupId))
-  const saveCharacter = dependencies.saveCharacter ?? (candidate => db.transaction(
-    'rw',
-    db.characters,
-    db.temporalFacts,
-    async () => {
+    ?? (() => readCharacterRosterSnapshot(input.projectId, input.worldGroupId, input.scope))
+  const saveCharacter = dependencies.saveCharacter ?? (async candidate => {
+    const workspaceScope = await resolveScope({ projectId: input.projectId, scope: input.scope })
+    return db.transaction(
+      'rw',
+      scopeTransactionTables(db.characters, db.temporalFacts),
+      async () => {
       // 将最终重复/过期检查与 adopt 写回锁进同一事务，避免多标签页在二者之间插入同名角色。
-      const lockedCurrent = await readCharacterRosterSnapshot(input.projectId, input.worldGroupId)
+      const lockedCurrent = await readCharacterRosterSnapshot(input.projectId, input.worldGroupId, workspaceScope)
       if (lockedCurrent.serialized !== input.snapshot.serialized) {
         throw new CharacterCopilotStaleError()
       }
@@ -396,6 +412,7 @@ export function createCharacterCopilotNode(
       }
       return adopt({
         projectId: input.projectId,
+        scope: workspaceScope,
         worldGroupId: input.worldGroupId,
         target: 'characters',
         mode: 'add',
@@ -404,8 +421,9 @@ export function createCharacterCopilotNode(
           isCrossWorld: false,
         },
       })
-    },
-  ))
+      },
+    )
+  })
   const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
     category: input.routingCategory ?? 'character.generate',
     projectId: input.projectId,
@@ -455,23 +473,25 @@ export function createCharacterCopilotNode(
 /** 节点执行器与聊天副驾共用的正式角色采纳入口。 */
 export async function adoptCharacterCopilotCandidate(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   snapshot: CharacterRosterSnapshot
   candidate: CharacterCopilotCandidate
 }): Promise<AdoptResult> {
   const parsed = parseCharacterCandidateDraft(JSON.stringify(input.candidate))
+  const workspaceScope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   return db.transaction(
     'rw',
-    db.characters,
-    db.temporalFacts,
+    scopeTransactionTables(db.characters, db.temporalFacts),
     async () => {
-      const current = await readCharacterRosterSnapshot(input.projectId, input.worldGroupId)
+      const current = await readCharacterRosterSnapshot(input.projectId, input.worldGroupId, workspaceScope)
       if (current.serialized !== input.snapshot.serialized) throw new CharacterCopilotStaleError()
       if (current.visibleNames.includes(normalizeName(parsed.name))) {
         throw new CharacterCopilotDuplicateError(parsed.name)
       }
       return adopt({
         projectId: input.projectId,
+        scope: workspaceScope,
         worldGroupId: input.worldGroupId,
         target: 'characters',
         mode: 'add',

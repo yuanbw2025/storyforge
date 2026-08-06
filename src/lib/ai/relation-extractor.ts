@@ -9,6 +9,7 @@ import type { Character, ChatMessage, RelationType } from '../types'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from './prompt-engine'
 import { characterAxesLabel } from '../character/character-axes'
+import { readOwnedRows, resolveReadScopeLike } from '../world-engine/scope'
 
 /** AI 返回的原始关系条目 */
 export interface ExtractedRelation {
@@ -35,15 +36,17 @@ export async function buildRelationExtractPrompt(
   projectId: number,
   characters: Character[],
 ): Promise<ChatMessage[]> {
+  const scope = await resolveReadScopeLike(projectId)
+  const ownedCharacters = await readOwnedRows<Character>(scope, 'characters', { owner: 'world' })
+  const ownedCharacterIds = new Set(ownedCharacters.flatMap(character => character.id == null ? [] : [character.id]))
   // 1. 角色列表
   const characterList = characters
+    .filter(character => character.id != null && ownedCharacterIds.has(character.id))
     .map(c => `- ${c.name}（${characterAxesLabel(c)}）${c.shortDescription ? '：' + c.shortDescription : ''}`)
     .join('\n')
 
   // 2. 大纲摘要
-  const outlineNodes = await db.outlineNodes
-    .where('projectId').equals(projectId)
-    .toArray()
+  const outlineNodes = await readOwnedRows<any>(scope, 'outlineNodes', { owner: 'work' })
   const outlineSummary = outlineNodes
     .filter(n => n.summary)
     .sort((a, b) => a.order - b.order)
@@ -51,9 +54,7 @@ export async function buildRelationExtractPrompt(
     .join('\n')
 
   // 3. 章节正文（取前 N 章，控制总 token）
-  const chapters = await db.chapters
-    .where('projectId').equals(projectId)
-    .toArray()
+  const chapters = await readOwnedRows<any>(scope, 'chapters', { owner: 'work' })
   const sortedChapters = chapters
     .filter(c => c.content && c.content.length > 50)
     .sort((a, b) => a.order - b.order)

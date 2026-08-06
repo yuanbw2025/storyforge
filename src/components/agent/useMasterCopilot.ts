@@ -12,7 +12,7 @@ import {
   type ExecutedMasterCandidate,
   type MasterCandidatePayload,
 } from '../../lib/agent/orchestrator'
-import type { AgentEvent, Project } from '../../lib/types'
+import type { AgentEvent, Project, WorkspaceScope } from '../../lib/types'
 import { parseAgentEventPayload } from '../../lib/types'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -39,11 +39,16 @@ export function useMasterCopilot(input: {
   const [loading, setLoading] = useState(true)
   const abortRef = useRef<AbortController | null>(null)
   const runtimeCandidates = useRef(new Map<number, ExecutedMasterCandidate>())
-  const scopeKey = `${project.id}:${worldGroupId ?? 'global'}`
+  const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
+    project.id != null && project.activeWorldId != null && project.activeWorkId != null
+      ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
+      : undefined
+  ), [project.activeWorkId, project.activeWorldId, project.id])
+  const scopeKey = `${project.id}:${project.activeWorldId ?? 'legacy'}:${project.activeWorkId ?? 'legacy'}:${worldGroupId ?? 'global'}`
 
   const reload = useCallback(async (id: number) => {
-    setEvents(await readAgentEvents(id))
-  }, [])
+    setEvents(await readAgentEvents(id, workspaceScope))
+  }, [workspaceScope])
 
   useEffect(() => {
     let active = true
@@ -55,10 +60,11 @@ export function useMasterCopilot(input: {
       const conversation = await getOrCreateAgentConversation({
         projectId: project.id!,
         worldGroupId,
+        scope: workspaceScope,
       })
       if (!active) return
       setConversationId(conversation.id!)
-      let rows = await readAgentEvents(conversation.id!)
+      let rows = await readAgentEvents(conversation.id!, workspaceScope)
       if (!rows.length) {
         await appendAgentEvent({
           projectId: project.id!,
@@ -66,8 +72,9 @@ export function useMasterCopilot(input: {
           kind: 'message',
           role: 'assistant',
           content: '直接告诉我你想完成什么。我会理解目标、调用需要的领域 Agent，并把结果统一交给你确认。',
+          scope: workspaceScope,
         })
-        rows = await readAgentEvents(conversation.id!)
+        rows = await readAgentEvents(conversation.id!, workspaceScope)
       }
       if (active) {
         setEvents(rows)
@@ -83,7 +90,7 @@ export function useMasterCopilot(input: {
       active = false
       abortRef.current?.abort()
     }
-  }, [project.id, scopeKey, worldGroupId])
+  }, [project.id, scopeKey, workspaceScope, worldGroupId])
 
   const pendingCandidates = useMemo(() => {
     const resolved = new Set<number>()
@@ -122,6 +129,7 @@ export function useMasterCopilot(input: {
         kind: 'message',
         role: 'user',
         content: request,
+        scope: workspaceScope,
       })
       await reload(conversationId)
       const teamBudget = new AgentTeamBudgetTracker(
@@ -129,6 +137,7 @@ export function useMasterCopilot(input: {
       )
       const plan = await createMasterAgentPlan({
         projectId: project.id!,
+        scope: workspaceScope,
         worldGroupId,
         request,
         budget: teamBudget,
@@ -140,6 +149,7 @@ export function useMasterCopilot(input: {
         kind: 'plan',
         content: plan.summary,
         payload: plan,
+        scope: workspaceScope,
       })
       await appendAgentEvent({
         projectId: project.id!,
@@ -147,12 +157,14 @@ export function useMasterCopilot(input: {
         kind: 'message',
         role: 'assistant',
         content: `${plan.summary} 我会在后台完成 ${plan.tasks.length} 个领域任务。`,
+        scope: workspaceScope,
       })
       await reload(conversationId)
 
       let taskQueue = Promise.resolve()
       const candidates = await executeMasterAgentPlan({
         projectId: project.id!,
+        scope: workspaceScope,
         worldGroupId,
         plan,
         budget: teamBudget,
@@ -165,6 +177,7 @@ export function useMasterCopilot(input: {
               kind: 'task',
               content: error || task.instruction,
               payload: { taskId: task.id, agentId: task.agentId, status, error },
+              scope: workspaceScope,
             })
           })
         },
@@ -177,6 +190,7 @@ export function useMasterCopilot(input: {
           kind: 'candidate',
           content: candidate.draft,
           payload: candidate.payload,
+          scope: workspaceScope,
         })
         runtimeCandidates.current.set(event.id!, candidate)
       }
@@ -185,13 +199,14 @@ export function useMasterCopilot(input: {
         conversationId,
         kind: 'message',
         role: 'assistant',
-        content: [
+          content: [
           `后台领域 Agent 已完成，生成了 ${candidates.length} 份候选。请检查、编辑并决定是否采纳。`,
           `本轮团队约使用 ${teamBudget.snapshot().usedTokens.toLocaleString()} / `
           + `${teamBudget.snapshot().maxTokens.toLocaleString()} tokens，`
           + `${teamBudget.snapshot().calls} 次调用，`
           + `Canon 受控打回 ${teamBudget.snapshot().canonRetries} 次。`,
-        ].join(' '),
+          ].join(' '),
+          scope: workspaceScope,
       })
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -201,6 +216,7 @@ export function useMasterCopilot(input: {
           conversationId,
           kind: 'error',
           content: message,
+          scope: workspaceScope,
         })
         await appendAgentEvent({
           projectId: project.id!,
@@ -208,6 +224,7 @@ export function useMasterCopilot(input: {
           kind: 'message',
           role: 'assistant',
           content: `本轮没有完成：${message}`,
+          scope: workspaceScope,
         })
       }
     } finally {
@@ -223,12 +240,13 @@ export function useMasterCopilot(input: {
     project.id,
     reload,
     worldGroupId,
+    workspaceScope,
   ])
 
   const updateCandidate = useCallback(async (eventId: number, draft: string) => {
-    await updateAgentEventCandidate(eventId, project.id!, draft)
+    await updateAgentEventCandidate(eventId, project.id!, draft, workspaceScope)
     setEvents(current => current.map(event => event.id === eventId ? { ...event, content: draft } : event))
-  }, [project.id])
+  }, [project.id, workspaceScope])
 
   const resolveCandidate = useCallback(async (
     candidate: PendingMasterCandidate,
@@ -241,6 +259,7 @@ export function useMasterCopilot(input: {
       if (decision === 'adopted') {
         message = await adoptMasterCandidate({
           projectId: project.id!,
+          scope: workspaceScope,
           worldGroupId,
           event: candidate.event,
           payload: candidate.payload,
@@ -254,6 +273,7 @@ export function useMasterCopilot(input: {
         kind: 'confirmation',
         content: message,
         payload: { candidateEventId: candidate.event.id, decision },
+        scope: workspaceScope,
       })
       await appendAgentEvent({
         projectId: project.id!,
@@ -261,6 +281,7 @@ export function useMasterCopilot(input: {
         kind: 'message',
         role: 'assistant',
         content: message,
+        scope: workspaceScope,
       })
       runtimeCandidates.current.delete(candidate.event.id)
     } catch (error) {
@@ -270,12 +291,13 @@ export function useMasterCopilot(input: {
         kind: 'message',
         role: 'assistant',
         content: errorMessage(error),
+        scope: workspaceScope,
       })
     } finally {
       setBusy(false)
       await reload(conversationId)
     }
-  }, [busy, conversationId, project.id, reload, worldGroupId])
+  }, [busy, conversationId, project.id, reload, workspaceScope, worldGroupId])
 
   const stop = useCallback(() => abortRef.current?.abort(), [])
 

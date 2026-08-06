@@ -118,6 +118,68 @@ export async function seedFullProject() {
   const chapNode = await db.outlineNodes.add({ projectId, worldGroupId: wgA, parentId: vol, type: 'chapter', title: '第1章', summary: '觉醒', order: 0, createdAt: now, updatedAt: now } as any) as number
   const chapter = await db.chapters.add({ projectId, outlineNodeId: chapNode, title: '第1章', content: '<p>废墟中睁眼</p>', wordCount: 6, status: 'draft', order: 0, createdAt: now, updatedAt: now } as any) as number
   await db.detailedOutlines.add({ projectId, outlineNodeId: chapNode, openingHook: '承接', endingCliffhanger: '黑影', appearingCharacterIds: [char1], scenes: [{ sceneId: 's1', title: '苏醒', summary: '醒来', characterIds: [char1], location: '废墟', conflict: '失忆' }], createdAt: now, updatedAt: now } as any)
+
+  // ── WORLD-2D/2E 可执行叙事与不可变发布 ──
+  const narrativeModule = await db.narrativeModules.add({
+    projectId,
+    kind: 'main',
+    title: '青云主线',
+    description: '从山门启程',
+    status: 'ready',
+    sourceProjection: 'outline',
+    sourceRefId: chapNode,
+    entryNodeKey: 'entry',
+    createdAt: now,
+    updatedAt: now,
+  }) as number
+  await db.narrativeNodes.add({
+    projectId,
+    moduleId: narrativeModule,
+    key: 'entry',
+    kind: 'entry',
+    title: '踏入山门',
+    summary: '从主线入口开始',
+    conditionJson: '{}',
+    effectsJson: '[]',
+    successorKeysJson: '[]',
+    sourceOutlineNodeId: chapNode,
+    order: 0,
+    createdAt: now,
+    updatedAt: now,
+  })
+  await db.works.update(workId, { activeNarrativeModuleId: narrativeModule })
+  const releaseManifest = JSON.stringify({
+    schema: 'storyforge.world-package',
+    version: 2,
+    worldCode: 'world-full-fixture',
+    worldName: '全量世界',
+    workTitle: '全量作品',
+    selectedTables: ['narrativeModules', 'narrativeNodes'],
+    selectedNarrativeModules: [{ exportId: 0, kind: 'main', title: '青云主线' }],
+    dependencies: [],
+    records: {},
+    portableProject: {},
+  })
+  const worldRevision = await db.worldRevisions.add({
+    projectId,
+    parentRevisionId: null,
+    revision: 1,
+    label: '初始修订',
+    manifestJson: releaseManifest,
+    contentHash: 'fixture-release-hash',
+    createdAt: now,
+    updatedAt: now,
+  } as any) as number
+  const worldRelease = await db.worldReleases.add({
+    projectId,
+    revisionId: worldRevision,
+    version: 1,
+    label: '世界 v1',
+    manifestJson: releaseManifest,
+    contentHash: 'fixture-release-hash',
+    sourceWorldCode: 'world-full-fixture',
+    createdAt: now,
+  } as any) as number
   await db.emotionBeatCards.add({ projectId, chapterId: chapter, overallArc: '低落→振奋', beats: '[]', createdAt: now, updatedAt: now } as any)
   await db.cultivationProgress.add({
     projectId,
@@ -277,6 +339,11 @@ export async function seedFullProject() {
   const simulationParent = await db.simulationSessions.add({
     projectId,
     worldGroupId: wgA,
+    worldId,
+    workId,
+    worldReleaseId: worldRelease,
+    narrativeModuleId: narrativeModule,
+    draftSnapshotHash: null,
     kind: 'ttrpg',
     title: '青云山战役',
     status: 'active',
@@ -299,6 +366,11 @@ export async function seedFullProject() {
   const simulationChild = await db.simulationSessions.add({
     projectId,
     worldGroupId: wgA,
+    worldId,
+    workId,
+    worldReleaseId: worldRelease,
+    narrativeModuleId: narrativeModule,
+    draftSnapshotHash: null,
     kind: 'ttrpg',
     title: '青云山战役 · 分支',
     status: 'active',
@@ -362,6 +434,7 @@ export async function seedFullProject() {
     projectId, wgA, wgB, char1, char2, vol, chapNode, chapter, temporalFact, ref1,
     cat, subCat, rootWorld, mirrorWorld, locParent, cultivationSystem, codexEntry,
     characterDrivenPlan, simulationParent, simulationChild, worldId, workId,
+    narrativeModule, worldRevision, worldRelease,
   }
 }
 

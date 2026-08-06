@@ -6,6 +6,7 @@ import { db } from '../lib/db/schema'
 import type { StateCard, StateCategory, StateDiffItem, StateField } from '../lib/types'
 import { parseFields, stringifyFields } from '../lib/types/state-card'
 import { adopt } from '../lib/registry/adopt'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 const now = () => Date.now()
 
@@ -14,7 +15,7 @@ interface StateCardStore {
   loading: boolean
 
   /** 加载项目的全部状态卡 */
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
 
   /** 新增一张状态卡 */
   addCard: (card: Omit<StateCard, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
@@ -26,7 +27,7 @@ interface StateCardStore {
   deleteCard: (id: number) => Promise<void>
 
   /** 批量应用 diff（用于章后审核确认） */
-  applyDiffs: (projectId: number, diffs: StateDiffItem[], chapterId?: number) => Promise<void>
+  applyDiffs: (scope: WorkspaceScopeLike, diffs: StateDiffItem[], chapterId?: number) => Promise<void>
 
   /** 构建用于 AI 注入的状态表文本（全量） */
   buildStateContext: () => string
@@ -43,10 +44,10 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
   cards: [],
   loading: false,
 
-  loadAll: async (projectId: number) => {
+  loadAll: async (scopeInput: WorkspaceScopeLike) => {
     set({ loading: true })
     try {
-      const cards = await db.stateCards.where('projectId').equals(projectId).toArray()
+      const cards = await readOwnedRows<StateCard>(await resolveScopeLike(scopeInput), 'stateCards', { owner: 'work' })
       set({ cards, loading: false })
     } catch (err) {
       console.error('[StateCard] loadAll 失败:', err)
@@ -56,7 +57,12 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
 
   addCard: async (card) => {
     try {
-      const newCard: StateCard = { ...card, createdAt: now(), updatedAt: now() }
+      const newCard = stampNewRecord(
+        await resolveScopeLike(card.projectId),
+        'stateCards',
+        { ...card, createdAt: now(), updatedAt: now() } as StateCard,
+        { owner: 'work' },
+      ) as StateCard
       const id = await db.stateCards.add(newCard) as number
       set({ cards: [...get().cards, { ...newCard, id }] })
       console.log('[StateCard] 新增:', card.entityName, id)
@@ -69,6 +75,8 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
 
   updateCard: async (id, data) => {
     try {
+      const current = get().cards.find(c => c.id === id) ?? await db.stateCards.get(id)
+      if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'stateCards', current, { owner: 'work' })) return
       const patch = { ...data, updatedAt: now() }
       await db.stateCards.update(id, patch)
       set({ cards: get().cards.map(c => c.id === id ? { ...c, ...patch } : c) })
@@ -80,6 +88,8 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
 
   deleteCard: async (id) => {
     try {
+      const current = get().cards.find(c => c.id === id) ?? await db.stateCards.get(id)
+      if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'stateCards', current, { owner: 'work' })) return
       await db.stateCards.delete(id)
       set({ cards: get().cards.filter(c => c.id !== id) })
       console.log('[StateCard] 删除:', id)
@@ -89,10 +99,12 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
     }
   },
 
-  applyDiffs: async (projectId, diffs, chapterId) => {
+  applyDiffs: async (scopeInput, diffs, chapterId) => {
+    const scope = await resolveScopeLike(scopeInput)
+    const projectId = scope.projectId
     const { cards } = get()
     const knownCharacters = new Set(
-      (await db.characters.where('projectId').equals(projectId).toArray())
+      (await readOwnedRows<any>(scope, 'characters', { owner: 'world' }))
         .map(character => character.name.trim().toLocaleLowerCase()),
     )
     const validDiffs = diffs.filter(diff =>
@@ -127,6 +139,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
     try {
       const result = await adopt({
         projectId,
+        scope,
         target: 'stateCards',
         mode: 'add-many',
         data: [...byEntity.values()].map(acc => ({
@@ -136,7 +149,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
           lastChapterId: chapterId ?? null,
         })),
       })
-      const refreshed = await db.stateCards.where('projectId').equals(projectId).toArray()
+      const refreshed = await readOwnedRows<StateCard>(scope, 'stateCards', { owner: 'work' })
       set({ cards: refreshed })
       console.log(`[StateCard] applyDiffs: ${validDiffs.length} 条角色变更已应用（实体 ${byEntity.size}，写入 ${result.written.length}）`)
     } catch (err) {

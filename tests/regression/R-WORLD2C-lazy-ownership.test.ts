@@ -54,6 +54,17 @@ async function createLegacyProject(name = '旧分步骤项目') {
 }
 
 async function stripC1Roots(projectId: number) {
+  await db.narrativeNodes.where('projectId').equals(projectId).delete()
+  await db.narrativeModules.where('projectId').equals(projectId).delete()
+  await db.worldReleases.where('projectId').equals(projectId).delete()
+  await db.worldRevisions.where('projectId').equals(projectId).delete()
+  await db.simulationSessions.where('projectId').equals(projectId).modify(session => {
+    delete session.worldId
+    delete session.workId
+    delete session.worldReleaseId
+    delete session.narrativeModuleId
+    delete session.draftSnapshotHash
+  })
   await db.workCharacterBindings.where('projectId').equals(projectId).delete()
   await db.works.where('projectId').equals(projectId).delete()
   await db.worlds.where('projectId').equals(projectId).delete()
@@ -106,11 +117,11 @@ describe('WORLD-2C C2 · lazy workspace ownership migration', () => {
   it('完整旧项目迁移为一个默认 World/Work，保留业务主键、正文和引用', async () => {
     const seeded = await seedFullProject()
     const chapterBefore = await db.chapters.get(seeded.chapter)
+    await stripC1Roots(seeded.projectId)
     const exportableCountsBefore = Object.fromEntries(await Promise.all(
       PROJECT_TABLES.filter(spec => spec.exportable && !['projects', 'worlds', 'works', 'workCharacterBindings'].includes(spec.name))
         .map(async spec => [spec.name, await spec.table.count()] as const),
     ))
-    await stripC1Roots(seeded.projectId)
 
     const result = await ensureWorkspaceOwnership(seeded.projectId)
     const project = await db.projects.get(seeded.projectId)

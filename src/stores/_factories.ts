@@ -12,7 +12,7 @@
 import { create } from 'zustand'
 import type { Table, UpdateSpec } from 'dexie'
 import { db } from '../lib/db/schema'
-import { getTableSpec, readOwnedRows, resolveScope, stampNewRecord } from '../lib/world-engine/scope'
+import { getTableSpec, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 const now = () => Date.now()
 
@@ -41,7 +41,7 @@ export type ProjectSingletonStore<K extends string, T extends ProjectScopedRecor
   loading: boolean
   /** 当前加载的世界组（null = 单世界 / 未指定，Phase 25.4） */
   activeWorldGroupId: number | null
-  loadAll: (projectId: number, worldGroupId?: number | null) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
   save: (data: Partial<T>) => Promise<void>
 } & { [P in K]: T | null }
 
@@ -84,9 +84,9 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
     return {
       ...initialState,
 
-      loadAll: async (projectId: number, worldGroupId: number | null = null) => {
+      loadAll: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
         set({ loading: true, activeWorldGroupId: worldGroupId } as unknown as Partial<State> as State)
-        const scope = await resolveScope({ projectId })
+        const scope = await resolveScopeLike(scopeInput)
         const owner = getTableSpec(String(table)).domainOwner?.legacyDefault
         const scopedRows = await readOwnedRows<T>(scope, String(table), {
           owner: owner === 'world' || owner === 'work' ? owner : undefined,
@@ -111,7 +111,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
         // （与 saveWorldview 同类修复：单例表应每 (projectId, worldGroupId) 仅一条）
         const projectId = data.projectId ?? (current as { projectId?: number } | null)?.projectId
         if (!current?.id && projectId != null) {
-          const scope = await resolveScope({ projectId })
+          const scope = await resolveScopeLike(projectId)
           const owner = getTableSpec(String(table)).domainOwner?.legacyDefault
           const all = await readOwnedRows<T>(scope, String(table), {
             owner: owner === 'world' || owner === 'work' ? owner : undefined,
@@ -135,7 +135,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
 
         if (data.projectId) {
           const ts = now()
-          const scope = await resolveScope({ projectId: data.projectId })
+          const scope = await resolveScopeLike(data.projectId)
           const toInsert = stampNewRecord(scope, String(table), {
             ...(defaults as object),
             projectId: data.projectId,

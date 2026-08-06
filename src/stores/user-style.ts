@@ -20,6 +20,15 @@ import type {
   StyleRevisionPair,
   UserStyleProfile,
 } from '../lib/types/user-style'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  stampNewRecord,
+  type WorkspaceScopeLike,
+} from '../lib/world-engine/scope'
+import type { WorkspaceScope } from '../lib/types/world-ownership'
 
 interface SaveProfileInput {
   profile: string
@@ -48,7 +57,7 @@ interface UserStyleState {
   loading: boolean
 
   /** 加载项目文风画像(无则置 null,不自动建空记录) */
-  loadProfile: (projectId: number) => Promise<void>
+  loadProfile: (scope: WorkspaceScopeLike) => Promise<void>
   /** 保存/覆盖画像(AI 学习完成后调;upsert,默认开启注入) */
   saveProfile: (projectId: number, input: SaveProfileInput) => Promise<void>
   /** 手动改写画像文本并保存 */
@@ -72,14 +81,14 @@ interface UserStyleState {
 }
 
 async function upsertProfileRow(
-  projectId: number,
+  scope: WorkspaceScope,
   patch: Partial<UserStyleProfile>,
 ): Promise<UserStyleProfile> {
   const now = Date.now()
-  const existing = await db.userStyleProfiles.where('projectId').equals(projectId).first()
-  const row: UserStyleProfile = {
+  const existing = (await readOwnedRows<UserStyleProfile>(scope, 'userStyleProfiles', { owner: 'work' }))[0]
+  const row = stampNewRecord(scope, 'userStyleProfiles', {
     ...(existing ?? {}),
-    projectId,
+    projectId: scope.projectId,
     profile: existing?.profile ?? '',
     enabled: existing?.enabled ?? false,
     sourceChapterIds: existing?.sourceChapterIds ?? '[]',
@@ -88,7 +97,7 @@ async function upsertProfileRow(
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     ...patch,
-  }
+  } as UserStyleProfile, { owner: 'work' }) as UserStyleProfile
   if (existing?.id != null) {
     await db.userStyleProfiles.update(existing.id, row)
     return { ...row, id: existing.id }
@@ -101,10 +110,14 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
   profile: null,
   loading: false,
 
-  loadProfile: async (projectId: number) => {
+  loadProfile: async (scopeInput) => {
     set({ loading: true })
     try {
-      const profile = await db.userStyleProfiles.where('projectId').equals(projectId).first()
+      const profile = (await readOwnedRows<UserStyleProfile>(
+        await resolveReadScopeLike(scopeInput),
+        'userStyleProfiles',
+        { owner: 'work' },
+      ))[0]
       set({ profile: profile ?? null })
     } finally {
       set({ loading: false })
@@ -113,8 +126,9 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
 
   saveProfile: async (projectId, input) => {
     const now = Date.now()
-    const existing = await db.userStyleProfiles.where('projectId').equals(projectId).first()
-    const row: UserStyleProfile = {
+    const scope = await resolveScopeLike(projectId)
+    const existing = (await readOwnedRows<UserStyleProfile>(scope, 'userStyleProfiles', { owner: 'work' }))[0]
+    const row = stampNewRecord(scope, 'userStyleProfiles', {
       ...(existing ?? {}),
       projectId,
       profile: input.profile,
@@ -126,7 +140,7 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
       sampleWords: input.sampleWords,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-    }
+    } as UserStyleProfile, { owner: 'work' }) as UserStyleProfile
     if (existing?.id != null) {
       await db.userStyleProfiles.update(existing.id, row)
       set({ profile: { ...row, id: existing.id } })
@@ -139,6 +153,9 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
   updateProfileText: async (text) => {
     const { profile } = get()
     if (!profile?.id) return
+    const scope = await resolveScopeLike(profile.projectId)
+    const current = await db.userStyleProfiles.get(profile.id)
+    if (!current || !await assertRecordInScope(scope, 'userStyleProfiles', current, { owner: 'work' })) return
     const updatedAt = Date.now()
     await db.userStyleProfiles.update(profile.id, { profile: text, updatedAt })
     set({ profile: { ...profile, profile: text, updatedAt } })
@@ -147,6 +164,9 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
   setEnabled: async (enabled) => {
     const { profile } = get()
     if (!profile?.id) return
+    const scope = await resolveScopeLike(profile.projectId)
+    const current = await db.userStyleProfiles.get(profile.id)
+    if (!current || !await assertRecordInScope(scope, 'userStyleProfiles', current, { owner: 'work' })) return
     const updatedAt = Date.now()
     await db.userStyleProfiles.update(profile.id, { enabled, updatedAt })
     set({ profile: { ...profile, enabled, updatedAt } })
@@ -155,12 +175,13 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
   captureRevisionPair: async (projectId, input) => {
     const pair = createStyleRevisionPair(input)
     if (!pair) return null
-    const existing = await db.userStyleProfiles.where('projectId').equals(projectId).first()
+    const scope = await resolveScopeLike(projectId)
+    const existing = (await readOwnedRows<UserStyleProfile>(scope, 'userStyleProfiles', { owner: 'work' }))[0]
     const revisionPairs = upsertStyleRevisionPair(
       parseStyleRevisionPairs(existing?.revisionPairs),
       pair,
     )
-    const row = await upsertProfileRow(projectId, {
+    const row = await upsertProfileRow(scope, {
       revisionPairs: JSON.stringify(revisionPairs),
     })
     set({ profile: row })
@@ -170,6 +191,9 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
   updateRevisionPairNote: async (pairId, note) => {
     const { profile } = get()
     if (profile?.id == null) return
+    const scope = await resolveScopeLike(profile.projectId)
+    const current = await db.userStyleProfiles.get(profile.id)
+    if (!current || !await assertRecordInScope(scope, 'userStyleProfiles', current, { owner: 'work' })) return
     const revisionPairs = parseStyleRevisionPairs(profile.revisionPairs)
       .map(pair => pair.id === pairId
         ? { ...pair, authorNote: note.trim().slice(0, 240) || undefined }
@@ -183,6 +207,9 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
   removeRevisionPair: async (pairId) => {
     const { profile } = get()
     if (profile?.id == null) return
+    const scope = await resolveScopeLike(profile.projectId)
+    const current = await db.userStyleProfiles.get(profile.id)
+    if (!current || !await assertRecordInScope(scope, 'userStyleProfiles', current, { owner: 'work' })) return
     const revisionPairs = parseStyleRevisionPairs(profile.revisionPairs)
       .filter(pair => pair.id !== pairId)
     const updatedAt = Date.now()
@@ -193,13 +220,14 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
 
   addCalibrationFeedback: async (projectId, input) => {
     const feedback = createStyleCalibrationFeedback(input)
-    const existing = await db.userStyleProfiles.where('projectId').equals(projectId).first()
+    const scope = await resolveScopeLike(projectId)
+    const existing = (await readOwnedRows<UserStyleProfile>(scope, 'userStyleProfiles', { owner: 'work' }))[0]
     const calibrationFeedback = [
       feedback,
       ...parseStyleCalibrationFeedback(existing?.calibrationFeedback)
         .filter(item => item.id !== feedback.id),
     ].slice(0, 12)
-    const row = await upsertProfileRow(projectId, {
+    const row = await upsertProfileRow(scope, {
       calibrationFeedback: JSON.stringify(calibrationFeedback),
     })
     set({ profile: row })

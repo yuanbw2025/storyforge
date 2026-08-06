@@ -7,6 +7,7 @@ import { db } from '../lib/db/schema'
 import type { StoryArc } from '../lib/types'
 import { parseStages, stringifyStages, type StoryStage } from '../lib/types/story-arc'
 import { deleteStoryArcLifecycle, updateStoryArcStagesLifecycle } from '../lib/storyline/lifecycle'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 const now = () => Date.now()
 
@@ -15,7 +16,7 @@ interface StoryArcStore {
   activeArcId: number | null
   loading: boolean
 
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   setActiveArc: (id: number | null) => void
   addArc: (arc: Omit<StoryArc, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
   /** 静态阶段必须走 updateStages()，以便同步清理动态投影的悬空 stageId。 */
@@ -39,10 +40,11 @@ export const useStoryArcStore = create<StoryArcStore>((set, get) => ({
   activeArcId: null,
   loading: false,
 
-  loadAll: async (projectId: number) => {
+  loadAll: async (scopeInput: WorkspaceScopeLike) => {
     set({ loading: true })
     try {
-      const arcs = await db.storyArcs.where('projectId').equals(projectId).toArray()
+      const scope = await resolveScopeLike(scopeInput)
+      const arcs = await readOwnedRows<StoryArc>(scope, 'storyArcs', { owner: 'work' })
       set({ arcs, loading: false })
       // 默认选中主线
       if (arcs.length > 0 && !get().activeArcId) {
@@ -58,19 +60,28 @@ export const useStoryArcStore = create<StoryArcStore>((set, get) => ({
   setActiveArc: (id) => set({ activeArcId: id }),
 
   addArc: async (arc) => {
-    const newArc: StoryArc = { ...arc, createdAt: now(), updatedAt: now() }
+    const newArc = stampNewRecord(
+      await resolveScopeLike(arc.projectId),
+      'storyArcs',
+      { ...arc, createdAt: now(), updatedAt: now() } as StoryArc,
+      { owner: 'work' },
+    ) as StoryArc
     const id = await db.storyArcs.add(newArc) as number
     set({ arcs: [...get().arcs, { ...newArc, id }] })
     return id
   },
 
   updateArc: async (id, data) => {
+    const current = get().arcs.find(a => a.id === id) ?? await db.storyArcs.get(id)
+    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'storyArcs', current, { owner: 'work' })) return
     const patch = { ...data, updatedAt: now() }
     await db.storyArcs.update(id, patch)
     set({ arcs: get().arcs.map(a => a.id === id ? { ...a, ...patch } : a) })
   },
 
   deleteArc: async (id) => {
+    const current = get().arcs.find(a => a.id === id) ?? await db.storyArcs.get(id)
+    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'storyArcs', current, { owner: 'work' })) return
     await deleteStoryArcLifecycle(id)
     const arcs = get().arcs.filter(a => a.id !== id)
     set({ arcs, activeArcId: get().activeArcId === id ? (arcs[0]?.id ?? null) : get().activeArcId })
@@ -84,6 +95,8 @@ export const useStoryArcStore = create<StoryArcStore>((set, get) => ({
   },
 
   updateStages: async (arcId, stages) => {
+    const current = get().arcs.find(a => a.id === arcId) ?? await db.storyArcs.get(arcId)
+    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'storyArcs', current, { owner: 'work' })) return
     const stagesJson = stringifyStages(stages)
     await updateStoryArcStagesLifecycle({
       arcId,

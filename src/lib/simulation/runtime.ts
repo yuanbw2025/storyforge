@@ -2251,11 +2251,21 @@ export async function branchSimulationSession(input: {
   await db.simulationSessions.update(child.id!, {
     parentSessionId: parent.id!,
     parentThroughSequence: input.throughSequence,
+    worldId: parent.worldId ?? null,
+    workId: parent.workId ?? null,
+    worldReleaseId: parent.worldReleaseId ?? null,
+    narrativeModuleId: parent.narrativeModuleId ?? null,
+    draftSnapshotHash: parent.draftSnapshotHash ?? null,
   })
   return {
     ...child,
     parentSessionId: parent.id!,
     parentThroughSequence: input.throughSequence,
+    worldId: parent.worldId ?? null,
+    workId: parent.workId ?? null,
+    worldReleaseId: parent.worldReleaseId ?? null,
+    narrativeModuleId: parent.narrativeModuleId ?? null,
+    draftSnapshotHash: parent.draftSnapshotHash ?? null,
   }
 }
 

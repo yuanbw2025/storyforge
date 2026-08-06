@@ -7,6 +7,8 @@ import {
 } from '../adapters/chapter-memory-adapter'
 import { CHAPTER_TEXT_NORMALIZATION_VERSION } from './text-normalization'
 import { loadChapterPlanSnapshot } from './plan-reconciliation'
+import { assertRecordInScope, resolveScopeLike } from '../../world-engine/scope'
+import { db } from '../../db/schema'
 
 export interface ChapterMemoryTaskResult {
   status: 'written' | 'stale' | 'parse-error'
@@ -24,7 +26,12 @@ export async function runChapterMemoryTask(args: {
   chapterContent: string
   call: (messages: ChatMessage[]) => Promise<string>
 }): Promise<ChapterMemoryTaskResult> {
-  const planSnapshot = await loadChapterPlanSnapshot(args.projectId, args.chapterId)
+  const scope = await resolveScopeLike(args.projectId)
+  const chapter = await db.chapters.get(args.chapterId)
+  if (!await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
+    return { status: 'stale' }
+  }
+  const planSnapshot = await loadChapterPlanSnapshot(args.projectId, args.chapterId, scope)
   const prepared = await prepareChapterMemoryRequest(
     args.chapterTitle,
     args.chapterContent,
@@ -40,11 +47,12 @@ export async function runChapterMemoryTask(args: {
     planSourceHash: planSnapshot.currentPlan ? planSnapshot.planSourceHash : undefined,
   })
   if (!memory) return { status: 'parse-error' }
-  const latestPlan = await loadChapterPlanSnapshot(args.projectId, args.chapterId)
+  const latestPlan = await loadChapterPlanSnapshot(args.projectId, args.chapterId, scope)
   const planStillCurrent = latestPlan.planSourceHash === planSnapshot.planSourceHash
 
   const result = await adopt({
     projectId: args.projectId,
+    scope,
     recordId: args.chapterId,
     target: 'chapters',
     mode: 'replace',

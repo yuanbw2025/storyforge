@@ -9,7 +9,9 @@ import {
   type SimulationCanonSnapshotV1,
   type SimulationCanonSource,
   type SimulationRuntimeState,
+  type WorkspaceScope,
 } from '../types'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScope } from '../world-engine/scope'
 
 const KIND_ORDER = new Map(SIMULATION_CANON_SOURCE_KINDS.map((kind, index) => [kind, index]))
 
@@ -91,22 +93,26 @@ function sortCandidates(candidates: SimulationCanonCandidate[]): SimulationCanon
 
 export async function loadSimulationCanonCandidates(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
 }): Promise<{ worldLabel: string; candidates: SimulationCanonCandidate[] }> {
+  const scope = input.scope
+    ? await resolveScope({ projectId: input.projectId, scope: input.scope })
+    : await resolveReadScopeLike(input.projectId)
   const project = await db.projects.get(input.projectId)
   if (!project) throw new Error('Canon 冻结所属项目不存在。')
   const world = input.worldGroupId == null ? null : await db.worldGroups.get(input.worldGroupId)
-  if (input.worldGroupId != null && (!world || world.projectId !== input.projectId)) {
+  if (input.worldGroupId != null && !await assertRecordInScope(scope, 'worldGroups', world, { owner: 'world' })) {
     throw new Error('Canon 冻结所属世界不存在或不属于当前项目。')
   }
   const worldLabel = world?.name.trim() || project.name.trim() || '默认世界'
   const [worldviews, powerSystems, rules, characters, locations, itemEntries] = await Promise.all([
-    db.worldviews.where('projectId').equals(input.projectId).toArray(),
-    db.powerSystems.where('projectId').equals(input.projectId).toArray(),
-    db.worldRulesProfiles.where('projectId').equals(input.projectId).toArray(),
-    db.characters.where('projectId').equals(input.projectId).toArray(),
-    db.importantLocations.where('projectId').equals(input.projectId).toArray(),
-    db.itemLedger.where('projectId').equals(input.projectId).toArray(),
+    readOwnedRows<any>(scope, 'worldviews', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'powerSystems', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'worldRulesProfiles', { owner: 'world' }),
+    readOwnedRows<Character>(scope, 'characters', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'importantLocations', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'itemLedger', { owner: 'work' }),
   ])
   const candidates: SimulationCanonCandidate[] = []
 
@@ -283,6 +289,7 @@ function runtimeEntity(
 
 export async function buildSimulationCanonSnapshot(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   sourceKeys: readonly string[]
 }): Promise<{ snapshot: SimulationCanonSnapshotV1; initialState: SimulationRuntimeState }> {

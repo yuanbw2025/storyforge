@@ -1,4 +1,5 @@
-import { db } from '../../db/schema'
+import type { Chapter, OutlineNode, WorkspaceScope } from '../../types'
+import { readOwnedRows, resolveReadScopeLike } from '../../world-engine/scope'
 import { formatHandoff } from './handoff-format'
 import { getChapterDerivedMemoryStatus, normalizeChapterText } from './text-normalization'
 import {
@@ -28,11 +29,13 @@ export async function prepareContinuityContext(args: {
   chapterId: number
   recentSummaryLimit?: number
   previousTailChars?: number
+  scope?: WorkspaceScope
 }): Promise<PreparedContinuityContext> {
+  const scope = args.scope ?? await resolveReadScopeLike(args.projectId)
   const [outlineNodes, chapters, worldGroups] = await Promise.all([
-    db.outlineNodes.where('projectId').equals(args.projectId).toArray(),
-    db.chapters.where('projectId').equals(args.projectId).toArray(),
-    db.worldGroups.where('projectId').equals(args.projectId).toArray(),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+    readOwnedRows<any>(scope, 'worldGroups', { owner: 'world' }),
   ])
   const resolved = resolveCanonicalChapterSequence(outlineNodes, chapters)
   const currentIndex = resolved.sequence.findIndex(entry => entry.chapter.id === args.chapterId)
@@ -67,7 +70,7 @@ export async function prepareContinuityContext(args: {
     const reconciliation = predecessor.chapter.planReconciliation
     if (
       reconciliation?.sourceTextHash === status.currentSourceTextHash
-      && await isPlanReconciliationCurrent(args.projectId, predecessor.chapter)
+      && await isPlanReconciliationCurrent(args.projectId, predecessor.chapter, scope)
     ) {
       const lines = [
         ...reconciliation.completedGoals.map(item => `已完成：${item.text}`),

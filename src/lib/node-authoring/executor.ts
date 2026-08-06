@@ -3,7 +3,7 @@ import { chat } from '../ai/client'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { db } from '../db/schema'
 import { adopt } from '../registry/adopt'
-import type { NodeFlow, NodeRunRecord } from '../types'
+import type { NodeFlow, NodeRunRecord, WorkspaceScope } from '../types'
 import { AUTHORING_NODE_BY_ID } from './catalog'
 import {
   hashAuthoringText,
@@ -23,6 +23,7 @@ import type {
 } from './contracts'
 import { safeAuthoringGraphJson } from './contracts'
 import { adoptDomainCandidate, executeDomainNode } from './domain-execution'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord } from '../world-engine/scope'
 
 export interface AuthoringRunSnapshot {
   nodeId: string
@@ -239,6 +240,7 @@ async function executeNode(input: {
   node: AuthoringNodeInstance
   inputs: AuthoringInputEnvelope[]
   projectId: number
+  scope: WorkspaceScope
   worldGroupId: number | null
   signal?: AbortSignal
 }): Promise<{
@@ -257,6 +259,7 @@ async function executeNode(input: {
     const binding = await readAuthoringCanonBinding({
       node,
       projectId: input.projectId,
+      scope: input.scope,
       worldGroupId: input.worldGroupId,
       contextBudget: numberConfig(node, 'contextBudget', 12_000),
     })
@@ -284,6 +287,7 @@ async function executeNode(input: {
     const binding = await readAuthoringCanonBinding({
       node,
       projectId: input.projectId,
+      scope: input.scope,
       worldGroupId: input.worldGroupId,
       contextBudget: numberConfig(node, 'contextBudget', 12_000),
     })
@@ -333,6 +337,7 @@ async function executeNode(input: {
       node,
       inputs,
       projectId: input.projectId,
+      scope: input.scope,
       worldGroupId: input.worldGroupId,
       aiConfig: requestedAIConfig(node, inputs),
       signal: input.signal,
@@ -344,6 +349,7 @@ async function executeNode(input: {
       ? await readAuthoringCanonBinding({
           node,
           projectId: input.projectId,
+          scope: input.scope,
           worldGroupId: input.worldGroupId,
           contextBudget: numberConfig(node, 'contextBudget', 16_000),
         })
@@ -418,12 +424,19 @@ export async function adoptAuthoringCandidate(input: {
   nodeId: string
   output: string
 }) {
+  if (input.flow.id == null) throw new Error('请先保存节点图。')
+  const scope = await resolveScopeLike(input.flow.projectId)
+  const storedFlow = await db.nodeFlows.get(input.flow.id)
+  if (!storedFlow || !await assertRecordInScope(scope, 'nodeFlows', storedFlow, { owner: 'work' })) {
+    throw new Error('节点图不存在或不属于当前作品。')
+  }
   const parsed = parseAuthoringGraph(input.flow.graphJson)
   const node = parsed.graph.nodes.find(item => item.id === input.nodeId)
   if (!node) throw new Error('候选节点不存在。')
   if (node.binding?.mode === 'live') throw new Error('实时 Canon 绑定节点只读，不能重复采纳；请采纳它的下游候选节点。')
   const template = AUTHORING_NODE_BY_ID.get(node.templateId)
-  const latestRuns = await db.nodeRuns.where('flowId').equals(input.flow.id!).toArray()
+  const latestRuns = (await readOwnedRows<NodeRunRecord>(scope, 'nodeRuns', { owner: 'work' }))
+    .filter(run => run.flowId === input.flow.id)
   latestRuns.sort((left, right) => right.startedAt - left.startedAt)
   let expectedSignature: AuthoringRunSignature | undefined
   let latestDomain: AuthoringCandidate['domain']
@@ -443,6 +456,7 @@ export async function adoptAuthoringCandidate(input: {
     const currentTarget = await readAuthoringTargetFingerprint({
       node,
       projectId: input.flow.projectId,
+      scope,
       worldGroupId: input.flow.worldGroupId ?? null,
     })
     if (currentTarget && !currentTarget.ambiguous && currentTarget.hash !== expectedSignature.targetHash) {
@@ -455,6 +469,7 @@ export async function adoptAuthoringCandidate(input: {
       domain: latestDomain,
       output: input.output,
       projectId: input.flow.projectId,
+      scope,
       worldGroupId: input.flow.worldGroupId ?? null,
     })
     if (adopted) return adopted
@@ -465,6 +480,7 @@ export async function adoptAuthoringCandidate(input: {
     const recordId = await resolveAuthoringBoundRecordId({
       node,
       projectId: input.flow.projectId,
+      scope,
       worldGroupId: input.flow.worldGroupId ?? null,
       target: write.target,
     })
@@ -473,6 +489,7 @@ export async function adoptAuthoringCandidate(input: {
     }
     return adopt({
       projectId: input.flow.projectId,
+      scope,
       worldGroupId: input.flow.worldGroupId ?? null,
       target: write.target,
       ...(recordId == null ? {} : { recordId }),
@@ -492,6 +509,7 @@ export async function adoptAuthoringCandidate(input: {
   if (!data.length) throw new Error('候选没有可采纳的记录。')
   return adopt({
     projectId: input.flow.projectId,
+    scope,
     worldGroupId: input.flow.worldGroupId ?? null,
     target: write.target,
     mode: write.mode === 'replace' ? 'add-many' : write.mode,
@@ -529,6 +547,11 @@ export async function runAuthoringGraph(input: {
   onUpdate?: (update: AuthoringRunUpdate) => void
 }): Promise<AuthoringRunUpdate> {
   if (input.flow.id == null) throw new Error('请先保存节点图。')
+  const scope = await resolveScopeLike(input.flow.projectId)
+  const storedFlow = await db.nodeFlows.get(input.flow.id)
+  if (!storedFlow || !await assertRecordInScope(scope, 'nodeFlows', storedFlow, { owner: 'work' })) {
+    throw new Error('节点图不存在或不属于当前作品。')
+  }
   const parsed = parseAuthoringGraph(input.flow.graphJson)
   const issues = validateAuthoringGraph(parsed.graph)
   if (issues.length) throw new Error(issues.map(issue => issue.message).join('；'))
@@ -548,7 +571,8 @@ export async function runAuthoringGraph(input: {
 
   if (input.resumeRunId != null) {
     const existing = await db.nodeRuns.get(input.resumeRunId)
-    if (!existing || existing.flowId !== input.flow.id || existing.projectId !== input.flow.projectId) {
+    if (!existing || existing.flowId !== input.flow.id
+      || !await assertRecordInScope(scope, 'nodeRuns', existing, { owner: 'work' })) {
       throw new Error('要恢复的运行记录不存在或不属于当前节点图。')
     }
     if (existing.status !== 'paused' && existing.status !== 'failed') {
@@ -580,12 +604,13 @@ export async function runAuthoringGraph(input: {
   } else {
     if (input.baseRunId != null) {
       const base = await db.nodeRuns.get(input.baseRunId)
-      if (!base || base.flowId !== input.flow.id || base.projectId !== input.flow.projectId) {
+      if (!base || base.flowId !== input.flow.id
+        || !await assertRecordInScope(scope, 'nodeRuns', base, { owner: 'work' })) {
         throw new Error('过期重跑基线不存在或不属于当前节点图。')
       }
       ;({ snapshots, candidates } = parseRunMaps(base))
     }
-    const row: NodeRunRecord = {
+    const row = stampNewRecord(scope, 'nodeRuns', {
       projectId: input.flow.projectId,
       flowId: input.flow.id,
       status: 'running',
@@ -596,7 +621,7 @@ export async function runAuthoringGraph(input: {
       startedAt: now,
       updatedAt: now,
       completedAt: null,
-    }
+    } as NodeRunRecord, { owner: 'work' }) as NodeRunRecord
     runId = await db.nodeRuns.add(row) as number
     run = { ...row, id: runId }
   }
@@ -619,12 +644,14 @@ export async function runAuthoringGraph(input: {
         node,
         inputs,
         projectId: input.flow.projectId,
+        scope,
         worldGroupId: input.flow.worldGroupId ?? null,
         signal: input.signal,
       })
       const targetFingerprint = await readAuthoringTargetFingerprint({
         node,
         projectId: input.flow.projectId,
+        scope,
         worldGroupId: input.flow.worldGroupId ?? null,
       })
       snapshots[node.id].sourceHash = executed.sourceHash

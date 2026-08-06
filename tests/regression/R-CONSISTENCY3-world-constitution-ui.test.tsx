@@ -1,6 +1,6 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import WorldConstitutionPanel from '../../src/components/facts/WorldConstitutionPanel'
 import { db } from '../../src/lib/db/schema'
 import { fingerprintSettingSource } from '../../src/lib/fact-ledger/setting-assertions'
@@ -66,7 +66,9 @@ describe('CONSISTENCY-3 · 世界宪法用户出口', () => {
         project: { id: projectId, name: 'UI' } as any,
         onShowFacts: () => undefined,
       }))
-      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      await vi.waitFor(() => expect(host.textContent).toContain('月亮潮汐'))
     })
 
     expect(host.textContent).toContain('世界宪法')

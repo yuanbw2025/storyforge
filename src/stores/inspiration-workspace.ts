@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { db } from '../lib/db/schema'
 import { adopt } from '../lib/registry/adopt'
 import {
   createInspirationFragment,
@@ -17,20 +16,26 @@ import type {
   InspirationVersion,
   InspirationWorkspace,
 } from '../lib/types/inspiration-workspace'
+import {
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  type WorkspaceScopeLike,
+} from '../lib/world-engine/scope'
 
 interface InspirationWorkspaceState {
   workspace: InspirationWorkspace | null
   fragments: InspirationFragment[]
   versions: InspirationVersion[]
   loading: boolean
-  load: (projectId: number) => Promise<void>
-  addFragment: (projectId: number, input: {
+  load: (scope: WorkspaceScopeLike) => Promise<void>
+  addFragment: (scope: WorkspaceScopeLike, input: {
     text: string
     label?: string
     sourceKind?: InspirationSourceKind
   }) => Promise<InspirationFragment | null>
-  removeFragment: (projectId: number, fragmentId: string) => Promise<void>
-  saveVersion: (projectId: number, input: {
+  removeFragment: (scope: WorkspaceScopeLike, fragmentId: string) => Promise<void>
+  saveVersion: (scope: WorkspaceScopeLike, input: {
     mode: InspirationResultMode
     parentVersionId?: string | null
     fragmentIds: string[]
@@ -39,12 +44,14 @@ interface InspirationWorkspaceState {
 }
 
 async function persistWorkspace(
-  projectId: number,
+  scopeInput: WorkspaceScopeLike,
   fragments: InspirationFragment[],
   versions: InspirationVersion[],
 ): Promise<InspirationWorkspace> {
+  const scope = await resolveScopeLike(scopeInput)
   const adopted = await adopt({
-    projectId,
+    projectId: scope.projectId,
+    scope,
     target: 'inspirationWorkspaces',
     mode: 'replace',
     data: {
@@ -55,7 +62,7 @@ async function persistWorkspace(
   if (adopted.written.length === 0) {
     throw new Error(`灵感工作区写回被拒绝：${adopted.skipped[0]?.reason ?? adopted.typeErrors[0]?.field ?? 'unknown'}`)
   }
-  const row = await db.inspirationWorkspaces.where('projectId').equals(projectId).first()
+  const row = (await readOwnedRows<InspirationWorkspace>(scope, 'inspirationWorkspaces', { owner: 'work' }))[0]
   if (!row) throw new Error('灵感工作区写回后无法回读')
   return row
 }
@@ -66,10 +73,15 @@ export const useInspirationWorkspaceStore = create<InspirationWorkspaceState>((s
   versions: [],
   loading: false,
 
-  load: async (projectId) => {
+  load: async (scopeInput) => {
     set({ loading: true })
     try {
-      const workspace = await db.inspirationWorkspaces.where('projectId').equals(projectId).first() ?? null
+      const scope = await resolveReadScopeLike(scopeInput)
+      const workspace = (await readOwnedRows<InspirationWorkspace>(
+        scope,
+        'inspirationWorkspaces',
+        { owner: 'work' },
+      ))[0] ?? null
       set({
         workspace,
         fragments: parseInspirationFragments(workspace?.fragments),
@@ -80,41 +92,50 @@ export const useInspirationWorkspaceStore = create<InspirationWorkspaceState>((s
     }
   },
 
-  addFragment: async (projectId, input) => {
+  addFragment: async (scopeInput, input) => {
+    const scope = await resolveScopeLike(scopeInput)
     const fragment = createInspirationFragment(input)
     if (!fragment) return null
-    const current = get().workspace?.projectId === projectId ? get().fragments : []
+    const current = get().workspace?.projectId === scope.projectId
+      && get().workspace?.workId === scope.workId ? get().fragments : []
     const fragments = upsertInspirationFragment(current, fragment)
     if (fragments === current) {
       return current.find(item =>
         item.text.replace(/\s+/g, '').toLocaleLowerCase()
         === fragment.text.replace(/\s+/g, '').toLocaleLowerCase()) ?? null
     }
-    const versions = get().workspace?.projectId === projectId ? get().versions : []
-    const workspace = await persistWorkspace(projectId, fragments, versions)
+    const versions = get().workspace?.projectId === scope.projectId
+      && get().workspace?.workId === scope.workId ? get().versions : []
+    const workspace = await persistWorkspace(scope, fragments, versions)
     set({ workspace, fragments, versions })
     return fragment
   },
 
-  removeFragment: async (projectId, fragmentId) => {
-    const current = get().workspace?.projectId === projectId ? get().fragments : []
-    const versions = get().workspace?.projectId === projectId ? get().versions : []
+  removeFragment: async (scopeInput, fragmentId) => {
+    const scope = await resolveScopeLike(scopeInput)
+    const matchesScope = get().workspace?.projectId === scope.projectId
+      && get().workspace?.workId === scope.workId
+    const current = matchesScope ? get().fragments : []
+    const versions = matchesScope ? get().versions : []
     if (versions.some(version => version.fragmentIds.includes(fragmentId))) {
       throw new Error('该碎片已被确认版本引用，只能取消勾选，不能删除来源证据')
     }
     const fragments = current.filter(fragment => fragment.id !== fragmentId)
-    const workspace = await persistWorkspace(projectId, fragments, versions)
+    const workspace = await persistWorkspace(scope, fragments, versions)
     set({ workspace, fragments, versions })
   },
 
-  saveVersion: async (projectId, input) => {
+  saveVersion: async (scopeInput, input) => {
+    const scope = await resolveScopeLike(scopeInput)
     const version = createInspirationVersion(input)
-    const fragments = get().workspace?.projectId === projectId ? get().fragments : []
-    const current = get().workspace?.projectId === projectId ? get().versions : []
+    const matchesScope = get().workspace?.projectId === scope.projectId
+      && get().workspace?.workId === scope.workId
+    const fragments = matchesScope ? get().fragments : []
+    const current = matchesScope ? get().versions : []
     const versions = repairInspirationVersionParents(
       [...current, version].slice(-MAX_INSPIRATION_VERSIONS),
     )
-    const workspace = await persistWorkspace(projectId, fragments, versions)
+    const workspace = await persistWorkspace(scope, fragments, versions)
     set({ workspace, fragments, versions })
     return version
   },

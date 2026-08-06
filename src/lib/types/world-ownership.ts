@@ -28,6 +28,7 @@ export interface Work {
   writingStyleId?: string
   methodologyId?: string
   activeCharacterDrivenPlanId?: number | null
+  activeNarrativeModuleId?: number | null
   createdAt: number
   updatedAt: number
 }
@@ -69,6 +70,14 @@ export interface OwnershipBeforeImageValue {
   value?: unknown
 }
 
+export interface OwnershipScopeChange {
+  tableName: string
+  recordId: number
+  previousOwner: 'world' | 'work'
+  targetOwner: 'world' | 'work'
+  changedAt: number
+}
+
 /**
  * Compact recovery evidence for the lazy ownership migration. It stores
  * only root/owner fields, never manuscript text or other content payloads.
@@ -87,6 +96,7 @@ export interface OwnershipMigrationReceipt {
   createdDefaultWork?: boolean
   projectBeforeImage: Record<string, OwnershipBeforeImageValue>
   ownerBeforeImages: Record<string, OwnershipBeforeImageRow[]>
+  scopeChanges?: OwnershipScopeChange[]
   errorCode?: string
   preparedAt: number
   completedAt?: number

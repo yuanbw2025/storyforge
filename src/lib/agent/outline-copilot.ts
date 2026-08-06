@@ -20,10 +20,18 @@ import {
 import { buildOutlineGenerationPlan } from '../outline/generation-plan'
 import type { OutlineGenerationRequest } from '../outline/generation-request'
 import { assembleContext } from '../registry/assemble-context'
+import {
+  isLegacyReadScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScope,
+  scopeTransactionTables,
+} from '../world-engine/scope'
 import type {
   AIConfig,
   OutlineNode,
   Project,
+  WorkspaceScope,
 } from '../types'
 import {
   evidenceFromContextResult,
@@ -62,6 +70,7 @@ export interface OutlineCopilotSnapshot {
 
 export interface OutlineCopilotInput {
   project: Project
+  scope?: WorkspaceScope
   worldGroupId: number | null
   authorRequest: string
   supplementalContext: string
@@ -172,8 +181,10 @@ async function readSnapshot(
   worldGroupId: number | null,
   mode: OutlineCopilotMode,
   parentVolumeId: number | null,
+  scope?: WorkspaceScope,
 ): Promise<OutlineCopilotSnapshot> {
-  const rows = await db.outlineNodes.where('projectId').equals(projectId).toArray()
+  const resolved = scope ?? await resolveReadScopeLike(projectId)
+  const rows = await readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' })
   return snapshotOf(rows, worldGroupId, mode, parentVolumeId)
 }
 
@@ -304,19 +315,23 @@ async function adoptCandidate(input: {
   parentVolumeId: number | null
   snapshot: OutlineCopilotSnapshot
   items: GeneratedOutlineItem[]
+  scope?: WorkspaceScope
 }): Promise<AdoptGeneratedOutlineItemsResult> {
-  return db.transaction('rw', db.outlineNodes, async () => {
+  const workspaceScope = await resolveScope({ projectId: input.projectId, scope: input.scope })
+  return db.transaction('rw', scopeTransactionTables(db.outlineNodes), async () => {
     const current = await readSnapshot(
       input.projectId,
       input.worldGroupId,
       input.mode,
       input.parentVolumeId,
+      workspaceScope,
     )
     if (current.serialized !== input.snapshot.serialized) throw new OutlineCopilotStaleError()
     const issues = candidateIssues(input.items, current)
     if (issues.length) throw new Error(issues.map(issue => issue.message).join('；'))
     const result = await adoptGeneratedOutlineItems({
       projectId: input.projectId,
+      workspaceScope,
       worldGroupId: input.worldGroupId,
       parentId: input.mode === 'volumes' ? null : input.parentVolumeId,
       type: input.mode === 'volumes' ? 'volume' : 'chapter',
@@ -332,6 +347,7 @@ async function adoptCandidate(input: {
 
 export async function adoptRestoredOutlineCandidate(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   mode: OutlineCopilotMode
   parentVolumeId: number | null
@@ -346,6 +362,7 @@ export async function adoptRestoredOutlineCandidate(input: {
 
 export async function prepareOutlineCopilot(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   authorRequest: string
   supplementalContext?: string
@@ -364,7 +381,9 @@ export async function prepareOutlineCopilot(input: {
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const request = assertAuthorRequest(input.authorRequest)
-  const allNodes = await db.outlineNodes.where('projectId').equals(input.projectId).toArray()
+  const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
+  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const allNodes = await readOwnedRows<OutlineNode>(readScope, 'outlineNodes', { owner: 'work' })
   const nodes = rowsInWorld(allNodes, worldGroupId)
   const volumes = nodes
     .filter(node => node.type === 'volume' && node.parentId === null)
@@ -385,6 +404,7 @@ export async function prepareOutlineCopilot(input: {
   const contextPolicy = resolveAgentContextPolicy('agent-outline', contextProfile)
   const assembled = await assembleContext({
     projectId: input.projectId,
+    scope,
     worldGroupId,
     outlineNodeId: parentVolumeId,
     provider: config.provider,
@@ -393,12 +413,13 @@ export async function prepareOutlineCopilot(input: {
     inputBudgetMaxTokens: contextPolicy.maxInputTokens,
     sourceBudgetScale: contextPolicy.sourceBudgetScale,
   })
-  const currentNodes = await db.outlineNodes.where('projectId').equals(input.projectId).toArray()
+  const currentNodes = await readOwnedRows<OutlineNode>(readScope, 'outlineNodes', { owner: 'work' })
   const snapshot = snapshotOf(currentNodes, worldGroupId, mode, parentVolumeId)
   if (before.serialized !== snapshot.serialized) throw new OutlineCopilotStaleError()
 
   const nodeInput: OutlineCopilotInput = {
     project,
+    scope,
     worldGroupId,
     authorRequest: request,
     supplementalContext: input.supplementalContext ?? '',
@@ -438,6 +459,7 @@ export function createOutlineCopilotNode(
     input.worldGroupId,
     input.mode,
     input.parentVolumeId,
+    input.scope,
   ))
   const saveItems = dependencies.saveItems ?? (items => adoptCandidate({
     projectId: input.project.id!,
@@ -446,6 +468,7 @@ export function createOutlineCopilotNode(
     parentVolumeId: input.parentVolumeId,
     snapshot: input.snapshot,
     items,
+    scope: input.scope,
   }))
   const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
     category: input.routingCategory ?? (input.mode === 'volumes' ? 'outline.volume' : 'outline.chapter'),

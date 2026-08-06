@@ -1,6 +1,5 @@
-import { db } from '../../db/schema'
-import type { DetailedOutline } from '../../types'
-import type { Chapter } from '../../types'
+import type { Chapter, DetailedOutline, OutlineNode, WorkspaceScope } from '../../types'
+import { readOwnedRows, resolveReadScopeLike } from '../../world-engine/scope'
 import { hashChapterText, sha256Text } from './text-normalization'
 import { resolveCanonicalChapterSequence } from './canonical-chapter-sequence'
 
@@ -24,11 +23,13 @@ function formatDetailedOutline(detail: DetailedOutline | undefined): string {
 export async function loadChapterPlanSnapshot(
   projectId: number,
   chapterId: number,
+  scope?: WorkspaceScope,
 ): Promise<ChapterPlanSnapshot> {
+  const resolvedScope = scope ?? await resolveReadScopeLike(projectId)
   const [outlineNodes, chapters, details] = await Promise.all([
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
-    db.detailedOutlines.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<OutlineNode>(resolvedScope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(resolvedScope, 'chapters', { owner: 'work' }),
+    readOwnedRows<DetailedOutline>(resolvedScope, 'detailedOutlines', { owner: 'work' }),
   ])
   const resolved = resolveCanonicalChapterSequence(outlineNodes, chapters)
   const index = resolved.sequence.findIndex(entry => entry.chapter.id === chapterId)
@@ -55,12 +56,13 @@ export async function loadChapterPlanSnapshot(
 export async function isPlanReconciliationCurrent(
   projectId: number,
   chapter: Chapter,
+  scope?: WorkspaceScope,
 ): Promise<boolean> {
   const reconciliation = chapter.planReconciliation
   if (!chapter.id || !reconciliation) return false
   if (reconciliation.sourceTextHash !== await hashChapterText(chapter.content)) return false
   if (reconciliation.reviewStatus === 'confirmed-constraint') return true
   if (reconciliation.reviewStatus === 'applied-outline' || reconciliation.reviewStatus === 'dismissed') return false
-  const plan = await loadChapterPlanSnapshot(projectId, chapter.id)
+  const plan = await loadChapterPlanSnapshot(projectId, chapter.id, scope)
   return reconciliation.planSourceHash === plan.planSourceHash
 }

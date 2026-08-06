@@ -190,14 +190,14 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:353` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:362` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:23` |
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:22` |
 | `chapter.content.batch` | `src/lib/ai/batch-detail-runner.ts:256` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:23` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:431`<br/>`src/lib/node-authoring/domain-execution.ts:494` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:451`<br/>`src/lib/node-authoring/domain-execution.ts:515` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:753` |
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:733` |
 | `chapter.memory` | `src/components/editor/ChapterEditor.tsx:471` |
@@ -209,7 +209,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `character.supplement` | `src/components/character/CharacterSupplementAction.tsx:80` |
 | `codex.extract` | `src/components/codex/CodexPanel.tsx:226` |
 | `cultivation.progress` | `src/components/cultivation/CultivationProgressPanel.tsx:143` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:292` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
 | `detail.scene` | `src/components/outline/DetailedOutlinePanel.tsx:151`<br/>`src/components/outline/ScenePanel.tsx:126`<br/>`src/lib/ai/batch-detail-runner.ts:109` |
 | `emotion.beat` | `src/components/editor/EmotionBeatCard.tsx:66` |
 | `foreshadow.structure` | `src/components/foreshadow/ForeshadowPanel.tsx:67` |
@@ -218,13 +218,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `geography.world-map` | `src/components/geography/WorldMapPanel.tsx:107` |
 | `history.consult` | `src/components/history/useHistoryAI.ts:118` |
 | `history.storm` | `src/components/history/useHistoryAI.ts:120` |
-| `inspiration.reverse` | `src/hooks/useIncrementalInspiration.ts:212` |
+| `inspiration.reverse` | `src/hooks/useIncrementalInspiration.ts:221` |
 | `inventory.extract` | `src/components/items/InventoryPanel.tsx:150` |
 | `location.extract` | `src/components/location/LocationPanel.tsx:106` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:315`<br/>`src/lib/node-flow/executor.ts:203` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:319`<br/>`src/lib/node-flow/executor.ts:207` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:123`<br/>`src/lib/outline/generation-node.ts:55` |
-| `outline.character-driven` | `src/components/outline/CharacterDrivenPlotPanel.tsx:198` |
-| `outline.character-revision` | `src/components/outline/CharacterRevisionPanel.tsx:169` |
+| `outline.character-driven` | `src/components/outline/CharacterDrivenPlotPanel.tsx:208` |
+| `outline.character-revision` | `src/components/outline/CharacterRevisionPanel.tsx:180` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:51` |
 | `outline.workshop.collision` | `src/lib/outline/workshop.ts:448` |
 | `outline.workshop.motivation` | `src/lib/outline/workshop.ts:445` |
@@ -241,7 +241,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:768` |
 | `rules.generate` | `src/components/rules/CreativeRulesPanel.tsx:80` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
-| `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:178`<br/>`src/components/simulation/ChatGamePanel.tsx:194` |
+| `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
 | `story-arc.generate` | `src/components/outline/StoryArcPanel.tsx:85` |
 | `story.generate` | `src/components/worldview/StoryCorePanel.tsx:200` |
 | `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:85` |
@@ -258,14 +258,14 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
 - `src/components/settings/NS0EvalPanel.tsx:50 · chat`
-- `src/lib/agent/character-copilot.ts:409 · chat`
-- `src/lib/agent/inspiration-copilot.ts:261 · chat`
-- `src/lib/agent/outline-copilot.ts:450 · chat`
-- `src/lib/agent/prose-copilot.ts:500 · chat`
-- `src/lib/agent/world-origin-copilot.ts:186 · chat`
+- `src/lib/agent/character-copilot.ts:427 · chat`
+- `src/lib/agent/inspiration-copilot.ts:283 · chat`
+- `src/lib/agent/outline-copilot.ts:473 · chat`
+- `src/lib/agent/prose-copilot.ts:525 · chat`
+- `src/lib/agent/world-origin-copilot.ts:207 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
-- `src/lib/node-authoring/executor.ts:361 · chat`
+- `src/lib/node-authoring/executor.ts:367 · chat`
 
 ---
 
-生成时间基准:commit `35dde9c`
+生成时间基准:commit `29ff36c`

@@ -2,12 +2,13 @@ import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import { buildForeshadowTaskContext } from '../lib/foreshadow/context'
 import type { Chapter, Foreshadow, ForeshadowStatus, OutlineNode } from '../lib/types'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 interface ForeshadowStore {
   foreshadows: Foreshadow[]
   loading: boolean
 
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   addForeshadow: (f: Omit<Foreshadow, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
   updateForeshadow: (id: number, data: Partial<Foreshadow>) => Promise<void>
   deleteForeshadow: (id: number) => Promise<void>
@@ -24,22 +25,22 @@ export const useForeshadowStore = create<ForeshadowStore>((set, get) => ({
   foreshadows: [],
   loading: false,
 
-  loadAll: async (projectId: number) => {
+  loadAll: async (scopeInput: WorkspaceScopeLike) => {
     set({ loading: true })
-    const foreshadows = await db.foreshadows
-      .where('projectId').equals(projectId)
-      .toArray()
+    const foreshadows = await readOwnedRows<Foreshadow>(await resolveScopeLike(scopeInput), 'foreshadows', { owner: 'work' })
     set({ foreshadows, loading: false })
   },
 
   addForeshadow: async (f) => {
-    const newF: Foreshadow = { ...f, createdAt: now(), updatedAt: now() }
+    const newF = stampNewRecord(await resolveScopeLike(f.projectId), 'foreshadows', { ...f, createdAt: now(), updatedAt: now() } as Foreshadow, { owner: 'work' }) as Foreshadow
     const id = await db.foreshadows.add(newF) as number
     set({ foreshadows: [...get().foreshadows, { ...newF, id }] })
     return id
   },
 
   updateForeshadow: async (id, data) => {
+    const current = get().foreshadows.find(f => f.id === id) ?? await db.foreshadows.get(id)
+    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'foreshadows', current, { owner: 'work' })) return
     await db.foreshadows.update(id, { ...data, updatedAt: now() })
     set({
       foreshadows: get().foreshadows.map(f =>
@@ -49,11 +50,15 @@ export const useForeshadowStore = create<ForeshadowStore>((set, get) => ({
   },
 
   deleteForeshadow: async (id) => {
+    const current = get().foreshadows.find(f => f.id === id) ?? await db.foreshadows.get(id)
+    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'foreshadows', current, { owner: 'work' })) return
     await db.foreshadows.delete(id)
     set({ foreshadows: get().foreshadows.filter(f => f.id !== id) })
   },
 
   updateStatus: async (id, status) => {
+    const current = get().foreshadows.find(f => f.id === id) ?? await db.foreshadows.get(id)
+    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'foreshadows', current, { owner: 'work' })) return
     await db.foreshadows.update(id, { status, updatedAt: now() })
     set({
       foreshadows: get().foreshadows.map(f =>

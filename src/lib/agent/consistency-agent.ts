@@ -33,6 +33,15 @@ import {
   AgentTeamBudgetTracker,
   type AgentTeamBudgetEvidence,
 } from './team-budget'
+import {
+  assertRecordInScope,
+  isLegacyReadScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  stampNewRecord,
+} from '../world-engine/scope'
+import type { WorkspaceScope } from '../types/world-ownership'
 
 export const CONSISTENCY_AGENT_VERSION = 1
 export const CONSISTENCY_AGENT_PAYLOAD_TYPE = 'consistency-agent'
@@ -122,10 +131,11 @@ async function buildDeterministicFindings(input: {
   chapterId: number
   worldGroupId: number | null
   chapterText: string
+  scope: WorkspaceScope
 }): Promise<ConsistencyFinding[]> {
   const [heldItems, characters] = await Promise.all([
-    readProjectHeldItems(input.projectId, input.chapterId, input.worldGroupId),
-    db.characters.where('projectId').equals(input.projectId).toArray(),
+    readProjectHeldItems(input.projectId, input.chapterId, input.worldGroupId, null, null, input.scope),
+    readOwnedRows<any>(input.scope, 'characters', { owner: 'world' }),
   ])
   return checkHeldItemAcquisition(
     input.chapterText,
@@ -171,6 +181,11 @@ export async function runBackgroundConsistencyAgent(input: {
   chapterContent: string
   budget: AgentTeamBudgetTracker
 }): Promise<ConsistencyAgentCandidate> {
+  const scope = await resolveReadScopeLike(input.projectId)
+  const chapter = await db.chapters.get(input.chapterId)
+  if (!await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
+    throw new Error('一致性审计章节不存在或不属于当前作品。')
+  }
   const chapterText = normalizeChapterText(input.chapterContent)
   const sourceTextHash = await hashChapterText(chapterText)
   const findings = await buildDeterministicFindings({
@@ -178,6 +193,7 @@ export async function runBackgroundConsistencyAgent(input: {
     chapterId: input.chapterId,
     worldGroupId: input.worldGroupId,
     chapterText,
+    scope,
   })
   return candidateBase({
     ...input,
@@ -205,11 +221,17 @@ export async function runConsistencyAgent(input: {
   budget: AgentTeamBudgetTracker
   call: (messages: ChatMessage[]) => Promise<string>
 }): Promise<ConsistencyAgentCandidate> {
+  const scope = await resolveReadScopeLike(input.projectId)
+  const chapter = await db.chapters.get(input.chapterId)
+  if (!await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
+    throw new Error('一致性审计章节不存在或不属于当前作品。')
+  }
   const chapterText = normalizeChapterText(input.chapterContent)
   const sourceTextHash = await hashChapterText(chapterText)
   const [evidence, cognition, lifecycle, deterministicFindings] = await Promise.all([
     assembleContext({
       projectId: input.projectId,
+      scope: isLegacyReadScope(scope) ? undefined : scope,
       chapterId: input.chapterId,
       outlineNodeId: input.outlineNodeId,
       worldGroupId: input.worldGroupId,
@@ -219,13 +241,14 @@ export async function runConsistencyAgent(input: {
       inputBudgetMaxTokens: input.mode === 'fast' ? 16_000 : 32_000,
       sourceBudgetScale: input.mode === 'fast' ? 0.55 : 1,
     }),
-    readCognitionAuditSnapshot(input.projectId, input.chapterId, input.worldGroupId),
-    readLifecycleAuditSnapshot(input.projectId, input.chapterId, input.worldGroupId),
+    readCognitionAuditSnapshot(input.projectId, input.chapterId, input.worldGroupId, input.outlineNodeId, scope),
+    readLifecycleAuditSnapshot(input.projectId, input.chapterId, input.worldGroupId, scope),
     buildDeterministicFindings({
       projectId: input.projectId,
       chapterId: input.chapterId,
       worldGroupId: input.worldGroupId,
       chapterText,
+      scope,
     }),
   ])
   const messages = buildConsistencyAuditPrompt({
@@ -312,7 +335,12 @@ export function summarizeConsistencyAgentCandidate(candidate: ConsistencyAgentCa
 export async function persistConsistencyAgentCandidate(
   candidate: ConsistencyAgentCandidate,
 ): Promise<ConsistencyAgentRun> {
-  const events = await db.agentEvents.where('projectId').equals(candidate.projectId).toArray()
+  const scope = await resolveScopeLike(candidate.projectId)
+  const chapter = await db.chapters.get(candidate.chapterId)
+  if (!await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
+    throw new Error('一致性 Agent 候选的章节不存在或不属于当前作品。')
+  }
+  const events = await readOwnedRows<AgentEvent>(scope, 'agentEvents', { owner: 'work' })
   const existing = events
     .filter(event => event.kind === 'candidate')
     .map(event => ({ event, candidate: parseAgentEventPayload<unknown>(event, null) }))
@@ -325,7 +353,7 @@ export async function persistConsistencyAgentCandidate(
   const now = Date.now()
   if (existing?.event.id != null) {
     const conversation = await db.agentConversations.get(existing.event.conversationId)
-    if (conversation) {
+    if (conversation && await assertRecordInScope(scope, 'agentConversations', conversation, { owner: 'work' })) {
       await db.transaction('rw', db.agentConversations, db.agentEvents, async () => {
         await db.agentEvents.update(existing.event.id!, {
           content: summarizeConsistencyAgentCandidate(candidate),
@@ -347,17 +375,17 @@ export async function persistConsistencyAgentCandidate(
     }
   }
 
-  const conversation: AgentConversation = {
+  const conversation = stampNewRecord(scope, 'agentConversations', {
     projectId: candidate.projectId,
     worldGroupId: candidate.worldGroupId,
     title: `一致性 Agent · ${candidate.chapterTitle}`,
     status: 'archived',
     createdAt: now,
     updatedAt: now,
-  }
+  }, { owner: 'work' }) as AgentConversation
   return db.transaction('rw', db.agentConversations, db.agentEvents, async () => {
     const conversationId = await db.agentConversations.add(conversation) as number
-    const event: AgentEvent = {
+    const event = stampNewRecord(scope, 'agentEvents', {
       projectId: candidate.projectId,
       conversationId,
       sequence: 1,
@@ -366,7 +394,7 @@ export async function persistConsistencyAgentCandidate(
       content: summarizeConsistencyAgentCandidate(candidate),
       payload: JSON.stringify(candidate),
       createdAt: now,
-    }
+    }, { owner: 'work' }) as AgentEvent
     const eventId = await db.agentEvents.add(event) as number
     return {
       conversation: { ...conversation, id: conversationId },
@@ -380,7 +408,10 @@ export async function readLatestConsistencyAgentRun(input: {
   projectId: number
   chapterId: number
 }): Promise<ConsistencyAgentRun | null> {
-  const events = await db.agentEvents.where('projectId').equals(input.projectId).toArray()
+  const scope = await resolveReadScopeLike(input.projectId)
+  const chapter = await db.chapters.get(input.chapterId)
+  if (!await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) return null
+  const events = await readOwnedRows<AgentEvent>(scope, 'agentEvents', { owner: 'work' })
   const matches = events
     .filter(event => event.kind === 'candidate')
     .map(event => ({ event, candidate: parseAgentEventPayload<unknown>(event, null) }))
@@ -392,16 +423,19 @@ export async function readLatestConsistencyAgentRun(input: {
   const latest = matches[0]
   if (!latest) return null
   const conversation = await db.agentConversations.get(latest.event.conversationId)
-  return conversation ? { conversation, event: latest.event, candidate: latest.candidate } : null
+  return conversation && await assertRecordInScope(scope, 'agentConversations', conversation, { owner: 'work' })
+    ? { conversation, event: latest.event, candidate: latest.candidate }
+    : null
 }
 
 export async function isConsistencyAgentCurrent(
   candidate: ConsistencyAgentCandidate,
 ): Promise<boolean> {
+  const scope = await resolveReadScopeLike(candidate.projectId)
   const chapter = await db.chapters.get(candidate.chapterId)
   return Boolean(
     chapter
-    && chapter.projectId === candidate.projectId
+    && await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })
     && await hashChapterText(chapter.content ?? '') === candidate.sourceTextHash
   )
 }

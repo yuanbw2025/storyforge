@@ -7,14 +7,14 @@ import { detachCultivationProgressForDeletedChapters } from '../lib/cultivation/
 import { pickBestChapterForOutline } from '../lib/chapters/selectors'
 import { transactionTablesFor } from '../lib/registry/lifecycle'
 import type { Chapter } from '../lib/types'
-import { assertRecordInScope, readOwnedRows, resolveScope, stampNewRecord } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 interface ChapterStore {
   chapters: Chapter[]
   currentChapter: Chapter | null
   loading: boolean
 
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   selectChapter: (id: number) => void
   addChapter: (ch: Omit<Chapter, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
   getOrCreateByOutlineNode: (
@@ -42,9 +42,9 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
   currentChapter: null,
   loading: false,
 
-  loadAll: async (projectId: number) => {
+  loadAll: async (scopeInput: WorkspaceScopeLike) => {
     set({ loading: true })
-    const chapters = (await readOwnedRows<Chapter>(await resolveScope({ projectId }), 'chapters', { owner: 'work' }))
+    const chapters = (await readOwnedRows<Chapter>(await resolveReadScopeLike(scopeInput), 'chapters', { owner: 'work' }))
       .sort((a, b) => a.order - b.order)
     set({ chapters, loading: false })
   },
@@ -55,7 +55,7 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
   },
 
   addChapter: async (ch) => {
-    const newCh = stampNewRecord(await resolveScope({ projectId: ch.projectId }), 'chapters', {
+    const newCh = stampNewRecord(await resolveScopeLike(ch.projectId), 'chapters', {
       ...ch, createdAt: now(), updatedAt: now(),
     } as Chapter, { owner: 'work' })
     const id = await db.chapters.add(newCh) as number
@@ -65,12 +65,12 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
   },
 
   getOrCreateByOutlineNode: async (projectId, outlineNodeId, create) => {
-    const chapter = await db.transaction('rw', db.chapters, async () => {
+    const scope = await resolveScopeLike(projectId)
+    const chapter = await db.transaction('rw', scopeTransactionTables(db.chapters), async () => {
       const candidates = await db.chapters
         .where('outlineNodeId')
         .equals(outlineNodeId)
         .toArray()
-      const scope = await resolveScope({ projectId })
       const existing = [] as Chapter[]
       for (const row of candidates) {
         if (row.projectId === projectId && await assertRecordInScope(scope, 'chapters', row, { owner: 'work' })) existing.push(row)
@@ -79,7 +79,7 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
       if (best?.id) return best
 
       const ts = now()
-      const newChapter = stampNewRecord(await resolveScope({ projectId }), 'chapters', {
+      const newChapter = stampNewRecord(scope, 'chapters', {
         ...create,
         projectId,
         outlineNodeId,
@@ -101,14 +101,17 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
   },
 
   updateChapter: async (id, data) => {
-    const before = get().chapters.find(c => c.id === id) ?? await db.chapters.get(id)
-    if (!before?.projectId || !await assertRecordInScope(await resolveScope({ projectId: before.projectId }), 'chapters', before, { owner: 'work' })) return
+    const beforeMigration = get().chapters.find(c => c.id === id) ?? await db.chapters.get(id)
+    if (!beforeMigration?.projectId) return
+    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const before = await db.chapters.get(id)
+    if (!before || !await assertRecordInScope(scope, 'chapters', before, { owner: 'work' })) return
     const updated = { ...data, updatedAt: now() }
     await db.chapters.update(id, updated)
     if (Object.prototype.hasOwnProperty.call(data, 'content')) {
-      const projectId = get().chapters.find(c => c.id === id)?.projectId ?? (await db.chapters.get(id))?.projectId
+      const projectId = before.projectId
       if (projectId != null) {
-        const summaryNodes = await db.narrativeSummaryNodes.where('projectId').equals(projectId).toArray()
+        const summaryNodes = await readOwnedRows<any>(scope, 'narrativeSummaryNodes', { owner: 'work' })
         for (const node of summaryNodes) {
           if (node.id == null) continue
           if (node.level === 'book' || node.level === 'volume' || node.sourceChapterId === id) {

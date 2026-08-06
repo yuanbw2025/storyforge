@@ -30,6 +30,7 @@ import {
   verifySimulationCheckpoint,
 } from '../lib/simulation/runtime'
 import { buildSimulationCanonSnapshot } from '../lib/simulation/canon-snapshot'
+import { createWorldInstance } from '../lib/world-engine/instances'
 import {
   EMPTY_SIMULATION_STATE,
   type SimulationCheckpoint,
@@ -46,6 +47,7 @@ import {
   type SimulationTtrpgQuest,
   type SimulationChatIdentity,
   type SimulationChatScene,
+  type WorkspaceScope,
 } from '../lib/types'
 
 interface SimulationRuntimeStore {
@@ -68,6 +70,7 @@ interface SimulationRuntimeStore {
     title: string
     seed?: string
     sourceKeys: string[]
+    scope?: WorkspaceScope
     chatConfig?: {
       characterKey: string
       identity: SimulationChatIdentity
@@ -183,6 +186,7 @@ export const useSimulationRuntimeStore = create<SimulationRuntimeStore>((set, ge
     createSession: async input => {
       const frozen = await buildSimulationCanonSnapshot({
         projectId: input.projectId,
+        scope: input.scope,
         worldGroupId: input.worldGroupId,
         sourceKeys: input.sourceKeys,
       })
@@ -195,15 +199,28 @@ export const useSimulationRuntimeStore = create<SimulationRuntimeStore>((set, ge
           messages: [],
         }
       }
-      const session = await createSimulationSession({
-        projectId: input.projectId,
-        worldGroupId: input.worldGroupId,
-        kind: input.kind,
-        title: input.title,
-        seed: input.seed,
-        canonSnapshot: frozen.snapshot,
-        initialState,
-      })
+      const activeWork = input.scope ? await db.works.get(input.scope.workId) : null
+      const session = input.scope
+        ? await createWorldInstance({
+          scope: input.scope,
+          kind: input.kind,
+          title: input.title,
+          seed: input.seed,
+          draftSnapshotHash: frozen.snapshot.snapshotHash,
+          narrativeModuleId: activeWork?.activeNarrativeModuleId ?? null,
+          canonSnapshot: frozen.snapshot,
+          initialState,
+          worldGroupId: input.worldGroupId,
+        })
+        : await createSimulationSession({
+          projectId: input.projectId,
+          worldGroupId: input.worldGroupId,
+          kind: input.kind,
+          title: input.title,
+          seed: input.seed,
+          canonSnapshot: frozen.snapshot,
+          initialState,
+        })
       await get().load(input.projectId, input.worldGroupId)
       await get().select(session.id!)
       return session.id!

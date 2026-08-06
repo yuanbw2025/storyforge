@@ -22,6 +22,7 @@ export interface InspirationVersion {
 export interface InspirationWorkspace {
   id?: number
   projectId: number
+  workId?: number | null
   fragments: string
   versions: string
   createdAt: number

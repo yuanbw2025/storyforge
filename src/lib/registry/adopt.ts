@@ -9,6 +9,7 @@ import {
   assertRecordInScope,
   readOwnedRows,
   resolveScope,
+  scopeTransactionTables,
   stampNewRecord,
 } from '../world-engine/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
@@ -134,17 +135,21 @@ export async function replaceAdoptedCollection(input: {
   const relatedTables = (adoption.fkChecks ?? [])
     .map(check => REGISTRY_BY_NAME.get(check.target)?.table)
     .filter((table): table is NonNullable<typeof table> => table != null)
-  const tables = [...new Set([tableSpec.table, ...relatedTables])]
+  const workspaceScope = await resolveScope({
+    projectId: input.projectId,
+    scope: input.workspaceScope,
+  })
+  const tables = scopeTransactionTables(tableSpec.table, ...relatedTables)
   return db.transaction('rw', tables, async () => {
     await clearAdoptedCollection({
       projectId: input.projectId,
-      workspaceScope: input.workspaceScope,
+      workspaceScope,
       target: input.target,
       scope: input.scope,
     })
     const result = await adopt({
       projectId: input.projectId,
-      scope: input.workspaceScope,
+      scope: workspaceScope,
       target: input.target,
       mode: 'add-many',
       data: input.data,
@@ -183,7 +188,10 @@ async function adoptCollectionRecord(
   if (!target || !await assertRecordInScope(input.scope!, input.target, target, {
     owner: ADOPTION_BY_TARGET.get(input.target)?.ownerFrom,
   })) {
-    result.skipped.push({ reason: `record ${input.recordId} 不存在或不属于当前 scope`, data: input.data })
+    result.skipped.push({
+      reason: `record ${input.recordId} 不存在、不属于当前项目或不属于当前 scope`,
+      data: input.data,
+    })
     return result
   }
   let patch = normalizeAndValidate(input.data, fieldSpecs, result)
@@ -581,7 +589,7 @@ async function applyFkChecks(
     const exists = await targetSpec.table.get(refValue as number)
     if (!exists || !await assertRecordInScope(scope, fk.target, exists, { owner: adoption.ownerFrom })) {
       result.fkErrors.push({ field: fk.field, refValue })
-      result.skipped.push({ reason: 'FK 校验失败', data: raw })
+      result.skipped.push({ reason: `FK 校验失败：${fk.field} -> ${fk.target}`, data: raw })
       return false
     }
   }

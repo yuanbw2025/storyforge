@@ -10,6 +10,7 @@ import type {
   ConflictPriority,
 } from '../lib/types/world-rules'
 import { createEmptyEntry, isEntryEmpty, countFilledEntries } from '../lib/types/world-rules'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 interface WorldRulesState {
   profile: WorldRulesProfile | null
@@ -17,7 +18,7 @@ interface WorldRulesState {
   loading: boolean
 
   /** 加载项目的世界规则 */
-  loadProfile: (projectId: number, worldGroupId?: number | null) => Promise<void>
+  loadProfile: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
 
   /** 保存整个 profile（内部使用） */
   _persist: () => Promise<void>
@@ -52,35 +53,34 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
   activeWorldGroupId: null,
   loading: false,
 
-  loadProfile: async (projectId: number, worldGroupId: number | null = null) => {
+  loadProfile: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
     set({ loading: true })
     try {
       const targetWorldGroupId = worldGroupId ?? null
+      const scope = await resolveScopeLike(scopeInput)
       const profile = await db.transaction('rw', db.projects, db.worldRulesProfiles, async () => {
-        const profiles = await db.worldRulesProfiles
-          .where('projectId').equals(projectId)
-          .toArray()
+        const profiles = await readOwnedRows<WorldRulesProfile>(scope, 'worldRulesProfiles', { owner: 'world' })
         const existing = profiles.find(p => (p.worldGroupId ?? null) === targetWorldGroupId)
         if (existing) return existing
 
         // 首次访问，创建空 profile
         // Phase 32.9: 检查旧项目是否设过 creativeMode=historical，自动迁移提示
-        const project = await db.projects.get(projectId)
+        const project = await db.projects.get(scope.projectId)
         const wasHistorical = project?.creativeMode === 'historical'
         const migrationNote = wasHistorical
           ? '【自动迁移提示】本项目原先使用「历史考证」模式。现已升级为维度级「真实与幻想」规则体系，请在左侧各维度中分别设定哪些内容取自真实、哪些是架空改造。'
           : ''
 
         const now = Date.now()
-        const id = await db.worldRulesProfiles.add({
-          projectId,
+        const id = await db.worldRulesProfiles.add(stampNewRecord(scope, 'worldRulesProfiles', {
+          projectId: scope.projectId,
           worldGroupId: targetWorldGroupId,
           entries: {},
           customNodes: [],
           globalNote: migrationNote,
           createdAt: now,
           updatedAt: now,
-        })
+        }, { owner: 'world' }))
         return await db.worldRulesProfiles.get(id) ?? null
       })
 
@@ -93,6 +93,8 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
   _persist: async () => {
     const { profile } = get()
     if (!profile?.id) return
+    const scope = await resolveScopeLike(profile.projectId)
+    if (!await assertRecordInScope(scope, 'worldRulesProfiles', profile, { owner: 'world' })) return
     await db.worldRulesProfiles.update(profile.id, {
       entries: profile.entries,
       customNodes: profile.customNodes,

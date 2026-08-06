@@ -15,9 +15,16 @@ import { parseCharacterDrivenPlanArcs } from '../types/character-driven-plan'
 import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
 import { redactAuthoringSecrets } from '../node-authoring/contracts'
+import { ensureWorkspaceOwnership } from '../world-engine/ownership'
 
 /** 当前导出格式版本(与手写版保持一致) */
 const EXPORT_VERSION = 3
+export const STRICT_EXPORT_VERSION = 4
+
+export interface StrictProjectExportSnapshot {
+  data: ProjectExportData
+  exportIds: ReadonlyMap<string, ReadonlyMap<number, number>>
+}
 
 /** 取一张 exportable 表的库内记录(项目级按 projectId;direct-child 经 projectResolver) */
 async function queryRows(spec: TableSpec, projectId: number): Promise<any[]> {
@@ -40,6 +47,7 @@ function toExportRow(
   row: any,
   index: number,
   idMaps: Map<string, Map<number, number>>,
+  strictOwners = false,
 ): any | null {
   const obj: any = { ...row }
   delete obj.id
@@ -83,6 +91,29 @@ function toExportRow(
     }
   }
 
+  if (strictOwners && spec.name !== 'worlds' && spec.name !== 'works') {
+    const locator = spec.domainOwner?.locator
+    if (locator?.kind === 'field' && (locator.owner === 'world' || locator.owner === 'work')) {
+      const ownerMap = idMaps.get(locator.owner === 'world' ? 'worlds' : 'works')
+      const portableId = ownerMap?.get(row[locator.field])
+      if (portableId == null) throw new Error(`[strictExport] ${spec.name}.${locator.field} 缺失或越界`)
+      obj[locator.owner === 'world' ? '_worldOwnerExportId' : '_workOwnerExportId'] = portableId
+      delete obj.worldId
+      delete obj.workId
+    } else if (locator?.kind === 'exclusive-fields') {
+      const hasWorld = row[locator.worldField] != null
+      const hasWork = row[locator.workField] != null
+      if (hasWorld === hasWork) throw new Error(`[strictExport] ${spec.name} 必须且只能有一个 owner`)
+      const kind = hasWorld ? 'world' : 'work'
+      const portableId = idMaps.get(kind === 'world' ? 'worlds' : 'works')
+        ?.get(row[hasWorld ? locator.worldField : locator.workField])
+      if (portableId == null) throw new Error(`[strictExport] ${spec.name} owner 缺失或越界`)
+      obj[kind === 'world' ? '_worldOwnerExportId' : '_workOwnerExportId'] = portableId
+      delete obj.worldId
+      delete obj.workId
+    }
+  }
+
   return spec.name === 'nodeFlows' || spec.name === 'nodeRuns'
     ? redactAuthoringSecrets(obj)
     : obj
@@ -102,7 +133,20 @@ function parseIdArray(value: unknown): number[] {
 /**
  * 派生导出:产出与手写 exportProjectJSON 逐字段等价的 ProjectExportData。
  */
-export async function deriveExportProjectJSON(projectId: number): Promise<ProjectExportData> {
+export async function deriveExportProjectJSON(
+  projectId: number,
+  options: { strict?: boolean } = {},
+): Promise<ProjectExportData> {
+  return options.strict
+    ? deriveStrictExportProjectJSON(projectId)
+    : deriveProjectExport(projectId, EXPORT_VERSION, false)
+}
+
+async function captureProjectExportInTransaction(
+  projectId: number,
+  version: number,
+  strictOwners: boolean,
+): Promise<StrictProjectExportSnapshot> {
   const project = await db.projects.get(projectId)
   if (!project) throw new Error('项目不存在')
 
@@ -122,9 +166,9 @@ export async function deriveExportProjectJSON(projectId: number): Promise<Projec
   // 第二遍:逐行转导出对象
   const projectSpec = REGISTRY_BY_NAME.get('projects')
   if (!projectSpec) throw new Error('[deriveExport] PROJECT_TABLES 缺少 projects 根表')
-  const projectData = toExportRow(projectSpec, project, 0, idMaps)
+  const projectData = toExportRow(projectSpec, project, 0, idMaps, strictOwners)
   const result: any = {
-    version: EXPORT_VERSION,
+    version,
     exportedAt: Date.now(),
     project: projectData,
   }
@@ -132,11 +176,54 @@ export async function deriveExportProjectJSON(projectId: number): Promise<Projec
     const rows = rowsByTable.get(spec.name)!
     const out: any[] = []
     rows.forEach((row, i) => {
-      const exported = toExportRow(spec, row, i, idMaps)
+      const exported = toExportRow(spec, row, i, idMaps, strictOwners)
       if (exported != null) out.push(exported)
     })
     result[spec.name] = out
   }
 
-  return result as ProjectExportData
+  return { data: result as ProjectExportData, exportIds: idMaps }
+}
+
+async function captureProjectExport(projectId: number, version: number, strictOwners: boolean): Promise<StrictProjectExportSnapshot> {
+  const tables = [...new Set(PROJECT_TABLES.filter(spec => spec.exportable).map(spec => spec.table))]
+  return db.transaction('r', tables, () => captureProjectExportInTransaction(projectId, version, strictOwners))
+}
+
+async function deriveProjectExport(projectId: number, version: number, strictOwners: boolean): Promise<ProjectExportData> {
+  return (await captureProjectExport(projectId, version, strictOwners)).data
+}
+
+/**
+ * WORLD-2C C4 strict export. The v3 derivation remains available for old
+ * fixture equivalence tests, while all user-facing backups use this boundary.
+ * Logical World/Work ownership is represented only by portable shadow IDs;
+ * physical IDs never cross the backup boundary.
+ */
+export async function deriveStrictExportProjectJSON(projectId: number): Promise<ProjectExportData> {
+  return (await deriveStrictExportProjectSnapshot(projectId)).data
+}
+
+export async function deriveStrictExportProjectSnapshot(projectId: number): Promise<StrictProjectExportSnapshot> {
+  const existingWorlds = await db.worlds.where('projectId').equals(projectId).count()
+  const existingWorks = await db.works.where('projectId').equals(projectId).count()
+  if (existingWorlds === 0 && existingWorks === 0) {
+    // Preserve the zero-data backup contract: there is no ownership to
+    // migrate, so an empty workspace remains a compact v3-compatible file.
+    return captureProjectExport(projectId, EXPORT_VERSION, false)
+  }
+  const ownership = await ensureWorkspaceOwnership(projectId)
+  const snapshot = await captureProjectExport(projectId, STRICT_EXPORT_VERSION, true)
+  const worldExportId = snapshot.exportIds.get('worlds')?.get(ownership.scope.worldId)
+  const workExportId = snapshot.exportIds.get('works')?.get(ownership.scope.workId)
+  if (worldExportId == null || workExportId == null) throw new Error('[strictExport] ownership 根不在导出快照中')
+  snapshot.data.ownership = {
+    contractVersion: 1,
+    worldExportId,
+    workExportId,
+  }
+  // Keep the ownership resolver observable to callers and make an accidental
+  // unused migration result impossible to hide in diagnostics.
+  if (!ownership.scope.worldId || !ownership.scope.workId) throw new Error('[strictExport] ownership 根不完整')
+  return snapshot
 }

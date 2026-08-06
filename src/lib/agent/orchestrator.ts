@@ -21,6 +21,7 @@ import {
   parseAgentEventPayload,
   type AgentEvent,
   type InspirationResultMode,
+  type WorkspaceScope,
 } from '../types'
 import {
   parseCharacterCandidateDraft,
@@ -64,6 +65,11 @@ import {
   AgentTeamBudgetTracker,
   type AgentTeamBudgetEvidence,
 } from './team-budget'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveScope,
+} from '../world-engine/scope'
 
 export const DOMAIN_AGENT_IDS = ['world-origin', 'character', 'inspiration', 'outline', 'prose'] as const
 export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
@@ -112,6 +118,7 @@ export interface MasterCandidatePayload {
   proseOperation?: ProseCopilotOperation
   proseOutlineNodeId?: number
   dependsOnTaskIds?: string[]
+  workspaceScope?: WorkspaceScope
 }
 
 export interface ExecutedMasterCandidate {
@@ -303,6 +310,7 @@ function sanitizePlan(raw: Record<string, unknown>, request: string): MasterAgen
 
 export async function createMasterAgentPlan(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   request: string
   budget?: AgentTeamBudgetTracker
@@ -316,6 +324,7 @@ export async function createMasterAgentPlan(input: {
   ).config
   const status = await executeAgentTool('read_project_status', {
     projectId: input.projectId,
+    scope: input.scope,
     worldGroupId: input.worldGroupId,
     provider: config.provider,
     model: config.model,
@@ -389,12 +398,14 @@ function topologicalTasks(plan: MasterAgentPlan): MasterAgentTask[] {
 
 export async function executeMasterAgentPlan(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   plan: MasterAgentPlan
   budget?: AgentTeamBudgetTracker
   signal?: AbortSignal
   onTask?: (task: MasterAgentTask, status: 'running' | 'completed' | 'failed', error?: string) => void
 }): Promise<ExecutedMasterCandidate[]> {
+  const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   const candidates: ExecutedMasterCandidate[] = []
   const outputs = new Map<string, string>()
   const contextProfiles = useAIConfigStore.getState().agentContextProfiles
@@ -412,6 +423,7 @@ export async function executeMasterAgentPlan(input: {
       if (task.agentId === 'world-origin') {
         const prepared = await prepareWorldOriginCopilot({
           projectId: input.projectId,
+          scope,
           worldGroupId: input.worldGroupId,
           authorRequest: task.instruction,
           routingCategory: AGENT_ROLE_CATEGORIES['world-origin'],
@@ -435,6 +447,7 @@ export async function executeMasterAgentPlan(input: {
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
             baseSnapshot: prepared.snapshot,
+            workspaceScope: scope,
             dependsOnTaskIds: task.dependsOn,
           },
           draft,
@@ -445,6 +458,7 @@ export async function executeMasterAgentPlan(input: {
       } else if (task.agentId === 'character') {
         const prepared = await prepareCharacterCopilot({
           projectId: input.projectId,
+          scope,
           worldGroupId: input.worldGroupId,
           authorRequest: task.instruction,
           supplementalContext: upstream,
@@ -469,6 +483,7 @@ export async function executeMasterAgentPlan(input: {
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
             baseSnapshot: prepared.snapshot,
+            workspaceScope: scope,
             dependsOnTaskIds: task.dependsOn,
           },
           draft,
@@ -477,13 +492,18 @@ export async function executeMasterAgentPlan(input: {
         })
         outputs.set(task.id, draft)
       } else if (task.agentId === 'inspiration') {
-        const workspace = await db.inspirationWorkspaces.where('projectId').equals(input.projectId).first()
+        const workspace = (await readOwnedRows<any>(
+          scope,
+          'inspirationWorkspaces',
+          { owner: 'work' },
+        ))[0]
         const selectedFragmentIds = parseInspirationFragments(workspace?.fragments)
           .slice(0, MAX_INSPIRATION_FRAGMENTS)
           .map(fragment => fragment.id)
         if (!selectedFragmentIds.length) throw new Error('项目尚无已保存的灵感碎片。')
         const prepared = await prepareInspirationCopilot({
           projectId: input.projectId,
+          scope,
           selectedFragmentIds,
           authorRequest: task.instruction,
           routingCategory: AGENT_ROLE_CATEGORIES.inspiration,
@@ -507,6 +527,7 @@ export async function executeMasterAgentPlan(input: {
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
             baseSnapshot: prepared.snapshot,
+            workspaceScope: scope,
             mode: prepared.mode,
             selectedFragmentIds,
             dependsOnTaskIds: task.dependsOn,
@@ -519,6 +540,7 @@ export async function executeMasterAgentPlan(input: {
       } else if (task.agentId === 'outline') {
         const prepared = await prepareOutlineCopilot({
           projectId: input.projectId,
+          scope,
           worldGroupId: input.worldGroupId,
           authorRequest: task.instruction,
           supplementalContext: upstream,
@@ -550,6 +572,7 @@ export async function executeMasterAgentPlan(input: {
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
             baseSnapshot: prepared.snapshot,
+            workspaceScope: scope,
             outlineMode: prepared.mode,
             outlineParentId: prepared.parentVolumeId,
             dependsOnTaskIds: task.dependsOn,
@@ -562,6 +585,7 @@ export async function executeMasterAgentPlan(input: {
       } else {
         const prepared = await prepareProseCopilot({
           projectId: input.projectId,
+          scope,
           worldGroupId: input.worldGroupId,
           authorRequest: task.instruction,
           supplementalContext: upstream,
@@ -593,6 +617,7 @@ export async function executeMasterAgentPlan(input: {
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
             baseSnapshot: prepared.snapshot,
+            workspaceScope: scope,
             proseOperation: prepared.operation,
             proseOutlineNodeId: prepared.outlineNodeId,
             dependsOnTaskIds: task.dependsOn,
@@ -626,16 +651,45 @@ function sameWorldSnapshot(
     && left.worldOrigin === right.worldOrigin
 }
 
-async function currentWorldSnapshot(projectId: number, worldGroupId: number | null): Promise<WorldOriginSnapshot> {
-  const rows = await db.worldviews.where('projectId').equals(projectId).toArray()
+function sameWorkspaceScope(left: WorkspaceScope, right: WorkspaceScope): boolean {
+  return left.projectId === right.projectId
+    && left.worldId === right.worldId
+    && left.workId === right.workId
+}
+
+async function resolveCandidateScope(input: {
+  projectId: number
+  scope?: WorkspaceScope
+  event: AgentEvent
+  payload: MasterCandidatePayload
+}): Promise<WorkspaceScope> {
+  if (input.event.projectId !== input.projectId) throw new Error('Agent 候选不属于当前项目。')
+  let declared = input.scope ?? input.payload.workspaceScope
+  if (!declared && input.event.workId != null) {
+    const work = await db.works.get(input.event.workId)
+    if (!work || work.projectId !== input.projectId) throw new Error('Agent 候选所属作品不存在。')
+    declared = { projectId: input.projectId, worldId: work.worldId, workId: work.id! }
+  }
+  const scope = await resolveScope({ projectId: input.projectId, scope: declared })
+  if (input.payload.workspaceScope && !sameWorkspaceScope(scope, input.payload.workspaceScope)) {
+    throw new Error('Agent 候选的冻结作品作用域不一致。')
+  }
+  if (!await assertRecordInScope(scope, 'agentEvents', input.event, { owner: 'work' })) {
+    throw new Error('Agent 候选不属于当前作品。')
+  }
+  return scope
+}
+
+async function currentWorldSnapshot(scope: WorkspaceScope, worldGroupId: number | null): Promise<WorldOriginSnapshot> {
+  const rows = await readOwnedRows<any>(scope, 'worldviews', { owner: 'world' })
   const row = worldGroupId == null
     ? (rows.find(item => (item.worldGroupId ?? null) === null) ?? rows[0] ?? null)
     : (rows.find(item => item.worldGroupId === worldGroupId) ?? null)
   return { id: row?.id ?? null, updatedAt: row?.updatedAt ?? null, worldOrigin: row?.worldOrigin ?? '' }
 }
 
-async function currentRosterSnapshot(projectId: number, worldGroupId: number | null): Promise<CharacterRosterSnapshot> {
-  const rows = await db.characters.where('projectId').equals(projectId).toArray()
+async function currentRosterSnapshot(scope: WorkspaceScope, worldGroupId: number | null): Promise<CharacterRosterSnapshot> {
+  const rows = await readOwnedRows<any>(scope, 'characters', { owner: 'world' })
   return {
     serialized: JSON.stringify(rows.map(character => ({
       id: character.id ?? null,
@@ -650,8 +704,8 @@ async function currentRosterSnapshot(projectId: number, worldGroupId: number | n
   }
 }
 
-async function currentInspirationSnapshot(projectId: number): Promise<InspirationWorkspaceSnapshot> {
-  const row = await db.inspirationWorkspaces.where('projectId').equals(projectId).first()
+async function currentInspirationSnapshot(scope: WorkspaceScope): Promise<InspirationWorkspaceSnapshot> {
+  const row = (await readOwnedRows<any>(scope, 'inspirationWorkspaces', { owner: 'work' }))[0]
   return {
     id: row?.id ?? null,
     updatedAt: row?.updatedAt ?? null,
@@ -663,13 +717,12 @@ async function currentInspirationSnapshot(projectId: number): Promise<Inspiratio
 async function assertCandidateDependenciesAdopted(
   event: AgentEvent,
   payload: MasterCandidatePayload,
+  scope: WorkspaceScope,
 ): Promise<void> {
   const taskIds = payload.dependsOnTaskIds ?? []
   if (!taskIds.length) return
-  const events = await db.agentEvents
-    .where('conversationId')
-    .equals(event.conversationId)
-    .toArray()
+  const events = (await readOwnedRows<AgentEvent>(scope, 'agentEvents', { owner: 'work' }))
+    .filter(row => row.conversationId === event.conversationId)
   const candidateByTask = new Map<string, number>()
   const adoptedCandidateIds = new Set<number>()
   for (const row of events) {
@@ -697,13 +750,15 @@ async function assertCandidateDependenciesAdopted(
 
 export async function adoptMasterCandidate(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   event: AgentEvent
   payload: MasterCandidatePayload
   draft: string
   runtime?: ExecutedMasterCandidate
 }): Promise<string> {
-  await assertCandidateDependenciesAdopted(input.event, input.payload)
+  const scope = await resolveCandidateScope(input)
+  await assertCandidateDependenciesAdopted(input.event, input.payload, scope)
   if (input.runtime) {
     const output = input.payload.agentId === 'world-origin'
       ? input.draft
@@ -720,13 +775,14 @@ export async function adoptMasterCandidate(input: {
     }
   } else if (input.payload.agentId === 'world-origin') {
     const base = input.payload.baseSnapshot as WorldOriginSnapshot
-    if (!sameWorldSnapshot(base, await currentWorldSnapshot(input.projectId, input.worldGroupId))) {
+    if (!sameWorldSnapshot(base, await currentWorldSnapshot(scope, input.worldGroupId))) {
       throw new Error('世界来源已在候选生成后发生变化，请重新生成。')
     }
     const draft = input.draft.trim()
     if (draft.length < 4 || draft.length > 12_000) throw new Error('世界来源候选长度无效。')
     await adopt({
       projectId: input.projectId,
+      scope,
       worldGroupId: input.worldGroupId,
       target: 'worldviews',
       mode: 'replace',
@@ -734,13 +790,14 @@ export async function adoptMasterCandidate(input: {
     })
   } else if (input.payload.agentId === 'character') {
     const base = input.payload.baseSnapshot as CharacterRosterSnapshot
-    const current = await currentRosterSnapshot(input.projectId, input.worldGroupId)
+    const current = await currentRosterSnapshot(scope, input.worldGroupId)
     if (base.serialized !== current.serialized) throw new Error('角色主档已变化，请重新生成。')
     const candidate = parseCharacterCandidateDraft(input.draft)
     const normalized = candidate.name.normalize('NFKC').trim().toLocaleLowerCase('zh-CN')
     if (current.visibleNames.includes(normalized)) throw new Error(`当前世界已存在角色“${candidate.name}”。`)
     await adopt({
       projectId: input.projectId,
+      scope,
       worldGroupId: input.worldGroupId,
       target: 'characters',
       mode: 'add',
@@ -748,12 +805,12 @@ export async function adoptMasterCandidate(input: {
     })
   } else if (input.payload.agentId === 'inspiration') {
     const base = input.payload.baseSnapshot as InspirationWorkspaceSnapshot
-    const current = await currentInspirationSnapshot(input.projectId)
+    const current = await currentInspirationSnapshot(scope)
     if (JSON.stringify(base) !== JSON.stringify(current)) throw new Error('灵感工作区已变化，请重新生成。')
     const mode = input.payload.mode ?? 'single'
     const result = parseInspirationCandidateDraft(input.draft, mode)
-    await useInspirationWorkspaceStore.getState().load(input.projectId)
-    await useInspirationWorkspaceStore.getState().saveVersion(input.projectId, {
+    await useInspirationWorkspaceStore.getState().load(scope)
+    await useInspirationWorkspaceStore.getState().saveVersion(scope, {
       mode,
       parentVersionId: null,
       fragmentIds: input.payload.selectedFragmentIds ?? [],
@@ -764,6 +821,7 @@ export async function adoptMasterCandidate(input: {
     if (!mode) throw new Error('大纲候选缺少写回模式，请重新生成。')
     await adoptRestoredOutlineCandidate({
       projectId: input.projectId,
+      scope,
       worldGroupId: input.worldGroupId,
       mode,
       parentVolumeId: input.payload.outlineParentId ?? null,
@@ -776,6 +834,7 @@ export async function adoptMasterCandidate(input: {
     }
     await adoptRestoredProseCandidate({
       projectId: input.projectId,
+      scope,
       worldGroupId: input.worldGroupId,
       operation: input.payload.proseOperation,
       outlineNodeId: input.payload.proseOutlineNodeId,
@@ -785,10 +844,10 @@ export async function adoptMasterCandidate(input: {
   }
 
   await Promise.all([
-    useWorldviewStore.getState().loadAll(input.projectId, input.worldGroupId),
-    useCharacterStore.getState().loadAll(input.projectId),
-    useOutlineStore.getState().loadAll(input.projectId),
-    useChapterStore.getState().loadAll(input.projectId),
+    useWorldviewStore.getState().loadAll(scope, input.worldGroupId),
+    useCharacterStore.getState().loadAll(scope),
+    useOutlineStore.getState().loadAll(scope),
+    useChapterStore.getState().loadAll(scope),
   ])
   return input.payload.agentId === 'world-origin'
     ? '世界来源已写入项目。'

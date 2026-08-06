@@ -48,6 +48,10 @@ describe('CANON 覆盖基线 · 世界宪法设定互斥', () => {
   })
 
   it('R-CANON-setting-clash-1 · 世界起源与力量来源断言冲突', async () => {
+    await db.projects.add({
+      name: 'Canon fixture', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
+      description: '', targetWordCount: 0, createdAt: now, updatedAt: now,
+    } as any)
     const worldviewId = await db.worldviews.add({
       projectId: 1,
       worldOrigin: '魔法源于月亮潮汐',

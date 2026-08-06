@@ -86,6 +86,7 @@ export interface FactPredicateSpec {
 export interface TemporalFact {
   id?: number
   projectId: number
+  workId?: number | null
   worldGroupId?: number | null
 
   // —— 主体：分类型 FK（方案A），只对有稳定主表的实体建 ——

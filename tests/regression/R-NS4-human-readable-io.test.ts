@@ -11,8 +11,8 @@ const now = Date.now()
 async function seed() {
   const pid = await db.projects.add({ name: 'P', genre: 'x', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
   const charId = await db.characters.add({ projectId: pid, name: '林飞', role: 'protagonist', createdAt: now, updatedAt: now } as any) as number
-  const ch = await db.chapters.add({ projectId: pid, outlineNodeId: 0, title: '第1章', content: '林飞在洛阳。', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
-  const ch2 = await db.chapters.add({ projectId: pid, outlineNodeId: 0, title: '第2章', content: '林飞去北境。', wordCount: 0, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now } as any) as number
+  const ch = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第1章', content: '林飞在洛阳。', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
+  const ch2 = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第2章', content: '林飞去北境。', wordCount: 0, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now } as any) as number
   return { pid, charId, ch, ch2 }
 }
 
@@ -43,7 +43,7 @@ describe('NS-4 · human-readable IO', () => {
   it('导入候选 diff 只写 candidate/import，并跳过无效谓词与坏章节引用', async () => {
     const { pid, charId, ch, ch2 } = await seed()
     const otherProject = await db.projects.add({ name: 'Other', genre: 'x', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
-    const foreignChapter = await db.chapters.add({ projectId: otherProject, outlineNodeId: 0, title: '外部章', content: '', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
+    const foreignChapter = await db.chapters.add({ projectId: otherProject, outlineNodeId: null, title: '外部章', content: '', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
 
     const result = await importFactCandidateDiff(pid, {
       facts: [

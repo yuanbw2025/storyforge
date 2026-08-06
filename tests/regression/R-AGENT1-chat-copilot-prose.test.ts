@@ -9,6 +9,7 @@ import {
   type ProseCopilotInput,
 } from '../../src/lib/agent/prose-copilot'
 import { adoptMasterCandidate } from '../../src/lib/agent/orchestrator'
+import { appendAgentEvent, getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import { db } from '../../src/lib/db/schema'
 import {
   adoptGenerationNodeOutput,
@@ -16,7 +17,8 @@ import {
   runGenerationNode,
 } from '../../src/lib/generation/generation-node'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
-import type { AIConfigPreset, AgentEvent, Chapter, OutlineNode, Project } from '../../src/lib/types'
+import type { AIConfigPreset, Chapter, OutlineNode, Project } from '../../src/lib/types'
+import { resolveScopeLike } from '../../src/lib/world-engine/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 
 const longDraft = (marker: string) => (
@@ -93,6 +95,7 @@ async function makeNodeInput(
   prepared: Awaited<ReturnType<typeof prepareProseCopilot>>,
 ): Promise<ProseCopilotInput> {
   const config = useAIConfigStore.getState().config
+  const scope = await resolveScopeLike(project.id!)
   const assembled = await assembleContext({
     projectId: project.id!,
     worldGroupId: null,
@@ -105,6 +108,7 @@ async function makeNodeInput(
   })
   return {
     project,
+    scope,
     worldGroupId: null,
     authorRequest: prepared.operation === 'continue' ? '续写这一章正文' : '写第一章正文',
     supplementalContext: '',
@@ -327,18 +331,23 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
       worldGroupId: null,
       authorRequest: '写第二章正文',
     })
-    const event: AgentEvent = {
-      id: 1,
+    const scope = await resolveScopeLike(project.id!)
+    const conversation = await getOrCreateAgentConversation({
       projectId: project.id!,
-      conversationId: 1,
-      sequence: 1,
+      worldGroupId: null,
+      scope,
+    })
+    const event = await appendAgentEvent({
+      projectId: project.id!,
+      conversationId: conversation.id!,
       kind: 'candidate',
       content: '',
-      payload: '{}',
-      createdAt: Date.now(),
-    }
+      payload: {},
+      scope,
+    })
     const message = await adoptMasterCandidate({
       projectId: project.id!,
+      scope,
       worldGroupId: null,
       event,
       payload: {

@@ -101,7 +101,9 @@ describe('WORLD-1 · 修炼进度作者确认 UI', () => {
     })
 
     const select = host.querySelector<HTMLSelectElement>('select[aria-label="修炼进度来源章节"]')!
-    expect(select.value).toBe(String(chapterId))
+    await act(async () => {
+      await vi.waitFor(() => expect(select.value).toBe(String(chapterId)))
+    })
     const analyze = Array.from(host.querySelectorAll('button'))
       .find(button => button.textContent?.includes('分析本章')) as HTMLButtonElement
     await act(async () => {
@@ -120,8 +122,8 @@ describe('WORLD-1 · 修炼进度作者确认 UI', () => {
     })
     await act(async () => {
       await vi.waitFor(() => expect(db.cultivationProgress.count()).resolves.toBe(1))
+      await vi.waitFor(() => expect(host.textContent).toContain('正文当前：炼体'))
     })
-    expect(host.textContent).toContain('正文当前：炼体')
     expect(await db.cultivationProgress.toArray()).toEqual([
       expect.objectContaining({
         characterId,

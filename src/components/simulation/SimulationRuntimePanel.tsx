@@ -28,6 +28,7 @@ import type {
   SimulationSessionKind,
   SimulationTtrpgEncounterCandidate,
   SimulationTtrpgTurnCandidate,
+  WorkspaceScope,
 } from '../../lib/types'
 import { useSimulationRuntimeStore } from '../../stores/simulation-runtime'
 import { useDialog } from '../shared/Dialog'
@@ -51,6 +52,7 @@ const KIND_LABELS: Record<SimulationSessionKind, string> = {
   'npc-evolution': 'NPC 演进',
   ttrpg: '跑团',
   chatgame: '角色聊天',
+  storygame: '文字游戏',
 }
 
 const SOURCE_KIND_LABELS: Record<SimulationCanonSourceKind, string> = {
@@ -114,6 +116,7 @@ export default function SimulationRuntimePanel(props: {
   worldGroupId: number | null
   /** 产品入口锁定为单一会话类型；旧工作区不传时仍管理全部互动存档。 */
   sessionKind?: SimulationSessionKind
+  workspaceScope?: WorkspaceScope
 }) {
   const store = useSimulationRuntimeStore()
   const dialog = useDialog()
@@ -170,6 +173,9 @@ export default function SimulationRuntimePanel(props: {
   const [campaignScheduleStartClock, setCampaignScheduleStartClock] = useState('0')
   const [campaignScheduleEndClock, setCampaignScheduleEndClock] = useState('')
   const [campaignScheduleLocationKey, setCampaignScheduleLocationKey] = useState('')
+  const scopeProjectId = props.workspaceScope?.projectId
+  const scopeWorldId = props.workspaceScope?.worldId
+  const scopeWorkId = props.workspaceScope?.workId
   const [campaignScheduleActivity, setCampaignScheduleActivity] = useState('')
   const [campaignScheduleRecurrence, setCampaignScheduleRecurrence] = useState<'once' | 'daily' | 'weekly'>('once')
   const { config } = useAIConfigStore()
@@ -186,6 +192,9 @@ export default function SimulationRuntimePanel(props: {
     setSelectedSourceKeys(new Set())
     void loadSimulationCanonCandidates({
       projectId: props.project.id!,
+      scope: scopeProjectId != null && scopeWorldId != null && scopeWorkId != null
+        ? { projectId: scopeProjectId, worldId: scopeWorldId, workId: scopeWorkId }
+        : undefined,
       worldGroupId: props.worldGroupId,
     }).then(result => {
       if (!cancelled) setCanonCandidates(result.candidates)
@@ -195,15 +204,19 @@ export default function SimulationRuntimePanel(props: {
       if (!cancelled) setCanonLoading(false)
     })
     return () => { cancelled = true }
-  }, [props.project.id, props.worldGroupId])
+  }, [props.project.id, props.worldGroupId, scopeProjectId, scopeWorldId, scopeWorkId])
 
   const visibleSessions = useMemo(
     () => store.sessions.filter(session => (
       session.projectId === props.project.id
       && (session.worldGroupId ?? null) === props.worldGroupId
+      && (!props.workspaceScope || (
+        (session.worldId == null && session.workId == null)
+        || (session.worldId === props.workspaceScope.worldId && session.workId === props.workspaceScope.workId)
+      ))
       && (!props.sessionKind || session.kind === props.sessionKind)
     )),
-    [props.project.id, props.sessionKind, props.worldGroupId, store.sessions],
+    [props.project.id, props.sessionKind, props.workspaceScope, props.worldGroupId, store.sessions],
   )
   const selected = useMemo(
     () => visibleSessions.find(session => session.id === store.selectedSessionId) ?? null,
@@ -534,6 +547,7 @@ export default function SimulationRuntimePanel(props: {
                 kind: props.sessionKind ?? newKind,
                 title: newTitle,
                 sourceKeys: [...selectedSourceKeys],
+                scope: props.workspaceScope,
               })
               setNewTitle('')
               setSelectedSourceKeys(new Set())

@@ -5,6 +5,14 @@ import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { EmotionBeatCard, EmotionBeat } from '../lib/types'
 import { stringifyBeats, parseBeats } from '../lib/types/emotion-beat'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  stampNewRecord,
+  type WorkspaceScopeLike,
+} from '../lib/world-engine/scope'
 
 const now = () => Date.now()
 
@@ -12,7 +20,7 @@ interface EmotionBeatStore {
   cards: EmotionBeatCard[]
   loading: boolean
 
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   getByChapter: (chapterId: number) => EmotionBeatCard | undefined
   saveCard: (card: Omit<EmotionBeatCard, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
   updateCard: (id: number, data: Partial<EmotionBeatCard>) => Promise<void>
@@ -40,10 +48,14 @@ export const useEmotionBeatStore = create<EmotionBeatStore>((set, get) => ({
   cards: [],
   loading: false,
 
-  loadAll: async (projectId: number) => {
+  loadAll: async (scopeInput) => {
     set({ loading: true })
     try {
-      const rows = await db.emotionBeatCards.where('projectId').equals(projectId).toArray()
+      const rows = await readOwnedRows<EmotionBeatCard>(
+        await resolveReadScopeLike(scopeInput),
+        'emotionBeatCards',
+        { owner: 'work' },
+      )
       const cards = (rows as unknown as DBEmotionBeatCard[]).map(fromDB)
       set({ cards, loading: false })
       console.log(`[EmotionBeat] 加载 ${cards.length} 张节拍卡`)
@@ -59,15 +71,24 @@ export const useEmotionBeatStore = create<EmotionBeatStore>((set, get) => ({
 
   saveCard: async (card) => {
     try {
-      const dbCard = {
+      const scope = await resolveScopeLike(card.projectId)
+      const chapter = await db.chapters.get(card.chapterId)
+      if (!chapter || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
+        throw new Error('情感节拍卡关联章节不属于当前作品')
+      }
+      const dbCard = stampNewRecord(scope, 'emotionBeatCards', {
         ...card,
         beats: toBeatString(card.beats),
         createdAt: now(),
         updatedAt: now(),
-      }
+      }, { owner: 'work' })
 
       // 如果已存在同章节的卡，更新它
-      const existing = get().cards.find(c => c.chapterId === card.chapterId)
+      const existing = (await readOwnedRows<EmotionBeatCard>(
+        scope,
+        'emotionBeatCards',
+        { owner: 'work' },
+      )).find(c => c.chapterId === card.chapterId)
       if (existing?.id) {
          
         await db.emotionBeatCards.update(existing.id, dbCard as any)
@@ -91,6 +112,11 @@ export const useEmotionBeatStore = create<EmotionBeatStore>((set, get) => ({
 
   updateCard: async (id, data) => {
     try {
+      const beforeMigration = await db.emotionBeatCards.get(id)
+      if (!beforeMigration) return
+      const scope = await resolveScopeLike(beforeMigration.projectId)
+      const current = await db.emotionBeatCards.get(id)
+      if (!current || !await assertRecordInScope(scope, 'emotionBeatCards', current, { owner: 'work' })) return
       const patch: Record<string, unknown> = { ...data, updatedAt: now() }
       if (data.beats) {
         patch.beats = toBeatString(data.beats)
@@ -109,6 +135,11 @@ export const useEmotionBeatStore = create<EmotionBeatStore>((set, get) => ({
 
   deleteCard: async (id) => {
     try {
+      const beforeMigration = await db.emotionBeatCards.get(id)
+      if (!beforeMigration) return
+      const scope = await resolveScopeLike(beforeMigration.projectId)
+      const current = await db.emotionBeatCards.get(id)
+      if (!current || !await assertRecordInScope(scope, 'emotionBeatCards', current, { owner: 'work' })) return
       await db.emotionBeatCards.delete(id)
       set({ cards: get().cards.filter(c => c.id !== id) })
       console.log('[EmotionBeat] 删除:', id)

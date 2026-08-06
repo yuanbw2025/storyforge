@@ -11,8 +11,8 @@ const now = Date.now()
 async function seed() {
   const pid = await db.projects.add({ name: 'P', genre: 'x', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
   const charId = await db.characters.add({ projectId: pid, name: '林飞', role: 'protagonist', createdAt: now, updatedAt: now } as any) as number
-  const c1 = await db.chapters.add({ projectId: pid, outlineNodeId: 0, title: '第1章', content: '', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
-  const c2 = await db.chapters.add({ projectId: pid, outlineNodeId: 0, title: '第2章', content: '', wordCount: 0, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now } as any) as number
+  const c1 = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第1章', content: '', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
+  const c2 = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第2章', content: '', wordCount: 0, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now } as any) as number
   return { pid, charId, c1, c2 }
 }
 const cand = (over: Partial<ExtractedFactCandidate>): ExtractedFactCandidate => ({ subjectName: '林飞', predicate: 'location', factKind: 'state', value: '洛阳', sourceQuote: 'q', ...over })

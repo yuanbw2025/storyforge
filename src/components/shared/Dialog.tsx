@@ -100,11 +100,16 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
       {children}
       {dialog && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/55 px-4">
-          <div className="w-full max-w-md rounded-lg border border-border bg-bg-surface shadow-2xl">
+          <div
+            className="w-full max-w-md rounded-lg border border-border bg-bg-surface shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="storyforge-dialog-title"
+          >
             <div className="flex items-start gap-3 border-b border-border px-4 py-3">
               <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${isDanger ? 'text-error' : 'text-accent'}`} />
               <div className="min-w-0 flex-1">
-                <h2 className="text-sm font-semibold text-text-primary">{dialog.title}</h2>
+                <h2 id="storyforge-dialog-title" className="text-sm font-semibold text-text-primary">{dialog.title}</h2>
                 {dialog.message && (
                   <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-text-muted">{dialog.message}</p>
                 )}

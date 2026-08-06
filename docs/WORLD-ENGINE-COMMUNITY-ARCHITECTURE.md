@@ -1,6 +1,6 @@
 # WORLD-2 / PLATFORM-1 · StoryForge 世界引擎与社区整体架构重构
 
-> 状态：ARCHITECTURE BASELINE / WORLD-2A、WORLD-2B 第一垂直切片已落地 / WORLD-2C C1 + C2 已完成
+> 状态：ARCHITECTURE BASELINE / WORLD-2A 至 WORLD-2F 本地世界引擎基座已落地 / PLATFORM-1B 后端未开始
 > 决策日期：2026-08-05
 > 适用范围：世界引擎、分步骤创作、节点创作、Agent、跑团、角色聊天、文字游戏、世界发布与社区
 > 用户核心定义：一个世界必须同时拥有完整的世界基础、可执行叙事和可演化状态；作品与游戏都是该世界的实例。
@@ -88,15 +88,16 @@ AI Harness 横向约束所有生成和演化操作：模型负责提出候选，
 
 代码证据：
 
-- [ProductHubPage.tsx](../src/pages/ProductHubPage.tsx) 仍把 `Project` 作为 WORLD-2C 前的兼容存储边界；完整度已经改由只读世界投影提供，不再读取正文进度。
+- [ProductHubPage.tsx](../src/pages/ProductHubPage.tsx) 保留 `Project` 作为本地物理兼容根，并通过显式 World/Work
+  打开当前世界与作品；完整度由只读世界投影提供，不读取正文进度。
 - [domain.ts](../src/lib/world-engine/domain.ts) 从 `PROJECT_TABLES.worldDomains` 批量派生 World / Work / Runtime 兼容投影，不创建平行表或写入旁路。
 - [WorldEngineWorkspace.tsx](../src/components/world-engine/WorldEngineWorkspace.tsx) 聚合现有分步骤面板，单世界用户不需要开启多世界。
 - [world-group.ts](../src/lib/types/world-group.ts) 的类型和字段来自穿越/无限流多世界设计。
 - [WorldGroupDetail.tsx](../src/components/world-group/WorldGroupDetail.tsx) 主要管理描述、穿越和能力继承规则。
 - [sidebar-tree.ts](../src/components/layout/sidebar-tree.ts) 仍在旧工作区保存完整设定库入口。
-- [project-tables.ts](../src/lib/registry/project-tables.ts) 将 `storyCores` 标为项目级，`outlineNodes` 与
-  `detailedOutlines` 未进入世界社区分享范围。
-- [project.ts](../src/stores/project.ts) 在加载或创建普通项目时分配世界编号。
+- [project-tables.ts](../src/lib/registry/project-tables.ts) 为 66 张表统一登记物理生命周期、World/Work owner、
+  引用重映射和社区分享范围；作品正文仍禁止进入世界包。
+- [ownership.ts](../src/lib/world-engine/ownership.ts) 统一处理旧项目惰性迁移、默认根、兼容镜像和活动 scope。
 
 ## 4. 目标产品层级
 
@@ -545,13 +546,16 @@ Harness 不是一组更长的提示词，也不是新的业务数据源。它是
 
 完成判据：单世界用户无需开启多世界即可完成完整世界设定；旧工作区仍保持原行为。
 
+实施状态（2026-08-06）：**COMPLETE**。完整世界工作台已按世界基础、世界资产、叙事设计、世界结构、
+状态与实例聚合既有分步骤面板；单世界无需开启多世界，数据仍由原 store/use-case 和三注册表治理。
+
 ### WORLD-2C · 显式世界/作品所有权
 
 正式决策见 [WORLD-2C 世界、作品与本地工作区所有权 ADR](./adr/WORLD-2C-WORLD-WORK-OWNERSHIP.md)。
-ADR 已冻结领域边界、逻辑 owner、惰性迁移、回滚、导入重映射和开放门禁。C1 已完成 DB v49 空升级、
-World/Work/角色作品绑定/迁移凭证四张表、`domainOwner` 全表分类和注册表守卫；C2 已完成逐工作区只读预检、
-SHA-256 指纹、before-image、默认根、owner 盖章、唯一兼容 resolver、并发幂等和有边界回滚。C3 的业务与 AI
-全链路 scope 隔离尚未实施，不得把 C1/C2 完成写成 WORLD-2C 完成或开放第二作品。
+ADR 已冻结领域边界、逻辑 owner、惰性迁移、回滚、导入重映射和开放门禁。C1/C2 完成 DB v49 空升级、
+`domainOwner` 全表分类、逐工作区只读预检、SHA-256 指纹、before-image、默认根、owner 盖章、唯一兼容
+resolver、并发幂等和有边界回滚；C3-C5 已继续完成 Store/AI scope gate、严格 v4 owner 往返、删除生命周期、
+注册表派生的原子作用域转换与审计，以及同一 World 下多 Work 的创建、切换和删除 UI。
 
 范围：
 
@@ -561,6 +565,10 @@ SHA-256 指纹、before-image、默认根、owner 盖章、唯一兼容 resolver
 - `worldCode` 的权威从 Project 迁到 World，旧字段保持只读兼容镜像直至下线。
 
 完成判据：一个世界可创建至少两部互不覆盖的作品；旧项目自动映射后内容与 ID 引用完整。
+
+实施状态（2026-08-06）：**COMPLETE**。DB v50 的 66 张登记表统一由 `PROJECT_TABLES` 派生物理生命周期和
+逻辑 owner；v1-v3 兼容导入、v4 便携 ID、损坏 owner 拒绝、World/Work/Workspace 删除、两作品隔离及
+`changeRecordScope()` 的跨作用域引用反例均已覆盖。`Project` 只继续承担本地兼容根和当前 Work 镜像。
 
 ### WORLD-2D · 可执行叙事蓝图
 
@@ -573,6 +581,10 @@ SHA-256 指纹、before-image、默认根、owner 盖章、唯一兼容 resolver
 
 完成判据：同一世界至少可定义一条主线和两条支线；分步骤写作可选择其中一条创作，运行时可从对应入口启动。
 
+实施状态（2026-08-06）：**COMPLETE**。`narrativeModules` / `narrativeNodes` 已进入 schema 与三注册表；现有
+StoryArc 主线/支线可重复同步为同一投影，严格校验入口、结局、可达性、悬空后继、条件和效果 JSON。Work
+保存当前 NarrativeModule；用户可把模块保留在本作品或原子提升为整个 World 可复用叙事。
+
 ### WORLD-2E · 世界修订、版本与发布包 v2
 
 范围：
@@ -584,6 +596,10 @@ SHA-256 指纹、before-image、默认根、owner 盖章、唯一兼容 resolver
 
 完成判据：发布 v1 后修改草稿不影响旧实例；发布 v2 可显示差异；干净浏览器能导入并选择主线/支线。
 
+实施状态（2026-08-06）：**COMPLETE**。`worldRevisions` 保存父链、逐表依赖锁、稳定 SHA-256 和差异；
+`worldReleases` 事务化幂等发布不可变 manifest。世界包 v2 裁出单 World/Work 的严格 v4 便携快照并保留来源，
+世界包 v1 继续兼容；浏览器已完成 v2 下载、预检、导入和当前叙事恢复。
+
 ### WORLD-2F · 状态机与多产品实例统一
 
 范围：
@@ -594,6 +610,11 @@ SHA-256 指纹、before-image、默认根、owner 盖章、唯一兼容 resolver
 - 运行结果回流形成作用域明确的候选。
 
 完成判据：同一发布版本建立四类隔离实例；回放确定；任何实例不能修改世界发布物或其它实例。
+
+实施状态（2026-08-06）：**COMPLETE**。SIM session 显式绑定 World、Work、Release 或草稿快照哈希及
+NarrativeModule，分支继承冻结绑定；跑团、角色聊天、文字游戏和 NPC 演进统一使用原 SIM
+event/reducer/checkpoint。创建会话与绑定在同一事务中完成，四类实例隔离、确定回放和 Release 不可变已有反例；
+运行结果仍只形成 SIM 提案/事件，不自动改写作者 Canon。
 
 ### PLATFORM-1B · 社区发布与发现
 
@@ -652,6 +673,10 @@ Harness/Agent 执行体系。整体架构达到稳定基线后，HARNESS-2 先�
 5. 世界草稿变化只产生来源过期/升级提示，不改已有实例。
 6. 删除世界、作品、叙事模块、实例和本地副本的正反生命周期测试。
 7. `npm run ci`、适用的 `npm run ci:e2e` 和隔离真实浏览器项目验证。
+
+本地基座最终证据（2026-08-06）：`npm run ci` 的 264 个测试文件 / 996 项测试全部通过，依赖审计 0 漏洞，
+生产构建和包体预算通过；`npm run ci:e2e` 在独立 Chromium 数据中 36/36 通过。线上账号、云发布、发现、
+订阅、fork、协作与治理没有借此标记完成，仍由 PLATFORM-1B/1C 单独验收。
 
 ## 14. 文档迁移与旧方案处理
 

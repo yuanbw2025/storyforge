@@ -1,7 +1,13 @@
 import type { Chapter, KnowledgeLedgerEntry, OutlineNode } from '../types'
 import type { ConsistencyFinding } from '../ai/adapters/consistency-audit-adapter'
 import { db } from '../db/schema'
-import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  type WorkspaceScopeLike,
+} from '../world-engine/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import { adopt } from '../registry/adopt'
 import { resolveProjectionBoundary } from '../consistency/projection-boundary'
@@ -59,11 +65,13 @@ export type KnowledgeCandidateInput = Pick<
 
 export async function adoptKnowledgeCandidates(args: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId?: number | null
   candidates: KnowledgeCandidateInput[]
 }): Promise<{ written: number; skipped: number }> {
   const result = await adopt({
     projectId: args.projectId,
+    scope: args.scope,
     worldGroupId: args.worldGroupId,
     target: 'knowledgeLedger',
     mode: 'add-many',
@@ -73,32 +81,51 @@ export async function adoptKnowledgeCandidates(args: {
 }
 
 export async function listKnowledgeEvents(
-  projectId: number,
+  scopeInput: WorkspaceScopeLike,
   status?: KnowledgeLedgerEntry['status'],
 ): Promise<KnowledgeLedgerEntry[]> {
-  const rows = await db.knowledgeLedger.where('projectId').equals(projectId).toArray()
+  const scope = await resolveReadScopeLike(scopeInput)
+  const rows = await readOwnedRows<KnowledgeLedgerEntry>(scope, 'knowledgeLedger', { owner: 'work' })
   const selected = status ? rows.filter(row => row.status === status) : rows
   return selected.sort((a, b) => b.updatedAt - a.updatedAt || (b.id ?? 0) - (a.id ?? 0))
 }
 
 /** 人工确认是候选进入认知投影的唯一入口。 */
-export async function confirmKnowledgeCandidate(eventId: number): Promise<boolean> {
+export async function confirmKnowledgeCandidate(
+  eventId: number,
+  scopeInput?: WorkspaceScopeLike,
+): Promise<boolean> {
+  const beforeMigration = await db.knowledgeLedger.get(eventId)
+  if (!beforeMigration) return false
+  const scope = await resolveScopeLike(scopeInput ?? beforeMigration.projectId)
   const entry = await db.knowledgeLedger.get(eventId)
+  if (!await assertRecordInScope(scope, 'knowledgeLedger', entry, { owner: 'work' })) return false
   if (!entry?.id || !['candidate', 'source-missing', 'invalid-range'].includes(entry.status)) return false
   if (entry.characterId == null || !entry.knowledgeKey.trim() || !entry.statement.trim()) return false
   const character = await db.characters.get(entry.characterId)
-  if (!character || character.projectId !== entry.projectId) return false
+  if (!await assertRecordInScope(scope, 'characters', character, { owner: 'world' })) return false
+  if (entry.factId != null) {
+    const fact = await db.temporalFacts.get(entry.factId)
+    if (!await assertRecordInScope(scope, 'temporalFacts', fact, { owner: 'work' })) return false
+  }
   if (entry.action === 'mislearn' && !entry.belief?.trim()) return false
   if (entry.sourceChapterId != null) {
     const chapter = await db.chapters.get(entry.sourceChapterId)
-    if (!chapter || chapter.projectId !== entry.projectId) return false
+    if (!await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) return false
   }
   await db.knowledgeLedger.update(entry.id, { status: 'confirmed', updatedAt: Date.now() })
   return true
 }
 
-export async function rejectKnowledgeCandidate(eventId: number): Promise<boolean> {
+export async function rejectKnowledgeCandidate(
+  eventId: number,
+  scopeInput?: WorkspaceScopeLike,
+): Promise<boolean> {
+  const beforeMigration = await db.knowledgeLedger.get(eventId)
+  if (!beforeMigration) return false
+  const scope = await resolveScopeLike(scopeInput ?? beforeMigration.projectId)
   const entry = await db.knowledgeLedger.get(eventId)
+  if (!await assertRecordInScope(scope, 'knowledgeLedger', entry, { owner: 'work' })) return false
   if (!entry?.id || entry.status === 'confirmed') return false
   await db.knowledgeLedger.update(entry.id, { status: 'rejected', updatedAt: Date.now() })
   return true
@@ -171,7 +198,7 @@ export async function readProjectCharacterKnowledge(
   outlineNodeId?: number | null,
   scope?: WorkspaceScope,
 ): Promise<ProjectedKnowledge[]> {
-  const resolved = scope ?? await resolveScope({ projectId })
+  const resolved = scope ?? await resolveReadScopeLike(projectId)
   const [entries, outlineNodes, chapters] = await Promise.all([
     readOwnedRows<any>(resolved, 'knowledgeLedger', { owner: 'work' }),
     readOwnedRows<any>(resolved, 'outlineNodes', { owner: 'work' }),
@@ -193,11 +220,13 @@ export async function readCognitionAuditSnapshot(
   chapterId?: number | null,
   worldGroupId?: number | null,
   outlineNodeId?: number | null,
+  scope?: WorkspaceScope,
 ): Promise<CognitionAuditSnapshot> {
+  const resolved = scope ?? await resolveReadScopeLike(projectId)
   const [entries, outlineNodes, chapters] = await Promise.all([
-    db.knowledgeLedger.where('projectId').equals(projectId).toArray(),
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<KnowledgeLedgerEntry>(resolved, 'knowledgeLedger', { owner: 'work' }),
+    readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' }),
   ])
   const worldEntries = entries.filter(entry =>
     entry.status === 'confirmed'

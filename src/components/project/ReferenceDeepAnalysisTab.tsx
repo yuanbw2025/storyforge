@@ -67,20 +67,41 @@ export default function ReferenceDeepAnalysisTab({ reference }: Props) {
   const [activityLog, setActivityLog] = useState<{ level: string; msg: string }[]>([])
   const [running, setRunning] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mountedRef = useRef(false)
+  const reloadRequestRef = useRef(0)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      reloadRequestRef.current += 1
+    }
+  }, [])
 
   const reloadRuns = useCallback(async (preferRunId?: number) => {
     if (!reference.id) return
-    const nextRuns = await listReferenceAnalysisRuns(reference.id)
-    setRuns(nextRuns)
-    const active = nextRuns.find(run => run.status === 'active')
-    const selected = nextRuns.find(run => run.id === preferRunId)
-      ?? active
-      ?? nextRuns[0]
-    setSelectedRunId(selected?.id)
-    setChunks(selected?.id ? await getChunkAnalyses(reference.id, selected.id) : [])
-    setActiveChunks(active?.id ? await getChunkAnalyses(reference.id, active.id) : [])
-    if (selected) setProgress(selected.progress)
-    setRunning(isRefAnalysisPipelineRunning() && getActiveRefAnalysisRunId() === selected?.id)
+    const requestId = ++reloadRequestRef.current
+    try {
+      const nextRuns = await listReferenceAnalysisRuns(reference.id)
+      const active = nextRuns.find(run => run.status === 'active')
+      const selected = nextRuns.find(run => run.id === preferRunId)
+        ?? active
+        ?? nextRuns[0]
+      const [nextChunks, nextActiveChunks] = await Promise.all([
+        selected?.id ? getChunkAnalyses(reference.id, selected.id) : [],
+        active?.id ? getChunkAnalyses(reference.id, active.id) : [],
+      ])
+      if (!mountedRef.current || requestId !== reloadRequestRef.current) return
+      setRuns(nextRuns)
+      setSelectedRunId(selected?.id)
+      setChunks(nextChunks)
+      setActiveChunks(nextActiveChunks)
+      if (selected) setProgress(selected.progress)
+      setRunning(isRefAnalysisPipelineRunning() && getActiveRefAnalysisRunId() === selected?.id)
+    } catch (error) {
+      if (!mountedRef.current || requestId !== reloadRequestRef.current) return
+      setStatusMessage(error instanceof Error ? error.message : String(error))
+    }
   }, [getChunkAnalyses, reference.id])
 
   useEffect(() => {
@@ -96,11 +117,17 @@ export default function ReferenceDeepAnalysisTab({ reference }: Props) {
       onActivity: (level, message) => {
         setActivityLog(current => [...current.slice(-20), { level, msg: message }])
       },
-      onDone: async (referenceId, _success, runId) => {
+      onDone: (referenceId, _success, runId) => {
         if (reference.id !== referenceId) return
         setRunning(false)
-        await reloadRuns(runId)
-        await loadAll(reference.projectId)
+        void (async () => {
+          await reloadRuns(runId)
+          if (mountedRef.current) await loadAll(reference.projectId)
+        })().catch(error => {
+          if (mountedRef.current) {
+            setStatusMessage(error instanceof Error ? error.message : String(error))
+          }
+        })
       },
     })
     return () => setRefAnalysisPipelineListener({})

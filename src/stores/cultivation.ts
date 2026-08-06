@@ -12,11 +12,19 @@ import {
 } from '../lib/cultivation/lifecycle'
 import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-assertions'
 import { transactionTablesForReferences } from '../lib/registry/lifecycle'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  stampNewRecord,
+  type WorkspaceScopeLike,
+} from '../lib/world-engine/scope'
 
 interface CultivationStore {
   systems: CultivationSystem[]
   loading: boolean
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   addSystem: (system: Omit<CultivationSystem, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
   updateSystem: (id: number, patch: Partial<CultivationSystem>) => Promise<void>
   deleteSystem: (id: number) => Promise<void>
@@ -28,9 +36,10 @@ export const useCultivationStore = create<CultivationStore>((set, get) => ({
   systems: [],
   loading: false,
 
-  loadAll: async (projectId) => {
+  loadAll: async (scopeInput) => {
     set({ loading: true })
-    const systems = await db.cultivationSystems.where('projectId').equals(projectId).toArray()
+    const scope = await resolveReadScopeLike(scopeInput)
+    const systems = await readOwnedRows<CultivationSystem>(scope, 'cultivationSystems', { owner: 'world' })
     set({ systems, loading: false })
   },
 
@@ -38,15 +47,23 @@ export const useCultivationStore = create<CultivationStore>((set, get) => ({
     const validation = validateCultivationStages(parseCultivationStages(system.stages))
     if (!validation.valid) throw new Error(validation.errors.join('；'))
     const timestamp = now()
-    const row = { ...system, createdAt: timestamp, updatedAt: timestamp }
+    const row = stampNewRecord(
+      await resolveScopeLike(system.projectId),
+      'cultivationSystems',
+      { ...system, createdAt: timestamp, updatedAt: timestamp },
+      { owner: 'world' },
+    ) as CultivationSystem
     const id = await db.cultivationSystems.add(row) as number
     set({ systems: [...get().systems, { ...row, id }] })
     return id
   },
 
   updateSystem: async (id, patch) => {
-    const current = get().systems.find(system => system.id === id) ?? await db.cultivationSystems.get(id)
-    if (!current) return
+    const beforeMigration = get().systems.find(system => system.id === id) ?? await db.cultivationSystems.get(id)
+    if (!beforeMigration) return
+    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const current = await db.cultivationSystems.get(id)
+    if (!current || !await assertRecordInScope(scope, 'cultivationSystems', current, { owner: 'world' })) return
     let removedStageIds = new Set<string>()
     if (patch.stages !== undefined) {
       const nextStages = parseCultivationStages(patch.stages)
@@ -80,8 +97,11 @@ export const useCultivationStore = create<CultivationStore>((set, get) => ({
   },
 
   deleteSystem: async (id) => {
-    const current = get().systems.find(system => system.id === id) ?? await db.cultivationSystems.get(id)
-    if (!current) return
+    const beforeMigration = get().systems.find(system => system.id === id) ?? await db.cultivationSystems.get(id)
+    if (!beforeMigration) return
+    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const current = await db.cultivationSystems.get(id)
+    if (!current || !await assertRecordInScope(scope, 'cultivationSystems', current, { owner: 'world' })) return
     await db.transaction('rw', transactionTablesForReferences('cultivationSystems'), async () => {
       await clearCultivationSystemReferences(current.projectId, new Set([id]))
       await db.cultivationSystems.delete(id)

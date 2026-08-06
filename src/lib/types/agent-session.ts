@@ -12,6 +12,7 @@ export type AgentEventKind = typeof AGENT_EVENT_KINDS[number]
 export interface AgentConversation {
   id?: number
   projectId: number
+  workId?: number | null
   worldGroupId?: number | null
   title: string
   status: 'active' | 'archived'
@@ -28,6 +29,7 @@ export interface AgentConversation {
 export interface AgentEvent {
   id?: number
   projectId: number
+  workId?: number | null
   conversationId: number
   sequence: number
   kind: AgentEventKind

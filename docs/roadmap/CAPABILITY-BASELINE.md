@@ -483,18 +483,24 @@
 - WORLD-2C C2 已完成：项目创建和旧工作区首次进入统一经过 ownership service；只读预检从 `PROJECT_TABLES`
   派生表范围，以 SHA-256 记录主键/owner 指纹而不记录正文；持久化 before-image 后在单事务中创建或采纳默认
   World/Work、盖默认 owner 并更新兼容镜像。失败回滚、并发幂等、未知归属拒绝和有边界回滚已有反例测试。
-- WORLD-2C C3 进行中：`src/lib/world-engine/scope.ts` 从 `PROJECT_TABLES.domainOwner` 派生唯一
-  `WorkspaceScope` selector/owner gate；`assembleContext()`、`adopt()`、核心世界/作品上下文源和 Agent
-  对话/事件流已按 World/Work 隔离，双作品 Golden Project 已验证故事核心、正文、结构化写回和 Agent 运行记录不串。
-  第二作品 UI 仍隐藏，剩余 store 写入口和导入导出属于后续 C3/C4/C5。
+- WORLD-2C C3-C5 已完成：核心 Store、`assembleContext()`、`adopt()`、上下文源和 Agent 记录统一经过
+  `WorkspaceScope` owner gate；严格 v4 便携 owner、v1-v3 兼容、损坏 owner 拒绝、Workspace/World/Work 删除、
+  双作用域原子转换及审计均从 `PROJECT_TABLES` 派生。同一 World 已开放多 Work 创建、切换和删除，双作品
+  Golden Project 与浏览器 E2E 证明世界 Canon 共享而作品内容不串。
+- WORLD-2D 已完成：`narrativeModules` / `narrativeNodes` 是主线、支线、任务、开局、条件、效果、选择和后继的
+  可执行合同；StoryArc 可重复同步而不复制正文，严格 JSON/可达性检查后由 Work 选择当前叙事，模块可选择
+  本作品或整个 World 作用域。
+- WORLD-2E 已完成：修订父链、逐表依赖锁、SHA-256、差异、事务化幂等 Release 和世界包 v2 已落地；v1 继续
+  兼容，浏览器完成 v2 下载、预检、导入、来源与当前叙事恢复。
+- WORLD-2F 已完成：SIM 会话绑定 World/Work/Release 或草稿快照/NarrativeModule，分支继承冻结绑定；跑团、
+  角色聊天、文字游戏和 NPC 演进共享原 event/reducer/checkpoint，文字游戏已由实验占位切换为实际运行入口。
 
 ### 当前边界 / 尚未完成
 
-- `Project` 仍是 IndexedDB 兼容存储边界，`worldCode` 仍保留为当前 World 的兼容镜像。WORLD-2C 当前只完成
-  C1/C2，C3 核心 scope-aware 链路已落地但尚未全量收口；v4 严格 owner 往返和两作品 UI 也尚未实施，不能
-  因 Golden Project 通过就开放第二作品。
+- `Project` 仍是 IndexedDB 兼容存储边界，`worldCode` / `worldVersion` 仍保留为当前 World/Release 的兼容
+  镜像；删除这些镜像需要后续独立 ADR，不能在普通功能改动中顺手移除。
 - 世界完整度当前只表达领域覆盖，不冒充引用完整、Canon 冲突或发布准备度；后续验证能力必须复用三注册表和已有一致性检查器。
-- 主线、支线、条件与效果仍是现有大纲/故事线投影；NarrativeModule / NarrativeNode、发布包 v2 和冻结版本实例绑定分别属于 WORLD-2D/2E/2F。
+- 本地世界引擎基座完成不等于社区平台完成；账号、云发布、发现、订阅、fork、协作和治理仍属于 PLATFORM-1B/1C。
 - Harness/Agent 执行体系不在 WORLD-2 中扩张；先在完整保留的分步骤模式完成 HARNESS-2，再评估迁移。
 
 ## 新开发前的最小核对清单

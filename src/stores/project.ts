@@ -10,6 +10,7 @@ import {
   withWorldIdentity,
 } from '../lib/product/world-identity'
 import { ensureWorkspaceOwnership } from '../lib/world-engine/ownership'
+import { updateProjectAndActiveWork } from '../lib/world-engine/works'
 
 async function ensureWorldIdentity(project: Project): Promise<Project> {
   if (hasShareableWorldIdentity(project)) return project
@@ -88,7 +89,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   updateProject: async (id: number, data: Partial<Project>) => {
-    await db.projects.update(id, { ...data, updatedAt: Date.now() })
+    await updateProjectAndActiveWork(id, data)
     await get().loadProjects()
   },
 

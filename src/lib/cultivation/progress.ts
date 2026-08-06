@@ -1,10 +1,12 @@
 import type {
   ChatMessage,
+  Chapter,
   Character,
   CultivationProgress,
   CultivationStage,
   CultivationSystem,
   CultivationTransition,
+  OutlineNode,
 } from '../types'
 import { CULTIVATION_TRANSITIONS, parseCultivationStages } from '../types'
 import { db } from '../db/schema'
@@ -12,6 +14,14 @@ import { adopt } from '../registry/adopt'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import { htmlToPlainText } from '../utils/html'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  type WorkspaceScopeLike,
+} from '../world-engine/scope'
+import type { WorkspaceScope } from '../types/world-ownership'
 
 export interface CultivationProgressCandidate {
   characterId: number
@@ -142,18 +152,29 @@ export function parseCultivationProgressResult(args: {
 
 export async function acceptCultivationProgressCandidate(args: {
   projectId: number
+  scope?: WorkspaceScope
   chapterId: number
   candidate: CultivationProgressCandidate
 }): Promise<number> {
+  const scope = await resolveScopeLike(args.scope ?? args.projectId)
   const [chapter, character, system, outlineNodes] = await Promise.all([
     db.chapters.get(args.chapterId),
     db.characters.get(args.candidate.characterId),
     db.cultivationSystems.get(args.candidate.cultivationSystemId),
-    db.outlineNodes.where('projectId').equals(args.projectId).toArray(),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
   ])
   if (!chapter || chapter.projectId !== args.projectId) throw new Error('来源章节不存在或不属于当前项目')
   if (!character || character.projectId !== args.projectId) throw new Error('角色不存在或不属于当前项目')
   if (!system || system.projectId !== args.projectId) throw new Error('修炼体系不存在或不属于当前项目')
+  if (!await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
+    throw new Error('来源章节不属于当前作品')
+  }
+  if (!await assertRecordInScope(scope, 'characters', character, { owner: 'world' })) {
+    throw new Error('角色不属于当前世界')
+  }
+  if (!await assertRecordInScope(scope, 'cultivationSystems', system, { owner: 'world' })) {
+    throw new Error('修炼体系不属于当前世界')
+  }
   if (character.cultivationSystemId !== system.id) throw new Error('角色主修体系已变化，请重新分析')
 
   const outline = outlineNodes.find(node => node.id === chapter.outlineNodeId)
@@ -170,13 +191,11 @@ export async function acceptCultivationProgressCandidate(args: {
   const stage = stages.find(item => item.id === args.candidate.stageId)
   if (!stage) throw new Error('目标境界已从体系中删除，请重新分析')
 
-  const existing = await db.cultivationProgress
-    .where('projectId').equals(args.projectId)
+  const existing = (await readOwnedRows<CultivationProgress>(scope, 'cultivationProgress', { owner: 'work' }))
     .filter(row =>
       row.characterId === character.id
       && row.cultivationSystemId === system.id
       && row.status === 'confirmed')
-    .toArray()
   if (existing.some(row =>
     row.sourceChapterId === chapter.id
     && row.stageId === stage.id
@@ -203,7 +222,7 @@ export async function acceptCultivationProgressCandidate(args: {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
-  const sorted = await sortProgressRows(args.projectId, [...existing, candidateRow])
+  const sorted = await sortProgressRows(scope, [...existing, candidateRow])
   const candidateIndex = sorted.indexOf(candidateRow)
   const expected = transitionBetween(
     candidateIndex > 0 ? sorted[candidateIndex - 1].stageId ?? null : null,
@@ -216,6 +235,7 @@ export async function acceptCultivationProgressCandidate(args: {
 
   const result = await adopt({
     projectId: args.projectId,
+    scope,
     worldGroupId: chapterWorld,
     target: 'cultivationProgress',
     mode: 'add',
@@ -226,19 +246,22 @@ export async function acceptCultivationProgressCandidate(args: {
   const id = result.written[0]?.id
   if (id == null) throw new Error(result.skipped[0]?.reason || '修炼进度写入失败')
 
-  await normalizeProgressTransitions(args.projectId, character.id!, system.id!, stages)
+  await normalizeProgressTransitions(scope, character.id!, system.id!, stages)
   return id
 }
 
 export async function deleteCultivationProgressEvent(projectId: number, id: number): Promise<void> {
+  const scope = await resolveScopeLike(projectId)
   const row = await db.cultivationProgress.get(id)
-  if (!row || row.projectId !== projectId) return
+  if (!row || row.projectId !== projectId
+    || !await assertRecordInScope(scope, 'cultivationProgress', row, { owner: 'work' })) return
   await db.cultivationProgress.delete(id)
   if (row.characterId == null || row.cultivationSystemId == null) return
   const system = await db.cultivationSystems.get(row.cultivationSystemId)
-  if (!system || system.projectId !== projectId) return
+  if (!system || system.projectId !== projectId
+    || !await assertRecordInScope(scope, 'cultivationSystems', system, { owner: 'world' })) return
   await normalizeProgressTransitions(
-    projectId,
+    scope,
     row.characterId,
     row.cultivationSystemId,
     parseCultivationStages(system.stages),
@@ -250,13 +273,15 @@ export async function readCultivationProgressContext(
   worldGroupId?: number | null,
   chapterId?: number | null,
   outlineNodeId?: number | null,
+  workspaceScope?: WorkspaceScope,
 ): Promise<string> {
   const project = await db.projects.get(projectId)
   if (!project?.includeCultivationProgressInAI) return ''
+  const scope = await resolveReadScopeLike(workspaceScope ?? projectId)
   const [rows, chapters, outlineNodes] = await Promise.all([
-    db.cultivationProgress.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<CultivationProgress>(scope, 'cultivationProgress', { owner: 'work' }),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
   ])
   const walk = walkOutlineChaptersInCanonicalOrder(outlineNodes)
   const orderOf = new Map<number, number>()
@@ -295,7 +320,7 @@ export async function readCultivationProgressContext(
   }
   const lines = ['【作者确认的正文修炼进度】']
   for (const group of grouped.values()) {
-    const sorted = await sortProgressRows(projectId, group)
+    const sorted = await sortProgressRows(scope, group)
     const current = sorted[sorted.length - 1]
     const path = sorted.map(row => row.stageName).filter((name, index, all) => index === 0 || name !== all[index - 1])
     lines.push(
@@ -308,12 +333,13 @@ export async function readCultivationProgressContext(
 }
 
 export async function sortProgressRows(
-  projectId: number,
+  scopeInput: WorkspaceScopeLike,
   rows: CultivationProgress[],
 ): Promise<CultivationProgress[]> {
+  const scope = await resolveReadScopeLike(scopeInput)
   const [chapters, outlineNodes] = await Promise.all([
-    db.chapters.where('projectId').equals(projectId).toArray(),
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
   ])
   const { sequence } = resolveCanonicalChapterSequence(outlineNodes, chapters)
   const orderOf = new Map<number, number>()
@@ -346,19 +372,17 @@ function transitionBetween(
 }
 
 async function normalizeProgressTransitions(
-  projectId: number,
+  scope: WorkspaceScope,
   characterId: number,
   systemId: number,
   stages: CultivationStage[],
 ): Promise<void> {
-  const rows = await db.cultivationProgress
-    .where('projectId').equals(projectId)
+  const rows = (await readOwnedRows<CultivationProgress>(scope, 'cultivationProgress', { owner: 'work' }))
     .filter(row =>
       row.characterId === characterId
       && row.cultivationSystemId === systemId
       && row.status === 'confirmed')
-    .toArray()
-  const sorted = await sortProgressRows(projectId, rows)
+  const sorted = await sortProgressRows(scope, rows)
   for (let index = 0; index < sorted.length; index++) {
     const row = sorted[index]
     if (row.id == null) continue

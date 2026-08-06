@@ -1,9 +1,10 @@
 import type { Chapter, Character, OutlineNode } from '../types'
 import type { ConsistencyFinding } from '../ai/adapters/consistency-audit-adapter'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
-import { db } from '../db/schema'
 import { getFactPredicate, normalizeFactValue } from '../registry/fact-predicate-registry'
 import type { TemporalFact } from '../types/temporal-fact'
+import type { WorkspaceScope } from '../types/world-ownership'
+import { readOwnedRows, resolveReadScopeLike } from '../world-engine/scope'
 
 export type CharacterLifecycleStatus = 'alive' | 'dead' | 'missing' | 'unknown'
 
@@ -128,12 +129,14 @@ export async function readLifecycleAuditSnapshot(
   projectId: number,
   chapterId: number,
   worldGroupId?: number | null,
+  scope?: WorkspaceScope,
 ): Promise<LifecycleAuditSnapshot> {
+  const resolved = scope ?? await resolveReadScopeLike(projectId)
   const [facts, characters, outlineNodes, chapters] = await Promise.all([
-    db.temporalFacts.where('projectId').equals(projectId).toArray(),
-    db.characters.where('projectId').equals(projectId).toArray(),
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<TemporalFact>(resolved, 'temporalFacts', { owner: 'work' }),
+    readOwnedRows<Character>(resolved, 'characters', { owner: 'world' }),
+    readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' }),
   ])
   const projected = projectCharacterLifecycles({
     facts, characters, outlineNodes, chapters, chapterId, worldGroupId,

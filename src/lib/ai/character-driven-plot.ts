@@ -14,13 +14,12 @@ import {
 import type { OutlineNode } from '../types/outline'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from './prompt-engine'
-import { useOutlineStore } from '../../stores/outline'
-import { db } from '../db/schema'
 import { assembleContext } from '../registry/assemble-context'
 import {
   appendSimplifiedChineseOutputConstraint,
   appendUserConstraint,
 } from './adapters/prompt-guards'
+import { isLegacyReadScope, readOwnedRows, resolveReadScopeLike } from '../world-engine/scope'
 
 // ── 类型 ────────────────────────────────────────────────────────────────
 
@@ -76,10 +75,9 @@ function buildExistingOutlineSummary(nodes: OutlineNode[]): string {
 }
 
 async function resolveContextWorldGroupId(projectId: number): Promise<number | null | undefined> {
-  const active = await db.worldGroups
-    .where('projectId').equals(projectId)
-    .and(g => g.type === 'primary')
-    .first()
+  const scope = await resolveReadScopeLike(projectId)
+  const active = (await readOwnedRows<any>(scope, 'worldGroups', { owner: 'world' }))
+    .find(group => group.type === 'primary')
   return active?.id ?? undefined
 }
 
@@ -99,9 +97,11 @@ export async function buildCharacterDrivenPlotPrompt(
   arcs: CharacterArcInput[],
   userHint?: string,
 ): Promise<ChatMessage[]> {
+  const readScope = await resolveReadScopeLike(projectId)
   const worldGroupId = await resolveContextWorldGroupId(projectId)
   const context = await assembleContext({
     projectId,
+    scope: isLegacyReadScope(readScope) ? undefined : readScope,
     worldGroupId,
     sourceKeys: [
       'worldview',
@@ -117,7 +117,7 @@ export async function buildCharacterDrivenPlotPrompt(
   const storyCoreBlock = extractStoryCoreBlock(context.text)
 
   // 已有大纲结构
-  const outlineNodes = useOutlineStore.getState().nodes
+  const outlineNodes = await readOwnedRows<OutlineNode>(readScope, 'outlineNodes', { owner: 'work' })
   const existingOutline = buildExistingOutlineSummary(outlineNodes)
 
   const characterArcs = formatCharacterArcs(arcs)

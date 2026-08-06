@@ -2,9 +2,19 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { adopt } from '../../src/lib/registry/adopt'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
-import { readOwnedRows, assertRecordInScope } from '../../src/lib/world-engine/scope'
+import { readOwnedRows, assertRecordInScope, resolveReadScope } from '../../src/lib/world-engine/scope'
 import type { WorkspaceScope } from '../../src/lib/types/world-ownership'
 import { appendAgentEvent, getOrCreateAgentConversation, readAgentEvents } from '../../src/lib/agent/conversations'
+import { useCultivationStore } from '../../src/stores/cultivation'
+import { acceptCultivationProgressCandidate } from '../../src/lib/cultivation/progress'
+import { stringifyCultivationStages } from '../../src/lib/types'
+import { useHistoricalStore } from '../../src/stores/historical'
+import { useWorldNodeStore } from '../../src/stores/world-node'
+import { useCharacterDrivenPlanStore } from '../../src/stores/character-driven-plan'
+import { useEmotionBeatStore } from '../../src/stores/emotion-beat'
+import { useNoteStore } from '../../src/stores/note'
+import { useUserStyleStore } from '../../src/stores/user-style'
+import { useNodeFlowStore } from '../../src/stores/node-flow'
 
 async function createGoldenProject(): Promise<{ projectId: number; worldId: number; a: WorkspaceScope; b: WorkspaceScope }> {
   const now = Date.now()
@@ -24,7 +34,13 @@ async function createGoldenProject(): Promise<{ projectId: number; worldId: numb
     projectId, worldId, title: '作品 B', description: '', genres: ['fantasy'], status: 'drafting',
     targetWordCount: 50000, createdAt: now, updatedAt: now,
   }) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workA, ownershipSchemaVersion: 1 })
+  await db.projects.update(projectId, {
+    activeWorldId: worldId,
+    activeWorkId: workA,
+    ownershipSchemaVersion: 1,
+    worldCode: 'c3-golden-world',
+    worldVersion: 1,
+  })
   return {
     projectId,
     worldId,
@@ -40,6 +56,46 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
   })
 
   afterEach(() => db.close())
+
+  it('旧分步骤项目只读装配零写入，兼容 scope 不得被复用于写回', async () => {
+    const projectId = await db.projects.add({
+      name: '旧分步骤项目', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
+      description: '', targetWordCount: 100000, createdAt: 1, updatedAt: 1,
+    } as any) as number
+    await db.storyCores.add({
+      projectId, theme: '旧项目主题', createdAt: 1, updatedAt: 1,
+    } as any)
+
+    const readScope = await resolveReadScope({ projectId })
+    expect(await resolveReadScope({ scope: readScope })).toEqual(readScope)
+    const context = await assembleContext({ projectId, sourceKeys: ['storyCore'] })
+    expect(context.text).toContain('旧项目主题')
+    expect(await db.worlds.count()).toBe(0)
+    expect(await db.works.count()).toBe(0)
+    expect(await db.ownershipMigrations.count()).toBe(0)
+
+    await expect(adopt({
+      projectId,
+      scope: readScope,
+      target: 'storyCores',
+      mode: 'replace',
+      data: { theme: '不得写入' },
+    })).rejects.toThrow('WorkspaceScope')
+  })
+
+  it('只读入口对半成品 World/Work 归属失败关闭，不猜测默认作品', async () => {
+    const projectId = await db.projects.add({
+      name: '不完整归属', genre: 'fantasy', createdAt: 1, updatedAt: 1,
+    } as any) as number
+    await db.worlds.add({
+      projectId, code: 'partial-owner', name: '孤立世界', description: '',
+      currentVersion: 1, createdAt: 1, updatedAt: 1,
+    })
+
+    await expect(assembleContext({ projectId, sourceKeys: ['storyCore'] }))
+      .rejects.toThrow('不完整的 World/Work 归属')
+    expect(await db.ownershipMigrations.count()).toBe(0)
+  })
 
   it('同一 World 下两部 Work 的故事核心与正文上下文严格隔离', async () => {
     const { a, b } = await createGoldenProject()
@@ -115,6 +171,9 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
     expect(owned).toEqual([])
     expect(await assertRecordInScope(a, 'storyCores', await db.storyCores.get(row), { owner: 'work' })).toBe(true)
     expect(await assertRecordInScope(b, 'storyCores', await db.storyCores.get(row), { owner: 'work' })).toBe(false)
+    await expect(resolveReadScope({
+      scope: { projectId: a.projectId, worldId: 0, workId: 0 },
+    })).rejects.toThrow('旧项目只读 scope')
     await expect(adopt({
       projectId: a.projectId, scope: { ...a, workId: 999999 }, target: 'storyCores', mode: 'replace', data: { theme: 'bad' },
     })).rejects.toThrow('WorkspaceScope')
@@ -129,5 +188,104 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
     expect((await readAgentEvents(conversationA.id!, a)).map(event => event.content)).toEqual(['A event'])
     expect((await readAgentEvents(conversationB.id!, b)).map(event => event.content)).toEqual(['B event'])
     expect(await readAgentEvents(conversationB.id!, a)).toEqual([])
+  })
+
+  it('ownership 就绪后的上游设定仍绑定 World，正文产物只写入当前 Work', async () => {
+    const { a, b } = await createGoldenProject()
+    await db.projects.update(a.projectId, { includeCultivationProgressInAI: true })
+    const systemId = await useCultivationStore.getState().addSystem({
+      projectId: a.projectId,
+      worldGroupId: null,
+      name: '剑修',
+      description: '',
+      stages: stringifyCultivationStages([
+        { id: 'foundation', name: '筑基境', parentStageIds: [] },
+      ]),
+    })
+    expect((await db.cultivationSystems.get(systemId) as any)?.worldId).toBe(a.worldId)
+    const historicalEventId = await useHistoricalStore.getState().addEvent({
+      projectId: a.projectId,
+      worldGroupId: null,
+      era: 'custom',
+      year: 1,
+      date: '元年',
+      title: '世界建立',
+      description: '',
+      isHistorical: false,
+    })
+    expect((await db.historicalTimelineEvents.get(historicalEventId) as any)?.worldId).toBe(a.worldId)
+    const worldNodeId = await useWorldNodeStore.getState().createNode({
+      projectId: a.projectId,
+      worldGroupId: null,
+      parentId: null,
+      name: '主世界',
+      description: '',
+      sortOrder: 0,
+    })
+    expect((await db.worldNodes.get(worldNodeId) as any)?.worldId).toBe(a.worldId)
+    const planId = await useCharacterDrivenPlanStore.getState().createPlan(a.projectId, '作品 A 方案')
+    await useCharacterDrivenPlanStore.getState().setActivePlan(a.projectId, planId)
+    expect((await db.characterDrivenPlans.get(planId) as any)?.workId).toBe(a.workId)
+    expect((await db.works.get(a.workId))?.activeCharacterDrivenPlanId).toBe(planId)
+    expect(await readOwnedRows(b, 'characterDrivenPlans', { owner: 'work' })).toEqual([])
+
+    const now = Date.now()
+    const characterId = await db.characters.add({
+      projectId: a.projectId, worldId: a.worldId, name: '林舟', role: 'protagonist',
+      roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
+      homeWorldGroupId: null, isCrossWorld: false,
+      cultivationSystemId: systemId, cultivationStageId: 'foundation',
+      createdAt: now, updatedAt: now,
+    } as any) as number
+    const outlineId = await db.outlineNodes.add({
+      projectId: a.projectId, workId: a.workId, worldId: null, parentId: null,
+      type: 'chapter', title: '筑基', summary: '', order: 0, createdAt: now, updatedAt: now,
+    } as any) as number
+    const chapterId = await db.chapters.add({
+      projectId: a.projectId, workId: a.workId, outlineNodeId: outlineId, title: '筑基',
+      content: '<p>林舟在生死关头凝成道基，正式踏入筑基境。</p>',
+      wordCount: 22, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now,
+    } as any) as number
+    const beatId = await useEmotionBeatStore.getState().saveCard({
+      projectId: a.projectId,
+      chapterId,
+      chapterTitle: '筑基',
+      overallArc: '绝境到突破',
+      beats: [],
+      source: 'manual',
+    })
+    const noteId = await useNoteStore.getState().addNote(a.projectId, '只属于作品 A', chapterId)
+    expect((await db.emotionBeatCards.get(beatId) as any)?.workId).toBe(a.workId)
+    expect((await db.notes.get(noteId) as any)?.workId).toBe(a.workId)
+    expect(await readOwnedRows(b, 'emotionBeatCards', { owner: 'work' })).toEqual([])
+    expect(await readOwnedRows(b, 'notes', { owner: 'work' })).toEqual([])
+    await useUserStyleStore.getState().saveProfile(a.projectId, {
+      profile: '作品 A 的克制文风',
+      sourceChapterIds: [chapterId],
+      sampleCount: 1,
+      sampleWords: 22,
+    })
+    expect((await db.userStyleProfiles.where('projectId').equals(a.projectId).first() as any)?.workId).toBe(a.workId)
+    expect(await readOwnedRows(b, 'userStyleProfiles', { owner: 'work' })).toEqual([])
+    const flowId = await useNodeFlowStore.getState().createFlow(a.projectId, null)
+    expect((await db.nodeFlows.get(flowId) as any)?.workId).toBe(a.workId)
+    expect(await readOwnedRows(b, 'nodeFlows', { owner: 'work' })).toEqual([])
+
+    const progressId = await acceptCultivationProgressCandidate({
+      projectId: a.projectId,
+      chapterId,
+      candidate: {
+        characterId,
+        cultivationSystemId: systemId,
+        stageId: 'foundation',
+        transition: 'enter',
+        trigger: '生死关头凝成道基',
+        evidenceQuote: '生死关头凝成道基',
+        sourceOffset: 3,
+      },
+    })
+    expect((await db.cultivationProgress.get(progressId) as any)?.workId).toBe(a.workId)
+    expect(await readOwnedRows(a, 'cultivationProgress', { owner: 'work' })).toHaveLength(1)
+    expect(await readOwnedRows(b, 'cultivationProgress', { owner: 'work' })).toEqual([])
   })
 })

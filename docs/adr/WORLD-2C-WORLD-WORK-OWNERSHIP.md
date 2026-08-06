@@ -1,6 +1,6 @@
 # WORLD-2C ADR：世界、作品与本地工作区所有权
 
-> 状态：ACCEPTED / C1 OWNERSHIP SCHEMA + C2 LAZY MIGRATION COMPLETE，NEXT C3 SCOPE-AWARE
+> 状态：ACCEPTED / IMPLEMENTED / C1-C5 COMPLETE
 > 决策日期：2026-08-06
 > 任务归属：`WORLD-2C`
 > 上位架构：[世界引擎与社区整体架构](../WORLD-ENGINE-COMMUNITY-ARCHITECTURE.md)
@@ -336,10 +336,10 @@ interface WorkspaceScope {
 | C4 | v4 导出导入、四入口兼容、World/Work 删除 | 数据管理可核查 owner | 双重往返、损坏 owner 拒绝、删除反例 |
 | C5 | 开放多作品 UI，移除已替代 fallback | 用户可在同一世界切换作品 | 隔离浏览器端到端 Golden Project |
 
-每个切片独立提交；C1/C2 完成不等于 WORLD-2C 完成，C5 验收通过后才能将路线图标为 COMPLETE。
+每个切片都必须保留独立可核查的测试证据；C1/C2 完成不等于 WORLD-2C 完成，C5 验收通过后才能将路线图标为 COMPLETE。
 
-当前实施状态：C1、C2 已于 2026-08-06 完成。DB v49 仅新增空的 `worlds`、`works`、
-`workCharacterBindings`、`ownershipMigrations`，没有 schema upgrade 数据搬迁；62 张表已在同一
+当前实施状态：C1-C5 已于 2026-08-06 完成。DB v49 仅新增空的 `worlds`、`works`、
+`workCharacterBindings`、`ownershipMigrations`，没有 schema upgrade 数据搬迁；当时 62 张表已在同一
 `PROJECT_TABLES` 中登记物理与逻辑归属。`ensureWorkspaceOwnership(projectId)` 在首次进入旧工作区时执行
 只读预检、SHA-256 主键/owner 指纹、持久化 before-image 和单工作区事务，创建或采纳一组确定性的默认
 World/Work，并由 `resolveWorkspaceScope()` 统一解析旧路由。并发、事务中途失败、未知 owner/根、幂等、
@@ -348,7 +348,13 @@ World/Work，并由 `resolveWorkspaceScope()` 统一解析旧路由。并发、�
 C3 已将核心世界/作品表 locator 切换为显式 `field` / `exclusive-fields`，并新增由
 `PROJECT_TABLES.domainOwner` 派生的 `scope.ts` selector/owner gate。`assembleContext()`、`adopt()`、核心
 上下文源和 Agent 对话/事件流均先验证 `WorkspaceScope`；双作品 Golden Project 已证明故事核心、正文、
-结构化写回和 Agent 运行记录不串。剩余 store 写入口、v4 owner 往返和多作品 UI 仍未完成，第二作品入口继续隐藏。
+结构化写回和 Agent 运行记录不串；核心 Store 读写也已统一携带 scope。C4 已完成严格 v4 owner 影子 ID、
+v1-v3 兼容、损坏/越界 owner 写库前拒绝，以及 Workspace/World/Work 的注册表派生删除。C5 已开放同 World
+多 Work 创建、切换和确认删除，并由隔离浏览器 E2E 验证刷新后的活动作品。
+
+随后 WORLD-2D/2E 引入的四张表使 DB 升至 v50、`PROJECT_TABLES` 升至 66 张；它们沿用同一 owner 和生命周期
+合同。`changeRecordScope()` 仅允许注册表声明的 `exclusive-fields` 记录在当前 Work/World 间原子转换，事务内
+检查注册表派生入向引用，发现其它作品引用即拒绝，并把不含正文的转换凭证追加到 ownership receipt。
 
 ## 13. 必须覆盖的反例矩阵
 
@@ -407,7 +413,14 @@ World/Work 根对象由领域 service 创建，不允许 AI 直接生成 ID。�
 - 一个旧项目自动映射为默认 World/Work，全部既有记录 ID、内容和引用完整。
 - 一个 World 下创建两部 Work 后，世界 Canon 共享，作品设定、大纲、细纲、章节和连续性互不覆盖。
 - 世界/作品的 AI 上下文和结构化写回均有 owner gate，无跨 scope 读取或写入。
-- 项目 v4 双重往返、v1-v3 兼容导入、世界包 v1、文件夹、Gist 和快照共用统一边界。
+- 项目 v4 双重往返、v1-v3 兼容导入、世界包 v1/v2、文件夹、Gist 和快照共用统一边界。
 - 删除 Workspace、World、Work 和作用域转换的正反生命周期测试通过。
 - 迁移预检、失败零写入、幂等、before-image 和受限回滚有真实旧库 fixture 证据。
 - 分步骤 Golden Master、架构检查、类型检查、构建、完整 CI 和适用 E2E 全部通过。
+
+结论（2026-08-06）：以上门槛均已有自动化与浏览器证据，`WORLD-2C` 标记为 **COMPLETE**。兼容镜像的未来
+删除需另立 ADR；PLATFORM-1B 社区后端和 HARNESS-2 分步骤 Agent 工程均不属于本 ADR 的遗留。
+
+最终验证证据（2026-08-06）：`npm run ci` 通过全部架构、三注册表、依赖、类型、覆盖率、构建和包体闸门，
+264 个测试文件 / 996 项测试全绿；`npm run ci:e2e` 在独立 Chromium 数据中 36/36 通过，覆盖同 World 双 Work
+切换、叙事同步、冻结修订、不可变 Release、世界包 v2 往返和绑定文字游戏实例。

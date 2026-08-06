@@ -10,6 +10,14 @@ import { db } from '../db/schema'
 import { getFactPredicate, normalizeFactValue } from '../registry/fact-predicate-registry'
 import type { FactKind, TemporalFact } from '../types/temporal-fact'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
+import type { WorkspaceScope } from '../types/world-ownership'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  stampNewRecord,
+} from '../world-engine/scope'
 
 export interface FactCandidateDiffRow {
   subjectName: string
@@ -42,18 +50,18 @@ function normalizeRows(raw: unknown): FactCandidateDiffRow[] {
   }))
 }
 
-async function validChapterId(projectId: number, chapterId: unknown): Promise<number | null> {
+async function validChapterId(scope: WorkspaceScope, chapterId: unknown): Promise<number | null> {
   if (chapterId == null) return null
   if (typeof chapterId !== 'number' || !Number.isFinite(chapterId)) return null
   const chapter = await db.chapters.get(chapterId)
-  return chapter?.projectId === projectId ? chapterId : null
+  return await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' }) ? chapterId : null
 }
 
-async function validRange(projectId: number, from: number | null, to: number | null): Promise<boolean> {
+async function validRange(scope: WorkspaceScope, from: number | null, to: number | null): Promise<boolean> {
   if (from == null || to == null) return true
   const [outlineNodes, chapters] = await Promise.all([
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<any>(scope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<any>(scope, 'chapters', { owner: 'work' }),
   ])
   const { sequence } = resolveCanonicalChapterSequence(outlineNodes, chapters)
   const orderOf = new Map<number, number>()
@@ -65,12 +73,11 @@ async function validRange(projectId: number, from: number | null, to: number | n
   return fromOrder != null && toOrder != null && fromOrder <= toOrder
 }
 
-async function resolveCharacterId(projectId: number, name: string): Promise<number | null> {
-  const matches = await db.characters.where('projectId').equals(projectId)
+async function resolveCharacterId(scope: WorkspaceScope, name: string): Promise<number | null> {
+  const matches = (await readOwnedRows<any>(scope, 'characters', { owner: 'world' }))
     .filter(character =>
       character.name === name
       && (character.isCrossWorld || character.homeWorldGroupId == null))
-    .toArray()
   return matches.length === 1 ? matches[0].id ?? null : null
 }
 
@@ -79,10 +86,11 @@ function dedupeKey(fact: Pick<TemporalFact, 'subjectName' | 'predicate' | 'value
 }
 
 export async function exportFactMemoryMarkdown(projectId: number): Promise<string> {
+  const scope = await resolveReadScopeLike(projectId)
   const [project, facts, summaries] = await Promise.all([
     db.projects.get(projectId),
-    db.temporalFacts.where('projectId').equals(projectId).toArray(),
-    db.narrativeSummaryNodes.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<TemporalFact>(scope, 'temporalFacts', { owner: 'work' }),
+    readOwnedRows<any>(scope, 'narrativeSummaryNodes', { owner: 'work' }),
   ])
   const lines: string[] = [
     `# StoryForge 事实/派生记忆导出`,
@@ -128,9 +136,10 @@ export async function exportFactMemoryMarkdown(projectId: number): Promise<strin
 }
 
 export async function importFactCandidateDiff(projectId: number, raw: unknown): Promise<ImportFactCandidateDiffResult> {
+  const scope = await resolveScopeLike(projectId)
   const result: ImportFactCandidateDiffResult = { written: 0, skippedInvalid: 0, skippedDuplicate: 0 }
   const rows = normalizeRows(raw)
-  const existing = await db.temporalFacts.where('projectId').equals(projectId).toArray()
+  const existing = await readOwnedRows<TemporalFact>(scope, 'temporalFacts', { owner: 'work' })
   const seen = new Set(existing.map(dedupeKey))
   for (const row of rows) {
     const spec = getFactPredicate(row.predicate)
@@ -139,8 +148,8 @@ export async function importFactCandidateDiff(projectId: number, raw: unknown): 
       result.skippedInvalid++
       continue
     }
-    const validFromChapterId = await validChapterId(projectId, row.validFromChapterId)
-    const validToChapterId = await validChapterId(projectId, row.validToChapterId)
+    const validFromChapterId = await validChapterId(scope, row.validFromChapterId)
+    const validToChapterId = await validChapterId(scope, row.validToChapterId)
     if (row.validFromChapterId != null && validFromChapterId == null) {
       result.skippedInvalid++
       continue
@@ -149,7 +158,7 @@ export async function importFactCandidateDiff(projectId: number, raw: unknown): 
       result.skippedInvalid++
       continue
     }
-    if (!await validRange(projectId, validFromChapterId, validToChapterId)) {
+    if (!await validRange(scope, validFromChapterId, validToChapterId)) {
       result.skippedInvalid++
       continue
     }
@@ -159,10 +168,10 @@ export async function importFactCandidateDiff(projectId: number, raw: unknown): 
       continue
     }
     seen.add(key)
-    const fact: TemporalFact = {
+    const fact = stampNewRecord(scope, 'temporalFacts', {
       projectId,
       worldGroupId: null,
-      characterId: spec.subjectTypes.includes('character') ? await resolveCharacterId(projectId, row.subjectName) : null,
+      characterId: spec.subjectTypes.includes('character') ? await resolveCharacterId(scope, row.subjectName) : null,
       subjectName: row.subjectName,
       predicate: row.predicate,
       factKind: spec.factKind as FactKind,
@@ -176,7 +185,7 @@ export async function importFactCandidateDiff(projectId: number, raw: unknown): 
       locked: false,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-    }
+    }, { owner: 'work' }) as TemporalFact
     await db.temporalFacts.add(fact)
     result.written++
   }

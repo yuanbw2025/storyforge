@@ -6,7 +6,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
-import type { CharacterDrivenPlan, Project } from '../../lib/types'
+import type { CharacterDrivenPlan, Project, WorkspaceScope } from '../../lib/types'
 import { parseCharacterDrivenPlanArcs } from '../../lib/types'
 import { useCharacterStore } from '../../stores/character'
 import { useOutlineStore } from '../../stores/outline'
@@ -56,10 +56,16 @@ export default function CharacterRevisionPanel({
   const characters = useCharacterStore(state => state.characters)
   const loadOutline = useOutlineStore(state => state.loadAll)
   const dialog = useDialog()
+  const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
+    project.id != null && project.activeWorldId != null && project.activeWorkId != null
+      ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
+      : undefined
+  ), [project.activeWorkId, project.activeWorldId, project.id])
+  const scopeInput = workspaceScope ?? project.id!
   const ai = useAIStream(createAISessionKey(
     project.id!,
     'character-revision.analyze',
-    plan?.id ?? 'no-plan',
+    `${project.activeWorkId ?? 'legacy'}:${plan?.id ?? 'no-plan'}`,
   ))
   const analysisSnapshot = useRef<CharacterRevisionSnapshot | null>(null)
   const analysisScope = useRef<CharacterRevisionScopeInput | null>(null)
@@ -84,7 +90,7 @@ export default function CharacterRevisionPanel({
   const refreshSnapshot = async () => {
     setLoadingSnapshot(true)
     try {
-      const next = await buildCharacterRevisionSnapshot(project.id!)
+      const next = await buildCharacterRevisionSnapshot(scopeInput)
       setSnapshot(next)
       setProtectedThrough(current => Math.max(current, next.lastWrittenOrdinal))
     } finally {
@@ -93,8 +99,13 @@ export default function CharacterRevisionPanel({
   }
 
   useEffect(() => {
+    analysisSnapshot.current = null
+    analysisScope.current = null
+    setAnalysis(null)
+    setSelectedOptionId(null)
+    setSelectedPatchIds(new Set())
     void refreshSnapshot()
-  }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scopeInput]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (characterId != null && characters.some(character => character.id === characterId)) return
@@ -199,11 +210,12 @@ export default function CharacterRevisionPanel({
       ])
       const result = await applyCharacterRevisionPatches({
         projectId: project.id!,
+        scope: analysisSnapshot.current?.workspaceScope,
         protectedThroughOrdinal: protectedBoundary,
         anchorNodeIds: [...protectedAnchors],
         patches,
       })
-      await loadOutline(project.id!)
+      await loadOutline(scopeInput)
       await refreshSnapshot()
       setResultMessage(
         `已应用 ${result.appliedOutlineNodeIds.length} 项`

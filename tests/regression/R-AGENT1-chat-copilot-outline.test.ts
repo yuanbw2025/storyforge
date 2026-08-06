@@ -10,6 +10,7 @@ import {
   type OutlineCopilotSnapshot,
 } from '../../src/lib/agent/outline-copilot'
 import { adoptMasterCandidate } from '../../src/lib/agent/orchestrator'
+import { appendAgentEvent, getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import { db } from '../../src/lib/db/schema'
 import {
   adoptGenerationNodeOutput,
@@ -17,7 +18,8 @@ import {
   runGenerationNode,
 } from '../../src/lib/generation/generation-node'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
-import type { AgentEvent, Project } from '../../src/lib/types'
+import type { Project } from '../../src/lib/types'
+import { resolveScopeLike } from '../../src/lib/world-engine/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 
 async function addProject(enableMultiWorld = false): Promise<Project> {
@@ -268,22 +270,27 @@ describe('AGENT-1 27.1-d · ChatCopilot 大纲闭环', () => {
       worldGroupId: null,
       authorRequest: '规划卷纲',
     })
-    const event: AgentEvent = {
-      id: 1,
+    const scope = await resolveScopeLike(project.id!)
+    const conversation = await getOrCreateAgentConversation({
       projectId: project.id!,
-      conversationId: 1,
-      sequence: 1,
+      worldGroupId: null,
+      scope,
+    })
+    const event = await appendAgentEvent({
+      projectId: project.id!,
+      conversationId: conversation.id!,
       kind: 'candidate',
       content: '',
-      payload: '{}',
-      createdAt: Date.now(),
-    }
+      payload: {},
+      scope,
+    })
     const draft = JSON.stringify([
       { title: '第一卷：退潮', summary: '主角发现浮空城。' },
     ])
 
     const message = await adoptMasterCandidate({
       projectId: project.id!,
+      scope,
       worldGroupId: null,
       event,
       payload: {

@@ -65,10 +65,11 @@ describe('WORLD-1 · 角色种族与修炼关联视图', () => {
         } as any,
         onChange,
       }))
-      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      await vi.waitFor(() => expect(host.textContent).toContain('镜裔'))
     })
 
-    expect(host.textContent).toContain('镜裔')
     expect(host.textContent).not.toContain('雾裔')
     expect(host.textContent).toContain('镜术')
     expect(host.textContent).not.toContain('雾术')

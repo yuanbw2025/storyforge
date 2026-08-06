@@ -375,6 +375,8 @@ export interface ContextSource {
   budgetTokens: number
   /** NS-1: assembleContext 总预算裁剪时不得整段删除。 */
   protectedFromTrim?: boolean
+  /** Source can use a caller-provided continuity snapshot without reading a Chapter row. */
+  acceptsDetachedContinuitySnapshot?: boolean
   requiresWorldGroupId?: boolean
   requiresSimulationSessionId?: boolean
   requiresOutlineNodeId?: boolean

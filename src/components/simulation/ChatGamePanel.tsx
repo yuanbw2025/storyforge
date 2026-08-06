@@ -15,7 +15,7 @@ import {
   Square,
   UserRound,
 } from 'lucide-react'
-import type { Project, SimulationCanonCandidate, SimulationChatState } from '../../lib/types'
+import type { Project, SimulationCanonCandidate, SimulationChatState, WorkspaceScope } from '../../lib/types'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { buildChatGamePrompt, parseChatReply } from '../../lib/simulation/chatgame'
 import { loadSimulationCanonCandidates } from '../../lib/simulation/canon-snapshot'
@@ -26,7 +26,7 @@ import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { resolveRequestConfig } from '../../lib/ai/client'
 import { useSimulationRuntimeStore } from '../../stores/simulation-runtime'
 
-export default function ChatGamePanel({ project, worldGroupId }: { project: Project; worldGroupId: number | null }) {
+export default function ChatGamePanel({ project, worldGroupId, workspaceScope }: { project: Project; worldGroupId: number | null; workspaceScope?: WorkspaceScope }) {
   const store = useSimulationRuntimeStore()
   const { config } = useAIConfigStore()
   const [candidates, setCandidates] = useState<SimulationCanonCandidate[]>([])
@@ -44,6 +44,9 @@ export default function ChatGamePanel({ project, worldGroupId }: { project: Proj
   const [checkpointName, setCheckpointName] = useState('')
   const [branchTitle, setBranchTitle] = useState('')
   const [editing, setEditing] = useState(false)
+  const scopeProjectId = workspaceScope?.projectId
+  const scopeWorldId = workspaceScope?.worldId
+  const scopeWorkId = workspaceScope?.workId
 
   useEffect(() => {
     void store.load(project.id!, worldGroupId)
@@ -54,16 +57,28 @@ export default function ChatGamePanel({ project, worldGroupId }: { project: Proj
   useEffect(() => {
     let cancelled = false
     setCanonLoading(true)
-    void loadSimulationCanonCandidates({ projectId: project.id!, worldGroupId })
+    void loadSimulationCanonCandidates({
+      projectId: project.id!,
+      scope: scopeProjectId != null && scopeWorldId != null && scopeWorkId != null
+        ? { projectId: scopeProjectId, worldId: scopeWorldId, workId: scopeWorkId }
+        : undefined,
+      worldGroupId,
+    })
       .then(result => { if (!cancelled) setCandidates(result.candidates) })
       .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason)) })
       .finally(() => { if (!cancelled) setCanonLoading(false) })
     return () => { cancelled = true }
-  }, [project.id, worldGroupId])
+  }, [project.id, scopeProjectId, scopeWorldId, scopeWorkId, worldGroupId])
 
   const sessions = useMemo(
-    () => store.sessions.filter(session => session.kind === 'chatgame' && session.projectId === project.id && (session.worldGroupId ?? null) === worldGroupId),
-    [project.id, store.sessions, worldGroupId],
+    () => store.sessions.filter(session => session.kind === 'chatgame'
+      && session.projectId === project.id
+      && (session.worldGroupId ?? null) === worldGroupId
+      && (!workspaceScope || (
+        (session.worldId == null && session.workId == null)
+        || (session.worldId === workspaceScope.worldId && session.workId === workspaceScope.workId)
+      ))),
+    [project.id, store.sessions, workspaceScope, worldGroupId],
   )
   const selected = sessions.find(session => session.id === store.selectedSessionId) ?? null
   const chat = (selected?.kind === 'chatgame' ? store.runtimeState.chat : null) ?? null
@@ -141,6 +156,7 @@ export default function ChatGamePanel({ project, worldGroupId }: { project: Proj
       kind: 'chatgame',
       title: newTitle.trim(),
       sourceKeys: [...selectedSourceKeys],
+      scope: workspaceScope,
       chatConfig: {
         characterKey: selectedCharacter.sourceKey,
         identity: { name: identityName.trim(), description: identityDescription.trim() },

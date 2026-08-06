@@ -1,5 +1,12 @@
 import { db } from '../db/schema'
-import type { ReferenceAnalysisRun } from '../types'
+import type { ReferenceAnalysisRun, ReferenceChunkAnalysis } from '../types'
+import type { WorkspaceScope } from '../types/world-ownership'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveScopeLike,
+  stampNewRecord,
+} from '../world-engine/scope'
 
 /**
  * 旧项目只保存 Reference + 无 runId 分块。第一次读取版本能力时创建显式 v1，
@@ -10,17 +17,22 @@ import type { ReferenceAnalysisRun } from '../types'
  */
 export async function ensureLegacyActiveReferenceRun(
   referenceId: number,
+  suppliedScope?: WorkspaceScope,
 ): Promise<ReferenceAnalysisRun | undefined> {
-  const existingRuns = await db.referenceAnalysisRuns
-    .where('referenceId').equals(referenceId).toArray()
+  const beforeMigration = await db.references.get(referenceId)
+  if (!beforeMigration?.id) return undefined
+  const scope = suppliedScope ?? await resolveScopeLike(beforeMigration.projectId)
+  const ref = await db.references.get(referenceId)
+  if (!ref?.id || !await assertRecordInScope(scope, 'references', ref, { owner: 'work' })) return undefined
+  const existingRuns = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
+    .filter(run => run.referenceId === referenceId)
   const existingActive = existingRuns.find(run => run.status === 'active')
   if (existingActive) return existingActive
   if (existingRuns.length > 0) return undefined
 
-  const ref = await db.references.get(referenceId)
-  if (!ref?.id || ref.analysisStatus !== 'done') return undefined
-  const legacyChunks = (await db.referenceChunkAnalysis
-    .where('referenceId').equals(referenceId).toArray())
+  if (ref.analysisStatus !== 'done') return undefined
+  const legacyChunks = (await readOwnedRows<ReferenceChunkAnalysis>(scope, 'referenceChunkAnalysis', { owner: 'work' }))
+    .filter(chunk => chunk.referenceId === referenceId)
     .filter(chunk => chunk.analysisRunId == null)
   if (!legacyChunks.length) return undefined
 
@@ -34,7 +46,7 @@ export async function ensureLegacyActiveReferenceRun(
       const recheck = await db.referenceAnalysisRuns
         .where('referenceId').equals(referenceId).toArray()
       if (recheck.length) return recheck.find(run => run.status === 'active')
-      const run: ReferenceAnalysisRun = {
+      const run = stampNewRecord(scope, 'referenceAnalysisRuns', {
         projectId: ref.projectId,
         referenceId,
         version: 1,
@@ -57,10 +69,13 @@ export async function ensureLegacyActiveReferenceRun(
         activatedAt: now,
         createdAt: ref.createdAt,
         updatedAt: now,
-      }
+      }, { owner: 'work' }) as ReferenceAnalysisRun
       const id = await db.referenceAnalysisRuns.add(run) as number
       await db.referenceChunkAnalysis.bulkPut(
-        legacyChunks.map(chunk => ({ ...chunk, analysisRunId: id })),
+        legacyChunks.map(chunk => stampNewRecord(scope, 'referenceChunkAnalysis', {
+          ...chunk,
+          analysisRunId: id,
+        }, { owner: 'work' }) as ReferenceChunkAnalysis),
       )
       return { ...run, id }
     },

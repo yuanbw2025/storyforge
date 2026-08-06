@@ -68,6 +68,7 @@ const WorldGroupOverview = lazy(() => import('../components/world-group/WorldGro
 const ChatCopilotPanel = lazy(() => import('../components/agent/ChatCopilotPanel'))
 import { useLocationStore } from '../stores/location'
 import { useWorldGroupStore } from '../stores/world-group'
+import { resolveScopeLike } from '../lib/world-engine/scope'
 
 export default function WorkspacePage() {
   const { projectId } = useParams()
@@ -143,21 +144,22 @@ export default function WorkspacePage() {
       // 并行加载所有数据。用 allSettled:任一 store 加载失败也不连累整体、
       // 不会让 setLoading(false) 漏执行而永久卡"加载中"(健壮性,防单点 store 抛错锁死工作区)。
       const pid = p.id!
+      const scope = await resolveScopeLike(pid)
       const loaders: { name: string; run: () => Promise<unknown> }[] = [
-        { name: 'worldview', run: () => useWorldviewStore.getState().loadAll(pid) },
-        { name: 'character', run: () => useCharacterStore.getState().loadAll(pid) },
-        { name: 'outline', run: () => useOutlineStore.getState().loadAll(pid) },
-        { name: 'chapter', run: () => useChapterStore.getState().loadAll(pid) },
-        { name: 'foreshadow', run: () => useForeshadowStore.getState().loadAll(pid) },
-        { name: 'geography', run: () => useGeographyStore.getState().loadAll(pid) },
-        { name: 'history', run: () => useHistoryStore.getState().loadAll(pid) },
-        { name: 'creativeRules', run: () => useCreativeRulesStore.getState().loadAll(pid) },
-        { name: 'characterRelation', run: () => useCharacterRelationStore.getState().loadAll(pid) },
-        { name: 'reference', run: () => useReferenceStore.getState().loadAll(pid) },
+        { name: 'worldview', run: () => useWorldviewStore.getState().loadAll(scope) },
+        { name: 'character', run: () => useCharacterStore.getState().loadAll(scope) },
+        { name: 'outline', run: () => useOutlineStore.getState().loadAll(scope) },
+        { name: 'chapter', run: () => useChapterStore.getState().loadAll(scope) },
+        { name: 'foreshadow', run: () => useForeshadowStore.getState().loadAll(scope) },
+        { name: 'geography', run: () => useGeographyStore.getState().loadAll(scope) },
+        { name: 'history', run: () => useHistoryStore.getState().loadAll(scope) },
+        { name: 'creativeRules', run: () => useCreativeRulesStore.getState().loadAll(scope) },
+        { name: 'characterRelation', run: () => useCharacterRelationStore.getState().loadAll(scope) },
+        { name: 'reference', run: () => useReferenceStore.getState().loadAll(scope) },
         { name: 'emotionBeat', run: () => useEmotionBeatStore.getState().loadAll(pid) },
-        { name: 'location', run: () => useLocationStore.getState().loadAll(pid) },
-        { name: 'worldRules', run: () => useWorldRulesStore.getState().loadProfile(pid) },
-        { name: 'worldGroup', run: () => useWorldGroupStore.getState().loadAll(pid) },
+        { name: 'location', run: () => useLocationStore.getState().loadAll(scope) },
+        { name: 'worldRules', run: () => useWorldRulesStore.getState().loadProfile(scope) },
+        { name: 'worldGroup', run: () => useWorldGroupStore.getState().loadAll(scope) },
       ]
       const results = await Promise.allSettled(loaders.map(l => l.run()))
       results.forEach((r, i) => {
@@ -258,7 +260,13 @@ export default function WorkspacePage() {
       case 'rag-library':
         return <RagLibraryPanel project={project} />
       case 'simulation-runtime':
-        return <SimulationRuntimePanel project={project} worldGroupId={copilotWorldGroupId} />
+        return <SimulationRuntimePanel
+          project={project}
+          worldGroupId={copilotWorldGroupId}
+          workspaceScope={project.id != null && project.activeWorldId != null && project.activeWorkId != null
+            ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
+            : undefined}
+        />
       case 'detailed-outline':
         return <DetailedOutlinePanel project={project} />
       case 'chapters-list':

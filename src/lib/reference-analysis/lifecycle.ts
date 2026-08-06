@@ -13,6 +13,14 @@ import type {
 import { ANALYSIS_DIMENSIONS } from '../types/reference'
 import type { ChunkPlan } from '../import/chunker'
 import { ensureLegacyActiveReferenceRun } from './legacy-bridge'
+import type { WorkspaceScope } from '../types/world-ownership'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  stampNewRecord,
+} from '../world-engine/scope'
 
 export { ensureLegacyActiveReferenceRun } from './legacy-bridge'
 
@@ -45,9 +53,39 @@ function constrainUsageScope(
   return usageScope
 }
 
-async function pruneOneDisposableRun(referenceId: number): Promise<boolean> {
-  const runs = await db.referenceAnalysisRuns
-    .where('referenceId').equals(referenceId).toArray()
+async function requireReference(referenceId: number): Promise<{ ref: Reference; scope: WorkspaceScope }> {
+  const beforeMigration = await db.references.get(referenceId)
+  if (!beforeMigration?.id) throw new Error('参考资料不存在')
+  const scope = await resolveScopeLike(beforeMigration.projectId)
+  const ref = await db.references.get(referenceId)
+  if (!ref?.id || !await assertRecordInScope(scope, 'references', ref, { owner: 'work' })) {
+    throw new Error('参考资料不存在或不属于当前作品')
+  }
+  return { ref, scope }
+}
+
+async function requireRun(runId: number): Promise<{
+  run: ReferenceAnalysisRun
+  ref: Reference
+  scope: WorkspaceScope
+}> {
+  const beforeMigration = await db.referenceAnalysisRuns.get(runId)
+  if (!beforeMigration?.id) throw new Error('分析版本不存在')
+  const scope = await resolveScopeLike(beforeMigration.projectId)
+  const run = await db.referenceAnalysisRuns.get(runId)
+  if (!run?.id || !await assertRecordInScope(scope, 'referenceAnalysisRuns', run, { owner: 'work' })) {
+    throw new Error('分析版本不存在或不属于当前作品')
+  }
+  const ref = await db.references.get(run.referenceId)
+  if (!ref?.id || !await assertRecordInScope(scope, 'references', ref, { owner: 'work' })) {
+    throw new Error('分析版本引用的参考资料不存在或越过当前作品')
+  }
+  return { run, ref, scope }
+}
+
+async function pruneOneDisposableRun(referenceId: number, scope: WorkspaceScope): Promise<boolean> {
+  const runs = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
+    .filter(run => run.referenceId === referenceId)
   if (runs.length < REFERENCE_ANALYSIS_RUN_POLICY.maxRunsPerReference) return true
   const disposable = runs
     .filter(run => run.status === 'failed' || run.status === 'cancelled' || run.status === 'superseded')
@@ -60,21 +98,20 @@ async function pruneOneDisposableRun(referenceId: number): Promise<boolean> {
 export async function createReferenceAnalysisRun(
   input: CreateReferenceAnalysisRunInput,
 ): Promise<ReferenceAnalysisRun> {
-  const ref = await db.references.get(input.referenceId)
-  if (!ref?.id) throw new Error('参考资料不存在')
+  const { ref, scope } = await requireReference(input.referenceId)
   if (!input.sourceFilename.trim()) throw new Error('来源文件名不能为空')
   if (!input.fileHash.trim()) throw new Error('来源文件哈希不能为空')
   if (input.totalChars <= 0 || input.expectedChunks <= 0) throw new Error('来源文本或分块计划为空')
-  if (!await pruneOneDisposableRun(ref.id)) {
+  if (!await pruneOneDisposableRun(ref.id!, scope)) {
     throw new Error(`每份参考最多保留 ${REFERENCE_ANALYSIS_RUN_POLICY.maxRunsPerReference} 个版本，请先删除未使用版本`)
   }
 
-  await ensureLegacyActiveReferenceRun(ref.id)
-  const existing = await db.referenceAnalysisRuns
-    .where('referenceId').equals(ref.id).toArray()
+  await ensureLegacyActiveReferenceRun(ref.id!, scope)
+  const existing = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
+    .filter(run => run.referenceId === ref.id)
   const version = Math.max(0, ...existing.map(run => run.version)) + 1
   const now = Date.now()
-  const row: ReferenceAnalysisRun = {
+  const row = stampNewRecord(scope, 'referenceAnalysisRuns', {
     projectId: ref.projectId,
     referenceId: ref.id,
     version,
@@ -93,7 +130,7 @@ export async function createReferenceAnalysisRun(
     progress: 0,
     createdAt: now,
     updatedAt: now,
-  }
+  }, { owner: 'work' }) as ReferenceAnalysisRun
 
   const runId = await db.transaction(
     'rw',
@@ -112,13 +149,13 @@ export async function createReferenceAnalysisRun(
               label: '全书',
               text: input.sourceText!,
             }]
-        const source: ReferenceAnalysisSource = {
+        const source = stampNewRecord(scope, 'referenceAnalysisSources', {
           analysisRunId: id,
           filename: row.sourceFilename,
           fileHash: row.fileHash,
           chunks,
           createdAt: now,
-        }
+        }, { owner: 'work' }) as ReferenceAnalysisSource
         await db.referenceAnalysisSources.put(source)
       }
       return id
@@ -128,19 +165,21 @@ export async function createReferenceAnalysisRun(
 }
 
 export async function listReferenceAnalysisRuns(referenceId: number): Promise<ReferenceAnalysisRun[]> {
-  await ensureLegacyActiveReferenceRun(referenceId)
-  const runs = await db.referenceAnalysisRuns
-    .where('referenceId').equals(referenceId).toArray()
+  const { scope } = await requireReference(referenceId)
+  await ensureLegacyActiveReferenceRun(referenceId, scope)
+  const runs = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
+    .filter(run => run.referenceId === referenceId)
   return runs.sort((a, b) => b.version - a.version)
 }
 
 export async function getActiveReferenceAnalysisRun(
   referenceId: number,
 ): Promise<ReferenceAnalysisRun | undefined> {
-  const legacy = await ensureLegacyActiveReferenceRun(referenceId)
+  const { scope } = await requireReference(referenceId)
+  const legacy = await ensureLegacyActiveReferenceRun(referenceId, scope)
   if (legacy) return legacy
-  return (await db.referenceAnalysisRuns
-    .where('referenceId').equals(referenceId).toArray())
+  return (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
+    .filter(run => run.referenceId === referenceId)
     .find(run => run.status === 'active')
 }
 
@@ -148,39 +187,49 @@ export async function getReferenceAnalysisRunChunks(
   referenceId: number,
   analysisRunId?: number,
 ): Promise<ReferenceChunkAnalysis[]> {
+  const { scope } = await requireReference(referenceId)
   const run = analysisRunId
-    ? await db.referenceAnalysisRuns.get(analysisRunId)
+    ? (await requireRun(analysisRunId)).run
     : await getActiveReferenceAnalysisRun(referenceId)
   if (run && run.referenceId !== referenceId) return []
-  if (run?.id) {
-    return db.referenceChunkAnalysis
-      .where('analysisRunId').equals(run.id)
-      .sortBy('chunkIndex')
-  }
-  return (await db.referenceChunkAnalysis
-    .where('referenceId').equals(referenceId)
-    .sortBy('chunkIndex'))
-    .filter(chunk => chunk.analysisRunId == null)
+  const chunks = await readOwnedRows<ReferenceChunkAnalysis>(scope, 'referenceChunkAnalysis', { owner: 'work' })
+  return chunks
+    .filter(chunk => run?.id ? chunk.analysisRunId === run.id : (
+      chunk.referenceId === referenceId && chunk.analysisRunId == null
+    ))
+    .sort((left, right) => left.chunkIndex - right.chunkIndex)
 }
 
 export async function readReferenceAnalysisSource(runId: number): Promise<string | undefined> {
+  const run = await db.referenceAnalysisRuns.get(runId)
+  if (!run) return undefined
+  const scope = await resolveReadScopeLike(run.projectId)
+  if (!await assertRecordInScope(scope, 'referenceAnalysisRuns', run, { owner: 'work' })) return undefined
   const source = await db.referenceAnalysisSources.get(runId)
-  return source?.chunks.map(chunk => chunk.text).join('\n\n')
+  return source && await assertRecordInScope(scope, 'referenceAnalysisSources', source, { owner: 'work' })
+    ? source.chunks.map(chunk => chunk.text).join('\n\n')
+    : undefined
 }
 
 export async function readReferenceAnalysisChunks(runId: number): Promise<ChunkPlan[] | undefined> {
+  const run = await db.referenceAnalysisRuns.get(runId)
+  if (!run) return undefined
+  const scope = await resolveReadScopeLike(run.projectId)
+  if (!await assertRecordInScope(scope, 'referenceAnalysisRuns', run, { owner: 'work' })) return undefined
   const source = await db.referenceAnalysisSources.get(runId)
-  return source?.chunks
+  return source && await assertRecordInScope(scope, 'referenceAnalysisSources', source, { owner: 'work' })
+    ? source.chunks
+    : undefined
 }
 
 export async function patchReferenceAnalysisRun(
   runId: number,
   changes: Partial<ReferenceAnalysisRun>,
 ): Promise<void> {
-  const run = await db.referenceAnalysisRuns.get(runId)
-  if (!run) throw new Error('分析版本不存在')
+  const { run, scope } = await requireRun(runId)
   const result = await adopt({
     projectId: run.projectId,
+    scope,
     target: 'referenceAnalysisRuns',
     recordId: runId,
     mode: 'replace',
@@ -196,10 +245,9 @@ export async function completeReferenceAnalysisRun(
   _reportedCompletedChunks: number,
   error?: string,
 ): Promise<'active' | 'ready' | 'failed'> {
-  const run = await db.referenceAnalysisRuns.get(runId)
-  if (!run) throw new Error('分析版本不存在')
-  const completedChunks = await db.referenceChunkAnalysis
-    .where('analysisRunId').equals(runId).count()
+  const { run, scope } = await requireRun(runId)
+  const completedChunks = (await readOwnedRows<ReferenceChunkAnalysis>(scope, 'referenceChunkAnalysis', { owner: 'work' }))
+    .filter(chunk => chunk.analysisRunId === runId).length
   const hasResults = completedChunks > 0
   if (!hasResults) {
     await patchReferenceAnalysisRun(runId, {
@@ -241,15 +289,14 @@ export async function completeReferenceAnalysisRun(
 }
 
 export async function activateReferenceAnalysisRun(runId: number): Promise<void> {
-  const target = await db.referenceAnalysisRuns.get(runId)
-  if (!target?.id) throw new Error('分析版本不存在')
+  const { run: target, ref, scope } = await requireRun(runId)
   if (!['ready', 'active', 'superseded'].includes(target.status)) {
     throw new Error('只有已完成版本可以激活')
   }
   const now = Date.now()
   await db.transaction('rw', db.references, db.referenceAnalysisRuns, async () => {
-    const runs = await db.referenceAnalysisRuns
-      .where('referenceId').equals(target.referenceId).toArray()
+    const runs = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
+      .filter(run => run.referenceId === target.referenceId)
     for (const run of runs) {
       if (!run.id || run.id === runId || run.status !== 'active') continue
       await db.referenceAnalysisRuns.update(run.id, { status: 'superseded', updatedAt: now })
@@ -259,7 +306,7 @@ export async function activateReferenceAnalysisRun(runId: number): Promise<void>
       activatedAt: now,
       updatedAt: now,
     })
-    await db.references.update(target.referenceId, {
+    await db.references.update(ref.id!, {
       totalChars: target.totalChars,
       fileHash: target.fileHash,
       analysisDepth: target.depth,
@@ -284,8 +331,9 @@ export async function updateReferenceAnalysisDerived(
 }
 
 export async function discardReferenceAnalysisRun(runId: number): Promise<void> {
-  const run = await db.referenceAnalysisRuns.get(runId)
-  if (!run) return
+  const beforeMigration = await db.referenceAnalysisRuns.get(runId)
+  if (!beforeMigration) return
+  const { run } = await requireRun(runId)
   if (run.status === 'active') throw new Error('不能删除当前激活版本，请先激活另一版本')
   await db.transaction(
     'rw',
@@ -301,10 +349,11 @@ export async function discardReferenceAnalysisRun(runId: number): Promise<void> 
 }
 
 export async function deleteReferenceWithAnalysis(referenceId: number): Promise<number | undefined> {
-  const ref = await db.references.get(referenceId)
-  if (!ref?.id) return undefined
-  const runs = await db.referenceAnalysisRuns
-    .where('referenceId').equals(referenceId).toArray()
+  const beforeMigration = await db.references.get(referenceId)
+  if (!beforeMigration?.id) return undefined
+  const { ref, scope } = await requireReference(referenceId)
+  const runs = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
+    .filter(run => run.referenceId === referenceId)
   const runIds = runs.map(run => run.id).filter((id): id is number => id != null)
   await db.transaction(
     'rw',
@@ -316,7 +365,7 @@ export async function deleteReferenceWithAnalysis(referenceId: number): Promise<
       db.creativeRules,
     ],
     async () => {
-      const rules = await db.creativeRules.where('projectId').equals(ref.projectId).toArray()
+      const rules = await readOwnedRows<any>(scope, 'creativeRules', { owner: 'work' })
       for (const rule of rules) {
         if (!rule.id) continue
         const ids = parseIdArray(rule.citedReferenceIds)
@@ -336,10 +385,12 @@ export async function deleteReferenceWithAnalysis(referenceId: number): Promise<
 }
 
 async function patchReferenceCompatibility(referenceId: number, changes: Partial<Reference>): Promise<void> {
-  const ref = await db.references.get(referenceId)
-  if (!ref) return
+  const beforeMigration = await db.references.get(referenceId)
+  if (!beforeMigration) return
+  const { ref, scope } = await requireReference(referenceId)
   const result = await adopt({
     projectId: ref.projectId,
+    scope,
     target: 'references',
     recordId: referenceId,
     mode: 'replace',

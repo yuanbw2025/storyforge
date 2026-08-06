@@ -1,6 +1,8 @@
 import { adopt } from '../registry/adopt'
 import { db } from '../db/schema'
 import type { Character, CharacterRelation } from '../types'
+import type { WorkspaceScope } from '../types/world-ownership'
+import { assertRecordInScope, resolveScopeLike } from '../world-engine/scope'
 
 export const RELATION_FIELD_PREFIX = '- 与【'
 
@@ -11,6 +13,7 @@ type RelationForSummary = Pick<
 
 interface RelationSummaryPatchInput {
   projectId: number
+  scope?: WorkspaceScope
   relation: RelationForSummary
   characters: Character[]
 }
@@ -52,16 +55,17 @@ export function buildRelationshipFieldPatches({ projectId, relation, characters 
 }
 
 export async function syncRelationToCharacterFields(input: RelationSummaryPatchInput): Promise<number> {
+  const scope = await resolveScopeLike(input.scope ?? input.projectId)
   const endpoints = [input.relation.fromCharacterId, input.relation.toCharacterId]
   const latestRows = await db.characters.bulkGet(endpoints)
   const characterById = new Map<number, Character>()
   for (const character of input.characters) {
-    if (character.id != null && character.projectId === input.projectId) {
+    if (character.id != null && await assertRecordInScope(scope, 'characters', character, { owner: 'world' })) {
       characterById.set(character.id, character)
     }
   }
   for (const character of latestRows) {
-    if (character?.id != null && character.projectId === input.projectId) {
+    if (character?.id != null && await assertRecordInScope(scope, 'characters', character, { owner: 'world' })) {
       characterById.set(character.id, character)
     }
   }
@@ -74,6 +78,7 @@ export async function syncRelationToCharacterFields(input: RelationSummaryPatchI
   for (const patch of patches) {
     const result = await adopt({
       projectId: input.projectId,
+      scope,
       target: 'characters',
       recordId: patch.characterId,
       mode: 'merge-diffs',

@@ -88,6 +88,12 @@ function normalize(data: any) {
   delete data.worlds
   delete data.works
   delete data.workCharacterBindings
+  // WORLD-2D/2E tables postdate the historical v3 fixture. Their portable
+  // owner/FK contracts are covered by strict v4 full-coverage and WORLD-2E tests.
+  delete data.narrativeModules
+  delete data.narrativeNodes
+  delete data.worldRevisions
+  delete data.worldReleases
   delete data.project?._activeWorldExportId
   delete data.project?._activeWorkExportId
   for (const row of data.characters ?? []) {

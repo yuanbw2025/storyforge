@@ -1,24 +1,25 @@
 import { create } from 'zustand'
-import { db } from '../lib/db/schema'
 import type { StorylineCrossing, StorylineProgress } from '../lib/types'
+import { readOwnedRows, resolveReadScopeLike, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 interface StorylineProgressStore {
   progress: StorylineProgress[]
   crossings: StorylineCrossing[]
   loading: boolean
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
 }
 
 export const useStorylineProgressStore = create<StorylineProgressStore>((set) => ({
   progress: [],
   crossings: [],
   loading: false,
-  loadAll: async (projectId) => {
+  loadAll: async (scopeInput) => {
     set({ loading: true })
     try {
+      const scope = await resolveReadScopeLike(scopeInput)
       const [progress, crossings] = await Promise.all([
-        db.storylineProgress.where('projectId').equals(projectId).toArray(),
-        db.storylineCrossings.where('projectId').equals(projectId).toArray(),
+        readOwnedRows<StorylineProgress>(scope, 'storylineProgress', { owner: 'work' }),
+        readOwnedRows<StorylineCrossing>(scope, 'storylineCrossings', { owner: 'work' }),
       ])
       set({ progress, crossings, loading: false })
     } catch (error) {

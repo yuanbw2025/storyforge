@@ -1,9 +1,16 @@
-import { db } from '../db/schema'
 import { normalizeChapterText } from '../ai/chapter-memory/text-normalization'
 import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
+import {
+  isLegacyReadScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  type WorkspaceScopeLike,
+} from '../world-engine/scope'
 import { adopt } from '../registry/adopt'
-import type { OutlineNode } from '../types'
+import type { Chapter, OutlineNode } from '../types'
+import type { WorkspaceScope } from '../types/world-ownership'
 
 export type CharacterRevisionChangeType =
   | 'add-character'
@@ -41,6 +48,7 @@ export interface CharacterRevisionChapterSnapshot {
 
 export interface CharacterRevisionSnapshot {
   projectId: number
+  workspaceScope?: WorkspaceScope
   chapters: CharacterRevisionChapterSnapshot[]
   lastWrittenOrdinal: number
   lastWrittenChapterId: number | null
@@ -159,10 +167,12 @@ function findVolumeTitle(node: OutlineNode, nodesById: Map<number, OutlineNode>)
   return '未分卷'
 }
 
-export async function buildCharacterRevisionSnapshot(projectId: number): Promise<CharacterRevisionSnapshot> {
+export async function buildCharacterRevisionSnapshot(scopeInput: WorkspaceScopeLike): Promise<CharacterRevisionSnapshot> {
+  const scope = await resolveReadScopeLike(scopeInput)
+  const projectId = typeof scopeInput === 'number' ? scopeInput : scopeInput.projectId
   const [outlineNodes, chapters] = await Promise.all([
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
   ])
   const walk = walkOutlineChaptersInCanonicalOrder(outlineNodes)
   const bestChapterByOutline = buildBestChapterByOutlineMap(chapters)
@@ -190,6 +200,7 @@ export async function buildCharacterRevisionSnapshot(projectId: number): Promise
   const chaptersById = new Map(chapters.filter(chapter => chapter.id != null).map(chapter => [chapter.id!, chapter]))
   return {
     projectId,
+    ...(!isLegacyReadScope(scope) ? { workspaceScope: scope } : {}),
     chapters: snapshots,
     lastWrittenOrdinal: lastWritten?.ordinal ?? 0,
     lastWrittenChapterId: lastWritten?.chapterId ?? null,
@@ -423,11 +434,13 @@ export function parseCharacterRevisionOutput(
  */
 export async function applyCharacterRevisionPatches(input: {
   projectId: number
+  scope?: WorkspaceScope
   protectedThroughOrdinal: number
   anchorNodeIds: number[]
   patches: CharacterRevisionPatch[]
 }): Promise<CharacterRevisionApplyResult> {
-  const fresh = await buildCharacterRevisionSnapshot(input.projectId)
+  const scope = await resolveScopeLike(input.scope ?? input.projectId)
+  const fresh = await buildCharacterRevisionSnapshot(scope)
   const protectedThrough = effectiveProtectedThrough(fresh, input.protectedThroughOrdinal)
   const currentByNode = new Map(fresh.chapters.map(chapter => [chapter.outlineNodeId, chapter]))
   const anchors = new Set(input.anchorNodeIds)
@@ -454,6 +467,7 @@ export async function applyCharacterRevisionPatches(input: {
 
     const outlineWrite = await adopt({
       projectId: input.projectId,
+      scope,
       worldGroupId: current.worldGroupId,
       target: 'outlineNodes',
       recordId: patch.outlineNodeId,
@@ -472,6 +486,7 @@ export async function applyCharacterRevisionPatches(input: {
     if (current.chapterId != null && patch.proposedTitle !== current.title) {
       await adopt({
         projectId: input.projectId,
+        scope,
         target: 'chapters',
         recordId: current.chapterId,
         mode: 'replace',

@@ -233,6 +233,8 @@ function rowsFor(state: WorkspaceState, table: string): CapturedRow[] {
 
 function requiresLegacyOwnerStamp(spec: TableSpec): boolean {
   if (spec.name === 'worlds' || spec.name === 'works' || spec.name === 'workCharacterBindings') return false
+  const locator = spec.domainOwner?.locator
+  if (locator?.kind === 'parent') return false
   return spec.domainOwner?.legacyDefault === 'world' || spec.domainOwner?.legacyDefault === 'work'
 }
 
@@ -638,6 +640,52 @@ export function ensureWorkspaceOwnership(projectId: number): Promise<WorkspaceOw
 /** The only resolver for legacy routes that carry only projectId. */
 export async function resolveWorkspaceScope(projectId: number): Promise<WorkspaceScope> {
   return (await ensureWorkspaceOwnership(projectId)).scope
+}
+
+/**
+ * Resolve only an ownership contract that already exists. This path is safe for
+ * read-only tools: it never creates roots, stamps rows, or writes a migration
+ * receipt. A null result means the workspace is still a completely legacy,
+ * single-work project; partial ownership state fails closed because its owner
+ * cannot be inferred safely.
+ */
+export async function resolveExistingWorkspaceScope(projectId: number): Promise<WorkspaceScope | null> {
+  const project = await db.projects.get(projectId)
+  // Context assembly also supports in-memory prompt projects and deliberate
+  // cross-project probes. Write boundaries still reject a missing project root.
+  if (!project) return null
+
+  if (
+    project.ownershipSchemaVersion === WORKSPACE_OWNERSHIP_CONTRACT_VERSION
+    && project.activeWorldId != null
+    && project.activeWorkId != null
+  ) {
+    const [world, work] = await Promise.all([
+      db.worlds.get(project.activeWorldId),
+      db.works.get(project.activeWorkId),
+    ])
+    if (
+      !world
+      || !work
+      || world.projectId !== projectId
+      || work.projectId !== projectId
+      || work.worldId !== world.id
+    ) {
+      fail('OWNERSHIP_ACTIVE_SCOPE_INVALID', '已登记的 World/Work 不属于同一工作区')
+    }
+    return { projectId, worldId: world.id!, workId: work.id! }
+  }
+
+  const hasPartialPointers = project.ownershipSchemaVersion != null
+    || project.activeWorldId != null
+    || project.activeWorkId != null
+  const [worldCount, workCount] = await Promise.all([
+    db.worlds.where('projectId').equals(projectId).count(),
+    db.works.where('projectId').equals(projectId).count(),
+  ])
+  if (!hasPartialPointers && worldCount === 0 && workCount === 0) return null
+
+  fail('OWNERSHIP_PARTIAL_STATE', '工作区存在不完整的 World/Work 归属，只读入口已拒绝猜测')
 }
 
 function restoreChanges(beforeImage: Record<string, OwnershipBeforeImageValue>): Record<string, unknown> {

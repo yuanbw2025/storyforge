@@ -11,12 +11,19 @@ import type {
   StorylineCrossing,
   StorylineProgress,
   StorylineProgressStatus,
+  WorkspaceScope,
 } from '../types'
 import { STORYLINE_PROGRESS_STATUSES, parseStages } from '../types'
 import { adopt } from '../registry/adopt'
 import { db } from '../db/schema'
 import { htmlToPlainText } from '../utils/html'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScope,
+} from '../world-engine/scope'
 
 export interface StorylineProgressCandidate {
   kind: 'progress'
@@ -190,16 +197,20 @@ export async function acceptStorylineProgressCandidate(args: {
   projectId: number
   chapterId: number
   candidate: StorylineProgressCandidate
+  scope?: WorkspaceScope
 }): Promise<number> {
+  const scope = await resolveScope({ projectId: args.projectId, scope: args.scope })
   const chapter = await assertChapterEvidence(
-    args.projectId,
+    scope,
     args.chapterId,
     args.candidate.evidenceQuote,
   )
-  await assertArcStageBoundary(args.projectId, args.candidate.arcId, args.candidate.currentStageId)
-  const existing = await db.storylineProgress.where('arcId').equals(args.candidate.arcId).first()
+  await assertArcStageBoundary(scope, args.candidate.arcId, args.candidate.currentStageId)
+  const existing = (await readOwnedRows<StorylineProgress>(scope, 'storylineProgress', { owner: 'work' }))
+    .find(row => row.arcId === args.candidate.arcId)
   const result = await adopt({
     projectId: args.projectId,
+    scope,
     target: 'storylineProgress',
     mode: existing?.id != null ? 'replace' : 'add',
     ...(existing?.id != null ? { recordId: existing.id } : {}),
@@ -221,22 +232,25 @@ export async function acceptStorylineCrossingCandidate(args: {
   projectId: number
   chapterId: number
   candidate: StorylineCrossingCandidate
+  scope?: WorkspaceScope
 }): Promise<number> {
+  const scope = await resolveScope({ projectId: args.projectId, scope: args.scope })
   if (args.candidate.arcIdA === args.candidate.arcIdB) throw new Error('故事线不能与自身交汇')
   const chapter = await assertChapterEvidence(
-    args.projectId,
+    scope,
     args.chapterId,
     args.candidate.evidenceQuote,
   )
   await Promise.all([
-    assertArcStageBoundary(args.projectId, args.candidate.arcIdA, null),
-    assertArcStageBoundary(args.projectId, args.candidate.arcIdB, null),
+    assertArcStageBoundary(scope, args.candidate.arcIdA, null),
+    assertArcStageBoundary(scope, args.candidate.arcIdB, null),
   ])
   const [arcIdA, arcIdB] = args.candidate.arcIdA < args.candidate.arcIdB
     ? [args.candidate.arcIdA, args.candidate.arcIdB]
     : [args.candidate.arcIdB, args.candidate.arcIdA]
   const result = await adopt({
     projectId: args.projectId,
+    scope,
     target: 'storylineCrossings',
     mode: 'add',
     data: {
@@ -255,13 +269,16 @@ export async function acceptStorylineCrossingCandidate(args: {
 export async function acceptNewStorylineCandidate(args: {
   projectId: number
   candidate: NewStorylineCandidate
+  scope?: WorkspaceScope
 }): Promise<number> {
-  const existing = await db.storyArcs.where('projectId').equals(args.projectId).toArray()
+  const scope = await resolveScope({ projectId: args.projectId, scope: args.scope })
+  const existing = await readOwnedRows<StoryArc>(scope, 'storyArcs', { owner: 'work' })
   if (existing.some(arc => normalizeName(arc.name) === normalizeName(args.candidate.name))) {
     throw new Error('同名故事线已登记，请重新映射后再处理')
   }
   const result = await adopt({
     projectId: args.projectId,
+    scope,
     target: 'storyArcs',
     mode: 'add',
     data: {
@@ -277,13 +294,15 @@ export async function acceptNewStorylineCandidate(args: {
 export async function readStorylineProgressContext(
   projectId: number,
   chapterId?: number | null,
+  scope?: WorkspaceScope,
 ): Promise<string> {
+  const resolved = scope ?? await resolveReadScopeLike(projectId)
   const [arcs, rawProgress, rawCrossings, chapters, outlineNodes] = await Promise.all([
-    db.storyArcs.where('projectId').equals(projectId).toArray(),
-    db.storylineProgress.where('projectId').equals(projectId).toArray(),
-    db.storylineCrossings.where('projectId').equals(projectId).toArray(),
-    chapterId != null ? db.chapters.where('projectId').equals(projectId).toArray() : Promise.resolve([]),
-    chapterId != null ? db.outlineNodes.where('projectId').equals(projectId).toArray() : Promise.resolve([]),
+    readOwnedRows<StoryArc>(resolved, 'storyArcs', { owner: 'work' }),
+    readOwnedRows<StorylineProgress>(resolved, 'storylineProgress', { owner: 'work' }),
+    readOwnedRows<StorylineCrossing>(resolved, 'storylineCrossings', { owner: 'work' }),
+    chapterId != null ? readOwnedRows<any>(resolved, 'chapters', { owner: 'work' }) : Promise.resolve([]),
+    chapterId != null ? readOwnedRows<any>(resolved, 'outlineNodes', { owner: 'work' }) : Promise.resolve([]),
   ])
   let progress = rawProgress
   let crossings = rawCrossings
@@ -332,17 +351,21 @@ export async function readStorylineProgressContext(
   return lines.join('\n')
 }
 
-async function assertArcStageBoundary(projectId: number, arcId: number, stageId: string | null): Promise<void> {
+async function assertArcStageBoundary(scope: WorkspaceScope, arcId: number, stageId: string | null): Promise<void> {
   const arc = await db.storyArcs.get(arcId)
-  if (!arc || arc.projectId !== projectId) throw new Error('故事线不存在或不属于当前项目')
+  if (!arc || !await assertRecordInScope(scope, 'storyArcs', arc, { owner: 'work' })) {
+    throw new Error('故事线不存在或不属于当前作品')
+  }
   if (stageId != null && !parseStages(arc.stages).some(stage => stage.id === stageId)) {
     throw new Error('阶段不属于目标故事线')
   }
 }
 
-async function assertChapterEvidence(projectId: number, chapterId: number, quote: string) {
+async function assertChapterEvidence(scope: WorkspaceScope, chapterId: number, quote: string) {
   const chapter = await db.chapters.get(chapterId)
-  if (!chapter || chapter.projectId !== projectId) throw new Error('章节不存在或不属于当前项目')
+  if (!chapter || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
+    throw new Error('章节不存在或不属于当前作品')
+  }
   const content = htmlToPlainText(chapter.content || '')
   if (!isExactQuote(content, quote)) throw new Error('正文已变化，候选证据不再成立，请重新映射')
   return chapter

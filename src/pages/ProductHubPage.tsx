@@ -5,7 +5,6 @@ import {
   BookOpenText,
   Check,
   ChevronRight,
-  CircleDot,
   Gamepad2,
   Globe2,
   Hash,
@@ -20,7 +19,7 @@ import {
   Workflow,
   X,
 } from 'lucide-react'
-import type { Project, SimulationSessionKind } from '../lib/types'
+import type { Project, SimulationSessionKind, WorkspaceScope } from '../lib/types'
 import { useProjectStore } from '../stores/project'
 import { useWorldGroupStore } from '../stores/world-group'
 import type { WorldProjection } from '../lib/world-engine/domain'
@@ -53,6 +52,12 @@ type ProductWorld = {
   projection?: WorldProjection
 }
 
+function scopeForProject(project: Project): WorkspaceScope | undefined {
+  return project.id != null && project.activeWorldId != null && project.activeWorkId != null
+    ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
+    : undefined
+}
+
 const NAV_TABS: Array<{ id: TabId; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'home', label: '总览', icon: LayoutDashboard },
   { id: 'worlds', label: '世界引擎', icon: Globe2 },
@@ -69,7 +74,7 @@ const FEATURE_META: Record<Exclude<TabId, 'home'>, { eyebrow: string; descriptio
   nodes: { eyebrow: 'FLOW', description: '自由组合世界资料、处理中间产物和生成节点。', icon: Workflow, accent: 'blue' },
   ttrpg: { eyebrow: 'PLAY', description: '选择一个世界版本，开始战役、行动和事件回放。', icon: Swords, accent: 'teal' },
   chat: { eyebrow: 'CHARACTERS', description: '冻结一个世界与角色快照，开始可分支的独立角色聊天。', icon: MessageCircle, accent: 'violet' },
-  game: { eyebrow: 'STORY GAME', description: '文字游戏功能将复用选择、状态和分支编辑器。', icon: Gamepad2, accent: 'blue' },
+  game: { eyebrow: 'STORY GAME', description: '从冻结的主线或支线开始独立游玩，并保留事件、检查点与分支。', icon: Gamepad2, accent: 'blue' },
 }
 
 function Button({
@@ -193,7 +198,7 @@ function HomePage({ worlds, activeProject, onSelect, onSelectWorld, onOpenCreate
   return <>
     <div className="sf-home-intro"><div><div className="sf-eyebrow">STORYFORGE · LOCAL WORKSPACE</div><h1>你的创作与游玩空间</h1><p>从一个世界出发，继续写作、编排、游玩，或者开始一段新的故事。</p></div><div className="sf-intro-actions"><Button icon={Hash} onClick={onOpenWorldPicker}>使用世界编号</Button><Button variant="primary" icon={Plus} onClick={onOpenCreate}>新建内容</Button></div></div>
     {activeProject ? <section className="sf-resume-grid"><article className="sf-resume-card sf-resume-primary"><div className="sf-resume-visual"><span className="sf-visual-label"><StatusDot /> 当前世界</span><span className="sf-visual-rule" /><span className="sf-visual-coordinate">{activeProject.code} · v{activeProject.version}</span></div><div className="sf-resume-content"><span className="sf-card-kicker"><Globe2 className="h-4 w-4" /> 世界引擎</span><h2>{activeProject.name}</h2><p>{activeProject.description}</p><div className="sf-progress"><span style={{ width: `${activeProject.completeness}%` }} /></div><div className="sf-resume-meta"><span>资料完整度 {activeProject.completeness}%</span><span>{activeProject.source}</span></div><Button icon={ArrowRight} onClick={() => onSelect('worlds')}>进入世界引擎</Button></div></article><article className="sf-resume-card sf-resume-secondary"><div className="sf-resume-secondary-head"><span className="sf-card-kicker"><BookOpenText className="h-4 w-4" /> 最近作品</span><StatusDot tone="neutral" /></div><div className="sf-campaign-avatar"><BookOpenText className="h-5 w-5" /></div><h2>{activeProject.name}</h2><p>分步骤写作 · {activeProject.project.currentWordCount ? `${(activeProject.project.currentWordCount / 10000).toFixed(1)} 万字` : '尚未开始正文'}</p><div className="sf-event-list"><div><StatusDot /><span>世界设定可被其他功能引用</span></div><div><StatusDot tone="warning" /><span>继续完善卷纲和正文</span></div></div><Button variant="quiet" icon={ArrowRight} onClick={() => onSelect('novel')}>继续写作</Button></article></section> : <EmptyProjectState onCreate={onOpenCreate} />}
-    <section className="sf-section"><div className="sf-section-header"><div><div className="sf-eyebrow">YOUR WORKSPACE</div><h2>从这里开始</h2></div><button className="sf-text-button" onClick={onOpenCreate}>新建 <ArrowRight className="h-4 w-4" /></button></div><div className="sf-feature-grid">{(Object.keys(FEATURE_META) as Array<Exclude<TabId, 'home'>>).map(id => { const meta = FEATURE_META[id]; const Icon = meta.icon; return <button key={id} className="sf-feature-card" onClick={() => onSelect(id)}><span className={`sf-feature-icon sf-feature-${meta.accent}`}><Icon className="h-5 w-5" /></span><span className="sf-feature-copy"><span className="sf-eyebrow">{meta.eyebrow}</span><h3>{NAV_TABS.find(tab => tab.id === id)?.label}</h3><p>{meta.description}</p></span><span className="sf-feature-footer"><span>{id === 'worlds' ? `${worlds.length} 个世界` : id === 'novel' ? '保留现有工作流' : id === 'nodes' ? '独立 DAG 工作区' : id === 'ttrpg' ? '单机战役已可用' : id === 'chat' ? '单角色聊天已可用' : '即将接入'}</span><ArrowRight className="h-4 w-4" /></span></button> })}</div></section>
+    <section className="sf-section"><div className="sf-section-header"><div><div className="sf-eyebrow">YOUR WORKSPACE</div><h2>从这里开始</h2></div><button className="sf-text-button" onClick={onOpenCreate}>新建 <ArrowRight className="h-4 w-4" /></button></div><div className="sf-feature-grid">{(Object.keys(FEATURE_META) as Array<Exclude<TabId, 'home'>>).map(id => { const meta = FEATURE_META[id]; const Icon = meta.icon; return <button key={id} className="sf-feature-card" onClick={() => onSelect(id)}><span className={`sf-feature-icon sf-feature-${meta.accent}`}><Icon className="h-5 w-5" /></span><span className="sf-feature-copy"><span className="sf-eyebrow">{meta.eyebrow}</span><h3>{NAV_TABS.find(tab => tab.id === id)?.label}</h3><p>{meta.description}</p></span><span className="sf-feature-footer"><span>{id === 'worlds' ? `${worlds.length} 个世界` : id === 'novel' ? '保留现有工作流' : id === 'nodes' ? '独立 DAG 工作区' : id === 'ttrpg' ? '单机战役已可用' : id === 'chat' ? '单角色聊天已可用' : '共享运行时已可用'}</span><ArrowRight className="h-4 w-4" /></span></button> })}</div></section>
     <section className="sf-section"><div className="sf-section-header"><div><div className="sf-eyebrow">WORLD LIBRARY</div><h2>我的世界引擎</h2></div><button className="sf-text-button" onClick={() => onSelect('worlds')}>管理世界 <ArrowRight className="h-4 w-4" /></button></div><div className="sf-world-grid">{worlds.slice(0, 3).map(world => <WorldCard key={world.code} world={world} onOpen={() => { onSelectWorld(world); onSelect('worlds') }} />)}<button className="sf-new-world-card" onClick={onOpenCreate}><span className="sf-new-world-plus"><Plus className="h-5 w-5" /></span><strong>从零创建世界</strong><span>建立一个可被作品与游戏引用的新世界</span></button></div></section>
   </>
 }
@@ -209,7 +214,7 @@ function WorldEnginePage({ worlds, activeWorld, onSelectWorld, onOpenCreate, onO
     <PageHeading eyebrow="FOUNDATION / WORLD ENGINE" title="世界引擎" description="世界是所有写作、节点和互动功能的共同基座。每个世界都有独立编号和版本。" action={<><Button icon={Hash} onClick={onOpenWorldPicker}>使用世界编号</Button><Button variant="primary" icon={Plus} onClick={onOpenCreate}>从零创建世界</Button></>} />
     <div className="sf-subnav">{worlds.map(world => <button key={world.code} className={world.code === activeWorld.code ? 'active' : ''} onClick={() => onSelectWorld(world)}><WorldGlyph accent={world.accent} small /><span>{world.name}</span><span>{world.code}</span></button>)}<span className="sf-subnav-spacer" /></div>
     <section className="sf-worlds-featured"><div className="sf-worlds-featured-visual"><WorldGlyph accent={activeWorld.accent} /></div><div className="sf-worlds-featured-copy"><span className="sf-overline">WORLD ENGINE · {activeWorld.source}</span><h2>{activeWorld.name}</h2><p>{activeWorld.description}</p><span className="sf-world-code-large"><Hash className="h-4 w-4" /> {activeWorld.code} · v{activeWorld.version}</span><div className="sf-worlds-featured-actions"><Button variant="primary" icon={ArrowRight} onClick={() => document.getElementById('world-engine-editor')?.scrollIntoView({ behavior: 'smooth' })}>管理世界设定</Button><Button icon={BookOpenText} onClick={() => onOpenModule('outline')}>继续分步骤创作</Button></div></div><div className="sf-worlds-featured-stats"><div><strong>{activeWorld.completeness}%</strong><span>世界内容覆盖</span></div><div><strong>v{activeWorld.version}</strong><span>当前草稿版本</span></div><div><strong>{projection?.readiness === 'usable' ? '可创作' : projection?.readiness === 'building' ? '建设中' : '待建立'}</strong><span>世界状态</span></div></div></section>
-    <section id="world-engine-editor" className="sf-product-panel"><WorldEngineWorkspace projection={projection} onOpenModule={onOpenModule} /></section>
+    <section id="world-engine-editor" className="sf-product-panel"><WorldEngineWorkspace projection={projection} activeWorkId={activeWorld.project.activeWorkId} onWorkChanged={onImported ? async () => { await onImported(activeWorld.projectId) } : undefined} onOpenModule={onOpenModule} /></section>
     <WorldSharingPanel project={activeWorld.project} onImported={onImported} />
   </>
 }
@@ -230,19 +235,19 @@ function NodesPage({ project, world, onOpenWorldPicker, onCreate }: { project?: 
 function TtrpgPage({ project, world, onOpenWorldPicker, onCreate }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void }) {
   const worldGroupId = useSelectedWorldGroupId(project)
   if (!project || !world) return <><PageHeading eyebrow="PLAY / TTRPG" title="跑团" description="选择世界版本，开始可回放的单机战役。" /><EmptyProjectState onCreate={onCreate} /></>
-  return <><PageHeading eyebrow="PLAY / TTRPG" title="跑团" description="选择一个世界版本，建立独立战役和可回放的互动存档。" /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}><SimulationRuntimePanel project={project} worldGroupId={worldGroupId} sessionKind={'ttrpg' satisfies SimulationSessionKind} /></Suspense></section></>
-}
-
-function PlaceholderPage({ kind, world, onOpenWorldPicker }: { kind: 'chat' | 'game'; world?: ProductWorld; onOpenWorldPicker: () => void }) {
-  const meta = FEATURE_META[kind]
-  const Icon = meta.icon
-  return <><PageHeading eyebrow={`${meta.eyebrow} / LABS`} title={NAV_TABS.find(tab => tab.id === kind)?.label ?? ''} description={meta.description} action={world ? <Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button> : undefined} />{world && <BindingBanner world={world} onChange={onOpenWorldPicker} />}<section className="sf-product-empty sf-product-empty-muted"><span className={`sf-feature-icon sf-feature-${meta.accent}`}><Icon className="h-6 w-6" /></span><h2>{kind === 'chat' ? '角色聊天实验入口' : '文字游戏实验入口'}</h2><p>{kind === 'chat' ? '当前版本仅展示角色聊天的世界基座绑定，不创建会话或改写数据。' : '当前版本仅展示文字游戏的世界基座绑定，不创建游戏或改写数据。'}</p><span className="sf-product-status-chip"><CircleDot className="h-3.5 w-3.5" />Labs · 默认只读</span></section></>
+  return <><PageHeading eyebrow="PLAY / TTRPG" title="跑团" description="选择一个世界版本，建立独立战役和可回放的互动存档。" /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}><SimulationRuntimePanel project={project} worldGroupId={worldGroupId} workspaceScope={scopeForProject(project)} sessionKind={'ttrpg' satisfies SimulationSessionKind} /></Suspense></section></>
 }
 
 function ChatGamePage({ project, world, onOpenWorldPicker, onCreate }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void }) {
   const worldGroupId = useSelectedWorldGroupId(project)
   if (!project || !world) return <><PageHeading eyebrow="PLAY / CHATGAME" title="角色聊天" description="选择世界和角色，开始独立的可分支互动会话。" /><EmptyProjectState onCreate={onCreate} /></>
-  return <><PageHeading eyebrow="PLAY / CHATGAME" title="角色聊天" description="选择一个世界版本，与冻结快照中的角色聊天；会话可重生成、保存和分支。" action={<Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}><ChatGamePanel project={project} worldGroupId={worldGroupId} /></Suspense></section></>
+  return <><PageHeading eyebrow="PLAY / CHATGAME" title="角色聊天" description="选择一个世界版本，与冻结快照中的角色聊天；会话可重生成、保存和分支。" action={<Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}><ChatGamePanel project={project} worldGroupId={worldGroupId} workspaceScope={scopeForProject(project)} /></Suspense></section></>
+}
+
+function TextGamePage({ project, world, onOpenWorldPicker, onCreate }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void }) {
+  const worldGroupId = useSelectedWorldGroupId(project)
+  if (!project || !world) return <><PageHeading eyebrow="PLAY / STORYGAME" title="文字游戏" description="选择世界与叙事蓝图，开始独立的可回放故事。" /><EmptyProjectState onCreate={onCreate} /></>
+  return <><PageHeading eyebrow="PLAY / STORYGAME" title="文字游戏" description="从当前主线或支线建立冻结快照，事件、分支和检查点与其他实例完全隔离。" action={<Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}><SimulationRuntimePanel project={project} worldGroupId={worldGroupId} workspaceScope={scopeForProject(project)} sessionKind={'storygame' satisfies SimulationSessionKind} /></Suspense></section></>
 }
 
 function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (kind: 'worlds' | 'novel', id: number) => void }) {
@@ -317,7 +322,7 @@ export default function ProductHubPage() {
       case 'nodes': return <NodesPage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
       case 'ttrpg': return <TtrpgPage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
       case 'chat': return <ChatGamePage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
-      case 'game': return <PlaceholderPage kind="game" world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} />
+      case 'game': return <TextGamePage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
       default: return <HomePage worlds={worlds} activeProject={activeWorld} onSelect={selectTab} onSelectWorld={selectWorld} onOpenCreate={() => setShowCreate(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} />
     }
   }

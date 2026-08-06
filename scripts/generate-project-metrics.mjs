@@ -26,19 +26,38 @@ function countMatches(source, pattern) {
 function declaredArrayLength(rel, declarationName) {
   const source = read(rel)
   const sourceFile = ts.createSourceFile(rel, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
-  let length = 0
+  const declarations = new Map()
   const visit = node => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === declarationName) {
-      let initializer = node.initializer
-      if (initializer && ts.isCallExpression(initializer) && initializer.expression.getText(sourceFile) === 'Object.freeze') {
-        initializer = initializer.arguments[0]
-      }
-      if (initializer && ts.isArrayLiteralExpression(initializer)) length = initializer.elements.length
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      declarations.set(node.name.text, node.initializer)
     }
     ts.forEachChild(node, visit)
   }
   visit(sourceFile)
-  return length
+
+  const resolveLength = (initializer, seen = new Set()) => {
+    if (ts.isArrayLiteralExpression(initializer)) return initializer.elements.length
+    if (ts.isIdentifier(initializer)) {
+      if (seen.has(initializer.text)) return 0
+      const target = declarations.get(initializer.text)
+      if (!target) return 0
+      return resolveLength(target, new Set([...seen, initializer.text]))
+    }
+    if (!ts.isCallExpression(initializer)) return 0
+    if (initializer.expression.getText(sourceFile) === 'Object.freeze') {
+      return initializer.arguments[0] ? resolveLength(initializer.arguments[0], seen) : 0
+    }
+    if (
+      ts.isPropertyAccessExpression(initializer.expression)
+      && initializer.expression.name.text === 'map'
+    ) {
+      return resolveLength(initializer.expression.expression, seen)
+    }
+    return 0
+  }
+
+  const declaration = declarations.get(declarationName)
+  return declaration ? resolveLength(declaration, new Set([declarationName])) : 0
 }
 
 function metrics() {

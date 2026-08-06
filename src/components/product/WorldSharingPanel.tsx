@@ -1,16 +1,20 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle, CheckCircle2, Download, FileJson, Loader2, ShieldCheck, Share2, Upload,
 } from 'lucide-react'
 import type { CommunityWorldLicense, Project } from '../../lib/types'
 import {
   createWorldPackage,
+  createWorldPackageV2,
   downloadWorldPackage,
   importWorldPackage,
   inspectWorldPackage,
   type WorldPackageTrustReport,
   type WorldPackageUse,
 } from '../../lib/product/world-package'
+import type { WorldRelease } from '../../lib/types'
+import { resolveWorkspaceScope } from '../../lib/world-engine/ownership'
+import { listWorldReleases } from '../../lib/world-engine/releases'
 
 const LICENSE_OPTIONS: Array<{ value: CommunityWorldLicense; label: string }> = [
   { value: 'CC-BY-4.0', label: 'CC BY 4.0 · 署名' },
@@ -44,19 +48,35 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [latestRelease, setLatestRelease] = useState<WorldRelease | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!project?.id) { setLatestRelease(null); return }
+    void resolveWorkspaceScope(project.id)
+      .then(scope => listWorldReleases(scope))
+      .then(releases => { if (!cancelled) setLatestRelease(releases[0] ?? null) })
+      .catch(() => { if (!cancelled) setLatestRelease(null) })
+    return () => { cancelled = true }
+  }, [project?.id, project?.worldVersion])
 
   const publish = async () => {
     if (!project?.id) return
     setBusy(true); setMessage(null)
     try {
-      const pkg = await createWorldPackage(project.id, {
+      const options = {
         authorName,
         license,
         allowedUses,
         contentWarnings: warnings.split(/[，,\n]/),
-      })
+      }
+      const pkg = latestRelease?.id
+        ? await createWorldPackageV2(latestRelease.id, options)
+        : await createWorldPackage(project.id, options)
       downloadWorldPackage(pkg, `storyforge-world-${pkg.manifest.sourceWorldCode}-v${pkg.manifest.sourceWorldVersion}.json`)
-      setMessage('世界分享包已生成；文件只包含已登记的世界资料，不包含正文和运行记录。')
+      setMessage(latestRelease
+        ? '世界分享包 v2 已生成；内容来自不可变发布版本，不包含正文和运行记录。'
+        : '兼容世界分享包 v1 已生成；建立不可变发布版本后可生成 v2。')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '生成分享包失败。')
     } finally { setBusy(false) }
@@ -99,7 +119,7 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
       <div className="sf-sharing-grid">
         <div className="sf-sharing-column">
           <div className="sf-sharing-title"><Share2 className="h-4 w-4" /><strong>生成世界分享包</strong></div>
-          <p>导出世界设定、角色、规则和来源编号；正文、笔记、Agent 会话、API 配置和运行存档不会进入文件。</p>
+          <p>{latestRelease ? `导出不可变版本 v${latestRelease.version} 的世界设定与已选叙事模块。` : '导出兼容 v1 世界资料；先在上方发布修订即可升级为 v2。'}正文、笔记、Agent 会话、API 配置和运行存档不会进入文件。</p>
           <label className="sf-sharing-label">作者署名<input value={authorName} onChange={event => setAuthorName(event.target.value)} placeholder="例如：林岚" /></label>
           <label className="sf-sharing-label">许可<select value={license} onChange={event => setLicense(event.target.value as CommunityWorldLicense)}>{LICENSE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
           <fieldset className="sf-sharing-fieldset"><legend>允许的二创用途</legend><div className="sf-sharing-checks">{USE_OPTIONS.map(option => <label key={option.id}><input type="checkbox" checked={allowedUses[option.id]} onChange={event => setAllowedUses(previous => ({ ...previous, [option.id]: event.target.checked }))} />{option.label}</label>)}</div></fieldset>

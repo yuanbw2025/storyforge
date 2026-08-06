@@ -4,12 +4,13 @@
  * 这里只保留“所有世界概览”这一非生成辅助视图。
  * 单世界生成上下文已统一由 CONTEXT_SOURCES + assembleContext() 提供。
  */
-import { db } from '../db/schema'
-import { WORLD_GROUP_TYPE_LABELS } from '../types/world-group'
+import { WORLD_GROUP_TYPE_LABELS, type WorldGroup } from '../types/world-group'
+import { readOwnedRows, resolveReadScopeLike } from '../world-engine/scope'
 
 /** 沿大纲节点父链解析其所属世界组（多世界）。无则返回 null。 */
 export async function resolveNodeWorldGroupId(projectId: number, outlineNodeId: number): Promise<number | null> {
-  const nodes = await db.outlineNodes.where('projectId').equals(projectId).toArray()
+  const scope = await resolveReadScopeLike(projectId)
+  const nodes = await readOwnedRows<any>(scope, 'outlineNodes', { owner: 'work' })
   let cur = nodes.find(n => n.id === outlineNodeId)
   const guard = new Set<number>()
   while (cur && !guard.has(cur.id!)) {
@@ -25,10 +26,12 @@ export async function resolveNodeWorldGroupId(projectId: number, outlineNodeId: 
  * 用于世界建议、跨世界规划、灵感反推等需要全局视野的场景。
  */
 export async function buildAllWorldsOverview(projectId: number): Promise<string> {
-  const groups = await db.worldGroups.where('projectId').equals(projectId).sortBy('order')
+  const scope = await resolveReadScopeLike(projectId)
+  const groups = (await readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' }))
+    .sort((left, right) => left.order - right.order)
   if (groups.length === 0) return ''
 
-  const allWv = await db.worldviews.where('projectId').equals(projectId).toArray()
+  const allWv = await readOwnedRows<any>(scope, 'worldviews', { owner: 'world' })
 
   const lines: string[] = ['【本项目已有世界】']
   for (const g of groups) {

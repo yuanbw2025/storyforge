@@ -7,6 +7,14 @@ import {
   type CanonAssertionSourceTable,
 } from '../registry/canon-assertion-source-registry'
 import type { FactEntityType, TemporalFact } from '../types/temporal-fact'
+import type { WorkspaceScope } from '../types/world-ownership'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  stampNewRecord,
+} from '../world-engine/scope'
 
 export interface SettingAssertionSource {
   sourceKey: string
@@ -118,7 +126,11 @@ export async function readCanonAssertions(
   projectId: number,
   worldGroupId?: number | null,
 ): Promise<TemporalFact[]> {
-  const rows = await db.temporalFacts.where('projectId').equals(projectId).toArray()
+  const rows = await readOwnedRows<TemporalFact>(
+    await resolveReadScopeLike(projectId),
+    'temporalFacts',
+    { owner: 'work' },
+  )
   return rows.filter(fact =>
     fact.status === 'confirmed'
     && isConstitutionPredicate(fact.predicate)
@@ -131,12 +143,13 @@ export async function listSettingAssertionSources(
   projectId: number,
   worldGroupId?: number | null,
 ): Promise<SettingAssertionSource[]> {
+  const scope = await resolveReadScopeLike(projectId)
   const [worldviews, powerSystems, cultivationSystems, storyCores, characters] = await Promise.all([
-    db.worldviews.where('projectId').equals(projectId).toArray(),
-    db.powerSystems.where('projectId').equals(projectId).toArray(),
-    db.cultivationSystems.where('projectId').equals(projectId).toArray(),
-    db.storyCores.where('projectId').equals(projectId).toArray(),
-    db.characters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<any>(scope, 'worldviews', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'powerSystems', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'cultivationSystems', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'storyCores', { owner: 'work' }),
+    readOwnedRows<any>(scope, 'characters', { owner: 'world' }),
   ])
   const records: Record<CanonAssertionSourceTable, Array<Record<string, unknown>>> = {
     worldviews: worldviews as unknown as Array<Record<string, unknown>>,
@@ -281,6 +294,7 @@ function typedSourceRecordId(fact: TemporalFact): number | null {
 
 export async function validateSettingAssertionSource(
   fact: TemporalFact,
+  suppliedScope?: WorkspaceScope,
 ): Promise<'current' | 'stale' | 'source-missing'> {
   const table = fact.sourceRecordTable as CanonAssertionSourceTable | undefined
   const recordId = typedSourceRecordId(fact)
@@ -290,6 +304,9 @@ export async function validateSettingAssertionSource(
   if (!registered || !isAllowedCanonAssertionSource(table, field, fact.predicate)) return 'source-missing'
   const record = await db.table(table).get(recordId) as Record<string, unknown> | undefined
   if (!record || Number(record.projectId) !== fact.projectId) return 'source-missing'
+  const scope = suppliedScope ?? await resolveReadScopeLike(fact.projectId)
+  const owner = table === 'storyCores' ? 'work' : 'world'
+  if (!await assertRecordInScope(scope, table, record, { owner })) return 'source-missing'
   return fingerprintSettingSource(record[field]) === fact.sourceFingerprint ? 'current' : 'stale'
 }
 
@@ -303,8 +320,13 @@ export async function adoptSettingAssertionCandidates(args: {
     characters: readonly { id: number; name: string; worldGroupId?: number | null }[]
   }
 }): Promise<{ written: number; skipped: number }> {
-  const sourceByKey = new Map(args.sources.map(source => [source.sourceKey, source]))
-  const existing = await db.temporalFacts.where('projectId').equals(args.projectId).toArray()
+  const scope = await resolveScopeLike(args.projectId)
+  const requestedSourceKeys = new Set(args.sources.map(source => source.sourceKey))
+  const currentSources = await listSettingAssertionSources(args.projectId, args.worldGroupId)
+  const sourceByKey = new Map(currentSources
+    .filter(source => requestedSourceKeys.has(source.sourceKey))
+    .map(source => [source.sourceKey, source]))
+  const existing = await readOwnedRows<TemporalFact>(scope, 'temporalFacts', { owner: 'work' })
   let written = 0
   let skipped = 0
   for (const candidate of args.candidates) {
@@ -339,7 +361,7 @@ export async function adoptSettingAssertionCandidates(args: {
       continue
     }
     const timestamp = Date.now()
-    const fact: TemporalFact = {
+    const fact = stampNewRecord(scope, 'temporalFacts', {
       projectId: args.projectId,
       worldGroupId: character?.worldGroupId ?? source.worldGroupId ?? args.worldGroupId ?? null,
       characterId: character?.id ?? null,
@@ -357,7 +379,7 @@ export async function adoptSettingAssertionCandidates(args: {
       locked: false,
       createdAt: timestamp,
       updatedAt: timestamp,
-    }
+    }, { owner: 'work' }) as TemporalFact
     await db.temporalFacts.add(fact)
     existing.push(fact)
     written++
@@ -376,9 +398,16 @@ export async function refreshSettingAssertionSourceStatus(args: {
   if (!sourceSpec) return { touched: 0 }
   const record = await db.table(args.table).get(args.recordId) as Record<string, unknown> | undefined
   const facts = await db.temporalFacts.where('projectId').equals(args.projectId).toArray()
+  const workIds = record && args.table !== 'storyCores' && typeof record.worldId === 'number'
+    ? new Set((await db.works.where('worldId').equals(record.worldId).toArray()).map(work => work.id))
+    : null
   let touched = 0
   for (const fact of facts) {
     if (fact.id == null || fact.sourceRecordTable !== args.table || typedSourceRecordId(fact) !== args.recordId) continue
+    if (record) {
+      if (args.table === 'storyCores' && fact.workId !== record.workId) continue
+      if (workIds && !workIds.has(fact.workId ?? undefined)) continue
+    }
     if (!fact.sourceField || (fieldFilter && !fieldFilter.has(fact.sourceField))) continue
     const registered = getCanonAssertionSourceField(args.table, fact.sourceField)
     const current = record && registered ? fingerprintSettingSource(record[fact.sourceField]) : null

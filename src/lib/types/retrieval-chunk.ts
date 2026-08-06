@@ -12,6 +12,7 @@
 export interface RetrievalChunk {
   id?: number
   projectId: number
+  workId?: number | null
   worldGroupId?: number | null
   /** 来源章节（删章 / 改章 → 该章的块重建或清除） */
   sourceChapterId: number

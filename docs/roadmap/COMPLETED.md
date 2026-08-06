@@ -18,6 +18,7 @@
 | **CANON-1 连续性与记忆** | Phase A/B/C；NS-1/T1-T8、NS-2、NS-3、NS-4/5/6 代码基础；`CONSISTENCY-0/2/3`；存亡时序 | 章节记忆、handoff、计划对账、规范章序、temporalFacts、检索、层级摘要、影响分析、事实审查、可执行覆盖基线、角色认知、世界宪法、角色存亡闭集判决 | `tests/canon/R-CANON-*`、`scripts/check-canon-coverage.mjs`、`tests/regression/R-CONSISTENCY2-*`、`tests/regression/R-CONSISTENCY3-*`、`tests/regression/R-CONSISTENCY4-*`、`R-NS1-*`、`R-NS3-*`、`R-NS4-*`、`R-NS5-*`、`R-NS6-*` |
 | **PIPE-1 创作与大纲** | Phase D/F；B 组；`QUICKWIN-4/6`；`EDITOR-1/3/4`；`ENH-OUTLINE-1`；`PIPELINE-1/2/3` | 大纲生成、空节点补全、已写正文进度、跨卷拖动、全文查找替换、对照润色、最终提示词编辑、五阶段章纲工坊、确定性 gate、Workflow 节点适配 | `R-AUDIT6-*`、`R-EDITOR1-*`、`R-EDITOR3-*`、`R-EDITOR4-*`、`R-QUICKWIN6-*`、`R-PIPELINE1-*`、`R-PIPELINE2-*`、`R-PIPELINE3-*` |
 | **WORLD-1 世界知识** | Phase 20/22/23/25/32；C-1/C-2/C-6/C-7；Phase 36；多世界 25.4/25.5；WORLD-1 世界隔离地基；Phase 37-a；Phase 34；Phase 35-b/c；ENH-WORLDMAP-2 | Codex、重要地点、地图、世界规则、多世界、正式历史、严格世界隔离、修炼体系 DAG、正文修炼进度、政经文化拆分、城池地点软关联、外部导入证据候选、空间约束地图与可信比例尺 | `R-PHASE36-content-types`、`cultivation-system.test.ts`、`cultivation-progress.test.ts`、`R-WORLD1-*`、`R-worldmap-spatial-layout`、Codex/location/import 回归、浏览器世界知识/词条导入/地图流程 |
+| **WORLD-2 世界引擎领域重构** | WORLD-2A / 2B / 2C C1-C5 / 2D / 2E / 2F | 完整世界工作台、显式 World/Work owner、严格 v4 备份、双作用域转换、可执行叙事、不可变修订/Release、世界包 v2，以及跑团/聊天/文字游戏/NPC 演进的统一冻结实例绑定 | `R-WORLD2-*`、`R-WORLD2C-*`、`R-export-fullcoverage`、Chromium 多作品与叙事发布 v2 闭环、`WORLD-ENGINE-COMMUNITY-ARCHITECTURE.md` |
 | **STORY-1 角色驱动与动态规划** | `CF-20260702-9/12` | 持久化角色驱动工作区、版本链、active 上下文源、中途变更影响分析、三档未来大纲 patch、正文保护和过期预览拒绝 | `R-CF9C-*`、`R-CF12-character-revision`、Chromium 角色驱动与中途重规划流程 |
 | **AUTHOR-1 作者工具** | Phase E/H；`FB-5` 基础画像与高级校准；编辑器基础；`CF-20260702-5/10/11`；`EDITOR-5` | 本地模型配置、任务路由、有界文风 few-shot 与互动校准、富文本、自动保存、对照润色、稳定实体智能全书改名与原子撤销 | `R-EDITOR3-*`、`R-EDITOR5-entity-rename`、`R-FB5-*`、Chromium 文风闭环 |
 | **IDEA-1 灵感与参考** | Phase 26.4；Phase 28/28.5；`CM-1`；参考作品导入/分块/分析；参考分析版本演化；角色 AI 聚合去重 | 灵感反推、带来源碎片、增量融合、字段差异、确认版本、参考资料来源声明、失败隔离、断点续跑、版本差异/激活/回滚、active-only 上下文、角色聚合与 AI 去重 | `R-CM1-*`、`R-IDEA1-*`、`INCREMENTAL-INSPIRATION-DESIGN.md`、`REFERENCE-ANALYSIS-EVOLUTION-DESIGN.md` |
@@ -29,7 +30,7 @@
 | **FLOW-3F 节点兼容发布** | FLOW-2 兼容收口与正式入口统一 | 旧图兼容读取、显式 graph v2 转换、未知节点 fail-closed、项目备份往返和旧入口下线 | `R-FLOW3F-compat-release`、`NODE-AUTHORING-MODE-DESIGN.md` |
 | **FLOW-1 历史技术试验（非节点模式产品完成）** | FLOW-1 第一阶段 | 旧工作流兼容图、DAG 校验、拓扑执行、显式入边装配和确认写回的技术验证；产品层级已于 2026-07-26 撤销，迁移归 FLOW-2 | `R-FLOW1-*`、`R-WF-workflow-step-context`、`VISUAL-WORKFLOW-DESIGN.md` |
 | **PRODUCT-1 可靠性与发布** | 数据云备份、导出/导入、快照、PWA/Vite、版本与 Release 相关修复、社区反馈批次；当前阶段新增备份恢复可信预检 | 本地优先、JSON/文件夹/Gist/快照恢复、生产构建和 CI；损坏/未来版本备份在写库前拒绝，旧格式缺表兼容警告 | `R-export-import-roundtrip`、`R-folder-backup`、`R-gist-backup`、`R-PRODUCT1-backup-trust`、CI |
-| **PLATFORM-1 本地世界发布包** | 世界引擎生成本地发布包，声明署名、许可、内容警告和二创用途；导入前校验并生成新的本地世界副本 | 仅分享 `PROJECT_TABLES.communityShare='world'` 登记的世界资料，保留来源编号和许可；不包含正文、运行存档、账号或云同步 | `R-PLATFORM1-world-package`、Chromium 本地分享包 E2E、`PLATFORM-1-LOCAL-PUBLISHING.md` |
+| **PLATFORM-1 本地世界发布包** | v1 兼容包与绑定不可变 Release 的 v2 包；声明署名、许可、内容警告和二创用途，导入前校验并生成新的本地世界副本 | 仅分享 `PROJECT_TABLES.communityShare='world'` 登记和发布时选定的世界/叙事资料，保留来源、依赖哈希与当前叙事；不包含正文、运行存档、账号或云同步 | `R-PLATFORM1-world-package`、`R-WORLD2C-2F-completion`、Chromium v1/v2 本地分享包 E2E、`PLATFORM-1-LOCAL-PUBLISHING.md` |
 
 ## 主要已完成批次
 

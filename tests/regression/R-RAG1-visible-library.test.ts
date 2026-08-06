@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { runNodeFlow } from '../../src/lib/node-flow/executor'
 import {
@@ -174,7 +175,8 @@ describe('RAG-1 · 可见资料与精确字段选择', () => {
       edges: [],
     }
     const now = Date.now()
-    const flowId = await db.nodeFlows.add({
+    const scope = await resolveScopeLike(seeded.projectId)
+    const flowId = await db.nodeFlows.add(stampNewRecord(scope, 'nodeFlows', {
       projectId: seeded.projectId,
       worldGroupId: null,
       name: '精确资料节点',
@@ -182,7 +184,7 @@ describe('RAG-1 · 可见资料与精确字段选择', () => {
       graphJson: JSON.stringify(graph),
       createdAt: now,
       updatedAt: now,
-    }) as number
+    }, { owner: 'work' }) as NodeFlow) as number
     const flow = await db.nodeFlows.get(flowId) as NodeFlow
     const outcome = await runNodeFlow({ flow })
     expect(outcome.run.status).toBe('completed')

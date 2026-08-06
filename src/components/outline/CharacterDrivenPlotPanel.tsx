@@ -23,7 +23,7 @@ import {
 import AIStreamOutput from '../shared/AIStreamOutput'
 import AutoResizeTextarea from '../shared/AutoResizeTextarea'
 import { useDialog } from '../shared/Dialog'
-import type { Project } from '../../lib/types'
+import type { Project, WorkspaceScope } from '../../lib/types'
 import {
   parseCharacterDrivenPlanArcs,
   parseCharacterDrivenPlotVolumes,
@@ -66,7 +66,17 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
     setActivePlan,
     deletePlan,
   } = useCharacterDrivenPlanStore()
-  const ai = useAIStream(createAISessionKey(project.id!, 'character-driven-plot.generate'))
+  const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
+    project.id != null && project.activeWorldId != null && project.activeWorkId != null
+      ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
+      : undefined
+  ), [project.activeWorkId, project.activeWorldId, project.id])
+  const scopeInput = workspaceScope ?? project.id!
+  const ai = useAIStream(createAISessionKey(
+    project.id!,
+    'character-driven-plot.generate',
+    project.activeWorkId ?? 'legacy',
+  ))
   const dialog = useDialog()
   const generationPlanId = useRef<number | null>(null)
 
@@ -79,9 +89,9 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
   const [importing, setImporting] = useState(false)
   const [importDone, setImportDone] = useState(false)
 
-  useEffect(() => { loadChars(project.id!) }, [project.id, loadChars])
-  useEffect(() => { loadOutline(project.id!) }, [project.id, loadOutline])
-  useEffect(() => { loadPlans(project.id!) }, [project.id, loadPlans])
+  useEffect(() => { loadChars(scopeInput) }, [loadChars, scopeInput])
+  useEffect(() => { loadOutline(scopeInput) }, [loadOutline, scopeInput])
+  useEffect(() => { loadPlans(scopeInput) }, [loadPlans, scopeInput])
 
   const currentPlan = useMemo(
     () => plans.find(plan => plan.id === currentPlanId) ?? null,
@@ -222,9 +232,9 @@ export default function CharacterDrivenPlotPanel({ project }: Props) {
       const selected = Array.from(selectedVolumes)
         .sort((a, b) => a - b)
         .flatMap(index => parsedVolumes[index] ? [parsedVolumes[index]] : [])
-      await adoptCharacterDrivenVolumes({ projectId: project.id!, volumes: selected })
+      await adoptCharacterDrivenVolumes({ projectId: project.id!, scope: workspaceScope, volumes: selected })
       if (currentPlan?.id != null) await markAdopted(currentPlan.id)
-      await loadOutline(project.id!)
+      await loadOutline(scopeInput)
       setImportDone(true)
     } finally {
       setImporting(false)

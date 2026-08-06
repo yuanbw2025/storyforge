@@ -2,7 +2,10 @@ import type { Worldview, StoryCore, PowerSystem, Character, CreativeRules } from
 import type { HistoricalKeyword, HistoricalKeywordCategory } from '../types/history'
 import { KEYWORD_CATEGORY_LABELS } from '../types/history'
 import { DIMENSION_LABELS, ANALYSIS_DIMENSIONS } from '../types/reference'
-import { ensureLegacyActiveReferenceRun } from '../reference-analysis/legacy-bridge'
+import {
+  getActiveReferenceAnalysisRun,
+  getReferenceAnalysisRunChunks,
+} from '../reference-analysis/lifecycle'
 import { loadContextMemo } from '../export/context-snapshot'
 import { db } from '../db/schema'
 import { readOwnedRows, resolveScope } from '../world-engine/scope'
@@ -266,16 +269,14 @@ export async function buildRefAnalysisContext(refIds: number[]): Promise<string>
   for (const refId of refIds) {
     const ref = await db.references.get(refId)
     if (!ref) continue
-    let activeRun = (await db.referenceAnalysisRuns
-      .where('referenceId').equals(refId).toArray())
-      .find(run => run.status === 'active')
-    if (!activeRun && ref.analysisStatus === 'done') {
-      activeRun = await ensureLegacyActiveReferenceRun(refId)
+    let activeRun
+    try {
+      activeRun = await getActiveReferenceAnalysisRun(refId)
+    } catch {
+      continue
     }
     if (!activeRun || activeRun.status !== 'active') continue
-    const chunks = await db.referenceChunkAnalysis
-      .where('analysisRunId').equals(activeRun.id!)
-      .sortBy('chunkIndex')
+    const chunks = await getReferenceAnalysisRunChunks(refId, activeRun.id!)
 
     if (!chunks.length) continue
 

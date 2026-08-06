@@ -5,11 +5,12 @@ import {
   deleteReferenceWithAnalysis,
   getReferenceAnalysisRunChunks,
 } from '../lib/reference-analysis/lifecycle'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 interface ReferenceStore {
   references: Reference[]
   loading: boolean
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   addReference: (data: CreateReferenceInput) => Promise<number>
   updateReference: (id: number, data: Partial<Reference>) => Promise<void>
   deleteReference: (id: number) => Promise<void>
@@ -23,26 +24,31 @@ export const useReferenceStore = create<ReferenceStore>((set, get) => ({
   references: [],
   loading: false,
 
-  loadAll: async (projectId: number) => {
+  loadAll: async (scopeInput: WorkspaceScopeLike) => {
     set({ loading: true })
-    const references = await db.references.where('projectId').equals(projectId).toArray()
+    const references = await readOwnedRows<Reference>(await resolveScopeLike(scopeInput), 'references', { owner: 'work' })
     set({ references, loading: false })
   },
 
   addReference: async (data: CreateReferenceInput) => {
     const now = Date.now()
-    const id = await db.references.add({ ...data, createdAt: now, updatedAt: now } as Reference)
+    const stamped = stampNewRecord(await resolveScopeLike(data.projectId), 'references', { ...data, createdAt: now, updatedAt: now } as Reference, { owner: 'work' }) as Reference
+    const id = await db.references.add(stamped)
     await get().loadAll(data.projectId)
     return id as number
   },
 
   updateReference: async (id: number, data: Partial<Reference>) => {
+    const current = get().references.find(r => r.id === id) ?? await db.references.get(id)
+    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'references', current, { owner: 'work' })) return
     await db.references.update(id, { ...data, updatedAt: Date.now() })
     const ref = await db.references.get(id)
     if (ref) await get().loadAll(ref.projectId)
   },
 
   deleteReference: async (id: number) => {
+    const current = get().references.find(r => r.id === id) ?? await db.references.get(id)
+    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'references', current, { owner: 'work' })) return
     const projectId = await deleteReferenceWithAnalysis(id)
     if (projectId) await get().loadAll(projectId)
   },

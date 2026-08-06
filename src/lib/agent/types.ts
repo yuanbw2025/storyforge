@@ -1,10 +1,12 @@
 import type { AIProvider } from '../types/ai'
 import type { AgentContextPolicy } from './context-policy'
+import type { WorkspaceScope } from '../types/world-ownership'
 
 export type AgentToolRisk = 'read' | 'generate' | 'write'
 
 export interface AgentToolExecutionContext {
   projectId: number
+  scope?: WorkspaceScope
   /**
    * 当前工作区选中的世界。多世界项目必须显式传；单世界项目会归一为 null。
    * 工具参数不能覆盖这个值。

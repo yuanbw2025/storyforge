@@ -21,6 +21,8 @@ import { adopt } from '../registry/adopt'
 import {
   completeReferenceAnalysisRun,
   createReferenceAnalysisRun,
+  getReferenceAnalysisRunChunks,
+  listReferenceAnalysisRuns,
   patchReferenceAnalysisRun,
   readReferenceAnalysisChunks,
 } from './lifecycle'
@@ -157,16 +159,19 @@ export async function runRefAnalysis(refId: number, requestedRunId?: number): Pr
     listener.onDone?.(refId, false, requestedRunId)
     return
   }
-  const ref = await db.references.get(refId)
-  if (!ref) {
+  let runs
+  try {
+    runs = await listReferenceAnalysisRuns(refId)
+  } catch {
     listener.onActivity?.('error', `参考 #${refId} 不存在`)
     listener.onDone?.(refId, false, requestedRunId)
     return
   }
+  const ref = await db.references.get(refId)
+  if (!ref) return
   const run = requestedRunId
-    ? await db.referenceAnalysisRuns.get(requestedRunId)
-    : (await db.referenceAnalysisRuns.where('referenceId').equals(refId).toArray())
-      .filter(candidate => candidate.status === 'analyzing')
+    ? runs.find(candidate => candidate.id === requestedRunId)
+    : runs.filter(candidate => candidate.status === 'analyzing')
       .sort((a, b) => b.version - a.version)[0]
   if (!run?.id || run.referenceId !== refId) {
     listener.onActivity?.('error', '找不到待分析版本')
@@ -201,8 +206,7 @@ export async function runRefAnalysis(refId: number, requestedRunId?: number): Pr
   listener.onActivity?.('info', `▶ 开始分析「${ref.title}」v${run.version}，共 ${chunks.length} 块（${depth}）`)
 
   // 已有分析 → 断点续跑
-  const existing = await db.referenceChunkAnalysis
-    .where('analysisRunId').equals(run.id).toArray()
+  const existing = await getReferenceAnalysisRunChunks(refId, run.id)
   const doneSet = new Set(existing.map(r => r.chunkIndex))
 
   let rollingContext = ''
@@ -290,8 +294,7 @@ export async function runRefAnalysis(refId: number, requestedRunId?: number): Pr
     }
 
     // 收尾
-    const finalAnalyses = await db.referenceChunkAnalysis
-      .where('analysisRunId').equals(run.id).toArray()
+    const finalAnalyses = await getReferenceAnalysisRunChunks(refId, run.id)
     const successRatio = total > 0 ? finalAnalyses.length / total : 0
     const errMsg = successRatio < 1
       ? `共 ${total} 块，成功 ${finalAnalyses.length}，失败 ${total - finalAnalyses.length}`

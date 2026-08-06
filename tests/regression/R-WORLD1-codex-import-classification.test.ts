@@ -160,9 +160,12 @@ describe('WORLD-1 Phase 35-c: Codex 外部导入分类', () => {
     } as any) as number
     const options = await loadCodexImportCategoryOptions(projectId)
     const city = options.find(option => option.ref === 'builtin:city')!
+    const activeWorldId = (await db.projects.get(projectId))?.activeWorldId
+    expect(activeWorldId).toBeTypeOf('number')
 
     await db.codexEntries.add({
       projectId,
+      worldId: activeWorldId,
       worldGroupId: worldA,
       categoryId: city.categoryId,
       name: '临渊城',

@@ -3,7 +3,7 @@ import { db } from '../lib/db/schema'
 import type { Worldview, StoryCore, PowerSystem, DivineDesign, NaturalResources } from '../lib/types'
 import { adopt } from '../lib/registry/adopt'
 import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-assertions'
-import { readOwnedRows, resolveScope, stampNewRecord } from '../lib/world-engine/scope'
+import { readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 interface WorldviewStore {
   worldview: Worldview | null
@@ -13,7 +13,7 @@ interface WorldviewStore {
   /** 当前加载的世界组（null = 单世界模式 / 未指定） */
   activeWorldGroupId: number | null
 
-  loadAll: (projectId: number, worldGroupId?: number | null) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
 
   saveWorldview: (data: Partial<Worldview>) => Promise<void>
   saveStoryCore: (data: Partial<StoryCore>) => Promise<void>
@@ -50,9 +50,9 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
   loading: false,
   activeWorldGroupId: null,
 
-  loadAll: async (projectId: number, worldGroupId: number | null = null) => {
+  loadAll: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
     set({ loading: true, activeWorldGroupId: worldGroupId })
-    const scope = await resolveScope({ projectId })
+    const scope = await resolveScopeLike(scopeInput)
     const [wvList, sc, psList] = await Promise.all([
       readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }),
       readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }).then(rows => rows[0]),
@@ -87,7 +87,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       mode: 'replace',
       data: patch as Record<string, unknown>,
     })
-    const list = await readOwnedRows<Worldview>(await resolveScope({ projectId }), 'worldviews', { owner: 'world' })
+    const list = await readOwnedRows<Worldview>(await resolveScopeLike(projectId), 'worldviews', { owner: 'world' })
     const next = (targetWorldGroupId == null
       ? (list.find(w => w.worldGroupId == null) ?? list[0])
       : list.find(w => w.worldGroupId === targetWorldGroupId)) ?? null
@@ -105,7 +105,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       mode: 'replace',
       data: patch as Record<string, unknown>,
     })
-    const next = (await readOwnedRows<StoryCore>(await resolveScope({ projectId }), 'storyCores', { owner: 'work' }))[0] ?? null
+    const next = (await readOwnedRows<StoryCore>(await resolveScopeLike(projectId), 'storyCores', { owner: 'work' }))[0] ?? null
     set({ storyCore: next })
   },
 
@@ -114,7 +114,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
     const projectId = data.projectId ?? powerSystem?.projectId
     let target = powerSystem
     if (!target?.id && projectId != null) {
-      const list = await readOwnedRows<PowerSystem>(await resolveScope({ projectId }), 'powerSystems', { owner: 'world' })
+      const list = await readOwnedRows<PowerSystem>(await resolveScopeLike(projectId), 'powerSystems', { owner: 'world' })
       target = (activeWorldGroupId == null
         ? (list.find(p => p.worldGroupId == null) ?? list[0])
         : list.find(p => p.worldGroupId === activeWorldGroupId)) ?? null
@@ -129,7 +129,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       })
       set({ powerSystem: { ...target, ...data, updatedAt: now() } })
     } else if (projectId != null) {
-      const newPs = stampNewRecord(await resolveScope({ projectId }), 'powerSystems', {
+      const newPs = stampNewRecord(await resolveScopeLike(projectId), 'powerSystems', {
         projectId,
         name: '', description: '', levels: '', rules: '',
         worldGroupId: activeWorldGroupId,   // 多世界模式下盖章当前世界组

@@ -226,13 +226,14 @@ async function readInspirationWorkspaceContext(
 
 export async function readActiveCharacterDrivenPlanContext(projectId: number, scope?: WorkspaceScope): Promise<string> {
   const project = await db.projects.get(projectId)
-  const activeId = project?.activeCharacterDrivenPlanId
+  const resolved = scope ?? await resolveScope({ projectId })
+  const work = resolved.workId > 0 ? await db.works.get(resolved.workId) : null
+  const activeId = work?.activeCharacterDrivenPlanId ?? project?.activeCharacterDrivenPlanId
   if (activeId == null) return ''
 
   const plan = await db.characterDrivenPlans.get(activeId)
-  if (!plan || plan.projectId !== projectId) return ''
+  if (!plan || !await assertRecordInScope(resolved, 'characterDrivenPlans', plan, { owner: 'work' })) return ''
 
-  const resolved = scope ?? await resolveScope({ projectId })
   const [characters, arcs] = await Promise.all([
     readOwnedRows<Character>(resolved, 'characters', { owner: 'world' }),
     Promise.resolve(parseCharacterDrivenPlanArcs(plan.arcs)),
@@ -295,9 +296,13 @@ async function readEmotionBeats(projectId: number, chapterId?: number | null, sc
 }
 
 /** FLOW-3D：只读的一致性影响摘要，供节点图接线查看，不产生任何写回。 */
-async function readConsistencyReport(projectId: number, chapterId?: number | null): Promise<string> {
+async function readConsistencyReport(
+  projectId: number,
+  chapterId?: number | null,
+  scope?: WorkspaceScope,
+): Promise<string> {
   if (chapterId == null) return ''
-  const impact = await analyzeEditImpact(projectId, chapterId)
+  const impact = await analyzeEditImpact(scope ?? projectId, chapterId)
   const staleFacts = impact.factsFromChapter.filter(fact => ['stale', 'source-missing', 'invalid-range'].includes(fact.status))
   const lines = [
     `【一致性影响报告】当前章节来源事实 ${impact.factsFromChapter.length} 条；后续可能受影响章节 ${impact.downstreamChapterIds.length} 个。`,
@@ -609,7 +614,7 @@ async function readRetrievedPassages(projectId: number, chapterId?: number | nul
   const mentioned = charNames.filter(n => summary.includes(n))
   const queryTerms = mentioned.length ? mentioned : charNames // 摘要没提具体角色 → 用全部角色作宽召回
   if (!queryTerms.length) {
-    return await readNarrativeSummaryContext({ projectId, currentChapterId: chapterId, worldGroupId })
+    return await readNarrativeSummaryContext({ projectId, currentChapterId: chapterId, worldGroupId, scope: resolved })
   }
 
   // NS-5：若启用 embedding，按"章纲摘要 + 涉及角色"嵌一次查询向量 → 混合检索（失败自动退回关键词）
@@ -620,9 +625,9 @@ async function readRetrievedPassages(projectId: number, chapterId?: number | nul
 
   const got = await retrieveChunks({
     projectId, currentChapterId: chapterId, worldGroupId, queryTerms, queryEmbedding,
-    queryEmbeddingModel: queryEmbedding ? embeddingModelTag(embCfg) : null, topK: 6,
+    queryEmbeddingModel: queryEmbedding ? embeddingModelTag(embCfg) : null, topK: 6, scope: resolved,
   })
-  const hierarchy = await readNarrativeSummaryContext({ projectId, currentChapterId: chapterId, worldGroupId })
+  const hierarchy = await readNarrativeSummaryContext({ projectId, currentChapterId: chapterId, worldGroupId, scope: resolved })
   if (!got.length) return hierarchy
   const chapters = await readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' })
   const titleOf = new Map(chapters.filter(c => c.id != null).map(c => [c.id!, c.title]))
@@ -735,6 +740,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => !!input.ragEntryKeys?.length,
     read: input => readRagSelectionContext({
       projectId: input.projectId,
+      scope: input.scope,
       worldGroupId: input.worldGroupId,
       entryKeys: input.ragEntryKeys,
       inputBudgetTokens: input.inputBudgetTokens,
@@ -855,7 +861,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     protectedFromTrim: true,
     requiresChapterId: true,
     acceptsOutlineNodeAsChapterBoundary: true,
-    read: input => readConsistencyReport(input.projectId, input.chapterId),
+    read: input => readConsistencyReport(input.projectId, input.chapterId, input.scope),
   },
   {
     key: 'detailedOutline',
@@ -873,6 +879,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 1800,
     protectedFromTrim: true,
+    acceptsDetachedContinuitySnapshot: true,
     enabled: input => !!(input.continuitySnapshot?.previousTailText || input.previousChapterEnding),
     read: async input => input.continuitySnapshot?.previousTailText
       || (input.previousChapterEnding ? `【上一章结尾】\n${input.previousChapterEnding}` : ''),
@@ -885,6 +892,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 1600,
     protectedFromTrim: true,
     requiresChapterId: true,
+    acceptsDetachedContinuitySnapshot: true,
     read: async input => input.continuitySnapshot?.handoffText || '',
   },
   {
@@ -895,6 +903,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 1400,
     protectedFromTrim: true,
     requiresChapterId: true,
+    acceptsDetachedContinuitySnapshot: true,
     read: async input => input.continuitySnapshot?.planReconciliationText || '',
   },
   {
@@ -904,6 +913,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 2200,
     requiresChapterId: true,
+    acceptsDetachedContinuitySnapshot: true,
     read: async input => input.continuitySnapshot?.recentSummariesText || '',
   },
   {
@@ -1029,7 +1039,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 1400,
     protectedFromTrim: true,
-    read: input => readStorylineProgressContext(input.projectId, input.chapterId),
+    read: input => readStorylineProgressContext(input.projectId, input.chapterId, input.scope),
   },
   {
     key: 'cultivationProgress',
@@ -1038,12 +1048,14 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 1000,
     protectedFromTrim: true,
+    ownerFrom: 'work',
     requiresWorldGroupId: true,
     read: input => readCultivationProgressContext(
       input.projectId,
       input.worldGroupId,
       input.chapterId,
       input.outlineNodeId,
+      input.scope,
     ),
   },
   {

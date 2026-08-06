@@ -13,8 +13,14 @@ import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outlin
 import { adopt } from '../registry/adopt'
 import { assembleContext } from '../registry/assemble-context'
 import { rebuildChapterChunks } from '../retrieval/retrieval'
-import type { AIConfig, Chapter, OutlineNode, Project } from '../types'
+import type { AIConfig, Chapter, OutlineNode, Project, WorkspaceScope } from '../types'
 import { countWords, htmlToPlainText, plainTextToHtml } from '../utils/html'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveScope,
+  scopeTransactionTables,
+} from '../world-engine/scope'
 import {
   evidenceFromContextResult,
   resolveAgentContextPolicy,
@@ -69,6 +75,7 @@ export interface ProseCopilotSnapshot {
 
 export interface ProseCopilotInput {
   project: Project
+  scope: WorkspaceScope
   worldGroupId: number | null
   authorRequest: string
   supplementalContext: string
@@ -216,16 +223,19 @@ async function snapshotOf(
   }
 }
 
-async function readSnapshot(projectId: number, base: ProseCopilotSnapshot): Promise<ProseCopilotSnapshot> {
+async function readSnapshot(scope: WorkspaceScope, base: ProseCopilotSnapshot): Promise<ProseCopilotSnapshot> {
   const outline = await db.outlineNodes.get(base.outlineNodeId)
-  if (!outline || outline.projectId !== projectId) throw new ProseCopilotStaleError()
+  if (!outline || !await assertRecordInScope(scope, 'outlineNodes', outline, { owner: 'work' })) {
+    throw new ProseCopilotStaleError()
+  }
   const chapter = base.chapterId == null ? null : await db.chapters.get(base.chapterId)
-  if (chapter && chapter.projectId !== projectId) throw new ProseCopilotStaleError()
+  if (chapter && !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
+    throw new ProseCopilotStaleError()
+  }
   if (chapter && chapter.outlineNodeId !== base.outlineNodeId) throw new ProseCopilotStaleError()
   if (base.chapterId == null) {
-    const created = await db.chapters.where('outlineNodeId').equals(base.outlineNodeId)
-      .and(row => row.projectId === projectId)
-      .first()
+    const created = (await readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }))
+      .find(row => row.outlineNodeId === base.outlineNodeId)
     if (created) throw new ProseCopilotStaleError()
   }
   return snapshotOf(outline, chapter ?? null, base.chapterOrder + 1)
@@ -298,16 +308,20 @@ async function adoptCandidate(input: {
   outline: OutlineNode
   snapshot: ProseCopilotSnapshot
   draft: string
+  scope?: WorkspaceScope
 }): Promise<{ chapterId: number }> {
   const candidate = parseProseCandidateDraft(input.draft)
+  const workspaceScope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   const chapterId = await db.transaction(
     'rw',
-    db.chapters,
-    db.outlineNodes,
-    db.retrievalChunks,
-    db.narrativeSummaryNodes,
+    scopeTransactionTables(
+      db.chapters,
+      db.outlineNodes,
+      db.retrievalChunks,
+      db.narrativeSummaryNodes,
+    ),
     async () => {
-      const current = await readSnapshot(input.projectId, input.snapshot)
+      const current = await readSnapshot(workspaceScope, input.snapshot)
       if (!sameSnapshot(current, input.snapshot)) throw new ProseCopilotStaleError()
       const chapter = current.chapterId == null ? null : await db.chapters.get(current.chapterId)
       const candidateHtml = plainTextToHtml(candidate)
@@ -324,8 +338,9 @@ async function adoptCandidate(input: {
         notes: chapter?.notes ?? '',
       }
       const result = chapter?.id == null
-        ? await adopt({
+          ? await adopt({
             projectId: input.projectId,
+            scope: workspaceScope,
             worldGroupId: input.worldGroupId,
             target: 'chapters',
             mode: 'add',
@@ -333,6 +348,7 @@ async function adoptCandidate(input: {
           })
         : await adopt({
             projectId: input.projectId,
+            scope: workspaceScope,
             worldGroupId: input.worldGroupId,
             target: 'chapters',
             recordId: chapter.id,
@@ -349,7 +365,7 @@ async function adoptCandidate(input: {
       }
       const oldChunkIds = await db.retrievalChunks.where('sourceChapterId').equals(writtenId).primaryKeys()
       if (oldChunkIds.length) await db.retrievalChunks.bulkDelete(oldChunkIds as number[])
-      const summaries = await db.narrativeSummaryNodes.where('projectId').equals(input.projectId).toArray()
+      const summaries = await readOwnedRows<any>(workspaceScope, 'narrativeSummaryNodes', { owner: 'work' })
       for (const summary of summaries) {
         if (summary.id != null && (
           summary.level === 'book'
@@ -364,7 +380,7 @@ async function adoptCandidate(input: {
   )
   const [chapter, characters] = await Promise.all([
     db.chapters.get(chapterId),
-    db.characters.where('projectId').equals(input.projectId).toArray(),
+    readOwnedRows<any>(workspaceScope, 'characters', { owner: 'world' }),
   ])
   if (chapter) {
     await rebuildChapterChunks({
@@ -379,19 +395,24 @@ async function adoptCandidate(input: {
 
 export async function adoptRestoredProseCandidate(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   operation: ProseCopilotOperation
   outlineNodeId: number
   snapshot: ProseCopilotSnapshot
   draft: string
 }): Promise<{ chapterId: number }> {
+  const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   const outline = await db.outlineNodes.get(input.outlineNodeId)
-  if (!outline || outline.projectId !== input.projectId) throw new ProseCopilotStaleError()
-  return adoptCandidate({ ...input, outline })
+  if (!await assertRecordInScope(scope, 'outlineNodes', outline, { owner: 'work' })) {
+    throw new ProseCopilotStaleError()
+  }
+  return adoptCandidate({ ...input, outline: outline!, scope })
 }
 
 export async function prepareProseCopilot(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId: number | null
   authorRequest: string
   supplementalContext?: string
@@ -414,9 +435,10 @@ export async function prepareProseCopilot(input: {
   if (/重写|改写|覆盖|替换.{0,6}正文/.test(request)) {
     throw new Error('主 Agent 正文领域当前不覆盖已有手稿；请使用正文编辑器的对照改写能力。')
   }
+  const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   const [nodes, chapters] = await Promise.all([
-    db.outlineNodes.where('projectId').equals(input.projectId).toArray(),
-    db.chapters.where('projectId').equals(input.projectId).toArray(),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
   ])
   const operation = operationFor(request)
   const target = selectTarget(request, nodes, chapters, worldGroupId, operation)
@@ -437,6 +459,7 @@ export async function prepareProseCopilot(input: {
   const previousTail = htmlToPlainText(previous?.content ?? '').slice(-1800)
   const assembled = await assembleContext({
     projectId: input.projectId,
+    scope,
     worldGroupId,
     outlineNodeId: target.outline.id,
     chapterId: target.chapter?.id ?? null,
@@ -449,10 +472,11 @@ export async function prepareProseCopilot(input: {
     inputBudgetMaxTokens: contextPolicy.maxInputTokens,
     sourceBudgetScale: contextPolicy.sourceBudgetScale,
   })
-  const current = await readSnapshot(input.projectId, snapshot)
+  const current = await readSnapshot(scope, snapshot)
   if (!sameSnapshot(current, snapshot)) throw new ProseCopilotStaleError()
   const nodeInput: ProseCopilotInput = {
     project,
+    scope,
     worldGroupId,
     authorRequest: request,
     supplementalContext: input.supplementalContext ?? '',
@@ -488,7 +512,7 @@ export function createProseCopilotNode(
   dependencies: ProseCopilotDependencies = {},
 ): PreparedProseCopilot['node'] {
   const readCurrent = dependencies.readCurrent
-    ?? (() => readSnapshot(input.project.id!, input.snapshot))
+    ?? (() => readSnapshot(input.scope, input.snapshot))
   const save = dependencies.save ?? (draft => adoptCandidate({
     projectId: input.project.id!,
     worldGroupId: input.worldGroupId,
@@ -496,6 +520,7 @@ export function createProseCopilotNode(
     outline: input.outlineNode,
     snapshot: input.snapshot,
     draft,
+    scope: input.scope,
   }))
   const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
     category: input.routingCategory ?? (input.operation === 'continue' ? 'chapter.continue' : 'chapter.content'),

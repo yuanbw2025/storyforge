@@ -1,6 +1,6 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import KnowledgeLedgerPanel from '../../src/components/facts/KnowledgeLedgerPanel'
 import { db } from '../../src/lib/db/schema'
 
@@ -46,7 +46,9 @@ describe('CONSISTENCY-2 · 角色认知用户出口', () => {
         project: { id: projectId, name: 'UI' } as any,
         onShowFacts: () => undefined,
       }))
-      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      await vi.waitFor(() => expect(host.textContent).toContain('黑衣人是城主'))
     })
 
     expect(host.textContent).toContain('角色认知账本')

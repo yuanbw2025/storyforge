@@ -16,6 +16,7 @@ import {
 } from '../../src/lib/reference-analysis/lifecycle'
 import { verifiedRawExcerpt } from '../../src/lib/reference-analysis/pipeline'
 import type { ReferenceChunkAnalysis } from '../../src/lib/types'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
 
 async function seedProjectAndReference(title = '演化参考') {
   const now = Date.now()
@@ -47,6 +48,13 @@ function chunk(
   }
 }
 
+async function addScopedChunk(projectId: number, row: ReferenceChunkAnalysis): Promise<number> {
+  const scope = await resolveScopeLike(projectId)
+  return db.referenceChunkAnalysis.add(
+    stampNewRecord(scope, 'referenceChunkAnalysis', row, { owner: 'work' }) as ReferenceChunkAnalysis,
+  ) as Promise<number>
+}
+
 describe('R-IDEA1 · 参考资料版本化演化', () => {
   beforeEach(async () => {
     await db.delete()
@@ -73,7 +81,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
   })
 
   it('新分析先 ready，激活后才进入上下文，并可原子回滚旧版本', async () => {
-    const { referenceId } = await seedProjectAndReference()
+    const { projectId, referenceId } = await seedProjectAndReference()
     await db.referenceChunkAnalysis.add(chunk(referenceId, '旧版本钩子'))
     const oldRun = await ensureLegacyActiveReferenceRun(referenceId)
 
@@ -90,7 +98,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
       rightsConfirmed: true,
       sourceText: '新的原文内容',
     })
-    await db.referenceChunkAnalysis.add(chunk(referenceId, '新版本悬念钩子', candidate.id))
+    await addScopedChunk(projectId, chunk(referenceId, '新版本悬念钩子', candidate.id))
     expect(await completeReferenceAnalysisRun(candidate.id!, 1)).toBe('ready')
 
     const staged = await db.referenceAnalysisRuns.get(candidate.id!)
@@ -124,7 +132,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
   })
 
   it('部分成功保留为待确认版本且公开缺块，不覆盖 active', async () => {
-    const { referenceId } = await seedProjectAndReference()
+    const { projectId, referenceId } = await seedProjectAndReference()
     await db.referenceChunkAnalysis.add(chunk(referenceId, '稳定旧版'))
     await ensureLegacyActiveReferenceRun(referenceId)
     const partial = await createReferenceAnalysisRun({
@@ -139,7 +147,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
       rightsConfirmed: true,
       sourceText: '第一块\n第二块',
     })
-    await db.referenceChunkAnalysis.add(chunk(referenceId, '只完成一块', partial.id))
+    await addScopedChunk(projectId, chunk(referenceId, '只完成一块', partial.id))
 
     expect(await completeReferenceAnalysisRun(partial.id!, 2, '共 2 块，成功 1')).toBe('ready')
     expect(await db.referenceAnalysisRuns.get(partial.id!)).toMatchObject({
@@ -202,14 +210,15 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
       rightsConfirmed: true,
       sourceText: '原文',
     })
-    await db.referenceChunkAnalysis.add(chunk(referenceId, '待删', run.id))
-    await db.creativeRules.add({
+    await addScopedChunk(projectId, chunk(referenceId, '待删', run.id))
+    const scope = await resolveScopeLike(projectId)
+    await db.creativeRules.add(stampNewRecord(scope, 'creativeRules', {
       projectId,
       writingStyle: '', narrativePOV: 'third-limited', toneAndMood: '',
       prohibitions: '[]', consistencyRules: '[]', specialRequirements: '',
       referenceWorks: '[]', citedReferenceIds: JSON.stringify([referenceId, otherRefId]),
       createdAt: now, updatedAt: now,
-    } as any)
+    } as any, { owner: 'work' }) as any)
 
     await deleteReferenceWithAnalysis(referenceId)
 
@@ -237,7 +246,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
       rightsConfirmed: true,
       sourceText: '便携原文',
     })
-    await db.referenceChunkAnalysis.add(chunk(referenceId, '便携钩子', run.id))
+    await addScopedChunk(projectId, chunk(referenceId, '便携钩子', run.id))
     await completeReferenceAnalysisRun(run.id!, 1)
 
     const exported = await exportProjectJSON(projectId)

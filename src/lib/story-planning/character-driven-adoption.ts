@@ -1,19 +1,19 @@
 import { db } from '../db/schema'
 import { adopt } from '../registry/adopt'
 import type { CharacterDrivenPlotVolume } from '../types/character-driven-plan'
+import type { WorkspaceScope } from '../types/world-ownership'
+import { readOwnedRows, resolveScopeLike } from '../world-engine/scope'
 
 export interface CharacterDrivenAdoptionResult {
   volumeIds: number[]
   chapterIds: number[]
 }
 
-async function resolveWorldGroupId(projectId: number): Promise<number | null> {
-  const project = await db.projects.get(projectId)
+async function resolveWorldGroupId(scope: WorkspaceScope): Promise<number | null> {
+  const project = await db.projects.get(scope.projectId)
   if (!project?.enableMultiWorld) return null
-  const primary = await db.worldGroups
-    .where('projectId').equals(projectId)
-    .and(group => group.type === 'primary')
-    .first()
+  const primary = (await readOwnedRows<any>(scope, 'worldGroups', { owner: 'world' }))
+    .find(group => group.type === 'primary')
   return primary?.id ?? null
 }
 
@@ -24,19 +24,20 @@ async function resolveWorldGroupId(projectId: number): Promise<number | null> {
  */
 export async function adoptCharacterDrivenVolumes(input: {
   projectId: number
+  scope?: WorkspaceScope
   volumes: CharacterDrivenPlotVolume[]
 }): Promise<CharacterDrivenAdoptionResult> {
-  const worldGroupId = await resolveWorldGroupId(input.projectId)
-  const topLevel = await db.outlineNodes
-    .where('projectId').equals(input.projectId)
+  const scope = await resolveScopeLike(input.scope ?? input.projectId)
+  const worldGroupId = await resolveWorldGroupId(scope)
+  const topLevel = (await readOwnedRows<any>(scope, 'outlineNodes', { owner: 'work' }))
     .filter(node => node.parentId === null)
-    .toArray()
   const result: CharacterDrivenAdoptionResult = { volumeIds: [], chapterIds: [] }
 
   for (let volumeIndex = 0; volumeIndex < input.volumes.length; volumeIndex++) {
     const volume = input.volumes[volumeIndex]
     const adoptedVolume = await adopt({
       projectId: input.projectId,
+      scope,
       worldGroupId,
       target: 'outlineNodes',
       mode: 'add',
@@ -49,14 +50,12 @@ export async function adoptCharacterDrivenVolumes(input: {
       },
     })
     const volumeId = adoptedVolume.written[0]?.id
-      ?? (await db.outlineNodes
-        .where('projectId').equals(input.projectId)
-        .filter(node =>
+      ?? (await readOwnedRows<any>(scope, 'outlineNodes', { owner: 'work' }))
+        .find(node =>
           node.parentId === null
           && node.type === 'volume'
           && node.title === volume.volumeTitle,
-        )
-        .first())?.id
+        )?.id
     if (volumeId == null) throw new Error(`无法采纳卷：${volume.volumeTitle}`)
     result.volumeIds.push(volumeId)
 
@@ -64,6 +63,7 @@ export async function adoptCharacterDrivenVolumes(input: {
       const chapter = volume.chapters[chapterIndex]
       const adoptedChapter = await adopt({
         projectId: input.projectId,
+        scope,
         worldGroupId,
         target: 'outlineNodes',
         mode: 'add',

@@ -11,6 +11,13 @@ import { prepareGenerationNode } from '../generation/generation-node'
 import { adopt } from '../registry/adopt'
 import type { AdoptResult } from '../registry/types'
 import type { AIConfig, Worldview } from '../types'
+import type { WorkspaceScope } from '../types/world-ownership'
+import {
+  isLegacyReadScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  type WorkspaceScopeLike,
+} from '../world-engine/scope'
 import {
   mergeContextEvidence,
   resolveAgentContextPolicy,
@@ -24,6 +31,7 @@ const WORLD_ORIGIN_MAX_CHARS = 12_000
 
 export interface WorldOriginCopilotScope {
   projectId: number
+  scope?: WorkspaceScope
   projectName: string
   genre: string
   worldGroupId: number | null
@@ -66,10 +74,17 @@ export class WorldOriginCopilotStaleError extends Error {
 }
 
 async function readScopedWorldview(
-  projectId: number,
+  scopeInput: WorkspaceScopeLike,
   worldGroupId: number | null,
 ): Promise<Worldview | null> {
-  const rows = await db.worldviews.where('projectId').equals(projectId).toArray()
+  return readWorldviewFromResolvedScope(await resolveReadScopeLike(scopeInput), worldGroupId)
+}
+
+async function readWorldviewFromResolvedScope(
+  scope: WorkspaceScope,
+  worldGroupId: number | null,
+): Promise<Worldview | null> {
+  const rows = await readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' })
   return worldGroupId == null
     ? (rows.find(row => (row.worldGroupId ?? null) === null) ?? rows[0] ?? null)
     : (rows.find(row => row.worldGroupId === worldGroupId) ?? null)
@@ -102,6 +117,7 @@ function assertAuthorRequest(value: string): string {
  */
 export async function prepareWorldOriginCopilot(
   input: Pick<WorldOriginCopilotScope, 'projectId' | 'worldGroupId'> & {
+    scope?: WorkspaceScope
     authorRequest: string
     routingCategory?: string
     contextProfile?: AgentContextProfile
@@ -121,8 +137,11 @@ export async function prepareWorldOriginCopilot(
   const contextProfile = input.contextProfile ?? 'full'
   const contextPolicy = resolveAgentContextPolicy('agent-world-origin', contextProfile)
   const [statusPolicy, worldviewPolicy] = splitAgentContextPolicy(contextPolicy, [1_400, 18_000])
+  const readScope = await resolveReadScopeLike(input.scope ?? input.projectId)
+  const scope = isLegacyReadScope(readScope) ? undefined : readScope
   const toolContextBase = {
     projectId: input.projectId,
+    scope,
     worldGroupId: input.worldGroupId,
     provider: config.provider,
     model: config.model,
@@ -130,7 +149,7 @@ export async function prepareWorldOriginCopilot(
   const [status, worldview, row] = await Promise.all([
     executeAgentTool('read_project_status', { ...toolContextBase, contextPolicy: statusPolicy }),
     executeAgentTool('read_worldview', { ...toolContextBase, contextPolicy: worldviewPolicy }),
-    readScopedWorldview(input.projectId, input.worldGroupId),
+    readWorldviewFromResolvedScope(readScope, input.worldGroupId),
   ])
   for (const result of [status, worldview]) {
     if (!result.ok) throw new Error(result.error || `${result.meta.toolName} 读取失败`)
@@ -139,6 +158,7 @@ export async function prepareWorldOriginCopilot(
   const snapshot = snapshotOf(row)
   const nodeInput: WorldOriginCopilotInput = {
     projectId: input.projectId,
+    scope,
     projectName: project.name,
     genre: project.genre || project.genres.join('、'),
     worldGroupId: input.worldGroupId,
@@ -173,10 +193,11 @@ export function createWorldOriginCopilotNode(
   dependencies: WorldOriginCopilotDependencies = {},
 ): GenerationNode<WorldOriginCopilotInput, string, AdoptResult> {
   const readCurrent = dependencies.readCurrent
-    ?? (async () => snapshotOf(await readScopedWorldview(input.projectId, input.worldGroupId)))
+    ?? (async () => snapshotOf(await readScopedWorldview(input.scope ?? input.projectId, input.worldGroupId)))
   const adoptOutput = dependencies.adoptOutput
     ?? (async output => adopt({
       projectId: input.projectId,
+      scope: input.scope,
       worldGroupId: input.worldGroupId,
       target: 'worldviews',
       mode: 'replace',

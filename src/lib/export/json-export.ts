@@ -43,6 +43,10 @@ import type {
   World,
   Work,
   WorkCharacterBinding,
+  NarrativeModule,
+  NarrativeNode,
+  WorldRevision,
+  WorldRelease,
 } from '../types'
 import type { TemporalFact } from '../types/temporal-fact'
 
@@ -65,10 +69,16 @@ type HomeWorldGroupExportRef = {
  *   1 — 初始版本（14 张表）
  *   2 — 补全全部项目数据（2026-05-27）
  *   3 — 多世界系统（2026-06-02，Phase 25.4）
+ *   4 — World/Work owner 便携影子 ID（WORLD-2C C4）
  */
 export interface ProjectExportData {
   version: number
   exportedAt: number
+  ownership?: {
+    contractVersion: number
+    worldExportId: number
+    workExportId: number
+  }
   project: Omit<Project, 'id' | 'activeCharacterDrivenPlanId' | 'activeWorldId' | 'activeWorkId'> & {
     _activeCharacterDrivenPlanExportId?: number | null
     _activeWorldExportId?: number | null
@@ -78,16 +88,30 @@ export interface ProjectExportData {
   /** WORLD-2C C1 roots; absent in v1-v3 legacy fixtures and empty before C2 migration. */
   worlds?: (Omit<World, 'id' | 'projectId'> & { _exportId: number })[]
   works?: (
-    Omit<Work, 'id' | 'projectId' | 'worldId' | 'activeCharacterDrivenPlanId'>
+    Omit<Work, 'id' | 'projectId' | 'worldId' | 'activeCharacterDrivenPlanId' | 'activeNarrativeModuleId'>
     & {
       _exportId: number
       _worldExportId: number
       _activeCharacterDrivenPlanExportId?: number | null
+      _activeNarrativeModuleExportId?: number | null
     }
   )[]
   workCharacterBindings?: (
     Omit<WorkCharacterBinding, 'id' | 'projectId' | 'workId' | 'characterId'>
     & { _workExportId: number; _characterExportId: number }
+  )[]
+  narrativeModules?: (Omit<NarrativeModule, 'id' | 'projectId'> & { _exportId: number })[]
+  narrativeNodes?: (
+    Omit<NarrativeNode, 'id' | 'projectId' | 'moduleId' | 'sourceOutlineNodeId'>
+    & { _exportId: number; _moduleExportId: number; _sourceOutlineExportId?: number | null }
+  )[]
+  worldRevisions?: (
+    Omit<WorldRevision, 'id' | 'projectId' | 'worldId' | 'parentRevisionId'>
+    & { _exportId: number; _worldExportId: number; _parentExportId?: number | null }
+  )[]
+  worldReleases?: (
+    Omit<WorldRelease, 'id' | 'projectId' | 'worldId' | 'revisionId'>
+    & { _exportId: number; _worldExportId: number; _revisionExportId: number }
   )[]
 
   // ── 原有（v1）──
@@ -203,7 +227,7 @@ export interface ProjectExportData {
 
 /** 导出项目为 JSON(注册表派生) */
 export async function exportProjectJSON(projectId: number): Promise<ProjectExportData> {
-  return deriveExportProjectJSON(projectId)
+  return deriveExportProjectJSON(projectId, { strict: true })
 }
 
 /** 下载 JSON 文件 */

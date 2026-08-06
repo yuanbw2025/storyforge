@@ -9,11 +9,18 @@ import { db } from '../db/schema'
 import { htmlToPlainText } from '../utils/html'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import type { OutlineNode, Chapter } from '../types'
+import {
+  readOwnedRows,
+  resolveReadScopeLike,
+  type WorkspaceScopeLike,
+} from '../world-engine/scope'
 
 const SEPARATOR = '\n\n---\n\n'
 
 /** 生成上下文快照文本 */
-export async function generateContextSnapshot(projectId: number): Promise<string> {
+export async function generateContextSnapshot(scopeInput: WorkspaceScopeLike): Promise<string> {
+  const scope = await resolveReadScopeLike(scopeInput)
+  const projectId = scope.projectId
   const [
     project,
     worldviews,
@@ -26,14 +33,14 @@ export async function generateContextSnapshot(projectId: number): Promise<string
     foreshadows,
   ] = await Promise.all([
     db.projects.get(projectId),
-    db.worldviews.where('projectId').equals(projectId).toArray(),
-    db.histories.where('projectId').equals(projectId).toArray(),
-    db.storyCores.where('projectId').equals(projectId).toArray(),
-    db.powerSystems.where('projectId').equals(projectId).toArray(),
-    db.characters.where('projectId').equals(projectId).toArray(),
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
-    db.foreshadows.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<any>(scope, 'worldviews', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'histories', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'storyCores', { owner: 'work' }),
+    readOwnedRows<any>(scope, 'powerSystems', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'characters', { owner: 'world' }),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+    readOwnedRows<any>(scope, 'foreshadows', { owner: 'work' }),
   ])
 
   if (!project) throw new Error('项目不存在')

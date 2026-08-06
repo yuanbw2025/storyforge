@@ -62,6 +62,10 @@ import type {
   Work,
   WorkCharacterBinding,
   OwnershipMigrationReceipt,
+  NarrativeModule,
+  NarrativeNode,
+  WorldRevision,
+  WorldRelease,
 } from '../types'
 import type { AIUsageEntry } from '../ai/usage-log'
 import type { TemporalFact } from '../types/temporal-fact'
@@ -188,6 +192,10 @@ class StoryForgeDB extends Dexie {
   simulationSessions!: Table<SimulationSession, number>
   simulationEvents!: Table<SimulationEvent, number>
   simulationCheckpoints!: Table<SimulationCheckpoint, number>
+  narrativeModules!: Table<NarrativeModule, number>
+  narrativeNodes!: Table<NarrativeNode, number>
+  worldRevisions!: Table<WorldRevision, number>
+  worldReleases!: Table<WorldRelease, number>
 
   constructor() {
     super('storyforge')
@@ -513,6 +521,18 @@ class StoryForgeDB extends Dexie {
       works: '++id, projectId, worldId, [projectId+worldId], [worldId+updatedAt], status',
       workCharacterBindings: '++id, projectId, workId, characterId, &[workId+characterId], [projectId+workId]',
       ownershipMigrations: '++id, projectId, &[projectId+contractVersion], status, updatedAt',
+    })
+
+    // v50 / WORLD-2D..2F: executable narrative blueprints, immutable world
+    // revisions/releases, and explicit release/module indexes for instances.
+    // Existing SIM rows are intentionally untouched; legacy sessions remain
+    // readable until a user creates a new bound instance.
+    this.version(50).stores({
+      narrativeModules: '++id, projectId, worldId, workId, kind, status, updatedAt',
+      narrativeNodes: '++id, projectId, moduleId, sourceOutlineNodeId, order',
+      worldRevisions: '++id, projectId, worldId, parentRevisionId, revision, contentHash, updatedAt',
+      worldReleases: '++id, projectId, worldId, revisionId, version, contentHash, createdAt',
+      simulationSessions: '++id, projectId, worldGroupId, worldId, workId, worldReleaseId, narrativeModuleId, kind, status, parentSessionId, updatedAt',
     })
   }
 }

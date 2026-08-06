@@ -11,10 +11,12 @@ import type {
   NodeFlowGraph,
   NodeFlowNode,
   NodeRunRecord,
+  WorkspaceScope,
 } from '../types'
 import { parseNodeFlowGraph } from '../types'
 import { createRagSelectionTrace } from '../types'
 import { topologicalNodeOrder } from './graph'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord } from '../world-engine/scope'
 
 export interface NodeExecutionInput {
   sourceNodeId: string
@@ -123,6 +125,7 @@ function composeInputs(node: NodeFlowNode, inputs: NodeExecutionInput[]): string
 
 async function executeNode(input: {
   projectId: number
+  scope: WorkspaceScope
   worldGroupId: number | null
   node: NodeFlowNode
   inputs: NodeExecutionInput[]
@@ -147,6 +150,7 @@ async function executeNode(input: {
     const ragTrace = createRagSelectionTrace()
     const assembled = await assembleContext({
       projectId: input.projectId,
+      scope: input.scope,
       worldGroupId: input.worldGroupId,
       chapterId: numberConfig(node, 'chapterId', 0) || undefined,
       outlineNodeId: numberConfig(node, 'outlineNodeId', 0) || undefined,
@@ -252,10 +256,15 @@ export async function runNodeFlow(input: {
   onUpdate?: (run: NodeRunRecord, snapshots: NodeInputSnapshotMap, results: NodeExecutionResultMap) => void
 }): Promise<{ run: NodeRunRecord; snapshots: NodeInputSnapshotMap; results: NodeExecutionResultMap }> {
   if (input.flow.id == null) throw new Error('请先保存节点图。')
+  const scope = await resolveScopeLike(input.flow.projectId)
+  const storedFlow = await db.nodeFlows.get(input.flow.id)
+  if (!storedFlow || !await assertRecordInScope(scope, 'nodeFlows', storedFlow, { owner: 'work' })) {
+    throw new Error('节点图不存在或不属于当前作品。')
+  }
   const graph = parseNodeFlowGraph(input.flow.graphJson)
   const ordered = topologicalNodeOrder(graph, input.targetNodeId)
   const now = Date.now()
-  const row: NodeRunRecord = {
+  const row = stampNewRecord(scope, 'nodeRuns', {
     projectId: input.flow.projectId,
     flowId: input.flow.id,
     status: 'running',
@@ -264,7 +273,7 @@ export async function runNodeFlow(input: {
     startedAt: now,
     updatedAt: now,
     completedAt: null,
-  }
+  } as NodeRunRecord, { owner: 'work' }) as NodeRunRecord
   const runId = await db.nodeRuns.add(row) as number
   const run = { ...row, id: runId }
   const snapshots: NodeInputSnapshotMap = {}
@@ -286,6 +295,7 @@ export async function runNodeFlow(input: {
       try {
         const executed = await executeNode({
           projectId: input.flow.projectId,
+          scope,
           worldGroupId: input.flow.worldGroupId ?? null,
           node,
           inputs,
@@ -354,16 +364,24 @@ async function readStoredRun(runId: number): Promise<{
   flow: NodeFlow
   graph: NodeFlowGraph
   results: NodeExecutionResultMap
+  scope: WorkspaceScope
 }> {
   const run = await db.nodeRuns.get(runId)
   if (!run) throw new Error('节点运行记录不存在。')
+  const scope = await resolveScopeLike(run.projectId)
+  if (!await assertRecordInScope(scope, 'nodeRuns', run, { owner: 'work' })) {
+    throw new Error('节点运行记录不属于当前作品。')
+  }
   const flow = await db.nodeFlows.get(run.flowId)
-  if (!flow || flow.projectId !== run.projectId) throw new Error('节点图不存在或不属于当前项目。')
+  if (!flow || !await assertRecordInScope(scope, 'nodeFlows', flow, { owner: 'work' })) {
+    throw new Error('节点图不存在或不属于当前作品。')
+  }
   return {
     run,
     flow,
     graph: parseNodeFlowGraph(flow.graphJson),
     results: JSON.parse(run.nodeResultsJson || '{}') as NodeExecutionResultMap,
+    scope,
   }
 }
 
@@ -422,6 +440,7 @@ export async function adoptNodeRunOutput(input: {
     }
     const adopted = await adopt({
       projectId: stored.flow.projectId,
+      scope: stored.scope,
       worldGroupId: stored.flow.worldGroupId ?? null,
       target: 'worldviews',
       mode: 'replace',
@@ -440,7 +459,7 @@ export async function adoptNodeRunOutput(input: {
   } else {
     const candidate = parseCharacterCandidateDraft(output)
     const normalizedName = candidate.name.normalize('NFKC').trim().toLocaleLowerCase('zh-CN')
-    const characters = await db.characters.where('projectId').equals(stored.flow.projectId).toArray()
+    const characters = await readOwnedRows<any>(stored.scope, 'characters', { owner: 'world' })
     const duplicate = characters.some(character => (
       (character.homeWorldGroupId ?? null) === (stored.flow.worldGroupId ?? null)
       && character.name.normalize('NFKC').trim().toLocaleLowerCase('zh-CN') === normalizedName
@@ -448,6 +467,7 @@ export async function adoptNodeRunOutput(input: {
     if (duplicate) throw new Error(`当前世界已存在角色“${candidate.name}”。`)
     const adopted = await adopt({
       projectId: stored.flow.projectId,
+      scope: stored.scope,
       worldGroupId: stored.flow.worldGroupId ?? null,
       target: 'characters',
       mode: 'add',

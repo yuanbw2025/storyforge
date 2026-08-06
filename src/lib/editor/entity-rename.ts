@@ -8,6 +8,8 @@ import type {
 } from '../types'
 import { adopt } from '../registry/adopt'
 import { transactionTablesFor } from '../registry/lifecycle'
+import type { WorkspaceScope } from '../types/world-ownership'
+import { resolveScope } from '../world-engine/scope'
 import {
   buildChapterSearchTargets,
   findChapterMatches,
@@ -473,6 +475,7 @@ async function assertRecordState(change: EntityRenameRecordChange, side: 'before
 
 async function applyChange(
   projectId: number,
+  scope: WorkspaceScope,
   change: EntityRenameRecordChange,
   side: 'before' | 'after',
 ): Promise<void> {
@@ -483,6 +486,7 @@ async function applyChange(
   }
   const result = await adopt({
     projectId,
+    scope,
     target: change.target,
     recordId: change.id,
     mode: 'replace',
@@ -496,6 +500,7 @@ async function applyChange(
 export async function executeEntityRename(
   args: ExecuteEntityRenameArgs,
 ): Promise<ExecuteEntityRenameResult> {
+  const workspaceScope = await resolveScope({ projectId: args.projectId })
   const preview = await buildEntityRenamePreview(args.projectId, args.entity, args.newName)
   if (preview.baseline !== args.expectedBaseline) throw new Error('项目数据已变化，请重新预览后再执行')
   if (preview.blockers.length) throw new Error(preview.blockers.join('；'))
@@ -507,7 +512,7 @@ export async function executeEntityRename(
       throw new Error('创建快照后项目数据发生变化，已取消改名，请重新预览')
     }
     for (const change of current.changes) await assertRecordState(change, 'before')
-    for (const change of current.changes) await applyChange(args.projectId, change, 'after')
+    for (const change of current.changes) await applyChange(args.projectId, workspaceScope, change, 'after')
   })
 
   return {
@@ -527,6 +532,7 @@ export async function executeEntityRename(
 }
 
 export async function undoEntityRename(patch: EntityRenameUndoPatch): Promise<number> {
+  const workspaceScope = await resolveScope({ projectId: patch.projectId })
   await db.transaction('rw', transactionTablesFor('importProject'), async () => {
     const reversePreview = await buildEntityRenamePreview(
       patch.projectId,
@@ -550,7 +556,9 @@ export async function undoEntityRename(patch: EntityRenameUndoPatch): Promise<nu
       throw new Error('改名后新增了相关正文或结构化记录，请改用项目快照恢复')
     }
     for (const change of patch.changes) await assertRecordState(change, 'after')
-    for (const change of [...patch.changes].reverse()) await applyChange(patch.projectId, change, 'before')
+    for (const change of [...patch.changes].reverse()) {
+      await applyChange(patch.projectId, workspaceScope, change, 'before')
+    }
   })
   return patch.changes.length
 }

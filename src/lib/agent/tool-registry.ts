@@ -10,6 +10,7 @@ import type {
   AgentToolJsonSchema,
   AgentToolResult,
 } from './types'
+import { assertRecordInScope, isLegacyReadScope, readOwnedRows, resolveReadScope } from '../world-engine/scope'
 
 type ArgRules = {
   allowed: readonly string[]
@@ -286,6 +287,7 @@ async function resolveScope(
   args: Record<string, unknown>,
 ): Promise<AssembleContextInput> {
   const projectId = positiveInteger(context.projectId, 'projectId')!
+  const workspaceScope = await resolveReadScope({ projectId, scope: context.scope })
   const project = await db.projects.get(projectId)
   if (!project) throw new Error('项目不存在')
   const fragmentIds = args.fragmentIds as string[] | undefined
@@ -295,7 +297,7 @@ async function resolveScope(
     && inspirationMode !== (project.enableMultiWorld ? 'multiworld' : 'single')
   ) throw new Error('灵感反推模式与当前项目不一致')
   if (fragmentIds) {
-    const workspace = await db.inspirationWorkspaces.where('projectId').equals(projectId).first()
+    const workspace = (await readOwnedRows<any>(workspaceScope, 'inspirationWorkspaces', { owner: 'work' }))[0]
     const available = new Set(parseInspirationFragments(workspace?.fragments).map(item => item.id))
     if (fragmentIds.some(fragmentId => !available.has(fragmentId))) {
       throw new Error('灵感碎片不存在或不属于当前项目')
@@ -313,7 +315,9 @@ async function resolveScope(
   }
   if (worldGroupId != null) {
     const group = await db.worldGroups.get(worldGroupId)
-    if (!group || group.projectId !== projectId) throw new Error('世界组不属于当前项目')
+    if (!await assertRecordInScope(workspaceScope, 'worldGroups', group, { owner: 'world' })) {
+      throw new Error('世界组不属于当前项目或当前 World')
+    }
   }
 
   const chapterId = args.chapterId as number | undefined
@@ -325,7 +329,9 @@ async function resolveScope(
     const visited = new Set<number>()
     let effectiveWorld: number | null = null
     while (node) {
-      if (node.projectId !== projectId) throw new Error('大纲节点不属于当前项目')
+      if (!await assertRecordInScope(workspaceScope, 'outlineNodes', node, { owner: 'work' })) {
+        throw new Error('大纲节点不属于当前作品')
+      }
       if (node.worldGroupId != null) {
         effectiveWorld = node.worldGroupId
         break
@@ -340,13 +346,17 @@ async function resolveScope(
   }
   if (chapterId != null) {
     const chapter = await db.chapters.get(chapterId)
-    if (!chapter || chapter.projectId !== projectId) throw new Error('章节不属于当前项目')
+    if (!chapter || !await assertRecordInScope(workspaceScope, 'chapters', chapter, { owner: 'work' })) {
+      throw new Error('章节不属于当前项目或当前作品')
+    }
     chapterOutlineNodeId = chapter.outlineNodeId
     await assertOutlineWorld(chapter.outlineNodeId)
   }
   if (outlineNodeId != null) {
     const node = await db.outlineNodes.get(outlineNodeId)
-    if (!node || node.projectId !== projectId) throw new Error('大纲节点不属于当前项目')
+    if (!node || !await assertRecordInScope(workspaceScope, 'outlineNodes', node, { owner: 'work' })) {
+      throw new Error('大纲节点不属于当前作品')
+    }
     await assertOutlineWorld(outlineNodeId)
   }
   if (chapterOutlineNodeId != null && outlineNodeId != null && chapterOutlineNodeId !== outlineNodeId) {
@@ -354,7 +364,9 @@ async function resolveScope(
   }
   if (characterId != null) {
     const character = await db.characters.get(characterId)
-    if (!character || character.projectId !== projectId) throw new Error('角色不属于当前项目')
+    if (!character || !await assertRecordInScope(workspaceScope, 'characters', character, { owner: 'world' })) {
+      throw new Error('角色不属于当前 World')
+    }
     if (
       needsWorld
       && !character.isCrossWorld
@@ -364,6 +376,7 @@ async function resolveScope(
 
   return {
     projectId,
+    scope: isLegacyReadScope(workspaceScope) ? undefined : workspaceScope,
     ...(needsWorld || explicitWorld ? { worldGroupId: worldGroupId ?? null } : {}),
     chapterId,
     outlineNodeId,

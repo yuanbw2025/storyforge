@@ -10,6 +10,7 @@ import {
 } from '../types/codex'
 import type { CodexImportCandidate } from '../types/import-session-data'
 import { useCodexStore } from '../../stores/codex'
+import { resolveScope, scopeTransactionTables } from '../world-engine/scope'
 
 export interface CodexImportCategoryOption {
   ref: string
@@ -245,12 +246,13 @@ export async function applyCodexImportCandidates(args: {
   candidates: readonly CodexImportCandidate[]
 }): Promise<CodexImportApplyResult> {
   await useCodexStore.getState().ensureBuiltIns(args.projectId)
+  const workspaceScope = await resolveScope({ projectId: args.projectId })
   const categories = await db.codexCategories.where('projectId').equals(args.projectId).toArray()
   const options = buildCodexImportCategoryOptions(categories)
   const byRef = new Map(options.map(option => [option.ref, option]))
   const result: CodexImportApplyResult = { imported: 0, updated: 0, skipped: 0, errors: [] }
 
-  await db.transaction('rw', db.codexCategories, db.codexEntries, async () => {
+  await db.transaction('rw', scopeTransactionTables(db.codexCategories, db.codexEntries), async () => {
     const existingEntries = await db.codexEntries.where('projectId').equals(args.projectId).toArray()
     for (const candidate of mergeCodexImportCandidates([], args.candidates)) {
       const option = byRef.get(candidate.categoryRef)
@@ -293,6 +295,7 @@ export async function applyCodexImportCandidates(args: {
         }
         const adopted = await adopt({
           projectId: args.projectId,
+          scope: workspaceScope,
           worldGroupId: args.worldGroupId,
           target: 'codexEntries',
           recordId: existing.id,
@@ -317,6 +320,7 @@ export async function applyCodexImportCandidates(args: {
         .reduce((max, entry) => Math.max(max, entry.order), -1) + 1
       const adopted = await adopt({
         projectId: args.projectId,
+        scope: workspaceScope,
         worldGroupId: args.worldGroupId,
         target: 'codexEntries',
         mode: 'add',

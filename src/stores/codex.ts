@@ -11,6 +11,7 @@ import {
   BUILTIN_CATEGORIES, stringifyFieldSchema,
   type CodexCategory, type CodexEntry, type CodexDomain, type CodexFieldDef,
 } from '../lib/types/codex'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
 
 interface CodexStore {
   categories: CodexCategory[]
@@ -18,10 +19,10 @@ interface CodexStore {
   loading: boolean
   loadedProjectId: number | null
 
-  loadAll: (projectId: number) => Promise<void>
+  loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   /** 只读加载现有分类/词条，不播种内置分类（供正文档案提示等纯读入口）。 */
-  loadExisting: (projectId: number) => Promise<void>
-  ensureBuiltIns: (projectId: number) => Promise<void>
+  loadExisting: (scope: WorkspaceScopeLike) => Promise<void>
+  ensureBuiltIns: (scope: WorkspaceScopeLike) => Promise<void>
 
   // 分类
   addCategory: (c: Omit<CodexCategory, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
@@ -44,7 +45,7 @@ const now = () => Date.now()
 // 并发锁:同一项目的 ensureBuiltIns 同一时刻只跑一次。
 // 防止并发调用(如 React StrictMode 开发期把 effect 跑两遍、或多个面板内嵌词条同时挂载)
 // 各自判定"内置分类缺失"而重复播种,产生每类两条的重复。
-const ensureBuiltInsInFlight = new Map<number, Promise<void>>()
+const ensureBuiltInsInFlight = new Map<string, Promise<void>>()
 
 export const useCodexStore = create<CodexStore>((set, get) => ({
   categories: [],
@@ -52,13 +53,15 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
   loading: false,
   loadedProjectId: null,
 
-  loadAll: async (projectId) => {
+  loadAll: async (scopeInput) => {
+    const scope = await resolveScopeLike(scopeInput)
+    const projectId = scope.projectId
     set({ loading: true })
     try {
-      await get().ensureBuiltIns(projectId)
+      await get().ensureBuiltIns(scope)
       const [categories, entries] = await Promise.all([
-        db.codexCategories.where('projectId').equals(projectId).toArray(),
-        db.codexEntries.where('projectId').equals(projectId).toArray(),
+        readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
+        readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }),
       ])
       set({ categories, entries, loading: false, loadedProjectId: projectId })
     } catch (err) {
@@ -67,12 +70,14 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
     }
   },
 
-  loadExisting: async (projectId) => {
+  loadExisting: async (scopeInput) => {
+    const scope = await resolveReadScopeLike(scopeInput)
+    const projectId = scope.projectId
     set({ loading: true })
     try {
       const [categories, entries] = await Promise.all([
-        db.codexCategories.where('projectId').equals(projectId).toArray(),
-        db.codexEntries.where('projectId').equals(projectId).toArray(),
+        readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
+        readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }),
       ])
       set({ categories, entries, loading: false, loadedProjectId: projectId })
     } catch (err) {
@@ -81,16 +86,19 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
     }
   },
 
-  ensureBuiltIns: async (projectId) => {
+  ensureBuiltIns: async (scopeInput) => {
+    const scope = await resolveScopeLike(scopeInput)
+    const projectId = scope.projectId
     // 并发锁:同项目已有调用在跑就复用它,从根上杜绝并发重复播种;
     // 内部仍保留自愈去重,清理历史/其它路径产生的重复。
-    const running = ensureBuiltInsInFlight.get(projectId)
+    const lockKey = `${projectId}:${scope.worldId}`
+    const running = ensureBuiltInsInFlight.get(lockKey)
     if (running) return running
     const task = (async () => {
     // 自愈式幂等：先去重历史重复，再补齐缺失的内置分类。
     // ① 每个 builtInKey 只保留 id 最小的一条；多余分类下的词条/子分类改挂到保留项后删除多余分类。
     // ② 再只播种当前缺失的内置 key。
-    const cats = await db.codexCategories.where('projectId').equals(projectId).toArray()
+    const cats = await readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' })
     const builtins = cats.filter(c => !!c.builtInKey)
 
     // ① 去重历史重复
@@ -106,10 +114,8 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       const keep = group[0]
       for (const extra of group.slice(1)) {
         // 多余分类下的词条改挂到保留项，避免删分类时孤立词条
-        const orphanEntries = await db.codexEntries
-          .where('projectId').equals(projectId)
+        const orphanEntries = (await readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }))
           .filter(e => e.categoryId === extra.id)
-          .toArray()
         for (const e of orphanEntries) {
           await db.codexEntries.update(e.id!, { categoryId: keep.id! })
         }
@@ -129,7 +135,7 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
 
     const ts = now()
     const baseOrder = cats.length
-    const rows: CodexCategory[] = missing.map((seed, i) => ({
+    const rows = missing.map((seed, i) => stampNewRecord(scope, 'codexCategories', {
       projectId,
       domain: seed.domain,
       parentId: null,
@@ -142,23 +148,25 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       worldGroupId: null,
       createdAt: ts,
       updatedAt: ts,
-    }))
+    }, { owner: 'world' }) as CodexCategory)
     await db.codexCategories.bulkAdd(rows)
     console.log('[Codex] 已播种缺失内置分类:', rows.length)
     })()
-    ensureBuiltInsInFlight.set(projectId, task)
-    try { await task } finally { ensureBuiltInsInFlight.delete(projectId) }
+    ensureBuiltInsInFlight.set(lockKey, task)
+    try { await task } finally { ensureBuiltInsInFlight.delete(lockKey) }
   },
 
   addCategory: async (c) => {
     const ts = now()
-    const row = { ...c, createdAt: ts, updatedAt: ts } as CodexCategory
+    const row = stampNewRecord(await resolveScopeLike(c.projectId), 'codexCategories', { ...c, createdAt: ts, updatedAt: ts } as CodexCategory, { owner: 'world' }) as CodexCategory
     const id = await db.codexCategories.add(row) as number
     set({ categories: [...get().categories, { ...row, id }] })
     return id
   },
 
   updateCategory: async (id, patch) => {
+    const current = get().categories.find(c => c.id === id) ?? await db.codexCategories.get(id)
+    if (!current || !await assertRecordInScope(await resolveScopeLike(current.projectId), 'codexCategories', current, { owner: 'world' })) return
     const next = { ...patch, updatedAt: now() }
     await db.codexCategories.update(id, next)
     set({ categories: get().categories.map(c => c.id === id ? { ...c, ...next } : c) })
@@ -167,6 +175,7 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
   deleteCategory: async (id) => {
     const cat = get().categories.find(c => c.id === id)
     if (!cat) return
+    if (!await assertRecordInScope(await resolveScopeLike(cat.projectId), 'codexCategories', cat, { owner: 'world' })) return
     if (cat?.builtInKey) {
       console.warn('[Codex] 内置分类不可删除，仅可隐藏')
       return
@@ -201,21 +210,38 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
 
   addEntry: async (e) => {
     const ts = now()
-    const row = { ...e, createdAt: ts, updatedAt: ts } as CodexEntry
+    const scope = await resolveScopeLike(e.projectId)
+    const category = await db.codexCategories.get(e.categoryId)
+    if (!category || !await assertRecordInScope(scope, 'codexCategories', category, { owner: 'world' })) {
+      throw new Error('[Codex] 分类不属于当前 World')
+    }
+    const row = stampNewRecord(scope, 'codexEntries', { ...e, createdAt: ts, updatedAt: ts } as CodexEntry, { owner: 'world' }) as CodexEntry
     const id = await db.codexEntries.add(row) as number
     set({ entries: [...get().entries, { ...row, id }] })
     return id
   },
 
   updateEntry: async (id, patch) => {
+    const beforeMigration = get().entries.find(e => e.id === id) ?? await db.codexEntries.get(id)
+    if (!beforeMigration) return
+    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const current = await db.codexEntries.get(id)
+    if (!current || !await assertRecordInScope(scope, 'codexEntries', current, { owner: 'world' })) return
+    if (patch.categoryId != null) {
+      const category = await db.codexCategories.get(patch.categoryId)
+      if (!category || !await assertRecordInScope(scope, 'codexCategories', category, { owner: 'world' })) return
+    }
     const next = { ...patch, updatedAt: now() }
     await db.codexEntries.update(id, next)
     set({ entries: get().entries.map(e => e.id === id ? { ...e, ...next } : e) })
   },
 
   deleteEntry: async (id) => {
-    const entry = get().entries.find(item => item.id === id)
-    if (!entry) return
+    const beforeMigration = get().entries.find(item => item.id === id) ?? await db.codexEntries.get(id)
+    if (!beforeMigration) return
+    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const entry = await db.codexEntries.get(id)
+    if (!entry || !await assertRecordInScope(scope, 'codexEntries', entry, { owner: 'world' })) return
     await db.transaction('rw', db.codexEntries, db.characters, async () => {
       await removeCodexEntryReferences(entry.projectId, new Set([id]))
       await db.codexEntries.delete(id)

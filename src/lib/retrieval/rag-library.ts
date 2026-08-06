@@ -19,6 +19,7 @@ import {
   type History,
   type ImportantLocation,
   type ItemLedgerEntry,
+  type OutlineNode,
   type RagDocumentMetadata,
   type RagDocumentPolicy,
   type RagFieldPolicy,
@@ -29,6 +30,14 @@ import {
   type Worldview,
 } from '../types'
 import { htmlToPlainText } from '../utils/html'
+import type { WorkspaceScope } from '../types/world-ownership'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScope,
+  type WorkspaceScopeLike,
+} from '../world-engine/scope'
 
 type RagRow = RagDocumentMetadata & {
   id?: number
@@ -321,14 +330,14 @@ function descriptors(): RagDescriptor<any>[] {
 }
 
 async function projectionContext(
-  projectId: number,
+  scope: WorkspaceScope,
   worldGroupId: number | null,
 ): Promise<ProjectionContext> {
   const [outlineNodes, characters, categories, chunks] = await Promise.all([
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.characters.where('projectId').equals(projectId).toArray(),
-    db.codexCategories.where('projectId').equals(projectId).toArray(),
-    db.retrievalChunks.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Character>(scope, 'characters', { owner: 'world' }),
+    readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
+    readOwnedRows<any>(scope, 'retrievalChunks', { owner: 'work' }),
   ])
   const outlineWorldById = new Map(outlineNodes.flatMap(node =>
     node.id == null ? [] : [[node.id, node.worldGroupId ?? null] as const],
@@ -379,14 +388,16 @@ export function makeRagEntryKey(documentId: string, fieldKey: string): string {
 /** 实时投影所有当前世界可见资料；缺稳定 ID 时只补元数据，不复制正文。 */
 export async function buildRagLibrary(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId?: number | null
 }): Promise<RagLibraryEntry[]> {
   const worldGroupId = input.worldGroupId ?? null
-  const context = await projectionContext(input.projectId, worldGroupId)
+  const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
+  const context = await projectionContext(scope, worldGroupId)
   const entries: RagLibraryEntry[] = []
 
   for (const descriptor of descriptors()) {
-    const rows = await descriptor.table.where('projectId').equals(input.projectId).toArray()
+    const rows = await readOwnedRows<any>(scope, descriptor.tableName)
     for (const row of rows) {
       if (row.id == null || descriptor.visible?.(row, context) === false) continue
       const documentId = stableDocumentId(descriptor.tableName, row)
@@ -439,13 +450,17 @@ function descriptorFor(tableName: string): RagDescriptor {
 
 async function updatePolicy(input: {
   projectId: number
+  scope?: WorkspaceScope
   tableName: string
   recordId: number
   transform: (policy: RagDocumentPolicy) => RagDocumentPolicy
 }): Promise<void> {
+  const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   const descriptor = descriptorFor(input.tableName)
   const row = await descriptor.table.get(input.recordId)
-  if (!row || row.projectId !== input.projectId) throw new Error('资料记录不存在或不属于当前项目。')
+  if (!row || !await assertRecordInScope(scope, input.tableName, row)) {
+    throw new Error('资料记录不存在或不属于当前 World/Work。')
+  }
   const next = input.transform(row.ragPolicy ?? {})
   await descriptor.table.update(input.recordId, {
     ragDocumentId: stableDocumentId(input.tableName, row),
@@ -455,6 +470,7 @@ async function updatePolicy(input: {
 
 export async function updateRagDocumentPolicy(input: {
   projectId: number
+  scope?: WorkspaceScope
   tableName: string
   recordId: number
   patch: RagFieldPolicy
@@ -472,6 +488,7 @@ export async function updateRagDocumentPolicy(input: {
 
 export async function updateRagFieldPolicy(input: {
   projectId: number
+  scope?: WorkspaceScope
   tableName: string
   recordId: number
   fieldKey: string
@@ -516,6 +533,7 @@ function capByTokens(content: string, budget: number): { content: string; trimme
  */
 export async function readRagSelectionContext(input: {
   projectId: number
+  scope?: WorkspaceScope
   worldGroupId?: number | null
   entryKeys?: string[]
   inputBudgetTokens?: number
@@ -573,10 +591,12 @@ export interface RecentRagRecall {
 
 /** 读取最近节点运行中冻结的精确资料召回证据，不重新执行也不改写快照。 */
 export async function readRecentRagRecalls(
-  projectId: number,
+  scopeInput: WorkspaceScopeLike,
   limit = 8,
 ): Promise<RecentRagRecall[]> {
-  const runs = await db.nodeRuns.where('projectId').equals(projectId).reverse().sortBy('updatedAt')
+  const scope = await resolveReadScopeLike(scopeInput)
+  const runs = (await readOwnedRows<any>(scope, 'nodeRuns', { owner: 'work' }))
+    .sort((left, right) => right.updatedAt - left.updatedAt)
   const recalls: RecentRagRecall[] = []
   for (const run of runs) {
     if (run.id == null) continue

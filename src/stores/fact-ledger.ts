@@ -20,12 +20,13 @@ import {
   type SettingAssertionSource,
 } from '../lib/fact-ledger/setting-assertions'
 import { importFactCandidateDiff, type ImportFactCandidateDiffResult } from '../lib/fact-ledger/human-readable-io'
+import type { WorkspaceScope } from '../lib/types/world-ownership'
 
 interface FactLedgerStore {
   facts: TemporalFact[]
   loading: boolean
   load: (projectId: number) => Promise<void>
-  adopt: (args: { projectId: number; sourceChapterId: number; worldGroupId?: number | null; candidates: ExtractedFactCandidate[] }) => Promise<number>
+  adopt: (args: { projectId: number; scope?: WorkspaceScope; sourceChapterId: number; worldGroupId?: number | null; candidates: ExtractedFactCandidate[] }) => Promise<number>
   adoptSetting: (args: {
     projectId: number
     worldGroupId?: number | null
@@ -55,8 +56,8 @@ export const useFactLedgerStore = create<FactLedgerStore>((set, get) => ({
     }
   },
 
-  adopt: async ({ projectId, sourceChapterId, worldGroupId, candidates }) => {
-    const result = await adoptFactCandidates({ projectId, sourceChapterId, worldGroupId, candidates })
+  adopt: async ({ projectId, scope, sourceChapterId, worldGroupId, candidates }) => {
+    const result = await adoptFactCandidates({ projectId, scope, sourceChapterId, worldGroupId, candidates })
     await get().load(projectId)
     return result.written
   },

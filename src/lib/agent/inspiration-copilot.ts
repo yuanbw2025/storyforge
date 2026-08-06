@@ -24,6 +24,7 @@ import {
   parseInspirationVersions,
 } from '../inspiration/workspace'
 import type { AIConfig } from '../types'
+import type { WorkspaceScope } from '../types/world-ownership'
 import type {
   InspirationResultMode,
   InspirationVersion,
@@ -36,6 +37,12 @@ import {
   type AgentContextProfile,
 } from './context-policy'
 import { executeAgentTool } from './tool-registry'
+import {
+  isLegacyReadScope,
+  readOwnedRows,
+  resolveReadScopeLike,
+  type WorkspaceScopeLike,
+} from '../world-engine/scope'
 
 export type InspirationCopilotResult = ReverseResult | ReverseMultiWorldResult
 
@@ -48,6 +55,7 @@ export interface InspirationWorkspaceSnapshot {
 
 export interface InspirationCopilotInput {
   projectId: number
+  scope?: WorkspaceScope
   projectName: string
   genres: string
   mode: InspirationResultMode
@@ -106,9 +114,17 @@ function sameSnapshot(
     && left.versions === right.versions
 }
 
-async function readWorkspaceSnapshot(projectId: number): Promise<InspirationWorkspaceSnapshot> {
-  const row = await db.inspirationWorkspaces.where('projectId').equals(projectId).first() ?? null
+async function snapshotFromResolvedScope(scope: WorkspaceScope): Promise<InspirationWorkspaceSnapshot> {
+  const row = (await readOwnedRows<InspirationWorkspace>(
+    scope,
+    'inspirationWorkspaces',
+    { owner: 'work' },
+  ))[0] ?? null
   return snapshotOf(row)
+}
+
+async function readWorkspaceSnapshot(scopeInput: WorkspaceScopeLike): Promise<InspirationWorkspaceSnapshot> {
+  return snapshotFromResolvedScope(await resolveReadScopeLike(scopeInput))
 }
 
 function assertAuthorRequest(value: string): string {
@@ -167,6 +183,7 @@ export function parseInspirationCandidateDraft(
  */
 export async function prepareInspirationCopilot(input: {
   projectId: number
+  scope?: WorkspaceScope
   selectedFragmentIds: string[]
   authorRequest: string
   routingCategory?: string
@@ -176,7 +193,9 @@ export async function prepareInspirationCopilot(input: {
   const project = await db.projects.get(input.projectId)
   if (!project) throw new Error('项目不存在。')
   const mode: InspirationResultMode = project.enableMultiWorld ? 'multiworld' : 'single'
-  const snapshot = await readWorkspaceSnapshot(input.projectId)
+  const readScope = await resolveReadScopeLike(input.scope ?? input.projectId)
+  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const snapshot = await snapshotFromResolvedScope(readScope)
   const fragments = parseInspirationFragments(snapshot.fragments)
   const selectedFragmentIds = [...new Set(input.selectedFragmentIds)]
   if (
@@ -199,6 +218,7 @@ export async function prepareInspirationCopilot(input: {
     'read_inspiration_workspace',
     {
       projectId: input.projectId,
+      scope,
       provider: config.provider,
       model: config.model,
       contextPolicy,
@@ -216,6 +236,7 @@ export async function prepareInspirationCopilot(input: {
 
   const nodeInput: InspirationCopilotInput = {
     projectId: input.projectId,
+    scope,
     projectName: project.name,
     genres: project.genres?.join('/') || project.genre || '',
     mode,
@@ -248,10 +269,11 @@ export function createInspirationCopilotNode(
   input: InspirationCopilotInput,
   dependencies: InspirationCopilotDependencies = {},
 ): GenerationNode<InspirationCopilotInput, InspirationCopilotResult, InspirationVersion> {
-  const readCurrent = dependencies.readCurrent ?? (() => readWorkspaceSnapshot(input.projectId))
+  const scopeInput = input.scope ?? input.projectId
+  const readCurrent = dependencies.readCurrent ?? (() => readWorkspaceSnapshot(scopeInput))
   const saveVersion = dependencies.saveVersion ?? (async result => {
-    await useInspirationWorkspaceStore.getState().load(input.projectId)
-    return useInspirationWorkspaceStore.getState().saveVersion(input.projectId, {
+    await useInspirationWorkspaceStore.getState().load(scopeInput)
+    return useInspirationWorkspaceStore.getState().saveVersion(scopeInput, {
       mode: input.mode,
       parentVersionId: input.parentVersionId,
       fragmentIds: input.selectedFragmentIds,

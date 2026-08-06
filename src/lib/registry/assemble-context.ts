@@ -8,7 +8,7 @@ import { CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
 import type { AssembleContextInput, AssembleContextResult, ContextSource } from './types'
 import { prepareContinuityContext } from '../ai/chapter-memory/continuity-context'
 import { db } from '../db/schema'
-import { assertRecordInScope, resolveScope } from '../world-engine/scope'
+import { assertRecordInScope, resolveReadScope } from '../world-engine/scope'
 
 /** 拿不到模型时的保守默认输入预算(原固定 24K 偏紧,放宽避免内部提前裁) */
 const FALLBACK_INPUT_BUDGET = 48_000
@@ -33,10 +33,10 @@ function deriveInputBudget(input: AssembleContextInput): number {
 }
 
 export async function assembleContext(input: AssembleContextInput): Promise<AssembleContextResult> {
-  const scope = await resolveScope(input)
+  const scope = await resolveReadScope(input)
   const resolvedBase: AssembleContextInput = { ...input, projectId: scope.projectId, scope }
-  await assertContextAnchors(resolvedBase)
   const selected = selectSources(resolvedBase)
+  await assertContextAnchors(resolvedBase, selected)
   const inputBudget = deriveInputBudget(input)
   const needsContinuity = selected.some(source => (
     source.key === 'previousChapterEnding'
@@ -50,6 +50,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
         continuitySnapshot: resolvedBase.continuitySnapshot ?? await prepareContinuityContext({
           projectId: scope.projectId,
           chapterId: resolvedBase.chapterId,
+          scope,
         }),
       }
     : resolvedBase
@@ -115,9 +116,12 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
   }
 }
 
-async function assertContextAnchors(input: AssembleContextInput): Promise<void> {
+async function assertContextAnchors(input: AssembleContextInput, selected: ContextSource[]): Promise<void> {
   if (!input.scope) return
-  if (input.chapterId != null) {
+  const detachedContinuity = input.continuitySnapshot != null
+    && selected.length > 0
+    && selected.every(source => source.acceptsDetachedContinuitySnapshot)
+  if (input.chapterId != null && !detachedContinuity) {
     const chapter = await db.chapters.get(input.chapterId)
     if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) {
       throw new Error('[assembleContext] chapterId 不属于当前 Work')
@@ -129,12 +133,8 @@ async function assertContextAnchors(input: AssembleContextInput): Promise<void> 
       throw new Error('[assembleContext] outlineNodeId 不属于当前 Work')
     }
   }
-  if (input.simulationSessionId != null) {
-    const session = await db.simulationSessions.get(input.simulationSessionId)
-    if (!session || session.projectId !== input.scope.projectId) {
-      throw new Error('[assembleContext] simulationSessionId 不属于当前工作区')
-    }
-  }
+  // Runtime readers omit foreign sessions themselves and surface only same-scope
+  // snapshot-integrity failures, preserving a fail-closed read contract.
 }
 
 function selectSources(input: AssembleContextInput): ContextSource[] {

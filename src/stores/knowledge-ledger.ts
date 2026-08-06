@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import type { Chapter, Character, KnowledgeLedgerEntry } from '../lib/types'
-import { db } from '../lib/db/schema'
 import {
   adoptKnowledgeCandidates,
   confirmKnowledgeCandidate,
@@ -8,16 +7,22 @@ import {
   rejectKnowledgeCandidate,
   type KnowledgeCandidateInput,
 } from '../lib/knowledge-ledger/knowledge-ledger'
+import {
+  readOwnedRows,
+  resolveReadScopeLike,
+  resolveScopeLike,
+  type WorkspaceScopeLike,
+} from '../lib/world-engine/scope'
 
 interface KnowledgeLedgerStore {
   events: KnowledgeLedgerEntry[]
   characters: Character[]
   chapters: Chapter[]
   loading: boolean
-  load: (projectId: number) => Promise<void>
-  adopt: (projectId: number, candidates: KnowledgeCandidateInput[]) => Promise<{ written: number; skipped: number }>
-  confirmEvent: (projectId: number, eventId: number) => Promise<boolean>
-  rejectEvent: (projectId: number, eventId: number) => Promise<boolean>
+  load: (scope: WorkspaceScopeLike) => Promise<void>
+  adopt: (scope: WorkspaceScopeLike, candidates: KnowledgeCandidateInput[]) => Promise<{ written: number; skipped: number }>
+  confirmEvent: (scope: WorkspaceScopeLike, eventId: number) => Promise<boolean>
+  rejectEvent: (scope: WorkspaceScopeLike, eventId: number) => Promise<boolean>
 }
 
 export const useKnowledgeLedgerStore = create<KnowledgeLedgerStore>((set, get) => ({
@@ -25,13 +30,14 @@ export const useKnowledgeLedgerStore = create<KnowledgeLedgerStore>((set, get) =
   characters: [],
   chapters: [],
   loading: false,
-  load: async projectId => {
+  load: async scopeInput => {
     set({ loading: true })
     try {
+      const scope = await resolveReadScopeLike(scopeInput)
       const [events, characters, chapters] = await Promise.all([
-        listKnowledgeEvents(projectId),
-        db.characters.where('projectId').equals(projectId).toArray(),
-        db.chapters.where('projectId').equals(projectId).toArray(),
+        listKnowledgeEvents(scope),
+        readOwnedRows<Character>(scope, 'characters', { owner: 'world' }),
+        readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
       ])
       set({
         events,
@@ -42,19 +48,22 @@ export const useKnowledgeLedgerStore = create<KnowledgeLedgerStore>((set, get) =
       set({ loading: false })
     }
   },
-  adopt: async (projectId, candidates) => {
-    const result = await adoptKnowledgeCandidates({ projectId, candidates })
-    await get().load(projectId)
+  adopt: async (scopeInput, candidates) => {
+    const scope = await resolveScopeLike(scopeInput)
+    const result = await adoptKnowledgeCandidates({ projectId: scope.projectId, scope, candidates })
+    await get().load(scope)
     return result
   },
-  confirmEvent: async (projectId, eventId) => {
-    const confirmed = await confirmKnowledgeCandidate(eventId)
-    await get().load(projectId)
+  confirmEvent: async (scopeInput, eventId) => {
+    const scope = await resolveScopeLike(scopeInput)
+    const confirmed = await confirmKnowledgeCandidate(eventId, scope)
+    await get().load(scope)
     return confirmed
   },
-  rejectEvent: async (projectId, eventId) => {
-    const rejected = await rejectKnowledgeCandidate(eventId)
-    await get().load(projectId)
+  rejectEvent: async (scopeInput, eventId) => {
+    const scope = await resolveScopeLike(scopeInput)
+    const rejected = await rejectKnowledgeCandidate(eventId, scope)
+    await get().load(scope)
     return rejected
   },
 }))

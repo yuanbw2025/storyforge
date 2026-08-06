@@ -37,10 +37,15 @@ export async function readAgentEvents(conversationId: number, scope?: WorkspaceS
   if (!conversation) return []
   const resolved = scope ?? await resolveScope({ projectId: conversation.projectId })
   if (!await assertRecordInScope(resolved, 'agentConversations', conversation, { owner: 'work' })) return []
-  return db.agentEvents
+  const events = await db.agentEvents
     .where('conversationId')
     .equals(conversationId)
     .sortBy('sequence')
+  const owned: AgentEvent[] = []
+  for (const event of events) {
+    if (await assertRecordInScope(resolved, 'agentEvents', event, { owner: 'work' })) owned.push(event)
+  }
+  return owned
 }
 
 export async function appendAgentEvent(input: {
@@ -58,10 +63,14 @@ export async function appendAgentEvent(input: {
     if (!conversation || !await assertRecordInScope(scope, 'agentConversations', conversation, { owner: 'work' })) {
       throw new Error('Agent 对话不存在或不属于当前 scope。')
     }
-    const existing = await db.agentEvents
+    const candidates = await db.agentEvents
       .where('conversationId')
       .equals(input.conversationId)
       .toArray()
+    const existing: AgentEvent[] = []
+    for (const event of candidates) {
+      if (await assertRecordInScope(scope, 'agentEvents', event, { owner: 'work' })) existing.push(event)
+    }
     const sequence = existing.reduce((max, event) => Math.max(max, event.sequence), 0) + 1
     const createdAt = Date.now()
     const event = stampNewRecord(scope, 'agentEvents', {

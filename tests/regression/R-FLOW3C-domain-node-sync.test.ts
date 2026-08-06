@@ -18,6 +18,7 @@ import {
   type AuthoringNodeGraph,
   type AuthoringNodeInstance,
 } from '../../src/lib/node-authoring'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
 
 const project: Project = {
   id: 73002,
@@ -68,7 +69,8 @@ describe('FLOW-3C · Canon 绑定概览与下游失效', () => {
   it('分步骤修改来源后标记绑定节点及其下游需要重跑', async () => {
     const overview = await buildAuthoringOverviewGraph({ projectId: project.id!, worldGroupId: null })
     const now = Date.now()
-    const flowId = await db.nodeFlows.add({
+    const scope = await resolveScopeLike(project.id!)
+    const flowId = await db.nodeFlows.add(stampNewRecord(scope, 'nodeFlows', {
       projectId: project.id!,
       worldGroupId: null,
       name: '同步概览',
@@ -76,7 +78,7 @@ describe('FLOW-3C · Canon 绑定概览与下游失效', () => {
       graphJson: JSON.stringify(overview.graph),
       createdAt: now,
       updatedAt: now,
-    }) as number
+    }, { owner: 'work' }) as NodeFlow) as number
     const flow = (await db.nodeFlows.get(flowId)) as NodeFlow
     const firstRun = await runAuthoringGraph({ flow })
     const changedWorld = await db.worldviews.where('projectId').equals(project.id!).first()
