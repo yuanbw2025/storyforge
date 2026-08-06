@@ -185,6 +185,9 @@ export function checkRegistry(): RegistryValidationResult {
     if (source.scope === 'chapter' && !source.requiresChapterId && source.key !== 'foreshadows') {
       errors.push(`CONTEXT_SOURCES chapter source 必须显式要求 chapterId: ${source.key}`)
     }
+    if (source.scope !== 'manual' && !source.ownerFrom) {
+      errors.push(`CONTEXT_SOURCES 必须登记 ownerFrom: ${source.key}`)
+    }
     if (source.budgetTokens <= 0) {
       errors.push(`CONTEXT_SOURCES budgetTokens 必须为正数: ${source.key}`)
     }

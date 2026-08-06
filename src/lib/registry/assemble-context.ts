@@ -7,6 +7,8 @@ import { estimateTokens, getModelPreset, type ContextLayer, type ContextSegment 
 import { CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
 import type { AssembleContextInput, AssembleContextResult, ContextSource } from './types'
 import { prepareContinuityContext } from '../ai/chapter-memory/continuity-context'
+import { db } from '../db/schema'
+import { assertRecordInScope, resolveScope } from '../world-engine/scope'
 
 /** 拿不到模型时的保守默认输入预算(原固定 24K 偏紧,放宽避免内部提前裁) */
 const FALLBACK_INPUT_BUDGET = 48_000
@@ -31,7 +33,10 @@ function deriveInputBudget(input: AssembleContextInput): number {
 }
 
 export async function assembleContext(input: AssembleContextInput): Promise<AssembleContextResult> {
-  const selected = selectSources(input)
+  const scope = await resolveScope(input)
+  const resolvedBase: AssembleContextInput = { ...input, projectId: scope.projectId, scope }
+  await assertContextAnchors(resolvedBase)
+  const selected = selectSources(resolvedBase)
   const inputBudget = deriveInputBudget(input)
   const needsContinuity = selected.some(source => (
     source.key === 'previousChapterEnding'
@@ -39,19 +44,26 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
     || source.key === 'previousPlanReconciliation'
     || source.key === 'recentChapterSummaries'
   ))
-  const resolvedInput: AssembleContextInput = needsContinuity && input.chapterId != null
+  const resolvedInput: AssembleContextInput = needsContinuity && resolvedBase.chapterId != null
     ? {
-        ...input,
-        continuitySnapshot: input.continuitySnapshot ?? await prepareContinuityContext({
-          projectId: input.projectId,
-          chapterId: input.chapterId,
+        ...resolvedBase,
+        continuitySnapshot: resolvedBase.continuitySnapshot ?? await prepareContinuityContext({
+          projectId: scope.projectId,
+          chapterId: resolvedBase.chapterId,
         }),
       }
-    : input
+    : resolvedBase
   const omitted: string[] = []
   const keyedSegments: { key: string; segment: ContextSegment }[] = []
 
   for (const source of selected) {
+    if (source.ownerFrom && source.ownerFrom !== 'workspace' && source.ownerFrom !== 'instance') {
+      const ownerId = source.ownerFrom === 'world' ? scope.worldId : scope.workId
+      if (!Number.isInteger(ownerId)) {
+        omitted.push(source.key)
+        continue
+      }
+    }
     if (!requirementsMet(source, resolvedInput)) {
       omitted.push(source.key)
       continue
@@ -100,6 +112,28 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
     inputBudget,
     overBudgetBeforeTrim,
     overBudgetAfterTrim: totalInputTokens > inputBudget,
+  }
+}
+
+async function assertContextAnchors(input: AssembleContextInput): Promise<void> {
+  if (!input.scope) return
+  if (input.chapterId != null) {
+    const chapter = await db.chapters.get(input.chapterId)
+    if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) {
+      throw new Error('[assembleContext] chapterId 不属于当前 Work')
+    }
+  }
+  if (input.outlineNodeId != null) {
+    const node = await db.outlineNodes.get(input.outlineNodeId)
+    if (!node || !await assertRecordInScope(input.scope, 'outlineNodes', node, { owner: 'work' })) {
+      throw new Error('[assembleContext] outlineNodeId 不属于当前 Work')
+    }
+  }
+  if (input.simulationSessionId != null) {
+    const session = await db.simulationSessions.get(input.simulationSessionId)
+    if (!session || session.projectId !== input.scope.projectId) {
+      throw new Error('[assembleContext] simulationSessionId 不属于当前工作区')
+    }
   }
 }
 

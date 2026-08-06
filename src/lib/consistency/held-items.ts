@@ -1,6 +1,7 @@
 import type { Chapter, ItemLedgerEntry, OutlineNode } from '../types'
 import type { ConsistencyFinding } from '../ai/adapters/consistency-audit-adapter'
-import { db } from '../db/schema'
+import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import type { WorkspaceScope } from '../types/world-ownership'
 import { resolveProjectionBoundary } from './projection-boundary'
 
 export interface HeldItemProjection {
@@ -109,11 +110,13 @@ export async function readProjectHeldItems(
   worldGroupId?: number | null,
   characterId?: number | null,
   outlineNodeId?: number | null,
+  scope?: WorkspaceScope,
 ): Promise<HeldItemProjection[]> {
+  const resolved = scope ?? await resolveScope({ projectId })
   const [entries, outlineNodes, chapters] = await Promise.all([
-    db.itemLedger.where('projectId').equals(projectId).toArray(),
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<any>(resolved, 'itemLedger', { owner: 'work' }),
+    readOwnedRows<any>(resolved, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<any>(resolved, 'chapters', { owner: 'work' }),
   ])
   return projectHeldItems({
     entries,

@@ -1,4 +1,5 @@
-import { db } from '../db/schema'
+import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import type { WorkspaceScope } from '../types/world-ownership'
 import {
   cultivationStageTiers,
   parseCultivationStages,
@@ -40,10 +41,12 @@ function formatSystem(
 export async function buildCultivationContext(
   projectId: number,
   worldGroupId?: number | null,
+  scope?: WorkspaceScope,
 ): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
   const [allSystems, characters] = await Promise.all([
-    db.cultivationSystems.where('projectId').equals(projectId).toArray(),
-    db.characters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<CultivationSystem>(resolved, 'cultivationSystems', { owner: 'world' }),
+    readOwnedRows<any>(resolved, 'characters', { owner: 'world' }),
   ])
   const systems = worldGroupId === undefined
     ? allSystems

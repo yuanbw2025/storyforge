@@ -5,6 +5,13 @@
  */
 import Dexie from 'dexie'
 import { db } from '../db/schema'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveScope,
+  stampNewRecord,
+} from '../world-engine/scope'
+import type { WorkspaceScope } from '../types/world-ownership'
 import { hashChapterText, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../ai/chapter-memory/text-normalization'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
 import { FIELD_BY_TARGET } from './field-registry'
@@ -50,13 +57,23 @@ export async function adopt(input: AdoptInput): Promise<AdoptResult> {
   const tableSpec = REGISTRY_BY_NAME.get(input.target)
   if (!tableSpec) throw new Error(`[adopt] target ${input.target} 不在 PROJECT_TABLES`)
 
-  if (input.recordId != null) {
-    return adoptCollectionRecord(input, fieldSpecs, tableSpec, result)
+  const payloads = Array.isArray(input.data) ? input.data : [input.data]
+  if (payloads.some(payload => payload && (Object.prototype.hasOwnProperty.call(payload, 'worldId')
+    || Object.prototype.hasOwnProperty.call(payload, 'workId')))) {
+    result.skipped.push({ reason: 'AI/结构化输入不得携带 World/Work owner ID；owner 由 WorkspaceScope 派生', data: input.data })
+    return result
   }
 
-  const isCollection = input.mode === 'add' || input.mode === 'add-many' || input.mode === 'merge-diffs'
-  if (isCollection) return adoptCollection(input, fieldSpecs, tableSpec, result)
-  return adoptSingleton(input, fieldSpecs, tableSpec, result)
+  const scope = await resolveScope(input)
+  const scopedInput: AdoptInput = { ...input, projectId: scope.projectId, scope }
+
+  if (scopedInput.recordId != null) {
+    return adoptCollectionRecord(scopedInput, fieldSpecs, tableSpec, result)
+  }
+
+  const isCollection = scopedInput.mode === 'add' || scopedInput.mode === 'add-many' || scopedInput.mode === 'merge-diffs'
+  if (isCollection) return adoptCollection(scopedInput, fieldSpecs, tableSpec, result)
+  return adoptSingleton(scopedInput, fieldSpecs, tableSpec, result)
 }
 
 /**
@@ -65,9 +82,11 @@ export async function adopt(input: AdoptInput): Promise<AdoptResult> {
  */
 export async function clearAdoptedCollection(input: {
   projectId: number
+  workspaceScope?: WorkspaceScope
   target: string
   scope: Record<string, unknown>
 }): Promise<number> {
+  const workspaceScope = await resolveScope({ projectId: input.projectId, scope: input.workspaceScope })
   const adoption = ADOPTION_BY_TARGET.get(input.target)
   const tableSpec = REGISTRY_BY_NAME.get(input.target)
   const fields = FIELD_BY_TARGET.get(input.target) ?? []
@@ -83,11 +102,11 @@ export async function clearAdoptedCollection(input: {
   for (const field of adoption.replaceScope) {
     if (normalized[field] == null) throw new Error(`[adopt] ${input.target} replaceScope 缺少 ${field}`)
   }
-  if (!await applyFkChecks(normalized, input.scope, adoption, result, input.projectId)) {
+  if (!await applyFkChecks(normalized, input.scope, adoption, result, workspaceScope)) {
     throw new Error(`[adopt] ${input.target} replaceScope FK 不属于当前项目`)
   }
 
-  const rows = await rowsForProject(input.projectId, tableSpec)
+  const rows = await readOwnedRows<Record<string, unknown>>(workspaceScope, input.target, { owner: adoption.ownerFrom })
   const ids = rows
     .filter(row => adoption.replaceScope!.every(field => (row[field] ?? null) === (normalized[field] ?? null)))
     .map(row => row.id)
@@ -102,6 +121,7 @@ export async function clearAdoptedCollection(input: {
  */
 export async function replaceAdoptedCollection(input: {
   projectId: number
+  workspaceScope?: WorkspaceScope
   target: string
   scope: Record<string, unknown>
   data: Record<string, unknown>[]
@@ -118,11 +138,13 @@ export async function replaceAdoptedCollection(input: {
   return db.transaction('rw', tables, async () => {
     await clearAdoptedCollection({
       projectId: input.projectId,
+      workspaceScope: input.workspaceScope,
       target: input.target,
       scope: input.scope,
     })
     const result = await adopt({
       projectId: input.projectId,
+      scope: input.workspaceScope,
       target: input.target,
       mode: 'add-many',
       data: input.data,
@@ -158,8 +180,10 @@ async function adoptCollectionRecord(
     return adoptChapterMemoryRecordWithCas(input, fieldSpecs, tableSpec, result)
   }
   const target = await tableSpec.table.get(input.recordId!)
-  if (!target || !await rowBelongsToProject(target, input.projectId, tableSpec)) {
-    result.skipped.push({ reason: `record ${input.recordId} 不存在或不属于当前项目`, data: input.data })
+  if (!target || !await assertRecordInScope(input.scope!, input.target, target, {
+    owner: ADOPTION_BY_TARGET.get(input.target)?.ownerFrom,
+  })) {
+    result.skipped.push({ reason: `record ${input.recordId} 不存在或不属于当前 scope`, data: input.data })
     return result
   }
   let patch = normalizeAndValidate(input.data, fieldSpecs, result)
@@ -211,8 +235,10 @@ async function adoptChapterMemoryRecordWithCas(
 
   await db.transaction('rw', tableSpec.table, async () => {
     const target = await tableSpec.table.get(input.recordId!)
-    if (!target || target.projectId !== input.projectId) {
-      result.skipped.push({ reason: `record ${input.recordId} 不存在或不属于当前项目`, data: input.data })
+    if (!target || !await assertRecordInScope(input.scope!, input.target, target, {
+      owner: ADOPTION_BY_TARGET.get(input.target)?.ownerFrom,
+    })) {
+      result.skipped.push({ reason: `record ${input.recordId} 不存在或不属于当前 scope`, data: input.data })
       return
     }
     const currentHash = await Dexie.waitFor(hashChapterText(String(target.content ?? '')))
@@ -297,14 +323,14 @@ async function adoptSingleton(
     await refreshCanonSourceAfterWrite(input.target, input.projectId, target.id, Object.keys(patch))
     result.written.push({ id: target.id, fields: Object.keys(patch) })
   } else {
-    const row = {
+    const row = stampNewRecord(input.scope!, input.target, {
       ...defaultSingletonRow(input.target),
       projectId: input.projectId,
       ...(tableSpec.worldScoped ? { [tableSpec.worldGroupField ?? 'worldGroupId']: input.worldGroupId ?? null } : {}),
       ...patch,
       createdAt: now,
       updatedAt: now,
-    }
+    }, { owner: tableSpec.domainOwner?.legacyDefault === 'world' ? 'world' : 'work' })
     const id = await tableSpec.table.add(row as any) as number
     result.written.push({ id, fields: Object.keys(patch) })
   }
@@ -331,16 +357,17 @@ async function adoptCollection(
     item = applyTableDefaults(item, tableSpec)
     if (input.target === 'characters') item = normalizeCharacterAxes(item)
     if (input.target === 'itemLedger') {
-      item = await resolveItemLedgerOwner(input.projectId, item)
+      item = await resolveItemLedgerOwner(input.scope!, item)
     }
     // AI/结构化采纳只能生成待确认候选，不能借输入字段绕过人工确认。
     if (input.target === 'knowledgeLedger') item = { ...item, status: 'candidate' }
     if (!applyRequired(item, raw, adoption, result)) continue
-    if (!await applyFkChecks(item, raw, adoption, result, input.projectId)) continue
-    await applyArrayMemberChecks(item, adoption, result)
+    if (!await applyFkChecks(item, raw, adoption, result, input.scope!)) continue
+    await applyArrayMemberChecks(item, adoption, result, input.scope!)
     applyAutoStamps(item, input, tableSpec, adoption)
+    item = stampNewRecord(input.scope!, input.target, item, { owner: adoption.ownerFrom })
 
-    const existing = await findExisting(input.projectId, tableSpec, item, adoption)
+    const existing = await findExisting(input.scope!, tableSpec, item, adoption)
     if (existing?.id != null) {
       if (adoption.duplicatePolicy === 'skip') {
         result.skipped.push({ reason: '重复(skip)', data: raw })
@@ -370,13 +397,13 @@ async function adoptCollection(
 }
 
 async function resolveItemLedgerOwner(
-  projectId: number,
+  scope: WorkspaceScope,
   item: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   if (item.characterId != null || typeof item.heldByName !== 'string') return item
   const heldByName = item.heldByName.trim()
   if (!heldByName) return item
-  const matches = (await db.characters.where('projectId').equals(projectId).toArray())
+  const matches = (await readOwnedRows<any>(scope, 'characters', { owner: 'world' }))
     .filter(character => character.name.trim() === heldByName)
   return {
     ...item,
@@ -494,7 +521,8 @@ function validateAndCoerce(spec: FieldSpec, value: unknown, result: AdoptResult)
 }
 
 async function findSingleton(input: AdoptInput, tableSpec: TableSpec): Promise<any | null> {
-  const rows = await tableSpec.table.where('projectId').equals(input.projectId).toArray()
+  const owner = tableSpec.domainOwner?.legacyDefault === 'world' ? 'world' : 'work'
+  const rows = await readOwnedRows<any>(input.scope!, input.target, { owner })
   if (tableSpec.worldScoped) {
     const wgField = tableSpec.worldGroupField ?? 'worldGroupId'
     return (rows as any[]).find(r => (r[wgField] ?? null) === (input.worldGroupId ?? null)) ?? null
@@ -543,7 +571,7 @@ async function applyFkChecks(
   raw: unknown,
   adoption: CollectionAdoptionSpec,
   result: AdoptResult,
-  projectId: number,
+  scope: WorkspaceScope,
 ): Promise<boolean> {
   for (const fk of adoption.fkChecks ?? []) {
     const refValue = item[fk.field]
@@ -551,7 +579,7 @@ async function applyFkChecks(
     const targetSpec = PROJECT_TABLES.find(s => s.name === fk.target)
     if (!targetSpec) continue
     const exists = await targetSpec.table.get(refValue as number)
-    if (!exists || !await rowBelongsToProject(exists, projectId, targetSpec)) {
+    if (!exists || !await assertRecordInScope(scope, fk.target, exists, { owner: adoption.ownerFrom })) {
       result.fkErrors.push({ field: fk.field, refValue })
       result.skipped.push({ reason: 'FK 校验失败', data: raw })
       return false
@@ -564,6 +592,7 @@ async function applyArrayMemberChecks(
   item: Record<string, unknown>,
   adoption: CollectionAdoptionSpec,
   result: AdoptResult,
+  scope: WorkspaceScope,
 ): Promise<void> {
   for (const arr of adoption.arrayMemberChecks ?? []) {
     const value = item[arr.field]
@@ -572,7 +601,8 @@ async function applyArrayMemberChecks(
     if (!targetSpec) continue
     const filtered: unknown[] = []
     for (const v of value) {
-      if (await targetSpec.table.get(v as number)) filtered.push(v)
+      const target = await targetSpec.table.get(v as number)
+      if (target && await assertRecordInScope(scope, arr.itemTarget, target, { owner: adoption.ownerFrom })) filtered.push(v)
       else result.fkErrors.push({ field: `${arr.field}[]`, refValue: v })
     }
     item[arr.field] = filtered
@@ -588,6 +618,8 @@ function applyAutoStamps(
   const now = Date.now()
   for (const stamp of adoption.autoStamps) {
     if (stamp === 'projectId') item.projectId = input.projectId
+    else if (stamp === 'worldId' && input.scope) item.worldId = input.scope.worldId
+    else if (stamp === 'workId' && input.scope) item.workId = input.scope.workId
     else if (stamp === 'worldGroupId' && tableSpec.worldScoped) item[tableSpec.worldGroupField ?? 'worldGroupId'] = input.worldGroupId ?? null
     else if (stamp === 'homeWorldGroupId' && tableSpec.homeWorldScoped) item.homeWorldGroupId = input.worldGroupId ?? null
     else if (stamp === 'createdAt' && item.createdAt == null) item.createdAt = now
@@ -596,47 +628,19 @@ function applyAutoStamps(
 }
 
 async function findExisting(
-  projectId: number,
+  scope: WorkspaceScope,
   tableSpec: TableSpec,
   item: Record<string, unknown>,
   adoption: CollectionAdoptionSpec,
 ): Promise<any | null> {
-  if (adoption.identity === 'id' && item.id != null) return tableSpec.table.get(item.id as number)
-  const candidates = await rowsForProject(projectId, tableSpec)
+  if (adoption.identity === 'id' && item.id != null) {
+    const candidate = await tableSpec.table.get(item.id as number)
+    return candidate && await assertRecordInScope(scope, tableSpec.name, candidate, { owner: adoption.ownerFrom })
+      ? candidate
+      : null
+  }
+  const candidates = await readOwnedRows(scope, tableSpec.name, { owner: adoption.ownerFrom })
   return (candidates as any[]).find(row => identityMatches(row, item, adoption)) ?? null
-}
-
-function indirectLinkField(tableSpec: TableSpec): string | null {
-  const indirect = tableSpec.refs?.find(ref => ref.kind === 'indirect')
-  return indirect?.kind === 'indirect' ? indirect.via.field : null
-}
-
-async function rowsForProject(projectId: number, tableSpec: TableSpec): Promise<any[]> {
-  if (tableSpec.owner === 'project' || tableSpec.owner === 'transient') {
-    return tableSpec.table.where('projectId').equals(projectId).toArray()
-  }
-  if ((tableSpec.owner === 'direct-child' || tableSpec.owner === 'indirect') && tableSpec.projectResolver) {
-    const parentKeys = await tableSpec.projectResolver(projectId)
-    const linkField = indirectLinkField(tableSpec)
-    if (!linkField || parentKeys.length === 0) return []
-    return tableSpec.table.where(linkField).anyOf(parentKeys).toArray()
-  }
-  if (tableSpec.owner === 'global') return tableSpec.table.toArray()
-  return []
-}
-
-async function rowBelongsToProject(row: any, projectId: number, tableSpec: TableSpec): Promise<boolean> {
-  if (tableSpec.owner === 'global') return true
-  if (tableSpec.owner === 'project' || tableSpec.owner === 'transient') {
-    return row.projectId === projectId
-  }
-  if ((tableSpec.owner === 'direct-child' || tableSpec.owner === 'indirect') && tableSpec.projectResolver) {
-    const linkField = indirectLinkField(tableSpec)
-    if (!linkField) return false
-    const parentKeys = await tableSpec.projectResolver(projectId)
-    return parentKeys.includes(row[linkField])
-  }
-  return false
 }
 
 function identityMatches(row: Record<string, unknown>, item: Record<string, unknown>, adoption: CollectionAdoptionSpec): boolean {

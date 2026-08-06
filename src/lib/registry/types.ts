@@ -10,6 +10,7 @@ import type { ContextLayer, ContextSegment } from '../ai/context-budget'
 import type { PreparedContinuityContext } from '../ai/chapter-memory/continuity-context'
 import type { InspirationResultMode } from '../types/inspiration-workspace'
 import type { RagSelectionTraceCollector } from '../types/rag-library'
+import type { WorkspaceScope } from '../types/world-ownership'
 
 /**
  * 表的归属方式 —— 决定删项目时如何定位该表的记录。
@@ -257,7 +258,9 @@ export interface CollectionAdoptionSpec {
   /** 必填字段;缺失则跳过该条 */
   required: string[]
   /** 自动盖章字段 */
-  autoStamps: ('projectId' | 'worldGroupId' | 'homeWorldGroupId' | 'createdAt' | 'updatedAt')[]
+  autoStamps: ('projectId' | 'worldId' | 'workId' | 'worldGroupId' | 'homeWorldGroupId' | 'createdAt' | 'updatedAt')[]
+  /** Owner selected from the trusted WorkspaceScope, never from AI output. */
+  ownerFrom?: Exclude<DomainOwnerKind, 'instance'>
   /** FK 校验:写入前检查字段引用是否存在 */
   fkChecks?: { field: string; target: string }[]
   /** 数组成员校验:过滤不存在的成员,并记录 fkErrors */
@@ -283,6 +286,8 @@ export interface AdoptionExtensionSpec {
 
 export interface AdoptInput {
   projectId: number
+  /** WORLD-2C C3: explicit logical read/write boundary. projectId remains a legacy adapter. */
+  scope?: WorkspaceScope
   worldGroupId?: number | null
   /** 集合表中定点更新既有记录；AI 补全空卷/空章等场景使用。 */
   recordId?: number
@@ -313,6 +318,8 @@ export type ContextSourceScope = 'project' | 'world' | 'node' | 'chapter' | 'man
 
 export interface AssembleContextInput {
   projectId: number
+  /** WORLD-2C C3: explicit logical read boundary. projectId remains a legacy adapter. */
+  scope?: WorkspaceScope
   /** Explicit world target. null is a valid explicit single-world/global target. */
   worldGroupId?: number | null
   outlineNodeId?: number | null
@@ -362,6 +369,8 @@ export interface ContextSource {
   label: string
   scope: ContextSourceScope
   layer: ContextLayer
+  /** Logical owner resolved before the registered reader runs. */
+  ownerFrom?: DomainOwnerKind
   /** Approximate per-source soft cap. Adapters can still return less. */
   budgetTokens: number
   /** NS-1: assembleContext 总预算裁剪时不得整段删除。 */

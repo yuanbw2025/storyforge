@@ -244,17 +244,19 @@ export function estimateManifestTokens(manifestText: string): number {
 
 // ── 便捷：从 DB 读取并生成完整清单 ────────────────────────────
 
-import { db } from '../db/schema'
+import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import type { WorkspaceScope } from '../types/world-ownership'
 
 /**
  * 一站式：从 DB 读取项目的世界规则 + 时间线 + 关键词，生成完整清单。
  * 用于 prompt 注入时调用。
  */
-async function resolveDefaultWorldRulesProfile(projectId: number): Promise<WorldRulesProfile | null> {
-  const profiles = await db.worldRulesProfiles.where('projectId').equals(projectId).toArray()
+async function resolveDefaultWorldRulesProfile(projectId: number, scope?: WorkspaceScope): Promise<WorldRulesProfile | null> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const profiles = await readOwnedRows<WorldRulesProfile>(resolved, 'worldRulesProfiles', { owner: 'world' })
   const nullProfile = profiles.find(p => (p.worldGroupId ?? null) === null)
   if (nullProfile) return nullProfile
-  const primary = await db.worldGroups.where('projectId').equals(projectId).toArray()
+  const primary = await readOwnedRows<any>(resolved, 'worldGroups', { owner: 'world' })
     .then(groups => groups.find(g => g.type === 'primary') ?? groups.sort((a, b) => a.order - b.order)[0])
   if (!primary?.id) return null
   return profiles.find(p => p.worldGroupId === primary.id) ?? null
@@ -263,12 +265,14 @@ async function resolveDefaultWorldRulesProfile(projectId: number): Promise<World
 export async function buildWorldRulesContext(
   projectId: number,
   worldGroupId?: number | null,
+  scope?: WorkspaceScope,
 ): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
   // 1. 读世界规则 profile
   const profile = worldGroupId !== undefined
-    ? (await db.worldRulesProfiles.where('projectId').equals(projectId).toArray())
+    ? (await readOwnedRows<WorldRulesProfile>(resolved, 'worldRulesProfiles', { owner: 'world' }))
       .find(p => (p.worldGroupId ?? null) === (worldGroupId ?? null)) ?? null
-    : await resolveDefaultWorldRulesProfile(projectId)
+    : await resolveDefaultWorldRulesProfile(projectId, resolved)
 
   if (!profile) return ''
   const effectiveWorldGroupId = worldGroupId !== undefined
@@ -277,16 +281,13 @@ export async function buildWorldRulesContext(
   const shouldFilterWorld = worldGroupId !== undefined || effectiveWorldGroupId != null
 
   // 2. 读历史时间线事件
-  const timelineEvents = (await db.historicalTimelineEvents
-    .where('projectId').equals(projectId)
-    .sortBy('year'))
+  const timelineEvents = (await readOwnedRows<any>(resolved, 'historicalTimelineEvents', { owner: 'world' }))
+    .sort((a, b) => a.year - b.year)
     .filter(e => !shouldFilterWorld || (e.worldGroupId ?? null) === effectiveWorldGroupId)
 
   // 3. 读历史关键词
-  const keywords = (await db.historicalKeywords
-    .where('projectId').equals(projectId)
-    .toArray())
-    .filter(k => !shouldFilterWorld || (k.worldGroupId ?? null) === effectiveWorldGroupId)
+  const keywords = (await readOwnedRows<any>(resolved, 'historicalKeywords', { owner: 'world' }))
+    .filter((k: any) => !shouldFilterWorld || (k.worldGroupId ?? null) === effectiveWorldGroupId)
 
   return buildWorldRulesManifest(profile, { timelineEvents, keywords })
 }

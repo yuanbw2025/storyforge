@@ -1,6 +1,8 @@
 import type { Chapter, KnowledgeLedgerEntry, OutlineNode } from '../types'
 import type { ConsistencyFinding } from '../ai/adapters/consistency-audit-adapter'
 import { db } from '../db/schema'
+import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import type { WorkspaceScope } from '../types/world-ownership'
 import { adopt } from '../registry/adopt'
 import { resolveProjectionBoundary } from '../consistency/projection-boundary'
 
@@ -167,11 +169,13 @@ export async function readProjectCharacterKnowledge(
   worldGroupId?: number | null,
   characterId?: number | null,
   outlineNodeId?: number | null,
+  scope?: WorkspaceScope,
 ): Promise<ProjectedKnowledge[]> {
+  const resolved = scope ?? await resolveScope({ projectId })
   const [entries, outlineNodes, chapters] = await Promise.all([
-    db.knowledgeLedger.where('projectId').equals(projectId).toArray(),
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<any>(resolved, 'knowledgeLedger', { owner: 'work' }),
+    readOwnedRows<any>(resolved, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<any>(resolved, 'chapters', { owner: 'work' }),
   ])
   return projectCharacterKnowledge({
     entries,

@@ -5,8 +5,9 @@
  * 自动盖章 / FK 校验策略。
  */
 import type { AdoptionExtensionSpec, CollectionAdoptionSpec } from './types'
+import { REGISTRY_BY_NAME } from './project-tables'
 
-export const ADOPTION_SCHEMAS: CollectionAdoptionSpec[] = [
+const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
   {
     target: 'characters',
     identity: { kind: 'composite', fields: ['homeWorldGroupId', 'name'] },
@@ -382,6 +383,15 @@ export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.free
     reviewAfter: '2027-01-01',
   },
 ])
+
+/** C3: owner policy is derived from the same PROJECT_TABLES domainOwner metadata. */
+export const ADOPTION_SCHEMAS: CollectionAdoptionSpec[] = ADOPTION_SCHEMAS_RAW.map(schema => ({
+  ...schema,
+  ownerFrom: schema.ownerFrom ?? (() => {
+    const owner = REGISTRY_BY_NAME.get(schema.target)?.domainOwner?.legacyDefault
+    return owner === 'world' || owner === 'work' ? owner : undefined
+  })(),
+}))
 
 export const ADOPTION_BY_TARGET: ReadonlyMap<string, CollectionAdoptionSpec> = new Map(
   ADOPTION_SCHEMAS.map(s => [s.target, s] as const),

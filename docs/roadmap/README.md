@@ -128,8 +128,9 @@
     默认 World/Work、按 `domainOwner.legacyDefault` 为存量 world/work 记录盖章并更新 Project 兼容镜像。
     重复和并发进入零重复根；任一表写入失败时根、owner 和 Project 指针全部回滚，只留下失败凭证；未知根、
     owner、跨工作区引用和缺失必填引用 fail closed；无后续作用域变化时可原子回滚，新增 Work 后拒绝自动回滚。
-    新建项目也走同一服务。下一步 C3 才将业务 selector、AI 上下文和结构化写回切换为显式 `WorkspaceScope`；
-    当前表 locator 仍为 `compat-project`，第二作品入口继续隐藏，WORLD-2C 尚未完成。
+    新建项目也走同一服务。C3 已开始将业务 selector、AI 上下文和结构化写回切换为显式 `WorkspaceScope`；
+    核心世界/作品链路已有 owner gate 和双作品 Golden Project 反例，但 store 全量写入口、v4 往返与 UI
+    仍待 C3/C4/C5 完成，第二作品入口继续隐藏，WORLD-2C 尚未完成。
 
 ### FLOW-1 历史实验 / FLOW-2 技术底座 / FLOW-3 当前设计卡
 

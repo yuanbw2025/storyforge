@@ -18,15 +18,17 @@ const WORKSPACE_DOMAIN_OWNER = {
 } as const satisfies DomainOwnershipSpec
 
 const LEGACY_WORLD_OWNER = {
-  allowed: ['world'], legacyDefault: 'world', locator: { kind: 'compat-project' },
+  allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' },
 } as const satisfies DomainOwnershipSpec
 
 const LEGACY_WORK_OWNER = {
-  allowed: ['work'], legacyDefault: 'work', locator: { kind: 'compat-project' },
+  allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
 } as const satisfies DomainOwnershipSpec
 
 const LEGACY_WORLD_OR_WORK_OWNER = {
-  allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'compat-project' },
+  allowed: ['world', 'work'], legacyDefault: 'work', locator: {
+    kind: 'exclusive-fields', worldField: 'worldId', workField: 'workId',
+  },
 } as const satisfies DomainOwnershipSpec
 
 const LEGACY_INSTANCE_OWNER = {

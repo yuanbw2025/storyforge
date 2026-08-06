@@ -9,7 +9,8 @@
  *  - 多世界按 worldGroupId 隔离（与 buildCurrentWorldContext 同源）；
  *    传 null/undefined 表示主世界/单世界，读取未归属世界组的词条。
  */
-import { db } from '../db/schema'
+import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import type { WorkspaceScope } from '../types/world-ownership'
 import {
   codexEntryInWorld, parseEntryFields, parseFieldSchema,
   type CodexCategory, type CodexEntry,
@@ -32,14 +33,16 @@ export async function buildCodexContext(
   projectId: number,
   worldGroupId?: number | null,
   opts: BuildOptions = {},
+  scope?: WorkspaceScope,
 ): Promise<string> {
   const maxChars = opts.maxChars ?? 2500
   const maxPerCategory = opts.maxPerCategory ?? 30
   const maxFields = opts.maxFieldsPerEntry ?? 3
 
+  const resolved = scope ?? await resolveScope({ projectId })
   const [allCats, allEntries] = await Promise.all([
-    db.codexCategories.where('projectId').equals(projectId).toArray(),
-    db.codexEntries.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<CodexCategory>(resolved, 'codexCategories', { owner: 'world' }),
+    readOwnedRows<CodexEntry>(resolved, 'codexEntries', { owner: 'world' }),
   ])
   if (allEntries.length === 0) return ''
 

@@ -483,12 +483,16 @@
 - WORLD-2C C2 已完成：项目创建和旧工作区首次进入统一经过 ownership service；只读预检从 `PROJECT_TABLES`
   派生表范围，以 SHA-256 记录主键/owner 指纹而不记录正文；持久化 before-image 后在单事务中创建或采纳默认
   World/Work、盖默认 owner 并更新兼容镜像。失败回滚、并发幂等、未知归属拒绝和有边界回滚已有反例测试。
+- WORLD-2C C3 进行中：`src/lib/world-engine/scope.ts` 从 `PROJECT_TABLES.domainOwner` 派生唯一
+  `WorkspaceScope` selector/owner gate；`assembleContext()`、`adopt()`、核心世界/作品上下文源和 Agent
+  对话/事件流已按 World/Work 隔离，双作品 Golden Project 已验证故事核心、正文、结构化写回和 Agent 运行记录不串。
+  第二作品 UI 仍隐藏，剩余 store 写入口和导入导出属于后续 C3/C4/C5。
 
 ### 当前边界 / 尚未完成
 
 - `Project` 仍是 IndexedDB 兼容存储边界，`worldCode` 仍保留为当前 World 的兼容镜像。WORLD-2C 当前只完成
-  C1/C2；业务表 locator、selector、AI 读取和写回尚未切换到显式 scope，v4 严格 owner 往返和两作品 UI 也
-  尚未实施。下一步是 C3 全链路 scope-aware，不能因存量记录已盖章就开放第二作品。
+  C1/C2，C3 核心 scope-aware 链路已落地但尚未全量收口；v4 严格 owner 往返和两作品 UI 也尚未实施，不能
+  因 Golden Project 通过就开放第二作品。
 - 世界完整度当前只表达领域覆盖，不冒充引用完整、Canon 冲突或发布准备度；后续验证能力必须复用三注册表和已有一致性检查器。
 - 主线、支线、条件与效果仍是现有大纲/故事线投影；NarrativeModule / NarrativeNode、发布包 v2 和冻结版本实例绑定分别属于 WORLD-2D/2E/2F。
 - Harness/Agent 执行体系不在 WORLD-2 中扩张；先在完整保留的分步骤模式完成 HARNESS-2，再评估迁移。

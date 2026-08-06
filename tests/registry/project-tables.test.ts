@@ -37,7 +37,7 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(new Set(names).size).toBe(names.length)
     })
 
-    it('所有非 global 表都有逻辑 owner，现有表仍明确处于兼容阶段', () => {
+    it('所有非 global 表都有逻辑 owner，C3 核心表已切换到显式字段 locator', () => {
       const governed = PROJECT_TABLES.filter(spec => spec.owner !== 'global')
       expect(governed.every(spec => spec.domainOwner != null)).toBe(true)
       expect(PROJECT_TABLES.find(spec => spec.name === 'worlds')?.domainOwner?.locator.kind).toBe('workspace')
@@ -45,10 +45,10 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
         kind: 'field', owner: 'world', field: 'worldId',
       })
       expect(PROJECT_TABLES.find(spec => spec.name === 'storyCores')?.domainOwner).toMatchObject({
-        allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'compat-project' },
+        allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'exclusive-fields' },
       })
       expect(PROJECT_TABLES.find(spec => spec.name === 'chapters')?.domainOwner).toMatchObject({
-        allowed: ['work'], legacyDefault: 'work', locator: { kind: 'compat-project' },
+        allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
       })
     })
   })

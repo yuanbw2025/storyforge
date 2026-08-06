@@ -64,6 +64,8 @@ import { readRagSelectionContext } from '../retrieval/rag-library'
 import { parseSimulationCanonSnapshot, verifySimulationCanonSnapshot } from '../simulation/canon-snapshot'
 import { readSimulationState } from '../simulation/runtime'
 import type { AssembleContextInput } from './types'
+import { readOwnedRows, resolveScope, assertRecordInScope } from '../world-engine/scope'
+import type { WorkspaceScope } from '../types/world-ownership'
 
 async function readSimulationRuntimeContext(input: AssembleContextInput): Promise<string> {
   if (input.simulationSessionId == null) return ''
@@ -145,34 +147,38 @@ async function readSimulationRuntimeContext(input: AssembleContextInput): Promis
   ].join('\n')
 }
 
-async function readWorldview(projectId: number, worldGroupId?: number | null): Promise<Worldview | null> {
-  const rows = await db.worldviews.where('projectId').equals(projectId).toArray()
+async function readWorldview(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<Worldview | null> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = await readOwnedRows<Worldview>(resolved, 'worldviews', { owner: 'world' })
   if (worldGroupId != null) {
     return rows.find(w => w.worldGroupId === worldGroupId) ?? null
   }
   return rows.find(w => (w.worldGroupId ?? null) === null) ?? rows[0] ?? null
 }
 
-async function readPowerSystem(projectId: number, worldGroupId?: number | null): Promise<PowerSystem | null> {
-  const rows = await db.powerSystems.where('projectId').equals(projectId).toArray()
+async function readPowerSystem(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<PowerSystem | null> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = await readOwnedRows<PowerSystem>(resolved, 'powerSystems', { owner: 'world' })
   if (worldGroupId != null) {
     return rows.find(p => p.worldGroupId === worldGroupId) ?? null
   }
   return rows.find(p => (p.worldGroupId ?? null) === null) ?? rows[0] ?? null
 }
 
-async function readCharacters(projectId: number, worldGroupId?: number | null): Promise<Character[]> {
-  const rows = await db.characters.where('projectId').equals(projectId).toArray()
+async function readCharacters(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<Character[]> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = await readOwnedRows<Character>(resolved, 'characters', { owner: 'world' })
   if (worldGroupId === undefined) return rows
   const wg = worldGroupId ?? null
   return rows.filter(c => c.isCrossWorld || (c.homeWorldGroupId ?? null) === wg)
 }
 
-async function readForeshadows(projectId: number, chapterId?: number | null): Promise<string> {
+async function readForeshadows(projectId: number, chapterId?: number | null, scope?: WorkspaceScope): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
   const [rows, chapters, outlineNodes] = await Promise.all([
-    db.foreshadows.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<any>(resolved, 'foreshadows', { owner: 'work' }),
+    readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' }),
+    readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' }),
   ])
   return buildForeshadowTaskContext(rows, {
     currentChapterId: chapterId ?? null,
@@ -182,8 +188,9 @@ async function readForeshadows(projectId: number, chapterId?: number | null): Pr
 }
 
 /** FB-5:作者文风画像。仅当画像存在且 enabled 时返回,否则空串(不进上下文)。 */
-async function readUserStyleProfile(projectId: number): Promise<string> {
-  const profile = await db.userStyleProfiles.where('projectId').equals(projectId).first()
+async function readUserStyleProfile(projectId: number, scope?: WorkspaceScope): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const profile = (await readOwnedRows<any>(resolved, 'userStyleProfiles', { owner: 'work' }))[0]
   if (!profile || !profile.enabled || !profile.profile.trim()) return ''
   const pairExamples = formatStyleFewShotPairs(parseStyleRevisionPairs(profile.revisionPairs))
   const feedback = formatStyleCalibrationFeedback(
@@ -202,9 +209,11 @@ async function readInspirationWorkspaceContext(
   projectId: number,
   selectedIds: string[] | undefined,
   mode: 'single' | 'multiworld' = 'single',
+  scope?: WorkspaceScope,
 ): Promise<string> {
   if (!selectedIds?.length) return ''
-  const workspace = await db.inspirationWorkspaces.where('projectId').equals(projectId).first()
+  const resolved = scope ?? await resolveScope({ projectId })
+  const workspace = (await readOwnedRows<any>(resolved, 'inspirationWorkspaces', { owner: 'work' }))[0]
   if (!workspace) return ''
   const fragments = parseInspirationFragments(workspace.fragments)
   const versions = parseInspirationVersions(workspace.versions)
@@ -215,7 +224,7 @@ async function readInspirationWorkspaceContext(
   })
 }
 
-export async function readActiveCharacterDrivenPlanContext(projectId: number): Promise<string> {
+export async function readActiveCharacterDrivenPlanContext(projectId: number, scope?: WorkspaceScope): Promise<string> {
   const project = await db.projects.get(projectId)
   const activeId = project?.activeCharacterDrivenPlanId
   if (activeId == null) return ''
@@ -223,8 +232,9 @@ export async function readActiveCharacterDrivenPlanContext(projectId: number): P
   const plan = await db.characterDrivenPlans.get(activeId)
   if (!plan || plan.projectId !== projectId) return ''
 
+  const resolved = scope ?? await resolveScope({ projectId })
   const [characters, arcs] = await Promise.all([
-    db.characters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<Character>(resolved, 'characters', { owner: 'world' }),
     Promise.resolve(parseCharacterDrivenPlanArcs(plan.arcs)),
   ])
   const byId = new Map(characters.flatMap(character =>
@@ -254,8 +264,9 @@ export async function readActiveCharacterDrivenPlanContext(projectId: number): P
   return lines.join('\n')
 }
 
-async function readStoryArcs(projectId: number): Promise<string> {
-  const arcs = await db.storyArcs.where('projectId').equals(projectId).toArray()
+async function readStoryArcs(projectId: number, scope?: WorkspaceScope): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const arcs = await readOwnedRows<any>(resolved, 'storyArcs', { owner: 'work' })
   if (!arcs.length) return ''
   const parts = ['【全局故事线】']
   for (const arc of arcs.slice(0, 8)) {
@@ -268,9 +279,10 @@ async function readStoryArcs(projectId: number): Promise<string> {
   return parts.join('\n')
 }
 
-async function readEmotionBeats(projectId: number, chapterId?: number | null): Promise<string> {
+async function readEmotionBeats(projectId: number, chapterId?: number | null, scope?: WorkspaceScope): Promise<string> {
   if (chapterId == null) return ''
-  const rows = await db.emotionBeatCards.where('projectId').equals(projectId).toArray()
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = await readOwnedRows<any>(resolved, 'emotionBeatCards', { owner: 'work' })
   const card = rows.find(c => c.chapterId === chapterId)
   if (!card) return ''
   const beats = parseBeats(String(card.beats || '[]'))
@@ -294,8 +306,9 @@ async function readConsistencyReport(projectId: number, chapterId?: number | nul
   return lines.join('\n')
 }
 
-async function readStateCards(projectId: number, referenceText?: string, extraIds?: number[]): Promise<string> {
-  const rows = await db.stateCards.where('projectId').equals(projectId).toArray()
+async function readStateCards(projectId: number, referenceText?: string, extraIds?: number[], scope?: WorkspaceScope): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = await readOwnedRows<any>(resolved, 'stateCards', { owner: 'work' })
   if (!rows.length) return ''
   const extra = new Set(extraIds ?? [])
   const text = referenceText || ''
@@ -310,20 +323,23 @@ async function readStateCards(projectId: number, referenceText?: string, extraId
   return `【当前状态表】\n${lines.join('\n')}`
 }
 
-async function readChapterOutline(projectId: number, outlineNodeId?: number | null, chapterId?: number | null): Promise<string> {
+async function readChapterOutline(projectId: number, outlineNodeId?: number | null, chapterId?: number | null, scope?: WorkspaceScope): Promise<string> {
   let nodeId = outlineNodeId ?? null
   if (nodeId == null && chapterId != null) {
     const chapter = await db.chapters.get(chapterId)
+    if (scope && (!chapter || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' }))) return ''
     nodeId = chapter?.outlineNodeId ?? null
   }
   if (nodeId == null) return ''
   const node = await db.outlineNodes.get(nodeId)
+  if (scope && (!node || !await assertRecordInScope(scope, 'outlineNodes', node, { owner: 'work' }))) return ''
   if (!node || node.projectId !== projectId) return ''
   return `【当前章节大纲】\n${node.title}${node.summary ? `\n${node.summary}` : ''}`
 }
 
-async function readExistingVolumeOutlines(projectId: number): Promise<string> {
-  const rows = await db.outlineNodes.where('projectId').equals(projectId).toArray()
+async function readExistingVolumeOutlines(projectId: number, scope?: WorkspaceScope): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = await readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' })
   const volumes = rows
     .filter(node => node.type === 'volume' && node.parentId == null)
     .sort((a, b) => a.order - b.order)
@@ -401,11 +417,13 @@ async function readWrittenChapterProgress(
   projectId: number,
   outlineNodeId?: number | null,
   worldGroupId?: number | null,
+  scope?: WorkspaceScope,
 ): Promise<string> {
   if (outlineNodeId == null) return ''
+  const resolved = scope ?? await resolveScope({ projectId })
   const [outlineNodes, chapters] = await Promise.all([
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' }),
   ])
   const nodesById = new Map(outlineNodes.filter(node => node.id != null).map(node => [node.id!, node]))
   const target = nodesById.get(outlineNodeId)
@@ -441,19 +459,21 @@ async function readWrittenChapterProgress(
  * 这里按当前章节节点读出场景拆解(开头衔接/逐场景:标题·概要·冲突·地点/结尾悬念),
  * 供正文等下游生成时注入,实现"用细纲指导正文",小上下文也能写出贴合的文字。
  */
-async function readDetailedOutline(projectId: number, outlineNodeId?: number | null, chapterId?: number | null): Promise<string> {
+async function readDetailedOutline(projectId: number, outlineNodeId?: number | null, chapterId?: number | null, scope?: WorkspaceScope): Promise<string> {
   let nodeId = outlineNodeId ?? null
   if (nodeId == null && chapterId != null) {
     const chapter = await db.chapters.get(chapterId)
+    if (scope && (!chapter || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' }))) return ''
     nodeId = chapter?.outlineNodeId ?? null
   }
   if (nodeId == null) return ''
-  const rows = await db.detailedOutlines.where('projectId').equals(projectId).toArray()
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = await readOwnedRows<any>(resolved, 'detailedOutlines', { owner: 'work' })
   const detail = rows.find(d => d.outlineNodeId === nodeId)
   if (!detail || !Array.isArray(detail.scenes) || detail.scenes.length === 0) return ''
   const parts: string[] = ['【本章细纲(场景拆解)】']
   if (detail.openingHook) parts.push(`开头衔接:${detail.openingHook}`)
-  detail.scenes.forEach((s, i) => {
+  detail.scenes.forEach((s: any, i: number) => {
     const bits = [s.summary, s.conflict ? `冲突:${s.conflict}` : '', s.location ? `地点:${s.location}` : '']
       .filter(Boolean).join(' / ')
     parts.push(`场景${i + 1} ${s.title || ''}: ${bits}`)
@@ -465,8 +485,9 @@ async function readDetailedOutline(projectId: number, outlineNodeId?: number | n
   return parts.join('\n')
 }
 
-async function readItemLedger(projectId: number, characterId?: number | null): Promise<string> {
-  const rows = await db.itemLedger.where('projectId').equals(projectId).toArray()
+async function readItemLedger(projectId: number, characterId?: number | null, scope?: WorkspaceScope): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = await readOwnedRows<any>(resolved, 'itemLedger', { owner: 'work' })
   const filtered = characterId != null
     ? rows.filter(r => (r.characterId ?? null) === (characterId ?? null))
     : rows
@@ -484,6 +505,7 @@ async function readHeldItems(
   worldGroupId?: number | null,
   characterId?: number | null,
   outlineNodeId?: number | null,
+  scope?: WorkspaceScope,
 ): Promise<string> {
   if (chapterId == null && outlineNodeId == null) return ''
   return formatHeldItemsContext(await readProjectHeldItems(
@@ -492,11 +514,14 @@ async function readHeldItems(
     worldGroupId,
     characterId,
     outlineNodeId,
+    scope,
   ))
 }
 
-async function readStoryTimeline(projectId: number): Promise<string> {
-  const rows = await db.storyTimelineEvents.where('projectId').equals(projectId).sortBy('order')
+async function readStoryTimeline(projectId: number, scope?: WorkspaceScope): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = (await readOwnedRows<any>(resolved, 'storyTimelineEvents', { owner: 'work' }))
+    .sort((a, b) => a.order - b.order)
   if (!rows.length) return ''
   return [
     '【故事年表证据】',
@@ -505,10 +530,11 @@ async function readStoryTimeline(projectId: number): Promise<string> {
   ].join('\n')
 }
 
-async function readCharacterRelations(projectId: number, worldGroupId?: number | null): Promise<string> {
+async function readCharacterRelations(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
   const [rows, characters] = await Promise.all([
-    db.characterRelations.where('projectId').equals(projectId).toArray(),
-    db.characters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<any>(resolved, 'characterRelations', { owner: 'world' }),
+    readOwnedRows<Character>(resolved, 'characters', { owner: 'world' }),
   ])
   const visibleCharacters = worldGroupId === undefined
     ? characters
@@ -533,14 +559,13 @@ async function readCharacterRelations(projectId: number, worldGroupId?: number |
  * 按【规范章序】实时解析 validFrom/To（绝不缓存 order）判定"截止本章是否有效"，
  * 并按当前世界（∪ 默认 null 世界）过滤。这是事实账本改善长期一致性的回报通道。
  */
-async function readCurrentFacts(projectId: number, chapterId?: number | null, worldGroupId?: number | null): Promise<string> {
+async function readCurrentFacts(projectId: number, chapterId?: number | null, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<string> {
   if (chapterId == null) return ''
+  const resolved = scope ?? await resolveScope({ projectId })
   const [facts, outlineNodes, chapters] = await Promise.all([
-    db.temporalFacts.where('projectId').equals(projectId)
-      .filter(f => f.status === 'confirmed' || f.status === 'superseded')
-      .toArray(),
-    db.outlineNodes.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<any>(resolved, 'temporalFacts', { owner: 'work' }).then(rows => rows.filter(f => f.status === 'confirmed' || f.status === 'superseded')),
+    readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' }),
   ])
   if (!facts.length) return ''
   const { sequence } = resolveCanonicalChapterSequence(outlineNodes, chapters)
@@ -572,10 +597,11 @@ async function readCurrentFacts(projectId: number, chapterId?: number | null, wo
  * 按本章涉及的实体召回历史块（关键词通道，未来章硬过滤、世界隔离、按时间重组），
  * 解决"几百章前的远距离细节/伏笔"被遗忘导致的矛盾。
  */
-async function readRetrievedPassages(projectId: number, chapterId?: number | null, outlineNodeId?: number | null, worldGroupId?: number | null): Promise<string> {
+async function readRetrievedPassages(projectId: number, chapterId?: number | null, outlineNodeId?: number | null, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<string> {
   if (chapterId == null) return ''
+  const resolved = scope ?? await resolveScope({ projectId })
   const [characters, node] = await Promise.all([
-    db.characters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<Character>(resolved, 'characters', { owner: 'world' }),
     outlineNodeId != null ? db.outlineNodes.get(outlineNodeId) : Promise.resolve(undefined),
   ])
   const charNames = characters.map(c => c.name).filter(n => n && n.length >= 2)
@@ -598,7 +624,7 @@ async function readRetrievedPassages(projectId: number, chapterId?: number | nul
   })
   const hierarchy = await readNarrativeSummaryContext({ projectId, currentChapterId: chapterId, worldGroupId })
   if (!got.length) return hierarchy
-  const chapters = await db.chapters.where('projectId').equals(projectId).toArray()
+  const chapters = await readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' })
   const titleOf = new Map(chapters.filter(c => c.id != null).map(c => [c.id!, c.title]))
   const lines = got.map(r => `〖${titleOf.get(r.chunk.sourceChapterId) ?? '前文'}〗${r.chunk.text}`)
   return [hierarchy, '【相关前文召回（防止远距离细节/伏笔矛盾，仅供参考）】', ...lines].filter(Boolean).join('\n\n')
@@ -609,11 +635,12 @@ async function readRetrievedPassages(projectId: number, chapterId?: number | nul
  * 取事实账本里 subjectName == 该角色名 的 confirmed 事实（按当前世界 ∪ null 过滤），
  * 不依赖章节——补全角色设定时要的是 TA 在全书已被确认的客观事实。
  */
-async function readCharacterFacts(projectId: number, name?: string, worldGroupId?: number | null): Promise<string> {
+async function readCharacterFacts(projectId: number, name?: string, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<string> {
   const subject = name?.trim()
   if (!subject) return ''
-  const facts = await db.temporalFacts.where('projectId').equals(projectId)
-    .filter(f => f.status === 'confirmed' && f.subjectName === subject).toArray()
+  const resolved = scope ?? await resolveScope({ projectId })
+  const facts = (await readOwnedRows<any>(resolved, 'temporalFacts', { owner: 'work' }))
+    .filter(f => f.status === 'confirmed' && f.subjectName === subject)
   const scoped = facts.filter(f => f.worldGroupId == null || f.worldGroupId === (worldGroupId ?? null))
   if (!scoped.length) return ''
   const lines = scoped.slice(0, 60).map(fact => {
@@ -628,12 +655,13 @@ async function readCharacterFacts(projectId: number, name?: string, worldGroupId
  * 关键词扫描全书 retrievalChunks（提到该角色名的块，当前世界 ∪ null），按章序取靠后的若干段，
  * 让补全贴合 TA 真正写出来的样子。不依赖 currentChapterId（要全书证据，不做未来章过滤）。
  */
-async function readCharacterPassages(projectId: number, name?: string, worldGroupId?: number | null): Promise<string> {
+async function readCharacterPassages(projectId: number, name?: string, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<string> {
   const subject = name?.trim()
   if (!subject || subject.length < 2) return ''
+  const resolved = scope ?? await resolveScope({ projectId })
   const [chunks, chapters] = await Promise.all([
-    db.retrievalChunks.where('projectId').equals(projectId).toArray(),
-    db.chapters.where('projectId').equals(projectId).toArray(),
+    readOwnedRows<any>(resolved, 'retrievalChunks', { owner: 'work' }),
+    readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' }),
   ])
   const hits = chunks
     .filter(c => (c.worldGroupId == null || c.worldGroupId === (worldGroupId ?? null)) && c.text.includes(subject))
@@ -730,7 +758,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresChapterId: true,
     read: async input => {
       const chapter = await db.chapters.get(input.chapterId!)
-      if (!chapter || chapter.projectId !== input.projectId) return ''
+      if (!chapter || !input.scope || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) return ''
       return htmlToPlainText(chapter.content || '')
     },
   },
@@ -750,7 +778,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 800,
     protectedFromTrim: true,
     requiresOutlineNodeId: true,
-    read: input => readChapterOutline(input.projectId, input.outlineNodeId, input.chapterId),
+    read: input => readChapterOutline(input.projectId, input.outlineNodeId, input.chapterId, input.scope),
   },
   {
     key: 'existingVolumeOutlines',
@@ -758,7 +786,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L1',
     budgetTokens: 2400,
-    read: input => readExistingVolumeOutlines(input.projectId),
+    read: input => readExistingVolumeOutlines(input.projectId, input.scope),
   },
   {
     key: 'writtenChapterProgress',
@@ -768,7 +796,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 3000,
     protectedFromTrim: true,
     requiresOutlineNodeId: true,
-    read: input => readWrittenChapterProgress(input.projectId, input.outlineNodeId, input.worldGroupId),
+    read: input => readWrittenChapterProgress(input.projectId, input.outlineNodeId, input.worldGroupId, input.scope),
   },
   {
     key: 'currentFacts',
@@ -777,7 +805,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 2000,
     requiresChapterId: true,
-    read: input => readCurrentFacts(input.projectId, input.chapterId, input.worldGroupId),
+    read: input => readCurrentFacts(input.projectId, input.chapterId, input.worldGroupId, input.scope),
   },
   {
     key: 'canonAssertions',
@@ -806,6 +834,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       input.worldGroupId,
       input.characterId,
       input.outlineNodeId,
+      input.scope,
     )),
   },
   {
@@ -815,7 +844,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L2',
     budgetTokens: 2500,
     requiresChapterId: true,
-    read: input => readRetrievedPassages(input.projectId, input.chapterId, input.outlineNodeId, input.worldGroupId),
+    read: input => readRetrievedPassages(input.projectId, input.chapterId, input.outlineNodeId, input.worldGroupId, input.scope),
   },
   {
     key: 'consistencyReport',
@@ -835,7 +864,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 1500,
     requiresOutlineNodeId: true,
-    read: input => readDetailedOutline(input.projectId, input.outlineNodeId, input.chapterId),
+    read: input => readDetailedOutline(input.projectId, input.outlineNodeId, input.chapterId, input.scope),
   },
   {
     key: 'previousChapterEnding',
@@ -884,7 +913,8 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L2',
     budgetTokens: 8000, // 放宽:容下完整世界观设定,超大才软截断(并配合总窗口软裁)
     requiresWorldGroupId: true,
-    read: async input => formatWorldviewBlock(await readWorldview(input.projectId, input.worldGroupId)),
+    ownerFrom: 'world',
+    read: async input => formatWorldviewBlock(await readWorldview(input.projectId, input.worldGroupId, input.scope)),
   },
   {
     key: 'storyCore',
@@ -892,7 +922,8 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L1',
     budgetTokens: 4000, // 放宽:容下完整故事核心(主线/复线)
-    read: async input => formatStoryCoreBlock(await db.storyCores.where('projectId').equals(input.projectId).first() ?? null),
+    ownerFrom: 'work',
+    read: async input => formatStoryCoreBlock((await readOwnedRows<any>(input.scope!, 'storyCores', { owner: 'work' }))[0] ?? null),
   },
   {
     key: 'characterDrivenPlan',
@@ -901,7 +932,8 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 5000,
     protectedFromTrim: true,
-    read: input => readActiveCharacterDrivenPlanContext(input.projectId),
+    ownerFrom: 'work',
+    read: input => readActiveCharacterDrivenPlanContext(input.projectId, input.scope),
   },
   {
     key: 'powerSystem',
@@ -912,9 +944,9 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresWorldGroupId: true,
     read: async input => {
       const [foundation, cultivation] = await Promise.all([
-        readPowerSystem(input.projectId, input.worldGroupId)
+        readPowerSystem(input.projectId, input.worldGroupId, input.scope)
           .then(formatPowerSystemBlock),
-        buildCultivationContext(input.projectId, input.worldGroupId),
+        buildCultivationContext(input.projectId, input.worldGroupId, input.scope),
       ])
       return [foundation, cultivation].filter(Boolean).join('\n')
     },
@@ -926,7 +958,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L2',
     budgetTokens: 6000, // 放宽:容下更多设定词条
     requiresWorldGroupId: true,
-    read: input => buildCodexContext(input.projectId, input.worldGroupId),
+    read: input => buildCodexContext(input.projectId, input.worldGroupId, {}, input.scope),
   },
   {
     key: 'characters',
@@ -935,7 +967,8 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L2',
     budgetTokens: 8000, // 放宽:容下完整角色档案(核心角色不再被砍残)
     requiresWorldGroupId: true,
-    read: async input => buildCharacterContext(await readCharacters(input.projectId, input.worldGroupId)),
+    ownerFrom: 'world',
+    read: async input => buildCharacterContext(await readCharacters(input.projectId, input.worldGroupId, input.scope)),
   },
   {
     key: 'creativeRules',
@@ -943,7 +976,8 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L1',
     budgetTokens: 1000,
-    read: async input => buildCreativeRulesContext(await db.creativeRules.where('projectId').equals(input.projectId).first() ?? null),
+    ownerFrom: 'work',
+    read: async input => buildCreativeRulesContext((await readOwnedRows<any>(input.scope!, 'creativeRules', { owner: 'work' }))[0] ?? null),
   },
   {
     key: 'worldRules',
@@ -952,7 +986,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 1200,
     requiresWorldGroupId: true,
-    read: input => buildWorldRulesContext(input.projectId, input.worldGroupId),
+    read: input => buildWorldRulesContext(input.projectId, input.worldGroupId, input.scope),
   },
   {
     key: 'historical',
@@ -961,7 +995,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L2',
     budgetTokens: 1800,
     requiresWorldGroupId: true,
-    read: input => buildHistoricalContext(input.projectId, input.worldGroupId),
+    read: input => buildHistoricalContext(input.projectId, input.worldGroupId, input.scope),
   },
   {
     key: 'locations',
@@ -969,7 +1003,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L2',
     budgetTokens: 1200,
-    read: input => buildLocationContext(input.projectId),
+    read: input => buildLocationContext(input.projectId, input.scope),
   },
   {
     key: 'foreshadows',
@@ -977,7 +1011,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'chapter',
     layer: 'L2',
     budgetTokens: 1200,
-    read: input => readForeshadows(input.projectId, input.chapterId),
+    read: input => readForeshadows(input.projectId, input.chapterId, input.scope),
   },
   {
     key: 'storyArcs',
@@ -985,7 +1019,8 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L2',
     budgetTokens: 1500,
-    read: input => readStoryArcs(input.projectId),
+    ownerFrom: 'work',
+    read: input => readStoryArcs(input.projectId, input.scope),
   },
   {
     key: 'storylineProgress',
@@ -1018,7 +1053,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 1000,
     requiresChapterId: true,
-    read: input => readEmotionBeats(input.projectId, input.chapterId),
+    read: input => readEmotionBeats(input.projectId, input.chapterId, input.scope),
   },
   {
     key: 'stateCards',
@@ -1026,7 +1061,8 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L2',
     budgetTokens: 1800,
-    read: input => readStateCards(input.projectId, input.stateReferenceText, input.extraStateIds),
+    ownerFrom: 'work',
+    read: input => readStateCards(input.projectId, input.stateReferenceText, input.extraStateIds, input.scope),
   },
   {
     key: 'itemLedger',
@@ -1034,7 +1070,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L2',
     budgetTokens: 2400,
-    read: input => readItemLedger(input.projectId, input.characterId),
+    read: input => readItemLedger(input.projectId, input.characterId, input.scope),
   },
   {
     key: 'heldItems',
@@ -1051,6 +1087,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       input.worldGroupId,
       input.characterId,
       input.outlineNodeId,
+      input.scope,
     ),
   },
   {
@@ -1059,7 +1096,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L2',
     budgetTokens: 2600,
-    read: input => readStoryTimeline(input.projectId),
+    read: input => readStoryTimeline(input.projectId, input.scope),
   },
   {
     key: 'characterRelations',
@@ -1067,7 +1104,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L2',
     budgetTokens: 2200,
-    read: input => readCharacterRelations(input.projectId, input.worldGroupId),
+    read: input => readCharacterRelations(input.projectId, input.worldGroupId, input.scope),
   },
   {
     key: 'references',
@@ -1085,7 +1122,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L2',
     budgetTokens: 1800,
-    read: input => readUserStyleProfile(input.projectId),
+    read: input => readUserStyleProfile(input.projectId, input.scope),
   },
   {
     // CM-1:只读取作者本次明确勾选的短灵感和同模式最近确认版本。
@@ -1099,6 +1136,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       input.projectId,
       input.inspirationFragmentIds,
       input.inspirationMode,
+      input.scope,
     ),
   },
   {
@@ -1109,7 +1147,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 1500,
     enabled: input => !!input.subjectCharacterName?.trim(),
-    read: input => readCharacterFacts(input.projectId, input.subjectCharacterName, input.worldGroupId),
+    read: input => readCharacterFacts(input.projectId, input.subjectCharacterName, input.worldGroupId, input.scope),
   },
   {
     // C2 反向哺喂：某角色在正文里的真实表现（需 subjectCharacterName）。
@@ -1119,9 +1157,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 2500,
     enabled: input => !!input.subjectCharacterName?.trim(),
-    read: input => readCharacterPassages(input.projectId, input.subjectCharacterName, input.worldGroupId),
+    read: input => readCharacterPassages(input.projectId, input.subjectCharacterName, input.worldGroupId, input.scope),
   },
 ]
+
+// Transitional C3 defaulting keeps legacy source declarations readable while making
+// the logical owner explicit at runtime. New sources should set ownerFrom directly.
+for (const source of CONTEXT_SOURCES) {
+  if (source.ownerFrom) continue
+  if (source.scope === 'world') source.ownerFrom = 'world'
+  else if (source.scope === 'node' || source.scope === 'chapter' || source.scope === 'project') source.ownerFrom = 'work'
+  else if (source.scope === 'runtime') source.ownerFrom = 'instance'
+}
 
 export const CONTEXT_SOURCE_BY_KEY: ReadonlyMap<string, ContextSource> = new Map(
   CONTEXT_SOURCES.map(source => [source.key, source] as const),

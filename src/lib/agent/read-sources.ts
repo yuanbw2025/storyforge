@@ -2,6 +2,7 @@ import { db } from '../db/schema'
 import type { AssembleContextInput } from '../registry/types'
 import type { OutlineNode } from '../types'
 import { countWords, htmlToPlainText } from '../utils/html'
+import { readOwnedRows } from '../world-engine/scope'
 
 export const AGENT_SEARCH_KINDS = [
   'chapter',
@@ -55,7 +56,7 @@ function matches(text: string, query: string): boolean {
 
 export async function readAgentProjectStatus(input: AssembleContextInput): Promise<string> {
   const project = await db.projects.get(input.projectId)
-  if (!project) return ''
+  if (!project || !input.scope) return ''
 
   const [
     worldGroups,
@@ -67,14 +68,14 @@ export async function readAgentProjectStatus(input: AssembleContextInput): Promi
     foreshadows,
     references,
   ] = await Promise.all([
-    db.worldGroups.where('projectId').equals(input.projectId).count(),
-    db.worldviews.where('projectId').equals(input.projectId).count(),
-    db.storyCores.where('projectId').equals(input.projectId).count(),
-    db.characters.where('projectId').equals(input.projectId).count(),
-    db.outlineNodes.where('projectId').equals(input.projectId).count(),
-    db.chapters.where('projectId').equals(input.projectId).toArray(),
-    db.foreshadows.where('projectId').equals(input.projectId).count(),
-    db.references.where('projectId').equals(input.projectId).count(),
+    readOwnedRows<any>(input.scope, 'worldGroups', { owner: 'world' }).then(rows => rows.length),
+    readOwnedRows<any>(input.scope, 'worldviews', { owner: 'world' }).then(rows => rows.length),
+    readOwnedRows<any>(input.scope, 'storyCores', { owner: 'work' }).then(rows => rows.length),
+    readOwnedRows<any>(input.scope, 'characters', { owner: 'world' }).then(rows => rows.length),
+    readOwnedRows<any>(input.scope, 'outlineNodes', { owner: 'work' }).then(rows => rows.length),
+    readOwnedRows<any>(input.scope, 'chapters', { owner: 'work' }),
+    readOwnedRows<any>(input.scope, 'foreshadows', { owner: 'work' }).then(rows => rows.length),
+    readOwnedRows<any>(input.scope, 'references', { owner: 'work' }).then(rows => rows.length),
   ])
   const writtenChapters = chapters.filter(chapter => htmlToPlainText(chapter.content || '').trim())
   const totalWords = chapters.reduce((sum, chapter) => (
@@ -93,9 +94,10 @@ export async function readAgentProjectStatus(input: AssembleContextInput): Promi
 }
 
 export async function readAgentWorldGroups(input: AssembleContextInput): Promise<string> {
+  if (!input.scope) return ''
   const [groups, links] = await Promise.all([
-    db.worldGroups.where('projectId').equals(input.projectId).sortBy('order'),
-    db.worldGroupLinks.where('projectId').equals(input.projectId).toArray(),
+    readOwnedRows<any>(input.scope, 'worldGroups', { owner: 'world' }).then(rows => rows.sort((a, b) => a.order - b.order)),
+    readOwnedRows<any>(input.scope, 'worldGroupLinks', { owner: 'world' }),
   ])
   if (!groups.length) return '【世界组】\n单世界项目：默认主世界（worldGroupId=null）'
   const names = new Map(groups.flatMap(group => group.id == null ? [] : [[group.id, group.name] as const]))
@@ -114,7 +116,8 @@ export async function readAgentWorldGroups(input: AssembleContextInput): Promise
 }
 
 export async function readAgentOutlineTree(input: AssembleContextInput): Promise<string> {
-  const rows = await db.outlineNodes.where('projectId').equals(input.projectId).toArray()
+  if (!input.scope) return ''
+  const rows = await readOwnedRows<OutlineNode>(input.scope, 'outlineNodes', { owner: 'work' })
   if (!rows.length) return ''
   const byId = new Map(rows.flatMap(node => node.id == null ? [] : [[node.id, node] as const]))
   const targetWorld = normalizeWorldGroupId(input.worldGroupId)
@@ -170,11 +173,11 @@ export async function readAgentSearchResults(input: AssembleContextInput): Promi
   const kinds = new Set<AgentSearchKind>(requestedKinds?.length ? requestedKinds : AGENT_SEARCH_KINDS)
   const limit = Math.max(1, Math.min(MAX_SEARCH_HITS, Math.floor(input.searchLimit ?? 5)))
   const [chapters, characters, outlineNodes, codexEntries, locations] = await Promise.all([
-    kinds.has('chapter') ? db.chapters.where('projectId').equals(input.projectId).toArray() : [],
-    kinds.has('character') ? db.characters.where('projectId').equals(input.projectId).toArray() : [],
-    kinds.has('outline') ? db.outlineNodes.where('projectId').equals(input.projectId).toArray() : [],
-    kinds.has('codex') ? db.codexEntries.where('projectId').equals(input.projectId).toArray() : [],
-    kinds.has('location') ? db.importantLocations.where('projectId').equals(input.projectId).toArray() : [],
+    kinds.has('chapter') && input.scope ? readOwnedRows<any>(input.scope, 'chapters', { owner: 'work' }) : [],
+    kinds.has('character') && input.scope ? readOwnedRows<any>(input.scope, 'characters', { owner: 'world' }) : [],
+    kinds.has('outline') && input.scope ? readOwnedRows<any>(input.scope, 'outlineNodes', { owner: 'work' }) : [],
+    kinds.has('codex') && input.scope ? readOwnedRows<any>(input.scope, 'codexEntries', { owner: 'world' }) : [],
+    kinds.has('location') && input.scope ? readOwnedRows<any>(input.scope, 'importantLocations', { owner: 'world' }) : [],
   ])
   const nodeById = new Map(outlineNodes.flatMap(node => node.id == null ? [] : [[node.id, node] as const]))
   if (!outlineNodes.length && chapters.length) {

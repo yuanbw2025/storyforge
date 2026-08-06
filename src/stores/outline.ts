@@ -3,6 +3,7 @@ import { db } from '../lib/db/schema'
 import type { OutlineNode } from '../lib/types'
 import { normalizeOutlineNode } from '../lib/outline/normalize'
 import { useChapterStore } from './chapter'
+import { assertRecordInScope, readOwnedRows, resolveScope, stampNewRecord } from '../lib/world-engine/scope'
 
 interface OutlineStore {
   nodes: OutlineNode[]
@@ -37,14 +38,14 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
 
   loadAll: async (projectId: number) => {
     set({ loading: true })
-    const nodes = await db.outlineNodes
-      .where('projectId').equals(projectId)
-      .sortBy('order')
+    const nodes = (await readOwnedRows<OutlineNode>(await resolveScope({ projectId }), 'outlineNodes', { owner: 'work' }))
+      .sort((a, b) => a.order - b.order)
     set({ nodes: nodes.map(normalizeOutlineNode), loading: false })
   },
 
   addNode: async (node) => {
-    const newNode: OutlineNode = normalizeOutlineNode({ ...node, createdAt: now(), updatedAt: now() } as OutlineNode)
+    const scope = await resolveScope({ projectId: node.projectId })
+    const newNode: OutlineNode = stampNewRecord(scope, 'outlineNodes', normalizeOutlineNode({ ...node, createdAt: now(), updatedAt: now() } as OutlineNode), { owner: 'work' })
     const id = await db.outlineNodes.add(newNode) as number
     set({ nodes: [...get().nodes, { ...newNode, id }] })
     return id
@@ -53,6 +54,8 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
   updateNode: async (id, data) => {
     const ts = now()
     const before = get().nodes.find(n => n.id === id) ?? await db.outlineNodes.get(id)
+    const projectId = before?.projectId
+    if (projectId == null || !await assertRecordInScope(await resolveScope({ projectId }), 'outlineNodes', before, { owner: 'work' })) return
     await db.outlineNodes.update(id, { ...data, updatedAt: ts })
     if (
       before?.type === 'chapter'
@@ -100,7 +103,12 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
   },
 
   addNodes: async (nodes) => {
-    const newNodes = nodes.map(n => normalizeOutlineNode({ ...n, createdAt: now(), updatedAt: now() } as OutlineNode))
+    const newNodes = await Promise.all(nodes.map(async n => stampNewRecord(
+      await resolveScope({ projectId: n.projectId }),
+      'outlineNodes',
+      normalizeOutlineNode({ ...n, createdAt: now(), updatedAt: now() } as OutlineNode),
+      { owner: 'work' },
+    )))
     const ids = await db.outlineNodes.bulkAdd(newNodes, { allKeys: true }) as number[]
     const withIds = newNodes.map((n, i) => ({ ...n, id: ids[i] }))
     set({ nodes: [...get().nodes, ...withIds] })

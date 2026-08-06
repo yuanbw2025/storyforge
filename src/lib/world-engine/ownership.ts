@@ -231,6 +231,11 @@ function rowsFor(state: WorkspaceState, table: string): CapturedRow[] {
   return state.rows.get(table) ?? []
 }
 
+function requiresLegacyOwnerStamp(spec: TableSpec): boolean {
+  if (spec.name === 'worlds' || spec.name === 'works' || spec.name === 'workCharacterBindings') return false
+  return spec.domainOwner?.legacyDefault === 'world' || spec.domainOwner?.legacyDefault === 'work'
+}
+
 async function validateExplicitReferences(state: WorkspaceState): Promise<void> {
   const missingByTarget = new Map<string, Set<number | string>>()
   const requiredByTarget = new Map<string, Set<number | string>>()
@@ -272,7 +277,7 @@ async function validateExplicitReferences(state: WorkspaceState): Promise<void> 
 
 function assertNoUnknownOwners(state: WorkspaceState): void {
   for (const spec of PROJECT_TABLES) {
-    if (spec.domainOwner?.locator.kind !== 'compat-project') continue
+    if (!requiresLegacyOwnerStamp(spec)) continue
     for (const row of rowsFor(state, spec.name)) {
       if (row.worldId != null || row.workId != null) {
         fail('OWNERSHIP_UNKNOWN_OWNER', `${spec.name} 已存在无法确认来源的 owner 字段`)
@@ -309,8 +314,7 @@ function buildBeforeImage(project: Project): Record<string, OwnershipBeforeImage
 function buildOwnerBeforeImages(state: WorkspaceState): Record<string, OwnershipBeforeImageRow[]> {
   const result: Record<string, OwnershipBeforeImageRow[]> = {}
   for (const spec of PROJECT_TABLES) {
-    if (spec.domainOwner?.locator.kind !== 'compat-project') continue
-    if (spec.domainOwner.legacyDefault !== 'world' && spec.domainOwner.legacyDefault !== 'work') continue
+    if (!requiresLegacyOwnerStamp(spec)) continue
     const images = rowsFor(state, spec.name).map(row => ({
       id: row.key,
       hadWorldId: row.hadWorldId,
@@ -452,12 +456,14 @@ async function allocateWorldCode(project: Project): Promise<string> {
 
 async function stampLegacyOwners(plan: OwnershipMigrationPlan, worldId: number, workId: number): Promise<void> {
   for (const spec of PROJECT_TABLES) {
-    if (spec.domainOwner?.locator.kind !== 'compat-project') continue
+    if (!requiresLegacyOwnerStamp(spec)) continue
+    const domain = spec.domainOwner
+    if (!domain) continue
     const images = plan.ownerBeforeImages[spec.name] ?? []
     if (!images.length) continue
-    const changes = spec.domainOwner.legacyDefault === 'world'
+    const changes = domain.legacyDefault === 'world'
       ? { worldId }
-      : { workId, ...(spec.domainOwner.allowed.includes('world') ? { worldId: null } : {}) }
+      : { workId, ...(domain.allowed.includes('world') ? { worldId: null } : {}) }
     for (const image of images) await spec.table.update(image.id, changes)
   }
 }
@@ -480,13 +486,14 @@ function assertCountsUnchanged(
 
 function assertStampedOwners(state: WorkspaceState, worldId: number, workId: number): void {
   for (const spec of PROJECT_TABLES) {
-    if (spec.domainOwner?.locator.kind !== 'compat-project') continue
-    if (spec.domainOwner.legacyDefault !== 'world' && spec.domainOwner.legacyDefault !== 'work') continue
+    if (!requiresLegacyOwnerStamp(spec)) continue
+    const domain = spec.domainOwner
+    if (!domain) continue
     for (const row of rowsFor(state, spec.name)) {
-      const actual = spec.domainOwner.legacyDefault === 'world' ? row.worldId : row.workId
-      const expected = spec.domainOwner.legacyDefault === 'world' ? worldId : workId
+      const actual = domain.legacyDefault === 'world' ? row.worldId : row.workId
+      const expected = domain.legacyDefault === 'world' ? worldId : workId
       if (actual !== expected) fail('OWNERSHIP_STAMP_INVALID', `${spec.name} owner 盖章不完整`)
-      if (spec.domainOwner.allowed.includes('world') && spec.domainOwner.allowed.includes('work')
+      if (domain.allowed.includes('world') && domain.allowed.includes('work')
         && row.worldId != null && row.workId != null) {
         fail('OWNERSHIP_EXCLUSIVE_OWNER_INVALID', `${spec.name} 同时绑定了 World 和 Work`)
       }

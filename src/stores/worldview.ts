@@ -3,6 +3,7 @@ import { db } from '../lib/db/schema'
 import type { Worldview, StoryCore, PowerSystem, DivineDesign, NaturalResources } from '../lib/types'
 import { adopt } from '../lib/registry/adopt'
 import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-assertions'
+import { readOwnedRows, resolveScope, stampNewRecord } from '../lib/world-engine/scope'
 
 interface WorldviewStore {
   worldview: Worldview | null
@@ -51,10 +52,11 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
 
   loadAll: async (projectId: number, worldGroupId: number | null = null) => {
     set({ loading: true, activeWorldGroupId: worldGroupId })
+    const scope = await resolveScope({ projectId })
     const [wvList, sc, psList] = await Promise.all([
-      db.worldviews.where('projectId').equals(projectId).toArray(),
-      db.storyCores.where('projectId').equals(projectId).first(),
-      db.powerSystems.where('projectId').equals(projectId).toArray(),
+      readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }),
+      readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }).then(rows => rows[0]),
+      readOwnedRows<PowerSystem>(scope, 'powerSystems', { owner: 'world' }),
     ])
     // 单世界模式（worldGroupId == null）：取第一条
     // 多世界模式：取匹配该世界组的记录
@@ -85,7 +87,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       mode: 'replace',
       data: patch as Record<string, unknown>,
     })
-    const list = await db.worldviews.where('projectId').equals(projectId).toArray()
+    const list = await readOwnedRows<Worldview>(await resolveScope({ projectId }), 'worldviews', { owner: 'world' })
     const next = (targetWorldGroupId == null
       ? (list.find(w => w.worldGroupId == null) ?? list[0])
       : list.find(w => w.worldGroupId === targetWorldGroupId)) ?? null
@@ -103,7 +105,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       mode: 'replace',
       data: patch as Record<string, unknown>,
     })
-    const next = await db.storyCores.where('projectId').equals(projectId).first() ?? null
+    const next = (await readOwnedRows<StoryCore>(await resolveScope({ projectId }), 'storyCores', { owner: 'work' }))[0] ?? null
     set({ storyCore: next })
   },
 
@@ -112,7 +114,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
     const projectId = data.projectId ?? powerSystem?.projectId
     let target = powerSystem
     if (!target?.id && projectId != null) {
-      const list = await db.powerSystems.where('projectId').equals(projectId).toArray()
+      const list = await readOwnedRows<PowerSystem>(await resolveScope({ projectId }), 'powerSystems', { owner: 'world' })
       target = (activeWorldGroupId == null
         ? (list.find(p => p.worldGroupId == null) ?? list[0])
         : list.find(p => p.worldGroupId === activeWorldGroupId)) ?? null
@@ -127,13 +129,13 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       })
       set({ powerSystem: { ...target, ...data, updatedAt: now() } })
     } else if (projectId != null) {
-      const newPs: PowerSystem = {
+      const newPs = stampNewRecord(await resolveScope({ projectId }), 'powerSystems', {
         projectId,
         name: '', description: '', levels: '', rules: '',
         worldGroupId: activeWorldGroupId,   // 多世界模式下盖章当前世界组
         createdAt: now(), updatedAt: now(),
         ...data,
-      }
+      }, { owner: 'world' }) as PowerSystem
       const id = await db.powerSystems.add(newPs)
       set({ powerSystem: { ...newPs, id: id as number } })
     }

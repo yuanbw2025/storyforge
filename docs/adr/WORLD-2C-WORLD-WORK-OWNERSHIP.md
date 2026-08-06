@@ -345,9 +345,10 @@ interface WorkspaceScope {
 World/Work，并由 `resolveWorkspaceScope()` 统一解析旧路由。并发、事务中途失败、未知 owner/根、幂等、
 可回滚和迁移后新增 Work 拒绝回滚均有反例测试。
 
-现有业务表的查询 locator 仍诚实标记为 `compat-project`：C2 只为存量记录盖默认 owner，并未授权第二作品。
-C3 必须把世界基础、作品创作、三注册表 AI 读写和 store selector 全链路切换到 `WorkspaceScope`；在此之前
-第二作品入口继续隐藏，C1/C2 完成不代表 WORLD-2C 完成。
+C3 已将核心世界/作品表 locator 切换为显式 `field` / `exclusive-fields`，并新增由
+`PROJECT_TABLES.domainOwner` 派生的 `scope.ts` selector/owner gate。`assembleContext()`、`adopt()`、核心
+上下文源和 Agent 对话/事件流均先验证 `WorkspaceScope`；双作品 Golden Project 已证明故事核心、正文、
+结构化写回和 Agent 运行记录不串。剩余 store 写入口、v4 owner 往返和多作品 UI 仍未完成，第二作品入口继续隐藏。
 
 ## 13. 必须覆盖的反例矩阵
 

@@ -7,6 +7,7 @@ import { detachCultivationProgressForDeletedChapters } from '../lib/cultivation/
 import { pickBestChapterForOutline } from '../lib/chapters/selectors'
 import { transactionTablesFor } from '../lib/registry/lifecycle'
 import type { Chapter } from '../lib/types'
+import { assertRecordInScope, readOwnedRows, resolveScope, stampNewRecord } from '../lib/world-engine/scope'
 
 interface ChapterStore {
   chapters: Chapter[]
@@ -43,9 +44,8 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
 
   loadAll: async (projectId: number) => {
     set({ loading: true })
-    const chapters = await db.chapters
-      .where('projectId').equals(projectId)
-      .sortBy('order')
+    const chapters = (await readOwnedRows<Chapter>(await resolveScope({ projectId }), 'chapters', { owner: 'work' }))
+      .sort((a, b) => a.order - b.order)
     set({ chapters, loading: false })
   },
 
@@ -55,7 +55,9 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
   },
 
   addChapter: async (ch) => {
-    const newCh: Chapter = { ...ch, createdAt: now(), updatedAt: now() }
+    const newCh = stampNewRecord(await resolveScope({ projectId: ch.projectId }), 'chapters', {
+      ...ch, createdAt: now(), updatedAt: now(),
+    } as Chapter, { owner: 'work' })
     const id = await db.chapters.add(newCh) as number
     const withId = { ...newCh, id }
     set({ chapters: [...get().chapters, withId] })
@@ -64,22 +66,26 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
 
   getOrCreateByOutlineNode: async (projectId, outlineNodeId, create) => {
     const chapter = await db.transaction('rw', db.chapters, async () => {
-      const existing = await db.chapters
+      const candidates = await db.chapters
         .where('outlineNodeId')
         .equals(outlineNodeId)
-        .and(row => row.projectId === projectId)
         .toArray()
+      const scope = await resolveScope({ projectId })
+      const existing = [] as Chapter[]
+      for (const row of candidates) {
+        if (row.projectId === projectId && await assertRecordInScope(scope, 'chapters', row, { owner: 'work' })) existing.push(row)
+      }
       const best = pickBestChapterForOutline(existing)
       if (best?.id) return best
 
       const ts = now()
-      const newChapter: Chapter = {
+      const newChapter = stampNewRecord(await resolveScope({ projectId }), 'chapters', {
         ...create,
         projectId,
         outlineNodeId,
         createdAt: ts,
         updatedAt: ts,
-      }
+      }, { owner: 'work' }) as Chapter
       const id = await db.chapters.add(newChapter) as number
       return { ...newChapter, id }
     })
@@ -95,6 +101,8 @@ export const useChapterStore = create<ChapterStore>((set, get) => ({
   },
 
   updateChapter: async (id, data) => {
+    const before = get().chapters.find(c => c.id === id) ?? await db.chapters.get(id)
+    if (!before?.projectId || !await assertRecordInScope(await resolveScope({ projectId: before.projectId }), 'chapters', before, { owner: 'work' })) return
     const updated = { ...data, updatedAt: now() }
     await db.chapters.update(id, updated)
     if (Object.prototype.hasOwnProperty.call(data, 'content')) {
