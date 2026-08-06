@@ -327,3 +327,13 @@ StoryForge 使用 [MIT License](./LICENSE) 开源。你可以自由使用、复�
 ## 功能全景指南
 
 完整图文版功能说明书见 [docs/FEATURE-GUIDE.md](./docs/FEATURE-GUIDE.md)。文档按页面和二级页签展开，包含功能说明、项目逻辑说明和配套截图。
+
+---
+
+## 自愿赞助
+
+StoryForge 的全部功能与后续更新不会因是否赞助而有任何区别：赞助不会获得额外功能或特殊权益，不赞助也不会失去任何功能或更新，一切完全自愿。赞助款将用于缓解开发者的大模型订阅成本，并在一定程度上帮助加快项目开发。
+
+<p align="center">
+  <img src="./docs/assets/support/afdian-aloneone.jpeg" alt="StoryForge 爱发电赞助二维码" width="420" />
+</p>
