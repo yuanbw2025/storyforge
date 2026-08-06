@@ -46,6 +46,18 @@ describe('R-export-fullcoverage · 全表多世界往返安全网', () => {
       expect(newCount, `表 ${name} 往返后行数应一致`).toBe(srcCount)
     }
 
+    // WORLD-2C: Workspace → World → Work → character binding 全部使用便携 ID。
+    const newWorld = await db.worlds.where('projectId').equals(newId).first()
+    const newWork = await db.works.where('projectId').equals(newId).first()
+    const newBinding = await db.workCharacterBindings.where('projectId').equals(newId).first()
+    const newProject = await db.projects.get(newId)
+    expect(newWorld?.id).not.toBe(src.worldId)
+    expect(newWork?.worldId).toBe(newWorld?.id)
+    expect(newWork?.worldId).not.toBe(src.worldId)
+    expect(newBinding?.workId).toBe(newWork?.id)
+    expect(newProject?.activeWorldId).toBe(newWorld?.id)
+    expect(newProject?.activeWorkId).toBe(newWork?.id)
+
     // 世界组重映射:新项目两个世界组,worldviews 分别挂到正确的新世界组
     const newGroups = await db.worldGroups.where('projectId').equals(newId).sortBy('order')
     expect(newGroups).toHaveLength(2)
@@ -62,6 +74,7 @@ describe('R-export-fullcoverage · 全表多世界往返安全网', () => {
     // 角色 homeWorldGroupId 重映射(char1 挂 wgA,char2 跨世界 null)
     const newChars = await db.characters.where('projectId').equals(newId).toArray()
     const newChar1 = newChars.find(c => c.name === '林惊羽')!
+    expect(newBinding?.characterId).toBe(newChar1.id)
     expect(newChar1.homeWorldGroupId).toBe(newWgA)
     const newCultivation = await db.cultivationSystems.where('projectId').equals(newId).first()
     const newCodexEntries = await db.codexEntries.where('projectId').equals(newId).toArray()

@@ -16,6 +16,28 @@ export async function seedFullProject() {
     targetWordCount: 100000, enableMultiWorld: true, createdAt: now, updatedAt: now,
   } as any) as number
 
+  // ── WORLD-2C C1 显式世界/作品根 ──
+  const worldId = await db.worlds.add({
+    projectId,
+    code: 'world-full-fixture',
+    name: '全量世界',
+    description: '全表往返世界根',
+    currentVersion: 1,
+    createdAt: now,
+    updatedAt: now,
+  }) as number
+  const workId = await db.works.add({
+    projectId,
+    worldId,
+    title: '全量作品',
+    description: '全表往返作品根',
+    genres: ['fantasy'],
+    status: 'drafting',
+    targetWordCount: 100000,
+    createdAt: now,
+    updatedAt: now,
+  }) as number
+
   // ── 双世界组(order 决定导出序) ──
   const wgA = await db.worldGroups.add({ projectId, name: '主世界群', order: 0, createdAt: now, updatedAt: now } as any) as number
   const wgB = await db.worldGroups.add({ projectId, name: '镜世界群', order: 1, createdAt: now, updatedAt: now } as any) as number
@@ -57,6 +79,15 @@ export async function seedFullProject() {
   } as any) as number
   const char2 = await db.characters.add({ projectId, isCrossWorld: true, name: '苏长歌', role: 'supporting', createdAt: now, updatedAt: now } as any) as number
   await db.characterRelations.add({ projectId, fromCharacterId: char1, toCharacterId: char2, type: 'ally', description: '同门', createdAt: now, updatedAt: now } as any)
+  await db.workCharacterBindings.add({
+    projectId,
+    workId,
+    characterId: char1,
+    role: 'protagonist',
+    arc: '从复仇者到守护者',
+    createdAt: now,
+    updatedAt: now,
+  })
   const characterDrivenPlan = await db.characterDrivenPlans.add({
     projectId,
     name: '林惊羽角色驱动方案',
@@ -75,7 +106,12 @@ export async function seedFullProject() {
     createdAt: now,
     updatedAt: now,
   }) as number
-  await db.projects.update(projectId, { activeCharacterDrivenPlanId: characterDrivenPlan })
+  await db.works.update(workId, { activeCharacterDrivenPlanId: characterDrivenPlan })
+  await db.projects.update(projectId, {
+    activeCharacterDrivenPlanId: characterDrivenPlan,
+    activeWorldId: worldId,
+    activeWorkId: workId,
+  })
 
   // ── 大纲(树,wgA)+ 章节 + 细纲 + 情感卡 ──
   const vol = await db.outlineNodes.add({ projectId, worldGroupId: wgA, parentId: null, type: 'volume', title: '第一卷', summary: '开篇', order: 0, createdAt: now, updatedAt: now } as any) as number
@@ -325,7 +361,7 @@ export async function seedFullProject() {
   return {
     projectId, wgA, wgB, char1, char2, vol, chapNode, chapter, temporalFact, ref1,
     cat, subCat, rootWorld, mirrorWorld, locParent, cultivationSystem, codexEntry,
-    characterDrivenPlan, simulationParent, simulationChild,
+    characterDrivenPlan, simulationParent, simulationChild, worldId, workId,
   }
 }
 

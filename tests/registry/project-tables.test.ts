@@ -28,13 +28,28 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(result.ok, result.errors.join('; ')).toBe(true)
     })
 
-    it('登记了全部 58 张表', () => {
-      expect(PROJECT_TABLES.length).toBe(58)   // v48 SIM 会话/事件/检查点→58
+    it('登记了全部 62 张表', () => {
+      expect(PROJECT_TABLES.length).toBe(62)   // v49 WORLD-2C C1 新增四张 ownership 表
     })
 
     it('每张表名唯一', () => {
       const names = PROJECT_TABLES.map(s => s.name)
       expect(new Set(names).size).toBe(names.length)
+    })
+
+    it('所有非 global 表都有逻辑 owner，现有表仍明确处于兼容阶段', () => {
+      const governed = PROJECT_TABLES.filter(spec => spec.owner !== 'global')
+      expect(governed.every(spec => spec.domainOwner != null)).toBe(true)
+      expect(PROJECT_TABLES.find(spec => spec.name === 'worlds')?.domainOwner?.locator.kind).toBe('workspace')
+      expect(PROJECT_TABLES.find(spec => spec.name === 'works')?.domainOwner?.locator).toMatchObject({
+        kind: 'field', owner: 'world', field: 'worldId',
+      })
+      expect(PROJECT_TABLES.find(spec => spec.name === 'storyCores')?.domainOwner).toMatchObject({
+        allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'compat-project' },
+      })
+      expect(PROJECT_TABLES.find(spec => spec.name === 'chapters')?.domainOwner).toMatchObject({
+        allowed: ['work'], legacyDefault: 'work', locator: { kind: 'compat-project' },
+      })
     })
   })
 

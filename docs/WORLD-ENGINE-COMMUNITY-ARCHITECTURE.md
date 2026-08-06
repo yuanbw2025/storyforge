@@ -1,6 +1,6 @@
 # WORLD-2 / PLATFORM-1 · StoryForge 世界引擎与社区整体架构重构
 
-> 状态：ARCHITECTURE BASELINE / WORLD-2A、WORLD-2B 第一垂直切片已落地
+> 状态：ARCHITECTURE BASELINE / WORLD-2A、WORLD-2B 第一垂直切片已落地 / WORLD-2C C1 + C2 已完成
 > 决策日期：2026-08-05
 > 适用范围：世界引擎、分步骤创作、节点创作、Agent、跑团、角色聊天、文字游戏、世界发布与社区
 > 用户核心定义：一个世界必须同时拥有完整的世界基础、可执行叙事和可演化状态；作品与游戏都是该世界的实例。
@@ -546,6 +546,12 @@ Harness 不是一组更长的提示词，也不是新的业务数据源。它是
 完成判据：单世界用户无需开启多世界即可完成完整世界设定；旧工作区仍保持原行为。
 
 ### WORLD-2C · 显式世界/作品所有权
+
+正式决策见 [WORLD-2C 世界、作品与本地工作区所有权 ADR](./adr/WORLD-2C-WORLD-WORK-OWNERSHIP.md)。
+ADR 已冻结领域边界、逻辑 owner、惰性迁移、回滚、导入重映射和开放门禁。C1 已完成 DB v49 空升级、
+World/Work/角色作品绑定/迁移凭证四张表、`domainOwner` 全表分类和注册表守卫；C2 已完成逐工作区只读预检、
+SHA-256 指纹、before-image、默认根、owner 盖章、唯一兼容 resolver、并发幂等和有边界回滚。C3 的业务与 AI
+全链路 scope 隔离尚未实施，不得把 C1/C2 完成写成 WORLD-2C 完成或开放第二作品。
 
 范围：
 

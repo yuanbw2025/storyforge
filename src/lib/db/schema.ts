@@ -58,6 +58,10 @@ import type {
   SimulationSession,
   SimulationEvent,
   SimulationCheckpoint,
+  World,
+  Work,
+  WorkCharacterBinding,
+  OwnershipMigrationReceipt,
 } from '../types'
 import type { AIUsageEntry } from '../ai/usage-log'
 import type { TemporalFact } from '../types/temporal-fact'
@@ -67,6 +71,10 @@ import type { NarrativeSummaryNode } from '../types/narrative-summary'
 
 class StoryForgeDB extends Dexie {
   projects!: Table<Project>
+  worlds!: Table<World, number>
+  works!: Table<Work, number>
+  workCharacterBindings!: Table<WorkCharacterBinding, number>
+  ownershipMigrations!: Table<OwnershipMigrationReceipt, number>
   worldviews!: Table<Worldview>
   storyCores!: Table<StoryCore>
   powerSystems!: Table<PowerSystem>
@@ -496,6 +504,15 @@ class StoryForgeDB extends Dexie {
       simulationSessions: '++id, projectId, worldGroupId, kind, status, parentSessionId, updatedAt',
       simulationEvents: '++id, projectId, worldGroupId, sessionId, &[sessionId+sequence], type, createdAt',
       simulationCheckpoints: '++id, projectId, worldGroupId, sessionId, [sessionId+throughSequence], createdAt',
+    })
+
+    // v49 / WORLD-2C C1: ownership roots and migration evidence only. This is
+    // deliberately an empty schema upgrade; legacy rows are not scanned or changed.
+    this.version(49).stores({
+      worlds: '++id, projectId, code, [projectId+updatedAt]',
+      works: '++id, projectId, worldId, [projectId+worldId], [worldId+updatedAt], status',
+      workCharacterBindings: '++id, projectId, workId, characterId, &[workId+characterId], [projectId+workId]',
+      ownershipMigrations: '++id, projectId, &[projectId+contractVersion], status, updatedAt',
     })
   }
 }

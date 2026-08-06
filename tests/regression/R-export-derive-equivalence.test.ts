@@ -83,6 +83,13 @@ function normalize(data: any) {
   delete data.simulationSessions
   delete data.simulationEvents
   delete data.simulationCheckpoints
+  // WORLD-2C roots/bindings are optional extensions to v3 until strict v4 ownership.
+  // Their portable remaps are covered by R-export-fullcoverage and R-WORLD2C.
+  delete data.worlds
+  delete data.works
+  delete data.workCharacterBindings
+  delete data.project?._activeWorldExportId
+  delete data.project?._activeWorkExportId
   for (const row of data.characters ?? []) {
     delete row._raceEntryExportId
     delete row._cultivationSystemExportId

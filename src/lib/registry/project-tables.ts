@@ -11,34 +11,91 @@
  * 设计依据:docs/MASTER-BLUEPRINT.md §5.1
  */
 import { db } from '../db/schema'
-import type { TableSpec } from './types'
+import type { DomainOwnershipSpec, TableSpec } from './types'
+
+const WORKSPACE_DOMAIN_OWNER = {
+  allowed: ['workspace'], legacyDefault: 'workspace', locator: { kind: 'workspace' },
+} as const satisfies DomainOwnershipSpec
+
+const LEGACY_WORLD_OWNER = {
+  allowed: ['world'], legacyDefault: 'world', locator: { kind: 'compat-project' },
+} as const satisfies DomainOwnershipSpec
+
+const LEGACY_WORK_OWNER = {
+  allowed: ['work'], legacyDefault: 'work', locator: { kind: 'compat-project' },
+} as const satisfies DomainOwnershipSpec
+
+const LEGACY_WORLD_OR_WORK_OWNER = {
+  allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'compat-project' },
+} as const satisfies DomainOwnershipSpec
+
+const LEGACY_INSTANCE_OWNER = {
+  allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'compat-project' },
+} as const satisfies DomainOwnershipSpec
 
 export const PROJECT_TABLES: TableSpec[] = [
   // ───────────────────────── 项目根表 ─────────────────────────
   { table: db.projects, name: 'projects', owner: 'project', exportable: true,
-    exportRemap: [{
-      field: 'activeCharacterDrivenPlanId',
-      remapVia: 'characterDrivenPlans',
-      exportAs: '_activeCharacterDrivenPlanExportId',
-    }],
-    note: '项目本身' },
+    domainOwner: WORKSPACE_DOMAIN_OWNER,
+    exportRemap: [
+      {
+        field: 'activeCharacterDrivenPlanId',
+        remapVia: 'characterDrivenPlans',
+        exportAs: '_activeCharacterDrivenPlanExportId',
+      },
+      { field: 'activeWorldId', remapVia: 'worlds', exportAs: '_activeWorldExportId' },
+      { field: 'activeWorkId', remapVia: 'works', exportAs: '_activeWorkExportId' },
+    ],
+    note: 'WORLD-2C 后作为 LocalWorkspace 物理兼容根，不再冒充 World/Work' },
+
+  // WORLD-2C C1 added empty roots; C2 now creates/adopts them lazily on workspace entry.
+  { table: db.worlds, name: 'worlds', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: WORKSPACE_DOMAIN_OWNER,
+    refs: [{ kind: 'simple', field: 'id', target: 'works[worldId]', onDelete: 'cascade' }],
+    note: 'WORLD-2C 显式世界根；公开身份和世界版本的未来权威' },
+
+  { table: db.works, name: 'works', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
+    refs: [{ kind: 'simple', field: 'id', target: 'workCharacterBindings[workId]', onDelete: 'cascade' }],
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'activeCharacterDrivenPlanId', remapVia: 'characterDrivenPlans',
+        exportAs: '_activeCharacterDrivenPlanExportId' },
+    ],
+    note: 'WORLD-2C 显式作品根；同一 World 可包含多部隔离作品' },
+
+  { table: db.workCharacterBindings, name: 'workCharacterBindings', owner: 'project', exportable: true,
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'characterId', remapVia: 'characters', exportAs: '_characterExportId', onUnmapped: 'require' },
+    ],
+    note: '角色身份保持世界级；本表只保存作品内角色作用投影' },
+
+  { table: db.ownershipMigrations, name: 'ownershipMigrations', owner: 'transient', exportable: false,
+    domainOwner: WORKSPACE_DOMAIN_OWNER,
+    note: 'WORLD-2C 惰性迁移的紧凑 before-image 和恢复凭证，不保存手稿正文' },
 
   // ───────────────────── 世界观/设定(world-scoped 多)─────────────────────
   { table: db.worldviews, name: 'worldviews', owner: 'project', worldScoped: true, communityShare: 'world',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldDomains: ['foundation'],
     exportable: true,
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.storyCores, name: 'storyCores', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
     worldDomains: ['narrative'],
     note: '项目级,跨世界共享主线' },
 
   { table: db.powerSystems, name: 'powerSystems', owner: 'project', worldScoped: true, communityShare: 'world',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldDomains: ['foundation'],
     exportable: true,
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.cultivationSystems, name: 'cultivationSystems', owner: 'project', worldScoped: true, communityShare: 'world',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldDomains: ['foundation', 'assets'],
     exportable: true, exportIdField: true,
     refs: [
@@ -54,6 +111,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'Phase 37 修炼流派；stages 为已校验 DAG，区别于世界底层 powerSystems' },
 
   { table: db.cultivationProgress, name: 'cultivationProgress', owner: 'project', worldScoped: true,
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: true,
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
@@ -65,16 +123,19 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'Phase 34 作者确认的正文修炼事件；当前境界与实际路径按规范章序实时投影，软引用缺失时保留冗余名称与证据' },
 
   { table: db.geographies, name: 'geographies', owner: 'project', worldScoped: true, communityShare: 'world',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldDomains: ['foundation'],
     exportable: true,
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.histories, name: 'histories', owner: 'project', worldScoped: true, communityShare: 'world',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldDomains: ['foundation'],
     exportable: true,
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.worldNodes, name: 'worldNodes', owner: 'project', worldScoped: true, communityShare: 'world',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldDomains: ['foundation', 'assets'],
     exportable: true, tree: { parentField: 'parentId' }, exportIdField: true,
     refs: [
@@ -88,16 +149,19 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'portalsJSON 内含指向其它节点的引用' },
 
   { table: db.historicalTimelineEvents, name: 'historicalTimelineEvents', owner: 'project',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldScoped: true, exportable: true, communityShare: 'world',
     worldDomains: ['foundation'],
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.historicalKeywords, name: 'historicalKeywords', owner: 'project',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldScoped: true, exportable: true, communityShare: 'world',
     worldDomains: ['foundation'],
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.importantLocations, name: 'importantLocations', owner: 'project',
+    domainOwner: LEGACY_WORLD_OWNER,
     exportable: true, communityShare: 'world', tree: { parentField: 'parentId' }, exportIdField: true,
     worldDomains: ['foundation', 'assets'],
     refs: [
@@ -107,6 +171,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: '⚠️ 无 worldGroupId,当前全局注入写作上下文；城池词条可通过 importantLocationId 建立软引用' },
 
   { table: db.worldRulesProfiles, name: 'worldRulesProfiles', owner: 'project',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldScoped: true, exportable: true, communityShare: 'world',
     worldDomains: ['foundation'],
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }],
@@ -114,6 +179,7 @@ export const PROJECT_TABLES: TableSpec[] = [
 
   // ───────────────────── 角色 ─────────────────────
   { table: db.characters, name: 'characters', owner: 'project', homeWorldScoped: true,
+    domainOwner: LEGACY_WORLD_OWNER,
     exportable: true, communityShare: 'world',
     worldDomains: ['assets'],
     refs: [
@@ -129,6 +195,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     ] },
 
   { table: db.characterRelations, name: 'characterRelations', owner: 'project',
+    domainOwner: LEGACY_WORLD_OWNER,
     exportable: true, communityShare: 'world',
     worldDomains: ['assets'],
     exportRemap: [
@@ -140,6 +207,7 @@ export const PROJECT_TABLES: TableSpec[] = [
 
   // ───────────────────── 大纲 / 章节 / 细纲 ─────────────────────
   { table: db.outlineNodes, name: 'outlineNodes', owner: 'project', worldScoped: true,
+    domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
     exportable: true, tree: { parentField: 'parentId' }, exportIdField: true,
     worldDomains: ['narrative'],
     // summary 是非可选字段,但老数据/跨版本导入的 JSON 可能整体缺该键 → 导入兜成 ''，
@@ -155,6 +223,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     ] },
 
   { table: db.chapters, name: 'chapters', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER,
     selfIdPaths: ['continuityHandoff.chapterId', 'planReconciliation.chapterId'],
     refs: [
       { kind: 'simple', field: 'id', target: 'emotionBeatCards[chapterId]', onDelete: 'cascade' },
@@ -163,6 +232,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     exportRemap: [{ field: 'outlineNodeId', remapVia: 'outlineNodes', exportAs: '_outlineExportId', onUnmapped: 'require' }] },
 
   { table: db.detailedOutlines, name: 'detailedOutlines', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
     worldDomains: ['narrative'],
     refs: [
       { kind: 'array', field: 'appearingCharacterIds', itemTarget: 'characters', onDelete: 'removeItem' },
@@ -177,14 +247,17 @@ export const PROJECT_TABLES: TableSpec[] = [
     exportRemap: [{ field: 'outlineNodeId', remapVia: 'outlineNodes', exportAs: '_outlineExportId', onUnmapped: 'require' }] },
 
   { table: db.emotionBeatCards, name: 'emotionBeatCards', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER,
     exportRemap: [{ field: 'chapterId', remapVia: 'chapters', exportAs: '_chapterExportId', onUnmapped: 'require' }] },
 
   // ───────────────────── 下游产物 / 工具 ─────────────────────
   { table: db.foreshadows, name: 'foreshadows', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
     worldDomains: ['narrative'],
     note: '可跨世界;plant/resolveChapterId 为软引用(删章不强删)' },
 
   { table: db.storyArcs, name: 'storyArcs', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
     worldDomains: ['narrative'],
     exportIdField: true,
     refs: [
@@ -194,6 +267,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     ] },
 
   { table: db.characterDrivenPlans, name: 'characterDrivenPlans', owner: 'project',
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: true, exportIdField: true, tree: { parentField: 'parentPlanId' },
     refs: [
       { kind: 'json', field: 'arcs', jsonPath: '$[].characterId', target: 'characters[id]', onDelete: 'remap' },
@@ -223,6 +297,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'CF-9C 项目级角色驱动设计方案；角色为软引用，删除后保留姓名/身份快照' },
 
   { table: db.storylineProgress, name: 'storylineProgress', owner: 'project',
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: true,
     defaults: { status: 'dormant', involvedEntities: '[]' },
     exportRemap: [
@@ -232,6 +307,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'Phase 39 已确认的故事线动态投影；每条 StoryArc 至多一行，删章保留标题并 NULL 化引用' },
 
   { table: db.storylineCrossings, name: 'storylineCrossings', owner: 'project',
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: true,
     exportRemap: [
       { field: 'arcIdA', remapVia: 'storyArcs', exportAs: '_arcAExportId', onUnmapped: 'require' },
@@ -240,9 +316,11 @@ export const PROJECT_TABLES: TableSpec[] = [
     ],
     note: 'Phase 39 已确认的两条登记故事线交汇；删章保留证据与章节标题并 NULL 化引用' },
 
-  { table: db.stateCards, name: 'stateCards', owner: 'project', exportable: true },
+  { table: db.stateCards, name: 'stateCards', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER },
 
   { table: db.itemLedger, name: 'itemLedger', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER,
     refs: [
       { kind: 'simple', field: 'characterId', target: 'characters[id]', onDelete: 'setNull' },
     ],
@@ -253,11 +331,14 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'chapterId 与 characterId 均为软引用；角色删除时 NULL 化 characterId、保留 heldByName' },
 
   { table: db.storyTimelineEvents, name: 'storyTimelineEvents', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER,
     exportRemap: [{ field: 'chapterId', remapVia: 'chapters', exportAs: '_chapterExportId' }] },
 
-  { table: db.notes, name: 'notes', owner: 'project', exportable: true },
+  { table: db.notes, name: 'notes', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER },
 
   { table: db.creativeRules, name: 'creativeRules', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER,
     refs: [
       { kind: 'array', field: 'citedReferenceIds', itemTarget: 'references', onDelete: 'removeItem' },
     ],
@@ -269,6 +350,7 @@ export const PROJECT_TABLES: TableSpec[] = [
 
   // ───────────────────── 词条系统 ─────────────────────
   { table: db.codexCategories, name: 'codexCategories', owner: 'project',
+    domainOwner: LEGACY_WORLD_OWNER,
     exportable: true, communityShare: 'world', tree: { parentField: 'parentId' }, exportIdField: true,
     refs: [{ kind: 'simple', field: 'id', target: 'codexEntries[categoryId]', onDelete: 'cascade' }],
     exportRemap: [
@@ -278,6 +360,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: '分类 schema 项目级共享；worldGroupId 仅为旧备份兼容字段，不参与世界生命周期' },
 
   { table: db.codexEntries, name: 'codexEntries', owner: 'project', worldScoped: true,
+    domainOwner: LEGACY_WORLD_OWNER,
     exportable: true, communityShare: 'world',
     worldDomains: ['foundation', 'assets'],
     refs: [
@@ -293,15 +376,18 @@ export const PROJECT_TABLES: TableSpec[] = [
 
   // ───────────────────── 文风学习（FB-5） ─────────────────────
   { table: db.userStyleProfiles, name: 'userStyleProfiles', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER,
     note: '每项目一份 AI 文风画像;projectId 单例' },
 
   // ───────────────────── 增量灵感工作区（CM-1） ─────────────────────
   { table: db.inspirationWorkspaces, name: 'inspirationWorkspaces', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER,
     defaults: { fragments: '[]', versions: '[]' },
     note: '每项目一份有界灵感碎片与确认版本；未确认 AI 预览不落库' },
 
   // ───────────────────── PLATFORM-2 创作过程层 ─────────────────────
   { table: db.agentConversations, name: 'agentConversations', owner: 'project',
+    domainOwner: LEGACY_WORK_OWNER,
     worldScoped: true, exportable: true, exportIdField: true,
     refs: [
       { kind: 'simple', field: 'id', target: 'agentEvents[conversationId]', onDelete: 'cascade' },
@@ -313,6 +399,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'AGENT-1 单一总对话；领域 Agent 只作为幕后事件，不形成前台标签' },
 
   { table: db.agentEvents, name: 'agentEvents', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER,
     exportRemap: [
       { field: 'conversationId', remapVia: 'agentConversations', exportAs: '_conversationExportId', onUnmapped: 'require' },
     ],
@@ -320,6 +407,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'Agent 追加事件流：消息/计划/任务/候选/确认/错误，未确认候选不属于 Canon' },
 
   { table: db.nodeFlows, name: 'nodeFlows', owner: 'project',
+    domainOwner: LEGACY_WORK_OWNER,
     worldScoped: true, exportable: true, exportIdField: true,
     refs: [
       { kind: 'simple', field: 'id', target: 'nodeRuns[flowId]', onDelete: 'cascade' },
@@ -331,6 +419,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'FLOW-2 项目级自由节点文档；独立于 PromptWorkflow' },
 
   { table: db.nodeRuns, name: 'nodeRuns', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER,
     exportRemap: [
       { field: 'flowId', remapVia: 'nodeFlows', exportAs: '_flowExportId', onUnmapped: 'require' },
     ],
@@ -344,6 +433,7 @@ export const PROJECT_TABLES: TableSpec[] = [
 
   // ───────────────────── SIM-1 共享互动运行时 ─────────────────────
   { table: db.simulationSessions, name: 'simulationSessions', owner: 'project',
+    domainOwner: LEGACY_INSTANCE_OWNER,
     worldScoped: true, exportable: true, exportIdField: true,
     worldDomains: ['runtime'],
     tree: { parentField: 'parentSessionId' },
@@ -367,6 +457,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'SIM-1 独立互动世界实例；冻结创作来源，不反写 Canon；分支拥有独立事件流' },
 
   { table: db.simulationEvents, name: 'simulationEvents', owner: 'project',
+    domainOwner: LEGACY_INSTANCE_OWNER,
     worldScoped: true, exportable: true,
     worldDomains: ['runtime'],
     exportRemap: [
@@ -378,6 +469,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'SIM-1 严格追加事件；(sessionId,sequence) 唯一，状态、骰子、记忆和叙事均从事件回放' },
 
   { table: db.simulationCheckpoints, name: 'simulationCheckpoints', owner: 'project',
+    domainOwner: LEGACY_INSTANCE_OWNER,
     worldScoped: true, exportable: true,
     worldDomains: ['runtime'],
     exportRemap: [
@@ -395,6 +487,7 @@ export const PROJECT_TABLES: TableSpec[] = [
   // 单独删除/合并：角色删除/合并由 character-references.ts 统一重映射；章节删除由 chapter store
   //   调 fact-ledger/lifecycle.ts 清 source/valid chapter FK 并降级待复核。绝不自动改写相邻时序。
   { table: db.temporalFacts, name: 'temporalFacts', owner: 'project', worldScoped: true,
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: true, exportIdField: true,
     defaults: { status: 'candidate', locked: false },
     exportRemap: [
@@ -424,6 +517,7 @@ export const PROJECT_TABLES: TableSpec[] = [
   // 角色/章节删除由 knowledge-ledger/lifecycle.ts 保留记录并降级复核；
   // 项目/世界生命周期与导出导入由本注册表派生。
   { table: db.knowledgeLedger, name: 'knowledgeLedger', owner: 'project', worldScoped: true,
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: true,
     defaults: { status: 'candidate' },
     exportRemap: [
@@ -438,6 +532,7 @@ export const PROJECT_TABLES: TableSpec[] = [
   // exportable:false —— 从章节正文切块而来、含大体积向量，是可重建缓存，不进 JSON 备份；
   // 导入后由 chapter 正文重建。项目级删除由 owner 覆盖；删章/改章触发该章块重建（在 chunk 写入层处理）。
   { table: db.retrievalChunks, name: 'retrievalChunks', owner: 'project', worldScoped: true,
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: false,
     note: 'NS-5 检索块·可重建派生缓存(关键词+可选 embedding)，不导出，导入后从正文重建' },
 
@@ -445,16 +540,19 @@ export const PROJECT_TABLES: TableSpec[] = [
   // exportable:false —— 从章节正文/已验证章节记忆/大纲 roll-up 得出，可按需重建；
   // 用于章→卷→全书的远距离叙事骨架，不替代事实账本，也不作为 Canon。
   { table: db.narrativeSummaryNodes, name: 'narrativeSummaryNodes', owner: 'project', worldScoped: true,
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: false,
     note: 'NS-5 章→卷→全书层级摘要树·可重建派生缓存；四态 pending/rebuilding/verified/stale' },
 
   // ───────────────────── 多世界 ─────────────────────
   { table: db.worldGroups, name: 'worldGroups', owner: 'project', exportable: true, communityShare: 'world',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldDomains: ['structure'],
     exportIdField: true, exportOrderBy: 'order',
     note: '导出用 _exportId(导出序)重映射;按 order 排序保证序稳定' },
 
   { table: db.worldGroupLinks, name: 'worldGroupLinks', owner: 'project', exportable: true, communityShare: 'world',
+    domainOwner: LEGACY_WORLD_OWNER,
     worldDomains: ['structure'],
     exportRemap: [
       { field: 'fromGroupId', remapVia: 'worldGroups', exportAs: '_fromGroupExportId', onUnmapped: 'require' },
@@ -463,6 +561,7 @@ export const PROJECT_TABLES: TableSpec[] = [
 
   // ───────────────────── 参考书 / 作品分析 ─────────────────────
   { table: db.references, name: 'references', owner: 'project', exportable: true,
+    domainOwner: LEGACY_WORK_OWNER,
     exportIdField: true,
     refs: [
       { kind: 'simple', field: 'id', target: 'referenceAnalysisRuns[referenceId]', onDelete: 'cascade' },
@@ -470,6 +569,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     ] },
 
   { table: db.referenceAnalysisRuns, name: 'referenceAnalysisRuns', owner: 'project',
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: true, exportIdField: true,
     refs: [
       { kind: 'simple', field: 'id', target: 'referenceChunkAnalysis[analysisRunId]', onDelete: 'cascade' },
@@ -490,6 +590,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'IDEA-1 版本化分析；仅 active run 可进入 AI 上下文，来源声明绑定文件哈希' },
 
   { table: db.referenceChunkAnalysis, name: 'referenceChunkAnalysis', owner: 'direct-child',
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: true,
     projectResolver: async (projectId) =>
       (await db.references.where('projectId').equals(projectId).primaryKeys()) as number[],
@@ -500,6 +601,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     ] },
 
   { table: db.referenceAnalysisSources, name: 'referenceAnalysisSources', owner: 'indirect',
+    domainOwner: LEGACY_WORK_OWNER,
     exportable: false,
     projectResolver: async (projectId) =>
       (await db.referenceAnalysisRuns.where('projectId').equals(projectId).primaryKeys()) as number[],
@@ -511,21 +613,26 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: 'IDEA-1 本地断点续跑原文；不进 JSON 备份，报告与来源哈希仍可便携往返' },
 
   // ───────────────────── 临时态 / blob ─────────────────────
-  { table: db.importSessions, name: 'importSessions', owner: 'transient', exportable: false },
+  { table: db.importSessions, name: 'importSessions', owner: 'transient', exportable: false,
+    domainOwner: WORKSPACE_DOMAIN_OWNER },
 
   { table: db.importJobs, name: 'importJobs', owner: 'transient', exportable: false,
+    domainOwner: WORKSPACE_DOMAIN_OWNER,
     note: '直接 projectId' },
 
   { table: db.importLogs, name: 'importLogs', owner: 'indirect', exportable: false,
+    domainOwner: WORKSPACE_DOMAIN_OWNER,
     projectResolver: async (projectId) =>
       (await db.importSessions.where('projectId').equals(projectId).primaryKeys()) as number[],
     refs: [{ kind: 'indirect', via: { table: 'importSessions', field: 'sessionId', resolveProject: 'projectId' }, onDelete: 'cascade' }] },
 
   { table: db.importFiles, name: 'importFiles', owner: 'blob', exportable: false,
+    domainOwner: WORKSPACE_DOMAIN_OWNER,
     note: '主键=sessionId;导入原文 blob 复用 importSessions.id' },
 
   // ───────────────────── 全局 / 本地态 ─────────────────────
   { table: db.snapshots, name: 'snapshots', owner: 'project', exportable: false,
+    domainOwner: WORKSPACE_DOMAIN_OWNER,
     note: '本地版本历史;不导出(避免循环嵌套)' },
 
   { table: db.promptTemplates, name: 'promptTemplates', owner: 'global', exportable: false,
@@ -534,6 +641,7 @@ export const PROJECT_TABLES: TableSpec[] = [
   { table: db.promptWorkflows, name: 'promptWorkflows', owner: 'global', exportable: false },
 
   { table: db.aiUsageLog, name: 'aiUsageLog', owner: 'project', exportable: false,
+    domainOwner: WORKSPACE_DOMAIN_OWNER,
     note: '消耗统计;projectId 可空;体积大不导出' },
 ]
 

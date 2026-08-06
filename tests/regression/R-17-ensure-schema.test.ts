@@ -32,12 +32,12 @@ describe('R-17: ensureSchema 生产环境不自动删库', () => {
     const schemaTables = db.tables.map(table => table.name).sort()
     const requiredTables = [...REQUIRED_TABLES].sort()
 
-    expect(requiredTables).toHaveLength(58)   // v48 simulation sessions/events/checkpoints
+    expect(requiredTables).toHaveLength(62)   // v49 WORLD-2C ownership roots and receipt
     expect(requiredTables).toEqual(schemaTables)
   })
 
   it('生产路径缺表时不调用 Dexie.delete,并保留旧库', async () => {
-    await createLegacyDbWithOnlyProjects()
+    await createNativeDb(1, ['projects'])
     const deleteSpy = vi.spyOn(Dexie, 'delete')
 
     const result = await ensureSchema(REQUIRED_TABLES, {
@@ -53,13 +53,34 @@ describe('R-17: ensureSchema 生产环境不自动删库', () => {
     const stores = await readStoreNames(DB_NAME)
     expect(stores).toContain('projects')
   })
+
+  it('正式旧版本允许交给 Dexie 原子升级，不误报损坏或删库', async () => {
+    const v48Tables = REQUIRED_TABLES.filter(name =>
+      !['worlds', 'works', 'workCharacterBindings', 'ownershipMigrations'].includes(name),
+    )
+    await createNativeDb(48, v48Tables)
+    const deleteSpy = vi.spyOn(Dexie, 'delete')
+
+    const result = await ensureSchema(REQUIRED_TABLES, {
+      allowReset: false,
+      notifyUser: false,
+      expectedVersion: 49,
+    })
+
+    expect(result.reset).toBe(false)
+    expect(result.blocked).toBe(false)
+    expect(result.missing).toContain('worlds')
+    expect(deleteSpy).not.toHaveBeenCalled()
+  })
 })
 
-function createLegacyDbWithOnlyProjects(): Promise<void> {
+function createNativeDb(version: number, tables: readonly string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1)
+    const req = indexedDB.open(DB_NAME, version)
     req.onupgradeneeded = () => {
-      req.result.createObjectStore('projects', { keyPath: 'id', autoIncrement: true })
+      for (const table of tables) {
+        req.result.createObjectStore(table, { keyPath: 'id', autoIncrement: true })
+      }
     }
     req.onsuccess = () => {
       req.result.close()

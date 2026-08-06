@@ -9,6 +9,7 @@ import {
   hasShareableWorldIdentity,
   withWorldIdentity,
 } from '../lib/product/world-identity'
+import { ensureWorkspaceOwnership } from '../lib/world-engine/ownership'
 
 async function ensureWorldIdentity(project: Project): Promise<Project> {
   if (hasShareableWorldIdentity(project)) return project
@@ -58,7 +59,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   loadProject: async (id: number) => {
     const raw = await db.projects.get(id)
     if (!raw) return undefined
-    const project = await ensureWorldIdentity(migrateGenre(raw))
+    // WORLD-2C C2: projectId-only legacy routes resolve through one ownership
+    // service before any project-scoped stores begin reading the workspace.
+    const project = migrateGenre((await ensureWorkspaceOwnership(id)).project)
     const projects = get().projects
     const exists = projects.some(p => p.id === id)
     const nextProjects = exists
@@ -79,6 +82,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       createdAt: now,
       updatedAt: now,
     } as Project)
+    await ensureWorkspaceOwnership(id as number)
     await get().loadProjects()
     return id as number
   },

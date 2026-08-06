@@ -40,6 +40,9 @@ import type {
   SimulationSession,
   SimulationEvent,
   SimulationCheckpoint,
+  World,
+  Work,
+  WorkCharacterBinding,
 } from '../types'
 import type { TemporalFact } from '../types/temporal-fact'
 
@@ -66,9 +69,26 @@ type HomeWorldGroupExportRef = {
 export interface ProjectExportData {
   version: number
   exportedAt: number
-  project: Omit<Project, 'id' | 'activeCharacterDrivenPlanId'> & {
+  project: Omit<Project, 'id' | 'activeCharacterDrivenPlanId' | 'activeWorldId' | 'activeWorkId'> & {
     _activeCharacterDrivenPlanExportId?: number | null
+    _activeWorldExportId?: number | null
+    _activeWorkExportId?: number | null
   }
+
+  /** WORLD-2C C1 roots; absent in v1-v3 legacy fixtures and empty before C2 migration. */
+  worlds?: (Omit<World, 'id' | 'projectId'> & { _exportId: number })[]
+  works?: (
+    Omit<Work, 'id' | 'projectId' | 'worldId' | 'activeCharacterDrivenPlanId'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _activeCharacterDrivenPlanExportId?: number | null
+    }
+  )[]
+  workCharacterBindings?: (
+    Omit<WorkCharacterBinding, 'id' | 'projectId' | 'workId' | 'characterId'>
+    & { _workExportId: number; _characterExportId: number }
+  )[]
 
   // ── 原有（v1）──
   worldviews: (Omit<Worldview, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]

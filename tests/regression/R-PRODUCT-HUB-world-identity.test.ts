@@ -28,6 +28,12 @@ describe('PRODUCT-HUB · 世界引擎身份兼容', () => {
     const project = await db.projects.get(id)
     expect(project?.worldCode).toMatch(/^W-[A-Z0-9]+-[A-Z0-9]+$/)
     expect(project?.worldVersion).toBe(1)
+    expect(project?.ownershipSchemaVersion).toBe(1)
+    expect(await db.worlds.where('projectId').equals(id).count()).toBe(1)
+    expect(await db.works.where('projectId').equals(id).count()).toBe(1)
+    expect(project?.activeWorkId).toBeDefined()
+    const work = await db.works.get(project!.activeWorkId!)
+    expect(work?.worldId).toBe(project?.activeWorldId)
   })
 
   it('读取旧项目时补齐世界身份但不改变旧的多世界开关', async () => {
@@ -49,6 +55,9 @@ describe('PRODUCT-HUB · 世界引擎身份兼容', () => {
     expect(loaded?.worldCode).toMatch(/^W-[A-Z0-9]+-[A-Z0-9]+$/)
     expect(persisted?.worldCode).toBe(loaded?.worldCode)
     expect(persisted?.worldVersion).toBe(1)
+    expect(persisted?.ownershipSchemaVersion).toBe(1)
+    expect(persisted?.activeWorldId).toBeDefined()
+    expect(persisted?.activeWorkId).toBeDefined()
     expect(loaded?.enableMultiWorld).toBe(false)
   })
 

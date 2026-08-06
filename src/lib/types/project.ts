@@ -131,6 +131,12 @@ export interface Project {
   /** PLATFORM-1：从社区世界包导入时保留来源，本地副本仍分配自己的 worldCode。 */
   communityOrigin?: CommunityWorldOrigin
 
+  /** WORLD-2C：当前世界/作品兼容指针；尚未首次进入的旧工作区允许缺失。 */
+  activeWorldId?: number | null
+  activeWorkId?: number | null
+  /** WORLD-2C ownership 合同版本；缺失表示尚未执行惰性迁移。 */
+  ownershipSchemaVersion?: number
+
   /** Phase 34：把作者确认的正文修炼进度注入后续 AI 写作；默认关闭。 */
   includeCultivationProgressInAI?: boolean
 

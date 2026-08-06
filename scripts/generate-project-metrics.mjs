@@ -62,7 +62,7 @@ function metrics() {
     sourceLines,
     schemaVersion: Math.max(...schemaVersions),
     requiredTables: countMatches(required, /'[^']+'/g),
-    projectTables: countMatches(read('src/lib/registry/project-tables.ts'), /\bname:\s*'[^']+'/g),
+    projectTables: declaredArrayLength('src/lib/registry/project-tables.ts', 'PROJECT_TABLES'),
     promptModuleKeys: promptKeys.size,
     promptTemplates,
     contextSources: countMatches(read('src/lib/registry/context-sources.ts'), /\n\s*key:\s*'[^']+'/g),

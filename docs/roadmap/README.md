@@ -55,7 +55,7 @@
 | 12 | **CHATGAME-1 角色聊天与冒险** | 提供类似酒馆的角色聊天、长期记忆、多角色房间和文字冒险 | ✅ 单角色聊天 MVP：用户身份/场景、冻结角色快照、流式回复、重生成、检查点与分支；后续长期记忆、多角色调度、地点/物品/能力与冒险选择 | 角色知识边界真实；运行时人格/状态不自动反写角色主档；游戏事件只能候选式回流创作层 | **MVP COMPLETE（2026-08-05）；后续扩展依赖 SIM-1，联机依赖 PLATFORM-1** |
 | 13 | **PRODUCT-1 新手转化、数据主权与开源信任** | 让新用户快速得到成果，成熟用户敢托付手稿，贡献者能参与 | 当前功能单位：备份恢复可信；后续 `AUDIT-5/8/9/10/11`、加密备份、帮助系统、i18n、安全/贡献/发布政策另行登记 | 当前阶段完成备份导入边界；其余产品能力仍需独立设计和验收 | **CURRENT SCOPE COMPLETE：备份恢复可信（2026-08-05）；后续扩展未完成** |
 | 14 | **PLATFORM-1 协作与社区广场** | 支撑世界版本发布、发现、游玩、派生、讨论、协作和社区治理 | 当前本地世界包 v1 保持兼容；后续 `PLATFORM-1B/1C` 按世界发布版本、模块许可、发现、派生图、协作和治理实施 | 当前阶段完成本地发布/导入闭环；线上服务服从 `WORLD-2` 世界/作品/实例边界，不直接同步或覆盖本地草稿 | **CURRENT SCOPE COMPLETE：本地世界发布包（2026-08-05）；NEXT DESIGN BASELINE REGISTERED** |
-| 15 | **WORLD-2 世界引擎领域重构** | 把散落在分步骤模式中的世界基础、角色资产、主线/支线、大纲/细纲与 SIM 状态机重组为完整世界引擎 | `WORLD-2A` 基线冻结与语义纠偏 → `2B` 完整世界工作台 → `2C` 世界/作品所有权 → `2D` 可执行叙事 → `2E` 版本/发布包 v2 → `2F` 多产品实例统一 | 分步骤模式原样保护；多世界只是可选子系统；世界基础、叙事蓝图和状态机分层；作品与游玩绑定冻结世界版本 | **WORLD-2A COMPLETE；WORLD-2B FIRST SLICE COMPLETE（2026-08-06）；NEXT WORLD-2C ADR** |
+| 15 | **WORLD-2 世界引擎领域重构** | 把散落在分步骤模式中的世界基础、角色资产、主线/支线、大纲/细纲与 SIM 状态机重组为完整世界引擎 | `WORLD-2A` 基线冻结与语义纠偏 → `2B` 完整世界工作台 → `2C` 世界/作品所有权 → `2D` 可执行叙事 → `2E` 版本/发布包 v2 → `2F` 多产品实例统一 | 分步骤模式原样保护；多世界只是可选子系统；世界基础、叙事蓝图和状态机分层；作品与游玩绑定冻结世界版本 | **WORLD-2A COMPLETE；WORLD-2B FIRST SLICE COMPLETE；WORLD-2C C1 + C2 COMPLETE（2026-08-06）；NEXT C3 SCOPE-AWARE** |
 
 ## 三、严格施工顺序
 
@@ -111,6 +111,25 @@
     新建世界不自动开启多世界；世界完整度改由 `PROJECT_TABLES.worldDomains` 中世界基础、资产和叙事数据派生。
     新的完整世界工作台聚合现有面板，分步骤作品可直接进入，不复制表、不迁移数据。Harness/Agent 工程明确后置，
     先只在分步骤模式独立施工。
+27. ✅ WORLD-2C ADR（2026-08-06）：确定 `Project = LocalWorkspace` 物理兼容根，新增显式 World/Work，
+    物理 `projectId` 与逻辑 `domainOwner` 分离；旧项目确定性映射为默认世界/作品，迁移采用只加 schema、
+    只读预检、持久化 before-image 和逐工作区单事务盖章。两作品读写隔离、v4 往返、删除与回滚反例通过前，
+    第二作品入口保持隐藏。正式合同见
+    [WORLD-2C-WORLD-WORK-OWNERSHIP.md](../adr/WORLD-2C-WORLD-WORK-OWNERSHIP.md)；C1 schema、
+    `domainOwner` 注册合同与架构守卫见下一条，ADR 完成不代表 WORLD-2C 已完成。
+28. ✅ WORLD-2C C1 ownership schema（2026-08-06）：DB v49 只新增空的 `worlds`、`works`、
+    `workCharacterBindings` 和 `ownershipMigrations`，不在版本升级中搬动旧记录；62 张非全局/全局表继续由
+    同一 `PROJECT_TABLES` 覆盖，所有非全局表均登记 `domainOwner`，现有业务表保持 `compat-project`。
+    完整备份已能便携重映射新增根与绑定；生产 schema 自检允许正式旧版本交给 Dexie 原子升级，同版本缺表仍
+    fail closed。C2 在下一条完成；第二作品入口仍隐藏。
+29. ✅ WORLD-2C C2 lazy ownership migration（2026-08-06）：新增唯一的
+    `ensureWorkspaceOwnership(projectId)` / `resolveWorkspaceScope(projectId)`，旧工作区首次进入时先只读统计
+    注册表派生表，生成不含正文的 SHA-256 主键/owner 指纹并保存紧凑 before-image，再在单一事务中创建或采纳
+    默认 World/Work、按 `domainOwner.legacyDefault` 为存量 world/work 记录盖章并更新 Project 兼容镜像。
+    重复和并发进入零重复根；任一表写入失败时根、owner 和 Project 指针全部回滚，只留下失败凭证；未知根、
+    owner、跨工作区引用和缺失必填引用 fail closed；无后续作用域变化时可原子回滚，新增 Work 后拒绝自动回滚。
+    新建项目也走同一服务。下一步 C3 才将业务 selector、AI 上下文和结构化写回切换为显式 `WorkspaceScope`；
+    当前表 locator 仍为 `compat-project`，第二作品入口继续隐藏，WORLD-2C 尚未完成。
 
 ### FLOW-1 历史实验 / FLOW-2 技术底座 / FLOW-3 当前设计卡
 

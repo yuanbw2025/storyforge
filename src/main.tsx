@@ -54,7 +54,13 @@ async function bootstrap() {
 
   // 1. Schema 健康自检：开发环境可自动 reset，生产环境绝不自动删库。
   try {
-    await ensureSchema(REQUIRED_TABLES, { allowReset: import.meta.env.DEV })
+    const schemaState = await ensureSchema(REQUIRED_TABLES, {
+      allowReset: import.meta.env.DEV,
+      expectedVersion: db.verno,
+    })
+    if (schemaState.blocked) {
+      throw new Error(`数据库结构检查已阻断打开：缺少 ${schemaState.missing.join(', ')}`)
+    }
     await db.open()
     await finalizeCharacterAxesMigrationSnapshots()
   } catch (e) {

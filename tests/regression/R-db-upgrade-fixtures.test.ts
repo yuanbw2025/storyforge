@@ -242,7 +242,91 @@ class UpgradedV48SimulationDB extends Dexie {
   }
 }
 
+class OldV48OwnershipDB extends Dexie {
+  constructor(name: string) {
+    super(name)
+    this.version(48).stores({
+      projects: '++id, name, createdAt, updatedAt',
+      worldviews: '++id, projectId',
+      chapters: '++id, projectId, outlineNodeId, order, status',
+      simulationSessions: '++id, projectId, worldGroupId, kind, status, parentSessionId, updatedAt',
+    })
+  }
+}
+
+class UpgradedV49OwnershipDB extends Dexie {
+  constructor(name: string) {
+    super(name)
+    this.version(48).stores({
+      projects: '++id, name, createdAt, updatedAt',
+      worldviews: '++id, projectId',
+      chapters: '++id, projectId, outlineNodeId, order, status',
+      simulationSessions: '++id, projectId, worldGroupId, kind, status, parentSessionId, updatedAt',
+    })
+    this.version(49).stores({
+      worlds: '++id, projectId, code, [projectId+updatedAt]',
+      works: '++id, projectId, worldId, [projectId+worldId], [worldId+updatedAt], status',
+      workCharacterBindings: '++id, projectId, workId, characterId, &[workId+characterId], [projectId+workId]',
+      ownershipMigrations: '++id, projectId, &[projectId+contractVersion], status, updatedAt',
+    })
+  }
+}
+
 describe('DB upgrade fixtures · real Dexie version transitions', () => {
+  it('v48→v49 只新增 ownership 空表，不搬动或盖章旧内容', async () => {
+    const name = nextName('upgrade-v49-ownership')
+    const oldDb = track(new OldV48OwnershipDB(name))
+    await oldDb.open()
+    const projectId = await oldDb.table('projects').add({
+      name: '旧分步骤项目',
+      worldCode: 'world-old-code',
+      worldVersion: 3,
+      createdAt: 1,
+      updatedAt: 2,
+    })
+    const worldviewId = await oldDb.table('worldviews').add({
+      projectId,
+      worldOrigin: '原始世界内容',
+      createdAt: 1,
+      updatedAt: 2,
+    })
+    const chapterId = await oldDb.table('chapters').add({
+      projectId,
+      outlineNodeId: 7,
+      title: '原始正文',
+      content: '<p>一字不改</p>',
+      order: 0,
+      status: 'draft',
+    })
+    oldDb.close()
+
+    const upgraded = track(new UpgradedV49OwnershipDB(name))
+    await upgraded.open()
+    expect(await upgraded.table('projects').get(projectId)).toEqual({
+      id: projectId,
+      name: '旧分步骤项目',
+      worldCode: 'world-old-code',
+      worldVersion: 3,
+      createdAt: 1,
+      updatedAt: 2,
+    })
+    expect(await upgraded.table('worldviews').get(worldviewId)).toEqual({
+      id: worldviewId,
+      projectId,
+      worldOrigin: '原始世界内容',
+      createdAt: 1,
+      updatedAt: 2,
+    })
+    expect(await upgraded.table('chapters').get(chapterId)).toMatchObject({
+      projectId,
+      content: '<p>一字不改</p>',
+    })
+    expect(await upgraded.table('worlds').count()).toBe(0)
+    expect(await upgraded.table('works').count()).toBe(0)
+    expect(await upgraded.table('workCharacterBindings').count()).toBe(0)
+    expect(await upgraded.table('ownershipMigrations').count()).toBe(0)
+  })
+
   it('v47→v48 只新增空运行时表，保留 Agent 与节点创作过程数据', async () => {
     const name = nextName('upgrade-v48-simulation')
     const oldDb = track(new OldV47ProcessDB(name))

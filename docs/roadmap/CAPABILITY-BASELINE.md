@@ -473,10 +473,22 @@
 - WORLD-2B 第一垂直切片复用现有分步骤数据和面板，按世界基础、世界资产、叙事设计、世界结构、状态与实例五个领域展示同一份 Canon 与运行数据。
 - `PROJECT_TABLES.worldDomains` 是世界产品投影的唯一表级登记；世界内容覆盖度和 World / Work / Runtime 兼容投影从注册表批量派生，不读取正文进度，不创建第二套表。
 - 世界工作台按领域深链到现有登记工作区模块；分步骤工作区继续作为 Golden Master，旧项目无需迁移或“同步为世界引擎”。
+- WORLD-2C ADR 已接受：`Project` 保留为 `LocalWorkspace` 物理兼容根；显式 World/Work 位于同一工作区，
+  `Work.worldId` 是绑定权威；逻辑 owner 进入现有 `PROJECT_TABLES.domainOwner`，不另建表清单。迁移按
+  “schema 只加不搬 + 运行时逐工作区预检/before-image/单事务盖章”实施，第二作品入口在全链路隔离前隐藏。
+  完整合同见 [WORLD-2C-WORLD-WORK-OWNERSHIP.md](../adr/WORLD-2C-WORLD-WORK-OWNERSHIP.md)。
+- WORLD-2C C1 已完成：DB v49 以空升级新增 World、Work、角色作品绑定和迁移凭证；所有非 global 表在
+  `PROJECT_TABLES.domainOwner` 中完成逻辑分类，现有表仍标记 `compat-project`。新增根和绑定已进入完整备份
+  的便携 ID 重映射与工作区删除生命周期；真实 v48 fixture 证明升级不盖章、不搬移旧内容。
+- WORLD-2C C2 已完成：项目创建和旧工作区首次进入统一经过 ownership service；只读预检从 `PROJECT_TABLES`
+  派生表范围，以 SHA-256 记录主键/owner 指纹而不记录正文；持久化 before-image 后在单事务中创建或采纳默认
+  World/Work、盖默认 owner 并更新兼容镜像。失败回滚、并发幂等、未知归属拒绝和有边界回滚已有反例测试。
 
 ### 当前边界 / 尚未完成
 
-- `Project` 仍是 IndexedDB 兼容存储边界，`worldCode` 仍是项目字段；显式 World / Work 所有权必须由 WORLD-2C 的独立 ADR、迁移和反例测试决定。
+- `Project` 仍是 IndexedDB 兼容存储边界，`worldCode` 仍保留为当前 World 的兼容镜像。WORLD-2C 当前只完成
+  C1/C2；业务表 locator、selector、AI 读取和写回尚未切换到显式 scope，v4 严格 owner 往返和两作品 UI 也
+  尚未实施。下一步是 C3 全链路 scope-aware，不能因存量记录已盖章就开放第二作品。
 - 世界完整度当前只表达领域覆盖，不冒充引用完整、Canon 冲突或发布准备度；后续验证能力必须复用三注册表和已有一致性检查器。
 - 主线、支线、条件与效果仍是现有大纲/故事线投影；NarrativeModule / NarrativeNode、发布包 v2 和冻结版本实例绑定分别属于 WORLD-2D/2E/2F。
 - Harness/Agent 执行体系不在 WORLD-2 中扩张；先在完整保留的分步骤模式完成 HARNESS-2，再评估迁移。

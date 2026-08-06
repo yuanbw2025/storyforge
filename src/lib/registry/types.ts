@@ -30,6 +30,35 @@ export type TableOwner =
  */
 export type WorldDomainArea = 'foundation' | 'assets' | 'narrative' | 'structure' | 'runtime'
 
+/** WORLD-2C product ownership, separate from the physical project lifecycle owner. */
+export type DomainOwnerKind = 'workspace' | 'world' | 'work' | 'instance'
+
+export type DomainOwnerLocator =
+  | { kind: 'workspace' }
+  | { kind: 'compat-project' }
+  | { kind: 'field'; owner: DomainOwnerKind; field: string }
+  | {
+      kind: 'exclusive-fields'
+      worldField: string
+      workField: string
+    }
+  | {
+      kind: 'parent'
+      owner: DomainOwnerKind
+      table: string
+      field: string
+    }
+
+/**
+ * Logical product owner for a table. `compat-project` means the table has been
+ * classified but its legacy rows have not yet received explicit owner fields.
+ */
+export interface DomainOwnershipSpec {
+  allowed: readonly DomainOwnerKind[]
+  legacyDefault: DomainOwnerKind
+  locator: DomainOwnerLocator
+}
+
 /** 简单外键引用(table[field] 形式) */
 export interface SimpleRef {
   kind: 'simple'
@@ -157,6 +186,8 @@ export interface TableSpec<T = any> {
   homeWorldScoped?: boolean
   /** 世界引擎产品投影域；同一表可同时属于多个域。 */
   worldDomains?: readonly WorldDomainArea[]
+  /** WORLD-2C 逻辑归属；物理删除/导出根仍由 owner 表达。 */
+  domainOwner?: DomainOwnershipSpec
   /** 树形(parentId 字段名) */
   tree?: { parentField: string }
   /** 外键/引用关系(删除级联用) */
