@@ -158,6 +158,26 @@ describe('AUDIT-6 · 大纲生成 controller', () => {
     expect(controller.pendingRequest).toBeNull()
   })
 
+  it('运行追踪初始化失败不能阻断原模型调用', async () => {
+    const malformedAssembly = {
+      ...assembled('仍可发送'),
+      included: ['unregistered-source'],
+    }
+    const ai = createAI()
+    const onError = vi.fn()
+    await mount({
+      ai,
+      onError,
+      assembleContext: vi.fn(async () => malformedAssembly),
+    })
+
+    await act(async () => { await controller.prepare({ kind: 'chapters', volumeId: 1 }) })
+    await act(async () => { await controller.confirm() })
+
+    expect(ai.start).toHaveBeenCalledOnce()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
   it('透明模式先停在最终消息闸门，编辑后才把本次副本交给 AI', async () => {
     const ai = createAI()
     await mount({ ai })

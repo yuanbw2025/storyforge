@@ -22,7 +22,7 @@ import {
   type PreparedGenerationContext,
 } from '../../lib/outline/generation-request'
 import type { AssembleContextResult } from '../../lib/registry/types'
-import { createOutlineGenerationShadowTraceV1 } from '../../lib/outline/harness'
+import { createOutlineGenerationTraceV1 } from '../../lib/outline/harness'
 import type { ChatMessage, OutlineNode, Project } from '../../lib/types'
 
 type GenerationAI = Pick<
@@ -136,16 +136,19 @@ export function useOutlineGenerationController({
         ?? await assembleContext(targetVolume?.worldGroupId ?? null, targetVolume?.id)
       const node = buildNode(request)
       const prepared = preparedSnapshot ?? prepareGenerationNode(node, assembled)
-      const shadowTrace = await createOutlineGenerationShadowTraceV1({
+      const generationTrace = await createOutlineGenerationTraceV1({
         projectId: project.id!,
         worldGroupId: targetVolume?.worldGroupId ?? null,
         request,
         assembled,
       }).catch(error => {
-        console.warn('[Outline Harness shadow] 无法建立影子运行，不影响本次生成。', error)
+        console.warn('[Outline Harness] 运行追踪不可用，本次继续沿原生成路径。', error)
         return undefined
       })
-      await runGenerationNode(node, prepared, { messages: messageOverride, shadowTrace })
+      if (generationTrace?.initializationError) {
+        console.warn('[Outline Harness] durable 账本不可用，已降级为内存影子。', generationTrace.initializationError)
+      }
+      await runGenerationNode(node, prepared, { messages: messageOverride, shadowTrace: generationTrace })
     } catch (error) {
       if (error instanceof OutlineGenerationSkipError) {
         ai.reset()

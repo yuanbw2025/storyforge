@@ -810,7 +810,8 @@ CHIRON 四类信息可映射到现有结构：
 
 - H1 数据地基已落到 DB v51：三表、严格原子追加、物化投影、契约代际、检查点校验、恢复计划、同 run 并发串行和三注册表生命周期均已有回归证据；
 - 备份中的契约 scope 使用便携编号，导入会重绑每一代契约/事件/检查点哈希并重新回放；克隆后的旧完成凭证会写入 `verification.staled`，不能继续签发 completed；
-- 当前仍未达到 H1 整体退出门槛：只读 Runner、真实 `GenerationNode` durable adapter、浏览器刷新恢复入口和 20 次中断对照尚待后续小阶段接入，现有产品行为仍由 H0 shadow 路径保持不变。
+- 大纲真实 `GenerationNode` 已进入 durable + H0 shadow 双写：仍只调用一次模型、仍沿原预览/确认/采纳路径，账本只记录契约与输入输出哈希；durable 初始化或追加失败会降级为 shadow，本机可用 `storyforge:harness:outline-durable-v1=disabled` 关闭接入；
+- 当前仍未达到 H1 整体退出门槛：只读 Runner、候选持久化、浏览器刷新恢复入口和 20 次中断对照尚待后续小阶段接入，durable ledger 目前只提供可核查执行证据，不接管产品结果。
 
 **范围**
 
