@@ -1,0 +1,297 @@
+import type {
+  AgentRunEventV1,
+  AgentRunEventTypeV1,
+  AgentRunProjectionV1,
+  AgentRunState,
+  AgentRunStepProjectionV1,
+  AnyAgentRunEventV1,
+} from '../../types/agent-run'
+import { parseAgentRunEventV1 } from './event-schema'
+import { hashCanonicalValue } from './hash'
+
+const TERMINAL_STATES: readonly AgentRunState[] = ['completed', 'failed', 'cancelled', 'recovery_required']
+
+class ProjectionError extends Error {}
+
+function expectState(projection: AgentRunProjectionV1, eventType: AgentRunEventTypeV1, allowed: AgentRunState[]): void {
+  if (!allowed.includes(projection.state)) {
+    throw new ProjectionError(`${eventType} 不能从 ${projection.state} 状态执行`)
+  }
+}
+
+function stepFor(projection: AgentRunProjectionV1, stepId: string): AgentRunStepProjectionV1 {
+  const step = projection.steps[stepId]
+  if (!step) throw new ProjectionError(`步骤 ${stepId} 尚未调度`)
+  return step
+}
+
+function assertAttempt(step: AgentRunStepProjectionV1, attempt: number): void {
+  if (step.attempt !== attempt) {
+    throw new ProjectionError(`步骤 ${step.stepId} attempt 不匹配：期望 ${step.attempt}，收到 ${attempt}`)
+  }
+}
+
+function assertCandidate(step: AgentRunStepProjectionV1, candidateHash: string): void {
+  if (!step.candidateHash || step.candidateHash !== candidateHash) {
+    throw new ProjectionError(`步骤 ${step.stepId} candidateHash 不匹配`)
+  }
+}
+
+function assertActiveStep(
+  projection: AgentRunProjectionV1,
+  payload: { stepId: string; attempt: number },
+): AgentRunStepProjectionV1 {
+  const step = stepFor(projection, payload.stepId)
+  if (step.status !== 'running') throw new ProjectionError(`步骤 ${payload.stepId} 当前不是 running`)
+  assertAttempt(step, payload.attempt)
+  return step
+}
+
+function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1): void {
+  if (TERMINAL_STATES.includes(projection.state)) {
+    throw new ProjectionError(`终态 ${projection.state} 后不得追加 ${event.type}`)
+  }
+  switch (event.type) {
+    case 'run.created':
+      throw new ProjectionError('run.created 只能作为首个事件')
+    case 'contract.accepted':
+      expectState(projection, event.type, ['planned'])
+      break
+    case 'contract.revised':
+      if (event.payload.previousContractHash !== projection.contractHash) {
+        throw new ProjectionError('contract.revised 的 previousContractHash 不匹配')
+      }
+      if (event.generation !== projection.generation + 1) {
+        throw new ProjectionError('contract.revised 必须将 generation 递增 1')
+      }
+      projection.generation = event.generation
+      projection.contractHash = event.contractHash
+      projection.steps = {}
+      projection.state = 'planned'
+      break
+    case 'step.scheduled':
+      expectState(projection, event.type, ['planned', 'running'])
+      if (projection.steps[event.payload.stepId]) throw new ProjectionError(`步骤 ${event.payload.stepId} 重复调度`)
+      projection.steps[event.payload.stepId] = {
+        stepId: event.payload.stepId,
+        status: 'scheduled',
+        attempt: 0,
+      }
+      projection.state = 'running'
+      break
+    case 'step.started': {
+      expectState(projection, event.type, ['running'])
+      const step = stepFor(projection, event.payload.stepId)
+      const expectedAttempt = step.status === 'scheduled' ? 1 : step.status === 'failed' ? step.attempt + 1 : -1
+      if (event.payload.attempt !== expectedAttempt) throw new ProjectionError(`步骤 ${step.stepId} attempt 必须为 ${expectedAttempt}`)
+      step.status = 'running'
+      step.attempt = event.payload.attempt
+      step.failureCode = undefined
+      break
+    }
+    case 'step.succeeded': {
+      const step = assertActiveStep(projection, event.payload)
+      step.status = 'succeeded'
+      step.outputHash = event.payload.outputHash
+      break
+    }
+    case 'step.failed': {
+      const step = assertActiveStep(projection, event.payload)
+      step.status = 'failed'
+      step.failureCode = event.payload.code
+      break
+    }
+    case 'context.assembled':
+    case 'model.requested':
+    case 'model.responded':
+    case 'tool.called':
+    case 'tool.returned':
+      expectState(projection, event.type, ['running'])
+      assertActiveStep(projection, event.payload)
+      break
+    case 'candidate.persisted': {
+      expectState(projection, event.type, ['running'])
+      const step = assertActiveStep(projection, event.payload)
+      step.candidateHash = event.payload.candidateHash
+      if (event.payload.requiresConfirmation) {
+        step.status = 'awaiting_confirmation'
+        projection.state = 'awaiting_confirmation'
+      }
+      break
+    }
+    case 'candidate.staled': {
+      const step = stepFor(projection, event.payload.stepId)
+      assertCandidate(step, event.payload.candidateHash)
+      step.status = 'stale'
+      projection.state = 'paused'
+      break
+    }
+    case 'confirmation.recorded': {
+      expectState(projection, event.type, ['awaiting_confirmation'])
+      const step = stepFor(projection, event.payload.stepId)
+      if (step.status !== 'awaiting_confirmation') throw new ProjectionError(`步骤 ${step.stepId} 不在等待确认`)
+      assertCandidate(step, event.payload.candidateHash)
+      step.confirmation = event.payload.decision
+      if (event.payload.decision === 'reject') {
+        step.status = 'failed'
+        step.failureCode = 'author_rejected'
+      } else {
+        step.status = 'running'
+      }
+      projection.state = 'running'
+      break
+    }
+    case 'adoption.started': {
+      expectState(projection, event.type, ['running'])
+      const step = stepFor(projection, event.payload.stepId)
+      assertCandidate(step, event.payload.candidateHash)
+      if (step.confirmation !== 'adopt') throw new ProjectionError('未记录作者采纳确认')
+      break
+    }
+    case 'adoption.committed': {
+      expectState(projection, event.type, ['running'])
+      const step = stepFor(projection, event.payload.stepId)
+      assertCandidate(step, event.payload.candidateHash)
+      if (step.confirmation !== 'adopt') throw new ProjectionError('未记录作者采纳确认')
+      step.adoptionHash = event.payload.adoptionHash
+      break
+    }
+    case 'adoption.rejected': {
+      expectState(projection, event.type, ['running'])
+      const step = stepFor(projection, event.payload.stepId)
+      assertCandidate(step, event.payload.candidateHash)
+      step.status = 'failed'
+      step.failureCode = event.payload.code
+      break
+    }
+    case 'verification.started':
+      expectState(projection, event.type, ['running'])
+      if (Object.keys(projection.steps).length === 0) throw new ProjectionError('没有可验证的步骤')
+      if (Object.values(projection.steps).some(step => step.status !== 'succeeded')) {
+        throw new ProjectionError('仍有步骤未成功，不能开始终态验证')
+      }
+      projection.state = 'verifying'
+      break
+    case 'verification.accepted':
+      expectState(projection, event.type, ['verifying'])
+      projection.terminalReceiptHash = event.payload.receiptHash
+      projection.state = 'completed'
+      break
+    case 'verification.rejected':
+      expectState(projection, event.type, ['verifying'])
+      projection.state = event.payload.retryable ? 'running' : 'failed'
+      break
+    case 'checkpoint.created':
+      if (event.payload.throughSequence !== event.sequence - 1) {
+        throw new ProjectionError('checkpoint throughSequence 必须指向前一个事件')
+      }
+      projection.lastCheckpointHash = event.payload.checkpointHash
+      break
+    case 'recovery.started':
+      expectState(projection, event.type, ['paused'])
+      if (projection.lastCheckpointHash !== event.payload.checkpointHash) {
+        throw new ProjectionError('恢复使用的 checkpoint 不是当前最新 checkpoint')
+      }
+      projection.state = 'recovering'
+      break
+    case 'recovery.completed':
+      expectState(projection, event.type, ['recovering'])
+      if (projection.lastCheckpointHash !== event.payload.checkpointHash) {
+        throw new ProjectionError('恢复完成的 checkpoint 不匹配')
+      }
+      projection.state = 'running'
+      break
+    case 'budget.reserved':
+    case 'budget.settled':
+      expectState(projection, event.type, ['running'])
+      stepFor(projection, event.payload.stepId)
+      break
+    case 'budget.exhausted':
+      expectState(projection, event.type, ['running', 'verifying'])
+      projection.state = 'failed'
+      break
+    case 'run.paused':
+      expectState(projection, event.type, ['running', 'awaiting_confirmation'])
+      projection.state = 'paused'
+      break
+    case 'run.cancelled':
+      expectState(projection, event.type, ['planned', 'running', 'awaiting_confirmation', 'verifying', 'paused'])
+      projection.state = 'cancelled'
+      break
+    case 'run.failed':
+      expectState(projection, event.type, ['planned', 'running', 'awaiting_confirmation', 'verifying', 'paused', 'recovering'])
+      projection.state = 'failed'
+      break
+  }
+}
+
+function scopeMatches(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1): boolean {
+  return event.runId === projection.runId
+    && event.projectId === projection.projectId
+    && event.worldGroupId === projection.worldGroupId
+}
+
+function appendError(projection: AgentRunProjectionV1, message: string): AgentRunProjectionV1 {
+  projection.errors.push(message)
+  projection.state = 'recovery_required'
+  return projection
+}
+
+export function replayAgentRunEventsV1(values: readonly unknown[]): AgentRunProjectionV1 {
+  if (values.length === 0) throw new ProjectionError('run event 不能为空')
+  const first = parseAgentRunEventV1(values[0])
+  const projection: AgentRunProjectionV1 = {
+    version: 1,
+    runId: first.runId,
+    projectId: first.projectId,
+    worldGroupId: first.worldGroupId,
+    generation: first.generation,
+    contractHash: first.contractHash,
+    state: 'planned',
+    lastSequence: 0,
+    steps: {},
+    errors: [],
+  }
+  if (first.type !== 'run.created') return appendError(projection, '首个事件必须是 run.created')
+  if (first.sequence !== 1) return appendError(projection, 'run.created 的 sequence 必须是 1')
+  projection.lastSequence = 1
+
+  for (let index = 1; index < values.length; index += 1) {
+    let event: AnyAgentRunEventV1
+    try {
+      event = parseAgentRunEventV1(values[index])
+    } catch (error) {
+      return appendError(projection, error instanceof Error ? error.message : '事件解析失败')
+    }
+    if (event.sequence !== projection.lastSequence + 1) {
+      return appendError(projection, `事件序列不连续：期望 ${projection.lastSequence + 1}，收到 ${event.sequence}`)
+    }
+    if (!scopeMatches(projection, event)) return appendError(projection, `事件 ${event.sequence} scope 不匹配`)
+    if (event.type !== 'contract.revised') {
+      if (event.generation !== projection.generation || event.contractHash !== projection.contractHash) {
+        return appendError(projection, `事件 ${event.sequence} contract generation/hash 不匹配`)
+      }
+    }
+    try {
+      applyEvent(projection, event)
+    } catch (error) {
+      return appendError(projection, error instanceof Error ? error.message : '状态转换失败')
+    }
+    projection.lastSequence = event.sequence
+  }
+  return projection
+}
+
+export async function hashAgentRunProjectionV1(projection: AgentRunProjectionV1): Promise<string> {
+  return hashCanonicalValue(projection)
+}
+
+export function isAgentRunCompletedV1(projection: AgentRunProjectionV1): boolean {
+  return projection.state === 'completed' && !!projection.terminalReceiptHash && projection.errors.length === 0
+}
+
+export function agentRunEventV1<T extends AgentRunEventTypeV1>(
+  event: AgentRunEventV1<T>,
+): AgentRunEventV1<T> {
+  return event
+}

@@ -1,0 +1,314 @@
+export type AgentRunWorkflowKind =
+  | 'direct-generation'
+  | 'read-only-audit'
+  | 'plan-execute'
+  | 'generate-verify-revise'
+  | 'multi-domain-sequential'
+  | 'long-running-resumable'
+
+export interface AgentRunScopeV1 {
+  projectId: number
+  worldGroupId: number | null
+  chapterIds?: number[]
+  outlineNodeIds?: number[]
+}
+
+export type AgentRunWriteMode = 'none' | 'candidate-only' | 'author-confirmed'
+
+export interface AgentRunWriteTargetV1 {
+  table: string
+  fields: string[]
+  mode: AgentRunWriteMode
+}
+
+export type AgentRunAcceptanceKind =
+  | 'output-present'
+  | 'gate-passed'
+  | 'author-confirmed'
+  | 'adoption-committed'
+  | 'post-state-matches'
+  | 'deterministic-check'
+  | 'semantic-review'
+
+export interface AgentRunAcceptanceCriterionV1 {
+  id: string
+  kind: AgentRunAcceptanceKind
+  required: boolean
+}
+
+export type AgentRunVerificationKind =
+  | 'protocol'
+  | 'scope'
+  | 'freshness'
+  | 'adoption'
+  | 'deterministic'
+  | 'semantic'
+  | 'terminal'
+
+export interface AgentRunVerificationStepV1 {
+  id: string
+  kind: AgentRunVerificationKind
+  verifier: string
+  criterionIds: string[]
+}
+
+export interface AgentRunContractV1 {
+  version: 1
+  objective: string
+  workflowKind: AgentRunWorkflowKind
+  scope: AgentRunScopeV1
+  permissions: {
+    contextSourceKeys: string[]
+    writeTargets: AgentRunWriteTargetV1[]
+  }
+  budget: {
+    maxModelCalls: number
+    maxToolCalls: number
+    maxInputTokens: number
+    maxOutputTokens: number
+    maxAttemptsPerStep: number
+  }
+  acceptance: AgentRunAcceptanceCriterionV1[]
+  verificationPlan: AgentRunVerificationStepV1[]
+  failurePolicy: {
+    onProtocolError: 'retry' | 'fail'
+    onVerificationFailure: 'revise' | 'replan' | 'fail'
+    onStaleInput: 'restart-step' | 'pause-for-author'
+  }
+}
+
+export interface AcceptedAgentRunContractV1 {
+  contract: AgentRunContractV1
+  contractHash: string
+}
+
+export type ContextManifestSourceStatus = 'included' | 'omitted' | 'trimmed'
+
+export interface ContextManifestBoundaryV1 {
+  chapterId?: number
+  throughChapterId?: number
+  outlineNodeId?: number
+}
+
+export interface ContextManifestSourceV1 {
+  key: string
+  status: ContextManifestSourceStatus
+  contentHash?: string
+  tokens: number
+  boundary?: ContextManifestBoundaryV1
+  readerVersion?: string
+}
+
+export interface ContextManifestV1 {
+  version: 1
+  runId: number
+  stepId: string
+  attempt: number
+  scope: {
+    projectId: number
+    worldGroupId: number | null
+  }
+  inputBudget: number
+  totalInputTokens: number
+  sources: ContextManifestSourceV1[]
+  manifestHash: string
+}
+
+export interface VerificationCriterionReceiptV1 {
+  id: string
+  status: 'passed' | 'failed'
+  evidenceRefs: string[]
+}
+
+export interface VerificationReceiptV1 {
+  version: 1
+  runId: number
+  generation: number
+  contractHash: string
+  contextManifestHashes: string[]
+  candidateHashes: string[]
+  adoptionEventIds: number[]
+  postStateHash: string
+  verifierSetVersion: string
+  semanticVerifier?: {
+    provider: string
+    model: string
+    promptVersion: string
+  }
+  criteria: VerificationCriterionReceiptV1[]
+  acceptedAt: number
+  receiptHash: string
+}
+
+export interface AgentHarnessBenchmarkArtifactV1 {
+  version: 1
+  createdAt: number
+  codeRevision: string
+  schemaVersions: {
+    contract: 1
+    event: 1
+    manifest: 1
+    receipt: 1
+  }
+  execution: {
+    provider: string
+    model: string
+    promptVersion: string
+    toolSchemaVersion: string
+  }
+  fixture: {
+    id: string
+    split: 'development' | 'held-out'
+    contentHash: string
+  }
+  metrics: {
+    runs: number
+    successfulSteps: number
+    failedSteps: number
+    modelCalls: number
+    toolCalls: number
+    inputTokens: number
+    outputTokens: number
+    latencyMs: number
+    costUsd: number
+  }
+  traceHashes: string[]
+  artifactHash: string
+}
+
+export type AgentRunEventTypeV1 =
+  | 'run.created'
+  | 'contract.accepted'
+  | 'contract.revised'
+  | 'step.scheduled'
+  | 'step.started'
+  | 'step.succeeded'
+  | 'step.failed'
+  | 'context.assembled'
+  | 'model.requested'
+  | 'model.responded'
+  | 'tool.called'
+  | 'tool.returned'
+  | 'candidate.persisted'
+  | 'candidate.staled'
+  | 'confirmation.recorded'
+  | 'adoption.started'
+  | 'adoption.committed'
+  | 'adoption.rejected'
+  | 'verification.started'
+  | 'verification.accepted'
+  | 'verification.rejected'
+  | 'checkpoint.created'
+  | 'recovery.started'
+  | 'recovery.completed'
+  | 'budget.reserved'
+  | 'budget.settled'
+  | 'budget.exhausted'
+  | 'run.paused'
+  | 'run.cancelled'
+  | 'run.failed'
+
+export interface AgentRunEventPayloadByTypeV1 {
+  'run.created': { objectiveHash: string }
+  'contract.accepted': Record<string, never>
+  'contract.revised': { previousContractHash: string }
+  'step.scheduled': { stepId: string }
+  'step.started': { stepId: string; attempt: number }
+  'step.succeeded': { stepId: string; attempt: number; outputHash: string }
+  'step.failed': { stepId: string; attempt: number; code: string; retryable: boolean }
+  'context.assembled': { stepId: string; attempt: number; manifestHash: string }
+  'model.requested': { stepId: string; attempt: number; bindingHash: string }
+  'model.responded': { stepId: string; attempt: number; outputHash: string }
+  'tool.called': { stepId: string; attempt: number; toolName: string; callHash: string }
+  'tool.returned': { stepId: string; attempt: number; toolName: string; resultHash: string }
+  'candidate.persisted': {
+    stepId: string
+    attempt: number
+    candidateHash: string
+    requiresConfirmation: boolean
+  }
+  'candidate.staled': { stepId: string; candidateHash: string; reason: string }
+  'confirmation.recorded': {
+    stepId: string
+    candidateHash: string
+    decision: 'adopt' | 'reject'
+  }
+  'adoption.started': { stepId: string; candidateHash: string }
+  'adoption.committed': { stepId: string; candidateHash: string; adoptionHash: string }
+  'adoption.rejected': { stepId: string; candidateHash: string; code: string }
+  'verification.started': { verifierSetVersion: string }
+  'verification.accepted': { receiptHash: string }
+  'verification.rejected': { codes: string[]; retryable: boolean }
+  'checkpoint.created': { throughSequence: number; checkpointHash: string }
+  'recovery.started': { checkpointHash: string }
+  'recovery.completed': { checkpointHash: string }
+  'budget.reserved': { stepId: string; modelCalls: number; toolCalls: number; tokens: number }
+  'budget.settled': { stepId: string; modelCalls: number; toolCalls: number; tokens: number }
+  'budget.exhausted': { resource: 'model-calls' | 'tool-calls' | 'input-tokens' | 'output-tokens' | 'attempts' }
+  'run.paused': { reason: string; recoverable: boolean }
+  'run.cancelled': { reason: string }
+  'run.failed': { code: string; retryable: boolean }
+}
+
+export interface AgentRunEventV1<T extends AgentRunEventTypeV1 = AgentRunEventTypeV1> {
+  version: 1
+  runId: number
+  sequence: number
+  generation: number
+  projectId: number
+  worldGroupId: number | null
+  contractHash: string
+  type: T
+  createdAt: number
+  payload: AgentRunEventPayloadByTypeV1[T]
+}
+
+export type AnyAgentRunEventV1 = {
+  [T in AgentRunEventTypeV1]: AgentRunEventV1<T>
+}[AgentRunEventTypeV1]
+
+export type AgentRunState =
+  | 'planned'
+  | 'running'
+  | 'awaiting_confirmation'
+  | 'verifying'
+  | 'completed'
+  | 'paused'
+  | 'recovering'
+  | 'failed'
+  | 'cancelled'
+  | 'recovery_required'
+
+export type AgentRunStepState =
+  | 'scheduled'
+  | 'running'
+  | 'awaiting_confirmation'
+  | 'succeeded'
+  | 'failed'
+  | 'stale'
+
+export interface AgentRunStepProjectionV1 {
+  stepId: string
+  status: AgentRunStepState
+  attempt: number
+  outputHash?: string
+  candidateHash?: string
+  confirmation?: 'adopt' | 'reject'
+  adoptionHash?: string
+  failureCode?: string
+}
+
+export interface AgentRunProjectionV1 {
+  version: 1
+  runId: number
+  projectId: number
+  worldGroupId: number | null
+  generation: number
+  contractHash: string
+  state: AgentRunState
+  lastSequence: number
+  steps: Record<string, AgentRunStepProjectionV1>
+  terminalReceiptHash?: string
+  lastCheckpointHash?: string
+  errors: string[]
+}

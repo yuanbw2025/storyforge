@@ -22,6 +22,7 @@ import {
   type PreparedGenerationContext,
 } from '../../lib/outline/generation-request'
 import type { AssembleContextResult } from '../../lib/registry/types'
+import { createOutlineGenerationShadowTraceV1 } from '../../lib/outline/harness'
 import type { ChatMessage, OutlineNode, Project } from '../../lib/types'
 
 type GenerationAI = Pick<
@@ -135,7 +136,16 @@ export function useOutlineGenerationController({
         ?? await assembleContext(targetVolume?.worldGroupId ?? null, targetVolume?.id)
       const node = buildNode(request)
       const prepared = preparedSnapshot ?? prepareGenerationNode(node, assembled)
-      await runGenerationNode(node, prepared, { messages: messageOverride })
+      const shadowTrace = await createOutlineGenerationShadowTraceV1({
+        projectId: project.id!,
+        worldGroupId: targetVolume?.worldGroupId ?? null,
+        request,
+        assembled,
+      }).catch(error => {
+        console.warn('[Outline Harness shadow] 无法建立影子运行，不影响本次生成。', error)
+        return undefined
+      })
+      await runGenerationNode(node, prepared, { messages: messageOverride, shadowTrace })
     } catch (error) {
       if (error instanceof OutlineGenerationSkipError) {
         ai.reset()
@@ -147,7 +157,7 @@ export function useOutlineGenerationController({
       ai.reset()
       onError(`准备大纲生成时出错：${error instanceof Error ? error.message : '未知错误'}。`)
     }
-  }, [ai, assembleContext, buildNode, clearPreview, nodes, onError, onInfo, volumes])
+  }, [ai, assembleContext, buildNode, clearPreview, nodes, onError, onInfo, project.id, volumes])
 
   const prepare = useCallback(async (request: OutlineGenerationRequest) => {
     const requestId = contextRequestRef.current + 1

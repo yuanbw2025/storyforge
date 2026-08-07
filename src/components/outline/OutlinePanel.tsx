@@ -4,6 +4,7 @@ import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { assembleContext } from '../../lib/registry/assemble-context'
+import { OUTLINE_GENERATION_SOURCE_KEYS } from '../../lib/outline/harness'
 import {
   parseVolumeOutlineSmart, parseChapterOutlineSmart,
   type ParsedVolume, type ParsedChapter,
@@ -182,26 +183,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       outlineNodeId: outlineNodeId ?? null,
       provider: aiConfig.provider,
       model: aiConfig.model,
-      sourceKeys: [
-        'canonAssertions',
-        'worldview',
-        'storyCore',
-        'activeNarrativeBlueprint',
-        'characterDrivenPlan',
-        'powerSystem',
-        'cultivationProgress',
-        'codex',
-        'characters',
-        'creativeRules',
-        'worldRules',
-        'historical',
-        'locations',
-        'foreshadows',
-        'storyArcs',
-        'storylineProgress',
-        'existingVolumeOutlines',
-        'writtenChapterProgress',
-      ],
+      sourceKeys: [...OUTLINE_GENERATION_SOURCE_KEYS],
     })
   }, [project.id, aiConfig.provider, aiConfig.model])
 
