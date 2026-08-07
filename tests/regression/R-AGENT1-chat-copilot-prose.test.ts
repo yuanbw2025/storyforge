@@ -229,6 +229,107 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     expect(await db.chapters.count()).toBe(0)
   })
 
+  it('正文主路径没有显式视角时不注入全体角色认知', async () => {
+    const { project } = await seedProject()
+    const prepared = await prepareProseCopilot({
+      projectId: project.id!,
+      worldGroupId: null,
+      authorRequest: '写第一章正文',
+    })
+
+    expect(prepared.perspectiveCharacterId).toBeNull()
+    expect(prepared.contextSources).not.toContain('characterKnowledge')
+    expect(prepared.prepared.messages.map(message => message.content).join('\n'))
+      .toContain('未指定视角角色')
+  })
+
+  it('正文显式视角只注入该角色在目标章前已知内容', async () => {
+    const { project, firstId, secondId } = await seedProject()
+    const now = Date.now()
+    const mainId = await db.characters.add({
+      projectId: project.id!,
+      name: '守灯人',
+      roleWeight: 'main',
+      moralAxis: 'neutral',
+      orderAxis: 'neutral',
+      createdAt: now,
+      updatedAt: now,
+    } as any) as number
+    const sideId = await db.characters.add({
+      projectId: project.id!,
+      name: '钟匠',
+      roleWeight: 'supporting',
+      moralAxis: 'neutral',
+      orderAxis: 'neutral',
+      createdAt: now,
+      updatedAt: now,
+    } as any) as number
+    const firstChapterId = await db.chapters.add({
+      projectId: project.id!,
+      outlineNodeId: firstId,
+      title: '第一章：海床之光',
+      content: '',
+      wordCount: 0,
+      status: 'draft',
+      order: 0,
+      notes: '',
+      createdAt: now,
+      updatedAt: now,
+    } as any) as number
+    await db.knowledgeLedger.bulkAdd([
+      {
+        projectId: project.id!,
+        characterId: mainId,
+        characterName: '守灯人',
+        knowledgeKey: 'main.secret',
+        statement: '主角知道潮门会在黎明前关闭',
+        action: 'learn',
+        sourceType: 'chapter',
+        sourceChapterId: firstChapterId,
+        status: 'confirmed',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        projectId: project.id!,
+        characterId: sideId,
+        characterName: '钟匠',
+        knowledgeKey: 'side.secret',
+        statement: '配角知道钟芯其实被藏在井底',
+        action: 'learn',
+        sourceType: 'chapter',
+        sourceChapterId: firstChapterId,
+        status: 'confirmed',
+        createdAt: now + 1,
+        updatedAt: now + 1,
+      },
+    ] as any)
+
+    const prepared = await prepareProseCopilot({
+      projectId: project.id!,
+      worldGroupId: null,
+      authorRequest: '写第二章正文',
+      perspectiveCharacterId: mainId,
+    })
+    const context = prepared.prepared.messages.map(message => message.content).join('\n')
+    expect(prepared.perspectiveCharacterId).toBe(mainId)
+    expect(prepared.contextSources).toContain('characterKnowledge')
+    expect(context).toContain('主角知道潮门会在黎明前关闭')
+    expect(context).not.toContain('配角知道钟芯其实被藏在井底')
+    expect(prepared.snapshot.perspectiveCharacterId).toBe(mainId)
+    expect(prepared.outlineNodeId).toBe(secondId)
+  })
+
+  it('正文拒绝不属于当前作用域的视角角色', async () => {
+    const { project } = await seedProject()
+    await expect(prepareProseCopilot({
+      projectId: project.id!,
+      worldGroupId: null,
+      authorRequest: '写第一章正文',
+      perspectiveCharacterId: 999_999,
+    })).rejects.toThrow('视角角色不存在或不属于当前世界')
+  })
+
   it('候选可编辑，作者确认眼前正文后写入且不二次调用模型', async () => {
     const { project, firstId } = await seedProject()
     const prepared = await prepareProseCopilot({

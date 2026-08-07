@@ -4,6 +4,7 @@ import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import {
   buildMasterAgentRunContractV1,
   hashMasterAgentPlanV1,
+  parseMasterAgentPlanV1,
   runDurableMasterAgentPlanV1,
 } from '../../src/lib/agent/run/master-durable'
 import {
@@ -138,6 +139,54 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
   })
 
   afterEach(() => db.close())
+
+  it('正文视角进入严格计划契约并决定角色认知读取权限', async () => {
+    const fixture = await createWorkspace('视角契约')
+    const budgetEvidence = new AgentTeamBudgetTracker('balanced').snapshot()
+    const withPerspective = parseMasterAgentPlanV1({
+      summary: '以守灯人视角生成正文。',
+      tasks: [{
+        id: 'prose-1',
+        agentId: 'prose',
+        instruction: '写第一章正文。',
+        dependsOn: [],
+        perspectiveCharacterId: 7,
+      }],
+    })
+    const withoutPerspective = parseMasterAgentPlanV1({
+      summary: '生成正文，但不猜测叙事视角。',
+      tasks: [{
+        id: 'prose-1',
+        agentId: 'prose',
+        instruction: '写第一章正文。',
+        dependsOn: [],
+      }],
+    })
+
+    expect(withPerspective.tasks[0].perspectiveCharacterId).toBe(7)
+    expect(buildMasterAgentRunContractV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      plan: withPerspective,
+      budgetEvidence,
+    }).permissions.contextSourceKeys).toContain('characterKnowledge')
+    expect(buildMasterAgentRunContractV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      plan: withoutPerspective,
+      budgetEvidence,
+    }).permissions.contextSourceKeys).not.toContain('characterKnowledge')
+    expect(() => parseMasterAgentPlanV1({
+      summary: '无效视角。',
+      tasks: [{
+        id: 'prose-1',
+        agentId: 'prose',
+        instruction: '写第一章正文。',
+        dependsOn: [],
+        perspectiveCharacterId: 0,
+      }],
+    })).toThrow('perspectiveCharacterId 无效')
+  })
 
   it('从三注册表派生多领域契约，候选只写入对话和 run ledger', async () => {
     const fixture = await createWorkspace('契约')

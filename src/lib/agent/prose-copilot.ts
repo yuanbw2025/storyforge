@@ -72,6 +72,8 @@ export interface ProseCopilotSnapshot {
   chapterContentHash: string
   chapterHadContent: boolean
   chapterOrder: number
+  /** 叙事视角角色；缺省表示本轮不注入任何角色认知投影。 */
+  perspectiveCharacterId?: number | null
 }
 
 export interface ProseCopilotInput {
@@ -87,6 +89,8 @@ export interface ProseCopilotInput {
   assembled: Awaited<ReturnType<typeof assembleContext>>
   previousTail: string
   config: AIConfig
+  /** 显式叙事视角。不得让模型从正文或角色列表自行猜测。 */
+  perspectiveCharacterId?: number | null
   parameterValues?: Record<string, unknown>
   generationOverrides?: { temperature?: number; maxTokens?: number }
   routingCategory?: string
@@ -102,6 +106,7 @@ export interface PreparedProseCopilot {
   outlineNodeId: number
   label: string
   contextEvidence: AgentContextEvidence
+  perspectiveCharacterId?: number | null
 }
 
 interface ProseCopilotDependencies {
@@ -212,6 +217,7 @@ async function snapshotOf(
   outline: OutlineNode,
   chapter: Chapter | null,
   order: number,
+  perspectiveCharacterId?: number | null,
 ): Promise<ProseCopilotSnapshot> {
   return {
     outlineNodeId: outline.id!,
@@ -221,6 +227,7 @@ async function snapshotOf(
     chapterContentHash: fingerprintContent(chapter?.content ?? ''),
     chapterHadContent: Boolean(htmlToPlainText(chapter?.content ?? '').trim()),
     chapterOrder: chapter?.order ?? Math.max(0, order - 1),
+    perspectiveCharacterId,
   }
 }
 
@@ -239,7 +246,7 @@ async function readSnapshot(scope: WorkspaceScope, base: ProseCopilotSnapshot): 
       .find(row => row.outlineNodeId === base.outlineNodeId)
     if (created) throw new ProseCopilotStaleError()
   }
-  return snapshotOf(outline, chapter ?? null, base.chapterOrder + 1)
+  return snapshotOf(outline, chapter ?? null, base.chapterOrder + 1, base.perspectiveCharacterId)
 }
 
 function sameSnapshot(left: ProseCopilotSnapshot, right: ProseCopilotSnapshot): boolean {
@@ -249,6 +256,7 @@ function sameSnapshot(left: ProseCopilotSnapshot, right: ProseCopilotSnapshot): 
     && left.chapterUpdatedAt === right.chapterUpdatedAt
     && left.chapterContentHash === right.chapterContentHash
     && left.chapterHadContent === right.chapterHadContent
+    && left.perspectiveCharacterId === right.perspectiveCharacterId
 }
 
 function candidateIssues(output: string): GenerationGateIssue[] {
@@ -264,6 +272,9 @@ function candidateIssues(output: string): GenerationGateIssue[] {
 }
 
 function buildProseMessages(input: ProseCopilotInput) {
+  const perspectiveBoundary = input.perspectiveCharacterId != null
+    ? '【叙事视角角色】characterId=' + input.perspectiveCharacterId + '。角色认知只代表该角色在本章开始前已知的内容。'
+    : '【叙事视角隔离】本轮未指定视角角色；不得代入任何角色的私人认知或使用角色认知账本中的信息。'
   const charactersIndex = input.assembled.included.indexOf('characters')
   const characters = charactersIndex >= 0
     ? input.assembled.segments[charactersIndex]?.content ?? ''
@@ -286,7 +297,7 @@ function buildProseMessages(input: ProseCopilotInput) {
     return buildContinuePrompt(
       htmlToPlainText(input.chapter?.content ?? ''),
       input.outlineNode.summary,
-      context,
+      perspectiveBoundary + '\n' + context,
       hint,
     )
   }
@@ -298,7 +309,7 @@ function buildProseMessages(input: ProseCopilotInput) {
     characters,
     input.previousTail,
     worldRulesIndex >= 0 ? input.assembled.segments[worldRulesIndex]?.content ?? '' : '',
-    hint,
+    perspectiveBoundary + '\n' + hint,
   )
 }
 
@@ -422,6 +433,8 @@ export async function prepareProseCopilot(input: {
   parameterValues?: Record<string, unknown>
   /** 节点级 AI preset 的解析结果；未提供时沿用全局路由配置。 */
   configOverride?: AIConfig
+  /** 明确的叙事视角角色；未传时正文主路径不注入全体角色认知。 */
+  perspectiveCharacterId?: number | null
   generationOverrides?: { temperature?: number; maxTokens?: number }
   signal?: AbortSignal
 }): Promise<PreparedProseCopilot> {
@@ -443,7 +456,10 @@ export async function prepareProseCopilot(input: {
   ])
   const operation = operationFor(request)
   const target = selectTarget(request, nodes, chapters, worldGroupId, operation)
-  const snapshot = await snapshotOf(target.outline, target.chapter, target.ordinal)
+  const perspectiveCharacterId = input.perspectiveCharacterId === undefined
+    ? target.chapter?.perspectiveCharacterId ?? null
+    : input.perspectiveCharacterId
+  const snapshot = await snapshotOf(target.outline, target.chapter, target.ordinal, perspectiveCharacterId)
   const defaultCategory = operation === 'continue' ? 'chapter.continue' : 'chapter.content'
   const routingCategory = input.routingCategory ?? defaultCategory
   const config = input.configOverride ?? resolveRequestConfig(
@@ -452,6 +468,16 @@ export async function prepareProseCopilot(input: {
   ).config
   const contextProfile = input.contextProfile ?? 'full'
   const contextPolicy = resolveAgentContextPolicy('agent-prose', contextProfile)
+  if (input.perspectiveCharacterId != null) {
+    const character = await db.characters.get(input.perspectiveCharacterId)
+    const visible = character
+      && await assertRecordInScope(scope, 'characters', character, { owner: 'world' })
+      && (Boolean(character.isCrossWorld) || (character.homeWorldGroupId ?? null) === worldGroupId)
+    if (!visible) throw new Error('正文叙事视角角色不存在或不属于当前世界。')
+  }
+  const sourceKeys = perspectiveCharacterId == null
+    ? PROSE_COPILOT_SOURCE_KEYS.filter(key => key !== 'characterKnowledge')
+    : [...PROSE_COPILOT_SOURCE_KEYS]
   const previous = scopedOutlineChapters(nodes, worldGroupId)
     .filter(item => item.ordinal < target.ordinal)
     .reverse()
@@ -469,7 +495,8 @@ export async function prepareProseCopilot(input: {
     stateReferenceText: [target.outline.title, target.outline.summary].join(' '),
     provider: config.provider,
     model: config.model,
-    sourceKeys: [...PROSE_COPILOT_SOURCE_KEYS],
+    sourceKeys,
+    ...(perspectiveCharacterId != null ? { characterId: perspectiveCharacterId } : {}),
     inputBudgetMaxTokens: contextPolicy.maxInputTokens,
     sourceBudgetScale: contextPolicy.sourceBudgetScale,
   })
@@ -489,6 +516,7 @@ export async function prepareProseCopilot(input: {
     previousTail,
     config,
     parameterValues: input.parameterValues,
+    perspectiveCharacterId,
     generationOverrides: input.generationOverrides,
     routingCategory,
     signal: input.signal,
@@ -502,6 +530,7 @@ export async function prepareProseCopilot(input: {
     operation,
     outlineNodeId: target.outline.id!,
     contextEvidence: evidenceFromContextResult(contextProfile, assembled),
+    perspectiveCharacterId,
     label: operation === 'continue'
       ? `续写《${target.outline.title}》`
       : `《${target.outline.title}》正文`,

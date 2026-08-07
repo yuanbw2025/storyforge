@@ -217,6 +217,7 @@ export const PROJECT_TABLES: TableSpec[] = [
       // 删角色 → 关系级联删 + 细纲数组引用清理
       { kind: 'simple', field: 'id', target: 'characterRelations[fromCharacterId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'characterRelations[toCharacterId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'chapters[perspectiveCharacterId]', onDelete: 'setNull' },
       { kind: 'array', field: 'appearingCharacterIds', itemTarget: 'detailedOutlines', onDelete: 'removeItem' },
     ],
     exportRemap: [
@@ -260,7 +261,10 @@ export const PROJECT_TABLES: TableSpec[] = [
       { kind: 'simple', field: 'id', target: 'emotionBeatCards[chapterId]', onDelete: 'cascade' },
       // 软引用:itemLedger/storyTimelineEvents 的 chapterId 保留(独立产物,见 chapter store 注释)
     ],
-    exportRemap: [{ field: 'outlineNodeId', remapVia: 'outlineNodes', exportAs: '_outlineExportId', onUnmapped: 'require' }] },
+    exportRemap: [
+      { field: 'outlineNodeId', remapVia: 'outlineNodes', exportAs: '_outlineExportId', onUnmapped: 'require' },
+      { field: 'perspectiveCharacterId', remapVia: 'characters', exportAs: '_perspectiveCharacterExportId' },
+    ] },
 
   { table: db.detailedOutlines, name: 'detailedOutlines', owner: 'project', exportable: true,
     domainOwner: LEGACY_WORLD_OR_WORK_OWNER,

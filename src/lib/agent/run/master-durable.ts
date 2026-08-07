@@ -182,6 +182,34 @@ function assertExactKeys(value: Record<string, unknown>, keys: readonly string[]
   }
 }
 
+function assertKeysWithOptional(
+  value: Record<string, unknown>,
+  required: readonly string[],
+  optional: readonly string[],
+  label: string,
+): void {
+  const allowed = new Set([...required, ...optional])
+  const actual = Object.keys(value)
+  if (
+    required.some(key => !Object.prototype.hasOwnProperty.call(value, key))
+    || actual.some(key => !allowed.has(key))
+  ) {
+    fail(label + ' 字段不符合严格契约')
+  }
+}
+
+function readOptionalPerspectiveCharacterId(
+  value: Record<string, unknown>,
+  label: string,
+): number | null | undefined {
+  if (!Object.prototype.hasOwnProperty.call(value, 'perspectiveCharacterId')) return undefined
+  if (value.perspectiveCharacterId === null) return null
+  if (!Number.isInteger(value.perspectiveCharacterId) || Number(value.perspectiveCharacterId) < 1) {
+    fail(label + '.perspectiveCharacterId 无效')
+  }
+  return Number(value.perspectiveCharacterId)
+}
+
 function assertAcyclic(plan: MasterAgentPlan): void {
   const byId = new Map(plan.tasks.map(task => [task.id, task]))
   const visiting = new Set<string>()
@@ -210,7 +238,12 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
   const ids = new Set<string>()
   const tasks: MasterAgentTask[] = value.tasks.map((item, index) => {
     if (!isRecord(item)) fail(`主 Agent 计划任务 ${index + 1} 无效`)
-    assertExactKeys(item, ['id', 'agentId', 'instruction', 'dependsOn'], `主 Agent 计划任务 ${index + 1}`)
+    assertKeysWithOptional(
+      item,
+      ['id', 'agentId', 'instruction', 'dependsOn'],
+      ['perspectiveCharacterId'],
+      '主 Agent 计划任务 ' + (index + 1),
+    )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
     if (ids.has(id)) fail(`主 Agent 计划包含重复任务 ID ${id}`)
     ids.add(id)
@@ -227,11 +260,13 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     }
     const dependsOn = [...new Set(item.dependsOn as string[])]
     if (dependsOn.includes(id)) fail(`主 Agent 计划任务 ${id} 不得依赖自身`)
+    const perspectiveCharacterId = readOptionalPerspectiveCharacterId(item, '主 Agent 计划任务 ' + id)
     return {
       id,
       agentId: item.agentId as DomainAgentId,
       instruction,
       dependsOn,
+      ...(perspectiveCharacterId !== undefined ? { perspectiveCharacterId } : {}),
     }
   })
   const result = { summary, tasks }
@@ -248,7 +283,12 @@ export async function hashMasterAgentPlanV1(plan: MasterAgentPlan): Promise<stri
 }
 
 function sourceKeysForPlan(plan: MasterAgentPlan): string[] {
-  return [...new Set(plan.tasks.flatMap(task => CONTEXT_KEYS_BY_AGENT[task.agentId]))]
+  return [...new Set(plan.tasks.flatMap(task => {
+    const keys = CONTEXT_KEYS_BY_AGENT[task.agentId]
+    return task.agentId === 'prose' && task.perspectiveCharacterId == null
+      ? keys.filter(key => key !== 'characterKnowledge')
+      : keys
+  }))]
 }
 
 function writeTargetsForPlan(plan: MasterAgentPlan): Array<{ table: string; fields: string[]; mode: 'author-confirmed' }> {
@@ -396,6 +436,13 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
   if (typeof payload.runId !== 'number' || !Number.isInteger(payload.runId) || payload.runId < 1) fail(`${label} payload runId 无效`)
   if (payload.runStepId !== taskStepId(payload.taskId)) fail(`${label} payload runStepId 不匹配`)
   readHash(payload.candidateHash, `${label} payload candidateHash`)
+  if (
+    payload.perspectiveCharacterId !== undefined
+    && payload.perspectiveCharacterId !== null
+    && (!Number.isInteger(payload.perspectiveCharacterId) || payload.perspectiveCharacterId < 1)
+  ) {
+    fail(label + ' perspectiveCharacterId 无效')
+  }
   budgetEvidence(payload.teamBudgetEvidence, `${label} payload teamBudgetEvidence`)
   return payload
 }
@@ -731,6 +778,12 @@ export async function runDurableMasterAgentPlanV1(
       if (activeTask?.id !== task.id) fail(`主 Agent durable trace 收到乱序候选 ${task.id}`)
       if (candidate.payload.taskId !== task.id || candidate.payload.agentId !== task.agentId) {
         fail(`主 Agent durable trace 候选身份与当前任务 ${task.id} 不一致`)
+      }
+      if (
+        task.agentId === 'prose'
+        && (candidate.payload.perspectiveCharacterId ?? null) !== (task.perspectiveCharacterId ?? null)
+      ) {
+        fail(`主 Agent durable trace 候选视角与当前任务 ${task.id} 不一致`)
       }
       const payload: MasterCandidatePayload = {
         ...candidate.payload,

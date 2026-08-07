@@ -399,6 +399,26 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     codexEntries,
     worldGroupId: project.enableMultiWorld ? chapterWorldGroupId : undefined,
   }), [characters, itemEntries, locations, codexCategories, codexEntries, project.enableMultiWorld, chapterWorldGroupId])
+  const perspectiveCharacters = useMemo(() => characters
+    .filter(character => character.id != null)
+    .filter(character => (
+      !project.enableMultiWorld
+      || character.isCrossWorld
+      || (character.homeWorldGroupId ?? null) === (chapterWorldGroupId ?? null)
+    ))
+    .map(character => ({ id: character.id!, name: character.name })), [
+    chapterWorldGroupId,
+    characters,
+    project.enableMultiWorld,
+  ])
+  const perspectiveCharacterId = perspectiveCharacters.some(
+    character => character.id === currentChapter?.perspectiveCharacterId,
+  ) ? currentChapter?.perspectiveCharacterId ?? null : null
+  const perspectiveCharacter = perspectiveCharacters.find(character => character.id === perspectiveCharacterId)
+  const perspectiveBoundary = perspectiveCharacter
+    ? '叙事视角角色：' + perspectiveCharacter.name
+      + '（characterId=' + perspectiveCharacter.id + '）。只允许使用该角色在本章开始前已知的信息。'
+    : '本章未指定叙事视角角色。不得代入任何角色的私人认知，也不得把其他角色掌握的信息写成当前人物已知。'
 
   const [worldCtx, setWorldCtx] = useState('')
   const [charCtx, setCharCtx] = useState('')
@@ -559,12 +579,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         'stateCards',
         'currentFacts', // NS-4:当前章生效的已确认事实，回注生成防止前后矛盾
         'canonAssertions', // CONSISTENCY-3:不依赖章节时点的已确认世界宪法
-        'characterKnowledge', // CONSISTENCY-2:按角色限制本章可知信息，防提前知情
+        ...(perspectiveCharacterId != null
+          ? ['characterKnowledge'] as const
+          : []), // CONSISTENCY-2:只有明确视角时才注入该角色认知
         'heldItems', // CONSISTENCY-1:当前已持有物品，避免新章重复写首次获得
         'retrievedPassages', // NS-5:相关前文召回，防远距离细节/伏笔矛盾
         'references',
         'userStyleProfile',
       ],
+      ...(perspectiveCharacterId != null ? { characterId: perspectiveCharacterId } : {}),
     })
 
     console.log(`[assembleContext] ${taskType} 模式 — included:${assembled.included.join(',')} trimmed:${assembled.trimmed.join(',') || 'none'} tokens:${assembled.totalInputTokens}`)
@@ -675,7 +698,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       charCtx,
       continuity.previousTail,
       worldRulesContext,
-      customInstruction.trim() || undefined,
+      [perspectiveBoundary, customInstruction.trim()].filter(Boolean).join('\n'),
       { continuity, continuityBudgetTokens },
     )
 
@@ -706,7 +729,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       plainText,
       outlineNode.summary,
       ctxWithChars,
-      customInstruction.trim() || undefined,
+      [perspectiveBoundary, customInstruction.trim()].filter(Boolean).join('\n'),
       { continuity, continuityBudgetTokens },
     )
     prepareOrRunChapterGeneration(
@@ -1197,6 +1220,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           consistencyAlertCount={consistencyCurrent ? consistencyRun?.candidate.findings.length ?? 0 : 0}
           showNotePanel={showNotePanel}
           customInstruction={customInstruction}
+          perspectiveCharacterId={perspectiveCharacterId}
+          perspectiveCharacters={perspectiveCharacters}
           onGenerate={() => { void handleGenerate() }}
           onContinue={() => { void handleContinue() }}
           onExpand={handleExpand}
@@ -1209,6 +1234,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onToggleReviewPanel={() => setShowReviewPanel(!showReviewPanel)}
           onToggleNotePanel={() => setShowNotePanel(!showNotePanel)}
           onCustomInstructionChange={setCustomInstruction}
+          onPerspectiveCharacterChange={characterId => {
+            if (currentChapter.id) void updateChapter(currentChapter.id, {
+              perspectiveCharacterId: characterId,
+            })
+          }}
         />
       )}
       </div>

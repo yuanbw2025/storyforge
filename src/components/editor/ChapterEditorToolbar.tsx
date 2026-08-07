@@ -1,4 +1,4 @@
-import { BookOpenCheck, ClipboardList, Loader2, ShieldCheck, StickyNote } from 'lucide-react'
+import { BookOpenCheck, ClipboardList, Eye, Loader2, ShieldCheck, StickyNote } from 'lucide-react'
 import { CInput } from '../shared/CompositionInput'
 
 interface Props {
@@ -14,6 +14,8 @@ interface Props {
   consistencyAlertCount: number
   showNotePanel: boolean
   customInstruction: string
+  perspectiveCharacterId: number | null
+  perspectiveCharacters: Array<{ id: number; name: string }>
   onGenerate: () => void
   onContinue: () => void
   onExpand: () => void
@@ -26,6 +28,7 @@ interface Props {
   onToggleReviewPanel: () => void
   onToggleNotePanel: () => void
   onCustomInstructionChange: (value: string) => void
+  onPerspectiveCharacterChange: (characterId: number | null) => void
 }
 
 export default function ChapterEditorToolbar({
@@ -41,6 +44,8 @@ export default function ChapterEditorToolbar({
   consistencyAlertCount,
   showNotePanel,
   customInstruction,
+  perspectiveCharacterId,
+  perspectiveCharacters,
   onGenerate,
   onContinue,
   onExpand,
@@ -53,6 +58,7 @@ export default function ChapterEditorToolbar({
   onToggleReviewPanel,
   onToggleNotePanel,
   onCustomInstructionChange,
+  onPerspectiveCharacterChange,
 }: Props) {
   return (
     <div className="flex flex-wrap gap-2 border-t border-border/60 bg-bg-surface/35 px-6 py-3">
@@ -137,6 +143,23 @@ export default function ChapterEditorToolbar({
         <StickyNote className="w-3 h-3" />
         便签
       </button>
+      <label className="flex min-w-[180px] items-center gap-2 rounded-md border border-border bg-bg-elevated px-2 text-xs text-text-secondary">
+        <Eye className="h-3.5 w-3.5 shrink-0" />
+        <span className="sr-only">叙事视角角色</span>
+        <select
+          aria-label="叙事视角角色"
+          value={perspectiveCharacterId ?? ''}
+          onChange={event => onPerspectiveCharacterChange(
+            event.target.value ? Number(event.target.value) : null,
+          )}
+          className="min-w-0 flex-1 bg-transparent py-1.5 text-xs text-text-primary outline-none"
+        >
+          <option value="">不指定视角</option>
+          {perspectiveCharacters.map(character => (
+            <option key={character.id} value={character.id}>{character.name}</option>
+          ))}
+        </select>
+      </label>
       <CInput value={customInstruction} onChange={event => onCustomInstructionChange(event.target.value)}
         placeholder="自定义指令..."
         className="min-w-[220px] flex-1 rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent" />

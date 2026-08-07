@@ -49,6 +49,8 @@ function normalize(data: any) {
     delete row.characterId
     delete row._characterExportId
   }
+  // HARNESS-4: 叙事视角角色是当前格式新增的章节 FK；旧 v3 fixture 没有对应字段。
+  for (const row of data.chapters ?? []) delete row._perspectiveCharacterExportId
   // CONSISTENCY-3: temporalFacts 新增四类可移植设定来源 FK。旧 fixture 没有这些
   // 影子字段；新格式的实际往返由 R-CONSISTENCY3-world-constitution 锁定。
   for (const row of data.temporalFacts ?? []) {

@@ -21,6 +21,11 @@ async function mount(patch: Record<string, unknown> = {}) {
     consistencyAlertCount: 0,
     showNotePanel: false,
     customInstruction: '',
+    perspectiveCharacterId: null,
+    perspectiveCharacters: [
+      { id: 7, name: '守灯人' },
+      { id: 8, name: '钟匠' },
+    ],
     onGenerate: vi.fn(),
     onContinue: vi.fn(),
     onExpand: vi.fn(),
@@ -33,6 +38,7 @@ async function mount(patch: Record<string, unknown> = {}) {
     onToggleReviewPanel: vi.fn(),
     onToggleNotePanel: vi.fn(),
     onCustomInstructionChange: vi.fn(),
+    onPerspectiveCharacterChange: vi.fn(),
     ...patch,
   }
   const host = document.createElement('div')
@@ -117,5 +123,26 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     const review = Array.from(host.querySelectorAll('button'))
       .find(item => item.textContent?.includes('质量审校'))
     expect(review?.textContent).toContain('3')
+  })
+
+  it('明确选择章节叙事视角并允许恢复为不指定', async () => {
+    const { host, props } = await mount({ perspectiveCharacterId: 7 })
+    const select = host.querySelector('select[aria-label="叙事视角角色"]') as HTMLSelectElement
+    expect(select.value).toBe('7')
+    expect(select.textContent).toContain('守灯人')
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+      setter.call(select, '8')
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(props.onPerspectiveCharacterChange).toHaveBeenCalledWith(8)
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+      setter.call(select, '')
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(props.onPerspectiveCharacterChange).toHaveBeenCalledWith(null)
   })
 })

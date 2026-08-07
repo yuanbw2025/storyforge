@@ -275,6 +275,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   num('chapters', 'wordCount'),
   enumeration('chapters', 'status', ['outline', 'draft', 'revised', 'polished', 'final'], chapterStatusAliases, ['状态']),
   num('chapters', 'order'),
+  num('chapters', 'perspectiveCharacterId', ['叙事视角角色']),
   longtext('chapters', 'notes', ['笔记']),
 
   num('detailedOutlines', 'outlineNodeId'),

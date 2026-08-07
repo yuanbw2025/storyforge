@@ -55,7 +55,10 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
     duplicatePolicy: 'update',
     required: ['outlineNodeId', 'title'],
     autoStamps: ['projectId', 'createdAt', 'updatedAt'],
-    fkChecks: [{ field: 'outlineNodeId', target: 'outlineNodes' }],
+    fkChecks: [
+      { field: 'outlineNodeId', target: 'outlineNodes' },
+      { field: 'perspectiveCharacterId', target: 'characters' },
+    ],
   },
   {
     target: 'detailedOutlines',

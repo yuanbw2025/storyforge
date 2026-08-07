@@ -94,12 +94,20 @@ async function remapSimpleCharacterRefs(projectId: number, fromId: number, toId?
     const field = targetField(ref.target)
     const targetSpec = PROJECT_TABLES.find(s => s.name === tableName)
     if (!field || !targetSpec) continue
+    const keys = (await (targetSpec.table as any)
+      .filter((row: Record<string, unknown>) => row.projectId === projectId && row[field] === fromId)
+      .primaryKeys()) as number[]
 
     if (toId == null) {
-      await (targetSpec.table as any).where(field).equals(fromId).delete()
+      if (ref.onDelete === 'setNull') {
+        for (const key of keys) {
+          await targetSpec.table.update(key, { [field]: null } as any)
+        }
+      } else if (ref.onDelete === 'cascade') {
+        if (keys.length) await targetSpec.table.bulkDelete(keys)
+      }
     } else {
-      const keys = await (targetSpec.table as any).where(field).equals(fromId).primaryKeys()
-      for (const key of keys as number[]) {
+      for (const key of keys) {
         await targetSpec.table.update(key, { [field]: toId } as any)
       }
     }

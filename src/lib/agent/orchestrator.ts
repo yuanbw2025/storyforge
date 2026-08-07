@@ -95,6 +95,8 @@ export interface MasterAgentTask {
   agentId: DomainAgentId
   instruction: string
   dependsOn: string[]
+  /** 正文领域的显式叙事视角；缺省时正文不注入角色认知。 */
+  perspectiveCharacterId?: number | null
 }
 
 export interface MasterAgentPlan {
@@ -122,6 +124,7 @@ export interface MasterCandidatePayload {
   runId?: number
   runStepId?: string
   candidateHash?: string
+  perspectiveCharacterId?: number | null
 }
 
 export interface ExecutedMasterCandidate {
@@ -280,6 +283,11 @@ function sanitizePlan(raw: Record<string, unknown>, request: string): MasterAgen
     const instruction = typeof source.instruction === 'string' && source.instruction.trim()
       ? source.instruction.trim().slice(0, 1000)
       : request
+    const perspectiveCharacterId = source.perspectiveCharacterId === null
+      ? null
+      : Number.isInteger(source.perspectiveCharacterId) && Number(source.perspectiveCharacterId) > 0
+        ? Number(source.perspectiveCharacterId)
+        : undefined
     tasks.push({
       id,
       agentId,
@@ -287,6 +295,7 @@ function sanitizePlan(raw: Record<string, unknown>, request: string): MasterAgen
       dependsOn: Array.isArray(source.dependsOn)
         ? source.dependsOn.filter((value): value is string => typeof value === 'string').slice(0, 5)
         : [],
+      ...(agentId === 'prose' && perspectiveCharacterId !== undefined ? { perspectiveCharacterId } : {}),
     })
   }
   if (!tasks.length) return fallbackPlan(request)
@@ -351,6 +360,7 @@ export async function createMasterAgentPlan(input: {
 依赖任务必须写 dependsOn。世界设定与角色同时出现时，角色应依赖世界任务。
 大纲依赖本轮新生成的世界或角色任务；正文依赖本轮新生成的大纲、世界或角色任务。只输出 JSON：
 {"summary":"给用户的简短计划","tasks":[{"id":"稳定ID","agentId":"world-origin|character|inspiration|outline|prose","instruction":"给分 Agent 的完整要求","dependsOn":[]}]}。
+只有用户明确指定正文叙事视角且项目状态能确认角色 ID 时，正文任务才可额外填写 perspectiveCharacterId；不要猜测，缺省则不注入角色认知。
 每个领域最多一个任务；同一领域的批量目标必须合并到这个任务中一次产出。最多 5 个任务；
 不要输出 Markdown。`,
   }, {
@@ -610,6 +620,7 @@ export async function executeMasterAgentPlan(input: {
           supplementalContext: upstream,
           routingCategory: AGENT_ROLE_CATEGORIES.prose,
           contextProfile: contextProfiles[CONTEXT_TASK_BY_AGENT[task.agentId]],
+          perspectiveCharacterId: task.perspectiveCharacterId ?? null,
           signal: input.signal,
         })
         const result = await runBudgetedGenerationNode({
@@ -639,6 +650,7 @@ export async function executeMasterAgentPlan(input: {
             workspaceScope: scope,
             proseOperation: prepared.operation,
             proseOutlineNodeId: prepared.outlineNodeId,
+            perspectiveCharacterId: prepared.perspectiveCharacterId,
             dependsOnTaskIds: task.dependsOn,
           },
           draft,
