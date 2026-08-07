@@ -22,6 +22,7 @@ export interface GenerationNodeDurableTraceV1 extends GenerationNodeShadowTrace 
   readonly stepId: string
   readonly events: readonly AnyAgentRunEventV1[]
   readonly traceErrors: readonly string[]
+  candidatePersisted: (candidateHash: string, requiresConfirmation: boolean) => Promise<void>
   projection: () => AgentRunProjectionV1
 }
 
@@ -120,6 +121,14 @@ export function createGenerationNodeDurableTraceV1(input: {
     async stepSucceeded(output: unknown) {
       const outputHash = modelOutputHash ?? await hashCanonicalValue(output)
       await append('step.succeeded', { stepId: input.stepId, attempt: 1, outputHash })
+    },
+    async candidatePersisted(candidateHash: string, requiresConfirmation: boolean) {
+      await append('candidate.persisted', {
+        stepId: input.stepId,
+        attempt: 1,
+        candidateHash,
+        requiresConfirmation,
+      })
     },
     async stepFailed({ phase, error }) {
       await append('step.failed', {

@@ -10,12 +10,19 @@ import type { WorkspaceScope } from '../types/world-ownership'
 export async function getOrCreateAgentConversation(input: {
   projectId: number
   worldGroupId: number | null
+  purpose?: string
+  title?: string
   scope?: WorkspaceScope
 }): Promise<AgentConversation> {
   const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
+  const purpose = input.purpose?.trim() || undefined
   const rows = await readOwnedRows<AgentConversation>(scope, 'agentConversations', { owner: 'work' })
   const current = rows
-    .filter(row => row.status === 'active' && (row.worldGroupId ?? null) === input.worldGroupId)
+    .filter(row => (
+      row.status === 'active'
+      && (row.worldGroupId ?? null) === input.worldGroupId
+      && (purpose ? row.purpose === purpose : row.purpose == null)
+    ))
     .sort((left, right) => right.updatedAt - left.updatedAt)[0]
   if (current) return current
 
@@ -23,7 +30,8 @@ export async function getOrCreateAgentConversation(input: {
   const row = stampNewRecord(scope, 'agentConversations', {
     projectId: input.projectId,
     worldGroupId: input.worldGroupId,
-    title: '创作对话',
+    purpose,
+    title: input.title?.trim() || '创作对话',
     status: 'active',
     createdAt: now,
     updatedAt: now,

@@ -10,13 +10,23 @@ import {
   type GenerationNodeDurableTraceV1,
   type GenerationNodeShadowTraceV1,
 } from '../agent/run'
+import { getOrCreateAgentConversation } from '../agent/conversations'
 import type { GenerationNodeShadowTrace } from '../generation/generation-node'
 import type { AssembleContextResult } from '../registry/types'
 import { resolveScope } from '../world-engine/scope'
-import type { AgentRunContractV1 } from '../types'
-import type { WorkspaceScope } from '../types'
+import type { AgentRunContractV1, WorkspaceScope } from '../types'
 import type { OutlineGenerationRequest } from './generation-request'
-import { encodeGenerationOperation, outlineGenerationModuleKey } from './generation-request'
+import {
+  encodeGenerationOperation,
+  outlineGenerationModuleKey,
+} from './generation-request'
+import {
+  OUTLINE_GENERATION_CONVERSATION_PURPOSE,
+  persistOutlineGenerationCandidateV1,
+  type OutlineGenerationCandidateV1,
+} from './candidate-lifecycle'
+
+export * from './candidate-lifecycle'
 
 export const OUTLINE_GENERATION_SOURCE_KEYS = [
   'canonAssertions',
@@ -155,11 +165,15 @@ export interface OutlineGenerationTraceV1 extends GenerationNodeShadowTrace {
   readonly durable?: GenerationNodeDurableTraceV1
   readonly initializationError?: string
   readonly traceErrors: readonly string[]
+  persistCandidate: (output: string) => Promise<OutlineGenerationCandidateV1 | null>
 }
 
 function composeOutlineTraces(input: {
   shadow: GenerationNodeShadowTraceV1
   durable?: GenerationNodeDurableTraceV1
+  scope?: WorkspaceScope
+  conversationId?: number
+  request: OutlineGenerationRequest
   initializationError?: string
 }): OutlineGenerationTraceV1 {
   const diagnostics: string[] = input.initializationError ? [input.initializationError] : []
@@ -189,8 +203,22 @@ function composeOutlineTraces(input: {
     },
     beforeModel: value => notify(trace => trace.beforeModel(value)),
     modelResponded: value => notify(trace => trace.modelResponded(value)),
-    stepSucceeded: value => notify(trace => trace.stepSucceeded(value)),
+    // The H0 shadow remains behavior-neutral. Durable outline runs do not
+    // succeed until the persisted candidate has been confirmed and adopted.
+    stepSucceeded: value => notify(trace => trace === input.shadow
+      ? trace.stepSucceeded(value)
+      : Promise.resolve()),
     stepFailed: value => notify(trace => trace.stepFailed(value)),
+    async persistCandidate(output: string) {
+      if (!input.durable || !input.scope || input.conversationId == null || !output.trim()) return null
+      return persistOutlineGenerationCandidateV1({
+        scope: input.scope,
+        conversationId: input.conversationId,
+        request: input.request,
+        durable: input.durable,
+        output,
+      })
+    },
     onTraceError(error: unknown) {
       diagnostics.push(error instanceof Error ? error.message : String(error))
     },
@@ -206,16 +234,25 @@ export async function createOutlineGenerationTraceV1(input: {
 }): Promise<OutlineGenerationTraceV1> {
   const shadow = await createOutlineGenerationShadowTraceV1(input)
   if ((input.durable ?? isOutlineDurableHarnessEnabledV1()) === false) {
-    return composeOutlineTraces({ shadow })
+    return composeOutlineTraces({ shadow, request: input.request })
   }
 
   let created: AgentRunSnapshotV1 | null = null
   let scope: WorkspaceScope | null = null
   try {
     scope = await resolveScope({ projectId: input.projectId })
+    const conversation = await getOrCreateAgentConversation({
+      projectId: input.projectId,
+      worldGroupId: input.worldGroupId,
+      purpose: OUTLINE_GENERATION_CONVERSATION_PURPOSE,
+      title: '大纲生成记录',
+      scope,
+    })
+    if (conversation.id == null) throw new Error('大纲生成对话缺少持久化 ID')
     created = await createAgentRunV1({
       scope,
       worldGroupId: input.worldGroupId,
+      conversationId: conversation.id,
       contract: outlineRunContract(input),
     })
     const manifest = await outlineManifest({
@@ -231,7 +268,13 @@ export async function createOutlineGenerationTraceV1(input: {
       stepId: encodeGenerationOperation(input.request),
       manifest,
     })
-    return composeOutlineTraces({ shadow, durable })
+    return composeOutlineTraces({
+      shadow,
+      durable,
+      scope,
+      conversationId: conversation.id,
+      request: input.request,
+    })
   } catch (error) {
     const initializationError = error instanceof Error ? error.message : String(error)
     if (created && scope) {
@@ -243,6 +286,6 @@ export async function createOutlineGenerationTraceV1(input: {
         expectedLastSequence: created.projection.lastSequence,
       }).catch(() => undefined)
     }
-    return composeOutlineTraces({ shadow, initializationError })
+    return composeOutlineTraces({ shadow, request: input.request, initializationError })
   }
 }

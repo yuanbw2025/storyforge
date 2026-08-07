@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { UseAIStreamReturn } from '../../hooks/useAIStream'
 import type { RunOptions } from '../../lib/ai/adapters/outline-adapter'
 import {
@@ -22,12 +22,21 @@ import {
   type PreparedGenerationContext,
 } from '../../lib/outline/generation-request'
 import type { AssembleContextResult } from '../../lib/registry/types'
-import { createOutlineGenerationTraceV1 } from '../../lib/outline/harness'
+import {
+  beginOutlineGenerationAdoptionV1,
+  commitOutlineGenerationAdoptionV1,
+  createOutlineGenerationTraceV1,
+  isOutlineDurableHarnessEnabledV1,
+  rejectOutlineGenerationCandidateV1,
+  restoreLatestOutlineGenerationCandidateV1,
+  staleOutlineGenerationCandidateV1,
+  type OutlineGenerationCandidateV1,
+} from '../../lib/outline/harness'
 import type { ChatMessage, OutlineNode, Project } from '../../lib/types'
 
 type GenerationAI = Pick<
   UseAIStreamReturn,
-  'operation' | 'reset' | 'setOperation' | 'start'
+  'isStreaming' | 'operation' | 'output' | 'reset' | 'restore' | 'setOperation' | 'start'
 >
 
 interface Options {
@@ -67,7 +76,9 @@ export function useOutlineGenerationController({
   const [contextError, setContextError] = useState('')
   const [transparentMode, setTransparentModeState] = useState(false)
   const [promptReviewOpen, setPromptReviewOpen] = useState(false)
+  const [activeCandidate, setActiveCandidate] = useState<OutlineGenerationCandidateV1 | null>(null)
   const contextRequestRef = useRef(0)
+  const restoreProjectRef = useRef<number | null>(null)
 
   const moduleKey: 'outline.volume' | 'outline.chapter' = pendingRequest
     ? outlineGenerationModuleKey(pendingRequest)
@@ -119,16 +130,24 @@ export function useOutlineGenerationController({
     preparedSnapshot?: PreparedGenerationNode | null,
     messageOverride?: ChatMessage[],
   ) => {
-    setActiveModuleKey(outlineGenerationModuleKey(request))
-    ai.setOperation(encodeGenerationOperation(request))
-    clearPreview()
-
     const targetError = outlineGenerationTargetError(request, nodes, volumes)
     if (targetError) {
       ai.reset()
       onError(targetError)
       return
     }
+
+    if (activeCandidate) {
+      try {
+        await staleOutlineGenerationCandidateV1(activeCandidate)
+        setActiveCandidate(null)
+      } catch (error) {
+        console.warn('[Outline Harness] 旧候选标旧失败，新生成仍按原路径继续。', error)
+      }
+    }
+    setActiveModuleKey(outlineGenerationModuleKey(request))
+    ai.setOperation(encodeGenerationOperation(request))
+    clearPreview()
 
     try {
       const targetVolume = findGenerationTargetVolume(request, nodes, volumes)
@@ -148,7 +167,18 @@ export function useOutlineGenerationController({
       if (generationTrace?.initializationError) {
         console.warn('[Outline Harness] durable 账本不可用，已降级为内存影子。', generationTrace.initializationError)
       }
-      await runGenerationNode(node, prepared, { messages: messageOverride, shadowTrace: generationTrace })
+      const result = await runGenerationNode(node, prepared, {
+        messages: messageOverride,
+        shadowTrace: generationTrace,
+      })
+      if (result.gate?.status !== 'blocked' && result.output.trim()) {
+        try {
+          const candidate = await generationTrace?.persistCandidate(result.output)
+          if (candidate) setActiveCandidate(candidate)
+        } catch (error) {
+          console.warn('[Outline Harness] 候选持久化失败，本次结果仍保留在原预览。', error)
+        }
+      }
     } catch (error) {
       if (error instanceof OutlineGenerationSkipError) {
         ai.reset()
@@ -160,7 +190,29 @@ export function useOutlineGenerationController({
       ai.reset()
       onError(`准备大纲生成时出错：${error instanceof Error ? error.message : '未知错误'}。`)
     }
-  }, [ai, assembleContext, buildNode, clearPreview, nodes, onError, onInfo, project.id, volumes])
+  }, [activeCandidate, ai, assembleContext, buildNode, clearPreview, nodes, onError, onInfo, project.id, volumes])
+
+  useEffect(() => {
+    if (project.id == null || ai.isStreaming || restoreProjectRef.current === project.id) return
+    restoreProjectRef.current = project.id
+    if (!isOutlineDurableHarnessEnabledV1()) return
+    let cancelled = false
+    void restoreLatestOutlineGenerationCandidateV1(project.id)
+      .then(candidate => {
+        if (cancelled || !candidate) return
+        setActiveCandidate(candidate)
+        const request = decodeGenerationOperation(candidate.operation)
+        if (request) setActiveModuleKey(outlineGenerationModuleKey(request))
+        if (!ai.output) {
+          ai.restore({ output: candidate.output, operation: candidate.operation })
+          onInfo('已恢复刷新前尚未确认的大纲候选。')
+        }
+      })
+      .catch(error => {
+        console.warn('[Outline Harness] 未能恢复持久化候选，已保持原界面状态。', error)
+      })
+    return () => { cancelled = true }
+  }, [ai, onInfo, project.id])
 
   const prepare = useCallback(async (request: OutlineGenerationRequest) => {
     const requestId = contextRequestRef.current + 1
@@ -262,6 +314,53 @@ export function useOutlineGenerationController({
     if (request) await execute(request)
   }, [ai.operation, execute])
 
+  const beginAdoption = useCallback(async () => {
+    if (!activeCandidate) return
+    try {
+      await beginOutlineGenerationAdoptionV1(activeCandidate)
+    } catch (error) {
+      console.warn('[Outline Harness] 采纳开始事件记录失败，正式采纳仍按原入口继续。', error)
+    }
+  }, [activeCandidate])
+
+  const completeAdoption = useCallback(async (evidence: unknown) => {
+    const candidate = activeCandidate
+    if (!candidate) return
+    try {
+      await commitOutlineGenerationAdoptionV1(candidate, evidence)
+    } catch (error) {
+      console.warn('[Outline Harness] 采纳提交证据记录失败，已写入的大纲不受影响。', error)
+    } finally {
+      setActiveCandidate(null)
+    }
+  }, [activeCandidate])
+
+  const failAdoption = useCallback(async (reason: string) => {
+    const candidate = activeCandidate
+    if (!candidate) return
+    try {
+      await rejectOutlineGenerationCandidateV1(candidate, reason)
+    } catch (error) {
+      console.warn('[Outline Harness] 采纳失败事件记录失败。', error)
+    } finally {
+      setActiveCandidate(null)
+    }
+  }, [activeCandidate])
+
+  const dismissCandidate = useCallback(async () => {
+    const candidate = activeCandidate
+    if (candidate) {
+      try {
+        await rejectOutlineGenerationCandidateV1(candidate, '作者关闭了本次大纲候选，没有写入项目。')
+      } catch (error) {
+        console.warn('[Outline Harness] 候选关闭事件记录失败。', error)
+      }
+    }
+    setActiveCandidate(null)
+    clearPreview()
+    ai.reset()
+  }, [activeCandidate, ai, clearPreview])
+
   return {
     moduleKey,
     pendingRequest,
@@ -278,5 +377,9 @@ export function useOutlineGenerationController({
     closePromptReview: () => setPromptReviewOpen(false),
     setTransparentMode,
     retry,
+    beginAdoption,
+    completeAdoption,
+    failAdoption,
+    dismissCandidate,
   }
 }

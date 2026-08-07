@@ -14,6 +14,8 @@ export interface AgentConversation {
   projectId: number
   workId?: number | null
   worldGroupId?: number | null
+  /** Stable product-owned channel. Missing means the legacy general copilot. */
+  purpose?: string
   title: string
   status: 'active' | 'archived'
   createdAt: number

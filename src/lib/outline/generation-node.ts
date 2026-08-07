@@ -56,5 +56,11 @@ export function createOutlineGenerationNode(input: {
         category: 'outline.chapter',
         projectId: project.id!,
       }),
+    gate: output => output.trim()
+      ? { status: 'pass', issues: [] }
+      : {
+          status: 'blocked',
+          issues: [{ code: 'outline_output_missing', message: '模型没有返回可持久化的大纲候选。' }],
+        },
   }
 }
