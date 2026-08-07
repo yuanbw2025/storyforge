@@ -28,6 +28,7 @@ import {
   beginAgentRunRecoveryV1,
   completeAgentRunRecoveryV1,
 } from './checkpoint'
+import { appendMasterAgentImpactReportV1 } from './master-impact'
 
 export interface MasterAgentCandidateAdoptionRefV1 {
   scope: WorkspaceScope
@@ -243,6 +244,31 @@ export async function commitMasterAgentCandidateAdoptionV1(
       })
     },
   )
+  try {
+    await appendMasterAgentImpactReportV1({
+      scope: input.scope,
+      snapshot,
+      candidate: resolved.candidate,
+    })
+  } catch (error) {
+    const conversationId = snapshot.run.conversationId
+    if (conversationId != null) {
+      await appendAgentEvent({
+        projectId: input.scope.projectId,
+        conversationId,
+        kind: 'error',
+        role: 'system',
+        content: `采纳已完成，但影响分析未能生成：${error instanceof Error ? error.message : String(error)}`,
+        payload: {
+          version: 1,
+          kind: 'master-agent-impact-error',
+          runId: input.runId,
+          stepId: resolved.stepId,
+        },
+        scope: input.scope,
+      })
+    }
+  }
   return { message, adoptionHash, snapshot }
 }
 
