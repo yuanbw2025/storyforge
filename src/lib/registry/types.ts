@@ -164,6 +164,22 @@ export type ExportRefRemap = {
 }
 
 /**
+ * Structured payloads whose embedded IDs or integrity hashes must participate
+ * in the registry-derived backup lifecycle. These declarations prevent domain
+ * JSON from silently bypassing normal exportRemap handling.
+ */
+export type PortableDataSpec = {
+  kind: 'agent-run-root'
+  contractField: string
+  contractHashField: string
+  dependencies: readonly string[]
+} | {
+  kind: 'agent-run-child'
+  parentField: string
+  contractHashField: string
+}
+
+/**
  * 单张表的元信息。
  */
 export interface TableSpec<T = any> {
@@ -213,6 +229,8 @@ export interface TableSpec<T = any> {
   exportOrderBy?: string
   /** JSON 字段内引用的导出/导入重映射(仅 worldNodes.portalsJSON) */
   exportRefRemap?: ExportRefRemap[]
+  /** Embedded structured data / integrity rebind behavior during export/import. */
+  portableData?: PortableDataSpec
   /**
    * 导入兜底默认值：声明该表"非可选字段"在缺失时的默认值。
    * 导入引擎写入前做 `{ ...defaults, ...row }`,保证老数据/跨版本导入的 JSON

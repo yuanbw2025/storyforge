@@ -37,6 +37,7 @@ export const AGENT_RUN_EVENT_TYPES_V1: readonly AgentRunEventTypeV1[] = [
   'verification.started',
   'verification.accepted',
   'verification.rejected',
+  'verification.staled',
   'checkpoint.created',
   'recovery.started',
   'recovery.completed',
@@ -52,10 +53,11 @@ function payloadRecord(
   value: unknown,
   type: AgentRunEventTypeV1,
   keys: readonly string[],
+  required: readonly string[] = keys,
 ): Record<string, unknown> {
   const path = `event.payload(${type})`
   const record = readRecord(value, path)
-  assertExactKeys(record, keys, keys, path)
+  assertExactKeys(record, keys, required, path)
   return record
 }
 
@@ -97,13 +99,22 @@ function parsePayload<T extends AgentRunEventTypeV1>(
       break
     }
     case 'contract.accepted': {
-      payloadRecord(value, type, [])
-      payload = {}
+      const record = payloadRecord(value, type, ['contractJson'], [])
+      payload = {
+        ...(record.contractJson === undefined ? {} : {
+          contractJson: readString(record.contractJson, 'event.payload(contract.accepted).contractJson', { max: 100_000 }),
+        }),
+      }
       break
     }
     case 'contract.revised': {
-      const record = payloadRecord(value, type, ['previousContractHash'])
-      payload = { previousContractHash: readHash(record.previousContractHash, 'event.payload(contract.revised).previousContractHash') }
+      const record = payloadRecord(value, type, ['previousContractHash', 'contractJson'], ['previousContractHash'])
+      payload = {
+        previousContractHash: readHash(record.previousContractHash, 'event.payload(contract.revised).previousContractHash'),
+        ...(record.contractJson === undefined ? {} : {
+          contractJson: readString(record.contractJson, 'event.payload(contract.revised).contractJson', { max: 100_000 }),
+        }),
+      }
       break
     }
     case 'step.scheduled': {
@@ -264,6 +275,17 @@ function parsePayload<T extends AgentRunEventTypeV1>(
       payload = {
         codes,
         retryable: readBoolean(record.retryable, 'event.payload(verification.rejected).retryable'),
+      }
+      break
+    }
+    case 'verification.staled': {
+      const record = payloadRecord(value, type, ['previousReceiptHash', 'reason'])
+      payload = {
+        previousReceiptHash: readHash(
+          record.previousReceiptHash,
+          'event.payload(verification.staled).previousReceiptHash',
+        ),
+        reason: readString(record.reason, 'event.payload(verification.staled).reason', { max: 1000 }),
       }
       break
     }

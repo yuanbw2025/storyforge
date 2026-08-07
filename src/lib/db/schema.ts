@@ -53,6 +53,9 @@ import type {
   InspirationWorkspace,
   AgentConversation,
   AgentEvent,
+  AgentRunRecord,
+  AgentRunEventRecord,
+  AgentRunCheckpointRecord,
   NodeFlow,
   NodeRunRecord,
   SimulationSession,
@@ -183,6 +186,11 @@ class StoryForgeDB extends Dexie {
   // PLATFORM-2 / AGENT-1 —— 可持久、可审计的总 Agent 对话事件流
   agentConversations!: Table<AgentConversation, number>
   agentEvents!: Table<AgentEvent, number>
+
+  // HARNESS-1 —— 分步骤创作 Agent 的可恢复运行账本
+  agentRuns!: Table<AgentRunRecord, number>
+  agentRunEvents!: Table<AgentRunEventRecord, number>
+  agentRunCheckpoints!: Table<AgentRunCheckpointRecord, number>
 
   // FLOW-2 —— 独立自由节点文档与逐节点可见运行记录
   nodeFlows!: Table<NodeFlow, number>
@@ -533,6 +541,15 @@ class StoryForgeDB extends Dexie {
       worldRevisions: '++id, projectId, worldId, parentRevisionId, revision, contentHash, updatedAt',
       worldReleases: '++id, projectId, worldId, revisionId, version, contentHash, createdAt',
       simulationSessions: '++id, projectId, worldGroupId, worldId, workId, worldReleaseId, narrativeModuleId, kind, status, parentSessionId, updatedAt',
+    })
+
+    // v51 / HARNESS-1: durable Agent run ledger. The upgrade only creates empty
+    // stores; historical conversations and model outputs are not guessed into
+    // resumable runs or retroactively marked completed.
+    this.version(51).stores({
+      agentRuns: '++id, projectId, workId, worldGroupId, conversationId, status, updatedAt',
+      agentRunEvents: '++id, projectId, worldGroupId, runId, &[runId+sequence], type, createdAt',
+      agentRunCheckpoints: '++id, projectId, worldGroupId, runId, &[runId+throughSequence], createdAt',
     })
   }
 }

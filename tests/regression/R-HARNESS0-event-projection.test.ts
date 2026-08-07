@@ -65,6 +65,22 @@ describe('R-HARNESS0-event-projection · 严格事件回放', () => {
     expect(isAgentRunCompletedV1(projection)).toBe(true)
   })
 
+  it('完成凭证失效后退出 completed，必须重新运行终态验证', () => {
+    const projection = replayAgentRunEventsV1([
+      ...successfulStepEvents(),
+      event(7, 'verification.started', { verifierSetVersion: 'terminal-v1' }),
+      event(8, 'verification.accepted', { receiptHash: RECEIPT_HASH }),
+      event(9, 'verification.staled', {
+        previousReceiptHash: RECEIPT_HASH,
+        reason: 'project-import-scope-rebound',
+      }),
+    ])
+
+    expect(projection.state).toBe('running')
+    expect(projection.terminalReceiptHash).toBeUndefined()
+    expect(isAgentRunCompletedV1(projection)).toBe(false)
+  })
+
   it('拒绝未知事件、未知字段和版本', () => {
     expect(() => parseAgentRunEventV1(event(1, 'model.declared-complete', {}))).toThrow('event.type')
     expect(() => parseAgentRunEventV1({

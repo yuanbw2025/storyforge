@@ -8,6 +8,7 @@
  * 必填外键(onUnmapped: 'require')缺失映射 → 抛错整体回滚(完整性保护);孤儿(onUnmapped:
  * 'drop')跳过该行;portals 等 JSON 自引用走两阶段(先建全表映射,再回填重映射)。
  */
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { remapWorldPortalTargets } from '../utils/world-portals'
@@ -22,6 +23,8 @@ import {
   stringifyCharacterDrivenPlanArcs,
 } from '../types/character-driven-plan'
 import { ensureWorkspaceOwnership } from '../world-engine/ownership'
+import { rebindPortableAgentRunContractV1 } from '../agent/run/contract-portability'
+import { finalizeImportedAgentRunLedgersV1 } from '../agent/run/ledger-portability'
 
 const STRICT_EXPORT_VERSION = 4
 
@@ -136,7 +139,10 @@ function deriveImportOrder(specs: TableSpec[]): TableSpec[] {
       const ownerDeps = spec.domainOwner?.locator?.kind === 'field'
         ? [spec.domainOwner.locator.owner === 'world' ? 'worlds' : spec.domainOwner.locator.owner === 'work' ? 'works' : null]
         : spec.domainOwner?.locator?.kind === 'exclusive-fields' ? ['worlds', 'works'] : []
-      const deps = [...new Set([...fieldDeps, ...refDeps, ...ownerDeps].filter((d): d is string => !!d && d !== spec.name))]
+      const portableDeps = spec.portableData?.kind === 'agent-run-root'
+        ? spec.portableData.dependencies
+        : []
+      const deps = [...new Set([...fieldDeps, ...refDeps, ...ownerDeps, ...portableDeps].filter((d): d is string => !!d && d !== spec.name))]
       if (deps.every(d => done.has(d))) {
         order.push(spec)
         done.add(spec.name)
@@ -292,6 +298,16 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
         }
 
         if (spec.owner === 'project') obj.projectId = newProjectId
+        if (spec.portableData?.kind === 'agent-run-root') {
+          const rebound = await Dexie.waitFor(rebindPortableAgentRunContractV1({
+            contractJson: obj[spec.portableData.contractField],
+            contractHash: obj[spec.portableData.contractHashField],
+            projectId: newProjectId,
+            idMaps: newIdMaps,
+          }))
+          obj[spec.portableData.contractField] = rebound.contractJson
+          obj[spec.portableData.contractHashField] = rebound.contractHash
+        }
         if (spec.name === 'characters') {
           Object.assign(obj, normalizeCharacterAxes(obj))
         }
@@ -382,6 +398,15 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
     // 对应候选不会重复写。
     if (((data as any).temporalFacts?.length ?? 0) === 0) {
       await migrateStateCardsToTemporalFactCandidates(db, newProjectId)
+    }
+
+    const agentRunIds = [...(newIdMaps.get('agentRuns')?.values() ?? [])]
+    if (agentRunIds.length > 0) {
+      await finalizeImportedAgentRunLedgersV1({
+        projectId: newProjectId,
+        runIds: agentRunIds,
+        idMaps: newIdMaps,
+      })
     }
 
     return newProjectId

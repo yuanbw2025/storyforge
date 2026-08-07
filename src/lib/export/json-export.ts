@@ -35,6 +35,9 @@ import type {
   InspirationWorkspace,
   AgentConversation,
   AgentEvent,
+  AgentRunRecord,
+  AgentRunEventRecord,
+  AgentRunCheckpointRecord,
   NodeFlow,
   NodeRunRecord,
   SimulationSession,
@@ -147,6 +150,26 @@ export interface ProjectExportData {
   agentEvents?: (
     Omit<AgentEvent, 'id' | 'projectId' | 'conversationId'>
     & { _conversationExportId: number }
+  )[]
+  /** HARNESS-1 可恢复运行账本；事件/检查点只通过便携 run ID 关联。 */
+  agentRuns?: (
+    Omit<AgentRunRecord, 'id' | 'projectId' | 'workId' | 'worldGroupId' | 'conversationId'>
+    & WorldGroupExportRef
+    & {
+      _exportId: number
+      _workOwnerExportId?: number
+      _conversationExportId?: number | null
+    }
+  )[]
+  agentRunEvents?: (
+    Omit<AgentRunEventRecord, 'id' | 'projectId' | 'worldGroupId' | 'runId'>
+    & WorldGroupExportRef
+    & { _agentRunExportId: number }
+  )[]
+  agentRunCheckpoints?: (
+    Omit<AgentRunCheckpointRecord, 'id' | 'projectId' | 'worldGroupId' | 'runId'>
+    & WorldGroupExportRef
+    & { _agentRunExportId: number }
   )[]
   /** FLOW-2 独立自由节点文档与运行记录。 */
   nodeFlows?: (

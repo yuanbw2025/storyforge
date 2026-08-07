@@ -1,6 +1,7 @@
 import type {
   AgentRunEventV1,
   AgentRunEventTypeV1,
+  AgentRunProjectionBodyV1,
   AgentRunProjectionV1,
   AgentRunState,
   AgentRunStepProjectionV1,
@@ -48,7 +49,7 @@ function assertActiveStep(
 }
 
 function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1): void {
-  if (TERMINAL_STATES.includes(projection.state)) {
+  if (TERMINAL_STATES.includes(projection.state) && event.type !== 'verification.staled') {
     throw new ProjectionError(`终态 ${projection.state} 后不得追加 ${event.type}`)
   }
   switch (event.type) {
@@ -181,6 +182,14 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       expectState(projection, event.type, ['verifying'])
       projection.state = event.payload.retryable ? 'running' : 'failed'
       break
+    case 'verification.staled':
+      expectState(projection, event.type, ['completed'])
+      if (projection.terminalReceiptHash !== event.payload.previousReceiptHash) {
+        throw new ProjectionError('verification.staled 的 previousReceiptHash 不匹配')
+      }
+      projection.terminalReceiptHash = undefined
+      projection.state = 'running'
+      break
     case 'checkpoint.created':
       if (event.payload.throughSequence !== event.sequence - 1) {
         throw new ProjectionError('checkpoint throughSequence 必须指向前一个事件')
@@ -199,7 +208,9 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       if (projection.lastCheckpointHash !== event.payload.checkpointHash) {
         throw new ProjectionError('恢复完成的 checkpoint 不匹配')
       }
-      projection.state = 'running'
+      projection.state = Object.values(projection.steps).some(step => step.status === 'awaiting_confirmation')
+        ? 'awaiting_confirmation'
+        : 'running'
       break
     case 'budget.reserved':
     case 'budget.settled':
@@ -284,6 +295,27 @@ export function replayAgentRunEventsV1(values: readonly unknown[]): AgentRunProj
 
 export async function hashAgentRunProjectionV1(projection: AgentRunProjectionV1): Promise<string> {
   return hashCanonicalValue(projection)
+}
+
+export function toAgentRunProjectionBodyV1(
+  projection: AgentRunProjectionV1,
+): AgentRunProjectionBodyV1 {
+  return {
+    version: 1,
+    generation: projection.generation,
+    state: projection.state,
+    lastSequence: projection.lastSequence,
+    steps: projection.steps,
+    terminalReceiptHash: projection.terminalReceiptHash,
+    lastCheckpointHash: projection.lastCheckpointHash,
+    errors: projection.errors,
+  }
+}
+
+export async function hashAgentRunProjectionBodyV1(
+  projection: AgentRunProjectionV1,
+): Promise<string> {
+  return hashCanonicalValue(toAgentRunProjectionBodyV1(projection))
 }
 
 export function isAgentRunCompletedV1(projection: AgentRunProjectionV1): boolean {

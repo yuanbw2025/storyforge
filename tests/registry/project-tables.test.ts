@@ -28,8 +28,8 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(result.ok, result.errors.join('; ')).toBe(true)
     })
 
-    it('登记了全部 66 张表', () => {
-      expect(PROJECT_TABLES.length).toBe(66)   // v50 WORLD-2D/2E 新增四张叙事与发布表
+    it('登记了全部 69 张表', () => {
+      expect(PROJECT_TABLES.length).toBe(69)   // v51 HARNESS-1 新增三张可恢复运行账本表
     })
 
     it('每张表名唯一', () => {

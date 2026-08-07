@@ -16,6 +16,7 @@ import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
 import { redactAuthoringSecrets } from '../node-authoring/contracts'
 import { ensureWorkspaceOwnership } from '../world-engine/ownership'
+import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
 
 /** 当前导出格式版本(与手写版保持一致) */
 const EXPORT_VERSION = 3
@@ -191,7 +192,14 @@ async function captureProjectExport(projectId: number, version: number, strictOw
 }
 
 async function deriveProjectExport(projectId: number, version: number, strictOwners: boolean): Promise<ProjectExportData> {
-  return (await captureProjectExport(projectId, version, strictOwners)).data
+  return (await portableizeSnapshot(await captureProjectExport(projectId, version, strictOwners))).data
+}
+
+async function portableizeSnapshot(snapshot: StrictProjectExportSnapshot): Promise<StrictProjectExportSnapshot> {
+  if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'agent-run-root')) {
+    await portableizeAgentRunLedgerExportV1(snapshot.data, snapshot.exportIds)
+  }
+  return snapshot
 }
 
 /**
@@ -213,7 +221,9 @@ export async function deriveStrictExportProjectSnapshot(projectId: number): Prom
     return captureProjectExport(projectId, EXPORT_VERSION, false)
   }
   const ownership = await ensureWorkspaceOwnership(projectId)
-  const snapshot = await captureProjectExport(projectId, STRICT_EXPORT_VERSION, true)
+  const snapshot = await portableizeSnapshot(
+    await captureProjectExport(projectId, STRICT_EXPORT_VERSION, true),
+  )
   const worldExportId = snapshot.exportIds.get('worlds')?.get(ownership.scope.worldId)
   const workExportId = snapshot.exportIds.get('works')?.get(ownership.scope.workId)
   if (worldExportId == null || workExportId == null) throw new Error('[strictExport] ownership 根不在导出快照中')

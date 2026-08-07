@@ -62,6 +62,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     refs: [
       { kind: 'simple', field: 'id', target: 'workCharacterBindings[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'simulationSessions[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'agentRuns[workId]', onDelete: 'cascade' },
     ],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
@@ -440,6 +441,7 @@ export const PROJECT_TABLES: TableSpec[] = [
     worldScoped: true, exportable: true, exportIdField: true,
     refs: [
       { kind: 'simple', field: 'id', target: 'agentEvents[conversationId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'agentRuns[conversationId]', onDelete: 'setNull' },
     ],
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
@@ -454,6 +456,60 @@ export const PROJECT_TABLES: TableSpec[] = [
     ],
     defaults: { payload: '{}' },
     note: 'Agent 追加事件流：消息/计划/任务/候选/确认/错误，未确认候选不属于 Canon' },
+
+  { table: db.agentRuns, name: 'agentRuns', owner: 'project',
+    domainOwner: LEGACY_WORK_OWNER,
+    worldScoped: true, exportable: true, exportIdField: true,
+    refs: [
+      { kind: 'simple', field: 'id', target: 'agentRunEvents[runId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'agentRunCheckpoints[runId]', onDelete: 'cascade' },
+    ],
+    exportRemap: [
+      { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
+      { field: 'conversationId', remapVia: 'agentConversations', exportAs: '_conversationExportId' },
+    ],
+    portableData: {
+      kind: 'agent-run-root',
+      contractField: 'contractJson',
+      contractHashField: 'contractHash',
+      dependencies: ['worldGroups', 'chapters', 'outlineNodes'],
+    },
+    defaults: {
+      status: 'planned',
+      contractVersion: 1,
+      generation: 1,
+      lastSequence: 0,
+      projectionJson: '{}',
+      terminalReceiptHash: null,
+    },
+    note: 'HARNESS-1 durable run 根；contract 与严格事件投影的物化状态，不保存正文或隐藏推理' },
+
+  { table: db.agentRunEvents, name: 'agentRunEvents', owner: 'project',
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'agentRuns', field: 'runId' } },
+    worldScoped: true, exportable: true,
+    exportRemap: [
+      { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
+      { field: 'runId', remapVia: 'agentRuns', exportAs: '_agentRunExportId', onUnmapped: 'require' },
+    ],
+    portableData: { kind: 'agent-run-child', parentField: 'runId', contractHashField: 'contractHash' },
+    defaults: { generation: 1, payloadJson: '{}' },
+    note: 'HARNESS-1 严格追加事件；(runId,sequence) 唯一，非法版本/断序/scope 污染 fail-closed' },
+
+  { table: db.agentRunCheckpoints, name: 'agentRunCheckpoints', owner: 'project',
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'agentRuns', field: 'runId' } },
+    worldScoped: true, exportable: true,
+    exportRemap: [
+      { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
+      { field: 'runId', remapVia: 'agentRuns', exportAs: '_agentRunExportId', onUnmapped: 'require' },
+    ],
+    portableData: { kind: 'agent-run-child', parentField: 'runId', contractHashField: 'contractHash' },
+    defaults: {
+      generation: 1,
+      checkpointHash: '0'.repeat(64),
+      resumePayloadJson: null,
+      resumePayloadHash: null,
+    },
+    note: 'HARNESS-1 最小恢复检查点；保存投影与可选 provider opaque 状态哈希，不复制手稿全文' },
 
   { table: db.nodeFlows, name: 'nodeFlows', owner: 'project',
     domainOwner: LEGACY_WORK_OWNER,

@@ -6,6 +6,9 @@
  */
 import { db } from '../../src/lib/db/schema'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
+import { canonicalStringify, hashCanonicalValue } from '../../src/lib/agent/run/hash'
+import { replayAgentRunEventsV1, toAgentRunProjectionBodyV1 } from '../../src/lib/agent/run/projection'
+import type { AnyAgentRunEventV1 } from '../../src/lib/types'
 
 const now = 1_700_000_000_000 // 固定时间戳,保证派生/手写两版导出可逐字段比对
 
@@ -308,6 +311,129 @@ export async function seedFullProject() {
     payload: '{}',
     createdAt: now,
   })
+  const harnessContract = {
+    version: 1,
+    objective: '生成第一卷卷纲候选',
+    workflowKind: 'direct-generation',
+    scope: { projectId, worldGroupId: wgA, outlineNodeIds: [vol] },
+    permissions: {
+      contextSourceKeys: ['worldview', 'storyCore'],
+      writeTargets: [{ table: 'outlineNodes', fields: ['summary'], mode: 'candidate-only' }],
+    },
+    budget: {
+      maxModelCalls: 1,
+      maxToolCalls: 0,
+      maxInputTokens: 8_000,
+      maxOutputTokens: 2_000,
+      maxAttemptsPerStep: 1,
+    },
+    acceptance: [{ id: 'outline.output', kind: 'output-present', required: true }],
+    verificationPlan: [{
+      id: 'outline.terminal',
+      kind: 'terminal',
+      verifier: 'terminal-v1',
+      criterionIds: ['outline.output'],
+    }],
+    failurePolicy: {
+      onProtocolError: 'fail',
+      onVerificationFailure: 'fail',
+      onStaleInput: 'pause-for-author',
+    },
+  }
+  const harnessContractHash = await hashCanonicalValue(harnessContract)
+  const agentRun = await db.agentRuns.add({
+    projectId,
+    worldGroupId: wgA,
+    conversationId: agentConversation,
+    status: 'planned',
+    contractVersion: 1,
+    contractJson: canonicalStringify(harnessContract),
+    contractHash: harnessContractHash,
+    generation: 1,
+    lastSequence: 0,
+    projectionJson: '{}',
+    projectionHash: '0'.repeat(64),
+    terminalReceiptHash: null,
+    createdAt: now,
+    updatedAt: now,
+  }) as number
+  const harnessEvents: AnyAgentRunEventV1[] = [{
+    version: 1 as const,
+    runId: agentRun,
+    sequence: 1,
+    generation: 1,
+    projectId,
+    worldGroupId: wgA,
+    contractHash: harnessContractHash,
+    type: 'run.created' as const,
+    payload: { objectiveHash: await hashCanonicalValue(harnessContract.objective) },
+    createdAt: now,
+  }, {
+    version: 1 as const,
+    runId: agentRun,
+    sequence: 2,
+    generation: 1,
+    projectId,
+    worldGroupId: wgA,
+    contractHash: harnessContractHash,
+    type: 'contract.accepted' as const,
+    payload: { contractJson: canonicalStringify(harnessContract) },
+    createdAt: now,
+  }]
+  const beforeCheckpoint = replayAgentRunEventsV1(harnessEvents)
+  const checkpointProjectionBody = toAgentRunProjectionBodyV1(beforeCheckpoint)
+  const checkpointProjectionHash = await hashCanonicalValue(checkpointProjectionBody)
+  const checkpointHash = await hashCanonicalValue({
+    version: 1,
+    generation: 1,
+    throughSequence: 2,
+    projectionHash: checkpointProjectionHash,
+    resumePayloadHash: null,
+  })
+  const agentRunCheckpoint = await db.agentRunCheckpoints.add({
+    projectId,
+    worldGroupId: wgA,
+    runId: agentRun,
+    throughSequence: 2,
+    generation: 1,
+    contractHash: harnessContractHash,
+    checkpointHash,
+    projectionJson: canonicalStringify(checkpointProjectionBody),
+    projectionHash: checkpointProjectionHash,
+    resumePayloadJson: null,
+    resumePayloadHash: null,
+    createdAt: now,
+  }) as number
+  harnessEvents.push({
+    version: 1,
+    runId: agentRun,
+    sequence: 3,
+    generation: 1,
+    projectId,
+    worldGroupId: wgA,
+    contractHash: harnessContractHash,
+    type: 'checkpoint.created',
+    payload: { throughSequence: 2, checkpointHash },
+    createdAt: now,
+  })
+  await db.agentRunEvents.bulkAdd(harnessEvents.map(event => ({
+    projectId: event.projectId,
+    worldGroupId: event.worldGroupId,
+    runId: event.runId,
+    sequence: event.sequence,
+    generation: event.generation,
+    contractHash: event.contractHash,
+    type: event.type,
+    payloadJson: canonicalStringify(event.payload),
+    createdAt: event.createdAt,
+  })))
+  const harnessProjection = replayAgentRunEventsV1(harnessEvents)
+  const harnessProjectionBody = toAgentRunProjectionBodyV1(harnessProjection)
+  await db.agentRuns.update(agentRun, {
+    lastSequence: harnessProjection.lastSequence,
+    projectionJson: canonicalStringify(harnessProjectionBody),
+    projectionHash: await hashCanonicalValue(harnessProjectionBody),
+  })
 
   // ── FLOW-2 独立节点文档与可见运行记录 ──
   const nodeFlow = await db.nodeFlows.add({
@@ -434,7 +560,7 @@ export async function seedFullProject() {
     projectId, wgA, wgB, char1, char2, vol, chapNode, chapter, temporalFact, ref1,
     cat, subCat, rootWorld, mirrorWorld, locParent, cultivationSystem, codexEntry,
     characterDrivenPlan, simulationParent, simulationChild, worldId, workId,
-    narrativeModule, worldRevision, worldRelease,
+    narrativeModule, worldRevision, worldRelease, agentRun, agentRunCheckpoint,
   }
 }
 

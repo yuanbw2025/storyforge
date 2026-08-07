@@ -176,6 +176,54 @@ export interface AgentHarnessBenchmarkArtifactV1 {
   artifactHash: string
 }
 
+export interface AgentRunRecord {
+  id?: number
+  projectId: number
+  workId?: number | null
+  worldGroupId?: number | null
+  conversationId?: number | null
+  status: AgentRunState
+  contractVersion: 1
+  contractJson: string
+  contractHash: string
+  generation: number
+  lastSequence: number
+  projectionJson: string
+  projectionHash: string
+  terminalReceiptHash?: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface AgentRunEventRecord {
+  id?: number
+  projectId: number
+  worldGroupId?: number | null
+  runId: number
+  sequence: number
+  generation: number
+  contractHash: string
+  type: AgentRunEventTypeV1
+  payloadJson: string
+  createdAt: number
+}
+
+export interface AgentRunCheckpointRecord {
+  id?: number
+  projectId: number
+  worldGroupId?: number | null
+  runId: number
+  throughSequence: number
+  generation: number
+  contractHash: string
+  checkpointHash: string
+  projectionJson: string
+  projectionHash: string
+  resumePayloadJson?: string | null
+  resumePayloadHash?: string | null
+  createdAt: number
+}
+
 export type AgentRunEventTypeV1 =
   | 'run.created'
   | 'contract.accepted'
@@ -198,6 +246,7 @@ export type AgentRunEventTypeV1 =
   | 'verification.started'
   | 'verification.accepted'
   | 'verification.rejected'
+  | 'verification.staled'
   | 'checkpoint.created'
   | 'recovery.started'
   | 'recovery.completed'
@@ -210,8 +259,8 @@ export type AgentRunEventTypeV1 =
 
 export interface AgentRunEventPayloadByTypeV1 {
   'run.created': { objectiveHash: string }
-  'contract.accepted': Record<string, never>
-  'contract.revised': { previousContractHash: string }
+  'contract.accepted': { contractJson?: string }
+  'contract.revised': { previousContractHash: string; contractJson?: string }
   'step.scheduled': { stepId: string }
   'step.started': { stepId: string; attempt: number }
   'step.succeeded': { stepId: string; attempt: number; outputHash: string }
@@ -239,6 +288,7 @@ export interface AgentRunEventPayloadByTypeV1 {
   'verification.started': { verifierSetVersion: string }
   'verification.accepted': { receiptHash: string }
   'verification.rejected': { codes: string[]; retryable: boolean }
+  'verification.staled': { previousReceiptHash: string; reason: string }
   'checkpoint.created': { throughSequence: number; checkpointHash: string }
   'recovery.started': { checkpointHash: string }
   'recovery.completed': { checkpointHash: string }
@@ -312,3 +362,13 @@ export interface AgentRunProjectionV1 {
   lastCheckpointHash?: string
   errors: string[]
 }
+
+/**
+ * Durable/exportable projection body. Physical workspace/run identifiers and
+ * the rebindable contract hash live on AgentRunRecord, so importing a backup
+ * never leaves stale local primary keys hidden inside projection JSON.
+ */
+export type AgentRunProjectionBodyV1 = Omit<
+  AgentRunProjectionV1,
+  'runId' | 'projectId' | 'worldGroupId' | 'contractHash'
+>

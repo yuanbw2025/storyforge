@@ -76,6 +76,11 @@ function normalize(data: any) {
   // Its exact remap and roundtrip contract is covered by R-export-fullcoverage.
   delete data.agentConversations
   delete data.agentEvents
+  // HARNESS-1 durable run ledger postdates the historical v3 fixture. Its
+  // replay, remap and roundtrip contracts are covered by R-HARNESS1 tests.
+  delete data.agentRuns
+  delete data.agentRunEvents
+  delete data.agentRunCheckpoints
   delete data.nodeFlows
   delete data.nodeRuns
   // SIM-1 process/runtime data is newer than the legacy v3 fixture.
