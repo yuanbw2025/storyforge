@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   clearRecentGenerationShadowTracesV1,
+  hashCanonicalValue,
   listRecentGenerationShadowTracesV1,
   readAgentRunV1,
 } from '../../src/lib/agent/run'
+import { appendAgentEvent } from '../../src/lib/agent/conversations'
 import {
   prepareGenerationNode,
   runGenerationNode,
@@ -230,7 +232,7 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
     })
   })
 
-  it.each(RECOVERY_BATCH_STARTS)('候选持久化后、确认前第 %i 轮起连续 5 次刷新均只恢复证据', async batchStart => {
+  it.each(RECOVERY_BATCH_STARTS)('模型返回后、UI 接管前第 %i 轮起连续 5 次刷新均恢复原候选', async batchStart => {
     for (const iteration of recoveryBatch(batchStart)) {
       const fixture = await createWorkspace()
       const assembled = assembly()
@@ -249,7 +251,6 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
         prepareGenerationNode(generationNode, assembled),
         { shadowTrace: trace },
       )
-      await trace.persistCandidate(result.output)
 
       const restored = await restoreLatestOutlineGenerationCandidateV1(fixture.scope.projectId)
 
@@ -262,8 +263,70 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
         runId: trace.durable!.runId,
         output,
       })
+      const cached = await trace.persistCandidate(result.output)
+      expect(cached?.candidateEventId).toBe(restored?.candidateEventId)
+      expect((await db.agentEvents
+        .where('conversationId')
+        .equals(restored!.conversationId)
+        .toArray())
+        .filter(event => event.kind === 'candidate')).toHaveLength(1)
       expect(run).toHaveBeenCalledOnce()
     }
+  })
+
+  it('候选原子事务中途失败会同时回滚模型响应与正文，并可在同一 trace 重试', async () => {
+    const fixture = await createWorkspace()
+    const assembled = assembly()
+    const generationNode = node(async () => '不会由本测试直接调用')
+    const prepared = prepareGenerationNode(generationNode, assembled)
+    const trace = await createOutlineGenerationTraceV1({
+      projectId: fixture.scope.projectId,
+      worldGroupId: fixture.worldGroupId,
+      request: { kind: 'chapters', volumeId: fixture.outlineNodeId },
+      assembled,
+      durable: true,
+    })
+    await trace.beforeModel({ prepared, messages: prepared.messages })
+    const beforeCommit = await readAgentRunV1(fixture.scope, trace.durable!.runId)
+    const output = '第一章：事务边界候选'
+
+    await expect(trace.durable!.commitCandidate({
+      output,
+      candidateHash: await hashCanonicalValue(output),
+      requiresConfirmation: true,
+      persistCandidate: async () => {
+        await appendAgentEvent({
+          projectId: fixture.scope.projectId,
+          conversationId: beforeCommit.run.conversationId!,
+          kind: 'candidate',
+          role: 'assistant',
+          content: output,
+          scope: fixture.scope,
+        })
+        throw new Error('模拟候选写入后的页面中断')
+      },
+    })).rejects.toThrow('模拟候选写入后的页面中断')
+
+    const rolledBack = await readAgentRunV1(fixture.scope, trace.durable!.runId)
+    expect(rolledBack.events.map(event => event.type)).toEqual([
+      'run.created',
+      'contract.accepted',
+      'step.scheduled',
+      'step.started',
+      'context.assembled',
+      'model.requested',
+    ])
+    expect((await db.agentEvents
+      .where('conversationId')
+      .equals(beforeCommit.run.conversationId!)
+      .toArray())
+      .filter(event => event.kind === 'candidate')).toEqual([])
+
+    await trace.candidateReady?.(output)
+    expect(await restoreLatestOutlineGenerationCandidateV1(fixture.scope.projectId)).toMatchObject({
+      runId: trace.durable!.runId,
+      output,
+    })
   })
 
   it('作者确认和采纳沿候选哈希推进，业务证据提交后步骤才成功', async () => {

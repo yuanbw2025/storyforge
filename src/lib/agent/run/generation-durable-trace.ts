@@ -11,6 +11,8 @@ import type {
   WorkspaceScope,
 } from '../../types'
 import type { ChatMessage } from '../../types'
+import { db } from '../../db/schema'
+import { scopeTransactionTables } from '../../world-engine/scope'
 import {
   appendAgentRunEventV1,
   type AgentRunSnapshotV1,
@@ -22,7 +24,12 @@ export interface GenerationNodeDurableTraceV1 extends GenerationNodeShadowTrace 
   readonly stepId: string
   readonly events: readonly AnyAgentRunEventV1[]
   readonly traceErrors: readonly string[]
-  candidatePersisted: (candidateHash: string, requiresConfirmation: boolean) => Promise<void>
+  commitCandidate: <T>(input: {
+    output: unknown
+    candidateHash: string
+    requiresConfirmation: boolean
+    persistCandidate: () => Promise<T>
+  }) => Promise<T>
   projection: () => AgentRunProjectionV1
 }
 
@@ -122,13 +129,59 @@ export function createGenerationNodeDurableTraceV1(input: {
       const outputHash = modelOutputHash ?? await hashCanonicalValue(output)
       await append('step.succeeded', { stepId: input.stepId, attempt: 1, outputHash })
     },
-    async candidatePersisted(candidateHash: string, requiresConfirmation: boolean) {
-      await append('candidate.persisted', {
-        stepId: input.stepId,
-        attempt: 1,
-        candidateHash,
-        requiresConfirmation,
-      })
+    async commitCandidate<T>({
+      output,
+      candidateHash,
+      requiresConfirmation,
+      persistCandidate,
+    }: {
+      output: unknown
+      candidateHash: string
+      requiresConfirmation: boolean
+      persistCandidate: () => Promise<T>
+    }): Promise<T> {
+      const outputHash = await hashCanonicalValue(output)
+      const committed = await db.transaction(
+        'rw',
+        scopeTransactionTables(
+          db.agentConversations,
+          db.agentEvents,
+          db.agentRuns,
+          db.agentRunEvents,
+        ),
+        async () => {
+          let nextSnapshot = await appendAgentRunEventV1({
+            scope: input.scope,
+            runId: snapshot.run.id,
+            type: 'model.responded',
+            payload: {
+              stepId: input.stepId,
+              attempt: 1,
+              outputHash,
+            },
+            expectedLastSequence: snapshot.projection.lastSequence,
+            now: now(),
+          })
+          const persisted = await persistCandidate()
+          nextSnapshot = await appendAgentRunEventV1({
+            scope: input.scope,
+            runId: snapshot.run.id,
+            type: 'candidate.persisted',
+            payload: {
+              stepId: input.stepId,
+              attempt: 1,
+              candidateHash,
+              requiresConfirmation,
+            },
+            expectedLastSequence: nextSnapshot.projection.lastSequence,
+            now: now(),
+          })
+          return { persisted, nextSnapshot }
+        },
+      )
+      snapshot = committed.nextSnapshot
+      modelOutputHash = outputHash
+      return committed.persisted
     },
     async stepFailed({ phase, error }) {
       await append('step.failed', {

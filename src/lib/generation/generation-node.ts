@@ -49,6 +49,7 @@ export interface GenerationNodeShadowTrace {
     messages: ChatMessage[]
   }) => Promise<void>
   modelResponded: (output: unknown) => Promise<void>
+  candidateReady?: (output: unknown) => Promise<void>
   stepSucceeded: (output: unknown) => Promise<void>
   stepFailed: (input: {
     phase: 'model' | 'gate' | 'adoption'
@@ -143,6 +144,9 @@ export async function runGenerationNode<TInput, TOutput, TAdoption>(
     }))
     return { output, gate, adopted: false, adoption: null }
   }
+  await notifyShadowTrace(options.shadowTrace, trace => (
+    trace.candidateReady?.(output) ?? Promise.resolve()
+  ))
   if (options.adopt === true && node.adopt) {
     let adoption: TAdoption
     try {

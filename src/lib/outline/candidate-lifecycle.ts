@@ -111,16 +111,11 @@ export async function persistOutlineGenerationCandidateV1(input: {
     operation,
     candidateHash,
   }
-  const candidateEvent = await db.transaction(
-    'rw',
-    scopeTransactionTables(
-      db.agentConversations,
-      db.agentEvents,
-      db.agentRuns,
-      db.agentRunEvents,
-    ),
-    async () => {
-      const event = await appendAgentEvent({
+  const candidateEvent = await input.durable.commitCandidate({
+    output: input.output,
+    candidateHash,
+    requiresConfirmation: true,
+    persistCandidate: () => appendAgentEvent({
         projectId: input.scope.projectId,
         conversationId: input.conversationId,
         kind: 'candidate',
@@ -128,11 +123,8 @@ export async function persistOutlineGenerationCandidateV1(input: {
         content: input.output,
         payload,
         scope: input.scope,
-      })
-      await input.durable.candidatePersisted(candidateHash, true)
-      return event
-    },
-  )
+      }),
+  })
   if (!candidateEvent.id) throw new Error('大纲候选持久化后缺少事件 ID')
   return {
     ...payload,

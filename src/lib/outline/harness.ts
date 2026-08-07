@@ -179,6 +179,7 @@ function composeOutlineTraces(input: {
   const diagnostics: string[] = input.initializationError ? [input.initializationError] : []
   const traces: GenerationNodeShadowTrace[] = [input.shadow]
   if (input.durable) traces.push(input.durable)
+  let persistedCandidate: OutlineGenerationCandidateV1 | null = null
   const notify = async (action: (trace: GenerationNodeShadowTrace) => Promise<void>) => {
     for (const trace of traces) {
       try {
@@ -202,7 +203,30 @@ function composeOutlineTraces(input: {
       return [...diagnostics]
     },
     beforeModel: value => notify(trace => trace.beforeModel(value)),
-    modelResponded: value => notify(trace => trace.modelResponded(value)),
+    // Durable model.responded is committed together with the candidate body.
+    // The in-memory shadow still observes the response immediately.
+    modelResponded: value => notify(trace => trace === input.durable
+      ? Promise.resolve()
+      : trace.modelResponded(value)),
+    async candidateReady(output: unknown) {
+      if (typeof output !== 'string' || !input.durable || !input.scope || input.conversationId == null) return
+      try {
+        persistedCandidate = await persistOutlineGenerationCandidateV1({
+          scope: input.scope,
+          conversationId: input.conversationId,
+          request: input.request,
+          durable: input.durable,
+          output,
+        })
+      } catch (error) {
+        diagnostics.push(error instanceof Error ? error.message : String(error))
+        try {
+          input.durable.onTraceError?.(error)
+        } catch {
+          // Candidate tracing remains behavior-neutral until the durable path is authoritative.
+        }
+      }
+    },
     // The H0 shadow remains behavior-neutral. Durable outline runs do not
     // succeed until the persisted candidate has been confirmed and adopted.
     stepSucceeded: value => notify(trace => trace === input.shadow
@@ -211,13 +235,15 @@ function composeOutlineTraces(input: {
     stepFailed: value => notify(trace => trace.stepFailed(value)),
     async persistCandidate(output: string) {
       if (!input.durable || !input.scope || input.conversationId == null || !output.trim()) return null
-      return persistOutlineGenerationCandidateV1({
+      if (persistedCandidate?.output === output) return persistedCandidate
+      persistedCandidate = await persistOutlineGenerationCandidateV1({
         scope: input.scope,
         conversationId: input.conversationId,
         request: input.request,
         durable: input.durable,
         output,
       })
+      return persistedCandidate
     },
     onTraceError(error: unknown) {
       diagnostics.push(error instanceof Error ? error.message : String(error))

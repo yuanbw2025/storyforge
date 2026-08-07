@@ -4,6 +4,7 @@ import {
   prepareGenerationNode,
   runGenerationNode,
   type GenerationNode,
+  type GenerationNodeShadowTrace,
 } from '../../src/lib/generation/generation-node'
 
 describe('PIPELINE-1 · GenerationNode 运行边界', () => {
@@ -76,6 +77,50 @@ describe('PIPELINE-1 · GenerationNode 运行边界', () => {
     expect(result.gate?.status).toBe('blocked')
     expect(result.adopted).toBe(false)
     expect(adopt).not.toHaveBeenCalled()
+  })
+
+  it('gate 通过后先交付候选，再进入采纳和成功事件', async () => {
+    const order: string[] = []
+    const trace: GenerationNodeShadowTrace = {
+      async beforeModel() { order.push('before-model') },
+      async modelResponded() { order.push('model-responded') },
+      async candidateReady() { order.push('candidate-ready') },
+      async stepSucceeded() { order.push('step-succeeded') },
+      async stepFailed() { order.push('step-failed') },
+    }
+    const node: GenerationNode<string, string, string> = {
+      id: 'outline.atomic-candidate',
+      kind: 'outline.chapter',
+      editableInput: true,
+      assembleInput: content => [{ role: 'user', content }],
+      async run() {
+        order.push('model-run')
+        return '候选'
+      },
+      gate() {
+        order.push('gate')
+        return { status: 'pass', issues: [] }
+      },
+      async adopt() {
+        order.push('adopt')
+        return '已采纳'
+      },
+    }
+
+    await runGenerationNode(node, prepareGenerationNode(node, '上下文'), {
+      adopt: true,
+      shadowTrace: trace,
+    })
+
+    expect(order).toEqual([
+      'before-model',
+      'model-run',
+      'model-responded',
+      'gate',
+      'candidate-ready',
+      'adopt',
+      'step-succeeded',
+    ])
   })
 
   it('采纳已经确认的精确候选时不重新调用模型，并重新执行 gate', async () => {
