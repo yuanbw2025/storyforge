@@ -160,8 +160,9 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
   assertUnique(writeTargets.map(target => target.table), 'contract.permissions.writeTargets')
 
   const budgetRecord = readRecord(record.budget, 'contract.budget')
-  const budgetKeys = ['maxModelCalls', 'maxToolCalls', 'maxInputTokens', 'maxOutputTokens', 'maxAttemptsPerStep'] as const
-  assertExactKeys(budgetRecord, budgetKeys, budgetKeys, 'contract.budget')
+  const requiredBudgetKeys = ['maxModelCalls', 'maxToolCalls', 'maxInputTokens', 'maxOutputTokens', 'maxAttemptsPerStep'] as const
+  const budgetKeys = [...requiredBudgetKeys, 'maxToolResultTokens', 'maxProtocolErrors'] as const
+  assertExactKeys(budgetRecord, budgetKeys, requiredBudgetKeys, 'contract.budget')
 
   const acceptance = readArray(record.acceptance, 'contract.acceptance')
     .map((item, index) => readAcceptance(item, `contract.acceptance[${index}]`))
@@ -221,6 +222,20 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
       maxInputTokens: readInteger(budgetRecord.maxInputTokens, 'contract.budget.maxInputTokens', { min: 1 }),
       maxOutputTokens: readInteger(budgetRecord.maxOutputTokens, 'contract.budget.maxOutputTokens', { min: 1 }),
       maxAttemptsPerStep: readInteger(budgetRecord.maxAttemptsPerStep, 'contract.budget.maxAttemptsPerStep', { min: 1 }),
+      ...(budgetRecord.maxToolResultTokens === undefined ? {} : {
+        maxToolResultTokens: readInteger(
+          budgetRecord.maxToolResultTokens,
+          'contract.budget.maxToolResultTokens',
+          { min: 1 },
+        ),
+      }),
+      ...(budgetRecord.maxProtocolErrors === undefined ? {} : {
+        maxProtocolErrors: readInteger(
+          budgetRecord.maxProtocolErrors,
+          'contract.budget.maxProtocolErrors',
+          { min: 0 },
+        ),
+      }),
     },
     acceptance,
     verificationPlan,

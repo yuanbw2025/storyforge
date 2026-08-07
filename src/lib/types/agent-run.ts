@@ -67,6 +67,10 @@ export interface AgentRunContractV1 {
     maxInputTokens: number
     maxOutputTokens: number
     maxAttemptsPerStep: number
+    /** Runner-specific evidence ceiling; absent on older/non-tool contracts. */
+    maxToolResultTokens?: number
+    /** Strict protocol repair allowance; absent on older/non-protocol contracts. */
+    maxProtocolErrors?: number
   }
   acceptance: AgentRunAcceptanceCriterionV1[]
   verificationPlan: AgentRunVerificationStepV1[]

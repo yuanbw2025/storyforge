@@ -77,6 +77,28 @@ describe('R-HARNESS0-contract-schema · RunContractV1', () => {
     expect(second.contractHash).toBe(first.contractHash)
   })
 
+  it('可选 Runner 预算进入规范化契约和 hash，旧契约仍保持兼容', async () => {
+    const legacy = await acceptAgentRunContractV1(validContract())
+    const source = validContract()
+    const extended = {
+      ...source,
+      budget: {
+        ...source.budget,
+        maxToolResultTokens: 24_000,
+        maxProtocolErrors: 2,
+      },
+    }
+    const accepted = await acceptAgentRunContractV1(extended)
+
+    expect(accepted.contract.budget).toMatchObject({
+      maxToolResultTokens: 24_000,
+      maxProtocolErrors: 2,
+    })
+    expect(accepted.contractHash).not.toBe(legacy.contractHash)
+    extended.budget.maxProtocolErrors = -1
+    expect(() => parseAgentRunContractV1(extended)).toThrow('contract.budget.maxProtocolErrors')
+  })
+
   it('拒绝未登记的上下文源', () => {
     const contract = validContract()
     contract.permissions.contextSourceKeys = ['worldview', 'componentHandBuiltPrompt']

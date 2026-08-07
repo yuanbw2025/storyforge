@@ -442,6 +442,11 @@ export const AGENT_READ_TOOLS: readonly AgentToolDefinition[] = READ_TOOL_SPECS.
   }
 })
 
+/** Maximum context capability exposed by the generic read-only runner. */
+export const AGENT_READ_CONTEXT_SOURCE_KEYS: readonly string[] = [...new Set(
+  AGENT_READ_TOOLS.flatMap(tool => tool.sourceKeys),
+)].sort()
+
 export const AGENT_TOOL_BY_NAME: ReadonlyMap<string, AgentToolDefinition> = new Map(
   AGENT_READ_TOOLS.map(tool => [tool.name, tool] as const),
 )

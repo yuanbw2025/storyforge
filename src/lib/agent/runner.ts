@@ -2,7 +2,7 @@ import { estimateTokens } from '../ai/context-budget'
 import type { ChatMessage } from '../types'
 import { executeAgentTool } from './tool-registry'
 import { buildAgentProtocolSystemPrompt, parseAgentProtocolAction } from './protocol'
-import type { AgentToolExecutionContext } from './types'
+import type { AgentToolExecutionContext, AgentToolResult } from './types'
 
 export interface AgentModelUsage {
   inputTokens: number
@@ -72,6 +72,41 @@ export interface ReadOnlyAgentResult {
   events: ReadOnlyAgentEvent[]
 }
 
+export type ReadOnlyAgentExecutionSummary = Omit<
+  ReadOnlyAgentResult,
+  'transcript' | 'events'
+>
+
+/**
+ * Awaited execution boundary used by durable adapters. The runner still owns
+ * protocol, tool and budget behavior; traces can persist evidence but cannot
+ * replace tool execution or change a result.
+ */
+export interface ReadOnlyAgentExecutionTrace {
+  beforeModel?: (input: {
+    step: number
+    messages: readonly ChatMessage[]
+    estimatedInputTokens: number
+  }) => Promise<void>
+  modelResponded?: (input: {
+    step: number
+    output: string
+    usage: AgentModelUsage
+  }) => Promise<void>
+  toolCalled?: (input: {
+    step: number
+    name: string
+    arguments: Readonly<Record<string, unknown>>
+  }) => Promise<void>
+  toolReturned?: (input: {
+    step: number
+    name: string
+    arguments: Readonly<Record<string, unknown>>
+    result: AgentToolResult
+  }) => Promise<void>
+  stopped?: (result: ReadOnlyAgentExecutionSummary) => Promise<void>
+}
+
 export interface RunReadOnlyAgentInput {
   goal: string
   context: AgentToolExecutionContext
@@ -79,6 +114,7 @@ export interface RunReadOnlyAgentInput {
   limits?: Partial<ReadOnlyAgentLimits>
   signal?: AbortSignal
   onEvent?: (event: ReadOnlyAgentEvent) => void
+  executionTrace?: ReadOnlyAgentExecutionTrace
 }
 
 function clampInteger(value: number | undefined, fallback: number, hardMax: number): number {
@@ -91,7 +127,7 @@ function clampNonNegativeInteger(value: number | undefined, fallback: number, ha
   return Math.max(0, Math.min(hardMax, Math.floor(value)))
 }
 
-function resolveLimits(input?: Partial<ReadOnlyAgentLimits>): ReadOnlyAgentLimits {
+export function resolveReadOnlyAgentLimits(input?: Partial<ReadOnlyAgentLimits>): ReadOnlyAgentLimits {
   return {
     maxSteps: clampInteger(input?.maxSteps, DEFAULT_READ_ONLY_AGENT_LIMITS.maxSteps, HARD_LIMITS.maxSteps),
     maxToolCalls: clampInteger(input?.maxToolCalls, DEFAULT_READ_ONLY_AGENT_LIMITS.maxToolCalls, HARD_LIMITS.maxToolCalls),
@@ -147,7 +183,7 @@ function stableValue(value: unknown): string {
   return JSON.stringify(value)
 }
 
-function stopResult(args: {
+async function stopResult(args: {
   reason: ReadOnlyAgentStopReason
   answer?: string
   steps: number
@@ -157,15 +193,20 @@ function stopResult(args: {
   transcript: ChatMessage[]
   events: ReadOnlyAgentEvent[]
   emit: (event: ReadOnlyAgentEvent) => void
-}): ReadOnlyAgentResult {
-  args.emit({ type: 'stopped', reason: args.reason })
-  return {
+  trace?: ReadOnlyAgentExecutionTrace
+}): Promise<ReadOnlyAgentResult> {
+  const summary: ReadOnlyAgentExecutionSummary = {
     status: args.reason,
     answer: args.answer ?? '',
     steps: args.steps,
     toolCalls: args.toolCalls,
     totalTokens: args.totalTokens,
     toolResultTokens: args.toolResultTokens,
+  }
+  await args.trace?.stopped?.(summary)
+  args.emit({ type: 'stopped', reason: args.reason })
+  return {
+    ...summary,
     transcript: args.transcript,
     events: args.events,
   }
@@ -174,7 +215,7 @@ function stopResult(args: {
 export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<ReadOnlyAgentResult> {
   const goal = input.goal.trim()
   if (!goal) throw new Error('Agent 目标不能为空')
-  const limits = resolveLimits(input.limits)
+  const limits = resolveReadOnlyAgentLimits(input.limits)
   const events: ReadOnlyAgentEvent[] = []
   const emit = (event: ReadOnlyAgentEvent) => {
     events.push(event)
@@ -196,15 +237,22 @@ export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<Re
     if (input.signal?.aborted) {
       return stopResult({
         reason: 'aborted', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+        trace: input.executionTrace,
       })
     }
     const estimatedRequest = estimateMessages(transcript)
     if (totalTokens + estimatedRequest > limits.maxTotalTokens) {
       return stopResult({
         reason: 'token_budget', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+        trace: input.executionTrace,
       })
     }
 
+    await input.executionTrace?.beforeModel?.({
+      step: steps + 1,
+      messages: transcript.map(message => ({ ...message })),
+      estimatedInputTokens: estimatedRequest,
+    })
     let completion: AgentModelCompletion
     try {
       completion = await input.model.complete(transcript.map(message => ({ ...message })), input.signal)
@@ -212,6 +260,7 @@ export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<Re
       if (input.signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
         return stopResult({
           reason: 'aborted', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+          trace: input.executionTrace,
         })
       }
       transcript.push({
@@ -220,16 +269,23 @@ export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<Re
       })
       return stopResult({
         reason: 'model_error', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+        trace: input.executionTrace,
       })
     }
     steps += 1
     const usage = normalizeUsage(completion.usage, estimatedRequest, completion.content)
     totalTokens += usage.totalTokens
+    await input.executionTrace?.modelResponded?.({
+      step: steps,
+      output: completion.content,
+      usage,
+    })
     emit({ type: 'model', step: steps, output: completion.content, usage })
     transcript.push({ role: 'assistant', content: completion.content })
     if (totalTokens > limits.maxTotalTokens) {
       return stopResult({
         reason: 'token_budget', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+        trace: input.executionTrace,
       })
     }
 
@@ -243,6 +299,7 @@ export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<Re
       if (protocolErrors > limits.maxProtocolErrors) {
         return stopResult({
           reason: 'protocol_error', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+          trace: input.executionTrace,
         })
       }
       transcript.push({
@@ -263,18 +320,21 @@ export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<Re
         transcript,
         events,
         emit,
+        trace: input.executionTrace,
       })
     }
 
     if (toolCalls + action.calls.length > limits.maxToolCalls) {
       return stopResult({
         reason: 'max_tool_calls', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+        trace: input.executionTrace,
       })
     }
     const signatures = action.calls.map(call => `${call.name}:${stableValue(call.arguments)}`)
     if (new Set(signatures).size !== signatures.length || signatures.some(signature => completedCalls.has(signature))) {
       return stopResult({
         reason: 'loop_detected', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+        trace: input.executionTrace,
       })
     }
 
@@ -283,12 +343,24 @@ export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<Re
       if (input.signal?.aborted) {
         return stopResult({
           reason: 'aborted', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+          trace: input.executionTrace,
         })
       }
       const call = action.calls[index]
       const signature = signatures[index]
       completedCalls.add(signature)
+      await input.executionTrace?.toolCalled?.({
+        step: steps,
+        name: call.name,
+        arguments: { ...call.arguments },
+      })
       const result = await executeAgentTool(call.name, input.context, call.arguments)
+      await input.executionTrace?.toolReturned?.({
+        step: steps,
+        name: call.name,
+        arguments: { ...call.arguments },
+        result,
+      })
       toolCalls += 1
       toolResultTokens += result.meta.totalInputTokens
       emit({
@@ -314,6 +386,7 @@ export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<Re
       if (toolResultTokens > limits.maxToolResultTokens) {
         return stopResult({
           reason: 'tool_result_budget', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+          trace: input.executionTrace,
         })
       }
     }
@@ -329,5 +402,6 @@ export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<Re
 
   return stopResult({
     reason: 'max_steps', steps, toolCalls, totalTokens, toolResultTokens, transcript, events, emit,
+    trace: input.executionTrace,
   })
 }

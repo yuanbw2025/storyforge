@@ -259,7 +259,13 @@ K3 报告中的具体 benchmark 来自不同 Harness、部分内部任务和特�
 - 物理上下文不足时拒绝静默裁掉目标或工具证据；
 - stop reason 明确区分 completed、budget、protocol、loop、abort 和 model error。
 
-关键缺口：[`action.type === 'final'`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/runner.ts#L255-L266) 直接返回 `reason: 'completed'`。这只能证明模型给出了协议合法的答案，不能证明答案覆盖了目标、引用仍新鲜、或任何环境状态达到验收条件。transcript/events 主要在调用内存中，也没有 attempt/checkpoint/resume。
+H1 现状（2026-08-08）：`runDurableReadOnlyAgentV1()` 复用同一 Runner 和 Tool Registry，
+把模型请求/响应、工具调用/返回和预算结算映射到 durable run；严格 `read-only-audit`
+契约的上下文权限由只读工具 source 闭包派生，写集合固定为空。最终答复以 32,000 字符上限的
+checkpoint 结果保存，不保存完整 transcript、工具正文或隐藏推理；四个中断边界各 5 次恢复
+对照已证明 checkpoint 后不重复模型调用，checkpoint 前按整步重试。模型协议中的
+`reason: 'completed'` 仍只表示 Runner 执行成功，账本停在 `paused` 等待 H2 terminal verifier，
+不会因此签发 `verification.accepted` 或进入 run `completed`。
 
 ### 3.3 主 Agent 与领域执行
 
@@ -381,7 +387,7 @@ Run Harness 应复用这两种模式，而不是把 Gajae 的 JSONL 或 K3 的 m
 
 | 能力 | 入口 | 读取 | 写入 | 生命周期/调用方 | 现有测试与缺口 |
 |---|---|---|---|---|---|
-| 只读 Agent | `runReadOnlyAgent` | Tool Registry -> `CONTEXT_SOURCES` -> `assembleContext()` | 无业务写入；仅标准 usage log | 调用方接收内存 transcript/events | `R-AGENT1-readonly-runner`、`read-tool-registry` 覆盖安全/预算；缺恢复和 terminal verifier |
+| 只读 Agent | `runReadOnlyAgent` + `runDurableReadOnlyAgentV1` | Tool Registry -> `CONTEXT_SOURCES` -> `assembleContext()` | 无业务写入；标准 usage log + run ledger/checkpoint | 首次执行可返回内存 transcript；恢复只读取有界结果 checkpoint | `R-AGENT1-readonly-runner`、`R-HARNESS1-readonly-durable-runner` 覆盖安全/预算/四边界恢复/篡改；仍缺 H2 terminal verifier |
 | 主 Agent 规划 | `createMasterAgentPlan` | `read_project_status` | plan event | `useMasterCopilot` | `R-AGENT2` 覆盖路由、授权、DAG；缺完整 RunContract 和持久 attempt |
 | 领域执行 | `executeMasterAgentPlan` | 各领域 context profile + 正式 sources | 仅生成候选 | `GenerationNode`、team budget、candidate event | `R-AGENT1-*`、`R-AGENT4`；缺 checkpoint/resume 和统一 completion |
 | 候选采纳 | `adoptMasterCandidate` | base/current snapshot、上游确认 | `adopt()` 或登记入口 | confirmation event、Canon refresh | 覆盖 stale、依赖、gate；缺统一 adoption receipt/post-state verifier |
@@ -480,6 +486,8 @@ interface AgentRunContractV1 {
     maxInputTokens: number
     maxOutputTokens: number
     maxAttemptsPerStep: number
+    maxToolResultTokens?: number
+    maxProtocolErrors?: number
   }
   acceptance: AcceptanceCriterionV1[]
   verificationPlan: VerificationStepV1[]
@@ -812,7 +820,9 @@ CHIRON 四类信息可映射到现有结构：
 - 备份中的契约 scope 使用便携编号，导入会重绑每一代契约/事件/检查点哈希并重新回放；克隆后的旧完成凭证会写入 `verification.staled`，不能继续签发 completed；
 - 大纲真实 `GenerationNode` 已进入 durable + H0 shadow 双写：仍只调用一次模型、仍沿原预览/确认/采纳路径，账本只记录契约与输入输出哈希；durable 初始化或追加失败会降级为 shadow，本机可用 `storyforge:harness:outline-durable-v1=disabled` 关闭接入；
 - 大纲原始候选已复用 `agentConversations/agentEvents` 持久化，并通过 `agentRuns.conversationId`、run/step/candidate hash 绑定；模型返回后 run 进入 `awaiting_confirmation`，作者确认和既有 `adopt()` 写入分别留下 confirmation/adoption/step 证据，刷新只从通过重放校验且候选哈希匹配的记录恢复，不会重调已完成的模型步骤；
-- 当前仍未达到 H1 整体退出门槛：只读 Runner durable 接入、正式写入后到 `adoption.committed` 之间的崩溃自动收敛、四边界各 20 次中断对照尚待后续小阶段完成；durable ledger 已接管大纲候选恢复证据，但仍不取代业务表、受治理采纳或作者确认。
+- 大纲采纳已能从确认后、业务写入前和部分批量写入后恢复，重复恢复沿既有 `adopt()` 去重语义补齐；模型返回、候选持久化、确认后和部分写入四组边界各完成 20 次中断对照；
+- 只读 Runner 已通过 awaited trace port 接入 durable adapter；运行契约绑定工具 source 闭包、零写权限和既有预算，最终答复进入有界 checkpoint，四个 Runner 边界共完成 20 次中断对照，tamper、scope、预算失败均 fail-closed；
+- 当前仍未达到 H1 整体退出门槛：现有 `createMasterAgentPlan()` / `executeMasterAgentPlan()` 的计划和领域 DAG 仍是内存执行，尚未把主 Agent plan/task/attempt/candidate 统一投影到 durable run。下一小阶段只接这条真实主路径，不提前实现 H2 terminal verifier，也不让 ledger 取代业务表、受治理采纳或作者确认。
 
 **范围**
 

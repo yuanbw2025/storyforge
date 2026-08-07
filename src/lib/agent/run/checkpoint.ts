@@ -41,6 +41,13 @@ export interface AgentRunRecoveryPlanV1 {
   snapshot: AgentRunSnapshotV1
 }
 
+export interface VerifiedAgentRunCheckpointV1 {
+  checkpoint: AgentRunCheckpointRecord & { id: number }
+  projection: AgentRunProjectionV1
+  resumePayload: unknown | null
+  snapshot: AgentRunSnapshotV1
+}
+
 function fail(code: string, message: string): never {
   throw new AgentRunStoreError(code, message)
 }
@@ -280,6 +287,29 @@ export async function verifyAgentRunCheckpointV1(
     if (error instanceof AgentRunStoreError) return false
     throw error
   }
+}
+
+/** Read the latest checkpoint only after replay, scope and payload hashes agree. */
+export async function readLatestVerifiedAgentRunCheckpointV1(
+  scope: WorkspaceScope,
+  runId: number,
+): Promise<VerifiedAgentRunCheckpointV1 | null> {
+  return db.transaction(
+    'r',
+    scopeTransactionTables(db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+    async () => {
+      const snapshot = await readVerifiedAgentRunInTransactionV1(scope, runId)
+      const checkpoint = await latestCheckpoint(runId)
+      if (!checkpoint) return null
+      const projection = await verifyCheckpointAgainstSnapshot(scope, checkpoint, snapshot)
+      return {
+        checkpoint,
+        projection,
+        resumePayload: parseResumePayload(checkpoint),
+        snapshot,
+      }
+    },
+  )
 }
 
 export async function beginAgentRunRecoveryV1(input: {
