@@ -9,7 +9,15 @@ import {
 import {
   beginMasterAgentCandidateAdoptionV1,
   commitMasterAgentCandidateAdoptionV1,
+  recoverPendingMasterAgentAdoptionsV1,
 } from '../../src/lib/agent/run/master-adoption'
+import { adoptMasterCandidate } from '../../src/lib/agent/orchestrator'
+import { adoptGeneratedOutlineItems } from '../../src/lib/outline/adopt-generation'
+import { prepareOutlineCopilot } from '../../src/lib/agent/outline-copilot'
+import { prepareProseCopilot } from '../../src/lib/agent/prose-copilot'
+import { adopt } from '../../src/lib/registry/adopt'
+import { countWords } from '../../src/lib/utils/html'
+import { plainTextToHtml } from '../../src/lib/utils/html'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { readLatestVerifiedAgentRunCheckpointV1 } from '../../src/lib/agent/run/checkpoint'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
@@ -118,7 +126,12 @@ function fakeExecutor(input: {
   }
 }
 
-describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable 编排', () => {
+function longDraft(label: string): string {
+  return `${label}。潮声从城墙外一层层压来，守门人握紧手中的灯柄，记起今日必须完成的约定。`
+    .repeat(3)
+}
+
+describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable 编排', { timeout: 15_000 }, () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
@@ -296,5 +309,285 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
     expect(repeated.adoptionHash).toBe(committed.adoptionHash)
     expect((await readAgentRunV1(fixture.scope, result.runId)).events.map(event => event.type))
       .toEqual(snapshot.events.map(event => event.type))
+  })
+
+  it('业务写入后宿主中断，恢复扫描只补齐采纳证据，不重复写业务', async () => {
+    const fixture = await createWorkspace('采纳恢复')
+    const conversation = await getOrCreateAgentConversation({
+      projectId: fixture.scope.projectId,
+      worldGroupId: fixture.worldGroupId,
+      scope: fixture.scope,
+    })
+    const result = await runDurableMasterAgentPlanV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      conversationId: conversation.id,
+      plan: {
+        summary: '建立世界来源。',
+        tasks: [{ id: 'world-1', agentId: 'world-origin', instruction: '生成世界来源。', dependsOn: [] }],
+      },
+      budget: new AgentTeamBudgetTracker('balanced'),
+    }, { execute: fakeExecutor({ calls: vi.fn() }) as any })
+    const candidate = result.candidates[0]
+    const ref = {
+      scope: fixture.scope,
+      runId: result.runId,
+      candidateEventId: candidate.event.id!,
+    }
+    await beginMasterAgentCandidateAdoptionV1(ref)
+    await adoptMasterCandidate({
+      projectId: fixture.scope.projectId,
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      event: candidate.event,
+      payload: candidate.payload,
+      draft: candidate.draft,
+    })
+    expect(await db.worldviews.count()).toBe(1)
+    const recovered = await recoverPendingMasterAgentAdoptionsV1(fixture.scope)
+    expect(recovered).toEqual({ recoveredRunIds: [result.runId], failed: [] })
+    const snapshot = await readAgentRunV1(fixture.scope, result.runId)
+    expect(snapshot.projection.steps['master:world-1']).toMatchObject({
+      status: 'succeeded',
+      confirmation: 'adopt',
+    })
+    expect(await recoverPendingMasterAgentAdoptionsV1(fixture.scope))
+      .toEqual({ recoveredRunIds: [], failed: [] })
+    expect(await db.worldviews.count()).toBe(1)
+  })
+
+  it('大纲部分写入后恢复只补齐缺项，不产生重复条目', async () => {
+    const fixture = await createWorkspace('大纲部分恢复')
+    await db.projects.update(fixture.scope.projectId, { enableMultiWorld: true })
+    const volumeId = await db.outlineNodes.add({
+      projectId: fixture.scope.projectId,
+      worldId: null,
+      workId: fixture.scope.workId,
+      worldGroupId: fixture.worldGroupId,
+      parentId: null,
+      type: 'volume',
+      title: '第一卷',
+      summary: '潮门即将关闭。',
+      order: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any) as number
+    const prepared = await prepareOutlineCopilot({
+      projectId: fixture.scope.projectId,
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      authorRequest: '展开第一卷章节大纲',
+    })
+    const items = [
+      { title: '潮门关闭', summary: '城门在潮汐前关闭，守灯人被迫留下。' },
+      { title: '最后一班船', summary: '守灯人发现仍有一艘船没有返航。' },
+    ]
+    const conversation = await getOrCreateAgentConversation({
+      projectId: fixture.scope.projectId,
+      worldGroupId: fixture.worldGroupId,
+      scope: fixture.scope,
+    })
+    const result = await runDurableMasterAgentPlanV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      conversationId: conversation.id,
+      plan: {
+        summary: '生成第一卷章节大纲。',
+        tasks: [{ id: 'outline-1', agentId: 'outline', instruction: '生成两个章节。', dependsOn: [] }],
+      },
+      budget: new AgentTeamBudgetTracker('balanced'),
+    }, { execute: async (options: any) => {
+      const task = options.plan.tasks[0]
+      await options.executionTrace.taskStarted(task)
+      const reservation = options.budget.reserveCall({
+        label: task.id,
+        messages: [{ role: 'user', content: task.instruction }],
+        maxOutputTokens: 100,
+      })
+      const draft = JSON.stringify(items)
+      options.budget.settleCall(reservation, draft)
+      await options.executionTrace.candidateReady(task, {
+        payload: {
+          version: 1,
+          taskId: task.id,
+          agentId: task.agentId,
+          label: '章节大纲',
+          contextSources: ['storyCore'],
+          baseSnapshot: prepared.snapshot,
+          outlineMode: prepared.mode,
+          outlineParentId: prepared.parentVolumeId,
+          workspaceScope: options.scope,
+          dependsOnTaskIds: [],
+        },
+        draft,
+        runtimeNode: {} as any,
+        runtimeOutput: draft,
+      })
+    }})
+    const candidate = result.candidates[0]
+    const ref = {
+      scope: fixture.scope,
+      runId: result.runId,
+      candidateEventId: candidate.event.id!,
+      worldGroupId: fixture.worldGroupId,
+    }
+    await beginMasterAgentCandidateAdoptionV1(ref)
+    await adoptGeneratedOutlineItems({
+      projectId: fixture.scope.projectId,
+      workspaceScope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      parentId: volumeId,
+      type: 'chapter',
+      items: [items[0]],
+      startingOrder: prepared.snapshot.startingOrder,
+    })
+
+    const recovered = await recoverPendingMasterAgentAdoptionsV1(fixture.scope)
+    expect(recovered).toEqual({ recoveredRunIds: [result.runId], failed: [] })
+    const chapters = (await db.outlineNodes.toArray())
+      .filter(row => row.type === 'chapter')
+      .sort((left, right) => left.order - right.order)
+    expect(chapters.map(row => ({ title: row.title, summary: row.summary, order: row.order })))
+      .toEqual([
+        { title: items[0].title, summary: items[0].summary, order: 0 },
+        { title: items[1].title, summary: items[1].summary, order: 1 },
+      ])
+    expect(await recoverPendingMasterAgentAdoptionsV1(fixture.scope))
+      .toEqual({ recoveredRunIds: [], failed: [] })
+    expect(await db.outlineNodes.where('type').equals('chapter').count()).toBe(2)
+  })
+
+  it('完整正文已经写入时恢复只补齐采纳证据，部分正文则 fail-closed', async () => {
+    const runProseRecovery = async (label: string, partial: boolean) => {
+      const fixture = await createWorkspace(label)
+      await db.projects.update(fixture.scope.projectId, { enableMultiWorld: true })
+      const volumeId = await db.outlineNodes.add({
+        projectId: fixture.scope.projectId,
+        worldId: null,
+        workId: fixture.scope.workId,
+        worldGroupId: fixture.worldGroupId,
+        parentId: null,
+        type: 'volume',
+        title: '第一卷',
+        summary: '潮门即将关闭。',
+        order: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      } as any) as number
+      const chapterOutlineId = await db.outlineNodes.add({
+        projectId: fixture.scope.projectId,
+        worldId: null,
+        workId: fixture.scope.workId,
+        worldGroupId: fixture.worldGroupId,
+        parentId: volumeId,
+        type: 'chapter',
+        title: '第一章',
+        summary: '守灯人等待潮汐。',
+        order: 0,
+        updatedAt: Date.now(),
+      } as any) as number
+      const prepared = await prepareProseCopilot({
+        projectId: fixture.scope.projectId,
+        scope: fixture.scope,
+        worldGroupId: fixture.worldGroupId,
+        authorRequest: '写第一章正文',
+      })
+      const draft = longDraft(label)
+      const conversation = await getOrCreateAgentConversation({
+        projectId: fixture.scope.projectId,
+        worldGroupId: fixture.worldGroupId,
+        scope: fixture.scope,
+      })
+      const result = await runDurableMasterAgentPlanV1({
+        scope: fixture.scope,
+        worldGroupId: fixture.worldGroupId,
+        conversationId: conversation.id,
+        plan: {
+          summary: '生成第一章正文。',
+          tasks: [{ id: 'prose-1', agentId: 'prose', instruction: '写第一章正文。', dependsOn: [] }],
+        },
+        budget: new AgentTeamBudgetTracker('balanced'),
+      }, { execute: async (options: any) => {
+        const task = options.plan.tasks[0]
+        await options.executionTrace.taskStarted(task)
+        const reservation = options.budget.reserveCall({
+          label: task.id,
+          messages: [{ role: 'user', content: task.instruction }],
+          maxOutputTokens: 100,
+        })
+        options.budget.settleCall(reservation, draft)
+        await options.executionTrace.candidateReady(task, {
+          payload: {
+            version: 1,
+            taskId: task.id,
+            agentId: task.agentId,
+            label: '第一章正文',
+            contextSources: ['chapterOutline'],
+            baseSnapshot: prepared.snapshot,
+            proseOperation: 'generate',
+            proseOutlineNodeId: chapterOutlineId,
+            workspaceScope: options.scope,
+            dependsOnTaskIds: [],
+          },
+          draft,
+          runtimeNode: {} as any,
+          runtimeOutput: draft,
+        })
+      }})
+      const candidate = result.candidates[0]
+      const ref = {
+        scope: fixture.scope,
+        runId: result.runId,
+        candidateEventId: candidate.event.id!,
+        worldGroupId: fixture.worldGroupId,
+      }
+      await beginMasterAgentCandidateAdoptionV1(ref)
+      if (partial) {
+        const partialText = draft.slice(0, -10)
+        await adopt({
+          projectId: fixture.scope.projectId,
+          scope: fixture.scope,
+          worldGroupId: fixture.worldGroupId,
+          target: 'chapters',
+          mode: 'add',
+          data: {
+            outlineNodeId: chapterOutlineId,
+            title: '第一章',
+            content: plainTextToHtml(partialText),
+            wordCount: countWords(partialText),
+            status: 'draft',
+            order: 0,
+            notes: '',
+          },
+        })
+      } else {
+        await adoptMasterCandidate({
+          projectId: fixture.scope.projectId,
+          scope: fixture.scope,
+          worldGroupId: fixture.worldGroupId,
+          event: candidate.event,
+          payload: candidate.payload,
+          draft: candidate.draft,
+        })
+      }
+      return { fixture, result, ref, draft, chapterOutlineId }
+    }
+
+    const complete = await runProseRecovery('正文完整恢复', false)
+    expect((await recoverPendingMasterAgentAdoptionsV1(complete.fixture.scope)))
+      .toEqual({ recoveredRunIds: [complete.result.runId], failed: [] })
+    expect(await db.chapters.where('outlineNodeId').equals(complete.chapterOutlineId).count()).toBe(1)
+    const completeSnapshot = await readAgentRunV1(complete.fixture.scope, complete.result.runId)
+    expect(completeSnapshot.projection.steps['master:prose-1']).toMatchObject({ status: 'succeeded' })
+
+    const partial = await runProseRecovery('正文部分恢复', true)
+    const partialBefore = await db.chapters.where('outlineNodeId').equals(partial.chapterOutlineId).toArray()
+    const failed = await recoverPendingMasterAgentAdoptionsV1(partial.fixture.scope)
+    expect(failed.recoveredRunIds).toEqual([])
+    expect(failed.failed).toHaveLength(1)
+    expect((await db.chapters.where('outlineNodeId').equals(partial.chapterOutlineId).toArray()).map(row => row.content))
+      .toEqual(partialBefore.map(row => row.content))
+    expect((await readAgentRunV1(partial.fixture.scope, partial.result.runId)).projection.steps['master:prose-1'])
+      .toMatchObject({ status: 'running', confirmation: 'adopt' })
   })
 })

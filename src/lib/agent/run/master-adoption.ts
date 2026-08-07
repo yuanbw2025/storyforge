@@ -16,12 +16,25 @@ import {
   type AgentRunSnapshotV1,
 } from './event-store'
 import { hashCanonicalValue } from './hash'
+import { readOwnedRows } from '../../world-engine/scope'
+import { adoptGeneratedOutlineItems } from '../../outline/adopt-generation'
+import { parseCharacterCandidateDraft } from '../character-copilot'
+import { parseOutlineCandidateDraft } from '../outline-copilot'
+import { parseProseCandidateDraft } from '../prose-copilot'
+import { parseInspirationCandidateDraft } from '../inspiration-copilot'
+import { parseInspirationVersions } from '../../inspiration/workspace'
+import { plainTextToHtml } from '../../utils/html'
+import {
+  beginAgentRunRecoveryV1,
+  completeAgentRunRecoveryV1,
+} from './checkpoint'
 
 export interface MasterAgentCandidateAdoptionRefV1 {
   scope: WorkspaceScope
   runId: number
   candidateEventId: number
   runtime?: ExecutedMasterCandidate
+  worldGroupId?: number | null
 }
 
 export interface MasterAgentCandidateAdoptionResultV1 {
@@ -98,7 +111,7 @@ export async function beginMasterAgentCandidateAdoptionV1(
     'rw',
     scopeTransactionTables(db.agentConversations, db.agentEvents, db.agentRuns, db.agentRunEvents),
     async () => {
-      let snapshot = await appendAgentRunEventV1({
+      const snapshot = await appendAgentRunEventV1({
         scope: input.scope,
         runId: input.runId,
         type: 'confirmation.recorded',
@@ -158,8 +171,27 @@ export async function commitMasterAgentCandidateAdoptionV1(
   if (
     step.status !== 'running'
     || step.confirmation !== 'adopt'
-    || !startedFor(resolved.snapshot, resolved.stepId, resolved.candidate.payload.candidateHash!)
   ) throw new Error('主 Agent durable 候选尚未进入可提交采纳状态')
+
+  if (!startedFor(resolved.snapshot, resolved.stepId, resolved.candidate.payload.candidateHash!)) {
+    await appendAgentRunEventV1({
+      scope: input.scope,
+      runId: input.runId,
+      type: 'adoption.started',
+      payload: {
+        stepId: resolved.stepId,
+        candidateHash: resolved.candidate.payload.candidateHash!,
+        intentHash: await hashCanonicalValue({
+          version: 1,
+          kind: 'master-agent-adoption',
+          candidateHash: resolved.candidate.payload.candidateHash,
+          taskId: resolved.candidate.payload.taskId,
+        }),
+      },
+    })
+    resolved = await resolveCandidate(input)
+    step = resolved.snapshot.projection.steps[resolved.stepId]
+  }
 
   const adopt = dependencies.adopt ?? adoptMasterCandidate
   const message = await adopt({
@@ -258,4 +290,214 @@ export async function rejectMasterAgentCandidateV1(
     },
   )
   return snapshot
+}
+
+function normalized(value: string): string {
+  return value.normalize('NFKC').trim().toLocaleLowerCase('zh-CN')
+}
+
+async function businessAlreadyMatches(
+  input: MasterAgentCandidateAdoptionRefV1,
+  candidate: MasterAgentDurableCandidateV1,
+): Promise<boolean> {
+  const agentId = candidate.payload.agentId
+  if (agentId === 'world-origin') {
+    const rows = await readOwnedRows<any>(input.scope, 'worldviews', { owner: 'world' })
+    const row = rows.find(item => (item.worldGroupId ?? null) === (input.worldGroupId ?? null))
+    return (row?.worldOrigin ?? '') === candidate.draft.trim()
+  }
+  if (agentId === 'character') {
+    const parsed = parseCharacterCandidateDraft(candidate.draft)
+    const rows = await readOwnedRows<any>(input.scope, 'characters', { owner: 'world' })
+    return rows.some(row => (
+      normalized(row.name ?? '') === normalized(parsed.name)
+      && Object.entries(parsed).every(([field, value]) => row[field] === value)
+      && row.isCrossWorld === false
+    ))
+  }
+  if (agentId === 'inspiration') {
+    const mode = candidate.payload.mode ?? 'single'
+    const expected = parseInspirationCandidateDraft(candidate.draft, mode)
+    const rows = await readOwnedRows<any>(input.scope, 'inspirationWorkspaces', { owner: 'work' })
+    const versions = parseInspirationVersions(rows[0]?.versions)
+    const expectedHash = await hashCanonicalValue(expected)
+    for (const version of versions) {
+      try {
+        if (version.mode === mode && await hashCanonicalValue(JSON.parse(version.resultJson)) === expectedHash) return true
+      } catch {
+        // Ignore malformed historical versions and continue checking later versions.
+      }
+    }
+    return false
+  }
+  if (agentId === 'outline') {
+    const items = parseOutlineCandidateDraft(candidate.draft)
+    const mode = candidate.payload.outlineMode
+    if (!mode) return false
+    const parentId = mode === 'volumes' ? null : (candidate.payload.outlineParentId ?? null)
+    const type = mode === 'volumes' ? 'volume' : 'chapter'
+    const startingOrder = (candidate.payload.baseSnapshot as { startingOrder?: unknown } | null)?.startingOrder
+    if (typeof startingOrder !== 'number' || !Number.isInteger(startingOrder) || startingOrder < 0) {
+      return false
+    }
+    const rows = await readOwnedRows<any>(input.scope, 'outlineNodes', { owner: 'work' })
+    return items.every((item, index) => rows.some(row => (
+      row.type === type
+      && (row.parentId ?? null) === parentId
+      && row.order === startingOrder + index
+      && normalized(row.title ?? '') === normalized(item.title)
+      && row.summary === item.summary
+    )))
+  }
+  const text = parseProseCandidateDraft(candidate.draft)
+  const outlineNodeId = candidate.payload.proseOutlineNodeId
+  if (outlineNodeId == null) return false
+  const chapter = (await readOwnedRows<any>(input.scope, 'chapters', { owner: 'work' }))
+    .find(row => row.outlineNodeId === outlineNodeId)
+  if (!chapter) return false
+  const fragment = plainTextToHtml(text)
+  return candidate.payload.proseOperation === 'continue'
+    ? String(chapter.content ?? '').endsWith(fragment)
+    : chapter.content === fragment
+}
+
+async function repairPartialOutlineAdoption(
+  input: MasterAgentCandidateAdoptionRefV1,
+  candidate: MasterAgentDurableCandidateV1,
+): Promise<void> {
+  if (candidate.payload.agentId !== 'outline') return
+  const mode = candidate.payload.outlineMode
+  if (!mode) throw new Error('大纲候选缺少写回模式')
+  const items = parseOutlineCandidateDraft(candidate.draft)
+  const parentId = mode === 'volumes' ? null : (candidate.payload.outlineParentId ?? null)
+  const type = mode === 'volumes' ? 'volume' as const : 'chapter' as const
+  const base = candidate.payload.baseSnapshot as { startingOrder?: number }
+  const startingOrder = typeof base.startingOrder === 'number'
+    && Number.isInteger(base.startingOrder)
+    && base.startingOrder >= 0
+    ? base.startingOrder
+    : (() => { throw new Error('大纲候选缺少可恢复的 startingOrder') })()
+  const rows = await readOwnedRows<any>(input.scope, 'outlineNodes', { owner: 'work' })
+  for (const [index, item] of items.entries()) {
+    const exact = rows.some(row => (
+      row.type === type
+      && (row.parentId ?? null) === parentId
+      && row.order === startingOrder + index
+      && normalized(row.title ?? '') === normalized(item.title)
+      && row.summary === item.summary
+    ))
+    if (exact) continue
+    const conflicting = rows.some(row => (
+      row.type === type
+      && (row.parentId ?? null) === parentId
+      && row.order === startingOrder + index
+      && normalized(row.title ?? '') !== normalized(item.title)
+    ))
+    if (conflicting) throw new Error('大纲部分采纳遇到已占用的目标顺序，已停止恢复')
+    const result = await adoptGeneratedOutlineItems({
+      projectId: input.scope.projectId,
+      workspaceScope: input.scope,
+      worldGroupId: input.worldGroupId,
+      parentId,
+      type,
+      items: [item],
+      startingOrder: startingOrder + index,
+    })
+    if (result.writtenCount !== 1 || result.skippedReasons.length > 0) {
+      throw new Error('大纲部分采纳未能补齐缺项')
+    }
+    rows.push({
+      type,
+      parentId,
+      order: startingOrder + index,
+      title: item.title,
+      summary: item.summary,
+    })
+  }
+}
+
+export interface MasterAgentAdoptionRecoveryResultV1 {
+  recoveredRunIds: number[]
+  failed: Array<{ runId: number; reason: string }>
+}
+
+/** Completes adoption.started runs after a host interruption without re-running generation. */
+export async function recoverPendingMasterAgentAdoptionsV1(
+  scope: WorkspaceScope,
+): Promise<MasterAgentAdoptionRecoveryResultV1> {
+  const result: MasterAgentAdoptionRecoveryResultV1 = { recoveredRunIds: [], failed: [] }
+  const runs = (await readOwnedRows<any>(scope, 'agentRuns', { owner: 'work' }))
+    .filter(run => run.id != null && run.conversationId != null && ['running', 'paused'].includes(run.status))
+  for (const run of runs) {
+    try {
+      const restored = await restoreMasterAgentCandidatesV1({ scope, runId: run.id })
+      if (restored.snapshot.contract.workflowKind !== 'multi-domain-sequential') continue
+      let snapshot = restored.snapshot
+      if (snapshot.projection.state === 'paused') {
+        const recovery = await beginAgentRunRecoveryV1({
+          scope,
+          runId: run.id,
+          expectedLastSequence: snapshot.projection.lastSequence,
+        })
+        snapshot = await completeAgentRunRecoveryV1({
+          scope,
+          runId: run.id,
+          checkpointHash: recovery.checkpointHash,
+          expectedLastSequence: recovery.snapshot.projection.lastSequence,
+        })
+      }
+      const pending = restored.candidates.find(candidate => {
+        const step = snapshot.projection.steps[candidate.payload.runStepId!]
+        return step?.confirmation === 'adopt'
+          && step.status === 'running'
+          && !step.adoptionHash
+          && startedFor(snapshot, candidate.payload.runStepId!, candidate.payload.candidateHash!)
+      })
+      if (!pending) continue
+      const ref = {
+        scope,
+        runId: run.id,
+        candidateEventId: pending.event.id!,
+        worldGroupId: snapshot.run.worldGroupId ?? null,
+      }
+      await repairPartialOutlineAdoption(ref, pending)
+      if (!await businessAlreadyMatches(ref, pending)) {
+        await commitMasterAgentCandidateAdoptionV1(ref)
+      } else {
+        const current = await readAgentRunV1(scope, run.id)
+        const step = current.projection.steps[pending.payload.runStepId!]
+        const adoptionHash = await hashCanonicalValue({
+          version: 1,
+          candidateHash: pending.payload.candidateHash,
+          evidence: { recovered: true, candidateEventId: pending.event.id },
+        })
+        const committed = await appendAgentRunEventV1({
+          scope,
+          runId: run.id,
+          type: 'adoption.committed',
+          payload: {
+            stepId: pending.payload.runStepId!,
+            candidateHash: pending.payload.candidateHash!,
+            adoptionHash,
+          },
+          expectedLastSequence: current.projection.lastSequence,
+        })
+        await appendAgentRunEventV1({
+          scope,
+          runId: run.id,
+          type: 'step.succeeded',
+          payload: {
+            stepId: pending.payload.runStepId!,
+            attempt: step.attempt,
+            outputHash: pending.payload.candidateHash!,
+          },
+          expectedLastSequence: committed.projection.lastSequence,
+        })
+      }
+      result.recoveredRunIds.push(run.id)
+    } catch (error) {
+      result.failed.push({ runId: run.id, reason: error instanceof Error ? error.message : String(error) })
+    }
+  }
+  return result
 }

@@ -13,11 +13,13 @@ import {
   type MasterCandidatePayload,
 } from '../../lib/agent/orchestrator'
 import {
+  findResumableMasterAgentRunV1,
   isMasterAgentDurableHarnessEnabledV1,
   runDurableMasterAgentPlanV1,
 } from '../../lib/agent/run/master-durable'
 import {
   commitMasterAgentCandidateAdoptionV1,
+  recoverPendingMasterAgentAdoptionsV1,
   rejectMasterAgentCandidateV1,
 } from '../../lib/agent/run/master-adoption'
 import type { AgentEvent, Project, WorkspaceScope } from '../../lib/types'
@@ -45,6 +47,7 @@ export function useMasterCopilot(input: {
   const [authorRequest, setAuthorRequest] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [recoveryAvailable, setRecoveryAvailable] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const runtimeCandidates = useRef(new Map<number, ExecutedMasterCandidate>())
   const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
@@ -58,11 +61,28 @@ export function useMasterCopilot(input: {
     setEvents(await readAgentEvents(id, workspaceScope))
   }, [workspaceScope])
 
+  const recordTask = useCallback(async (
+    task: Parameters<NonNullable<Parameters<typeof executeMasterAgentPlan>[0]['onTask']>>[0],
+    status: 'running' | 'completed' | 'failed',
+    error?: string,
+  ) => {
+    if (conversationId == null) return
+    await appendAgentEvent({
+      projectId: project.id!,
+      conversationId,
+      kind: 'task',
+      content: error || task.instruction,
+      payload: { taskId: task.id, agentId: task.agentId, status, error },
+      scope: workspaceScope,
+    })
+  }, [conversationId, project.id, workspaceScope])
+
   useEffect(() => {
     let active = true
     abortRef.current?.abort()
     runtimeCandidates.current.clear()
     setBusy(false)
+    setRecoveryAvailable(false)
     setLoading(true)
     void (async () => {
       const conversation = await getOrCreateAgentConversation({
@@ -72,6 +92,9 @@ export function useMasterCopilot(input: {
       })
       if (!active) return
       setConversationId(conversation.id!)
+      if (workspaceScope) {
+        await recoverPendingMasterAgentAdoptionsV1(workspaceScope)
+      }
       let rows = await readAgentEvents(conversation.id!, workspaceScope)
       if (!rows.length) {
         await appendAgentEvent({
@@ -86,6 +109,12 @@ export function useMasterCopilot(input: {
       }
       if (active) {
         setEvents(rows)
+        setRecoveryAvailable(workspaceScope
+          ? await findResumableMasterAgentRunV1({
+              scope: workspaceScope,
+              conversationId: conversation.id!,
+            }) != null
+          : false)
         setLoading(false)
       }
     })().catch(error => {
@@ -169,16 +198,6 @@ export function useMasterCopilot(input: {
       })
       await reload(conversationId)
 
-      const recordTask = async (task: Parameters<NonNullable<Parameters<typeof executeMasterAgentPlan>[0]['onTask']>>[0], status: 'running' | 'completed' | 'failed', error?: string) => {
-        await appendAgentEvent({
-          projectId: project.id!,
-          conversationId,
-          kind: 'task',
-          content: error || task.instruction,
-          payload: { taskId: task.id, agentId: task.agentId, status, error },
-          scope: workspaceScope,
-        })
-      }
       const durable = workspaceScope && isMasterAgentDurableHarnessEnabledV1()
         ? await runDurableMasterAgentPlanV1({
             scope: workspaceScope,
@@ -269,10 +288,69 @@ export function useMasterCopilot(input: {
     conversationId,
     pendingCandidates.length,
     project.id,
+    recordTask,
     reload,
     worldGroupId,
     workspaceScope,
   ])
+
+  const resume = useCallback(async () => {
+    if (busy || conversationId == null || !workspaceScope) return
+    const runId = await findResumableMasterAgentRunV1({
+      scope: workspaceScope,
+      conversationId,
+    })
+    if (runId == null) {
+      setRecoveryAvailable(false)
+      return
+    }
+    const controller = new AbortController()
+    abortRef.current?.abort()
+    abortRef.current = controller
+    setBusy(true)
+    try {
+      const result = await runDurableMasterAgentPlanV1({
+        scope: workspaceScope,
+        worldGroupId,
+        runId,
+        signal: controller.signal,
+        onTask: recordTask,
+      })
+      for (const candidate of result.candidates) {
+        if (candidate.event.id != null && candidate.runtime) {
+          runtimeCandidates.current.set(candidate.event.id, candidate.runtime)
+        }
+      }
+      await appendAgentEvent({
+        projectId: project.id!,
+        conversationId,
+        kind: 'message',
+        role: 'assistant',
+        content: `已从中断处恢复本轮执行，当前生成了 ${result.candidates.length} 份候选。请检查并确认。`,
+        scope: workspaceScope,
+      })
+      setRecoveryAvailable(false)
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        await appendAgentEvent({
+          projectId: project.id!,
+          conversationId,
+          kind: 'message',
+          role: 'assistant',
+          content: `恢复本轮失败：${errorMessage(error)}`,
+          scope: workspaceScope,
+        })
+      }
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null
+      setBusy(false)
+      await reload(conversationId)
+      setRecoveryAvailable(await findResumableMasterAgentRunV1({
+        scope: workspaceScope,
+        conversationId,
+      }) != null)
+    }
+  }, [busy, conversationId, project.id, recordTask, reload, worldGroupId, workspaceScope])
 
   const updateCandidate = useCallback(async (eventId: number, draft: string) => {
     await updateAgentEventCandidate(eventId, project.id!, draft, workspaceScope)
@@ -355,7 +433,9 @@ export function useMasterCopilot(input: {
     pendingCandidates,
     busy,
     loading,
+    recoveryAvailable,
     submit,
+    resume,
     stop,
     updateCandidate,
     adoptCandidate: (candidate: PendingMasterCandidate) => resolveCandidate(candidate, 'adopted'),

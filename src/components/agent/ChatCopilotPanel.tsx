@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
+  RotateCcw,
   Send,
   ShieldCheck,
   Square,
@@ -162,6 +163,23 @@ export default function ChatCopilotPanel({
                 ))}
               </div>
             )}
+          </section>
+        )}
+
+        {copilot.recoveryAvailable && (
+          <section className="rounded-lg border border-warning/40 bg-warning/5 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs leading-5 text-text-secondary">检测到一轮未完成的后台任务。</p>
+              <button
+                type="button"
+                disabled={copilot.busy}
+                onClick={() => { void copilot.resume() }}
+                className="flex shrink-0 items-center gap-1 rounded border border-warning/50 px-2.5 py-1.5 text-xs text-text-primary hover:bg-warning/10 disabled:opacity-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                从中断处恢复
+              </button>
+            </div>
           </section>
         )}
 

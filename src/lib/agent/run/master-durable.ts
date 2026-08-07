@@ -44,7 +44,7 @@ import {
   type AgentTeamBudgetProfile,
 } from '../team-budget'
 import { db } from '../../db/schema'
-import { assertRecordInScope, scopeTransactionTables } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../../world-engine/scope'
 
 export const MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1 = 'master-agent-plan'
 export const MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 = 1 as const
@@ -943,4 +943,26 @@ export async function restoreMasterAgentCandidatesV1(input: {
     outputs: restored.outputs,
     budgetEvidence: restored.latestBudget,
   }
+}
+
+export async function findResumableMasterAgentRunV1(input: {
+  scope: WorkspaceScope
+  conversationId: number
+}): Promise<number | null> {
+  const runs = (await readOwnedRows<any>(input.scope, 'agentRuns', { owner: 'work' }))
+    .filter(run => run.id != null && run.conversationId === input.conversationId)
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+  for (const run of runs) {
+    try {
+      const snapshot = await readAgentRunV1(input.scope, run.id)
+      if (snapshot.contract.workflowKind !== 'multi-domain-sequential') continue
+      if (!['paused', 'running'].includes(snapshot.projection.state)) continue
+      if (Object.values(snapshot.projection.steps).some(step => (
+        step.status === 'scheduled' || step.status === 'running' || step.status === 'failed'
+      ))) return run.id
+    } catch {
+      // A corrupted run must remain visible to ledger diagnostics, never auto-run.
+    }
+  }
+  return null
 }
