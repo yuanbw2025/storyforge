@@ -48,6 +48,18 @@ function assertActiveStep(
   return step
 }
 
+function refreshRunningState(projection: AgentRunProjectionV1): void {
+  const steps = Object.values(projection.steps)
+  const hasExecutable = steps.some(step => (
+    step.status === 'scheduled' || step.status === 'running' || step.status === 'failed'
+  ))
+  projection.state = hasExecutable
+    ? 'running'
+    : steps.some(step => step.status === 'awaiting_confirmation')
+      ? 'awaiting_confirmation'
+      : 'running'
+}
+
 function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1): void {
   if (TERMINAL_STATES.includes(projection.state) && event.type !== 'verification.staled') {
     throw new ProjectionError(`终态 ${projection.state} 后不得追加 ${event.type}`)
@@ -94,12 +106,14 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       const step = assertActiveStep(projection, event.payload)
       step.status = 'succeeded'
       step.outputHash = event.payload.outputHash
+      refreshRunningState(projection)
       break
     }
     case 'step.failed': {
       const step = assertActiveStep(projection, event.payload)
       step.status = 'failed'
       step.failureCode = event.payload.code
+      refreshRunningState(projection)
       break
     }
     case 'context.assembled':
@@ -116,7 +130,7 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       step.candidateHash = event.payload.candidateHash
       if (event.payload.requiresConfirmation) {
         step.status = 'awaiting_confirmation'
-        projection.state = 'awaiting_confirmation'
+        refreshRunningState(projection)
       }
       break
     }
@@ -128,7 +142,7 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       break
     }
     case 'confirmation.recorded': {
-      expectState(projection, event.type, ['awaiting_confirmation'])
+      expectState(projection, event.type, ['running', 'awaiting_confirmation'])
       const step = stepFor(projection, event.payload.stepId)
       if (step.status !== 'awaiting_confirmation') throw new ProjectionError(`步骤 ${step.stepId} 不在等待确认`)
       assertCandidate(step, event.payload.candidateHash)
@@ -139,7 +153,7 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       } else {
         step.status = 'running'
       }
-      projection.state = 'running'
+      refreshRunningState(projection)
       break
     }
     case 'adoption.started': {
@@ -208,9 +222,7 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       if (projection.lastCheckpointHash !== event.payload.checkpointHash) {
         throw new ProjectionError('恢复完成的 checkpoint 不匹配')
       }
-      projection.state = Object.values(projection.steps).some(step => step.status === 'awaiting_confirmation')
-        ? 'awaiting_confirmation'
-        : 'running'
+      refreshRunningState(projection)
       break
     case 'budget.reserved':
     case 'budget.settled':

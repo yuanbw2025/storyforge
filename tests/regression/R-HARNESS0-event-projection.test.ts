@@ -145,4 +145,39 @@ describe('R-HARNESS0-event-projection · 严格事件回放', () => {
     expect(withoutConfirmation.state).toBe('recovery_required')
     expect(withoutConfirmation.errors[0]).toContain('未记录作者采纳确认')
   })
+
+  it('多任务 run 可在已持久候选等待确认时继续其它已调度步骤', () => {
+    const firstCandidate = 'e'.repeat(64)
+    const secondCandidate = 'f'.repeat(64)
+    const afterFirst = [
+      event(1, 'run.created', { objectiveHash: OBJECTIVE_HASH }),
+      event(2, 'contract.accepted', {}),
+      event(3, 'step.scheduled', { stepId: 'world-1' }),
+      event(4, 'step.scheduled', { stepId: 'character-1' }),
+      event(5, 'step.started', { stepId: 'world-1', attempt: 1 }),
+      event(6, 'candidate.persisted', {
+        stepId: 'world-1',
+        attempt: 1,
+        candidateHash: firstCandidate,
+        requiresConfirmation: true,
+      }),
+    ]
+    const firstProjection = replayAgentRunEventsV1(afterFirst)
+    expect(firstProjection.state).toBe('running')
+    expect(firstProjection.steps['world-1'].status).toBe('awaiting_confirmation')
+    expect(firstProjection.steps['character-1'].status).toBe('scheduled')
+
+    const allCandidates = replayAgentRunEventsV1([
+      ...afterFirst,
+      event(7, 'step.started', { stepId: 'character-1', attempt: 1 }),
+      event(8, 'candidate.persisted', {
+        stepId: 'character-1',
+        attempt: 1,
+        candidateHash: secondCandidate,
+        requiresConfirmation: true,
+      }),
+    ])
+    expect(allCandidates.state).toBe('awaiting_confirmation')
+    expect(Object.values(allCandidates.steps).every(step => step.status === 'awaiting_confirmation')).toBe(true)
+  })
 })

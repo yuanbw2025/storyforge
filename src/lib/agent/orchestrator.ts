@@ -119,6 +119,9 @@ export interface MasterCandidatePayload {
   proseOutlineNodeId?: number
   dependsOnTaskIds?: string[]
   workspaceScope?: WorkspaceScope
+  runId?: number
+  runStepId?: string
+  candidateHash?: string
 }
 
 export interface ExecutedMasterCandidate {
@@ -126,6 +129,11 @@ export interface ExecutedMasterCandidate {
   draft: string
   runtimeNode: GenerationNode<any, any, any>
   runtimeOutput: unknown
+}
+
+export interface MasterAgentExecutionTrace {
+  taskStarted?: (task: MasterAgentTask) => Promise<void>
+  candidateReady?: (task: MasterAgentTask, candidate: ExecutedMasterCandidate) => Promise<void>
 }
 
 interface PlannerDependencies {
@@ -403,7 +411,13 @@ export async function executeMasterAgentPlan(input: {
   plan: MasterAgentPlan
   budget?: AgentTeamBudgetTracker
   signal?: AbortSignal
-  onTask?: (task: MasterAgentTask, status: 'running' | 'completed' | 'failed', error?: string) => void
+  completedTaskOutputs?: Readonly<Record<string, string>>
+  executionTrace?: MasterAgentExecutionTrace
+  onTask?: (
+    task: MasterAgentTask,
+    status: 'running' | 'completed' | 'failed',
+    error?: string,
+  ) => void | Promise<void>
 }): Promise<ExecutedMasterCandidate[]> {
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   const candidates: ExecutedMasterCandidate[] = []
@@ -412,9 +426,14 @@ export async function executeMasterAgentPlan(input: {
   const budget = input.budget ?? new AgentTeamBudgetTracker(
     useAIConfigStore.getState().agentTeamBudgetProfile,
   )
+  for (const [taskId, output] of Object.entries(input.completedTaskOutputs ?? {})) {
+    if (output.trim()) outputs.set(taskId, output)
+  }
   for (const task of topologicalTasks(input.plan)) {
+    if (outputs.has(task.id)) continue
     if (input.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    input.onTask?.(task, 'running')
+    await input.executionTrace?.taskStarted?.(task)
+    await input.onTask?.(task, 'running')
     try {
       const upstream = task.dependsOn
         .map(id => outputs.get(id))
@@ -628,17 +647,16 @@ export async function executeMasterAgentPlan(input: {
         })
         outputs.set(task.id, draft)
       }
-      input.onTask?.(task, 'completed')
+      const candidate = candidates[candidates.length - 1]
+      candidate.payload.teamBudgetEvidence = budget.snapshot()
+      await input.executionTrace?.candidateReady?.(task, candidate)
+      await input.onTask?.(task, 'completed')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      input.onTask?.(task, 'failed', message)
+      await input.onTask?.(task, 'failed', message)
       throw error
     }
   }
-  const teamBudgetEvidence = budget.snapshot()
-  candidates.forEach(candidate => {
-    candidate.payload.teamBudgetEvidence = teamBudgetEvidence
-  })
   return candidates
 }
 

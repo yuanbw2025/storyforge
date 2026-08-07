@@ -63,8 +63,29 @@ export class AgentTeamBudgetTracker {
   private calls = 0
   private canonRetries = 0
 
-  constructor(profile: AgentTeamBudgetProfile) {
+  constructor(profile: AgentTeamBudgetProfile, restored?: AgentTeamBudgetEvidence) {
     this.policy = resolveAgentTeamBudgetPolicy(profile)
+    if (restored) {
+      const matchesPolicy = restored.profile === this.policy.profile
+        && restored.maxTokens === this.policy.maxTokens
+        && restored.maxCalls === this.policy.maxCalls
+        && restored.maxCanonRetries === this.policy.maxCanonRetries
+      const validUsage = Number.isInteger(restored.usedTokens)
+        && restored.usedTokens >= 0
+        && restored.usedTokens <= this.policy.maxTokens
+        && Number.isInteger(restored.calls)
+        && restored.calls >= 0
+        && restored.calls <= this.policy.maxCalls
+        && Number.isInteger(restored.canonRetries)
+        && restored.canonRetries >= 0
+        && restored.canonRetries <= this.policy.maxCanonRetries
+      if (!matchesPolicy || !validUsage) {
+        throw new AgentTeamBudgetExceededError('持久化的 Agent 团队预算证据无效或与当前策略不一致。')
+      }
+      this.usedTokens = restored.usedTokens
+      this.calls = restored.calls
+      this.canonRetries = restored.canonRetries
+    }
   }
 
   reserveCall(input: {
