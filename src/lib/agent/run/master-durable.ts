@@ -48,6 +48,15 @@ import { assertRecordInScope, scopeTransactionTables } from '../../world-engine/
 
 export const MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1 = 'master-agent-plan'
 export const MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 = 1 as const
+export const MASTER_AGENT_DURABLE_HARNESS_STORAGE_KEY = 'storyforge:harness:master-agent-durable-v1'
+
+export function isMasterAgentDurableHarnessEnabledV1(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(MASTER_AGENT_DURABLE_HARNESS_STORAGE_KEY) !== 'disabled'
+  } catch {
+    return true
+  }
+}
 
 const MAX_PLAN_TASKS = 5
 const MAX_PLAN_SUMMARY_CHARS = 500
@@ -103,6 +112,14 @@ export interface DurableMasterAgentResultV1 {
   candidates: MasterAgentDurableCandidateV1[]
   budgetEvidence: AgentTeamBudgetEvidence
   projection: AgentRunProjectionV1
+}
+
+export interface RestoredMasterAgentCandidatesV1 {
+  snapshot: AgentRunSnapshotV1
+  plan: MasterAgentPlan
+  candidates: MasterAgentDurableCandidateV1[]
+  outputs: Record<string, string>
+  budgetEvidence: AgentTeamBudgetEvidence
 }
 
 export interface MasterAgentDurableBoundaryV1 {
@@ -899,5 +916,31 @@ export async function runDurableMasterAgentPlanV1(
     candidates,
     budgetEvidence: latestCandidates.latestBudget,
     projection: snapshot.projection,
+  }
+}
+
+/** Reads a master run and its candidates without executing any remaining task. */
+export async function restoreMasterAgentCandidatesV1(input: {
+  scope: WorkspaceScope
+  runId: number
+}): Promise<RestoredMasterAgentCandidatesV1> {
+  const snapshot = await readAgentRunV1(input.scope, input.runId)
+  const latest = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.runId)
+  if (!latest) fail('主 Agent durable run 缺少计划检查点')
+  const checkpoint = parsePlanCheckpoint(latest.resumePayload)
+  const expectedPlanHash = await hashMasterAgentPlanV1(checkpoint.plan)
+  if (expectedPlanHash !== checkpoint.planHash) fail('主 Agent 计划检查点 planHash 校验失败')
+  const restored = await readPersistedCandidates({
+    scope: input.scope,
+    snapshot,
+    plan: checkpoint.plan,
+    checkpointBudget: checkpoint.budgetEvidence,
+  })
+  return {
+    snapshot,
+    plan: checkpoint.plan,
+    candidates: restored.candidates,
+    outputs: restored.outputs,
+    budgetEvidence: restored.latestBudget,
   }
 }

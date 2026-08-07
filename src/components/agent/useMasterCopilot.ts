@@ -12,6 +12,14 @@ import {
   type ExecutedMasterCandidate,
   type MasterCandidatePayload,
 } from '../../lib/agent/orchestrator'
+import {
+  isMasterAgentDurableHarnessEnabledV1,
+  runDurableMasterAgentPlanV1,
+} from '../../lib/agent/run/master-durable'
+import {
+  commitMasterAgentCandidateAdoptionV1,
+  rejectMasterAgentCandidateV1,
+} from '../../lib/agent/run/master-adoption'
 import type { AgentEvent, Project, WorkspaceScope } from '../../lib/types'
 import { parseAgentEventPayload } from '../../lib/types'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
@@ -161,38 +169,61 @@ export function useMasterCopilot(input: {
       })
       await reload(conversationId)
 
-      let taskQueue = Promise.resolve()
-      const candidates = await executeMasterAgentPlan({
-        projectId: project.id!,
-        scope: workspaceScope,
-        worldGroupId,
-        plan,
-        budget: teamBudget,
-        signal: controller.signal,
-        onTask: (task, status, error) => {
-          taskQueue = taskQueue.then(async () => {
-            await appendAgentEvent({
-              projectId: project.id!,
-              conversationId,
-              kind: 'task',
-              content: error || task.instruction,
-              payload: { taskId: task.id, agentId: task.agentId, status, error },
-              scope: workspaceScope,
-            })
-          })
-        },
-      })
-      await taskQueue
-      for (const candidate of candidates) {
-        const event = await appendAgentEvent({
+      const recordTask = async (task: Parameters<NonNullable<Parameters<typeof executeMasterAgentPlan>[0]['onTask']>>[0], status: 'running' | 'completed' | 'failed', error?: string) => {
+        await appendAgentEvent({
           projectId: project.id!,
           conversationId,
-          kind: 'candidate',
-          content: candidate.draft,
-          payload: candidate.payload,
+          kind: 'task',
+          content: error || task.instruction,
+          payload: { taskId: task.id, agentId: task.agentId, status, error },
           scope: workspaceScope,
         })
-        runtimeCandidates.current.set(event.id!, candidate)
+      }
+      const durable = workspaceScope && isMasterAgentDurableHarnessEnabledV1()
+        ? await runDurableMasterAgentPlanV1({
+            scope: workspaceScope,
+            worldGroupId,
+            conversationId,
+            plan,
+            budget: teamBudget,
+            signal: controller.signal,
+            onTask: recordTask,
+          })
+        : null
+      const candidates = durable
+        ? durable.candidates.map(candidate => ({
+            payload: candidate.payload,
+            draft: candidate.draft,
+            runtimeNode: candidate.runtime?.runtimeNode ?? ({} as any),
+            runtimeOutput: candidate.runtime?.runtimeOutput ?? candidate.draft,
+          }))
+        : await executeMasterAgentPlan({
+            projectId: project.id!,
+            scope: workspaceScope,
+            worldGroupId,
+            plan,
+            budget: teamBudget,
+            signal: controller.signal,
+            onTask: recordTask,
+          })
+      if (!durable) {
+        for (const candidate of candidates) {
+          const event = await appendAgentEvent({
+            projectId: project.id!,
+            conversationId,
+            kind: 'candidate',
+            content: candidate.draft,
+            payload: candidate.payload,
+            scope: workspaceScope,
+          })
+          runtimeCandidates.current.set(event.id!, candidate)
+        }
+      } else {
+        for (const candidate of durable.candidates) {
+          if (candidate.event.id != null && candidate.runtime) {
+            runtimeCandidates.current.set(candidate.event.id, candidate.runtime)
+          }
+        }
       }
       await appendAgentEvent({
         projectId: project.id!,
@@ -256,7 +287,21 @@ export function useMasterCopilot(input: {
     setBusy(true)
     try {
       let message = '候选已拒绝，没有写入项目。'
-      if (decision === 'adopted') {
+      const durableCandidate = candidate.payload.runId != null && candidate.payload.runStepId
+      if (durableCandidate && decision === 'adopted') {
+        message = (await commitMasterAgentCandidateAdoptionV1({
+          scope: workspaceScope!,
+          runId: candidate.payload.runId!,
+          candidateEventId: candidate.event.id,
+          runtime: runtimeCandidates.current.get(candidate.event.id),
+        })).message
+      } else if (durableCandidate) {
+        await rejectMasterAgentCandidateV1({
+          scope: workspaceScope!,
+          runId: candidate.payload.runId!,
+          candidateEventId: candidate.event.id,
+        })
+      } else if (decision === 'adopted') {
         message = await adoptMasterCandidate({
           projectId: project.id!,
           scope: workspaceScope,
@@ -267,14 +312,16 @@ export function useMasterCopilot(input: {
           runtime: runtimeCandidates.current.get(candidate.event.id),
         })
       }
-      await appendAgentEvent({
-        projectId: project.id!,
-        conversationId,
-        kind: 'confirmation',
-        content: message,
-        payload: { candidateEventId: candidate.event.id, decision },
-        scope: workspaceScope,
-      })
+      if (!durableCandidate) {
+        await appendAgentEvent({
+          projectId: project.id!,
+          conversationId,
+          kind: 'confirmation',
+          content: message,
+          payload: { candidateEventId: candidate.event.id, decision },
+          scope: workspaceScope,
+        })
+      }
       await appendAgentEvent({
         projectId: project.id!,
         conversationId,

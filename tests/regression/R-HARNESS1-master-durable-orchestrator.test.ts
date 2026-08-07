@@ -6,6 +6,10 @@ import {
   hashMasterAgentPlanV1,
   runDurableMasterAgentPlanV1,
 } from '../../src/lib/agent/run/master-durable'
+import {
+  beginMasterAgentCandidateAdoptionV1,
+  commitMasterAgentCandidateAdoptionV1,
+} from '../../src/lib/agent/run/master-adoption'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { readLatestVerifiedAgentRunCheckpointV1 } from '../../src/lib/agent/run/checkpoint'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
@@ -99,7 +103,9 @@ function fakeExecutor(input: {
           agentId: task.agentId,
           label: task.agentId,
           contextSources: ['worldview'],
-          baseSnapshot: {},
+          baseSnapshot: task.agentId === 'world-origin'
+            ? { id: null, updatedAt: null, worldOrigin: '' }
+            : {},
           workspaceScope: options.scope,
           dependsOnTaskIds: task.dependsOn,
         },
@@ -236,5 +242,59 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       }),
     })
     await expect(readLatestVerifiedAgentRunCheckpointV1(fixture.scope, run.id!)).rejects.toThrow()
+  })
+
+  it('确认与采纳沿 candidateHash 推进，重复确认和重复提交不重复写入', async () => {
+    const fixture = await createWorkspace('采纳')
+    const conversation = await getOrCreateAgentConversation({
+      projectId: fixture.scope.projectId,
+      worldGroupId: fixture.worldGroupId,
+      scope: fixture.scope,
+    })
+    const result = await runDurableMasterAgentPlanV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      conversationId: conversation.id,
+      plan: {
+        summary: '建立世界来源。',
+        tasks: [{ id: 'world-1', agentId: 'world-origin', instruction: '生成世界来源。', dependsOn: [] }],
+      },
+      budget: new AgentTeamBudgetTracker('balanced'),
+    }, { execute: fakeExecutor({ calls: vi.fn() }) as any })
+    const candidate = result.candidates[0]
+    const ref = {
+      scope: fixture.scope,
+      runId: result.runId,
+      candidateEventId: candidate.event.id!,
+    }
+    await beginMasterAgentCandidateAdoptionV1(ref)
+    await beginMasterAgentCandidateAdoptionV1(ref)
+    let snapshot = await readAgentRunV1(fixture.scope, result.runId)
+    expect(snapshot.projection.steps['master:world-1']).toMatchObject({
+      status: 'running',
+      confirmation: 'adopt',
+      candidateHash: candidate.payload.candidateHash,
+    })
+    const committed = await commitMasterAgentCandidateAdoptionV1(ref)
+    expect(committed.message).toContain('世界来源')
+    snapshot = await readAgentRunV1(fixture.scope, result.runId)
+    expect(snapshot.projection.steps['master:world-1']).toMatchObject({
+      status: 'succeeded',
+      confirmation: 'adopt',
+      adoptionHash: committed.adoptionHash,
+    })
+    expect(snapshot.events.map(event => event.type).slice(-4)).toEqual([
+      'confirmation.recorded',
+      'adoption.started',
+      'adoption.committed',
+      'step.succeeded',
+    ])
+    expect((await db.agentEvents.where('conversationId').equals(conversation.id!).toArray())
+      .filter(event => event.kind === 'confirmation')).toHaveLength(1)
+    expect((await db.worldviews.toArray()).map(row => row.worldOrigin)).toEqual(['潮汐由沉睡的海神维持。'])
+    const repeated = await commitMasterAgentCandidateAdoptionV1(ref)
+    expect(repeated.adoptionHash).toBe(committed.adoptionHash)
+    expect((await readAgentRunV1(fixture.scope, result.runId)).events.map(event => event.type))
+      .toEqual(snapshot.events.map(event => event.type))
   })
 })
