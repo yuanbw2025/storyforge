@@ -199,6 +199,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     clearPreview: clearGenerationPreview,
     onInfo: toast.info,
     onError: toast.error,
+    onOutlineRecovered: () => loadAll(project.id!),
   })
 
   const handleAIVolumes = () => { void generation.prepare({ kind: 'volumes' }) }
@@ -249,7 +250,19 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const handleConfirmVolumes = async () => {
     if (!previewVolumes) return
     const targetId = previewTargetId
-    await generation.beginAdoption()
+    const existingCount = volumes.length
+    await generation.beginAdoption(targetId != null ? {
+      version: 1,
+      kind: 'single-volume',
+      targetId,
+      summary: previewVolumes[0]?.summary ?? '',
+    } : {
+      version: 1,
+      kind: 'volumes',
+      items: previewVolumes,
+      startingOrder: existingCount,
+      baseExistingTitles: volumes.map(volume => volume.title),
+    })
     ai.reset()
     if (targetId != null) {
       let result: Awaited<ReturnType<typeof adoptGeneratedOutlineSummary>>
@@ -273,7 +286,6 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       toast.success('本卷卷纲已写入。')
       return
     }
-    const existingCount = volumes.length
     let result: Awaited<ReturnType<typeof adoptGeneratedOutlineItems>>
     try {
       result = await adoptGeneratedOutlineItems({
@@ -312,7 +324,31 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     if (!previewChapters) return
     const targetId = previewTargetId
     const operation = decodeGenerationOperation(ai.operation)
-    await generation.beginAdoption()
+    const destinationVolume = targetId == null
+      ? operation?.kind === 'chapters'
+        ? volumes.find(volume => volume.id === operation.volumeId) ?? null
+        : selectedVol
+      : null
+    if (targetId == null && !destinationVolume) {
+      await generation.failAdoption('目标卷不存在，未写入章节大纲')
+      return
+    }
+    const existingChapters = destinationVolume
+      ? nodes.filter(node => node.parentId === destinationVolume.id && node.type === 'chapter')
+      : []
+    await generation.beginAdoption(targetId != null ? {
+      version: 1,
+      kind: 'single-chapter',
+      targetId,
+      summary: previewChapters[0]?.summary ?? '',
+    } : {
+      version: 1,
+      kind: 'chapters',
+      destinationVolumeId: destinationVolume!.id!,
+      items: previewChapters,
+      startingOrder: existingChapters.length,
+      baseExistingTitles: existingChapters.map(chapter => chapter.title),
+    })
     ai.reset()
     if (targetId != null) {
       let result: Awaited<ReturnType<typeof adoptGeneratedOutlineSummary>>
@@ -336,14 +372,8 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       toast.success('本章章纲已写入。')
       return
     }
-    const destinationVolume = operation?.kind === 'chapters'
-      ? volumes.find(volume => volume.id === operation.volumeId) ?? null
-      : selectedVol
-    if (!destinationVolume) {
-      await generation.failAdoption('目标卷不存在，未写入章节大纲')
-      return
-    }
-    const existingCount = nodes.filter(node => node.parentId === destinationVolume.id && node.type === 'chapter').length
+    if (!destinationVolume) return
+    const existingCount = existingChapters.length
     let result: Awaited<ReturnType<typeof adoptGeneratedOutlineItems>>
     try {
       result = await adoptGeneratedOutlineItems({

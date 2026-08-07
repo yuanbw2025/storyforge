@@ -282,7 +282,7 @@ export interface AgentRunEventPayloadByTypeV1 {
     candidateHash: string
     decision: 'adopt' | 'reject'
   }
-  'adoption.started': { stepId: string; candidateHash: string }
+  'adoption.started': { stepId: string; candidateHash: string; intentHash?: string }
   'adoption.committed': { stepId: string; candidateHash: string; adoptionHash: string }
   'adoption.rejected': { stepId: string; candidateHash: string; code: string }
   'verification.started': { verifierSetVersion: string }

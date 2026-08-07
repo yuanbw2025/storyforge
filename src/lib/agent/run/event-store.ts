@@ -216,10 +216,11 @@ async function verifyMaterializedProjection(
   } catch {
     fail('projection_json', '运行物化投影 JSON 已损坏')
   }
-  const [storedHash, replayHash] = await Promise.all([
-    waitForHash(storedBody),
-    Dexie.waitFor(hashAgentRunProjectionBodyV1(projection)),
-  ])
+  // Dexie.waitFor keeps the current IndexedDB transaction alive while WebCrypto
+  // resolves. Run the two small hashes sequentially so one transaction never
+  // owns competing keep-alive loops during repeated durable event appends.
+  const storedHash = await waitForHash(storedBody)
+  const replayHash = await Dexie.waitFor(hashAgentRunProjectionBodyV1(projection))
   if (storedHash !== run.projectionHash || replayHash !== run.projectionHash) {
     fail('projection_hash', '物化投影与事件重放结果不一致')
   }

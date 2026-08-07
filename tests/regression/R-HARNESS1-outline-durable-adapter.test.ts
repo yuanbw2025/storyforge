@@ -16,12 +16,16 @@ import {
   createOutlineGenerationTraceV1,
   isOutlineDurableHarnessEnabledV1,
   OUTLINE_DURABLE_HARNESS_STORAGE_KEY,
+  OUTLINE_GENERATION_ADOPTION_INTENT_PAYLOAD_TYPE,
   OUTLINE_GENERATION_CANDIDATE_PAYLOAD_TYPE,
   OUTLINE_GENERATION_CONVERSATION_PURPOSE,
   OUTLINE_GENERATION_SOURCE_KEYS,
+  recoverPendingOutlineGenerationAdoptionsV1,
   restoreLatestOutlineGenerationCandidateV1,
   staleOutlineGenerationCandidateV1,
 } from '../../src/lib/outline/harness'
+import { adoptGeneratedOutlineItems } from '../../src/lib/outline/adopt-generation'
+import { encodeGenerationOperation, type OutlineGenerationRequest } from '../../src/lib/outline/generation-request'
 import type { AssembleContextResult } from '../../src/lib/registry/types'
 import type { WorkspaceScope } from '../../src/lib/types'
 
@@ -111,9 +115,12 @@ function assembly(): AssembleContextResult {
   }
 }
 
-function node(run: () => Promise<string>): GenerationNode<AssembleContextResult, string> {
+function node(
+  run: () => Promise<string>,
+  id = 'outline.chapter:batch:1',
+): GenerationNode<AssembleContextResult, string> {
   return {
-    id: 'outline.chapter:batch:1',
+    id,
     kind: 'outline.chapter',
     editableInput: true,
     assembleInput: assembled => [{ role: 'user', content: assembled.text }],
@@ -121,7 +128,38 @@ function node(run: () => Promise<string>): GenerationNode<AssembleContextResult,
   }
 }
 
-describe('R-HARNESS1-outline-durable-adapter · 大纲双写接入', () => {
+async function persistOutlineCandidate(
+  fixture: Awaited<ReturnType<typeof createWorkspace>>,
+  request: OutlineGenerationRequest,
+  output: string,
+) {
+  const assembled = assembly()
+  const run = vi.fn(async () => output)
+  const generationNode = node(run, encodeGenerationOperation(request))
+  const trace = await createOutlineGenerationTraceV1({
+    projectId: fixture.scope.projectId,
+    worldGroupId: fixture.worldGroupId,
+    request,
+    assembled,
+    durable: true,
+  })
+  const generated = await runGenerationNode(
+    generationNode,
+    prepareGenerationNode(generationNode, assembled),
+    { shadowTrace: trace },
+  )
+  const candidate = await trace.persistCandidate(generated.output)
+  if (!candidate) throw new Error('测试前置条件失败：未持久化大纲候选')
+  return { candidate, run }
+}
+
+const RECOVERY_BATCH_STARTS = [0, 5, 10, 15] as const
+
+function recoveryBatch(start: number): number[] {
+  return Array.from({ length: 5 }, (_, index) => start + index)
+}
+
+describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
@@ -192,33 +230,40 @@ describe('R-HARNESS1-outline-durable-adapter · 大纲双写接入', () => {
     })
   })
 
-  it('刷新恢复只读取已校验账本和匹配候选，不会再次调用模型', async () => {
-    const fixture = await createWorkspace()
-    const assembled = assembly()
-    const run = vi.fn(async () => '第一章：潮声中的密令')
-    const generationNode = node(run)
-    const trace = await createOutlineGenerationTraceV1({
-      projectId: fixture.scope.projectId,
-      worldGroupId: fixture.worldGroupId,
-      request: { kind: 'chapters', volumeId: fixture.outlineNodeId },
-      assembled,
-      durable: true,
-    })
-    const result = await runGenerationNode(
-      generationNode,
-      prepareGenerationNode(generationNode, assembled),
-      { shadowTrace: trace },
-    )
-    await trace.persistCandidate(result.output)
+  it.each(RECOVERY_BATCH_STARTS)('候选持久化后、确认前第 %i 轮起连续 5 次刷新均只恢复证据', async batchStart => {
+    for (const iteration of recoveryBatch(batchStart)) {
+      const fixture = await createWorkspace()
+      const assembled = assembly()
+      const output = `第一章：潮声中的密令-${iteration}`
+      const run = vi.fn(async () => output)
+      const generationNode = node(run)
+      const trace = await createOutlineGenerationTraceV1({
+        projectId: fixture.scope.projectId,
+        worldGroupId: fixture.worldGroupId,
+        request: { kind: 'chapters', volumeId: fixture.outlineNodeId },
+        assembled,
+        durable: true,
+      })
+      const result = await runGenerationNode(
+        generationNode,
+        prepareGenerationNode(generationNode, assembled),
+        { shadowTrace: trace },
+      )
+      await trace.persistCandidate(result.output)
 
-    const restored = await restoreLatestOutlineGenerationCandidateV1(fixture.scope.projectId)
+      const restored = await restoreLatestOutlineGenerationCandidateV1(fixture.scope.projectId)
 
-    expect(restored).toMatchObject({
-      runId: trace.durable!.runId,
-      output: '第一章：潮声中的密令',
-      operation: `outline.chapter:batch:${fixture.outlineNodeId}`,
-    })
-    expect(run).toHaveBeenCalledOnce()
+      expect(restored, `第 ${iteration + 1} 次候选恢复`).toMatchObject({
+        runId: trace.durable!.runId,
+        output,
+        operation: `outline.chapter:batch:${fixture.outlineNodeId}`,
+      })
+      expect(await restoreLatestOutlineGenerationCandidateV1(fixture.scope.projectId)).toMatchObject({
+        runId: trace.durable!.runId,
+        output,
+      })
+      expect(run).toHaveBeenCalledOnce()
+    }
   })
 
   it('作者确认和采纳沿候选哈希推进，业务证据提交后步骤才成功', async () => {
@@ -299,6 +344,244 @@ describe('R-HARNESS1-outline-durable-adapter · 大纲双写接入', () => {
     expect(await restoreLatestOutlineGenerationCandidateV1(fixture.scope.projectId)).toBeNull()
     const snapshot = await readAgentRunV1(fixture.scope, candidate.runId)
     expect(snapshot.projection.steps[candidate.stepId].status).toBe('stale')
+  })
+
+  it.each(RECOVERY_BATCH_STARTS)('确认后、业务写入前第 %i 轮起连续 5 次中断均按冻结计划恢复一次', async batchStart => {
+    for (const iteration of recoveryBatch(batchStart)) {
+      const fixture = await createWorkspace()
+      const assembled = assembly()
+      const run = vi.fn(async () => `确认后中断候选-${iteration}`)
+      const generationNode = node(run)
+      const trace = await createOutlineGenerationTraceV1({
+        projectId: fixture.scope.projectId,
+        worldGroupId: fixture.worldGroupId,
+        request: { kind: 'chapters', volumeId: fixture.outlineNodeId },
+        assembled,
+        durable: true,
+      })
+      const generated = await runGenerationNode(
+        generationNode,
+        prepareGenerationNode(generationNode, assembled),
+        { shadowTrace: trace },
+      )
+      const candidate = (await trace.persistCandidate(generated.output))!
+      const items = [
+        { title: `第${iteration * 2 + 1}章`, summary: `冲突建立-${iteration}` },
+        { title: `第${iteration * 2 + 2}章`, summary: `冲突升级-${iteration}` },
+      ]
+      await beginOutlineGenerationAdoptionV1(candidate, {
+        version: 1,
+        kind: 'chapters',
+        destinationVolumeId: fixture.outlineNodeId,
+        items,
+        startingOrder: 0,
+        baseExistingTitles: [],
+      })
+
+      const recovered = await recoverPendingOutlineGenerationAdoptionsV1(fixture.scope.projectId)
+
+      expect(recovered, `第 ${iteration + 1} 次确认后恢复`)
+        .toEqual({ recoveredRunIds: [candidate.runId], failed: [] })
+      const chapters = (await db.outlineNodes
+        .where('projectId')
+        .equals(fixture.scope.projectId)
+        .toArray())
+        .filter(row => row.type === 'chapter')
+        .sort((left, right) => left.order - right.order)
+        .map(row => ({ title: row.title, summary: row.summary, order: row.order }))
+      expect(chapters).toEqual(items.map((item, order) => ({ ...item, order })))
+      const snapshot = await readAgentRunV1(fixture.scope, candidate.runId)
+      expect(snapshot.projection.steps[candidate.stepId]).toMatchObject({
+        status: 'succeeded',
+        confirmation: 'adopt',
+      })
+      expect(await recoverPendingOutlineGenerationAdoptionsV1(fixture.scope.projectId))
+        .toEqual({ recoveredRunIds: [], failed: [] })
+      const events = await db.agentEvents
+        .where('conversationId')
+        .equals(candidate.conversationId)
+        .toArray()
+      expect(events.filter(event => event.kind === 'candidate')).toHaveLength(1)
+      expect(events.filter(event => event.kind === 'confirmation')).toHaveLength(1)
+      expect(run).toHaveBeenCalledOnce()
+    }
+  })
+
+  it.each(RECOVERY_BATCH_STARTS)('部分业务写入后第 %i 轮起连续 5 次中断均补齐缺项且不重复调用', async batchStart => {
+    for (const iteration of recoveryBatch(batchStart)) {
+      const fixture = await createWorkspace()
+      const assembled = assembly()
+      const run = vi.fn(async () => `部分写入候选-${iteration}`)
+      const generationNode = node(run)
+      const trace = await createOutlineGenerationTraceV1({
+        projectId: fixture.scope.projectId,
+        worldGroupId: fixture.worldGroupId,
+        request: { kind: 'chapters', volumeId: fixture.outlineNodeId },
+        assembled,
+        durable: true,
+      })
+      const generated = await runGenerationNode(
+        generationNode,
+        prepareGenerationNode(generationNode, assembled),
+        { shadowTrace: trace },
+      )
+      const candidate = (await trace.persistCandidate(generated.output))!
+      const items = [
+        { title: `第${iteration * 2 + 1}章`, summary: `冲突建立-${iteration}` },
+        { title: `第${iteration * 2 + 2}章`, summary: `冲突升级-${iteration}` },
+      ]
+      await beginOutlineGenerationAdoptionV1(candidate, {
+        version: 1,
+        kind: 'chapters',
+        destinationVolumeId: fixture.outlineNodeId,
+        items,
+        startingOrder: 0,
+        baseExistingTitles: [],
+      })
+
+      // 模拟 adopt 循环写完第一项后页面崩溃，账本尚无 adoption.committed。
+      await adoptGeneratedOutlineItems({
+        projectId: fixture.scope.projectId,
+        workspaceScope: fixture.scope,
+        worldGroupId: fixture.worldGroupId,
+        parentId: fixture.outlineNodeId,
+        type: 'chapter',
+        items: items.slice(0, 1),
+        startingOrder: 0,
+      })
+
+      const recovered = await recoverPendingOutlineGenerationAdoptionsV1(fixture.scope.projectId)
+
+      expect(recovered, `第 ${iteration + 1} 次部分写入恢复`)
+        .toEqual({ recoveredRunIds: [candidate.runId], failed: [] })
+      const chapters = (await db.outlineNodes
+        .where('projectId')
+        .equals(fixture.scope.projectId)
+        .toArray())
+        .filter(row => row.type === 'chapter')
+        .sort((left, right) => left.order - right.order)
+        .map(row => ({ title: row.title, summary: row.summary, order: row.order }))
+      expect(chapters).toEqual(items.map((item, order) => ({ ...item, order })))
+      const snapshot = await readAgentRunV1(fixture.scope, candidate.runId)
+      expect(snapshot.projection.steps[candidate.stepId]).toMatchObject({
+        status: 'succeeded',
+        confirmation: 'adopt',
+      })
+      expect(await recoverPendingOutlineGenerationAdoptionsV1(fixture.scope.projectId))
+        .toEqual({ recoveredRunIds: [], failed: [] })
+      const events = await db.agentEvents
+        .where('conversationId')
+        .equals(candidate.conversationId)
+        .toArray()
+      expect(events.filter(event => event.kind === 'candidate')).toHaveLength(1)
+      expect(events.filter(event => event.kind === 'confirmation')).toHaveLength(1)
+      expect(run).toHaveBeenCalledOnce()
+    }
+  })
+
+  it('冻结采纳计划被篡改时拒绝恢复，且不向业务表写入篡改内容', async () => {
+    const fixture = await createWorkspace()
+    const { candidate, run } = await persistOutlineCandidate(
+      fixture,
+      { kind: 'chapters', volumeId: fixture.outlineNodeId },
+      '计划篡改候选',
+    )
+    await expect(beginOutlineGenerationAdoptionV1(candidate, {
+      version: 1,
+      kind: 'single-volume',
+      targetId: fixture.outlineNodeId,
+      summary: '越权改写卷纲',
+    })).rejects.toThrow('采纳计划与候选生成目标不匹配')
+    expect((await db.agentEvents
+      .where('conversationId')
+      .equals(candidate.conversationId)
+      .toArray())
+      .filter(event => event.kind === 'plan')).toEqual([])
+    await beginOutlineGenerationAdoptionV1(candidate, {
+      version: 1,
+      kind: 'chapters',
+      destinationVolumeId: fixture.outlineNodeId,
+      items: [{ title: '第一章', summary: '作者确认的摘要' }],
+      startingOrder: 0,
+      baseExistingTitles: [],
+    })
+    const planEvent = (await db.agentEvents
+      .where('conversationId')
+      .equals(candidate.conversationId)
+      .toArray())
+      .find(event => event.kind === 'plan')
+    const payload = JSON.parse(planEvent!.payload)
+    expect(payload.type).toBe(OUTLINE_GENERATION_ADOPTION_INTENT_PAYLOAD_TYPE)
+    payload.intent.items[0].summary = '被篡改的摘要'
+    await db.agentEvents.update(planEvent!.id!, { payload: JSON.stringify(payload) })
+
+    const recovered = await recoverPendingOutlineGenerationAdoptionsV1(fixture.scope.projectId)
+
+    expect(recovered.recoveredRunIds).toEqual([])
+    expect(recovered.failed).toEqual([{
+      runId: candidate.runId,
+      reason: '已确认运行缺少哈希匹配的采纳计划',
+    }])
+    expect((await db.outlineNodes
+      .where('projectId')
+      .equals(fixture.scope.projectId)
+      .toArray())
+      .filter(row => row.type === 'chapter')).toEqual([])
+    expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('单卷摘要在确认后中断时通过既有受治理采纳入口恢复', async () => {
+    const fixture = await createWorkspace()
+    const { candidate } = await persistOutlineCandidate(
+      fixture,
+      { kind: 'single-volume', volumeId: fixture.outlineNodeId },
+      '单卷摘要候选',
+    )
+    await beginOutlineGenerationAdoptionV1(candidate, {
+      version: 1,
+      kind: 'single-volume',
+      targetId: fixture.outlineNodeId,
+      summary: '潮城在七日倒计时中被迫迁徙。',
+    })
+
+    expect(await recoverPendingOutlineGenerationAdoptionsV1(fixture.scope.projectId))
+      .toEqual({ recoveredRunIds: [candidate.runId], failed: [] })
+    expect(await db.outlineNodes.get(fixture.outlineNodeId)).toMatchObject({
+      summary: '潮城在七日倒计时中被迫迁徙。',
+    })
+  })
+
+  it('批量卷恢复遵循基线与候选内标题去重，并保留原采纳序位', async () => {
+    const fixture = await createWorkspace()
+    const { candidate } = await persistOutlineCandidate(fixture, { kind: 'volumes' }, '批量卷候选')
+    const items = [
+      { title: '第一卷', summary: '与基线重复，不应覆盖' },
+      { title: '第二卷', summary: '潮城离岸' },
+      { title: ' 第二卷 ', summary: '候选内重复，不应覆盖' },
+      { title: '第三卷', summary: '新大陆登陆' },
+    ]
+    await beginOutlineGenerationAdoptionV1(candidate, {
+      version: 1,
+      kind: 'volumes',
+      items,
+      startingOrder: 1,
+      baseExistingTitles: ['第一卷'],
+    })
+
+    expect(await recoverPendingOutlineGenerationAdoptionsV1(fixture.scope.projectId))
+      .toEqual({ recoveredRunIds: [candidate.runId], failed: [] })
+    const volumes = (await db.outlineNodes
+      .where('projectId')
+      .equals(fixture.scope.projectId)
+      .toArray())
+      .filter(row => row.type === 'volume')
+      .sort((left, right) => left.order - right.order)
+      .map(row => ({ title: row.title, summary: row.summary, order: row.order }))
+    expect(volumes).toEqual([
+      { title: '第一卷', summary: '', order: 0 },
+      { title: '第二卷', summary: '潮城离岸', order: 2 },
+      { title: '第三卷', summary: '新大陆登陆', order: 4 },
+    ])
   })
 
   it('关闭 durable 开关时保持原 shadow 行为且不写运行表', async () => {

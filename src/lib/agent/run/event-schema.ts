@@ -225,10 +225,18 @@ function parsePayload<T extends AgentRunEventTypeV1>(
       break
     }
     case 'adoption.started': {
-      const record = payloadRecord(value, type, ['stepId', 'candidateHash'])
+      const record = payloadRecord(
+        value,
+        type,
+        ['stepId', 'candidateHash', 'intentHash'],
+        ['stepId', 'candidateHash'],
+      )
       payload = {
         stepId: readString(record.stepId, 'event.payload(adoption.started).stepId', { max: 160 }),
         candidateHash: readHash(record.candidateHash, 'event.payload(adoption.started).candidateHash'),
+        ...(record.intentHash == null ? {} : {
+          intentHash: readHash(record.intentHash, 'event.payload(adoption.started).intentHash'),
+        }),
       }
       break
     }
