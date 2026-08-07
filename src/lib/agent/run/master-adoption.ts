@@ -361,6 +361,13 @@ async function businessAlreadyMatches(
     : chapter.content === fragment
 }
 
+export async function isMasterAgentCandidateBusinessStateMatchingV1(
+  input: MasterAgentCandidateAdoptionRefV1,
+  candidate: MasterAgentDurableCandidateV1,
+): Promise<boolean> {
+  return businessAlreadyMatches(input, candidate)
+}
+
 async function repairPartialOutlineAdoption(
   input: MasterAgentCandidateAdoptionRefV1,
   candidate: MasterAgentDurableCandidateV1,

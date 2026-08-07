@@ -749,6 +749,16 @@ export async function runDurableMasterAgentPlanV1(
       if (!budgetAtLeast(evidence, previousBudget)) fail(`主 Agent 任务 ${task.id} 团队预算证据倒退`)
       payload.candidateHash = await computeCandidateHash(payload, draft)
       const outputHash = await hashCanonicalValue(candidate.runtimeOutput)
+      const contextManifestHash = payload.contextEvidence
+        ? await hashCanonicalValue({
+            version: 1,
+            runId: snapshot.run.id,
+            stepId,
+            attempt: snapshot.projection.steps[stepId].attempt,
+            contextSources: payload.contextSources,
+            contextEvidence: payload.contextEvidence,
+          })
+        : null
       const persisted = await db.transaction(
         'rw',
         scopeTransactionTables(db.agentConversations, db.agentEvents, db.agentRuns, db.agentRunEvents),
@@ -761,12 +771,27 @@ export async function runDurableMasterAgentPlanV1(
             payload,
             scope: input.scope,
           })
-          let nextSnapshot = await appendAgentRunEventV1({
+          let nextSnapshot = snapshot
+          if (payload.contextEvidence) {
+            nextSnapshot = await appendAgentRunEventV1({
+              scope: input.scope,
+              runId: snapshot.run.id,
+              type: 'context.assembled',
+              payload: {
+                stepId,
+                attempt: snapshot.projection.steps[stepId].attempt,
+                manifestHash: contextManifestHash!,
+              },
+              expectedLastSequence: nextSnapshot.projection.lastSequence,
+              now: now(),
+            })
+          }
+          nextSnapshot = await appendAgentRunEventV1({
             scope: input.scope,
             runId: snapshot.run.id,
             type: 'model.responded',
-            payload: { stepId, attempt: snapshot.projection.steps[stepId].attempt, outputHash },
-            expectedLastSequence: snapshot.projection.lastSequence,
+            payload: { stepId, attempt: nextSnapshot.projection.steps[stepId].attempt, outputHash },
+            expectedLastSequence: nextSnapshot.projection.lastSequence,
             now: now(),
           })
           const prior = previousBudget

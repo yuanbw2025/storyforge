@@ -22,6 +22,7 @@ import {
   recoverPendingMasterAgentAdoptionsV1,
   rejectMasterAgentCandidateV1,
 } from '../../lib/agent/run/master-adoption'
+import { verifyMasterAgentRunV1 } from '../../lib/agent/run/master-verification'
 import type { AgentEvent, Project, WorkspaceScope } from '../../lib/types'
 import { parseAgentEventPayload } from '../../lib/types'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
@@ -93,7 +94,10 @@ export function useMasterCopilot(input: {
       if (!active) return
       setConversationId(conversation.id!)
       if (workspaceScope) {
-        await recoverPendingMasterAgentAdoptionsV1(workspaceScope)
+        const recovered = await recoverPendingMasterAgentAdoptionsV1(workspaceScope)
+        for (const runId of recovered.recoveredRunIds) {
+          await verifyMasterAgentRunV1({ scope: workspaceScope, runId })
+        }
       }
       let rows = await readAgentEvents(conversation.id!, workspaceScope)
       if (!rows.length) {
@@ -367,12 +371,22 @@ export function useMasterCopilot(input: {
       let message = '候选已拒绝，没有写入项目。'
       const durableCandidate = candidate.payload.runId != null && candidate.payload.runStepId
       if (durableCandidate && decision === 'adopted') {
-        message = (await commitMasterAgentCandidateAdoptionV1({
+        const adoption = await commitMasterAgentCandidateAdoptionV1({
           scope: workspaceScope!,
           runId: candidate.payload.runId!,
           candidateEventId: candidate.event.id,
           runtime: runtimeCandidates.current.get(candidate.event.id),
-        })).message
+        })
+        message = adoption.message
+        const verification = await verifyMasterAgentRunV1({
+          scope: workspaceScope!,
+          runId: candidate.payload.runId!,
+        })
+        if (verification.accepted) {
+          message = `${message} 本轮所有步骤均已通过终态校验。`
+        } else if (!verification.codes.includes('run-not-ready')) {
+          message = `${message} 终态校验未通过：${verification.codes.join('、')}。`
+        }
       } else if (durableCandidate) {
         await rejectMasterAgentCandidateV1({
           scope: workspaceScope!,
