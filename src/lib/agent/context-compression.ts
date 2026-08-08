@@ -46,7 +46,10 @@ export interface AgentContextCompressionRuntimeV1 {
   budget: AgentTeamBudgetTracker
   /** Final generation calls and the remaining Canon retry must stay available. */
   requiredFutureModelCalls: number
-  complete?: (messages: ChatMessage[]) => Promise<string>
+  complete?: (
+    messages: ChatMessage[],
+    request: { maxOutputTokens: number; temperature: number },
+  ) => Promise<string>
 }
 
 export interface AgentContextCompressionSessionV1 {
@@ -326,7 +329,7 @@ export function createAgentContextCompressionSessionV1(input: {
       attempts += 1
       try {
         const raw = input.runtime.complete
-          ? await input.runtime.complete(messages)
+          ? await input.runtime.complete(messages, { maxOutputTokens, temperature: 0.1 })
           : await chat(messages, input.config, {
               category: `${input.routingCategory}.context-compression`,
               projectId: input.projectId,

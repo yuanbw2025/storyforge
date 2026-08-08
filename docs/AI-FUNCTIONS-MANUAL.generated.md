@@ -259,9 +259,9 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 ### 动态 category 调用
 
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
-- `src/components/settings/NS0EvalPanel.tsx:50 · chat`
+- `src/components/settings/NS0EvalPanel.tsx:72 · chat`
 - `src/lib/agent/character-copilot.ts:472 · chat`
-- `src/lib/agent/context-compression.ts:330 · chat`
+- `src/lib/agent/context-compression.ts:333 · chat`
 - `src/lib/agent/inspiration-copilot.ts:322 · chat`
 - `src/lib/agent/outline-copilot.ts:496 · chat`
 - `src/lib/agent/prose-copilot.ts:649 · chat`
@@ -271,4 +271,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `27cae5a`
+生成时间基准:commit `9a06490`

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { chat } from '../../lib/ai/client'
 import { getFixtures } from '../../lib/evals/long-consistency/fixtures'
 import {
@@ -14,6 +14,13 @@ import {
   parseSemanticJudgeVerdict,
   scoreWithSemanticVerdict,
 } from '../../lib/evals/long-consistency/semantic-judge'
+import {
+  evaluateContextCompressionNonInferiorityV1,
+  H17_CONTEXT_COMPRESSION_RESULTS_STORAGE_KEY,
+  runContextCompressionEvalMatrixV1,
+  verifyContextCompressionEvalRecordV1,
+} from '../../lib/evals/context-compression/runner'
+import type { ContextCompressionEvalRecordV1 } from '../../lib/evals/context-compression/types'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
 
@@ -33,6 +40,21 @@ function readPairedRecords(): EvalRunRecord[] {
   } catch {
     return []
   }
+}
+
+function readContextCompressionRecords(): ContextCompressionEvalRecordV1[] {
+  try {
+    const raw = localStorage.getItem(H17_CONTEXT_COMPRESSION_RESULTS_STORAGE_KEY)
+    return raw ? JSON.parse(raw) as ContextCompressionEvalRecordV1[] : []
+  } catch {
+    return []
+  }
+}
+
+const CONTEXT_VARIANT_LABELS: Record<ContextCompressionEvalRecordV1['variant'], string> = {
+  'full-source': '全文基线',
+  'deterministic-truncation': '旧截断',
+  'semantic-compression': '语义压缩',
 }
 
 async function evalChatWithRetry(
@@ -90,9 +112,25 @@ export default function NS0EvalPanel() {
   const config = useAIConfigStore(state => state.config)
   const [record, setRecord] = useState<EvalRunRecord | null>(() => readStoredRecord())
   const [pairedRecords, setPairedRecords] = useState<EvalRunRecord[]>(() => readPairedRecords())
+  const [compressionRecords, setCompressionRecords] = useState<ContextCompressionEvalRecordV1[]>(
+    () => readContextCompressionRecords(),
+  )
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
   const [running, setRunning] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const stored = readContextCompressionRecords()
+    void Promise.all(stored.map(async item => (
+      await verifyContextCompressionEvalRecordV1(item) ? item : null
+    ))).then(records => {
+      if (!active) return
+      const verified = records.filter((item): item is ContextCompressionEvalRecordV1 => item !== null)
+      setCompressionRecords(verified)
+    })
+    return () => { active = false }
+  }, [])
 
   const run = async () => {
     setRunning(true)
@@ -144,6 +182,36 @@ export default function NS0EvalPanel() {
     }
   }
 
+  const runCompressionMatrix = async () => {
+    setRunning(true)
+    setError('')
+    setProgress('0/3 组')
+    try {
+      const fixtures = getFixtures('development').slice(0, 3)
+      const records = await runContextCompressionEvalMatrixV1({
+        fixtures,
+        split: 'development',
+        contextTargetTokens: 900,
+        generationMaxTokens: 1_200,
+        config,
+        call: async (messages, runConfig, phase) => evalChatWithRetry(
+          messages,
+          runConfig,
+          phase === 'compression' ? 'eval.h17.compression' : 'eval.h17.generation',
+        ),
+        onVariantComplete: (_completedRecord, completed, total) => setProgress(`${completed}/${total} 组`),
+        onCaseProgress: (variantIndex, variantTotal, completed, total) => {
+          setProgress(`${variantIndex + 1}/${variantTotal} 组 · ${completed}/${total} 例`)
+        },
+      })
+      setCompressionRecords(records)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setRunning(false)
+    }
+  }
+
   const aggregate = record?.aggregate
   const fixedLegacy = pairedRecords.find(item => item.budgetMode === 'fixed' && item.variant === 'legacy-500-tail')
   const fixedCandidate = pairedRecords.find(item => item.budgetMode === 'fixed' && item.variant === 'handoff-tail-summary')
@@ -154,6 +222,14 @@ export default function NS0EvalPanel() {
     ? evaluateNs1Gate(naturalLegacy, naturalCandidate, { requireFactImprovement: false })
     : null
   const finalHeldOutAlreadyRun = pairedRecords.some(item => item.split === 'held-out')
+  const fullCompressionRecord = compressionRecords.find(item => item.variant === 'full-source')
+  const semanticCompressionRecord = compressionRecords.find(item => item.variant === 'semantic-compression')
+  const compressionGate = fullCompressionRecord && semanticCompressionRecord
+    ? evaluateContextCompressionNonInferiorityV1({
+        full: fullCompressionRecord,
+        semantic: semanticCompressionRecord,
+      })
+    : null
 
   return (
     <div data-testid="ns0-eval-panel" className="max-w-2xl mt-6 p-4 bg-bg-surface border border-border rounded-xl">
@@ -161,7 +237,7 @@ export default function NS0EvalPanel() {
       <p className="mt-1 text-xs text-text-muted">
         普通按钮运行 development 样例；NS-1 最终按钮运行冻结 held-out，并用独立语义裁判评分。最终盲测只展示 aggregate，不展开逐例输出。
       </p>
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           onClick={() => { void run() }}
           disabled={running || !isAIConfigReady(config)}
@@ -175,6 +251,13 @@ export default function NS0EvalPanel() {
           className="px-3 py-1.5 text-sm rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-40"
         >
           {finalHeldOutAlreadyRun ? 'NS-1 最终盲测已锁定' : 'NS-1 最终配对 A/B'}
+        </button>
+        <button
+          onClick={() => { void runCompressionMatrix() }}
+          disabled={running || !isAIConfigReady(config)}
+          className="px-3 py-1.5 text-sm rounded-lg bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 disabled:opacity-40"
+        >
+          上下文质量对照
         </button>
         {record && <span className="text-xs text-text-muted">{record.model} · {record.createdAt}</span>}
       </div>
@@ -242,6 +325,37 @@ export default function NS0EvalPanel() {
               </details>
             ))}
           </div>
+        </div>
+      )}
+      {compressionRecords.length > 0 && (
+        <div data-testid="h17-context-compression-result" className="mt-4 overflow-x-auto border-t border-border pt-3">
+          <table className="w-full text-[11px] text-text-secondary">
+            <thead>
+              <tr className="text-left text-text-muted">
+                <th>上下文方案</th><th>事实</th><th>约束</th><th>泄漏</th><th>生成输入</th><th>总输入</th><th>调用</th>
+              </tr>
+            </thead>
+            <tbody>
+              {compressionRecords.map(item => (
+                <tr key={item.variant} className="border-t border-border/50">
+                  <td>{CONTEXT_VARIANT_LABELS[item.variant]}</td>
+                  <td>{(item.aggregate.requiredFactRecall * 100).toFixed(1)}%</td>
+                  <td>{(item.aggregate.constraintRecall * 100).toFixed(1)}%</td>
+                  <td>{((item.aggregate.futureLeakageRate + item.aggregate.wrongWorldLeakageRate) * 100).toFixed(1)}%</td>
+                  <td>{item.aggregate.generationInputTokens}</td>
+                  <td>{item.aggregate.totalInputTokens}</td>
+                  <td>{item.aggregate.modelCalls}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {compressionGate && (
+            <p className={`mt-2 text-[11px] ${compressionGate.passed ? 'text-success' : 'text-error'}`}>
+              H17 非劣门：{compressionGate.passed ? 'PASS' : `FAIL · ${compressionGate.failures.join(', ')}`}
+              {' '}· 生成输入下降 {(compressionGate.generationInputReduction * 100).toFixed(1)}%
+              {' '}· 总输入倍率 {compressionGate.totalInputMultiplier.toFixed(2)}x
+            </p>
+          )}
         </div>
       )}
     </div>

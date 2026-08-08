@@ -446,7 +446,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression'],
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS17-context-compression-eval'],
   },
   {
     version: 1,

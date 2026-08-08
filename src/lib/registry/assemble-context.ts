@@ -207,7 +207,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       && preparedContent === content
       && originalTokens > sourceBudgetTokens
       && transformed?.allowSourceBudgetOverflow !== true
-      ? capBySourceBudget(content, sourceBudgetTokens)
+      ? capContextSourceByBudget(content, sourceBudgetTokens)
       : { content: preparedContent, truncated: false }
     keyedSegments.push({
       key: source.key,
@@ -310,7 +310,8 @@ function requirementsMet(source: ContextSource, input: AssembleContextInput): bo
   return true
 }
 
-function capBySourceBudget(
+/** Shared deterministic source cap used by production assembly and paired evals. */
+export function capContextSourceByBudget(
   content: string,
   budgetTokens: number,
 ): { content: string; truncated: boolean } {

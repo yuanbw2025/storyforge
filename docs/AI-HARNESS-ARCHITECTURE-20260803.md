@@ -992,7 +992,15 @@ CHIRON 四类信息可映射到现有结构：
 - `agent-context-compression-v1` 产物要求结构化摘要、全部锚点 ID 和逐字证据。确定性锚点优先抽取禁止/条件、角色认知边界、时间顺序和身份/标题；装配层重新校验原文 hash、逐字引文、覆盖数、产物预算和 delivery。只有全部通过才记录 `delivery=compressed`，伪造 source hash、漏锚点、非逐字引文或超预算产物均不得进入生成提示词；
 - 单来源最多两次压缩调用，默认每个任务只处理一个超额来源。两次失败或没有辅助调用额度时，只允许该来源在 `originalTokens <= inputBudget`、不超过 Skill 全文上限且不超过单源预算两倍时全文升级；否则回到带显式证据的确定性截断，禁止全库全文注入；
 - 压缩调用复用当前领域 Agent 的模型路由并计入同一个 `AgentTeamBudgetTracker`。主 Agent 会先为本任务、后续任务和尚未使用的一次 Canon 打回保留调用额度；额度不足时不会发起压缩调用。压缩/回退证据进入候选 hash 和 Context Manifest，首次持久化及恢复会拒绝篡改；H16 之前缺少压缩字段的历史 manifest/candidate 继续兼容；
-- `R-HARNESS16-semantic-context-compression` 已覆盖成功压缩、锚点漏失后一次修复、两次失败、单源全文上限、确定性截断、辅助预算不足、Manifest 完整性和 source hash 伪造。该回归证明的是机制与安全边界，不是模型质量收益；相同 provider/model/budget 的真实生成配对 A/B、成本/延迟分布和非劣效门槛仍未完成，不能据此默认扩大压缩来源数或宣称 H5 完成。
+- `R-HARNESS16-semantic-context-compression` 已覆盖成功压缩、锚点漏失后一次修复、两次失败、单源全文上限、确定性截断、辅助预算不足、Manifest 完整性和 source hash 伪造。该回归证明的是机制与安全边界，不是模型质量收益；不能据此默认扩大压缩来源数或宣称 H5 完成。
+
+**同模型上下文交付评测实施状态（HARNESS-17，2026-08-08）**
+
+- 现有开发评测入口新增 `full-source`、`deterministic-truncation`、`semantic-compression` 三路对照，三路冻结相同 provider、model、生成温度和输出预算。评测直接复用 NS-0 的 generation/continuation/expansion 合成夹具和事实、约束、未来泄漏、错世界泄漏评分器，不把 `requiredFacts`、匹配标签或自动验收脚手架注入模型可见输入；
+- 确定性截断变体直接调用生产 `assembleContext()` 共用的单源裁剪函数；语义变体直接调用生产 `agent-context-compression-v1` 和 `prose.generate` Skill 压缩策略，不复制第二套压缩提示词或伪造摘要。压缩无合格交付时该 case fail-closed，不生成名为 semantic 的伪对照记录；
+- 评测将“最终生成调用的输入 token”与“压缩辅助调用 + 最终生成的总 token”分开报告，同时记录模型调用数、压缩回退率和延迟。生成输入缩短不再被表述为总成本下降；额外压缩调用造成的总成本倍率会原样展示；
+- 发布门在调用真实模型前冻结为：事实召回和约束召回相对全文各最多下降 2 个百分点，未来泄漏和错世界泄漏均为 0，生成阶段输入至少下降 25%，压缩回退率为 0。结果记录绑定 source/delivery/output/score/usage trace hash 和整组 record hash，篡改指标后验证失败；
+- `NS0EvalPanel` 只取三种任务各一条 development 夹具运行该对照，避免一次内部评测无限扩张调用量。当前仓库只证明 runner、成本核算、证据完整性和发布门可执行，尚未替作者调用任何真实 provider，也没有产出质量收益结论；在真实结果通过前不扩大生产压缩来源数，不接入“生成质量差即自动全文重生成”。
 
 **范围**
 
