@@ -56,12 +56,13 @@ export function parseVerificationReceiptV1(value: unknown): VerificationReceiptV
     'adoptionEventIds',
     'postStateHash',
     'verifierSetVersion',
+    'lineage',
     'semanticVerifier',
     'criteria',
     'acceptedAt',
     'receiptHash',
   ] as const
-  const required = keys.filter(key => key !== 'semanticVerifier')
+  const required = keys.filter(key => key !== 'semanticVerifier' && key !== 'lineage')
   assertExactKeys(record, keys, required, 'receipt')
   if (record.version !== 1) failSchema('unsupported_version', 'receipt.version', '仅支持版本 1')
   const adoptionEventIds = readArray(record.adoptionEventIds, 'receipt.adoptionEventIds').map((item, index) => (
@@ -92,6 +93,24 @@ export function parseVerificationReceiptV1(value: unknown): VerificationReceiptV
       promptVersion: readString(semantic.promptVersion, 'receipt.semanticVerifier.promptVersion', { max: 160 }),
     }
   }
+  let lineage: VerificationReceiptV1['lineage']
+  if (record.lineage !== undefined) {
+    const parent = readRecord(record.lineage, 'receipt.lineage')
+    assertExactKeys(
+      parent,
+      ['runId', 'receiptHash', 'relation', 'artifactHash'],
+      ['runId', 'receiptHash', 'relation'],
+      'receipt.lineage',
+    )
+    lineage = {
+      runId: readInteger(parent.runId, 'receipt.lineage.runId', { min: 1 }),
+      receiptHash: readHash(parent.receiptHash, 'receipt.lineage.receiptHash'),
+      relation: readString(parent.relation, 'receipt.lineage.relation', { max: 120 }),
+      ...(parent.artifactHash === undefined ? {} : {
+        artifactHash: readHash(parent.artifactHash, 'receipt.lineage.artifactHash'),
+      }),
+    }
+  }
   return {
     version: 1,
     runId: readInteger(record.runId, 'receipt.runId', { min: 1 }),
@@ -102,6 +121,7 @@ export function parseVerificationReceiptV1(value: unknown): VerificationReceiptV
     adoptionEventIds,
     postStateHash: readHash(record.postStateHash, 'receipt.postStateHash'),
     verifierSetVersion: readString(record.verifierSetVersion, 'receipt.verifierSetVersion', { max: 160 }),
+    ...(lineage ? { lineage } : {}),
     semanticVerifier,
     criteria,
     acceptedAt: readInteger(record.acceptedAt, 'receipt.acceptedAt', { min: 0 }),

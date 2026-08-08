@@ -28,6 +28,14 @@ export interface AgentRunStepExecutionBindingV1 extends AgentSkillExecutionBindi
   stepId: string
 }
 
+/** Durable provenance for a run created from another run's verified artifact. */
+export interface AgentRunParentLineageV1 {
+  runId: number
+  receiptHash: string
+  relation: string
+  artifactHash?: string
+}
+
 export type AgentRunWriteMode = 'none' | 'candidate-only' | 'author-confirmed'
 
 export interface AgentRunWriteTargetV1 {
@@ -76,6 +84,10 @@ export interface AgentRunContractV1 {
   version: 1
   objective: string
   workflowKind: AgentRunWorkflowKind
+  /** Absent on root/legacy runs; immutable once a child run is created. */
+  lineage?: {
+    parent: AgentRunParentLineageV1
+  }
   scope: AgentRunScopeV1
   permissions: {
     contextSourceKeys: string[]
@@ -163,6 +175,8 @@ export interface VerificationReceiptV1 {
   adoptionEventIds: number[]
   postStateHash: string
   verifierSetVersion: string
+  /** The terminal receipt is cryptographically bound to its upstream run via the contract hash. */
+  lineage?: AgentRunParentLineageV1
   semanticVerifier?: {
     provider: string
     model: string
@@ -215,6 +229,11 @@ export interface AgentRunRecord {
   workId?: number | null
   worldGroupId?: number | null
   conversationId?: number | null
+  /** Materialized index for querying child runs; mirrors contract.lineage.parent. */
+  parentRunId?: number | null
+  parentRelation?: string | null
+  parentReceiptHash?: string | null
+  parentArtifactHash?: string | null
   status: AgentRunState
   contractVersion: 1
   contractJson: string

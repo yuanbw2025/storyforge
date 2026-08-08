@@ -551,6 +551,12 @@ class StoryForgeDB extends Dexie {
       agentRunEvents: '++id, projectId, worldGroupId, runId, &[runId+sequence], type, createdAt',
       agentRunCheckpoints: '++id, projectId, worldGroupId, runId, &[runId+throughSequence], createdAt',
     })
+
+    // v52 / HARNESS-21: materialize durable parent-run lineage. Existing root
+    // runs stay roots; no historical run is guessed into a parent/child chain.
+    this.version(52).stores({
+      agentRuns: '++id, projectId, workId, worldGroupId, conversationId, parentRunId, &[parentRunId+parentRelation], status, updatedAt',
+    })
   }
 }
 

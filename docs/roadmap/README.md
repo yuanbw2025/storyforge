@@ -248,6 +248,11 @@
   `prose.organize` 与 `prose.memory` 已登记为正文 Agent 的非默认 Skill 并冻结执行版本。章节记忆
   写回后才重建检索块和层级摘要；三步全部成功、六域候选已确认且派生状态匹配当前正文时才签发
   post-adoption terminal receipt。历史 Chapter Transition V1 候选继续只读恢复，不再用于新正文主路径。
+- HARNESS-21 已把正文生成 Run 与章后处理 Run 绑定为可移植的父子 lineage：子 Run 的契约固定父
+  `runId`、父 terminal receipt hash、关系标识和采纳后正文 hash；`agentRuns.parentRunId` 及复合唯一
+  索引防止同一正文重复创建同类子 Run。刷新可从父键恢复，父回执或正文产物变化会阻断/撤销子回执，
+  UI 明确区分“正文完成”“下游处理中/待确认/可恢复失败”和“全链完成”。导入导出同时重映射契约
+  lineage 与物化父键，历史无 lineage 的 Run 仅保留兼容读取并标为旧链。
 
 ### GOV-1 第一阶段交付证据
 

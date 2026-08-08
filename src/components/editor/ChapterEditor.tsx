@@ -90,6 +90,7 @@ import {
 import {
   beginChapterPostAdoptionStepV1,
   beginChapterPostAdoptionOrganizationAdoptionV1,
+  chapterPostAdoptionChainStateV1,
   commitChapterPostAdoptionOrganizationV1,
   createChapterPostAdoptionDurableRunV1,
   failChapterPostAdoptionStepV1,
@@ -97,16 +98,19 @@ import {
   recordChapterPostAdoptionOutputV1,
   rejectChapterPostAdoptionOrganizationAdoptionV1,
   recoverChapterPostAdoptionOrganizationV1,
+  readChapterPostAdoptionChainStatusV1,
+  readLatestChapterPostAdoptionRunV1,
   scheduleChapterPostAdoptionStepsV1,
   succeedChapterPostAdoptionStepV1,
   verifyChapterPostAdoptionRunV1,
   CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1,
   CHAPTER_POST_ADOPTION_STEP_IDS_V1,
   type ChapterPostAdoptionDurableEvidenceV1,
+  type ChapterPostAdoptionChainStateV1,
   type ChapterPostAdoptionStepIdV1,
 } from '../../lib/agent/run/chapter-post-adoption-durable'
 import { createContextManifestFromAssemblyV1 } from '../../lib/agent/run/context-manifest'
-import type { AgentRunSnapshotV1 } from '../../lib/agent/run/event-store'
+import { readAgentRunV1, type AgentRunSnapshotV1 } from '../../lib/agent/run/event-store'
 import { hashChapterText, normalizeChapterText } from '../../lib/ai/chapter-memory/text-normalization'
 import { hashCanonicalValue } from '../../lib/agent/run/hash'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
@@ -247,11 +251,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [transitionCandidate, setTransitionCandidate] = useState<ChapterTransitionCandidateV1 | null>(null)
   const [transitionRunId, setTransitionRunId] = useState<number | null>(null)
   const [postAdoptionRunId, setPostAdoptionRunId] = useState<number | null>(null)
+  const [postAdoptionChainState, setPostAdoptionChainState] = useState<ChapterPostAdoptionChainStateV1 | null>(null)
   const [transitionError, setTransitionError] = useState('')
   const [consistencyRun, setConsistencyRun] = useState<ConsistencyAgentRun | null>(null)
   const [consistencyCurrent, setConsistencyCurrent] = useState(false)
   const aiConfig = useAIConfigStore(s => s.config)
   const dialog = useDialog()
+
+  const updatePostAdoptionSnapshot = useCallback((snapshot: AgentRunSnapshotV1) => {
+    transitionSnapshotRef.current = snapshot
+    setPostAdoptionRunId(snapshot.run.id)
+    setPostAdoptionChainState(chapterPostAdoptionChainStateV1(snapshot))
+  }, [])
 
   useEffect(() => {
     consistencyRunRef.current = consistencyRun
@@ -323,17 +334,30 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setShowOrganization(false)
     setOrganizationError('')
     setPostAdoptionRunId(null)
+    setPostAdoptionChainState(null)
     if (!currentChapter?.id) return () => { active = false }
     void (async () => {
+      const scope = await resolveScopeLike(project.id!)
       const run = await readLatestChapterOrganizationRun({
         projectId: project.id!,
         chapterId: currentChapter.id!,
       })
       let postAdoptionSnapshot: AgentRunSnapshotV1 | null = null
+      const linkedPostAdoptionSnapshot = await readLatestChapterPostAdoptionRunV1({
+        scope,
+        chapterId: currentChapter.id!,
+      })
+      const linkedParentRunId = linkedPostAdoptionSnapshot?.contract.lineage?.parent.runId
+      const linkedChainState = linkedParentRunId == null
+        ? null
+        : (await readChapterPostAdoptionChainStatusV1({
+            scope,
+            parentRunId: linkedParentRunId,
+          })).state
       if (run?.candidate.durable?.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization) {
         try {
           postAdoptionSnapshot = await recoverChapterPostAdoptionOrganizationV1({
-            scope: await resolveScopeLike(project.id!),
+            scope,
             candidate: run.candidate as ChapterOrganizationRun['candidate'] & {
               durable: ChapterPostAdoptionDurableEvidenceV1
             },
@@ -344,7 +368,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       } else if (run?.candidate.durable) {
         try {
           await recoverChapterOrganizationCandidateV1({
-            scope: await resolveScopeLike(project.id!),
+            scope,
             candidate: run.candidate,
           })
         } catch (error) {
@@ -355,9 +379,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       if (!active) return
       setOrganizationRun(run)
       setOrganizationCurrent(current)
-      if (postAdoptionSnapshot) {
+      if (linkedPostAdoptionSnapshot) {
+        transitionSnapshotRef.current = linkedPostAdoptionSnapshot
+        setPostAdoptionRunId(linkedPostAdoptionSnapshot.run.id)
+        setPostAdoptionChainState(linkedChainState ?? chapterPostAdoptionChainStateV1(linkedPostAdoptionSnapshot))
+      } else if (postAdoptionSnapshot) {
         transitionSnapshotRef.current = postAdoptionSnapshot
         setPostAdoptionRunId(postAdoptionSnapshot.run.id)
+        setPostAdoptionChainState(chapterPostAdoptionChainStateV1(postAdoptionSnapshot))
       }
     })().catch(error => {
       if (active) setOrganizationError(error instanceof Error ? error.message : '读取整理记录失败')
@@ -1456,12 +1485,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     const durableCandidate = organizationRun.candidate.durable
     try {
       if (durableCandidate?.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization) {
+        const workspaceScope = await resolveScopeLike(project.id!)
         postAdoptionSnapshot = await beginChapterPostAdoptionOrganizationAdoptionV1({
-          scope: await resolveScopeLike(project.id!),
+          scope: workspaceScope,
           runId: durableCandidate.runId,
           candidateHash: durableCandidate.candidateHash,
         })
-        transitionSnapshotRef.current = postAdoptionSnapshot
+        updatePostAdoptionSnapshot(postAdoptionSnapshot)
       }
       const result = await adoptChapterOrganizationSelection({ run: organizationRun, selection })
       setOrganizationRun(result.run)
@@ -1475,8 +1505,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             snapshot: postAdoptionSnapshot,
             candidateHash: durableCandidate.candidateHash,
           })
-          transitionSnapshotRef.current = rejected
-          setPostAdoptionRunId(rejected.run.id)
+          updatePostAdoptionSnapshot(rejected)
         }
       } else if (result.run.candidate.durable) {
         const workspaceScope = await resolveScopeLike(project.id!)
@@ -1489,13 +1518,21 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             },
             written: result.written,
           })
-          transitionSnapshotRef.current = snapshot
-          setPostAdoptionRunId(snapshot.run.id)
+          updatePostAdoptionSnapshot(snapshot)
           try {
-            await verifyChapterPostAdoptionRunV1({ scope: workspaceScope, runId: snapshot.run.id })
+            const verified = await verifyChapterPostAdoptionRunV1({
+              scope: workspaceScope,
+              runId: snapshot.run.id,
+            })
+            updatePostAdoptionSnapshot(verified.snapshot)
           } catch (verificationError) {
             // 其它后处理步骤可能仍在运行；终态验证会在最后一步完成后重试。
             console.info('[ChapterPostAdoption] 六域采纳后暂不能签发终态回执:', verificationError)
+            try {
+              updatePostAdoptionSnapshot(await readAgentRunV1(workspaceScope, snapshot.run.id))
+            } catch {
+              // Keep the verification error when a refresh window prevents a re-read.
+            }
           }
         } else {
           await commitChapterOrganizationDurableAdoptionV1({
@@ -1516,8 +1553,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             candidateHash: durableCandidate.candidateHash,
             code: 'chapter_organization_partial_adoption',
           })
-          transitionSnapshotRef.current = rejected
-          setPostAdoptionRunId(rejected.run.id)
+          updatePostAdoptionSnapshot(rejected)
         } catch (traceError) {
           console.warn('[ChapterPostAdoption] 部分采纳失败证据写入失败:', traceError)
         }
@@ -1696,6 +1732,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     chapterTitle: string
     chapterContent: string
     chapterPlainText: string
+    parent?: {
+      runId: number
+      receiptHash: string
+      artifactHash: string
+    }
   }) => {
     const controller = new AbortController()
     organizationAbortRef.current?.abort()
@@ -1717,8 +1758,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       scope,
       worldGroupId: transitionWorldGroupId,
       chapterId: task.chapterId,
+      parent: task.parent,
     })
     setPostAdoptionRunId(snapshot.run.id)
+    setPostAdoptionChainState(chapterPostAdoptionChainStateV1(snapshot))
     transitionSnapshotRef.current = snapshot
     snapshot = await scheduleChapterPostAdoptionStepsV1({ scope, snapshot })
 
@@ -1760,6 +1803,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     const updateSnapshot = (next: AgentRunSnapshotV1) => {
       snapshot = next
       transitionSnapshotRef.current = next
+      setPostAdoptionChainState(chapterPostAdoptionChainStateV1(next))
     }
 
     // 1. 一次综合抽取六域候选；作者确认前业务表零写入。
@@ -1844,6 +1888,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setOrganizationCurrent(true)
       setShowOrganization(true)
     } catch (error) {
+      try {
+        updateSnapshot(await readAgentRunV1(scope, snapshot.run.id))
+      } catch {
+        // Keep the original processing error when a refresh window prevents a re-read.
+      }
       updateSnapshot(await failChapterPostAdoptionStepV1({
         scope,
         snapshot,
@@ -1940,7 +1989,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         output: { chunks, summaries, sourceTextHash: expectedSourceTextHash },
       }))
       if (snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization]?.status === 'succeeded') {
-        await verifyChapterPostAdoptionRunV1({ scope, runId: snapshot.run.id })
+        const verified = await verifyChapterPostAdoptionRunV1({ scope, runId: snapshot.run.id })
+        updateSnapshot(verified.snapshot)
       }
     } catch (error) {
       updateSnapshot(await failChapterPostAdoptionStepV1({
@@ -2016,6 +2066,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           chapterTitle: acceptedChapterTitle,
           chapterContent: fullHtml,
           chapterPlainText: fullText,
+          parent: {
+            runId: verification.snapshot.run.id,
+            receiptHash: verification.receiptHash,
+            artifactHash: durableCandidate.expectedContentHash,
+          },
         }).catch(error => {
           setTransitionError(error instanceof Error ? error.message : '章节后处理启动失败')
         })
@@ -2434,6 +2489,23 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           <div>
             章节后处理 Run #{postAdoptionRunId ?? transitionRunId ?? '—'} · 检索、六域交接候选、章节记忆统一记录，可恢复
           </div>
+          {postAdoptionChainState && (
+            <div className="mt-1">
+              全链状态：{postAdoptionChainState === 'downstream-completed'
+                ? '正文与章后交接均已完成'
+                : postAdoptionChainState === 'downstream-awaiting-confirmation'
+                  ? '正文已完成，章后交接等待作者确认'
+                  : postAdoptionChainState === 'downstream-failed'
+                    ? '正文已完成，章后交接失败但可恢复'
+                    : postAdoptionChainState === 'upstream-invalid'
+                      ? '父正文回执或正文产物已失效，需要重新处理'
+                      : postAdoptionChainState === 'prose-completed'
+                        ? '正文已完成，章后处理尚未启动'
+                        : postAdoptionChainState === 'legacy-unlinked'
+                          ? '兼容后处理记录未绑定正文 Run'
+                          : '正文已完成，章后处理正在执行'}
+            </div>
+          )}
           {organizationRun?.candidate.durable?.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization && (
             <div className="mt-1">六域交接候选待作者确认，确认后才会写入状态、事实、物品、年表、关系与伏笔。</div>
           )}

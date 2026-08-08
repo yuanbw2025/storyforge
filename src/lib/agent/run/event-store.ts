@@ -92,6 +92,10 @@ function sameNullableId(left: number | null | undefined, right: number | null | 
   return (left ?? null) === (right ?? null)
 }
 
+function sameNullableText(left: string | null | undefined, right: string | null | undefined): boolean {
+  return (left ?? null) === (right ?? null)
+}
+
 async function waitForHash(value: unknown): Promise<string> {
   return Dexie.waitFor(hashCanonicalValue(value))
 }
@@ -199,7 +203,43 @@ async function verifyContractRecord(run: AgentRunRecord & { id: number }): Promi
   ) {
     fail('contract_scope', '运行契约内嵌作用域与运行行不一致')
   }
+  const parent = contract.lineage?.parent
+  if (
+    !sameNullableId(parent?.runId, run.parentRunId)
+    || !sameNullableText(parent?.relation, run.parentRelation)
+    || !sameNullableText(parent?.receiptHash, run.parentReceiptHash)
+    || !sameNullableText(parent?.artifactHash, run.parentArtifactHash)
+  ) {
+    fail('contract_lineage', '运行契约父子来源与物化列不一致')
+  }
   return contract
+}
+
+async function assertParentLineageForCreationV1(
+  scope: WorkspaceScope,
+  contract: AgentRunContractV1,
+): Promise<void> {
+  const lineage = contract.lineage?.parent
+  if (!lineage) return
+  const parent = await readVerifiedAgentRunInTransactionV1(scope, lineage.runId)
+  if (
+    parent.projection.state !== 'completed'
+    || !parent.projection.terminalReceiptHash
+    || parent.projection.terminalReceiptHash !== lineage.receiptHash
+  ) {
+    fail('parent_receipt', '父运行没有匹配的 fresh terminal receipt')
+  }
+  if (
+    parent.contract.scope.projectId !== contract.scope.projectId
+    || !sameNullableId(parent.contract.scope.worldGroupId, contract.scope.worldGroupId)
+  ) {
+    fail('parent_scope', '父运行与子运行不属于同一项目/世界作用域')
+  }
+  const existing = await db.agentRuns
+    .where('[parentRunId+parentRelation]')
+    .equals([lineage.runId, lineage.relation])
+    .first()
+  if (existing) fail('duplicate_child', '同一父运行和关系已经存在子运行')
 }
 
 async function verifyMaterializedProjection(
@@ -337,7 +377,7 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
   const conversationId = input.conversationId ?? null
   const now = input.now ?? Date.now()
 
-  return db.transaction(
+  const create = () => db.transaction(
     'rw',
     scopeTransactionTables(
       db.worldGroups,
@@ -350,12 +390,19 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
     async () => {
       await assertContractScope(input.scope, accepted.contract, worldGroupId)
       await assertOptionalConversationScope(input.scope, conversationId, worldGroupId)
+      await assertParentLineageForCreationV1(input.scope, accepted.contract)
+
+      const parent = accepted.contract.lineage?.parent
 
       const root = stampNewRecord(input.scope, 'agentRuns', {
         projectId: input.scope.projectId,
         workId: input.scope.workId,
         worldGroupId,
         conversationId,
+        parentRunId: parent?.runId ?? null,
+        parentRelation: parent?.relation ?? null,
+        parentReceiptHash: parent?.receiptHash ?? null,
+        parentArtifactHash: parent?.artifactHash ?? null,
         status: 'planned' as const,
         contractVersion: 1 as const,
         contractJson: canonicalStringify(accepted.contract),
@@ -407,6 +454,8 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
       }
     },
   )
+  const parentRunId = accepted.contract.lineage?.parent.runId
+  return parentRunId == null ? create() : withAgentRunMutationLockV1(parentRunId, create)
 }
 
 export async function readAgentRunV1(
@@ -418,6 +467,73 @@ export async function readAgentRunV1(
     scopeTransactionTables(db.agentRuns, db.agentRunEvents),
     () => readVerifiedAgentRunInTransactionV1(scope, runId),
   )
+}
+
+/** Read and verify the exact child for a parent/relation pair. */
+export async function readAgentRunChildV1(input: {
+  scope: WorkspaceScope
+  parentRunId: number
+  relation: string
+}): Promise<AgentRunSnapshotV1 | null> {
+  const row = await db.agentRuns
+    .where('[parentRunId+parentRelation]')
+    .equals([input.parentRunId, input.relation])
+    .first()
+  if (!row?.id) return null
+  return readAgentRunV1(input.scope, row.id)
+}
+
+/** Verify that a child still points at the parent's current terminal receipt. */
+export async function readCurrentAgentRunParentV1(
+  scope: WorkspaceScope,
+  child: AgentRunSnapshotV1,
+): Promise<AgentRunSnapshotV1 | null> {
+  const lineage = child.contract.lineage?.parent
+  if (!lineage) return null
+  const parent = await readAgentRunV1(scope, lineage.runId)
+  if (
+    parent.projection.state !== 'completed'
+    || parent.projection.terminalReceiptHash !== lineage.receiptHash
+  ) fail('parent_receipt', '父运行 terminal receipt 已缺失、过期或不匹配')
+  if (
+    parent.contract.scope.projectId !== child.contract.scope.projectId
+    || !sameNullableId(parent.contract.scope.worldGroupId, child.contract.scope.worldGroupId)
+  ) fail('parent_scope', '父运行与子运行作用域不匹配')
+  return parent
+}
+
+/** Invalidate a completed receipt when durable upstream/post-state evidence is no longer fresh. */
+export async function staleAgentRunVerificationV1(input: {
+  scope: WorkspaceScope
+  runId: number
+  reason: string
+  now?: number
+}): Promise<AgentRunSnapshotV1> {
+  return withAgentRunMutationLockV1(input.runId, () => db.transaction(
+    'rw',
+    scopeTransactionTables(db.agentRuns, db.agentRunEvents),
+    async () => {
+      const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      const previousReceiptHash = snapshot.projection.terminalReceiptHash
+      if (snapshot.projection.state !== 'completed' || !previousReceiptHash) return snapshot
+      const event = parseAgentRunEventV1({
+        version: 1,
+        runId: input.runId,
+        sequence: snapshot.projection.lastSequence + 1,
+        generation: snapshot.projection.generation,
+        projectId: snapshot.run.projectId,
+        worldGroupId: snapshot.run.worldGroupId ?? null,
+        contractHash: snapshot.run.contractHash,
+        type: 'verification.staled',
+        createdAt: input.now ?? Date.now(),
+        payload: {
+          previousReceiptHash,
+          reason: input.reason.slice(0, 1_000),
+        },
+      })
+      return appendPrivilegedAgentRunEventInTransactionV1(snapshot, event)
+    },
+  ))
 }
 
 export async function appendAgentRunEventV1<T extends AgentRunEventTypeV1>(
@@ -475,6 +591,9 @@ export async function reviseAgentRunContractV1(input: {
         input.expectedLastSequence != null
         && input.expectedLastSequence !== snapshot.projection.lastSequence
       ) fail('sequence_conflict', '运行已被其它执行者推进，请刷新后重试')
+      if (canonicalStringify(snapshot.contract.lineage ?? null) !== canonicalStringify(accepted.contract.lineage ?? null)) {
+        fail('lineage_immutable', '运行创建后不得修改父子来源关系')
+      }
       await assertContractScope(input.scope, accepted.contract, snapshot.run.worldGroupId ?? null)
       const event = parseAgentRunEventV1({
         version: 1,
@@ -510,9 +629,17 @@ export async function deleteAgentRunV1(
       if (!await assertRecordInScope(scope, 'agentRuns', run, { owner: 'work' })) {
         fail('scope', `运行 ${runId} 不属于当前 Work`)
       }
-      await db.agentRunEvents.where('runId').equals(runId).delete()
-      await db.agentRunCheckpoints.where('runId').equals(runId).delete()
-      await db.agentRuns.delete(runId)
+      const runIds: number[] = []
+      const pending = [runId]
+      while (pending.length > 0) {
+        const current = pending.shift()!
+        runIds.push(current)
+        const children = await db.agentRuns.where('parentRunId').equals(current).primaryKeys()
+        pending.push(...children.filter((id): id is number => typeof id === 'number'))
+      }
+      await db.agentRunEvents.where('runId').anyOf(runIds).delete()
+      await db.agentRunCheckpoints.where('runId').anyOf(runIds).delete()
+      await db.agentRuns.bulkDelete(runIds)
       return true
     },
   ))

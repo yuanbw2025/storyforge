@@ -58,6 +58,14 @@ export async function portableizeAgentRunContractV1(input: {
   await assertHash(source, input.contractHash)
   const contract = parseAgentRunContractV1({
     ...source,
+    ...(source.lineage ? {
+      lineage: {
+        parent: {
+          ...source.lineage.parent,
+          runId: portableId(source.lineage.parent.runId, 'agentRuns', input.idMaps),
+        },
+      },
+    } : {}),
     scope: {
       ...source.scope,
       // Portable contract IDs are one-based so the strict V1 schema remains
@@ -85,6 +93,14 @@ export async function rebindPortableAgentRunContractV1(input: {
   if (portable.scope.projectId !== 1) fail('便携 RunContract.projectId 必须为逻辑根 1')
   const contract = parseAgentRunContractV1({
     ...portable,
+    ...(portable.lineage ? {
+      lineage: {
+        parent: {
+          ...portable.lineage.parent,
+          runId: reboundId(portable.lineage.parent.runId, 'agentRuns', input.idMaps),
+        },
+      },
+    } : {}),
     scope: {
       ...portable.scope,
       projectId: input.projectId,

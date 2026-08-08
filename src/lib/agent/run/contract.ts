@@ -7,6 +7,7 @@ import type {
   AgentRunAcceptanceCriterionV1,
   AgentRunAcceptanceKind,
   AgentRunContractV1,
+  AgentRunParentLineageV1,
   AgentRunVerificationKind,
   AgentRunVerificationStepV1,
   AgentRunWorkflowKind,
@@ -159,15 +160,40 @@ function readExecutionBinding(value: unknown, path: string): AgentRunStepExecuti
   }
 }
 
+function readParentLineage(value: unknown, path: string): AgentRunParentLineageV1 {
+  const record = readRecord(value, path)
+  assertExactKeys(
+    record,
+    ['runId', 'receiptHash', 'relation', 'artifactHash'],
+    ['runId', 'receiptHash', 'relation'],
+    path,
+  )
+  return {
+    runId: readInteger(record.runId, `${path}.runId`, { min: 1 }),
+    receiptHash: readHash(record.receiptHash, `${path}.receiptHash`),
+    relation: readString(record.relation, `${path}.relation`, { max: 120 }),
+    ...(record.artifactHash === undefined ? {} : {
+      artifactHash: readHash(record.artifactHash, `${path}.artifactHash`),
+    }),
+  }
+}
+
 export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
   const record = readRecord(value, 'contract')
   assertExactKeys(
     record,
-    ['version', 'objective', 'workflowKind', 'scope', 'permissions', 'executionBindings', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
+    ['version', 'objective', 'workflowKind', 'lineage', 'scope', 'permissions', 'executionBindings', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
     ['version', 'objective', 'workflowKind', 'scope', 'permissions', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
     'contract',
   )
   if (record.version !== 1) failSchema('unsupported_version', 'contract.version', '仅支持版本 1')
+
+  let lineage: AgentRunContractV1['lineage']
+  if (record.lineage !== undefined) {
+    const lineageRecord = readRecord(record.lineage, 'contract.lineage')
+    assertExactKeys(lineageRecord, ['parent'], ['parent'], 'contract.lineage')
+    lineage = { parent: readParentLineage(lineageRecord.parent, 'contract.lineage.parent') }
+  }
 
   const scopeRecord = readRecord(record.scope, 'contract.scope')
   assertExactKeys(
@@ -264,6 +290,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
     version: 1,
     objective: readString(record.objective, 'contract.objective', { max: 4000 }),
     workflowKind,
+    ...(lineage ? { lineage } : {}),
     scope: {
       projectId: readInteger(scopeRecord.projectId, 'contract.scope.projectId', { min: 1 }),
       worldGroupId,

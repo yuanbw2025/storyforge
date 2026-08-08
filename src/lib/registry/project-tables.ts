@@ -464,11 +464,14 @@ export const PROJECT_TABLES: TableSpec[] = [
   { table: db.agentRuns, name: 'agentRuns', owner: 'project',
     domainOwner: LEGACY_WORK_OWNER,
     worldScoped: true, exportable: true, exportIdField: true,
+    tree: { parentField: 'parentRunId' },
     refs: [
+      { kind: 'simple', field: 'id', target: 'agentRuns[parentRunId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'agentRunEvents[runId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'agentRunCheckpoints[runId]', onDelete: 'cascade' },
     ],
     exportRemap: [
+      { field: 'parentRunId', remapVia: 'agentRuns', selfTree: true, exportAs: '_parentExportId' },
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
       { field: 'conversationId', remapVia: 'agentConversations', exportAs: '_conversationExportId' },
     ],
@@ -485,8 +488,12 @@ export const PROJECT_TABLES: TableSpec[] = [
       lastSequence: 0,
       projectionJson: '{}',
       terminalReceiptHash: null,
+      parentRunId: null,
+      parentRelation: null,
+      parentReceiptHash: null,
+      parentArtifactHash: null,
     },
-    note: 'HARNESS-1 durable run 根；contract 与严格事件投影的物化状态，不保存正文或隐藏推理' },
+    note: 'HARNESS-1/21 durable run 根与父子 lineage；contract 与严格事件投影的物化状态，不保存正文或隐藏推理' },
 
   { table: db.agentRunEvents, name: 'agentRunEvents', owner: 'project',
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'agentRuns', field: 'runId' } },

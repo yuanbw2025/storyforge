@@ -153,10 +153,11 @@ export interface ProjectExportData {
   )[]
   /** HARNESS-1 可恢复运行账本；事件/检查点只通过便携 run ID 关联。 */
   agentRuns?: (
-    Omit<AgentRunRecord, 'id' | 'projectId' | 'workId' | 'worldGroupId' | 'conversationId'>
+    Omit<AgentRunRecord, 'id' | 'projectId' | 'workId' | 'worldGroupId' | 'conversationId' | 'parentRunId'>
     & WorldGroupExportRef
     & {
       _exportId: number
+      _parentExportId?: number | null
       _workOwnerExportId?: number
       _conversationExportId?: number | null
     }

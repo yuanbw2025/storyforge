@@ -892,6 +892,20 @@ CHIRON 四类信息可映射到现有结构：
 - post-adoption receipt 只有在三步全部成功、六域候选已有作者采纳证据、summary/handoff、检索块和 verified 章节摘要都匹配当前正文时签发。正文变化会把未确认候选暂停为 stale；历史 Chapter Transition V1 候选仅保留恢复兼容；
 - `R-HARNESS20-chapter-post-adoption-durable` 与更新后的 `R-16-selective-state-extraction` 覆盖单次综合调用、无确认无回执、正文变化、候选持久化崩溃窗、Skill 执行绑定和状态专用旁路防回归。
 
+**正文 Run 与章后处理的父子完成关系（HARNESS-21，2026-08-08）**
+
+- 正文采纳成功后，章后处理主路径必须携带 `RunContract.lineage.parent`：父 Run ID、父 terminal
+  receipt hash、`prose-post-adoption` 关系和采纳后正文 hash。创建时在同一作用域内重放并核对父 Run
+  已完成，且父契约必须是当前章节的正文生成终态；没有父回执的旧/旁路调用只保留兼容模式。
+- `agentRuns` 物化 `parentRunId`、父回执/产物 hash，并以 `[parentRunId+parentRelation]` 唯一索引防止
+  同一正文重复创建同类下游 Run；`PROJECT_TABLES` 同步登记自引用级联和导入导出重映射，DB v52 只扩展
+  索引，不猜测历史父子关系。
+- 子 Run 的 terminal receipt 通过其 contract hash 绑定父回执；刷新可查询并恢复子 Run。父回执 stale、
+  父作用域不匹配或正文 hash 变化时，新的 step 被阻断；已完成子 Run 追加 `verification.staled`，
+  产品状态区分正文已完成、下游处理中/待作者确认/可恢复失败和全链完成。
+- `R-HARNESS21-parent-child-lineage` 覆盖同父关系幂等、错误父回执、父 stale 撤销子回执、正文产物
+  变化和跨项目导入的父键/契约重映射；旧无 lineage Run 仍通过既有兼容回归。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

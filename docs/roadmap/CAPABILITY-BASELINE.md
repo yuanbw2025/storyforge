@@ -423,6 +423,11 @@
 - 分步骤主 Agent 与正文 Harness 当前有 13 个受治理 Skill、9 个提示词执行版本和一份由 14 个只读工具实际声明派生的 schema hash。新 RunContract 按步骤冻结 Skill/Prompt/Tool 版本，候选 hash 同步绑定；恢复会拒绝版本篡改，HARNESS-18 前无 binding 的旧运行保持原协议兼容。
 - HARNESS-19 已在章节编辑器的正文生成/续写主路径接入 `prose.review` 和 `prose.revise`：信息边界硬门通过后才做证据型语义初审；blocking 必须同时引用候选原文和登记上下文原文，只有明确可局部修复的问题最多修订一次，修订后重跑硬门和语义复核。评审、修订、复核共用团队预算并写入 Context Manifest、冻结执行版本和 durable 事件；通过后仍停在可编辑候选，作者确认才经 `adopt(chapters)` 写回。旧候选可恢复但不会伪造语义证据。
 - HARNESS-20 已将正文确认写回后的自动状态抽取旁路下线：新主路径由同一个 post-adoption durable Run 顺序执行六域综合整理、章节记忆和确定性检索重建。综合整理继续复用既有一次调用解析器与六域作者确认界面，`prose.organize` / `prose.memory` 两个非默认 Skill 冻结各自来源、写入边界、提示词和回归证据；章节记忆写回后才重建层级摘要，避免新摘要仍停留在 pending。只有三步、六域采纳证据和当前正文派生状态全部匹配才有 terminal receipt；历史 Chapter Transition V1 只保留兼容恢复。
+- HARNESS-21 已将正文 Run → post-adoption Run 的父子完成关系持久化：RunContract 的 `lineage.parent`
+  与 `agentRuns.parentRunId/parentReceiptHash/parentArtifactHash` 双向核对，父终态回执和正文 hash
+  缺一不可；同一父 Run/关系由唯一索引去重。子 Run 的终态证明通过契约 hash 间接绑定父回执，父回执
+  stale 或正文再次变化时子 receipt 会被撤销。新链支持刷新恢复、全链状态投影和项目导入导出重映射；
+  无 lineage 的 HARNESS-20/历史数据只走兼容分支，不被显示为全链完成。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

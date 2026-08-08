@@ -46,6 +46,21 @@ class HarnessV51DB extends Dexie {
   }
 }
 
+class HarnessV52DB extends Dexie {
+  constructor(name: string) {
+    super(name)
+    this.version(51).stores({
+      projects: '++id, name, createdAt, updatedAt',
+      agentRuns: '++id, projectId, workId, worldGroupId, conversationId, status, updatedAt',
+      agentRunEvents: '++id, projectId, worldGroupId, runId, &[runId+sequence], type, createdAt',
+      agentRunCheckpoints: '++id, projectId, worldGroupId, runId, &[runId+throughSequence], createdAt',
+    })
+    this.version(52).stores({
+      agentRuns: '++id, projectId, workId, worldGroupId, conversationId, parentRunId, &[parentRunId+parentRelation], status, updatedAt',
+    })
+  }
+}
+
 afterEach(async () => {
   for (const db of opened.splice(0)) db.close()
   for (const name of names.splice(0)) await Dexie.delete(name)
@@ -134,5 +149,43 @@ describe('R-HARNESS1-db-migration · v50 -> v51', () => {
       throughSequence: 1,
       createdAt: 2,
     })).rejects.toMatchObject({ name: 'ConstraintError' })
+  })
+})
+
+describe('R-HARNESS1-db-migration · v51 -> v52', () => {
+  it('保留历史 Run 为根节点，并用唯一索引拒绝重复父关系', async () => {
+    const name = databaseName()
+    const legacy = track(new HarnessV51DB(name))
+    await legacy.open()
+    const rootId = await legacy.table('agentRuns').add({
+      projectId: 1,
+      status: 'completed',
+      terminalReceiptHash: 'a'.repeat(64),
+      updatedAt: 1,
+    })
+    legacy.close()
+
+    const upgraded = track(new HarnessV52DB(name))
+    await upgraded.open()
+    expect(await upgraded.table('agentRuns').get(rootId)).toMatchObject({
+      status: 'completed',
+      terminalReceiptHash: 'a'.repeat(64),
+    })
+    expect((await upgraded.table('agentRuns').get(rootId)).parentRunId).toBeUndefined()
+
+    await upgraded.table('agentRuns').add({
+      projectId: 1,
+      parentRunId: rootId,
+      parentRelation: 'prose-post-adoption',
+      status: 'running',
+      updatedAt: 2,
+    })
+    await expect(upgraded.table('agentRuns').add({
+      projectId: 1,
+      parentRunId: rootId,
+      parentRelation: 'prose-post-adoption',
+      status: 'planned',
+      updatedAt: 3,
+    })).rejects.toThrow()
   })
 })

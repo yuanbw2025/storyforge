@@ -299,11 +299,16 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
 
         if (spec.owner === 'project') obj.projectId = newProjectId
         if (spec.portableData?.kind === 'agent-run-root') {
+          const contractIdMaps = new Map(newIdMaps)
+          // Agent runs are a lineage tree. A child contract may reference the
+          // already-imported parent in this same table before the table map is
+          // published after the row loop.
+          contractIdMaps.set(spec.name, newIdMap)
           const rebound = await Dexie.waitFor(rebindPortableAgentRunContractV1({
             contractJson: obj[spec.portableData.contractField],
             contractHash: obj[spec.portableData.contractHashField],
             projectId: newProjectId,
-            idMaps: newIdMaps,
+            idMaps: contractIdMaps,
           }))
           obj[spec.portableData.contractField] = rebound.contractJson
           obj[spec.portableData.contractHashField] = rebound.contractHash

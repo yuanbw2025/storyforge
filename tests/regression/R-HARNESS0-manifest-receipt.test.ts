@@ -123,6 +123,12 @@ describe('R-HARNESS0-manifest-receipt · 输入与完成证据', () => {
       adoptionEventIds: [31],
       postStateHash: POST_STATE_HASH,
       verifierSetVersion: 'terminal-v1',
+      lineage: {
+        runId: 8,
+        receiptHash: '8'.repeat(64),
+        relation: 'prose-post-adoption',
+        artifactHash: '7'.repeat(64),
+      },
       criteria: [
         { id: 'outline.output', status: 'passed', evidenceRefs: ['candidate:c'] },
         { id: 'outline.adoption', status: 'passed', evidenceRefs: ['event:31'] },
@@ -141,6 +147,10 @@ describe('R-HARNESS0-manifest-receipt · 输入与完成证据', () => {
     }
 
     expect(await verifyVerificationReceiptIntegrityV1(receipt)).toBe(true)
+    expect(await verifyVerificationReceiptIntegrityV1({
+      ...receipt,
+      lineage: { ...receipt.lineage!, receiptHash: '9'.repeat(64) },
+    })).toBe(false)
     expect(isVerificationReceiptFreshV1(receipt, current)).toBe(true)
     expect(isVerificationReceiptFreshV1(receipt, { ...current, postStateHash: 'f'.repeat(64) })).toBe(false)
     expect(isVerificationReceiptFreshV1(receipt, { ...current, generation: 2 })).toBe(false)
