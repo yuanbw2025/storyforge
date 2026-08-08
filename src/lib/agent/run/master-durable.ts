@@ -19,10 +19,18 @@ import {
 } from '../orchestrator'
 import type { AgentTeamBudgetEvidence } from '../team-budget'
 import {
-  getDefaultAgentSkillV1,
+  getAgentSkillV1,
+  resolveAgentSkillV1,
   resolveAgentSkillContextSourceKeysV1,
+  type AgentSkillId,
   type DomainAgentId,
 } from '../skill-registry'
+import {
+  assertMasterWorkflowTaskCompatibilityV1,
+  getMasterWorkflowV1,
+  isMasterAgentRunWorkflowKindV1,
+  parseMasterWorkflowSelectionV1,
+} from '../workflow-catalog'
 import { acceptAgentRunContractV1 } from './contract'
 import {
   appendAgentRunEventV1,
@@ -185,6 +193,16 @@ function readOptionalPerspectiveCharacterId(
   return Number(value.perspectiveCharacterId)
 }
 
+function readOptionalSkillId(
+  value: Record<string, unknown>,
+  agentId: DomainAgentId,
+  label: string,
+): AgentSkillId | undefined {
+  if (!Object.prototype.hasOwnProperty.call(value, 'skillId')) return undefined
+  if (typeof value.skillId !== 'string') fail(label + '.skillId 无效')
+  return getAgentSkillV1(value.skillId, agentId).id as AgentSkillId
+}
+
 function assertAcyclic(plan: MasterAgentPlan): void {
   const byId = new Map(plan.tasks.map(task => [task.id, task]))
   const visiting = new Set<string>()
@@ -205,7 +223,7 @@ function assertAcyclic(plan: MasterAgentPlan): void {
 /** Strictly validates the persisted plan instead of trusting a UI plan object. */
 export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
   if (!isRecord(value)) fail('主 Agent 计划必须是对象')
-  assertExactKeys(value, ['summary', 'tasks'], '主 Agent 计划')
+  assertKeysWithOptional(value, ['summary', 'tasks'], ['workflow'], '主 Agent 计划')
   const summary = readString(value.summary, '主 Agent 计划 summary', MAX_PLAN_SUMMARY_CHARS)
   if (!Array.isArray(value.tasks) || value.tasks.length < 1 || value.tasks.length > MAX_PLAN_TASKS) {
     fail(`主 Agent 计划任务数必须在 1-${MAX_PLAN_TASKS} 之间`)
@@ -216,7 +234,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     assertKeysWithOptional(
       item,
       ['id', 'agentId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId'],
+      ['perspectiveCharacterId', 'skillId'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -225,6 +243,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     if (!DOMAIN_AGENT_IDS.includes(item.agentId as DomainAgentId)) {
       fail(`主 Agent 计划包含未知领域 ${String(item.agentId)}`)
     }
+    const agentId = item.agentId as DomainAgentId
     const instruction = readString(
       item.instruction,
       `主 Agent 计划任务 ${id}.instruction`,
@@ -236,20 +255,30 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     const dependsOn = [...new Set(item.dependsOn as string[])]
     if (dependsOn.includes(id)) fail(`主 Agent 计划任务 ${id} 不得依赖自身`)
     const perspectiveCharacterId = readOptionalPerspectiveCharacterId(item, '主 Agent 计划任务 ' + id)
+    const skillId = readOptionalSkillId(item, agentId, '主 Agent 计划任务 ' + id)
     return {
       id,
-      agentId: item.agentId as DomainAgentId,
+      agentId,
+      ...(skillId !== undefined ? { skillId } : {}),
       instruction,
       dependsOn,
       ...(perspectiveCharacterId !== undefined ? { perspectiveCharacterId } : {}),
     }
   })
-  const result = { summary, tasks }
+  const workflow = value.workflow === undefined
+    ? undefined
+    : parseMasterWorkflowSelectionV1(value.workflow)
+  const result: MasterAgentPlan = {
+    summary,
+    tasks,
+    ...(workflow ? { workflow } : {}),
+  }
   const known = new Set(tasks.map(task => task.id))
   tasks.forEach(task => task.dependsOn.forEach(dep => {
     if (!known.has(dep)) fail(`主 Agent 计划任务 ${task.id} 依赖不存在的任务 ${dep}`)
   }))
   assertAcyclic(result)
+  if (workflow) assertMasterWorkflowTaskCompatibilityV1(workflow, tasks)
   return result
 }
 
@@ -259,7 +288,7 @@ export async function hashMasterAgentPlanV1(plan: MasterAgentPlan): Promise<stri
 
 function sourceKeysForPlan(plan: MasterAgentPlan): string[] {
   return [...new Set(plan.tasks.flatMap(task => {
-    const skill = getDefaultAgentSkillV1(task.agentId)
+    const skill = resolveAgentSkillV1(task.agentId, task.skillId)
     return resolveAgentSkillContextSourceKeysV1(skill, {
       includeOptional: task.agentId === 'prose' && task.perspectiveCharacterId != null,
     })
@@ -269,7 +298,7 @@ function sourceKeysForPlan(plan: MasterAgentPlan): string[] {
 function writeTargetsForPlan(plan: MasterAgentPlan): Array<{ table: string; fields: string[]; mode: 'author-confirmed' }> {
   const byTable = new Map<string, Set<string>>()
   plan.tasks.forEach(task => {
-    const skill = getDefaultAgentSkillV1(task.agentId)
+    const skill = resolveAgentSkillV1(task.agentId, task.skillId)
     skill.writeTargets.forEach(target => {
       const fields = byTable.get(target.table) ?? new Set<string>()
       target.fields.forEach(field => fields.add(field))
@@ -321,7 +350,9 @@ export function buildMasterAgentRunContractV1(input: {
   return {
     version: 1 as const,
     objective: plan.summary,
-    workflowKind: 'multi-domain-sequential' as const,
+    workflowKind: plan.workflow
+      ? getMasterWorkflowV1(plan.workflow).runContractWorkflowKind
+      : 'multi-domain-sequential' as const,
     scope: {
       projectId: input.scope.projectId,
       worldGroupId: input.worldGroupId,
@@ -407,6 +438,7 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
   if (payload.version !== 1) fail(`${label} payload 版本不支持`)
   if (typeof payload.taskId !== 'string' || typeof payload.agentId !== 'string') fail(`${label} payload 缺少任务身份`)
   if (!DOMAIN_AGENT_IDS.includes(payload.agentId as DomainAgentId)) fail(`${label} payload 领域无效`)
+  if (payload.skillId !== undefined) getAgentSkillV1(payload.skillId, payload.agentId)
   if (!Array.isArray(payload.contextSources) || payload.contextSources.some(source => typeof source !== 'string')) {
     fail(`${label} payload contextSources 无效`)
   }
@@ -422,6 +454,26 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
   }
   budgetEvidence(payload.teamBudgetEvidence, `${label} payload teamBudgetEvidence`)
   return payload
+}
+
+function assertCandidateMatchesTaskSkill(
+  task: MasterAgentTask,
+  payload: MasterCandidatePayload,
+  label: string,
+): void {
+  const taskSkill = resolveAgentSkillV1(task.agentId, task.skillId)
+  const candidateSkill = resolveAgentSkillV1(payload.agentId, payload.skillId)
+  if (candidateSkill.id !== taskSkill.id) fail(`${label} 的 Skill 与计划不一致`)
+  if (
+    task.agentId === 'outline'
+    && (taskSkill.executionMode === 'volumes' || taskSkill.executionMode === 'chapters')
+    && payload.outlineMode !== taskSkill.executionMode
+  ) fail(`${label} 的大纲模式与 Skill 不一致`)
+  if (
+    task.agentId === 'prose'
+    && (taskSkill.executionMode === 'generate' || taskSkill.executionMode === 'continue')
+    && payload.proseOperation !== taskSkill.executionMode
+  ) fail(`${label} 的正文操作与 Skill 不一致`)
 }
 
 function budgetAtLeast(next: AgentTeamBudgetEvidence, previous: AgentTeamBudgetEvidence): boolean {
@@ -463,6 +515,7 @@ async function readPersistedCandidates(input: {
     const payload = parseCandidatePayload(raw, `候选事件 ${event.id}`)
     const task = taskById.get(payload.taskId)
     if (!task || payload.agentId !== task.agentId) fail(`候选事件 ${event.id} 不属于当前计划任务`)
+    assertCandidateMatchesTaskSkill(task, payload, `候选事件 ${event.id}`)
     if (
       !Array.isArray(payload.dependsOnTaskIds)
       || payload.dependsOnTaskIds.length !== task.dependsOn.length
@@ -756,6 +809,7 @@ export async function runDurableMasterAgentPlanV1(
       if (candidate.payload.taskId !== task.id || candidate.payload.agentId !== task.agentId) {
         fail(`主 Agent durable trace 候选身份与当前任务 ${task.id} 不一致`)
       }
+      assertCandidateMatchesTaskSkill(task, candidate.payload, `主 Agent durable trace 候选 ${task.id}`)
       if (
         task.agentId === 'prose'
         && (candidate.payload.perspectiveCharacterId ?? null) !== (task.perspectiveCharacterId ?? null)
@@ -1010,7 +1064,7 @@ export async function findResumableMasterAgentRunV1(input: {
   for (const run of runs) {
     try {
       const snapshot = await readAgentRunV1(input.scope, run.id)
-      if (snapshot.contract.workflowKind !== 'multi-domain-sequential') continue
+      if (!isMasterAgentRunWorkflowKindV1(snapshot.contract.workflowKind)) continue
       if (!['paused', 'running'].includes(snapshot.projection.state)) continue
       if (Object.values(snapshot.projection.steps).some(step => (
         step.status === 'scheduled' || step.status === 'running' || step.status === 'failed'

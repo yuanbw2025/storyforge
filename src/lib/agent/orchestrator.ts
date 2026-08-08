@@ -71,9 +71,17 @@ import {
 } from '../world-engine/scope'
 import {
   DOMAIN_AGENT_IDS,
-  getDefaultAgentSkillV1,
+  resolveAgentSkillV1,
+  type AgentSkillId,
   type DomainAgentId,
 } from './skill-registry'
+import {
+  classifyRequestedDomainIdsV1,
+  getMasterWorkflowV1,
+  selectAgentSkillIdV1,
+  selectMasterWorkflowV1,
+  type MasterWorkflowSelectionV1,
+} from './workflow-catalog'
 
 export { DOMAIN_AGENT_IDS }
 export type { DomainAgentId }
@@ -81,6 +89,8 @@ export type { DomainAgentId }
 export interface MasterAgentTask {
   id: string
   agentId: DomainAgentId
+  /** 新计划冻结具体 Skill；旧 durable 计划缺省时回退到该 Agent 的默认 Skill。 */
+  skillId?: AgentSkillId
   instruction: string
   dependsOn: string[]
   /** 正文领域的显式叙事视角；缺省时正文不注入角色认知。 */
@@ -90,12 +100,15 @@ export interface MasterAgentTask {
 export interface MasterAgentPlan {
   summary: string
   tasks: MasterAgentTask[]
+  /** 旧 durable 计划没有该字段，恢复时保持原始 plan hash 与顺序工作流语义。 */
+  workflow?: MasterWorkflowSelectionV1
 }
 
 export interface MasterCandidatePayload {
   version: 1
   taskId: string
   agentId: DomainAgentId
+  skillId?: AgentSkillId
   label: string
   contextSources: string[]
   contextEvidence?: AgentContextEvidence
@@ -143,42 +156,12 @@ function extractJsonObject(text: string): Record<string, unknown> {
   return parsed as Record<string, unknown>
 }
 
-function explicitlyRequestedDomains(request: string): Set<DomainAgentId> {
-  const hasInspiration = /灵感|反推|碎片|脑洞/.test(request)
-  const hasProse = /正文|续写|接着写|继续写|写(?:作|出|完)?第\s*[零〇一二两三四五六七八九十\d]+\s*章/.test(request)
-  const outlineMention = /大纲|卷纲|章纲|章节规划|剧情结构|情节结构/.test(request)
-  const outlineAction = (
-    /(?:生成|创建|新增|规划|设计|展开|补充|完善|修改|重做).{0,12}(?:大纲|卷纲|章纲|章节规划|剧情结构|情节结构)/.test(request)
-    || /(?:大纲|卷纲|章纲|章节规划|剧情结构|情节结构).{0,12}(?:生成|创建|新增|规划|设计|展开|补充|完善|修改|重做)/.test(request)
-  )
-  const hasOutline = hasProse ? outlineAction : outlineMention
-  const worldMention = /世界|设定|起源|文明|力量|体系|时代|地理/.test(request)
-  const worldObject = '(?:世界观|世界|背景设定|世界起源|文明设定|力量体系|时代背景|地理设定)'
-  const worldAction = (
-    new RegExp(`(?:创建|生成|设计|新增|建立|补充|完善|修改|重做).{0,12}${worldObject}`).test(request)
-    || new RegExp(`${worldObject}.{0,12}(?:创建|生成|设计|新增|建立|补充|完善|修改|重做)`).test(request)
-  )
-  const characterMention = /角色|人物|主角|配角|反派|npc/i.test(request)
-  const characterAction = (
-    /(?:创建|生成|设计|新增|塑造|补充|完善|修改|重做).{0,12}(?:角色|人物|主角|配角|反派|npc)/i.test(request)
-    || /(?:角色|人物|主角|配角|反派|npc).{0,12}(?:创建|生成|设计|新增|塑造|补充|完善|修改|重做)/i.test(request)
-  )
-  const downstreamWriting = hasOutline || hasProse
-  const hasWorld = downstreamWriting ? worldAction : worldMention
-  // 大纲里的“角色变化/角色弧光”是输出约束，不是创建或修改角色主档的授权。
-  const hasCharacter = downstreamWriting ? characterAction : characterMention
-  return new Set<DomainAgentId>([
-    ...(hasWorld ? ['world-origin' as const] : []),
-    ...(hasCharacter ? ['character' as const] : []),
-    ...(hasInspiration ? ['inspiration' as const] : []),
-    ...(hasOutline ? ['outline' as const] : []),
-    ...(hasProse ? ['prose' as const] : []),
-  ])
-}
-
-function fallbackPlan(request: string): MasterAgentPlan {
+function fallbackPlan(
+  request: string,
+  workflow = selectMasterWorkflowV1(request),
+): MasterAgentPlan {
   const tasks: MasterAgentTask[] = []
-  const requested = explicitlyRequestedDomains(request)
+  const requested = classifyRequestedDomainIdsV1(request)
   const hasWorld = requested.has('world-origin')
   const hasCharacter = requested.has('character')
   const hasInspiration = requested.has('inspiration')
@@ -187,24 +170,28 @@ function fallbackPlan(request: string): MasterAgentPlan {
   if (hasWorld) tasks.push({
     id: 'world-1',
     agentId: 'world-origin',
+    skillId: selectAgentSkillIdV1('world-origin', request),
     instruction: request,
     dependsOn: [],
   })
   if (hasInspiration) tasks.push({
     id: 'inspiration-1',
     agentId: 'inspiration',
+    skillId: selectAgentSkillIdV1('inspiration', request),
     instruction: request,
     dependsOn: [],
   })
   if (hasCharacter) tasks.push({
     id: 'character-1',
     agentId: 'character',
+    skillId: selectAgentSkillIdV1('character', request),
     instruction: request,
     dependsOn: hasWorld ? ['world-1'] : [],
   })
   if (hasOutline) tasks.push({
     id: 'outline-1',
     agentId: 'outline',
+    skillId: selectAgentSkillIdV1('outline', request),
     instruction: request,
     dependsOn: [
       ...(hasWorld ? ['world-1'] : []),
@@ -214,6 +201,7 @@ function fallbackPlan(request: string): MasterAgentPlan {
   if (hasProse && !hasOutline) tasks.push({
     id: 'prose-1',
     agentId: 'prose',
+    skillId: selectAgentSkillIdV1('prose', request),
     instruction: request,
     dependsOn: [
       ...(hasWorld ? ['world-1'] : []),
@@ -224,6 +212,7 @@ function fallbackPlan(request: string): MasterAgentPlan {
   if (!tasks.length) tasks.push({
     id: 'character-1',
     agentId: 'character',
+    skillId: selectAgentSkillIdV1('character', request),
     instruction: request,
     dependsOn: [],
   })
@@ -232,15 +221,20 @@ function fallbackPlan(request: string): MasterAgentPlan {
       ? '先生成并确认章节大纲；确认进入正式数据后，再继续生成正文。'
       : '根据用户要求调度相关创作领域。',
     tasks,
+    workflow,
   }
 }
 
-function sanitizePlan(raw: Record<string, unknown>, request: string): MasterAgentPlan {
+function sanitizePlan(
+  raw: Record<string, unknown>,
+  request: string,
+  workflow: MasterWorkflowSelectionV1,
+): MasterAgentPlan {
   const rawTasks = Array.isArray(raw.tasks) ? raw.tasks : []
   const tasks: MasterAgentTask[] = []
   const ids = new Set<string>()
   const agentIds = new Set<DomainAgentId>()
-  const explicitlyRequested = explicitlyRequestedDomains(request)
+  const explicitlyRequested = classifyRequestedDomainIdsV1(request)
   for (const item of rawTasks.slice(0, 6)) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue
     const source = item as Record<string, unknown>
@@ -279,6 +273,7 @@ function sanitizePlan(raw: Record<string, unknown>, request: string): MasterAgen
     tasks.push({
       id,
       agentId,
+      skillId: selectAgentSkillIdV1(agentId, request),
       instruction,
       dependsOn: Array.isArray(source.dependsOn)
         ? source.dependsOn.filter((value): value is string => typeof value === 'string').slice(0, 5)
@@ -286,7 +281,7 @@ function sanitizePlan(raw: Record<string, unknown>, request: string): MasterAgen
       ...(agentId === 'prose' && perspectiveCharacterId !== undefined ? { perspectiveCharacterId } : {}),
     })
   }
-  if (!tasks.length) return fallbackPlan(request)
+  if (!tasks.length) return fallbackPlan(request, workflow)
   const knownIds = new Set(tasks.map(task => task.id))
   tasks.forEach(task => {
     task.dependsOn = task.dependsOn.filter(id => id !== task.id && knownIds.has(id))
@@ -310,6 +305,7 @@ function sanitizePlan(raw: Record<string, unknown>, request: string): MasterAgen
       ? raw.summary.trim().slice(0, 500)
       : '主 Agent 已拆分本轮创作任务。',
     tasks,
+    workflow,
   }
 }
 
@@ -323,6 +319,10 @@ export async function createMasterAgentPlan(input: {
 }, dependencies: PlannerDependencies = {}): Promise<MasterAgentPlan> {
   const request = input.request.trim()
   if (request.length < 2) throw new Error('请至少输入 2 个字符的创作要求。')
+  const workflow = selectMasterWorkflowV1(request)
+  if (getMasterWorkflowV1(workflow).planner === 'skip') {
+    return fallbackPlan(request, workflow)
+  }
   const config = resolveRequestConfig(
     useAIConfigStore.getState().config,
     { category: AGENT_ROLE_CATEGORIES.orchestrator },
@@ -375,13 +375,13 @@ export async function createMasterAgentPlan(input: {
       input.budget!.settleCall(reservation, output)
       settled = true
     }
-    return sanitizePlan(extractJsonObject(output), request)
+    return sanitizePlan(extractJsonObject(output), request, workflow)
   } catch (error) {
     if (reservation && !settled) input.budget!.settleFailedCall(reservation)
     if (error instanceof AgentTeamBudgetExceededError) throw error
     if (input.signal?.aborted) throw error
     console.warn('[master-agent] 计划模型失败，使用确定性路由降级：', error)
-    return fallbackPlan(request)
+    return fallbackPlan(request, workflow)
   }
 }
 
@@ -437,7 +437,7 @@ export async function executeMasterAgentPlan(input: {
         .map(id => outputs.get(id))
         .filter((value): value is string => Boolean(value?.trim()))
         .join('\n\n')
-      const skill = getDefaultAgentSkillV1(task.agentId)
+      const skill = resolveAgentSkillV1(task.agentId, task.skillId)
       const contextProfile = contextProfiles[skill.contextTaskKind]
       if (task.agentId === 'world-origin') {
         const prepared = await prepareWorldOriginCopilot({
@@ -445,6 +445,7 @@ export async function executeMasterAgentPlan(input: {
           scope,
           worldGroupId: input.worldGroupId,
           authorRequest: task.instruction,
+          skillId: skill.id as AgentSkillId,
           routingCategory: AGENT_ROLE_CATEGORIES['world-origin'],
           contextProfile,
           signal: input.signal,
@@ -462,6 +463,7 @@ export async function executeMasterAgentPlan(input: {
             version: 1,
             taskId: task.id,
             agentId: task.agentId,
+            skillId: skill.id as AgentSkillId,
             label: '世界来源',
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
@@ -480,6 +482,7 @@ export async function executeMasterAgentPlan(input: {
           scope,
           worldGroupId: input.worldGroupId,
           authorRequest: task.instruction,
+          skillId: skill.id as AgentSkillId,
           supplementalContext: upstream,
           routingCategory: AGENT_ROLE_CATEGORIES.character,
           contextProfile,
@@ -498,6 +501,7 @@ export async function executeMasterAgentPlan(input: {
             version: 1,
             taskId: task.id,
             agentId: task.agentId,
+            skillId: skill.id as AgentSkillId,
             label: '新角色',
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
@@ -525,6 +529,7 @@ export async function executeMasterAgentPlan(input: {
           scope,
           selectedFragmentIds,
           authorRequest: task.instruction,
+          skillId: skill.id as AgentSkillId,
           routingCategory: AGENT_ROLE_CATEGORIES.inspiration,
           contextProfile,
           signal: input.signal,
@@ -542,6 +547,7 @@ export async function executeMasterAgentPlan(input: {
             version: 1,
             taskId: task.id,
             agentId: task.agentId,
+            skillId: skill.id as AgentSkillId,
             label: '灵感反推版本',
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
@@ -562,6 +568,7 @@ export async function executeMasterAgentPlan(input: {
           scope,
           worldGroupId: input.worldGroupId,
           authorRequest: task.instruction,
+          skillId: skill.id as AgentSkillId,
           supplementalContext: upstream,
           routingCategory: AGENT_ROLE_CATEGORIES.outline,
           contextProfile,
@@ -587,6 +594,7 @@ export async function executeMasterAgentPlan(input: {
             version: 1,
             taskId: task.id,
             agentId: task.agentId,
+            skillId: skill.id as AgentSkillId,
             label: prepared.label,
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
@@ -607,6 +615,7 @@ export async function executeMasterAgentPlan(input: {
           scope,
           worldGroupId: input.worldGroupId,
           authorRequest: task.instruction,
+          skillId: skill.id as AgentSkillId,
           supplementalContext: upstream,
           routingCategory: AGENT_ROLE_CATEGORIES.prose,
           contextProfile,
@@ -633,6 +642,7 @@ export async function executeMasterAgentPlan(input: {
             version: 1,
             taskId: task.id,
             agentId: task.agentId,
+            skillId: skill.id as AgentSkillId,
             label: prepared.label,
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,

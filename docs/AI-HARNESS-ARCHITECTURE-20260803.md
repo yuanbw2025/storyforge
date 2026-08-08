@@ -912,7 +912,15 @@ CHIRON 四类信息可映射到现有结构：
 - 新增类型化 `AGENT_SKILLS` 注册表，为现有世界来源、角色、灵感、大纲、正文五个领域 Agent 登记默认 Skill；同一 Agent 可以继续增加非默认 Skill，但只能有一个默认 Skill；
 - 每个 Skill 明确 owner、version、上下文档位、正式只读工具/`CONTEXT_SOURCES`、可选边界源、最大输出预算、`FIELD_REGISTRY` 写目标、最后验证日期和回归证据；未知工具、源、表或字段均 fail-closed；
 - 五个真实领域 copilot 的工具选择、上下文源和预算，以及主 Agent durable `RunContract` 的读写权限，已从同一 Skill 注册表派生；正文只有显式叙事视角时才授权 `characterKnowledge`；
-- 本阶段不改变生成结果，也尚未把 `outline.compose` 拆为卷纲/章纲 Skill，或把 `prose.write` 拆为生成/续写 Skill。后续拆分必须复用该注册表并用任务分类与 A/B 证据证明收益，禁止重新在 orchestrator 内堆字段清单。
+- H13 本身不改变生成结果；后续模式拆分必须复用该注册表并用任务分类与 A/B 证据证明收益，禁止重新在 orchestrator 内堆字段清单。卷纲/章纲和正文生成/续写的首批拆分已在 H14 接续完成。
+
+**固定工作流与模式 Skill 实施状态（HARNESS-14，2026-08-08）**
+
+- 新增类型化 `MASTER_WORKFLOWS` catalog 和可解释分类器，当前只有单领域 direct、多领域 sequential、作者确认分阶段、模糊请求保守 sequential 四种固定工作流；模型不能声明 catalog 外的工作流；
+- 明确单领域请求直接形成计划并跳过规划模型；多领域、领域不明确或需要解析叙事视角的请求继续走既有规划器及确定性降级。分类结果和 reason codes 进入 plan checkpoint/hash，`RunContract.workflowKind` 从 catalog 派生；
+- `outline.volumes`、`outline.chapters`、`prose.generate`、`prose.continue` 已成为真实非默认 Skill。新计划冻结 `skillId`，执行器、候选哈希和恢复校验共同拒绝 Skill/卷章纲模式/正文操作不一致；旧 durable 计划缺省 workflow/skill 时保持旧 hash 和默认 Skill 语义；
+- 分类器默认开启，可通过 `storyforge:harness:workflow-classifier-v1=disabled` 回到保守顺序规划；durable run/receipt 格式保持兼容。明确章纲缺少卷纲时直接阻断，不再静默改成卷纲；正文生成/续写不再依赖执行时二次猜测；
+- 本阶段尚未实现有限 fan-out、attempt replan/steering、同代 frozen hash join，也尚未完成 H3 的 p95 成本/延迟与质量非劣 A/B，因此 H3 仍未整体退出。
 
 **范围**
 

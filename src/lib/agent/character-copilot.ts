@@ -43,7 +43,7 @@ import {
   type AgentContextProfile,
 } from './context-policy'
 import { AGENT_TOOL_BY_NAME, executeAgentTool } from './tool-registry'
-import { getDefaultAgentSkillV1 } from './skill-registry'
+import { resolveAgentSkillV1, type AgentSkillId } from './skill-registry'
 
 export const MAX_CHARACTER_CANDIDATE_CHARS = 40_000
 const MAX_CHARACTER_NAME_CHARS = 80
@@ -316,6 +316,7 @@ export async function prepareCharacterCopilot(input: {
   scope?: WorkspaceScope
   worldGroupId: number | null
   authorRequest: string
+  skillId?: AgentSkillId
   /** 主 Agent 可把尚未写库的上游候选作为本轮显式证据传入，绝不冒充 Canon。 */
   supplementalContext?: string
   routingCategory?: string
@@ -340,7 +341,7 @@ export async function prepareCharacterCopilot(input: {
     { category: routingCategory },
   ).config
   const contextProfile = input.contextProfile ?? 'full'
-  const skill = getDefaultAgentSkillV1('character')
+  const skill = resolveAgentSkillV1('character', input.skillId)
   const tools = skill.readToolNames.map(name => AGENT_TOOL_BY_NAME.get(name)!)
   const [worldTool, characterTool] = tools
   if (!worldTool || !characterTool || tools.length !== 2) {

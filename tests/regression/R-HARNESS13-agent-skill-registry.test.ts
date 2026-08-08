@@ -22,6 +22,12 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
   it('每个领域 Agent 有且仅有一个默认 Skill，全部读写都能通过三注册表校验', () => {
     expect(() => validateAgentSkillDefinitionsV1(AGENT_SKILLS)).not.toThrow()
     expect(AGENT_SKILLS.filter(skill => skill.defaultForAgent)).toHaveLength(5)
+    expect(AGENT_SKILLS.map(skill => skill.id)).toEqual(expect.arrayContaining([
+      'outline.volumes',
+      'outline.chapters',
+      'prose.generate',
+      'prose.continue',
+    ]))
     expect(new Set(AGENT_SKILLS.map(skill => skill.owner)).size).toBe(5)
   })
 
@@ -87,6 +93,11 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
         ? { ...skill, writeTargets: [{ table: 'worldviews', fields: ['notRegisteredField'] }] }
         : skill
     )))).toThrow('未登记写字段')
+    expect(() => validateAgentSkillDefinitionsV1(AGENT_SKILLS.map(skill => (
+      skill.id === base.id
+        ? { ...skill, executionMode: 'continue' }
+        : skill
+    )) as AgentSkillDefinitionV1[])).toThrow('执行模式与 Agent 不匹配')
   })
 
   it('Skill 的工具源和直接上下文源只在需要时合并可选源', () => {

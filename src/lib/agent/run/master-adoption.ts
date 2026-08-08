@@ -10,6 +10,7 @@ import {
   restoreMasterAgentCandidatesV1,
   type MasterAgentDurableCandidateV1,
 } from './master-durable'
+import { isMasterAgentRunWorkflowKindV1 } from '../workflow-catalog'
 import {
   appendAgentRunEventV1,
   readAgentRunV1,
@@ -469,7 +470,7 @@ export async function recoverPendingMasterAgentAdoptionsV1(
   for (const run of runs) {
     try {
       const restored = await restoreMasterAgentCandidatesV1({ scope, runId: run.id })
-      if (restored.snapshot.contract.workflowKind !== 'multi-domain-sequential') continue
+      if (!isMasterAgentRunWorkflowKindV1(restored.snapshot.contract.workflowKind)) continue
       let snapshot = restored.snapshot
       if (snapshot.projection.state === 'paused') {
         const recovery = await beginAgentRunRecoveryV1({

@@ -154,6 +154,35 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     expect(await db.chapters.count()).toBe(0)
   })
 
+  it('正文 Skill 冻结生成或续写语义，不依赖提示词再次猜测操作', async () => {
+    const { project, firstId } = await seedProject()
+    const now = Date.now()
+    await db.chapters.add({
+      projectId: project.id!,
+      outlineNodeId: firstId,
+      title: '第一章：海床之光',
+      content: '<p>作者已有正文。</p>',
+      wordCount: 7,
+      order: 0,
+      worldGroupId: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    const continued = await prepareProseCopilot({
+      projectId: project.id!,
+      worldGroupId: null,
+      authorRequest: '完善第一章内容',
+      skillId: 'prose.continue',
+    })
+    expect(continued.operation).toBe('continue')
+    await expect(prepareProseCopilot({
+      projectId: project.id!,
+      worldGroupId: null,
+      authorRequest: '完善第一章内容',
+      skillId: 'prose.generate',
+    })).rejects.toThrow('已有正文')
+  })
+
   it('主 Agent 正文档位收窄登记源预算并冻结实际输入证据', async () => {
     const { project } = await seedProject()
     const prepared = await prepareProseCopilot({

@@ -26,7 +26,7 @@ import {
   type AgentContextProfile,
 } from './context-policy'
 import { AGENT_TOOL_BY_NAME, executeAgentTool } from './tool-registry'
-import { getDefaultAgentSkillV1 } from './skill-registry'
+import { resolveAgentSkillV1, type AgentSkillId } from './skill-registry'
 
 const WORLD_ORIGIN_MAX_CHARS = 12_000
 
@@ -120,6 +120,7 @@ export async function prepareWorldOriginCopilot(
   input: Pick<WorldOriginCopilotScope, 'projectId' | 'worldGroupId'> & {
     scope?: WorkspaceScope
     authorRequest: string
+    skillId?: AgentSkillId
     routingCategory?: string
     contextProfile?: AgentContextProfile
     signal?: AbortSignal
@@ -136,7 +137,7 @@ export async function prepareWorldOriginCopilot(
     { category: routingCategory },
   ).config
   const contextProfile = input.contextProfile ?? 'full'
-  const skill = getDefaultAgentSkillV1('world-origin')
+  const skill = resolveAgentSkillV1('world-origin', input.skillId)
   const tools = skill.readToolNames.map(name => AGENT_TOOL_BY_NAME.get(name)!)
   const [statusTool, worldviewTool] = tools
   if (!statusTool || !worldviewTool || tools.length !== 2) {

@@ -39,7 +39,12 @@ import {
   type AgentContextEvidence,
   type AgentContextProfile,
 } from './context-policy'
-import { getDefaultAgentSkillV1 } from './skill-registry'
+import {
+  getDefaultAgentSkillV1,
+  resolveAgentSkillV1,
+  type AgentSkillExecutionModeV1,
+  type AgentSkillId,
+} from './skill-registry'
 
 export const OUTLINE_COPILOT_SOURCE_KEYS = getDefaultAgentSkillV1('outline').contextSourceKeys
 
@@ -178,7 +183,12 @@ function assertAuthorRequest(value: string): string {
   return request
 }
 
-function determineMode(request: string, volumes: OutlineNode[]): OutlineCopilotMode {
+function determineMode(
+  request: string,
+  volumes: OutlineNode[],
+  executionMode: AgentSkillExecutionModeV1 = 'auto',
+): OutlineCopilotMode {
+  if (executionMode === 'volumes' || executionMode === 'chapters') return executionMode
   if (!volumes.length) return 'volumes'
   if (/卷纲|卷级|分卷|全书大纲|新增.{0,6}卷|规划.{0,6}卷/.test(request)) return 'volumes'
   return 'chapters'
@@ -348,6 +358,7 @@ export async function prepareOutlineCopilot(input: {
   scope?: WorkspaceScope
   worldGroupId: number | null
   authorRequest: string
+  skillId?: AgentSkillId
   supplementalContext?: string
   routingCategory?: string
   contextProfile?: AgentContextProfile
@@ -364,6 +375,7 @@ export async function prepareOutlineCopilot(input: {
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const request = assertAuthorRequest(input.authorRequest)
+  const skill = resolveAgentSkillV1('outline', input.skillId)
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
   const scope = isLegacyReadScope(readScope) ? undefined : readScope
   const allNodes = await readOwnedRows<OutlineNode>(readScope, 'outlineNodes', { owner: 'work' })
@@ -371,7 +383,7 @@ export async function prepareOutlineCopilot(input: {
   const volumes = nodes
     .filter(node => node.type === 'volume' && node.parentId === null)
     .sort((left, right) => left.order - right.order)
-  const mode = determineMode(request, volumes)
+  const mode = determineMode(request, volumes, skill.executionMode)
   const targetVolume = mode === 'chapters' ? chooseTargetVolume(request, volumes) : null
   if (mode === 'chapters' && !targetVolume?.id) throw new Error('当前世界没有可展开的卷纲。')
 
@@ -384,7 +396,6 @@ export async function prepareOutlineCopilot(input: {
     { category: routingCategory },
   ).config
   const contextProfile = input.contextProfile ?? 'full'
-  const skill = getDefaultAgentSkillV1('outline')
   const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
   const assembled = await assembleContext({
     projectId: input.projectId,
@@ -393,7 +404,7 @@ export async function prepareOutlineCopilot(input: {
     outlineNodeId: parentVolumeId,
     provider: config.provider,
     model: config.model,
-    sourceKeys: [...OUTLINE_COPILOT_SOURCE_KEYS],
+    sourceKeys: [...skill.contextSourceKeys],
     inputBudgetMaxTokens: contextPolicy.maxInputTokens,
     sourceBudgetScale: contextPolicy.sourceBudgetScale,
   })

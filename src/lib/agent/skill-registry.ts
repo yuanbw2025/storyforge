@@ -8,6 +8,16 @@ import { AGENT_TOOL_BY_NAME } from './tool-registry'
 export const DOMAIN_AGENT_IDS = ['world-origin', 'character', 'inspiration', 'outline', 'prose'] as const
 export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
 
+export type AgentSkillExecutionModeV1 =
+  | 'complete'
+  | 'create'
+  | 'reverse'
+  | 'auto'
+  | 'volumes'
+  | 'chapters'
+  | 'generate'
+  | 'continue'
+
 export interface AgentSkillWriteTargetV1 {
   table: string
   fields: readonly string[]
@@ -20,6 +30,7 @@ export interface AgentSkillDefinitionV1 {
   defaultForAgent: boolean
   label: string
   owner: string
+  executionMode: AgentSkillExecutionModeV1
   contextTaskKind: AgentContextTaskKind
   /** Tool-backed sources are derived from the Tool Registry, never copied here. */
   readToolNames: readonly string[]
@@ -95,6 +106,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '世界来源补全',
     owner: 'world-foundation-agent',
+    executionMode: 'complete',
     contextTaskKind: 'agent-world-origin',
     readToolNames: ['read_project_status', 'read_worldview'],
     contextSourceKeys: [],
@@ -111,6 +123,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '角色创建',
     owner: 'character-agent',
+    executionMode: 'create',
     contextTaskKind: 'agent-character',
     readToolNames: ['read_worldview', 'read_characters'],
     contextSourceKeys: [],
@@ -137,6 +150,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '灵感反推',
     owner: 'inspiration-agent',
+    executionMode: 'reverse',
     contextTaskKind: 'agent-inspiration',
     readToolNames: ['read_inspiration_workspace'],
     contextSourceKeys: [],
@@ -153,6 +167,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '卷章纲编排',
     owner: 'outline-agent',
+    executionMode: 'auto',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: OUTLINE_CONTEXT_SOURCE_KEYS,
@@ -164,11 +179,46 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'outline.volumes',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '卷纲编排',
+    owner: 'outline-agent',
+    executionMode: 'volumes',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: OUTLINE_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    maxOutputTokens: 8_000,
+    writeTargets: [{ table: 'outlineNodes', fields: ['title', 'summary'] }],
+    lastVerifiedAt: '2026-08-08',
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline'],
+  },
+  {
+    version: 1,
+    id: 'outline.chapters',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '章纲编排',
+    owner: 'outline-agent',
+    executionMode: 'chapters',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: OUTLINE_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'outlineNodes', fields: ['title', 'summary'] }],
+    lastVerifiedAt: '2026-08-08',
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline'],
+  },
+  {
+    version: 1,
     id: 'prose.write',
     agentId: 'prose',
     defaultForAgent: true,
     label: '章节正文生成与续写',
     owner: 'prose-agent',
+    executionMode: 'auto',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
     contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS,
@@ -177,6 +227,40 @@ export const AGENT_SKILLS = [
     writeTargets: [{ table: 'chapters', fields: ['content'] }],
     lastVerifiedAt: '2026-08-08',
     regressionTests: ['R-HARNESS7-prose-generation-durable', 'R-HARNESS9-information-boundary'],
+  },
+  {
+    version: 1,
+    id: 'prose.generate',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '章节正文生成',
+    owner: 'prose-agent',
+    executionMode: 'generate',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: ['characterKnowledge'],
+    maxOutputTokens: 16_000,
+    writeTargets: [{ table: 'chapters', fields: ['content'] }],
+    lastVerifiedAt: '2026-08-08',
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable'],
+  },
+  {
+    version: 1,
+    id: 'prose.continue',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '章节正文续写',
+    owner: 'prose-agent',
+    executionMode: 'continue',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: ['characterKnowledge'],
+    maxOutputTokens: 16_000,
+    writeTargets: [{ table: 'chapters', fields: ['content'] }],
+    lastVerifiedAt: '2026-08-08',
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable'],
   },
 ] as const satisfies readonly AgentSkillDefinitionV1[]
 
@@ -198,6 +282,13 @@ export function resolveAgentSkillContextSourceKeysV1(
 export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
+  const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
+    'world-origin': new Set(['complete']),
+    character: new Set(['create']),
+    inspiration: new Set(['reverse']),
+    outline: new Set(['auto', 'volumes', 'chapters']),
+    prose: new Set(['auto', 'generate', 'continue']),
+  }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()
   for (const skill of definitions) {
@@ -209,6 +300,9 @@ export function validateAgentSkillDefinitionsV1(
       defaultAgents.add(skill.agentId)
     }
     if (!skill.owner.trim()) throw new Error(`Agent Skill ${skill.id} 缺少 owner`)
+    if (!executionModesByAgent[skill.agentId].has(skill.executionMode)) {
+      throw new Error(`Agent Skill ${skill.id} 的执行模式与 Agent 不匹配`)
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(skill.lastVerifiedAt)) {
       throw new Error(`Agent Skill ${skill.id} 的 lastVerifiedAt 无效`)
     }
@@ -256,4 +350,23 @@ export function getDefaultAgentSkillV1(agentId: DomainAgentId): AgentSkillDefini
   const skill = DEFAULT_AGENT_SKILL_BY_AGENT.get(agentId)
   if (!skill) throw new Error(`Agent ${agentId} 缺少默认 Skill`)
   return skill
+}
+
+export function getAgentSkillV1(
+  skillId: string,
+  expectedAgentId?: DomainAgentId,
+): AgentSkillDefinitionV1 {
+  const skill = AGENT_SKILL_BY_ID.get(skillId)
+  if (!skill) throw new Error(`未知 Agent Skill：${skillId}`)
+  if (expectedAgentId && skill.agentId !== expectedAgentId) {
+    throw new Error(`Agent Skill ${skillId} 不属于 Agent ${expectedAgentId}`)
+  }
+  return skill
+}
+
+export function resolveAgentSkillV1(
+  agentId: DomainAgentId,
+  skillId?: string,
+): AgentSkillDefinitionV1 {
+  return skillId ? getAgentSkillV1(skillId, agentId) : getDefaultAgentSkillV1(agentId)
 }

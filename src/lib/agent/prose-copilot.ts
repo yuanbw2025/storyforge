@@ -35,7 +35,10 @@ import {
 } from './information-boundary'
 import {
   getDefaultAgentSkillV1,
+  resolveAgentSkillV1,
   resolveAgentSkillContextSourceKeysV1,
+  type AgentSkillExecutionModeV1,
+  type AgentSkillId,
 } from './skill-registry'
 
 export const PROSE_COPILOT_SOURCE_KEYS = resolveAgentSkillContextSourceKeysV1(
@@ -145,7 +148,11 @@ function chineseOrdinal(value: string): number | null {
   return digits[value] ?? null
 }
 
-function operationFor(request: string): ProseCopilotOperation {
+function operationFor(
+  request: string,
+  executionMode: AgentSkillExecutionModeV1 = 'auto',
+): ProseCopilotOperation {
+  if (executionMode === 'generate' || executionMode === 'continue') return executionMode
   return /续写|接着写|继续写|承接.{0,6}正文/.test(request) ? 'continue' : 'generate'
 }
 
@@ -466,6 +473,7 @@ export async function prepareProseCopilot(input: {
   scope?: WorkspaceScope
   worldGroupId: number | null
   authorRequest: string
+  skillId?: AgentSkillId
   supplementalContext?: string
   routingCategory?: string
   contextProfile?: AgentContextProfile
@@ -488,12 +496,13 @@ export async function prepareProseCopilot(input: {
   if (/重写|改写|覆盖|替换.{0,6}正文/.test(request)) {
     throw new Error('主 Agent 正文领域当前不覆盖已有手稿；请使用正文编辑器的对照改写能力。')
   }
+  const skill = resolveAgentSkillV1('prose', input.skillId)
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   const [nodes, chapters] = await Promise.all([
     readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
     readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
   ])
-  const operation = operationFor(request)
+  const operation = operationFor(request, skill.executionMode)
   const target = selectTarget(request, nodes, chapters, worldGroupId, operation)
   const perspectiveCharacterId = input.perspectiveCharacterId === undefined
     ? target.chapter?.perspectiveCharacterId ?? null
@@ -506,10 +515,9 @@ export async function prepareProseCopilot(input: {
     { category: routingCategory },
   ).config
   const contextProfile = input.contextProfile ?? 'full'
-  const skill = getDefaultAgentSkillV1('prose')
   const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
-  if (input.perspectiveCharacterId != null) {
-    const character = await db.characters.get(input.perspectiveCharacterId)
+  if (perspectiveCharacterId != null) {
+    const character = await db.characters.get(perspectiveCharacterId)
     const visible = character
       && await assertRecordInScope(scope, 'characters', character, { owner: 'world' })
       && (Boolean(character.isCrossWorld) || (character.homeWorldGroupId ?? null) === worldGroupId)
@@ -530,9 +538,9 @@ export async function prepareProseCopilot(input: {
     informationBoundary.manifestHash,
     perspectiveFromChapter,
   )
-  const sourceKeys = perspectiveCharacterId == null
-    ? PROSE_COPILOT_SOURCE_KEYS.filter(key => key !== 'characterKnowledge')
-    : [...PROSE_COPILOT_SOURCE_KEYS]
+  const sourceKeys = resolveAgentSkillContextSourceKeysV1(skill, {
+    includeOptional: perspectiveCharacterId != null,
+  })
   const previous = scopedOutlineChapters(nodes, worldGroupId)
     .filter(item => item.ordinal < target.ordinal)
     .reverse()

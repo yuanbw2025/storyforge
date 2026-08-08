@@ -18,6 +18,7 @@ import {
 } from './master-adoption'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
+import { isMasterAgentRunWorkflowKindV1 } from '../workflow-catalog'
 
 export const MASTER_AGENT_VERIFIER_SET_VERSION_V1 = 'master-terminal-v1'
 
@@ -131,7 +132,7 @@ export async function verifyMasterAgentRunV1(input: {
   if (snapshot.projection.state !== 'running') {
     throw new Error(`主 Agent run 当前状态 ${snapshot.projection.state} 不允许终态验证`)
   }
-  if (snapshot.contract.workflowKind !== 'multi-domain-sequential') {
+  if (!isMasterAgentRunWorkflowKindV1(snapshot.contract.workflowKind)) {
     throw new Error('终态验证器只接受分步骤主 Agent run')
   }
   const steps = Object.values(snapshot.projection.steps)

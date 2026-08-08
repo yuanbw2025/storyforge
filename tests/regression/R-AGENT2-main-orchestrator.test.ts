@@ -110,8 +110,11 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
         choices: [{
           message: {
             content: JSON.stringify({
-              summary: '规划一个角色任务。',
-              tasks: [{ id: 'hero', agentId: 'character', instruction: '设计守灯人', dependsOn: [] }],
+              summary: '先建立世界，再规划角色。',
+              tasks: [
+                { id: 'world', agentId: 'world-origin', instruction: '建立潮汐世界', dependsOn: [] },
+                { id: 'hero', agentId: 'character', instruction: '设计守灯人', dependsOn: ['world'] },
+              ],
             }),
           },
         }],
@@ -123,10 +126,11 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
     const plan = await createMasterAgentPlan({
       projectId: project.id!,
       worldGroupId: null,
-      request: '设计一个守灯人角色',
+      request: '建立潮汐世界并设计一个守灯人角色',
     })
 
-    expect(plan.tasks.map(task => task.agentId)).toEqual(['character'])
+    expect(plan.tasks.map(task => task.agentId)).toEqual(['world-origin', 'character'])
+    expect(plan.workflow?.workflowId).toBe('multi-domain-sequential')
     expect(fetchMock).toHaveBeenCalledOnce()
     await vi.waitFor(async () => {
       expect(await db.aiUsageLog.toCollection().last()).toMatchObject({
@@ -162,64 +166,72 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
     expect(plan.tasks[2].dependsOn).toEqual(['world-1', 'character-1'])
   })
 
-  it('清洗规划模型重复领域任务，避免同快照候选互相作废', async () => {
+  it('明确单领域请求直接形成一个冻结 Skill 的任务，不调用规划模型', async () => {
+    const complete = vi.fn(async () => JSON.stringify({ tasks: [] }))
     const plan = await createMasterAgentPlan({
       projectId: project.id!,
       worldGroupId: null,
       request: '规划两卷卷纲',
     }, {
-      complete: async () => JSON.stringify({
-        summary: '规划两卷。',
-        tasks: [
-          { id: 'outline-v1', agentId: 'outline', instruction: '生成第一卷', dependsOn: [] },
-          { id: 'outline-v2', agentId: 'outline', instruction: '生成第二卷', dependsOn: ['outline-v1'] },
-        ],
-      }),
+      complete,
     })
     expect(plan.tasks).toEqual([
-      { id: 'outline-v1', agentId: 'outline', instruction: '规划两卷卷纲', dependsOn: [] },
+      {
+        id: 'outline-1',
+        agentId: 'outline',
+        skillId: 'outline.volumes',
+        instruction: '规划两卷卷纲',
+        dependsOn: [],
+      },
     ])
+    expect(plan.workflow).toEqual({
+      version: 1,
+      workflowId: 'single-domain-direct',
+      reasonCodes: ['single-explicit-domain'],
+    })
+    expect(complete).not.toHaveBeenCalled()
   })
 
   it('只允许用户明确授权的领域，设定元素和角色名不扩大为额外写入任务', async () => {
+    const complete = vi.fn(async () => JSON.stringify({ tasks: [] }))
     const plan = await createMasterAgentPlan({
       projectId: project.id!,
       worldGroupId: null,
       request: '基于已有世界观，用浮空城和守灯人规划两卷卷纲，每卷要有角色变化',
     }, {
-      complete: async () => JSON.stringify({
-        summary: '先补设定角色，再写大纲。',
-        tasks: [
-          { id: 'world', agentId: 'world-origin', instruction: '创建浮空城设定', dependsOn: [] },
-          { id: 'character', agentId: 'character', instruction: '创建守灯人', dependsOn: ['world'] },
-          { id: 'outline', agentId: 'outline', instruction: '规划两卷', dependsOn: ['world', 'character'] },
-        ],
-      }),
+      complete,
     })
     expect(plan.tasks).toEqual([
-      { id: 'outline', agentId: 'outline', instruction: '规划两卷', dependsOn: [] },
+      {
+        id: 'outline-1',
+        agentId: 'outline',
+        skillId: 'outline.volumes',
+        instruction: '基于已有世界观，用浮空城和守灯人规划两卷卷纲，每卷要有角色变化',
+        dependsOn: [],
+      },
     ])
+    expect(complete).not.toHaveBeenCalled()
   })
 
   it('正文请求不会把已有章纲、世界观或角色约束扩大成额外写入任务', async () => {
+    const complete = vi.fn(async () => JSON.stringify({ tasks: [] }))
     const plan = await createMasterAgentPlan({
       projectId: project.id!,
       worldGroupId: null,
       request: '根据已有章纲和世界观，续写第一章正文，保持主角性格',
     }, {
-      complete: async () => JSON.stringify({
-        summary: '先改设定和大纲，再写正文。',
-        tasks: [
-          { id: 'world', agentId: 'world-origin', instruction: '修改世界观', dependsOn: [] },
-          { id: 'character', agentId: 'character', instruction: '修改主角', dependsOn: [] },
-          { id: 'outline', agentId: 'outline', instruction: '修改章纲', dependsOn: [] },
-          { id: 'prose', agentId: 'prose', instruction: '续写第一章正文', dependsOn: ['world', 'character', 'outline'] },
-        ],
-      }),
+      complete,
     })
     expect(plan.tasks).toEqual([
-      { id: 'prose', agentId: 'prose', instruction: '续写第一章正文', dependsOn: [] },
+      {
+        id: 'prose-1',
+        agentId: 'prose',
+        skillId: 'prose.continue',
+        instruction: '根据已有章纲和世界观，续写第一章正文，保持主角性格',
+        dependsOn: [],
+      },
     ])
+    expect(complete).not.toHaveBeenCalled()
   })
 
   it('同轮新建章纲和正文会分阶段，只先返回可确认的大纲任务', async () => {

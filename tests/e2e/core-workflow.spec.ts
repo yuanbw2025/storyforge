@@ -1050,7 +1050,7 @@ test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见�
   await expect(candidate).toHaveValue('模型候选一：潮汐退去后，最初的陆地显露。')
   await expect(copilot.getByText(/均衡 · ≈[\d,]+ tokens/)).toBeVisible()
   await expect(copilot.getByText(/查看本次实际输入证据 · \d+ 个来源/)).toBeVisible()
-  await expect(copilot.getByText(/本轮团队预算约 [\d,]+ \/ 160,000 tokens · 3\/7 次调用 · Canon 打回 1\/1/)).toBeVisible()
+  await expect(copilot.getByText(/本轮团队预算约 [\d,]+ \/ 160,000 tokens · 2\/7 次调用 · Canon 打回 1\/1/)).toBeVisible()
 
   await openSidebarLeaf(page, '世界观', '世界起源')
   await expect(page.locator('main').getByText('模型候选一：潮汐退去后，最初的陆地显露。', { exact: true }))

@@ -260,14 +260,14 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
 - `src/components/settings/NS0EvalPanel.tsx:50 · chat`
-- `src/lib/agent/character-copilot.ts:437 · chat`
-- `src/lib/agent/inspiration-copilot.ts:289 · chat`
-- `src/lib/agent/outline-copilot.ts:457 · chat`
-- `src/lib/agent/prose-copilot.ts:613 · chat`
-- `src/lib/agent/world-origin-copilot.ts:217 · chat`
+- `src/lib/agent/character-copilot.ts:438 · chat`
+- `src/lib/agent/inspiration-copilot.ts:290 · chat`
+- `src/lib/agent/outline-copilot.ts:468 · chat`
+- `src/lib/agent/prose-copilot.ts:621 · chat`
+- `src/lib/agent/world-origin-copilot.ts:218 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/node-authoring/executor.ts:367 · chat`
 
 ---
 
-生成时间基准:commit `cf341a5`
+生成时间基准:commit `2800385`

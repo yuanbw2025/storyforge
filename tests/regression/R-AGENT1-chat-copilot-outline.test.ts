@@ -128,6 +128,17 @@ describe('AGENT-1 27.1-d · ChatCopilot 大纲闭环', () => {
     expect(await db.outlineNodes.count()).toBe(0)
   })
 
+  it('明确章纲 Skill 缺少上游卷纲时直接阻断，不悄悄改成卷纲任务', async () => {
+    const project = await addProject()
+    await expect(prepareOutlineCopilot({
+      projectId: project.id!,
+      worldGroupId: null,
+      authorRequest: '把第一卷展开为章节大纲',
+      skillId: 'outline.chapters',
+    })).rejects.toThrow('没有可展开的卷纲')
+    expect(await db.outlineNodes.count()).toBe(0)
+  })
+
   it('卷纲候选生成后保持零写入，作者确认眼前 JSON 后一次性写入且不二次调用模型', async () => {
     const project = await addProject()
     const prepared = await prepareOutlineCopilot({
