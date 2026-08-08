@@ -15,6 +15,7 @@ import {
   type MasterAgentExecutionTrace,
   type MasterAgentPlan,
   type MasterAgentTask,
+  type MasterCandidateDependencyBindingV1,
   type MasterCandidatePayload,
 } from '../orchestrator'
 import type { AgentTeamBudgetEvidence } from '../team-budget'
@@ -155,6 +156,35 @@ function readString(value: unknown, label: string, max: number): string {
 function readHash(value: unknown, label: string): string {
   if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) fail(`${label} 不是有效哈希`)
   return value
+}
+
+function dependencyBindings(
+  value: unknown,
+  label: string,
+): MasterCandidateDependencyBindingV1[] {
+  if (!Array.isArray(value)) fail(`${label} 必须是数组`)
+  return value.map((item, index) => {
+    if (!isRecord(item)) fail(`${label}[${index}] 无效`)
+    assertKeysWithOptional(
+      item,
+      ['taskId', 'outputHash'],
+      ['candidateHash', 'generation'],
+      `${label}[${index}]`,
+    )
+    const candidateHash = item.candidateHash === undefined
+      ? undefined
+      : readHash(item.candidateHash, `${label}[${index}].candidateHash`)
+    const generation = item.generation === undefined
+      ? undefined
+      : readInteger(item.generation, `${label}[${index}].generation`)
+    if (generation !== undefined && generation < 1) fail(`${label}[${index}].generation 无效`)
+    return {
+      taskId: readString(item.taskId, `${label}[${index}].taskId`, MAX_TASK_ID_CHARS),
+      outputHash: readHash(item.outputHash, `${label}[${index}].outputHash`),
+      ...(candidateHash ? { candidateHash } : {}),
+      ...(generation === undefined ? {} : { generation }),
+    }
+  })
 }
 
 function readInteger(value: unknown, label: string, max = Number.MAX_SAFE_INTEGER): number {
@@ -480,8 +510,21 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
     ) fail(`${label} payload contextSources 与上下文证据不一致`)
   }
   if (typeof payload.runId !== 'number' || !Number.isInteger(payload.runId) || payload.runId < 1) fail(`${label} payload runId 无效`)
+  if (
+    payload.runGeneration !== undefined
+    && (!Number.isInteger(payload.runGeneration) || payload.runGeneration < 1)
+  ) fail(`${label} payload runGeneration 无效`)
   if (payload.runStepId !== taskStepId(payload.taskId)) fail(`${label} payload runStepId 不匹配`)
   readHash(payload.candidateHash, `${label} payload candidateHash`)
+  if (payload.dependencyBindings !== undefined) {
+    payload.dependencyBindings = dependencyBindings(
+      payload.dependencyBindings,
+      `${label} payload dependencyBindings`,
+    )
+  }
+  if ((payload.runGeneration === undefined) !== (payload.dependencyBindings === undefined)) {
+    fail(`${label} payload 必须同时携带 runGeneration 和 dependencyBindings`)
+  }
   if (
     payload.perspectiveCharacterId !== undefined
     && payload.perspectiveCharacterId !== null
@@ -611,6 +654,44 @@ async function readPersistedCandidates(input: {
       fail(`run ledger 中的任务 ${task.id} 缺少对应候选事件`)
     }
   })
+  const candidateByTask = new Map(candidates.map(candidate => [candidate.payload.taskId, candidate]))
+  for (const candidate of candidates) {
+    const task = taskById.get(candidate.payload.taskId)!
+    const bindings = candidate.payload.dependencyBindings
+    if (bindings === undefined) continue
+    if (candidate.payload.runGeneration !== input.snapshot.projection.generation) {
+      fail(`候选事件 ${candidate.event.id} 不属于当前 Run generation`)
+    }
+    if (
+      bindings.length !== task.dependsOn.length
+      || bindings.some((binding, index) => binding.taskId !== task.dependsOn[index])
+    ) fail(`候选事件 ${candidate.event.id} 的冻结依赖清单与计划不一致`)
+    for (const binding of bindings) {
+      const upstream = candidateByTask.get(binding.taskId)
+      if (!upstream || (upstream.event.sequence ?? 0) >= (candidate.event.sequence ?? 0)) {
+        fail(`候选事件 ${candidate.event.id} 缺少先行依赖 ${binding.taskId}`)
+      }
+      if (
+        upstream.payload.runId !== candidate.payload.runId
+        || (upstream.payload.runGeneration ?? candidate.payload.runGeneration) !== binding.generation
+      ) fail(`候选事件 ${candidate.event.id} 的依赖 ${binding.taskId} 跨 Run、跨代或版本不匹配`)
+      const upstreamStepId = taskStepId(binding.taskId)
+      const historicalVersionExists = input.snapshot.events.some(event => (
+        event.generation === binding.generation
+        && (
+          (event.type === 'candidate.persisted'
+            && event.payload.stepId === upstreamStepId
+            && event.payload.candidateHash === binding.candidateHash)
+          || (event.type === 'candidate.revised'
+            && event.payload.stepId === upstreamStepId
+            && event.payload.candidateHash === binding.candidateHash)
+        )
+      ))
+      if (!historicalVersionExists) {
+        fail(`候选事件 ${candidate.event.id} 的依赖 ${binding.taskId} 从未存在于当前 Run generation`)
+      }
+    }
+  }
   candidates.sort((left, right) => (left.event.sequence ?? 0) - (right.event.sequence ?? 0))
   const outputs: Record<string, string> = {}
   candidates.forEach(candidate => { outputs[candidate.payload.taskId] = candidate.draft })
@@ -897,8 +978,23 @@ export async function runDurableMasterAgentPlanV1(
       }
       const {
         executionBinding: candidateExecutionBinding,
+        dependencyBindings: _candidateDependencyBindings,
+        runGeneration: _candidateRunGeneration,
         ...candidatePayload
       } = candidate.payload
+      const frozenDependencies = await Promise.all(task.dependsOn.map(async dependencyTaskId => {
+        const upstream = liveCandidates.get(dependencyTaskId)
+          ?? restored.candidates.find(item => item.payload.taskId === dependencyTaskId)
+        if (!upstream?.payload.candidateHash) {
+          fail(`主 Agent durable trace 缺少依赖候选 ${dependencyTaskId}`)
+        }
+        return {
+          taskId: dependencyTaskId,
+          candidateHash: upstream.payload.candidateHash,
+          outputHash: await hashCanonicalValue(upstream.draft),
+          generation: snapshot.projection.generation,
+        }
+      }))
       const payload: MasterCandidatePayload = {
         ...candidatePayload,
         taskId: task.id,
@@ -906,7 +1002,9 @@ export async function runDurableMasterAgentPlanV1(
         dependsOnTaskIds: [...task.dependsOn],
         workspaceScope: input.scope,
         runId: snapshot.run.id,
+        runGeneration: snapshot.projection.generation,
         runStepId: stepId,
+        dependencyBindings: frozenDependencies,
         teamBudgetEvidence: candidate.payload.teamBudgetEvidence ?? budget.snapshot(),
         ...(snapshot.contract.executionBindings === undefined ? {} : {
           executionBinding: candidateExecutionBinding

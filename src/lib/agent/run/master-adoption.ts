@@ -1,6 +1,7 @@
 import { db } from '../../db/schema'
 import type { WorkspaceScope } from '../../types'
 import {
+  assertMasterCandidateDependenciesAdoptedV1,
   adoptMasterCandidate,
   type ExecutedMasterCandidate,
 } from '../orchestrator'
@@ -90,6 +91,11 @@ export async function beginMasterAgentCandidateAdoptionV1(
   input: MasterAgentCandidateAdoptionRefV1,
 ): Promise<ResolvedMasterCandidateV1> {
   const resolved = await resolveCandidate(input)
+  await assertMasterCandidateDependenciesAdoptedV1(
+    resolved.candidate.event,
+    resolved.candidate.payload,
+    input.scope,
+  )
   const candidateHash = resolved.candidate.payload.candidateHash!
   const step = resolved.snapshot.projection.steps[resolved.stepId]
   if (

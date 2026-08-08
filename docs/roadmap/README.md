@@ -253,6 +253,10 @@
   索引防止同一正文重复创建同类子 Run。刷新可从父键恢复，父回执或正文产物变化会阻断/撤销子回执，
   UI 明确区分“正文完成”“下游处理中/待确认/可恢复失败”和“全链完成”。导入导出同时重映射契约
   lineage 与物化父键，历史无 lineage 的 Run 仅保留兼容读取并标为旧链。
+- HARNESS-22 已为主 Agent 同一轮多任务增加 frozen dependency join：下游候选绑定生成时实际读取的
+  上游 candidate/output hash 和 Run generation；上游作者编辑后，旧下游不会因新版本已采纳而被放行。
+  下游确认前还会回读上游 step 的正式 adoptionHash/succeeded 状态，避免把对话确认误当成写入完成。
+  本单元没有开启并发 Agent；有限 fan-out 与 replan 必须在这套同代 join 上继续实现。
 
 ### GOV-1 第一阶段交付证据
 

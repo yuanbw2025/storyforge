@@ -954,6 +954,21 @@ CHIRON 四类信息可映射到现有结构：
 - 分类器默认开启，可通过 `storyforge:harness:workflow-classifier-v1=disabled` 回到保守顺序规划；durable run/receipt 格式保持兼容。明确章纲缺少卷纲时直接阻断，不再静默改成卷纲；正文生成/续写不再依赖执行时二次猜测；
 - 本阶段尚未实现有限 fan-out、attempt replan/steering、同代 frozen hash join，也尚未完成 H3 的 p95 成本/延迟与质量非劣 A/B，因此 H3 仍未整体退出。
 
+**同代依赖 join 实施状态（HARNESS-22，2026-08-08）**
+
+- 新主 Agent durable 候选记录 `runGeneration`，并为每个 `dependsOn` 上游冻结任务 ID、上游
+  `candidateHash`、候选正文 `outputHash` 和 generation。下游候选 hash 覆盖这组绑定，恢复时
+  核对它属于同一 Run、同一契约代际，且所引用的候选版本确实存在于严格事件历史；
+- 作者合法编辑上游候选时，上游 `candidate.revised` 仍可恢复和采纳；依赖旧版本生成的下游
+  保持可查看，但在确认之前会因 candidate/output hash 不再匹配而确定性阻断，不能拿新上游
+  采纳结果为旧下游背书；
+- 下游作者确认前不再只检查对话中的 `confirmation` 消息。新 durable 链会回读同 Run step，
+  要求上游 `candidateHash` 相同、作者选择 adopt、`adoptionHash` 存在且 step 已 `succeeded`；
+  因此“确认已记录但业务写入尚未完成/失败”不能解锁下游；
+- HARNESS-22 之前没有 dependency binding 的历史候选继续沿旧确认兼容路径。当前仍按顺序执行，
+  尚未开启有限 fan-out、并发 trace 或 attempt replan；这些后续能力必须复用本 join 契约，不能
+  重新用松散文本拼接依赖。
+
 **范围**
 
 - 实现可解释 `WorkflowClassifier` 和固定工作流 catalog；

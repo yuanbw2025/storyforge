@@ -428,6 +428,11 @@
   缺一不可；同一父 Run/关系由唯一索引去重。子 Run 的终态证明通过契约 hash 间接绑定父回执，父回执
   stale 或正文再次变化时子 receipt 会被撤销。新链支持刷新恢复、全链状态投影和项目导入导出重映射；
   无 lineage 的 HARNESS-20/历史数据只走兼容分支，不被显示为全链完成。
+- HARNESS-22 已闭合主 Agent 多任务候选的同代依赖 join：新 durable 下游候选冻结上游 task、
+  candidate/output hash 和 Run generation，恢复验证引用版本确实来自当前严格事件历史；作者编辑
+  上游后旧下游仍可查看但不能确认采纳。下游确认前必须回读上游 step 的正式 adoptionHash 与
+  succeeded 状态，不再把对话确认消息等同于业务写入完成。旧无绑定候选保持兼容；有限 fan-out
+  和 attempt replan 仍未开启。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

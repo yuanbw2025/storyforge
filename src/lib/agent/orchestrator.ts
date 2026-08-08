@@ -84,6 +84,8 @@ import {
   type MasterWorkflowSelectionV1,
 } from './workflow-catalog'
 import { createAgentSkillExecutionBindingV1 } from './execution-binding'
+import { hashCanonicalValue } from './run/hash'
+import { readAgentRunV1 } from './run/event-store'
 
 export { DOMAIN_AGENT_IDS }
 export type { DomainAgentId }
@@ -106,6 +108,15 @@ export interface MasterAgentPlan {
   workflow?: MasterWorkflowSelectionV1
 }
 
+export interface MasterCandidateDependencyBindingV1 {
+  taskId: string
+  outputHash: string
+  /** Present on durable candidates; binds the exact upstream author-editable candidate. */
+  candidateHash?: string
+  /** Present on durable candidates; prevents a revised contract generation from joining old output. */
+  generation?: number
+}
+
 export interface MasterCandidatePayload {
   version: 1
   taskId: string
@@ -125,8 +136,12 @@ export interface MasterCandidatePayload {
   proseOperation?: ProseCopilotOperation
   proseOutlineNodeId?: number
   dependsOnTaskIds?: string[]
+  /** Absent on candidates created before HARNESS-22. */
+  dependencyBindings?: MasterCandidateDependencyBindingV1[]
   workspaceScope?: WorkspaceScope
   runId?: number
+  /** Absent on candidates created before HARNESS-22. */
+  runGeneration?: number
   runStepId?: string
   candidateHash?: string
   perspectiveCharacterId?: number | null
@@ -439,6 +454,14 @@ export async function executeMasterAgentPlan(input: {
     await input.executionTrace?.taskStarted?.(task)
     await input.onTask?.(task, 'running')
     try {
+      const dependencyBindings = await Promise.all(task.dependsOn.map(async taskId => {
+        const output = outputs.get(taskId)
+        if (!output?.trim()) throw new Error(`主 Agent 任务 ${task.id} 缺少依赖输出 ${taskId}。`)
+        return {
+          taskId,
+          outputHash: await hashCanonicalValue(output),
+        }
+      }))
       const upstream = task.dependsOn
         .map(id => outputs.get(id))
         .filter((value): value is string => Boolean(value?.trim()))
@@ -489,6 +512,7 @@ export async function executeMasterAgentPlan(input: {
             baseSnapshot: prepared.snapshot,
             workspaceScope: scope,
             dependsOnTaskIds: task.dependsOn,
+            dependencyBindings,
           },
           draft,
           runtimeNode: prepared.node,
@@ -529,6 +553,7 @@ export async function executeMasterAgentPlan(input: {
             baseSnapshot: prepared.snapshot,
             workspaceScope: scope,
             dependsOnTaskIds: task.dependsOn,
+            dependencyBindings,
           },
           draft,
           runtimeNode: prepared.node,
@@ -579,6 +604,7 @@ export async function executeMasterAgentPlan(input: {
             mode: prepared.mode,
             selectedFragmentIds,
             dependsOnTaskIds: task.dependsOn,
+            dependencyBindings,
           },
           draft,
           runtimeNode: prepared.node,
@@ -628,6 +654,7 @@ export async function executeMasterAgentPlan(input: {
             outlineMode: prepared.mode,
             outlineParentId: prepared.parentVolumeId,
             dependsOnTaskIds: task.dependsOn,
+            dependencyBindings,
           },
           draft,
           runtimeNode: prepared.node,
@@ -679,6 +706,7 @@ export async function executeMasterAgentPlan(input: {
             proseOutlineNodeId: prepared.outlineNodeId,
             perspectiveCharacterId: prepared.perspectiveCharacterId,
             dependsOnTaskIds: task.dependsOn,
+            dependencyBindings,
           },
           draft,
           runtimeNode: prepared.node,
@@ -771,7 +799,7 @@ async function currentInspirationSnapshot(scope: WorkspaceScope): Promise<Inspir
   }
 }
 
-async function assertCandidateDependenciesAdopted(
+export async function assertMasterCandidateDependenciesAdoptedV1(
   event: AgentEvent,
   payload: MasterCandidatePayload,
   scope: WorkspaceScope,
@@ -780,12 +808,17 @@ async function assertCandidateDependenciesAdopted(
   if (!taskIds.length) return
   const events = (await readOwnedRows<AgentEvent>(scope, 'agentEvents', { owner: 'work' }))
     .filter(row => row.conversationId === event.conversationId)
-  const candidateByTask = new Map<string, number>()
+  const candidates: Array<{
+    event: AgentEvent
+    payload: Partial<MasterCandidatePayload>
+  }> = []
+  const legacyCandidateByTask = new Map<string, number>()
   const adoptedCandidateIds = new Set<number>()
   for (const row of events) {
     if (row.kind === 'candidate' && row.id != null) {
       const candidate = parseAgentEventPayload<Partial<MasterCandidatePayload>>(row, {})
-      if (candidate.taskId) candidateByTask.set(candidate.taskId, row.id)
+      candidates.push({ event: row, payload: candidate })
+      if (candidate.taskId) legacyCandidateByTask.set(candidate.taskId, row.id)
     } else if (row.kind === 'confirmation') {
       const confirmation = parseAgentEventPayload<{
         candidateEventId?: number
@@ -796,12 +829,59 @@ async function assertCandidateDependenciesAdopted(
       }
     }
   }
-  const missing = taskIds.filter(taskId => {
-    const candidateId = candidateByTask.get(taskId)
-    return candidateId == null || !adoptedCandidateIds.has(candidateId)
-  })
-  if (missing.length) {
-    throw new Error(`请先采纳本候选依赖的上游结果：${missing.join('、')}。`)
+
+  const bindings = payload.dependencyBindings
+  if (bindings === undefined) {
+    const missing = taskIds.filter(taskId => {
+      const candidateId = legacyCandidateByTask.get(taskId)
+      return candidateId == null || !adoptedCandidateIds.has(candidateId)
+    })
+    if (missing.length) {
+      throw new Error(`请先采纳本候选依赖的上游结果：${missing.join('、')}。`)
+    }
+    return
+  }
+  if (
+    bindings.length !== taskIds.length
+    || bindings.some((binding, index) => binding.taskId !== taskIds[index])
+  ) throw new Error('下游候选的冻结依赖清单与计划不一致。')
+
+  const durableSnapshot = payload.runId == null ? null : await readAgentRunV1(scope, payload.runId)
+  if (durableSnapshot && payload.runGeneration !== durableSnapshot.projection.generation) {
+    throw new Error('下游候选不属于当前 Run generation，请重新生成。')
+  }
+  for (const binding of bindings) {
+    const eligible = candidates.filter(candidate => (
+      candidate.payload.taskId === binding.taskId
+      && (payload.runId == null || candidate.payload.runId === payload.runId)
+      && (binding.candidateHash == null || candidate.payload.candidateHash === binding.candidateHash)
+    ))
+    let upstream: typeof eligible[number] | undefined
+    for (let index = eligible.length - 1; index >= 0; index -= 1) {
+      if (await hashCanonicalValue(eligible[index].event.content) === binding.outputHash) {
+        upstream = eligible[index]
+        break
+      }
+    }
+    if (!upstream?.event.id) {
+      throw new Error(`依赖 ${binding.taskId} 的冻结候选版本已经变化，请重新生成下游候选。`)
+    }
+    if (
+      binding.generation !== undefined
+      && (upstream.payload.runGeneration ?? payload.runGeneration) !== binding.generation
+    ) throw new Error(`依赖 ${binding.taskId} 来自不同 Run generation，请重新生成。`)
+    if (durableSnapshot && binding.candidateHash) {
+      const step = durableSnapshot.projection.steps[`master:${binding.taskId}`]
+      if (
+        !step
+        || step.status !== 'succeeded'
+        || step.confirmation !== 'adopt'
+        || !step.adoptionHash
+        || step.candidateHash !== binding.candidateHash
+      ) throw new Error(`请先完成采纳本候选依赖的上游结果：${binding.taskId}。`)
+    } else if (!adoptedCandidateIds.has(upstream.event.id)) {
+      throw new Error(`请先采纳本候选依赖的上游结果：${binding.taskId}。`)
+    }
   }
 }
 
@@ -815,7 +895,7 @@ export async function adoptMasterCandidate(input: {
   runtime?: ExecutedMasterCandidate
 }): Promise<string> {
   const scope = await resolveCandidateScope(input)
-  await assertCandidateDependenciesAdopted(input.event, input.payload, scope)
+  await assertMasterCandidateDependenciesAdoptedV1(input.event, input.payload, scope)
   if (input.runtime) {
     const output = input.payload.agentId === 'world-origin'
       ? input.draft
