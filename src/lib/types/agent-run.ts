@@ -74,6 +74,21 @@ export type AgentRunVerificationKind =
   | 'semantic'
   | 'terminal'
 
+export type AgentRunFailureCategoryV1 =
+  | 'protocol'
+  | 'transient'
+  | 'stale-input'
+  | 'deterministic'
+  | 'budget'
+  | 'cancelled'
+  | 'unknown'
+
+export type AgentRunFailureActionV1 =
+  | 'retry'
+  | 'replan'
+  | 'pause-for-author'
+  | 'fail'
+
 export interface AgentRunVerificationStepV1 {
   id: string
   kind: AgentRunVerificationKind
@@ -102,6 +117,8 @@ export interface AgentRunContractV1 {
     maxInputTokens: number
     maxOutputTokens: number
     maxAttemptsPerStep: number
+    /** Bounded contract-generation changes; absent on pre-HARNESS-24 runs. */
+    maxReplans?: number
     /** Runner-specific evidence ceiling; absent on older/non-tool contracts. */
     maxToolResultTokens?: number
     /** Strict protocol repair allowance; absent on older/non-protocol contracts. */
@@ -281,6 +298,7 @@ export type AgentRunEventTypeV1 =
   | 'run.created'
   | 'contract.accepted'
   | 'contract.revised'
+  | 'plan.replanned'
   | 'step.scheduled'
   | 'step.started'
   | 'step.succeeded'
@@ -293,6 +311,7 @@ export type AgentRunEventTypeV1 =
   | 'candidate.persisted'
   | 'candidate.revised'
   | 'candidate.staled'
+  | 'candidate.carried-forward'
   | 'confirmation.recorded'
   | 'adoption.started'
   | 'adoption.committed'
@@ -315,10 +334,26 @@ export interface AgentRunEventPayloadByTypeV1 {
   'run.created': { objectiveHash: string }
   'contract.accepted': { contractJson?: string }
   'contract.revised': { previousContractHash: string; contractJson?: string }
+  'plan.replanned': {
+    previousPlanHash: string
+    planHash: string
+    reasonCode: string
+    affectedStepIds: string[]
+    carriedStepIds: string[]
+    failureFingerprints: string[]
+  }
   'step.scheduled': { stepId: string }
   'step.started': { stepId: string; attempt: number }
   'step.succeeded': { stepId: string; attempt: number; outputHash: string }
-  'step.failed': { stepId: string; attempt: number; code: string; retryable: boolean }
+  'step.failed': {
+    stepId: string
+    attempt: number
+    code: string
+    retryable: boolean
+    category?: AgentRunFailureCategoryV1
+    action?: AgentRunFailureActionV1
+    fingerprint?: string
+  }
   'context.assembled': { stepId: string; attempt: number; manifestHash: string }
   'model.requested': { stepId: string; attempt: number; bindingHash: string }
   'model.responded': { stepId: string; attempt: number; outputHash: string }
@@ -337,6 +372,12 @@ export interface AgentRunEventPayloadByTypeV1 {
     candidateHash: string
   }
   'candidate.staled': { stepId: string; candidateHash: string; reason: string }
+  'candidate.carried-forward': {
+    stepId: string
+    sourceGeneration: number
+    sourceAttempt: number
+    candidateHash: string
+  }
   'confirmation.recorded': {
     stepId: string
     candidateHash: string
@@ -354,7 +395,9 @@ export interface AgentRunEventPayloadByTypeV1 {
   'recovery.completed': { checkpointHash: string }
   'budget.reserved': { stepId: string; modelCalls: number; toolCalls: number; tokens: number }
   'budget.settled': { stepId: string; modelCalls: number; toolCalls: number; tokens: number }
-  'budget.exhausted': { resource: 'model-calls' | 'tool-calls' | 'input-tokens' | 'output-tokens' | 'attempts' }
+  'budget.exhausted': {
+    resource: 'model-calls' | 'tool-calls' | 'input-tokens' | 'output-tokens' | 'attempts' | 'replans'
+  }
   'run.paused': { reason: string; recoverable: boolean }
   'run.cancelled': { reason: string }
   'run.failed': { code: string; retryable: boolean }

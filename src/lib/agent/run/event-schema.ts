@@ -19,6 +19,7 @@ export const AGENT_RUN_EVENT_TYPES_V1: readonly AgentRunEventTypeV1[] = [
   'run.created',
   'contract.accepted',
   'contract.revised',
+  'plan.replanned',
   'step.scheduled',
   'step.started',
   'step.succeeded',
@@ -31,6 +32,7 @@ export const AGENT_RUN_EVENT_TYPES_V1: readonly AgentRunEventTypeV1[] = [
   'candidate.persisted',
   'candidate.revised',
   'candidate.staled',
+  'candidate.carried-forward',
   'confirmation.recorded',
   'adoption.started',
   'adoption.committed',
@@ -73,6 +75,14 @@ function readStepAttempt(
     stepId: readString(record.stepId, `event.payload(${type}).stepId`, { max: 160 }),
     attempt: readInteger(record.attempt, `event.payload(${type}).attempt`, { min: 1 }),
   }
+}
+
+function readStringArray(value: unknown, path: string, maxItems = 20): string[] {
+  const items = readArray(value, path)
+  if (items.length > maxItems) failSchema('too_many_items', path, `最多允许 ${maxItems} 项`)
+  return items.map((item, index) => (
+    readString(item, `${path}[${index}]`, { max: 160 })
+  ))
 }
 
 function readUsagePayload(
@@ -118,6 +128,31 @@ function parsePayload<T extends AgentRunEventTypeV1>(
       }
       break
     }
+    case 'plan.replanned': {
+      const record = payloadRecord(value, type, [
+        'previousPlanHash',
+        'planHash',
+        'reasonCode',
+        'affectedStepIds',
+        'carriedStepIds',
+        'failureFingerprints',
+      ])
+      payload = {
+        previousPlanHash: readHash(record.previousPlanHash, 'event.payload(plan.replanned).previousPlanHash'),
+        planHash: readHash(record.planHash, 'event.payload(plan.replanned).planHash'),
+        reasonCode: readString(record.reasonCode, 'event.payload(plan.replanned).reasonCode', { max: 160 }),
+        affectedStepIds: readStringArray(record.affectedStepIds, 'event.payload(plan.replanned).affectedStepIds'),
+        carriedStepIds: readStringArray(record.carriedStepIds, 'event.payload(plan.replanned).carriedStepIds'),
+        failureFingerprints: readStringArray(
+          record.failureFingerprints,
+          'event.payload(plan.replanned).failureFingerprints',
+        ).map((fingerprint, index) => readHash(
+          fingerprint,
+          `event.payload(plan.replanned).failureFingerprints[${index}]`,
+        )),
+      }
+      break
+    }
     case 'step.scheduled': {
       const record = payloadRecord(value, type, ['stepId'])
       payload = { stepId: readString(record.stepId, 'event.payload(step.scheduled).stepId', { max: 160 }) }
@@ -138,12 +173,34 @@ function parsePayload<T extends AgentRunEventTypeV1>(
       break
     }
     case 'step.failed': {
-      const parsed = readStepAttempt(value, type, ['code', 'retryable'])
+      const record = payloadRecord(
+        value,
+        type,
+        ['stepId', 'attempt', 'code', 'retryable', 'category', 'action', 'fingerprint'],
+        ['stepId', 'attempt', 'code', 'retryable'],
+      )
       payload = {
-        stepId: parsed.stepId,
-        attempt: parsed.attempt,
-        code: readString(parsed.record.code, 'event.payload(step.failed).code', { max: 160 }),
-        retryable: readBoolean(parsed.record.retryable, 'event.payload(step.failed).retryable'),
+        stepId: readString(record.stepId, 'event.payload(step.failed).stepId', { max: 160 }),
+        attempt: readInteger(record.attempt, 'event.payload(step.failed).attempt', { min: 1 }),
+        code: readString(record.code, 'event.payload(step.failed).code', { max: 160 }),
+        retryable: readBoolean(record.retryable, 'event.payload(step.failed).retryable'),
+        ...(record.category === undefined ? {} : {
+          category: readEnum(
+            record.category,
+            ['protocol', 'transient', 'stale-input', 'deterministic', 'budget', 'cancelled', 'unknown'],
+            'event.payload(step.failed).category',
+          ),
+        }),
+        ...(record.action === undefined ? {} : {
+          action: readEnum(
+            record.action,
+            ['retry', 'replan', 'pause-for-author', 'fail'],
+            'event.payload(step.failed).action',
+          ),
+        }),
+        ...(record.fingerprint === undefined ? {} : {
+          fingerprint: readHash(record.fingerprint, 'event.payload(step.failed).fingerprint'),
+        }),
       }
       break
     }
@@ -226,6 +283,29 @@ function parsePayload<T extends AgentRunEventTypeV1>(
         stepId: readString(record.stepId, 'event.payload(candidate.staled).stepId', { max: 160 }),
         candidateHash: readHash(record.candidateHash, 'event.payload(candidate.staled).candidateHash'),
         reason: readString(record.reason, 'event.payload(candidate.staled).reason', { max: 1000 }),
+      }
+      break
+    }
+    case 'candidate.carried-forward': {
+      const record = payloadRecord(value, type, [
+        'stepId',
+        'sourceGeneration',
+        'sourceAttempt',
+        'candidateHash',
+      ])
+      payload = {
+        stepId: readString(record.stepId, 'event.payload(candidate.carried-forward).stepId', { max: 160 }),
+        sourceGeneration: readInteger(
+          record.sourceGeneration,
+          'event.payload(candidate.carried-forward).sourceGeneration',
+          { min: 1 },
+        ),
+        sourceAttempt: readInteger(
+          record.sourceAttempt,
+          'event.payload(candidate.carried-forward).sourceAttempt',
+          { min: 1 },
+        ),
+        candidateHash: readHash(record.candidateHash, 'event.payload(candidate.carried-forward).candidateHash'),
       }
       break
     }
@@ -334,7 +414,7 @@ function parsePayload<T extends AgentRunEventTypeV1>(
       payload = {
         resource: readEnum(
           record.resource,
-          ['model-calls', 'tool-calls', 'input-tokens', 'output-tokens', 'attempts'],
+          ['model-calls', 'tool-calls', 'input-tokens', 'output-tokens', 'attempts', 'replans'],
           'event.payload(budget.exhausted).resource',
         ),
       }

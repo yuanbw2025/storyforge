@@ -986,6 +986,26 @@ CHIRON 四类信息可映射到现有结构：
   计划按原 DAG 顺序执行，计划、候选和 RunContract 格式不变。当前尚未交付每叶独立 terminal
   receipt、通用只读审计 fan-out、p95 成本/延迟与质量非劣 A/B，因此 H3 仍未整体退出。
 
+**有限重规划实施状态（HARNESS-24，2026-08-08）**
+
+- `step.failed` 在保持旧事件兼容的前提下新增失败 category、建议 action 和不含原始错误正文的
+  fingerprint；临时服务错误、协议错误、stale 输入、确定性硬门、预算和作者处理不再被压成同一个
+  `master_agent_execution_failed`。失败模型调用的累计调用数/token 会写入新检查点，刷新不再退回
+  到失败前预算；
+- 同一 step、同一 generation、同一 fingerprint 第二次出现时停止原样 retry，并进入受限 replan。
+  新 `RunContract.budget.maxReplans` 对新主 Agent run 固定为 1；旧契约缺少该授权时不补签。重规划器
+  只能修改失败任务及其 DAG 下游的 instruction/dependsOn，任务 ID、Agent、Skill、叙事视角、顺序、
+  workflow 和三注册表派生权限均由代码冻结；无有效变化、越界变化或环依赖全部 fail-closed；
+- replan 通过 `contract.revised` 把 generation 加一，并记录 `plan.replanned`。已确认或已采纳候选的 run
+  不允许原地换代；未受影响且仍待确认的候选通过 `candidate.carried-forward` 显式跨代保留，受影响
+  候选追加 `candidate.staled` 并从待采纳集合移除，但正文和证据仍留在历史。新下游只有在当前代存在
+  carry-forward 证据时才能绑定旧代上游 candidate hash；
+- stale、契约换代、步骤重调度、候选保留、对话侧失效标记和新计划检查点在一个 IndexedDB 事务内
+  完成；中途失败不会留下“新契约但没有可恢复计划”的半代运行。`storyforge:harness:master-agent-replan-v1=disabled`
+  可关闭自动/显式重规划，既有 run/event/checkpoint 仍可读取；
+- 当前只覆盖主 Agent 在作者确认前的候选 DAG，且最多一代重规划；不会自动撤销正式采纳，也未提供
+  任意作者 steering UI、每叶独立 terminal receipt 或 H3 的 p95/质量非劣 A/B，因此 H3 仍未整体退出。
+
 **范围**
 
 - 实现可解释 `WorkflowClassifier` 和固定工作流 catalog；
@@ -1007,7 +1027,8 @@ CHIRON 四类信息可映射到现有结构：
 
 **回滚**
 
-- classifier flag 强制所有路径回到现有 sequential orchestrator；run/receipt 数据仍兼容。
+- classifier flag 强制所有路径回到现有 sequential orchestrator；fan-out 与 master replan 各有独立开关；
+  run/receipt 数据仍兼容。
 
 ### H4：中文长篇一致性评测扩展
 

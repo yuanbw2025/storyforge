@@ -10,9 +10,12 @@ import {
 } from '../conversations'
 import {
   DOMAIN_AGENT_IDS,
+  collectMasterAgentAffectedTaskIdsV1,
+  createMasterAgentReplanV1,
   executeMasterAgentPlan,
   type ExecutedMasterCandidate,
   type MasterAgentExecutionTrace,
+  type MasterAgentReplanFailureV1,
   type MasterAgentPlan,
   type MasterAgentTask,
   type MasterCandidateDependencyBindingV1,
@@ -40,17 +43,26 @@ import {
 import { acceptAgentRunContractV1 } from './contract'
 import {
   appendAgentRunEventV1,
+  appendPrivilegedAgentRunEventInTransactionV1,
   createAgentRunV1,
   readAgentRunV1,
+  readVerifiedAgentRunInTransactionV1,
+  withAgentRunMutationLockV1,
   type AgentRunSnapshotV1,
 } from './event-store'
 import {
   beginAgentRunRecoveryV1,
+  createAgentRunCheckpointInTransactionV1,
   createAgentRunCheckpointV1,
   completeAgentRunRecoveryV1,
   readLatestVerifiedAgentRunCheckpointV1,
 } from './checkpoint'
-import { hashCanonicalValue } from './hash'
+import { canonicalStringify, hashCanonicalValue } from './hash'
+import { parseAgentRunEventV1 } from './event-schema'
+import {
+  classifyAgentRunFailureV1,
+  matchingFailureCountV1,
+} from './failure-policy'
 import {
   AgentTeamBudgetExceededError,
   AgentTeamBudgetTracker,
@@ -64,10 +76,20 @@ import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../.
 export const MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1 = 'master-agent-plan'
 export const MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 = 1 as const
 export const MASTER_AGENT_DURABLE_HARNESS_STORAGE_KEY = 'storyforge:harness:master-agent-durable-v1'
+export const MASTER_AGENT_REPLAN_STORAGE_KEY = 'storyforge:harness:master-agent-replan-v1'
+export const MAX_MASTER_AGENT_REPLANS_V1 = 1
 
 export function isMasterAgentDurableHarnessEnabledV1(): boolean {
   try {
     return globalThis.localStorage?.getItem(MASTER_AGENT_DURABLE_HARNESS_STORAGE_KEY) !== 'disabled'
+  } catch {
+    return true
+  }
+}
+
+export function isMasterAgentReplanEnabledV1(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(MASTER_AGENT_REPLAN_STORAGE_KEY) !== 'disabled'
   } catch {
     return true
   }
@@ -136,6 +158,7 @@ export interface RunDurableMasterAgentInputV1 {
 
 export interface MasterAgentDurableDependenciesV1 {
   execute?: typeof executeMasterAgentPlan
+  replan?: typeof createMasterAgentReplanV1
 }
 
 function fail(message: string): never {
@@ -419,6 +442,7 @@ export function buildMasterAgentRunContractV1(input: {
       maxInputTokens: policy.maxTokens,
       maxOutputTokens: policy.maxTokens,
       maxAttemptsPerStep: 2,
+      maxReplans: MAX_MASTER_AGENT_REPLANS_V1,
       maxProtocolErrors: policy.maxCanonRetries,
     },
     acceptance,
@@ -473,6 +497,248 @@ function parsePlanCheckpoint(value: unknown): MasterAgentPlanCheckpointV1 {
 
 function taskStepId(taskId: string): string {
   return `master:${taskId}`
+}
+
+function sameTaskIdentity(left: MasterAgentTask, right: MasterAgentTask): boolean {
+  return left.id === right.id
+    && left.agentId === right.agentId
+    && (left.skillId ?? null) === (right.skillId ?? null)
+    && (left.perspectiveCharacterId ?? null) === (right.perspectiveCharacterId ?? null)
+}
+
+function sameTaskDefinition(left: MasterAgentTask, right: MasterAgentTask): boolean {
+  return sameTaskIdentity(left, right)
+    && left.instruction === right.instruction
+    && JSON.stringify(left.dependsOn) === JSON.stringify(right.dependsOn)
+}
+
+function assertBoundedMasterReplan(
+  previousPlan: MasterAgentPlan,
+  nextPlan: MasterAgentPlan,
+  rootTaskIds: readonly string[],
+): Set<string> {
+  const previous = parseMasterAgentPlanV1(previousPlan)
+  const next = parseMasterAgentPlanV1(nextPlan)
+  if (
+    previous.tasks.length !== next.tasks.length
+    || JSON.stringify(previous.workflow ?? null) !== JSON.stringify(next.workflow ?? null)
+  ) fail('主 Agent 有限重规划不得改变任务数量或工作流')
+  const affected = collectMasterAgentAffectedTaskIdsV1(previous, rootTaskIds)
+  const nextAffected = collectMasterAgentAffectedTaskIdsV1(next, rootTaskIds)
+  nextAffected.forEach(taskId => affected.add(taskId))
+  previous.tasks.forEach((task, index) => {
+    const replacement = next.tasks[index]
+    if (!replacement || !sameTaskIdentity(task, replacement)) {
+      fail('主 Agent 有限重规划不得改变任务身份、Skill、顺序或叙事视角')
+    }
+    if (!affected.has(task.id) && !sameTaskDefinition(task, replacement)) {
+      fail(`主 Agent 有限重规划越界修改了未受影响任务 ${task.id}`)
+    }
+  })
+  if (!previous.tasks.some((task, index) => !sameTaskDefinition(task, next.tasks[index]))) {
+    fail('主 Agent 有限重规划没有改变任何受影响任务')
+  }
+  return affected
+}
+
+export interface ReplanDurableMasterAgentRunInputV1 {
+  scope: WorkspaceScope
+  runId: number
+  nextPlan: MasterAgentPlan
+  rootTaskIds: string[]
+  failures: Array<MasterAgentReplanFailureV1>
+  budgetEvidence: AgentTeamBudgetEvidence
+  reasonCode?: string
+  now?: number
+}
+
+/**
+ * Atomically advances a paused master run to one new contract generation.
+ * Unaffected pending candidates receive explicit carry-forward evidence;
+ * candidates in the failed branch remain in history but are staled.
+ */
+export async function replanDurableMasterAgentRunV1(
+  input: ReplanDurableMasterAgentRunInputV1,
+): Promise<AgentRunSnapshotV1> {
+  if (!isMasterAgentReplanEnabledV1()) fail('主 Agent 有限重规划已通过回滚开关关闭')
+  const before = await readAgentRunV1(input.scope, input.runId)
+  if (before.projection.state !== 'paused') fail('只有 paused 主 Agent run 可以有限重规划')
+  const maxReplans = before.contract.budget.maxReplans ?? 0
+  if (maxReplans < 1) fail('当前主 Agent RunContract 未授权重规划')
+  if (before.events.filter(event => event.type === 'plan.replanned').length >= maxReplans) {
+    fail('主 Agent run 的有限重规划次数已耗尽')
+  }
+  if (Object.values(before.projection.steps).some(step => (
+    step.status === 'succeeded' || step.confirmation !== undefined || step.adoptionHash !== undefined
+  ))) fail('已经确认或采纳候选的主 Agent run 不允许原地重规划')
+  const latest = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.runId)
+  if (!latest) fail('主 Agent 有限重规划缺少当前代计划检查点')
+  const checkpoint = parsePlanCheckpoint(latest.resumePayload)
+  const previousPlanHash = await hashMasterAgentPlanV1(checkpoint.plan)
+  if (previousPlanHash !== checkpoint.planHash) fail('主 Agent 有限重规划的原计划检查点已损坏')
+  const affected = assertBoundedMasterReplan(checkpoint.plan, input.nextPlan, input.rootTaskIds)
+  const parsedBudget = budgetEvidence(input.budgetEvidence, '主 Agent 重规划 budgetEvidence')
+  const restored = await readPersistedCandidates({
+    scope: input.scope,
+    snapshot: before,
+    plan: checkpoint.plan,
+    checkpointBudget: checkpoint.budgetEvidence,
+  })
+  if (!budgetAtLeast(parsedBudget, restored.latestBudget)) {
+    fail('主 Agent 重规划预算证据倒退')
+  }
+  const carried = restored.candidates.filter(candidate => !affected.has(candidate.payload.taskId))
+  const staled = restored.candidates.filter(candidate => affected.has(candidate.payload.taskId))
+  const nextPlan = parseMasterAgentPlanV1(input.nextPlan)
+  const nextPlanHash = await hashMasterAgentPlanV1(nextPlan)
+  const accepted = await acceptAgentRunContractV1(buildMasterAgentRunContractV1({
+    scope: input.scope,
+    worldGroupId: before.run.worldGroupId ?? null,
+    plan: nextPlan,
+    budgetEvidence: parsedBudget,
+    includeExecutionBindings: before.contract.executionBindings !== undefined,
+  }))
+  const now = input.now ?? Date.now()
+
+  return withAgentRunMutationLockV1(input.runId, () => db.transaction(
+    'rw',
+    scopeTransactionTables(
+      db.agentConversations,
+      db.agentEvents,
+      db.agentRuns,
+      db.agentRunEvents,
+      db.agentRunCheckpoints,
+    ),
+    async () => {
+      let snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      if (
+        snapshot.projection.lastSequence !== before.projection.lastSequence
+        || snapshot.projection.generation !== before.projection.generation
+      ) fail('主 Agent run 已推进，重规划基线过期')
+      for (const candidate of staled) {
+        const stepId = taskStepId(candidate.payload.taskId)
+        snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({
+          version: 1,
+          runId: input.runId,
+          sequence: snapshot.projection.lastSequence + 1,
+          generation: snapshot.projection.generation,
+          projectId: snapshot.run.projectId,
+          worldGroupId: snapshot.run.worldGroupId ?? null,
+          contractHash: snapshot.run.contractHash,
+          type: 'candidate.staled',
+          createdAt: now,
+          payload: {
+            stepId,
+            candidateHash: candidate.payload.candidateHash,
+            reason: input.reasonCode ?? 'bounded_replan_affected_branch',
+          },
+        }))
+      }
+      snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({
+        version: 1,
+        runId: input.runId,
+        sequence: snapshot.projection.lastSequence + 1,
+        generation: snapshot.projection.generation + 1,
+        projectId: snapshot.run.projectId,
+        worldGroupId: snapshot.run.worldGroupId ?? null,
+        contractHash: accepted.contractHash,
+        type: 'contract.revised',
+        createdAt: now,
+        payload: {
+          previousContractHash: snapshot.run.contractHash,
+          contractJson: canonicalStringify(accepted.contract),
+        },
+      }), accepted)
+      snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({
+        version: 1,
+        runId: input.runId,
+        sequence: snapshot.projection.lastSequence + 1,
+        generation: snapshot.projection.generation,
+        projectId: snapshot.run.projectId,
+        worldGroupId: snapshot.run.worldGroupId ?? null,
+        contractHash: snapshot.run.contractHash,
+        type: 'plan.replanned',
+        createdAt: now,
+        payload: {
+          previousPlanHash,
+          planHash: nextPlanHash,
+          reasonCode: input.reasonCode ?? 'bounded_replan',
+          affectedStepIds: [...affected].map(taskStepId),
+          carriedStepIds: carried.map(candidate => taskStepId(candidate.payload.taskId)),
+          failureFingerprints: [...new Set(input.failures.map(failure => failure.fingerprint))],
+        },
+      }))
+      for (const task of nextPlan.tasks) {
+        snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({
+          version: 1,
+          runId: input.runId,
+          sequence: snapshot.projection.lastSequence + 1,
+          generation: snapshot.projection.generation,
+          projectId: snapshot.run.projectId,
+          worldGroupId: snapshot.run.worldGroupId ?? null,
+          contractHash: snapshot.run.contractHash,
+          type: 'step.scheduled',
+          createdAt: now,
+          payload: { stepId: taskStepId(task.id) },
+        }))
+      }
+      for (const candidate of carried) {
+        const oldStep = before.projection.steps[taskStepId(candidate.payload.taskId)]
+        if (!oldStep || oldStep.status !== 'awaiting_confirmation' || oldStep.attempt < 1) {
+          fail(`主 Agent 候选 ${candidate.payload.taskId} 不满足跨代保留条件`)
+        }
+        snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({
+          version: 1,
+          runId: input.runId,
+          sequence: snapshot.projection.lastSequence + 1,
+          generation: snapshot.projection.generation,
+          projectId: snapshot.run.projectId,
+          worldGroupId: snapshot.run.worldGroupId ?? null,
+          contractHash: snapshot.run.contractHash,
+          type: 'candidate.carried-forward',
+          createdAt: now,
+          payload: {
+            stepId: taskStepId(candidate.payload.taskId),
+            sourceGeneration: candidate.payload.runGeneration ?? before.projection.generation,
+            sourceAttempt: oldStep.attempt,
+            candidateHash: candidate.payload.candidateHash,
+          },
+        }))
+      }
+      const saved = await createAgentRunCheckpointInTransactionV1({
+        snapshot,
+        resumePayload: {
+          version: 1,
+          kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+          plan: nextPlan,
+          planHash: nextPlanHash,
+          budgetEvidence: parsedBudget,
+        } satisfies MasterAgentPlanCheckpointV1,
+        now,
+      })
+      const conversationId = snapshot.run.conversationId
+      if (conversationId != null) {
+        for (const candidate of staled) {
+          await appendAgentEvent({
+            projectId: input.scope.projectId,
+            conversationId,
+            kind: 'confirmation',
+            role: 'system',
+            content: '候选因有限重规划失效，未写入正式数据。',
+            payload: {
+              version: 1,
+              runId: input.runId,
+              candidateEventId: candidate.event.id,
+              decision: 'staled',
+              reason: input.reasonCode ?? 'bounded_replan_affected_branch',
+            },
+            scope: input.scope,
+          })
+        }
+      }
+      return saved.snapshot
+    },
+  ))
 }
 
 function candidateHashInput(payload: MasterCandidatePayload, draft: string): unknown {
@@ -608,7 +874,15 @@ async function readPersistedCandidates(input: {
   const taskById = new Map(input.plan.tasks.map(task => [task.id, task]))
   const seen = new Set<string>()
   const candidates: MasterAgentDurableCandidateV1[] = []
-  let latestBudget = input.checkpointBudget
+  // Candidate evidence is ordered by conversation sequence. A later failure
+  // checkpoint may legitimately be ahead of every candidate, so compare the
+  // two monotonic streams only after validating each stream independently.
+  let latestBudget: AgentTeamBudgetEvidence = {
+    ...input.checkpointBudget,
+    usedTokens: 0,
+    calls: 0,
+    canonRetries: 0,
+  }
   for (const event of rows) {
     let raw: unknown
     try {
@@ -620,12 +894,6 @@ async function readPersistedCandidates(input: {
     const payload = parseCandidatePayload(raw, `候选事件 ${event.id}`)
     const task = taskById.get(payload.taskId)
     if (!task || payload.agentId !== task.agentId) fail(`候选事件 ${event.id} 不属于当前计划任务`)
-    assertCandidateMatchesTaskSkill(task, payload, `候选事件 ${event.id}`)
-    if (
-      !Array.isArray(payload.dependsOnTaskIds)
-      || payload.dependsOnTaskIds.length !== task.dependsOn.length
-      || payload.dependsOnTaskIds.some((dependency, index) => dependency !== task.dependsOn[index])
-    ) fail(`候选事件 ${event.id} 的任务依赖与计划不一致`)
     if (
       !payload.workspaceScope
       || payload.workspaceScope.projectId !== input.scope.projectId
@@ -636,17 +904,30 @@ async function readPersistedCandidates(input: {
     if (payload.contextSources.some(source => !allowedSources.has(source))) {
       fail(`候选事件 ${event.id} 使用了契约未授权的上下文源`)
     }
-    if (seen.has(payload.taskId)) fail(`当前 durable run 存在重复候选任务 ${payload.taskId}`)
     if (event.content.length > MAX_CANDIDATE_CHARS) fail(`候选事件 ${event.id} 超出持久化上限`)
     const expectedHash = await computeCandidateHash(payload, event.content)
     if (expectedHash !== payload.candidateHash) fail(`候选事件 ${event.id} candidateHash 校验失败`)
-    const step = input.snapshot.projection.steps[taskStepId(task.id)]
-    if (!step || step.candidateHash !== payload.candidateHash) fail(`候选事件 ${event.id} 与 run ledger 不一致`)
     const evidence = budgetEvidence(payload.teamBudgetEvidence, `候选事件 ${event.id} teamBudgetEvidence`)
     if (!budgetAtLeast(evidence, latestBudget)) fail(`候选事件 ${event.id} 的团队预算证据倒退`)
     latestBudget = evidence
+    const step = input.snapshot.projection.steps[taskStepId(task.id)]
+    // Replanning retains historical candidates for audit. Only the candidate
+    // selected by the current generation projection is executable.
+    if (!step || step.candidateHash !== payload.candidateHash) continue
+    if (seen.has(payload.taskId)) fail(`当前 durable run 存在重复活动候选任务 ${payload.taskId}`)
+    assertCandidateMatchesTaskSkill(task, payload, `候选事件 ${event.id}`)
+    if (
+      !Array.isArray(payload.dependsOnTaskIds)
+      || payload.dependsOnTaskIds.length !== task.dependsOn.length
+      || payload.dependsOnTaskIds.some((dependency, index) => dependency !== task.dependsOn[index])
+    ) fail(`候选事件 ${event.id} 的任务依赖与计划不一致`)
     seen.add(payload.taskId)
     candidates.push({ event, payload, draft: event.content })
+  }
+  if (budgetAtLeast(input.checkpointBudget, latestBudget)) {
+    latestBudget = input.checkpointBudget
+  } else if (!budgetAtLeast(latestBudget, input.checkpointBudget)) {
+    fail('主 Agent 候选与检查点预算证据无法形成单调顺序')
   }
   input.plan.tasks.forEach(task => {
     const step = input.snapshot.projection.steps[taskStepId(task.id)]
@@ -659,7 +940,15 @@ async function readPersistedCandidates(input: {
     const task = taskById.get(candidate.payload.taskId)!
     const bindings = candidate.payload.dependencyBindings
     if (bindings === undefined) continue
-    if (candidate.payload.runGeneration !== input.snapshot.projection.generation) {
+    const candidateGeneration = candidate.payload.runGeneration ?? input.snapshot.projection.generation
+    const candidateCarried = input.snapshot.events.some(event => (
+      event.generation === input.snapshot.projection.generation
+      && event.type === 'candidate.carried-forward'
+      && event.payload.stepId === taskStepId(candidate.payload.taskId)
+      && event.payload.candidateHash === candidate.payload.candidateHash
+      && event.payload.sourceGeneration === candidateGeneration
+    ))
+    if (candidateGeneration !== input.snapshot.projection.generation && !candidateCarried) {
       fail(`候选事件 ${candidate.event.id} 不属于当前 Run generation`)
     }
     if (
@@ -673,9 +962,19 @@ async function readPersistedCandidates(input: {
       }
       if (
         upstream.payload.runId !== candidate.payload.runId
-        || (upstream.payload.runGeneration ?? candidate.payload.runGeneration) !== binding.generation
-      ) fail(`候选事件 ${candidate.event.id} 的依赖 ${binding.taskId} 跨 Run、跨代或版本不匹配`)
+      ) fail(`候选事件 ${candidate.event.id} 的依赖 ${binding.taskId} 跨 Run 或版本不匹配`)
       const upstreamStepId = taskStepId(binding.taskId)
+      const upstreamGeneration = upstream.payload.runGeneration ?? candidateGeneration
+      const upstreamCarried = input.snapshot.events.some(event => (
+        event.generation === binding.generation
+        && event.type === 'candidate.carried-forward'
+        && event.payload.stepId === upstreamStepId
+        && event.payload.candidateHash === binding.candidateHash
+        && event.payload.sourceGeneration === upstreamGeneration
+      ))
+      if (upstreamGeneration !== binding.generation && !upstreamCarried) {
+        fail(`候选事件 ${candidate.event.id} 的依赖 ${binding.taskId} 跨代或版本不匹配`)
+      }
       const historicalVersionExists = input.snapshot.events.some(event => (
         event.generation === binding.generation
         && (
@@ -683,6 +982,9 @@ async function readPersistedCandidates(input: {
             && event.payload.stepId === upstreamStepId
             && event.payload.candidateHash === binding.candidateHash)
           || (event.type === 'candidate.revised'
+            && event.payload.stepId === upstreamStepId
+            && event.payload.candidateHash === binding.candidateHash)
+          || (event.type === 'candidate.carried-forward'
             && event.payload.stepId === upstreamStepId
             && event.payload.candidateHash === binding.candidateHash)
         )
@@ -895,6 +1197,22 @@ export async function runDurableMasterAgentPlanV1(
       if (!step) fail(`主 Agent durable run 缺少步骤 ${stepId}`)
       if (step.status === 'awaiting_confirmation' || step.status === 'succeeded') {
         fail(`主 Agent durable run 步骤 ${stepId} 已有候选或已完成，不得重复调用`)
+      }
+      const lastFailure = [...snapshot.events].reverse().find(event => (
+        event.generation === snapshot.projection.generation
+        && event.type === 'step.failed'
+        && event.payload.stepId === stepId
+        && event.payload.attempt === step.attempt
+      ))
+      if (
+        step.status === 'failed'
+        && lastFailure?.type === 'step.failed'
+        && lastFailure.payload.action
+        && lastFailure.payload.action !== 'retry'
+      ) {
+        fail(`主 Agent durable run 步骤 ${stepId} 的失败策略要求${
+          lastFailure.payload.action === 'replan' ? '有限重规划' : '作者处理'
+        }，不得原样重试`)
       }
       if (step.status === 'running') {
         snapshot = await appendAgentRunEventV1({
@@ -1123,6 +1441,7 @@ export async function runDurableMasterAgentPlanV1(
     const latest = await readAgentRunV1(input.scope, snapshot.run.id)
     snapshot = latest
     const failedTasks = [...activeTasks.values()]
+    const classified = await classifyAgentRunFailureV1(error)
     if (input.signal?.aborted) {
       for (const failedTask of failedTasks) {
         const stepId = taskStepId(failedTask.id)
@@ -1136,6 +1455,9 @@ export async function runDurableMasterAgentPlanV1(
             attempt: snapshot.projection.steps[stepId].attempt,
             code: 'host_interrupted',
             retryable: true,
+            category: 'cancelled',
+            action: 'retry',
+            fingerprint: classified.fingerprint,
           },
           expectedLastSequence: snapshot.projection.lastSequence,
           now: now(),
@@ -1163,32 +1485,181 @@ export async function runDurableMasterAgentPlanV1(
         })
       }
     } else if (['running', 'awaiting_confirmation'].includes(snapshot.projection.state)) {
-      for (const failedTask of failedTasks) {
-        const stepId = taskStepId(failedTask.id)
-        if (snapshot.projection.steps[stepId]?.status !== 'running') continue
+      const finalBudget = budget.snapshot()
+      if (
+        failedTasks.length > 0
+        && budgetAtLeast(finalBudget, previousBudget)
+        && (
+          finalBudget.calls > previousBudget.calls
+          || finalBudget.usedTokens > previousBudget.usedTokens
+          || finalBudget.canonRetries > previousBudget.canonRetries
+        )
+      ) {
         snapshot = await appendAgentRunEventV1({
           scope: input.scope,
           runId: snapshot.run.id,
-          type: 'step.failed',
+          type: 'budget.settled',
           payload: {
-            stepId,
-            attempt: snapshot.projection.steps[stepId].attempt,
-            code: 'master_agent_execution_failed',
-            retryable: true,
+            stepId: taskStepId(failedTasks[0].id),
+            modelCalls: finalBudget.calls - previousBudget.calls,
+            toolCalls: 0,
+            tokens: finalBudget.usedTokens - previousBudget.usedTokens,
           },
           expectedLastSequence: snapshot.projection.lastSequence,
           now: now(),
         })
+        previousBudget = finalBudget
       }
+      const replanFailures: MasterAgentReplanFailureV1[] = []
+      let requiresReplan = classified.action === 'replan'
+      for (const failedTask of failedTasks) {
+        const stepId = taskStepId(failedTask.id)
+        const step = snapshot.projection.steps[stepId]
+        if (!step) continue
+        const existing = [...snapshot.events].reverse().find(event => (
+          event.generation === snapshot.projection.generation
+          && event.type === 'step.failed'
+          && event.payload.stepId === stepId
+          && event.payload.attempt === step.attempt
+        ))
+        if (step.status === 'running') {
+          const repeated = matchingFailureCountV1(snapshot.events, {
+            generation: snapshot.projection.generation,
+            stepId,
+            fingerprint: classified.fingerprint,
+          }) > 0
+          const action = repeated && classified.action === 'retry' ? 'replan' : classified.action
+          const retryable = action === 'retry' && classified.retryable
+          snapshot = await appendAgentRunEventV1({
+            scope: input.scope,
+            runId: snapshot.run.id,
+            type: 'step.failed',
+            payload: {
+              stepId,
+              attempt: step.attempt,
+              code: classified.code,
+              retryable,
+              category: classified.category,
+              action,
+              fingerprint: classified.fingerprint,
+            },
+            expectedLastSequence: snapshot.projection.lastSequence,
+            now: now(),
+          })
+          requiresReplan ||= action === 'replan'
+          replanFailures.push({
+            taskId: failedTask.id,
+            code: classified.code,
+            category: classified.category,
+            fingerprint: classified.fingerprint,
+          })
+        } else if (existing?.type === 'step.failed') {
+          requiresReplan ||= existing.payload.action === 'replan'
+          replanFailures.push({
+            taskId: failedTask.id,
+            code: existing.payload.code,
+            category: existing.payload.category ?? 'unknown',
+            fingerprint: existing.payload.fingerprint ?? classified.fingerprint,
+          })
+        }
+      }
+      const replanCount = snapshot.events.filter(event => event.type === 'plan.replanned').length
+      const replanLimit = snapshot.contract.budget.maxReplans ?? 0
+      const replanExhausted = requiresReplan
+        && isMasterAgentReplanEnabledV1()
+        && replanCount >= replanLimit
       if (['running', 'awaiting_confirmation'].includes(snapshot.projection.state)) {
-        snapshot = await appendAgentRunEventV1({
+        snapshot = replanExhausted
+          ? await appendAgentRunEventV1({
+              scope: input.scope,
+              runId: snapshot.run.id,
+              type: 'budget.exhausted',
+              payload: { resource: 'replans' },
+              expectedLastSequence: snapshot.projection.lastSequence,
+              now: now(),
+            })
+          : await appendAgentRunEventV1({
+              scope: input.scope,
+              runId: snapshot.run.id,
+              type: 'run.paused',
+              payload: {
+                reason: requiresReplan ? 'master_agent_replan_required' : classified.code,
+                recoverable: true,
+              },
+              expectedLastSequence: snapshot.projection.lastSequence,
+              now: now(),
+            })
+      }
+      if (snapshot.projection.state === 'paused') {
+        const saved = await createAgentRunCheckpointV1({
           scope: input.scope,
           runId: snapshot.run.id,
-          type: 'run.paused',
-          payload: { reason: 'master_agent_execution_failed', recoverable: true },
+          resumePayload: {
+            version: 1,
+            kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+            plan,
+            planHash: await hashMasterAgentPlanV1(plan),
+            budgetEvidence: budget.snapshot(),
+          } satisfies MasterAgentPlanCheckpointV1,
           expectedLastSequence: snapshot.projection.lastSequence,
           now: now(),
         })
+        snapshot = saved.snapshot
+        await notify(input.onDurableBoundary, 'checkpoint.created', snapshot)
+      }
+      if (
+        requiresReplan
+        && replanFailures.length > 0
+        && !replanExhausted
+        && isMasterAgentReplanEnabledV1()
+      ) {
+        let replannedSnapshot: AgentRunSnapshotV1
+        try {
+          const replan = dependencies.replan ?? createMasterAgentReplanV1
+          const nextPlan = await replan({
+            projectId: input.scope.projectId,
+            plan,
+            failures: replanFailures,
+            budget,
+            signal: input.signal,
+          })
+          replannedSnapshot = await replanDurableMasterAgentRunV1({
+            scope: input.scope,
+            runId: snapshot.run.id,
+            nextPlan,
+            rootTaskIds: replanFailures.map(failure => failure.taskId),
+            failures: replanFailures,
+            budgetEvidence: budget.snapshot(),
+            reasonCode: 'same_failure_loop_or_replan_policy',
+            now: now(),
+          })
+        } catch (replanError) {
+          const current = await readAgentRunV1(input.scope, snapshot.run.id)
+          if (current.projection.state === 'paused') {
+            await createAgentRunCheckpointV1({
+              scope: input.scope,
+              runId: current.run.id,
+              resumePayload: {
+                version: 1,
+                kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
+                plan,
+                planHash: await hashMasterAgentPlanV1(plan),
+                budgetEvidence: budget.snapshot(),
+              } satisfies MasterAgentPlanCheckpointV1,
+              expectedLastSequence: current.projection.lastSequence,
+              now: now(),
+            })
+          }
+          throw new Error(`主 Agent 有限重规划未完成：${replanError instanceof Error ? replanError.message : String(replanError)}`)
+        }
+        await notify(input.onDurableBoundary, 'plan.replanned', replannedSnapshot)
+        return runDurableMasterAgentPlanV1({
+          ...input,
+          plan: undefined,
+          conversationId: undefined,
+          budget: undefined,
+          runId: replannedSnapshot.run.id,
+        }, dependencies)
       }
     }
     throw error

@@ -262,6 +262,12 @@
   预留未结算调用；一叶失败保留成功候选，恢复只重跑失败叶，后续角色汇合冻结两叶版本。
   `storyforge:harness:fan-out-v1=disabled` 可无数据迁移回到顺序执行。大纲/正文并行、每叶终态
   receipt、通用审计 fan-out 和 p95/质量 A/B 仍未交付。
+- HARNESS-24 已把主 Agent 失败分成临时、协议、stale、确定性、预算、取消和未知类别，并持久化
+  action/fingerprint 与失败调用预算。同一错误第二次出现后不再原样重试，而是在 RunContract 授权的
+  1 次上限内只 patch 失败任务及下游；身份、Skill、workflow 和权限不可变。契约换代、局部 stale、
+  未受影响候选 carry-forward、对话失效标记和新检查点同事务提交；已确认/已采纳候选不原地重规划。
+  `storyforge:harness:master-agent-replan-v1=disabled` 可关闭该能力。作者任意 steering UI、每叶 receipt
+  和 H3 的 p95/质量 A/B 仍未交付。
 
 ### GOV-1 第一阶段交付证据
 

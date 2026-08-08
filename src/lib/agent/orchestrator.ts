@@ -166,6 +166,13 @@ interface PlannerDependencies {
   complete?: (messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>) => Promise<string>
 }
 
+export interface MasterAgentReplanFailureV1 {
+  taskId: string
+  code: string
+  category: string
+  fingerprint: string
+}
+
 function extractJsonObject(text: string): Record<string, unknown> {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text)?.[1] ?? text
   const start = fenced.indexOf('{')
@@ -415,6 +422,120 @@ export async function createMasterAgentPlan(input: {
     if (input.signal?.aborted) throw error
     console.warn('[master-agent] 计划模型失败，使用确定性路由降级：', error)
     return fallbackPlan(request, workflow)
+  }
+}
+
+export function collectMasterAgentAffectedTaskIdsV1(
+  plan: MasterAgentPlan,
+  rootTaskIds: readonly string[],
+): Set<string> {
+  const affected = new Set(rootTaskIds)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const task of plan.tasks) {
+      if (!affected.has(task.id) && task.dependsOn.some(dependency => affected.has(dependency))) {
+        affected.add(task.id)
+        changed = true
+      }
+    }
+  }
+  return affected
+}
+
+/**
+ * Produces a bounded plan patch. Task identity, Skill, perspective and workflow
+ * stay code-owned; the model may only adjust instructions/dependencies inside
+ * the failed branch selected by the durable runner.
+ */
+export async function createMasterAgentReplanV1(input: {
+  projectId: number
+  plan: MasterAgentPlan
+  failures: readonly MasterAgentReplanFailureV1[]
+  budget: AgentTeamBudgetTracker
+  signal?: AbortSignal
+}, dependencies: PlannerDependencies = {}): Promise<MasterAgentPlan> {
+  if (!input.failures.length) throw new Error('主 Agent 重规划缺少失败证据。')
+  const knownTaskIds = new Set(input.plan.tasks.map(task => task.id))
+  if (input.failures.some(failure => !knownTaskIds.has(failure.taskId))) {
+    throw new Error('主 Agent 重规划失败证据引用了未知任务。')
+  }
+  const affected = collectMasterAgentAffectedTaskIdsV1(
+    input.plan,
+    input.failures.map(failure => failure.taskId),
+  )
+  const config = resolveRequestConfig(
+    useAIConfigStore.getState().config,
+    { category: AGENT_ROLE_CATEGORIES.orchestrator },
+  ).config
+  const messages = [{
+    role: 'system' as const,
+    content: `你是 StoryForge 主 Agent 的受限重规划器。你只能修订失败任务及其下游的 instruction 和
+dependsOn，不能新增、删除或改名任务，不能改变 agentId、skillId、叙事视角或工作流。不要重复原失败
+策略；依赖只能引用原计划任务 ID，且不得形成循环。只输出 JSON：
+{"summary":"修订原因","tasks":[{"id":"允许修订的任务ID","instruction":"新指令","dependsOn":[]}]}。
+不要输出 Markdown。`,
+  }, {
+    role: 'user' as const,
+    content: [
+      `【冻结原计划】\n${JSON.stringify(input.plan)}`,
+      `【允许修订任务】\n${JSON.stringify([...affected])}`,
+      `【失败证据】\n${JSON.stringify(input.failures)}`,
+    ].join('\n\n'),
+  }]
+  const reservation = input.budget.reserveCall({
+    label: '主 Agent 有限重规划',
+    messages,
+    maxOutputTokens: 1_200,
+  })
+  let settled = false
+  try {
+    const output = dependencies.complete
+      ? await dependencies.complete(messages)
+      : await chat(messages, config, {
+          category: 'agent.orchestrator.replan',
+          projectId: input.projectId,
+          configOverrides: { maxTokens: 1200, temperature: 0.1 },
+          contextOverflowPolicy: 'reject',
+        }, input.signal)
+    input.budget.settleCall(reservation, output)
+    settled = true
+    const raw = extractJsonObject(output)
+    const patches = Array.isArray(raw.tasks) ? raw.tasks : []
+    const byId = new Map(input.plan.tasks.map(task => [task.id, task]))
+    let changed = false
+    for (const value of patches) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+      const patch = value as Record<string, unknown>
+      if (typeof patch.id !== 'string' || !affected.has(patch.id)) continue
+      const task = byId.get(patch.id)!
+      const instruction = typeof patch.instruction === 'string'
+        ? patch.instruction.trim().slice(0, 1_000)
+        : ''
+      const dependsOn = Array.isArray(patch.dependsOn)
+        ? [...new Set(patch.dependsOn.filter((item): item is string => (
+            typeof item === 'string' && item !== task.id && knownTaskIds.has(item)
+          )))].slice(0, 5)
+        : task.dependsOn
+      if (!instruction) continue
+      if (instruction !== task.instruction || JSON.stringify(dependsOn) !== JSON.stringify(task.dependsOn)) {
+        byId.set(task.id, { ...task, instruction, dependsOn })
+        changed = true
+      }
+    }
+    if (!changed) throw new Error('主 Agent 重规划没有产生受限范围内的有效变化。')
+    const plan: MasterAgentPlan = {
+      ...input.plan,
+      summary: typeof raw.summary === 'string' && raw.summary.trim()
+        ? raw.summary.trim().slice(0, 500)
+        : `${input.plan.summary}（已根据失败证据有限重规划）`,
+      tasks: input.plan.tasks.map(task => byId.get(task.id)!),
+    }
+    topologicalTasks(plan)
+    return plan
+  } catch (error) {
+    if (!settled) input.budget.settleFailedCall(reservation)
+    throw error
   }
 }
 

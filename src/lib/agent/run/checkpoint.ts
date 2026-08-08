@@ -201,11 +201,9 @@ function recoveryPlan(
   }
 }
 
-export async function createAgentRunCheckpointV1(input: {
-  scope: WorkspaceScope
-  runId: number
+export async function createAgentRunCheckpointInTransactionV1(input: {
+  snapshot: AgentRunSnapshotV1
   resumePayload?: unknown
-  expectedLastSequence?: number
   now?: number
 }): Promise<{ checkpoint: AgentRunCheckpointRecord & { id: number }; snapshot: AgentRunSnapshotV1 }> {
   const resumePayloadJson = input.resumePayload === undefined
@@ -213,7 +211,53 @@ export async function createAgentRunCheckpointV1(input: {
     : canonicalStringify(input.resumePayload)
   const resumePayloadHash = input.resumePayload === undefined
     ? null
-    : await hashCanonicalValue(input.resumePayload)
+    : await waitForHash(input.resumePayload)
+  const snapshot = input.snapshot
+  if (['completed', 'failed', 'cancelled', 'recovery_required'].includes(snapshot.projection.state)) {
+    fail('checkpoint_terminal', `终态 ${snapshot.projection.state} 不能创建检查点`)
+  }
+
+  const throughSequence = snapshot.projection.lastSequence
+  const base: AgentRunCheckpointRecord = {
+    projectId: snapshot.run.projectId,
+    worldGroupId: snapshot.run.worldGroupId ?? null,
+    runId: snapshot.run.id,
+    throughSequence,
+    generation: snapshot.run.generation,
+    contractHash: snapshot.run.contractHash,
+    checkpointHash: '0'.repeat(64),
+    projectionJson: snapshot.run.projectionJson,
+    projectionHash: snapshot.run.projectionHash,
+    resumePayloadJson,
+    resumePayloadHash,
+    createdAt: input.now ?? Date.now(),
+  }
+  base.checkpointHash = await waitForHash(checkpointHashBody(base))
+  const checkpointId = await db.agentRunCheckpoints.add(base) as number
+  const checkpoint = { ...base, id: checkpointId }
+  const event = parseAgentRunEventV1({
+    version: 1,
+    runId: snapshot.run.id,
+    sequence: throughSequence + 1,
+    generation: snapshot.run.generation,
+    projectId: snapshot.run.projectId,
+    worldGroupId: snapshot.run.worldGroupId ?? null,
+    contractHash: snapshot.run.contractHash,
+    type: 'checkpoint.created',
+    payload: { throughSequence, checkpointHash: checkpoint.checkpointHash },
+    createdAt: checkpoint.createdAt,
+  })
+  const next = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, event)
+  return { checkpoint, snapshot: next }
+}
+
+export async function createAgentRunCheckpointV1(input: {
+  scope: WorkspaceScope
+  runId: number
+  resumePayload?: unknown
+  expectedLastSequence?: number
+  now?: number
+}): Promise<{ checkpoint: AgentRunCheckpointRecord & { id: number }; snapshot: AgentRunSnapshotV1 }> {
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
     scopeTransactionTables(db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
@@ -223,42 +267,11 @@ export async function createAgentRunCheckpointV1(input: {
         input.expectedLastSequence != null
         && input.expectedLastSequence !== snapshot.projection.lastSequence
       ) fail('sequence_conflict', '运行已推进，拒绝在过期序号创建检查点')
-      if (['completed', 'failed', 'cancelled', 'recovery_required'].includes(snapshot.projection.state)) {
-        fail('checkpoint_terminal', `终态 ${snapshot.projection.state} 不能创建检查点`)
-      }
-
-      const throughSequence = snapshot.projection.lastSequence
-      const base: AgentRunCheckpointRecord = {
-        projectId: snapshot.run.projectId,
-        worldGroupId: snapshot.run.worldGroupId ?? null,
-        runId: snapshot.run.id,
-        throughSequence,
-        generation: snapshot.run.generation,
-        contractHash: snapshot.run.contractHash,
-        checkpointHash: '0'.repeat(64),
-        projectionJson: snapshot.run.projectionJson,
-        projectionHash: snapshot.run.projectionHash,
-        resumePayloadJson,
-        resumePayloadHash,
-        createdAt: input.now ?? Date.now(),
-      }
-      base.checkpointHash = await waitForHash(checkpointHashBody(base))
-      const checkpointId = await db.agentRunCheckpoints.add(base) as number
-      const checkpoint = { ...base, id: checkpointId }
-      const event = parseAgentRunEventV1({
-        version: 1,
-        runId: snapshot.run.id,
-        sequence: throughSequence + 1,
-        generation: snapshot.run.generation,
-        projectId: snapshot.run.projectId,
-        worldGroupId: snapshot.run.worldGroupId ?? null,
-        contractHash: snapshot.run.contractHash,
-        type: 'checkpoint.created',
-        payload: { throughSequence, checkpointHash: checkpoint.checkpointHash },
-        createdAt: checkpoint.createdAt,
+      return createAgentRunCheckpointInTransactionV1({
+        snapshot,
+        resumePayload: input.resumePayload,
+        now: input.now,
       })
-      const next = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, event)
-      return { checkpoint, snapshot: next }
     },
   ))
 }

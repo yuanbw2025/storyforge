@@ -401,7 +401,8 @@
   持久化并可见。旧配置默认均衡，完整档保留此前上限。
 - 主 Agent 编排与所有领域调用共享节省/均衡/充分三档单轮总预算；每次调用前按冻结输入与
   最大输出预留判定，候选保存估算 token、调用次数和打回次数。整轮只有一次受预算 Canon
-  打回；现阶段复用领域 GenerationNode gate 和物品持有连续性硬判，网络与软审错误不重试。
+  打回；领域 GenerationNode gate 和物品持有连续性硬判保持确定性。新主 Agent durable run 会把
+  失败调用预算持久化；临时/协议错误最多原样重试一次，同一 fingerprint 再现后停止循环。
 - `agentConversations/agentEvents` 持久保存用户消息、计划、任务状态、候选编辑、确认、拒绝
   和错误；刷新后候选仍可恢复。候选确认继续复用原领域 GenerationNode gate，刷新后则用
   冻结快照重新执行并发校验，不会因会话恢复绕开安全边界。
@@ -438,6 +439,11 @@
   账本和候选提交仍串行。并发预算计入 outstanding reservation；一叶失败会保留成功候选，恢复
   只重跑失败叶，汇合任务复用 HARNESS-22 同代 join。大纲、正文、Canon 采纳仍不并行；每叶
   terminal receipt、通用审计 fan-out 和成本/延迟 A/B 尚未完成，可用独立本地开关回到顺序执行。
+- HARNESS-24 已为主 Agent 候选 DAG 增加失败分类与最多一次有限重规划：失败事件记录 category、action
+  和哈希化 fingerprint，同错第二次出现不再原样 retry。模型只能 patch 失败任务及其下游的指令和
+  依赖；任务身份、Skill、workflow 和三注册表权限冻结。换代事务会局部 stale 受影响候选，显式
+  carry-forward 未受影响的待确认候选，并原子写入新契约代际、计划事件和检查点；新下游只有当前代
+  carry 证据才能引用旧代上游。已确认/已采纳 run 不原地重规划，旧契约不补授权，独立开关可关闭。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

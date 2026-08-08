@@ -243,7 +243,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
 
   const budgetRecord = readRecord(record.budget, 'contract.budget')
   const requiredBudgetKeys = ['maxModelCalls', 'maxToolCalls', 'maxInputTokens', 'maxOutputTokens', 'maxAttemptsPerStep'] as const
-  const budgetKeys = [...requiredBudgetKeys, 'maxToolResultTokens', 'maxProtocolErrors'] as const
+  const budgetKeys = [...requiredBudgetKeys, 'maxReplans', 'maxToolResultTokens', 'maxProtocolErrors'] as const
   assertExactKeys(budgetRecord, budgetKeys, requiredBudgetKeys, 'contract.budget')
 
   const acceptance = readArray(record.acceptance, 'contract.acceptance')
@@ -306,6 +306,9 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
       maxInputTokens: readInteger(budgetRecord.maxInputTokens, 'contract.budget.maxInputTokens', { min: 1 }),
       maxOutputTokens: readInteger(budgetRecord.maxOutputTokens, 'contract.budget.maxOutputTokens', { min: 1 }),
       maxAttemptsPerStep: readInteger(budgetRecord.maxAttemptsPerStep, 'contract.budget.maxAttemptsPerStep', { min: 1 }),
+      ...(budgetRecord.maxReplans === undefined ? {} : {
+        maxReplans: readInteger(budgetRecord.maxReplans, 'contract.budget.maxReplans', { min: 0 }),
+      }),
       ...(budgetRecord.maxToolResultTokens === undefined ? {} : {
         maxToolResultTokens: readInteger(
           budgetRecord.maxToolResultTokens,

@@ -82,6 +82,9 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       projection.steps = {}
       projection.state = 'planned'
       break
+    case 'plan.replanned':
+      expectState(projection, event.type, ['planned'])
+      break
     case 'step.scheduled':
       expectState(projection, event.type, ['planned', 'running'])
       if (projection.steps[event.payload.stepId]) throw new ProjectionError(`步骤 ${event.payload.stepId} 重复调度`)
@@ -151,6 +154,21 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       assertCandidate(step, event.payload.candidateHash)
       step.status = 'stale'
       projection.state = 'paused'
+      break
+    }
+    case 'candidate.carried-forward': {
+      expectState(projection, event.type, ['running'])
+      if (event.payload.sourceGeneration >= projection.generation) {
+        throw new ProjectionError('candidate.carried-forward 必须引用旧 generation')
+      }
+      const step = stepFor(projection, event.payload.stepId)
+      if (step.status !== 'scheduled' || step.attempt !== 0) {
+        throw new ProjectionError(`步骤 ${event.payload.stepId} 不是可跨代保留的 scheduled 状态`)
+      }
+      step.status = 'awaiting_confirmation'
+      step.attempt = 1
+      step.candidateHash = event.payload.candidateHash
+      refreshRunningState(projection)
       break
     }
     case 'confirmation.recorded': {
