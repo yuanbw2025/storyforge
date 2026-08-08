@@ -87,6 +87,7 @@ export interface AcceptedAgentRunContractV1 {
 }
 
 export type ContextManifestSourceStatus = 'included' | 'omitted' | 'trimmed'
+export type ContextManifestSourceDeliveryV1 = 'full' | 'truncated'
 
 export interface ContextManifestBoundaryV1 {
   chapterId?: number
@@ -99,6 +100,10 @@ export interface ContextManifestSourceV1 {
   status: ContextManifestSourceStatus
   contentHash?: string
   tokens: number
+  /** Optional for manifests created before HARNESS-15. */
+  delivery?: ContextManifestSourceDeliveryV1
+  /** Reader output size before per-source capping; never contains source text. */
+  originalTokens?: number
   boundary?: ContextManifestBoundaryV1
   readerVersion?: string
 }

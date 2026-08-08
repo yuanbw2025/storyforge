@@ -34,6 +34,7 @@ import type {
   WorkspaceScope,
 } from '../types'
 import {
+  attachAgentContextInputStateV1,
   evidenceFromContextResult,
   resolveAgentContextPolicy,
   type AgentContextEvidence,
@@ -41,6 +42,8 @@ import {
 } from './context-policy'
 import {
   getDefaultAgentSkillV1,
+  buildAgentSkillInputGuidanceV1,
+  resolveAgentSkillInputStateV1,
   resolveAgentSkillV1,
   type AgentSkillExecutionModeV1,
   type AgentSkillId,
@@ -62,6 +65,7 @@ export interface OutlineCopilotInput {
   worldGroupId: number | null
   authorRequest: string
   supplementalContext: string
+  inputGuidance: string
   mode: OutlineCopilotMode
   parentVolumeId: number | null
   nodes: OutlineNode[]
@@ -294,7 +298,7 @@ function buildOutlineMessages(input: OutlineCopilotInput) {
     nodes: input.nodes,
     volumes: input.volumes,
     assembled: input.assembled,
-    hint: `${input.authorRequest}${supplemental}`,
+    hint: `${input.inputGuidance}\n\n${input.authorRequest}${supplemental}`,
     options: { parameterValues: input.parameterValues },
   })
   if (plan.status === 'skip') throw new Error(plan.reason)
@@ -412,12 +416,19 @@ export async function prepareOutlineCopilot(input: {
   const snapshot = snapshotOf(currentNodes, worldGroupId, mode, parentVolumeId)
   if (before.serialized !== snapshot.serialized) throw new OutlineCopilotStaleError()
 
+  const inputState = resolveAgentSkillInputStateV1(skill, [assembled])
+  const contextEvidence = attachAgentContextInputStateV1(
+    evidenceFromContextResult(contextProfile, assembled),
+    inputState,
+  )
+  const inputGuidance = buildAgentSkillInputGuidanceV1(skill, inputState)
   const nodeInput: OutlineCopilotInput = {
     project,
     scope,
     worldGroupId,
     authorRequest: request,
     supplementalContext: input.supplementalContext ?? '',
+    inputGuidance,
     mode,
     parentVolumeId,
     nodes: rowsInWorld(currentNodes, worldGroupId),
@@ -438,7 +449,7 @@ export async function prepareOutlineCopilot(input: {
     snapshot,
     mode,
     parentVolumeId,
-    contextEvidence: evidenceFromContextResult(contextProfile, assembled),
+    contextEvidence,
     label: mode === 'volumes'
       ? '卷级大纲'
       : `《${targetVolume!.title}》章节大纲`,

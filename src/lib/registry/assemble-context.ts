@@ -5,7 +5,12 @@
  */
 import { estimateTokens, getModelPreset, type ContextLayer, type ContextSegment } from '../ai/context-budget'
 import { CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
-import type { AssembleContextInput, AssembleContextResult, ContextSource } from './types'
+import type {
+  AssembleContextInput,
+  AssembleContextResult,
+  AssembleContextSourceEvidence,
+  ContextSource,
+} from './types'
 import { prepareContinuityContext } from '../ai/chapter-memory/continuity-context'
 import { db } from '../db/schema'
 import { assertRecordInScope, resolveReadScope } from '../world-engine/scope'
@@ -13,6 +18,13 @@ import { assertRecordInScope, resolveReadScope } from '../world-engine/scope'
 /** 拿不到模型时的保守默认输入预算(原固定 24K 偏紧,放宽避免内部提前裁) */
 const FALLBACK_INPUT_BUDGET = 48_000
 const LAYERS_BY_TRIM_PRIORITY: ContextLayer[] = ['L3', 'L2', 'L1']
+
+interface KeyedContextSegment {
+  key: string
+  segment: ContextSegment
+  originalTokens: number
+  delivery: 'full' | 'truncated'
+}
 
 /**
  * 输入预算 = 所选模型的上下文窗口(减输出预留与安全边际)。
@@ -55,27 +67,39 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       }
     : resolvedBase
   const omitted: string[] = []
-  const keyedSegments: { key: string; segment: ContextSegment }[] = []
+  const omittedEvidence: AssembleContextSourceEvidence[] = []
+  const keyedSegments: KeyedContextSegment[] = []
+
+  const omit = (key: string): void => {
+    omitted.push(key)
+    omittedEvidence.push({
+      key,
+      status: 'omitted',
+      delivery: 'none',
+      originalTokens: 0,
+      inputTokens: 0,
+    })
+  }
 
   for (const source of selected) {
     if (source.ownerFrom && source.ownerFrom !== 'workspace' && source.ownerFrom !== 'instance') {
       const ownerId = source.ownerFrom === 'world' ? scope.worldId : scope.workId
       if (!Number.isInteger(ownerId)) {
-        omitted.push(source.key)
+        omit(source.key)
         continue
       }
     }
     if (!requirementsMet(source, resolvedInput)) {
-      omitted.push(source.key)
+      omit(source.key)
       continue
     }
     if (source.enabled && !await source.enabled(resolvedInput)) {
-      omitted.push(source.key)
+      omit(source.key)
       continue
     }
     const content = await source.read(resolvedInput)
     if (!content.trim()) {
-      omitted.push(source.key)
+      omit(source.key)
       continue
     }
     // 单一源也不能突破整个请求预算。L0/protected 只表示不得整段丢弃，
@@ -84,16 +108,19 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       ? Math.max(0.1, Math.min(1, input.sourceBudgetScale!))
       : 1
     const scaledSourceBudget = Math.max(64, Math.floor(source.budgetTokens * sourceBudgetScale))
+    const originalTokens = estimateTokens(content)
     const capped = capBySourceBudget(content, Math.min(scaledSourceBudget, inputBudget))
     keyedSegments.push({
       key: source.key,
       segment: {
         label: source.label,
         layer: source.layer,
-        content: capped,
-        tokens: estimateTokens(capped),
+        content: capped.content,
+        tokens: estimateTokens(capped.content),
         trimmable: source.layer !== 'L0' && !source.protectedFromTrim,
       },
+      originalTokens,
+      delivery: capped.truncated ? 'truncated' : 'full',
     })
   }
 
@@ -102,6 +129,31 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
   const { kept, trimmed } = trimToFit(keyedSegments, inputBudget)
   const segments = kept.map(s => s.segment)
   const totalInputTokens = segments.reduce((sum, s) => sum + s.tokens, 0)
+  const keptKeys = new Set(kept.map(item => item.key))
+  const sourceEvidence: AssembleContextSourceEvidence[] = selected.map(source => {
+    const omittedItem = omittedEvidence.find(item => item.key === source.key)
+    if (omittedItem) return omittedItem
+    const item = keyedSegments.find(segment => segment.key === source.key)
+    if (!item) {
+      throw new Error(`[assembleContext] 来源 ${source.key} 缺少装配证据`)
+    }
+    if (!keptKeys.has(source.key)) {
+      return {
+        key: source.key,
+        status: 'trimmed',
+        delivery: 'none',
+        originalTokens: item.originalTokens,
+        inputTokens: 0,
+      }
+    }
+    return {
+      key: source.key,
+      status: 'included',
+      delivery: item.delivery,
+      originalTokens: item.originalTokens,
+      inputTokens: item.segment.tokens,
+    }
+  })
 
   return {
     text: segments.map(s => s.content).join('\n\n'),
@@ -109,6 +161,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
     included: kept.map(s => s.key),
     omitted,
     trimmed,
+    sourceEvidence,
     totalInputTokens,
     inputBudget,
     overBudgetBeforeTrim,
@@ -156,8 +209,13 @@ function requirementsMet(source: ContextSource, input: AssembleContextInput): bo
   return true
 }
 
-function capBySourceBudget(content: string, budgetTokens: number): string {
-  if (!budgetTokens || estimateTokens(content) <= budgetTokens) return content
+function capBySourceBudget(
+  content: string,
+  budgetTokens: number,
+): { content: string; truncated: boolean } {
+  if (!budgetTokens || estimateTokens(content) <= budgetTokens) {
+    return { content, truncated: false }
+  }
   const marker = '\n…（该上下文源已按预算截断）'
   let low = 0
   let high = content.length
@@ -166,13 +224,13 @@ function capBySourceBudget(content: string, budgetTokens: number): string {
     if (estimateTokens(`${content.slice(0, middle)}${marker}`) <= budgetTokens) low = middle
     else high = middle - 1
   }
-  return `${content.slice(0, low)}${marker}`
+  return { content: `${content.slice(0, low)}${marker}`, truncated: true }
 }
 
 function trimToFit(
-  segments: { key: string; segment: ContextSegment }[],
+  segments: KeyedContextSegment[],
   inputBudget: number,
-): { kept: { key: string; segment: ContextSegment }[]; trimmed: string[] } {
+): { kept: KeyedContextSegment[]; trimmed: string[] } {
   let kept = [...segments]
   const trimmed: string[] = []
   let total = kept.reduce((sum, s) => sum + s.segment.tokens, 0)

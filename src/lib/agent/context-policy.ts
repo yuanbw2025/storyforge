@@ -1,3 +1,5 @@
+import type { AssembleContextSourceEvidence } from '../registry/types'
+
 export const AGENT_CONTEXT_PROFILES = ['lean', 'balanced', 'full'] as const
 export type AgentContextProfile = typeof AGENT_CONTEXT_PROFILES[number]
 
@@ -25,8 +27,76 @@ export interface AgentContextEvidence {
   included: string[]
   omitted: string[]
   trimmed: string[]
+  sourceEvidence?: AssembleContextSourceEvidence[]
+  inputState?: AgentContextInputStateEvidenceV1
   estimatedInputTokens: number
   inputBudgetTokens: number
+}
+
+export const AGENT_CONTEXT_INPUT_STATES = ['empty', 'partial', 'complete'] as const
+export type AgentContextInputStateV1 = typeof AGENT_CONTEXT_INPUT_STATES[number]
+
+export const AGENT_CONTEXT_INPUT_HANDLINGS = [
+  'create-from-request',
+  'reference-and-create',
+  'grounded-transform',
+  'require-upstream',
+  'require-author-input',
+] as const
+export type AgentContextInputHandlingV1 = typeof AGENT_CONTEXT_INPUT_HANDLINGS[number]
+
+export interface AgentContextInputStateEvidenceV1 {
+  version: 1
+  state: AgentContextInputStateV1
+  handling: AgentContextInputHandlingV1
+  consideredSourceKeys: string[]
+  availableSourceKeys: string[]
+  missingSourceKeys: string[]
+  truncatedSourceKeys: string[]
+  trimmedSourceKeys: string[]
+}
+
+interface ContextEvidenceInput {
+  included: readonly string[]
+  omitted: readonly string[]
+  trimmed: readonly string[]
+  sourceEvidence?: readonly AssembleContextSourceEvidence[]
+  totalInputTokens: number
+  inputBudget: number
+}
+
+function mergeSourceEvidence(
+  results: readonly ContextEvidenceInput[],
+): AssembleContextSourceEvidence[] | undefined {
+  const evidence = results.flatMap(result => result.sourceEvidence ?? [])
+  if (!evidence.length) return undefined
+  const byKey = new Map<string, AssembleContextSourceEvidence>()
+  for (const source of evidence) {
+    const current = byKey.get(source.key)
+    if (!current) {
+      byKey.set(source.key, { ...source })
+      continue
+    }
+    const status = current.status === 'included' || source.status === 'included'
+      ? 'included'
+      : current.status === 'trimmed' || source.status === 'trimmed'
+        ? 'trimmed'
+        : 'omitted'
+    const inputTokens = current.inputTokens + source.inputTokens
+    const originalTokens = current.originalTokens + source.originalTokens
+    byKey.set(source.key, {
+      key: source.key,
+      status,
+      delivery: status !== 'included'
+        ? 'none'
+        : current.delivery === 'truncated' || source.delivery === 'truncated'
+          ? 'truncated'
+          : 'full',
+      originalTokens,
+      inputTokens,
+    })
+  }
+  return [...byKey.values()]
 }
 
 export const DEFAULT_AGENT_CONTEXT_PROFILES: AgentContextProfiles = {
@@ -99,6 +169,7 @@ export function evidenceFromContextResult(
     included: readonly string[]
     omitted: readonly string[]
     trimmed: readonly string[]
+    sourceEvidence?: readonly AssembleContextSourceEvidence[]
     totalInputTokens: number
     inputBudget: number
   },
@@ -108,6 +179,9 @@ export function evidenceFromContextResult(
     included: [...new Set(result.included)],
     omitted: [...new Set(result.omitted)],
     trimmed: [...new Set(result.trimmed)],
+    ...(result.sourceEvidence?.length
+      ? { sourceEvidence: result.sourceEvidence.map(source => ({ ...source })) }
+      : {}),
     estimatedInputTokens: result.totalInputTokens,
     inputBudgetTokens: result.inputBudget,
   }
@@ -115,20 +189,56 @@ export function evidenceFromContextResult(
 
 export function mergeContextEvidence(
   profile: AgentContextProfile,
-  results: Array<{
-    included: readonly string[]
-    omitted: readonly string[]
-    trimmed: readonly string[]
-    totalInputTokens: number
-    inputBudget: number
-  }>,
+  results: ContextEvidenceInput[],
 ): AgentContextEvidence {
+  const sourceEvidence = mergeSourceEvidence(results)
   return {
     profile,
     included: [...new Set(results.flatMap(result => result.included))],
     omitted: [...new Set(results.flatMap(result => result.omitted))],
     trimmed: [...new Set(results.flatMap(result => result.trimmed))],
+    ...(sourceEvidence ? { sourceEvidence } : {}),
     estimatedInputTokens: results.reduce((sum, result) => sum + result.totalInputTokens, 0),
     inputBudgetTokens: results.reduce((sum, result) => sum + result.inputBudget, 0),
   }
+}
+
+export function classifyAgentContextInputStateV1(input: {
+  consideredSourceKeys: readonly string[]
+  handling: Record<AgentContextInputStateV1, AgentContextInputHandlingV1>
+  results: readonly ContextEvidenceInput[]
+}): AgentContextInputStateEvidenceV1 {
+  const consideredSourceKeys = [...new Set(input.consideredSourceKeys)]
+  if (!consideredSourceKeys.length) throw new Error('Agent Skill 输入状态来源不得为空')
+  const included = new Set(input.results.flatMap(result => result.included))
+  const trimmed = new Set(input.results.flatMap(result => result.trimmed))
+  const sourceEvidence = mergeSourceEvidence(input.results) ?? []
+  const sourceByKey = new Map(sourceEvidence.map(source => [source.key, source]))
+  const availableSourceKeys = consideredSourceKeys.filter(key => {
+    const evidence = sourceByKey.get(key)
+    return included.has(key) || trimmed.has(key) || Boolean(evidence && evidence.originalTokens > 0)
+  })
+  const missingSourceKeys = consideredSourceKeys.filter(key => !availableSourceKeys.includes(key))
+  const state: AgentContextInputStateV1 = availableSourceKeys.length === 0
+    ? 'empty'
+    : missingSourceKeys.length === 0
+      ? 'complete'
+      : 'partial'
+  return {
+    version: 1,
+    state,
+    handling: input.handling[state],
+    consideredSourceKeys,
+    availableSourceKeys,
+    missingSourceKeys,
+    truncatedSourceKeys: consideredSourceKeys.filter(key => sourceByKey.get(key)?.delivery === 'truncated'),
+    trimmedSourceKeys: consideredSourceKeys.filter(key => trimmed.has(key)),
+  }
+}
+
+export function attachAgentContextInputStateV1(
+  evidence: AgentContextEvidence,
+  inputState: AgentContextInputStateEvidenceV1,
+): AgentContextEvidence {
+  return { ...evidence, inputState }
 }

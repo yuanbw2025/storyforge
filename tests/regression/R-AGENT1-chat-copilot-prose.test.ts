@@ -149,6 +149,11 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     expect(prepared.outlineNodeId).toBe(firstId)
     expect(prepared.contextSources).toContain('chapterOutline')
     expect(prepared.contextSources).toContain('worldview')
+    expect(prepared.contextEvidence.inputState).toMatchObject({
+      state: 'partial',
+      handling: 'reference-and-create',
+    })
+    expect(prompt).toContain('partial / reference-and-create')
     expect(prompt).toContain('第一章：海床之光')
     expect(prompt).toContain('盐海每十年退潮')
     expect(await db.chapters.count()).toBe(0)

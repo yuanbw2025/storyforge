@@ -19,6 +19,7 @@ import {
   type WorkspaceScopeLike,
 } from '../world-engine/scope'
 import {
+  attachAgentContextInputStateV1,
   mergeContextEvidence,
   resolveAgentContextPolicy,
   splitAgentContextPolicy,
@@ -26,7 +27,12 @@ import {
   type AgentContextProfile,
 } from './context-policy'
 import { AGENT_TOOL_BY_NAME, executeAgentTool } from './tool-registry'
-import { resolveAgentSkillV1, type AgentSkillId } from './skill-registry'
+import {
+  buildAgentSkillInputGuidanceV1,
+  resolveAgentSkillInputStateV1,
+  resolveAgentSkillV1,
+  type AgentSkillId,
+} from './skill-registry'
 
 const WORLD_ORIGIN_MAX_CHARS = 12_000
 
@@ -47,6 +53,7 @@ export interface WorldOriginSnapshot {
 export interface WorldOriginCopilotInput extends WorldOriginCopilotScope {
   authorRequest: string
   contextText: string
+  inputGuidance: string
   snapshot: WorldOriginSnapshot
   config: AIConfig
   routingCategory?: string
@@ -167,6 +174,13 @@ export async function prepareWorldOriginCopilot(
   }
 
   const snapshot = snapshotOf(row)
+  const contextResults = [status.meta, worldview.meta]
+  const inputState = resolveAgentSkillInputStateV1(skill, contextResults)
+  const contextEvidence = attachAgentContextInputStateV1(
+    mergeContextEvidence(contextProfile, contextResults),
+    inputState,
+  )
+  const inputGuidance = buildAgentSkillInputGuidanceV1(skill, inputState)
   const nodeInput: WorldOriginCopilotInput = {
     projectId: input.projectId,
     scope,
@@ -175,7 +189,9 @@ export async function prepareWorldOriginCopilot(
     worldGroupId: input.worldGroupId,
     signal: input.signal,
     authorRequest: assertAuthorRequest(input.authorRequest),
+    inputGuidance,
     contextText: [
+      inputGuidance,
       '【只读项目概况】',
       status.content,
       '【当前世界的已登记设定】',
@@ -191,7 +207,7 @@ export async function prepareWorldOriginCopilot(
     prepared: prepareGenerationNode(node, nodeInput),
     snapshot,
     contextSources: [...status.meta.included, ...worldview.meta.included],
-    contextEvidence: mergeContextEvidence(contextProfile, [status.meta, worldview.meta]),
+    contextEvidence,
   }
 }
 

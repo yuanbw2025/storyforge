@@ -128,6 +128,11 @@ describe('AGENT-1 27.1-d · ChatCopilot 灵感反推闭环', () => {
     const prompt = prepared.prepared.messages.map(message => message.content).join('\n')
 
     expect(prepared.contextSources).toEqual(['inspirationWorkspace'])
+    expect(prepared.contextEvidence.inputState).toMatchObject({
+      state: 'complete',
+      handling: 'grounded-transform',
+    })
+    expect(prompt).toContain('complete / grounded-transform')
     expect(prepared.selectedFragmentIds).toEqual(['idea-selected'])
     expect(prompt).toContain('旧城每次下雨都会忘记一个人')
     expect(prompt).not.toContain('本轮不应读取的秘密碎片')

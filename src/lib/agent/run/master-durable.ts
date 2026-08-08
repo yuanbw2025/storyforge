@@ -21,6 +21,7 @@ import type { AgentTeamBudgetEvidence } from '../team-budget'
 import {
   getAgentSkillV1,
   resolveAgentSkillV1,
+  validateAgentSkillContextEvidenceV1,
   resolveAgentSkillContextSourceKeysV1,
   type AgentSkillId,
   type DomainAgentId,
@@ -442,6 +443,14 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
   if (!Array.isArray(payload.contextSources) || payload.contextSources.some(source => typeof source !== 'string')) {
     fail(`${label} payload contextSources 无效`)
   }
+  if (payload.contextEvidence) {
+    const skill = resolveAgentSkillV1(payload.agentId, payload.skillId)
+    validateAgentSkillContextEvidenceV1(skill, payload.contextEvidence)
+    if (
+      payload.contextSources.length !== payload.contextEvidence.included.length
+      || payload.contextSources.some((source, index) => source !== payload.contextEvidence!.included[index])
+    ) fail(`${label} payload contextSources 与上下文证据不一致`)
+  }
   if (typeof payload.runId !== 'number' || !Number.isInteger(payload.runId) || payload.runId < 1) fail(`${label} payload runId 无效`)
   if (payload.runStepId !== taskStepId(payload.taskId)) fail(`${label} payload runStepId 不匹配`)
   readHash(payload.candidateHash, `${label} payload candidateHash`)
@@ -810,6 +819,20 @@ export async function runDurableMasterAgentPlanV1(
         fail(`主 Agent durable trace 候选身份与当前任务 ${task.id} 不一致`)
       }
       assertCandidateMatchesTaskSkill(task, candidate.payload, `主 Agent durable trace 候选 ${task.id}`)
+      if (candidate.payload.contextEvidence) {
+        const skill = resolveAgentSkillV1(task.agentId, task.skillId)
+        validateAgentSkillContextEvidenceV1(skill, candidate.payload.contextEvidence)
+        if (
+          candidate.payload.contextSources.length !== candidate.payload.contextEvidence.included.length
+          || candidate.payload.contextSources.some((source, index) => (
+            source !== candidate.payload.contextEvidence!.included[index]
+          ))
+        ) fail(`主 Agent durable trace 候选 ${task.id} 的上下文来源与证据不一致`)
+      }
+      const allowedSources = new Set(snapshot.contract.permissions.contextSourceKeys)
+      if (candidate.payload.contextSources.some(source => !allowedSources.has(source))) {
+        fail(`主 Agent durable trace 候选 ${task.id} 使用了契约未授权的上下文源`)
+      }
       if (
         task.agentId === 'prose'
         && (candidate.payload.perspectiveCharacterId ?? null) !== (task.perspectiveCharacterId ?? null)

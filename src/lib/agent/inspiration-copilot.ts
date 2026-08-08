@@ -31,13 +31,19 @@ import type {
   InspirationWorkspace,
 } from '../types/inspiration-workspace'
 import {
+  attachAgentContextInputStateV1,
   evidenceFromContextResult,
   resolveAgentContextPolicy,
   type AgentContextEvidence,
   type AgentContextProfile,
 } from './context-policy'
 import { executeAgentTool } from './tool-registry'
-import { resolveAgentSkillV1, type AgentSkillId } from './skill-registry'
+import {
+  buildAgentSkillInputGuidanceV1,
+  resolveAgentSkillInputStateV1,
+  resolveAgentSkillV1,
+  type AgentSkillId,
+} from './skill-registry'
 import {
   isLegacyReadScope,
   readOwnedRows,
@@ -62,6 +68,7 @@ export interface InspirationCopilotInput {
   mode: InspirationResultMode
   authorRequest: string
   contextText: string
+  inputGuidance: string
   selectedFragmentIds: string[]
   parentVersionId: string | null
   snapshot: InspirationWorkspaceSnapshot
@@ -241,6 +248,12 @@ export async function prepareInspirationCopilot(input: {
   let previousResult: InspirationCopilotResult | null = null
   if (parent) previousResult = parseResult(parent.resultJson, mode)
 
+  const inputState = resolveAgentSkillInputStateV1(skill, [context.meta])
+  const contextEvidence = attachAgentContextInputStateV1(
+    evidenceFromContextResult(contextProfile, context.meta),
+    inputState,
+  )
+  const inputGuidance = buildAgentSkillInputGuidanceV1(skill, inputState)
   const nodeInput: InspirationCopilotInput = {
     projectId: input.projectId,
     scope,
@@ -248,7 +261,8 @@ export async function prepareInspirationCopilot(input: {
     genres: project.genres?.join('/') || project.genre || '',
     mode,
     authorRequest: assertAuthorRequest(input.authorRequest),
-    contextText: context.content,
+    contextText: `${inputGuidance}\n\n${context.content}`,
+    inputGuidance,
     selectedFragmentIds,
     parentVersionId: parent?.id ?? null,
     snapshot,
@@ -265,7 +279,7 @@ export async function prepareInspirationCopilot(input: {
     contextSources: context.meta.included,
     selectedFragmentIds,
     snapshot,
-    contextEvidence: evidenceFromContextResult(contextProfile, context.meta),
+    contextEvidence,
   }
 }
 

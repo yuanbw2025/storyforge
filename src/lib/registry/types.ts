@@ -410,12 +410,31 @@ export interface ContextSource {
   read: (input: AssembleContextInput) => Promise<string>
 }
 
+export type AssembleContextSourceStatus = 'included' | 'omitted' | 'trimmed'
+export type AssembleContextSourceDelivery = 'full' | 'truncated' | 'none'
+
+/**
+ * Per-source delivery evidence derived by assembleContext(). It records only
+ * token counts and delivery state; source text remains in segments/business tables.
+ */
+export interface AssembleContextSourceEvidence {
+  key: string
+  status: AssembleContextSourceStatus
+  delivery: AssembleContextSourceDelivery
+  /** Tokens returned by the registered reader before its source budget was applied. */
+  originalTokens: number
+  /** Tokens actually delivered to the model. Zero for omitted/trimmed sources. */
+  inputTokens: number
+}
+
 export interface AssembleContextResult {
   text: string
   segments: ContextSegment[]
   included: string[]
   omitted: string[]
   trimmed: string[]
+  /** Optional for historical/test fixtures; production assembleContext always supplies it. */
+  sourceEvidence?: AssembleContextSourceEvidence[]
   totalInputTokens: number
   inputBudget: number
   overBudgetBeforeTrim: boolean

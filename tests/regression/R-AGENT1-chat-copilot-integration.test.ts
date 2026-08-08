@@ -56,6 +56,11 @@ describe('AGENT-1 · ChatCopilot 注册表真实链路', () => {
 
     expect(prepared.contextSources).toContain('projectStatus')
     expect(prepared.contextSources).toContain('worldview')
+    expect(prepared.contextEvidence.inputState).toMatchObject({
+      state: 'partial',
+      handling: 'reference-and-create',
+    })
+    expect(prepared.prepared.messages.some(message => message.content.includes('partial / reference-and-create'))).toBe(true)
     expect(prepared.prepared.messages.some(message => message.content.includes('旧世界由潮汐孕育'))).toBe(true)
 
     const adopted = await adoptGenerationNodeOutput(

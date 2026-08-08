@@ -22,6 +22,7 @@ import {
   scopeTransactionTables,
 } from '../world-engine/scope'
 import {
+  attachAgentContextInputStateV1,
   evidenceFromContextResult,
   resolveAgentContextPolicy,
   type AgentContextEvidence,
@@ -35,6 +36,8 @@ import {
 } from './information-boundary'
 import {
   getDefaultAgentSkillV1,
+  buildAgentSkillInputGuidanceV1,
+  resolveAgentSkillInputStateV1,
   resolveAgentSkillV1,
   resolveAgentSkillContextSourceKeysV1,
   type AgentSkillExecutionModeV1,
@@ -70,6 +73,7 @@ export interface ProseCopilotInput {
   worldGroupId: number | null
   authorRequest: string
   supplementalContext: string
+  inputGuidance: string
   operation: ProseCopilotOperation
   outlineNode: OutlineNode
   chapter: Chapter | null
@@ -319,7 +323,7 @@ function buildProseMessages(input: ProseCopilotInput) {
   const wordCountHint = Number.isFinite(targetWordCount) && targetWordCount > 0
     ? `\n\n【节点字数目标】正文候选尽量接近 ${Math.floor(targetWordCount)} 字。`
     : ''
-  const hint = `${input.authorRequest}${wordCountHint}${supplemental}`
+  const hint = `${input.inputGuidance}\n\n${input.authorRequest}${wordCountHint}${supplemental}`
   if (input.operation === 'continue') {
     const context = characters ? `${world}\n\n${characters}` : world
     return buildContinuePrompt(
@@ -565,12 +569,19 @@ export async function prepareProseCopilot(input: {
   })
   const current = await readSnapshot(scope, snapshot, worldGroupId)
   if (!sameSnapshot(current, snapshot)) throw new ProseCopilotStaleError()
+  const inputState = resolveAgentSkillInputStateV1(skill, [assembled])
+  const contextEvidence = attachAgentContextInputStateV1(
+    evidenceFromContextResult(contextProfile, assembled),
+    inputState,
+  )
+  const inputGuidance = buildAgentSkillInputGuidanceV1(skill, inputState)
   const nodeInput: ProseCopilotInput = {
     project,
     scope,
     worldGroupId,
     authorRequest: request,
     supplementalContext: input.supplementalContext ?? '',
+    inputGuidance,
     operation,
     outlineNode: target.outline,
     chapter: target.chapter,
@@ -594,7 +605,7 @@ export async function prepareProseCopilot(input: {
     snapshot,
     operation,
     outlineNodeId: target.outline.id!,
-    contextEvidence: evidenceFromContextResult(contextProfile, assembled),
+    contextEvidence,
     perspectiveCharacterId,
     informationBoundary,
     label: operation === 'continue'

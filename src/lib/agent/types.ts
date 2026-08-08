@@ -1,4 +1,5 @@
 import type { AIProvider } from '../types/ai'
+import type { AssembleContextSourceEvidence } from '../registry/types'
 import type { AgentContextPolicy } from './context-policy'
 import type { WorkspaceScope } from '../types/world-ownership'
 
@@ -44,6 +45,7 @@ export interface AgentToolResult {
     included: string[]
     omitted: string[]
     trimmed: string[]
+    sourceEvidence?: AssembleContextSourceEvidence[]
     totalInputTokens: number
     inputBudget: number
     overBudgetBeforeTrim: boolean

@@ -979,6 +979,13 @@ CHIRON 四类信息可映射到现有结构：
 
 ### H5：提示词/上下文瘦身与自动治理
 
+**输入状态与交付证据实施状态（HARNESS-15，2026-08-08）**
+
+- `assembleContext()` 在兼容原 `included/omitted/trimmed` 的同时，新增逐来源交付证据：原始 token、实际输入 token、全文/截断/未交付状态。单源预算截断不再只靠正文尾部标记，Context Manifest 也会记录 `delivery/originalTokens`，但仍不复制手稿全文；旧 manifest 缺少新可选字段时继续按原 hash 解析；
+- 每个 `AGENT_SKILLS` 条目新增输入策略契约，明确哪些正式 `CONTEXT_SOURCES` 决定 `empty/partial/complete`，并为当前状态选择 `create-from-request`、`reference-and-create`、`grounded-transform`、`require-upstream` 或 `require-author-input`。五个领域 copilot 均从真实装配结果确定状态，提示词只注入命中的一条短策略；
+- 输入状态、缺失来源、单源截断和总预算移除证据进入主 Agent 候选 hash/durable trace。首次持久化和恢复都会拒绝来源越权、状态伪造、token 伪报以及与冻结 Skill 不一致的策略；H15 之前没有输入状态字段的历史候选仍可恢复；
+- 本单元没有把尾部截断包装成语义压缩，也没有新增压缩模型调用。压缩产物契约、约束保真验证、按来源全文回退、失败后受限升级以及同模型配对 A/B 仍属于 H5 后续交付单元。
+
 **范围**
 
 - 建立 system prompt、tool descriptions、skills/source bundles 的 ownership map；

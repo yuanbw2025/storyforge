@@ -145,6 +145,11 @@ describe('AGENT-1 27.1-d · ChatCopilot 角色生成闭环', () => {
 
     expect(prepared.contextSources).toContain('worldview')
     expect(prepared.contextSources).toContain('characters')
+    expect(prepared.contextEvidence.inputState).toMatchObject({
+      state: 'partial',
+      handling: 'reference-and-create',
+    })
+    expect(prompt).toContain('partial / reference-and-create')
     expect(prompt).toContain('盐海退潮后')
     expect(prompt).toContain('陆潮')
     expect(prompt).toContain('界行者')

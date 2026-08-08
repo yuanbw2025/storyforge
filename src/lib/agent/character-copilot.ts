@@ -36,6 +36,7 @@ import {
   scopeTransactionTables,
 } from '../world-engine/scope'
 import {
+  attachAgentContextInputStateV1,
   mergeContextEvidence,
   resolveAgentContextPolicy,
   splitAgentContextPolicy,
@@ -43,7 +44,12 @@ import {
   type AgentContextProfile,
 } from './context-policy'
 import { AGENT_TOOL_BY_NAME, executeAgentTool } from './tool-registry'
-import { resolveAgentSkillV1, type AgentSkillId } from './skill-registry'
+import {
+  buildAgentSkillInputGuidanceV1,
+  resolveAgentSkillInputStateV1,
+  resolveAgentSkillV1,
+  type AgentSkillId,
+} from './skill-registry'
 
 export const MAX_CHARACTER_CANDIDATE_CHARS = 40_000
 const MAX_CHARACTER_NAME_CHARS = 80
@@ -70,6 +76,7 @@ export interface CharacterCopilotInput {
   genres: string
   worldGroupId: number | null
   authorRequest: string
+  inputGuidance: string
   worldContext: string
   characterContext: string
   contextSources: string[]
@@ -276,14 +283,15 @@ function buildCharacterCopilotPrompt(input: CharacterCopilotInput) {
     input.authorRequest,
   )
   const contract = structuredOutputContract()
+  const inputPolicy = input.inputGuidance
   const systemIndex = messages.findIndex(message => message.role === 'system')
   if (systemIndex >= 0) {
     messages[systemIndex] = {
       ...messages[systemIndex],
-      content: `${messages[systemIndex].content}\n\n${contract}`,
+      content: `${messages[systemIndex].content}\n\n${inputPolicy}\n\n${contract}`,
     }
   } else {
-    messages.unshift({ role: 'system', content: contract })
+    messages.unshift({ role: 'system', content: `${inputPolicy}\n\n${contract}` })
   }
   return messages
 }
@@ -367,6 +375,13 @@ export async function prepareCharacterCopilot(input: {
   const afterRead = await readCharacterRosterSnapshot(input.projectId, worldGroupId, scope)
   if (beforeRead.serialized !== afterRead.serialized) throw new CharacterCopilotStaleError()
 
+  const contextResults = [worldview.meta, characters.meta]
+  const inputState = resolveAgentSkillInputStateV1(skill, contextResults)
+  const contextEvidence = attachAgentContextInputStateV1(
+    mergeContextEvidence(contextProfile, contextResults),
+    inputState,
+  )
+  const inputGuidance = buildAgentSkillInputGuidanceV1(skill, inputState)
   const nodeInput: CharacterCopilotInput = {
     projectId: input.projectId,
     scope,
@@ -374,6 +389,7 @@ export async function prepareCharacterCopilot(input: {
     genres: project.genres?.join('/') || project.genre || '',
     worldGroupId,
     authorRequest: assertAuthorRequest(input.authorRequest),
+    inputGuidance,
     worldContext: [
       worldview.content,
       input.supplementalContext?.trim()
@@ -394,7 +410,7 @@ export async function prepareCharacterCopilot(input: {
     prepared: prepareGenerationNode(node, nodeInput),
     contextSources: nodeInput.contextSources,
     snapshot: afterRead,
-    contextEvidence: mergeContextEvidence(contextProfile, [worldview.meta, characters.meta]),
+    contextEvidence,
   }
 }
 

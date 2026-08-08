@@ -3,6 +3,7 @@ import { CONTEXT_SOURCE_BY_KEY } from '../../registry/context-sources'
 import type { AssembleContextResult } from '../../registry/types'
 import type {
   ContextManifestBoundaryV1,
+  ContextManifestSourceDeliveryV1,
   ContextManifestSourceStatus,
   ContextManifestSourceV1,
   ContextManifestV1,
@@ -21,6 +22,7 @@ import {
 } from './schema-utils'
 
 const SOURCE_STATUSES: readonly ContextManifestSourceStatus[] = ['included', 'omitted', 'trimmed']
+const SOURCE_DELIVERIES: readonly ContextManifestSourceDeliveryV1[] = ['full', 'truncated']
 
 type ContextManifestBodyV1 = Omit<ContextManifestV1, 'manifestHash'>
 
@@ -50,7 +52,16 @@ function parseSource(value: unknown, path: string): ContextManifestSourceV1 {
   const record = readRecord(value, path)
   assertExactKeys(
     record,
-    ['key', 'status', 'contentHash', 'tokens', 'boundary', 'readerVersion'],
+    [
+      'key',
+      'status',
+      'contentHash',
+      'tokens',
+      'delivery',
+      'originalTokens',
+      'boundary',
+      'readerVersion',
+    ],
     ['key', 'status', 'tokens'],
     path,
   )
@@ -59,6 +70,12 @@ function parseSource(value: unknown, path: string): ContextManifestSourceV1 {
   const status = readEnum(record.status, SOURCE_STATUSES, `${path}.status`)
   const contentHash = record.contentHash === undefined ? undefined : readHash(record.contentHash, `${path}.contentHash`)
   const tokens = readInteger(record.tokens, `${path}.tokens`, { min: 0 })
+  const delivery = record.delivery === undefined
+    ? undefined
+    : readEnum(record.delivery, SOURCE_DELIVERIES, `${path}.delivery`)
+  const originalTokens = record.originalTokens === undefined
+    ? undefined
+    : readInteger(record.originalTokens, `${path}.originalTokens`, { min: 0 })
   if (status === 'included' && !contentHash) {
     failSchema('missing_content_hash', `${path}.contentHash`, 'included 来源必须绑定实际输入内容哈希')
   }
@@ -68,11 +85,25 @@ function parseSource(value: unknown, path: string): ContextManifestSourceV1 {
   if (status !== 'included' && tokens !== 0) {
     failSchema('invalid_tokens', `${path}.tokens`, `${status} 来源 token 必须为 0`)
   }
+  if (status !== 'included' && delivery) {
+    failSchema('invalid_delivery', `${path}.delivery`, `${status} 来源没有实际模型输入，不得声明 delivery`)
+  }
+  if (originalTokens !== undefined && originalTokens < tokens) {
+    failSchema('invalid_original_tokens', `${path}.originalTokens`, '不得小于实际输入 token')
+  }
+  if (delivery === 'full' && originalTokens !== undefined && originalTokens !== tokens) {
+    failSchema('invalid_delivery', `${path}.delivery`, 'full 来源的原始 token 必须等于实际输入 token')
+  }
+  if (delivery === 'truncated' && (originalTokens === undefined || originalTokens <= tokens)) {
+    failSchema('invalid_delivery', `${path}.delivery`, 'truncated 来源必须证明原始 token 大于实际输入 token')
+  }
   return {
     key,
     status,
     contentHash,
     tokens,
+    delivery,
+    originalTokens,
     boundary: parseBoundary(record.boundary, `${path}.boundary`),
     readerVersion: record.readerVersion === undefined
       ? undefined
@@ -149,6 +180,9 @@ export async function createContextManifestFromAssemblyV1(input: {
     failSchema('invalid_sources', 'manifest.declaredSourceKeys', '不得为空')
   }
   const sources: ContextManifestSourceV1[] = []
+  const sourceEvidence = new Map(
+    (input.assembled.sourceEvidence ?? []).map(evidence => [evidence.key, evidence]),
+  )
   for (const key of input.declaredSourceKeys) {
     if (!CONTEXT_SOURCE_BY_KEY.has(key)) {
       failSchema('unknown_context_source', 'manifest.declaredSourceKeys', `未登记的上下文源 ${key}`)
@@ -162,6 +196,12 @@ export async function createContextManifestFromAssemblyV1(input: {
         status: 'included',
         contentHash: await sha256Text(segment.content),
         tokens: segment.tokens,
+        ...(sourceEvidence.get(key)?.status === 'included'
+          ? {
+              delivery: sourceEvidence.get(key)!.delivery as ContextManifestSourceDeliveryV1,
+              originalTokens: sourceEvidence.get(key)!.originalTokens,
+            }
+          : {}),
         boundary: input.boundary,
         readerVersion: input.readerVersion,
       })
@@ -171,6 +211,9 @@ export async function createContextManifestFromAssemblyV1(input: {
       key,
       status: input.assembled.trimmed.includes(key) ? 'trimmed' : 'omitted',
       tokens: 0,
+      ...(sourceEvidence.has(key)
+        ? { originalTokens: sourceEvidence.get(key)!.originalTokens }
+        : {}),
       boundary: input.boundary,
       readerVersion: input.readerVersion,
     })

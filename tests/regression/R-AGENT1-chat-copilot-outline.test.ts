@@ -123,6 +123,11 @@ describe('AGENT-1 27.1-d · ChatCopilot 大纲闭环', () => {
     expect(prepared.mode).toBe('volumes')
     expect(prepared.parentVolumeId).toBeNull()
     expect(prepared.contextSources).toContain('worldview')
+    expect(prepared.contextEvidence.inputState).toMatchObject({
+      state: 'partial',
+      handling: 'reference-and-create',
+    })
+    expect(prompt).toContain('partial / reference-and-create')
     expect(prompt).toContain('盐海每十年退潮')
     expect(prompt).toContain('规划全书三卷大纲')
     expect(await db.outlineNodes.count()).toBe(0)
