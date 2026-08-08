@@ -809,6 +809,16 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: async input => input.manualSourceText || '',
   },
   {
+    key: 'priorOutlineCandidate',
+    label: '同批次上一卷章纲候选',
+    scope: 'runtime',
+    layer: 'L1',
+    budgetTokens: 2400,
+    protectedFromTrim: true,
+    enabled: input => !!input.priorOutlineCandidateText?.trim(),
+    read: async input => input.priorOutlineCandidateText || '',
+  },
+  {
     key: 'chapterContent',
     label: '章节正文',
     scope: 'chapter',

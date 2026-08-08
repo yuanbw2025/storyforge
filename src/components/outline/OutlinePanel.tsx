@@ -6,7 +6,7 @@ import { createAISessionKey } from '../../stores/ai-generation-session'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { OUTLINE_GENERATION_SOURCE_KEYS } from '../../lib/outline/harness'
 import {
-  parseVolumeOutlineSmart, parseChapterOutlineSmart,
+  parseChapterOutlineOutput, parseVolumeOutlineOutput,
   type ParsedVolume, type ParsedChapter,
 } from '../../lib/ai/parse-outline-output'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -176,11 +176,16 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     } : undefined,
   }), [parameterValues, systemOverride, userOverride])
 
-  const buildOutlineAssembledContext = useCallback(async (worldGroupId: number | null, outlineNodeId?: number | null) => {
+  const buildOutlineAssembledContext = useCallback(async (
+    worldGroupId: number | null,
+    outlineNodeId?: number | null,
+    priorOutlineCandidateText?: string,
+  ) => {
     return await assembleContext({
       projectId: project.id!,
       worldGroupId,
       outlineNodeId: outlineNodeId ?? null,
+      priorOutlineCandidateText,
       provider: aiConfig.provider,
       model: aiConfig.model,
       sourceKeys: [...OUTLINE_GENERATION_SOURCE_KEYS],
@@ -214,7 +219,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     setRestructuring(true)
     try {
       if (generation.moduleKey === 'outline.volume') {
-        const parsed = await parseVolumeOutlineSmart(text, aiConfig)
+        const parsed = parseVolumeOutlineOutput(text)
         if (parsed.length === 0) {
           toast.error('未能从 AI 输出中解析出卷级大纲，请检查输出内容或重试。')
           return
@@ -228,7 +233,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
           setPreviewVolumes(parsed)
         }
       } else {
-        const parsed = await parseChapterOutlineSmart(text, aiConfig)
+        const parsed = parseChapterOutlineOutput(text)
         if (parsed.length === 0) {
           toast.error('未能从 AI 输出中解析出章节大纲，请检查输出内容或重试。')
           return
@@ -378,6 +383,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     try {
       result = await adoptGeneratedOutlineItems({
         projectId: project.id!,
+        worldGroupId: destinationVolume.worldGroupId ?? null,
         parentId: destinationVolume.id!,
         type: 'chapter',
         items: previewChapters,
@@ -423,13 +429,15 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   }
 
   const batch = useOutlineBatchGeneration({
-    projectId: project.id!,
+    project,
     multiWorldEnabled: Boolean(project.enableMultiWorld),
     volumes,
     nodes,
     hint,
+    runOptions: generationRunOptions,
     assembleContext: buildOutlineAssembledContext,
     reloadOutline: () => loadAll(project.id!),
+    onInfo: toast.info,
     onError: toast.error,
   })
 

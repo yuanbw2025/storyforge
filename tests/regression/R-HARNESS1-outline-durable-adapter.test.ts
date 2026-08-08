@@ -705,6 +705,41 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
     })
   })
 
+  it('确定性 gate 阻断后可将单次生成 run 收口为 failed 终态', async () => {
+    const fixture = await createWorkspace()
+    const assembled = assembly()
+    const generationNode: GenerationNode<AssembleContextResult, string> = {
+      ...node(async () => '无法解析的输出'),
+      gate: () => ({
+        status: 'blocked',
+        issues: [{ code: 'outline_output_unparseable', message: '输出无法解析' }],
+      }),
+    }
+    const trace = await createOutlineGenerationTraceV1({
+      projectId: fixture.scope.projectId,
+      worldGroupId: fixture.worldGroupId,
+      request: { kind: 'chapters', volumeId: fixture.outlineNodeId },
+      assembled,
+      durable: true,
+    })
+
+    const result = await runGenerationNode(
+      generationNode,
+      prepareGenerationNode(generationNode, assembled),
+      { shadowTrace: trace },
+    )
+    expect(result.gate?.status).toBe('blocked')
+    await trace.terminateRun({ status: 'failed', code: 'outline_output_unparseable' })
+
+    const snapshot = await readAgentRunV1(fixture.scope, trace.durable!.runId)
+    expect(snapshot.projection.state).toBe('failed')
+    expect(snapshot.events.slice(-3).map(event => event.type)).toEqual([
+      'model.responded',
+      'step.failed',
+      'run.failed',
+    ])
+  })
+
   it('durable 账本在执行前损坏时降级为 shadow，不能改变模型结果或调用数', async () => {
     const fixture = await createWorkspace()
     const assembled = assembly()

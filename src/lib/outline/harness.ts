@@ -23,6 +23,7 @@ import {
 import {
   OUTLINE_GENERATION_CONVERSATION_PURPOSE,
   persistOutlineGenerationCandidateV1,
+  type OutlineGenerationBatchRefV1,
   type OutlineGenerationCandidateV1,
 } from './candidate-lifecycle'
 
@@ -47,6 +48,7 @@ export const OUTLINE_GENERATION_SOURCE_KEYS = [
   'storylineProgress',
   'existingVolumeOutlines',
   'writtenChapterProgress',
+  'priorOutlineCandidate',
 ] as const
 
 export const OUTLINE_DURABLE_HARNESS_STORAGE_KEY = 'storyforge:harness:outline-durable-v1'
@@ -166,6 +168,7 @@ export interface OutlineGenerationTraceV1 extends GenerationNodeShadowTrace {
   readonly initializationError?: string
   readonly traceErrors: readonly string[]
   persistCandidate: (output: string) => Promise<OutlineGenerationCandidateV1 | null>
+  terminateRun: (input: { status: 'failed' | 'cancelled'; code: string }) => Promise<void>
 }
 
 function composeOutlineTraces(input: {
@@ -174,12 +177,14 @@ function composeOutlineTraces(input: {
   scope?: WorkspaceScope
   conversationId?: number
   request: OutlineGenerationRequest
+  batch?: OutlineGenerationBatchRefV1
   initializationError?: string
 }): OutlineGenerationTraceV1 {
   const diagnostics: string[] = input.initializationError ? [input.initializationError] : []
   const traces: GenerationNodeShadowTrace[] = [input.shadow]
   if (input.durable) traces.push(input.durable)
   let persistedCandidate: OutlineGenerationCandidateV1 | null = null
+  let pendingModelOutput: unknown
   const notify = async (action: (trace: GenerationNodeShadowTrace) => Promise<void>) => {
     for (const trace of traces) {
       try {
@@ -205,9 +210,12 @@ function composeOutlineTraces(input: {
     beforeModel: value => notify(trace => trace.beforeModel(value)),
     // Durable model.responded is committed together with the candidate body.
     // The in-memory shadow still observes the response immediately.
-    modelResponded: value => notify(trace => trace === input.durable
-      ? Promise.resolve()
-      : trace.modelResponded(value)),
+    modelResponded: value => {
+      pendingModelOutput = value
+      return notify(trace => trace === input.durable
+        ? Promise.resolve()
+        : trace.modelResponded(value))
+    },
     async candidateReady(output: unknown) {
       if (typeof output !== 'string' || !input.durable || !input.scope || input.conversationId == null) return
       try {
@@ -217,6 +225,7 @@ function composeOutlineTraces(input: {
           request: input.request,
           durable: input.durable,
           output,
+          batch: input.batch,
         })
       } catch (error) {
         diagnostics.push(error instanceof Error ? error.message : String(error))
@@ -232,7 +241,15 @@ function composeOutlineTraces(input: {
     stepSucceeded: value => notify(trace => trace === input.shadow
       ? trace.stepSucceeded(value)
       : Promise.resolve()),
-    stepFailed: value => notify(trace => trace.stepFailed(value)),
+    stepFailed: value => notify(async trace => {
+      // Successful candidates commit model.responded atomically with the
+      // candidate body. A deterministic gate rejection has no candidate, so
+      // persist its response hash immediately before the failure evidence.
+      if (trace === input.durable && value.phase === 'gate') {
+        await trace.modelResponded(pendingModelOutput)
+      }
+      await trace.stepFailed(value)
+    }),
     async persistCandidate(output: string) {
       if (!input.durable || !input.scope || input.conversationId == null || !output.trim()) return null
       if (persistedCandidate?.output === output) return persistedCandidate
@@ -242,8 +259,23 @@ function composeOutlineTraces(input: {
         request: input.request,
         durable: input.durable,
         output,
+        batch: input.batch,
       })
       return persistedCandidate
+    },
+    async terminateRun({ status, code }) {
+      if (!input.durable || !input.scope) return
+      const projection = input.durable.projection()
+      if (['completed', 'failed', 'cancelled', 'recovery_required'].includes(projection.state)) return
+      await appendAgentRunEventV1({
+        scope: input.scope,
+        runId: input.durable.runId,
+        type: status === 'cancelled' ? 'run.cancelled' : 'run.failed',
+        payload: status === 'cancelled'
+          ? { reason: code.trim().slice(0, 200) || 'outline_generation_cancelled' }
+          : { code: code.trim().slice(0, 160) || 'outline_generation_failed', retryable: false },
+        expectedLastSequence: projection.lastSequence,
+      })
     },
     onTraceError(error: unknown) {
       diagnostics.push(error instanceof Error ? error.message : String(error))
@@ -256,11 +288,12 @@ export async function createOutlineGenerationTraceV1(input: {
   worldGroupId: number | null
   request: OutlineGenerationRequest
   assembled: AssembleContextResult
+  batch?: OutlineGenerationBatchRefV1
   durable?: boolean
 }): Promise<OutlineGenerationTraceV1> {
   const shadow = await createOutlineGenerationShadowTraceV1(input)
   if ((input.durable ?? isOutlineDurableHarnessEnabledV1()) === false) {
-    return composeOutlineTraces({ shadow, request: input.request })
+    return composeOutlineTraces({ shadow, request: input.request, batch: input.batch })
   }
 
   let created: AgentRunSnapshotV1 | null = null
@@ -300,6 +333,7 @@ export async function createOutlineGenerationTraceV1(input: {
       scope,
       conversationId: conversation.id,
       request: input.request,
+      batch: input.batch,
     })
   } catch (error) {
     const initializationError = error instanceof Error ? error.message : String(error)
@@ -312,6 +346,11 @@ export async function createOutlineGenerationTraceV1(input: {
         expectedLastSequence: created.projection.lastSequence,
       }).catch(() => undefined)
     }
-    return composeOutlineTraces({ shadow, request: input.request, initializationError })
+    return composeOutlineTraces({
+      shadow,
+      request: input.request,
+      batch: input.batch,
+      initializationError,
+    })
   }
 }

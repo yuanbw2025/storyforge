@@ -1,5 +1,6 @@
 import {
   appendAgentRunEventV1,
+  createVerificationReceiptV1,
   hashCanonicalValue,
   readAgentRunV1,
   type AgentRunSnapshotV1,
@@ -17,6 +18,7 @@ import {
   type WorkspaceScope,
 } from '../types'
 import {
+  assertRecordInScope,
   readOwnedRows,
   resolveScope,
   scopeTransactionTables,
@@ -36,6 +38,13 @@ import {
 export const OUTLINE_GENERATION_CONVERSATION_PURPOSE = 'outline-generation-v1'
 export const OUTLINE_GENERATION_CANDIDATE_PAYLOAD_TYPE = 'outline-generation-candidate'
 
+export interface OutlineGenerationBatchRefV1 {
+  batchGroupId: string
+  batchIndex: number
+  batchTotal: number
+  predecessorCandidateHash?: string
+}
+
 export interface OutlineGenerationCandidatePayloadV1 {
   version: 1
   type: typeof OUTLINE_GENERATION_CANDIDATE_PAYLOAD_TYPE
@@ -43,6 +52,7 @@ export interface OutlineGenerationCandidatePayloadV1 {
   stepId: string
   operation: string
   candidateHash: string
+  batch?: OutlineGenerationBatchRefV1
 }
 
 export interface OutlineGenerationCandidateV1 extends OutlineGenerationCandidatePayloadV1 {
@@ -54,6 +64,7 @@ export interface OutlineGenerationCandidateV1 extends OutlineGenerationCandidate
 }
 
 export const OUTLINE_GENERATION_ADOPTION_INTENT_PAYLOAD_TYPE = 'outline-generation-adoption-intent'
+export const OUTLINE_GENERATION_TERMINAL_VERIFIER_V1 = 'outline-generation-terminal-v1'
 
 interface OutlineGenerationAdoptionIntentBaseV1 {
   version: 1
@@ -93,14 +104,23 @@ export interface OutlineGenerationAdoptionRecoveryResultV1 {
   failed: Array<{ runId: number; reason: string }>
 }
 
+export interface RestoredOutlineGenerationBatchV1 {
+  batchGroupId: string
+  batchTotal: number
+  candidates: OutlineGenerationCandidateV1[]
+}
+
 export async function persistOutlineGenerationCandidateV1(input: {
   scope: WorkspaceScope
   conversationId: number
   request: OutlineGenerationRequest
   durable: GenerationNodeDurableTraceV1
   output: string
+  batch?: OutlineGenerationBatchRefV1
 }): Promise<OutlineGenerationCandidateV1 | null> {
   if (!input.output.trim()) return null
+  const batch = input.batch == null ? null : parseOutlineGenerationBatchRef(input.batch)
+  if (input.batch != null && !batch) throw new Error('批量章纲候选引用不符合受控结构')
   const candidateHash = await hashCanonicalValue(input.output)
   const operation = encodeGenerationOperation(input.request)
   const payload: OutlineGenerationCandidatePayloadV1 = {
@@ -110,6 +130,7 @@ export async function persistOutlineGenerationCandidateV1(input: {
     stepId: input.durable.stepId,
     operation,
     candidateHash,
+    ...(batch ? { batch } : {}),
   }
   const candidateEvent = await input.durable.commitCandidate({
     output: input.output,
@@ -138,6 +159,7 @@ export async function persistOutlineGenerationCandidateV1(input: {
 
 function parseOutlineCandidatePayload(event: AgentEvent): OutlineGenerationCandidatePayloadV1 | null {
   const payload = parseAgentEventPayload<Partial<OutlineGenerationCandidatePayloadV1>>(event, {})
+  const batch = parseOutlineGenerationBatchRef(payload.batch)
   if (
     payload.version !== 1
     || payload.type !== OUTLINE_GENERATION_CANDIDATE_PAYLOAD_TYPE
@@ -148,8 +170,30 @@ function parseOutlineCandidatePayload(event: AgentEvent): OutlineGenerationCandi
     || payload.stepId !== payload.operation
     || typeof payload.candidateHash !== 'string'
     || !/^[a-f0-9]{64}$/.test(payload.candidateHash)
+    || (payload.batch != null && !batch)
   ) return null
-  return payload as OutlineGenerationCandidatePayloadV1
+  return {
+    ...payload,
+    ...(batch ? { batch } : {}),
+  } as OutlineGenerationCandidatePayloadV1
+}
+
+function parseOutlineGenerationBatchRef(value: unknown): OutlineGenerationBatchRefV1 | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const batch = value as Partial<OutlineGenerationBatchRefV1>
+  if (
+    typeof batch.batchGroupId !== 'string'
+    || !/^[a-zA-Z0-9_-]{8,120}$/.test(batch.batchGroupId)
+    || !Number.isInteger(batch.batchIndex)
+    || !Number.isInteger(batch.batchTotal)
+    || (batch.batchIndex as number) < 0
+    || (batch.batchTotal as number) < 1
+    || (batch.batchIndex as number) >= (batch.batchTotal as number)
+    || (batch.predecessorCandidateHash != null
+      && (typeof batch.predecessorCandidateHash !== 'string'
+        || !/^[a-f0-9]{64}$/.test(batch.predecessorCandidateHash)))
+  ) return null
+  return batch as OutlineGenerationBatchRefV1
 }
 
 function validId(value: unknown): value is number {
@@ -289,12 +333,58 @@ export async function restoreLatestOutlineGenerationCandidateV1(
       const snapshot = await readAgentRunV1(scope, run.id!)
       if (snapshot.projection.state !== 'awaiting_confirmation') continue
       const candidate = await candidateForSnapshot(scope, snapshot)
-      if (candidate) return candidate
+      if (candidate && !candidate.batch) return candidate
     } catch {
       // A corrupt or cross-scope ledger must not become a recoverable candidate.
     }
   }
   return null
+}
+
+export async function restoreLatestOutlineGenerationBatchV1(
+  projectId: number,
+): Promise<RestoredOutlineGenerationBatchV1 | null> {
+  const scope = await resolveScope({ projectId })
+  const runs = (await readOwnedRows<AgentRunRecord>(scope, 'agentRuns', { owner: 'work' }))
+    .filter(run => run.id != null && run.status === 'awaiting_confirmation' && run.conversationId != null)
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+  const groups = new Map<string, {
+    batchTotal: number
+    latestUpdatedAt: number
+    candidatesByIndex: Map<number, OutlineGenerationCandidateV1>
+  }>()
+  for (const run of runs) {
+    try {
+      const snapshot = await readAgentRunV1(scope, run.id!)
+      if (snapshot.projection.state !== 'awaiting_confirmation') continue
+      const candidate = await candidateForSnapshot(scope, snapshot)
+      const batch = candidate?.batch
+      if (!candidate || !batch) continue
+      const group = groups.get(batch.batchGroupId) ?? {
+        batchTotal: batch.batchTotal,
+        latestUpdatedAt: run.updatedAt,
+        candidatesByIndex: new Map<number, OutlineGenerationCandidateV1>(),
+      }
+      if (group.batchTotal !== batch.batchTotal) continue
+      group.latestUpdatedAt = Math.max(group.latestUpdatedAt, run.updatedAt)
+      if (!group.candidatesByIndex.has(batch.batchIndex)) {
+        group.candidatesByIndex.set(batch.batchIndex, candidate)
+      }
+      groups.set(batch.batchGroupId, group)
+    } catch {
+      // Invalid run/event evidence cannot be projected into a recoverable batch.
+    }
+  }
+  const latest = [...groups.entries()]
+    .sort((left, right) => right[1].latestUpdatedAt - left[1].latestUpdatedAt)[0]
+  if (!latest) return null
+  return {
+    batchGroupId: latest[0],
+    batchTotal: latest[1].batchTotal,
+    candidates: [...latest[1].candidatesByIndex.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([, candidate]) => candidate),
+  }
 }
 
 export async function beginOutlineGenerationAdoptionV1(
@@ -398,7 +488,11 @@ export async function commitOutlineGenerationAdoptionV1(
 ): Promise<void> {
   let resolved = await resolveOutlineCandidate(candidate)
   let step = resolved.snapshot.projection.steps[candidate.stepId]
-  if (step?.status === 'succeeded' && step.adoptionHash) return
+  if (step?.status === 'succeeded' && step.adoptionHash) {
+    const frozen = await adoptionIntentForSnapshot(resolved.scope, resolved.snapshot, candidate)
+    if (frozen) await verifyOutlineGenerationAdoptionV1(candidate, frozen.intent)
+    return
+  }
   if (step?.status === 'awaiting_confirmation') {
     await beginOutlineGenerationAdoptionV1(candidate, intent)
     resolved = await resolveOutlineCandidate(candidate)
@@ -437,6 +531,9 @@ export async function commitOutlineGenerationAdoptionV1(
       })
     },
   )
+  resolved = await resolveOutlineCandidate(candidate)
+  const frozen = await adoptionIntentForSnapshot(resolved.scope, resolved.snapshot, candidate)
+  if (frozen) await verifyOutlineGenerationAdoptionV1(candidate, frozen.intent)
 }
 
 async function adoptionIntentForSnapshot(
@@ -522,13 +619,170 @@ async function executeOutlineAdoptionIntent(
   return { recovered: true, kind: intent.kind, targetIds, result }
 }
 
+async function readOutlineAdoptionPostState(
+  candidate: OutlineGenerationCandidateV1,
+  scope: WorkspaceScope,
+  intent: OutlineGenerationAdoptionIntentV1,
+): Promise<unknown> {
+  if (!adoptionIntentMatchesCandidate(candidate, intent)) {
+    throw new Error('终态验证的大纲采纳计划与候选不匹配')
+  }
+  if (intent.kind === 'single-volume' || intent.kind === 'single-chapter') {
+    const row = await db.outlineNodes.get(intent.targetId)
+    if (
+      !row
+      || !await assertRecordInScope(scope, 'outlineNodes', row, { owner: 'work' })
+      || row.summary !== intent.summary
+    ) throw new Error('大纲采纳后的目标摘要与作者确认计划不一致')
+    return {
+      id: row.id,
+      type: row.type,
+      parentId: row.parentId ?? null,
+      title: row.title,
+      summary: row.summary,
+      order: row.order,
+      worldGroupId: row.worldGroupId ?? null,
+    }
+  }
+  if (!('items' in intent)) throw new Error('终态验证遇到不支持的大纲采纳计划')
+
+  const parentId = intent.kind === 'chapters' ? intent.destinationVolumeId : null
+  const type = intent.kind === 'chapters' ? 'chapter' as const : 'volume' as const
+  const seenTitles = new Set(intent.baseExistingTitles.map(normalizedTitle))
+  const expected = intent.items
+    .map((item, index) => ({ item, order: intent.startingOrder + index }))
+    .filter(({ item }) => {
+      const title = normalizedTitle(item.title)
+      if (seenTitles.has(title)) return false
+      seenTitles.add(title)
+      return true
+    })
+  if (expected.length === 0) throw new Error('作者确认计划没有可验证的大纲写入条目')
+  const rows = await readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' })
+  return expected.map(({ item, order }) => {
+    const row = rows.find(candidateRow => (
+      candidateRow.type === type
+      && (candidateRow.parentId ?? null) === parentId
+      && candidateRow.order === order
+      && normalizedTitle(candidateRow.title) === normalizedTitle(item.title)
+      && candidateRow.summary === item.summary
+      && (candidateRow.worldGroupId ?? null) === candidate.worldGroupId
+    ))
+    if (!row) throw new Error(`大纲采纳后缺少已确认条目：${item.title}`)
+    return {
+      id: row.id,
+      type: row.type,
+      parentId: row.parentId ?? null,
+      title: row.title,
+      summary: row.summary,
+      order: row.order,
+      worldGroupId: row.worldGroupId ?? null,
+    }
+  })
+}
+
+export async function verifyOutlineGenerationAdoptionV1(
+  candidate: OutlineGenerationCandidateV1,
+  intent: OutlineGenerationAdoptionIntentV1,
+): Promise<{ receiptHash: string; postStateHash: string }> {
+  const resolved = await resolveOutlineCandidate(candidate)
+  let snapshot = resolved.snapshot
+  if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash) {
+    return {
+      receiptHash: snapshot.projection.terminalReceiptHash,
+      postStateHash: await hashCanonicalValue(await readOutlineAdoptionPostState(candidate, resolved.scope, intent)),
+    }
+  }
+  const step = snapshot.projection.steps[candidate.stepId]
+  if (!step || step.status !== 'succeeded' || !step.adoptionHash) {
+    throw new Error('大纲运行尚未完成采纳，不能签发终态凭证')
+  }
+  try {
+    const postStateHash = await hashCanonicalValue(
+      await readOutlineAdoptionPostState(candidate, resolved.scope, intent),
+    )
+    const contextManifestHashes = [...new Set(snapshot.events
+      .filter(event => event.type === 'context.assembled')
+      .map(event => event.type === 'context.assembled' ? event.payload.manifestHash : ''))]
+      .filter(Boolean)
+    if (contextManifestHashes.length === 0) throw new Error('大纲运行缺少 Context Manifest 证据')
+    if (snapshot.projection.state === 'running') {
+      snapshot = await appendAgentRunEventV1({
+        scope: resolved.scope,
+        runId: candidate.runId,
+        type: 'verification.started',
+        payload: { verifierSetVersion: OUTLINE_GENERATION_TERMINAL_VERIFIER_V1 },
+        expectedLastSequence: snapshot.projection.lastSequence,
+      })
+    }
+    if (snapshot.projection.state !== 'verifying') {
+      throw new Error(`大纲运行状态 ${snapshot.projection.state} 不能签发终态凭证`)
+    }
+    const adoptionEventIds = (await db.agentRunEvents.where('runId').equals(candidate.runId).toArray())
+      .filter(event => event.type === 'adoption.committed' && event.id != null)
+      .map(event => event.id!)
+    if (adoptionEventIds.length !== 1) throw new Error('大纲运行缺少唯一采纳提交事件')
+    const receipt = await createVerificationReceiptV1({
+      version: 1,
+      runId: candidate.runId,
+      generation: snapshot.projection.generation,
+      contractHash: snapshot.projection.contractHash,
+      contextManifestHashes,
+      candidateHashes: [candidate.candidateHash],
+      adoptionEventIds,
+      postStateHash,
+      verifierSetVersion: OUTLINE_GENERATION_TERMINAL_VERIFIER_V1,
+      criteria: [
+        { id: 'outline.output', status: 'passed', evidenceRefs: [`candidate:${candidate.candidateHash}`] },
+        { id: 'outline.confirmed', status: 'passed', evidenceRefs: [`candidate:${candidate.candidateHash}`] },
+        { id: 'outline.adopted', status: 'passed', evidenceRefs: adoptionEventIds.map(id => `event:${id}`) },
+        { id: 'outline.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
+      ],
+      acceptedAt: Date.now(),
+    })
+    await appendAgentRunEventV1({
+      scope: resolved.scope,
+      runId: candidate.runId,
+      type: 'verification.accepted',
+      payload: { receiptHash: receipt.receiptHash },
+      expectedLastSequence: snapshot.projection.lastSequence,
+    })
+    return { receiptHash: receipt.receiptHash, postStateHash }
+  } catch (error) {
+    const current = await readAgentRunV1(resolved.scope, candidate.runId)
+    let rejected = current
+    if (rejected.projection.state === 'running') {
+      rejected = await appendAgentRunEventV1({
+        scope: resolved.scope,
+        runId: candidate.runId,
+        type: 'verification.started',
+        payload: { verifierSetVersion: OUTLINE_GENERATION_TERMINAL_VERIFIER_V1 },
+        expectedLastSequence: rejected.projection.lastSequence,
+      })
+    }
+    if (rejected.projection.state === 'verifying') {
+      await appendAgentRunEventV1({
+        scope: resolved.scope,
+        runId: candidate.runId,
+        type: 'verification.rejected',
+        payload: {
+          codes: [(error instanceof Error ? error.message : String(error)).slice(0, 160)],
+          retryable: false,
+        },
+        expectedLastSequence: rejected.projection.lastSequence,
+      })
+    }
+    throw error
+  }
+}
+
 export async function recoverPendingOutlineGenerationAdoptionsV1(
   projectId: number,
 ): Promise<OutlineGenerationAdoptionRecoveryResultV1> {
   const scope = await resolveScope({ projectId })
   const result: OutlineGenerationAdoptionRecoveryResultV1 = { recoveredRunIds: [], failed: [] }
   const runs = (await readOwnedRows<AgentRunRecord>(scope, 'agentRuns', { owner: 'work' }))
-    .filter(run => run.id != null && run.status === 'running' && run.conversationId != null)
+    .filter(run => run.id != null && (run.status === 'running' || run.status === 'verifying') && run.conversationId != null)
     .sort((left, right) => left.updatedAt - right.updatedAt)
   for (const run of runs) {
     try {
@@ -536,12 +790,16 @@ export async function recoverPendingOutlineGenerationAdoptionsV1(
       const step = Object.values(snapshot.projection.steps).find(item => (
         item.candidateHash
         && item.confirmation === 'adopt'
-        && (item.status === 'running' || (item.status === 'succeeded' && !item.adoptionHash))
+        && (item.status === 'running' || item.status === 'succeeded')
       ))
       if (!step?.candidateHash) continue
       const candidate = await candidateForSnapshot(scope, snapshot)
       if (!candidate) throw new Error('已确认运行缺少可校验的持久化候选')
-      if (step.adoptionHash) {
+      if (step.status === 'succeeded' && step.adoptionHash) {
+        const frozen = await adoptionIntentForSnapshot(scope, snapshot, candidate)
+        if (!frozen) throw new Error('已采纳运行缺少哈希匹配的采纳计划')
+        await verifyOutlineGenerationAdoptionV1(candidate, frozen.intent)
+      } else if (step.adoptionHash) {
         await appendAgentRunEventV1({
           scope,
           runId: candidate.runId,
@@ -552,6 +810,10 @@ export async function recoverPendingOutlineGenerationAdoptionsV1(
             outputHash: candidate.candidateHash,
           },
         })
+        const refreshed = await readAgentRunV1(scope, candidate.runId)
+        const frozen = await adoptionIntentForSnapshot(scope, refreshed, candidate)
+        if (!frozen) throw new Error('已采纳运行缺少哈希匹配的采纳计划')
+        await verifyOutlineGenerationAdoptionV1(candidate, frozen.intent)
       } else {
         const intent = await adoptionIntentForSnapshot(scope, snapshot, candidate)
         if (!intent) throw new Error('已确认运行缺少哈希匹配的采纳计划')
@@ -624,6 +886,15 @@ export async function rejectOutlineGenerationCandidateV1(
           decision: 'rejected',
         },
         scope,
+      })
+      await appendAgentRunEventV1({
+        scope,
+        runId: candidate.runId,
+        type: 'run.failed',
+        payload: {
+          code: step.status === 'awaiting_confirmation' ? 'author_rejected' : 'adoption_rejected',
+          retryable: false,
+        },
       })
     },
   )

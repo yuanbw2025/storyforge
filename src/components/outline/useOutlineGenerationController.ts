@@ -31,6 +31,7 @@ import {
   recoverPendingOutlineGenerationAdoptionsV1,
   restoreLatestOutlineGenerationCandidateV1,
   staleOutlineGenerationCandidateV1,
+  type OutlineGenerationTraceV1,
   type OutlineGenerationCandidateV1,
   type OutlineGenerationAdoptionIntentV1,
 } from '../../lib/outline/harness'
@@ -157,13 +158,14 @@ export function useOutlineGenerationController({
     ai.setOperation(encodeGenerationOperation(request))
     clearPreview()
 
+    let generationTrace: OutlineGenerationTraceV1 | undefined
     try {
       const targetVolume = findGenerationTargetVolume(request, nodes, volumes)
       const assembled = contextSnapshot
         ?? await assembleContext(targetVolume?.worldGroupId ?? null, targetVolume?.id)
       const node = buildNode(request)
       const prepared = preparedSnapshot ?? prepareGenerationNode(node, assembled)
-      const generationTrace = await createOutlineGenerationTraceV1({
+      generationTrace = await createOutlineGenerationTraceV1({
         projectId: project.id!,
         worldGroupId: targetVolume?.worldGroupId ?? null,
         request,
@@ -179,6 +181,14 @@ export function useOutlineGenerationController({
         messages: messageOverride,
         shadowTrace: generationTrace,
       })
+      if (result.gate?.status === 'blocked') {
+        await generationTrace?.terminateRun({
+          status: 'failed',
+          code: result.gate.issues.map(issue => issue.code).join(',') || 'outline_generation_gate_blocked',
+        }).catch(error => {
+          console.warn('[Outline Harness] 未能提交结构 gate 的终止证据。', error)
+        })
+      }
       if (result.gate?.status !== 'blocked' && result.output.trim()) {
         try {
           const candidate = await generationTrace?.persistCandidate(result.output)
@@ -194,6 +204,12 @@ export function useOutlineGenerationController({
         else onError(error.message)
         return
       }
+      await generationTrace?.terminateRun({
+        status: error instanceof Error && error.name === 'AbortError' ? 'cancelled' : 'failed',
+        code: error instanceof Error ? error.message : 'outline_generation_failed',
+      }).catch(traceError => {
+        console.warn('[Outline Harness] 未能提交生成异常的终止证据。', traceError)
+      })
       console.error('[Outline] 准备生成失败:', error)
       ai.reset()
       onError(`准备大纲生成时出错：${error instanceof Error ? error.message : '未知错误'}。`)

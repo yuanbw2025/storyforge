@@ -361,6 +361,8 @@ export interface AssembleContextInput {
   extraStateIds?: number[]
   /** 手动输入/当前字段内容，供“内容反推结构化设定”类动作走注册表。 */
   manualSourceText?: string
+  /** HARNESS-11: 同一批量章纲任务中，上一卷尚未采纳的结构化候选。 */
+  priorOutlineCandidateText?: string
   /** C2 反向哺喂：以某角色为主体，召回剧情里关于 TA 的事实/正文证据（characterFacts/characterPassages 源用）。 */
   subjectCharacterName?: string
   /** INV-1: 按角色过滤物品流水/持有投影。 */

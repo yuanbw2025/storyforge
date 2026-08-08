@@ -3,6 +3,10 @@ import type { GenerationNode } from '../generation/generation-node'
 import type { AssembleContextResult } from '../registry/types'
 import type { OutlineNode, Project } from '../types'
 import type { RunOptions } from '../ai/adapters/outline-adapter'
+import {
+  parseChapterOutlineOutput,
+  parseVolumeOutlineOutput,
+} from '../ai/parse-outline-output'
 import { buildOutlineGenerationPlan } from './generation-plan'
 import {
   encodeGenerationOperation,
@@ -56,11 +60,29 @@ export function createOutlineGenerationNode(input: {
         category: 'outline.chapter',
         projectId: project.id!,
       }),
-    gate: output => output.trim()
-      ? { status: 'pass', issues: [] }
-      : {
+    gate: output => {
+      if (!output.trim()) {
+        return {
           status: 'blocked',
           issues: [{ code: 'outline_output_missing', message: '模型没有返回可持久化的大纲候选。' }],
-        },
+        }
+      }
+      const items = request.kind === 'volumes' || request.kind === 'single-volume'
+        ? parseVolumeOutlineOutput(output)
+        : parseChapterOutlineOutput(output)
+      if (items.length === 0) {
+        return {
+          status: 'blocked',
+          issues: [{ code: 'outline_output_unparseable', message: '模型输出无法确定性解析为大纲条目。' }],
+        }
+      }
+      if ((request.kind === 'single-volume' || request.kind === 'single-chapter') && items.length !== 1) {
+        return {
+          status: 'blocked',
+          issues: [{ code: 'outline_single_target_count', message: '单项补全必须且只能返回一个大纲条目。' }],
+        }
+      }
+      return { status: 'pass', issues: [] }
+    },
   }
 }

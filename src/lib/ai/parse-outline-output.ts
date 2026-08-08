@@ -2,13 +2,9 @@
  * 解析 AI 生成的大纲文本，提取结构化卷/章节数据
  *
  * Phase 30.4: JSON 优先解析
- * 解析增强（2026-06）：全局原则——文本内容提取用 AI 不用正则。
- *   smart 版（parseChapterOutlineSmart）：JSON 优先 → 失败则 AI 重构（不靠正则）。
- *   旧的正则版保留为 AI 不可用（无 API Key/离线）时的最后兜底。
+ * HARNESS-11：模型输出只做确定性解析。解析失败由生成 gate 阻断，禁止在
+ * 解析器内部隐藏发起第二次模型调用。
  */
-
-import type { AIConfig } from '../types'
-import { aiRestructure } from './restructure'
 
 export interface ParsedVolume {
   title: string
@@ -385,43 +381,4 @@ export function parseChapterOutlineOutput(text: string): ParsedChapter[] {
 
   flushCh()
   return chapters
-}
-
-// ── Smart 版：JSON 优先 → AI 重构（不靠正则） ─────────────────────────────
-
-/** 把 JSON 数组转为 {title, summary}[] */
-function jsonToTitleSummary(arr: unknown[] | null): { title: string; summary: string }[] {
-  if (!arr) return []
-  const out: { title: string; summary: string }[] = []
-  for (const item of arr) {
-    if (item && typeof item === 'object' && 'title' in item) {
-      const obj = item as { title?: string; summary?: string }
-      if (obj.title) out.push({ title: String(obj.title).trim(), summary: String(obj.summary || '').trim() })
-    }
-  }
-  return out
-}
-
-const TITLE_SUMMARY_SCHEMA = `目标结构：JSON 数组，每个元素 { "title": "标题", "summary": "情节摘要" }。
-原文里每一个卷/章（无论用"第X章"、数字序号、**加粗标题**、有无冒号等任何格式书写）都要提取为一个元素。`
-
-/**
- * 智能解析章节大纲：JSON 优先 → AI 重构 → 正则兜底（仅 AI 不可用时）。
- * 解决任意格式（含「**标题**摘要」无冒号）的提取，不依赖正则准确率。
- */
-export async function parseChapterOutlineSmart(text: string, config: AIConfig): Promise<ParsedChapter[]> {
-  const json = jsonToTitleSummary(extractJsonArray(text))
-  if (json.length > 0) return json
-  const restructured = jsonToTitleSummary(await aiRestructure<unknown[]>(text, TITLE_SUMMARY_SCHEMA, config))
-  if (restructured.length > 0) return restructured
-  return parseChapterOutlineOutput(text) // 最后兜底（AI 不可用时）
-}
-
-/** 智能解析卷大纲：JSON 优先 → AI 重构 → 正则兜底。 */
-export async function parseVolumeOutlineSmart(text: string, config: AIConfig): Promise<ParsedVolume[]> {
-  const json = jsonToTitleSummary(extractJsonArray(text))
-  if (json.length > 0) return json
-  const restructured = jsonToTitleSummary(await aiRestructure<unknown[]>(text, TITLE_SUMMARY_SCHEMA, config))
-  if (restructured.length > 0) return restructured
-  return parseVolumeOutlineOutput(text)
 }

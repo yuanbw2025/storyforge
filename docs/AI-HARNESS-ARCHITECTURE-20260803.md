@@ -861,6 +861,13 @@ CHIRON 四类信息可映射到现有结构：
 
 ### H2：终态 verifier 与 fresh receipt
 
+**章纲实施状态（HARNESS-11，2026-08-08）**
+
+- 可达的“批量生成所有卷章节”入口已按卷复用既有 outline durable run，不再直接 `chat()` 后把候选只放在 React 内存；每卷候选以同一 `batchGroupId` 分组，刷新恢复整组待确认候选，取消、关闭和解析失败均有终止证据；
+- 同批次上一卷的未采纳章纲候选已登记为 `priorOutlineCandidate`，由 `assembleContext()` 执行 2,400 token 单源预算并进入 Context Manifest；runner 不再私下拼接并硬截断 800 字；
+- 章纲输出只做 JSON/确定性文本解析，结构 gate 失败即 `run.failed`，已删除解析阶段隐藏发起第二次 AI 重构的生产入口；
+- 作者确认后仍只经 `adoptGeneratedOutlineItems()` / `adopt()` 写入 `outlineNodes`；终态 verifier 回读正式后状态，并绑定 manifest、candidate、adoption event 与 post-state hash，只有 `verification.accepted` 可将逐卷运行投影为 `completed`。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

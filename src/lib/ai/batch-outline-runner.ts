@@ -1,169 +1,279 @@
-/**
- * 批量大纲生成器 — Phase D1
- *
- * 按卷循环生成章节大纲，每生成一章就把该章摘要加入上下文传给下一章，
- * 保持故事线连贯。支持中途取消、进度回调。
- */
-import { chat } from './client'
-import { buildChapterOutlinePrompt } from './adapters/outline-adapter'
-import { parseChapterOutlineSmart, type ParsedChapter } from './parse-outline-output'
 import { useAIConfigStore } from '../../stores/ai-config'
-import type { OutlineNode } from '../types'
+import {
+  prepareGenerationNode,
+  runGenerationNode,
+} from '../generation/generation-node'
+import {
+  createOutlineGenerationTraceV1,
+  type OutlineGenerationCandidateV1,
+} from '../outline/harness'
+import { createOutlineGenerationNode } from '../outline/generation-node'
+import type { RunOptions } from './adapters/outline-adapter'
+import { chat } from './client'
+import {
+  parseChapterOutlineOutput,
+  type ParsedChapter,
+} from './parse-outline-output'
+import type { AssembleContextResult } from '../registry/types'
+import type { ChatMessage, OutlineNode, Project } from '../types'
+import type { OutlineGenerationTraceV1 } from '../outline/harness'
 
 export interface BatchOutlineProgress {
-  /** 当前正在处理的卷索引（0-based） */
   currentVolumeIndex: number
-  /** 总卷数 */
   totalVolumes: number
-  /** 当前卷标题 */
   currentVolumeTitle: string
-  /** 当前卷已解析出的章节 */
   parsedChapters: ParsedChapter[]
-  /** 累计已完成的卷数 */
   completedVolumes: number
-  /** 阶段描述 */
   stage: string
 }
 
+export interface BatchOutlineFailure {
+  volumeId: number
+  volumeTitle: string
+  reason: string
+}
+
 export interface BatchOutlineResult {
-  /** 按卷 ID 分组的章节列表 */
+  batchGroupId: string
   chaptersByVolume: Map<number, ParsedChapter[]>
-  /** 是否被用户取消 */
+  candidatesByVolume: Map<number, OutlineGenerationCandidateV1>
+  failures: BatchOutlineFailure[]
   cancelled: boolean
-  /** 总耗时(ms) */
   elapsed: number
 }
 
+export interface BatchOutlineContextRequest {
+  volume: OutlineNode
+  priorOutlineCandidateText?: string
+}
+
 export interface BatchOutlineOptions {
-  /** 要处理的卷列表（已排序） */
+  project: Project
+  nodes: OutlineNode[]
   volumes: OutlineNode[]
-  /** 世界观上下文（单一，作为兜底） */
-  worldContext: string
-  /** 多世界：按卷解析各自世界上下文（提供则逐卷覆盖 worldContext） */
-  worldContextResolver?: (volumeId: number) => Promise<string>
-  /** 用户补充说明 */
+  assembleContext: (request: BatchOutlineContextRequest) => Promise<AssembleContextResult>
   userHint?: string
-  /** 角色上下文 */
-  characterContext?: string
-  /** Phase 32: 世界规则清单（替代旧 historicalContext + creativeMode） */
-  worldRulesContext?: string
-  /** 多世界：按卷解析各自世界规则（提供则逐卷覆盖 worldRulesContext） */
-  worldRulesContextResolver?: (volumeId: number) => Promise<string>
-  /** 进度回调 */
+  runOptions?: RunOptions
   onProgress?: (progress: BatchOutlineProgress) => void
-  /** 取消信号 */
   signal?: AbortSignal
+  /** Test seam for proving one model call per volume without changing production routing. */
+  runModel?: (messages: ChatMessage[], volume: OutlineNode, signal?: AbortSignal) => Promise<string>
+  /** Stable injection for recovery tests. Production callers omit it. */
+  batchGroupId?: string
+}
+
+function newBatchGroupId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return `outline-batch-${globalThis.crypto.randomUUID()}`
+  }
+  return `outline-batch-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+}
+
+function priorCandidateContext(input: {
+  volume: OutlineNode
+  chapters: ParsedChapter[]
+  candidate: OutlineGenerationCandidateV1
+}): string {
+  return [
+    '【同批次上一卷章纲候选（尚未采纳）】',
+    `卷：${input.volume.title}`,
+    `候选哈希：${input.candidate.candidateHash}`,
+    ...input.chapters.map((chapter, index) => (
+      `${index + 1}. ${chapter.title}${chapter.summary ? `：${chapter.summary}` : ''}`
+    )),
+    '仅用于保持后续卷的承接关系；它不是已采纳 Canon，不得覆盖用户正式设定。',
+  ].join('\n')
+}
+
+function cancelledResult(input: {
+  batchGroupId: string
+  chaptersByVolume: Map<number, ParsedChapter[]>
+  candidatesByVolume: Map<number, OutlineGenerationCandidateV1>
+  failures: BatchOutlineFailure[]
+  startTime: number
+}): BatchOutlineResult {
+  return {
+    batchGroupId: input.batchGroupId,
+    chaptersByVolume: input.chaptersByVolume,
+    candidatesByVolume: input.candidatesByVolume,
+    failures: input.failures,
+    cancelled: true,
+    elapsed: Date.now() - input.startTime,
+  }
+}
+
+async function finalizeFailedTrace(input: {
+  trace: OutlineGenerationTraceV1 | null
+  cancelled: boolean
+  code: string
+}): Promise<void> {
+  if (!input.trace) return
+  try {
+    await input.trace.terminateRun({
+      status: input.cancelled ? 'cancelled' : 'failed',
+      code: input.code,
+    })
+  } catch (error) {
+    console.warn('[BatchOutline] 未能提交卷级运行终止证据。', error)
+  }
 }
 
 /**
- * 批量生成章节大纲
- *
- * 按卷顺序逐个调用 AI，前一卷的生成结果作为上下文注入后续卷。
+ * 按卷生成 durable 章纲候选。每卷只有一次模型调用；输出必须通过
+ * 确定性解析，候选持久化成功后才会进入可确认结果。
  */
 export async function runBatchOutlineGeneration(
   options: BatchOutlineOptions,
 ): Promise<BatchOutlineResult> {
   const {
+    project,
+    nodes,
     volumes,
-    worldContext,
-    worldContextResolver,
+    assembleContext,
     userHint,
-    characterContext,
-    worldRulesContext,
-    worldRulesContextResolver,
+    runOptions = {},
     onProgress,
     signal,
   } = options
+  if (project.id == null) throw new Error('批量章纲生成缺少项目 ID')
+  const batchGroupId = options.batchGroupId ?? newBatchGroupId()
+  if (!/^[a-zA-Z0-9_-]{8,120}$/.test(batchGroupId)) throw new Error('批量章纲任务 ID 不符合受控格式')
+
   const config = useAIConfigStore.getState().config
   const chaptersByVolume = new Map<number, ParsedChapter[]>()
+  const candidatesByVolume = new Map<number, OutlineGenerationCandidateV1>()
+  const failures: BatchOutlineFailure[] = []
   const startTime = Date.now()
+  let previous: {
+    volume: OutlineNode
+    chapters: ParsedChapter[]
+    candidate: OutlineGenerationCandidateV1
+  } | null = null
 
-  let prevVolumeChaptersSummary = ''
-
-  for (let i = 0; i < volumes.length; i++) {
-    // 检查取消
+  for (let index = 0; index < volumes.length; index++) {
     if (signal?.aborted) {
-      return { chaptersByVolume, cancelled: true, elapsed: Date.now() - startTime }
+      return cancelledResult({ batchGroupId, chaptersByVolume, candidatesByVolume, failures, startTime })
     }
-
-    const vol = volumes[i]
-    const volId = vol.id!
-
+    const volume = volumes[index]
+    if (volume.id == null) {
+      failures.push({ volumeId: -1, volumeTitle: volume.title, reason: '目标卷缺少持久化 ID' })
+      continue
+    }
+    const volumeId = volume.id
     onProgress?.({
-      currentVolumeIndex: i,
+      currentVolumeIndex: index,
       totalVolumes: volumes.length,
-      currentVolumeTitle: vol.title,
+      currentVolumeTitle: volume.title,
       parsedChapters: [],
-      completedVolumes: i,
-      stage: `正在生成「${vol.title}」的章节大纲...`,
+      completedVolumes: index,
+      stage: `正在生成「${volume.title}」的章节大纲...`,
     })
 
-    // 构建前序摘要：上一卷的章节梗概
-    const prevSummary = prevVolumeChaptersSummary
-      || (i > 0 ? volumes[i - 1].summary : '')
-
-    // 多世界：用本卷所属世界的上下文
-    const volWorldContext = worldContextResolver ? await worldContextResolver(volId) : worldContext
-    const volWorldRulesContext = worldRulesContextResolver
-      ? await worldRulesContextResolver(volId)
-      : worldRulesContext
-
-    const messages = buildChapterOutlinePrompt(
-      vol.title,
-      vol.summary,
-      volWorldContext,
-      prevSummary,
-      userHint,
-      undefined, // options
-      characterContext,
-      volWorldRulesContext,
-    )
-
+    let trace: OutlineGenerationTraceV1 | null = null
     try {
-      const rawOutput = await chat(messages, config, { category: 'outline.chapter', projectId: vol.projectId })
-
-      if (signal?.aborted) {
-        return { chaptersByVolume, cancelled: true, elapsed: Date.now() - startTime }
-      }
-
-      const parsed = await parseChapterOutlineSmart(rawOutput, config)
-      chaptersByVolume.set(volId, parsed)
-
-      // 把本卷章节摘要串联，作为下一卷的前序上下文
-      prevVolumeChaptersSummary = parsed
-        .map((ch, idx) => `${idx + 1}. ${ch.title}：${ch.summary}`)
-        .join('\n')
-        .slice(0, 800) // 限制 token
-
-      onProgress?.({
-        currentVolumeIndex: i,
-        totalVolumes: volumes.length,
-        currentVolumeTitle: vol.title,
-        parsedChapters: parsed,
-        completedVolumes: i + 1,
-        stage: `「${vol.title}」完成，生成了 ${parsed.length} 章`,
+      const scopedPrevious = previous
+        && (previous.volume.worldGroupId ?? null) === (volume.worldGroupId ?? null)
+        ? previous
+        : null
+      const predecessorCandidateHash = scopedPrevious?.candidate.candidateHash
+      const assembled = await assembleContext({
+        volume,
+        priorOutlineCandidateText: scopedPrevious ? priorCandidateContext(scopedPrevious) : undefined,
       })
-    } catch (err) {
       if (signal?.aborted) {
-        return { chaptersByVolume, cancelled: true, elapsed: Date.now() - startTime }
+        return cancelledResult({ batchGroupId, chaptersByVolume, candidatesByVolume, failures, startTime })
       }
-      // 单卷失败不中断，记录空结果继续
-      console.error(`[BatchOutline] 卷「${vol.title}」生成失败:`, err)
-      chaptersByVolume.set(volId, [])
+      const request = { kind: 'chapters' as const, volumeId }
+      const runModel = options.runModel ?? ((messages: ChatMessage[], target: OutlineNode, abortSignal?: AbortSignal) => (
+        chat(messages, config, { category: 'outline.chapter', projectId: target.projectId }, abortSignal)
+      ))
+      const node = createOutlineGenerationNode({
+        request,
+        project,
+        nodes,
+        volumes,
+        hint: userHint ?? '',
+        runOptions,
+        ai: { start: messages => runModel(messages, volume, signal) },
+      })
+      const prepared = prepareGenerationNode(node, assembled)
+      trace = await createOutlineGenerationTraceV1({
+        projectId: project.id,
+        worldGroupId: volume.worldGroupId ?? null,
+        request,
+        assembled,
+        durable: true,
+        batch: {
+          batchGroupId,
+          batchIndex: index,
+          batchTotal: volumes.length,
+          ...(predecessorCandidateHash ? { predecessorCandidateHash } : {}),
+        },
+      })
+      if (!trace.durable) {
+        throw new Error(`durable 运行初始化失败：${trace.initializationError ?? '未知原因'}`)
+      }
+      const generation = await runGenerationNode(node, prepared, { shadowTrace: trace })
+      if (generation.gate?.status === 'blocked') {
+        throw new Error(generation.gate.issues.map(issue => issue.message).join('；'))
+      }
+      const parsed = parseChapterOutlineOutput(generation.output)
+      if (parsed.length === 0) throw new Error('模型输出无法确定性解析为章节大纲')
+      const candidate = await trace.persistCandidate(generation.output)
+      if (!candidate) throw new Error('durable 候选未能持久化')
 
+      chaptersByVolume.set(volumeId, parsed)
+      candidatesByVolume.set(volumeId, candidate)
+      previous = { volume, chapters: parsed, candidate }
       onProgress?.({
-        currentVolumeIndex: i,
+        currentVolumeIndex: index,
         totalVolumes: volumes.length,
-        currentVolumeTitle: vol.title,
+        currentVolumeTitle: volume.title,
+        parsedChapters: parsed,
+        completedVolumes: index + 1,
+        stage: `「${volume.title}」完成，生成了 ${parsed.length} 章`,
+      })
+      if (signal?.aborted) {
+        await finalizeFailedTrace({
+          trace,
+          cancelled: true,
+          code: 'author_cancelled_batch',
+        })
+        return cancelledResult({ batchGroupId, chaptersByVolume, candidatesByVolume, failures, startTime })
+      }
+    } catch (error) {
+      if (signal?.aborted) {
+        await finalizeFailedTrace({
+          trace,
+          cancelled: true,
+          code: 'author_cancelled_batch',
+        })
+        return cancelledResult({ batchGroupId, chaptersByVolume, candidatesByVolume, failures, startTime })
+      }
+      const reason = error instanceof Error ? error.message : String(error)
+      await finalizeFailedTrace({
+        trace,
+        cancelled: false,
+        code: reason,
+      })
+      console.error(`[BatchOutline] 卷「${volume.title}」生成失败:`, error)
+      failures.push({ volumeId, volumeTitle: volume.title, reason })
+      onProgress?.({
+        currentVolumeIndex: index,
+        totalVolumes: volumes.length,
+        currentVolumeTitle: volume.title,
         parsedChapters: [],
-        completedVolumes: i + 1,
-        stage: `「${vol.title}」生成失败，已跳过`,
+        completedVolumes: index + 1,
+        stage: `「${volume.title}」生成失败，已保留诊断并跳过`,
       })
     }
   }
 
   return {
+    batchGroupId,
     chaptersByVolume,
+    candidatesByVolume,
+    failures,
     cancelled: false,
     elapsed: Date.now() - startTime,
   }

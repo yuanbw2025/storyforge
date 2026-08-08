@@ -1,79 +1,151 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   runBatchOutlineGeneration,
   type BatchOutlineProgress,
 } from '../../lib/ai/batch-outline-runner'
-import type { ParsedChapter } from '../../lib/ai/parse-outline-output'
+import {
+  parseChapterOutlineOutput,
+  type ParsedChapter,
+} from '../../lib/ai/parse-outline-output'
 import { adoptGeneratedOutlineItems } from '../../lib/outline/adopt-generation'
+import type { RunOptions } from '../../lib/ai/adapters/outline-adapter'
+import {
+  beginOutlineGenerationAdoptionV1,
+  commitOutlineGenerationAdoptionV1,
+  rejectOutlineGenerationCandidateV1,
+  restoreLatestOutlineGenerationBatchV1,
+  type OutlineGenerationCandidateV1,
+} from '../../lib/outline/harness'
+import { decodeGenerationOperation } from '../../lib/outline/generation-request'
 import type { AssembleContextResult } from '../../lib/registry/types'
-import type { OutlineNode } from '../../lib/types'
+import type { OutlineNode, Project } from '../../lib/types'
 
 interface Options {
-  projectId: number
+  project: Project
   multiWorldEnabled: boolean
   volumes: OutlineNode[]
   nodes: OutlineNode[]
   hint: string
-  assembleContext: (worldGroupId: number | null, outlineNodeId?: number | null) => Promise<AssembleContextResult>
+  runOptions: RunOptions
+  assembleContext: (
+    worldGroupId: number | null,
+    outlineNodeId?: number | null,
+    priorOutlineCandidateText?: string,
+  ) => Promise<AssembleContextResult>
   reloadOutline: () => Promise<void>
+  onInfo: (message: string) => void
   onError: (message: string) => void
 }
 
-function contextPart(assembled: AssembleContextResult, key: string): string {
-  const index = assembled.included.indexOf(key)
-  return index >= 0 ? assembled.segments[index]?.content ?? '' : ''
+async function rejectCandidates(candidates: Iterable<OutlineGenerationCandidateV1>, reason: string): Promise<void> {
+  for (const candidate of candidates) {
+    await rejectOutlineGenerationCandidateV1(candidate, reason).catch(error => {
+      console.warn('[Outline Batch Harness] 候选拒绝证据记录失败。', error)
+    })
+  }
+}
+
+function projectRestoredBatch(input: Awaited<ReturnType<typeof restoreLatestOutlineGenerationBatchV1>>): {
+  chapters: Map<number, ParsedChapter[]>
+  candidates: Map<number, OutlineGenerationCandidateV1>
+} | null {
+  if (!input) return null
+  const chapters = new Map<number, ParsedChapter[]>()
+  const candidates = new Map<number, OutlineGenerationCandidateV1>()
+  for (const candidate of input.candidates) {
+    const request = decodeGenerationOperation(candidate.operation)
+    if (request?.kind !== 'chapters') continue
+    const parsed = parseChapterOutlineOutput(candidate.output)
+    if (parsed.length === 0) continue
+    chapters.set(request.volumeId, parsed)
+    candidates.set(request.volumeId, candidate)
+  }
+  return candidates.size > 0 ? { chapters, candidates } : null
 }
 
 export function useOutlineBatchGeneration({
-  projectId,
+  project,
   multiWorldEnabled,
   volumes,
   nodes,
   hint,
+  runOptions,
   assembleContext,
   reloadOutline,
+  onInfo,
   onError,
 }: Options) {
   const [progress, setProgress] = useState<BatchOutlineProgress | null>(null)
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<Map<number, ParsedChapter[]> | null>(null)
+  const [candidates, setCandidates] = useState<Map<number, OutlineGenerationCandidateV1>>(new Map())
   const abortRef = useRef<AbortController | null>(null)
+  const restoredProjectRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (project.id == null || restoredProjectRef.current === project.id) return
+    restoredProjectRef.current = project.id
+    let cancelled = false
+    void restoreLatestOutlineGenerationBatchV1(project.id)
+      .then(restored => {
+        if (cancelled) return
+        const projected = projectRestoredBatch(restored)
+        if (!projected) return
+        setResult(projected.chapters)
+        setCandidates(projected.candidates)
+        onInfo(`已恢复刷新前尚未确认的批量章纲候选，共 ${projected.candidates.size} 卷。`)
+      })
+      .catch(error => {
+        console.warn('[Outline Batch Harness] 批量候选恢复失败，已保持当前界面状态。', error)
+      })
+    return () => { cancelled = true }
+  }, [onInfo, project.id])
 
   const generate = useCallback(async () => {
-    if (volumes.length === 0) return
+    if (project.id == null || volumes.length === 0) return
+    if (candidates.size > 0) {
+      await rejectCandidates(candidates.values(), '作者启动了新的批量章纲任务，旧批量候选已失效。')
+    }
     setRunning(true)
     setResult(null)
+    setCandidates(new Map())
     setProgress(null)
 
     const controller = new AbortController()
     abortRef.current = controller
 
     try {
-      const assembled = await assembleContext(null)
       const generationResult = await runBatchOutlineGeneration({
+        project,
+        nodes,
         volumes,
-        worldContext: assembled.text,
-        worldContextResolver: multiWorldEnabled
-          ? async volumeId => {
-            const volume = nodes.find(node => node.id === volumeId)
-            const resolved = await assembleContext(volume?.worldGroupId ?? null, volumeId)
-            return resolved.text
-          }
-          : undefined,
-        worldRulesContextResolver: multiWorldEnabled
-          ? async volumeId => {
-            const volume = nodes.find(node => node.id === volumeId)
-            const resolved = await assembleContext(volume?.worldGroupId ?? null, volumeId)
-            return contextPart(resolved, 'worldRules')
-          }
-          : undefined,
         userHint: hint || undefined,
-        characterContext: contextPart(assembled, 'characters'),
-        worldRulesContext: contextPart(assembled, 'worldRules'),
+        runOptions,
+        assembleContext: ({ volume, priorOutlineCandidateText }) => assembleContext(
+          multiWorldEnabled ? (volume.worldGroupId ?? null) : null,
+          volume.id,
+          priorOutlineCandidateText,
+        ),
         signal: controller.signal,
         onProgress: setProgress,
       })
-      if (!generationResult.cancelled) setResult(generationResult.chaptersByVolume)
+      if (generationResult.cancelled) {
+        await rejectCandidates(
+          generationResult.candidatesByVolume.values(),
+          '作者取消了批量章纲生成，已生成候选不进入正式数据。',
+        )
+        return
+      }
+      if (generationResult.candidatesByVolume.size === 0) {
+        const first = generationResult.failures[0]?.reason ?? '没有卷生成出可确认候选'
+        onError(`批量生成章节失败：${first}。`)
+        return
+      }
+      setResult(generationResult.chaptersByVolume)
+      setCandidates(generationResult.candidatesByVolume)
+      if (generationResult.failures.length > 0) {
+        onInfo(`已生成 ${generationResult.candidatesByVolume.size} 卷，另有 ${generationResult.failures.length} 卷失败并保留了诊断。`)
+      }
     } catch (error) {
       console.error('[BatchOutline] 失败:', error)
       onError(`批量生成章节失败：${error instanceof Error ? error.message : '未知错误'}。`)
@@ -81,41 +153,85 @@ export function useOutlineBatchGeneration({
       if (abortRef.current === controller) abortRef.current = null
       setRunning(false)
     }
-  }, [volumes, nodes, multiWorldEnabled, hint, assembleContext, onError])
+  }, [
+    assembleContext,
+    candidates,
+    hint,
+    multiWorldEnabled,
+    nodes,
+    onError,
+    onInfo,
+    project,
+    runOptions,
+    volumes,
+  ])
 
   const cancel = useCallback(() => {
     abortRef.current?.abort()
-    abortRef.current = null
-    setRunning(false)
   }, [])
 
   const confirm = useCallback(async () => {
-    if (!result) return
-    try {
-      for (const [volumeId, chapters] of result) {
-        const existingCount = nodes.filter(node => node.parentId === volumeId && node.type === 'chapter').length
-        await adoptGeneratedOutlineItems({
-          projectId,
+    if (project.id == null || !result || candidates.size === 0) return
+    const errors: string[] = []
+    const ordered = [...candidates.entries()].sort((left, right) => (
+      (left[1].batch?.batchIndex ?? 0) - (right[1].batch?.batchIndex ?? 0)
+    ))
+    for (const [volumeId, candidate] of ordered) {
+      const chapters = result.get(volumeId)
+      const volume = nodes.find(node => node.id === volumeId && node.type === 'volume')
+      if (!chapters?.length || !volume) {
+        const reason = `目标卷 ${volumeId} 或其候选内容已不存在`
+        errors.push(reason)
+        await rejectOutlineGenerationCandidateV1(candidate, reason).catch(() => undefined)
+        continue
+      }
+      const existingChapters = nodes.filter(node => node.parentId === volumeId && node.type === 'chapter')
+      const intent = {
+        version: 1 as const,
+        kind: 'chapters' as const,
+        destinationVolumeId: volumeId,
+        items: chapters,
+        startingOrder: existingChapters.length,
+        baseExistingTitles: existingChapters.map(chapter => chapter.title),
+      }
+      try {
+        await beginOutlineGenerationAdoptionV1(candidate, intent)
+        const adoption = await adoptGeneratedOutlineItems({
+          projectId: project.id,
+          worldGroupId: volume.worldGroupId ?? null,
           parentId: volumeId,
           type: 'chapter',
           items: chapters,
-          startingOrder: existingCount,
+          startingOrder: existingChapters.length,
         })
+        if (adoption.writtenCount === 0) {
+          throw new Error(adoption.skippedReasons.join('；') || '未写入任何章节')
+        }
+        await commitOutlineGenerationAdoptionV1(candidate, {
+          kind: 'chapters',
+          volumeId,
+          items: chapters,
+          result: adoption,
+        }, intent)
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error)
+        errors.push(`「${volume.title}」：${reason}`)
+        await rejectOutlineGenerationCandidateV1(candidate, reason).catch(() => undefined)
       }
-    } catch (error) {
-      console.error('[Outline] 批量写入章节失败:', error)
-      onError(`批量写入章节时出错：${error instanceof Error ? error.message : '未知错误'}。请查看控制台获取详情。`)
-      return
     }
     await reloadOutline()
     setResult(null)
+    setCandidates(new Map())
     setProgress(null)
-  }, [result, nodes, projectId, reloadOutline, onError])
+    if (errors.length > 0) onError(`批量写入有 ${errors.length} 卷失败：${errors.join('；')}`)
+  }, [candidates, nodes, onError, project.id, reloadOutline, result])
 
-  const dismiss = useCallback(() => {
+  const dismiss = useCallback(async () => {
+    await rejectCandidates(candidates.values(), '作者关闭了批量章纲候选，没有写入项目。')
     setResult(null)
+    setCandidates(new Map())
     setProgress(null)
-  }, [])
+  }, [candidates])
 
   return { progress, running, result, generate, cancel, confirm, dismiss }
 }
