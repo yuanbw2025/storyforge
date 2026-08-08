@@ -167,10 +167,15 @@ export default function ChapterOrganizationModal({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-bg-base p-3 text-xs text-text-secondary sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-bg-base p-3 text-xs text-text-secondary sm:grid-cols-4">
             <span>约 {candidate.budget.usedTokens.toLocaleString()} / {candidate.budget.maxTokens.toLocaleString()} tokens</span>
             <span>{candidate.budget.calls} / {candidate.budget.maxCalls} 次模型调用</span>
             <span>正文指纹 {candidate.sourceTextHash.slice(0, 12)}…</span>
+            {candidate.durable && (
+              <span title={candidate.durable.contextManifestHash}>
+                Run #{candidate.durable.runId} · durable
+              </span>
+            )}
           </div>
 
           {renderSection({

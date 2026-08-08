@@ -110,6 +110,16 @@ export interface ChapterOrganizationCandidate {
   domainStatus: Record<ChapterOrganizationDomain, ChapterOrganizationDomainStatus>
   domainErrors: Partial<Record<ChapterOrganizationDomain, string>>
   budget: AgentTeamBudgetEvidence
+  /** H5 durable harness evidence; absent for legacy/manual runs. */
+  durable?: ChapterOrganizationDurableEvidence
+}
+
+export interface ChapterOrganizationDurableEvidence {
+  runId: number
+  stepId: string
+  attempt: number
+  contextManifestHash: string
+  candidateHash: string
 }
 
 export interface ChapterOrganizationSelection {
@@ -268,6 +278,8 @@ export function buildChapterOrganizationPrompt(input: {
   knownItemNames: string[]
   existingRelations: CharacterRelation[]
   foreshadows: Foreshadow[]
+  /** H5: 由 CONTEXT_SOURCES + assembleContext() 生成的受控上下文快照。 */
+  contextSnapshot?: string
 }): ChatMessage[] {
   const characterList = input.characters
     .filter(character => character.id != null && character.name.trim())
@@ -330,6 +342,8 @@ ${foreshadowList}
 
 【正文】
 ${input.chapterText}
+
+${input.contextSnapshot ? `【Harness 受控上下文快照】\n${input.contextSnapshot}\n` : ''}
 
 请输出严格 JSON：`,
     },
@@ -395,6 +409,7 @@ export async function runChapterOrganization(input: {
   knownItemNames: string[]
   existingRelations: CharacterRelation[]
   foreshadows: Foreshadow[]
+  contextSnapshot?: string
   budget: AgentTeamBudgetTracker
   call: (messages: ChatMessage[]) => Promise<string>
 }): Promise<ChapterOrganizationCandidate> {
@@ -437,7 +452,11 @@ function isChapterOrganizationCandidate(value: unknown): value is ChapterOrganiz
 
 export async function persistChapterOrganizationCandidate(
   candidate: ChapterOrganizationCandidate,
+  options: { durable?: ChapterOrganizationDurableEvidence } = {},
 ): Promise<ChapterOrganizationRun> {
+  const storedCandidate = options.durable
+    ? { ...candidate, durable: options.durable }
+    : candidate
   const scope = await resolveScopeLike(candidate.projectId)
   const chapter = await db.chapters.get(candidate.chapterId)
   if (!await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) {
@@ -459,15 +478,15 @@ export async function persistChapterOrganizationCandidate(
       conversationId,
       sequence: 1,
       kind: 'candidate',
-      content: summarizeChapterOrganizationCandidate(candidate),
-      payload: JSON.stringify(candidate),
+      content: summarizeChapterOrganizationCandidate(storedCandidate),
+      payload: JSON.stringify(storedCandidate),
       createdAt: now,
     }, { owner: 'work' }) as AgentEvent
     const eventId = await db.agentEvents.add(event) as number
     return {
       conversation: { ...conversation, id: conversationId },
       event: { ...event, id: eventId },
-      candidate,
+      candidate: storedCandidate,
     }
   })
 }

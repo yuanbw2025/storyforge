@@ -68,6 +68,20 @@ import {
   type ChapterOrganizationRun,
   type ChapterOrganizationSelection,
 } from '../../lib/agent/chapter-organization'
+import {
+  beginChapterOrganizationDurableStepV1,
+  commitChapterOrganizationDurableAdoptionV1,
+  createChapterOrganizationDurableRunV1,
+  failChapterOrganizationDurableStepV1,
+  hashChapterOrganizationCandidateV1,
+  markChapterOrganizationStaleV1,
+  recordChapterOrganizationCandidateV1,
+  recoverChapterOrganizationCandidateV1,
+  CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1,
+  CHAPTER_ORGANIZATION_SOURCE_KEYS_V1,
+} from '../../lib/agent/run/chapter-organization-durable'
+import { createContextManifestFromAssemblyV1 } from '../../lib/agent/run/context-manifest'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
 import {
   isConsistencyAgentCurrent,
@@ -201,6 +215,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         projectId: project.id!,
         chapterId: currentChapter.id!,
       })
+      if (run?.candidate.durable) {
+        try {
+          await recoverChapterOrganizationCandidateV1({
+            scope: await resolveScopeLike(project.id!),
+            candidate: run.candidate,
+          })
+        } catch (error) {
+          console.warn('[ChapterOrganization] 恢复 durable 候选证据失败:', error)
+        }
+      }
       const current = run ? await isChapterOrganizationCurrent(run.candidate) : false
       if (!active) return
       setOrganizationRun(run)
@@ -824,7 +848,47 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     organizationAbortRef.current = controller
     setOrganizingChapter(true)
     setOrganizationError('')
+    let durableSnapshot: Awaited<ReturnType<typeof createChapterOrganizationDurableRunV1>> | null = null
+    let candidateEventPersisted = false
     try {
+      const workspaceScope = await resolveScopeLike(project.id!)
+      durableSnapshot = await createChapterOrganizationDurableRunV1({
+        scope: workspaceScope,
+        worldGroupId: chapterWorldGroupId ?? null,
+        chapterId: currentChapter.id,
+      })
+      const assembled = await assembleContext({
+        projectId: project.id!,
+        scope: workspaceScope,
+        worldGroupId: chapterWorldGroupId ?? null,
+        chapterId: currentChapter.id,
+        outlineNodeId: currentChapter.outlineNodeId,
+        sourceKeys: [...CHAPTER_ORGANIZATION_SOURCE_KEYS_V1],
+        inputBudgetMaxTokens: 24_000,
+      })
+      const contextManifest = await createContextManifestFromAssemblyV1({
+        runId: durableSnapshot.run.id,
+        stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1,
+        attempt: 1,
+        projectId: project.id!,
+        worldGroupId: chapterWorldGroupId ?? null,
+        declaredSourceKeys: CHAPTER_ORGANIZATION_SOURCE_KEYS_V1,
+        assembled,
+        boundary: { chapterId: currentChapter.id, outlineNodeId: currentChapter.outlineNodeId },
+        readerVersion: 'chapter-organization-context-v1',
+      })
+      const organizationContextSnapshot = assembled.included.flatMap((sourceKey, index) => (
+        sourceKey === 'chapterContent' ? [] : [assembled.segments[index]?.content ?? '']
+      )).filter(Boolean).join('\n\n')
+      durableSnapshot = await beginChapterOrganizationDurableStepV1({
+        scope: workspaceScope,
+        snapshot: durableSnapshot,
+        contextManifest,
+        binding: {
+          chapterId: currentChapter.id,
+          sourceKeys: CHAPTER_ORGANIZATION_SOURCE_KEYS_V1,
+        },
+      })
       const [allRelations] = await Promise.all([
         db.characterRelations.where('projectId').equals(project.id!).toArray(),
         loadForeshadows(project.id!),
@@ -855,6 +919,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         knownItemNames: itemEntries.map(entry => entry.itemName),
         existingRelations,
         foreshadows: useForeshadowStore.getState().foreshadows,
+        // 正文已在专用区完整提供；这里只追加其它登记来源，避免正文重复消耗 tokens。
+        contextSnapshot: organizationContextSnapshot,
         budget,
         call: messages => chat(messages, aiConfig, {
           category: 'chapter.organize',
@@ -863,11 +929,38 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           contextOverflowPolicy: 'reject',
         }, controller.signal),
       })
-      const run = await persistChapterOrganizationCandidate(candidate)
+      const candidateHash = await hashChapterOrganizationCandidateV1(candidate)
+      const run = await persistChapterOrganizationCandidate(candidate, {
+        durable: {
+          runId: durableSnapshot.run.id,
+          stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1,
+          attempt: 1,
+          contextManifestHash: contextManifest.manifestHash,
+          candidateHash,
+        },
+      })
+      candidateEventPersisted = true
+      await recordChapterOrganizationCandidateV1({
+        scope: workspaceScope,
+        snapshot: durableSnapshot,
+        candidate: run.candidate,
+      })
       setOrganizationRun(run)
       setOrganizationCurrent(true)
       setShowOrganization(true)
     } catch (error) {
+      if (durableSnapshot && !candidateEventPersisted) {
+        try {
+          await failChapterOrganizationDurableStepV1({
+            scope: await resolveScopeLike(project.id!),
+            snapshot: durableSnapshot,
+            code: error instanceof Error ? error.message : 'chapter_organization_failed',
+            retryable: true,
+          })
+        } catch (traceError) {
+          console.warn('[ChapterOrganization] durable 失败证据写入失败:', traceError)
+        }
+      }
       if (!controller.signal.aborted) {
         const message = error instanceof Error ? error.message : '整理本章失败'
         setOrganizationError(message)
@@ -890,11 +983,31 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const failed = Object.entries(result.run.candidate.domainErrors)
       if (failed.length) {
         setOrganizationError(failed.map(([domain, message]) => `${domain}: ${message}`).join('；'))
+      } else if (result.run.candidate.durable) {
+        const workspaceScope = await resolveScopeLike(project.id!)
+        await commitChapterOrganizationDurableAdoptionV1({
+          scope: workspaceScope,
+          runId: result.run.candidate.durable.runId,
+          candidate: result.run.candidate,
+          written: result.written,
+        })
       }
     } catch (error) {
       setOrganizationError(error instanceof Error ? error.message : '写入整理结果失败')
       if (organizationRun) {
-        setOrganizationCurrent(await isChapterOrganizationCurrent(organizationRun.candidate))
+        const current = await isChapterOrganizationCurrent(organizationRun.candidate)
+        setOrganizationCurrent(current)
+        if (!current && organizationRun.candidate.durable) {
+          try {
+            await markChapterOrganizationStaleV1({
+              scope: await resolveScopeLike(project.id!),
+              runId: organizationRun.candidate.durable.runId,
+              reason: '正文已变化；作者确认前的整理候选已失效。',
+            })
+          } catch (traceError) {
+            console.warn('[ChapterOrganization] stale 证据写入失败:', traceError)
+          }
+        }
       }
     } finally {
       setOrganizingChapter(false)
