@@ -10,11 +10,32 @@
 
 import { chat } from './client'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { buildEnhancedDetailPrompt, parseEnhancedDetailSmart } from './adapters/detail-scene-adapter'
+import { buildEnhancedDetailPrompt, parseEnhancedDetailResult } from './adapters/detail-scene-adapter'
 import { buildChapterContentPrompt } from './adapters/chapter-adapter'
-import type { OutlineNode, DetailedOutline } from '../types'
+import type { OutlineNode, DetailedOutline, WorkspaceScope } from '../types'
+import type { AssembleContextResult } from '../registry/types'
 import type { ScenePace } from '../types/detailed-outline'
 import { nanoid } from '../utils/id'
+import { hashCanonicalValue } from '../agent/run/hash'
+import { hashDetailedOutlineSourceSummaryV1 } from '../agent/run/detailed-outline-generation-durable'
+import {
+  beginDetailedOutlineBatchStepV1,
+  cancelDetailedOutlineBatchRunV1,
+  commitDetailedOutlineBatchCandidateV1,
+  createDetailedOutlineBatchDurableRunV1,
+  detailedOutlineBatchManifestV1,
+  detailedOutlineBatchStepIdV1,
+  failDetailedOutlineBatchStepV1,
+  hashDetailedOutlineBatchCandidateV1,
+  pauseDetailedOutlineBatchRunV1,
+  persistDetailedOutlineBatchCandidateV1,
+  recordDetailedOutlineBatchCandidateV1,
+  recordDetailedOutlineBatchModelOutputV1,
+  rejectDetailedOutlineBatchCandidateV1,
+  verifyDetailedOutlineBatchRunV1,
+  DETAILED_OUTLINE_BATCH_GENERATION_CANDIDATE_TYPE_V1,
+  type DetailedOutlineBatchCandidateV1,
+} from '../agent/run/detailed-outline-batch-durable'
 
 // ── 公共类型 ─────────────────────────────────────────────────────
 
@@ -36,16 +57,26 @@ export interface BatchDetailOptions {
   chapters: OutlineNode[]
   /** 已有细纲列表（用于跳过） */
   existingDetails: DetailedOutline[]
-  /** 世界观上下文（单一，作为兜底） */
-  worldContext: string
-  /** 多世界：按章解析各自世界上下文（提供则逐章覆盖 worldContext） */
-  worldContextResolver?: (chapterNodeId: number) => Promise<string>
-  /** 角色上下文（ID:name 列表） */
-  characterContext: string
-  /** 伏笔上下文 */
-  foreshadowContext: string
   /** 保存回调：把生成的细纲数据写入 store/DB */
   onSave: (outlineNodeId: number, data: Partial<DetailedOutline>) => Promise<void>
+  /** H10：批量任务必须绑定当前 Work，不允许以 projectId 猜测写入范围。 */
+  scope: WorkspaceScope
+  /** H10：逐章提供真实 assembleContext 结果，供 Context Manifest 留证。 */
+  contextResolver: (chapterNodeId: number) => Promise<{
+    worldGroupId: number | null
+    worldContext: string
+    characterContext?: string
+    foreshadowContext?: string
+    assembled: AssembleContextResult
+  }>
+  /** 候选落入 durable ledger 后等待作者逐章确认；未确认绝不调用 onSave。 */
+  onCandidate: (input: {
+    chapter: OutlineNode
+    candidate: DetailedOutlineBatchCandidateV1
+  }) => Promise<'adopt' | 'reject'>
+  /** 采纳后读取正式表，用于父任务终态验证。 */
+  onPostState: (outlineNodeId: number) => Promise<unknown>
+  onRunCreated?: (runId: number) => void
   onProgress?: (p: BatchProgress) => void
   signal?: AbortSignal
 }
@@ -56,13 +87,25 @@ export interface BatchDetailResult {
   failed: number
   cancelled: boolean
   elapsed: number
+  runIds: number[]
 }
 
-/** 批量生成细纲：跳过已有、串行调用 AI、逐个保存 */
+/** 批量生成细纲：跳过已有、串行调用 AI、逐章确认后受控采纳。 */
 export async function batchGenerateDetails(
   opts: BatchDetailOptions,
 ): Promise<BatchDetailResult> {
-  const { chapters, existingDetails, worldContext, worldContextResolver, characterContext, foreshadowContext, onSave, onProgress, signal } = opts
+  const {
+    chapters,
+    existingDetails,
+    onSave,
+    onProgress,
+    signal,
+    scope,
+    contextResolver,
+    onCandidate,
+    onPostState,
+    onRunCreated,
+  } = opts
   const config = useAIConfigStore.getState().config
   const start = Date.now()
 
@@ -73,46 +116,122 @@ export async function batchGenerateDetails(
   let generated = 0
   let failed = 0
   const failures: string[] = []
+  const runIds: number[] = []
 
-  for (let i = 0; i < todo.length; i++) {
-    if (signal?.aborted) {
-      return { generated, skipped: chapters.length - todo.length, failed, cancelled: true, elapsed: Date.now() - start }
-    }
+  const groups = new Map<number | null, OutlineNode[]>()
+  for (const chapter of todo) {
+    const worldGroupId = chapter.worldGroupId ?? null
+    groups.set(worldGroupId, [...(groups.get(worldGroupId) ?? []), chapter])
+  }
 
-    const ch = todo[i]
-    const idx = chapters.indexOf(ch)
-    const prevSummary = idx > 0 ? (chapters[idx - 1].summary || '') : ''
-    const nextSummary = idx < chapters.length - 1 ? (chapters[idx + 1].summary || '') : ''
+  let processed = 0
 
-    onProgress?.({
-      current: i + 1,
-      total: todo.length,
-      currentTitle: ch.title,
-      stage: `正在生成「${ch.title}」的细纲...`,
-      completed: i,
-      failures,
+  for (const [worldGroupId, group] of groups) {
+    let snapshot = await createDetailedOutlineBatchDurableRunV1({
+      scope,
+      worldGroupId,
+      outlineNodeIds: group.map(chapter => chapter.id!),
     })
+    runIds.push(snapshot.run.id)
+    onRunCreated?.(snapshot.run.id)
+    const acceptedCandidates: DetailedOutlineBatchCandidateV1[] = []
+    const postStates: unknown[] = []
+    let groupFailed = false
 
-    try {
-      // 多世界：用本章所属世界的上下文
-      const chWorldContext = worldContextResolver ? await worldContextResolver(ch.id!) : worldContext
-      const messages = buildEnhancedDetailPrompt(
-        ch.title,
-        ch.summary || '',
-        prevSummary,
-        nextSummary,
-        chWorldContext,
-        characterContext,
-        foreshadowContext,
-      )
-
-      const rawOutput = await chat(messages, config, { category: 'detail.scene', projectId: ch.projectId })
+    for (const ch of group) {
       if (signal?.aborted) {
-        return { generated, skipped: chapters.length - todo.length, failed, cancelled: true, elapsed: Date.now() - start }
+        snapshot = await cancelDetailedOutlineBatchRunV1({ scope, snapshot })
+        return {
+          generated,
+          skipped: chapters.length - todo.length,
+          failed,
+          cancelled: true,
+          elapsed: Date.now() - start,
+          runIds,
+        }
       }
 
-      const parsed = await parseEnhancedDetailSmart(rawOutput, config)
-      if (parsed) {
+      onProgress?.({
+        current: processed + 1,
+        total: todo.length,
+        currentTitle: ch.title,
+        stage: `正在生成「${ch.title}」的细纲候选...`,
+        completed: processed,
+        failures,
+      })
+
+      try {
+        const context = await contextResolver(ch.id!)
+        if (context.worldGroupId !== worldGroupId) {
+          throw new Error('批量细纲逐章上下文与父任务世界作用域不一致。')
+        }
+        const messages = buildEnhancedDetailPrompt(
+          ch.title,
+          ch.summary || '',
+          '',
+          '',
+          context.worldContext,
+          context.characterContext ?? '',
+          context.foreshadowContext ?? '',
+        )
+        const manifest = await detailedOutlineBatchManifestV1({
+          runId: snapshot.run.id,
+          scope,
+          worldGroupId,
+          outlineNodeId: ch.id!,
+          assembled: context.assembled,
+        })
+        const sourceSummaryHash = await hashDetailedOutlineSourceSummaryV1(ch.summary || '')
+        snapshot = await beginDetailedOutlineBatchStepV1({
+          scope,
+          snapshot,
+          contextManifest: manifest,
+          binding: {
+            outlineNodeId: ch.id!,
+            sourceSummaryHash,
+            promptHash: await hashCanonicalValue(messages),
+          },
+        })
+
+        const rawOutput = await chat(
+          messages,
+          config,
+          { category: 'detail.scene', projectId: ch.projectId, contextOverflowPolicy: 'reject' },
+          signal,
+        )
+        if (signal?.aborted) {
+          snapshot = await cancelDetailedOutlineBatchRunV1({ scope, snapshot })
+          return {
+            generated,
+            skipped: chapters.length - todo.length,
+            failed,
+            cancelled: true,
+            elapsed: Date.now() - start,
+            runIds,
+          }
+        }
+
+        snapshot = await recordDetailedOutlineBatchModelOutputV1({
+          scope,
+          snapshot,
+          outlineNodeId: ch.id!,
+          output: rawOutput,
+        })
+        const parsed = parseEnhancedDetailResult(rawOutput)
+        if (!parsed?.scenes?.length) {
+          snapshot = await failDetailedOutlineBatchStepV1({
+            scope,
+            snapshot,
+            outlineNodeId: ch.id!,
+            code: 'invalid_structured_detail_output',
+            retryable: true,
+          })
+          failed++
+          groupFailed = true
+          failures.push(ch.title)
+          continue
+        }
+
         const data: Partial<DetailedOutline> = {}
         if (parsed.openingHook) data.openingHook = parsed.openingHook
         if (parsed.endingCliffhanger) data.endingCliffhanger = parsed.endingCliffhanger
@@ -137,16 +256,111 @@ export async function batchGenerateDetails(
           }))
         }
 
-        await onSave(ch.id!, data)
+        const baseCandidate: Omit<DetailedOutlineBatchCandidateV1, 'durable'> = {
+          version: 1,
+          type: DETAILED_OUTLINE_BATCH_GENERATION_CANDIDATE_TYPE_V1,
+          projectId: scope.projectId,
+          runId: snapshot.run.id,
+          stepId: detailedOutlineBatchStepIdV1(ch.id!),
+          outlineNodeId: ch.id!,
+          worldGroupId,
+          operation: 'enhanced',
+          sourceSummaryHash,
+          output: rawOutput,
+          outputHash: await hashCanonicalValue(rawOutput),
+          contextManifestHash: manifest.manifestHash,
+          workspaceScope: scope,
+          createdAt: Date.now(),
+        }
+        const draftCandidate: DetailedOutlineBatchCandidateV1 = {
+          ...baseCandidate,
+          durable: {
+            runId: snapshot.run.id,
+            stepId: detailedOutlineBatchStepIdV1(ch.id!),
+            attempt: 1,
+            candidateHash: '',
+          },
+        }
+        const candidate: DetailedOutlineBatchCandidateV1 = {
+          ...draftCandidate,
+          durable: {
+            ...draftCandidate.durable,
+            candidateHash: await hashDetailedOutlineBatchCandidateV1(draftCandidate),
+          },
+        }
+        await persistDetailedOutlineBatchCandidateV1({ scope, candidate })
+        snapshot = await recordDetailedOutlineBatchCandidateV1({ scope, snapshot, candidate })
+        onProgress?.({
+          current: processed + 1,
+          total: todo.length,
+          currentTitle: ch.title,
+          stage: `等待确认「${ch.title}」的细纲候选...`,
+          completed: processed,
+          failures,
+        })
+        const decision = await onCandidate({ chapter: ch, candidate })
+        if (decision === 'reject') {
+          snapshot = await rejectDetailedOutlineBatchCandidateV1({
+            scope,
+            runId: snapshot.run.id,
+            candidate,
+          })
+          failed++
+          failures.push(ch.title)
+          return {
+            generated,
+            skipped: chapters.length - todo.length,
+            failed,
+            cancelled: true,
+            elapsed: Date.now() - start,
+            runIds,
+          }
+        }
+        snapshot = await commitDetailedOutlineBatchCandidateV1({
+          scope,
+          runId: snapshot.run.id,
+          candidate,
+          output: rawOutput,
+          currentSourceSummaryHash: () => hashDetailedOutlineSourceSummaryV1(ch.summary || ''),
+          adopt: () => onSave(ch.id!, data),
+          postState: () => onPostState(ch.id!),
+        })
+        acceptedCandidates.push(candidate)
+        postStates.push(await onPostState(ch.id!))
         generated++
-      } else {
+      } catch (err) {
+        console.error(`[BatchDetail] 「${ch.title}」生成失败:`, err)
+        const step = snapshot.projection.steps[detailedOutlineBatchStepIdV1(ch.id!)]
+        if (!step || ['scheduled', 'running'].includes(step.status)) {
+          snapshot = await failDetailedOutlineBatchStepV1({
+            scope,
+            snapshot,
+            outlineNodeId: ch.id!,
+            code: err instanceof Error ? err.message : 'batch_detail_failed',
+            retryable: true,
+          })
+        }
         failed++
+        groupFailed = true
         failures.push(ch.title)
+      } finally {
+        processed++
       }
-    } catch (err) {
-      console.error(`[BatchDetail] 「${ch.title}」生成失败:`, err)
-      failed++
-      failures.push(ch.title)
+    }
+
+    if (groupFailed) {
+      snapshot = await pauseDetailedOutlineBatchRunV1({
+        scope,
+        snapshot,
+        reason: `批量细纲有 ${failures.length} 个章节失败；保留断点等待重试。`,
+      })
+    } else {
+      await verifyDetailedOutlineBatchRunV1({
+        scope,
+        runId: snapshot.run.id,
+        candidates: acceptedCandidates,
+        postStates,
+      })
     }
   }
 
@@ -165,6 +379,7 @@ export async function batchGenerateDetails(
     failed,
     cancelled: false,
     elapsed: Date.now() - start,
+    runIds,
   }
 }
 

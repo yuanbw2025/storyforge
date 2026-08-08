@@ -82,9 +82,11 @@ export function buildEnhancedDetailPrompt(
   ]
   if (prevChapterSummary) parts.push(`【上一章摘要】${prevChapterSummary}`)
   if (nextChapterSummary) parts.push(`【下一章摘要】${nextChapterSummary}`)
-  if (worldContext) parts.push(`【世界观】\n${worldContext.slice(0, 500)}`)
-  if (characterList) parts.push(`【可用角色】\n${characterList.slice(0, 600)}`)
-  if (foreshadowList) parts.push(`【可用伏笔】\n${foreshadowList.slice(0, 500)}`)
+  // Context budgets and trimming are owned by assembleContext(). Truncating
+  // again here would make the Context Manifest disagree with the real prompt.
+  if (worldContext) parts.push(`【世界观】\n${worldContext}`)
+  if (characterList) parts.push(`【可用角色】\n${characterList}`)
+  if (foreshadowList) parts.push(`【可用伏笔】\n${foreshadowList}`)
 
   return [
     { role: 'system', content: systemPrompt },

@@ -76,7 +76,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 48 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 49 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -90,6 +90,7 @@
 | `chapterContent` | 章节正文 | chapter | L0 | 100000 |
 | `contextMemo` | 上下文快照 | project | L3 | 1500 |
 | `chapterOutline` | 当前章节大纲 | node | L1 | 800 |
+| `adjacentChapterOutlines` | 相邻章纲 | node | L1 | 1000 |
 | `existingVolumeOutlines` | 已有卷大纲 | project | L1 | 2400 |
 | `writtenChapterProgress` | 本卷已写正文进度 | node | L1 | 3000 |
 | `currentFacts` | 当前有效事实(事实账本投影) | chapter | L1 | 2000 |
@@ -196,7 +197,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
-| `chapter.content.batch` | `src/lib/ai/batch-detail-runner.ts:256` |
+| `chapter.content.batch` | `src/lib/ai/batch-detail-runner.ts:471` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:24` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:451`<br/>`src/lib/node-authoring/domain-execution.ts:515` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1143` |
@@ -211,7 +212,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `codex.extract` | `src/components/codex/CodexPanel.tsx:226` |
 | `cultivation.progress` | `src/components/cultivation/CultivationProgressPanel.tsx:143` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
-| `detail.scene` | `src/components/outline/ScenePanel.tsx:126`<br/>`src/lib/ai/batch-detail-runner.ts:109` |
+| `detail.scene` | `src/components/outline/ScenePanel.tsx:126`<br/>`src/lib/ai/batch-detail-runner.ts:196` |
 | `emotion.beat` | `src/components/editor/EmotionBeatCard.tsx:66` |
 | `foreshadow.structure` | `src/components/foreshadow/ForeshadowPanel.tsx:67` |
 | `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:216` |
@@ -269,4 +270,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `4ab7196`
+生成时间基准:commit `1cf7897`

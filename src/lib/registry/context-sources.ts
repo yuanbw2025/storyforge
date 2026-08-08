@@ -5,6 +5,7 @@
  */
 import { db } from '../db/schema'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
+import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import { getFactPredicate } from './fact-predicate-registry'
 import { retrieveChunks, embedQuery, readNarrativeSummaryContext } from '../retrieval/retrieval'
 import { isEmbeddingReady, embeddingModelTag } from '../ai/adapters/embedding-adapter'
@@ -370,6 +371,28 @@ async function readChapterOutline(projectId: number, outlineNodeId?: number | nu
   if (scope && (!node || !await assertRecordInScope(scope, 'outlineNodes', node, { owner: 'work' }))) return ''
   if (!node || node.projectId !== projectId) return ''
   return `【当前章节大纲】\n${node.title}${node.summary ? `\n${node.summary}` : ''}`
+}
+
+async function readAdjacentChapterOutlines(
+  projectId: number,
+  outlineNodeId?: number | null,
+  scope?: WorkspaceScope,
+): Promise<string> {
+  if (outlineNodeId == null) return ''
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = await readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' })
+  const ordered = walkOutlineChaptersInCanonicalOrder(rows).chapters
+  const currentIndex = ordered.findIndex(item => item.outlineNode.id === outlineNodeId)
+  if (currentIndex < 0) return ''
+  const worldGroupId = ordered[currentIndex].worldGroupId
+  const previous = ordered.slice(0, currentIndex).reverse().find(item => item.worldGroupId === worldGroupId)
+  const next = ordered.slice(currentIndex + 1).find(item => item.worldGroupId === worldGroupId)
+  if (!previous && !next) return ''
+  return [
+    '【相邻章纲】',
+    previous ? `上一章《${previous.outlineNode.title}》：${previous.outlineNode.summary || '（无摘要）'}` : '',
+    next ? `下一章《${next.outlineNode.title}》：${next.outlineNode.summary || '（无摘要）'}` : '',
+  ].filter(Boolean).join('\n')
 }
 
 async function readExistingVolumeOutlines(projectId: number, scope?: WorkspaceScope): Promise<string> {
@@ -815,6 +838,16 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     protectedFromTrim: true,
     requiresOutlineNodeId: true,
     read: input => readChapterOutline(input.projectId, input.outlineNodeId, input.chapterId, input.scope),
+  },
+  {
+    key: 'adjacentChapterOutlines',
+    label: '相邻章纲',
+    scope: 'node',
+    layer: 'L1',
+    budgetTokens: 1000,
+    protectedFromTrim: true,
+    requiresOutlineNodeId: true,
+    read: input => readAdjacentChapterOutlines(input.projectId, input.outlineNodeId, input.scope),
   },
   {
     key: 'existingVolumeOutlines',

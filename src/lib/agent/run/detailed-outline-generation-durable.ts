@@ -33,6 +33,7 @@ export const DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1 = 'detailed-outline-g
 export const DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1 = [
   'canonAssertions',
   'chapterOutline',
+  'adjacentChapterOutlines',
   'worldview',
   'storyCore',
   'activeNarrativeBlueprint',
