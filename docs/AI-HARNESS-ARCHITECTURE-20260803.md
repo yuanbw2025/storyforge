@@ -374,14 +374,16 @@ Run Harness 应复用这两种模式，而不是把 Gajae 的 JSONL 或 K3 的 m
 
 当前 `src/lib/evals/long-consistency` 有 17 个 development 和 4 个 held-out 合成夹具，覆盖 completion/continuation/expansion、事实、约束、未来泄漏、错世界泄漏和语义裁判。结果保存在 browser `localStorage`，held-out 只显示 aggregate。
 
+HARNESS-28A 已在同一评测模块增加 ConStory 闭集 taxonomy、严格逐字证据协议和只读 verifier runner。新 H4 artifact 可记录五类/19 子型、程序计算的 UTF-16 半开字符区间、来源 hash、作者意图区分、生成/审查模型身份、Prompt/benchmark 版本、token、延迟、成本和 trace hash，并支持严格 JSON 导入导出；这没有改变下面所述旧 NS-0 夹具规模和开发面板路径。
+
 主要局限：
 
 - fixture 用“关键事实 + 40 句长尾填充”验证 NS-1 的前文携带能力，不是 8,000–10,000 词完整长篇；
-- 未覆盖 ConStory 五类/19 子型、全文中段和远距地理/时间专项；
+- taxonomy 契约已覆盖 ConStory 五类/19 子型，但现有夹具尚未覆盖各子型、全文中段和远距地理/时间专项；
 - 当前配置模型既可能生成又可能裁判，存在相关性偏差；
-- 结果不是带 benchmark/version/model/prompt/hash 的可导出版本化 artifact；
+- 旧 NS-0 结果仍不是新 H4 artifact，开发面板和 40+20 长篇 runner 尚未迁移；
 - 不测进程中断、刷新恢复、trace 完整性、预算越界恢复和多 Harness 对照；
-- 没有统一 evidence span + character offset schema。
+- 新 H4 artifact 已有统一 evidence span + character offset schema；旧 `CaseScore` 仍没有该证据。
 
 ## 4. 入口 -> 读写 -> 生命周期 -> 调用方 -> 测试闭包
 
@@ -1090,6 +1092,14 @@ CHIRON 四类信息可映射到现有结构：
   run/receipt 数据仍兼容。
 
 ### H4：中文长篇一致性评测扩展
+
+**分类与证据基座实施状态（HARNESS-28A，2026-08-09）**
+
+- `src/lib/evals/long-consistency` 已按 `Lost in Stories` 原文表格冻结五类/19 子型及英文标签，不自行发明或合并子型；新 judge prompt 只接收标准化只读来源和闭集 taxonomy，不接收 fixture hidden labels；
+- verifier 只能返回 `sourceId + quote`，不得返回 offset、来源 hash、顶层类别或 hard 结论。代码复用 `chapter-text-v1` 标准化，计算 UTF-16 code unit 半开区间与 SHA-256；不存在、错来源、重复歧义、同一证据冒充 pair、未知字段/子型均 fail-closed；
+- 顶层类别只由 subtype 映射，`hard-conflict` 只由 `intentClassification=unintentional` 派生；`intentional` 与 `ambiguous` 固定为 advisory，模型不能自行升级。证据候选、严格解析、定位和 artifact 签名共用同一 runner；
+- 版本化 artifact 绑定 benchmark/taxonomy/judge Prompt、fixture 输入及隐藏标签 hash、生成器/审查器身份、来源集合、judge 输入/输出、token、延迟、成本和 trace hash；导入导出会复算 artifact/source/prompt/evidence，重签后的 offset 篡改也不能通过逐字回查；artifact 只保留来源 hash 和引文，不复制整篇手稿；
+- 本单元是只读离线评测基座，不新增表、不写 Canon，也未改变生产一致性 gate。`R-HARNESS28-long-consistency-report` 证明的是 taxonomy、协议、runner 与防篡改，不是 40+20 长篇规模、真实独立模型 precision/recall、恢复、统计门槛或质量收益；H4 尚未完成。
 
 **范围**
 

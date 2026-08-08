@@ -292,6 +292,12 @@
   revise、organize、memory Skill 不能伪装成主计划生成任务。由于 HARNESS-26 尚无真实外部模型的 6 组通过
   artifact，新能力默认关闭，只能显式设置 `storyforge:harness:master-candidate-semantic-review-v1=enabled`；
   不扩大 fan-out 白名单，也不宣称已交付通用审计、自动修订或质量净收益。
+- HARNESS-28A 已完成 H4 的首个只读评测单元：按论文原文冻结 ConStory 五类/19 子型；verifier 只交
+  `sourceId + quote`，代码统一计算标准化来源 hash 与 UTF-16 半开 offset，并拒绝不存在、错来源、重复歧义
+  和证据篡改。类别、hard/advisory 和 intentional/ambiguous 降级由代码决定。版本化 artifact 绑定 fixture
+  输入/隐藏标签、来源、生成/审查身份、Prompt/benchmark、token、延迟、成本和 trace hash，可严格导入导出，
+  不复制整篇来源且不写 Canon。40+20 长篇夹具、现有开发面板迁移、真实独立模型、恢复与统计发布门仍待后续，
+  因此 H4 和全面 Harness 重构均未完成。
 
 ### GOV-1 第一阶段交付证据
 

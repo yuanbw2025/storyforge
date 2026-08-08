@@ -468,6 +468,12 @@
   `agentEvents` 的项目生命周期和便携重映射。review/revise/organize/memory 等 Harness 内部 Skill 不能成为
   顶层生成任务。因真实外部模型发布 artifact 仍缺失，该策略默认关闭，仅显式本地开关可启用；未交付
   通用审计 fan-out、自动语义修订或更宽的领域白名单。
+- HARNESS-28A 已在既有长篇评测模块冻结 ConStory 五类/19 子型，并建立统一只读证据协议：模型只交
+  `sourceId + quote`，代码用 `chapter-text-v1` 标准化来源、计算 SHA-256 与 UTF-16 半开 offset，拒绝不存在、
+  错来源、重复歧义和同区间 pair。类别和 hard/advisory 由代码派生，intentional/ambiguous 不得升级 hard。
+  H4 artifact 严格绑定 fixture 输入/隐藏标签 hash、来源集合、生成/审查身份、Prompt/benchmark、用量、成本和
+  trace，并支持防篡改导入导出；不保存整篇来源、不写 Canon、不接生产 gate。现有 17+4 短夹具和开发面板
+  尚未升级为 40+20 长篇评测，真实独立 verifier、统计门槛和质量收益仍未证明。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

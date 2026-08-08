@@ -28,6 +28,8 @@ const entrypoints = [
   'src/lib/node-authoring/index.ts',
   // HARNESS-26 is a headless offline release-evaluation boundary; production routing must not import it.
   'src/lib/evals/agent-harness/paired-workflow.ts',
+  // HARNESS-28 is the headless long-consistency verifier/artifact boundary; it remains report-only.
+  'src/lib/evals/long-consistency/evidence-report.ts',
   // FLOW-2 compatibility workspace remains intentionally reachable for old graphs and migration tests
   // while the product entry points use NodeAuthoringWorkspace.
   'src/components/node-flow/NodeModeWorkspace.tsx',
