@@ -369,6 +369,7 @@ export function useMasterCopilot(input: {
     setBusy(true)
     try {
       let message = '候选已拒绝，没有写入项目。'
+      let terminalMessage: string | null = null
       const durableCandidate = candidate.payload.runId != null && candidate.payload.runStepId
       if (durableCandidate && decision === 'adopted') {
         const adoption = await commitMasterAgentCandidateAdoptionV1({
@@ -383,7 +384,9 @@ export function useMasterCopilot(input: {
           runId: candidate.payload.runId!,
         })
         if (verification.accepted) {
-          message = `${message} 本轮所有步骤均已通过终态校验。`
+          // Keep the business-adoption message stable for existing callers and
+          // surface terminal verification as a separate auditable event.
+          terminalMessage = '本轮所有步骤均已通过终态校验。'
         } else if (!verification.codes.includes('run-not-ready')) {
           message = `${message} 终态校验未通过：${verification.codes.join('、')}。`
         }
@@ -422,6 +425,16 @@ export function useMasterCopilot(input: {
         content: message,
         scope: workspaceScope,
       })
+      if (terminalMessage) {
+        await appendAgentEvent({
+          projectId: project.id!,
+          conversationId,
+          kind: 'message',
+          role: 'assistant',
+          content: terminalMessage,
+          scope: workspaceScope,
+        })
+      }
       runtimeCandidates.current.delete(candidate.event.id)
     } catch (error) {
       await appendAgentEvent({

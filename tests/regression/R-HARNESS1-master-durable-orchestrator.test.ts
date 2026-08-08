@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
+import {
+  getOrCreateAgentConversation,
+  readAgentEvents,
+  updateAgentEventCandidate,
+} from '../../src/lib/agent/conversations'
 import {
   buildMasterAgentRunContractV1,
   hashMasterAgentPlanV1,
   parseMasterAgentPlanV1,
+  restoreMasterAgentCandidatesV1,
   runDurableMasterAgentPlanV1,
 } from '../../src/lib/agent/run/master-durable'
 import {
@@ -358,6 +363,55 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
     expect(repeated.adoptionHash).toBe(committed.adoptionHash)
     expect((await readAgentRunV1(fixture.scope, result.runId)).events.map(event => event.type))
       .toEqual(snapshot.events.map(event => event.type))
+  })
+
+  it('作者编辑 durable 候选后追加修订证据，刷新恢复仍可按新 hash 采纳', async () => {
+    const fixture = await createWorkspace('候选修订')
+    const conversation = await getOrCreateAgentConversation({
+      projectId: fixture.scope.projectId,
+      worldGroupId: fixture.worldGroupId,
+      scope: fixture.scope,
+    })
+    const result = await runDurableMasterAgentPlanV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      conversationId: conversation.id,
+      plan: {
+        summary: '建立可修订的世界来源。',
+        tasks: [{ id: 'world-1', agentId: 'world-origin', instruction: '生成世界来源。', dependsOn: [] }],
+      },
+      budget: new AgentTeamBudgetTracker('balanced'),
+    }, { execute: fakeExecutor({ calls: vi.fn() }) as any })
+    const original = result.candidates[0]
+    const revisedDraft = '作者确认后的潮汐世界来源。'
+
+    await updateAgentEventCandidate(
+      original.event.id!,
+      fixture.scope.projectId,
+      revisedDraft,
+      fixture.scope,
+    )
+
+    const restoredEvents = await readAgentEvents(conversation.id!, fixture.scope)
+    const revised = restoredEvents.find(event => event.id === original.event.id)
+    expect(revised?.content).toBe(revisedDraft)
+    expect((await readAgentRunV1(fixture.scope, result.runId)).events
+      .filter(event => event.type === 'candidate.revised')).toHaveLength(1)
+    const restoredCandidate = await restoreMasterAgentCandidatesV1({
+      scope: fixture.scope,
+      runId: result.runId,
+    })
+    expect(restoredCandidate.candidates[0].draft).toBe(revisedDraft)
+    expect(restoredCandidate.snapshot.projection.steps['master:world-1'].candidateHash)
+      .toBe(restoredCandidate.candidates[0].payload.candidateHash)
+
+    const committed = await commitMasterAgentCandidateAdoptionV1({
+      scope: fixture.scope,
+      runId: result.runId,
+      candidateEventId: original.event.id!,
+    })
+    expect(committed.message).toContain('世界来源')
+    expect((await db.worldviews.toArray()).map(row => row.worldOrigin)).toEqual([revisedDraft])
   })
 
   it('业务写入后宿主中断，恢复扫描只补齐采纳证据，不重复写业务', async () => {

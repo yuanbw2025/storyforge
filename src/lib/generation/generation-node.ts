@@ -113,6 +113,12 @@ export async function runGenerationNode<TInput, TOutput, TAdoption>(
   options: {
     messages?: ChatMessage[]
     adopt?: boolean
+    /**
+     * Some durable nodes stop at an author-confirmed candidate. In that mode
+     * the durable runner owns step.succeeded and records it only after
+     * adoption; the model/gate lifecycle remains unchanged.
+     */
+    deferStepSucceeded?: boolean
     shadowTrace?: GenerationNodeShadowTrace
   } = {},
 ): Promise<GenerationNodeRunResult<TOutput, TAdoption>> {
@@ -155,10 +161,14 @@ export async function runGenerationNode<TInput, TOutput, TAdoption>(
       await notifyShadowTrace(options.shadowTrace, trace => trace.stepFailed({ phase: 'adoption', error }))
       throw error
     }
-    await notifyShadowTrace(options.shadowTrace, trace => trace.stepSucceeded(output))
+    if (!options.deferStepSucceeded) {
+      await notifyShadowTrace(options.shadowTrace, trace => trace.stepSucceeded(output))
+    }
     return { output, gate, adopted: true, adoption }
   }
-  await notifyShadowTrace(options.shadowTrace, trace => trace.stepSucceeded(output))
+  if (!options.deferStepSucceeded) {
+    await notifyShadowTrace(options.shadowTrace, trace => trace.stepSucceeded(output))
+  }
   return { output, gate, adopted: false, adoption: null }
 }
 

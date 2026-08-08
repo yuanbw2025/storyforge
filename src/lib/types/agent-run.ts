@@ -242,6 +242,7 @@ export type AgentRunEventTypeV1 =
   | 'tool.called'
   | 'tool.returned'
   | 'candidate.persisted'
+  | 'candidate.revised'
   | 'candidate.staled'
   | 'confirmation.recorded'
   | 'adoption.started'
@@ -279,6 +280,12 @@ export interface AgentRunEventPayloadByTypeV1 {
     attempt: number
     candidateHash: string
     requiresConfirmation: boolean
+  }
+  'candidate.revised': {
+    stepId: string
+    attempt: number
+    previousCandidateHash: string
+    candidateHash: string
   }
   'candidate.staled': { stepId: string; candidateHash: string; reason: string }
   'confirmation.recorded': {

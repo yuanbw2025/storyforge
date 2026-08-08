@@ -134,6 +134,18 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       }
       break
     }
+    case 'candidate.revised': {
+      expectState(projection, event.type, ['running', 'awaiting_confirmation'])
+      const step = stepFor(projection, event.payload.stepId)
+      if (step.status !== 'awaiting_confirmation') {
+        throw new ProjectionError(`步骤 ${event.payload.stepId} 不在等待确认，不能修订候选`)
+      }
+      assertAttempt(step, event.payload.attempt)
+      assertCandidate(step, event.payload.previousCandidateHash)
+      if (step.confirmation) throw new ProjectionError('候选已经确认，不能再修订')
+      step.candidateHash = event.payload.candidateHash
+      break
+    }
     case 'candidate.staled': {
       const step = stepFor(projection, event.payload.stepId)
       assertCandidate(step, event.payload.candidateHash)

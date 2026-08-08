@@ -29,6 +29,7 @@ export const AGENT_RUN_EVENT_TYPES_V1: readonly AgentRunEventTypeV1[] = [
   'tool.called',
   'tool.returned',
   'candidate.persisted',
+  'candidate.revised',
   'candidate.staled',
   'confirmation.recorded',
   'adoption.started',
@@ -203,6 +204,19 @@ function parsePayload<T extends AgentRunEventTypeV1>(
           parsed.record.requiresConfirmation,
           'event.payload(candidate.persisted).requiresConfirmation',
         ),
+      }
+      break
+    }
+    case 'candidate.revised': {
+      const parsed = readStepAttempt(value, type, ['previousCandidateHash', 'candidateHash'])
+      payload = {
+        stepId: parsed.stepId,
+        attempt: parsed.attempt,
+        previousCandidateHash: readHash(
+          parsed.record.previousCandidateHash,
+          'event.payload(candidate.revised).previousCandidateHash',
+        ),
+        candidateHash: readHash(parsed.record.candidateHash, 'event.payload(candidate.revised).candidateHash'),
       }
       break
     }

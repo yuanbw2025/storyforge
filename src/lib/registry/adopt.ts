@@ -32,6 +32,23 @@ const CANON_SOURCE_TABLES = new Set<CanonAssertionSourceTable>([
   'characters',
 ])
 
+/** Content adoption invalidates every narrative summary that depended on the
+ * changed chapter. Keep this lifecycle rule at the single write boundary so
+ * durable AI adoption cannot leave a fresh-looking summary cache behind. */
+async function markChapterNarrativeSummariesStale(
+  scope: WorkspaceScope,
+  chapterId: number,
+): Promise<void> {
+  const rows = await readOwnedRows<Record<string, unknown>>(scope, 'narrativeSummaryNodes', { owner: 'work' })
+  const now = Date.now()
+  for (const row of rows) {
+    if (typeof row.id !== 'number') continue
+    if (row.level === 'book' || row.level === 'volume' || row.sourceChapterId === chapterId) {
+      await db.narrativeSummaryNodes.update(row.id, { status: 'stale', updatedAt: now })
+    }
+  }
+}
+
 async function refreshCanonSourceAfterWrite(
   target: string,
   projectId: number,
@@ -210,6 +227,9 @@ async function adoptCollectionRecord(
 
   patch.updatedAt = Date.now()
   await tableSpec.table.update(input.recordId!, patch as any)
+  if (input.target === 'chapters' && Object.prototype.hasOwnProperty.call(patch, 'content')) {
+    await markChapterNarrativeSummariesStale(input.scope!, input.recordId!)
+  }
   await refreshCanonSourceAfterWrite(input.target, input.projectId, input.recordId!, Object.keys(patch))
   result.written.push({ id: input.recordId!, fields: Object.keys(patch) })
   return result
@@ -241,7 +261,7 @@ async function adoptChapterMemoryRecordWithCas(
     return result
   }
 
-  await db.transaction('rw', tableSpec.table, async () => {
+  await db.transaction('rw', tableSpec.table, db.narrativeSummaryNodes, async () => {
     const target = await tableSpec.table.get(input.recordId!)
     if (!target || !await assertRecordInScope(input.scope!, input.target, target, {
       owner: ADOPTION_BY_TARGET.get(input.target)?.ownerFrom,
@@ -257,6 +277,9 @@ async function adoptChapterMemoryRecordWithCas(
 
     patch.updatedAt = Date.now()
     await tableSpec.table.update(input.recordId!, patch as any)
+    if (Object.prototype.hasOwnProperty.call(patch, 'content')) {
+      await markChapterNarrativeSummariesStale(input.scope!, input.recordId!)
+    }
     result.written.push({ id: input.recordId!, fields: Object.keys(patch) })
   })
   return result

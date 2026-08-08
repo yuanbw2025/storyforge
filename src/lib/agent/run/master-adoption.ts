@@ -337,8 +337,13 @@ async function businessAlreadyMatches(
     const rows = await readOwnedRows<any>(input.scope, 'characters', { owner: 'world' })
     return rows.some(row => (
       normalized(row.name ?? '') === normalized(parsed.name)
-      && Object.entries(parsed).every(([field, value]) => row[field] === value)
-      && row.isCrossWorld === false
+      // adopt() intentionally omits empty-string fields to avoid erasing
+      // existing values. Treat an omitted empty candidate field as equivalent
+      // to the canonical empty value during terminal verification.
+      && Object.entries(parsed).every(([field, value]) => (
+        value === '' ? (row[field] ?? '') === '' : row[field] === value
+      ))
+      && row.isCrossWorld !== true
     ))
   }
   if (agentId === 'inspiration') {

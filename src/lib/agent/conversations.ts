@@ -4,8 +4,20 @@ import type {
   AgentEvent,
   AgentEventKind,
 } from '../types'
-import { assertRecordInScope, readOwnedRows, resolveScope, stampNewRecord } from '../world-engine/scope'
+import {
+  assertRecordInScope,
+  readOwnedRows,
+  resolveScope,
+  scopeTransactionTables,
+  stampNewRecord,
+} from '../world-engine/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
+import { hashCanonicalValue } from './run/hash'
+import {
+  appendPrivilegedAgentRunEventInTransactionV1,
+  readVerifiedAgentRunInTransactionV1,
+} from './run/event-store'
+import { parseAgentRunEventV1 } from './run/event-schema'
 
 export async function getOrCreateAgentConversation(input: {
   projectId: number
@@ -113,5 +125,64 @@ export async function updateAgentEventCandidate(
   if (!event || !await assertRecordInScope(resolved, 'agentEvents', event, { owner: 'work' }) || event.kind !== 'candidate') {
     throw new Error('待更新的 Agent 候选不存在。')
   }
+  let payload: Record<string, unknown> | null = null
+  try {
+    const parsed = JSON.parse(event.payload) as unknown
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      payload = parsed as Record<string, unknown>
+    }
+  } catch {
+    payload = null
+  }
+
+  // Legacy conversational candidates have no durable run binding and keep
+  // their original lightweight update semantics. Durable candidates append an
+  // event-store revision so the edited draft remains hash-bound and recoverable.
+  if (
+    payload
+    && typeof payload.runId === 'number'
+    && typeof payload.runStepId === 'string'
+    && typeof payload.candidateHash === 'string'
+  ) {
+    const previousCandidateHash = payload.candidateHash
+    const { candidateHash: _oldHash, ...withoutHash } = payload
+    const candidateHash = await hashCanonicalValue({
+      draft: content,
+      payload: withoutHash,
+    })
+    const nextPayload = JSON.stringify({ ...payload, candidateHash })
+    await db.transaction(
+      'rw',
+      scopeTransactionTables(db.agentEvents, db.agentRuns, db.agentRunEvents),
+      async () => {
+        const snapshot = await readVerifiedAgentRunInTransactionV1(resolved, payload!.runId as number)
+        const step = snapshot.projection.steps[payload!.runStepId as string]
+        if (!step || step.status !== 'awaiting_confirmation' || step.candidateHash !== previousCandidateHash) {
+          throw new Error('待更新的 durable 候选不在等待确认状态。')
+        }
+        const runEvent = parseAgentRunEventV1({
+          version: 1,
+          runId: snapshot.run.id,
+          sequence: snapshot.projection.lastSequence + 1,
+          generation: snapshot.projection.generation,
+          projectId: snapshot.run.projectId,
+          worldGroupId: snapshot.run.worldGroupId ?? null,
+          contractHash: snapshot.run.contractHash,
+          type: 'candidate.revised',
+          createdAt: Date.now(),
+          payload: {
+            stepId: payload!.runStepId as string,
+            attempt: step.attempt,
+            previousCandidateHash,
+            candidateHash,
+          },
+        })
+        await appendPrivilegedAgentRunEventInTransactionV1(snapshot, runEvent)
+        await db.agentEvents.update(eventId, { content, payload: nextPayload })
+      },
+    )
+    return
+  }
+
   await db.agentEvents.update(eventId, { content })
 }
