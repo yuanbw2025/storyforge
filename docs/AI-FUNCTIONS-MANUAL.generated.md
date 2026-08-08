@@ -199,11 +199,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.content.batch` | `src/lib/ai/batch-detail-runner.ts:256` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:451`<br/>`src/lib/node-authoring/domain-execution.ts:515` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:800` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:780` |
-| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:515` |
-| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:925` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:772` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:857` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:837` |
+| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:572` |
+| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:982` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:829` |
 | `chapter.toolbar` | `src/components/editor/FloatingToolbar.tsx:105` |
 | `character.generate` | `src/components/character/CharacterPanel.tsx:160` |
 | `character.structure` | `src/lib/ai/parse-character-output.ts:80` |
@@ -239,7 +239,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:451` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:98` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:115` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:815` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:872` |
 | `rules.generate` | `src/components/rules/CreativeRulesPanel.tsx:80` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
@@ -269,4 +269,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `091f047`
+生成时间基准:commit `1ada12e`

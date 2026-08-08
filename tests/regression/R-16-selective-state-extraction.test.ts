@@ -26,7 +26,9 @@ describe('R-16: selective state extraction wiring', () => {
       source.indexOf('const handleAcceptAI = async (text: string) => {'),
     )
 
-    expect(body).toContain('buildSelectiveStateContext(task.chapterPlainText, extraStateIds).text')
+    expect(body).toContain("sourceKeys: [...CHAPTER_TRANSITION_SOURCE_KEYS_V1]")
+    expect(body).toContain('stateReferenceText: task.chapterPlainText')
+    expect(body).toContain("assembled.included.indexOf('stateCards')")
     expect(body).not.toContain('const stateCtx = buildStateContext()')
   })
 })
