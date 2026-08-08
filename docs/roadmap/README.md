@@ -272,7 +272,15 @@
   上游回执仍与 candidate/output、Context Manifest、attempt、verifier 和当前 generation 一致。下游候选
   冻结实际消费的 receipt hash；编辑、重规划、篡改、导入和删除都走可回放失效/重签或注册表生命周期。
   历史运行不伪造回执，`agentEvents.durableRunId` 由 DB v53 索引并通过 `PROJECT_TABLES` 便携重映射。
-  这仍是候选级确定性回执；通用 fan-out、独立语义终验和成本/延迟/质量 A/B 尚未交付。
+  这仍是候选级确定性回执；通用 fan-out 和独立语义终验尚未交付。
+- HARNESS-26 已建立顺序执行与有限 fan-out 的离线配对评测和发布门：每个 fixture 冻结内容、输入、计划、
+  provider/model、Prompt 和 Tool schema hash/版本，按奇偶交叉执行以减小顺序偏差，再由不同
+  provider/model 身份的独立 verifier 评分。记录只保留 output/trace/receipt hash 与聚合指标，完整正文、
+  隐藏标签和未知字段均被严格 schema 拒绝；两个变体继续生成可验证的 H0 benchmark artifact。
+  发布门要求至少 6 组配对样本、生成完成率与回执覆盖率 100%、语义与证据回归不超过 2 个百分点、
+  未来/错世界泄漏为 0、fan-out p95 延迟不高于顺序执行的 90%、token/cost 不超过 1.15 倍，零成本不会
+  被伪装成通过。回归已直接运行真实 durable 主 Agent 的顺序/fan-out 路径并核对 1/2 最大并发、逐步
+  回执和零 Canon 写入；当前尚未用真实外部模型跑满 6 组发布样本，因此不据此扩大 fan-out 范围。
 
 ### GOV-1 第一阶段交付证据
 

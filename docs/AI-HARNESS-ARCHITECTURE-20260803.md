@@ -1022,8 +1022,25 @@ CHIRON 四类信息可映射到现有结构：
   导出导入通过便携 Run ID 重映射；hash-bound 原始 payload 不静默改写。删除 Run 会把候选归属置空，
   删除 Work/世界/项目仍由注册表派生生命周期清理，迁移、往返和删除均有反例；
 - 本单元完成的是首批受控 fan-out 的候选级确定性步骤回执，不等同于每叶独立语义 terminal receipt。
-  通用只读审计 fan-out、语义终验及 p95 成本/延迟和质量非劣 A/B 仍未交付。没有独立的回执绕过开关；
+  通用只读审计 fan-out 和语义终验仍未交付。没有独立的回执绕过开关；
   `storyforge:harness:fan-out-v1=disabled` 可停止新请求进入 fan-out，已有事件与回执继续兼容读取和校验。
+
+**工作流配对评测实施状态（HARNESS-26，2026-08-09）**
+
+- `src/lib/evals/agent-harness` 已建立只读离线的 sequential/fan-out 配对评测器，不接管生产分类或执行。
+  每例只登记 fixture/content/input/plan hash，并冻结 generator 的 provider/model、Prompt 和 Tool schema 版本；
+  两个变体按 fixture 奇偶交叉先后顺序，避免总让同一变体承担热启动偏差；
+- 生成正文只在当次内存中交给独立 verifier，持久记录仅含 output/trace/receipt hash、完成与步骤计数、
+  token、cost、latency、语义分、证据覆盖和泄漏结果。generator 与 verifier 的 provider/model 身份完全相同
+  时在任何执行前失败；严格 schema 会拒绝完整 `content`、`output`、`hiddenLabel` 和其它未知字段；
+- 两个变体分别复用 H0 `AgentHarnessBenchmarkArtifactV1`，配对记录会重算 fixture set、交叉顺序、逐例聚合、
+  发布门、artifact metrics/trace 和所有 hash。默认门槛为至少 6 例、completion/receipt coverage 100%、
+  语义与证据回归不超过 0.02、未来/错世界泄漏为 0、fan-out p95 延迟比例不超过 0.90、token/cost 比例
+  不超过 1.15；双方零成本视为缺少成本证据，不能自动放行；
+- 回归测试不是只测聚合公式：它以同一个冻结计划直接运行 `runDurableMasterAgentPlanV1`，通过回滚开关
+  获得最大并发 1 的顺序路径和最大并发 2 的 fan-out 路径，验证两边均交付三候选、三份步骤回执、可重放
+  trace 且 Canon 零写入。该单例只证明评测接入真实主路径；尚未用真实外部模型完成至少 6 例的发布 artifact，
+  因此 H3 质量/成本退出门槛仍未达成，也不扩大现有 fan-out 白名单。
 
 **范围**
 

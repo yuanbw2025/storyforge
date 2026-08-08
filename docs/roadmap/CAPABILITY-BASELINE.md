@@ -449,7 +449,13 @@
   请求前必须取得所有上游 fresh receipt，下游候选再冻结 receipt hash；恢复会拒绝篡改、已失效、跨代
   或晚于 join 的证据。作者编辑先使旧回执失效，合法稿重签，不合法稿不能进入下游；重规划 carry-forward
   在新代重签。`agentEvents.durableRunId` 经 DB v53 索引和 `PROJECT_TABLES` 参与导入重映射及删除生命周期，
-  原始 hash-bound payload 不静默改写。历史无策略运行兼容；通用 fan-out、语义终验和质量/成本 A/B 未完成。
+  原始 hash-bound payload 不静默改写。历史无策略运行兼容；通用 fan-out 和语义终验未完成。
+- HARNESS-26 已新增去内容化的顺序/fan-out 配对评测记录：冻结 fixture/input/plan hash 及同一生成器
+  provider/model、Prompt/Tool schema 版本，交叉执行两个变体，并要求不同 provider/model 身份的 verifier
+  在生成结束后独立评分。逐例证据和两个既有 benchmark artifact 均可重算，正文、hidden label、未知字段、
+  指标或 hash 篡改均 fail-closed。发布门覆盖至少 6 组样本、完成率、逐步回执、语义/证据非劣、未来与
+  错世界泄漏、p95 延迟、token 和 cost；真实 durable 集成测试已证明同计划能走 1 路顺序与 2 路 fan-out，
+  两边均产生完整步骤回执且不写 Canon。尚无真实外部模型的 6 组通过 artifact，不能宣称 fan-out 已证明净收益。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。
