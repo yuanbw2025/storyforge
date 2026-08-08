@@ -119,6 +119,8 @@ async function makeNodeInput(
     assembled,
     previousTail: '',
     config,
+    perspectiveCharacterId: prepared.perspectiveCharacterId,
+    informationBoundary: prepared.informationBoundary,
   }
 }
 

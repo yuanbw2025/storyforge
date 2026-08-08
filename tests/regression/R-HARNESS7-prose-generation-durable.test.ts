@@ -23,6 +23,7 @@ import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { hashChapterText, normalizeChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { buildChapterInformationBoundaryV1 } from '../../src/lib/agent/information-boundary'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
@@ -138,6 +139,13 @@ async function preparePending(
     readerVersion: 'chapter-prose-generation-context-v1',
   })
   const sourceTextHash = await hashChapterText(fixture.content)
+  const informationBoundary = await buildChapterInformationBoundaryV1({
+    scope: fixture.scope,
+    chapterId: fixture.chapterId,
+    outlineNodeId: fixture.outlineNodeId,
+    worldGroupId: fixture.worldGroupId,
+    perspectiveCharacterId: null,
+  })
   snapshot = await beginProseGenerationStepV1({
     scope: fixture.scope,
     snapshot,
@@ -146,6 +154,7 @@ async function preparePending(
       operation,
       sourceTextHash,
       promptHash: await hashCanonicalValue([{ role: 'user', content: '生成潮门正文' }]),
+      informationBoundaryHash: informationBoundary.manifestHash,
     },
   })
   const outputText = operation === 'continue' ? '潮声里传来第二次钟响。' : '潮门在暮色中缓缓开启。'
@@ -170,6 +179,9 @@ async function preparePending(
         ? [normalizeChapterText(fixture.content), normalizeChapterText(outputText)].join('\n')
         : outputText,
     ),
+    informationBoundaryHash: informationBoundary.manifestHash,
+    perspectiveCharacterId: null,
+    perspectiveFromChapter: false,
     createdAt: Date.now(),
   }
   const candidateHash = await hashProseGenerationCandidateV1(baseCandidate)

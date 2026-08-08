@@ -1,7 +1,7 @@
 import { db } from '../../db/schema'
 import { adopt } from '../../registry/adopt'
 import { hashChapterText, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../../ai/chapter-memory/text-normalization'
-import type { AgentConversation, AgentEvent, WorkspaceScope } from '../../types'
+import type { AgentConversation, AgentEvent, Chapter, WorkspaceScope } from '../../types'
 import type { ContextManifestV1 } from '../../types/agent-run'
 import {
   appendAgentRunEventV1,
@@ -14,12 +14,18 @@ import { hashCanonicalValue } from './hash'
 import {
   assertRecordInScope,
   readOwnedRows,
+  resolveScope,
   scopeTransactionTables,
   stampNewRecord,
 } from '../../world-engine/scope'
+import {
+  buildChapterInformationBoundaryV1,
+  validateProseInformationBoundaryV1,
+} from '../information-boundary'
 
 export const PROSE_GENERATION_STEP_ID_V1 = 'prose-generation'
 export const PROSE_GENERATION_VERIFIER_SET_V1 = 'prose-generation-terminal-v1'
+export const PROSE_GENERATION_VERIFIER_SET_V2 = 'prose-generation-terminal-v2-information-boundary'
 export const PROSE_GENERATION_CANDIDATE_TYPE_V1 = 'prose-generation-candidate'
 
 /**
@@ -84,6 +90,10 @@ export interface ProseGenerationCandidateV1 {
   outputTextHash: string
   /** Expected normalized chapter hash after this candidate is adopted. */
   expectedContentHash: string
+  /** H9：新候选绑定生成时的信息边界；旧候选缺省以保持刷新恢复兼容。 */
+  informationBoundaryHash?: string
+  perspectiveCharacterId?: number | null
+  perspectiveFromChapter?: boolean
   createdAt: number
   durable: ProseGenerationDurableEvidenceV1
 }
@@ -121,6 +131,7 @@ export function buildProseGenerationRunContractV1(input: {
     },
     acceptance: [
       { id: 'prose-generation.candidate', kind: 'output-present' as const, required: true },
+      { id: 'prose-generation.information-boundary', kind: 'deterministic-check' as const, required: true },
       { id: 'prose-generation.confirmed', kind: 'author-confirmed' as const, required: true },
       { id: 'prose-generation.adopted', kind: 'adoption-committed' as const, required: true },
       { id: 'prose-generation.post-state', kind: 'post-state-matches' as const, required: true },
@@ -128,9 +139,10 @@ export function buildProseGenerationRunContractV1(input: {
     verificationPlan: [{
       id: 'prose-generation.terminal',
       kind: 'terminal' as const,
-      verifier: PROSE_GENERATION_VERIFIER_SET_V1,
+      verifier: PROSE_GENERATION_VERIFIER_SET_V2,
       criterionIds: [
         'prose-generation.candidate',
+        'prose-generation.information-boundary',
         'prose-generation.confirmed',
         'prose-generation.adopted',
         'prose-generation.post-state',
@@ -181,7 +193,12 @@ export async function beginProseGenerationStepV1(input: {
   scope: WorkspaceScope
   snapshot: AgentRunSnapshotV1
   contextManifest: ContextManifestV1
-  binding: { operation: ProseGenerationOperationV1; sourceTextHash: string; promptHash: string }
+  binding: {
+    operation: ProseGenerationOperationV1
+    sourceTextHash: string
+    promptHash: string
+    informationBoundaryHash?: string
+  }
 }): Promise<AgentRunSnapshotV1> {
   if (input.contextManifest.runId !== input.snapshot.run.id
     || input.contextManifest.stepId !== PROSE_GENERATION_STEP_ID_V1) {
@@ -234,6 +251,11 @@ function isProseGenerationCandidate(value: unknown): value is ProseGenerationCan
     && typeof candidate.outputText === 'string'
     && typeof candidate.outputTextHash === 'string'
     && typeof candidate.expectedContentHash === 'string'
+    && (candidate.informationBoundaryHash === undefined || typeof candidate.informationBoundaryHash === 'string')
+    && (candidate.perspectiveCharacterId === undefined
+      || candidate.perspectiveCharacterId === null
+      || typeof candidate.perspectiveCharacterId === 'number')
+    && (candidate.perspectiveFromChapter === undefined || typeof candidate.perspectiveFromChapter === 'boolean')
     && !!candidate.durable
     && candidate.durable.stepId === PROSE_GENERATION_STEP_ID_V1
 }
@@ -339,7 +361,38 @@ export async function isProseGenerationCandidateCurrentV1(
   candidate: ProseGenerationCandidateV1,
 ): Promise<boolean> {
   const chapter = await db.chapters.get(candidate.chapterId)
-  return Boolean(chapter && await hashChapterText(chapter.content ?? '') === candidate.sourceTextHash)
+  if (!chapter || await hashChapterText(chapter.content ?? '') !== candidate.sourceTextHash) return false
+  if (
+    candidate.perspectiveFromChapter
+    && (chapter.perspectiveCharacterId ?? null) !== (candidate.perspectiveCharacterId ?? null)
+  ) return false
+  if (!candidate.informationBoundaryHash) return true
+  try {
+    const scope = await resolveScopeForCandidate(candidate)
+    const boundary = await buildChapterInformationBoundaryV1({
+      scope,
+      chapterId: candidate.chapterId,
+      outlineNodeId: chapter.outlineNodeId,
+      worldGroupId: candidate.worldGroupId,
+      perspectiveCharacterId: candidate.perspectiveCharacterId ?? null,
+    })
+    return boundary.manifestHash === candidate.informationBoundaryHash
+      && validateProseInformationBoundaryV1(candidate.outputText, boundary).length === 0
+  } catch {
+    return false
+  }
+}
+
+async function resolveScopeForCandidate(candidate: ProseGenerationCandidateV1): Promise<WorkspaceScope> {
+  const chapter = await db.chapters.get(candidate.chapterId)
+  const workId = (chapter as (Chapter & { workId?: number }) | undefined)?.workId
+  if (workId != null) {
+    const work = await db.works.get(workId)
+    if (work?.id != null && work.projectId === candidate.projectId) {
+      return { projectId: candidate.projectId, worldId: work.worldId, workId: work.id }
+    }
+  }
+  return resolveScope({ projectId: candidate.projectId })
 }
 
 /** Recover an event-store crash window without calling the model again. */
@@ -581,8 +634,25 @@ export async function verifyProseGenerationRunV1(input: {
   if (await hashChapterText(chapter.content ?? '') !== input.candidate.expectedContentHash) {
     throw new Error('正文生成终态校验发现章节正文与候选不一致。')
   }
+  const hasInformationBoundary = Boolean(input.candidate.informationBoundaryHash)
+  if (hasInformationBoundary) {
+    const currentBoundary = await buildChapterInformationBoundaryV1({
+      scope: input.scope,
+      chapterId: input.candidate.chapterId,
+      outlineNodeId: chapter.outlineNodeId,
+      worldGroupId: input.candidate.worldGroupId,
+      perspectiveCharacterId: input.candidate.perspectiveCharacterId ?? null,
+    })
+    if (
+      currentBoundary.manifestHash !== input.candidate.informationBoundaryHash
+      || validateProseInformationBoundaryV1(input.candidate.outputText, currentBoundary).length > 0
+    ) throw new Error('正文生成终态校验发现信息边界已变化或候选包含提前泄漏。')
+  }
+  const verifierSetVersion = hasInformationBoundary
+    ? PROSE_GENERATION_VERIFIER_SET_V2
+    : PROSE_GENERATION_VERIFIER_SET_V1
   snapshot = await append(input.scope, snapshot, 'verification.started', {
-    verifierSetVersion: PROSE_GENERATION_VERIFIER_SET_V1,
+    verifierSetVersion,
   })
   const postStateHash = await prosePostStateHash({
     scope: input.scope,
@@ -597,9 +667,14 @@ export async function verifyProseGenerationRunV1(input: {
     candidateHashes: [input.candidate.durable.candidateHash],
     adoptionEventIds: [adoptionRecord.id],
     postStateHash,
-    verifierSetVersion: PROSE_GENERATION_VERIFIER_SET_V1,
+    verifierSetVersion,
     criteria: [
       { id: 'prose-generation.candidate', status: 'passed', evidenceRefs: [`candidate:${input.candidate.durable.candidateHash}`] },
+      ...(hasInformationBoundary ? [{
+        id: 'prose-generation.information-boundary',
+        status: 'passed' as const,
+        evidenceRefs: [`information-boundary:${input.candidate.informationBoundaryHash}`],
+      }] : []),
       { id: 'prose-generation.confirmed', status: 'passed', evidenceRefs: [`run:${input.runId}:confirmation`] },
       { id: 'prose-generation.adopted', status: 'passed', evidenceRefs: [`event:${adoptionRecord.id}`] },
       { id: 'prose-generation.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },

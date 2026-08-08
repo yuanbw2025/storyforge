@@ -131,6 +131,12 @@ import {
   toConsistencyAuditResult,
   type ConsistencyAgentRun,
 } from '../../lib/agent/consistency-agent'
+import {
+  buildChapterInformationBoundaryV1,
+  buildInformationBoundaryInstructionV1,
+  validateProseInformationBoundaryV1,
+  type InformationBoundaryManifestV1,
+} from '../../lib/agent/information-boundary'
 
 const StateDiffModal = lazy(() => import('../state/StateDiffModal'))
 const OutlinePreview = lazy(() => import('../outline/OutlinePreview'))
@@ -152,6 +158,7 @@ interface PendingChapterGeneration {
   prepared: PreparedGenerationNode
   backgroundMemoryIds: number[]
   assembled: Awaited<ReturnType<typeof assembleContext>>
+  informationBoundary: InformationBoundaryManifestV1
 }
 
 interface Props {
@@ -221,6 +228,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [transparentMode, setTransparentMode] = useState(false)
   const [pendingGeneration, setPendingGeneration] = useState<PendingChapterGeneration | null>(null)
   const [proseCandidate, setProseCandidate] = useState<ProseGenerationCandidateV1 | null>(null)
+  const [proseGenerationError, setProseGenerationError] = useState('')
   const [planReconciliationCurrent, setPlanReconciliationCurrent] = useState(false)
   const [organizationRun, setOrganizationRun] = useState<ChapterOrganizationRun | null>(null)
   const [organizationCurrent, setOrganizationCurrent] = useState(false)
@@ -555,12 +563,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const perspectiveCharacterId = perspectiveCharacters.some(
     character => character.id === currentChapter?.perspectiveCharacterId,
   ) ? currentChapter?.perspectiveCharacterId ?? null : null
-  const perspectiveCharacter = perspectiveCharacters.find(character => character.id === perspectiveCharacterId)
-  const perspectiveBoundary = perspectiveCharacter
-    ? '叙事视角角色：' + perspectiveCharacter.name
-      + '（characterId=' + perspectiveCharacter.id + '）。只允许使用该角色在本章开始前已知的信息。'
-    : '本章未指定叙事视角角色。不得代入任何角色的私人认知，也不得把其他角色掌握的信息写成当前人物已知。'
-
   const [worldCtx, setWorldCtx] = useState('')
   const [charCtx, setCharCtx] = useState('')
   useEffect(() => {
@@ -781,12 +783,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const chapterGenerationNode = (
     operation: ChapterGenerationOperation,
     category: ChapterGenerationCategory,
+    informationBoundary: InformationBoundaryManifestV1,
   ) => createChapterGenerationNode({
     operation,
     category,
     projectId: project.id!,
     chapterIdentity: currentChapter?.id ?? outlineNodeId ?? 'unselected',
     ai,
+    gate: output => {
+      const issues = validateProseInformationBoundaryV1(output, informationBoundary)
+      return { status: issues.length ? 'blocked' : 'pass', issues }
+    },
   })
 
   const runDurableChapterGeneration = async (input: {
@@ -796,6 +803,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     prepared: PreparedGenerationNode
     messages?: ChatMessage[]
     assembled?: Awaited<ReturnType<typeof assembleContext>>
+    informationBoundary: InformationBoundaryManifestV1
   }): Promise<void> => {
     if (!currentChapter?.id || !input.assembled) {
       throw new Error('正文生成缺少章节或受控上下文快照。')
@@ -844,6 +852,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         operation: input.operation,
         sourceTextHash,
         promptHash: await hashCanonicalValue(actualMessages),
+        informationBoundaryHash: input.informationBoundary.manifestHash,
       },
     })
     proseSnapshotRef.current = snapshot
@@ -884,6 +893,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
                     .join('\n')
                 : outputText,
             ),
+            informationBoundaryHash: input.informationBoundary.manifestHash,
+            perspectiveCharacterId,
+            perspectiveFromChapter: true,
             createdAt: Date.now(),
           }
           const candidateHash = await hashProseGenerationCandidateV1(baseCandidate)
@@ -921,7 +933,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         onTraceError: error => { traceError = error },
       },
     })
-    if (result.gate?.status === 'blocked') return
+    if (result.gate?.status === 'blocked') {
+      setProseGenerationError(result.gate.issues.map(issue => issue.message).join('；'))
+      return
+    }
     if (traceError || !persistedCandidate) {
       snapshot = await failProseGenerationStepV1({
         scope,
@@ -930,6 +945,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         retryable: true,
       })
       proseSnapshotRef.current = snapshot
+      setProseGenerationError(
+        traceError instanceof Error ? traceError.message : '正文候选没有进入 durable ledger。',
+      )
       throw traceError instanceof Error ? traceError : new Error('正文候选没有进入 durable ledger。')
     }
   }
@@ -941,9 +959,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     backgroundMemoryIds: number[],
     messages?: ChatMessage[],
     assembled?: Awaited<ReturnType<typeof assembleContext>>,
+    informationBoundary?: InformationBoundaryManifestV1,
   ) => {
+    if (!informationBoundary) {
+      setProseGenerationError('正文生成缺少信息边界快照，已阻止模型调用。')
+      return
+    }
     ai.setOperation(operation)
-    const node = chapterGenerationNode(operation, category)
+    const node = chapterGenerationNode(operation, category, informationBoundary)
     void runDurableChapterGeneration({
       operation,
       category,
@@ -951,6 +974,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       prepared,
       messages,
       assembled,
+      informationBoundary,
     }).catch(error => {
       console.error('[ChapterEditor] 生成节点执行失败:', error)
     })
@@ -963,12 +987,20 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     messages: ChatMessage[],
     backgroundMemoryIds: number[],
     assembled: Awaited<ReturnType<typeof assembleContext>>,
+    informationBoundary: InformationBoundaryManifestV1,
   ) => {
-    const node = chapterGenerationNode(operation, category)
+    const node = chapterGenerationNode(operation, category, informationBoundary)
     const prepared = prepareGenerationNode(node, messages)
     if (transparentMode) {
       ai.setOperation(operation)
-      setPendingGeneration({ operation, category, prepared, backgroundMemoryIds, assembled })
+      setPendingGeneration({
+        operation,
+        category,
+        prepared,
+        backgroundMemoryIds,
+        assembled,
+        informationBoundary,
+      })
       return
     }
     setPendingGeneration(null)
@@ -979,11 +1011,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       backgroundMemoryIds,
       undefined,
       assembled,
+      informationBoundary,
     )
   }
 
   const handleGenerate = async () => {
     if (!outlineNode) return
+    setProseGenerationError('')
     await persistCurrentEditorContent()
     const backgroundMemoryIds = await prepareContinuityBeforeGeneration()
     const {
@@ -995,6 +1029,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       continuity,
       continuityBudgetTokens,
     } = await buildFullWorldCtx('write')
+    const informationBoundary = await buildChapterInformationBoundaryV1({
+      scope: await resolveScopeLike(project.id!),
+      chapterId: currentChapter?.id ?? null,
+      outlineNodeId: outlineNode.id!,
+      worldGroupId: chapterWorldGroupId ?? null,
+      perspectiveCharacterId,
+    })
     const messages = buildChapterContentPrompt(
       outlineNode.title,
       outlineNode.summary,
@@ -1002,7 +1043,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       characterContext,
       continuity.previousTail,
       worldRulesContext,
-      [perspectiveBoundary, customInstruction.trim()].filter(Boolean).join('\n'),
+      [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
+        .filter(Boolean)
+        .join('\n'),
       { continuity, continuityBudgetTokens },
     )
 
@@ -1021,11 +1064,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       messages,
       backgroundMemoryIds,
       assembled,
+      informationBoundary,
     )
   }
 
   const handleContinue = async () => {
     if (!plainText || !outlineNode) return
+    setProseGenerationError('')
     await persistCurrentEditorContent()
     const backgroundMemoryIds = await prepareContinuityBeforeGeneration()
     const {
@@ -1035,12 +1080,21 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       continuity,
       continuityBudgetTokens,
     } = await buildFullWorldCtx('write')
+    const informationBoundary = await buildChapterInformationBoundaryV1({
+      scope: await resolveScopeLike(project.id!),
+      chapterId: currentChapter?.id ?? null,
+      outlineNodeId: outlineNode.id!,
+      worldGroupId: chapterWorldGroupId ?? null,
+      perspectiveCharacterId,
+    })
     const ctxWithChars = characterContext ? `${fullCtx}\n\n【角色设定】\n${characterContext}` : fullCtx
     const messages = buildContinuePrompt(
       plainText,
       outlineNode.summary,
       ctxWithChars,
-      [perspectiveBoundary, customInstruction.trim()].filter(Boolean).join('\n'),
+      [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
+        .filter(Boolean)
+        .join('\n'),
       { continuity, continuityBudgetTokens },
     )
     prepareOrRunChapterGeneration(
@@ -1049,6 +1103,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       messages,
       backgroundMemoryIds,
       assembled,
+      informationBoundary,
     )
   }
 
@@ -1734,6 +1789,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       }
       return
     }
+    if (shouldAutoProcess) {
+      await dialog.alert({
+        title: '正文候选不可采纳',
+        message: proseGenerationError
+          || '本次输出没有通过 durable 候选与信息边界校验。请关闭后重试，作者原稿未被修改。',
+      })
+      return
+    }
 
     if (aiAction === 'continue') {
       editorRef.current.appendContent(html)
@@ -1748,6 +1811,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       // polish/expand/deai（选区）：替换选区（若无选区则插入在光标处）
       editorRef.current.replaceSelection(html)
     }
+    setProseGenerationError('')
     ai.reset()
 
     // 先把完整正文落库，再启动带 hash CAS 的异步后处理。
@@ -2049,16 +2113,26 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
                 pending.backgroundMemoryIds,
                 messages,
                 pending.assembled,
+                pending.informationBoundary,
               )
             }}
           />
         </div>
       )}
 
+      {proseGenerationError && (
+        <div className="mb-3 rounded-lg border border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
+          正文候选已被信息边界阻断：{proseGenerationError}
+        </div>
+      )}
+
       {(ai.output || ai.isStreaming || ai.error) && (
         <div className="mb-3">
           <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
-            onStop={ai.stop} onAccept={handleAcceptAI}
+            onStop={ai.stop}
+            onAccept={(
+              ai.operation === 'generate' || ai.operation === 'continue'
+            ) && !proseCandidate ? undefined : handleAcceptAI}
             onDismiss={() => { void handleDismissAI() }}
             onRetry={() => {
               if (ai.operation === 'generate') handleGenerate()

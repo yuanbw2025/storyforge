@@ -27,6 +27,12 @@ import {
   type AgentContextEvidence,
   type AgentContextProfile,
 } from './context-policy'
+import {
+  buildChapterInformationBoundaryV1,
+  buildInformationBoundaryInstructionV1,
+  validateProseInformationBoundaryV1,
+  type InformationBoundaryManifestV1,
+} from './information-boundary'
 
 export const PROSE_COPILOT_SOURCE_KEYS = [
   'contextMemo',
@@ -74,6 +80,10 @@ export interface ProseCopilotSnapshot {
   chapterOrder: number
   /** 叙事视角角色；缺省表示本轮不注入任何角色认知投影。 */
   perspectiveCharacterId?: number | null
+  /** H9：生成时的信息边界；旧候选缺省时按兼容路径重建。 */
+  informationBoundaryHash?: string
+  /** 视角来自章节字段时，章节视角变化必须使候选过期；主 Agent 显式视角不绑定该字段。 */
+  perspectiveFromChapter?: boolean
 }
 
 export interface ProseCopilotInput {
@@ -91,6 +101,8 @@ export interface ProseCopilotInput {
   config: AIConfig
   /** 显式叙事视角。不得让模型从正文或角色列表自行猜测。 */
   perspectiveCharacterId?: number | null
+  perspectiveFromChapter?: boolean
+  informationBoundary: InformationBoundaryManifestV1
   parameterValues?: Record<string, unknown>
   generationOverrides?: { temperature?: number; maxTokens?: number }
   routingCategory?: string
@@ -107,6 +119,7 @@ export interface PreparedProseCopilot {
   label: string
   contextEvidence: AgentContextEvidence
   perspectiveCharacterId?: number | null
+  informationBoundary: InformationBoundaryManifestV1
 }
 
 interface ProseCopilotDependencies {
@@ -218,6 +231,8 @@ async function snapshotOf(
   chapter: Chapter | null,
   order: number,
   perspectiveCharacterId?: number | null,
+  informationBoundaryHash?: string,
+  perspectiveFromChapter?: boolean,
 ): Promise<ProseCopilotSnapshot> {
   return {
     outlineNodeId: outline.id!,
@@ -228,10 +243,17 @@ async function snapshotOf(
     chapterHadContent: Boolean(htmlToPlainText(chapter?.content ?? '').trim()),
     chapterOrder: chapter?.order ?? Math.max(0, order - 1),
     perspectiveCharacterId,
+    informationBoundaryHash,
+    perspectiveFromChapter,
   }
 }
 
-async function readSnapshot(scope: WorkspaceScope, base: ProseCopilotSnapshot): Promise<ProseCopilotSnapshot> {
+async function readSnapshot(
+  scope: WorkspaceScope,
+  base: ProseCopilotSnapshot,
+  worldGroupId: number | null,
+  knownInformationBoundaryHash?: string,
+): Promise<ProseCopilotSnapshot> {
   const outline = await db.outlineNodes.get(base.outlineNodeId)
   if (!outline || !await assertRecordInScope(scope, 'outlineNodes', outline, { owner: 'work' })) {
     throw new ProseCopilotStaleError()
@@ -241,12 +263,32 @@ async function readSnapshot(scope: WorkspaceScope, base: ProseCopilotSnapshot): 
     throw new ProseCopilotStaleError()
   }
   if (chapter && chapter.outlineNodeId !== base.outlineNodeId) throw new ProseCopilotStaleError()
+  if (
+    base.perspectiveFromChapter
+    && (chapter?.perspectiveCharacterId ?? null) !== (base.perspectiveCharacterId ?? null)
+  ) throw new ProseCopilotStaleError()
   if (base.chapterId == null) {
     const created = (await readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }))
       .find(row => row.outlineNodeId === base.outlineNodeId)
     if (created) throw new ProseCopilotStaleError()
   }
-  return snapshotOf(outline, chapter ?? null, base.chapterOrder + 1, base.perspectiveCharacterId)
+  const informationBoundaryHash = knownInformationBoundaryHash ?? (
+    await buildChapterInformationBoundaryV1({
+      scope,
+      chapterId: chapter?.id ?? null,
+      outlineNodeId: outline.id!,
+      worldGroupId,
+      perspectiveCharacterId: base.perspectiveCharacterId ?? null,
+    })
+  ).manifestHash
+  return snapshotOf(
+    outline,
+    chapter ?? null,
+    base.chapterOrder + 1,
+    base.perspectiveCharacterId,
+    informationBoundaryHash,
+    base.perspectiveFromChapter,
+  )
 }
 
 function sameSnapshot(left: ProseCopilotSnapshot, right: ProseCopilotSnapshot): boolean {
@@ -257,14 +299,20 @@ function sameSnapshot(left: ProseCopilotSnapshot, right: ProseCopilotSnapshot): 
     && left.chapterContentHash === right.chapterContentHash
     && left.chapterHadContent === right.chapterHadContent
     && left.perspectiveCharacterId === right.perspectiveCharacterId
+    && (left.informationBoundaryHash == null
+      || left.informationBoundaryHash === right.informationBoundaryHash)
 }
 
-function candidateIssues(output: string): GenerationGateIssue[] {
+function candidateIssues(
+  output: string,
+  informationBoundary: InformationBoundaryManifestV1,
+): GenerationGateIssue[] {
+  const issues = validateProseInformationBoundaryV1(output, informationBoundary)
   try {
     parseProseCandidateDraft(output)
-    return []
+    return issues
   } catch (error) {
-    return [{
+    return [...issues, {
       code: 'prose-invalid',
       message: error instanceof Error ? error.message : '正文候选无效。',
     }]
@@ -272,9 +320,7 @@ function candidateIssues(output: string): GenerationGateIssue[] {
 }
 
 function buildProseMessages(input: ProseCopilotInput) {
-  const perspectiveBoundary = input.perspectiveCharacterId != null
-    ? '【叙事视角角色】characterId=' + input.perspectiveCharacterId + '。角色认知只代表该角色在本章开始前已知的内容。'
-    : '【叙事视角隔离】本轮未指定视角角色；不得代入任何角色的私人认知或使用角色认知账本中的信息。'
+  const perspectiveBoundary = buildInformationBoundaryInstructionV1(input.informationBoundary)
   const charactersIndex = input.assembled.included.indexOf('characters')
   const characters = charactersIndex >= 0
     ? input.assembled.segments[charactersIndex]?.content ?? ''
@@ -324,6 +370,19 @@ async function adoptCandidate(input: {
 }): Promise<{ chapterId: number }> {
   const candidate = parseProseCandidateDraft(input.draft)
   const workspaceScope = await resolveScope({ projectId: input.projectId, scope: input.scope })
+  const informationBoundary = await buildChapterInformationBoundaryV1({
+    scope: workspaceScope,
+    chapterId: input.snapshot.chapterId,
+    outlineNodeId: input.outline.id!,
+    worldGroupId: input.worldGroupId,
+    perspectiveCharacterId: input.snapshot.perspectiveCharacterId ?? null,
+  })
+  if (
+    input.snapshot.informationBoundaryHash != null
+    && informationBoundary.manifestHash !== input.snapshot.informationBoundaryHash
+  ) throw new ProseCopilotStaleError()
+  const boundaryIssues = validateProseInformationBoundaryV1(candidate, informationBoundary)
+  if (boundaryIssues.length) throw new Error(boundaryIssues.map(issue => issue.message).join('；'))
   const chapterId = await db.transaction(
     'rw',
     scopeTransactionTables(
@@ -333,7 +392,12 @@ async function adoptCandidate(input: {
       db.narrativeSummaryNodes,
     ),
     async () => {
-      const current = await readSnapshot(workspaceScope, input.snapshot)
+      const current = await readSnapshot(
+        workspaceScope,
+        input.snapshot,
+        input.worldGroupId,
+        informationBoundary.manifestHash,
+      )
       if (!sameSnapshot(current, input.snapshot)) throw new ProseCopilotStaleError()
       const chapter = current.chapterId == null ? null : await db.chapters.get(current.chapterId)
       const candidateHtml = plainTextToHtml(candidate)
@@ -459,7 +523,7 @@ export async function prepareProseCopilot(input: {
   const perspectiveCharacterId = input.perspectiveCharacterId === undefined
     ? target.chapter?.perspectiveCharacterId ?? null
     : input.perspectiveCharacterId
-  const snapshot = await snapshotOf(target.outline, target.chapter, target.ordinal, perspectiveCharacterId)
+  const perspectiveFromChapter = input.perspectiveCharacterId === undefined
   const defaultCategory = operation === 'continue' ? 'chapter.continue' : 'chapter.content'
   const routingCategory = input.routingCategory ?? defaultCategory
   const config = input.configOverride ?? resolveRequestConfig(
@@ -475,6 +539,21 @@ export async function prepareProseCopilot(input: {
       && (Boolean(character.isCrossWorld) || (character.homeWorldGroupId ?? null) === worldGroupId)
     if (!visible) throw new Error('正文叙事视角角色不存在或不属于当前世界。')
   }
+  const informationBoundary = await buildChapterInformationBoundaryV1({
+    scope,
+    chapterId: target.chapter?.id ?? null,
+    outlineNodeId: target.outline.id!,
+    worldGroupId,
+    perspectiveCharacterId,
+  })
+  const snapshot = await snapshotOf(
+    target.outline,
+    target.chapter,
+    target.ordinal,
+    perspectiveCharacterId,
+    informationBoundary.manifestHash,
+    perspectiveFromChapter,
+  )
   const sourceKeys = perspectiveCharacterId == null
     ? PROSE_COPILOT_SOURCE_KEYS.filter(key => key !== 'characterKnowledge')
     : [...PROSE_COPILOT_SOURCE_KEYS]
@@ -500,7 +579,7 @@ export async function prepareProseCopilot(input: {
     inputBudgetMaxTokens: contextPolicy.maxInputTokens,
     sourceBudgetScale: contextPolicy.sourceBudgetScale,
   })
-  const current = await readSnapshot(scope, snapshot)
+  const current = await readSnapshot(scope, snapshot, worldGroupId)
   if (!sameSnapshot(current, snapshot)) throw new ProseCopilotStaleError()
   const nodeInput: ProseCopilotInput = {
     project,
@@ -517,6 +596,8 @@ export async function prepareProseCopilot(input: {
     config,
     parameterValues: input.parameterValues,
     perspectiveCharacterId,
+    perspectiveFromChapter,
+    informationBoundary,
     generationOverrides: input.generationOverrides,
     routingCategory,
     signal: input.signal,
@@ -531,6 +612,7 @@ export async function prepareProseCopilot(input: {
     outlineNodeId: target.outline.id!,
     contextEvidence: evidenceFromContextResult(contextProfile, assembled),
     perspectiveCharacterId,
+    informationBoundary,
     label: operation === 'continue'
       ? `续写《${target.outline.title}》`
       : `《${target.outline.title}》正文`,
@@ -542,7 +624,7 @@ export function createProseCopilotNode(
   dependencies: ProseCopilotDependencies = {},
 ): PreparedProseCopilot['node'] {
   const readCurrent = dependencies.readCurrent
-    ?? (() => readSnapshot(input.scope, input.snapshot))
+    ?? (() => readSnapshot(input.scope, input.snapshot, input.worldGroupId))
   const save = dependencies.save ?? (draft => adoptCandidate({
     projectId: input.project.id!,
     worldGroupId: input.worldGroupId,
@@ -570,7 +652,7 @@ export function createProseCopilotNode(
     assembleInput: buildProseMessages,
     run: async messages => parseProseCandidateDraft(await runAI(messages)),
     gate: output => {
-      const issues = candidateIssues(output)
+      const issues = candidateIssues(output, input.informationBoundary)
       return { status: issues.length ? 'blocked' : 'pass', issues }
     },
     adopt: async output => {
