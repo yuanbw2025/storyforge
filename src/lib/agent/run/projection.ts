@@ -171,6 +171,26 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       refreshRunningState(projection)
       break
     }
+    case 'step.verification.accepted': {
+      expectState(projection, event.type, ['running', 'awaiting_confirmation'])
+      const receipt = event.payload.receipt
+      const step = stepFor(projection, receipt.stepId)
+      if (step.status !== 'awaiting_confirmation') {
+        throw new ProjectionError(`步骤 ${receipt.stepId} 不在等待确认，不能签发步骤回执`)
+      }
+      assertAttempt(step, receipt.attempt)
+      assertCandidate(step, receipt.candidateHash)
+      step.verificationReceiptHash = receipt.receiptHash
+      break
+    }
+    case 'step.verification.staled': {
+      const step = stepFor(projection, event.payload.stepId)
+      if (step.verificationReceiptHash !== event.payload.previousReceiptHash) {
+        throw new ProjectionError('step.verification.staled 的 previousReceiptHash 不匹配')
+      }
+      step.verificationReceiptHash = undefined
+      break
+    }
     case 'confirmation.recorded': {
       expectState(projection, event.type, ['running', 'awaiting_confirmation'])
       const step = stepFor(projection, event.payload.stepId)

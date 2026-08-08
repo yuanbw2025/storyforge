@@ -444,6 +444,12 @@
   依赖；任务身份、Skill、workflow 和三注册表权限冻结。换代事务会局部 stale 受影响候选，显式
   carry-forward 未受影响的待确认候选，并原子写入新契约代际、计划事件和检查点；新下游只有当前代
   carry 证据才能引用旧代上游。已确认/已采纳 run 不原地重规划，旧契约不补授权，独立开关可关闭。
+- HARNESS-25 已为新 fan-out 契约增加逐候选确定性步骤回执：回执绑定 step/attempt、candidate/output
+  hash、Context Manifest、verifier 版本和 criteria，并与候选及 Manifest 同事务提交。汇合任务在模型
+  请求前必须取得所有上游 fresh receipt，下游候选再冻结 receipt hash；恢复会拒绝篡改、已失效、跨代
+  或晚于 join 的证据。作者编辑先使旧回执失效，合法稿重签，不合法稿不能进入下游；重规划 carry-forward
+  在新代重签。`agentEvents.durableRunId` 经 DB v53 索引和 `PROJECT_TABLES` 参与导入重映射及删除生命周期，
+  原始 hash-bound payload 不静默改写。历史无策略运行兼容；通用 fan-out、语义终验和质量/成本 A/B 未完成。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

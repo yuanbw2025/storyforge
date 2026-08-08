@@ -148,8 +148,8 @@ export interface ProjectExportData {
     & { _exportId: number }
   )[]
   agentEvents?: (
-    Omit<AgentEvent, 'id' | 'projectId' | 'conversationId'>
-    & { _conversationExportId: number }
+    Omit<AgentEvent, 'id' | 'projectId' | 'conversationId' | 'durableRunId'>
+    & { _conversationExportId: number; _agentRunExportId?: number | null }
   )[]
   /** HARNESS-1 可恢复运行账本；事件/检查点只通过便携 run ID 关联。 */
   agentRuns?: (

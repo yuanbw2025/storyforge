@@ -111,6 +111,11 @@ export interface AgentRunContractV1 {
   }
   /** Absent on runs created before HARNESS-18. */
   executionBindings?: AgentRunStepExecutionBindingV1[]
+  /** Absent on runs created before HARNESS-25 and on workflows without a candidate join. */
+  dependencyReceiptPolicy?: {
+    requiredForJoin: true
+    verifierSetVersion: string
+  }
   budget: {
     maxModelCalls: number
     maxToolCalls: number
@@ -181,6 +186,24 @@ export interface VerificationCriterionReceiptV1 {
   id: string
   status: 'passed' | 'failed'
   evidenceRefs: string[]
+}
+
+/**
+ * Deterministic candidate evidence used inside one run generation. The event
+ * envelope owns run/contract identity so the receipt remains portable when a
+ * project import rebinds physical IDs and contract hashes.
+ */
+export interface AgentRunStepVerificationReceiptV1 {
+  version: 1
+  stepId: string
+  attempt: number
+  candidateHash: string
+  outputHash: string
+  contextManifestHash: string
+  verifierSetVersion: string
+  criteria: VerificationCriterionReceiptV1[]
+  acceptedAt: number
+  receiptHash: string
 }
 
 export interface VerificationReceiptV1 {
@@ -312,6 +335,8 @@ export type AgentRunEventTypeV1 =
   | 'candidate.revised'
   | 'candidate.staled'
   | 'candidate.carried-forward'
+  | 'step.verification.accepted'
+  | 'step.verification.staled'
   | 'confirmation.recorded'
   | 'adoption.started'
   | 'adoption.committed'
@@ -378,6 +403,8 @@ export interface AgentRunEventPayloadByTypeV1 {
     sourceAttempt: number
     candidateHash: string
   }
+  'step.verification.accepted': { receipt: AgentRunStepVerificationReceiptV1 }
+  'step.verification.staled': { stepId: string; previousReceiptHash: string; reason: string }
   'confirmation.recorded': {
     stepId: string
     candidateHash: string
@@ -446,6 +473,7 @@ export interface AgentRunStepProjectionV1 {
   attempt: number
   outputHash?: string
   candidateHash?: string
+  verificationReceiptHash?: string
   confirmation?: 'adopt' | 'reject'
   adoptionHash?: string
   failureCode?: string

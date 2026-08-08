@@ -266,8 +266,13 @@
   action/fingerprint 与失败调用预算。同一错误第二次出现后不再原样重试，而是在 RunContract 授权的
   1 次上限内只 patch 失败任务及下游；身份、Skill、workflow 和权限不可变。契约换代、局部 stale、
   未受影响候选 carry-forward、对话失效标记和新检查点同事务提交；已确认/已采纳候选不原地重规划。
-  `storyforge:harness:master-agent-replan-v1=disabled` 可关闭该能力。作者任意 steering UI、每叶 receipt
-  和 H3 的 p95/质量 A/B 仍未交付。
+  `storyforge:harness:master-agent-replan-v1=disabled` 可关闭该能力。作者任意 steering UI 和 H3 的
+  p95/质量 A/B 仍未交付。
+- HARNESS-25 已给新 fan-out Run 的每个候选签发独立确定性步骤回执，并在汇合模型调用前强制验证
+  上游回执仍与 candidate/output、Context Manifest、attempt、verifier 和当前 generation 一致。下游候选
+  冻结实际消费的 receipt hash；编辑、重规划、篡改、导入和删除都走可回放失效/重签或注册表生命周期。
+  历史运行不伪造回执，`agentEvents.durableRunId` 由 DB v53 索引并通过 `PROJECT_TABLES` 便携重映射。
+  这仍是候选级确定性回执；通用 fan-out、独立语义终验和成本/延迟/质量 A/B 尚未交付。
 
 ### GOV-1 第一阶段交付证据
 

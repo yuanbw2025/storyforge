@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type {
   AgentConversation,
@@ -18,6 +19,11 @@ import {
   readVerifiedAgentRunInTransactionV1,
 } from './run/event-store'
 import { parseAgentRunEventV1 } from './run/event-schema'
+import type { MasterCandidatePayload } from './orchestrator'
+import {
+  contextManifestHashForStepAttemptV1,
+  createMasterCandidateStepReceiptV1,
+} from './run/master-step-verification'
 
 export async function getOrCreateAgentConversation(input: {
   projectId: number
@@ -71,6 +77,7 @@ export async function readAgentEvents(conversationId: number, scope?: WorkspaceS
 export async function appendAgentEvent(input: {
   projectId: number
   conversationId: number
+  durableRunId?: number | null
   kind: AgentEventKind
   role?: AgentEvent['role']
   content: string
@@ -96,6 +103,7 @@ export async function appendAgentEvent(input: {
     const event = stampNewRecord(scope, 'agentEvents', {
       projectId: input.projectId,
       conversationId: input.conversationId,
+      durableRunId: input.durableRunId ?? null,
       sequence,
       kind: input.kind,
       role: input.role,
@@ -155,10 +163,31 @@ export async function updateAgentEventCandidate(
       'rw',
       scopeTransactionTables(db.agentEvents, db.agentRuns, db.agentRunEvents),
       async () => {
-        const snapshot = await readVerifiedAgentRunInTransactionV1(resolved, payload!.runId as number)
-        const step = snapshot.projection.steps[payload!.runStepId as string]
+        const durableRunId = event.durableRunId ?? payload!.runId as number
+        let snapshot = await readVerifiedAgentRunInTransactionV1(resolved, durableRunId)
+        const stepId = payload!.runStepId as string
+        const step = snapshot.projection.steps[stepId]
         if (!step || step.status !== 'awaiting_confirmation' || step.candidateHash !== previousCandidateHash) {
           throw new Error('待更新的 durable 候选不在等待确认状态。')
+        }
+        if (step.verificationReceiptHash) {
+          const staleEvent = parseAgentRunEventV1({
+            version: 1,
+            runId: snapshot.run.id,
+            sequence: snapshot.projection.lastSequence + 1,
+            generation: snapshot.projection.generation,
+            projectId: snapshot.run.projectId,
+            worldGroupId: snapshot.run.worldGroupId ?? null,
+            contractHash: snapshot.run.contractHash,
+            type: 'step.verification.staled',
+            createdAt: Date.now(),
+            payload: {
+              stepId,
+              previousReceiptHash: step.verificationReceiptHash,
+              reason: 'author_revised_candidate',
+            },
+          })
+          snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, staleEvent)
         }
         const runEvent = parseAgentRunEventV1({
           version: 1,
@@ -171,14 +200,45 @@ export async function updateAgentEventCandidate(
           type: 'candidate.revised',
           createdAt: Date.now(),
           payload: {
-            stepId: payload!.runStepId as string,
+            stepId,
             attempt: step.attempt,
             previousCandidateHash,
             candidateHash,
           },
         })
-        await appendPrivilegedAgentRunEventInTransactionV1(snapshot, runEvent)
+        snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, runEvent)
         await db.agentEvents.update(eventId, { content, payload: nextPayload })
+        const contextManifestHash = contextManifestHashForStepAttemptV1(snapshot, stepId, step.attempt)
+        if (snapshot.contract.dependencyReceiptPolicy?.requiredForJoin && contextManifestHash) {
+          let receipt = null
+          try {
+            receipt = await Dexie.waitFor(createMasterCandidateStepReceiptV1({
+              payload: { ...payload, candidateHash } as unknown as MasterCandidatePayload,
+              draft: content,
+              attempt: step.attempt,
+              contextManifestHash,
+              acceptedAt: Date.now(),
+              verifierSetVersion: snapshot.contract.dependencyReceiptPolicy.verifierSetVersion,
+            }))
+          } catch {
+            // Invalid author edits remain editable candidates but cannot feed a downstream join.
+          }
+          if (receipt) {
+            const acceptedEvent = parseAgentRunEventV1({
+              version: 1,
+              runId: snapshot.run.id,
+              sequence: snapshot.projection.lastSequence + 1,
+              generation: snapshot.projection.generation,
+              projectId: snapshot.run.projectId,
+              worldGroupId: snapshot.run.worldGroupId ?? null,
+              contractHash: snapshot.run.contractHash,
+              type: 'step.verification.accepted',
+              createdAt: Date.now(),
+              payload: { receipt },
+            })
+            await appendPrivilegedAgentRunEventInTransactionV1(snapshot, acceptedEvent)
+          }
+        }
       },
     )
     return

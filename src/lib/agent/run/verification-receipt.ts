@@ -1,4 +1,5 @@
 import type {
+  AgentRunStepVerificationReceiptV1,
   VerificationCriterionReceiptV1,
   VerificationReceiptV1,
 } from '../../types/agent-run'
@@ -16,8 +17,16 @@ import {
 } from './schema-utils'
 
 type VerificationReceiptBodyV1 = Omit<VerificationReceiptV1, 'receiptHash'>
+type StepVerificationReceiptBodyV1 = Omit<AgentRunStepVerificationReceiptV1, 'receiptHash'>
 
 function receiptBody(receipt: VerificationReceiptV1): VerificationReceiptBodyV1 {
+  const { receiptHash: _receiptHash, ...body } = receipt
+  return body
+}
+
+function stepReceiptBody(
+  receipt: AgentRunStepVerificationReceiptV1,
+): StepVerificationReceiptBodyV1 {
   const { receiptHash: _receiptHash, ...body } = receipt
   return body
 }
@@ -140,6 +149,71 @@ export async function createVerificationReceiptV1(
 export async function verifyVerificationReceiptIntegrityV1(value: unknown): Promise<boolean> {
   const receipt = parseVerificationReceiptV1(value)
   return await hashCanonicalValue(receiptBody(receipt)) === receipt.receiptHash
+}
+
+export function parseAgentRunStepVerificationReceiptV1(
+  value: unknown,
+): AgentRunStepVerificationReceiptV1 {
+  const record = readRecord(value, 'stepReceipt')
+  const keys = [
+    'version',
+    'stepId',
+    'attempt',
+    'candidateHash',
+    'outputHash',
+    'contextManifestHash',
+    'verifierSetVersion',
+    'criteria',
+    'acceptedAt',
+    'receiptHash',
+  ] as const
+  assertExactKeys(record, keys, keys, 'stepReceipt')
+  if (record.version !== 1) {
+    failSchema('unsupported_version', 'stepReceipt.version', '仅支持版本 1')
+  }
+  const criteria = readArray(record.criteria, 'stepReceipt.criteria')
+    .map((item, index) => parseCriterion(item, `stepReceipt.criteria[${index}]`))
+  if (criteria.length === 0) {
+    failSchema('invalid_criteria', 'stepReceipt.criteria', '不得为空')
+  }
+  assertUnique(criteria.map(item => item.id), 'stepReceipt.criteria')
+  if (criteria.some(item => item.status !== 'passed')) {
+    failSchema('failed_criterion', 'stepReceipt.criteria', 'accepted receipt 不得包含 failed 验收项')
+  }
+  return {
+    version: 1,
+    stepId: readString(record.stepId, 'stepReceipt.stepId', { max: 160 }),
+    attempt: readInteger(record.attempt, 'stepReceipt.attempt', { min: 1 }),
+    candidateHash: readHash(record.candidateHash, 'stepReceipt.candidateHash'),
+    outputHash: readHash(record.outputHash, 'stepReceipt.outputHash'),
+    contextManifestHash: readHash(record.contextManifestHash, 'stepReceipt.contextManifestHash'),
+    verifierSetVersion: readString(
+      record.verifierSetVersion,
+      'stepReceipt.verifierSetVersion',
+      { max: 160 },
+    ),
+    criteria,
+    acceptedAt: readInteger(record.acceptedAt, 'stepReceipt.acceptedAt', { min: 0 }),
+    receiptHash: readHash(record.receiptHash, 'stepReceipt.receiptHash'),
+  }
+}
+
+export async function createAgentRunStepVerificationReceiptV1(
+  body: StepVerificationReceiptBodyV1,
+): Promise<AgentRunStepVerificationReceiptV1> {
+  const provisional = { ...body, receiptHash: '0'.repeat(64) }
+  const parsed = parseAgentRunStepVerificationReceiptV1(provisional)
+  return {
+    ...parsed,
+    receiptHash: await hashCanonicalValue(stepReceiptBody(parsed)),
+  }
+}
+
+export async function verifyAgentRunStepVerificationReceiptIntegrityV1(
+  value: unknown,
+): Promise<boolean> {
+  const receipt = parseAgentRunStepVerificationReceiptV1(value)
+  return await hashCanonicalValue(stepReceiptBody(receipt)) === receipt.receiptHash
 }
 
 export function isVerificationReceiptFreshV1(

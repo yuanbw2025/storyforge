@@ -61,6 +61,27 @@ class HarnessV52DB extends Dexie {
   }
 }
 
+class CandidateEventsV52DB extends Dexie {
+  constructor(name: string) {
+    super(name)
+    this.version(52).stores({
+      agentEvents: '++id, projectId, conversationId, [conversationId+sequence], kind, createdAt',
+    })
+  }
+}
+
+class HarnessV53DB extends Dexie {
+  constructor(name: string) {
+    super(name)
+    this.version(52).stores({
+      agentEvents: '++id, projectId, conversationId, [conversationId+sequence], kind, createdAt',
+    })
+    this.version(53).stores({
+      agentEvents: '++id, projectId, conversationId, durableRunId, [conversationId+sequence], kind, createdAt',
+    })
+  }
+}
+
 afterEach(async () => {
   for (const db of opened.splice(0)) db.close()
   for (const name of names.splice(0)) await Dexie.delete(name)
@@ -187,5 +208,43 @@ describe('R-HARNESS1-db-migration · v51 -> v52', () => {
       status: 'planned',
       updatedAt: 3,
     })).rejects.toThrow()
+  })
+})
+
+describe('R-HARNESS1-db-migration · v52 -> v53', () => {
+  it('保留候选事件并为 durable Run 归属建立可查询索引，不猜测未绑定历史事件', async () => {
+    const name = databaseName()
+    const legacy = track(new CandidateEventsV52DB(name))
+    await legacy.open()
+    const boundId = await legacy.table('agentEvents').add({
+      projectId: 1,
+      conversationId: 2,
+      durableRunId: 7,
+      sequence: 1,
+      kind: 'candidate',
+      content: '已绑定的候选',
+      payload: '{}',
+      createdAt: 1,
+    })
+    const unboundId = await legacy.table('agentEvents').add({
+      projectId: 1,
+      conversationId: 2,
+      sequence: 2,
+      kind: 'message',
+      content: '历史普通事件',
+      payload: '{}',
+      createdAt: 2,
+    })
+    legacy.close()
+
+    const upgraded = track(new HarnessV53DB(name))
+    await upgraded.open()
+
+    expect(await upgraded.table('agentEvents').where('durableRunId').equals(7).primaryKeys())
+      .toEqual([boundId])
+    expect(await upgraded.table('agentEvents').get(unboundId)).toMatchObject({
+      content: '历史普通事件',
+    })
+    expect((await upgraded.table('agentEvents').get(unboundId)).durableRunId).toBeUndefined()
   })
 })

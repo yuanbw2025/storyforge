@@ -621,7 +621,7 @@ export async function deleteAgentRunV1(
 ): Promise<boolean> {
   return withAgentRunMutationLockV1(runId, () => db.transaction(
     'rw',
-    scopeTransactionTables(db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+    scopeTransactionTables(db.agentEvents, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
     async () => {
       const run = await db.agentRuns.get(runId)
       if (!run) return false
@@ -639,6 +639,10 @@ export async function deleteAgentRunV1(
       }
       await db.agentRunEvents.where('runId').anyOf(runIds).delete()
       await db.agentRunCheckpoints.where('runId').anyOf(runIds).delete()
+      await db.agentEvents
+        .where('durableRunId')
+        .anyOf(runIds)
+        .modify({ durableRunId: null })
       await db.agentRuns.bulkDelete(runIds)
       return true
     },

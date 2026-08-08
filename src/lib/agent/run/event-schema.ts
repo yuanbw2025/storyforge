@@ -14,6 +14,7 @@ import {
   readRecord,
   readString,
 } from './schema-utils'
+import { parseAgentRunStepVerificationReceiptV1 } from './verification-receipt'
 
 export const AGENT_RUN_EVENT_TYPES_V1: readonly AgentRunEventTypeV1[] = [
   'run.created',
@@ -33,6 +34,8 @@ export const AGENT_RUN_EVENT_TYPES_V1: readonly AgentRunEventTypeV1[] = [
   'candidate.revised',
   'candidate.staled',
   'candidate.carried-forward',
+  'step.verification.accepted',
+  'step.verification.staled',
   'confirmation.recorded',
   'adoption.started',
   'adoption.committed',
@@ -306,6 +309,23 @@ function parsePayload<T extends AgentRunEventTypeV1>(
           { min: 1 },
         ),
         candidateHash: readHash(record.candidateHash, 'event.payload(candidate.carried-forward).candidateHash'),
+      }
+      break
+    }
+    case 'step.verification.accepted': {
+      const record = payloadRecord(value, type, ['receipt'])
+      payload = { receipt: parseAgentRunStepVerificationReceiptV1(record.receipt) }
+      break
+    }
+    case 'step.verification.staled': {
+      const record = payloadRecord(value, type, ['stepId', 'previousReceiptHash', 'reason'])
+      payload = {
+        stepId: readString(record.stepId, 'event.payload(step.verification.staled).stepId', { max: 160 }),
+        previousReceiptHash: readHash(
+          record.previousReceiptHash,
+          'event.payload(step.verification.staled).previousReceiptHash',
+        ),
+        reason: readString(record.reason, 'event.payload(step.verification.staled).reason', { max: 1000 }),
       }
       break
     }

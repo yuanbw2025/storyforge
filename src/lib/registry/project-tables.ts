@@ -457,9 +457,10 @@ export const PROJECT_TABLES: TableSpec[] = [
     domainOwner: LEGACY_WORK_OWNER,
     exportRemap: [
       { field: 'conversationId', remapVia: 'agentConversations', exportAs: '_conversationExportId', onUnmapped: 'require' },
+      { field: 'durableRunId', remapVia: 'agentRuns', exportAs: '_agentRunExportId' },
     ],
-    defaults: { payload: '{}' },
-    note: 'Agent 追加事件流：消息/计划/任务/候选/确认/错误，未确认候选不属于 Canon' },
+    defaults: { payload: '{}', durableRunId: null },
+    note: 'Agent 追加事件流：消息/计划/任务/候选/确认/错误；durableRunId 由 PROJECT_TABLES 统一重映射，未确认候选不属于 Canon' },
 
   { table: db.agentRuns, name: 'agentRuns', owner: 'project',
     domainOwner: LEGACY_WORK_OWNER,
@@ -469,6 +470,7 @@ export const PROJECT_TABLES: TableSpec[] = [
       { kind: 'simple', field: 'id', target: 'agentRuns[parentRunId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'agentRunEvents[runId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'agentRunCheckpoints[runId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'agentEvents[durableRunId]', onDelete: 'setNull' },
     ],
     exportRemap: [
       { field: 'parentRunId', remapVia: 'agentRuns', selfTree: true, exportAs: '_parentExportId' },

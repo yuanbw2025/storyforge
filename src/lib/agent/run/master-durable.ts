@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import type {
   AgentEvent,
   AgentRunEventTypeV1,
@@ -63,6 +64,13 @@ import {
   classifyAgentRunFailureV1,
   matchingFailureCountV1,
 } from './failure-policy'
+import {
+  MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1,
+  contextManifestHashForStepAttemptV1,
+  createMasterCandidateStepReceiptV1,
+  readFreshMasterCandidateStepReceiptV1,
+  verifyHistoricalMasterCandidateStepReceiptV1,
+} from './master-step-verification'
 import {
   AgentTeamBudgetExceededError,
   AgentTeamBudgetTracker,
@@ -191,7 +199,7 @@ function dependencyBindings(
     assertKeysWithOptional(
       item,
       ['taskId', 'outputHash'],
-      ['candidateHash', 'generation'],
+      ['candidateHash', 'generation', 'verificationReceiptHash'],
       `${label}[${index}]`,
     )
     const candidateHash = item.candidateHash === undefined
@@ -201,11 +209,15 @@ function dependencyBindings(
       ? undefined
       : readInteger(item.generation, `${label}[${index}].generation`)
     if (generation !== undefined && generation < 1) fail(`${label}[${index}].generation 无效`)
+    const verificationReceiptHash = item.verificationReceiptHash === undefined
+      ? undefined
+      : readHash(item.verificationReceiptHash, `${label}[${index}].verificationReceiptHash`)
     return {
       taskId: readString(item.taskId, `${label}[${index}].taskId`, MAX_TASK_ID_CHARS),
       outputHash: readHash(item.outputHash, `${label}[${index}].outputHash`),
       ...(candidateHash ? { candidateHash } : {}),
       ...(generation === undefined ? {} : { generation }),
+      ...(verificationReceiptHash ? { verificationReceiptHash } : {}),
     }
   })
 }
@@ -386,9 +398,13 @@ export function buildMasterAgentRunContractV1(input: {
   plan: MasterAgentPlan
   budgetEvidence: AgentTeamBudgetEvidence
   includeExecutionBindings?: boolean
+  includeDependencyReceiptPolicy?: boolean
 }) {
   const plan = parseMasterAgentPlanV1(input.plan)
   const policy = resolveAgentTeamBudgetPolicy(input.budgetEvidence.profile)
+  const workflow = plan.workflow ? getMasterWorkflowV1(plan.workflow) : null
+  const includeDependencyReceiptPolicy = input.includeDependencyReceiptPolicy
+    ?? workflow?.strategy === 'fan-out'
   const acceptance = plan.tasks.flatMap(task => [
     { id: `${task.id}.candidate`, kind: 'output-present' as const, required: true },
     { id: `${task.id}.confirmed`, kind: 'author-confirmed' as const, required: true },
@@ -408,6 +424,12 @@ export function buildMasterAgentRunContractV1(input: {
         verifier: 'master-author-adoption-v1',
         criterionIds: [`${task.id}.confirmed`, `${task.id}.adopted`],
       },
+      ...(includeDependencyReceiptPolicy ? [{
+        id: `${task.id}.candidate-step`,
+        kind: 'deterministic' as const,
+        verifier: MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1,
+        criterionIds: [`${task.id}.candidate`],
+      }] : []),
     ]),
     {
       id: 'master.terminal',
@@ -419,8 +441,8 @@ export function buildMasterAgentRunContractV1(input: {
   return {
     version: 1 as const,
     objective: plan.summary,
-    workflowKind: plan.workflow
-      ? getMasterWorkflowV1(plan.workflow).runContractWorkflowKind
+    workflowKind: workflow
+      ? workflow.runContractWorkflowKind
       : 'multi-domain-sequential' as const,
     scope: {
       projectId: input.scope.projectId,
@@ -436,6 +458,12 @@ export function buildMasterAgentRunContractV1(input: {
         ...createAgentSkillExecutionBindingV1(resolveAgentSkillV1(task.agentId, task.skillId)),
       })),
     }),
+    ...(includeDependencyReceiptPolicy ? {
+      dependencyReceiptPolicy: {
+        requiredForJoin: true as const,
+        verifierSetVersion: MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1,
+      },
+    } : {}),
     budget: {
       maxModelCalls: policy.maxCalls,
       maxToolCalls: 0,
@@ -597,6 +625,7 @@ export async function replanDurableMasterAgentRunV1(
     plan: nextPlan,
     budgetEvidence: parsedBudget,
     includeExecutionBindings: before.contract.executionBindings !== undefined,
+    includeDependencyReceiptPolicy: before.contract.dependencyReceiptPolicy !== undefined,
   }))
   const now = input.now ?? Date.now()
 
@@ -617,6 +646,25 @@ export async function replanDurableMasterAgentRunV1(
       ) fail('主 Agent run 已推进，重规划基线过期')
       for (const candidate of staled) {
         const stepId = taskStepId(candidate.payload.taskId)
+        const priorReceiptHash = snapshot.projection.steps[stepId]?.verificationReceiptHash
+        if (priorReceiptHash) {
+          snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({
+            version: 1,
+            runId: input.runId,
+            sequence: snapshot.projection.lastSequence + 1,
+            generation: snapshot.projection.generation,
+            projectId: snapshot.run.projectId,
+            worldGroupId: snapshot.run.worldGroupId ?? null,
+            contractHash: snapshot.run.contractHash,
+            type: 'step.verification.staled',
+            createdAt: now,
+            payload: {
+              stepId,
+              previousReceiptHash: priorReceiptHash,
+              reason: input.reasonCode ?? 'bounded_replan_affected_branch',
+            },
+          }))
+        }
         snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({
           version: 1,
           runId: input.runId,
@@ -704,6 +752,36 @@ export async function replanDurableMasterAgentRunV1(
             candidateHash: candidate.payload.candidateHash,
           },
         }))
+        if (snapshot.contract.dependencyReceiptPolicy?.requiredForJoin) {
+          const contextManifestHash = contextManifestHashForStepAttemptV1(
+            before,
+            taskStepId(candidate.payload.taskId),
+            oldStep.attempt,
+          )
+          if (!contextManifestHash) {
+            fail(`主 Agent 候选 ${candidate.payload.taskId} 缺少可跨代验证的 Context Manifest`)
+          }
+          const receipt = await Dexie.waitFor(createMasterCandidateStepReceiptV1({
+            payload: candidate.payload,
+            draft: candidate.draft,
+            attempt: snapshot.projection.steps[taskStepId(candidate.payload.taskId)].attempt,
+            contextManifestHash,
+            acceptedAt: now,
+            verifierSetVersion: snapshot.contract.dependencyReceiptPolicy.verifierSetVersion,
+          }))
+          snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, parseAgentRunEventV1({
+            version: 1,
+            runId: input.runId,
+            sequence: snapshot.projection.lastSequence + 1,
+            generation: snapshot.projection.generation,
+            projectId: snapshot.run.projectId,
+            worldGroupId: snapshot.run.worldGroupId ?? null,
+            contractHash: snapshot.run.contractHash,
+            type: 'step.verification.accepted',
+            createdAt: now,
+            payload: { receipt },
+          }))
+        }
       }
       const saved = await createAgentRunCheckpointInTransactionV1({
         snapshot,
@@ -890,15 +968,24 @@ async function readPersistedCandidates(input: {
     } catch {
       fail(`候选事件 ${event.id} payload JSON 已损坏`)
     }
-    if (!isRecord(raw) || raw.runId !== input.snapshot.run.id) continue
+    if (!isRecord(raw)) continue
+    const importedDurableCandidate = event.durableRunId === input.snapshot.run.id
+      && raw.runId !== input.snapshot.run.id
+    if (
+      event.durableRunId != null
+        ? event.durableRunId !== input.snapshot.run.id
+        : raw.runId !== input.snapshot.run.id
+    ) continue
     const payload = parseCandidatePayload(raw, `候选事件 ${event.id}`)
     const task = taskById.get(payload.taskId)
     if (!task || payload.agentId !== task.agentId) fail(`候选事件 ${event.id} 不属于当前计划任务`)
     if (
       !payload.workspaceScope
-      || payload.workspaceScope.projectId !== input.scope.projectId
-      || payload.workspaceScope.worldId !== input.scope.worldId
-      || payload.workspaceScope.workId !== input.scope.workId
+      || (!importedDurableCandidate && (
+        payload.workspaceScope.projectId !== input.scope.projectId
+        || payload.workspaceScope.worldId !== input.scope.worldId
+        || payload.workspaceScope.workId !== input.scope.workId
+      ))
     ) fail(`候选事件 ${event.id} 的 WorkspaceScope 不一致`)
     const allowedSources = new Set(input.snapshot.contract.permissions.contextSourceKeys)
     if (payload.contextSources.some(source => !allowedSources.has(source))) {
@@ -955,6 +1042,14 @@ async function readPersistedCandidates(input: {
       bindings.length !== task.dependsOn.length
       || bindings.some((binding, index) => binding.taskId !== task.dependsOn[index])
     ) fail(`候选事件 ${candidate.event.id} 的冻结依赖清单与计划不一致`)
+    const joinEvent = input.snapshot.events.find(event => (
+      event.generation === candidateGeneration
+      && event.type === 'candidate.persisted'
+      && event.payload.stepId === taskStepId(task.id)
+    ))
+    if (bindings.length > 0 && !joinEvent) {
+      fail(`候选事件 ${candidate.event.id} 缺少生成时的 join 事件`)
+    }
     for (const binding of bindings) {
       const upstream = candidateByTask.get(binding.taskId)
       if (!upstream || (upstream.event.sequence ?? 0) >= (candidate.event.sequence ?? 0)) {
@@ -992,6 +1087,22 @@ async function readPersistedCandidates(input: {
       if (!historicalVersionExists) {
         fail(`候选事件 ${candidate.event.id} 的依赖 ${binding.taskId} 从未存在于当前 Run generation`)
       }
+      if (
+        input.snapshot.contract.dependencyReceiptPolicy?.requiredForJoin
+        && !binding.verificationReceiptHash
+      ) fail(`候选事件 ${candidate.event.id} 的依赖 ${binding.taskId} 缺少步骤回执绑定`)
+      if (
+        binding.verificationReceiptHash
+        && !await verifyHistoricalMasterCandidateStepReceiptV1({
+          snapshot: input.snapshot,
+          stepId: upstreamStepId,
+          candidateHash: binding.candidateHash ?? upstream.payload.candidateHash!,
+          outputHash: binding.outputHash,
+          receiptHash: binding.verificationReceiptHash,
+          generation: binding.generation ?? candidateGeneration,
+          beforeSequence: joinEvent!.sequence,
+        })
+      ) fail(`候选事件 ${candidate.event.id} 的依赖 ${binding.taskId} 步骤回执无效或在 join 前已过期`)
     }
   }
   candidates.sort((left, right) => (left.event.sequence ?? 0) - (right.event.sequence ?? 0))
@@ -1096,6 +1207,7 @@ export async function runDurableMasterAgentPlanV1(
       plan,
       budgetEvidence: checkpointPayload.budgetEvidence,
       includeExecutionBindings: snapshot.contract.executionBindings !== undefined,
+      includeDependencyReceiptPolicy: snapshot.contract.dependencyReceiptPolicy !== undefined,
     }))
     if (snapshot.run.contractHash !== contract.contractHash) fail('主 Agent durable run 契约已变化')
     budget = new AgentTeamBudgetTracker(checkpointPayload.budgetEvidence.profile, checkpointPayload.budgetEvidence)
@@ -1248,6 +1360,24 @@ export async function runDurableMasterAgentPlanV1(
         now: now(),
       })
       await notify(input.onDurableBoundary, 'step.started', snapshot)
+      if (snapshot.contract.dependencyReceiptPolicy?.requiredForJoin) {
+        for (const dependencyTaskId of task.dependsOn) {
+          const upstream = liveCandidates.get(dependencyTaskId)
+            ?? restored.candidates.find(item => item.payload.taskId === dependencyTaskId)
+          if (!upstream?.payload.candidateHash) {
+            fail(`主 Agent durable run 缺少依赖候选 ${dependencyTaskId}`)
+          }
+          const receipt = await readFreshMasterCandidateStepReceiptV1({
+            snapshot,
+            stepId: taskStepId(dependencyTaskId),
+            candidateHash: upstream.payload.candidateHash,
+            outputHash: await hashCanonicalValue(upstream.draft),
+          })
+          if (!receipt) {
+            fail(`主 Agent 任务 ${task.id} 的上游 ${dependencyTaskId} 缺少 fresh 步骤回执`)
+          }
+        }
+      }
       snapshot = await appendAgentRunEventV1({
         scope: input.scope,
         runId: snapshot.run.id,
@@ -1306,11 +1436,24 @@ export async function runDurableMasterAgentPlanV1(
         if (!upstream?.payload.candidateHash) {
           fail(`主 Agent durable trace 缺少依赖候选 ${dependencyTaskId}`)
         }
+        const outputHash = await hashCanonicalValue(upstream.draft)
+        const receipt = snapshot.contract.dependencyReceiptPolicy?.requiredForJoin
+          ? await readFreshMasterCandidateStepReceiptV1({
+              snapshot,
+              stepId: taskStepId(dependencyTaskId),
+              candidateHash: upstream.payload.candidateHash,
+              outputHash,
+            })
+          : null
+        if (snapshot.contract.dependencyReceiptPolicy?.requiredForJoin && !receipt) {
+          fail(`主 Agent durable trace 的依赖 ${dependencyTaskId} 缺少 fresh 步骤回执`)
+        }
         return {
           taskId: dependencyTaskId,
           candidateHash: upstream.payload.candidateHash,
-          outputHash: await hashCanonicalValue(upstream.draft),
+          outputHash,
           generation: snapshot.projection.generation,
+          ...(receipt ? { verificationReceiptHash: receipt.receiptHash } : {}),
         }
       }))
       const payload: MasterCandidatePayload = {
@@ -1346,6 +1489,17 @@ export async function runDurableMasterAgentPlanV1(
             contextEvidence: payload.contextEvidence,
           })
         : null
+      const stepReceipt = snapshot.contract.dependencyReceiptPolicy?.requiredForJoin
+        ? await createMasterCandidateStepReceiptV1({
+            payload,
+            draft,
+            attempt: snapshot.projection.steps[stepId].attempt,
+            contextManifestHash: contextManifestHash
+              ?? fail(`主 Agent 任务 ${task.id} 缺少可验证 Context Manifest`),
+            acceptedAt: now(),
+            verifierSetVersion: snapshot.contract.dependencyReceiptPolicy.verifierSetVersion,
+          })
+        : null
       const persisted = await db.transaction(
         'rw',
         scopeTransactionTables(db.agentConversations, db.agentEvents, db.agentRuns, db.agentRunEvents),
@@ -1353,6 +1507,7 @@ export async function runDurableMasterAgentPlanV1(
           const event = await appendAgentEvent({
             projectId: input.scope.projectId,
             conversationId: snapshot.run.conversationId!,
+            durableRunId: snapshot.run.id,
             kind: 'candidate',
             content: draft,
             payload,
@@ -1408,7 +1563,18 @@ export async function runDurableMasterAgentPlanV1(
             expectedLastSequence: nextSnapshot.projection.lastSequence,
             now: now(),
           })
-          return { event, snapshot: nextSnapshot }
+          const candidateSnapshot = nextSnapshot
+          if (stepReceipt) {
+            nextSnapshot = await appendAgentRunEventV1({
+              scope: input.scope,
+              runId: snapshot.run.id,
+              type: 'step.verification.accepted',
+              payload: { receipt: stepReceipt },
+              expectedLastSequence: nextSnapshot.projection.lastSequence,
+              now: now(),
+            })
+          }
+          return { event, candidateSnapshot, snapshot: nextSnapshot }
         },
       )
       snapshot = persisted.snapshot
@@ -1421,7 +1587,8 @@ export async function runDurableMasterAgentPlanV1(
       }
       liveCandidates.set(task.id, durableCandidate)
       activeTasks.delete(task.id)
-      await notify(input.onDurableBoundary, 'candidate.persisted', snapshot)
+      await notify(input.onDurableBoundary, 'candidate.persisted', persisted.candidateSnapshot)
+      if (stepReceipt) await notify(input.onDurableBoundary, 'step.verification.accepted', snapshot)
     },
   }
 

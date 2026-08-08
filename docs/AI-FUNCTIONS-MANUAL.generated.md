@@ -193,8 +193,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:408` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:495` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:410` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:497` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:34` |
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
@@ -265,7 +265,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/components/settings/NS0EvalPanel.tsx:72 · chat`
 - `src/lib/agent/character-copilot.ts:472 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
-- `src/lib/agent/inspiration-copilot.ts:322 · chat`
+- `src/lib/agent/inspiration-copilot.ts:325 · chat`
 - `src/lib/agent/outline-copilot.ts:496 · chat`
 - `src/lib/agent/prose-copilot.ts:649 · chat`
 - `src/lib/agent/world-origin-copilot.ts:252 · chat`
@@ -274,4 +274,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `2ba9a41`
+生成时间基准:commit `2d1c866`

@@ -58,6 +58,7 @@
 ### 分步骤主 Agent 的执行版本
 - **业务意图**:每次新主 Agent 运行按计划步骤冻结 Skill、提示词和只读工具 schema 版本；候选与运行合同使用同一绑定，刷新恢复时可判断结果究竟由哪套执行协议产生。
 - **兼容边界**:HARNESS-18 前的运行没有 execution binding，继续按旧 hash 恢复；新运行不得省略绑定。修改 Skill、提示词协议或工具声明后必须升级相应版本并重跑登记回归。
+- **fan-out 回执**:新 fan-out 运行要求每个上游候选先取得绑定 candidate/output、Context Manifest、attempt 和 verifier 版本的确定性步骤回执，汇合模型调用前再次检查 freshness，下游候选冻结实际消费的 receipt hash。作者编辑或重规划会使旧回执失效；历史无回执运行只按旧协议读取，不补造证据。
 - **维护闸门**:`check:agent-freshness` 检查 owner、提示词版本、复核日期和回归证据；工具 schema 的实际快照另由 SHA-256 回归校验。版本绑定用于可归因和防漂移，不代表模型输出已经通过质量评测。
 
 ---

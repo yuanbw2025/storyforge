@@ -557,6 +557,13 @@ class StoryForgeDB extends Dexie {
     this.version(52).stores({
       agentRuns: '++id, projectId, workId, worldGroupId, conversationId, parentRunId, &[parentRunId+parentRelation], status, updatedAt',
     })
+
+    // v53 / HARNESS-25: bind durable candidate events to their current Run
+    // through an indexed lifecycle reference. Existing events are preserved;
+    // rows without a durable owner remain unbound and are not inferred.
+    this.version(53).stores({
+      agentEvents: '++id, projectId, conversationId, durableRunId, [conversationId+sequence], kind, createdAt',
+    })
   }
 }
 

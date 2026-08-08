@@ -183,7 +183,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
   const record = readRecord(value, 'contract')
   assertExactKeys(
     record,
-    ['version', 'objective', 'workflowKind', 'lineage', 'scope', 'permissions', 'executionBindings', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
+    ['version', 'objective', 'workflowKind', 'lineage', 'scope', 'permissions', 'executionBindings', 'dependencyReceiptPolicy', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
     ['version', 'objective', 'workflowKind', 'scope', 'permissions', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
     'contract',
   )
@@ -240,6 +240,32 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
     failSchema('invalid_execution_binding', 'contract.executionBindings', '存在字段时不得为空')
   }
   if (executionBindings) assertUnique(executionBindings.map(item => item.stepId), 'contract.executionBindings')
+
+  let dependencyReceiptPolicy: AgentRunContractV1['dependencyReceiptPolicy']
+  if (record.dependencyReceiptPolicy !== undefined) {
+    const policy = readRecord(record.dependencyReceiptPolicy, 'contract.dependencyReceiptPolicy')
+    assertExactKeys(
+      policy,
+      ['requiredForJoin', 'verifierSetVersion'],
+      ['requiredForJoin', 'verifierSetVersion'],
+      'contract.dependencyReceiptPolicy',
+    )
+    if (policy.requiredForJoin !== true) {
+      failSchema(
+        'invalid_value',
+        'contract.dependencyReceiptPolicy.requiredForJoin',
+        '存在策略时必须启用 join 回执',
+      )
+    }
+    dependencyReceiptPolicy = {
+      requiredForJoin: true,
+      verifierSetVersion: readString(
+        policy.verifierSetVersion,
+        'contract.dependencyReceiptPolicy.verifierSetVersion',
+        { max: 160 },
+      ),
+    }
+  }
 
   const budgetRecord = readRecord(record.budget, 'contract.budget')
   const requiredBudgetKeys = ['maxModelCalls', 'maxToolCalls', 'maxInputTokens', 'maxOutputTokens', 'maxAttemptsPerStep'] as const
@@ -300,6 +326,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
     },
     permissions: { contextSourceKeys, writeTargets },
     ...(executionBindings ? { executionBindings } : {}),
+    ...(dependencyReceiptPolicy ? { dependencyReceiptPolicy } : {}),
     budget: {
       maxModelCalls: readInteger(budgetRecord.maxModelCalls, 'contract.budget.maxModelCalls', { min: 1 }),
       maxToolCalls: readInteger(budgetRecord.maxToolCalls, 'contract.budget.maxToolCalls', { min: 0 }),

@@ -33,6 +33,8 @@ export interface AgentEvent {
   projectId: number
   workId?: number | null
   conversationId: number
+  /** Durable run ownership outside the hash-bound candidate payload; absent on legacy events. */
+  durableRunId?: number | null
   sequence: number
   kind: AgentEventKind
   role?: 'user' | 'assistant' | 'system'

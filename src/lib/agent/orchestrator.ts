@@ -118,6 +118,8 @@ export interface MasterCandidateDependencyBindingV1 {
   candidateHash?: string
   /** Present on durable candidates; prevents a revised contract generation from joining old output. */
   generation?: number
+  /** Present when the RunContract requires a fresh deterministic upstream receipt. */
+  verificationReceiptHash?: string
 }
 
 export interface MasterCandidatePayload {
@@ -982,7 +984,13 @@ async function resolveCandidateScope(input: {
     declared = { projectId: input.projectId, worldId: work.worldId, workId: work.id! }
   }
   const scope = await resolveScope({ projectId: input.projectId, scope: declared })
-  if (input.payload.workspaceScope && !sameWorkspaceScope(scope, input.payload.workspaceScope)) {
+  const importedDurableCandidate = input.event.durableRunId != null
+    && input.event.durableRunId !== input.payload.runId
+  if (
+    input.payload.workspaceScope
+    && !sameWorkspaceScope(scope, input.payload.workspaceScope)
+    && !importedDurableCandidate
+  ) {
     throw new Error('Agent 候选的冻结作品作用域不一致。')
   }
   if (!await assertRecordInScope(scope, 'agentEvents', input.event, { owner: 'work' })) {
@@ -1072,11 +1080,16 @@ export async function assertMasterCandidateDependenciesAdoptedV1(
     || bindings.some((binding, index) => binding.taskId !== taskIds[index])
   ) throw new Error('下游候选的冻结依赖清单与计划不一致。')
 
-  const durableSnapshot = payload.runId == null ? null : await readAgentRunV1(scope, payload.runId)
+  const durableRunId = event.durableRunId ?? payload.runId
+  const durableSnapshot = durableRunId == null ? null : await readAgentRunV1(scope, durableRunId)
   if (durableSnapshot && payload.runGeneration !== durableSnapshot.projection.generation) {
     throw new Error('下游候选不属于当前 Run generation，请重新生成。')
   }
   for (const binding of bindings) {
+    if (
+      durableSnapshot?.contract.dependencyReceiptPolicy?.requiredForJoin
+      && !binding.verificationReceiptHash
+    ) throw new Error(`依赖 ${binding.taskId} 缺少步骤验证回执，请重新生成下游候选。`)
     const eligible = candidates.filter(candidate => (
       candidate.payload.taskId === binding.taskId
       && (payload.runId == null || candidate.payload.runId === payload.runId)
@@ -1104,6 +1117,10 @@ export async function assertMasterCandidateDependenciesAdoptedV1(
         || step.confirmation !== 'adopt'
         || !step.adoptionHash
         || step.candidateHash !== binding.candidateHash
+        || (
+          binding.verificationReceiptHash !== undefined
+          && step.verificationReceiptHash !== binding.verificationReceiptHash
+        )
       ) throw new Error(`请先完成采纳本候选依赖的上游结果：${binding.taskId}。`)
     } else if (!adoptedCandidateIds.has(upstream.event.id)) {
       throw new Error(`请先采纳本候选依赖的上游结果：${binding.taskId}。`)

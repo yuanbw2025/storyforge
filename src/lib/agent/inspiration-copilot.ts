@@ -146,7 +146,10 @@ function assertAuthorRequest(value: string): string {
   return request
 }
 
-function resultHasValue(result: InspirationCopilotResult, mode: InspirationResultMode): boolean {
+export function hasInspirationCandidateMaterialV1(
+  result: InspirationCopilotResult,
+  mode: InspirationResultMode,
+): boolean {
   if (mode === 'multiworld') {
     const candidate = result as ReverseMultiWorldResult
     return candidate.worlds.some(world => [
@@ -362,7 +365,7 @@ export function createInspirationCopilotNode(
           message: `候选超过 ${MAX_INSPIRATION_RESULT_CHARS} 字符。`,
         })
       }
-      if (!resultHasValue(output, input.mode)) {
+      if (!hasInspirationCandidateMaterialV1(output, input.mode)) {
         issues.push({ code: 'inspiration-empty-shell', message: '候选没有可用的世界、故事或角色内容。' })
       }
       if (input.mode === 'multiworld' && (output as ReverseMultiWorldResult).worlds.length === 0) {
