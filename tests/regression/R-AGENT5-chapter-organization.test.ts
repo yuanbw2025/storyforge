@@ -321,6 +321,25 @@ describe('AGENT-1 27.2b · 整理本章 Agent', () => {
     expect((await db.foreshadows.get(1))).toMatchObject({ status: 'planted', plantChapterId: chapterId })
     expect(Object.values(result.run.candidate.domainStatus)).toEqual(Array(6).fill('adopted'))
     expect(await db.agentEvents.where('conversationId').equals(run.conversation.id!).count()).toBe(2)
+
+    const retried = await adoptChapterOrganizationSelection({
+      run: result.run,
+      selection: selectAllChapterOrganizationCandidates(result.run.candidate),
+    })
+    expect(retried.written).toEqual({
+      state: 0,
+      facts: 0,
+      inventory: 0,
+      timeline: 0,
+      relations: 0,
+      foreshadows: 0,
+    })
+    expect(await db.stateCards.count()).toBe(1)
+    expect(await db.temporalFacts.count()).toBe(1)
+    expect(await db.itemLedger.count()).toBe(1)
+    expect(await db.storyTimelineEvents.count()).toBe(1)
+    expect(await db.characterRelations.count()).toBe(1)
+    expect((await db.foreshadows.get(1))?.status).toBe('planted')
   })
 
   it('正文变化后旧候选仍可查看但不能写回', async () => {

@@ -1,5 +1,6 @@
 import { CONTEXT_SOURCE_BY_KEY } from '../../registry/context-sources'
 import { FIELD_BY_TARGET } from '../../registry/field-registry'
+import { ADOPTION_EXTENSIONS } from '../../registry/adoption-schema'
 import { REGISTRY_BY_NAME } from '../../registry/project-tables'
 import type {
   AcceptedAgentRunContractV1,
@@ -65,7 +66,7 @@ function readIdArray(value: unknown, path: string): number[] | undefined {
 
 function readWriteTarget(value: unknown, path: string): AgentRunWriteTargetV1 {
   const record = readRecord(value, path)
-  assertExactKeys(record, ['table', 'fields', 'mode'], ['table', 'fields', 'mode'], path)
+  assertExactKeys(record, ['table', 'fields', 'mode', 'adoptionExtension'], ['table', 'fields', 'mode'], path)
   const table = readString(record.table, `${path}.table`, { max: 100 })
   if (!REGISTRY_BY_NAME.has(table)) failSchema('unknown_table', `${path}.table`, `未登记的数据表 ${table}`)
   const fields = readArray(record.fields, `${path}.fields`).map((item, index) => (
@@ -73,10 +74,23 @@ function readWriteTarget(value: unknown, path: string): AgentRunWriteTargetV1 {
   ))
   assertUnique(fields, `${path}.fields`)
   const mode = readEnum(record.mode, WRITE_MODES, `${path}.mode`)
+  const adoptionExtension = record.adoptionExtension === undefined
+    ? undefined
+    : readString(record.adoptionExtension, `${path}.adoptionExtension`, { max: 120 })
+  const extension = adoptionExtension
+    ? ADOPTION_EXTENSIONS.find(item => item.id === adoptionExtension)
+    : undefined
+  if (adoptionExtension && (!extension || extension.target !== table)) {
+    failSchema(
+      'unknown_adoption_extension',
+      `${path}.adoptionExtension`,
+      `未登记或与目标表不匹配的采纳扩展 ${adoptionExtension}`,
+    )
+  }
   if (mode === 'none' && fields.length > 0) {
     failSchema('invalid_permission', path, 'mode=none 时不得声明可写字段')
   }
-  if (mode !== 'none' && fields.length === 0) {
+  if (mode !== 'none' && fields.length === 0 && !adoptionExtension) {
     failSchema('invalid_permission', path, '可写目标必须声明至少一个字段')
   }
   const registeredFields = new Set((FIELD_BY_TARGET.get(table) ?? []).map(field => field.field))
@@ -85,7 +99,12 @@ function readWriteTarget(value: unknown, path: string): AgentRunWriteTargetV1 {
       failSchema('unknown_write_field', `${path}.fields`, `${table}.${field} 未在 FIELD_REGISTRY 登记`)
     }
   }
-  return { table, fields, mode }
+  return {
+    table,
+    fields,
+    mode,
+    ...(adoptionExtension ? { adoptionExtension } : {}),
+  }
 }
 
 function readAcceptance(value: unknown, path: string): AgentRunAcceptanceCriterionV1 {

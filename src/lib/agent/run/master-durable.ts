@@ -300,20 +300,30 @@ function sourceKeysForPlan(plan: MasterAgentPlan): string[] {
   }))]
 }
 
-function writeTargetsForPlan(plan: MasterAgentPlan): Array<{ table: string; fields: string[]; mode: 'author-confirmed' }> {
-  const byTable = new Map<string, Set<string>>()
+function writeTargetsForPlan(plan: MasterAgentPlan): Array<{
+  table: string
+  fields: string[]
+  mode: 'author-confirmed'
+  adoptionExtension?: string
+}> {
+  const byTable = new Map<string, { fields: Set<string>; adoptionExtension?: string }>()
   plan.tasks.forEach(task => {
     const skill = resolveAgentSkillV1(task.agentId, task.skillId)
     skill.writeTargets.forEach(target => {
-      const fields = byTable.get(target.table) ?? new Set<string>()
-      target.fields.forEach(field => fields.add(field))
-      byTable.set(target.table, fields)
+      const existing = byTable.get(target.table) ?? { fields: new Set<string>() }
+      target.fields.forEach(field => existing.fields.add(field))
+      if (target.adoptionExtension && existing.adoptionExtension && target.adoptionExtension !== existing.adoptionExtension) {
+        throw new Error(`主 Agent 计划对 ${target.table} 声明了冲突的采纳扩展。`)
+      }
+      if (target.adoptionExtension) existing.adoptionExtension = target.adoptionExtension
+      byTable.set(target.table, existing)
     })
   })
-  return [...byTable.entries()].map(([table, fields]) => ({
+  return [...byTable.entries()].map(([table, target]) => ({
     table,
-    fields: [...fields],
+    fields: [...target.fields],
     mode: 'author-confirmed' as const,
+    ...(target.adoptionExtension ? { adoptionExtension: target.adoptionExtension } : {}),
   }))
 }
 

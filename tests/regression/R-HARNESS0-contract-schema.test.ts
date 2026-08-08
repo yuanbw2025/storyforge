@@ -122,6 +122,27 @@ describe('R-HARNESS0-contract-schema · RunContractV1', () => {
     )
   })
 
+  it('领域写回扩展必须与 ADOPTION_EXTENSIONS 的目标表精确匹配', () => {
+    const contract = validContract() as any
+    contract.permissions.writeTargets = [{
+      table: 'temporalFacts',
+      fields: [],
+      mode: 'author-confirmed',
+      adoptionExtension: 'fact-ledger',
+    }]
+    expect(parseAgentRunContractV1(contract).permissions.writeTargets[0]).toEqual({
+      table: 'temporalFacts',
+      fields: [],
+      mode: 'author-confirmed',
+      adoptionExtension: 'fact-ledger',
+    })
+
+    contract.permissions.writeTargets[0].adoptionExtension = 'knowledge-ledger'
+    expect(() => parseAgentRunContractV1(contract)).toThrow('未登记或与目标表不匹配')
+    delete contract.permissions.writeTargets[0].adoptionExtension
+    expect(() => parseAgentRunContractV1(contract)).toThrow('可写目标必须声明至少一个字段')
+  })
+
   it('只读工作流即使字段合法也不得声明写集合', () => {
     const contract = validContract()
     contract.workflowKind = 'read-only-audit'

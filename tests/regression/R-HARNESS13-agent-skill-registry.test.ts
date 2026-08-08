@@ -64,6 +64,18 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
     ])
   })
 
+  it('主 Agent 合并计划时保留领域采纳扩展，而不是伪造 FIELD_REGISTRY 字段', () => {
+    const contract = contractFor([
+      { id: 'post', agentId: 'prose', skillId: 'prose.organize', instruction: '整理正文后六域候选', dependsOn: [] },
+    ])
+    expect(contract.permissions.writeTargets).toContainEqual({
+      table: 'temporalFacts',
+      fields: [],
+      mode: 'author-confirmed',
+      adoptionExtension: 'fact-ledger',
+    })
+  })
+
   it('只有显式正文视角才把角色认知源加入 Skill 权限', () => {
     const withoutPerspective = contractFor([
       { id: 'prose', agentId: 'prose', instruction: '写第一章正文', dependsOn: [] },

@@ -10,7 +10,6 @@ import { useAutoSave } from '../../hooks/useAutoSave'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
 import { buildReviewRevisePrompt, type ReviewResult } from '../../lib/ai/adapters/review-adapter'
-import { buildStateExtractPrompt, parseStateDiffs } from '../../lib/ai/adapters/state-extract-adapter'
 import { rebuildChapterChunks, ensureChunkEmbeddings, rebuildProjectNarrativeSummaries } from '../../lib/retrieval/retrieval'
 import { isEmbeddingReady } from '../../lib/ai/adapters/embedding-adapter'
 import { propagateChapterEditStale, analyzeEditImpact } from '../../lib/consistency/impact-analysis'
@@ -81,24 +80,31 @@ import {
   CHAPTER_ORGANIZATION_SOURCE_KEYS_V1,
 } from '../../lib/agent/run/chapter-organization-durable'
 import {
-  beginChapterTransitionStepV1,
   commitChapterTransitionStateAdoptionV1,
-  createChapterTransitionDurableRunV1,
-  failChapterTransitionStepV1,
-  hashChapterTransitionCandidateV1,
   isChapterTransitionCandidateCurrentV1,
-  persistChapterTransitionCandidateV1,
   readLatestChapterTransitionCandidateV1,
-  recordChapterTransitionOutputV1,
   recoverChapterTransitionCandidateV1,
-  scheduleChapterTransitionStepsV1,
-  succeedChapterTransitionStepV1,
   verifyChapterTransitionRunV1,
-  CHAPTER_TRANSITION_SOURCE_KEYS_V1,
-  CHAPTER_TRANSITION_STEP_IDS_V1,
   type ChapterTransitionCandidateV1,
-  type ChapterTransitionStepIdV1,
 } from '../../lib/agent/run/chapter-transition-durable'
+import {
+  beginChapterPostAdoptionStepV1,
+  beginChapterPostAdoptionOrganizationAdoptionV1,
+  commitChapterPostAdoptionOrganizationV1,
+  createChapterPostAdoptionDurableRunV1,
+  failChapterPostAdoptionStepV1,
+  markChapterPostAdoptionOrganizationStaleV1,
+  recordChapterPostAdoptionOutputV1,
+  rejectChapterPostAdoptionOrganizationAdoptionV1,
+  recoverChapterPostAdoptionOrganizationV1,
+  scheduleChapterPostAdoptionStepsV1,
+  succeedChapterPostAdoptionStepV1,
+  verifyChapterPostAdoptionRunV1,
+  CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1,
+  CHAPTER_POST_ADOPTION_STEP_IDS_V1,
+  type ChapterPostAdoptionDurableEvidenceV1,
+  type ChapterPostAdoptionStepIdV1,
+} from '../../lib/agent/run/chapter-post-adoption-durable'
 import { createContextManifestFromAssemblyV1 } from '../../lib/agent/run/context-manifest'
 import type { AgentRunSnapshotV1 } from '../../lib/agent/run/event-store'
 import { hashChapterText, normalizeChapterText } from '../../lib/ai/chapter-memory/text-normalization'
@@ -240,6 +246,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [showOrganization, setShowOrganization] = useState(false)
   const [transitionCandidate, setTransitionCandidate] = useState<ChapterTransitionCandidateV1 | null>(null)
   const [transitionRunId, setTransitionRunId] = useState<number | null>(null)
+  const [postAdoptionRunId, setPostAdoptionRunId] = useState<number | null>(null)
   const [transitionError, setTransitionError] = useState('')
   const [consistencyRun, setConsistencyRun] = useState<ConsistencyAgentRun | null>(null)
   const [consistencyCurrent, setConsistencyCurrent] = useState(false)
@@ -315,13 +322,26 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setOrganizationCurrent(false)
     setShowOrganization(false)
     setOrganizationError('')
+    setPostAdoptionRunId(null)
     if (!currentChapter?.id) return () => { active = false }
     void (async () => {
       const run = await readLatestChapterOrganizationRun({
         projectId: project.id!,
         chapterId: currentChapter.id!,
       })
-      if (run?.candidate.durable) {
+      let postAdoptionSnapshot: AgentRunSnapshotV1 | null = null
+      if (run?.candidate.durable?.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization) {
+        try {
+          postAdoptionSnapshot = await recoverChapterPostAdoptionOrganizationV1({
+            scope: await resolveScopeLike(project.id!),
+            candidate: run.candidate as ChapterOrganizationRun['candidate'] & {
+              durable: ChapterPostAdoptionDurableEvidenceV1
+            },
+          })
+        } catch (error) {
+          console.warn('[ChapterPostAdoption] 恢复 durable 候选证据失败:', error)
+        }
+      } else if (run?.candidate.durable) {
         try {
           await recoverChapterOrganizationCandidateV1({
             scope: await resolveScopeLike(project.id!),
@@ -335,6 +355,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       if (!active) return
       setOrganizationRun(run)
       setOrganizationCurrent(current)
+      if (postAdoptionSnapshot) {
+        transitionSnapshotRef.current = postAdoptionSnapshot
+        setPostAdoptionRunId(postAdoptionSnapshot.run.id)
+      }
     })().catch(error => {
       if (active) setOrganizationError(error instanceof Error ? error.message : '读取整理记录失败')
     })
@@ -1428,34 +1452,96 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!organizationRun || organizingChapter) return
     setOrganizingChapter(true)
     setOrganizationError('')
+    let postAdoptionSnapshot: AgentRunSnapshotV1 | null = null
+    const durableCandidate = organizationRun.candidate.durable
     try {
+      if (durableCandidate?.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization) {
+        postAdoptionSnapshot = await beginChapterPostAdoptionOrganizationAdoptionV1({
+          scope: await resolveScopeLike(project.id!),
+          runId: durableCandidate.runId,
+          candidateHash: durableCandidate.candidateHash,
+        })
+        transitionSnapshotRef.current = postAdoptionSnapshot
+      }
       const result = await adoptChapterOrganizationSelection({ run: organizationRun, selection })
       setOrganizationRun(result.run)
       setOrganizationCurrent(true)
       const failed = Object.entries(result.run.candidate.domainErrors)
       if (failed.length) {
         setOrganizationError(failed.map(([domain, message]) => `${domain}: ${message}`).join('；'))
+        if (postAdoptionSnapshot && durableCandidate) {
+          const rejected = await rejectChapterPostAdoptionOrganizationAdoptionV1({
+            scope: await resolveScopeLike(project.id!),
+            snapshot: postAdoptionSnapshot,
+            candidateHash: durableCandidate.candidateHash,
+          })
+          transitionSnapshotRef.current = rejected
+          setPostAdoptionRunId(rejected.run.id)
+        }
       } else if (result.run.candidate.durable) {
         const workspaceScope = await resolveScopeLike(project.id!)
-        await commitChapterOrganizationDurableAdoptionV1({
-          scope: workspaceScope,
-          runId: result.run.candidate.durable.runId,
-          candidate: result.run.candidate,
-          written: result.written,
-        })
+        if (result.run.candidate.durable.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization) {
+          const snapshot = await commitChapterPostAdoptionOrganizationV1({
+            scope: workspaceScope,
+            runId: result.run.candidate.durable.runId,
+            candidate: result.run.candidate as ChapterOrganizationRun['candidate'] & {
+              durable: ChapterPostAdoptionDurableEvidenceV1
+            },
+            written: result.written,
+          })
+          transitionSnapshotRef.current = snapshot
+          setPostAdoptionRunId(snapshot.run.id)
+          try {
+            await verifyChapterPostAdoptionRunV1({ scope: workspaceScope, runId: snapshot.run.id })
+          } catch (verificationError) {
+            // 其它后处理步骤可能仍在运行；终态验证会在最后一步完成后重试。
+            console.info('[ChapterPostAdoption] 六域采纳后暂不能签发终态回执:', verificationError)
+          }
+        } else {
+          await commitChapterOrganizationDurableAdoptionV1({
+            scope: workspaceScope,
+            runId: result.run.candidate.durable.runId,
+            candidate: result.run.candidate,
+            written: result.written,
+          })
+        }
       }
     } catch (error) {
       setOrganizationError(error instanceof Error ? error.message : '写入整理结果失败')
+      if (postAdoptionSnapshot && durableCandidate && await isChapterOrganizationCurrent(organizationRun.candidate)) {
+        try {
+          const rejected = await rejectChapterPostAdoptionOrganizationAdoptionV1({
+            scope: await resolveScopeLike(project.id!),
+            snapshot: postAdoptionSnapshot,
+            candidateHash: durableCandidate.candidateHash,
+            code: 'chapter_organization_partial_adoption',
+          })
+          transitionSnapshotRef.current = rejected
+          setPostAdoptionRunId(rejected.run.id)
+        } catch (traceError) {
+          console.warn('[ChapterPostAdoption] 部分采纳失败证据写入失败:', traceError)
+        }
+      }
       if (organizationRun) {
         const current = await isChapterOrganizationCurrent(organizationRun.candidate)
         setOrganizationCurrent(current)
         if (!current && organizationRun.candidate.durable) {
           try {
-            await markChapterOrganizationStaleV1({
-              scope: await resolveScopeLike(project.id!),
-              runId: organizationRun.candidate.durable.runId,
-              reason: '正文已变化；作者确认前的整理候选已失效。',
-            })
+            const staleScope = await resolveScopeLike(project.id!)
+            if (organizationRun.candidate.durable.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization) {
+              await markChapterPostAdoptionOrganizationStaleV1({
+                scope: staleScope,
+                runId: organizationRun.candidate.durable.runId,
+                candidateHash: organizationRun.candidate.durable.candidateHash,
+                reason: '正文已变化；作者确认前的六域交接候选已失效。',
+              })
+            } else {
+              await markChapterOrganizationStaleV1({
+                scope: staleScope,
+                runId: organizationRun.candidate.durable.runId,
+                reason: '正文已变化；作者确认前的整理候选已失效。',
+              })
+            }
           } catch (traceError) {
             console.warn('[ChapterOrganization] stale 证据写入失败:', traceError)
           }
@@ -1603,14 +1689,19 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
   }
 
-  // ── D6: 正文接受后的 Chapter Transition post-processing barrier ──
-  // 正文先落库；检索、状态候选、章节记忆分别记录为可恢复 durable steps。
+  // HARNESS-20: 正文采纳后的单一 post-adoption barrier。
+  // 六域结构抽取复用“整理本章”Agent；检索与章节记忆仍是独立、可验证步骤。
   const handleAutoPostGenerate = async (task: {
     chapterId: number
     chapterTitle: string
     chapterContent: string
     chapterPlainText: string
   }) => {
+    const controller = new AbortController()
+    organizationAbortRef.current?.abort()
+    organizationAbortRef.current = controller
+    setOrganizingChapter(true)
+    try {
     const scope = await resolveScopeLike(project.id!)
     const transitionChapter = await db.chapters.get(task.chapterId)
     const transitionOutline = transitionChapter?.outlineNodeId != null
@@ -1622,16 +1713,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setTransitionCandidate(null)
     transitionCandidateRef.current = null
     setPendingDiffs(null)
-    let snapshot = await createChapterTransitionDurableRunV1({
+    let snapshot = await createChapterPostAdoptionDurableRunV1({
       scope,
       worldGroupId: transitionWorldGroupId,
       chapterId: task.chapterId,
     })
-    setTransitionRunId(snapshot.run.id)
+    setPostAdoptionRunId(snapshot.run.id)
     transitionSnapshotRef.current = snapshot
-    snapshot = await scheduleChapterTransitionStepsV1({ scope, snapshot })
+    snapshot = await scheduleChapterPostAdoptionStepsV1({ scope, snapshot })
 
-    const assembled = await assembleContext({
+    const assembledFor = async (sourceKeys: readonly string[]) => assembleContext({
       projectId: project.id!,
       scope,
       worldGroupId: transitionWorldGroupId,
@@ -1639,21 +1730,26 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       outlineNodeId: transitionChapter?.outlineNodeId ?? null,
       provider: aiConfig.provider,
       model: aiConfig.model,
-      sourceKeys: [...CHAPTER_TRANSITION_SOURCE_KEYS_V1],
+      sourceKeys: [...sourceKeys],
       stateReferenceText: task.chapterPlainText,
       extraStateIds,
       inputBudgetMaxTokens: 24_000,
     })
-    const manifestFor = (stepId: ChapterTransitionStepIdV1) => createContextManifestFromAssemblyV1({
+    const manifestFor = async (
+      stepId: ChapterPostAdoptionStepIdV1,
+      attempt: number,
+      sourceKeys: readonly string[],
+      assembled: Awaited<ReturnType<typeof assembleContext>>,
+    ) => createContextManifestFromAssemblyV1({
       runId: snapshot.run.id,
       stepId,
-      attempt: 1,
+      attempt,
       projectId: project.id!,
       worldGroupId: transitionWorldGroupId,
-      declaredSourceKeys: CHAPTER_TRANSITION_SOURCE_KEYS_V1,
+      declaredSourceKeys: sourceKeys,
       assembled,
       boundary: { chapterId: task.chapterId, outlineNodeId: transitionChapter?.outlineNodeId ?? undefined },
-      readerVersion: 'chapter-transition-context-v1',
+      readerVersion: 'chapter-post-adoption-context-v1',
     })
     const ensureFresh = async () => {
       const latest = await db.chapters.get(task.chapterId)
@@ -1666,14 +1762,160 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       transitionSnapshotRef.current = next
     }
 
-    // 1. NS-5：检索块和叙事摘要是确定性派生缓存；embedding 仍是可选后台补建。
+    // 1. 一次综合抽取六域候选；作者确认前业务表零写入。
+    setAutoProcessing('extracting')
     try {
       await ensureFresh()
-      updateSnapshot(await beginChapterTransitionStepV1({
+      const organizationAssembly = await assembledFor(CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.organization)
+      const organizationManifest = await manifestFor(
+        CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
+        1,
+        CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.organization,
+        organizationAssembly,
+      )
+      updateSnapshot(await beginChapterPostAdoptionStepV1({
         scope,
         snapshot,
-        stepId: CHAPTER_TRANSITION_STEP_IDS_V1.retrieval,
-        contextManifest: await manifestFor(CHAPTER_TRANSITION_STEP_IDS_V1.retrieval),
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
+        contextManifest: organizationManifest,
+        binding: { chapterId: task.chapterId, sourceTextHash: expectedSourceTextHash },
+      }))
+      const [allRelations] = await Promise.all([
+        db.characterRelations.where('projectId').equals(project.id!).toArray(),
+        loadForeshadows(project.id!),
+      ])
+      const scopedCharacters = project.enableMultiWorld
+        ? characters.filter(character => (
+          character.isCrossWorld
+          || (character.homeWorldGroupId ?? null) === (transitionWorldGroupId ?? null)
+        ))
+        : characters
+      const scopedCharacterIds = new Set(
+        scopedCharacters.flatMap(character => character.id != null ? [character.id] : []),
+      )
+      const existingRelations = allRelations.filter(relation => (
+        scopedCharacterIds.has(relation.fromCharacterId)
+        && scopedCharacterIds.has(relation.toCharacterId)
+      ))
+      const organizationContextSnapshot = organizationAssembly.included.flatMap((sourceKey, index) => (
+        sourceKey === 'chapterContent' ? [] : [organizationAssembly.segments[index]?.content ?? '']
+      )).filter(Boolean).join('\n\n')
+      const budget = new AgentTeamBudgetTracker(useAIConfigStore.getState().agentTeamBudgetProfile)
+      const candidate = await runChapterOrganization({
+        projectId: project.id!,
+        chapterId: task.chapterId,
+        chapterTitle: task.chapterTitle,
+        worldGroupId: transitionWorldGroupId,
+        chapterContent: task.chapterContent,
+        stateContext: buildSelectiveStateContext(task.chapterPlainText, extraStateIds).text,
+        characters: scopedCharacters,
+        knownItemNames: itemEntries.map(entry => entry.itemName),
+        existingRelations,
+        foreshadows: useForeshadowStore.getState().foreshadows,
+        contextSnapshot: organizationContextSnapshot,
+        budget,
+        call: messages => chat(messages, aiConfig, {
+          category: 'chapter.organize',
+          projectId: project.id!,
+          configOverrides: { maxTokens: 8_000 },
+          contextOverflowPolicy: 'reject',
+        }, controller.signal),
+      })
+      await ensureFresh()
+      const candidateHash = await hashChapterOrganizationCandidateV1(candidate)
+      const run = await persistChapterOrganizationCandidate(candidate, {
+        durable: {
+          runId: snapshot.run.id,
+          stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
+          attempt: 1,
+          contextManifestHash: organizationManifest.manifestHash,
+          candidateHash,
+        },
+      })
+      updateSnapshot(await recordChapterPostAdoptionOutputV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
+        output: run.candidate,
+        candidateHash,
+        requiresConfirmation: true,
+      }))
+      setOrganizationRun(run)
+      setOrganizationCurrent(true)
+      setShowOrganization(true)
+    } catch (error) {
+      updateSnapshot(await failChapterPostAdoptionStepV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
+        code: error instanceof Error ? error.message : 'organization_post_step_failed',
+      }))
+      if (!controller.signal.aborted) {
+        setTransitionError(error instanceof Error ? error.message : '六域交接候选生成失败')
+      }
+      if (controller.signal.aborted) return
+    } finally {
+      setAutoProcessing('idle')
+    }
+
+    // 2. summary + handoff 仍只调用一次模型，并由原子 CAS 写回 chapters。
+    try {
+      await ensureFresh()
+      const memoryAssembly = await assembledFor(CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.memory)
+      updateSnapshot(await beginChapterPostAdoptionStepV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory,
+        contextManifest: await manifestFor(
+          CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory,
+          1,
+          CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.memory,
+          memoryAssembly,
+        ),
+        binding: { chapterId: task.chapterId, sourceTextHash: expectedSourceTextHash },
+      }))
+      const result = await handleChapterMemory({
+        chapterId: task.chapterId,
+        chapterTitle: task.chapterTitle,
+        chapterContent: task.chapterContent,
+      })
+      if (result !== 'written') throw new Error(`章节记忆后处理未写入：${result}`)
+      updateSnapshot(await recordChapterPostAdoptionOutputV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory,
+        output: { status: result, sourceTextHash: expectedSourceTextHash },
+      }))
+      updateSnapshot(await succeedChapterPostAdoptionStepV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory,
+        output: { status: result, sourceTextHash: expectedSourceTextHash },
+      }))
+    } catch (error) {
+      updateSnapshot(await failChapterPostAdoptionStepV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory,
+        code: error instanceof Error ? error.message : 'memory_post_step_failed',
+      }))
+      setTransitionError(error instanceof Error ? error.message : '章节记忆后处理失败')
+    }
+
+    // 3. 记忆写回后再重建检索与层级摘要，避免把刚生成的可信摘要留在 pending 状态。
+    try {
+      await ensureFresh()
+      const retrievalAssembly = await assembledFor(CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.retrieval)
+      updateSnapshot(await beginChapterPostAdoptionStepV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
+        contextManifest: await manifestFor(
+          CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
+          1,
+          CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.retrieval,
+          retrievalAssembly,
+        ),
         model: false,
       }))
       const chapter = await db.chapters.get(task.chapterId)
@@ -1689,140 +1931,29 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const embCfg = useAIConfigStore.getState().embedding
       if (isEmbeddingReady(embCfg)) {
         void ensureChunkEmbeddings({ projectId: project.id!, cfg: embCfg, scope })
-          .catch(e => console.warn('[ChapterTransition] 语义索引补建失败（关键词检索仍可用）:', e))
+          .catch(e => console.warn('[ChapterPostAdoption] 语义索引补建失败（关键词检索仍可用）:', e))
       }
-      updateSnapshot(await succeedChapterTransitionStepV1({
+      updateSnapshot(await succeedChapterPostAdoptionStepV1({
         scope,
         snapshot,
-        stepId: CHAPTER_TRANSITION_STEP_IDS_V1.retrieval,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
         output: { chunks, summaries, sourceTextHash: expectedSourceTextHash },
       }))
+      if (snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization]?.status === 'succeeded') {
+        await verifyChapterPostAdoptionRunV1({ scope, runId: snapshot.run.id })
+      }
     } catch (error) {
-      updateSnapshot(await failChapterTransitionStepV1({
+      updateSnapshot(await failChapterPostAdoptionStepV1({
         scope,
         snapshot,
-        stepId: CHAPTER_TRANSITION_STEP_IDS_V1.retrieval,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
         code: error instanceof Error ? error.message : 'retrieval_post_step_failed',
       }))
       setTransitionError(error instanceof Error ? error.message : '检索后处理失败')
-      return
     }
-
-    // 2. 状态抽取只写候选；候选持久化后等待作者逐项确认。
-    setAutoProcessing('extracting')
-    try {
-      await ensureFresh()
-      updateSnapshot(await beginChapterTransitionStepV1({
-        scope,
-        snapshot,
-        stepId: CHAPTER_TRANSITION_STEP_IDS_V1.state,
-        contextManifest: await manifestFor(CHAPTER_TRANSITION_STEP_IDS_V1.state),
-        binding: { chapterId: task.chapterId, sourceTextHash: expectedSourceTextHash },
-      }))
-      const stateContextIndex = assembled.included.indexOf('stateCards')
-      const stateCtx = stateContextIndex >= 0
-        ? assembled.segments[stateContextIndex]?.content ?? ''
-        : ''
-      const characterNames = characters.map(character => character.name)
-      const messages = buildStateExtractPrompt(stateCtx, task.chapterTitle, task.chapterPlainText, characterNames)
-      const raw = await stateAI.start(messages, undefined, { category: 'state.extract', projectId: project.id! })
-      const parsed = parseStateDiffs(raw, characterNames)
-      if (parsed.error) throw new Error(parsed.error)
-      const stateDiffs = parsed.diffs as StateDiffItem[]
-      const baseCandidate = {
-        version: 1 as const,
-        type: 'chapter-transition-state-candidate' as const,
-        projectId: project.id!,
-        chapterId: task.chapterId,
-        chapterTitle: task.chapterTitle,
-        worldGroupId: transitionWorldGroupId,
-        sourceTextHash: expectedSourceTextHash,
-        stateDiffs,
-        createdAt: Date.now(),
-      }
-      const candidateHash = await hashChapterTransitionCandidateV1(baseCandidate)
-      const candidate: ChapterTransitionCandidateV1 = {
-        ...baseCandidate,
-        durable: {
-          runId: snapshot.run.id,
-          stepId: CHAPTER_TRANSITION_STEP_IDS_V1.state,
-          attempt: 1,
-          contextManifestHash: (await manifestFor(CHAPTER_TRANSITION_STEP_IDS_V1.state)).manifestHash,
-          candidateHash,
-        },
-      }
-      await persistChapterTransitionCandidateV1({ scope, candidate })
-      updateSnapshot(await recordChapterTransitionOutputV1({
-        scope,
-        snapshot,
-        stepId: CHAPTER_TRANSITION_STEP_IDS_V1.state,
-        output: stateDiffs,
-        candidateHash,
-        requiresConfirmation: stateDiffs.length > 0,
-      }))
-      setTransitionCandidate(candidate)
-      transitionCandidateRef.current = candidate
-      if (stateDiffs.length > 0) {
-        setPendingDiffs(stateDiffs)
-      } else {
-        updateSnapshot(await succeedChapterTransitionStepV1({
-          scope,
-          snapshot,
-          stepId: CHAPTER_TRANSITION_STEP_IDS_V1.state,
-          output: stateDiffs,
-        }))
-      }
-    } catch (error) {
-      updateSnapshot(await failChapterTransitionStepV1({
-        scope,
-        snapshot,
-        stepId: CHAPTER_TRANSITION_STEP_IDS_V1.state,
-        code: error instanceof Error ? error.message : 'state_post_step_failed',
-      }))
-      setTransitionError(error instanceof Error ? error.message : '状态后处理失败')
     } finally {
-      stateAI.reset()
-    }
-
-    // 3. summary + handoff 仍只调用一次模型，并由原子 CAS 写回 chapters。
-    try {
-      await ensureFresh()
-      updateSnapshot(await beginChapterTransitionStepV1({
-        scope,
-        snapshot,
-        stepId: CHAPTER_TRANSITION_STEP_IDS_V1.memory,
-        contextManifest: await manifestFor(CHAPTER_TRANSITION_STEP_IDS_V1.memory),
-        binding: { chapterId: task.chapterId, sourceTextHash: expectedSourceTextHash },
-      }))
-      const result = await handleChapterMemory({
-        chapterId: task.chapterId,
-        chapterTitle: task.chapterTitle,
-        chapterContent: task.chapterContent,
-      })
-      if (result !== 'written') throw new Error(`章节记忆后处理未写入：${result}`)
-      updateSnapshot(await recordChapterTransitionOutputV1({
-        scope,
-        snapshot,
-        stepId: CHAPTER_TRANSITION_STEP_IDS_V1.memory,
-        output: { status: result, sourceTextHash: expectedSourceTextHash },
-      }))
-      updateSnapshot(await succeedChapterTransitionStepV1({
-        scope,
-        snapshot,
-        stepId: CHAPTER_TRANSITION_STEP_IDS_V1.memory,
-        output: { status: result, sourceTextHash: expectedSourceTextHash },
-      }))
-      if (snapshot.projection.steps[CHAPTER_TRANSITION_STEP_IDS_V1.state]?.status === 'succeeded') {
-        await verifyChapterTransitionRunV1({ scope, runId: snapshot.run.id })
-      }
-    } catch (error) {
-      updateSnapshot(await failChapterTransitionStepV1({
-        scope,
-        snapshot,
-        stepId: CHAPTER_TRANSITION_STEP_IDS_V1.memory,
-        code: error instanceof Error ? error.message : 'memory_post_step_failed',
-      }))
-      setTransitionError(error instanceof Error ? error.message : '章节记忆后处理失败')
+      if (organizationAbortRef.current === controller) organizationAbortRef.current = null
+      setOrganizingChapter(false)
     }
   }
 
@@ -2296,11 +2427,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           </div>
         </div>
       )}
-      {(transitionRunId != null || transitionError) && (
+      {(postAdoptionRunId != null || transitionRunId != null || transitionError) && (
         <div className={`mb-3 p-3 rounded-lg border text-xs ${transitionError
           ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
           : 'bg-sky-500/10 border-sky-500/20 text-sky-300'}`}>
-          <div>章节后处理 Run #{transitionRunId ?? '—'} · 检索、状态候选、章节记忆独立记录，可恢复</div>
+          <div>
+            章节后处理 Run #{postAdoptionRunId ?? transitionRunId ?? '—'} · 检索、六域交接候选、章节记忆统一记录，可恢复
+          </div>
+          {organizationRun?.candidate.durable?.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization && (
+            <div className="mt-1">六域交接候选待作者确认，确认后才会写入状态、事实、物品、年表、关系与伏笔。</div>
+          )}
           {transitionCandidate && transitionCandidate.stateDiffs.length > 0 && (
             <div className="mt-1">状态候选待作者确认：{transitionCandidate.stateDiffs.length} 条</div>
           )}

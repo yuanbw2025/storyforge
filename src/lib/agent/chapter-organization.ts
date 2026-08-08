@@ -672,6 +672,10 @@ export async function adoptChapterOrganizationSelection(input: {
     count: number,
     action: () => Promise<number>,
   ) => {
+    // A retry after a recorded partial adoption only retries failed/pending
+    // domains. Collection replacement and state updates are otherwise liable
+    // to re-apply a transition that has already advanced.
+    if (candidate.domainStatus[domain] === 'adopted') return
     if (count === 0) {
       candidate.domainStatus[domain] = 'skipped'
       delete candidate.domainErrors[domain]

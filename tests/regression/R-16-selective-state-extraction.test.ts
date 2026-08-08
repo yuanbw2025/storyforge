@@ -19,16 +19,20 @@ describe('R-16: selective state extraction wiring', () => {
     expect(body).not.toContain('const stateCtx = buildStateContext()')
   })
 
-  it('auto post-generation state extraction uses selective recall from generated text', () => {
+  it('auto post-generation organization uses selective recall and does not restore the state-only model bypass', () => {
     const source = readFileSync(sourcePath, 'utf8')
     const body = source.slice(
       source.indexOf('const handleAutoPostGenerate = async (task: {'),
       source.indexOf('const handleAcceptAI = async (text: string) => {'),
     )
 
-    expect(body).toContain("sourceKeys: [...CHAPTER_TRANSITION_SOURCE_KEYS_V1]")
+    expect(body).toContain('sourceKeys: [...sourceKeys]')
+    expect(body).toContain('CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.organization')
     expect(body).toContain('stateReferenceText: task.chapterPlainText')
-    expect(body).toContain("assembled.included.indexOf('stateCards')")
+    expect(body).toContain('buildSelectiveStateContext(task.chapterPlainText, extraStateIds).text')
+    expect(body.match(/runChapterOrganization\(/g)).toHaveLength(1)
+    expect(body).not.toContain('stateAI.start(')
+    expect(body).not.toContain('buildStateExtractPrompt(')
     expect(body).not.toContain('const stateCtx = buildStateContext()')
   })
 })

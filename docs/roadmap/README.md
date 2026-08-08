@@ -233,7 +233,7 @@
   一个入口，同一正文只发起一次综合抽取；状态、受控事实、物品、故事年表、关系和伏笔
   六域候选均须逐字证据。候选复用归档 `agentConversations/agentEvents` 保存，刷新可恢复；
   正文 hash 变化阻断写回，物品/年表按章整批替换失败会事务回滚，事实只进入 candidate。
-- HARNESS-18/19 已把 11 个领域 Skill、7 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
+- HARNESS-18/19/20 已把 13 个领域 Skill、9 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
   新主 Agent RunContract 与候选 hash；恢复会拒绝 Skill/Prompt/Tool 漂移，旧合同继续按旧协议
   恢复。CI 新增 45 天复核、owner、版本和回归证据新鲜度闸门；该能力只保证执行可归因，
   不冒充真实模型质量收益。
@@ -242,6 +242,12 @@
   最多自动修订一次，随后重跑硬门和语义复核。四次模型调用共用团队预算，三个语义步骤均有
   Context Manifest、冻结执行版本和 durable 事件；通过后仍只形成作者可编辑候选，确认才经
   `adopt(chapters)` 写入。旧候选保持兼容但不伪造新评审证据。
+- HARNESS-20 已把正文采纳后的检索、六域交接和章节记忆收口为同一个 durable post-adoption
+  Run：自动主路径只调用一次既有“整理本章”综合 Agent，不再额外运行状态专用模型旁路；状态、
+  事实候选、物品、年表、关系和伏笔继续逐项由作者确认并复用既有 `adopt()`/领域扩展写入。
+  `prose.organize` 与 `prose.memory` 已登记为正文 Agent 的非默认 Skill 并冻结执行版本。章节记忆
+  写回后才重建检索块和层级摘要；三步全部成功、六域候选已确认且派生状态匹配当前正文时才签发
+  post-adoption terminal receipt。历史 Chapter Transition V1 候选继续只读恢复，不再用于新正文主路径。
 
 ### GOV-1 第一阶段交付证据
 

@@ -883,6 +883,15 @@ CHIRON 四类信息可映射到现有结构：
 - 作者界面展示初审/修订/复核阶段并允许取消。通过后仍停在可编辑候选，只有作者确认才经既有 `adopt(chapters)` 写入；HARNESS-19 前没有语义证据的旧候选继续按旧合同恢复，但不会被标记为新语义评审通过；
 - `R-HARNESS19-prose-semantic-review` 与 `R-HARNESS19-prose-semantic-durable` 覆盖证据伪造、不可自动修订、最多一次修订、硬门不可覆盖、预算、统一运行入口、版本/候选篡改、刷新恢复和 terminal receipt。
 
+**正文采纳后统一交接实施状态（HARNESS-20，2026-08-08）**
+
+- 正文生成/续写候选经作者确认并写入 `chapters` 后，新主路径只创建一个 post-adoption durable Run，依次覆盖六域综合整理、章节记忆和确定性检索重建；旧的状态专用模型抽取不再从新正文主路径调用；
+- 六域综合整理复用既有“整理本章”Agent、逐字证据解析器、归档候选和作者逐项确认界面，状态、事实候选、物品、故事年表、角色关系和伏笔仍只经既有 `adopt()` 或已登记领域扩展写入，不新增第二套业务采纳入口；
+- `prose.organize` 与 `prose.memory` 成为正文 Agent 的非默认 Skill，RunContract 从 Skill Registry 派生来源、写目标和 Skill/Prompt/Tool 执行绑定；恢复、采纳和终态验证都会拒绝版本漂移；
+- 章节记忆先以正文 hash CAS 原子写回，再重建检索块和章/卷/书层级摘要，避免摘要树在新记忆写回前被固化为 pending；embedding 仍是可选后台派生，失败不覆盖关键词检索；
+- post-adoption receipt 只有在三步全部成功、六域候选已有作者采纳证据、summary/handoff、检索块和 verified 章节摘要都匹配当前正文时签发。正文变化会把未确认候选暂停为 stale；历史 Chapter Transition V1 候选仅保留恢复兼容；
+- `R-HARNESS20-chapter-post-adoption-durable` 与更新后的 `R-16-selective-state-extraction` 覆盖单次综合调用、无确认无回执、正文变化、候选持久化崩溃窗、Skill 执行绑定和状态专用旁路防回归。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

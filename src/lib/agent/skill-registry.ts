@@ -1,6 +1,7 @@
 import { CHARACTER_DIMENSIONS } from '../character/character-dimensions'
 import { CONTEXT_SOURCE_BY_KEY } from '../registry/context-sources'
 import { FIELD_BY_TARGET } from '../registry/field-registry'
+import { ADOPTION_EXTENSIONS } from '../registry/adoption-schema'
 import { REGISTRY_BY_NAME } from '../registry/project-tables'
 import {
   AGENT_CONTEXT_INPUT_HANDLINGS,
@@ -30,10 +31,13 @@ export type AgentSkillExecutionModeV1 =
   | 'continue'
   | 'review'
   | 'revise'
+  | 'organize'
+  | 'memory'
 
 export interface AgentSkillWriteTargetV1 {
   table: string
   fields: readonly string[]
+  adoptionExtension?: string
 }
 
 export interface AgentSkillInputPolicyV1 {
@@ -156,6 +160,29 @@ const PROSE_REVIEW_CONTEXT_SOURCE_KEYS = [
   'heldItems',
 ] as const
 
+export const PROSE_ORGANIZATION_CONTEXT_SOURCE_KEYS = [
+  'chapterContent',
+  'chapterOutline',
+  'detailedOutline',
+  'stateCards',
+  'currentFacts',
+  'characters',
+  'characterRelations',
+  'itemLedger',
+  'foreshadows',
+  'canonAssertions',
+  'characterKnowledge',
+  'retrievedPassages',
+] as const
+
+export const PROSE_MEMORY_CONTEXT_SOURCE_KEYS = [
+  'chapterContent',
+  'chapterOutline',
+  'detailedOutline',
+  'chapterContinuityHandoff',
+  'previousPlanReconciliation',
+] as const
+
 const WORLD_FOUNDATION_INPUT_POLICY = {
   sourceKeys: ['worldview', 'powerSystem', 'codex'],
   states: {
@@ -264,6 +291,24 @@ const PROSE_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+const PROSE_POST_ADOPTION_INPUT_POLICY = {
+  sourceKeys: ['chapterContent'],
+  states: {
+    empty: {
+      handling: 'require-author-input',
+      instruction: '章节没有已采纳正文时不得生成章后交接或章节记忆。',
+    },
+    partial: {
+      handling: 'grounded-transform',
+      instruction: '只从当前已采纳正文抽取有逐字证据的变化，不把未完成片段补写成事实。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格依据当前已采纳正文抽取交接与记忆，计划和设定只能用于核对，不能冒充已发生事实。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
 function compressionPolicy(
   sourceKeys: readonly string[],
 ): AgentSkillContextCompressionPolicyV1 {
@@ -311,6 +356,19 @@ const PROSE_REVIEW_COMPRESSION_POLICY = compressionPolicy([
   'storyCore',
   'characters',
   'storyArcs',
+])
+const PROSE_ORGANIZATION_COMPRESSION_POLICY = compressionPolicy([
+  'chapterOutline',
+  'detailedOutline',
+  'characters',
+  'currentFacts',
+  'retrievedPassages',
+])
+const PROSE_MEMORY_COMPRESSION_POLICY = compressionPolicy([
+  'chapterOutline',
+  'detailedOutline',
+  'chapterContinuityHandoff',
+  'previousPlanReconciliation',
 ])
 
 export const AGENT_SKILLS = [
@@ -544,6 +602,56 @@ export const AGENT_SKILLS = [
     lastVerifiedAt: '2026-08-08',
     regressionTests: ['R-HARNESS19-prose-semantic-review'],
   },
+  {
+    version: 1,
+    id: 'prose.organize',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '章节六域证据整理',
+    owner: 'prose-agent',
+    promptVersion: 'chapter-organization-v1',
+    executionMode: 'organize',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_ORGANIZATION_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_POST_ADOPTION_INPUT_POLICY,
+    contextCompression: PROSE_ORGANIZATION_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [
+      { table: 'stateCards', fields: ['category', 'entityName', 'fields', 'lastChapterId'] },
+      { table: 'temporalFacts', fields: [], adoptionExtension: 'fact-ledger' },
+      { table: 'itemLedger', fields: ['itemName', 'action', 'quantity', 'heldByName', 'characterId', 'chapterId', 'chapterTitle', 'note'] },
+      { table: 'storyTimelineEvents', fields: ['title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle', 'order'] },
+      { table: 'characterRelations', fields: ['fromCharacterId', 'toCharacterId', 'relationType', 'label', 'description', 'isBidirectional'] },
+      { table: 'foreshadows', fields: ['status', 'plantChapterId', 'echoChapterIds', 'resolveChapterId', 'notes'] },
+    ],
+    lastVerifiedAt: '2026-08-08',
+    regressionTests: ['R-AGENT5-chapter-organization', 'R-HARNESS20-chapter-post-adoption-durable'],
+  },
+  {
+    version: 1,
+    id: 'prose.memory',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '章节记忆与交接抽取',
+    owner: 'prose-agent',
+    promptVersion: 'chapter-memory-v1',
+    executionMode: 'memory',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_MEMORY_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_POST_ADOPTION_INPUT_POLICY,
+    contextCompression: PROSE_MEMORY_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [{
+      table: 'chapters',
+      fields: ['summary', 'summarySourceTextHash', 'summaryTextNormalizationVersion', 'continuityHandoff', 'planReconciliation'],
+    }],
+    lastVerifiedAt: '2026-08-08',
+    regressionTests: ['R-NS1-T3-chapter-memory-task', 'R-HARNESS20-chapter-post-adoption-durable'],
+  },
 ] as const satisfies readonly AgentSkillDefinitionV1[]
 
 export type AgentSkillId = typeof AGENT_SKILLS[number]['id']
@@ -746,7 +854,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create']),
     inspiration: new Set(['reverse']),
     outline: new Set(['auto', 'volumes', 'chapters']),
-    prose: new Set(['auto', 'generate', 'continue', 'review', 'revise']),
+    prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()
@@ -832,6 +940,15 @@ export function validateAgentSkillDefinitionsV1(
         throw new Error(`Agent Skill ${skill.id} 引用了未登记表 ${target.table}`)
       }
       const registered = new Set((FIELD_BY_TARGET.get(target.table) ?? []).map(field => field.field))
+      const extension = target.adoptionExtension
+        ? ADOPTION_EXTENSIONS.find(item => item.id === target.adoptionExtension)
+        : undefined
+      if (target.adoptionExtension && (!extension || extension.target !== target.table)) {
+        throw new Error(`Agent Skill ${skill.id} 引用了未登记或目标不匹配的采纳扩展 ${target.adoptionExtension}`)
+      }
+      if (target.fields.length === 0 && !target.adoptionExtension) {
+        throw new Error(`Agent Skill ${skill.id} 的写目标 ${target.table} 未声明字段或采纳扩展`)
+      }
       for (const field of target.fields) {
         if (!registered.has(field)) {
           throw new Error(`Agent Skill ${skill.id} 引用了未登记写字段 ${target.table}.${field}`)

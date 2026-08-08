@@ -34,6 +34,11 @@ export interface AgentRunWriteTargetV1 {
   table: string
   fields: string[]
   mode: AgentRunWriteMode
+  /**
+   * Domain adoption extension used when the target is intentionally outside
+   * FIELD_REGISTRY. The extension must be registered for the same table.
+   */
+  adoptionExtension?: string
 }
 
 export type AgentRunAcceptanceKind =
