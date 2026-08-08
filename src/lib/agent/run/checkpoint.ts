@@ -138,10 +138,11 @@ async function verifyCheckpointAgainstSnapshot(
   } catch {
     fail('checkpoint_projection_json', '检查点投影 JSON 已损坏')
   }
-  const [storedProjectionHash, replayProjectionHash] = await Promise.all([
-    waitForHash(storedProjection),
-    Dexie.waitFor(hashAgentRunProjectionBodyV1(projection)),
-  ])
+  // Dexie.waitFor spins an IndexedDB keep-alive loop while WebCrypto resolves.
+  // Concurrent loops in one transaction can starve one another under sustained
+  // checkpoint replay, so keep these integrity checks deliberately sequential.
+  const storedProjectionHash = await waitForHash(storedProjection)
+  const replayProjectionHash = await Dexie.waitFor(hashAgentRunProjectionBodyV1(projection))
   if (
     storedProjectionHash !== checkpoint.projectionHash
     || replayProjectionHash !== checkpoint.projectionHash

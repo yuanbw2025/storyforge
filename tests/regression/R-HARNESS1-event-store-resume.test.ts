@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import Dexie from 'dexie'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   appendAgentRunEventV1,
@@ -311,7 +312,27 @@ describe('R-HARNESS1-event-store-resume · durable run ledger', () => {
       resumePayload: { providerCursor: 'opaque-1' },
       expectedLastSequence: snapshot.projection.lastSequence,
     })
-    expect(await verifyAgentRunCheckpointV1(fixture.scope, saved.checkpoint.id)).toBe(true)
+    const originalWaitFor = Dexie.waitFor.bind(Dexie)
+    let activeWaits = 0
+    let maxActiveWaits = 0
+    const waitForSpy = vi.spyOn(Dexie, 'waitFor').mockImplementation((async (
+      promise: Promise<unknown>,
+      timeout?: number,
+    ) => {
+      activeWaits += 1
+      maxActiveWaits = Math.max(maxActiveWaits, activeWaits)
+      try {
+        return await originalWaitFor(promise, timeout)
+      } finally {
+        activeWaits -= 1
+      }
+    }) as typeof Dexie.waitFor)
+    try {
+      expect(await verifyAgentRunCheckpointV1(fixture.scope, saved.checkpoint.id)).toBe(true)
+      expect(maxActiveWaits).toBe(1)
+    } finally {
+      waitForSpy.mockRestore()
+    }
 
     const paused = await appendAgentRunEventV1({
       scope: fixture.scope,
