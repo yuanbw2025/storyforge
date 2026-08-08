@@ -55,7 +55,6 @@ import {
 } from './world-origin-copilot'
 import type {
   AgentContextEvidence,
-  AgentContextTaskKind,
 } from './context-policy'
 import { executeAgentTool } from './tool-registry'
 import { validateDomainCandidateCanon } from './canon-validator'
@@ -70,25 +69,14 @@ import {
   readOwnedRows,
   resolveScope,
 } from '../world-engine/scope'
+import {
+  DOMAIN_AGENT_IDS,
+  getDefaultAgentSkillV1,
+  type DomainAgentId,
+} from './skill-registry'
 
-export const DOMAIN_AGENT_IDS = ['world-origin', 'character', 'inspiration', 'outline', 'prose'] as const
-export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
-
-const CONTEXT_TASK_BY_AGENT: Record<DomainAgentId, AgentContextTaskKind> = {
-  'world-origin': 'agent-world-origin',
-  character: 'agent-character',
-  inspiration: 'agent-inspiration',
-  outline: 'agent-outline',
-  prose: 'agent-prose',
-}
-
-const MAX_OUTPUT_TOKENS_BY_AGENT: Record<DomainAgentId, number> = {
-  'world-origin': 3_000,
-  character: 6_000,
-  inspiration: 8_000,
-  outline: 12_000,
-  prose: 16_000,
-}
+export { DOMAIN_AGENT_IDS }
+export type { DomainAgentId }
 
 export interface MasterAgentTask {
   id: string
@@ -449,6 +437,8 @@ export async function executeMasterAgentPlan(input: {
         .map(id => outputs.get(id))
         .filter((value): value is string => Boolean(value?.trim()))
         .join('\n\n')
+      const skill = getDefaultAgentSkillV1(task.agentId)
+      const contextProfile = contextProfiles[skill.contextTaskKind]
       if (task.agentId === 'world-origin') {
         const prepared = await prepareWorldOriginCopilot({
           projectId: input.projectId,
@@ -456,7 +446,7 @@ export async function executeMasterAgentPlan(input: {
           worldGroupId: input.worldGroupId,
           authorRequest: task.instruction,
           routingCategory: AGENT_ROLE_CATEGORIES['world-origin'],
-          contextProfile: contextProfiles[CONTEXT_TASK_BY_AGENT[task.agentId]],
+          contextProfile,
           signal: input.signal,
         })
         const result = await runBudgetedGenerationNode({
@@ -464,7 +454,7 @@ export async function executeMasterAgentPlan(input: {
           prepared: prepared.prepared,
           budget,
           callLabel: '世界领域 Agent',
-          maxOutputTokens: MAX_OUTPUT_TOKENS_BY_AGENT[task.agentId],
+          maxOutputTokens: skill.maxOutputTokens,
         })
         const draft = result.output
         candidates.push({
@@ -492,7 +482,7 @@ export async function executeMasterAgentPlan(input: {
           authorRequest: task.instruction,
           supplementalContext: upstream,
           routingCategory: AGENT_ROLE_CATEGORIES.character,
-          contextProfile: contextProfiles[CONTEXT_TASK_BY_AGENT[task.agentId]],
+          contextProfile,
           signal: input.signal,
         })
         const result = await runBudgetedGenerationNode({
@@ -500,7 +490,7 @@ export async function executeMasterAgentPlan(input: {
           prepared: prepared.prepared,
           budget,
           callLabel: '角色领域 Agent',
-          maxOutputTokens: MAX_OUTPUT_TOKENS_BY_AGENT[task.agentId],
+          maxOutputTokens: skill.maxOutputTokens,
         })
         const draft = JSON.stringify(result.output, null, 2)
         candidates.push({
@@ -536,7 +526,7 @@ export async function executeMasterAgentPlan(input: {
           selectedFragmentIds,
           authorRequest: task.instruction,
           routingCategory: AGENT_ROLE_CATEGORIES.inspiration,
-          contextProfile: contextProfiles[CONTEXT_TASK_BY_AGENT[task.agentId]],
+          contextProfile,
           signal: input.signal,
         })
         const result = await runBudgetedGenerationNode({
@@ -544,7 +534,7 @@ export async function executeMasterAgentPlan(input: {
           prepared: prepared.prepared,
           budget,
           callLabel: '灵感领域 Agent',
-          maxOutputTokens: MAX_OUTPUT_TOKENS_BY_AGENT[task.agentId],
+          maxOutputTokens: skill.maxOutputTokens,
         })
         const draft = JSON.stringify(result.output, null, 2)
         candidates.push({
@@ -574,7 +564,7 @@ export async function executeMasterAgentPlan(input: {
           authorRequest: task.instruction,
           supplementalContext: upstream,
           routingCategory: AGENT_ROLE_CATEGORIES.outline,
-          contextProfile: contextProfiles[CONTEXT_TASK_BY_AGENT[task.agentId]],
+          contextProfile,
           signal: input.signal,
         })
         const result = await runBudgetedGenerationNode({
@@ -582,7 +572,7 @@ export async function executeMasterAgentPlan(input: {
           prepared: prepared.prepared,
           budget,
           callLabel: '大纲领域 Agent',
-          maxOutputTokens: MAX_OUTPUT_TOKENS_BY_AGENT[task.agentId],
+          maxOutputTokens: skill.maxOutputTokens,
           validate: output => validateDomainCandidateCanon({
             agentId: task.agentId,
             projectId: input.projectId,
@@ -619,7 +609,7 @@ export async function executeMasterAgentPlan(input: {
           authorRequest: task.instruction,
           supplementalContext: upstream,
           routingCategory: AGENT_ROLE_CATEGORIES.prose,
-          contextProfile: contextProfiles[CONTEXT_TASK_BY_AGENT[task.agentId]],
+          contextProfile,
           perspectiveCharacterId: task.perspectiveCharacterId ?? null,
           signal: input.signal,
         })
@@ -628,7 +618,7 @@ export async function executeMasterAgentPlan(input: {
           prepared: prepared.prepared,
           budget,
           callLabel: '正文领域 Agent',
-          maxOutputTokens: MAX_OUTPUT_TOKENS_BY_AGENT[task.agentId],
+          maxOutputTokens: skill.maxOutputTokens,
           validate: output => validateDomainCandidateCanon({
             agentId: task.agentId,
             projectId: input.projectId,

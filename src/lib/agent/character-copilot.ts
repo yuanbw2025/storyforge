@@ -42,7 +42,8 @@ import {
   type AgentContextEvidence,
   type AgentContextProfile,
 } from './context-policy'
-import { executeAgentTool } from './tool-registry'
+import { AGENT_TOOL_BY_NAME, executeAgentTool } from './tool-registry'
+import { getDefaultAgentSkillV1 } from './skill-registry'
 
 export const MAX_CHARACTER_CANDIDATE_CHARS = 40_000
 const MAX_CHARACTER_NAME_CHARS = 80
@@ -339,8 +340,17 @@ export async function prepareCharacterCopilot(input: {
     { category: routingCategory },
   ).config
   const contextProfile = input.contextProfile ?? 'full'
-  const contextPolicy = resolveAgentContextPolicy('agent-character', contextProfile)
-  const [worldPolicy, characterPolicy] = splitAgentContextPolicy(contextPolicy, [18_000, 10_500])
+  const skill = getDefaultAgentSkillV1('character')
+  const tools = skill.readToolNames.map(name => AGENT_TOOL_BY_NAME.get(name)!)
+  const [worldTool, characterTool] = tools
+  if (!worldTool || !characterTool || tools.length !== 2) {
+    throw new Error(`Agent Skill ${skill.id} 的只读工具契约无效`)
+  }
+  const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
+  const [worldPolicy, characterPolicy] = splitAgentContextPolicy(
+    contextPolicy,
+    tools.map(tool => tool.inputBudgetTokens),
+  )
   const executionContext = {
     projectId: input.projectId,
     worldGroupId,
@@ -348,8 +358,8 @@ export async function prepareCharacterCopilot(input: {
     model: config.model,
   }
   const [worldview, characters] = await Promise.all([
-    executeAgentTool('read_worldview', { ...executionContext, contextPolicy: worldPolicy }, {}),
-    executeAgentTool('read_characters', { ...executionContext, contextPolicy: characterPolicy }, {}),
+    executeAgentTool(worldTool.name, { ...executionContext, contextPolicy: worldPolicy }, {}),
+    executeAgentTool(characterTool.name, { ...executionContext, contextPolicy: characterPolicy }, {}),
   ])
   if (!worldview.ok) throw new Error(worldview.error || '无法读取当前世界观。')
   if (!characters.ok) throw new Error(characters.error || '无法读取当前角色。')

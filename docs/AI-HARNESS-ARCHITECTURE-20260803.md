@@ -822,7 +822,7 @@ CHIRON 四类信息可映射到现有结构：
 - 大纲原始候选已复用 `agentConversations/agentEvents` 持久化，并通过 `agentRuns.conversationId`、run/step/candidate hash 绑定；模型返回后 run 进入 `awaiting_confirmation`，作者确认和既有 `adopt()` 写入分别留下 confirmation/adoption/step 证据，刷新只从通过重放校验且候选哈希匹配的记录恢复，不会重调已完成的模型步骤；
 - 大纲采纳已能从确认后、业务写入前和部分批量写入后恢复，重复恢复沿既有 `adopt()` 去重语义补齐；模型返回、候选持久化、确认后和部分写入四组边界各完成 20 次中断对照；
 - 只读 Runner 已通过 awaited trace port 接入 durable adapter；运行契约绑定工具 source 闭包、零写权限和既有预算，最终答复进入有界 checkpoint，四个 Runner 边界共完成 20 次中断对照，tamper、scope、预算失败均 fail-closed；
-- 当前仍未达到 H1 整体退出门槛：现有 `createMasterAgentPlan()` / `executeMasterAgentPlan()` 的计划和领域 DAG 仍是内存执行，尚未把主 Agent plan/task/attempt/candidate 统一投影到 durable run。下一小阶段只接这条真实主路径，不提前实现 H2 terminal verifier，也不让 ledger 取代业务表、受治理采纳或作者确认。
+- 主 Agent 的 plan/task/attempt/candidate 已统一进入 durable run：计划检查点、逐任务 Context Manifest、候选恢复、作者确认、受治理采纳、中断恢复和团队预算均有回归证据；H2 terminal verifier 进一步要求正式后状态与 adoption evidence 一致后才签发 receipt。ledger 仍只做控制面和证据，不取代业务表、`adopt()` 或作者确认。
 
 **范围**
 
@@ -906,6 +906,13 @@ CHIRON 四类信息可映射到现有结构：
 - verifier 可按 workflow/criterion 单独切到 report-only；ledger 证据保留，completion 临时回到旧语义时 UI 必须显示降级，不能继续宣称 verified。
 
 ### H3：动态工作流与有限 fan-out
+
+**Skill 控制面实施状态（HARNESS-13，2026-08-08）**
+
+- 新增类型化 `AGENT_SKILLS` 注册表，为现有世界来源、角色、灵感、大纲、正文五个领域 Agent 登记默认 Skill；同一 Agent 可以继续增加非默认 Skill，但只能有一个默认 Skill；
+- 每个 Skill 明确 owner、version、上下文档位、正式只读工具/`CONTEXT_SOURCES`、可选边界源、最大输出预算、`FIELD_REGISTRY` 写目标、最后验证日期和回归证据；未知工具、源、表或字段均 fail-closed；
+- 五个真实领域 copilot 的工具选择、上下文源和预算，以及主 Agent durable `RunContract` 的读写权限，已从同一 Skill 注册表派生；正文只有显式叙事视角时才授权 `characterKnowledge`；
+- 本阶段不改变生成结果，也尚未把 `outline.compose` 拆为卷纲/章纲 Skill，或把 `prose.write` 拆为生成/续写 Skill。后续拆分必须复用该注册表并用任务分类与 A/B 证据证明收益，禁止重新在 orchestrator 内堆字段清单。
 
 **范围**
 

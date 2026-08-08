@@ -11,7 +11,6 @@ import {
 import {
   DOMAIN_AGENT_IDS,
   executeMasterAgentPlan,
-  type DomainAgentId,
   type ExecutedMasterCandidate,
   type MasterAgentExecutionTrace,
   type MasterAgentPlan,
@@ -19,9 +18,11 @@ import {
   type MasterCandidatePayload,
 } from '../orchestrator'
 import type { AgentTeamBudgetEvidence } from '../team-budget'
-import { CHARACTER_DIMENSIONS } from '../../character/character-dimensions'
-import { OUTLINE_COPILOT_SOURCE_KEYS } from '../outline-copilot'
-import { PROSE_COPILOT_SOURCE_KEYS } from '../prose-copilot'
+import {
+  getDefaultAgentSkillV1,
+  resolveAgentSkillContextSourceKeysV1,
+  type DomainAgentId,
+} from '../skill-registry'
 import { acceptAgentRunContractV1 } from './contract'
 import {
   appendAgentRunEventV1,
@@ -63,32 +64,6 @@ const MAX_PLAN_SUMMARY_CHARS = 500
 const MAX_TASK_ID_CHARS = 80
 const MAX_TASK_INSTRUCTION_CHARS = 1_000
 const MAX_CANDIDATE_CHARS = 120_000
-
-const CONTEXT_KEYS_BY_AGENT: Record<DomainAgentId, readonly string[]> = {
-  'world-origin': ['projectStatus', 'worldview', 'powerSystem', 'codex'],
-  character: ['worldview', 'powerSystem', 'codex', 'characters', 'characterRelations'],
-  inspiration: ['inspirationWorkspace'],
-  outline: [...OUTLINE_COPILOT_SOURCE_KEYS],
-  prose: [...PROSE_COPILOT_SOURCE_KEYS],
-}
-
-const WRITE_TARGETS_BY_AGENT: Record<DomainAgentId, { table: string; fields: string[] }> = {
-  'world-origin': { table: 'worldviews', fields: ['worldOrigin'] },
-  character: {
-    table: 'characters',
-    fields: [
-      'name',
-      'roleWeight',
-      'moralAxis',
-      'orderAxis',
-      'relationships',
-      ...CHARACTER_DIMENSIONS.map(dimension => dimension.key),
-    ],
-  },
-  inspiration: { table: 'inspirationWorkspaces', fields: ['versions'] },
-  outline: { table: 'outlineNodes', fields: ['title', 'summary'] },
-  prose: { table: 'chapters', fields: ['content'] },
-}
 
 export interface MasterAgentPlanCheckpointV1 {
   version: typeof MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1
@@ -284,20 +259,22 @@ export async function hashMasterAgentPlanV1(plan: MasterAgentPlan): Promise<stri
 
 function sourceKeysForPlan(plan: MasterAgentPlan): string[] {
   return [...new Set(plan.tasks.flatMap(task => {
-    const keys = CONTEXT_KEYS_BY_AGENT[task.agentId]
-    return task.agentId === 'prose' && task.perspectiveCharacterId == null
-      ? keys.filter(key => key !== 'characterKnowledge')
-      : keys
+    const skill = getDefaultAgentSkillV1(task.agentId)
+    return resolveAgentSkillContextSourceKeysV1(skill, {
+      includeOptional: task.agentId === 'prose' && task.perspectiveCharacterId != null,
+    })
   }))]
 }
 
 function writeTargetsForPlan(plan: MasterAgentPlan): Array<{ table: string; fields: string[]; mode: 'author-confirmed' }> {
   const byTable = new Map<string, Set<string>>()
   plan.tasks.forEach(task => {
-    const target = WRITE_TARGETS_BY_AGENT[task.agentId]
-    const fields = byTable.get(target.table) ?? new Set<string>()
-    target.fields.forEach(field => fields.add(field))
-    byTable.set(target.table, fields)
+    const skill = getDefaultAgentSkillV1(task.agentId)
+    skill.writeTargets.forEach(target => {
+      const fields = byTable.get(target.table) ?? new Set<string>()
+      target.fields.forEach(field => fields.add(field))
+      byTable.set(target.table, fields)
+    })
   })
   return [...byTable.entries()].map(([table, fields]) => ({
     table,

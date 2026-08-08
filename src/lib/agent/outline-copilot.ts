@@ -39,27 +39,9 @@ import {
   type AgentContextEvidence,
   type AgentContextProfile,
 } from './context-policy'
+import { getDefaultAgentSkillV1 } from './skill-registry'
 
-export const OUTLINE_COPILOT_SOURCE_KEYS = [
-  'canonAssertions',
-  'worldview',
-  'storyCore',
-  'activeNarrativeBlueprint',
-  'characterDrivenPlan',
-  'powerSystem',
-  'cultivationProgress',
-  'codex',
-  'characters',
-  'creativeRules',
-  'worldRules',
-  'historical',
-  'locations',
-  'foreshadows',
-  'storyArcs',
-  'storylineProgress',
-  'existingVolumeOutlines',
-  'writtenChapterProgress',
-] as const
+export const OUTLINE_COPILOT_SOURCE_KEYS = getDefaultAgentSkillV1('outline').contextSourceKeys
 
 export type OutlineCopilotMode = 'volumes' | 'chapters'
 
@@ -402,7 +384,8 @@ export async function prepareOutlineCopilot(input: {
     { category: routingCategory },
   ).config
   const contextProfile = input.contextProfile ?? 'full'
-  const contextPolicy = resolveAgentContextPolicy('agent-outline', contextProfile)
+  const skill = getDefaultAgentSkillV1('outline')
+  const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
   const assembled = await assembleContext({
     projectId: input.projectId,
     scope,

@@ -25,7 +25,8 @@ import {
   type AgentContextEvidence,
   type AgentContextProfile,
 } from './context-policy'
-import { executeAgentTool } from './tool-registry'
+import { AGENT_TOOL_BY_NAME, executeAgentTool } from './tool-registry'
+import { getDefaultAgentSkillV1 } from './skill-registry'
 
 const WORLD_ORIGIN_MAX_CHARS = 12_000
 
@@ -135,8 +136,17 @@ export async function prepareWorldOriginCopilot(
     { category: routingCategory },
   ).config
   const contextProfile = input.contextProfile ?? 'full'
-  const contextPolicy = resolveAgentContextPolicy('agent-world-origin', contextProfile)
-  const [statusPolicy, worldviewPolicy] = splitAgentContextPolicy(contextPolicy, [1_400, 18_000])
+  const skill = getDefaultAgentSkillV1('world-origin')
+  const tools = skill.readToolNames.map(name => AGENT_TOOL_BY_NAME.get(name)!)
+  const [statusTool, worldviewTool] = tools
+  if (!statusTool || !worldviewTool || tools.length !== 2) {
+    throw new Error(`Agent Skill ${skill.id} 的只读工具契约无效`)
+  }
+  const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
+  const [statusPolicy, worldviewPolicy] = splitAgentContextPolicy(
+    contextPolicy,
+    tools.map(tool => tool.inputBudgetTokens),
+  )
   const readScope = await resolveReadScopeLike(input.scope ?? input.projectId)
   const scope = isLegacyReadScope(readScope) ? undefined : readScope
   const toolContextBase = {
@@ -147,8 +157,8 @@ export async function prepareWorldOriginCopilot(
     model: config.model,
   }
   const [status, worldview, row] = await Promise.all([
-    executeAgentTool('read_project_status', { ...toolContextBase, contextPolicy: statusPolicy }),
-    executeAgentTool('read_worldview', { ...toolContextBase, contextPolicy: worldviewPolicy }),
+    executeAgentTool(statusTool.name, { ...toolContextBase, contextPolicy: statusPolicy }),
+    executeAgentTool(worldviewTool.name, { ...toolContextBase, contextPolicy: worldviewPolicy }),
     readWorldviewFromResolvedScope(readScope, input.worldGroupId),
   ])
   for (const result of [status, worldview]) {

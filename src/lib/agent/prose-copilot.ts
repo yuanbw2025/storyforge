@@ -33,40 +33,15 @@ import {
   validateProseInformationBoundaryV1,
   type InformationBoundaryManifestV1,
 } from './information-boundary'
+import {
+  getDefaultAgentSkillV1,
+  resolveAgentSkillContextSourceKeysV1,
+} from './skill-registry'
 
-export const PROSE_COPILOT_SOURCE_KEYS = [
-  'contextMemo',
-  'chapterOutline',
-  'detailedOutline',
-  'chapterContinuityHandoff',
-  'previousPlanReconciliation',
-  'previousChapterEnding',
-  'recentChapterSummaries',
-  'worldview',
-  'storyCore',
-  'activeNarrativeBlueprint',
-  'characterDrivenPlan',
-  'powerSystem',
-  'cultivationProgress',
-  'codex',
-  'characters',
-  'creativeRules',
-  'worldRules',
-  'historical',
-  'locations',
-  'foreshadows',
-  'storyArcs',
-  'storylineProgress',
-  'emotionBeats',
-  'stateCards',
-  'currentFacts',
-  'canonAssertions',
-  'characterKnowledge',
-  'heldItems',
-  'retrievedPassages',
-  'references',
-  'userStyleProfile',
-] as const
+export const PROSE_COPILOT_SOURCE_KEYS = resolveAgentSkillContextSourceKeysV1(
+  getDefaultAgentSkillV1('prose'),
+  { includeOptional: true },
+)
 
 export type ProseCopilotOperation = 'generate' | 'continue'
 
@@ -531,7 +506,8 @@ export async function prepareProseCopilot(input: {
     { category: routingCategory },
   ).config
   const contextProfile = input.contextProfile ?? 'full'
-  const contextPolicy = resolveAgentContextPolicy('agent-prose', contextProfile)
+  const skill = getDefaultAgentSkillV1('prose')
+  const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
   if (input.perspectiveCharacterId != null) {
     const character = await db.characters.get(input.perspectiveCharacterId)
     const visible = character

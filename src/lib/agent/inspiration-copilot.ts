@@ -37,6 +37,7 @@ import {
   type AgentContextProfile,
 } from './context-policy'
 import { executeAgentTool } from './tool-registry'
+import { getDefaultAgentSkillV1 } from './skill-registry'
 import {
   isLegacyReadScope,
   readOwnedRows,
@@ -213,9 +214,14 @@ export async function prepareInspirationCopilot(input: {
     { category: routingCategory },
   ).config
   const contextProfile = input.contextProfile ?? 'full'
-  const contextPolicy = resolveAgentContextPolicy('agent-inspiration', contextProfile)
+  const skill = getDefaultAgentSkillV1('inspiration')
+  const [readToolName] = skill.readToolNames
+  if (!readToolName || skill.readToolNames.length !== 1) {
+    throw new Error(`Agent Skill ${skill.id} 的只读工具契约无效`)
+  }
+  const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
   const context = await executeAgentTool(
-    'read_inspiration_workspace',
+    readToolName,
     {
       projectId: input.projectId,
       scope,
