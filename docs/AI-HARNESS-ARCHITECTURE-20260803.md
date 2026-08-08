@@ -378,12 +378,14 @@ HARNESS-28A 已在同一评测模块增加 ConStory 闭集 taxonomy、严格逐�
 
 HARNESS-28B 已另建 headless H4 目录：40 个 development、20 个 held-out，每篇 8,000–12,000 个 UTF-16 字符，generation/continuation/expansion/completion 在两个 split 内均衡；development 每个子型两例、held-out 每个子型一例，并加入 2+1 个 clean controls、中段/远距证据及 intentional/ambiguous 控制。公开 fixture/source ID 为不透明编号，模型可见投影物理移除 hidden labels；60 例的隐藏证据均已通过与真实 verifier 共用的定位和 artifact 路径。该目录尚未接入旧面板或真实模型 runner。
 
+HARNESS-28C 已为该目录增加可接真实 provider 的 headless verifier runner、可校验 checkpoint/恢复、有限重试、调用预算和 aggregate-only sealed scorer。runner 强制生成来源与 verifier 的 provider/model 身份不同，每次外部调用只收到不含正文副本的 fixture 元数据与唯一一份正式 judge messages；稳定 trace hash 可作为恢复后的幂等键。成功及失败响应的 token、延迟和成本都会累计，无用量证据的失败调用单独计数并阻断发布。评分代码计算 high-severity hard precision/recall、证据回查、作者意图误升级和 clean control 误报，报告 Wilson 95% 区间；独立的配对 bootstrap 工具比较每万字符 hard-conflict density。仓库目前只有模拟 verifier 的契约测试，没有真实外部模型结果。
+
 主要局限：
 
 - 旧 NS-0 fixture 仍是“关键事实 + 40 句长尾填充”；新 H4 目录虽达到长度、分类和证据位置门槛，仍是确定性合成语料，不等同于作者长篇分布；
 - 当前配置模型既可能生成又可能裁判，存在相关性偏差；
-- 旧 NS-0 结果仍不是新 H4 artifact，开发面板和真实 40+20 长篇 runner 尚未迁移；
-- 不测进程中断、刷新恢复、trace 完整性、预算越界恢复和多 Harness 对照；
+- 新 headless runner 强制独立身份，但旧开发面板仍可能由当前配置模型同时生成和裁判，且旧结果不是新 H4 artifact；
+- checkpoint、重试、预算和恢复已有确定性故障注入，尚未用真实 provider 完成 40+20、刷新/关闭重开和多 Harness 对照；
 - 新 H4 artifact 已有统一 evidence span + character offset schema；旧 `CaseScore` 仍没有该证据。
 
 ## 4. 入口 -> 读写 -> 生命周期 -> 调用方 -> 测试闭包
@@ -1109,6 +1111,15 @@ CHIRON 四类信息可映射到现有结构：
 - fixture/source 只公开 `h4-dev-NN` / `h4-held-NN` 不透明 ID。`toH4ModelVisibleFixtureV1()` 返回隔离 clone 并物理移除 hidden labels，回归拒绝 subtype、注入位置、预期 issue 和 clean-control 标记进入模型可见 JSON；
 - 60 例隐藏标签均被转换成模拟 judge JSON，逐例调用正式 `createLongConsistencyEvalArtifactV1()` 并重新验证来源、逐字 quote、offset、hash 和 artifact 完整性。`src/lib/evals/long-consistency/index.ts` 是统一 headless 入口；
 - 本单元仍不调用外部模型、不计算 precision/recall/Wilson/bootstrap、不提供 sealed scorer 或中断恢复，也不接生产 gate。它证明评测目录及证据 plumbing 可执行，不证明生成质量收益；H4 尚未完成。
+
+**可恢复 runner 与统计发布门实施状态（HARNESS-28C，2026-08-09）**
+
+- `runH4LongConsistencyVerifierV1()` 逐例调用 HARNESS-28A 的正式 judge messages/artifact 路径，强制 generator/verifier 使用不同 provider/model，Prompt 版本固定；provider 回调只得到 fixture ID/split/task 元数据、唯一一份正式 messages、attempt 和稳定 trace hash，长篇来源不会经第二个参数重复注入；
+- 每例成功后产生 canonical-hash checkpoint，JSON 导入/导出会从冻结目录重建 fixture binding、来源与 label hash，并复核 raw judge output、artifact、trace、逐次失败历史、目录执行顺序、用量和终态。故障注入证明中断后只补未完成 case，已完成 artifact hash 与不中断运行最终 hash 一致；嵌套 artifact 或状态历史即使重签 checkpoint 也会被拒绝；
+- 每例最多 1–3 次尝试，总调用、输入/输出 token、时长和成本均有冻结预算。协议失败响应的用量进入失败历史；无法取得用量的失败调用记为 unmetered 并阻断 release evidence。静态合成语料的 generator usage 明确为零，仅 verifier 调用计入本 runner；
+- `scoreH4LongConsistencyCheckpointV1()` 内部读取标签、对外只返回 aggregate，计算 high-severity hard confusion matrix、precision/recall、证据回查率、intentional/ambiguous hard escalation、clean hard false positive、任务分布和用量。点估计执行预注册 90%/80% 等门槛，同时报告 Wilson 95% 区间；阈值只能收紧，sealed score 的 JSON 导入/导出必须与原 checkpoint 重新核算一致；
+- `compareH4ConsistencyErrorDensityV1()` 对相同 fixture 的不同长度输出计算每万字符 hard conflict density，并用固定种子的配对 percentile bootstrap 报告相对下降区间。模型调用与评分 API 的 sealed 边界用于防止标签进入 context；标签仍存在于本地合成评测源码，不宣称密码学或服务端保密；
+- `R-HARNESS28-long-consistency-runner` 使用模拟响应证明真实调用参数、有限重试、成本核算、预算终止、中断恢复、防篡改、聚合隔离、Wilson/bootstrap 和发布门可执行。没有外部模型 40+20 artifact、人工 held-out 复核、真实刷新/关闭重开证据或质量收益，因此 H4 仍未完成且不得接生产 hard gate。
 
 **范围**
 
