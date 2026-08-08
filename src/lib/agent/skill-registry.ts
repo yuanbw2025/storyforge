@@ -44,6 +44,18 @@ export interface AgentSkillInputPolicyV1 {
   }>
 }
 
+export interface AgentSkillContextCompressionPolicyV1 {
+  version: 1
+  sourceKeys: readonly string[]
+  minimumOriginalTokens: number
+  maxSourcesPerTask: number
+  maxAttemptsPerSource: number
+  maxAnchors: number
+  maxOutputTokens: number
+  maxFullTextFallbackTokens: number
+  maxFullTextBudgetScale: number
+}
+
 export interface AgentSkillDefinitionV1 {
   version: 1
   id: string
@@ -60,6 +72,7 @@ export interface AgentSkillDefinitionV1 {
   /** Sources enabled only by an explicit runtime boundary, such as a POV character. */
   optionalContextSourceKeys: readonly string[]
   inputPolicy: AgentSkillInputPolicyV1
+  contextCompression: AgentSkillContextCompressionPolicyV1
   maxOutputTokens: number
   writeTargets: readonly AgentSkillWriteTargetV1[]
   lastVerifiedAt: string
@@ -228,6 +241,50 @@ const PROSE_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+function compressionPolicy(
+  sourceKeys: readonly string[],
+): AgentSkillContextCompressionPolicyV1 {
+  return {
+    version: 1,
+    sourceKeys,
+    minimumOriginalTokens: 1_600,
+    maxSourcesPerTask: 1,
+    maxAttemptsPerSource: 2,
+    maxAnchors: 12,
+    maxOutputTokens: 1_800,
+    maxFullTextFallbackTokens: 12_000,
+    maxFullTextBudgetScale: 2,
+  }
+}
+
+const WORLD_COMPRESSION_POLICY = compressionPolicy(['worldview', 'powerSystem', 'codex'])
+const CHARACTER_COMPRESSION_POLICY = compressionPolicy(['worldview', 'powerSystem', 'codex', 'characters'])
+const INSPIRATION_COMPRESSION_POLICY = compressionPolicy(['inspirationWorkspace'])
+const OUTLINE_COMPRESSION_POLICY = compressionPolicy([
+  'worldview',
+  'storyCore',
+  'activeNarrativeBlueprint',
+  'characterDrivenPlan',
+  'powerSystem',
+  'codex',
+  'characters',
+  'historical',
+  'storyArcs',
+  'existingVolumeOutlines',
+])
+const PROSE_COMPRESSION_POLICY = compressionPolicy([
+  'worldview',
+  'storyCore',
+  'activeNarrativeBlueprint',
+  'characterDrivenPlan',
+  'powerSystem',
+  'codex',
+  'characters',
+  'historical',
+  'storyArcs',
+  'references',
+])
+
 export const AGENT_SKILLS = [
   {
     version: 1,
@@ -242,10 +299,11 @@ export const AGENT_SKILLS = [
     contextSourceKeys: [],
     optionalContextSourceKeys: [],
     inputPolicy: WORLD_FOUNDATION_INPUT_POLICY,
+    contextCompression: WORLD_COMPRESSION_POLICY,
     maxOutputTokens: 3_000,
     writeTargets: [{ table: 'worldviews', fields: ['worldOrigin'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-world-origin', 'R-HARNESS2-master-terminal-verifier'],
+    regressionTests: ['R-AGENT1-chat-copilot-world-origin', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression'],
   },
   {
     version: 1,
@@ -260,6 +318,7 @@ export const AGENT_SKILLS = [
     contextSourceKeys: [],
     optionalContextSourceKeys: [],
     inputPolicy: CHARACTER_INPUT_POLICY,
+    contextCompression: CHARACTER_COMPRESSION_POLICY,
     maxOutputTokens: 6_000,
     writeTargets: [{
       table: 'characters',
@@ -273,7 +332,7 @@ export const AGENT_SKILLS = [
       ],
     }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-character', 'R-HARNESS2-master-terminal-verifier'],
+    regressionTests: ['R-AGENT1-chat-copilot-character', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression'],
   },
   {
     version: 1,
@@ -288,10 +347,11 @@ export const AGENT_SKILLS = [
     contextSourceKeys: [],
     optionalContextSourceKeys: [],
     inputPolicy: INSPIRATION_INPUT_POLICY,
+    contextCompression: INSPIRATION_COMPRESSION_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'inspirationWorkspaces', fields: ['versions'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-inspiration', 'R-HARNESS2-master-terminal-verifier'],
+    regressionTests: ['R-AGENT1-chat-copilot-inspiration', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression'],
   },
   {
     version: 1,
@@ -306,10 +366,11 @@ export const AGENT_SKILLS = [
     contextSourceKeys: OUTLINE_CONTEXT_SOURCE_KEYS,
     optionalContextSourceKeys: [],
     inputPolicy: OUTLINE_VOLUME_INPUT_POLICY,
+    contextCompression: OUTLINE_COMPRESSION_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['title', 'summary'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-outline', 'R-HARNESS11-outline-batch-durable'],
+    regressionTests: ['R-AGENT1-chat-copilot-outline', 'R-HARNESS11-outline-batch-durable', 'R-HARNESS16-semantic-context-compression'],
   },
   {
     version: 1,
@@ -324,10 +385,11 @@ export const AGENT_SKILLS = [
     contextSourceKeys: OUTLINE_CONTEXT_SOURCE_KEYS,
     optionalContextSourceKeys: [],
     inputPolicy: OUTLINE_VOLUME_INPUT_POLICY,
+    contextCompression: OUTLINE_COMPRESSION_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['title', 'summary'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline'],
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression'],
   },
   {
     version: 1,
@@ -342,10 +404,11 @@ export const AGENT_SKILLS = [
     contextSourceKeys: OUTLINE_CONTEXT_SOURCE_KEYS,
     optionalContextSourceKeys: [],
     inputPolicy: OUTLINE_CHAPTER_INPUT_POLICY,
+    contextCompression: OUTLINE_COMPRESSION_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['title', 'summary'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline'],
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression'],
   },
   {
     version: 1,
@@ -360,10 +423,11 @@ export const AGENT_SKILLS = [
     contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS,
     optionalContextSourceKeys: ['characterKnowledge'],
     inputPolicy: PROSE_INPUT_POLICY,
+    contextCompression: PROSE_COMPRESSION_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS7-prose-generation-durable', 'R-HARNESS9-information-boundary'],
+    regressionTests: ['R-HARNESS7-prose-generation-durable', 'R-HARNESS9-information-boundary', 'R-HARNESS16-semantic-context-compression'],
   },
   {
     version: 1,
@@ -378,10 +442,11 @@ export const AGENT_SKILLS = [
     contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS,
     optionalContextSourceKeys: ['characterKnowledge'],
     inputPolicy: PROSE_INPUT_POLICY,
+    contextCompression: PROSE_COMPRESSION_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable'],
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression'],
   },
   {
     version: 1,
@@ -396,10 +461,11 @@ export const AGENT_SKILLS = [
     contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS,
     optionalContextSourceKeys: ['characterKnowledge'],
     inputPolicy: PROSE_INPUT_POLICY,
+    contextCompression: PROSE_COMPRESSION_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable'],
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression'],
   },
 ] as const satisfies readonly AgentSkillDefinitionV1[]
 
@@ -516,6 +582,9 @@ export function validateAgentSkillContextEvidenceV1(
         if (source.delivery === 'truncated' && source.originalTokens <= source.inputTokens) {
           throw new Error(`Agent Skill ${skill.id} 来源 ${source.key} truncated 证据不一致`)
         }
+        if (source.delivery === 'compressed' && source.originalTokens <= source.inputTokens) {
+          throw new Error(`Agent Skill ${skill.id} 来源 ${source.key} compressed 证据不一致`)
+        }
         deliveredTokens += source.inputTokens
       } else if (
         source.delivery !== 'none'
@@ -524,6 +593,51 @@ export function validateAgentSkillContextEvidenceV1(
         || (source.status === 'trimmed' && !trimmed.includes(source.key))
       ) {
         throw new Error(`Agent Skill ${skill.id} 来源 ${source.key} 未交付证据不一致`)
+      }
+      if (source.compression) {
+        const compression = source.compression
+        const validHash = (value: unknown): value is string => (
+          typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
+        )
+        if (
+          compression.version !== 1
+          || compression.promptVersion !== 'agent-context-compression-v1'
+          || !validHash(compression.sourceHash)
+          || !Number.isInteger(compression.attempts)
+          || compression.attempts < 0
+          || compression.attempts > skill.contextCompression.maxAttemptsPerSource
+          || !Number.isInteger(compression.targetTokens)
+          || compression.targetTokens < 1
+          || !Number.isInteger(compression.requiredAnchorCount)
+          || compression.requiredAnchorCount < 1
+          || !Number.isInteger(compression.coveredAnchorCount)
+          || compression.coveredAnchorCount < 0
+          || compression.coveredAnchorCount > compression.requiredAnchorCount
+        ) throw new Error(`Agent Skill ${skill.id} 来源 ${source.key} 压缩证据无效`)
+        if (!skill.contextCompression.sourceKeys.includes(source.key)) {
+          throw new Error(`Agent Skill ${skill.id} 来源 ${source.key} 不允许压缩`)
+        }
+        if (compression.outcome === 'verified') {
+          if (
+            compression.fallback !== 'none'
+            || !validHash(compression.artifactHash)
+            || compression.coveredAnchorCount !== compression.requiredAnchorCount
+            || (source.status === 'included' && source.delivery !== 'compressed')
+          ) throw new Error(`Agent Skill ${skill.id} 来源 ${source.key} 已验证压缩证据不一致`)
+        } else if (
+          compression.outcome !== 'fallback'
+          || compression.fallback === 'none'
+          || compression.artifactHash !== undefined
+          || !compression.failureCode?.trim()
+          || (source.status === 'included'
+            && compression.fallback === 'full-source'
+            && source.delivery !== 'full')
+          || (source.status === 'included'
+            && compression.fallback === 'deterministic-truncation'
+            && source.delivery !== 'truncated')
+        ) throw new Error(`Agent Skill ${skill.id} 来源 ${source.key} 压缩回退证据不一致`)
+      } else if (source.delivery === 'compressed') {
+        throw new Error(`Agent Skill ${skill.id} 来源 ${source.key} 缺少压缩证据`)
       }
     }
     if (deliveredTokens !== evidence.estimatedInputTokens) {
@@ -607,6 +721,31 @@ export function validateAgentSkillDefinitionsV1(
       if (!policy.instruction.trim() || policy.instruction.length > 400) {
         throw new Error(`Agent Skill ${skill.id} 的 ${state} 输入说明无效`)
       }
+    }
+    const compression = skill.contextCompression
+    if (compression.version !== 1) throw new Error(`Agent Skill ${skill.id} 的压缩策略版本无效`)
+    if (!compression.sourceKeys.length || new Set(compression.sourceKeys).size !== compression.sourceKeys.length) {
+      throw new Error(`Agent Skill ${skill.id} 的压缩来源无效`)
+    }
+    for (const sourceKey of compression.sourceKeys) {
+      if (!authorizedSourceKeys.includes(sourceKey)) {
+        throw new Error(`Agent Skill ${skill.id} 的压缩来源未获读取授权 ${sourceKey}`)
+      }
+    }
+    for (const [key, value] of Object.entries({
+      minimumOriginalTokens: compression.minimumOriginalTokens,
+      maxSourcesPerTask: compression.maxSourcesPerTask,
+      maxAttemptsPerSource: compression.maxAttemptsPerSource,
+      maxAnchors: compression.maxAnchors,
+      maxOutputTokens: compression.maxOutputTokens,
+      maxFullTextFallbackTokens: compression.maxFullTextFallbackTokens,
+    })) {
+      if (!Number.isInteger(value) || value < 1) {
+        throw new Error(`Agent Skill ${skill.id} 的压缩策略 ${key} 无效`)
+      }
+    }
+    if (!Number.isFinite(compression.maxFullTextBudgetScale) || compression.maxFullTextBudgetScale < 1) {
+      throw new Error(`Agent Skill ${skill.id} 的全文回退比例无效`)
     }
     for (const target of skill.writeTargets) {
       if (!REGISTRY_BY_NAME.has(target.table)) {

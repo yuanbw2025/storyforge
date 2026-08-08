@@ -41,6 +41,10 @@ import {
   type AgentContextProfile,
 } from './context-policy'
 import {
+  createAgentContextCompressionSessionV1,
+  type AgentContextCompressionRuntimeV1,
+} from './context-compression'
+import {
   getDefaultAgentSkillV1,
   buildAgentSkillInputGuidanceV1,
   resolveAgentSkillInputStateV1,
@@ -370,6 +374,7 @@ export async function prepareOutlineCopilot(input: {
   /** 节点级 AI preset 的解析结果；未提供时沿用全局路由配置。 */
   configOverride?: AIConfig
   generationOverrides?: { temperature?: number; maxTokens?: number }
+  contextCompressionRuntime?: AgentContextCompressionRuntimeV1
   signal?: AbortSignal
 }): Promise<PreparedOutlineCopilot> {
   const project = await db.projects.get(input.projectId)
@@ -401,6 +406,17 @@ export async function prepareOutlineCopilot(input: {
   ).config
   const contextProfile = input.contextProfile ?? 'full'
   const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
+  const compression = input.contextCompressionRuntime
+    ? createAgentContextCompressionSessionV1({
+        policy: skill.contextCompression,
+        config,
+        projectId: input.projectId,
+        authorRequest: request,
+        routingCategory,
+        signal: input.signal,
+        runtime: input.contextCompressionRuntime,
+      })
+    : undefined
   const assembled = await assembleContext({
     projectId: input.projectId,
     scope,
@@ -411,6 +427,7 @@ export async function prepareOutlineCopilot(input: {
     sourceKeys: [...skill.contextSourceKeys],
     inputBudgetMaxTokens: contextPolicy.maxInputTokens,
     sourceBudgetScale: contextPolicy.sourceBudgetScale,
+    sourceTransformer: compression?.sourceTransformer,
   })
   const currentNodes = await readOwnedRows<OutlineNode>(readScope, 'outlineNodes', { owner: 'work' })
   const snapshot = snapshotOf(currentNodes, worldGroupId, mode, parentVolumeId)

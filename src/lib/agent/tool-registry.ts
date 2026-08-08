@@ -395,6 +395,7 @@ async function resolveScope(
       context.contextPolicy?.maxInputTokens ?? spec.inputBudgetTokens,
     ),
     sourceBudgetScale: context.contextPolicy?.sourceBudgetScale,
+    sourceTransformer: context.sourceTransformer,
   }
 }
 

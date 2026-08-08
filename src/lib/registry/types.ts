@@ -337,6 +337,47 @@ export interface AdoptResult {
 
 export type ContextSourceScope = 'project' | 'world' | 'node' | 'chapter' | 'manual' | 'runtime'
 
+export type ContextCompressionFallbackV1 = 'none' | 'full-source' | 'deterministic-truncation'
+
+/**
+ * Durable-safe proof for one semantic compression decision. It intentionally
+ * stores hashes/counts only; Canon source text remains in its registered table.
+ */
+export interface ContextCompressionEvidenceV1 {
+  version: 1
+  promptVersion: 'agent-context-compression-v1'
+  outcome: 'verified' | 'fallback'
+  fallback: ContextCompressionFallbackV1
+  sourceHash: string
+  artifactHash?: string
+  attempts: number
+  targetTokens: number
+  requiredAnchorCount: number
+  coveredAnchorCount: number
+  failureCode?: string
+}
+
+export interface ContextSourceTransformInput {
+  source: Pick<ContextSource, 'key' | 'label' | 'layer' | 'budgetTokens' | 'protectedFromTrim'>
+  content: string
+  originalTokens: number
+  sourceBudgetTokens: number
+  inputBudgetTokens: number
+}
+
+export interface ContextSourceTransformResult {
+  /** Omit to retain assembleContext's deterministic truncation fallback. */
+  content?: string
+  delivery?: 'full' | 'compressed'
+  /** Only the verified full-source fallback may exceed the registered soft cap. */
+  allowSourceBudgetOverflow?: boolean
+  compression: ContextCompressionEvidenceV1
+}
+
+export type ContextSourceTransformer = (
+  input: ContextSourceTransformInput,
+) => Promise<ContextSourceTransformResult | undefined>
+
 export interface AssembleContextInput {
   projectId: number
   /** WORLD-2C C3: explicit logical read boundary. projectId remains a legacy adapter. */
@@ -355,6 +396,8 @@ export interface AssembleContextInput {
   inputBudgetMaxTokens?: number
   /** 调用方只能按比例收窄每个登记源的软上限，不能放大或绕过注册表。 */
   sourceBudgetScale?: number
+  /** HARNESS-16: registered-reader output may be transformed before source capping. */
+  sourceTransformer?: ContextSourceTransformer
   citedReferenceIds?: number[]
   previousChapterEnding?: string
   stateReferenceText?: string
@@ -411,7 +454,7 @@ export interface ContextSource {
 }
 
 export type AssembleContextSourceStatus = 'included' | 'omitted' | 'trimmed'
-export type AssembleContextSourceDelivery = 'full' | 'truncated' | 'none'
+export type AssembleContextSourceDelivery = 'full' | 'compressed' | 'truncated' | 'none'
 
 /**
  * Per-source delivery evidence derived by assembleContext(). It records only
@@ -425,6 +468,8 @@ export interface AssembleContextSourceEvidence {
   originalTokens: number
   /** Tokens actually delivered to the model. Zero for omitted/trimmed sources. */
   inputTokens: number
+  /** Optional for sources processed by the HARNESS-16 semantic compression policy. */
+  compression?: ContextCompressionEvidenceV1
 }
 
 export interface AssembleContextResult {

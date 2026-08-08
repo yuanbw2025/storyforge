@@ -1,5 +1,5 @@
 import type { AIProvider } from '../types/ai'
-import type { AssembleContextSourceEvidence } from '../registry/types'
+import type { AssembleContextSourceEvidence, ContextSourceTransformer } from '../registry/types'
 import type { AgentContextPolicy } from './context-policy'
 import type { WorkspaceScope } from '../types/world-ownership'
 
@@ -17,6 +17,8 @@ export interface AgentToolExecutionContext {
   model?: string
   /** 只由宿主编排层注入；模型工具参数不能覆盖。 */
   contextPolicy?: AgentContextPolicy
+  /** Host-only semantic compression hook; model tool arguments cannot supply it. */
+  sourceTransformer?: ContextSourceTransformer
 }
 
 export interface AgentToolJsonSchema {

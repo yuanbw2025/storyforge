@@ -986,6 +986,14 @@ CHIRON 四类信息可映射到现有结构：
 - 输入状态、缺失来源、单源截断和总预算移除证据进入主 Agent 候选 hash/durable trace。首次持久化和恢复都会拒绝来源越权、状态伪造、token 伪报以及与冻结 Skill 不一致的策略；H15 之前没有输入状态字段的历史候选仍可恢复；
 - 本单元没有把尾部截断包装成语义压缩，也没有新增压缩模型调用。压缩产物契约、约束保真验证、按来源全文回退、失败后受限升级以及同模型配对 A/B 仍属于 H5 后续交付单元。
 
+**受治理语义压缩实施状态（HARNESS-16，2026-08-08）**
+
+- `AGENT_SKILLS.contextCompression` 冻结每个 Skill 允许压缩的正式来源、触发下限、单任务来源数、单来源修复次数、锚点数、输出预算和全文回退上限。压缩只能发生在 `CONTEXT_SOURCES` reader 返回原文之后、`assembleContext()` 应用单源预算之前；组件、领域 Agent 和压缩执行器均不能自行查询业务表拼装第二套上下文；
+- `agent-context-compression-v1` 产物要求结构化摘要、全部锚点 ID 和逐字证据。确定性锚点优先抽取禁止/条件、角色认知边界、时间顺序和身份/标题；装配层重新校验原文 hash、逐字引文、覆盖数、产物预算和 delivery。只有全部通过才记录 `delivery=compressed`，伪造 source hash、漏锚点、非逐字引文或超预算产物均不得进入生成提示词；
+- 单来源最多两次压缩调用，默认每个任务只处理一个超额来源。两次失败或没有辅助调用额度时，只允许该来源在 `originalTokens <= inputBudget`、不超过 Skill 全文上限且不超过单源预算两倍时全文升级；否则回到带显式证据的确定性截断，禁止全库全文注入；
+- 压缩调用复用当前领域 Agent 的模型路由并计入同一个 `AgentTeamBudgetTracker`。主 Agent 会先为本任务、后续任务和尚未使用的一次 Canon 打回保留调用额度；额度不足时不会发起压缩调用。压缩/回退证据进入候选 hash 和 Context Manifest，首次持久化及恢复会拒绝篡改；H16 之前缺少压缩字段的历史 manifest/candidate 继续兼容；
+- `R-HARNESS16-semantic-context-compression` 已覆盖成功压缩、锚点漏失后一次修复、两次失败、单源全文上限、确定性截断、辅助预算不足、Manifest 完整性和 source hash 伪造。该回归证明的是机制与安全边界，不是模型质量收益；相同 provider/model/budget 的真实生成配对 A/B、成本/延迟分布和非劣效门槛仍未完成，不能据此默认扩大压缩来源数或宣称 H5 完成。
+
 **范围**
 
 - 建立 system prompt、tool descriptions、skills/source bundles 的 ownership map；

@@ -1,3 +1,5 @@
+import type { ContextCompressionEvidenceV1 } from '../registry/types'
+
 export type AgentRunWorkflowKind =
   | 'direct-generation'
   | 'read-only-audit'
@@ -87,7 +89,7 @@ export interface AcceptedAgentRunContractV1 {
 }
 
 export type ContextManifestSourceStatus = 'included' | 'omitted' | 'trimmed'
-export type ContextManifestSourceDeliveryV1 = 'full' | 'truncated'
+export type ContextManifestSourceDeliveryV1 = 'full' | 'compressed' | 'truncated'
 
 export interface ContextManifestBoundaryV1 {
   chapterId?: number
@@ -104,6 +106,8 @@ export interface ContextManifestSourceV1 {
   delivery?: ContextManifestSourceDeliveryV1
   /** Reader output size before per-source capping; never contains source text. */
   originalTokens?: number
+  /** Optional for manifests created before HARNESS-16. */
+  compression?: ContextCompressionEvidenceV1
   boundary?: ContextManifestBoundaryV1
   readerVersion?: string
 }

@@ -43,6 +43,10 @@ import {
   type AgentContextEvidence,
   type AgentContextProfile,
 } from './context-policy'
+import {
+  createAgentContextCompressionSessionV1,
+  type AgentContextCompressionRuntimeV1,
+} from './context-compression'
 import { AGENT_TOOL_BY_NAME, executeAgentTool } from './tool-registry'
 import {
   buildAgentSkillInputGuidanceV1,
@@ -332,6 +336,7 @@ export async function prepareCharacterCopilot(input: {
   /** 节点级 AI preset 的解析结果；未提供时沿用全局路由配置。 */
   configOverride?: AIConfig
   generationOverrides?: { temperature?: number; maxTokens?: number }
+  contextCompressionRuntime?: AgentContextCompressionRuntimeV1
   signal?: AbortSignal
 }): Promise<PreparedCharacterCopilot> {
   const project = await db.projects.get(input.projectId)
@@ -350,6 +355,18 @@ export async function prepareCharacterCopilot(input: {
   ).config
   const contextProfile = input.contextProfile ?? 'full'
   const skill = resolveAgentSkillV1('character', input.skillId)
+  const authorRequest = assertAuthorRequest(input.authorRequest)
+  const compression = input.contextCompressionRuntime
+    ? createAgentContextCompressionSessionV1({
+        policy: skill.contextCompression,
+        config,
+        projectId: input.projectId,
+        authorRequest,
+        routingCategory,
+        signal: input.signal,
+        runtime: input.contextCompressionRuntime,
+      })
+    : undefined
   const tools = skill.readToolNames.map(name => AGENT_TOOL_BY_NAME.get(name)!)
   const [worldTool, characterTool] = tools
   if (!worldTool || !characterTool || tools.length !== 2) {
@@ -365,6 +382,7 @@ export async function prepareCharacterCopilot(input: {
     worldGroupId,
     provider: config.provider,
     model: config.model,
+    sourceTransformer: compression?.sourceTransformer,
   }
   const [worldview, characters] = await Promise.all([
     executeAgentTool(worldTool.name, { ...executionContext, contextPolicy: worldPolicy }, {}),
@@ -388,7 +406,7 @@ export async function prepareCharacterCopilot(input: {
     projectName: project.name,
     genres: project.genres?.join('/') || project.genre || '',
     worldGroupId,
-    authorRequest: assertAuthorRequest(input.authorRequest),
+    authorRequest,
     inputGuidance,
     worldContext: [
       worldview.content,

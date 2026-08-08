@@ -189,7 +189,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
 共 62 个 category。
-未分类调用: 0 个。动态 category 调用: 9 个。
+未分类调用: 0 个。动态 category 调用: 10 个。
 
 | category | 触发文件 |
 |---|---|
@@ -260,14 +260,15 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
 - `src/components/settings/NS0EvalPanel.tsx:50 · chat`
-- `src/lib/agent/character-copilot.ts:454 · chat`
-- `src/lib/agent/inspiration-copilot.ts:304 · chat`
-- `src/lib/agent/outline-copilot.ts:479 · chat`
-- `src/lib/agent/prose-copilot.ts:632 · chat`
-- `src/lib/agent/world-origin-copilot.ts:234 · chat`
+- `src/lib/agent/character-copilot.ts:472 · chat`
+- `src/lib/agent/context-compression.ts:330 · chat`
+- `src/lib/agent/inspiration-copilot.ts:322 · chat`
+- `src/lib/agent/outline-copilot.ts:496 · chat`
+- `src/lib/agent/prose-copilot.ts:649 · chat`
+- `src/lib/agent/world-origin-copilot.ts:252 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/node-authoring/executor.ts:367 · chat`
 
 ---
 
-生成时间基准:commit `6ec8ab5`
+生成时间基准:commit `27cae5a`

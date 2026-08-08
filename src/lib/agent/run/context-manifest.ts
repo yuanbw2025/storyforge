@@ -1,6 +1,6 @@
 import { sha256Text } from '../../ai/chapter-memory/text-normalization'
 import { CONTEXT_SOURCE_BY_KEY } from '../../registry/context-sources'
-import type { AssembleContextResult } from '../../registry/types'
+import type { AssembleContextResult, ContextCompressionEvidenceV1 } from '../../registry/types'
 import type {
   ContextManifestBoundaryV1,
   ContextManifestSourceDeliveryV1,
@@ -22,7 +22,7 @@ import {
 } from './schema-utils'
 
 const SOURCE_STATUSES: readonly ContextManifestSourceStatus[] = ['included', 'omitted', 'trimmed']
-const SOURCE_DELIVERIES: readonly ContextManifestSourceDeliveryV1[] = ['full', 'truncated']
+const SOURCE_DELIVERIES: readonly ContextManifestSourceDeliveryV1[] = ['full', 'compressed', 'truncated']
 
 type ContextManifestBodyV1 = Omit<ContextManifestV1, 'manifestHash'>
 
@@ -48,6 +48,76 @@ function parseBoundary(value: unknown, path: string): ContextManifestBoundaryV1 
   return boundary
 }
 
+function parseCompression(
+  value: unknown,
+  path: string,
+): ContextCompressionEvidenceV1 {
+  const record = readRecord(value, path)
+  const keys = [
+    'version',
+    'promptVersion',
+    'outcome',
+    'fallback',
+    'sourceHash',
+    'artifactHash',
+    'attempts',
+    'targetTokens',
+    'requiredAnchorCount',
+    'coveredAnchorCount',
+    'failureCode',
+  ] as const
+  assertExactKeys(record, keys, [
+    'version',
+    'promptVersion',
+    'outcome',
+    'fallback',
+    'sourceHash',
+    'attempts',
+    'targetTokens',
+    'requiredAnchorCount',
+    'coveredAnchorCount',
+  ], path)
+  if (record.version !== 1 || record.promptVersion !== 'agent-context-compression-v1') {
+    failSchema('unsupported_version', path, '仅支持 agent-context-compression-v1')
+  }
+  const outcome = readEnum(record.outcome, ['verified', 'fallback'], `${path}.outcome`)
+  const fallback = readEnum(
+    record.fallback,
+    ['none', 'full-source', 'deterministic-truncation'],
+    `${path}.fallback`,
+  )
+  const artifactHash = record.artifactHash === undefined
+    ? undefined
+    : readHash(record.artifactHash, `${path}.artifactHash`)
+  const failureCode = record.failureCode === undefined
+    ? undefined
+    : readString(record.failureCode, `${path}.failureCode`, { max: 160 })
+  const requiredAnchorCount = readInteger(record.requiredAnchorCount, `${path}.requiredAnchorCount`, { min: 1 })
+  const coveredAnchorCount = readInteger(record.coveredAnchorCount, `${path}.coveredAnchorCount`, { min: 0 })
+  if (coveredAnchorCount > requiredAnchorCount) {
+    failSchema('invalid_compression_coverage', `${path}.coveredAnchorCount`, '不得超过 requiredAnchorCount')
+  }
+  if (outcome === 'verified' && (
+    fallback !== 'none' || !artifactHash || failureCode || coveredAnchorCount !== requiredAnchorCount
+  )) failSchema('invalid_compression', path, 'verified 压缩必须完整覆盖锚点且不得声明回退')
+  if (outcome === 'fallback' && (
+    fallback === 'none' || artifactHash || !failureCode
+  )) failSchema('invalid_compression', path, 'fallback 压缩必须声明回退类型和失败码')
+  return {
+    version: 1,
+    promptVersion: 'agent-context-compression-v1',
+    outcome,
+    fallback,
+    sourceHash: readHash(record.sourceHash, `${path}.sourceHash`),
+    artifactHash,
+    attempts: readInteger(record.attempts, `${path}.attempts`, { min: 0 }),
+    targetTokens: readInteger(record.targetTokens, `${path}.targetTokens`, { min: 1 }),
+    requiredAnchorCount,
+    coveredAnchorCount,
+    failureCode,
+  }
+}
+
 function parseSource(value: unknown, path: string): ContextManifestSourceV1 {
   const record = readRecord(value, path)
   assertExactKeys(
@@ -59,6 +129,7 @@ function parseSource(value: unknown, path: string): ContextManifestSourceV1 {
       'tokens',
       'delivery',
       'originalTokens',
+      'compression',
       'boundary',
       'readerVersion',
     ],
@@ -76,6 +147,9 @@ function parseSource(value: unknown, path: string): ContextManifestSourceV1 {
   const originalTokens = record.originalTokens === undefined
     ? undefined
     : readInteger(record.originalTokens, `${path}.originalTokens`, { min: 0 })
+  const compression = record.compression === undefined
+    ? undefined
+    : parseCompression(record.compression, `${path}.compression`)
   if (status === 'included' && !contentHash) {
     failSchema('missing_content_hash', `${path}.contentHash`, 'included 来源必须绑定实际输入内容哈希')
   }
@@ -97,6 +171,20 @@ function parseSource(value: unknown, path: string): ContextManifestSourceV1 {
   if (delivery === 'truncated' && (originalTokens === undefined || originalTokens <= tokens)) {
     failSchema('invalid_delivery', `${path}.delivery`, 'truncated 来源必须证明原始 token 大于实际输入 token')
   }
+  if (delivery === 'compressed' && (
+    originalTokens === undefined
+    || originalTokens <= tokens
+    || compression?.outcome !== 'verified'
+  )) failSchema('invalid_delivery', `${path}.delivery`, 'compressed 来源必须绑定已验证压缩证据')
+  if (compression?.outcome === 'verified' && status === 'included' && delivery !== 'compressed') {
+    failSchema('invalid_compression', `${path}.compression`, '已验证压缩的实际 delivery 必须为 compressed')
+  }
+  if (
+    compression?.outcome === 'fallback'
+    && status === 'included'
+    && ((compression.fallback === 'full-source' && delivery !== 'full')
+      || (compression.fallback === 'deterministic-truncation' && delivery !== 'truncated'))
+  ) failSchema('invalid_compression', `${path}.compression`, '压缩回退与实际 delivery 不一致')
   return {
     key,
     status,
@@ -104,6 +192,7 @@ function parseSource(value: unknown, path: string): ContextManifestSourceV1 {
     tokens,
     delivery,
     originalTokens,
+    compression,
     boundary: parseBoundary(record.boundary, `${path}.boundary`),
     readerVersion: record.readerVersion === undefined
       ? undefined
@@ -200,6 +289,9 @@ export async function createContextManifestFromAssemblyV1(input: {
           ? {
               delivery: sourceEvidence.get(key)!.delivery as ContextManifestSourceDeliveryV1,
               originalTokens: sourceEvidence.get(key)!.originalTokens,
+              ...(sourceEvidence.get(key)!.compression
+                ? { compression: sourceEvidence.get(key)!.compression }
+                : {}),
             }
           : {}),
         boundary: input.boundary,
@@ -212,7 +304,12 @@ export async function createContextManifestFromAssemblyV1(input: {
       status: input.assembled.trimmed.includes(key) ? 'trimmed' : 'omitted',
       tokens: 0,
       ...(sourceEvidence.has(key)
-        ? { originalTokens: sourceEvidence.get(key)!.originalTokens }
+        ? {
+            originalTokens: sourceEvidence.get(key)!.originalTokens,
+            ...(sourceEvidence.get(key)!.compression
+              ? { compression: sourceEvidence.get(key)!.compression }
+              : {}),
+          }
         : {}),
       boundary: input.boundary,
       readerVersion: input.readerVersion,

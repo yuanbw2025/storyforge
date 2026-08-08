@@ -29,6 +29,10 @@ import {
   type AgentContextProfile,
 } from './context-policy'
 import {
+  createAgentContextCompressionSessionV1,
+  type AgentContextCompressionRuntimeV1,
+} from './context-compression'
+import {
   buildChapterInformationBoundaryV1,
   buildInformationBoundaryInstructionV1,
   validateProseInformationBoundaryV1,
@@ -487,6 +491,7 @@ export async function prepareProseCopilot(input: {
   /** 明确的叙事视角角色；未传时正文主路径不注入全体角色认知。 */
   perspectiveCharacterId?: number | null
   generationOverrides?: { temperature?: number; maxTokens?: number }
+  contextCompressionRuntime?: AgentContextCompressionRuntimeV1
   signal?: AbortSignal
 }): Promise<PreparedProseCopilot> {
   const project = await db.projects.get(input.projectId)
@@ -520,6 +525,17 @@ export async function prepareProseCopilot(input: {
   ).config
   const contextProfile = input.contextProfile ?? 'full'
   const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
+  const compression = input.contextCompressionRuntime
+    ? createAgentContextCompressionSessionV1({
+        policy: skill.contextCompression,
+        config,
+        projectId: input.projectId,
+        authorRequest: request,
+        routingCategory,
+        signal: input.signal,
+        runtime: input.contextCompressionRuntime,
+      })
+    : undefined
   if (perspectiveCharacterId != null) {
     const character = await db.characters.get(perspectiveCharacterId)
     const visible = character
@@ -566,6 +582,7 @@ export async function prepareProseCopilot(input: {
     ...(perspectiveCharacterId != null ? { characterId: perspectiveCharacterId } : {}),
     inputBudgetMaxTokens: contextPolicy.maxInputTokens,
     sourceBudgetScale: contextPolicy.sourceBudgetScale,
+    sourceTransformer: compression?.sourceTransformer,
   })
   const current = await readSnapshot(scope, snapshot, worldGroupId)
   if (!sameSnapshot(current, snapshot)) throw new ProseCopilotStaleError()

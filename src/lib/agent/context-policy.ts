@@ -91,9 +91,14 @@ function mergeSourceEvidence(
         ? 'none'
         : current.delivery === 'truncated' || source.delivery === 'truncated'
           ? 'truncated'
+          : current.delivery === 'compressed' || source.delivery === 'compressed'
+            ? 'compressed'
           : 'full',
       originalTokens,
       inputTokens,
+      ...((current.compression ?? source.compression)
+        ? { compression: current.compression ?? source.compression }
+        : {}),
     })
   }
   return [...byKey.values()]

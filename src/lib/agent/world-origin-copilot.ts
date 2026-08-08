@@ -26,6 +26,10 @@ import {
   type AgentContextEvidence,
   type AgentContextProfile,
 } from './context-policy'
+import {
+  createAgentContextCompressionSessionV1,
+  type AgentContextCompressionRuntimeV1,
+} from './context-compression'
 import { AGENT_TOOL_BY_NAME, executeAgentTool } from './tool-registry'
 import {
   buildAgentSkillInputGuidanceV1,
@@ -130,6 +134,7 @@ export async function prepareWorldOriginCopilot(
     skillId?: AgentSkillId
     routingCategory?: string
     contextProfile?: AgentContextProfile
+    contextCompressionRuntime?: AgentContextCompressionRuntimeV1
     signal?: AbortSignal
   },
 ): Promise<PreparedWorldOriginCopilot> {
@@ -145,6 +150,18 @@ export async function prepareWorldOriginCopilot(
   ).config
   const contextProfile = input.contextProfile ?? 'full'
   const skill = resolveAgentSkillV1('world-origin', input.skillId)
+  const authorRequest = assertAuthorRequest(input.authorRequest)
+  const compression = input.contextCompressionRuntime
+    ? createAgentContextCompressionSessionV1({
+        policy: skill.contextCompression,
+        config,
+        projectId: input.projectId,
+        authorRequest,
+        routingCategory,
+        signal: input.signal,
+        runtime: input.contextCompressionRuntime,
+      })
+    : undefined
   const tools = skill.readToolNames.map(name => AGENT_TOOL_BY_NAME.get(name)!)
   const [statusTool, worldviewTool] = tools
   if (!statusTool || !worldviewTool || tools.length !== 2) {
@@ -163,6 +180,7 @@ export async function prepareWorldOriginCopilot(
     worldGroupId: input.worldGroupId,
     provider: config.provider,
     model: config.model,
+    sourceTransformer: compression?.sourceTransformer,
   }
   const [status, worldview, row] = await Promise.all([
     executeAgentTool(statusTool.name, { ...toolContextBase, contextPolicy: statusPolicy }),
@@ -188,7 +206,7 @@ export async function prepareWorldOriginCopilot(
     genre: project.genre || project.genres.join('、'),
     worldGroupId: input.worldGroupId,
     signal: input.signal,
-    authorRequest: assertAuthorRequest(input.authorRequest),
+    authorRequest,
     inputGuidance,
     contextText: [
       inputGuidance,

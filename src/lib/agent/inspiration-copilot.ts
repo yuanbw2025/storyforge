@@ -37,6 +37,10 @@ import {
   type AgentContextEvidence,
   type AgentContextProfile,
 } from './context-policy'
+import {
+  createAgentContextCompressionSessionV1,
+  type AgentContextCompressionRuntimeV1,
+} from './context-compression'
 import { executeAgentTool } from './tool-registry'
 import {
   buildAgentSkillInputGuidanceV1,
@@ -197,6 +201,7 @@ export async function prepareInspirationCopilot(input: {
   skillId?: AgentSkillId
   routingCategory?: string
   contextProfile?: AgentContextProfile
+  contextCompressionRuntime?: AgentContextCompressionRuntimeV1
   signal?: AbortSignal
 }): Promise<PreparedInspirationCopilot> {
   const project = await db.projects.get(input.projectId)
@@ -223,6 +228,18 @@ export async function prepareInspirationCopilot(input: {
   ).config
   const contextProfile = input.contextProfile ?? 'full'
   const skill = resolveAgentSkillV1('inspiration', input.skillId)
+  const authorRequest = assertAuthorRequest(input.authorRequest)
+  const compression = input.contextCompressionRuntime
+    ? createAgentContextCompressionSessionV1({
+        policy: skill.contextCompression,
+        config,
+        projectId: input.projectId,
+        authorRequest,
+        routingCategory,
+        signal: input.signal,
+        runtime: input.contextCompressionRuntime,
+      })
+    : undefined
   const [readToolName] = skill.readToolNames
   if (!readToolName || skill.readToolNames.length !== 1) {
     throw new Error(`Agent Skill ${skill.id} 的只读工具契约无效`)
@@ -236,6 +253,7 @@ export async function prepareInspirationCopilot(input: {
       provider: config.provider,
       model: config.model,
       contextPolicy,
+      sourceTransformer: compression?.sourceTransformer,
     },
     { fragmentIds: selectedFragmentIds, mode },
   )
@@ -260,7 +278,7 @@ export async function prepareInspirationCopilot(input: {
     projectName: project.name,
     genres: project.genres?.join('/') || project.genre || '',
     mode,
-    authorRequest: assertAuthorRequest(input.authorRequest),
+    authorRequest,
     contextText: `${inputGuidance}\n\n${context.content}`,
     inputGuidance,
     selectedFragmentIds,

@@ -12,6 +12,7 @@ import type {
   ContextSource,
 } from './types'
 import { prepareContinuityContext } from '../ai/chapter-memory/continuity-context'
+import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { db } from '../db/schema'
 import { assertRecordInScope, resolveReadScope } from '../world-engine/scope'
 
@@ -23,7 +24,62 @@ interface KeyedContextSegment {
   key: string
   segment: ContextSegment
   originalTokens: number
-  delivery: 'full' | 'truncated'
+  delivery: 'full' | 'compressed' | 'truncated'
+  compression?: AssembleContextSourceEvidence['compression']
+}
+
+async function assertSourceTransformResult(
+  result: NonNullable<Awaited<ReturnType<NonNullable<AssembleContextInput['sourceTransformer']>>>>,
+  input: {
+    content: string
+    originalTokens: number
+    sourceBudgetTokens: number
+    inputBudgetTokens: number
+  },
+): Promise<void> {
+  const evidence = result.compression
+  if (
+    evidence.version !== 1
+    || evidence.promptVersion !== 'agent-context-compression-v1'
+    || evidence.sourceHash !== await sha256Text(input.content)
+    || evidence.targetTokens !== input.sourceBudgetTokens
+    || !Number.isInteger(evidence.attempts)
+    || evidence.attempts < 0
+    || !Number.isInteger(evidence.requiredAnchorCount)
+    || evidence.requiredAnchorCount < 1
+    || !Number.isInteger(evidence.coveredAnchorCount)
+    || evidence.coveredAnchorCount < 0
+    || evidence.coveredAnchorCount > evidence.requiredAnchorCount
+  ) throw new Error('[assembleContext] 上下文转换证据无效')
+  if (evidence.outcome === 'verified') {
+    if (
+      evidence.fallback !== 'none'
+      || !/^[a-f0-9]{64}$/.test(evidence.artifactHash ?? '')
+      || evidence.coveredAnchorCount !== evidence.requiredAnchorCount
+      || result.delivery !== 'compressed'
+      || !result.content
+      || estimateTokens(result.content) >= input.originalTokens
+      || estimateTokens(result.content) > input.sourceBudgetTokens
+      || result.allowSourceBudgetOverflow
+    ) throw new Error('[assembleContext] 已验证压缩产物与交付内容不一致')
+    return
+  }
+  if (
+    evidence.outcome !== 'fallback'
+    || evidence.fallback === 'none'
+    || evidence.artifactHash !== undefined
+    || !evidence.failureCode?.trim()
+  ) throw new Error('[assembleContext] 上下文转换回退证据无效')
+  if (evidence.fallback === 'full-source') {
+    if (
+      result.content !== input.content
+      || result.delivery !== 'full'
+      || result.allowSourceBudgetOverflow !== true
+      || input.originalTokens > input.inputBudgetTokens
+    ) throw new Error('[assembleContext] 单来源全文回退越界')
+  } else if (result.content !== undefined || result.delivery !== undefined || result.allowSourceBudgetOverflow) {
+    throw new Error('[assembleContext] 确定性截断回退不得提供旁路内容')
+  }
 }
 
 /**
@@ -108,8 +164,51 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       ? Math.max(0.1, Math.min(1, input.sourceBudgetScale!))
       : 1
     const scaledSourceBudget = Math.max(64, Math.floor(source.budgetTokens * sourceBudgetScale))
+    const sourceBudgetTokens = Math.min(scaledSourceBudget, inputBudget)
     const originalTokens = estimateTokens(content)
-    const capped = capBySourceBudget(content, Math.min(scaledSourceBudget, inputBudget))
+    const transformed = originalTokens > sourceBudgetTokens && input.sourceTransformer
+      ? await input.sourceTransformer({
+          source: {
+            key: source.key,
+            label: source.label,
+            layer: source.layer,
+            budgetTokens: source.budgetTokens,
+            protectedFromTrim: source.protectedFromTrim,
+          },
+          content,
+          originalTokens,
+          sourceBudgetTokens,
+          inputBudgetTokens: inputBudget,
+        })
+      : undefined
+    if (transformed) {
+      await assertSourceTransformResult(transformed, {
+        content,
+        originalTokens,
+        sourceBudgetTokens,
+        inputBudgetTokens: inputBudget,
+      })
+    }
+    let preparedContent = content
+    let delivery: KeyedContextSegment['delivery'] = 'full'
+    if (transformed?.content != null) {
+      const transformedTokens = estimateTokens(transformed.content)
+      const overflowAllowed = transformed.allowSourceBudgetOverflow === true
+        && transformed.delivery === 'full'
+        && transformed.content === content
+        && transformedTokens <= inputBudget
+      if (transformedTokens > sourceBudgetTokens && !overflowAllowed) {
+        throw new Error(`[assembleContext] 来源 ${source.key} 转换后仍超出预算`)
+      }
+      preparedContent = transformed.content
+      delivery = transformed.delivery ?? (transformedTokens < originalTokens ? 'compressed' : 'full')
+    }
+    const capped = delivery === 'full'
+      && preparedContent === content
+      && originalTokens > sourceBudgetTokens
+      && transformed?.allowSourceBudgetOverflow !== true
+      ? capBySourceBudget(content, sourceBudgetTokens)
+      : { content: preparedContent, truncated: false }
     keyedSegments.push({
       key: source.key,
       segment: {
@@ -120,7 +219,8 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
         trimmable: source.layer !== 'L0' && !source.protectedFromTrim,
       },
       originalTokens,
-      delivery: capped.truncated ? 'truncated' : 'full',
+      delivery: capped.truncated ? 'truncated' : delivery,
+      compression: transformed?.compression,
     })
   }
 
@@ -152,6 +252,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       delivery: item.delivery,
       originalTokens: item.originalTokens,
       inputTokens: item.segment.tokens,
+      ...(item.compression ? { compression: item.compression } : {}),
     }
   })
 

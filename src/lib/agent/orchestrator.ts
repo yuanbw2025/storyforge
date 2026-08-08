@@ -427,7 +427,9 @@ export async function executeMasterAgentPlan(input: {
   for (const [taskId, output] of Object.entries(input.completedTaskOutputs ?? {})) {
     if (output.trim()) outputs.set(taskId, output)
   }
-  for (const task of topologicalTasks(input.plan)) {
+  const orderedTasks = topologicalTasks(input.plan)
+  for (let taskIndex = 0; taskIndex < orderedTasks.length; taskIndex += 1) {
+    const task = orderedTasks[taskIndex]
     if (outputs.has(task.id)) continue
     if (input.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     await input.executionTrace?.taskStarted?.(task)
@@ -439,6 +441,16 @@ export async function executeMasterAgentPlan(input: {
         .join('\n\n')
       const skill = resolveAgentSkillV1(task.agentId, task.skillId)
       const contextProfile = contextProfiles[skill.contextTaskKind]
+      const budgetSnapshot = budget.snapshot()
+      const pendingGenerationCalls = orderedTasks
+        .slice(taskIndex)
+        .filter(item => !outputs.has(item.id))
+        .length
+      const contextCompressionRuntime = {
+        budget,
+        requiredFutureModelCalls: pendingGenerationCalls
+          + Math.max(0, budgetSnapshot.maxCanonRetries - budgetSnapshot.canonRetries),
+      }
       if (task.agentId === 'world-origin') {
         const prepared = await prepareWorldOriginCopilot({
           projectId: input.projectId,
@@ -448,6 +460,7 @@ export async function executeMasterAgentPlan(input: {
           skillId: skill.id as AgentSkillId,
           routingCategory: AGENT_ROLE_CATEGORIES['world-origin'],
           contextProfile,
+          contextCompressionRuntime,
           signal: input.signal,
         })
         const result = await runBudgetedGenerationNode({
@@ -486,6 +499,7 @@ export async function executeMasterAgentPlan(input: {
           supplementalContext: upstream,
           routingCategory: AGENT_ROLE_CATEGORIES.character,
           contextProfile,
+          contextCompressionRuntime,
           signal: input.signal,
         })
         const result = await runBudgetedGenerationNode({
@@ -532,6 +546,7 @@ export async function executeMasterAgentPlan(input: {
           skillId: skill.id as AgentSkillId,
           routingCategory: AGENT_ROLE_CATEGORIES.inspiration,
           contextProfile,
+          contextCompressionRuntime,
           signal: input.signal,
         })
         const result = await runBudgetedGenerationNode({
@@ -572,6 +587,7 @@ export async function executeMasterAgentPlan(input: {
           supplementalContext: upstream,
           routingCategory: AGENT_ROLE_CATEGORIES.outline,
           contextProfile,
+          contextCompressionRuntime,
           signal: input.signal,
         })
         const result = await runBudgetedGenerationNode({
@@ -619,6 +635,7 @@ export async function executeMasterAgentPlan(input: {
           supplementalContext: upstream,
           routingCategory: AGENT_ROLE_CATEGORIES.prose,
           contextProfile,
+          contextCompressionRuntime,
           perspectiveCharacterId: task.perspectiveCharacterId ?? null,
           signal: input.signal,
         })
