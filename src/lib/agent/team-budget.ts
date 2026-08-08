@@ -18,6 +18,7 @@ export interface AgentTeamBudgetEvidence extends AgentTeamBudgetPolicy {
 }
 
 export interface AgentTeamCallReservation {
+  reservationId: number
   label: string
   estimatedInputTokens: number
   reservedOutputTokens: number
@@ -62,6 +63,8 @@ export class AgentTeamBudgetTracker {
   private usedTokens = 0
   private calls = 0
   private canonRetries = 0
+  private nextReservationId = 1
+  private readonly outstandingReservations = new Map<number, AgentTeamCallReservation>()
 
   constructor(profile: AgentTeamBudgetProfile, restored?: AgentTeamBudgetEvidence) {
     this.policy = resolveAgentTeamBudgetPolicy(profile)
@@ -101,7 +104,16 @@ export class AgentTeamBudgetTracker {
         `本轮 Agent 团队已达到 ${this.policy.maxCalls} 次模型调用上限，已在发起“${input.label}”前停止。`,
       )
     }
-    const projected = this.usedTokens + estimatedInputTokens + reservedOutputTokens
+    const outstandingTokens = [...this.outstandingReservations.values()].reduce(
+      (sum, reservation) => (
+        sum + reservation.estimatedInputTokens + reservation.reservedOutputTokens
+      ),
+      0,
+    )
+    const projected = this.usedTokens
+      + outstandingTokens
+      + estimatedInputTokens
+      + reservedOutputTokens
     if (projected > this.policy.maxTokens) {
       throw new AgentTeamBudgetExceededError(
         `本轮 Agent 团队预算不足：已用约 ${this.usedTokens.toLocaleString()} tokens，`
@@ -110,15 +122,31 @@ export class AgentTeamBudgetTracker {
       )
     }
     this.calls += 1
-    return { label: input.label, estimatedInputTokens, reservedOutputTokens }
+    const reservation = {
+      reservationId: this.nextReservationId++,
+      label: input.label,
+      estimatedInputTokens,
+      reservedOutputTokens,
+    }
+    this.outstandingReservations.set(reservation.reservationId, reservation)
+    return reservation
   }
 
   settleCall(reservation: AgentTeamCallReservation, output: unknown): void {
+    this.consumeReservation(reservation)
     this.usedTokens += reservation.estimatedInputTokens + estimateTokens(outputText(output))
   }
 
   settleFailedCall(reservation: AgentTeamCallReservation): void {
+    this.consumeReservation(reservation)
     this.usedTokens += reservation.estimatedInputTokens
+  }
+
+  private consumeReservation(reservation: AgentTeamCallReservation): void {
+    if (this.outstandingReservations.get(reservation.reservationId) !== reservation) {
+      throw new AgentTeamBudgetExceededError(`模型调用“${reservation.label}”的预算预留不存在或已经结算。`)
+    }
+    this.outstandingReservations.delete(reservation.reservationId)
   }
 
   claimCanonRetry(issues: readonly { message: string }[]): void {

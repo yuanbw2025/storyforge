@@ -6,6 +6,7 @@ export type AgentRunWorkflowKind =
   | 'plan-execute'
   | 'generate-verify-revise'
   | 'multi-domain-sequential'
+  | 'fan-out-synthesize'
   | 'long-running-resumable'
 
 export interface AgentRunScopeV1 {

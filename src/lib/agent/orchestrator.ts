@@ -79,6 +79,9 @@ import {
 import {
   classifyRequestedDomainIdsV1,
   getMasterWorkflowV1,
+  hasMasterFanOutPairV1,
+  isMasterFanOutEnabledV1,
+  selectMasterFanOutBatchV1,
   selectAgentSkillIdV1,
   selectMasterWorkflowV1,
   type MasterWorkflowSelectionV1,
@@ -305,6 +308,15 @@ function sanitizePlan(
   tasks.forEach(task => {
     task.dependsOn = task.dependsOn.filter(id => id !== task.id && knownIds.has(id))
   })
+  if (getMasterWorkflowV1(workflow).strategy === 'fan-out') {
+    // Inspiration reverse only reads the author's saved fragments. A planner may
+    // invent a semantic dependency on another generated candidate, but that
+    // would destroy the independently verifiable leaf boundary.
+    tasks.filter(task => task.agentId === 'inspiration').forEach(task => {
+      task.dependsOn = []
+    })
+    if (!hasMasterFanOutPairV1(tasks)) return fallbackPlan(request, workflow)
+  }
   const outlineTaskIds = new Set(tasks
     .filter(task => task.agentId === 'outline')
     .map(task => task.id))
@@ -365,6 +377,8 @@ export async function createMasterAgentPlan(input: {
 只调度用户明确要求生成或修改的领域。用户在大纲要求中提到世界元素或角色姓名，只是大纲
 约束，不代表授权新建世界观或角色；不得擅自扩大写入范围。
 依赖任务必须写 dependsOn。世界设定与角色同时出现时，角色应依赖世界任务。
+灵感反推只读取作者已保存的灵感碎片，不得把它伪装成依赖本轮世界候选；若角色明确需要同时使用
+本轮世界与灵感结果，角色应依赖这两个任务。
 大纲依赖本轮新生成的世界或角色任务；正文依赖本轮新生成的大纲、世界或角色任务。只输出 JSON：
 {"summary":"给用户的简短计划","tasks":[{"id":"稳定ID","agentId":"world-origin|character|inspiration|outline|prose","instruction":"给分 Agent 的完整要求","dependsOn":[]}]}。
 只有用户明确指定正文叙事视角且项目状态能确认角色 ID 时，正文任务才可额外填写 perspectiveCharacterId；不要猜测，缺省则不注入角色认知。
@@ -421,7 +435,7 @@ function topologicalTasks(plan: MasterAgentPlan): MasterAgentTask[] {
   return result
 }
 
-export async function executeMasterAgentPlan(input: {
+export interface ExecuteMasterAgentPlanInput {
   projectId: number
   scope?: WorkspaceScope
   worldGroupId: number | null
@@ -435,7 +449,12 @@ export async function executeMasterAgentPlan(input: {
     status: 'running' | 'completed' | 'failed',
     error?: string,
   ) => void | Promise<void>
-}): Promise<ExecutedMasterCandidate[]> {
+}
+
+async function executeSequentialMasterAgentPlan(
+  input: ExecuteMasterAgentPlanInput,
+  runtime: { requiredFutureModelCalls?: number } = {},
+): Promise<ExecutedMasterCandidate[]> {
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   const candidates: ExecutedMasterCandidate[] = []
   const outputs = new Map<string, string>()
@@ -470,10 +489,8 @@ export async function executeMasterAgentPlan(input: {
       const executionBinding = createAgentSkillExecutionBindingV1(skill)
       const contextProfile = contextProfiles[skill.contextTaskKind]
       const budgetSnapshot = budget.snapshot()
-      const pendingGenerationCalls = orderedTasks
-        .slice(taskIndex)
-        .filter(item => !outputs.has(item.id))
-        .length
+      const pendingGenerationCalls = runtime.requiredFutureModelCalls
+        ?? orderedTasks.slice(taskIndex).filter(item => !outputs.has(item.id)).length
       const contextCompressionRuntime = {
         budget,
         requiredFutureModelCalls: pendingGenerationCalls
@@ -725,6 +742,94 @@ export async function executeMasterAgentPlan(input: {
     }
   }
   return candidates
+}
+
+function compareCandidateBudgetEvidence(
+  left: ExecutedMasterCandidate,
+  right: ExecutedMasterCandidate,
+): number {
+  const leftEvidence = left.payload.teamBudgetEvidence
+  const rightEvidence = right.payload.teamBudgetEvidence
+  if (!leftEvidence || !rightEvidence) return 0
+  return leftEvidence.calls - rightEvidence.calls
+    || leftEvidence.usedTokens - rightEvidence.usedTokens
+    || leftEvidence.canonRetries - rightEvidence.canonRetries
+}
+
+async function executeFanOutMasterAgentPlan(
+  input: ExecuteMasterAgentPlanInput,
+): Promise<ExecutedMasterCandidate[]> {
+  const budget = input.budget ?? new AgentTeamBudgetTracker(
+    useAIConfigStore.getState().agentTeamBudgetProfile,
+  )
+  const outputs = new Map<string, string>()
+  for (const [taskId, output] of Object.entries(input.completedTaskOutputs ?? {})) {
+    if (output.trim()) outputs.set(taskId, output)
+  }
+  const completed = new Set(
+    input.plan.tasks.filter(task => outputs.has(task.id)).map(task => task.id),
+  )
+  const candidates: ExecutedMasterCandidate[] = []
+
+  while (completed.size < input.plan.tasks.length) {
+    if (input.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const batch = selectMasterFanOutBatchV1(input.plan.tasks, completed, 2)
+    if (!batch.length) throw new Error('主 Agent fan-out 计划没有可执行任务，依赖可能已损坏。')
+    for (const task of batch) {
+      await input.executionTrace?.taskStarted?.(task)
+      await input.onTask?.(task, 'running')
+    }
+
+    const completedTaskOutputs = Object.fromEntries(outputs)
+    const requiredFutureModelCalls = input.plan.tasks.length - completed.size
+    const settled = await Promise.all(batch.map(async task => {
+      try {
+        const generated = await executeSequentialMasterAgentPlan({
+          ...input,
+          plan: { summary: input.plan.summary, tasks: [task] },
+          budget,
+          completedTaskOutputs,
+          executionTrace: undefined,
+          onTask: undefined,
+        }, { requiredFutureModelCalls })
+        const candidate = generated[0]
+        if (!candidate) throw new Error(`主 Agent fan-out 任务 ${task.id} 没有生成候选。`)
+        return { status: 'fulfilled' as const, task, candidate }
+      } catch (error) {
+        return { status: 'rejected' as const, task, error }
+      }
+    }))
+
+    const fulfilled = settled
+      .filter((item): item is Extract<typeof item, { status: 'fulfilled' }> => (
+        item.status === 'fulfilled'
+      ))
+      .sort((left, right) => compareCandidateBudgetEvidence(left.candidate, right.candidate))
+    for (const item of fulfilled) {
+      outputs.set(item.task.id, item.candidate.draft)
+      completed.add(item.task.id)
+      candidates.push(item.candidate)
+      await input.executionTrace?.candidateReady?.(item.task, item.candidate)
+      await input.onTask?.(item.task, 'completed')
+    }
+
+    const failed = settled.filter(item => item.status === 'rejected')
+    for (const item of failed) {
+      const message = item.error instanceof Error ? item.error.message : String(item.error)
+      await input.onTask?.(item.task, 'failed', message)
+    }
+    if (failed.length) throw failed[0].error
+  }
+  return candidates
+}
+
+export async function executeMasterAgentPlan(
+  input: ExecuteMasterAgentPlanInput,
+): Promise<ExecutedMasterCandidate[]> {
+  const workflow = input.plan.workflow ? getMasterWorkflowV1(input.plan.workflow) : null
+  return workflow?.strategy === 'fan-out' && isMasterFanOutEnabledV1()
+    ? executeFanOutMasterAgentPlan(input)
+    : executeSequentialMasterAgentPlan(input)
 }
 
 function sameWorldSnapshot(

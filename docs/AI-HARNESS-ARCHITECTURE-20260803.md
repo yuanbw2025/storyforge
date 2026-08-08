@@ -969,6 +969,23 @@ CHIRON 四类信息可映射到现有结构：
   尚未开启有限 fan-out、并发 trace 或 attempt replan；这些后续能力必须复用本 join 契约，不能
   重新用松散文本拼接依赖。
 
+**有限 fan-out 实施状态（HARNESS-23，2026-08-08）**
+
+- 固定工作流 catalog 新增 `multi-domain-fan-out`，RunContract 明确记录
+  `fan-out-synthesize`。首批分类仅在作者明确要求“并行/同时/分别/各自”，且任务同时包含
+  世界来源与已保存灵感、不包含大纲或正文时启用；世界→角色、角色→大纲、大纲→正文仍保持
+  依赖屏障。任务必须存在至少一对无依赖且 Skill 写表不相交的叶子，否则严格计划解析拒绝；
+- 调度器每波最多并行两个领域模型调用。`taskStarted`、候选持久化和 durable event append 仍按
+  确定顺序串行，正式 Canon 采纳继续逐候选由作者确认；共享写表任务不会进入同一并行波；
+- 团队预算现在把尚未结算的输入和最大输出预留计入下一次调用的最坏预算，同一预留只能结算
+  一次，避免两个并发调用分别合法但合计越界。上下文压缩仍为每个叶子保留本轮剩余调用预算；
+- 同波一叶失败时先持久化成功叶，再把失败步骤和 Run 收口为可恢复暂停；刷新后从 durable 候选
+  恢复成功输出，只重跑失败叶。后续汇合任务继续使用 HARNESS-22 的 candidate/output hash 与
+  generation 冻结 join，不消费松散或跨代文本；
+- `storyforge:harness:fan-out-v1=disabled` 可让新分类降级为顺序工作流，也可让已经冻结的 fan-out
+  计划按原 DAG 顺序执行，计划、候选和 RunContract 格式不变。当前尚未交付每叶独立 terminal
+  receipt、通用只读审计 fan-out、p95 成本/延迟与质量非劣 A/B，因此 H3 仍未整体退出。
+
 **范围**
 
 - 实现可解释 `WorkflowClassifier` 和固定工作流 catalog；

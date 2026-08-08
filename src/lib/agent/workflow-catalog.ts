@@ -1,6 +1,7 @@
 import type { AgentRunWorkflowKind } from '../types/agent-run'
 import {
   getAgentSkillV1,
+  resolveAgentSkillV1,
   type AgentSkillId,
   type DomainAgentId,
 } from './skill-registry'
@@ -10,6 +11,8 @@ export type MasterWorkflowReasonCodeV1 =
   | 'multiple-explicit-domains'
   | 'outline-prose-confirmation-barrier'
   | 'perspective-resolution-required'
+  | 'explicit-independent-fan-out'
+  | 'fan-out-disabled'
   | 'classifier-disabled'
   | 'domain-ambiguous'
 
@@ -17,9 +20,12 @@ export interface MasterWorkflowDefinitionV1 {
   version: 1
   id: string
   label: string
-  strategy: 'direct' | 'sequential'
+  strategy: 'direct' | 'sequential' | 'fan-out'
   planner: 'skip' | 'required'
-  runContractWorkflowKind: Extract<AgentRunWorkflowKind, 'direct-generation' | 'multi-domain-sequential'>
+  runContractWorkflowKind: Extract<
+    AgentRunWorkflowKind,
+    'direct-generation' | 'multi-domain-sequential' | 'fan-out-synthesize'
+  >
 }
 
 export const MASTER_WORKFLOWS = [
@@ -46,6 +52,14 @@ export const MASTER_WORKFLOWS = [
     strategy: 'sequential',
     planner: 'required',
     runContractWorkflowKind: 'multi-domain-sequential',
+  },
+  {
+    version: 1,
+    id: 'multi-domain-fan-out',
+    label: '多领域有限并行',
+    strategy: 'fan-out',
+    planner: 'required',
+    runContractWorkflowKind: 'fan-out-synthesize',
   },
   {
     version: 1,
@@ -82,6 +96,9 @@ export function validateMasterWorkflowDefinitionsV1(
       || (workflow.strategy === 'sequential' && (
         workflow.planner !== 'required' || workflow.runContractWorkflowKind !== 'multi-domain-sequential'
       ))
+      || (workflow.strategy === 'fan-out' && (
+        workflow.planner !== 'required' || workflow.runContractWorkflowKind !== 'fan-out-synthesize'
+      ))
     ) throw new Error(`Master Workflow ${workflow.id} 的执行策略契约无效`)
   }
 }
@@ -97,15 +114,26 @@ const REASON_CODES: readonly MasterWorkflowReasonCodeV1[] = [
   'multiple-explicit-domains',
   'outline-prose-confirmation-barrier',
   'perspective-resolution-required',
+  'explicit-independent-fan-out',
+  'fan-out-disabled',
   'classifier-disabled',
   'domain-ambiguous',
 ]
 
 export const MASTER_WORKFLOW_CLASSIFIER_STORAGE_KEY = 'storyforge:harness:workflow-classifier-v1'
+export const MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY = 'storyforge:harness:fan-out-v1'
 
 export function isMasterWorkflowClassifierEnabledV1(): boolean {
   try {
     return globalThis.localStorage?.getItem(MASTER_WORKFLOW_CLASSIFIER_STORAGE_KEY) !== 'disabled'
+  } catch {
+    return true
+  }
+}
+
+export function isMasterFanOutEnabledV1(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY) !== 'disabled'
   } catch {
     return true
   }
@@ -172,6 +200,20 @@ export function classifyMasterWorkflowV1(request: string): MasterWorkflowSelecti
       reasonCodes: ['outline-prose-confirmation-barrier', 'multiple-explicit-domains'],
     }
   }
+  if (
+    domains.size > 1
+    && domains.has('inspiration')
+    && domains.has('world-origin')
+    && !domains.has('outline')
+    && !domains.has('prose')
+    && /并行|同时|分别|各自/.test(request)
+  ) {
+    return {
+      version: 1,
+      workflowId: 'multi-domain-fan-out',
+      reasonCodes: ['explicit-independent-fan-out', 'multiple-explicit-domains'],
+    }
+  }
   if (domains.size === 1 && /视角|第一人称|第三人称限知/.test(request)) {
     return {
       version: 1,
@@ -189,9 +231,18 @@ export function classifyMasterWorkflowV1(request: string): MasterWorkflowSelecti
 }
 
 export function selectMasterWorkflowV1(request: string): MasterWorkflowSelectionV1 {
-  return isMasterWorkflowClassifierEnabledV1()
-    ? classifyMasterWorkflowV1(request)
-    : { version: 1, workflowId: 'conservative-sequential', reasonCodes: ['classifier-disabled'] }
+  if (!isMasterWorkflowClassifierEnabledV1()) {
+    return { version: 1, workflowId: 'conservative-sequential', reasonCodes: ['classifier-disabled'] }
+  }
+  const selected = classifyMasterWorkflowV1(request)
+  if (selected.workflowId === 'multi-domain-fan-out' && !isMasterFanOutEnabledV1()) {
+    return {
+      version: 1,
+      workflowId: 'multi-domain-sequential',
+      reasonCodes: ['fan-out-disabled', 'multiple-explicit-domains'],
+    }
+  }
+  return selected
 }
 
 export function parseMasterWorkflowSelectionV1(value: unknown): MasterWorkflowSelectionV1 {
@@ -228,7 +279,12 @@ export function getMasterWorkflowV1(selection: MasterWorkflowSelectionV1): Maste
 
 export function assertMasterWorkflowTaskCompatibilityV1(
   selection: MasterWorkflowSelectionV1,
-  tasks: ReadonlyArray<{ agentId: DomainAgentId; skillId?: string }>,
+  tasks: ReadonlyArray<{
+    id?: string
+    agentId: DomainAgentId
+    skillId?: string
+    dependsOn?: readonly string[]
+  }>,
 ): void {
   const workflow = getMasterWorkflowV1(selection)
   if (workflow.strategy === 'direct' && tasks.length !== 1) {
@@ -237,8 +293,63 @@ export function assertMasterWorkflowTaskCompatibilityV1(
   for (const task of tasks) {
     if (task.skillId) getAgentSkillV1(task.skillId, task.agentId)
   }
+  if (workflow.strategy === 'fan-out' && !hasMasterFanOutPairV1(tasks)) {
+    throw new Error('有限 fan-out 工作流至少需要一对无依赖且写目标不冲突的任务')
+  }
 }
 
 export function isMasterAgentRunWorkflowKindV1(value: AgentRunWorkflowKind): boolean {
-  return value === 'direct-generation' || value === 'multi-domain-sequential'
+  return value === 'direct-generation'
+    || value === 'multi-domain-sequential'
+    || value === 'fan-out-synthesize'
+}
+
+interface FanOutTaskLikeV1 {
+  id?: string
+  agentId: DomainAgentId
+  skillId?: string
+  dependsOn?: readonly string[]
+}
+
+function taskWriteTables(task: FanOutTaskLikeV1): Set<string> {
+  return new Set(resolveAgentSkillV1(task.agentId, task.skillId).writeTargets.map(target => target.table))
+}
+
+function tasksHaveWriteConflict(left: FanOutTaskLikeV1, right: FanOutTaskLikeV1): boolean {
+  const leftTables = taskWriteTables(left)
+  return [...taskWriteTables(right)].some(table => leftTables.has(table))
+}
+
+/** Stable, bounded selection for one generation wave. Canon adoption remains serial. */
+export function selectMasterFanOutBatchV1<T extends FanOutTaskLikeV1>(
+  tasks: readonly T[],
+  completedTaskIds: ReadonlySet<string>,
+  maxConcurrency = 2,
+): T[] {
+  const boundedConcurrency = Math.max(1, Math.min(2, Math.floor(maxConcurrency)))
+  const available = tasks.filter(task => (
+    task.id
+    && !completedTaskIds.has(task.id)
+    && (task.dependsOn ?? []).every(dependency => completedTaskIds.has(dependency))
+  ))
+  const selected: T[] = []
+  for (const task of available) {
+    if (selected.length >= boundedConcurrency) break
+    if (selected.some(existing => tasksHaveWriteConflict(existing, task))) continue
+    selected.push(task)
+  }
+  return selected
+}
+
+export function hasMasterFanOutPairV1(tasks: readonly FanOutTaskLikeV1[]): boolean {
+  if (tasks.length < 2 || tasks.some(task => !task.id)) return false
+  const completed = new Set<string>()
+  while (completed.size < tasks.length) {
+    const batch = selectMasterFanOutBatchV1(tasks, completed, 2)
+    if (batch.length > 1) return true
+    const next = batch[0]
+    if (!next?.id) return false
+    completed.add(next.id)
+  }
+  return false
 }

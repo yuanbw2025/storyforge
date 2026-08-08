@@ -431,8 +431,13 @@
 - HARNESS-22 已闭合主 Agent 多任务候选的同代依赖 join：新 durable 下游候选冻结上游 task、
   candidate/output hash 和 Run generation，恢复验证引用版本确实来自当前严格事件历史；作者编辑
   上游后旧下游仍可查看但不能确认采纳。下游确认前必须回读上游 step 的正式 adoptionHash 与
-  succeeded 状态，不再把对话确认消息等同于业务写入完成。旧无绑定候选保持兼容；有限 fan-out
-  和 attempt replan 仍未开启。
+  succeeded 状态，不再把对话确认消息等同于业务写入完成。旧无绑定候选保持兼容；本单元未开启
+  fan-out，后续由 HARNESS-23 接续，attempt replan 仍未开启。
+- HARNESS-23 已开启首批受控有限 fan-out：只有作者明确要求且计划包含世界来源、已保存灵感的
+  无依赖、无共享写表叶子时才进入 `fan-out-synthesize`，每波最多并行两个模型调用，durable
+  账本和候选提交仍串行。并发预算计入 outstanding reservation；一叶失败会保留成功候选，恢复
+  只重跑失败叶，汇合任务复用 HARNESS-22 同代 join。大纲、正文、Canon 采纳仍不并行；每叶
+  terminal receipt、通用审计 fan-out 和成本/延迟 A/B 尚未完成，可用独立本地开关回到顺序执行。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

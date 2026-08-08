@@ -41,6 +41,24 @@ describe('AGENT-1 27.1-e · 跨调用团队预算与 Canon 受控打回', () => 
     expect(tracker.snapshot().calls).toBe(1)
   })
 
+  it('并发调用把未结算预留计入总预算，且同一预留只能结算一次', () => {
+    const tracker = new AgentTeamBudgetTracker('economy')
+    const first = tracker.reserveCall({
+      label: '并行叶一',
+      messages: [{ role: 'user', content: '一'.repeat(35_000) }],
+      maxOutputTokens: 10_000,
+    })
+    expect(() => tracker.reserveCall({
+      label: '并行叶二',
+      messages: [{ role: 'user', content: '二'.repeat(35_000) }],
+      maxOutputTokens: 10_000,
+    })).toThrow('预算不足')
+    expect(tracker.snapshot().calls).toBe(1)
+
+    tracker.settleCall(first, '完成')
+    expect(() => tracker.settleFailedCall(first)).toThrow('已经结算')
+  })
+
   it('确定性 gate 只触发一次带具体证据的受预算返工，第二版通过后才形成结果', async () => {
     const run = vi.fn(async (messages: Array<{ content: string }>) => (
       messages.some(message => message.content.includes('确定性 Canon 校验打回'))

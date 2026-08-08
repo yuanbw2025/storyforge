@@ -166,6 +166,27 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
     expect(plan.tasks[2].dependsOn).toEqual(['world-1', 'character-1'])
   })
 
+  it('显式有限并行会清除规划器虚构的灵感上游依赖并保留固定工作流', async () => {
+    const plan = await createMasterAgentPlan({
+      projectId: project.id!,
+      worldGroupId: null,
+      request: '同时建立潮汐世界并反推已保存灵感',
+    }, {
+      complete: async () => JSON.stringify({
+        summary: '并行处理两个独立候选。',
+        tasks: [
+          { id: 'world', agentId: 'world-origin', instruction: '建立潮汐世界', dependsOn: [] },
+          { id: 'idea', agentId: 'inspiration', instruction: '反推已保存灵感', dependsOn: ['world'] },
+        ],
+      }),
+    })
+    expect(plan.workflow?.workflowId).toBe('multi-domain-fan-out')
+    expect(plan.tasks.map(task => [task.id, task.dependsOn])).toEqual([
+      ['world', []],
+      ['idea', []],
+    ])
+  })
+
   it('明确单领域请求直接形成一个冻结 Skill 的任务，不调用规划模型', async () => {
     const complete = vi.fn(async () => JSON.stringify({ tasks: [] }))
     const plan = await createMasterAgentPlan({

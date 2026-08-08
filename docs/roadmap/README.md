@@ -257,6 +257,11 @@
   上游 candidate/output hash 和 Run generation；上游作者编辑后，旧下游不会因新版本已采纳而被放行。
   下游确认前还会回读上游 step 的正式 adoptionHash/succeeded 状态，避免把对话确认误当成写入完成。
   本单元没有开启并发 Agent；有限 fan-out 与 replan 必须在这套同代 join 上继续实现。
+- HARNESS-23 已在该 join 上开启首批最多 2 路的候选 fan-out：仅显式“世界来源 + 已保存灵感”
+  且无共享写表的叶子并行模型调用，所有 durable 事件、候选提交和正式采纳仍串行。并发预算会
+  预留未结算调用；一叶失败保留成功候选，恢复只重跑失败叶，后续角色汇合冻结两叶版本。
+  `storyforge:harness:fan-out-v1=disabled` 可无数据迁移回到顺序执行。大纲/正文并行、每叶终态
+  receipt、通用审计 fan-out 和 p95/质量 A/B 仍未交付。
 
 ### GOV-1 第一阶段交付证据
 

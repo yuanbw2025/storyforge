@@ -3,6 +3,7 @@ import { db } from '../../src/lib/db/schema'
 import {
   MASTER_WORKFLOWS,
   MASTER_WORKFLOW_CLASSIFIER_STORAGE_KEY,
+  MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY,
   assertMasterWorkflowTaskCompatibilityV1,
   classifyMasterWorkflowV1,
   parseMasterWorkflowSelectionV1,
@@ -76,6 +77,7 @@ describe.sequential('R-HARNESS14 · 固定工作流分类与 Skill 冻结', () =
 
   afterEach(() => {
     globalThis.localStorage?.removeItem(MASTER_WORKFLOW_CLASSIFIER_STORAGE_KEY)
+    globalThis.localStorage?.removeItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY)
     db.close()
   })
 
@@ -87,6 +89,12 @@ describe.sequential('R-HARNESS14 · 固定工作流分类与 Skill 冻结', () =
       reasonCodes: ['single-explicit-domain'],
     })
     expect(classifyMasterWorkflowV1('建立潮汐世界并设计守灯人角色').workflowId)
+      .toBe('multi-domain-sequential')
+    expect(classifyMasterWorkflowV1('同时建立潮汐世界并反推已保存灵感')).toMatchObject({
+      workflowId: 'multi-domain-fan-out',
+      reasonCodes: ['explicit-independent-fan-out', 'multiple-explicit-domains'],
+    })
+    expect(classifyMasterWorkflowV1('同时反推灵感并规划第一卷大纲').workflowId)
       .toBe('multi-domain-sequential')
     expect(classifyMasterWorkflowV1('先规划第一卷章纲，再写第一章正文').workflowId)
       .toBe('staged-author-confirmed')
@@ -105,6 +113,14 @@ describe.sequential('R-HARNESS14 · 固定工作流分类与 Skill 冻结', () =
       reasonCodes: ['classifier-disabled'],
     })
     expect(MASTER_WORKFLOWS.map(workflow => workflow.id)).toContain('single-domain-direct')
+
+    globalThis.localStorage?.removeItem(MASTER_WORKFLOW_CLASSIFIER_STORAGE_KEY)
+    globalThis.localStorage?.setItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY, 'disabled')
+    expect(selectMasterWorkflowV1('同时建立潮汐世界并反推已保存灵感')).toEqual({
+      version: 1,
+      workflowId: 'multi-domain-sequential',
+      reasonCodes: ['fan-out-disabled', 'multiple-explicit-domains'],
+    })
   })
 
   it('大纲和正文的真实执行模式映射为不同 Skill，普通 Agent 使用稳定默认职责', () => {
@@ -186,6 +202,32 @@ describe.sequential('R-HARNESS14 · 固定工作流分类与 Skill 冻结', () =
       { agentId: 'world-origin' },
       { agentId: 'character' },
     ])).toThrow('必须且只能包含一个任务')
+
+    expect(() => parseMasterAgentPlanV1({
+      summary: '伪并行依赖链。',
+      tasks: [
+        { id: 'world', agentId: 'world-origin', instruction: '生成世界', dependsOn: [] },
+        { id: 'character', agentId: 'character', instruction: '生成角色', dependsOn: ['world'] },
+      ],
+      workflow: {
+        version: 1,
+        workflowId: 'multi-domain-fan-out',
+        reasonCodes: ['explicit-independent-fan-out'],
+      },
+    })).toThrow('至少需要一对')
+
+    expect(() => parseMasterAgentPlanV1({
+      summary: '共享写目标的伪并行。',
+      tasks: [
+        { id: 'world-a', agentId: 'world-origin', instruction: '生成世界甲', dependsOn: [] },
+        { id: 'world-b', agentId: 'world-origin', instruction: '生成世界乙', dependsOn: [] },
+      ],
+      workflow: {
+        version: 1,
+        workflowId: 'multi-domain-fan-out',
+        reasonCodes: ['explicit-independent-fan-out'],
+      },
+    })).toThrow('写目标不冲突')
   })
 
   it('durable trace 拒绝 Skill 与实际输出模式不一致的候选', async () => {

@@ -35,6 +35,7 @@ const WORKFLOW_KINDS: readonly AgentRunWorkflowKind[] = [
   'plan-execute',
   'generate-verify-revise',
   'multi-domain-sequential',
+  'fan-out-synthesize',
   'long-running-resumable',
 ]
 

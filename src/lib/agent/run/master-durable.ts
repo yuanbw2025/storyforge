@@ -885,11 +885,11 @@ export async function runDurableMasterAgentPlanV1(
   }
 
   const liveCandidates = new Map<string, MasterAgentDurableCandidateV1>()
-  let activeTask: MasterAgentTask | null = null
+  const activeTasks = new Map<string, MasterAgentTask>()
   let previousBudget = restored.latestBudget
   const trace: MasterAgentExecutionTrace = {
     async taskStarted(task) {
-      activeTask = task
+      activeTasks.set(task.id, task)
       const stepId = taskStepId(task.id)
       let step = snapshot.projection.steps[stepId]
       if (!step) fail(`主 Agent durable run 缺少步骤 ${stepId}`)
@@ -951,7 +951,7 @@ export async function runDurableMasterAgentPlanV1(
     },
     async candidateReady(task, candidate) {
       const stepId = taskStepId(task.id)
-      if (activeTask?.id !== task.id) fail(`主 Agent durable trace 收到乱序候选 ${task.id}`)
+      if (!activeTasks.has(task.id)) fail(`主 Agent durable trace 收到未启动候选 ${task.id}`)
       if (candidate.payload.taskId !== task.id || candidate.payload.agentId !== task.agentId) {
         fail(`主 Agent durable trace 候选身份与当前任务 ${task.id} 不一致`)
       }
@@ -1102,7 +1102,7 @@ export async function runDurableMasterAgentPlanV1(
         runtime: candidate,
       }
       liveCandidates.set(task.id, durableCandidate)
-      activeTask = null
+      activeTasks.delete(task.id)
       await notify(input.onDurableBoundary, 'candidate.persisted', snapshot)
     },
   }
@@ -1122,10 +1122,11 @@ export async function runDurableMasterAgentPlanV1(
   } catch (error) {
     const latest = await readAgentRunV1(input.scope, snapshot.run.id)
     snapshot = latest
-    const failedTask = activeTask as MasterAgentTask | null
+    const failedTasks = [...activeTasks.values()]
     if (input.signal?.aborted) {
-      if (failedTask && snapshot.projection.steps[taskStepId(failedTask.id)]?.status === 'running') {
+      for (const failedTask of failedTasks) {
         const stepId = taskStepId(failedTask.id)
+        if (snapshot.projection.steps[stepId]?.status !== 'running') continue
         snapshot = await appendAgentRunEventV1({
           scope: input.scope,
           runId: snapshot.run.id,
@@ -1162,8 +1163,9 @@ export async function runDurableMasterAgentPlanV1(
         })
       }
     } else if (['running', 'awaiting_confirmation'].includes(snapshot.projection.state)) {
-      if (failedTask && snapshot.projection.steps[taskStepId(failedTask.id)]?.status === 'running') {
+      for (const failedTask of failedTasks) {
         const stepId = taskStepId(failedTask.id)
+        if (snapshot.projection.steps[stepId]?.status !== 'running') continue
         snapshot = await appendAgentRunEventV1({
           scope: input.scope,
           runId: snapshot.run.id,
