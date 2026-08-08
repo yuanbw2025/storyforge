@@ -874,6 +874,15 @@ CHIRON 四类信息可映射到现有结构：
 - 章纲输出只做 JSON/确定性文本解析，结构 gate 失败即 `run.failed`，已删除解析阶段隐藏发起第二次 AI 重构的生产入口；
 - 作者确认后仍只经 `adoptGeneratedOutlineItems()` / `adopt()` 写入 `outlineNodes`；终态 verifier 回读正式后状态，并绑定 manifest、candidate、adoption event 与 post-state hash，只有 `verification.accepted` 可将逐卷运行投影为 `completed`。
 
+**正文语义评审闭环实施状态（HARNESS-19，2026-08-08）**
+
+- 章节编辑器的正文生成/续写主路径在既有信息边界硬门通过后，调用 `prose.review` Skill 对章纲、细纲、连续性交接、故事核心、角色、规则、伏笔、故事线进度、状态、事实、角色认知和物品持有进行证据型语义评审；所有来源仍只经 `CONTEXT_SOURCES + assembleContext()` 装配；
+- 评审只接受固定 issue code、正文逐字引文和登记来源逐字引文。没有登记证据的问题只能是 warning/uncertain，不能成为 blocking；语义结论不能覆盖信息边界等确定性失败；
+- 只有带明确局部修订指令的 blocking 问题允许 `prose.revise` 自动修订一次。修订稿必须重新通过信息边界硬门并由 `prose.review` 复核；不能局部修复、复核仍失败或协议错误时均不持久化可采纳候选，也不写正式正文或 Canon；
+- 正文 RunContract 使用 `generate-verify-revise`，模型调用上限为生成、初审、一次修订、复核共四次。三个语义步骤分别持久化 Context Manifest、Skill/Prompt 执行绑定、模型输出 hash、预算和 artifact；候选、刷新恢复、确认采纳和 terminal receipt 都会重新核对语义证据及版本；
+- 作者界面展示初审/修订/复核阶段并允许取消。通过后仍停在可编辑候选，只有作者确认才经既有 `adopt(chapters)` 写入；HARNESS-19 前没有语义证据的旧候选继续按旧合同恢复，但不会被标记为新语义评审通过；
+- `R-HARNESS19-prose-semantic-review` 与 `R-HARNESS19-prose-semantic-durable` 覆盖证据伪造、不可自动修订、最多一次修订、硬门不可覆盖、预算、统一运行入口、版本/候选篡改、刷新恢复和 terminal receipt。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；
@@ -1002,9 +1011,9 @@ CHIRON 四类信息可映射到现有结构：
 - 发布门在调用真实模型前冻结为：事实召回和约束召回相对全文各最多下降 2 个百分点，未来泄漏和错世界泄漏均为 0，生成阶段输入至少下降 25%，压缩回退率为 0。结果记录绑定 source/delivery/output/score/usage trace hash 和整组 record hash，篡改指标后验证失败；
 - `NS0EvalPanel` 只取三种任务各一条 development 夹具运行该对照，避免一次内部评测无限扩张调用量。当前仓库只证明 runner、成本核算、证据完整性和发布门可执行，尚未替作者调用任何真实 provider，也没有产出质量收益结论；在真实结果通过前不扩大生产压缩来源数，不接入“生成质量差即自动全文重生成”。
 
-**执行版本与新鲜度实施状态（HARNESS-18，2026-08-08）**
+**执行版本与新鲜度实施状态（HARNESS-18/19，2026-08-08）**
 
-- 九个 `AGENT_SKILLS` 条目现在声明稳定 `promptVersion`；Tool Registry 从 14 个实际只读工具派生不含执行函数的规范 schema 快照，并以显式 `toolSchemaVersion + SHA-256` 绑定。新主 Agent RunContract 为每个计划步骤冻结 `skillId/skillVersion/promptVersion/toolSchemaVersion/toolSchemaHash`，不再只靠当时内存中的提示词和工具实现推断运行环境；
+- 十一个 `AGENT_SKILLS` 条目现在声明七个稳定 `promptVersion`；Tool Registry 从 14 个实际只读工具派生不含执行函数的规范 schema 快照，并以显式 `toolSchemaVersion + SHA-256` 绑定。新主 Agent 及正文语义评审 RunContract 为每个计划步骤冻结 `skillId/skillVersion/promptVersion/toolSchemaVersion/toolSchemaHash`，不再只靠当时内存中的提示词和工具实现推断运行环境；
 - 同一 execution binding 同时进入领域候选和 `candidateHash`。首次持久化、刷新恢复和继续执行都会重新核对计划任务、当前 Skill、提示词版本和工具 schema hash；Skill 身份、提示词版本或工具 hash 任一变化都会 fail-closed，不能把旧结果冒充当前版本产物；
 - HARNESS-18 之前没有 `executionBindings` 的 RunContract 和候选保持旧 hash 结构并可实际恢复。旧合同恢复后仍生成旧格式候选，避免一条运行中出现无法解释的半旧半新协议；新建运行一律使用版本绑定；
 - `check:agent-freshness` 已进入 `npm run ci`，用 TypeScript AST 检查 Skill 的 owner、提示词版本、复核日期和真实存在的回归证据，并在超过 45 天未复核时阻断。`R-HARNESS18-execution-version-freshness` 覆盖合同/候选 hash、三类篡改、实际旧运行恢复和工具 schema 漂移；

@@ -233,10 +233,15 @@
   一个入口，同一正文只发起一次综合抽取；状态、受控事实、物品、故事年表、关系和伏笔
   六域候选均须逐字证据。候选复用归档 `agentConversations/agentEvents` 保存，刷新可恢复；
   正文 hash 变化阻断写回，物品/年表按章整批替换失败会事务回滚，事实只进入 candidate。
-- HARNESS-18 已把 9 个领域 Skill、5 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
+- HARNESS-18/19 已把 11 个领域 Skill、7 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
   新主 Agent RunContract 与候选 hash；恢复会拒绝 Skill/Prompt/Tool 漂移，旧合同继续按旧协议
   恢复。CI 新增 45 天复核、owner、版本和回归证据新鲜度闸门；该能力只保证执行可归因，
   不冒充真实模型质量收益。
+- HARNESS-19 已把 `prose.review → prose.revise → prose.review` 接入章节正文生成/续写主路径：
+  信息边界硬门先行，语义 blocking 必须有候选和登记来源逐字证据，只有明确可局部修复的问题
+  最多自动修订一次，随后重跑硬门和语义复核。四次模型调用共用团队预算，三个语义步骤均有
+  Context Manifest、冻结执行版本和 durable 事件；通过后仍只形成作者可编辑候选，确认才经
+  `adopt(chapters)` 写入。旧候选保持兼容但不伪造新评审证据。
 
 ### GOV-1 第一阶段交付证据
 

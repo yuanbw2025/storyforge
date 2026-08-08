@@ -28,6 +28,8 @@ export type AgentSkillExecutionModeV1 =
   | 'chapters'
   | 'generate'
   | 'continue'
+  | 'review'
+  | 'revise'
 
 export interface AgentSkillWriteTargetV1 {
   table: string
@@ -132,6 +134,26 @@ const PROSE_CONTEXT_SOURCE_KEYS = [
   'retrievedPassages',
   'references',
   'userStyleProfile',
+] as const
+
+const PROSE_REVIEW_CONTEXT_SOURCE_KEYS = [
+  'chapterOutline',
+  'detailedOutline',
+  'chapterContinuityHandoff',
+  'previousPlanReconciliation',
+  'previousChapterEnding',
+  'recentChapterSummaries',
+  'storyCore',
+  'characters',
+  'creativeRules',
+  'worldRules',
+  'foreshadows',
+  'storyArcs',
+  'storylineProgress',
+  'stateCards',
+  'currentFacts',
+  'canonAssertions',
+  'heldItems',
 ] as const
 
 const WORLD_FOUNDATION_INPUT_POLICY = {
@@ -284,6 +306,11 @@ const PROSE_COMPRESSION_POLICY = compressionPolicy([
   'historical',
   'storyArcs',
   'references',
+])
+const PROSE_REVIEW_COMPRESSION_POLICY = compressionPolicy([
+  'storyCore',
+  'characters',
+  'storyArcs',
 ])
 
 export const AGENT_SKILLS = [
@@ -476,6 +503,46 @@ export const AGENT_SKILLS = [
     writeTargets: [{ table: 'chapters', fields: ['content'] }],
     lastVerifiedAt: '2026-08-08',
     regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
+  },
+  {
+    version: 1,
+    id: 'prose.review',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '正文证据型语义评审',
+    owner: 'prose-agent',
+    promptVersion: 'prose-semantic-review-v1',
+    executionMode: 'review',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_REVIEW_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: ['characterKnowledge'],
+    inputPolicy: PROSE_INPUT_POLICY,
+    contextCompression: PROSE_REVIEW_COMPRESSION_POLICY,
+    maxOutputTokens: 3_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-08',
+    regressionTests: ['R-HARNESS19-prose-semantic-review'],
+  },
+  {
+    version: 1,
+    id: 'prose.revise',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '正文证据定向修订',
+    owner: 'prose-agent',
+    promptVersion: 'prose-semantic-revision-v1',
+    executionMode: 'revise',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: ['characterKnowledge'],
+    inputPolicy: PROSE_INPUT_POLICY,
+    contextCompression: PROSE_COMPRESSION_POLICY,
+    maxOutputTokens: 16_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-08',
+    regressionTests: ['R-HARNESS19-prose-semantic-review'],
   },
 ] as const satisfies readonly AgentSkillDefinitionV1[]
 
@@ -679,7 +746,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create']),
     inspiration: new Set(['reverse']),
     outline: new Set(['auto', 'volumes', 'chapters']),
-    prose: new Set(['auto', 'generate', 'continue']),
+    prose: new Set(['auto', 'generate', 'continue', 'review', 'revise']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

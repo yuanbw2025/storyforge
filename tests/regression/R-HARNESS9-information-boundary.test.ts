@@ -6,7 +6,11 @@ import {
   verifyInformationBoundaryManifestV1,
 } from '../../src/lib/agent/information-boundary'
 import { prepareProseCopilot } from '../../src/lib/agent/prose-copilot'
-import { isProseGenerationCandidateCurrentV1 } from '../../src/lib/agent/run/prose-generation-durable'
+import {
+  hashProseGenerationCandidateV1,
+  isProseGenerationCandidateCurrentV1,
+} from '../../src/lib/agent/run/prose-generation-durable'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 import type { WorkspaceScope } from '../../src/lib/types'
 
@@ -269,7 +273,7 @@ describe.sequential('R-HARNESS9 · 正文信息边界', () => {
       perspectiveCharacterId: fixture.perspectiveCharacterId,
     })
     const sourceTextHash = await hashChapterText('')
-    const candidate = {
+    const candidateBody = {
       version: 1 as const,
       type: 'prose-generation-candidate' as const,
       projectId: fixture.scope.projectId,
@@ -279,17 +283,20 @@ describe.sequential('R-HARNESS9 · 正文信息边界', () => {
       operation: 'generate' as const,
       sourceTextHash,
       outputText: '潮水在门外缓慢退去，守灯人握紧灯柄，沿着陌生石阶一步步向下走。',
-      outputTextHash: 'a'.repeat(64),
+      outputTextHash: await hashCanonicalValue('潮水在门外缓慢退去，守灯人握紧灯柄，沿着陌生石阶一步步向下走。'),
       expectedContentHash: 'b'.repeat(64),
       informationBoundaryHash: boundary.manifestHash,
       perspectiveCharacterId: fixture.perspectiveCharacterId,
       createdAt: Date.now(),
+    }
+    const candidate = {
+      ...candidateBody,
       durable: {
         runId: 1,
         stepId: 'prose-generation' as const,
         attempt: 1,
         contextManifestHash: 'c'.repeat(64),
-        candidateHash: 'd'.repeat(64),
+        candidateHash: await hashProseGenerationCandidateV1(candidateBody),
       },
     }
     expect(await isProseGenerationCandidateCurrentV1(candidate)).toBe(true)

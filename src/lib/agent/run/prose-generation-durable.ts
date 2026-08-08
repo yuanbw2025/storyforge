@@ -2,7 +2,7 @@ import { db } from '../../db/schema'
 import { adopt } from '../../registry/adopt'
 import { hashChapterText, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../../ai/chapter-memory/text-normalization'
 import type { AgentConversation, AgentEvent, Chapter, WorkspaceScope } from '../../types'
-import type { ContextManifestV1 } from '../../types/agent-run'
+import type { ContextManifestV1, VerificationReceiptV1 } from '../../types/agent-run'
 import {
   appendAgentRunEventV1,
   createAgentRunV1,
@@ -22,10 +22,27 @@ import {
   buildChapterInformationBoundaryV1,
   validateProseInformationBoundaryV1,
 } from '../information-boundary'
+import {
+  verifyProseSemanticReviewArtifactV1,
+  verifyProseSemanticRevisionArtifactV1,
+  type ProseSemanticReviewArtifactV1,
+  type ProseSemanticRevisionArtifactV1,
+} from '../prose-semantic-review'
+import { AgentTeamBudgetTracker, type AgentTeamBudgetEvidence } from '../team-budget'
+import {
+  assertAgentSkillExecutionBindingV1,
+  createAgentSkillExecutionBindingV1,
+} from '../execution-binding'
+import { getAgentSkillV1 } from '../skill-registry'
+import type { AgentSkillExecutionBindingV1 } from '../../types/agent-run'
 
 export const PROSE_GENERATION_STEP_ID_V1 = 'prose-generation'
+export const PROSE_SEMANTIC_REVIEW_STEP_ID_V1 = 'prose-semantic-review'
+export const PROSE_SEMANTIC_REVISION_STEP_ID_V1 = 'prose-semantic-revision'
+export const PROSE_SEMANTIC_REREVIEW_STEP_ID_V1 = 'prose-semantic-rereview'
 export const PROSE_GENERATION_VERIFIER_SET_V1 = 'prose-generation-terminal-v1'
 export const PROSE_GENERATION_VERIFIER_SET_V2 = 'prose-generation-terminal-v2-information-boundary'
+export const PROSE_GENERATION_VERIFIER_SET_V3 = 'prose-generation-terminal-v3-semantic-review'
 export const PROSE_GENERATION_CANDIDATE_TYPE_V1 = 'prose-generation-candidate'
 
 /**
@@ -76,6 +93,14 @@ export interface ProseGenerationDurableEvidenceV1 {
   candidateHash: string
 }
 
+export interface ProseGenerationSemanticReviewEvidenceV1 {
+  version: 1
+  initial: ProseSemanticReviewArtifactV1
+  final: ProseSemanticReviewArtifactV1
+  revision?: ProseSemanticRevisionArtifactV1
+  budget: AgentTeamBudgetEvidence
+}
+
 export interface ProseGenerationCandidateV1 {
   version: 1
   type: typeof PROSE_GENERATION_CANDIDATE_TYPE_V1
@@ -94,6 +119,8 @@ export interface ProseGenerationCandidateV1 {
   informationBoundaryHash?: string
   perspectiveCharacterId?: number | null
   perspectiveFromChapter?: boolean
+  /** Absent on candidates created before HARNESS-19. */
+  semanticReview?: ProseGenerationSemanticReviewEvidenceV1
   createdAt: number
   durable: ProseGenerationDurableEvidenceV1
 }
@@ -103,11 +130,19 @@ export function buildProseGenerationRunContractV1(input: {
   worldGroupId: number | null
   chapterId: number
   operation: ProseGenerationOperationV1
+  semanticReview?: boolean
 }) {
+  const semanticReview = input.semanticReview === true
+  const generationSkill = getAgentSkillV1(
+    input.operation === 'continue' ? 'prose.continue' : 'prose.generate',
+    'prose',
+  )
+  const reviewSkill = getAgentSkillV1('prose.review', 'prose')
+  const revisionSkill = getAgentSkillV1('prose.revise', 'prose')
   return {
     version: 1 as const,
     objective: `${input.operation === 'continue' ? '续写' : '生成'}章节 #${input.chapterId} 正文候选，并等待作者确认后写回`,
-    workflowKind: 'long-running-resumable' as const,
+    workflowKind: semanticReview ? 'generate-verify-revise' as const : 'long-running-resumable' as const,
     scope: {
       projectId: input.projectId,
       worldGroupId: input.worldGroupId,
@@ -121,39 +156,183 @@ export function buildProseGenerationRunContractV1(input: {
         mode: 'author-confirmed' as const,
       }],
     },
+    ...(semanticReview ? {
+      executionBindings: [
+        { stepId: PROSE_GENERATION_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(generationSkill) },
+        { stepId: PROSE_SEMANTIC_REVIEW_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(reviewSkill) },
+        { stepId: PROSE_SEMANTIC_REVISION_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(revisionSkill) },
+        { stepId: PROSE_SEMANTIC_REREVIEW_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(reviewSkill) },
+      ],
+    } : {}),
     budget: {
-      maxModelCalls: 1,
+      maxModelCalls: semanticReview ? 4 : 1,
       maxToolCalls: 0,
-      maxInputTokens: 48_000,
-      maxOutputTokens: 16_000,
+      maxInputTokens: semanticReview ? 160_000 : 48_000,
+      maxOutputTokens: semanticReview ? 38_000 : 16_000,
       maxAttemptsPerStep: 2,
       maxProtocolErrors: 1,
     },
     acceptance: [
       { id: 'prose-generation.candidate', kind: 'output-present' as const, required: true },
       { id: 'prose-generation.information-boundary', kind: 'deterministic-check' as const, required: true },
+      ...(semanticReview
+        ? [{ id: 'prose-generation.semantic-review', kind: 'semantic-review' as const, required: true }]
+        : []),
       { id: 'prose-generation.confirmed', kind: 'author-confirmed' as const, required: true },
       { id: 'prose-generation.adopted', kind: 'adoption-committed' as const, required: true },
       { id: 'prose-generation.post-state', kind: 'post-state-matches' as const, required: true },
     ],
-    verificationPlan: [{
+    verificationPlan: [
+      ...(semanticReview ? [{
+        id: 'prose-generation.semantic',
+        kind: 'semantic' as const,
+        verifier: PROSE_GENERATION_VERIFIER_SET_V3,
+        criterionIds: ['prose-generation.semantic-review'],
+      }] : []),
+      {
       id: 'prose-generation.terminal',
       kind: 'terminal' as const,
-      verifier: PROSE_GENERATION_VERIFIER_SET_V2,
+      verifier: semanticReview ? PROSE_GENERATION_VERIFIER_SET_V3 : PROSE_GENERATION_VERIFIER_SET_V2,
       criterionIds: [
         'prose-generation.candidate',
         'prose-generation.information-boundary',
+        ...(semanticReview ? ['prose-generation.semantic-review'] : []),
         'prose-generation.confirmed',
         'prose-generation.adopted',
         'prose-generation.post-state',
       ],
-    }],
+      },
+    ],
     failurePolicy: {
       onProtocolError: 'retry' as const,
-      onVerificationFailure: 'fail' as const,
+      onVerificationFailure: semanticReview ? 'revise' as const : 'fail' as const,
       onStaleInput: 'pause-for-author' as const,
     },
   }
+}
+
+function requiresSemanticReview(snapshot: AgentRunSnapshotV1): boolean {
+  return snapshot.contract.acceptance.some(criterion => (
+    criterion.id === 'prose-generation.semantic-review'
+      && criterion.kind === 'semantic-review'
+      && criterion.required
+  ))
+}
+
+export function assertProseGenerationExecutionBindingsV1(snapshot: AgentRunSnapshotV1): void {
+  if (!snapshot.contract.executionBindings) return
+  const operation = snapshot.contract.objective.startsWith('续写') ? 'continue' : 'generate'
+  const expected = new Map<string, ReturnType<typeof getAgentSkillV1>>([
+    [PROSE_GENERATION_STEP_ID_V1, getAgentSkillV1(`prose.${operation}`, 'prose')],
+    [PROSE_SEMANTIC_REVIEW_STEP_ID_V1, getAgentSkillV1('prose.review', 'prose')],
+    [PROSE_SEMANTIC_REVISION_STEP_ID_V1, getAgentSkillV1('prose.revise', 'prose')],
+    [PROSE_SEMANTIC_REREVIEW_STEP_ID_V1, getAgentSkillV1('prose.review', 'prose')],
+  ])
+  if (snapshot.contract.executionBindings.length !== expected.size) {
+    throw new Error('正文生成 RunContract execution bindings 数量无效。')
+  }
+  for (const binding of snapshot.contract.executionBindings) {
+    const skill = expected.get(binding.stepId)
+    if (!skill) throw new Error(`正文生成 RunContract 包含未知 execution binding：${binding.stepId}`)
+    const { stepId: _stepId, ...skillBinding } = binding
+    assertAgentSkillExecutionBindingV1(skillBinding, skill, `正文生成 ${binding.stepId}`)
+  }
+}
+
+async function verifySemanticReviewEvidence(
+  candidate: ProseGenerationCandidateV1,
+): Promise<boolean> {
+  const evidence = candidate.semanticReview
+  if (!evidence || evidence.version !== 1 || evidence.final.verdict !== 'pass') return false
+  try {
+    new AgentTeamBudgetTracker(evidence.budget.profile, evidence.budget)
+    assertAgentSkillExecutionBindingV1(
+      evidence.initial.reviewer.executionBinding,
+      getAgentSkillV1('prose.review', 'prose'),
+      '正文语义初审 execution binding',
+    )
+    assertAgentSkillExecutionBindingV1(
+      evidence.final.reviewer.executionBinding,
+      getAgentSkillV1('prose.review', 'prose'),
+      '正文语义复核 execution binding',
+    )
+    if (evidence.revision) {
+      assertAgentSkillExecutionBindingV1(
+        evidence.revision.executionBinding,
+        getAgentSkillV1('prose.revise', 'prose'),
+        '正文语义修订 execution binding',
+      )
+    }
+  } catch {
+    return false
+  }
+  if (!await verifyProseSemanticReviewArtifactV1({
+    artifact: evidence.initial,
+    ...(evidence.revision
+      ? { candidateTextHash: evidence.revision.sourceCandidateTextHash }
+      : { candidateText: candidate.outputText }),
+  })) return false
+  if (!await verifyProseSemanticReviewArtifactV1({
+    artifact: evidence.final,
+    candidateText: candidate.outputText,
+  })) return false
+  if (!evidence.revision) {
+    return evidence.initial.artifactHash === evidence.final.artifactHash
+      && evidence.initial.round === 1
+      && evidence.initial.verdict === 'pass'
+  }
+  if (
+    evidence.initial.round !== 1
+    || evidence.initial.verdict !== 'revise'
+    || evidence.final.round !== 2
+    || evidence.revision.sourceReviewArtifactHash !== evidence.initial.artifactHash
+    || evidence.revision.outputTextHash !== await hashCanonicalValue(candidate.outputText)
+    || evidence.initial.candidateTextHash !== evidence.revision.sourceCandidateTextHash
+  ) return false
+  return verifyProseSemanticRevisionArtifactV1(evidence.revision)
+}
+
+function hasSemanticStepEvidence(
+  snapshot: AgentRunSnapshotV1,
+  input: {
+    stepId: ProseSemanticStepIdV1
+    artifactHash: string
+    contextManifestHash?: string
+  },
+): boolean {
+  const step = snapshot.projection.steps[input.stepId]
+  if (step?.status !== 'succeeded' || step.outputHash !== input.artifactHash) return false
+  if (!input.contextManifestHash) return true
+  return snapshot.events.some(event => (
+    event.type === 'context.assembled'
+      && event.payload.stepId === input.stepId
+      && event.payload.attempt === 1
+      && event.payload.manifestHash === input.contextManifestHash
+  ))
+}
+
+function verifySemanticReviewDurableEvidence(
+  snapshot: AgentRunSnapshotV1,
+  candidate: ProseGenerationCandidateV1,
+): boolean {
+  const evidence = candidate.semanticReview
+  if (!evidence) return !requiresSemanticReview(snapshot)
+  if (!hasSemanticStepEvidence(snapshot, {
+    stepId: PROSE_SEMANTIC_REVIEW_STEP_ID_V1,
+    artifactHash: evidence.initial.artifactHash,
+    contextManifestHash: evidence.initial.contextManifestHash,
+  })) return false
+  if (!evidence.revision) {
+    return evidence.initial.artifactHash === evidence.final.artifactHash
+  }
+  return hasSemanticStepEvidence(snapshot, {
+    stepId: PROSE_SEMANTIC_REVISION_STEP_ID_V1,
+    artifactHash: evidence.revision.artifactHash,
+  }) && hasSemanticStepEvidence(snapshot, {
+    stepId: PROSE_SEMANTIC_REREVIEW_STEP_ID_V1,
+    artifactHash: evidence.final.artifactHash,
+    contextManifestHash: evidence.final.contextManifestHash,
+  })
 }
 
 export async function createProseGenerationDurableRunV1(input: {
@@ -161,6 +340,7 @@ export async function createProseGenerationDurableRunV1(input: {
   worldGroupId: number | null
   chapterId: number
   operation: ProseGenerationOperationV1
+  semanticReview?: boolean
 }): Promise<AgentRunSnapshotV1> {
   return createAgentRunV1({
     scope: input.scope,
@@ -170,6 +350,7 @@ export async function createProseGenerationDurableRunV1(input: {
       worldGroupId: input.worldGroupId,
       chapterId: input.chapterId,
       operation: input.operation,
+      semanticReview: input.semanticReview,
     }),
   })
 }
@@ -199,6 +380,7 @@ export async function beginProseGenerationStepV1(input: {
     promptHash: string
     informationBoundaryHash?: string
   }
+  budgetReservationTokens?: number
 }): Promise<AgentRunSnapshotV1> {
   if (input.contextManifest.runId !== input.snapshot.run.id
     || input.contextManifest.stepId !== PROSE_GENERATION_STEP_ID_V1) {
@@ -216,10 +398,17 @@ export async function beginProseGenerationStepV1(input: {
     attempt: 1,
     manifestHash: input.contextManifest.manifestHash,
   })
-  return append(input.scope, snapshot, 'model.requested', {
+  snapshot = await append(input.scope, snapshot, 'model.requested', {
     stepId: PROSE_GENERATION_STEP_ID_V1,
     attempt: 1,
     bindingHash: await hashCanonicalValue(input.binding),
+  })
+  if (input.budgetReservationTokens == null) return snapshot
+  return append(input.scope, snapshot, 'budget.reserved', {
+    stepId: PROSE_GENERATION_STEP_ID_V1,
+    modelCalls: 1,
+    toolCalls: 0,
+    tokens: Math.max(1, Math.floor(input.budgetReservationTokens)),
   })
 }
 
@@ -227,15 +416,128 @@ export async function recordProseGenerationModelOutputV1(input: {
   scope: WorkspaceScope
   snapshot: AgentRunSnapshotV1
   output: string
+  usedTokens?: number
 }): Promise<AgentRunSnapshotV1> {
   const step = input.snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
   if (!step || step.status !== 'running' || step.attempt !== 1) {
     throw new Error('正文生成 durable step 不在模型响应状态。')
   }
-  return append(input.scope, input.snapshot, 'model.responded', {
+  let snapshot = await append(input.scope, input.snapshot, 'model.responded', {
     stepId: PROSE_GENERATION_STEP_ID_V1,
     attempt: 1,
     outputHash: await hashCanonicalValue(input.output),
+  })
+  if (input.usedTokens == null) return snapshot
+  snapshot = await append(input.scope, snapshot, 'budget.settled', {
+    stepId: PROSE_GENERATION_STEP_ID_V1,
+    modelCalls: 1,
+    toolCalls: 0,
+    tokens: Math.max(0, Math.floor(input.usedTokens)),
+  })
+  return snapshot
+}
+
+export type ProseSemanticStepIdV1 =
+  | typeof PROSE_SEMANTIC_REVIEW_STEP_ID_V1
+  | typeof PROSE_SEMANTIC_REVISION_STEP_ID_V1
+  | typeof PROSE_SEMANTIC_REREVIEW_STEP_ID_V1
+
+export async function beginProseSemanticStepV1(input: {
+  scope: WorkspaceScope
+  snapshot: AgentRunSnapshotV1
+  stepId: ProseSemanticStepIdV1
+  contextManifest: ContextManifestV1
+  executionBinding: AgentSkillExecutionBindingV1
+  requestBinding: unknown
+  reservedTokens: number
+}): Promise<AgentRunSnapshotV1> {
+  assertProseGenerationExecutionBindingsV1(input.snapshot)
+  if (
+    input.contextManifest.runId !== input.snapshot.run.id
+    || input.contextManifest.stepId !== input.stepId
+    || input.contextManifest.attempt !== 1
+  ) throw new Error(`正文语义步骤 ${input.stepId} Context Manifest 不匹配。`)
+  const contractBinding = input.snapshot.contract.executionBindings?.find(binding => binding.stepId === input.stepId)
+  if (!contractBinding) throw new Error(`正文语义步骤 ${input.stepId} 缺少冻结 execution binding。`)
+  const { stepId: _stepId, ...expectedBinding } = contractBinding
+  if (JSON.stringify(expectedBinding) !== JSON.stringify(input.executionBinding)) {
+    throw new Error(`正文语义步骤 ${input.stepId} execution binding 与 RunContract 不一致。`)
+  }
+  let snapshot = await append(input.scope, input.snapshot, 'step.scheduled', { stepId: input.stepId })
+  snapshot = await append(input.scope, snapshot, 'step.started', { stepId: input.stepId, attempt: 1 })
+  snapshot = await append(input.scope, snapshot, 'context.assembled', {
+    stepId: input.stepId,
+    attempt: 1,
+    manifestHash: input.contextManifest.manifestHash,
+  })
+  snapshot = await append(input.scope, snapshot, 'model.requested', {
+    stepId: input.stepId,
+    attempt: 1,
+    bindingHash: await hashCanonicalValue({
+      executionBinding: input.executionBinding,
+      request: input.requestBinding,
+      contextManifestHash: input.contextManifest.manifestHash,
+    }),
+  })
+  return append(input.scope, snapshot, 'budget.reserved', {
+    stepId: input.stepId,
+    modelCalls: 1,
+    toolCalls: 0,
+    tokens: Math.max(1, Math.floor(input.reservedTokens)),
+  })
+}
+
+export async function recordProseSemanticModelOutputV1(input: {
+  scope: WorkspaceScope
+  snapshot: AgentRunSnapshotV1
+  stepId: ProseSemanticStepIdV1
+  output: string
+  usedTokens: number
+}): Promise<AgentRunSnapshotV1> {
+  const step = input.snapshot.projection.steps[input.stepId]
+  if (!step || step.status !== 'running' || step.attempt !== 1) {
+    throw new Error(`正文语义步骤 ${input.stepId} 不在模型响应状态。`)
+  }
+  let snapshot = await append(input.scope, input.snapshot, 'model.responded', {
+    stepId: input.stepId,
+    attempt: 1,
+    outputHash: await hashCanonicalValue(input.output),
+  })
+  snapshot = await append(input.scope, snapshot, 'budget.settled', {
+    stepId: input.stepId,
+    modelCalls: 1,
+    toolCalls: 0,
+    tokens: Math.max(0, Math.floor(input.usedTokens)),
+  })
+  return snapshot
+}
+
+export async function completeProseSemanticStepV1(input: {
+  scope: WorkspaceScope
+  snapshot: AgentRunSnapshotV1
+  stepId: ProseSemanticStepIdV1
+  artifactHash: string
+}): Promise<AgentRunSnapshotV1> {
+  return append(input.scope, input.snapshot, 'step.succeeded', {
+    stepId: input.stepId,
+    attempt: 1,
+    outputHash: input.artifactHash,
+  })
+}
+
+export async function failProseSemanticStepV1(input: {
+  scope: WorkspaceScope
+  snapshot: AgentRunSnapshotV1
+  stepId: ProseSemanticStepIdV1
+  code: string
+}): Promise<AgentRunSnapshotV1> {
+  const step = input.snapshot.projection.steps[input.stepId]
+  if (!step || step.status !== 'running') return input.snapshot
+  return append(input.scope, input.snapshot, 'step.failed', {
+    stepId: input.stepId,
+    attempt: step.attempt,
+    code: input.code.trim().slice(0, 160) || 'prose_semantic_step_failed',
+    retryable: false,
   })
 }
 
@@ -256,6 +558,13 @@ function isProseGenerationCandidate(value: unknown): value is ProseGenerationCan
       || candidate.perspectiveCharacterId === null
       || typeof candidate.perspectiveCharacterId === 'number')
     && (candidate.perspectiveFromChapter === undefined || typeof candidate.perspectiveFromChapter === 'boolean')
+    && (candidate.semanticReview === undefined || (
+      !!candidate.semanticReview
+      && candidate.semanticReview.version === 1
+      && candidate.semanticReview.initial?.type === 'prose-semantic-review'
+      && candidate.semanticReview.final?.type === 'prose-semantic-review'
+      && !!candidate.semanticReview.budget
+    ))
     && !!candidate.durable
     && candidate.durable.stepId === PROSE_GENERATION_STEP_ID_V1
 }
@@ -270,6 +579,20 @@ export async function persistProseGenerationCandidateV1(input: {
   scope: WorkspaceScope
   candidate: ProseGenerationCandidateV1
 }): Promise<{ conversation: AgentConversation & { id: number }; event: AgentEvent & { id: number } }> {
+  const { durable, ...candidateBody } = input.candidate
+  if (await hashProseGenerationCandidateV1(candidateBody) !== durable.candidateHash) {
+    throw new Error('正文生成候选 hash 不匹配。')
+  }
+  if (input.candidate.semanticReview && !await verifySemanticReviewEvidence(input.candidate)) {
+    throw new Error('正文生成候选的语义评审证据无效。')
+  }
+  if (input.candidate.semanticReview) {
+    const snapshot = await readAgentRunV1(input.scope, input.candidate.durable.runId)
+    assertProseGenerationExecutionBindingsV1(snapshot)
+    if (!verifySemanticReviewDurableEvidence(snapshot, input.candidate)) {
+      throw new Error('正文生成候选的语义评审证据与 durable ledger 不一致。')
+    }
+  }
   const chapter = await db.chapters.get(input.candidate.chapterId)
   if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) {
     throw new Error('正文生成候选的章节不存在或越界。')
@@ -313,6 +636,18 @@ export async function recordProseGenerationCandidateV1(input: {
 }): Promise<AgentRunSnapshotV1> {
   const durable = input.candidate.durable
   if (durable.runId !== input.snapshot.run.id) throw new Error('正文生成候选 durable evidence 不匹配。')
+  const { durable: _durable, ...candidateBody } = input.candidate
+  if (await hashProseGenerationCandidateV1(candidateBody) !== durable.candidateHash) {
+    throw new Error('正文生成候选 hash 不匹配。')
+  }
+  assertProseGenerationExecutionBindingsV1(input.snapshot)
+  if (requiresSemanticReview(input.snapshot) && !await verifySemanticReviewEvidence(input.candidate)) {
+    throw new Error('正文生成候选缺少新鲜语义评审证据。')
+  }
+  if (requiresSemanticReview(input.snapshot)
+    && !verifySemanticReviewDurableEvidence(input.snapshot, input.candidate)) {
+    throw new Error('正文生成候选的语义评审证据与 durable ledger 不一致。')
+  }
   const step = input.snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
   if (!step || step.status !== 'running' || step.attempt !== durable.attempt) {
     throw new Error('正文生成 durable step 不在候选持久化状态。')
@@ -362,13 +697,27 @@ export async function isProseGenerationCandidateCurrentV1(
 ): Promise<boolean> {
   const chapter = await db.chapters.get(candidate.chapterId)
   if (!chapter || await hashChapterText(chapter.content ?? '') !== candidate.sourceTextHash) return false
+  const { durable, ...candidateBody } = candidate
+  if (await hashProseGenerationCandidateV1(candidateBody) !== durable.candidateHash) return false
+  if (candidate.semanticReview && !await verifySemanticReviewEvidence(candidate)) return false
+  let scope: WorkspaceScope | null = null
+  if (candidate.semanticReview) {
+    try {
+      scope = await resolveScopeForCandidate(candidate)
+      const snapshot = await readAgentRunV1(scope, candidate.durable.runId)
+      assertProseGenerationExecutionBindingsV1(snapshot)
+      if (!verifySemanticReviewDurableEvidence(snapshot, candidate)) return false
+    } catch {
+      return false
+    }
+  }
   if (
     candidate.perspectiveFromChapter
     && (chapter.perspectiveCharacterId ?? null) !== (candidate.perspectiveCharacterId ?? null)
   ) return false
   if (!candidate.informationBoundaryHash) return true
   try {
-    const scope = await resolveScopeForCandidate(candidate)
+    scope ??= await resolveScopeForCandidate(candidate)
     const boundary = await buildChapterInformationBoundaryV1({
       scope,
       chapterId: candidate.chapterId,
@@ -402,6 +751,11 @@ export async function recoverProseGenerationCandidateV1(input: {
 }): Promise<AgentRunSnapshotV1 | null> {
   if (!await isProseGenerationCandidateCurrentV1(input.candidate)) return null
   const snapshot = await readAgentRunV1(input.scope, input.candidate.durable.runId)
+  assertProseGenerationExecutionBindingsV1(snapshot)
+  if (requiresSemanticReview(snapshot) && (
+    !await verifySemanticReviewEvidence(input.candidate)
+      || !verifySemanticReviewDurableEvidence(snapshot, input.candidate)
+  )) return null
   const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
   if (step?.candidateHash === input.candidate.durable.candidateHash) return snapshot
   if (step?.status !== 'running') return null
@@ -489,7 +843,7 @@ export async function commitProseGenerationAdoptionV1(input: {
   candidate: ProseGenerationCandidateV1
   contentHtml: string
   wordCount: number
-}): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string }> {
+}): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
   if (!await isProseGenerationCandidateCurrentV1(input.candidate)) {
     await markProseGenerationStaleV1({
       scope: input.scope,
@@ -499,6 +853,13 @@ export async function commitProseGenerationAdoptionV1(input: {
     throw new Error('章节正文已变化，这批正文候选已过期；请重新生成。')
   }
   let snapshot = await readAgentRunV1(input.scope, input.runId)
+  assertProseGenerationExecutionBindingsV1(snapshot)
+  if (requiresSemanticReview(snapshot) && (
+    !await verifySemanticReviewEvidence(input.candidate)
+      || !verifySemanticReviewDurableEvidence(snapshot, input.candidate)
+  )) {
+    throw new Error('正文候选没有通过当前合同要求的语义评审。')
+  }
   const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
   if (!step || step.status !== 'awaiting_confirmation' || step.candidateHash !== input.candidate.durable.candidateHash) {
     throw new Error('正文生成候选不在等待作者确认状态。')
@@ -602,12 +963,20 @@ export async function verifyProseGenerationRunV1(input: {
   runId: number
   candidate: ProseGenerationCandidateV1
   snapshot?: AgentRunSnapshotV1
-}): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string }> {
+}): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
   let snapshot = input.snapshot ?? await readAgentRunV1(input.scope, input.runId)
   if (snapshot.projection.state === 'completed' && snapshot.run.terminalReceiptHash) {
     return { snapshot, receiptHash: snapshot.run.terminalReceiptHash }
   }
   const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
+  assertProseGenerationExecutionBindingsV1(snapshot)
+  const semanticRequired = requiresSemanticReview(snapshot)
+  if (semanticRequired && (
+    !await verifySemanticReviewEvidence(input.candidate)
+      || !verifySemanticReviewDurableEvidence(snapshot, input.candidate)
+  )) {
+    throw new Error('正文生成终态校验发现语义评审证据缺失、过期或被篡改。')
+  }
   const adoption = snapshot.events.find(event => (
     event.type === 'adoption.committed'
       && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1
@@ -648,9 +1017,11 @@ export async function verifyProseGenerationRunV1(input: {
       || validateProseInformationBoundaryV1(input.candidate.outputText, currentBoundary).length > 0
     ) throw new Error('正文生成终态校验发现信息边界已变化或候选包含提前泄漏。')
   }
-  const verifierSetVersion = hasInformationBoundary
-    ? PROSE_GENERATION_VERIFIER_SET_V2
-    : PROSE_GENERATION_VERIFIER_SET_V1
+  const verifierSetVersion = semanticRequired
+    ? PROSE_GENERATION_VERIFIER_SET_V3
+    : hasInformationBoundary
+      ? PROSE_GENERATION_VERIFIER_SET_V2
+      : PROSE_GENERATION_VERIFIER_SET_V1
   snapshot = await append(input.scope, snapshot, 'verification.started', {
     verifierSetVersion,
   })
@@ -663,17 +1034,40 @@ export async function verifyProseGenerationRunV1(input: {
     runId: input.runId,
     generation: snapshot.projection.generation,
     contractHash: snapshot.projection.contractHash,
-    contextManifestHashes: [input.candidate.durable.contextManifestHash],
+    contextManifestHashes: [...new Set([
+      input.candidate.durable.contextManifestHash,
+      ...(input.candidate.semanticReview ? [
+        input.candidate.semanticReview.initial.contextManifestHash,
+        input.candidate.semanticReview.final.contextManifestHash,
+      ] : []),
+    ])],
     candidateHashes: [input.candidate.durable.candidateHash],
     adoptionEventIds: [adoptionRecord.id],
     postStateHash,
     verifierSetVersion,
+    ...(input.candidate.semanticReview ? {
+      semanticVerifier: {
+        provider: input.candidate.semanticReview.final.reviewer.provider,
+        model: input.candidate.semanticReview.final.reviewer.model,
+        promptVersion: input.candidate.semanticReview.final.reviewer.promptVersion,
+      },
+    } : {}),
     criteria: [
       { id: 'prose-generation.candidate', status: 'passed', evidenceRefs: [`candidate:${input.candidate.durable.candidateHash}`] },
       ...(hasInformationBoundary ? [{
         id: 'prose-generation.information-boundary',
         status: 'passed' as const,
         evidenceRefs: [`information-boundary:${input.candidate.informationBoundaryHash}`],
+      }] : []),
+      ...(semanticRequired ? [{
+        id: 'prose-generation.semantic-review',
+        status: 'passed' as const,
+        evidenceRefs: [
+          `semantic-review:${input.candidate.semanticReview!.final.artifactHash}`,
+          ...(input.candidate.semanticReview!.revision
+            ? [`semantic-revision:${input.candidate.semanticReview!.revision.artifactHash}`]
+            : []),
+        ],
       }] : []),
       { id: 'prose-generation.confirmed', status: 'passed', evidenceRefs: [`run:${input.runId}:confirmation`] },
       { id: 'prose-generation.adopted', status: 'passed', evidenceRefs: [`event:${adoptionRecord.id}`] },
@@ -682,5 +1076,5 @@ export async function verifyProseGenerationRunV1(input: {
     acceptedAt: Date.now(),
   })
   snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash: receipt.receiptHash })
-  return { snapshot, receiptHash: receipt.receiptHash }
+  return { snapshot, receiptHash: receipt.receiptHash, receipt }
 }
