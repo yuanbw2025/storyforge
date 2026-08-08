@@ -372,21 +372,22 @@ Run Harness 应复用这两种模式，而不是把 Gajae 的 JSONL 或 K3 的 m
 
 ### 3.10 NS-0 评测现状
 
-当前 `src/lib/evals/long-consistency` 的旧 NS-0 面板仍使用 17 个 development 和 4 个 held-out 合成夹具，覆盖 completion/continuation/expansion、事实、约束、未来泄漏、错世界泄漏和语义裁判。结果保存在 browser `localStorage`，held-out 只显示 aggregate。
+`src/lib/evals/long-consistency` 保留 17 个 development 和 4 个 held-out 的旧 NS-0 夹具及纯构造/评分函数，作为历史回归和 H17 压缩评测的基线；旧浏览器模型 runner、整组 `localStorage` 结果入口和 NS-0/NS-1 按钮已在 HARNESS-28D 下线，不能再从产品代码启动旧格式评测。
 
-HARNESS-28A 已在同一评测模块增加 ConStory 闭集 taxonomy、严格逐字证据协议和只读 verifier runner。新 H4 artifact 可记录五类/19 子型、程序计算的 UTF-16 半开字符区间、来源 hash、作者意图区分、生成/审查模型身份、Prompt/benchmark 版本、token、延迟、成本和 trace hash，并支持严格 JSON 导入导出；这没有改变下面所述旧 NS-0 夹具规模和开发面板路径。
+HARNESS-28A 已在同一评测模块增加 ConStory 闭集 taxonomy、严格逐字证据协议和只读 verifier runner。新 H4 artifact 可记录五类/19 子型、程序计算的 UTF-16 半开字符区间、来源 hash、作者意图区分、生成/审查模型身份、Prompt/benchmark 版本、token、延迟、成本和 trace hash，并支持严格 JSON 导入导出。
 
-HARNESS-28B 已另建 headless H4 目录：40 个 development、20 个 held-out，每篇 8,000–12,000 个 UTF-16 字符，generation/continuation/expansion/completion 在两个 split 内均衡；development 每个子型两例、held-out 每个子型一例，并加入 2+1 个 clean controls、中段/远距证据及 intentional/ambiguous 控制。公开 fixture/source ID 为不透明编号，模型可见投影物理移除 hidden labels；60 例的隐藏证据均已通过与真实 verifier 共用的定位和 artifact 路径。该目录尚未接入旧面板或真实模型 runner。
+HARNESS-28B 已另建 headless H4 目录：40 个 development、20 个 held-out，每篇 8,000–12,000 个 UTF-16 字符，generation/continuation/expansion/completion 在两个 split 内均衡；development 每个子型两例、held-out 每个子型一例，并加入 2+1 个 clean controls、中段/远距证据及 intentional/ambiguous 控制。公开 fixture/source ID 为不透明编号，模型可见投影物理移除 hidden labels；60 例的隐藏证据均已通过与真实 verifier 共用的定位和 artifact 路径。
 
 HARNESS-28C 已为该目录增加可接真实 provider 的 headless verifier runner、可校验 checkpoint/恢复、有限重试、调用预算和 aggregate-only sealed scorer。runner 强制生成来源与 verifier 的 provider/model 身份不同，每次外部调用只收到不含正文副本的 fixture 元数据与唯一一份正式 judge messages；稳定 trace hash 可作为恢复后的幂等键。成功及失败响应的 token、延迟和成本都会累计，无用量证据的失败调用单独计数并阻断发布。评分代码计算 high-severity hard precision/recall、证据回查、作者意图误升级和 clean control 误报，报告 Wilson 95% 区间；独立的配对 bootstrap 工具比较每万字符 hard-conflict density。仓库目前只有模拟 verifier 的契约测试，没有真实外部模型结果。
+
+HARNESS-28D 已把开发环境设置页迁移到 H4 40+20：development 完整通过后才解锁 held-out；每个 case 后验签并写入 split 隔离的浏览器 checkpoint，刷新后从冻结 checkpoint 只补未完成 case。真实当前 provider 只接收正式 judge messages，调用由 H4 runner 统一重试，token、估算成本和时长进入 artifact；界面只展示 sealed aggregate，可导出完整 checkpoint JSON。旧 NS-0/NS-1 模型 runner、旧结果 key 和 UI 已删除，H17 上下文压缩对照保留。当前只有模拟 provider 的浏览器存储/组件回归，没有真实外部 provider 的 40+20 artifact。
 
 主要局限：
 
 - 旧 NS-0 fixture 仍是“关键事实 + 40 句长尾填充”；新 H4 目录虽达到长度、分类和证据位置门槛，仍是确定性合成语料，不等同于作者长篇分布；
-- 当前配置模型既可能生成又可能裁判，存在相关性偏差；
-- 新 headless runner 强制独立身份，但旧开发面板仍可能由当前配置模型同时生成和裁判，且旧结果不是新 H4 artifact；
-- checkpoint、重试、预算和恢复已有确定性故障注入，尚未用真实 provider 完成 40+20、刷新/关闭重开和多 Harness 对照；
-- 新 H4 artifact 已有统一 evidence span + character offset schema；旧 `CaseScore` 仍没有该证据。
+- H4 当前冻结的是合成长篇矛盾语料并评测 verifier，不是由生产 Harness 实际生成的长篇候选，不能据此证明生成质量收益；
+- checkpoint、重试、预算和恢复已有确定性故障注入及浏览器存储/组件模拟，尚未用真实 provider 完成 40+20、真实关闭重开和多 Harness 对照；
+- 新 H4 artifact 已有统一 evidence span + character offset schema；旧 `CaseScore` 只作为 H17 历史基线保留，不得作为 H4 发布证据。
 
 ## 4. 入口 -> 读写 -> 生命周期 -> 调用方 -> 测试闭包
 
@@ -401,7 +402,7 @@ HARNESS-28C 已为该目录增加可接真实 provider 的 headless verifier run
 | 一致性 Agent | background/fast/deep | 正式 context + 原文证据 | 只写 Agent 报告事件 | conversation/events | `R-AGENT6` 覆盖零 token、引文、stale；缺 terminal receipt 和跨章修复循环 |
 | 自由节点 | Node run | 正式 sources/RAG selection | 确认后 `adopt()` | `nodeFlows/nodeRuns` 已注册 | `R-FLOW2/R-RAG1`；可复用 input/output snapshot 设计 |
 | 模拟运行时 | simulation runtime | 冻结 Canon snapshot | 独立 runtime event，不反写 Canon | 3 表完整生命周期 | `R-SIM1` 覆盖回放/hash/分支/删除；可复用 event/checkpoint 模式 |
-| NS-0 eval | settings panel/runner | 冻结 fixtures + 生产 builders | localStorage 结果 | 浏览器本地 | 专项测试覆盖 A/B 和阈值；缺版本化 artifact、长篇/恢复/过程评测 |
+| H4 eval | `HarnessEvalPanel` -> H4 runner | 40+20 冻结长篇来源 + 正式 judge messages | split 隔离、验签 checkpoint；不写项目数据 | development 通过后解锁 held-out；刷新恢复、aggregate 展示、JSON 导出 | HARNESS-28A–28D 覆盖证据、目录、恢复、统计、浏览器存储与旧入口收口；缺真实 provider 40+20 和人工复核 |
 
 ## 5. 差距矩阵与采用决策
 
@@ -1121,6 +1122,15 @@ CHIRON 四类信息可映射到现有结构：
 - `compareH4ConsistencyErrorDensityV1()` 对相同 fixture 的不同长度输出计算每万字符 hard conflict density，并用固定种子的配对 percentile bootstrap 报告相对下降区间。模型调用与评分 API 的 sealed 边界用于防止标签进入 context；标签仍存在于本地合成评测源码，不宣称密码学或服务端保密；
 - `R-HARNESS28-long-consistency-runner` 使用模拟响应证明真实调用参数、有限重试、成本核算、预算终止、中断恢复、防篡改、聚合隔离、Wilson/bootstrap 和发布门可执行。没有外部模型 40+20 artifact、人工 held-out 复核、真实刷新/关闭重开证据或质量收益，因此 H4 仍未完成且不得接生产 hard gate。
 
+**浏览器入口迁移与旧入口收口（HARNESS-28D，2026-08-09）**
+
+- 设置页开发工具由 `NS0EvalPanel` 改为 `HarnessEvalPanel`。H4 development 固定 40 例；其 sealed score 通过后才可运行 20 例 held-out，完成的 held-out 在界面锁定；
+- `h4-browser-storage.ts` 按 split 使用版本化 key，只接受能由冻结目录重新验证的 checkpoint。每个初始状态、失败尝试和完成 case 后同步持久化；恢复继续使用原 run/model/code/预算绑定。错误 JSON、错误 split、篡改 hash 和存储失败均 fail closed；
+- provider 适配器不再做第二层隐藏重试，单个逻辑调用由 H4 runner 的 1–3 次上限治理。正式 `chat()` 使用 reject-overflow，返回 provider token 时采用真实用量，否则用统一 estimator；成本按现有模型价格表估算，时长按调用计时；
+- UI 不读取 hidden labels、不展示逐例输出，只显示 scorer 返回的 aggregate、门禁和总用量；完整 checkpoint 可导出并由 28C 导入器重新验证。评测状态不属于用户项目，不新增表、不写 Canon，也不进入三注册表生命周期；
+- 旧 `runEvalInBrowser()`、`runPairedEvalInBrowser()`、独立 `semantic-judge.ts`、NS-0/NS-1 结果 key 和开发按钮已删除。17+4 旧夹具只保留纯构造/确定性评分回归及 H17 依赖，不能形成第二条外部模型入口；
+- `R-HARNESS28-long-consistency-browser-storage` 与 `R-HARNESS17-context-compression-eval-ui` 覆盖逐例持久化、刷新恢复、不重复调用、损坏拒绝、split 隔离、旧按钮不可达、H17 保留以及共享危险确认对话框的取消/清除双分支。测试使用模拟 provider/jsdom；真实浏览器关闭重开、真实 provider 40+20 与人工 held-out 复核仍未交付。
+
 **范围**
 
 - 建立 40 个 development + 20 个 sealed held-out 的中文长篇用例，目标每例 8,000–12,000 中文字符；
@@ -1174,7 +1184,7 @@ CHIRON 四类信息可映射到现有结构：
 - 确定性截断变体直接调用生产 `assembleContext()` 共用的单源裁剪函数；语义变体直接调用生产 `agent-context-compression-v1` 和 `prose.generate` Skill 压缩策略，不复制第二套压缩提示词或伪造摘要。压缩无合格交付时该 case fail-closed，不生成名为 semantic 的伪对照记录；
 - 评测将“最终生成调用的输入 token”与“压缩辅助调用 + 最终生成的总 token”分开报告，同时记录模型调用数、压缩回退率和延迟。生成输入缩短不再被表述为总成本下降；额外压缩调用造成的总成本倍率会原样展示；
 - 发布门在调用真实模型前冻结为：事实召回和约束召回相对全文各最多下降 2 个百分点，未来泄漏和错世界泄漏均为 0，生成阶段输入至少下降 25%，压缩回退率为 0。结果记录绑定 source/delivery/output/score/usage trace hash 和整组 record hash，篡改指标后验证失败；
-- `NS0EvalPanel` 只取三种任务各一条 development 夹具运行该对照，避免一次内部评测无限扩张调用量。当前仓库只证明 runner、成本核算、证据完整性和发布门可执行，尚未替作者调用任何真实 provider，也没有产出质量收益结论；在真实结果通过前不扩大生产压缩来源数，不接入“生成质量差即自动全文重生成”。
+- `HarnessEvalPanel` 的 H17 区域只取三种任务各一条 development 夹具运行该对照，避免一次内部评测无限扩张调用量。当前仓库只证明 runner、成本核算、证据完整性和发布门可执行，尚未替作者调用任何真实 provider，也没有产出质量收益结论；在真实结果通过前不扩大生产压缩来源数，不接入“生成质量差即自动全文重生成”。
 
 **执行版本与新鲜度实施状态（HARNESS-18/19，2026-08-08）**
 

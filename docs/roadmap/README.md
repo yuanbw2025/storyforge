@@ -292,7 +292,7 @@
   revise、organize、memory Skill 不能伪装成主计划生成任务。由于 HARNESS-26 尚无真实外部模型的 6 组通过
   artifact，新能力默认关闭，只能显式设置 `storyforge:harness:master-candidate-semantic-review-v1=enabled`；
   不扩大 fan-out 白名单，也不宣称已交付通用审计、自动修订或质量净收益。
-- HARNESS-28A–28C 已完成 H4 的证据协议、长篇夹具目录和 headless 发布 runner：按论文原文冻结 ConStory 五类/19 子型；verifier 只交
+- HARNESS-28A–28D 已完成 H4 的证据协议、长篇夹具目录、headless runner 和开发入口迁移：按论文原文冻结 ConStory 五类/19 子型；verifier 只交
   `sourceId + quote`，代码统一计算标准化来源 hash 与 UTF-16 半开 offset，并拒绝不存在、错来源、重复歧义
   和证据篡改。类别、hard/advisory 和 intentional/ambiguous 降级由代码决定。版本化 artifact 绑定 fixture
   输入/隐藏标签、来源、生成/审查身份、Prompt/benchmark、token、延迟、成本和 trace hash，可严格导入导出，
@@ -300,9 +300,10 @@
   19 子型达到 2+1 覆盖，并含 clean、作者意图及中段/远距控制；不透明公开 ID 和模型可见投影阻止隐藏标签
   泄漏，60 例都已通过正式证据定位/artifact 路径。runner 强制独立模型身份、有限重试、预算、逐例 checkpoint、
   防篡改 JSON 恢复和失败用量核算；aggregate-only scorer 提供预注册 precision/recall、证据、意图/clean 门、
-  Wilson 区间及配对 bootstrap 错误密度比较。当前只有模拟响应的工程证据，sealed 不代表源码标签保密；现有
-  开发面板迁移、真实外部模型 40+20 artifact、人工 held-out 复核和质量收益仍待后续，因此 H4 和全面 Harness
-  重构均未完成。
+  Wilson 区间及配对 bootstrap 错误密度比较。开发设置页已改走 H4 40+20，逐例验签持久化、刷新恢复、
+  development 门禁解锁 held-out、aggregate 展示和 checkpoint 导出均已接入；旧 NS-0/NS-1 模型入口及结果 key
+  已删除，H17 保留。当前只有模拟响应/jsdom 的工程证据，sealed 不代表源码标签保密；真实外部模型 40+20
+  artifact、真实浏览器关闭重开、人工 held-out 复核和质量收益仍待后续，因此 H4 和全面 Harness 重构均未完成。
 
 ### GOV-1 第一阶段交付证据
 

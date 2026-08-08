@@ -468,7 +468,7 @@
   `agentEvents` 的项目生命周期和便携重映射。review/revise/organize/memory 等 Harness 内部 Skill 不能成为
   顶层生成任务。因真实外部模型发布 artifact 仍缺失，该策略默认关闭，仅显式本地开关可启用；未交付
   通用审计 fan-out、自动语义修订或更宽的领域白名单。
-- HARNESS-28A–28C 已在既有长篇评测模块冻结 ConStory 五类/19 子型，并建立统一只读证据协议：模型只交
+- HARNESS-28A–28D 已在既有长篇评测模块冻结 ConStory 五类/19 子型，并建立统一只读证据协议：模型只交
   `sourceId + quote`，代码用 `chapter-text-v1` 标准化来源、计算 SHA-256 与 UTF-16 半开 offset，拒绝不存在、
   错来源、重复歧义和同区间 pair。类别和 hard/advisory 由代码派生，intentional/ambiguous 不得升级 hard。
   H4 artifact 严格绑定 fixture 输入/隐藏标签 hash、来源集合、生成/审查身份、Prompt/benchmark、用量、成本和
@@ -478,8 +478,10 @@
   通过正式证据定位/artifact 路径。headless runner 强制 generator/verifier 身份分离，按例 checkpoint 并可从
   JSON 恢复；有限重试和调用/token/时长/成本预算包含失败响应用量，无用量失败会阻断发布。aggregate-only
   scorer 计算 high hard precision/recall、证据回查、作者意图误升级、clean 误报及 Wilson 95% 区间；配对
-  bootstrap 可比较不同长度输出的每万字符错误密度。旧 17+4 面板尚未迁移，sealed 仅指调用/评分 API 隔离而非
-  源码标签保密；真实外部 verifier artifact、人工 held-out 复核、浏览器重启恢复和质量收益仍未交付。
+  bootstrap 可比较不同长度输出的每万字符错误密度。开发设置页现已迁移到 H4 40+20，逐例验签 checkpoint
+  按 split 存储并可刷新恢复，只展示 aggregate 且可导出完整 artifact；development 通过后才解锁 held-out。
+  旧 NS-0/NS-1 模型 runner、独立语义裁判、结果 key 和按钮已删除，H17 对照保留。sealed 仅指调用/评分 API 隔离而非源码
+  标签保密；真实外部 verifier 40+20 artifact、真实浏览器关闭重开、人工 held-out 复核和质量收益仍未交付。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

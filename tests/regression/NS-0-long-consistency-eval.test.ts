@@ -6,13 +6,8 @@ import {
   aggregateScores,
   buildEvalCase,
   evaluateNs1Gate,
-  runPairedEvalInBrowser,
   scoreOutput,
 } from '../../src/lib/evals/long-consistency/runner'
-import {
-  parseSemanticJudgeVerdict,
-  scoreWithSemanticVerdict,
-} from '../../src/lib/evals/long-consistency/semantic-judge'
 
 describe('NS-0 long-consistency evaluation harness', () => {
   it('freezes separate development and held-out fixture sets', () => {
@@ -133,27 +128,6 @@ describe('NS-0 long-consistency evaluation harness', () => {
     expect(score.evidenceCitationRecall).toBe(1)
   })
 
-  it('uses a bounded semantic verdict for behavior constraints and contextual leakage', () => {
-    const fixture = getFixtures('development')[0]
-    const verdict = parseSemanticJudgeVerdict(fixture, JSON.stringify({
-      matchedRequiredFactIds: ['bronze-bell', 'unknown'],
-      satisfiedConstraintIds: ['signal', 'protect-identity'],
-      leakedFutureFactIds: [],
-      leakedForeignWorldFactIds: [],
-    }))
-    expect(verdict).toEqual({
-      matchedRequiredFactIds: ['bronze-bell'],
-      satisfiedConstraintIds: ['signal', 'protect-identity'],
-      leakedFutureFactIds: [],
-      leakedForeignWorldFactIds: [],
-    })
-    const score = scoreWithSemanticVerdict(fixture, '正文没有逐字复述禁令。', verdict!)
-    expect(score.requiredFactRecall).toBe(0.5)
-    expect(score.constraintRecall).toBe(1)
-    expect(score.futureLeakage).toBe(false)
-    expect(score.wrongWorldLeakage).toBe(false)
-  })
-
   it('pre-registers fixed-budget and NS-1 acceptance gates before real baseline calls', () => {
     expect(NS0_FIXED_MAX_TOKENS).toBe(1200)
     expect(NS1_ACCEPTANCE_THRESHOLDS).toEqual({
@@ -193,41 +167,6 @@ describe('NS-0 long-consistency evaluation harness', () => {
     expect(aggregate.futureLeakageRate).toBe(0)
     expect(aggregate.estimatedInputTokens).toBe(80)
     expect(aggregate.estimatedOutputTokens).toBe(20)
-  })
-
-  it('runs paired A/B under both fixed-budget and natural-cost modes', async () => {
-    const seenMaxTokens: number[] = []
-    const fixture = getFixtures('development')[0]
-    const records = await runPairedEvalInBrowser({
-      fixtures: [fixture],
-      split: 'development',
-      variants: ['legacy-500-tail', 'handoff-tail-summary'],
-      config: {
-        provider: 'agnes',
-        apiKey: 'test-only',
-        model: 'agnes-1.5-flash',
-        baseUrl: 'https://example.invalid/v1',
-        temperature: 0.7,
-        maxTokens: 4096,
-      },
-      call: async (_messages, config) => {
-        seenMaxTokens.push(config.maxTokens)
-        return {
-          output: '青铜铃藏在左袖，暗号是三短一长，她没有叫出苏禾的名字。',
-          usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
-        }
-      },
-    })
-
-    expect(records.map(record => `${record.budgetMode}:${record.variant}`)).toEqual([
-      'fixed:legacy-500-tail',
-      'fixed:handoff-tail-summary',
-      'natural:legacy-500-tail',
-      'natural:handoff-tail-summary',
-    ])
-    // handoff 候选每个 case 多一次"真实抽取"调用（从上一章正文抽 handoff/摘要，
-    // 不喂答案），与生成调用同预算；legacy 无抽取。故每模式下为 [legacy gen, handoff 抽取, handoff gen]。
-    expect(seenMaxTokens).toEqual([1200, 1200, 1200, 4096, 4096, 4096])
   })
 
   it('applies the pre-registered NS-1 gate without post-hoc threshold changes', () => {

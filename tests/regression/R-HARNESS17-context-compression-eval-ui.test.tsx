@@ -1,7 +1,8 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it } from 'vitest'
-import NS0EvalPanel from '../../src/components/settings/NS0EvalPanel'
+import HarnessEvalPanel from '../../src/components/settings/HarnessEvalPanel'
+import { DialogProvider } from '../../src/components/shared/Dialog'
 import { H17_CONTEXT_COMPRESSION_RESULTS_STORAGE_KEY } from '../../src/lib/evals/context-compression/runner'
 import type {
   ContextCompressionEvalAggregateV1,
@@ -9,10 +10,46 @@ import type {
   ContextCompressionEvalVariant,
 } from '../../src/lib/evals/context-compression/types'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
+import {
+  H4_LONG_CONSISTENCY_FIXTURES_V1,
+  clearH4LongConsistencyBrowserCheckpointV1,
+  loadH4LongConsistencyBrowserStateV1,
+  persistH4LongConsistencyBrowserCheckpointV1,
+  runH4LongConsistencyVerifierV1,
+  type H4LongConsistencyVerifierCallInputV1,
+} from '../../src/lib/evals/long-consistency'
+import { useAIConfigStore } from '../../src/stores/ai-config'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
+const ORIGINAL_AI_CONFIG = structuredClone(useAIConfigStore.getState().config)
+
+async function flushAsyncEffects(): Promise<void> {
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 50))
+  })
+}
+
+async function mountHarness(): Promise<HTMLDivElement> {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const root = createRoot(host)
+  mounted.push({ host, root })
+  await act(async () => root.render(
+    createElement(DialogProvider, null, createElement(HarnessEvalPanel)),
+  ))
+  return host
+}
+
+function clickButton(button: HTMLButtonElement | null | undefined): void {
+  button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+}
+
+function findButton(label: string): HTMLButtonElement | undefined {
+  return Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+    .find(button => button.textContent?.trim() === label)
+}
 
 function aggregate(inputTokens: number, totalInputTokens: number, calls: number): ContextCompressionEvalAggregateV1 {
   return {
@@ -76,20 +113,141 @@ afterEach(async () => {
     item.host.remove()
   }
   localStorage.removeItem(H17_CONTEXT_COMPRESSION_RESULTS_STORAGE_KEY)
+  clearH4LongConsistencyBrowserCheckpointV1('development')
+  clearH4LongConsistencyBrowserCheckpointV1('held-out')
+  useAIConfigStore.setState({ config: structuredClone(ORIGINAL_AI_CONFIG) })
 })
 
 describe('R-HARNESS17 · 压缩评测面板', () => {
+  it('retires the legacy NS-0/NS-1 controls and exposes the H4 40+20 entry', async () => {
+    const host = await mountHarness()
+
+    expect(host.querySelector('[data-testid="harness-eval-panel"]')).not.toBeNull()
+    expect(host.textContent).toContain('H4 Development')
+    expect(host.textContent).toContain('40 例')
+    expect(host.textContent).toContain('H4 Held-out')
+    expect(host.textContent).toContain('20 例')
+    expect(host.textContent).not.toContain('NS-0 长期一致性基线')
+    expect(host.textContent).not.toContain('NS-1 最终配对 A/B')
+  })
+
+  it('restores an interrupted H4 checkpoint as a resumable run without exposing case output', async () => {
+    const fixtures = new Map(H4_LONG_CONSISTENCY_FIXTURES_V1.map(fixture => [fixture.id, fixture] as const))
+    const call = async (input: H4LongConsistencyVerifierCallInputV1) => {
+      const fixture = fixtures.get(input.fixture.id)!
+      return {
+        output: JSON.stringify({
+          schemaVersion: 1,
+          issues: fixture.hiddenLabels.expectedIssues.map(issue => ({
+            id: `ui:${issue.id}`,
+            subtype: issue.subtype,
+            severity: issue.severity,
+            intentClassification: issue.intentClassification,
+            summary: '界面恢复测试结论。',
+            factEvidence: issue.factEvidence,
+            contradictionEvidence: issue.contradictionEvidence,
+          })),
+        }),
+        usage: { inputTokens: 1_000, outputTokens: 100, durationMs: 10, costUsd: 0.01 },
+      }
+    }
+    await expect(runH4LongConsistencyVerifierV1({
+      runId: 'h4-ui-resume',
+      split: 'development',
+      codeRevision: 'h4-ui-test',
+      fixtureIds: ['h4-dev-01', 'h4-dev-02'],
+      execution: {
+        generator: { provider: 'fixture', model: 'h4-synthetic-corpus', promptVersion: 'h4-synthetic-zh-60-v1' },
+        verifier: { provider: 'independent', model: 'h4-ui-verifier', promptVersion: 'h4-long-consistency-judge-v1' },
+      },
+      call,
+      now: () => 0,
+      onCheckpoint: async checkpoint => {
+        await persistH4LongConsistencyBrowserCheckpointV1(checkpoint)
+        if (checkpoint.completed.length === 1) throw new Error('simulated-ui-refresh')
+      },
+    })).rejects.toThrow('simulated-ui-refresh')
+
+    useAIConfigStore.setState({
+      config: {
+        ...ORIGINAL_AI_CONFIG,
+        provider: 'openai',
+        model: 'different-verifier',
+        apiKey: 'test-only',
+      },
+    })
+    const host = await mountHarness()
+    await flushAsyncEffects()
+
+    const section = host.querySelector('[data-testid="h4-development-section"]')
+    expect(section?.textContent).toContain('可恢复 · 1/2')
+    expect(section?.textContent).toContain('继续')
+    expect(section?.textContent).not.toContain('界面恢复测试结论')
+
+    await act(async () => {
+      clickButton(section?.querySelector('button'))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(host.textContent).toContain('请先切回 independent/h4-ui-verifier')
+  })
+
+  it('keeps or clears an H4 checkpoint according to the shared confirmation dialog', async () => {
+    const fixture = H4_LONG_CONSISTENCY_FIXTURES_V1[0]
+    const checkpoint = await runH4LongConsistencyVerifierV1({
+      runId: 'h4-ui-clear',
+      split: 'development',
+      codeRevision: 'h4-ui-test',
+      fixtureIds: [fixture.id],
+      execution: {
+        generator: { provider: 'fixture', model: 'h4-synthetic-corpus', promptVersion: 'h4-synthetic-zh-60-v1' },
+        verifier: { provider: 'independent', model: 'h4-ui-verifier', promptVersion: 'h4-long-consistency-judge-v1' },
+      },
+      call: async () => ({
+        output: JSON.stringify({ schemaVersion: 1, issues: [] }),
+        usage: { inputTokens: 1_000, outputTokens: 100, durationMs: 10, costUsd: 0.01 },
+      }),
+      now: () => 0,
+    })
+    await persistH4LongConsistencyBrowserCheckpointV1(checkpoint)
+
+    const host = await mountHarness()
+    await flushAsyncEffects()
+    const clearButton = () => host.querySelector<HTMLButtonElement>(
+      '[aria-label="\u6e05\u9664 H4 Development"]',
+    )
+
+    await act(async () => {
+      clickButton(clearButton())
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('清除 H4 checkpoint？')
+    await act(async () => {
+      clickButton(findButton('保留'))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(await loadH4LongConsistencyBrowserStateV1('development')).not.toBeNull()
+    expect(host.querySelector('[data-testid="h4-development-section"]')?.textContent).toContain('已完成 · 1/1')
+
+    await act(async () => {
+      clickButton(clearButton())
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      clickButton(findButton('清除'))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(await loadH4LongConsistencyBrowserStateV1('development')).toBeNull()
+    expect(host.querySelector('[data-testid="h4-development-section"]')?.textContent).toContain('40 例')
+  })
+
   it('恢复三路汇总并同时展示生成输入缩减和总输入倍率', async () => {
     localStorage.setItem(H17_CONTEXT_COMPRESSION_RESULTS_STORAGE_KEY, JSON.stringify(await Promise.all([
       signedRecord('full-source', 9_000, 9_000, 3),
       signedRecord('deterministic-truncation', 3_300, 3_300, 3),
       signedRecord('semantic-compression', 3_000, 11_000, 6),
     ])))
-    const host = document.createElement('div')
-    document.body.append(host)
-    const root = createRoot(host)
-    mounted.push({ host, root })
-    await act(async () => root.render(createElement(NS0EvalPanel)))
+    const host = await mountHarness()
+    await flushAsyncEffects()
 
     expect(host.textContent).toContain('上下文质量对照')
     expect(host.querySelector('[data-testid="h17-context-compression-result"]')).not.toBeNull()

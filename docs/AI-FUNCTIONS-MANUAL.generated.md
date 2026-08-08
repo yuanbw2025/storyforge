@@ -188,8 +188,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 64 个 category。
-未分类调用: 0 个。动态 category 调用: 12 个。
+共 67 个 category。
+未分类调用: 0 个。动态 category 调用: 11 个。
 
 | category | 触发文件 |
 |---|---|
@@ -215,6 +215,9 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
 | `detail.scene` | `src/components/outline/ScenePanel.tsx:126`<br/>`src/lib/ai/batch-detail-runner.ts:193` |
 | `emotion.beat` | `src/components/editor/EmotionBeatCard.tsx:66` |
+| `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:78` |
+| `eval.h17.generation` | `src/components/settings/HarnessEvalPanel.tsx:79` |
+| `eval.h4.verifier` | `src/components/settings/HarnessEvalPanel.tsx:108` |
 | `foreshadow.structure` | `src/components/foreshadow/ForeshadowPanel.tsx:67` |
 | `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:216` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
@@ -262,7 +265,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 - `src/components/editor/ChapterEditor.tsx:997 · chat`
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
-- `src/components/settings/NS0EvalPanel.tsx:72 · chat`
 - `src/lib/agent/character-copilot.ts:472 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
 - `src/lib/agent/inspiration-copilot.ts:328 · chat`
@@ -275,4 +277,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `b12bce9`
+生成时间基准:commit `26e1229`

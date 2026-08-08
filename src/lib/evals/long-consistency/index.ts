@@ -1,5 +1,6 @@
 export * from './evidence-report'
 export * from './h4-fixtures'
+export * from './h4-browser-storage'
 export * from './h4-runner'
 export * from './h4-scoring'
 export * from './h4-statistics'

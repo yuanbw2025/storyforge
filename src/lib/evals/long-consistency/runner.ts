@@ -1,16 +1,11 @@
 import { buildChapterContentPrompt, buildContinuePrompt, buildExpandPrompt } from '../../ai/adapters/chapter-adapter'
-import { prepareChapterMemoryRequest, parseChapterMemoryOutput } from '../../ai/adapters/chapter-memory-adapter'
-import { formatHandoff } from '../../ai/chapter-memory/handoff-format'
 import { estimateTokens } from '../../ai/context-budget'
-import type { AIConfig, ChatMessage } from '../../types'
-import type { TokenUsage } from '../../ai/logger'
+import type { ChatMessage } from '../../types'
 import type {
   AggregateScore,
   BuiltEvalCase,
   CaseScore,
-  EvalBudgetMode,
   EvalRunRecord,
-  EvalSplit,
   EvalVariant,
   LongConsistencyFixture,
 } from './types'
@@ -26,10 +21,6 @@ export const NS1_ACCEPTANCE_THRESHOLDS = Object.freeze({
 })
 
 export const NS0_FIXED_MAX_TOKENS = 1200
-export const NS0_RESULTS_STORAGE_KEY = 'storyforge-ns0-long-consistency-results-v5'
-// Bump this key for each sealed held-out attempt. Earlier versions remain in
-// browser storage as audit records and are never reused for tuning.
-export const NS0_PAIRED_RESULTS_STORAGE_KEY = 'storyforge-ns0-long-consistency-paired-v5'
 
 export interface Ns1GateResult {
   passed: boolean
@@ -86,54 +77,6 @@ export const EMPTY_EVAL_MEMORY: ExtractedEvalMemory = {
   extractionOutputTokens: null,
   extractionInputChars: 0,
   extractionOutputChars: 0,
-}
-
-function evalExtractionSource(fixture: LongConsistencyFixture): string {
-  return fixture.previousChapterText || fixture.existingContent || fixture.selectedText || ''
-}
-
-/**
- * 对非 legacy 变体，调真实 chapter.memory 抽取器从上一章正文产出 handoff/摘要。
- * 抽取本身要花一次模型调用——其 token 必须计入候选成本，A/B 成本比较才诚实。
- */
-export async function extractEvalMemory(
-  fixture: LongConsistencyFixture,
-  variant: EvalVariant,
-  call: (messages: ChatMessage[], config: AIConfig) => Promise<{ output: string; usage?: TokenUsage }>,
-  config: AIConfig,
-): Promise<ExtractedEvalMemory> {
-  if (variant === 'legacy-500-tail') return EMPTY_EVAL_MEMORY
-  const source = evalExtractionSource(fixture)
-  if (!source.trim()) return EMPTY_EVAL_MEMORY
-
-  const prepared = await prepareChapterMemoryRequest(fixture.title, source)
-  const response = await call(prepared.messages, { ...config, temperature: 0.1 })
-  const extractionInputChars = prepared.messages.reduce((sum, message) => sum + message.content.length, 0)
-  const extractionOutputChars = response.output.length
-  const parsed = parseChapterMemoryOutput({
-    raw: response.output,
-    chapterId: 0,
-    normalizedText: prepared.normalizedText,
-    sourceTextHash: prepared.sourceTextHash,
-  })
-  if (!parsed) {
-    // 抽取失败是真实信号（handoff 可能抽不出）——候选此时退化为 tail-only。
-    return {
-      ...EMPTY_EVAL_MEMORY,
-      extractionInputTokens: response.usage?.inputTokens ?? null,
-      extractionOutputTokens: response.usage?.outputTokens ?? null,
-      extractionInputChars,
-      extractionOutputChars,
-    }
-  }
-  return {
-    handoffText: variant === 'handoff-tail-summary' ? formatHandoff(parsed.handoff).join('\n') : '',
-    summaryText: parsed.summary,
-    extractionInputTokens: response.usage?.inputTokens ?? null,
-    extractionOutputTokens: response.usage?.outputTokens ?? null,
-    extractionInputChars,
-    extractionOutputChars,
-  }
 }
 
 function buildEvalContinuity(fixture: LongConsistencyFixture, variant: EvalVariant, memory: ExtractedEvalMemory) {
@@ -281,132 +224,4 @@ export function aggregateScores(
       0,
     ),
   }
-}
-
-/** 两段 token 用量相加；只有都缺失才返回 null（用于把抽取调用成本并入候选）。 */
-function combineTokens(a: number | null, b: number | null): number | null {
-  if (a == null && b == null) return null
-  return (a ?? 0) + (b ?? 0)
-}
-
-export async function runEvalInBrowser(args: {
-  fixtures: LongConsistencyFixture[]
-  split: EvalSplit
-  variant: EvalVariant
-  budgetMode: EvalBudgetMode
-  config: AIConfig
-  call: (
-    messages: ChatMessage[],
-    config: AIConfig,
-  ) => Promise<{ output: string; usage?: TokenUsage }>
-  judge?: (
-    fixture: LongConsistencyFixture,
-    output: string,
-    config: AIConfig,
-  ) => Promise<CaseScore>
-  onProgress?: (completed: number, total: number) => void
-  persistStandalone?: boolean
-}): Promise<EvalRunRecord> {
-  const results: EvalRunRecord['results'] = []
-  const runConfig = {
-    ...args.config,
-    maxTokens: args.budgetMode === 'fixed' ? NS0_FIXED_MAX_TOKENS : args.config.maxTokens,
-    temperature: 0.2,
-  }
-
-  for (const fixture of args.fixtures) {
-    const startedAt = performance.now()
-    // 候选变体先从上一章真实正文抽 handoff/摘要（真实管线，不喂答案），再生成。
-    const memory = await extractEvalMemory(fixture, args.variant, args.call, runConfig)
-    const built = buildEvalCase(fixture, args.variant, memory)
-    const response = await args.call(built.messages, runConfig)
-    const score = args.judge
-      ? await args.judge(fixture, response.output, runConfig)
-      : scoreOutput(fixture, response.output)
-    results.push({
-      fixtureId: fixture.id,
-      messages: built.messages,
-      productionSnapshot: built.productionSnapshot,
-      output: response.output,
-      // 候选成本诚实计入抽取那次调用（输入正文 + 输出 handoff JSON）。
-      inputChars: built.inputChars + memory.extractionInputChars,
-      outputChars: response.output.length + memory.extractionOutputChars,
-      inputTokens: combineTokens(response.usage?.inputTokens ?? null, memory.extractionInputTokens),
-      outputTokens: combineTokens(response.usage?.outputTokens ?? null, memory.extractionOutputTokens),
-      durationMs: Math.round(performance.now() - startedAt),
-      score,
-    })
-    args.onProgress?.(results.length, args.fixtures.length)
-  }
-
-  const record: EvalRunRecord = {
-    schemaVersion: 1,
-    runId: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    provider: args.config.provider,
-    model: args.config.model,
-    variant: args.variant,
-    split: args.split,
-    budgetMode: args.budgetMode,
-    configuredMaxTokens: runConfig.maxTokens,
-    results,
-    aggregate: aggregateScores(results),
-  }
-  if (args.persistStandalone !== false) {
-    localStorage.setItem(NS0_RESULTS_STORAGE_KEY, JSON.stringify(record))
-  }
-  return record
-}
-
-export async function runPairedEvalInBrowser(args: {
-  fixtures: LongConsistencyFixture[]
-  split: EvalSplit
-  variants: [EvalVariant, EvalVariant]
-  config: AIConfig
-  call: (
-    messages: ChatMessage[],
-    config: AIConfig,
-  ) => Promise<{ output: string; usage?: TokenUsage }>
-  judge?: (
-    fixture: LongConsistencyFixture,
-    output: string,
-    config: AIConfig,
-  ) => Promise<CaseScore>
-  onRunComplete?: (record: EvalRunRecord, completed: number, total: number) => void
-  onCaseProgress?: (
-    completedRuns: number,
-    totalRuns: number,
-    completedCases: number,
-    totalCases: number,
-  ) => void
-}): Promise<EvalRunRecord[]> {
-  const records: EvalRunRecord[] = []
-  const modes: EvalBudgetMode[] = ['fixed', 'natural']
-  const total = args.variants.length * modes.length
-
-  for (const budgetMode of modes) {
-    for (const variant of args.variants) {
-      const record = await runEvalInBrowser({
-        fixtures: args.fixtures,
-        split: args.split,
-        variant,
-        budgetMode,
-        config: args.config,
-        call: args.call,
-        judge: args.judge,
-        persistStandalone: false,
-        onProgress: (completedCases, totalCases) => {
-          args.onCaseProgress?.(records.length, total, completedCases, totalCases)
-        },
-      })
-      records.push(record)
-      // 逐条持久化：agnes 免费版慢 + 面板卸载/超时易中断整轮，每完成一个变体就落盘，
-      // 中断也保住已完成的，避免整轮白跑。
-      localStorage.setItem(NS0_PAIRED_RESULTS_STORAGE_KEY, JSON.stringify(records))
-      args.onRunComplete?.(record, records.length, total)
-    }
-  }
-
-  localStorage.setItem(NS0_PAIRED_RESULTS_STORAGE_KEY, JSON.stringify(records))
-  return records
 }
