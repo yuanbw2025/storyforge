@@ -19,6 +19,7 @@
     "check:release-metadata": "node scripts/check-release-metadata.mjs",
     "check:roadmap": "node scripts/check-roadmap.mjs",
     "check:agent-context": "node scripts/check-agent-context.mjs",
+    "check:agent-freshness": "node scripts/check-agent-freshness.mjs",
     "check:canon-coverage": "node scripts/check-canon-coverage.mjs",
     "gen:project-metrics": "node scripts/generate-project-metrics.mjs",
     "check:project-metrics": "node scripts/generate-project-metrics.mjs --check",
@@ -27,7 +28,7 @@
     "check:architecture": "node scripts/check-architecture.mjs",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
-    "ci": "npm run check:required-tables && npm run check:ai-manual && npm run check:architecture && npm run check:source-reachability && npm run check:roadmap && npm run check:agent-context && npm run check:canon-coverage && npm run check:project-metrics && npm run check:dependencies && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size",
+    "ci": "npm run check:required-tables && npm run check:ai-manual && npm run check:architecture && npm run check:source-reachability && npm run check:roadmap && npm run check:agent-context && npm run check:agent-freshness && npm run check:canon-coverage && npm run check:project-metrics && npm run check:dependencies && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size",
     "ci:e2e": "npm run test:e2e"
   },
   "dependencies": {

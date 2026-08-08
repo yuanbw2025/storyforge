@@ -63,6 +63,7 @@ export interface AgentSkillDefinitionV1 {
   defaultForAgent: boolean
   label: string
   owner: string
+  promptVersion: string
   executionMode: AgentSkillExecutionModeV1
   contextTaskKind: AgentContextTaskKind
   /** Tool-backed sources are derived from the Tool Registry, never copied here. */
@@ -293,6 +294,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '世界来源补全',
     owner: 'world-foundation-agent',
+    promptVersion: 'world-origin-copilot-v1',
     executionMode: 'complete',
     contextTaskKind: 'agent-world-origin',
     readToolNames: ['read_project_status', 'read_worldview'],
@@ -303,7 +305,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 3_000,
     writeTargets: [{ table: 'worldviews', fields: ['worldOrigin'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-world-origin', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression'],
+    regressionTests: ['R-AGENT1-chat-copilot-world-origin', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -312,6 +314,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '角色创建',
     owner: 'character-agent',
+    promptVersion: 'character-copilot-v1',
     executionMode: 'create',
     contextTaskKind: 'agent-character',
     readToolNames: ['read_worldview', 'read_characters'],
@@ -332,7 +335,7 @@ export const AGENT_SKILLS = [
       ],
     }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-character', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression'],
+    regressionTests: ['R-AGENT1-chat-copilot-character', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -341,6 +344,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '灵感反推',
     owner: 'inspiration-agent',
+    promptVersion: 'inspiration-copilot-v1',
     executionMode: 'reverse',
     contextTaskKind: 'agent-inspiration',
     readToolNames: ['read_inspiration_workspace'],
@@ -351,7 +355,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'inspirationWorkspaces', fields: ['versions'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-inspiration', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression'],
+    regressionTests: ['R-AGENT1-chat-copilot-inspiration', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -360,6 +364,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '卷章纲编排',
     owner: 'outline-agent',
+    promptVersion: 'outline-copilot-v1',
     executionMode: 'auto',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
@@ -370,7 +375,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['title', 'summary'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-outline', 'R-HARNESS11-outline-batch-durable', 'R-HARNESS16-semantic-context-compression'],
+    regressionTests: ['R-AGENT1-chat-copilot-outline', 'R-HARNESS11-outline-batch-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -379,6 +384,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '卷纲编排',
     owner: 'outline-agent',
+    promptVersion: 'outline-copilot-v1',
     executionMode: 'volumes',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
@@ -389,7 +395,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['title', 'summary'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression'],
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -398,6 +404,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '章纲编排',
     owner: 'outline-agent',
+    promptVersion: 'outline-copilot-v1',
     executionMode: 'chapters',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
@@ -408,7 +415,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['title', 'summary'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression'],
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -417,6 +424,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '章节正文生成与续写',
     owner: 'prose-agent',
+    promptVersion: 'prose-copilot-v1',
     executionMode: 'auto',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -427,7 +435,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS7-prose-generation-durable', 'R-HARNESS9-information-boundary', 'R-HARNESS16-semantic-context-compression'],
+    regressionTests: ['R-HARNESS7-prose-generation-durable', 'R-HARNESS9-information-boundary', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -436,6 +444,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '章节正文生成',
     owner: 'prose-agent',
+    promptVersion: 'prose-copilot-v1',
     executionMode: 'generate',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -446,7 +455,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS17-context-compression-eval'],
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS17-context-compression-eval', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -455,6 +464,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '章节正文续写',
     owner: 'prose-agent',
+    promptVersion: 'prose-copilot-v1',
     executionMode: 'continue',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -465,7 +475,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content'] }],
     lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression'],
+    regressionTests: ['R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
 ] as const satisfies readonly AgentSkillDefinitionV1[]
 
@@ -682,6 +692,9 @@ export function validateAgentSkillDefinitionsV1(
       defaultAgents.add(skill.agentId)
     }
     if (!skill.owner.trim()) throw new Error(`Agent Skill ${skill.id} 缺少 owner`)
+    if (!/^[a-z0-9][a-z0-9.-]*-v\d+$/.test(skill.promptVersion)) {
+      throw new Error(`Agent Skill ${skill.id} 的 promptVersion 无效`)
+    }
     if (!executionModesByAgent[skill.agentId].has(skill.executionMode)) {
       throw new Error(`Agent Skill ${skill.id} 的执行模式与 Agent 不匹配`)
     }

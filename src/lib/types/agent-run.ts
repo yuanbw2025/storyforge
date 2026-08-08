@@ -15,6 +15,19 @@ export interface AgentRunScopeV1 {
   outlineNodeIds?: number[]
 }
 
+export interface AgentSkillExecutionBindingV1 {
+  version: 1
+  skillId: string
+  skillVersion: 1
+  promptVersion: string
+  toolSchemaVersion: string
+  toolSchemaHash: string
+}
+
+export interface AgentRunStepExecutionBindingV1 extends AgentSkillExecutionBindingV1 {
+  stepId: string
+}
+
 export type AgentRunWriteMode = 'none' | 'candidate-only' | 'author-confirmed'
 
 export interface AgentRunWriteTargetV1 {
@@ -63,6 +76,8 @@ export interface AgentRunContractV1 {
     contextSourceKeys: string[]
     writeTargets: AgentRunWriteTargetV1[]
   }
+  /** Absent on runs created before HARNESS-18. */
+  executionBindings?: AgentRunStepExecutionBindingV1[]
   budget: {
     maxModelCalls: number
     maxToolCalls: number

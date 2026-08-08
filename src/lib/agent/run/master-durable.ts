@@ -27,6 +27,10 @@ import {
   type DomainAgentId,
 } from '../skill-registry'
 import {
+  assertAgentSkillExecutionBindingV1,
+  createAgentSkillExecutionBindingV1,
+} from '../execution-binding'
+import {
   assertMasterWorkflowTaskCompatibilityV1,
   getMasterWorkflowV1,
   isMasterAgentRunWorkflowKindV1,
@@ -318,6 +322,7 @@ export function buildMasterAgentRunContractV1(input: {
   worldGroupId: number | null
   plan: MasterAgentPlan
   budgetEvidence: AgentTeamBudgetEvidence
+  includeExecutionBindings?: boolean
 }) {
   const plan = parseMasterAgentPlanV1(input.plan)
   const policy = resolveAgentTeamBudgetPolicy(input.budgetEvidence.profile)
@@ -362,6 +367,12 @@ export function buildMasterAgentRunContractV1(input: {
       contextSourceKeys: sourceKeysForPlan(plan),
       writeTargets: writeTargetsForPlan(plan),
     },
+    ...(input.includeExecutionBindings === false ? {} : {
+      executionBindings: plan.tasks.map(task => ({
+        stepId: taskStepId(task.id),
+        ...createAgentSkillExecutionBindingV1(resolveAgentSkillV1(task.agentId, task.skillId)),
+      })),
+    }),
     budget: {
       maxModelCalls: policy.maxCalls,
       maxToolCalls: 0,
@@ -440,6 +451,13 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
   if (typeof payload.taskId !== 'string' || typeof payload.agentId !== 'string') fail(`${label} payload 缺少任务身份`)
   if (!DOMAIN_AGENT_IDS.includes(payload.agentId as DomainAgentId)) fail(`${label} payload 领域无效`)
   if (payload.skillId !== undefined) getAgentSkillV1(payload.skillId, payload.agentId)
+  if (payload.executionBinding !== undefined) {
+    assertAgentSkillExecutionBindingV1(
+      payload.executionBinding,
+      resolveAgentSkillV1(payload.agentId, payload.skillId),
+      `${label} executionBinding`,
+    )
+  }
   if (!Array.isArray(payload.contextSources) || payload.contextSources.some(source => typeof source !== 'string')) {
     fail(`${label} payload contextSources 无效`)
   }
@@ -473,6 +491,9 @@ function assertCandidateMatchesTaskSkill(
   const taskSkill = resolveAgentSkillV1(task.agentId, task.skillId)
   const candidateSkill = resolveAgentSkillV1(payload.agentId, payload.skillId)
   if (candidateSkill.id !== taskSkill.id) fail(`${label} 的 Skill 与计划不一致`)
+  if (payload.executionBinding !== undefined) {
+    assertAgentSkillExecutionBindingV1(payload.executionBinding, taskSkill, `${label} executionBinding`)
+  }
   if (
     task.agentId === 'outline'
     && (taskSkill.executionMode === 'volumes' || taskSkill.executionMode === 'chapters')
@@ -483,6 +504,28 @@ function assertCandidateMatchesTaskSkill(
     && (taskSkill.executionMode === 'generate' || taskSkill.executionMode === 'continue')
     && payload.proseOperation !== taskSkill.executionMode
   ) fail(`${label} 的正文操作与 Skill 不一致`)
+}
+
+export function assertMasterAgentRunContractExecutionBindingsV1(
+  contract: AgentRunSnapshotV1['contract'],
+  plan: MasterAgentPlan,
+): void {
+  if (contract.executionBindings === undefined) return
+  if (contract.executionBindings.length !== plan.tasks.length) {
+    fail('主 Agent RunContract executionBindings 数量与计划不一致')
+  }
+  const byStep = new Map(contract.executionBindings.map(binding => [binding.stepId, binding]))
+  for (const task of plan.tasks) {
+    const stepId = taskStepId(task.id)
+    const binding = byStep.get(stepId)
+    if (!binding) fail(`主 Agent RunContract 缺少 ${stepId} execution binding`)
+    const { stepId: _stepId, ...skillBinding } = binding
+    assertAgentSkillExecutionBindingV1(
+      skillBinding,
+      resolveAgentSkillV1(task.agentId, task.skillId),
+      `主 Agent RunContract ${stepId}`,
+    )
+  }
 }
 
 function budgetAtLeast(next: AgentTeamBudgetEvidence, previous: AgentTeamBudgetEvidence): boolean {
@@ -659,10 +702,13 @@ export async function runDurableMasterAgentPlanV1(
       worldGroupId: input.worldGroupId,
       plan,
       budgetEvidence: checkpointPayload.budgetEvidence,
+      includeExecutionBindings: snapshot.contract.executionBindings !== undefined,
     }))
     if (snapshot.run.contractHash !== contract.contractHash) fail('主 Agent durable run 契约已变化')
     budget = new AgentTeamBudgetTracker(checkpointPayload.budgetEvidence.profile, checkpointPayload.budgetEvidence)
   }
+
+  assertMasterAgentRunContractExecutionBindingsV1(snapshot.contract, plan)
 
   const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, snapshot.run.id)
   if (!checkpoint) fail('主 Agent durable run 缺少可验证检查点')
@@ -839,8 +885,12 @@ export async function runDurableMasterAgentPlanV1(
       ) {
         fail(`主 Agent durable trace 候选视角与当前任务 ${task.id} 不一致`)
       }
+      const {
+        executionBinding: candidateExecutionBinding,
+        ...candidatePayload
+      } = candidate.payload
       const payload: MasterCandidatePayload = {
-        ...candidate.payload,
+        ...candidatePayload,
         taskId: task.id,
         agentId: task.agentId,
         dependsOnTaskIds: [...task.dependsOn],
@@ -848,6 +898,10 @@ export async function runDurableMasterAgentPlanV1(
         runId: snapshot.run.id,
         runStepId: stepId,
         teamBudgetEvidence: candidate.payload.teamBudgetEvidence ?? budget.snapshot(),
+        ...(snapshot.contract.executionBindings === undefined ? {} : {
+          executionBinding: candidateExecutionBinding
+            ?? createAgentSkillExecutionBindingV1(resolveAgentSkillV1(task.agentId, task.skillId)),
+        }),
         candidateHash: undefined,
       }
       const draft = candidate.draft

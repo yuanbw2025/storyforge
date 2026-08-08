@@ -420,6 +420,8 @@
   团队预算和调用次数；刷新可恢复，正文变化后旧结果标为过期且不再显示旧角标。报告没有
   adoption 路径，不修改正文、设定、事实、物品或年表。
 - 项目概况、世界组目录、世界大纲树和本地搜索已成为正式上下文源；搜索只做当前项目/世界内的有界短摘，不调用网络或 embedding。
+- 分步骤主 Agent 当前有 9 个受治理 Skill、5 个提示词执行版本和一份由 14 个只读工具实际声明派生的 schema hash。新 RunContract 按步骤冻结 Skill/Prompt/Tool 版本，候选 hash 同步绑定；恢复会拒绝版本篡改，HARNESS-18 前无 binding 的旧运行保持原协议兼容。
+- `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。
 - SIM-1A 已建立共享互动运行时：DB v48 的 `simulationSessions / simulationEvents /

@@ -9,6 +9,7 @@ import type {
   AgentRunVerificationKind,
   AgentRunVerificationStepV1,
   AgentRunWorkflowKind,
+  AgentRunStepExecutionBindingV1,
   AgentRunWriteMode,
   AgentRunWriteTargetV1,
 } from '../../types/agent-run'
@@ -20,6 +21,7 @@ import {
   readArray,
   readBoolean,
   readEnum,
+  readHash,
   readInteger,
   readRecord,
   readString,
@@ -112,11 +114,37 @@ function readVerificationStep(value: unknown, path: string): AgentRunVerificatio
   }
 }
 
+function readExecutionBinding(value: unknown, path: string): AgentRunStepExecutionBindingV1 {
+  const record = readRecord(value, path)
+  const keys = [
+    'stepId',
+    'version',
+    'skillId',
+    'skillVersion',
+    'promptVersion',
+    'toolSchemaVersion',
+    'toolSchemaHash',
+  ] as const
+  assertExactKeys(record, keys, keys, path)
+  if (record.version !== 1 || record.skillVersion !== 1) {
+    failSchema('unsupported_version', path, '仅支持 execution binding v1 / Skill v1')
+  }
+  return {
+    stepId: readString(record.stepId, `${path}.stepId`, { max: 160 }),
+    version: 1,
+    skillId: readString(record.skillId, `${path}.skillId`, { max: 160 }),
+    skillVersion: 1,
+    promptVersion: readString(record.promptVersion, `${path}.promptVersion`, { max: 160 }),
+    toolSchemaVersion: readString(record.toolSchemaVersion, `${path}.toolSchemaVersion`, { max: 160 }),
+    toolSchemaHash: readHash(record.toolSchemaHash, `${path}.toolSchemaHash`),
+  }
+}
+
 export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
   const record = readRecord(value, 'contract')
   assertExactKeys(
     record,
-    ['version', 'objective', 'workflowKind', 'scope', 'permissions', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
+    ['version', 'objective', 'workflowKind', 'scope', 'permissions', 'executionBindings', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
     ['version', 'objective', 'workflowKind', 'scope', 'permissions', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
     'contract',
   )
@@ -158,6 +186,14 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
     'contract.permissions.writeTargets',
   ).map((item, index) => readWriteTarget(item, `contract.permissions.writeTargets[${index}]`))
   assertUnique(writeTargets.map(target => target.table), 'contract.permissions.writeTargets')
+  const executionBindings = record.executionBindings === undefined
+    ? undefined
+    : readArray(record.executionBindings, 'contract.executionBindings')
+        .map((item, index) => readExecutionBinding(item, `contract.executionBindings[${index}]`))
+  if (executionBindings?.length === 0) {
+    failSchema('invalid_execution_binding', 'contract.executionBindings', '存在字段时不得为空')
+  }
+  if (executionBindings) assertUnique(executionBindings.map(item => item.stepId), 'contract.executionBindings')
 
   const budgetRecord = readRecord(record.budget, 'contract.budget')
   const requiredBudgetKeys = ['maxModelCalls', 'maxToolCalls', 'maxInputTokens', 'maxOutputTokens', 'maxAttemptsPerStep'] as const
@@ -216,6 +252,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
       outlineNodeIds: readIdArray(scopeRecord.outlineNodeIds, 'contract.scope.outlineNodeIds'),
     },
     permissions: { contextSourceKeys, writeTargets },
+    ...(executionBindings ? { executionBindings } : {}),
     budget: {
       maxModelCalls: readInteger(budgetRecord.maxModelCalls, 'contract.budget.maxModelCalls', { min: 1 }),
       maxToolCalls: readInteger(budgetRecord.maxToolCalls, 'contract.budget.maxToolCalls', { min: 0 }),

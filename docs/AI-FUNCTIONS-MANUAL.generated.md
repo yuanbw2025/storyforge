@@ -193,7 +193,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:368` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:372` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:34` |
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
@@ -271,4 +271,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `9a06490`
+生成时间基准:commit `74b3033`

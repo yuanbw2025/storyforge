@@ -454,6 +454,18 @@ export const AGENT_TOOL_BY_NAME: ReadonlyMap<string, AgentToolDefinition> = new 
   AGENT_READ_TOOLS.map(tool => [tool.name, tool] as const),
 )
 
+/** Canonical tool declaration input for the HARNESS-18 runtime binding hash. */
+export function getAgentToolSchemaSnapshotV1(): unknown {
+  return AGENT_READ_TOOLS.map(tool => ({
+    name: tool.name,
+    description: tool.description,
+    risk: tool.risk,
+    parameters: tool.parameters,
+    sourceKeys: [...tool.sourceKeys],
+    inputBudgetTokens: tool.inputBudgetTokens,
+  }))
+}
+
 export async function executeAgentTool(
   name: string,
   context: AgentToolExecutionContext,

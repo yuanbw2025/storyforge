@@ -56,6 +56,7 @@ import {
 import type {
   AgentContextEvidence,
 } from './context-policy'
+import type { AgentSkillExecutionBindingV1 } from '../types/agent-run'
 import { executeAgentTool } from './tool-registry'
 import { validateDomainCandidateCanon } from './canon-validator'
 import { runBudgetedGenerationNode } from './team-execution'
@@ -82,6 +83,7 @@ import {
   selectMasterWorkflowV1,
   type MasterWorkflowSelectionV1,
 } from './workflow-catalog'
+import { createAgentSkillExecutionBindingV1 } from './execution-binding'
 
 export { DOMAIN_AGENT_IDS }
 export type { DomainAgentId }
@@ -109,6 +111,8 @@ export interface MasterCandidatePayload {
   taskId: string
   agentId: DomainAgentId
   skillId?: AgentSkillId
+  /** Absent on candidates created before HARNESS-18. */
+  executionBinding?: AgentSkillExecutionBindingV1
   label: string
   contextSources: string[]
   contextEvidence?: AgentContextEvidence
@@ -440,6 +444,7 @@ export async function executeMasterAgentPlan(input: {
         .filter((value): value is string => Boolean(value?.trim()))
         .join('\n\n')
       const skill = resolveAgentSkillV1(task.agentId, task.skillId)
+      const executionBinding = createAgentSkillExecutionBindingV1(skill)
       const contextProfile = contextProfiles[skill.contextTaskKind]
       const budgetSnapshot = budget.snapshot()
       const pendingGenerationCalls = orderedTasks
@@ -477,6 +482,7 @@ export async function executeMasterAgentPlan(input: {
             taskId: task.id,
             agentId: task.agentId,
             skillId: skill.id as AgentSkillId,
+            executionBinding,
             label: '世界来源',
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
@@ -516,6 +522,7 @@ export async function executeMasterAgentPlan(input: {
             taskId: task.id,
             agentId: task.agentId,
             skillId: skill.id as AgentSkillId,
+            executionBinding,
             label: '新角色',
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
@@ -563,6 +570,7 @@ export async function executeMasterAgentPlan(input: {
             taskId: task.id,
             agentId: task.agentId,
             skillId: skill.id as AgentSkillId,
+            executionBinding,
             label: '灵感反推版本',
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
@@ -611,6 +619,7 @@ export async function executeMasterAgentPlan(input: {
             taskId: task.id,
             agentId: task.agentId,
             skillId: skill.id as AgentSkillId,
+            executionBinding,
             label: prepared.label,
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
@@ -660,6 +669,7 @@ export async function executeMasterAgentPlan(input: {
             taskId: task.id,
             agentId: task.agentId,
             skillId: skill.id as AgentSkillId,
+            executionBinding,
             label: prepared.label,
             contextSources: prepared.contextSources,
             contextEvidence: prepared.contextEvidence,
