@@ -14,6 +14,28 @@ import { nanoid } from '../../lib/utils/id'
 import { adopt } from '../../lib/registry/adopt'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import type { Project, DetailedOutline, DetailedScene, EmotionArc } from '../../lib/types'
+import { db } from '../../lib/db/schema'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { hashCanonicalValue } from '../../lib/agent/run/hash'
+import {
+  beginDetailedOutlineGenerationStepV1,
+  commitDetailedOutlineGenerationAdoptionV1,
+  createDetailedOutlineGenerationDurableRunV1,
+  detailedOutlineManifestV1,
+  failDetailedOutlineGenerationStepV1,
+  hashDetailedOutlineGenerationCandidateV1,
+  hashDetailedOutlineSourceSummaryV1,
+  readLatestDetailedOutlineGenerationCandidateV1,
+  recordDetailedOutlineGenerationCandidateV1,
+  recordDetailedOutlineGenerationModelOutputV1,
+  rejectDetailedOutlineGenerationCandidateV1,
+  persistDetailedOutlineGenerationCandidateV1,
+  DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1,
+  DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1,
+  DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+  type DetailedOutlineGenerationCandidateV1,
+  type DetailedOutlineGenerationOperationV1,
+} from '../../lib/agent/run/detailed-outline-generation-durable'
 import { useToast } from '../shared/Toast'
 import DetailedOutlineSidebar from './DetailedOutlineSidebar'
 import DetailedSceneCard from './DetailedSceneCard'
@@ -34,6 +56,11 @@ export function filterExistingIds(ids: number[], validIds: Set<number>): number[
   return [...new Set(ids.filter(id => validIds.has(id)))]
 }
 
+interface PendingDetailedOutlineCandidate {
+  candidate: DetailedOutlineGenerationCandidateV1
+  eventId: number
+}
+
 /** v3 §2.1 — 创作区.细纲（场景拆分 + AI） */
 export default function DetailedOutlinePanel({ project }: Props) {
   const toast = useToast()
@@ -43,8 +70,11 @@ export default function DetailedOutlinePanel({ project }: Props) {
   const aiConfig = useAIConfigStore(s => s.config)
   const { foreshadows, loadAll: loadForeshadows } = useForeshadowStore()
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
+  const [pendingDetailedCandidate, setPendingDetailedCandidate] = useState<PendingDetailedOutlineCandidate | null>(null)
   const ai = useAIStream(createAISessionKey(project.id!, 'detail.scene', selectedNodeId ?? 'unselected'))
   const enhanceAI = useAIStream(createAISessionKey(project.id!, 'detail.enhance', selectedNodeId ?? 'unselected'))
+  const restoreDetail = ai.restore
+  const restoreEnhanced = enhanceAI.restore
 
   useEffect(() => {
     loadOutline(project.id!)
@@ -70,6 +100,39 @@ export default function DetailedOutlinePanel({ project }: Props) {
     () => new Set(foreshadows.map(f => f.id).filter((id): id is number => id != null)),
     [foreshadows],
   )
+
+  // Durable candidates are the recovery source of truth. The stream session is
+  // only the visible projection and can be safely rebuilt after a refresh.
+  useEffect(() => {
+    let active = true
+    if (!selectedNodeId) {
+      setPendingDetailedCandidate(null)
+      return () => { active = false }
+    }
+    void (async () => {
+      try {
+        const scope = await resolveScopeLike(project.id!)
+        const restored = await readLatestDetailedOutlineGenerationCandidateV1({
+          scope,
+          outlineNodeId: selectedNodeId,
+        })
+        if (!active) return
+        if (!restored) {
+          setPendingDetailedCandidate(null)
+          return
+        }
+        setPendingDetailedCandidate({ candidate: restored.candidate, eventId: restored.event.id! })
+        const restore = restored.candidate.operation === 'scenes' ? restoreDetail : restoreEnhanced
+        restore({
+          output: restored.candidate.output,
+          operation: `durable:${restored.candidate.operation}:${restored.candidate.durable.runId}`,
+        })
+      } catch (error) {
+        console.error('[DetailedOutline] durable candidate recovery failed', error)
+      }
+    })()
+    return () => { active = false }
+  }, [project.id, restoreDetail, restoreEnhanced, selectedNodeId])
 
   const ensureDetailed = async () => {
     if (!currentChapter) return null
@@ -129,14 +192,100 @@ export default function DetailedOutlinePanel({ project }: Props) {
       outlineNodeId,
       provider: aiConfig.provider,
       model: aiConfig.model,
-      sourceKeys: ['chapterOutline', 'canonAssertions', 'worldview', 'storyCore', 'activeNarrativeBlueprint', 'characterDrivenPlan', 'powerSystem', 'cultivationProgress', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
+      sourceKeys: [...DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1],
     })
     const charIdx = assembled.included.indexOf('characters')
     return {
       worldContext: assembled.text,
       characterContext: charIdx >= 0 ? assembled.segments[charIdx]?.content ?? '' : '',
+      assembled,
     }
   }, [project.id, nodes, aiConfig.provider, aiConfig.model])
+
+  const runDurableDetailedGeneration = useCallback(async (
+    operation: DetailedOutlineGenerationOperationV1,
+    messages: ReturnType<typeof buildEnhancedDetailPrompt>,
+    outlineNodeId: number,
+    assembled: Awaited<ReturnType<typeof assembleContext>>,
+  ) => {
+    if (pendingDetailedCandidate) return
+    const scope = await resolveScopeLike(project.id!)
+    const worldGroupId = nodes.find(node => node.id === outlineNodeId)?.worldGroupId ?? null
+    let snapshot = await createDetailedOutlineGenerationDurableRunV1({
+      scope,
+      worldGroupId,
+      outlineNodeId,
+      operation,
+    })
+    const manifest = await detailedOutlineManifestV1({
+      runId: snapshot.run.id,
+      scope,
+      worldGroupId,
+      outlineNodeId,
+      assembled,
+    })
+    const chapterSummary = nodes.find(node => node.id === outlineNodeId)?.summary ?? ''
+    snapshot = await beginDetailedOutlineGenerationStepV1({
+      scope,
+      snapshot,
+      contextManifest: manifest,
+      binding: {
+        operation,
+        sourceSummaryHash: await hashDetailedOutlineSourceSummaryV1(chapterSummary),
+        promptHash: await hashCanonicalValue(messages),
+      },
+    })
+    const target = operation === 'scenes' ? ai : enhanceAI
+    const output = await target.start(messages, undefined, {
+      category: operation === 'scenes' ? 'detail.scene' : 'detail.enhance',
+      projectId: project.id!,
+    })
+    if (!output.trim()) {
+      await failDetailedOutlineGenerationStepV1({
+        scope,
+        snapshot,
+        code: 'empty_or_cancelled_output',
+        retryable: true,
+      })
+      return
+    }
+    snapshot = await recordDetailedOutlineGenerationModelOutputV1({ scope, snapshot, output })
+    const baseCandidate: Omit<DetailedOutlineGenerationCandidateV1, 'durable'> = {
+      version: 1 as const,
+      type: DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1,
+      projectId: project.id!,
+      outlineNodeId,
+      worldGroupId,
+      operation,
+      sourceSummaryHash: await hashDetailedOutlineSourceSummaryV1(chapterSummary),
+      output,
+      outputHash: await hashCanonicalValue(output),
+      contextManifestHash: manifest.manifestHash,
+      workspaceScope: scope,
+      createdAt: Date.now(),
+    }
+    const candidateHash = await hashDetailedOutlineGenerationCandidateV1({
+      ...baseCandidate,
+      durable: {
+        runId: snapshot.run.id,
+        stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+        attempt: 1,
+        candidateHash: '',
+      },
+    })
+    const candidate: DetailedOutlineGenerationCandidateV1 = {
+      ...baseCandidate,
+      durable: {
+        runId: snapshot.run.id,
+        stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+        attempt: 1,
+        candidateHash,
+      },
+    }
+    const persisted = await persistDetailedOutlineGenerationCandidateV1({ scope, candidate })
+    snapshot = await recordDetailedOutlineGenerationCandidateV1({ scope, snapshot, candidate })
+    setPendingDetailedCandidate({ candidate, eventId: persisted.event.id! })
+  }, [ai, enhanceAI, nodes, pendingDetailedCandidate, project.id])
 
   const handleAIGenerate = async () => {
     if (!currentChapter) return
@@ -148,7 +297,11 @@ export default function DetailedOutlinePanel({ project }: Props) {
       ctx.characterContext,
       '',
     )
-    ai.start(messages, undefined, { category: 'detail.scene', projectId: project.id! })
+    try {
+      await runDurableDetailedGeneration('scenes', messages, currentChapter.id!, ctx.assembled)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '场景细纲生成失败，请重试。')
+    }
   }
 
   // D2: 完善细纲
@@ -157,7 +310,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
     const idx = chapterNodes.indexOf(currentChapter)
     const prevSummary = idx > 0 ? (chapterNodes[idx - 1].summary || '') : ''
     const nextSummary = idx < chapterNodes.length - 1 ? (chapterNodes[idx + 1].summary || '') : ''
-    const { worldContext: worldCtx } = await buildDetailContext(currentChapter.id!)
+    const { worldContext: worldCtx, assembled } = await buildDetailContext(currentChapter.id!)
 
     const charCtx = characters
       .filter(c => c.roleWeight === 'main')
@@ -175,43 +328,97 @@ export default function DetailedOutlinePanel({ project }: Props) {
       prevSummary, nextSummary,
       worldCtx, charCtx, foreshadowCtx,
     )
-    enhanceAI.start(messages, undefined, { category: 'detail.enhance', projectId: project.id! })
+    try {
+      await runDurableDetailedGeneration('enhanced', messages, currentChapter.id!, assembled)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '增强细纲生成失败，请重试。')
+    }
   }
 
-  const handleAcceptEnhanced = async (text: string) => {
-    const parsed = await parseEnhancedDetailSmart(text, aiConfig)
-    if (!parsed) {
-      toast.error('解析增强细纲失败，请重试')
+  const handleAcceptDetailed = useCallback(async (
+    operation: DetailedOutlineGenerationOperationV1,
+    text: string,
+  ) => {
+    const pending = pendingDetailedCandidate
+    if (!pending || pending.candidate.operation !== operation) return
+    if (!currentChapter?.id || pending.candidate.output !== text) {
+      toast.error('细纲候选已变化，请刷新后重新确认。')
       return
     }
-    if (!currentChapter?.id) return
-
+    const parsed = await parseEnhancedDetailSmart(text, aiConfig)
+    if (!parsed) {
+      toast.error('解析细纲候选失败，请重试。')
+      return
+    }
     const patch: Partial<DetailedOutline> = {}
-    if (parsed.openingHook) patch.openingHook = parsed.openingHook
-    if (parsed.endingCliffhanger) patch.endingCliffhanger = parsed.endingCliffhanger
-    if (parsed.sceneLocation) patch.sceneLocation = parsed.sceneLocation
-    if (parsed.emotionArc) patch.emotionArc = parsed.emotionArc as EmotionArc
-    if (parsed.appearingCharacterIds) {
-      patch.appearingCharacterIds = filterExistingIds(parsed.appearingCharacterIds, validCharacterIds)
+    if (operation === 'scenes') {
+      const scenes = normalizeParsedScenes(parsed.scenes, ids => filterExistingIds(ids, validCharacterIds))
+      if (!scenes.length) {
+        toast.error('未能从 AI 输出解析出场景，请重试。')
+        return
+      }
+      patch.scenes = [...(currentDetailed?.scenes || []), ...scenes]
+      patch.lastUsedSummary = currentChapter.summary || ''
+    } else {
+      if (parsed.openingHook) patch.openingHook = parsed.openingHook
+      if (parsed.endingCliffhanger) patch.endingCliffhanger = parsed.endingCliffhanger
+      if (parsed.sceneLocation) patch.sceneLocation = parsed.sceneLocation
+      if (parsed.emotionArc) patch.emotionArc = parsed.emotionArc as EmotionArc
+      if (parsed.appearingCharacterIds) patch.appearingCharacterIds = filterExistingIds(parsed.appearingCharacterIds, validCharacterIds)
+      if (parsed.foreshadowIds) patch.foreshadowIds = filterExistingIds(parsed.foreshadowIds, validForeshadowIds)
+      if (parsed.scenes?.length) patch.scenes = normalizeParsedScenes(parsed.scenes, ids => filterExistingIds(ids, validCharacterIds))
+      patch.lastUsedSummary = currentChapter.summary || ''
     }
-    if (parsed.foreshadowIds) {
-      patch.foreshadowIds = filterExistingIds(parsed.foreshadowIds, validForeshadowIds)
+    try {
+      const scope = await resolveScopeLike(project.id!)
+      await commitDetailedOutlineGenerationAdoptionV1({
+        scope,
+        runId: pending.candidate.durable.runId,
+        candidate: pending.candidate,
+        output: text,
+        adopt: async () => {
+          const result = await adoptDetailedPatch(currentChapter.id!, patch)
+          if (!result.written.length || result.typeErrors.length || result.fkErrors.length || result.skipped.length) {
+            throw new Error('细纲候选未能经正式注册表完整写入。')
+          }
+        },
+        currentSourceSummaryHash: () => hashDetailedOutlineSourceSummaryV1(currentChapter.summary || ''),
+        postState: async () => {
+          const row = await db.detailedOutlines.where('outlineNodeId').equals(currentChapter.id!).first()
+          return row ? {
+            outlineNodeId: row.outlineNodeId,
+            scenes: row.scenes,
+            openingHook: row.openingHook ?? '',
+            endingCliffhanger: row.endingCliffhanger ?? '',
+            lastUsedSummary: row.lastUsedSummary ?? '',
+          } : null
+        },
+      })
+      setPendingDetailedCandidate(null)
+      if (operation === 'scenes') ai.reset()
+      else enhanceAI.reset()
+      toast.success(operation === 'scenes' ? `已采纳 ${patch.scenes?.length ?? 0} 个场景` : '已采纳增强细纲')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '细纲采纳失败，请重试。')
     }
+  }, [adoptDetailedPatch, ai, aiConfig, currentChapter, currentDetailed, enhanceAI, pendingDetailedCandidate, project.id, toast, validCharacterIds, validForeshadowIds])
 
-    // 如果 AI 返回了场景，也写入
-    if (parsed.scenes && parsed.scenes.length > 0) {
-      const newScenes = normalizeParsedScenes(
-        parsed.scenes,
-        ids => filterExistingIds(ids, validCharacterIds),
-      )
-      patch.scenes = newScenes
+  const handleDismissDetailed = useCallback(async (operation: DetailedOutlineGenerationOperationV1) => {
+    const pending = pendingDetailedCandidate
+    if (!pending || pending.candidate.operation !== operation) return
+    try {
+      const scope = await resolveScopeLike(project.id!)
+      await rejectDetailedOutlineGenerationCandidateV1({
+        scope,
+        runId: pending.candidate.durable.runId,
+        candidate: pending.candidate,
+      })
+    } finally {
+      setPendingDetailedCandidate(null)
+      if (operation === 'scenes') ai.reset()
+      else enhanceAI.reset()
     }
-
-    // Phase 30.3: 同时快照当前大纲摘要
-    patch.lastUsedSummary = currentChapter?.summary || ''
-    await adoptDetailedPatch(currentChapter.id, patch)
-    enhanceAI.reset()
-  }
+  }, [ai, enhanceAI, pendingDetailedCandidate, project.id])
 
   const totalWords = currentDetailed?.scenes.reduce((s, sc) => s + (sc.estimatedWords || 0), 0) ?? 0
 
@@ -351,14 +558,14 @@ export default function DetailedOutlinePanel({ project }: Props) {
               </button>
               <button
                 onClick={handleAIGenerate}
-                disabled={ai.isStreaming || enhanceAI.isStreaming}
+                disabled={ai.isStreaming || enhanceAI.isStreaming || !!pendingDetailedCandidate}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 text-accent text-sm rounded hover:bg-accent/20 disabled:opacity-50"
               >
                 <Sparkles className="w-4 h-4" /> AI 一键拆场景
               </button>
               <button
                 onClick={handleEnhancedGenerate}
-                disabled={ai.isStreaming || enhanceAI.isStreaming}
+                disabled={ai.isStreaming || enhanceAI.isStreaming || !!pendingDetailedCandidate}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-success/10 text-success text-sm rounded hover:bg-success/20 disabled:opacity-50"
               >
                 <Wand2 className="w-4 h-4" /> 完善细纲
@@ -371,29 +578,8 @@ export default function DetailedOutlinePanel({ project }: Props) {
                 <AIStreamOutput
                   output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
                   onStop={ai.stop}
-                  onAccept={async (text) => {
-                    try {
-                      if (!currentChapter.id) return
-                      const parsed = await parseEnhancedDetailSmart(text, aiConfig)
-                      const newScenes = normalizeParsedScenes(
-                        parsed?.scenes,
-                        ids => filterExistingIds(ids, validCharacterIds),
-                      )
-                      if (newScenes.length === 0) {
-                        toast.error('未能从 AI 输出解析出场景，请重试')
-                        return
-                      }
-                      await adoptDetailedPatch(currentChapter.id, {
-                        scenes: [...(currentDetailed?.scenes || []), ...newScenes],
-                        lastUsedSummary: currentChapter.summary || '',
-                      })
-                      toast.success(`已采纳 ${newScenes.length} 个场景`)
-                    } catch (err) {
-                      console.error('[DetailedOutline] 采纳失败:', err)
-                      toast.error('采纳场景失败，请重试')
-                    }
-                    ai.reset()
-                  }}
+                  onAccept={text => { void handleAcceptDetailed('scenes', text) }}
+                  onDismiss={() => { void handleDismissDetailed('scenes') }}
                   onRetry={handleAIGenerate}
                 />
               </div>
@@ -405,7 +591,8 @@ export default function DetailedOutlinePanel({ project }: Props) {
                 <AIStreamOutput
                   output={enhanceAI.output} isStreaming={enhanceAI.isStreaming} error={enhanceAI.error} tokenUsage={enhanceAI.tokenUsage}
                   onStop={enhanceAI.stop}
-                  onAccept={handleAcceptEnhanced}
+                  onAccept={text => { void handleAcceptDetailed('enhanced', text) }}
+                  onDismiss={() => { void handleDismissDetailed('enhanced') }}
                   onRetry={handleEnhancedGenerate}
                 />
               </div>
