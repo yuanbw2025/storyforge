@@ -31,6 +31,7 @@ import {
   completeAgentRunRecoveryV1,
 } from './checkpoint'
 import { appendMasterAgentImpactReportV1 } from './master-impact'
+import { readFreshMasterCandidateStepReceiptV1 } from './master-step-verification'
 
 export interface MasterAgentCandidateAdoptionRefV1 {
   scope: WorkspaceScope
@@ -87,10 +88,30 @@ function startedFor(
   ))
 }
 
+async function assertRequiredSemanticReviewFresh(
+  resolved: ResolvedMasterCandidateV1,
+): Promise<void> {
+  const policy = resolved.snapshot.contract.candidateSemanticReviewPolicy
+  if (!policy?.taskIds.includes(resolved.candidate.payload.taskId)) return
+  const candidateHash = resolved.candidate.payload.candidateHash!
+  const receipt = await readFreshMasterCandidateStepReceiptV1({
+    snapshot: resolved.snapshot,
+    stepId: resolved.stepId,
+    candidateHash,
+    outputHash: await hashCanonicalValue(resolved.candidate.draft),
+    semanticReview: resolved.candidate.payload.semanticReview,
+    generator: resolved.candidate.payload.generator,
+  })
+  if (!receipt) {
+    throw new Error('主 Agent durable 候选缺少 fresh 独立语义终验，重新执行并通过终验前不能采纳。')
+  }
+}
+
 export async function beginMasterAgentCandidateAdoptionV1(
   input: MasterAgentCandidateAdoptionRefV1,
 ): Promise<ResolvedMasterCandidateV1> {
   const resolved = await resolveCandidate(input)
+  await assertRequiredSemanticReviewFresh(resolved)
   await assertMasterCandidateDependenciesAdoptedV1(
     resolved.candidate.event,
     resolved.candidate.payload,
@@ -201,6 +222,7 @@ export async function commitMasterAgentCandidateAdoptionV1(
     step = resolved.snapshot.projection.steps[resolved.stepId]
   }
 
+  await assertRequiredSemanticReviewFresh(resolved)
   const adopt = dependencies.adopt ?? adoptMasterCandidate
   const message = await adopt({
     projectId: input.scope.projectId,

@@ -421,7 +421,7 @@
   团队预算和调用次数；刷新可恢复，正文变化后旧结果标为过期且不再显示旧角标。报告没有
   adoption 路径，不修改正文、设定、事实、物品或年表。
 - 项目概况、世界组目录、世界大纲树和本地搜索已成为正式上下文源；搜索只做当前项目/世界内的有界短摘，不调用网络或 embedding。
-- 分步骤主 Agent 与正文 Harness 当前有 13 个受治理 Skill、9 个提示词执行版本和一份由 14 个只读工具实际声明派生的 schema hash。新 RunContract 按步骤冻结 Skill/Prompt/Tool 版本，候选 hash 同步绑定；恢复会拒绝版本篡改，HARNESS-18 前无 binding 的旧运行保持原协议兼容。
+- 分步骤主 Agent 与正文 Harness 当前有 15 个受治理 Skill、11 个提示词执行版本和一份由 14 个只读工具实际声明派生的 schema hash。新 RunContract 按步骤冻结 Skill/Prompt/Tool 版本，候选 hash 同步绑定；恢复会拒绝版本篡改，HARNESS-18 前无 binding 的旧运行保持原协议兼容。
 - HARNESS-19 已在章节编辑器的正文生成/续写主路径接入 `prose.review` 和 `prose.revise`：信息边界硬门通过后才做证据型语义初审；blocking 必须同时引用候选原文和登记上下文原文，只有明确可局部修复的问题最多修订一次，修订后重跑硬门和语义复核。评审、修订、复核共用团队预算并写入 Context Manifest、冻结执行版本和 durable 事件；通过后仍停在可编辑候选，作者确认才经 `adopt(chapters)` 写回。旧候选可恢复但不会伪造语义证据。
 - HARNESS-20 已将正文确认写回后的自动状态抽取旁路下线：新主路径由同一个 post-adoption durable Run 顺序执行六域综合整理、章节记忆和确定性检索重建。综合整理继续复用既有一次调用解析器与六域作者确认界面，`prose.organize` / `prose.memory` 两个非默认 Skill 冻结各自来源、写入边界、提示词和回归证据；章节记忆写回后才重建层级摘要，避免新摘要仍停留在 pending。只有三步、六域采纳证据和当前正文派生状态全部匹配才有 terminal receipt；历史 Chapter Transition V1 只保留兼容恢复。
 - HARNESS-21 已将正文 Run → post-adoption Run 的父子完成关系持久化：RunContract 的 `lineage.parent`
@@ -449,13 +449,25 @@
   请求前必须取得所有上游 fresh receipt，下游候选再冻结 receipt hash；恢复会拒绝篡改、已失效、跨代
   或晚于 join 的证据。作者编辑先使旧回执失效，合法稿重签，不合法稿不能进入下游；重规划 carry-forward
   在新代重签。`agentEvents.durableRunId` 经 DB v53 索引和 `PROJECT_TABLES` 参与导入重映射及删除生命周期，
-  原始 hash-bound payload 不静默改写。历史无策略运行兼容；通用 fan-out 和语义终验未完成。
+  原始 hash-bound payload 不静默改写。历史无策略运行兼容；首批领域语义终验由 HARNESS-27 接续，
+  通用 fan-out 仍未完成。
 - HARNESS-26 已新增去内容化的顺序/fan-out 配对评测记录：冻结 fixture/input/plan hash 及同一生成器
   provider/model、Prompt/Tool schema 版本，交叉执行两个变体，并要求不同 provider/model 身份的 verifier
   在生成结束后独立评分。逐例证据和两个既有 benchmark artifact 均可重算，正文、hidden label、未知字段、
   指标或 hash 篡改均 fail-closed。发布门覆盖至少 6 组样本、完成率、逐步回执、语义/证据非劣、未来与
   错世界泄漏、p95 延迟、token 和 cost；真实 durable 集成测试已证明同计划能走 1 路顺序与 2 路 fan-out，
   两边均产生完整步骤回执且不写 Canon。尚无真实外部模型的 6 组通过 artifact，不能宣称 fan-out 已证明净收益。
+- HARNESS-27 已为当前 `world-origin + inspiration -> character` 限定 fan-out 的两个独立叶子增加
+  `world-origin.review` / `inspiration.review` 领域 Skill 和 `candidateSemanticReviewPolicy`。reviewer 只从
+  `assembleContext()` 独立装配的登记源取证，必须与 generator 使用不同 provider/model；blocking 必须有
+  候选逐字引文、登记 source key 和来源逐字引文，缺少该证据的质量意见不能阻断。通过 artifact 绑定
+  candidate、generation、生成/审查 Context Manifest、Prompt/Tool 执行版本和模型响应 hash，再签发 v2
+  step receipt；join、恢复与 terminal receipt 都会 fail-closed 复核。编辑会移除 artifact 并 stale 回执，
+  重新执行生成/终验前不能汇合或采纳；当前没有只复审编辑稿的自动局部入口。replan 会重跑受审叶及
+  全部下游，阻断则暂停给作者。审查成本纳入父候选预算；artifact 复用现有
+  `agentEvents` 的项目生命周期和便携重映射。review/revise/organize/memory 等 Harness 内部 Skill 不能成为
+  顶层生成任务。因真实外部模型发布 artifact 仍缺失，该策略默认关闭，仅显式本地开关可启用；未交付
+  通用审计 fan-out、自动语义修订或更宽的领域白名单。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

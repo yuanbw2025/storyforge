@@ -116,6 +116,12 @@ export interface AgentRunContractV1 {
     requiredForJoin: true
     verifierSetVersion: string
   }
+  /** Absent until explicitly enabled after the paired release gate has evidence. */
+  candidateSemanticReviewPolicy?: {
+    requiredForJoin: true
+    verifierSetVersion: string
+    taskIds: string[]
+  }
   budget: {
     maxModelCalls: number
     maxToolCalls: number

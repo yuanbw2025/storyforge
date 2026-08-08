@@ -13,6 +13,12 @@ import {
   createAgentRunStepVerificationReceiptV1,
   verifyAgentRunStepVerificationReceiptIntegrityV1,
 } from './verification-receipt'
+import {
+  MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1,
+  type MasterCandidateModelIdentityV1,
+  type MasterCandidateSemanticReviewArtifactV1,
+  verifyMasterCandidateSemanticReviewArtifactV1,
+} from '../master-candidate-semantic-review'
 
 export const MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1 = 'master-candidate-step-v1'
 
@@ -47,12 +53,33 @@ export async function createMasterCandidateStepReceiptV1(input: {
   contextManifestHash: string
   acceptedAt: number
   verifierSetVersion?: string
+  semanticReview?: MasterCandidateSemanticReviewArtifactV1
+  generator?: MasterCandidateModelIdentityV1
 }): Promise<AgentRunStepVerificationReceiptV1> {
   const stepId = input.payload.runStepId
   const candidateHash = input.payload.candidateHash
   if (!stepId || !candidateHash) throw new Error('主 Agent 候选缺少步骤或候选哈希。')
   validateCandidateDraft(input.payload, input.draft)
   const outputHash = await hashCanonicalValue(input.draft)
+  const verifierSetVersion = input.verifierSetVersion ?? MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1
+  if (verifierSetVersion === MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1) {
+    const semanticReview = input.semanticReview ?? input.payload.semanticReview
+    const generator = input.generator ?? input.payload.generator
+    if (
+      !semanticReview
+      || !generator
+      || semanticReview.verdict !== 'pass'
+      || semanticReview.taskId !== input.payload.taskId
+      || semanticReview.candidateStepId !== stepId
+      || semanticReview.attempt !== input.attempt
+      || semanticReview.generationContextManifestHash !== input.contextManifestHash
+      || !await verifyMasterCandidateSemanticReviewArtifactV1({
+        artifact: semanticReview,
+        candidateText: input.draft,
+        generator,
+      })
+    ) throw new Error('主 Agent 候选缺少通过且可验证的独立语义终验 artifact。')
+  }
   return createAgentRunStepVerificationReceiptV1({
     version: 1,
     stepId,
@@ -60,13 +87,20 @@ export async function createMasterCandidateStepReceiptV1(input: {
     candidateHash,
     outputHash,
     contextManifestHash: input.contextManifestHash,
-    verifierSetVersion: input.verifierSetVersion ?? MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1,
+    verifierSetVersion,
     criteria: [
       {
         id: `${input.payload.taskId}.output-contract`,
         status: 'passed',
         evidenceRefs: [`candidate:${candidateHash}`, `output:${outputHash}`],
       },
+      ...(verifierSetVersion === MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1
+        ? [{
+            id: `${input.payload.taskId}.semantic-review`,
+            status: 'passed' as const,
+            evidenceRefs: [`semantic-review:${input.semanticReview?.artifactHash ?? input.payload.semanticReview!.artifactHash}`],
+          }]
+        : []),
       {
         id: `${input.payload.taskId}.context-manifest`,
         status: 'passed',
@@ -75,6 +109,52 @@ export async function createMasterCandidateStepReceiptV1(input: {
     ],
     acceptedAt: input.acceptedAt,
   })
+}
+
+function expectedVerifierSetVersion(
+  snapshot: AgentRunSnapshotV1,
+  stepId: string,
+): string | null {
+  const taskId = stepId.startsWith('master:') ? stepId.slice('master:'.length) : ''
+  if (snapshot.contract.candidateSemanticReviewPolicy?.taskIds.includes(taskId)) {
+    return snapshot.contract.candidateSemanticReviewPolicy.verifierSetVersion
+  }
+  return snapshot.contract.dependencyReceiptPolicy?.verifierSetVersion ?? null
+}
+
+function hasDurableSemanticReviewEvidence(input: {
+  snapshot: AgentRunSnapshotV1
+  artifact: MasterCandidateSemanticReviewArtifactV1
+  beforeSequence?: number
+}): boolean {
+  const { snapshot, artifact } = input
+  const before = (event: AgentRunSnapshotV1['events'][number]) => (
+    input.beforeSequence === undefined || event.sequence < input.beforeSequence
+  )
+  const succeeded = snapshot.events.find(event => (
+    event.generation === artifact.runGeneration
+    && before(event)
+    && event.type === 'step.succeeded'
+    && event.payload.stepId === artifact.reviewStepId
+    && event.payload.attempt === 1
+    && event.payload.outputHash === artifact.artifactHash
+  ))
+  if (!succeeded) return false
+  return snapshot.events.some(event => (
+    event.generation === artifact.runGeneration
+    && event.sequence < succeeded.sequence
+    && event.type === 'context.assembled'
+    && event.payload.stepId === artifact.reviewStepId
+    && event.payload.attempt === 1
+    && event.payload.manifestHash === artifact.reviewContextManifestHash
+  )) && snapshot.events.some(event => (
+    event.generation === artifact.runGeneration
+    && event.sequence < succeeded.sequence
+    && event.type === 'model.responded'
+    && event.payload.stepId === artifact.reviewStepId
+    && event.payload.attempt === 1
+    && event.payload.outputHash === artifact.reviewResponseHash
+  ))
 }
 
 function acceptedReceiptEvents(
@@ -131,6 +211,8 @@ export async function readFreshMasterCandidateStepReceiptV1(input: {
   candidateHash: string
   outputHash?: string
   contextManifestHash?: string
+  semanticReview?: MasterCandidateSemanticReviewArtifactV1
+  generator?: MasterCandidateModelIdentityV1
 }): Promise<AgentRunStepVerificationReceiptV1 | null> {
   const policy = input.snapshot.contract.dependencyReceiptPolicy
   if (!policy?.requiredForJoin) return null
@@ -138,11 +220,26 @@ export async function readFreshMasterCandidateStepReceiptV1(input: {
   const event = accepted[accepted.length - 1]
   if (!event || event.type !== 'step.verification.accepted') return null
   const receipt = event.payload.receipt
+  const expectedVerifier = expectedVerifierSetVersion(input.snapshot, input.stepId)
+  if (!expectedVerifier) return null
+  if (expectedVerifier === MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1) {
+    if (
+      !input.semanticReview
+      || !input.generator
+      || input.semanticReview.runGeneration !== input.snapshot.projection.generation
+      || input.semanticReview.generationContextManifestHash !== receipt.contextManifestHash
+      || !hasDurableSemanticReviewEvidence({ snapshot: input.snapshot, artifact: input.semanticReview })
+      || !await verifyMasterCandidateSemanticReviewArtifactV1({
+        artifact: input.semanticReview,
+        generator: input.generator,
+      })
+    ) return null
+  }
   if (
     wasStaledBefore(input.snapshot, receipt.receiptHash, event.sequence)
     || !hasBoundContextManifest(input.snapshot, receipt, event.sequence)
     || input.snapshot.projection.steps[input.stepId]?.verificationReceiptHash !== receipt.receiptHash
-    || receipt.verifierSetVersion !== policy.verifierSetVersion
+    || receipt.verifierSetVersion !== expectedVerifier
     || (input.outputHash !== undefined && receipt.outputHash !== input.outputHash)
     || (input.contextManifestHash !== undefined && receipt.contextManifestHash !== input.contextManifestHash)
     || !await verifyAgentRunStepVerificationReceiptIntegrityV1(receipt)
@@ -158,14 +255,35 @@ export async function verifyHistoricalMasterCandidateStepReceiptV1(input: {
   receiptHash: string
   generation: number
   beforeSequence: number
+  semanticReview?: MasterCandidateSemanticReviewArtifactV1
+  generator?: MasterCandidateModelIdentityV1
 }): Promise<boolean> {
   const accepted = acceptedReceiptEvents(input.snapshot, input)
   const event = accepted[accepted.length - 1]
   if (!event || event.type !== 'step.verification.accepted') return false
   const receipt = event.payload.receipt
+  const expectedVerifier = expectedVerifierSetVersion(input.snapshot, input.stepId)
+  if (!expectedVerifier) return false
+  if (expectedVerifier === MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1) {
+    if (
+      !input.semanticReview
+      || !input.generator
+      || input.semanticReview.runGeneration !== input.generation
+      || input.semanticReview.generationContextManifestHash !== receipt.contextManifestHash
+      || !hasDurableSemanticReviewEvidence({
+        snapshot: input.snapshot,
+        artifact: input.semanticReview,
+        beforeSequence: input.beforeSequence,
+      })
+      || !await verifyMasterCandidateSemanticReviewArtifactV1({
+        artifact: input.semanticReview,
+        generator: input.generator,
+      })
+    ) return false
+  }
   return receipt.outputHash === input.outputHash
     && receipt.verifierSetVersion
-      === input.snapshot.contract.dependencyReceiptPolicy?.verifierSetVersion
+      === expectedVerifier
     && hasBoundContextManifest(input.snapshot, receipt, event.sequence)
     && !wasStaledBefore(input.snapshot, receipt.receiptHash, event.sequence, input.beforeSequence)
     && await verifyAgentRunStepVerificationReceiptIntegrityV1(receipt)

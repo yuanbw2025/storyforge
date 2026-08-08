@@ -37,6 +37,7 @@ import {
   resolveAgentSkillV1,
   type AgentSkillId,
 } from './skill-registry'
+import type { MasterCandidateModelIdentityV1 } from './master-candidate-semantic-review'
 
 const WORLD_ORIGIN_MAX_CHARS = 12_000
 
@@ -70,6 +71,7 @@ export interface PreparedWorldOriginCopilot {
   snapshot: WorldOriginSnapshot
   contextSources: string[]
   contextEvidence: AgentContextEvidence
+  modelIdentity: MasterCandidateModelIdentityV1
 }
 
 interface WorldOriginCopilotDependencies {
@@ -226,6 +228,7 @@ export async function prepareWorldOriginCopilot(
     snapshot,
     contextSources: [...status.meta.included, ...worldview.meta.included],
     contextEvidence,
+    modelIdentity: { provider: config.provider, model: config.model },
   }
 }
 

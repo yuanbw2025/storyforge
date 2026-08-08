@@ -28,6 +28,14 @@ function decision(error: unknown): Omit<AgentRunFailureEvidenceV1, 'fingerprint'
   if (error instanceof AgentTeamBudgetExceededError) {
     return { code: 'team_budget_exhausted', retryable: false, category: 'budget', action: 'fail' }
   }
+  if (error instanceof Error && error.name === 'MasterCandidateSemanticReviewBlockedError') {
+    return {
+      code: 'semantic_review_blocked',
+      retryable: false,
+      category: 'deterministic',
+      action: 'pause-for-author',
+    }
+  }
   if (error instanceof DOMException && error.name === 'AbortError') {
     return { code: 'host_interrupted', retryable: true, category: 'cancelled', action: 'retry' }
   }

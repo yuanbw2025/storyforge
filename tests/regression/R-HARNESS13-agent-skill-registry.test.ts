@@ -64,16 +64,16 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
     ])
   })
 
-  it('主 Agent 合并计划时保留领域采纳扩展，而不是伪造 FIELD_REGISTRY 字段', () => {
-    const contract = contractFor([
-      { id: 'post', agentId: 'prose', skillId: 'prose.organize', instruction: '整理正文后六域候选', dependsOn: [] },
-    ])
-    expect(contract.permissions.writeTargets).toContainEqual({
+  it('正文采纳扩展仍由内部 Skill 登记，但不能伪装成主计划生成任务', () => {
+    const organize = AGENT_SKILLS.find(skill => skill.id === 'prose.organize')
+    expect(organize?.writeTargets).toContainEqual({
       table: 'temporalFacts',
       fields: [],
-      mode: 'author-confirmed',
       adoptionExtension: 'fact-ledger',
     })
+    expect(() => contractFor([
+      { id: 'post', agentId: 'prose', skillId: 'prose.organize', instruction: '整理正文后六域候选', dependsOn: [] },
+    ])).toThrow('不是主计划可直接执行的生成 Skill')
   })
 
   it('只有显式正文视角才把角色认知源加入 Skill 权限', () => {

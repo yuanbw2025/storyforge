@@ -48,6 +48,7 @@ import {
   resolveAgentSkillV1,
   type AgentSkillId,
 } from './skill-registry'
+import type { MasterCandidateModelIdentityV1 } from './master-candidate-semantic-review'
 import {
   isLegacyReadScope,
   readOwnedRows,
@@ -90,6 +91,7 @@ export interface PreparedInspirationCopilot {
   selectedFragmentIds: string[]
   snapshot: InspirationWorkspaceSnapshot
   contextEvidence: AgentContextEvidence
+  modelIdentity: MasterCandidateModelIdentityV1
 }
 
 interface InspirationCopilotDependencies {
@@ -301,6 +303,7 @@ export async function prepareInspirationCopilot(input: {
     selectedFragmentIds,
     snapshot,
     contextEvidence,
+    modelIdentity: { provider: config.provider, model: config.model },
   }
 }
 

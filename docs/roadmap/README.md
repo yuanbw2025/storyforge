@@ -233,7 +233,7 @@
   一个入口，同一正文只发起一次综合抽取；状态、受控事实、物品、故事年表、关系和伏笔
   六域候选均须逐字证据。候选复用归档 `agentConversations/agentEvents` 保存，刷新可恢复；
   正文 hash 变化阻断写回，物品/年表按章整批替换失败会事务回滚，事实只进入 candidate。
-- HARNESS-18/19/20 已把 13 个领域 Skill、9 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
+- HARNESS-18/19/20/27 已把 15 个领域 Skill、11 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
   新主 Agent RunContract 与候选 hash；恢复会拒绝 Skill/Prompt/Tool 漂移，旧合同继续按旧协议
   恢复。CI 新增 45 天复核、owner、版本和回归证据新鲜度闸门；该能力只保证执行可归因，
   不冒充真实模型质量收益。
@@ -272,7 +272,7 @@
   上游回执仍与 candidate/output、Context Manifest、attempt、verifier 和当前 generation 一致。下游候选
   冻结实际消费的 receipt hash；编辑、重规划、篡改、导入和删除都走可回放失效/重签或注册表生命周期。
   历史运行不伪造回执，`agentEvents.durableRunId` 由 DB v53 索引并通过 `PROJECT_TABLES` 便携重映射。
-  这仍是候选级确定性回执；通用 fan-out 和独立语义终验尚未交付。
+  HARNESS-25 本身只交付候选级确定性回执；首批领域语义终验由 HARNESS-27 接续，通用 fan-out 仍未交付。
 - HARNESS-26 已建立顺序执行与有限 fan-out 的离线配对评测和发布门：每个 fixture 冻结内容、输入、计划、
   provider/model、Prompt 和 Tool schema hash/版本，按奇偶交叉执行以减小顺序偏差，再由不同
   provider/model 身份的独立 verifier 评分。记录只保留 output/trace/receipt hash 与聚合指标，完整正文、
@@ -281,6 +281,17 @@
   未来/错世界泄漏为 0、fan-out p95 延迟不高于顺序执行的 90%、token/cost 不超过 1.15 倍，零成本不会
   被伪装成通过。回归已直接运行真实 durable 主 Agent 的顺序/fan-out 路径并核对 1/2 最大并发、逐步
   回执和零 Canon 写入；当前尚未用真实外部模型跑满 6 组发布样本，因此不据此扩大 fan-out 范围。
+- HARNESS-27 已为现有限定 fan-out 的世界来源与灵感独立叶子增加领域专用语义终验 Skill。reviewer
+  重新经 `assembleContext()` 装配登记来源，且必须使用不同于生成器的 provider/model；blocking 必须同时
+  绑定候选逐字引文、`CONTEXT_SOURCES` key 和来源逐字引文，无登记证据的文学质量意见只能 warning 或
+  uncertain。通过后候选签发 `master-candidate-step-v2-semantic` fresh receipt，汇合与终局验证同时核对生成/
+  审查两个 Context Manifest、artifact hash、执行版本和 durable review 事件。作者编辑会移除旧 artifact 并
+  stale 回执，重新执行生成/终验前不能汇合或采纳；当前没有只复审编辑稿的自动局部入口。有限重规划会
+  使受审叶及全部下游重新生成；审查阻断暂停给作者处理，不自动消耗重规划额度。
+  reviewer 调用计入父候选团队预算，证据复用既有 `agentEvents`/`PROJECT_TABLES` 生命周期；内部 review、
+  revise、organize、memory Skill 不能伪装成主计划生成任务。由于 HARNESS-26 尚无真实外部模型的 6 组通过
+  artifact，新能力默认关闭，只能显式设置 `storyforge:harness:master-candidate-semantic-review-v1=enabled`；
+  不扩大 fan-out 白名单，也不宣称已交付通用审计、自动修订或质量净收益。
 
 ### GOV-1 第一阶段交付证据
 

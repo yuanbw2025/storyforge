@@ -80,11 +80,20 @@ import {
 } from '../team-budget'
 import { db } from '../../db/schema'
 import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../../world-engine/scope'
+import {
+  MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1,
+  MasterCandidateSemanticReviewBlockedError,
+  masterCandidateReviewStepIdV1,
+  parseMasterCandidateSemanticReviewArtifactV1,
+  runMasterCandidateSemanticReviewWithClientV1,
+  verifyMasterCandidateSemanticReviewArtifactV1,
+} from '../master-candidate-semantic-review'
 
 export const MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1 = 'master-agent-plan'
 export const MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 = 1 as const
 export const MASTER_AGENT_DURABLE_HARNESS_STORAGE_KEY = 'storyforge:harness:master-agent-durable-v1'
 export const MASTER_AGENT_REPLAN_STORAGE_KEY = 'storyforge:harness:master-agent-replan-v1'
+export const MASTER_CANDIDATE_SEMANTIC_REVIEW_STORAGE_KEY = 'storyforge:harness:master-candidate-semantic-review-v1'
 export const MAX_MASTER_AGENT_REPLANS_V1 = 1
 
 export function isMasterAgentDurableHarnessEnabledV1(): boolean {
@@ -100,6 +109,15 @@ export function isMasterAgentReplanEnabledV1(): boolean {
     return globalThis.localStorage?.getItem(MASTER_AGENT_REPLAN_STORAGE_KEY) !== 'disabled'
   } catch {
     return true
+  }
+}
+
+/** HARNESS-26 release evidence is still pending, so new production runs opt in explicitly. */
+export function isMasterCandidateSemanticReviewEnabledV1(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(MASTER_CANDIDATE_SEMANTIC_REVIEW_STORAGE_KEY) === 'enabled'
+  } catch {
+    return false
   }
 }
 
@@ -167,6 +185,7 @@ export interface RunDurableMasterAgentInputV1 {
 export interface MasterAgentDurableDependenciesV1 {
   execute?: typeof executeMasterAgentPlan
   replan?: typeof createMasterAgentReplanV1
+  semanticReview?: typeof runMasterCandidateSemanticReviewWithClientV1
 }
 
 function fail(message: string): never {
@@ -270,7 +289,18 @@ function readOptionalSkillId(
 ): AgentSkillId | undefined {
   if (!Object.prototype.hasOwnProperty.call(value, 'skillId')) return undefined
   if (typeof value.skillId !== 'string') fail(label + '.skillId 无效')
-  return getAgentSkillV1(value.skillId, agentId).id as AgentSkillId
+  const skill = getAgentSkillV1(value.skillId, agentId)
+  const allowedModes: Record<DomainAgentId, ReadonlySet<string>> = {
+    'world-origin': new Set(['complete']),
+    character: new Set(['create']),
+    inspiration: new Set(['reverse']),
+    outline: new Set(['auto', 'volumes', 'chapters']),
+    prose: new Set(['auto', 'generate', 'continue']),
+  }
+  if (!allowedModes[agentId].has(skill.executionMode)) {
+    fail(`${label}.skillId 不是主计划可直接执行的生成 Skill`)
+  }
+  return skill.id as AgentSkillId
 }
 
 function assertAcyclic(plan: MasterAgentPlan): void {
@@ -392,6 +422,17 @@ function writeTargetsForPlan(plan: MasterAgentPlan): Array<{
   }))
 }
 
+function semanticReviewTaskIdsForPlan(plan: MasterAgentPlan): string[] {
+  const workflow = plan.workflow ? getMasterWorkflowV1(plan.workflow) : null
+  if (workflow?.strategy !== 'fan-out') return []
+  return plan.tasks
+    .filter(task => (
+      task.dependsOn.length === 0
+      && (task.agentId === 'world-origin' || task.agentId === 'inspiration')
+    ))
+    .map(task => task.id)
+}
+
 export function buildMasterAgentRunContractV1(input: {
   scope: WorkspaceScope
   worldGroupId: number | null
@@ -399,14 +440,22 @@ export function buildMasterAgentRunContractV1(input: {
   budgetEvidence: AgentTeamBudgetEvidence
   includeExecutionBindings?: boolean
   includeDependencyReceiptPolicy?: boolean
+  includeCandidateSemanticReviewPolicy?: boolean
 }) {
   const plan = parseMasterAgentPlanV1(input.plan)
   const policy = resolveAgentTeamBudgetPolicy(input.budgetEvidence.profile)
   const workflow = plan.workflow ? getMasterWorkflowV1(plan.workflow) : null
   const includeDependencyReceiptPolicy = input.includeDependencyReceiptPolicy
     ?? workflow?.strategy === 'fan-out'
+  const semanticReviewTaskIds = input.includeCandidateSemanticReviewPolicy
+    ? semanticReviewTaskIdsForPlan(plan)
+    : []
+  const semanticReviewTaskIdSet = new Set(semanticReviewTaskIds)
   const acceptance = plan.tasks.flatMap(task => [
     { id: `${task.id}.candidate`, kind: 'output-present' as const, required: true },
+    ...(semanticReviewTaskIdSet.has(task.id)
+      ? [{ id: `${task.id}.semantic-review`, kind: 'semantic-review' as const, required: true }]
+      : []),
     { id: `${task.id}.confirmed`, kind: 'author-confirmed' as const, required: true },
     { id: `${task.id}.adopted`, kind: 'adoption-committed' as const, required: true },
   ])
@@ -427,8 +476,13 @@ export function buildMasterAgentRunContractV1(input: {
       ...(includeDependencyReceiptPolicy ? [{
         id: `${task.id}.candidate-step`,
         kind: 'deterministic' as const,
-        verifier: MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1,
-        criterionIds: [`${task.id}.candidate`],
+        verifier: semanticReviewTaskIdSet.has(task.id)
+          ? MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1
+          : MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1,
+        criterionIds: [
+          `${task.id}.candidate`,
+          ...(semanticReviewTaskIdSet.has(task.id) ? [`${task.id}.semantic-review`] : []),
+        ],
       }] : []),
     ]),
     {
@@ -453,15 +507,33 @@ export function buildMasterAgentRunContractV1(input: {
       writeTargets: writeTargetsForPlan(plan),
     },
     ...(input.includeExecutionBindings === false ? {} : {
-      executionBindings: plan.tasks.map(task => ({
-        stepId: taskStepId(task.id),
-        ...createAgentSkillExecutionBindingV1(resolveAgentSkillV1(task.agentId, task.skillId)),
-      })),
+      executionBindings: [
+        ...plan.tasks.map(task => ({
+          stepId: taskStepId(task.id),
+          ...createAgentSkillExecutionBindingV1(resolveAgentSkillV1(task.agentId, task.skillId)),
+        })),
+        ...plan.tasks.flatMap(task => semanticReviewTaskIdSet.has(task.id)
+          ? [1, 2].map(attempt => ({
+              stepId: masterCandidateReviewStepIdV1(task.id, attempt),
+              ...createAgentSkillExecutionBindingV1(getAgentSkillV1(
+                task.agentId === 'world-origin' ? 'world-origin.review' : 'inspiration.review',
+                task.agentId,
+              )),
+            }))
+          : []),
+      ],
     }),
     ...(includeDependencyReceiptPolicy ? {
       dependencyReceiptPolicy: {
         requiredForJoin: true as const,
         verifierSetVersion: MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1,
+      },
+    } : {}),
+    ...(semanticReviewTaskIds.length > 0 ? {
+      candidateSemanticReviewPolicy: {
+        requiredForJoin: true as const,
+        verifierSetVersion: MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1,
+        taskIds: semanticReviewTaskIds,
       },
     } : {}),
     budget: {
@@ -597,7 +669,9 @@ export async function replanDurableMasterAgentRunV1(
     fail('主 Agent run 的有限重规划次数已耗尽')
   }
   if (Object.values(before.projection.steps).some(step => (
-    step.status === 'succeeded' || step.confirmation !== undefined || step.adoptionHash !== undefined
+    (step.status === 'succeeded' && !step.stepId.includes(':semantic-review:'))
+    || step.confirmation !== undefined
+    || step.adoptionHash !== undefined
   ))) fail('已经确认或采纳候选的主 Agent run 不允许原地重规划')
   const latest = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.runId)
   if (!latest) fail('主 Agent 有限重规划缺少当前代计划检查点')
@@ -615,6 +689,11 @@ export async function replanDurableMasterAgentRunV1(
   if (!budgetAtLeast(parsedBudget, restored.latestBudget)) {
     fail('主 Agent 重规划预算证据倒退')
   }
+  for (const taskId of before.contract.candidateSemanticReviewPolicy?.taskIds ?? []) {
+    for (const affectedTaskId of collectMasterAgentAffectedTaskIdsV1(checkpoint.plan, [taskId])) {
+      affected.add(affectedTaskId)
+    }
+  }
   const carried = restored.candidates.filter(candidate => !affected.has(candidate.payload.taskId))
   const staled = restored.candidates.filter(candidate => affected.has(candidate.payload.taskId))
   const nextPlan = parseMasterAgentPlanV1(input.nextPlan)
@@ -626,6 +705,7 @@ export async function replanDurableMasterAgentRunV1(
     budgetEvidence: parsedBudget,
     includeExecutionBindings: before.contract.executionBindings !== undefined,
     includeDependencyReceiptPolicy: before.contract.dependencyReceiptPolicy !== undefined,
+    includeCandidateSemanticReviewPolicy: before.contract.candidateSemanticReviewPolicy !== undefined,
   }))
   const now = input.now ?? Date.now()
 
@@ -842,6 +922,28 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
       `${label} executionBinding`,
     )
   }
+  if (payload.generator !== undefined) {
+    if (
+      !isRecord(payload.generator)
+      || typeof payload.generator.provider !== 'string'
+      || !payload.generator.provider.trim()
+      || typeof payload.generator.model !== 'string'
+      || !payload.generator.model.trim()
+    ) fail(`${label} payload generator 无效`)
+    payload.generator = {
+      provider: payload.generator.provider.trim(),
+      model: payload.generator.model.trim(),
+    }
+  }
+  if (payload.semanticReview !== undefined) {
+    payload.semanticReview = parseMasterCandidateSemanticReviewArtifactV1(payload.semanticReview)
+    if (
+      payload.semanticReview.taskId !== payload.taskId
+      || payload.semanticReview.domain !== payload.agentId
+      || payload.semanticReview.candidateStepId !== payload.runStepId
+    ) fail(`${label} payload semanticReview 与候选身份不一致`)
+    if (!payload.generator) fail(`${label} payload semanticReview 缺少 generator 身份`)
+  }
   if (!Array.isArray(payload.contextSources) || payload.contextSources.some(source => typeof source !== 'string')) {
     fail(`${label} payload contextSources 无效`)
   }
@@ -908,18 +1010,41 @@ export function assertMasterAgentRunContractExecutionBindingsV1(
   plan: MasterAgentPlan,
 ): void {
   if (contract.executionBindings === undefined) return
-  if (contract.executionBindings.length !== plan.tasks.length) {
+  const expected = new Map<string, ReturnType<typeof resolveAgentSkillV1>>()
+  for (const task of plan.tasks) {
+    expected.set(taskStepId(task.id), resolveAgentSkillV1(task.agentId, task.skillId))
+  }
+  const semanticPolicy = contract.candidateSemanticReviewPolicy
+  if (semanticPolicy) {
+    const expectedTaskIds = semanticReviewTaskIdsForPlan(plan)
+    if (
+      semanticPolicy.verifierSetVersion !== MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1
+      || semanticPolicy.taskIds.length !== expectedTaskIds.length
+      || semanticPolicy.taskIds.some((taskId, index) => taskId !== expectedTaskIds[index])
+    ) fail('主 Agent RunContract 的候选语义终验策略与计划不一致')
+    for (const taskId of semanticPolicy.taskIds) {
+      const task = plan.tasks.find(item => item.id === taskId)
+      if (!task || (task.agentId !== 'world-origin' && task.agentId !== 'inspiration')) {
+        fail(`主 Agent RunContract 的语义终验任务 ${taskId} 无效`)
+      }
+      const skill = getAgentSkillV1(
+        task.agentId === 'world-origin' ? 'world-origin.review' : 'inspiration.review',
+        task.agentId,
+      )
+      for (const attempt of [1, 2]) expected.set(masterCandidateReviewStepIdV1(taskId, attempt), skill)
+    }
+  }
+  if (contract.executionBindings.length !== expected.size) {
     fail('主 Agent RunContract executionBindings 数量与计划不一致')
   }
   const byStep = new Map(contract.executionBindings.map(binding => [binding.stepId, binding]))
-  for (const task of plan.tasks) {
-    const stepId = taskStepId(task.id)
+  for (const [stepId, skill] of expected) {
     const binding = byStep.get(stepId)
     if (!binding) fail(`主 Agent RunContract 缺少 ${stepId} execution binding`)
     const { stepId: _stepId, ...skillBinding } = binding
     assertAgentSkillExecutionBindingV1(
       skillBinding,
-      resolveAgentSkillV1(task.agentId, task.skillId),
+      skill,
       `主 Agent RunContract ${stepId}`,
     )
   }
@@ -947,8 +1072,30 @@ async function readPersistedCandidates(input: {
 }> {
   const conversationId = input.snapshot.run.conversationId
   if (conversationId == null) fail('主 Agent durable run 缺少候选对话')
-  const rows = (await readAgentEvents(conversationId, input.scope))
-    .filter(event => event.kind === 'candidate' && event.id != null)
+  const allRows = await readAgentEvents(conversationId, input.scope)
+  const rows = allRows.filter(event => event.kind === 'candidate' && event.id != null)
+  const semanticArtifacts = allRows.flatMap(event => {
+    if (
+      event.kind !== 'task'
+      || event.durableRunId !== input.snapshot.run.id
+    ) return []
+    let raw: unknown
+    try {
+      raw = JSON.parse(event.payload)
+    } catch {
+      fail(`语义终验审计事件 ${event.id} payload JSON 已损坏`)
+    }
+    if (
+      !isRecord(raw)
+      || raw.version !== 1
+      || raw.type !== 'master-candidate-semantic-review-evidence'
+    ) return []
+    try {
+      return [parseMasterCandidateSemanticReviewArtifactV1(raw.artifact)]
+    } catch (error) {
+      fail(`语义终验审计事件 ${event.id} 无效：${error instanceof Error ? error.message : String(error)}`)
+    }
+  })
   const taskById = new Map(input.plan.tasks.map(task => [task.id, task]))
   const seen = new Set<string>()
   const candidates: MasterAgentDurableCandidateV1[] = []
@@ -994,6 +1141,40 @@ async function readPersistedCandidates(input: {
     if (event.content.length > MAX_CANDIDATE_CHARS) fail(`候选事件 ${event.id} 超出持久化上限`)
     const expectedHash = await computeCandidateHash(payload, event.content)
     if (expectedHash !== payload.candidateHash) fail(`候选事件 ${event.id} candidateHash 校验失败`)
+    const semanticRequired = input.snapshot.contract.candidateSemanticReviewPolicy
+      ?.taskIds.includes(payload.taskId) === true
+    if (semanticRequired) {
+      const authorRevisedWithoutReview = !payload.semanticReview
+        && input.snapshot.projection.steps[taskStepId(payload.taskId)]?.verificationReceiptHash === undefined
+        && input.snapshot.events.some(runEvent => (
+          runEvent.generation === input.snapshot.projection.generation
+          && runEvent.type === 'candidate.revised'
+          && runEvent.payload.stepId === taskStepId(payload.taskId)
+          && runEvent.payload.candidateHash === payload.candidateHash
+        ))
+      if (!authorRevisedWithoutReview && (
+        !payload.semanticReview
+          || !payload.generator
+          || payload.semanticReview.verdict !== 'pass'
+          || payload.semanticReview.runGeneration !== payload.runGeneration
+          || !await verifyMasterCandidateSemanticReviewArtifactV1({
+            artifact: payload.semanticReview,
+            candidateText: event.content,
+            generator: payload.generator,
+          })
+      )) fail(`候选事件 ${event.id} 缺少 fresh 独立语义终验`)
+      if (payload.semanticReview) {
+        const fresh = await readFreshMasterCandidateStepReceiptV1({
+          snapshot: input.snapshot,
+          stepId: taskStepId(payload.taskId),
+          candidateHash: payload.candidateHash!,
+          outputHash: await hashCanonicalValue(event.content),
+          semanticReview: payload.semanticReview,
+          generator: payload.generator,
+        })
+        if (!fresh) fail(`候选事件 ${event.id} 的独立语义终验 durable 证据无效或已过期`)
+      }
+    }
     const evidence = budgetEvidence(payload.teamBudgetEvidence, `候选事件 ${event.id} teamBudgetEvidence`)
     if (!budgetAtLeast(evidence, latestBudget)) fail(`候选事件 ${event.id} 的团队预算证据倒退`)
     latestBudget = evidence
@@ -1101,6 +1282,12 @@ async function readPersistedCandidates(input: {
           receiptHash: binding.verificationReceiptHash,
           generation: binding.generation ?? candidateGeneration,
           beforeSequence: joinEvent!.sequence,
+          semanticReview: upstream.payload.semanticReview ?? semanticArtifacts.find(artifact => (
+            artifact.taskId === binding.taskId
+            && artifact.runGeneration === (binding.generation ?? candidateGeneration)
+            && artifact.candidateTextHash === binding.outputHash
+          )),
+          generator: upstream.payload.generator,
         })
       ) fail(`候选事件 ${candidate.event.id} 的依赖 ${binding.taskId} 步骤回执无效或在 join 前已过期`)
     }
@@ -1154,6 +1341,7 @@ export async function runDurableMasterAgentPlanV1(
       worldGroupId: input.worldGroupId,
       plan,
       budgetEvidence: evidence,
+      includeCandidateSemanticReviewPolicy: isMasterCandidateSemanticReviewEnabledV1(),
     })
     await assertConversationScope(input)
     snapshot = await createAgentRunV1({
@@ -1208,6 +1396,7 @@ export async function runDurableMasterAgentPlanV1(
       budgetEvidence: checkpointPayload.budgetEvidence,
       includeExecutionBindings: snapshot.contract.executionBindings !== undefined,
       includeDependencyReceiptPolicy: snapshot.contract.dependencyReceiptPolicy !== undefined,
+      includeCandidateSemanticReviewPolicy: snapshot.contract.candidateSemanticReviewPolicy !== undefined,
     }))
     if (snapshot.run.contractHash !== contract.contractHash) fail('主 Agent durable run 契约已变化')
     budget = new AgentTeamBudgetTracker(checkpointPayload.budgetEvidence.profile, checkpointPayload.budgetEvidence)
@@ -1372,6 +1561,8 @@ export async function runDurableMasterAgentPlanV1(
             stepId: taskStepId(dependencyTaskId),
             candidateHash: upstream.payload.candidateHash,
             outputHash: await hashCanonicalValue(upstream.draft),
+            semanticReview: upstream.payload.semanticReview,
+            generator: upstream.payload.generator,
           })
           if (!receipt) {
             fail(`主 Agent 任务 ${task.id} 的上游 ${dependencyTaskId} 缺少 fresh 步骤回执`)
@@ -1443,6 +1634,8 @@ export async function runDurableMasterAgentPlanV1(
               stepId: taskStepId(dependencyTaskId),
               candidateHash: upstream.payload.candidateHash,
               outputHash,
+              semanticReview: upstream.payload.semanticReview,
+              generator: upstream.payload.generator,
             })
           : null
         if (snapshot.contract.dependencyReceiptPolicy?.requiredForJoin && !receipt) {
@@ -1475,9 +1668,6 @@ export async function runDurableMasterAgentPlanV1(
       }
       const draft = candidate.draft
       if (!draft || draft.length > MAX_CANDIDATE_CHARS) fail(`主 Agent 任务 ${task.id} 候选长度无效`)
-      const evidence = budgetEvidence(payload.teamBudgetEvidence, `主 Agent 任务 ${task.id} teamBudgetEvidence`)
-      if (!budgetAtLeast(evidence, previousBudget)) fail(`主 Agent 任务 ${task.id} 团队预算证据倒退`)
-      payload.candidateHash = await computeCandidateHash(payload, draft)
       const outputHash = await hashCanonicalValue(candidate.runtimeOutput)
       const contextManifestHash = payload.contextEvidence
         ? await hashCanonicalValue({
@@ -1489,6 +1679,158 @@ export async function runDurableMasterAgentPlanV1(
             contextEvidence: payload.contextEvidence,
           })
         : null
+      const semanticRequired = snapshot.contract.candidateSemanticReviewPolicy
+        ?.taskIds.includes(task.id) === true
+      if (semanticRequired) {
+        if (
+          (task.agentId !== 'world-origin' && task.agentId !== 'inspiration')
+          || !payload.generator
+          || !contextManifestHash
+        ) fail(`主 Agent 任务 ${task.id} 缺少语义终验所需的领域、生成器或 Context Manifest`)
+        const review = dependencies.semanticReview ?? runMasterCandidateSemanticReviewWithClientV1
+        const reviewStepId = masterCandidateReviewStepIdV1(
+          task.id,
+          snapshot.projection.steps[stepId].attempt,
+        )
+        let reviewStarted = false
+        let reviewSucceeded = false
+        try {
+          const result = await review({
+            scope: input.scope,
+            worldGroupId: input.worldGroupId,
+            runId: snapshot.run.id,
+            runGeneration: snapshot.projection.generation,
+            taskId: task.id,
+            candidateStepId: stepId,
+            attempt: snapshot.projection.steps[stepId].attempt,
+            domain: task.agentId,
+            authorRequest: task.instruction,
+            candidateText: draft,
+            generationContextManifestHash: contextManifestHash,
+            generator: payload.generator,
+            selectedFragmentIds: payload.selectedFragmentIds,
+            inspirationMode: payload.mode,
+            budget,
+            signal: input.signal,
+            now,
+            onCall: async event => {
+              if (event.state === 'requested') {
+                snapshot = await appendAgentRunEventV1({
+                  scope: input.scope,
+                  runId: snapshot.run.id,
+                  type: 'step.scheduled',
+                  payload: { stepId: reviewStepId },
+                  expectedLastSequence: snapshot.projection.lastSequence,
+                  now: now(),
+                })
+                snapshot = await appendAgentRunEventV1({
+                  scope: input.scope,
+                  runId: snapshot.run.id,
+                  type: 'step.started',
+                  payload: { stepId: reviewStepId, attempt: 1 },
+                  expectedLastSequence: snapshot.projection.lastSequence,
+                  now: now(),
+                })
+                reviewStarted = true
+                snapshot = await appendAgentRunEventV1({
+                  scope: input.scope,
+                  runId: snapshot.run.id,
+                  type: 'context.assembled',
+                  payload: {
+                    stepId: reviewStepId,
+                    attempt: 1,
+                    manifestHash: event.contextManifest.manifestHash,
+                  },
+                  expectedLastSequence: snapshot.projection.lastSequence,
+                  now: now(),
+                })
+                snapshot = await appendAgentRunEventV1({
+                  scope: input.scope,
+                  runId: snapshot.run.id,
+                  type: 'model.requested',
+                  payload: {
+                    stepId: reviewStepId,
+                    attempt: 1,
+                    bindingHash: await hashCanonicalValue({
+                      candidateTextHash: await hashCanonicalValue(draft),
+                      generationContextManifestHash: contextManifestHash,
+                      reviewContextManifestHash: event.contextManifest.manifestHash,
+                    }),
+                  },
+                  expectedLastSequence: snapshot.projection.lastSequence,
+                  now: now(),
+                })
+                await notify(input.onDurableBoundary, 'model.requested', snapshot)
+              } else {
+                snapshot = await appendAgentRunEventV1({
+                  scope: input.scope,
+                  runId: snapshot.run.id,
+                  type: 'model.responded',
+                  payload: {
+                    stepId: reviewStepId,
+                    attempt: 1,
+                    outputHash: await hashCanonicalValue(event.output ?? ''),
+                  },
+                  expectedLastSequence: snapshot.projection.lastSequence,
+                  now: now(),
+                })
+                await notify(input.onDurableBoundary, 'model.responded', snapshot)
+              }
+            },
+          })
+          snapshot = await appendAgentRunEventV1({
+            scope: input.scope,
+            runId: snapshot.run.id,
+            type: 'step.succeeded',
+            payload: { stepId: reviewStepId, attempt: 1, outputHash: result.artifact.artifactHash },
+            expectedLastSequence: snapshot.projection.lastSequence,
+            now: now(),
+          })
+          reviewSucceeded = true
+          payload.semanticReview = result.artifact
+          payload.teamBudgetEvidence = budget.snapshot()
+          await appendAgentEvent({
+            projectId: input.scope.projectId,
+            conversationId: snapshot.run.conversationId!,
+            durableRunId: snapshot.run.id,
+            kind: 'task',
+            role: 'system',
+            content: result.artifact.verdict === 'pass'
+              ? '候选已通过独立语义终验。'
+              : '候选未通过独立语义终验。',
+            payload: {
+              version: 1,
+              type: 'master-candidate-semantic-review-evidence',
+              artifact: result.artifact,
+            },
+            scope: input.scope,
+          })
+          await notify(input.onDurableBoundary, 'step.succeeded', snapshot)
+          if (result.artifact.verdict !== 'pass') {
+            throw new MasterCandidateSemanticReviewBlockedError(result.artifact)
+          }
+        } catch (error) {
+          if (reviewStarted && !reviewSucceeded) {
+            snapshot = await appendAgentRunEventV1({
+              scope: input.scope,
+              runId: snapshot.run.id,
+              type: 'step.failed',
+              payload: {
+                stepId: reviewStepId,
+                attempt: 1,
+                code: 'semantic_review_failed',
+                retryable: true,
+              },
+              expectedLastSequence: snapshot.projection.lastSequence,
+              now: now(),
+            })
+          }
+          throw error
+        }
+      }
+      const evidence = budgetEvidence(payload.teamBudgetEvidence, `主 Agent 任务 ${task.id} teamBudgetEvidence`)
+      if (!budgetAtLeast(evidence, previousBudget)) fail(`主 Agent 任务 ${task.id} 团队预算证据倒退`)
+      payload.candidateHash = await computeCandidateHash(payload, draft)
       const stepReceipt = snapshot.contract.dependencyReceiptPolicy?.requiredForJoin
         ? await createMasterCandidateStepReceiptV1({
             payload,
@@ -1497,7 +1839,11 @@ export async function runDurableMasterAgentPlanV1(
             contextManifestHash: contextManifestHash
               ?? fail(`主 Agent 任务 ${task.id} 缺少可验证 Context Manifest`),
             acceptedAt: now(),
-            verifierSetVersion: snapshot.contract.dependencyReceiptPolicy.verifierSetVersion,
+            verifierSetVersion: semanticRequired
+              ? snapshot.contract.candidateSemanticReviewPolicy!.verifierSetVersion
+              : snapshot.contract.dependencyReceiptPolicy.verifierSetVersion,
+            semanticReview: payload.semanticReview,
+            generator: payload.generator,
           })
         : null
       const persisted = await db.transaction(

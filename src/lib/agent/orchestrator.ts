@@ -89,6 +89,10 @@ import {
 import { createAgentSkillExecutionBindingV1 } from './execution-binding'
 import { hashCanonicalValue } from './run/hash'
 import { readAgentRunV1 } from './run/event-store'
+import type {
+  MasterCandidateModelIdentityV1,
+  MasterCandidateSemanticReviewArtifactV1,
+} from './master-candidate-semantic-review'
 
 export { DOMAIN_AGENT_IDS }
 export type { DomainAgentId }
@@ -150,6 +154,9 @@ export interface MasterCandidatePayload {
   runStepId?: string
   candidateHash?: string
   perspectiveCharacterId?: number | null
+  /** Present on candidates covered by independent semantic review. */
+  generator?: MasterCandidateModelIdentityV1
+  semanticReview?: MasterCandidateSemanticReviewArtifactV1
 }
 
 export interface ExecutedMasterCandidate {
@@ -653,6 +660,7 @@ async function executeSequentialMasterAgentPlan(
             workspaceScope: scope,
             dependsOnTaskIds: task.dependsOn,
             dependencyBindings,
+            generator: prepared.modelIdentity,
           },
           draft,
           runtimeNode: prepared.node,
@@ -745,6 +753,7 @@ async function executeSequentialMasterAgentPlan(
             selectedFragmentIds,
             dependsOnTaskIds: task.dependsOn,
             dependencyBindings,
+            generator: prepared.modelIdentity,
           },
           draft,
           runtimeNode: prepared.node,

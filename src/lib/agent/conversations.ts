@@ -153,12 +153,17 @@ export async function updateAgentEventCandidate(
     && typeof payload.candidateHash === 'string'
   ) {
     const previousCandidateHash = payload.candidateHash
-    const { candidateHash: _oldHash, ...withoutHash } = payload
+    const {
+      candidateHash: _oldHash,
+      semanticReview: _staleSemanticReview,
+      ...withoutHash
+    } = payload
     const candidateHash = await hashCanonicalValue({
       draft: content,
       payload: withoutHash,
     })
-    const nextPayload = JSON.stringify({ ...payload, candidateHash })
+    const revisedPayload = { ...withoutHash, candidateHash }
+    const nextPayload = JSON.stringify(revisedPayload)
     await db.transaction(
       'rw',
       scopeTransactionTables(db.agentEvents, db.agentRuns, db.agentRunEvents),
@@ -209,11 +214,17 @@ export async function updateAgentEventCandidate(
         snapshot = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, runEvent)
         await db.agentEvents.update(eventId, { content, payload: nextPayload })
         const contextManifestHash = contextManifestHashForStepAttemptV1(snapshot, stepId, step.attempt)
-        if (snapshot.contract.dependencyReceiptPolicy?.requiredForJoin && contextManifestHash) {
+        const semanticReviewRequired = snapshot.contract.candidateSemanticReviewPolicy
+          ?.taskIds.includes(payload!.taskId as string) === true
+        if (
+          snapshot.contract.dependencyReceiptPolicy?.requiredForJoin
+          && contextManifestHash
+          && !semanticReviewRequired
+        ) {
           let receipt = null
           try {
             receipt = await Dexie.waitFor(createMasterCandidateStepReceiptV1({
-              payload: { ...payload, candidateHash } as unknown as MasterCandidatePayload,
+              payload: revisedPayload as unknown as MasterCandidatePayload,
               draft: content,
               attempt: step.attempt,
               contextManifestHash,

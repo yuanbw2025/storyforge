@@ -183,7 +183,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
   const record = readRecord(value, 'contract')
   assertExactKeys(
     record,
-    ['version', 'objective', 'workflowKind', 'lineage', 'scope', 'permissions', 'executionBindings', 'dependencyReceiptPolicy', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
+    ['version', 'objective', 'workflowKind', 'lineage', 'scope', 'permissions', 'executionBindings', 'dependencyReceiptPolicy', 'candidateSemanticReviewPolicy', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
     ['version', 'objective', 'workflowKind', 'scope', 'permissions', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
     'contract',
   )
@@ -267,6 +267,53 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
     }
   }
 
+  let candidateSemanticReviewPolicy: AgentRunContractV1['candidateSemanticReviewPolicy']
+  if (record.candidateSemanticReviewPolicy !== undefined) {
+    const policy = readRecord(
+      record.candidateSemanticReviewPolicy,
+      'contract.candidateSemanticReviewPolicy',
+    )
+    assertExactKeys(
+      policy,
+      ['requiredForJoin', 'verifierSetVersion', 'taskIds'],
+      ['requiredForJoin', 'verifierSetVersion', 'taskIds'],
+      'contract.candidateSemanticReviewPolicy',
+    )
+    if (policy.requiredForJoin !== true) {
+      failSchema(
+        'invalid_value',
+        'contract.candidateSemanticReviewPolicy.requiredForJoin',
+        '存在策略时必须启用语义终验 join',
+      )
+    }
+    const taskIds = readArray(policy.taskIds, 'contract.candidateSemanticReviewPolicy.taskIds')
+      .map((item, index) => readString(
+        item,
+        `contract.candidateSemanticReviewPolicy.taskIds[${index}]`,
+        { max: 80 },
+      ))
+    if (taskIds.length === 0) {
+      failSchema('invalid_value', 'contract.candidateSemanticReviewPolicy.taskIds', '不得为空')
+    }
+    assertUnique(taskIds, 'contract.candidateSemanticReviewPolicy.taskIds')
+    candidateSemanticReviewPolicy = {
+      requiredForJoin: true,
+      verifierSetVersion: readString(
+        policy.verifierSetVersion,
+        'contract.candidateSemanticReviewPolicy.verifierSetVersion',
+        { max: 160 },
+      ),
+      taskIds,
+    }
+    if (!dependencyReceiptPolicy) {
+      failSchema(
+        'invalid_value',
+        'contract.candidateSemanticReviewPolicy',
+        '语义终验 join 必须建立在候选确定性回执策略之上',
+      )
+    }
+  }
+
   const budgetRecord = readRecord(record.budget, 'contract.budget')
   const requiredBudgetKeys = ['maxModelCalls', 'maxToolCalls', 'maxInputTokens', 'maxOutputTokens', 'maxAttemptsPerStep'] as const
   const budgetKeys = [...requiredBudgetKeys, 'maxReplans', 'maxToolResultTokens', 'maxProtocolErrors'] as const
@@ -327,6 +374,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
     permissions: { contextSourceKeys, writeTargets },
     ...(executionBindings ? { executionBindings } : {}),
     ...(dependencyReceiptPolicy ? { dependencyReceiptPolicy } : {}),
+    ...(candidateSemanticReviewPolicy ? { candidateSemanticReviewPolicy } : {}),
     budget: {
       maxModelCalls: readInteger(budgetRecord.maxModelCalls, 'contract.budget.maxModelCalls', { min: 1 }),
       maxToolCalls: readInteger(budgetRecord.maxToolCalls, 'contract.budget.maxToolCalls', { min: 0 }),

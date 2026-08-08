@@ -189,12 +189,12 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
 共 64 个 category。
-未分类调用: 0 个。动态 category 调用: 11 个。
+未分类调用: 0 个。动态 category 调用: 12 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:410` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:497` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:417` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:504` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:34` |
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
@@ -265,13 +265,14 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/components/settings/NS0EvalPanel.tsx:72 · chat`
 - `src/lib/agent/character-copilot.ts:472 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
-- `src/lib/agent/inspiration-copilot.ts:325 · chat`
+- `src/lib/agent/inspiration-copilot.ts:328 · chat`
+- `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:496 · chat`
 - `src/lib/agent/prose-copilot.ts:649 · chat`
-- `src/lib/agent/world-origin-copilot.ts:252 · chat`
+- `src/lib/agent/world-origin-copilot.ts:255 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/node-authoring/executor.ts:367 · chat`
 
 ---
 
-生成时间基准:commit `2d1c866`
+生成时间基准:commit `b12bce9`

@@ -19,6 +19,7 @@ import {
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
 import { isMasterAgentRunWorkflowKindV1 } from '../workflow-catalog'
+import { readFreshMasterCandidateStepReceiptV1 } from './master-step-verification'
 
 export const MASTER_AGENT_VERIFIER_SET_VERSION_V1 = 'master-terminal-v1'
 
@@ -86,6 +87,9 @@ function evidenceForCriterion(
     return event ? [`run-event:${event.sequence}`] : [`candidate:${candidate.payload.candidateHash}`]
   }
   if (kind === 'adoption-committed') return [`event:${adoption.id}`]
+  if (kind === 'semantic-review' && candidate.payload.semanticReview) {
+    return [`semantic-review:${candidate.payload.semanticReview.artifactHash}`]
+  }
   return [`post-state:${postStateHash}`]
 }
 
@@ -135,11 +139,13 @@ export async function verifyMasterAgentRunV1(input: {
   if (!isMasterAgentRunWorkflowKindV1(snapshot.contract.workflowKind)) {
     throw new Error('终态验证器只接受分步骤主 Agent run')
   }
-  const steps = Object.values(snapshot.projection.steps)
-  if (
-    steps.length !== snapshot.contract.acceptance.filter(item => item.kind === 'output-present').length
-    || steps.some(step => step.status !== 'succeeded' || !step.adoptionHash)
-  ) {
+  const candidateStepIds = snapshot.contract.acceptance
+    .filter(item => item.kind === 'output-present')
+    .map(item => `master:${item.id.slice(0, -'.candidate'.length)}`)
+  if (candidateStepIds.some(stepId => {
+    const step = snapshot.projection.steps[stepId]
+    return !step || step.status !== 'succeeded' || !step.adoptionHash
+  })) {
     return { accepted: false, codes: ['run-not-ready'], snapshot }
   }
 
@@ -164,6 +170,21 @@ export async function verifyMasterAgentRunV1(input: {
       .filter(isContextAssembledEvent)
       .find(event => event.payload.stepId === stepId && event.payload.attempt === step?.attempt)
     if (!contextEvent) codes.push(`${task.id}:context-manifest-missing`)
+    if (
+      candidate
+      && candidate.payload.candidateHash
+      && snapshot.contract.candidateSemanticReviewPolicy?.taskIds.includes(task.id)
+    ) {
+      const semanticReceipt = await readFreshMasterCandidateStepReceiptV1({
+        snapshot,
+        stepId,
+        candidateHash: candidate.payload.candidateHash,
+        outputHash: await hashCanonicalValue(candidate.draft),
+        semanticReview: candidate.payload.semanticReview,
+        generator: candidate.payload.generator,
+      })
+      if (!semanticReceipt) codes.push(`${task.id}:semantic-review-missing-or-stale`)
+    }
     if (!candidate || !adoption || candidate.event.id == null) {
       if (candidate?.event.id == null) codes.push(`${task.id}:candidate-event-missing`)
       continue
@@ -191,11 +212,16 @@ export async function verifyMasterAgentRunV1(input: {
   }
 
   const candidateHashes = ordered.map(item => item.candidate.payload.candidateHash!)
-  const contextManifestHashes = restored.plan.tasks.map(task => {
+  const contextManifestHashes = restored.plan.tasks.flatMap(task => {
     const event = snapshot.events
       .filter(isContextAssembledEvent)
       .find(item => item.payload.stepId === `master:${task.id}`)
-    return event?.payload.manifestHash ?? ''
+    const semantic = ordered.find(item => item.candidate.payload.taskId === task.id)
+      ?.candidate.payload.semanticReview
+    return [
+      event?.payload.manifestHash ?? '',
+      ...(semantic ? [semantic.reviewContextManifestHash] : []),
+    ]
   })
   const postStateHash = await hashCanonicalValue({
     version: 1,
@@ -206,6 +232,7 @@ export async function verifyMasterAgentRunV1(input: {
       candidateHash: item.candidate.payload.candidateHash,
       adoptionEventId: item.adoption.id,
       businessMatch: item.businessMatch,
+      semanticReviewArtifactHash: item.candidate.payload.semanticReview?.artifactHash ?? null,
     })),
   })
   snapshot = await appendAgentRunEventV1({

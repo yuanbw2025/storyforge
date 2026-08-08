@@ -1021,8 +1021,8 @@ CHIRON 四类信息可映射到现有结构：
 - `agentEvents.durableRunId` 作为候选当前 Run 归属登记到 `PROJECT_TABLES`，DB v53 建立生命周期索引，
   导出导入通过便携 Run ID 重映射；hash-bound 原始 payload 不静默改写。删除 Run 会把候选归属置空，
   删除 Work/世界/项目仍由注册表派生生命周期清理，迁移、往返和删除均有反例；
-- 本单元完成的是首批受控 fan-out 的候选级确定性步骤回执，不等同于每叶独立语义 terminal receipt。
-  通用只读审计 fan-out 和语义终验仍未交付。没有独立的回执绕过开关；
+- 本单元完成的是首批受控 fan-out 的候选级确定性步骤回执，不等同于每叶独立语义 terminal receipt；
+  首批世界来源/灵感领域语义终验由 HARNESS-27 接续。没有独立的回执绕过开关；
   `storyforge:harness:fan-out-v1=disabled` 可停止新请求进入 fan-out，已有事件与回执继续兼容读取和校验。
 
 **工作流配对评测实施状态（HARNESS-26，2026-08-09）**
@@ -1041,6 +1041,29 @@ CHIRON 四类信息可映射到现有结构：
   获得最大并发 1 的顺序路径和最大并发 2 的 fan-out 路径，验证两边均交付三候选、三份步骤回执、可重放
   trace 且 Canon 零写入。该单例只证明评测接入真实主路径；尚未用真实外部模型完成至少 6 例的发布 artifact，
   因此 H3 质量/成本退出门槛仍未达成，也不扩大现有 fan-out 白名单。
+
+**fan-out 叶子语义终验实施状态（HARNESS-27，2026-08-09）**
+
+- 只覆盖当前限定 fan-out 中无依赖的 `world-origin` 与 `inspiration` 叶子，各自由
+  `world-origin.review` / `inspiration.review` 领域 Skill 定义 rubric、登记上下文和执行版本；没有建立
+  一套泛化所有领域的 reviewer，也没有把 review/revise/organize/memory 等 Harness 内部 Skill 暴露为
+  顶层主计划生成任务；
+- 新 RunContract 可显式声明 `candidateSemanticReviewPolicy`，并为两次候选 attempt 冻结 reviewer
+  execution binding。reviewer 通过 `assembleContext()` 独立装配登记来源，且 provider/model 身份必须
+  与 generator 不同。blocking finding 必须同时包含可逐字回查的候选引文、登记 source key 和来源引文；
+  无登记证据的文学质量、因果或具体度判断只能 warning/uncertain，确定性格式与 Canon 硬门仍由代码负责；
+- review 调用计入同一团队预算，并记录独立 `step/context.assembled/model.requested/model.responded` 事件；
+  artifact 绑定 candidate、generation、生成与审查 Context Manifest、模型响应、Prompt/Tool 版本和 reviewer
+  身份，另以既有 `agentEvents(kind=task, durableRunId)` 保存不可变审计副本，不新增数据表。通过后才给叶子
+  签发 `master-candidate-step-v2-semantic` receipt，join 与 terminal receipt 同时验证 artifact 和两类 manifest；
+- 作者编辑会保留可编辑候选，但移除旧 semantic artifact 并 stale v2 receipt，重新执行生成/终验前不得
+  汇合或写入正式数据；当前未提供只复审编辑稿的自动局部入口。有限
+  重规划会把全部受审叶及其 DAG 下游标为受影响，旧代语义证据不 carry-forward。证据型 blocking 让 run
+  暂停等待作者，不自动消耗一次 replan。项目导出导入、删除和 Run 重映射继续由现有 `PROJECT_TABLES`
+  生命周期覆盖；历史无该策略的运行继续使用 v1 确定性回执；
+- `storyforge:harness:master-candidate-semantic-review-v1=enabled` 是显式 opt-in。HARNESS-26 尚无至少 6 例
+  真实外部模型的通过 artifact，因此生产默认关闭，不扩大 fan-out 白名单，也不宣称通用审计、自动修订
+  或质量/成本净收益已经完成；H3 退出门槛仍未达成。
 
 **范围**
 
