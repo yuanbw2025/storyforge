@@ -90,7 +90,7 @@
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 580 个文件 / 136356 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 580 个文件 / 136231 行 | `tsconfig.json` |
 | IndexedDB schema | v51 / 69 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 69 张表 | `project-tables.ts` |
 | Prompt 主线 | 61 个 moduleKey / 206 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
@@ -124,7 +124,7 @@
 | P1-3 | `AIFieldCard` 有 `value` 但 AI 生成时不传 → 说明书"读取当前字段值"是假的，影响 BUG-INPUT-WITH-GEN | `src/components/shared/AIFieldCard.tsx:72` |
 | P1-4 | `WorkflowRunner` 步骤无 UI 输入框，运行时只传 `userHint` + `previousOutput` → BUG-INPUT-WITH-GEN | `src/components/settings/prompt/WorkflowRunner.tsx:172` |
 | P1-5 | `worldRulesProfiles` 项目级单例 `&projectId`，`buildWorldRulesContext` 不接 `worldGroupId` → 多世界串台（Phase 40 未实施） | `src/lib/db/schema.ts:249` 等 |
-| P1-6 | `batch-detail-runner` 章节正文版本只有单一 `worldContext`，无逐章 resolver → 多世界串台 | `src/lib/ai/batch-detail-runner.ts:173` |
+| P1-6 | 已收口：无产品调用方的旧批量正文 runner 已在 HARNESS-12 删除；正文统一走现有章节正文 Harness，不再保留平行 `chat → onSave` 入口 | `src/lib/ai/batch-detail-runner.ts` / `src/lib/agent/run/prose-generation-durable.ts` |
 | P1-7 | 角色合并/删除不 remap `detailedOutlines.appearingCharacterIds` / `scenes.characterIds` 等 JSON 数组引用 | `src/stores/character.ts:53` 等 |
 | P1-8 | `chunk-writer` 导入只收 `projectId` 不接 `worldGroupId` → 多世界导入串台 | `src/lib/import/chunk-writer.ts:32` |
 | P1-9 | `autoTrimToFit` 旧问题已修：请求侧 `chat()` / `streamChat()` 发送前真裁剪，并尊重 `contextWindow`；后续仅剩更细粒度 segment 裁剪优化 | `src/lib/ai/context-budget.ts` / `src/lib/ai/client.ts` |
@@ -618,13 +618,12 @@
 
 ---
 
-#### 2.5 批量正文 worldContextResolver
+#### 2.5 批量正文旧入口收口
 
-**位置**：`src/lib/ai/batch-detail-runner.ts:173/234`
-**前置**：1.3 完成
-**改法**：照 `batch-outline-runner.ts` 已有的 resolver 模式，给批量细纲/批量正文都加 `worldContextResolver?(chapterId)`
-**验证**：多世界批量生成，断言每章用其所属世界上下文
-**完成判据**：多世界批量场景无串台。
+**位置**：`src/lib/ai/batch-detail-runner.ts` / `src/lib/agent/run/prose-generation-durable.ts`
+**完成状态（HARNESS-12）**：旧 `batchGenerateChapters()` 没有产品调用方，且以 `chat → onSave` 绕过正文候选、信息边界、正式采纳和终态验证，已删除而不是继续扩建第二套 runner。批量细纲保留现有逐章 Context Manifest 和 durable 父子运行；正文生成统一复用章节正文 Harness。
+**验证**：回归守卫证明批量细纲继续导出、旧批量正文不再导出；正文 Harness 的多世界、信息边界、采纳和 receipt 测试继续通过。
+**完成判据**：产品中不存在平行批量正文入口。
 
 ---
 
@@ -1605,7 +1604,7 @@ CI 跑：
 | R-10 | 灵感反推采纳后 worldview 字段正确填写（aliases 生效） |
 | R-11 | 章节正文 prompt 实际发送内容包含 worldRulesContext |
 | R-12 | AIFieldCard 生成带 currentValue |
-| R-13 | 多世界批量正文按章节所属世界（不串台） |
+| R-13 | 多世界正文按章节所属世界装配 Context Manifest；禁止恢复已删除的平行批量正文入口 |
 | R-14 | autoTrimToFit 超预算时 L3 先被丢 |
 | R-15 | chat AbortSignal 真取消（不消耗 token） |
 | R-16 | HTML 导出包含 `<script>` 的章节内容时脚本被清洗 |

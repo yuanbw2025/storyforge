@@ -188,7 +188,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 63 个 category。
+共 62 个 category。
 未分类调用: 0 个。动态 category 调用: 9 个。
 
 | category | 触发文件 |
@@ -198,7 +198,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
-| `chapter.content.batch` | `src/lib/ai/batch-detail-runner.ts:471` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:24` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:451`<br/>`src/lib/node-authoring/domain-execution.ts:515` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1143` |
@@ -213,7 +212,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `codex.extract` | `src/components/codex/CodexPanel.tsx:226` |
 | `cultivation.progress` | `src/components/cultivation/CultivationProgressPanel.tsx:143` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
-| `detail.scene` | `src/components/outline/ScenePanel.tsx:126`<br/>`src/lib/ai/batch-detail-runner.ts:196` |
+| `detail.scene` | `src/components/outline/ScenePanel.tsx:126`<br/>`src/lib/ai/batch-detail-runner.ts:193` |
 | `emotion.beat` | `src/components/editor/EmotionBeatCard.tsx:66` |
 | `foreshadow.structure` | `src/components/foreshadow/ForeshadowPanel.tsx:67` |
 | `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:216` |
@@ -271,4 +270,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `beb48b6`
+生成时间基准:commit `85c1f8a`

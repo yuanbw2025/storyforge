@@ -209,7 +209,7 @@ docs/
 - ✅ `worldRulesProfiles` schema 已变 `++id, projectId, worldGroupId`(DB v27),WorldRulesPanel 多世界下显示世界标签
 - ✅ 章节正文生成时,实际发送的 prompt 文本中**包含真实与幻想规则**(在 ChromeDevTools Network 面板抓 AI 请求验证)
 - ✅ AIFieldCard 单字段生成:用户写半句"修真世界以灵气为本" → 点 AI 生成 → 输出**基于这半句扩写**而非另起
-- ✅ 多世界项目批量正文生成:章节属于"斗破"则读斗破设定,属于"遮天"则读遮天设定(逐章验证)
+- ✅ 多世界正文生成按章节所属世界装配上下文；无产品调用方的旧平行批量正文入口已删除
 - ✅ 删除角色:`detailedOutlines.appearingCharacterIds` 中不再含该角色(JSON 数组级联清理生效)
 - ✅ 导入多世界项目:可选择目标世界,所有 worldview/characters/outline 写入归属正确
 - ✅ 反例测试 R-11~R-16 全绿

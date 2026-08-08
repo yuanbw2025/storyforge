@@ -1,17 +1,14 @@
 /**
- * Phase 30.1 — 细纲 + 章节正文 批量生成引擎
+ * Phase 30.1 / HARNESS-10 — 细纲批量生成引擎
  *
  * 功能：
- * 1. batchGenerateDetails: 对无细纲的章节批量调用完善细纲 AI
- * 2. batchGenerateChapters: 对空/少于阈值字数的章节批量生成正文
- *
- * 均支持：进度回调、AbortSignal 中途停止、单章失败不中断。
+ * batchGenerateDetails: 对无细纲的章节批量生成 durable 候选，经作者确认后受控采纳。
+ * 支持进度回调、AbortSignal 中途停止、单章失败留证和父任务终态验证。
  */
 
 import { chat } from './client'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { buildEnhancedDetailPrompt, parseEnhancedDetailResult } from './adapters/detail-scene-adapter'
-import { buildChapterContentPrompt } from './adapters/chapter-adapter'
 import type { OutlineNode, DetailedOutline, WorkspaceScope } from '../types'
 import type { AssembleContextResult } from '../registry/types'
 import type { ScenePace } from '../types/detailed-outline'
@@ -380,127 +377,5 @@ export async function batchGenerateDetails(
     cancelled: false,
     elapsed: Date.now() - start,
     runIds,
-  }
-}
-
-// ── 批量章节正文 ──────────────────────────────────────────────────
-
-export interface BatchChapterOptions {
-  projectId?: number | null
-  /** 章节列表（带 content） */
-  chapters: Array<{
-    id: number
-    title: string
-    summary: string
-    content: string
-  }>
-  /** 字数阈值：content 字数 < threshold 才生成 */
-  minWordThreshold: number
-  /** 世界观上下文（单一，作为兜底） */
-  worldContext: string
-  /** 多世界：按章解析各自世界上下文（提供则逐章覆盖 worldContext） */
-  worldContextResolver?: (chapterNodeId: number) => Promise<string>
-  characterContext: string
-  /** 保存回调 */
-  onSave: (chapterId: number, content: string) => Promise<void>
-  onProgress?: (p: BatchProgress) => void
-  signal?: AbortSignal
-}
-
-export interface BatchChapterResult {
-  generated: number
-  skipped: number
-  failed: number
-  cancelled: boolean
-  elapsed: number
-}
-
-/** 批量生成章节正文：跳过已有足够内容的章节 */
-export async function batchGenerateChapters(
-  opts: BatchChapterOptions,
-): Promise<BatchChapterResult> {
-  const {
-    chapters,
-    minWordThreshold,
-    worldContext,
-    worldContextResolver,
-    characterContext,
-    onSave,
-    onProgress,
-    signal,
-  } = opts
-  const config = useAIConfigStore.getState().config
-  const start = Date.now()
-
-  const todo = chapters.filter(ch => (ch.content || '').length < minWordThreshold)
-
-  let generated = 0
-  let failed = 0
-  const failures: string[] = []
-
-  for (let i = 0; i < todo.length; i++) {
-    if (signal?.aborted) {
-      return { generated, skipped: chapters.length - todo.length, failed, cancelled: true, elapsed: Date.now() - start }
-    }
-
-    const ch = todo[i]
-    const idx = chapters.indexOf(ch)
-    const prevEnding = idx > 0
-      ? (chapters[idx - 1].content || '').slice(-500)
-      : ''
-
-    onProgress?.({
-      current: i + 1,
-      total: todo.length,
-      currentTitle: ch.title,
-      stage: `正在生成「${ch.title}」正文...`,
-      completed: i,
-      failures,
-    })
-
-    try {
-      const chWorldContext = worldContextResolver ? await worldContextResolver(ch.id) : worldContext
-      const messages = buildChapterContentPrompt(
-        ch.title,
-        ch.summary || '',
-        chWorldContext,
-        characterContext,
-        prevEnding,
-      )
-
-      const content = await chat(messages, config, { category: 'chapter.content.batch', projectId: opts.projectId ?? null })
-      if (signal?.aborted) {
-        return { generated, skipped: chapters.length - todo.length, failed, cancelled: true, elapsed: Date.now() - start }
-      }
-
-      if (content && content.trim().length > 50) {
-        await onSave(ch.id, content.trim())
-        generated++
-      } else {
-        failed++
-        failures.push(ch.title)
-      }
-    } catch (err) {
-      console.error(`[BatchChapter] 「${ch.title}」生成失败:`, err)
-      failed++
-      failures.push(ch.title)
-    }
-  }
-
-  onProgress?.({
-    current: todo.length,
-    total: todo.length,
-    currentTitle: '',
-    stage: `完成！生成 ${generated}，跳过 ${chapters.length - todo.length}，失败 ${failed}`,
-    completed: todo.length,
-    failures,
-  })
-
-  return {
-    generated,
-    skipped: chapters.length - todo.length,
-    failed,
-    cancelled: false,
-    elapsed: Date.now() - start,
   }
 }
