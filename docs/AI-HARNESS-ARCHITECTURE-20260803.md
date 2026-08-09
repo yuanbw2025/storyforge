@@ -312,6 +312,14 @@ Registry → `assembleContext()` 装配，并继续冻结输入状态、压缩�
 组件级 `useAIStream → parseCharacterOutput` 自由文本旁路及无调用解析文件已删除；人工 CRUD、角色轴/维度选择
 和 Prompt 配置入口保留。该单元不自动创建关系边、物品、状态卡或大纲，当前测试也不证明真实模型角色质量收益。
 
+HARNESS-34 现状（2026-08-09）：分步骤灵感反推面板已统一进入现有 Inspiration Agent 的
+`inspiration.reverse` Skill。面板仍保留碎片填写、来源标注、勾选、增量版本、差异审阅、多世界预览和显式
+Canon 采纳；生成时通过主 Agent 的定向任务入口把作者选择的碎片 ID 冻结进 durable plan，Skill 只经
+`read_inspiration_workspace` → `CONTEXT_SOURCES + assembleContext()` 读取。候选持久在主 Agent 事件中，
+可刷新恢复、编辑、拒绝或确认；确认只新增 `inspirationWorkspaces.versions`，不会自动写入世界观、故事核心、
+角色或世界组。旧面板级 `useAIStream`、组件级 `assembleContext()` 和直接模型调用已删除。当前证据证明入口、
+任务契约和候选治理，不证明真实 provider 的文学质量、成本或延迟收益；多世界 Canon 采纳仍是单独的作者确认动作。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。

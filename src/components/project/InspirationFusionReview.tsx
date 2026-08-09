@@ -20,6 +20,9 @@ interface Props {
   mode: InspirationResultMode
   pendingDiff: InspirationResultDiff[] | null
   confirming: boolean
+  candidateDraft?: string | null
+  candidateInputSummary?: string
+  onCandidateChange?: (draft: string) => void
   onToggle: (fragmentId: string) => void
   onRemove: (fragmentId: string) => void
   onConfirm: () => void
@@ -33,6 +36,9 @@ export default function InspirationFusionReview({
   mode,
   pendingDiff,
   confirming,
+  candidateDraft = null,
+  candidateInputSummary,
+  onCandidateChange,
   onToggle,
   onRemove,
   onConfirm,
@@ -108,16 +114,30 @@ export default function InspirationFusionReview({
         </div>
       )}
 
-      {pendingDiff && (
+      {(candidateDraft != null || pendingDiff !== null) && (
         <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
           <div className="flex items-center gap-1.5 text-sm font-medium text-amber-400">
             <GitCompareArrows className="h-4 w-4" />
             待确认的融合版本
           </div>
           <p className="text-xs text-text-muted">
-            下方结果尚未写入版本历史，也不能采纳到项目。请先检查差异。
+            候选尚未写入版本历史，也不能采纳到项目。你可以先编辑结构化 JSON，再检查差异。
           </p>
-          {pendingDiff.length === 0 ? (
+          {candidateInputSummary && (
+            <p className="text-[11px] text-text-muted">{candidateInputSummary}</p>
+          )}
+          {candidateDraft != null && (
+            <textarea
+              aria-label="灵感反推候选内容"
+              value={candidateDraft}
+              onChange={event => onCandidateChange?.(event.target.value)}
+              disabled={confirming}
+              className="min-h-64 w-full resize-y rounded border border-border bg-bg-base px-2.5 py-2 font-mono text-[11px] leading-5 text-text-primary"
+            />
+          )}
+          {pendingDiff === null ? (
+            <p className="text-xs text-red-400">候选当前不是有效结构，修正 JSON 后才能确认。</p>
+          ) : pendingDiff.length === 0 ? (
             <p className="text-xs text-text-secondary">与当前版本没有字段差异。</p>
           ) : (
             <div className="max-h-64 space-y-2 overflow-y-auto">
@@ -141,7 +161,7 @@ export default function InspirationFusionReview({
           <div className="flex gap-2">
             <button
               onClick={onConfirm}
-              disabled={confirming}
+              disabled={confirming || pendingDiff === null}
               className="flex items-center gap-1 rounded bg-green-600 px-3 py-1.5 text-xs text-white hover:bg-green-700 disabled:opacity-40"
             >
               <Check className="h-3.5 w-3.5" />

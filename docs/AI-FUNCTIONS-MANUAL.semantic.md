@@ -26,6 +26,10 @@
 - **业务意图**:用户写碎片想法,AI 反向生成世界观/故事核心/角色草稿。是"下游→上游"的反推流。
 - **角色模型**:角色草稿必须同时产出戏份权重与九宫格阵营两轴；旧 `role` 只作为派生兼容字段。
 - **坑**:写回经 `adopt()`,AI 输出的别名字段(如 `summary`→`worldOrigin`)自动归一,不再静默丢字段(Phase 1.2b 修复)。
+- **上下文边界**:HARNESS-34 后生成只进入 Inspiration Agent 的 `inspiration.reverse` Skill；作者勾选的碎片 ID 冻结到 durable plan，未勾选内容不会发给模型，读取只经 `read_inspiration_workspace → assembleContext()`。
+- **候选与写回**:结构化候选可刷新恢复、编辑、拒绝或确认；确认只经 `adopt(inspirationWorkspaces)` 新增一个版本，不自动写世界观、故事核心、角色或世界组。版本确认后，面板里的分区/多世界采纳仍是另一项显式作者动作。
+- **兼容边界**:碎片来源、增量版本、差异审阅、多世界预览和导出保留；旧面板级 `useAIStream`、直接模型调用和组件级上下文装配已删除。
+- **证据边界**:现有回归证明任务契约、碎片隔离、候选 gate/CAS 和版本采纳，不证明真实模型文学质量、成本或延迟收益。
 
 ### 角色生成 — `moduleKey: character.generate`
 - **业务意图**:根据现有阵容与世界上下文设计角色；戏份(main/secondary/NPC/路人)与阵营(道德轴×秩序轴)彼此独立。

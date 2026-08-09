@@ -121,4 +121,35 @@ describe('R-CM1 · 增量灵感融合 UI', () => {
     expect(onAdoptAll).not.toHaveBeenCalled()
     expect(onAdoptStoryCore).not.toHaveBeenCalled()
   })
+
+  it('结构化候选可在确认前编辑，编辑内容由事件草稿回调承接', async () => {
+    const onCandidateChange = vi.fn()
+    const draft = JSON.stringify({ storyCore: { theme: '记忆' } })
+    const host = await mount(createElement(InspirationFusionReview, {
+      fragments: [fragment],
+      versions: [version],
+      selectedIds: new Set([fragment.id]),
+      mode: 'single',
+      pendingDiff: [],
+      candidateDraft: draft,
+      confirming: false,
+      onCandidateChange,
+      onToggle: vi.fn(),
+      onRemove: vi.fn(),
+      onConfirm: vi.fn(),
+      onDiscard: vi.fn(),
+    }))
+
+    const editor = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="灵感反推候选内容"]')!
+    expect(editor.value).toBe(draft)
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        editor,
+        JSON.stringify({ storyCore: { theme: '身份与记忆' } }),
+      )
+      editor.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(onCandidateChange).toHaveBeenCalledOnce()
+    expect(onCandidateChange.mock.calls[0][0]).toContain('身份与记忆')
+  })
 })

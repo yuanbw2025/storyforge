@@ -338,6 +338,10 @@
   `characters` 零写入，确认后只经 `adopt(characters)`，roster snapshot/CAS、刷新恢复、候选编辑/拒绝/确认、
   同名/未知字段/非法枚举/stale 和终态回读均有专项回归。旧 `useAIStream → parseCharacterOutput` 旁路及死代码
   已删除，人工 CRUD、角色轴/维度选择和 Prompt 配置保留；当前不自动创建关系、物品或大纲，不证明真实模型质量收益。
+- HARNESS-34 已把分步骤灵感反推面板收口为现有 Inspiration Agent 的 `inspiration.reverse` Skill。作者勾选的
+  碎片 ID 会冻结到主 Agent durable plan，读取经正式工具和 `assembleContext()`，候选可刷新恢复、编辑、拒绝
+  或确认；确认只新增灵感工作区版本，不自动写入世界观、故事核心、角色或世界组。旧 `useAIStream` 和面板级
+  上下文装配已删除，碎片库、差异审阅、多世界预览和后续显式采纳保留。
 
 ### GOV-1 第一阶段交付证据
 

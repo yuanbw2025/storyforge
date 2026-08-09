@@ -90,6 +90,7 @@ import {
 } from '../master-candidate-semantic-review'
 import { STORY_CORE_FIELDS } from '../story-core-copilot'
 import { WORLDVIEW_AGENT_FIELDS } from '../worldview-field-copilot'
+import { MAX_INSPIRATION_FRAGMENTS } from '../../inspiration/workspace'
 
 export const MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1 = 'master-agent-plan'
 export const MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 = 1 as const
@@ -284,6 +285,26 @@ function readOptionalPerspectiveCharacterId(
   return Number(value.perspectiveCharacterId)
 }
 
+function readOptionalInspirationFragmentIds(
+  value: Record<string, unknown>,
+  agentId: DomainAgentId,
+  label: string,
+): string[] | undefined {
+  if (!Object.prototype.hasOwnProperty.call(value, 'inspirationFragmentIds')) return undefined
+  if (agentId !== 'inspiration' || !Array.isArray(value.inspirationFragmentIds)) {
+    fail(label + '.inspirationFragmentIds 无效')
+  }
+  const ids = [...new Set(value.inspirationFragmentIds)]
+  if (
+    ids.length < 1
+    || ids.length > MAX_INSPIRATION_FRAGMENTS
+    || ids.some(id => typeof id !== 'string' || !id.trim() || id.length > 120)
+  ) {
+    fail(label + '.inspirationFragmentIds 无效')
+  }
+  return ids as string[]
+}
+
 function readOptionalSkillId(
   value: Record<string, unknown>,
   agentId: DomainAgentId,
@@ -336,7 +357,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     assertKeysWithOptional(
       item,
       ['id', 'agentId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId', 'skillId'],
+      ['perspectiveCharacterId', 'skillId', 'inspirationFragmentIds'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -358,6 +379,11 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     if (dependsOn.includes(id)) fail(`主 Agent 计划任务 ${id} 不得依赖自身`)
     const perspectiveCharacterId = readOptionalPerspectiveCharacterId(item, '主 Agent 计划任务 ' + id)
     const skillId = readOptionalSkillId(item, agentId, '主 Agent 计划任务 ' + id)
+    const inspirationFragmentIds = readOptionalInspirationFragmentIds(
+      item,
+      agentId,
+      '主 Agent 计划任务 ' + id,
+    )
     return {
       id,
       agentId,
@@ -365,6 +391,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       instruction,
       dependsOn,
       ...(perspectiveCharacterId !== undefined ? { perspectiveCharacterId } : {}),
+      ...(inspirationFragmentIds !== undefined ? { inspirationFragmentIds } : {}),
     }
   })
   const workflow = value.workflow === undefined
@@ -606,6 +633,8 @@ function sameTaskIdentity(left: MasterAgentTask, right: MasterAgentTask): boolea
     && left.agentId === right.agentId
     && (left.skillId ?? null) === (right.skillId ?? null)
     && (left.perspectiveCharacterId ?? null) === (right.perspectiveCharacterId ?? null)
+    && JSON.stringify(left.inspirationFragmentIds ?? null)
+      === JSON.stringify(right.inspirationFragmentIds ?? null)
 }
 
 function sameTaskDefinition(left: MasterAgentTask, right: MasterAgentTask): boolean {
@@ -1025,6 +1054,13 @@ function assertCandidateMatchesTaskSkill(
     && (taskSkill.executionMode === 'generate' || taskSkill.executionMode === 'continue')
     && payload.proseOperation !== taskSkill.executionMode
   ) fail(`${label} 的正文操作与 Skill 不一致`)
+  if (task.agentId === 'inspiration' && task.inspirationFragmentIds !== undefined) {
+    const expected = [...new Set(task.inspirationFragmentIds)]
+    const actual = payload.selectedFragmentIds ?? []
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      fail(label + ' 的灵感碎片选择与计划不一致')
+    }
+  }
 }
 
 export function assertMasterAgentRunContractExecutionBindingsV1(

@@ -61,7 +61,13 @@ export default function InspirationPanel({ project }: Props) {
     confirmFusion: handleConfirmFusion,
     discardFusion: handleDiscardFusion,
     removeFragment: handleRemoveFragment,
+    copilot,
+    pendingCandidate,
   } = fusion
+  const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
+    candidate !== pendingCandidate
+      && (candidate.payload.agentId !== 'inspiration' || candidate.payload.skillId !== 'inspiration.reverse')
+  ))
 
   // ── 多世界：一键采纳（创建世界组 + 各世界世界观 + 故事核心 + 角色归属）──
   const handleAdoptMultiWorld = async () => {
@@ -409,6 +415,16 @@ export default function InspirationPanel({ project }: Props) {
           mode={mode}
           pendingDiff={pendingDiff}
           confirming={confirmingFusion}
+          candidateDraft={pendingCandidate?.event.content ?? null}
+          candidateInputSummary={pendingCandidate?.payload.contextEvidence
+            ? '实际输入：' + (pendingCandidate.payload.contextEvidence.included.join('、') || '无')
+              + '；估算 ' + pendingCandidate.payload.contextEvidence.estimatedInputTokens.toLocaleString() + ' tokens'
+            : undefined}
+          onCandidateChange={draft => {
+            if (pendingCandidate?.event.id != null) {
+              void copilot.updateCandidate(pendingCandidate.event.id, draft)
+            }
+          }}
           onToggle={fragmentId => {
             setSelectedFragmentIds(current => {
               const next = new Set(current)
@@ -442,6 +458,8 @@ export default function InspirationPanel({ project }: Props) {
               (!inspiration.trim() && selectedFragmentIds.size === 0)
               || inspiration.trim().length > MAX_INSPIRATION_FRAGMENT_CHARS
               || ai.isStreaming
+              || copilot.loading
+              || copilot.pendingCandidates.length > 0
             }
             className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
@@ -457,7 +475,20 @@ export default function InspirationPanel({ project }: Props) {
               停止
             </button>
           )}
+          {copilot.recoveryAvailable && !copilot.busy && (
+            <button
+              onClick={() => { void copilot.resume() }}
+              className="text-xs text-accent hover:text-accent-hover transition-colors"
+            >
+              恢复中断任务
+            </button>
+          )}
         </div>
+        {hasOtherPendingCandidates && (
+          <p className="rounded border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-text-secondary">
+            主 Agent 还有其他待确认候选，请先在右侧副驾中处理。
+          </p>
+        )}
 
         {/* ── AI 流式输出 ────────────────────────── */}
         {(ai.output || ai.isStreaming || ai.error) && (

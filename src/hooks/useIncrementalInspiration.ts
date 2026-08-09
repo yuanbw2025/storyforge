@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useAIStream } from './useAIStream'
-import { createAISessionKey } from '../stores/ai-generation-session'
 import { useInspirationWorkspaceStore } from '../stores/inspiration-workspace'
 import {
-  buildInspirationReverseMultiWorldPrompt,
-  buildInspirationReversePrompt,
   parseReverseMultiWorldOutput,
   parseReverseOutput,
   type ReverseMultiWorldResult,
@@ -16,13 +12,12 @@ import {
   MAX_INSPIRATION_FRAGMENT_CHARS,
   type InspirationResultDiff,
 } from '../lib/inspiration/workspace'
-import { assembleContext } from '../lib/registry/assemble-context'
+import { useMasterCopilot } from '../components/agent/useMasterCopilot'
 import type { Project } from '../lib/types'
 import type { WorkspaceScope } from '../lib/types/world-ownership'
 import type {
   InspirationResultMode,
   InspirationSourceKind,
-  InspirationVersion,
 } from '../lib/types/inspiration-workspace'
 
 export function useIncrementalInspiration(
@@ -38,7 +33,7 @@ export function useIncrementalInspiration(
   ), [project.activeWorkId, project.activeWorldId, project.id])
   const scopeInput = workspaceScope ?? project.id!
   const scopeKey = `${project.activeWorldId ?? 'legacy'}:${project.activeWorkId ?? 'legacy'}`
-  const ai = useAIStream(createAISessionKey(project.id!, 'inspiration.reverse', scopeKey))
+  const copilot = useMasterCopilot({ project, worldGroupId: null })
   const workspace = useInspirationWorkspaceStore()
   const draftKey = `sf-inspiration-draft-${project.id}-${scopeKey}`
   const draftLoaded = useRef(false)
@@ -53,11 +48,22 @@ export function useIncrementalInspiration(
   const [sourceKind, setSourceKind] = useState<InspirationSourceKind>('author')
   const [selectedFragmentIds, setSelectedFragmentIds] = useState<Set<string>>(new Set())
   const [pendingDiff, setPendingDiff] = useState<InspirationResultDiff[] | null>(null)
-  const [pendingFragmentIds, setPendingFragmentIds] = useState<string[]>([])
-  const [pendingParent, setPendingParent] = useState<InspirationVersion | null>(null)
   const [confirmingFusion, setConfirmingFusion] = useState(false)
-  const [awaitingResult, setAwaitingResult] = useState(false)
   const [fusionError, setFusionError] = useState('')
+
+  const pendingCandidate = useMemo(() => copilot.pendingCandidates.find(candidate => (
+    candidate.payload.agentId === 'inspiration'
+      && candidate.payload.skillId === 'inspiration.reverse'
+      && (candidate.payload.mode ?? mode) === mode
+  )) ?? null, [copilot.pendingCandidates, mode])
+
+  const ai = useMemo(() => ({
+    isStreaming: copilot.busy,
+    output: '',
+    error: copilot.error,
+    tokenUsage: undefined,
+    stop: copilot.stop,
+  }), [copilot.busy, copilot.error, copilot.stop])
 
   const applyResult = (parsed: ReverseResult | ReverseMultiWorldResult, targetMode = mode) => {
     if (targetMode === 'multiworld') {
@@ -77,9 +83,6 @@ export function useIncrementalInspiration(
     setMwResult(null)
     setMwAdopted(false)
     setPendingDiff(null)
-    setPendingFragmentIds([])
-    setPendingParent(null)
-    setAwaitingResult(false)
     setFusionError('')
     void workspace.load(scopeInput).then(() => {
       if (!active) return
@@ -130,7 +133,6 @@ export function useIncrementalInspiration(
   }, [draftKey, inspiration, userHint, result, mwResult, mwAdopted])
 
   const acceptGeneratedResult = (output: string) => {
-    setAwaitingResult(false)
     const latest = latestInspirationVersion(
       useInspirationWorkspaceStore.getState().versions,
       mode,
@@ -143,22 +145,25 @@ export function useIncrementalInspiration(
       ? parseReverseMultiWorldOutput(output)
       : parseReverseOutput(output)
     if (!parsed) {
-      setFusionError('Agnes 返回内容无法解析，请检查原始输出后重试')
-      return
+      throw new Error('Agnes 返回内容无法解析，请修正候选 JSON 或拒绝后重试')
     }
     setFusionError('')
     applyResult(parsed)
     setPendingDiff(diffInspirationResults(previous, parsed))
-    setPendingParent(latest)
   }
 
   useEffect(() => {
-    if (!awaitingResult || ai.isStreaming || !ai.output) return
-    acceptGeneratedResult(ai.output)
-    setAwaitingResult(false)
-  // Completion intentionally reads the latest store snapshot.
+    if (!pendingCandidate || pendingCandidate.event.id == null) return
+    try {
+      acceptGeneratedResult(pendingCandidate.event.content)
+      setFusionError('')
+    } catch (error) {
+      setPendingDiff(null)
+      setFusionError(error instanceof Error ? error.message : '灵感反推候选无法解析')
+    }
+  // Candidate event content is the source of truth for generated and edited drafts.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ai.isStreaming, ai.output, awaitingResult, isMultiWorld])
+  }, [pendingCandidate?.event.content, pendingCandidate?.event.id, mode])
 
   const addCurrentFragment = async () => {
     if (inspiration.trim().length > MAX_INSPIRATION_FRAGMENT_CHARS) {
@@ -193,51 +198,43 @@ export function useIncrementalInspiration(
     }
     const state = useInspirationWorkspaceStore.getState()
     if (selectedIds.size === 0 || state.fragments.length === 0) return
-    const previousVersion = latestInspirationVersion(state.versions, mode)
-    const assembled = await assembleContext({
-      projectId: project.id!,
-      scope: workspaceScope,
-      sourceKeys: ['inspirationWorkspace'],
-      inspirationFragmentIds: [...selectedIds],
-      inspirationMode: mode,
-    })
-    const fusionInput = assembled.text
-    if (!fusionInput) return
-
     setResult(null)
     setMwResult(null)
     setMwAdopted(false)
     setPendingDiff(null)
-    setPendingFragmentIds([...selectedIds])
-    setPendingParent(previousVersion)
     setFusionError('')
     onGenerationStarted()
 
-    const genres = project.genres?.join('/') || project.genre || ''
-    const messages = isMultiWorld
-      ? buildInspirationReverseMultiWorldPrompt(project.name, genres, fusionInput, userHint || undefined)
-      : buildInspirationReversePrompt(project.name, genres, fusionInput, userHint || undefined)
-    setAwaitingResult(true)
-    await ai.start(messages, undefined, {
-      category: 'inspiration.reverse',
-      projectId: project.id!,
+    const request = [
+      '基于作者选择的灵感碎片生成结构化灵感反推候选。',
+      userHint.trim() ? '作者补充要求：' + userHint.trim() : '',
+    ].filter(Boolean).join('\n')
+    await copilot.submitTargetedRequest(request, {
+      agentId: 'inspiration',
+      skillId: 'inspiration.reverse',
+      instruction: request,
+      inspirationFragmentIds: [...selectedIds],
     })
   }
 
   const confirmFusion = async () => {
     const pendingResult = mode === 'multiworld' ? mwResult : result
-    if (!pendingResult || pendingDiff === null) return
+    if (!pendingResult || pendingDiff === null || !pendingCandidate) return
     setConfirmingFusion(true)
     try {
-      await workspace.saveVersion(scopeInput, {
+      const before = latestInspirationVersion(
+        useInspirationWorkspaceStore.getState().versions,
         mode,
-        parentVersionId: pendingParent?.id ?? null,
-        fragmentIds: pendingFragmentIds,
-        result: pendingResult,
-      })
+      )?.id ?? null
+      await copilot.adoptCandidate(pendingCandidate)
+      const after = latestInspirationVersion(
+        useInspirationWorkspaceStore.getState().versions,
+        mode,
+      )?.id ?? null
+      if (after === before) {
+        throw new Error('候选尚未完成版本采纳，请检查主 Agent 错误后重试。')
+      }
       setPendingDiff(null)
-      setPendingParent(null)
-      setPendingFragmentIds([])
       setFusionError('')
     } catch (error) {
       setFusionError(error instanceof Error ? error.message : '融合版本保存失败')
@@ -246,19 +243,13 @@ export function useIncrementalInspiration(
     }
   }
 
-  const discardFusion = () => {
-    const latest = latestInspirationVersion(
-      useInspirationWorkspaceStore.getState().versions,
-      mode,
-    )
-    if (latest) applyResult(JSON.parse(latest.resultJson))
-    else {
-      setResult(null)
-      setMwResult(null)
-    }
+  const discardFusion = async () => {
+    if (pendingCandidate) await copilot.rejectCandidate(pendingCandidate)
+    const latest = latestInspirationVersion(useInspirationWorkspaceStore.getState().versions, mode)
+    if (latest) {
+      try { applyResult(JSON.parse(latest.resultJson)) } catch { setResult(null); setMwResult(null) }
+    } else { setResult(null); setMwResult(null) }
     setPendingDiff(null)
-    setPendingParent(null)
-    setPendingFragmentIds([])
   }
 
   const removeFragment = async (fragmentId: string) => {
@@ -277,6 +268,7 @@ export function useIncrementalInspiration(
 
   return {
     ai,
+    copilot,
     isMultiWorld,
     mode,
     workspace,
@@ -304,5 +296,6 @@ export function useIncrementalInspiration(
     confirmFusion,
     discardFusion,
     removeFragment,
+    pendingCandidate,
   }
 }

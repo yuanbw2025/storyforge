@@ -516,6 +516,11 @@
   候选，确认前 `characters` 零写入，确认后只经 `adopt(characters)`；刷新恢复、编辑、拒绝、同名/未知字段/
   非法枚举/stale 和终态回归均已覆盖。旧 `useAIStream → parseCharacterOutput` 自由文本旁路及死代码已删除，
   人工 CRUD、角色轴/维度选择和 Prompt 配置保留；当前不自动创建关系、物品或大纲，也不证明真实模型质量收益。
+- HARNESS-34 已交付 `inspiration.reverse` 主入口收口：分步骤灵感面板通过主 Agent 定向 durable 任务执行，
+  作者勾选的碎片 ID 进入计划、候选 payload 和恢复合同；Skill 只经 `read_inspiration_workspace` 与
+  `assembleContext()` 读取。候选可刷新恢复、编辑、拒绝或确认，确认只经 `adopt(inspirationWorkspaces)`
+  新增版本，不自动写世界观、故事核心、角色或世界组。旧面板级 `useAIStream`、直接模型调用和手工上下文装配
+  已删除；现有碎片库、差异审阅、多世界预览与显式 Canon 采纳保留。当前无真实模型质量、成本或延迟 A/B。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

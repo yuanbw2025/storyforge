@@ -10,6 +10,7 @@ import {
   createMasterAgentPlan,
   executeMasterAgentPlan,
   type ExecutedMasterCandidate,
+  type PinnedMasterAgentTaskV1,
   type MasterCandidatePayload,
 } from '../../lib/agent/orchestrator'
 import {
@@ -200,7 +201,10 @@ export function useMasterCopilot(input: {
       }))
   }, [events])
 
-  const submitRequest = useCallback(async (requestOverride?: string) => {
+  const submitRequest = useCallback(async (
+    requestOverride?: string,
+    options?: { pinnedTask?: PinnedMasterAgentTaskV1 },
+  ) => {
     const request = (requestOverride ?? authorRequest).trim()
     if (!request || busy || conversationId == null) return
     if (pendingCandidates.length) return
@@ -232,6 +236,7 @@ export function useMasterCopilot(input: {
         request,
         budget: teamBudget,
         signal: controller.signal,
+        pinnedTask: options?.pinnedTask,
       })
       await appendAgentEvent({
         projectId: project.id!,
@@ -351,6 +356,11 @@ export function useMasterCopilot(input: {
   ])
 
   const submit = useCallback(() => submitRequest(), [submitRequest])
+
+  const submitTargetedRequest = useCallback((
+    request: string,
+    pinnedTask: PinnedMasterAgentTaskV1,
+  ) => submitRequest(request, { pinnedTask }), [submitRequest])
 
   const resume = useCallback(async () => {
     if (busy || conversationId == null || !workspaceScope) return
@@ -529,6 +539,7 @@ export function useMasterCopilot(input: {
     error,
     submit,
     submitRequest,
+    submitTargetedRequest,
     resume,
     stop,
     updateCandidate,

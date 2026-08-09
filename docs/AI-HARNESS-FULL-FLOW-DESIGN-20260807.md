@@ -361,6 +361,12 @@ empty/partial/complete 输入策略、正式登记上下文、预算压缩/全�
 文本解析旁路及死代码已删除，人工 CRUD、角色轴、维度选择和 Prompt 配置保留。当前不自动创建关系边、物品、
 状态卡或大纲，也不证明真实模型角色质量已经提升。
 
+**HARNESS-34 已交付边界（2026-08-09）：** 分步骤灵感反推入口已统一到现有 Inspiration Agent 的
+`inspiration.reverse` Skill。作者选中的碎片 ID 被固定到主 Agent durable plan，刷新恢复后仍使用同一输入
+边界；读取只经 `read_inspiration_workspace → assembleContext()`。结构化候选在主 Agent 事件中可编辑、拒绝
+或确认，确认只经 `adopt(inspirationWorkspaces)` 新增版本，不自动写入世界观、故事核心、角色或世界组。碎片
+填写、来源、版本差异、多世界预览及后续显式 Canon 采纳保持不变；旧面板级 `useAIStream` 和手工上下文装配已删除。
+
 ### 8.4 阶段 3：主线、支线、角色弧与关键事件
 
 | 项目 | 设计 |
@@ -611,9 +617,10 @@ Receipt 绑定 `contractHash + contextManifestHash + sourceHashes + candidateHas
 1. 世界观组件内的手工上下文与 `slice()` 已由 HARNESS-32 收口到 `world-origin.worldview-field` → `assembleContext()`；旧 `world-origin.complete` 仅保留历史 durable Run 兼容，人工编辑、词条、历史年表和 Prompt 配置入口保留。~~故事核心手工上下文~~已由 HARNESS-31 收口到 `world-origin.story-core`，旧 `story-adapter` 已删除，人工编辑保留。
 2. ~~故事线 AI 生成的直接 `db.storyArcs.add()`~~：HARNESS-30 已收口为 `outline.story-arcs` durable 候选并统一经 `adopt()`；人工 CRUD 保留。
 3. ~~普通角色弱 parser 与 Character Copilot 双入口~~已由 HARNESS-33 统一为 `character.create`；旧弱 parser 删除，手动角色编辑、轴/维度选择和 Prompt 配置保留。
-4. 正文接受后的 best-effort 后处理，收口为可恢复 post-step barrier。
-5. 独立一致性候选和章节整理候选，绑定统一 run/source hash，不再形成无法追踪的平行质量入口。
-6. 任何新的 Skill 不得复制数据库读取、Prompt runner、RAG、Embedding、导入导出或写回实现。
+4. ~~灵感反推的面板级 `useAIStream` 与组件上下文装配~~已由 HARNESS-34 统一为 `inspiration.reverse` 定向 durable 任务；碎片库、版本差异和显式 Canon 采纳保留。
+5. 正文接受后的 best-effort 后处理，收口为可恢复 post-step barrier。
+6. 独立一致性候选和章节整理候选，绑定统一 run/source hash，不再形成无法追踪的平行质量入口。
+7. 任何新的 Skill 不得复制数据库读取、Prompt runner、RAG、Embedding、导入导出或写回实现。
 
 ## 17. 分阶段实施路线
 

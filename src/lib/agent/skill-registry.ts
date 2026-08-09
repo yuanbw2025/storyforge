@@ -673,8 +673,8 @@ export const AGENT_SKILLS = [
     contextCompression: INSPIRATION_COMPRESSION_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'inspirationWorkspaces', fields: ['versions'] }],
-    lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-inspiration', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
+    lastVerifiedAt: '2026-08-09',
+    regressionTests: ['R-AGENT1-chat-copilot-inspiration', 'R-CM1-inspiration-fusion-ui', 'R-HARNESS34-inspiration-entry', 'R-HARNESS34-inspiration-panel-ui', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,

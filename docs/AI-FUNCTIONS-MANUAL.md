@@ -79,7 +79,7 @@
 
 ### 1.2 灵感反推（侧栏：inspiration）
 
-**对应表**：无自有表（写入到 `worldviews` / `storyCores` / `characters` / `worldGroups`）
+**对应表**：`inspirationWorkspaces`（碎片与确认版本）；世界观、故事核心、角色和世界组只在版本确认后的独立作者采纳动作中写入
 
 **字段**（本面板内的用户输入与中间态）：
 | 字段 | 含义 |
@@ -93,28 +93,26 @@
 #### 动作①：灵感反推（单世界）
 - **触发**：🔘 手动，点"反推"按钮
 - **读**：
-  - `projects.name`、`projects.genre`、`projects.description`
-  - `用户输入: 碎片输入`
+  - 作者本轮勾选的已保存碎片；碎片 ID 固定到主 Agent durable plan
+  - `read_inspiration_workspace → CONTEXT_SOURCES + assembleContext()`，未勾选碎片不读取
 - **提示词**：`inspiration.reverse`
-- **写**（用户审核 → 分批采纳）：
-  - `worldviews.worldOrigin / powerHierarchy / continentLayout / climateByRegion / historyLine / races / factionLayout`（覆盖，按 v3 字段）
-  - `storyCores.theme / centralConflict / plotPattern / mainPlot / logline`（覆盖）
+- **首次确认写入**：结构化候选可编辑/拒绝/确认；确认只经 `adopt(inspirationWorkspaces)` 新增版本，不自动写 Canon
+- **后续显式采纳**：
+  - `worldviews.worldOrigin / powerHierarchy / continentLayout / climateByRegion / historyLine / races / factionLayout`
+  - `storyCores.theme / centralConflict / plotPattern / mainPlot / logline`
   - `characters`（批量新建）
-- **采纳方式**：用户在面板上分别点"写入世界观/写入故事核心/写入角色"或"一键全部采纳"
+- **采纳方式**：版本确认后，用户在面板上分别点"写入世界观/写入故事核心/写入角色"或"一键全部采纳"
 
 #### 动作②：灵感反推（多世界）
 - **触发**：🔘 手动，多世界模式下点"反推"按钮
-- **读**：
-  - `projects.name / genre`
-  - `worldGroups.全世界概览`
-  - `用户输入: 碎片输入`（含可指明"我想要斗破/遮天/完美三个世界..."这种意图）
+- **读**：与单世界相同，只读取作者勾选的已保存碎片，并按多世界模式构造结构化候选
 - **提示词**：`inspiration.reverse.multiworld`
-- **写**：
+- **首次确认写入**：只新增 `inspirationWorkspaces.versions`；以下均为版本确认后的独立显式采纳：
   - `worldGroups`（批量新建多世界）
   - 每个世界对应的 `worldviews`（带 worldGroupId 盖章）
   - `characters`（带 homeWorldGroupId 或 isCrossWorld）
 
-> ⚠️ 已知风险：字段映射严格按 v3，AI 若吐 `summary` 等旧字段会被忽略；建议未来走"R-2 统一写回 + 别名映射"根治。
+> HARNESS-34：旧面板级 `useAIStream`、直接模型调用和组件级上下文装配已删除；候选进入主 Agent durable Run，刷新后仍可编辑、拒绝或确认。当前工程证据不代表真实模型生成质量已经提升。
 
 ---
 

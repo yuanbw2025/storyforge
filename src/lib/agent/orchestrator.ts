@@ -15,6 +15,8 @@ import {
 } from '../generation/generation-node'
 import {
   parseInspirationFragments,
+  parseInspirationVersions,
+  latestInspirationVersion,
   MAX_INSPIRATION_FRAGMENTS,
 } from '../inspiration/workspace'
 import { adopt } from '../registry/adopt'
@@ -128,6 +130,8 @@ export interface MasterAgentTask {
   dependsOn: string[]
   /** 正文领域的显式叙事视角；缺省时正文不注入角色认知。 */
   perspectiveCharacterId?: number | null
+  /** 灵感领域的显式碎片选择；缺省时由主 Agent 使用受限默认选择。 */
+  inspirationFragmentIds?: string[]
 }
 
 export interface MasterAgentPlan {
@@ -198,6 +202,16 @@ export interface MasterAgentExecutionTrace {
 
 interface PlannerDependencies {
   complete?: (messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>) => Promise<string>
+}
+
+export interface PinnedMasterAgentTaskV1 {
+  agentId: DomainAgentId
+  skillId?: AgentSkillId
+  instruction: string
+  dependsOn?: string[]
+  perspectiveCharacterId?: number | null
+  inspirationFragmentIds?: string[]
+  id?: string
 }
 
 export interface MasterAgentReplanFailureV1 {
@@ -388,10 +402,36 @@ export async function createMasterAgentPlan(input: {
   request: string
   budget?: AgentTeamBudgetTracker
   signal?: AbortSignal
+  pinnedTask?: PinnedMasterAgentTaskV1
 }, dependencies: PlannerDependencies = {}): Promise<MasterAgentPlan> {
   const request = input.request.trim()
   if (request.length < 2) throw new Error('请至少输入 2 个字符的创作要求。')
   const workflow = selectMasterWorkflowV1(request)
+  if (input.pinnedTask) {
+    const pinned = input.pinnedTask
+    if (pinned.agentId !== 'inspiration' && pinned.inspirationFragmentIds !== undefined) {
+      throw new Error('只有灵感领域任务可以固定灵感碎片。')
+    }
+    return {
+      summary: pinned.agentId === 'inspiration'
+        ? '按作者选择的灵感碎片生成结构化反推候选。'
+        : '按固定领域任务执行一次受治理候选生成。',
+      tasks: [{
+        id: pinned.id ?? `${pinned.agentId}-targeted`,
+        agentId: pinned.agentId,
+        ...(pinned.skillId ? { skillId: pinned.skillId } : {}),
+        instruction: pinned.instruction.trim().slice(0, 1_000),
+        dependsOn: [...new Set(pinned.dependsOn ?? [])].slice(0, 5),
+        ...(pinned.perspectiveCharacterId !== undefined
+          ? { perspectiveCharacterId: pinned.perspectiveCharacterId }
+          : {}),
+        ...(pinned.inspirationFragmentIds !== undefined
+          ? { inspirationFragmentIds: [...new Set(pinned.inspirationFragmentIds)].slice(0, 24) }
+          : {}),
+      }],
+      workflow,
+    }
+  }
   if (getMasterWorkflowV1(workflow).planner === 'skip') {
     return fallbackPlan(request, workflow)
   }
@@ -827,10 +867,19 @@ async function executeSequentialMasterAgentPlan(
           'inspirationWorkspaces',
           { owner: 'work' },
         ))[0]
-        const selectedFragmentIds = parseInspirationFragments(workspace?.fragments)
-          .slice(0, MAX_INSPIRATION_FRAGMENTS)
-          .map(fragment => fragment.id)
+        const availableFragmentIds = new Set(
+          parseInspirationFragments(workspace?.fragments).map(fragment => fragment.id),
+        )
+        const requestedFragmentIds = task.inspirationFragmentIds
+        const selectedFragmentIds = (requestedFragmentIds?.length
+          ? [...new Set(requestedFragmentIds)].filter(id => availableFragmentIds.has(id))
+          : parseInspirationFragments(workspace?.fragments)
+              .slice(0, MAX_INSPIRATION_FRAGMENTS)
+              .map(fragment => fragment.id))
         if (!selectedFragmentIds.length) throw new Error('项目尚无已保存的灵感碎片。')
+        if (requestedFragmentIds?.length && selectedFragmentIds.length !== requestedFragmentIds.length) {
+          throw new Error('固定的灵感碎片已变化，请重新选择后生成。')
+        }
         const prepared = await prepareInspirationCopilot({
           projectId: input.projectId,
           scope,
@@ -1388,10 +1437,14 @@ export async function adoptMasterCandidate(input: {
     if (JSON.stringify(base) !== JSON.stringify(current)) throw new Error('灵感工作区已变化，请重新生成。')
     const mode = input.payload.mode ?? 'single'
     const result = parseInspirationCandidateDraft(input.draft, mode)
+    const parentVersionId = latestInspirationVersion(
+      parseInspirationVersions(base.versions),
+      mode,
+    )?.id ?? null
     await useInspirationWorkspaceStore.getState().load(scope)
     await useInspirationWorkspaceStore.getState().saveVersion(scope, {
       mode,
-      parentVersionId: null,
+      parentVersionId,
       fragmentIds: input.payload.selectedFragmentIds ?? [],
       result: result as InspirationCopilotResult,
     })

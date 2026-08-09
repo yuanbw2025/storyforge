@@ -91,6 +91,7 @@
 |---|---|---|---|---|
 | 世界观：起源/自然/人文 | `WorldviewOriginPanel.tsx`、`WorldviewNaturalPanel.tsx`、`WorldviewHumanityPanel.tsx` | HARNESS-32 后 17 个世界基座字段的 AI 生成统一路由到 `world-foundation-agent` 的 `world-origin.worldview-field` Skill；上下文只经 `CONTEXT_SOURCES + assembleContext()`，每次生成一个严格 `{field,value}` 候选，确认后经 `adopt(worldviews)` 写回。人工编辑、词条、历史年表和 Prompt 配置入口保留 | 空/部分/完整状态、反推方向、预算压缩/全文救援、完整快照/CAS、durable 刷新恢复、编辑/拒绝/确认和终态回读均有专项回归与 Chromium 证据；旧 `world-origin.complete` 仅保留历史 durable Run 兼容。当前证据证明工程闭环和模拟模型合同，不证明真实模型文学质量收益 | A（HARNESS-32） |
 | 故事核心 | `StoryCorePanel.tsx`、`story-core-copilot.ts` | HARNESS-31 后 AI 入口只提交 `world-origin.story-core` 单字段任务；Skill 声明上下文并经 `assembleContext()` 读取，严格候选为 `{field,value}`，确认后经 `adopt(storyCores)` | durable 候选支持刷新恢复、编辑/拒绝/确认；完整故事核心 snapshot/CAS、正式字段回读和 terminal verifier 已接入；人工编辑仍经原 store/adopt | A（HARNESS-31） |
+| 灵感反推 | `InspirationPanel.tsx`、`useIncrementalInspiration.ts`、`inspiration-copilot.ts` | HARNESS-34 后生成按钮只提交固定 `inspiration.reverse` 任务；作者勾选的碎片 ID 进入 durable plan，Skill 只经 `read_inspiration_workspace → assembleContext()` 读取，确认后经 `adopt(inspirationWorkspaces)` 新增版本 | 候选可刷新恢复、编辑、拒绝和确认；工作区 snapshot/CAS、空壳/长度/多世界结构 gate、来源碎片证据和终态回读生效。旧 `useAIStream` 与面板级上下文装配已删除；确认版本不自动写世界观、故事核心或角色，后续 Canon 采纳仍需作者单独操作 | A（HARNESS-34） |
 | 角色普通生成 | `CharacterPanel.tsx`、`character-copilot.ts` | HARNESS-33 后普通 AI 按钮只提交 `character.create`；Skill 经正式只读工具和 `assembleContext()` 装配世界、故事核心、角色、规则与历史，返回严格闭集 JSON 候选，确认后经 `adopt(characters)` | durable 候选可刷新恢复、编辑/拒绝/确认；roster snapshot/CAS、同名、非法枚举、未知字段和正式写回终验均生效。旧 `useAIStream → parseCharacterOutput` 自由文本旁路及死代码已删除；人工 CRUD、轴和维度选择、Prompt 配置保留 | A（HARNESS-33） |
 | 角色 Copilot | `src/lib/agent/character-copilot.ts` | 与普通分步骤 AI 按钮共用 `character.create` Skill、输入策略、压缩预算、候选合同和采纳入口 | 当前只生成一个新角色，不自动创建关系边、物品、状态卡或大纲；真实模型角色质量仍需固定评测 | A（HARNESS-33 复用） |
 | 角色补全 | `CharacterSupplementAction.tsx` | `:49-85` 通过 `assembleContext()` 读取设定；可选读事实/正文证据；`adopt(recordId, merge-diffs)` | 解析空补丁直接返回；单任务可用，未纳入统一 run 恢复 | A（局部） |
@@ -303,6 +304,7 @@ verifying → stale(source/state changed)
 | `StoryCorePanel.worldCtx()` + historical 拼接 | 登记完整 story-core 输入源并统一装配 | 纯文本字段仍可保留，但需结构化长度/冲突 gate |
 | `StoryArcPanel → addArc()` | AI 候选改为 `adopt()`；`addArc/updateArc` 仅作为显式人工编辑入口 | 不复制第二个 arc 写回 service |
 | ~~`CharacterPanel` 普通生成自由文本旁路~~ | HARNESS-33 已迁移到 `character.create`，旧弱 parser 与死代码已删除 | 手动角色 CRUD、轴/维度选择和 Prompt 配置保留；不自动创建关系、物品或下游规划 |
+| ~~`InspirationPanel` 面板级 `useAIStream` / 上下文装配~~ | HARNESS-34 已迁移到 `inspiration.reverse` 定向 durable 任务，碎片选择进入计划和候选证据 | 保留碎片库、版本差异、多世界预览与显式 Canon 采纳；确认反推候选只写灵感版本 |
 | `GenerationNode` | 继续作为领域执行抽象，由 Harness 调度 | 不把它误命名为 durable run，不另造第二套生成运行器 |
 | `agentConversations/agentEvents` | 继续承载对话/候选/确认/错误；可作为兼容投影 | 不无限扩展为 run ledger；字段扩展须先审计生命周期 |
 | `nodeFlows/nodeRuns` | 继续服务 FLOW-3 自由节点 | 不直接冒充分步骤主流程 run，除非新增明确 contract/作用域/终态语义 |
