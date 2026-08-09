@@ -189,13 +189,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 58 个 category。
-未分类调用: 0 个。动态 category 调用: 15 个。
+共 57 个 category。
+未分类调用: 0 个。动态 category 调用: 16 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:508` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:595` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:534` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:621` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
@@ -227,7 +227,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `location.extract` | `src/components/location/LocationPanel.tsx:106` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:319`<br/>`src/lib/node-flow/executor.ts:207` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:188`<br/>`src/lib/outline/generation-node.ts:59` |
-| `outline.character-revision` | `src/components/outline/CharacterRevisionPanel.tsx:180` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:55` |
 | `outline.workshop.collision` | `src/lib/outline/workshop.ts:448` |
 | `outline.workshop.motivation` | `src/lib/outline/workshop.ts:445` |
@@ -259,6 +258,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
 - `src/lib/agent/character-copilot.ts:475 · chat`
 - `src/lib/agent/character-driven-copilot.ts:507 · chat`
+- `src/lib/agent/character-revision-copilot.ts:704 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
 - `src/lib/agent/inspiration-copilot.ts:328 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
@@ -273,4 +273,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `cc6ac8d`
+生成时间基准:commit `8f9a760`

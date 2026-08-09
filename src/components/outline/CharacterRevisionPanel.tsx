@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Anchor,
   FileSearch,
@@ -10,28 +10,31 @@ import type { CharacterDrivenPlan, Project, WorkspaceScope } from '../../lib/typ
 import { parseCharacterDrivenPlanArcs } from '../../lib/types'
 import { useCharacterStore } from '../../stores/character'
 import { useOutlineStore } from '../../stores/outline'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildCharacterRevisionPrompt } from '../../lib/ai/character-revision'
 import {
-  applyCharacterRevisionPatches,
   buildCharacterRevisionSnapshot,
   effectiveProtectedThrough,
-  parseCharacterRevisionOutput,
   type CharacterRevisionChangeType,
   type CharacterRevisionPlan,
   type CharacterRevisionScopeInput,
   type CharacterRevisionSnapshot,
   type CharacterRevisionStrategy,
 } from '../../lib/story-planning/character-revision'
+import {
+  decideCharacterRevisionCandidateV1,
+  parseCharacterRevisionCandidateDraftV1,
+  serializeCharacterRevisionCandidateV1,
+  type CharacterRevisionCandidateV1,
+  type CharacterRevisionCopilotSnapshotV1,
+} from '../../lib/agent/character-revision-copilot'
+import type { MasterCopilotController } from '../agent/useMasterCopilot'
 import AutoResizeTextarea from '../shared/AutoResizeTextarea'
-import AIStreamOutput from '../shared/AIStreamOutput'
 import { useDialog } from '../shared/Dialog'
 import CharacterRevisionResult from './CharacterRevisionResult'
 
 interface Props {
   project: Project
   plan: CharacterDrivenPlan | null
+  copilot: MasterCopilotController
   onSwitchToPlanning: () => void
 }
 
@@ -51,6 +54,7 @@ const STRATEGY_LABELS: Record<CharacterRevisionStrategy, string> = {
 export default function CharacterRevisionPanel({
   project,
   plan,
+  copilot,
   onSwitchToPlanning,
 }: Props) {
   const characters = useCharacterStore(state => state.characters)
@@ -62,13 +66,6 @@ export default function CharacterRevisionPanel({
       : undefined
   ), [project.activeWorkId, project.activeWorldId, project.id])
   const scopeInput = workspaceScope ?? project.id!
-  const ai = useAIStream(createAISessionKey(
-    project.id!,
-    'character-revision.analyze',
-    `${project.activeWorkId ?? 'legacy'}:${plan?.id ?? 'no-plan'}`,
-  ))
-  const analysisSnapshot = useRef<CharacterRevisionSnapshot | null>(null)
-  const analysisScope = useRef<CharacterRevisionScopeInput | null>(null)
 
   const [snapshot, setSnapshot] = useState<CharacterRevisionSnapshot | null>(null)
   const [loadingSnapshot, setLoadingSnapshot] = useState(true)
@@ -81,11 +78,17 @@ export default function CharacterRevisionPanel({
   const [anchorNodeIds, setAnchorNodeIds] = useState<Set<number>>(new Set())
   const [extraRequirements, setExtraRequirements] = useState('')
   const [analysis, setAnalysis] = useState<CharacterRevisionPlan | null>(null)
+  const [parsedCandidate, setParsedCandidate] = useState<CharacterRevisionCandidateV1 | null>(null)
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null)
   const [selectedPatchIds, setSelectedPatchIds] = useState<Set<number>>(new Set())
   const [localError, setLocalError] = useState<string | null>(null)
-  const [applying, setApplying] = useState(false)
   const [resultMessage, setResultMessage] = useState<string | null>(null)
+  const pendingRevisionCandidates = copilot.pendingCandidates.filter(candidate => (
+    candidate.payload.skillId === 'outline.character-revision'
+    && candidate.payload.characterRevisionRequest?.planId === (plan?.id ?? null)
+  ))
+  const activeCandidate = pendingRevisionCandidates[0] ?? null
+  const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => candidate !== activeCandidate)
 
   const refreshSnapshot = async () => {
     setLoadingSnapshot(true)
@@ -99,9 +102,8 @@ export default function CharacterRevisionPanel({
   }
 
   useEffect(() => {
-    analysisSnapshot.current = null
-    analysisScope.current = null
     setAnalysis(null)
+    setParsedCandidate(null)
     setSelectedOptionId(null)
     setSelectedPatchIds(new Set())
     void refreshSnapshot()
@@ -127,19 +129,36 @@ export default function CharacterRevisionPanel({
   const selectedOption = analysis?.options.find(option => option.id === selectedOptionId) ?? null
 
   useEffect(() => {
-    if (ai.isStreaming || !ai.output || !analysisSnapshot.current || !analysisScope.current) return
-    const parsed = parseCharacterRevisionOutput(ai.output, analysisSnapshot.current, analysisScope.current)
-    if (!parsed) {
-      setLocalError('AI 返回的修订计划不是有效 JSON，请重试或在提示词库中恢复内置模板。')
+    if (!activeCandidate) {
+      setAnalysis(null)
+      setParsedCandidate(null)
+      setSelectedOptionId(null)
+      setSelectedPatchIds(new Set())
       return
     }
-    setAnalysis(parsed)
-    const preferred = parsed.options.find(
-      option => option.intensity === analysisScope.current?.strategy,
-    ) ?? parsed.options[0]
-    setSelectedOptionId(preferred?.id ?? null)
-    setSelectedPatchIds(new Set(preferred?.patches.map(patch => patch.outlineNodeId) ?? []))
-  }, [ai.isStreaming, ai.output])
+    try {
+      const parsed = parseCharacterRevisionCandidateDraftV1(
+        activeCandidate.event.content,
+        activeCandidate.payload.baseSnapshot as CharacterRevisionCopilotSnapshotV1,
+      )
+      setParsedCandidate(parsed)
+      setAnalysis(parsed.plan)
+      const preferred = parsed.decision
+        ? parsed.plan.options.find(option => option.id === parsed.decision!.optionId)
+        : parsed.plan.options.find(option => (
+            option.intensity === activeCandidate.payload.characterRevisionRequest?.strategy
+          )) ?? parsed.plan.options[0]
+      setSelectedOptionId(preferred?.id ?? null)
+      setSelectedPatchIds(new Set(
+        parsed.decision?.outlineNodeIds ?? preferred?.patches.map(patch => patch.outlineNodeId) ?? [],
+      ))
+      setLocalError(null)
+    } catch (error) {
+      setAnalysis(null)
+      setParsedCandidate(null)
+      setLocalError(error instanceof Error ? error.message : '恢复的角色重规划候选已损坏。')
+    }
+  }, [activeCandidate])
 
   useEffect(() => {
     if (!selectedOption) return
@@ -165,29 +184,30 @@ export default function CharacterRevisionPanel({
     setLocalError(null)
     setResultMessage(null)
     setAnalysis(null)
+    setParsedCandidate(null)
     setSelectedOptionId(null)
     setSelectedPatchIds(new Set())
     try {
       const requestedScope = currentScope()
-      const prepared = await buildCharacterRevisionPrompt({
-        projectId: project.id!,
-        plan,
-        scope: requestedScope,
-      })
-      analysisSnapshot.current = prepared.snapshot
-      analysisScope.current = requestedScope
-      setSnapshot(prepared.snapshot)
-      await ai.start(prepared.messages, undefined, {
-        category: 'outline.character-revision',
-        projectId: project.id!,
-      })
+      await copilot.submitTargetedRequest(
+        '分析当前角色变更对已写事实、角色状态、故事线和未来大纲的影响，并生成三档可审查方案。',
+        {
+          agentId: 'outline',
+          skillId: 'outline.character-revision',
+          instruction: '分析当前角色变更对已写事实、角色状态、故事线和未来大纲的影响，并生成三档可审查方案。',
+          characterRevisionRequest: {
+            planId: plan?.id ?? null,
+            ...requestedScope,
+          },
+        },
+      )
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : '影响分析准备失败')
     }
   }
 
   const handleApply = async () => {
-    if (!selectedOption) return
+    if (!selectedOption || !parsedCandidate || !activeCandidate) return
     const patches = selectedOption.patches.filter(patch => selectedPatchIds.has(patch.outlineNodeId))
     if (!patches.length) return
     const confirmed = await dialog.confirm({
@@ -196,40 +216,27 @@ export default function CharacterRevisionPanel({
       confirmText: '应用到大纲',
     })
     if (!confirmed) return
-    setApplying(true)
     setResultMessage(null)
     try {
-      const capturedScope = analysisScope.current
-      const protectedBoundary = Math.max(
-        effectiveBoundary,
-        capturedScope?.protectedThroughOrdinal ?? 0,
+      const decided = decideCharacterRevisionCandidateV1(
+        parsedCandidate,
+        selectedOption.id,
+        patches.map(patch => patch.outlineNodeId),
       )
-      const protectedAnchors = new Set([
-        ...anchorNodeIds,
-        ...(capturedScope?.anchorNodeIds ?? []),
-      ])
-      const result = await applyCharacterRevisionPatches({
-        projectId: project.id!,
-        scope: analysisSnapshot.current?.workspaceScope,
-        protectedThroughOrdinal: protectedBoundary,
-        anchorNodeIds: [...protectedAnchors],
-        patches,
+      const draft = serializeCharacterRevisionCandidateV1(decided)
+      await copilot.updateCandidate(activeCandidate.event.id!, draft)
+      const adopted = await copilot.adoptCandidate({
+        ...activeCandidate,
+        event: { ...activeCandidate.event, content: draft },
+        payload: { ...activeCandidate.payload },
       })
+      if (!adopted) return
       await loadOutline(scopeInput)
       await refreshSnapshot()
-      setResultMessage(
-        `已应用 ${result.appliedOutlineNodeIds.length} 项`
-        + (result.skipped.length ? `；${result.skipped.length} 项因保护边界或版本变化跳过` : ''),
-      )
-      if (result.appliedOutlineNodeIds.length) {
-        setSelectedPatchIds(current => {
-          const next = new Set(current)
-          result.appliedOutlineNodeIds.forEach(id => next.delete(id))
-          return next
-        })
-      }
-    } finally {
-      setApplying(false)
+      setResultMessage(`已应用 ${patches.length} 项`)
+      setSelectedPatchIds(new Set())
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : '角色重规划写入失败')
     }
   }
 
@@ -241,6 +248,13 @@ export default function CharacterRevisionPanel({
     } catch {
       setResultMessage('浏览器未授予剪贴板权限，请从 AI 输出区手动复制')
     }
+  }
+
+  const handleReject = async () => {
+    if (!activeCandidate) return
+    const rejected = await copilot.rejectCandidate(activeCandidate)
+    if (!rejected) return
+    setResultMessage('本次角色重规划候选已拒绝，未写入任何正式内容。')
   }
 
   const toggleAnchor = (nodeId: number) => {
@@ -435,36 +449,51 @@ export default function CharacterRevisionPanel({
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleAnalyze}
-            disabled={!snapshot || !changeDescription.trim() || ai.isStreaming}
+            disabled={
+              !snapshot
+              || !changeDescription.trim()
+              || copilot.loading
+              || copilot.busy
+              || copilot.pendingCandidates.length > 0
+            }
             className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
           >
-            {ai.isStreaming
+            {copilot.busy
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <Sparkles className="w-4 h-4" />}
-            {ai.isStreaming ? '正在分析影响...' : '分析影响并生成三档方案'}
+            {copilot.busy ? '正在分析影响...' : '分析影响并生成三档方案'}
           </button>
+          {copilot.busy && (
+            <button
+              onClick={copilot.stop}
+              className="rounded border border-border px-3 py-2 text-xs text-text-muted"
+            >
+              停止
+            </button>
+          )}
+          {copilot.recoveryAvailable && !copilot.busy && (
+            <button
+              onClick={() => { void copilot.resume() }}
+              className="rounded border border-border px-3 py-2 text-xs text-text-muted"
+            >
+              恢复中断任务
+            </button>
+          )}
           <div className="inline-flex items-center gap-1.5 text-xs text-text-muted">
             <ShieldCheck className="w-4 h-4 text-green-600" />
             分析不会写入正文、大纲或主线
           </div>
         </div>
 
-        {(ai.output || ai.isStreaming || ai.error) && (
-          <AIStreamOutput
-            output={ai.output}
-            isStreaming={ai.isStreaming}
-            error={ai.error}
-            tokenUsage={ai.tokenUsage}
-            onStop={ai.stop}
-            onRetry={handleAnalyze}
-            placeholder="等待角色变更影响分析..."
-            moduleKey="plot.character-revision"
-          />
+        {(localError || copilot.error) && (
+          <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
+            {localError || copilot.error}
+          </div>
         )}
 
-        {localError && (
-          <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
-            {localError}
+        {hasOtherPendingCandidates && (
+          <div className="rounded border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">
+            当前作品还有其它待确认候选；请先回到对应入口处理，避免并行覆盖同一创作基线。
           </div>
         )}
 
@@ -473,11 +502,12 @@ export default function CharacterRevisionPanel({
             analysis={analysis}
             selectedOptionId={selectedOptionId}
             selectedPatchIds={selectedPatchIds}
-            applying={applying}
+            applying={copilot.busy}
             onSelectOption={setSelectedOptionId}
             onTogglePatch={togglePatch}
             onCopy={handleCopy}
             onApply={handleApply}
+            onReject={() => { void handleReject() }}
           />
         )}
 

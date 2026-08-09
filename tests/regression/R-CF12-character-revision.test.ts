@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
-  applyCharacterRevisionPatches,
   buildCharacterRevisionSnapshot,
   effectiveProtectedThrough,
   formatCharacterRevisionScope,
   parseCharacterRevisionOutput,
   type CharacterRevisionScopeInput,
 } from '../../src/lib/story-planning/character-revision'
-import { buildCharacterRevisionPrompt } from '../../src/lib/ai/character-revision'
+import { prepareCharacterRevisionCopilotV1 } from '../../src/lib/agent/character-revision-copilot'
 
 const now = 1_800_000_000_000
 
@@ -215,40 +214,6 @@ describe('R-CF12 · 角色变化影响分析与受控大纲 patch', () => {
     expect(parsed?.foreshadowSuggestions[0].writtenRegion).toBe(true)
   })
 
-  it('应用前再次校验正文、保护区和预览版本，只经统一写回更新仍未写的节点', async () => {
-    const { projectId, nodeIds, chapterIds } = await seedProject()
-    const snapshot = await buildCharacterRevisionSnapshot(projectId)
-    const parsed = parseCharacterRevisionOutput(aiPlan(nodeIds), snapshot, scope())!
-    const balanced = parsed.options.find(option => option.intensity === 'balanced')!
-    const light = parsed.options.find(option => option.intensity === 'light')!
-
-    // 分析后作者又修改第 4 章摘要；旧预览必须失效，不能覆盖新内容。
-    await db.outlineNodes.update(nodeIds[3], { summary: '作者分析后手工更新' })
-    const result = await applyCharacterRevisionPatches({
-      projectId,
-      protectedThroughOrdinal: 2,
-      anchorNodeIds: [],
-      patches: [...balanced.patches, ...light.patches],
-    })
-
-    expect(result.appliedOutlineNodeIds).toEqual([nodeIds[2]])
-    expect(result.skipped).toEqual([{
-      outlineNodeId: nodeIds[3],
-      reason: '分析后大纲已变化，请重新分析',
-    }])
-    expect(await db.outlineNodes.get(nodeIds[2])).toMatchObject({
-      title: '第3章 新的来客',
-      summary: '城外传来沈砚将至的消息',
-    })
-    // 第 3 章已有空 Chapter 行，标题同步但 content 不会被写入。
-    expect(await db.chapters.get(chapterIds[2])).toMatchObject({
-      title: '第3章 新的来客',
-      content: '',
-    })
-    expect((await db.chapters.get(chapterIds[0]))?.content).toContain('不可覆盖的正文')
-    expect((await db.chapters.get(chapterIds[1]))?.content).toContain('不可覆盖的正文')
-  })
-
   it('AI 请求通过 CONTEXT_SOURCES 装配真实进度和作者边界，不读取平行事实系统', async () => {
     const { projectId, nodeIds } = await seedProject()
     await db.storyCores.add({
@@ -257,14 +222,18 @@ describe('R-CF12 · 角色变化影响分析与受控大纲 patch', () => {
       createdAt: now,
       updatedAt: now,
     } as any)
-    const prepared = await buildCharacterRevisionPrompt({
+    const prepared = await prepareCharacterRevisionCopilotV1({
       projectId,
-      plan: null,
-      scope: scope({ anchorNodeIds: [nodeIds[5]] }),
+      worldGroupId: null,
+      request: {
+        planId: null,
+        ...scope({ anchorNodeIds: [nodeIds[5]] }),
+      },
+      authorRequest: '分析角色变更并生成三档可审查方案',
     })
-    const user = prepared.messages.find(message => message.role === 'user')?.content ?? ''
-    expect(prepared.includedSources).toContain('manualText')
-    expect(prepared.includedSources).toContain('storyCore')
+    const user = prepared.prepared.messages.find(message => message.role === 'user')?.content ?? ''
+    expect(prepared.contextSources).toContain('manualText')
+    expect(prepared.contextSources).toContain('storyCore')
     expect(user).toContain('主角守住孤城')
     expect(user).toContain('硬保护区：第 1-2 章')
     expect(user).toContain(`[node:${nodeIds[5]}]`)

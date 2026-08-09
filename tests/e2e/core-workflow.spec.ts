@@ -5,8 +5,9 @@ async function openCleanHome(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  await page.goto('./projects')
-  await expect(page.getByRole('heading', { name: /开始.*第一部.*小说/ })).toBeVisible()
+  await page.goto('./projects', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: /开始.*第一部.*小说/ }))
+    .toBeVisible({ timeout: 15_000 })
 }
 
 async function createProject(page: Page, name: string) {
@@ -1442,7 +1443,7 @@ test('分步骤角色面板通过 character.create Skill 生成、恢复并确�
   await page.getByRole('button', { name: '采纳', exact: true }).click()
 
   await expect(page.getByText('角色生成 · 1', { exact: true })).toBeVisible()
-  await expect(page.getByText('沈砚灯', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /沈砚灯.*作者确认的旧港守灯钟/ })).toBeVisible()
   expect(generationCalls).toBe(2)
 })
 
@@ -1625,6 +1626,7 @@ test('故事线面板通过主 Agent 生成 durable 候选，确认后才写入�
 
   await page.reload()
   await openSidebarLeaf(page, '创作区', '故事线')
+  await expect(page.getByRole('heading', { name: /全局故事线/ })).toBeVisible({ timeout: 15_000 })
   await expect(page.getByRole('button', { name: '潮汐钟主线', exact: true })).toBeVisible()
   await expect(page.locator('main input').first()).toHaveValue('潮汐钟主线')
   await expect(page.locator('main textarea').first()).toHaveValue(edited[0].description)
@@ -2293,16 +2295,11 @@ test('角色中途重规划保护已写正文，只把审查后的 patch 应用�
     })
     await route.fulfill({
       status: 200,
-      contentType: 'text/event-stream',
-      body: [
-        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`,
-        `data: ${JSON.stringify({
-          choices: [{ delta: {} }],
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{ message: { content } }],
           usage: { prompt_tokens: 240, completion_tokens: 120, total_tokens: 360 },
-        })}`,
-        'data: [DONE]',
-        '',
-      ].join('\n\n'),
+      }),
     })
   })
 
@@ -2343,6 +2340,11 @@ test('角色中途重规划保护已写正文，只把审查后的 patch 应用�
   await expect(page.getByRole('heading', { name: '影响分析结果', exact: true })).toBeVisible()
   await expect(page.getByText('已拒绝第 1 章 patch：属于已写保护区', { exact: false })).toBeVisible()
   await expect(page.getByRole('button', { name: '采纳', exact: true })).toHaveCount(0)
+  await expect(page.getByText('归途重排', { exact: false }).first()).toBeVisible()
+  await page.reload()
+  await openSidebarLeaf(page, '创作区', '角色驱动')
+  await page.getByRole('button', { name: '中途重规划', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '影响分析结果', exact: true })).toBeVisible()
   await expect(page.getByText('归途重排', { exact: false }).first()).toBeVisible()
   await page.getByRole('button', { name: '应用选中 patch 到未写大纲', exact: true }).click()
   await page.getByRole('button', { name: '应用到大纲', exact: true }).click()

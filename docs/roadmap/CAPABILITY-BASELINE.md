@@ -143,7 +143,7 @@
 
 ### 当前边界 / 尚未完成
 
-- `AgentRunner` 尚不存在；动态对话/多 Agent 编排归 `AGENT-1`，不得在 PIPE-1 伪造空壳。
+- `GenerationNode` 本身仍不是 durable Harness；实际 `AgentRunner`、run ledger、Context Manifest 与终态回执归 `AGENT-1`，PIPE-1 不复制这些控制面。
 - 闭集引用由模型抽取，代码可拒绝伪造 ID/引文和已声明冲突，但不能证明模型没有漏报未声明的语义。
 - 工坊历史只保留当前会话最近版本；若未来要求跨会话持久化，必须先登记新表、迁移和导入导出，不得偷写 localStorage。
 
@@ -421,7 +421,7 @@
   团队预算和调用次数；刷新可恢复，正文变化后旧结果标为过期且不再显示旧角标。报告没有
   adoption 路径，不修改正文、设定、事实、物品或年表。
 - 项目概况、世界组目录、世界大纲树和本地搜索已成为正式上下文源；搜索只做当前项目/世界内的有界短摘，不调用网络或 embedding。
-- 分步骤主 Agent 与正文 Harness 当前有 18 个受治理 Skill、14 个提示词执行版本和一份由 14 个只读工具实际声明派生的 schema hash。新 RunContract 按步骤冻结 Skill/Prompt/Tool 版本，候选 hash 同步绑定；恢复会拒绝版本篡改，HARNESS-18 前无 binding 的旧运行保持原协议兼容。
+- 分步骤主 Agent 与正文 Harness 当前有 20 个受治理 Skill、16 个提示词执行版本和一份由 14 个只读工具实际声明派生的 schema hash。新 RunContract 按步骤冻结 Skill/Prompt/Tool 版本，候选 hash 同步绑定；恢复会拒绝版本篡改，HARNESS-18 前无 binding 的旧运行保持原协议兼容。
 - HARNESS-19 已在章节编辑器的正文生成/续写主路径接入 `prose.review` 和 `prose.revise`：信息边界硬门通过后才做证据型语义初审；blocking 必须同时引用候选原文和登记上下文原文，只有明确可局部修复的问题最多修订一次，修订后重跑硬门和语义复核。评审、修订、复核共用团队预算并写入 Context Manifest、冻结执行版本和 durable 事件；通过后仍停在可编辑候选，作者确认才经 `adopt(chapters)` 写回。旧候选可恢复但不会伪造语义证据。
 - HARNESS-20 已将正文确认写回后的自动状态抽取旁路下线：新主路径由同一个 post-adoption durable Run 顺序执行六域综合整理、章节记忆和确定性检索重建。综合整理继续复用既有一次调用解析器与六域作者确认界面，`prose.organize` / `prose.memory` 两个非默认 Skill 冻结各自来源、写入边界、提示词和回归证据；章节记忆写回后才重建层级摘要，避免新摘要仍停留在 pending。只有三步、六域采纳证据和当前正文派生状态全部匹配才有 terminal receipt；历史 Chapter Transition V1 只保留兼容恢复。
 - HARNESS-21 已将正文 Run → post-adoption Run 的父子完成关系持久化：RunContract 的 `lineage.parent`
@@ -527,6 +527,11 @@
   `adopt(recordId, characterDrivenPlans)` 保存方案，第二次勾选卷才经 `adopt(outlineNodes)` 写正式大纲；旧
   `useAIStream`、自动保存、弱 parser 和无调用 Prompt 构造模块已删除。人工输入、版本、激活参考、中途重规划和
   Prompt 配置保留；角色反推世界基座与真实模型质量 A/B 不在本单元完成。
+- HARNESS-36 已交付 `outline.character-revision` 主入口收口：中途重规划把角色变更、保护区、过渡区、策略、
+  锚点和方案 ID 冻结进 durable plan，正式项目资料只经 `assembleContext()` 读取。模型输出须满足严格三档合同，
+  代码拒绝未知/重复节点、已写或保护区 patch 和锚点改名；作者选择固化后只经 `adopt()` 写未来大纲标题/摘要，
+  已有空正文行只同步标题。候选支持刷新恢复、完整 snapshot/CAS、确认后部分中断恢复和 terminal verifier；旧
+  `useAIStream`、Prompt service 与非 durable patch helper 已删除。正文、主线、伏笔和只读影响建议不会自动写入。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。
@@ -554,8 +559,9 @@
 
 ### 当前边界 / 尚未完成
 
-- 原生 `tool_calls` 尚未作为 provider 优化接入；主 Agent 当前编排世界来源、灵感反推、
-  新增角色、新增大纲和正文五个已闭环领域；正文只支持空白章生成和显式续写，不覆盖手稿。
+- provider 原生 `tool_calls` 已作为默认关闭的 transport 优化接入唯一只读 Runner；主 Agent 已覆盖世界基座字段、
+  故事核心、灵感反推、角色、故事线、角色驱动开书/中途重规划、普通大纲和正文等受治理 Skill。正文仍只支持
+  空白章生成和显式续写，不覆盖手稿；这些工程闭环不等于真实模型质量已经通过发布门。
 - 后台领域任务目前按依赖顺序执行，不是并行自治团队；当前有三档领域输入预算、一次
   受控确定性打回、正文采纳后的自动六域整理（也可从原手动入口查看/重跑）和只读一致性 Agent。任意单源权重、更多 Canon 闭集和
   模型投票仍未形成正式产品闭环。

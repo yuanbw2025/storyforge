@@ -29,6 +29,7 @@ export type AgentSkillExecutionModeV1 =
   | 'auto'
   | 'story-arcs'
   | 'character-driven'
+  | 'character-revision'
   | 'volumes'
   | 'chapters'
   | 'generate'
@@ -177,6 +178,27 @@ const OUTLINE_CHARACTER_DRIVEN_CONTEXT_SOURCE_KEYS = [
   'storylineProgress',
   'existingVolumeOutlines',
   'writtenChapterProgress',
+] as const
+
+const OUTLINE_CHARACTER_REVISION_CONTEXT_SOURCE_KEYS = [
+  'manualText',
+  'storyCore',
+  'characters',
+  'characterRelations',
+  'storyArcs',
+  'storylineProgress',
+  'existingVolumeOutlines',
+  'writtenChapterProgress',
+  'currentFacts',
+  'chapterContinuityHandoff',
+  'previousPlanReconciliation',
+  'recentChapterSummaries',
+  'characterFacts',
+  'characterPassages',
+  'foreshadows',
+  'canonAssertions',
+  'worldRules',
+  'codex',
 ] as const
 
 const PROSE_CONTEXT_SOURCE_KEYS = [
@@ -399,6 +421,24 @@ const OUTLINE_CHARACTER_DRIVEN_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+const OUTLINE_CHARACTER_REVISION_INPUT_POLICY = {
+  sourceKeys: ['existingVolumeOutlines', 'writtenChapterProgress'],
+  states: {
+    empty: {
+      handling: 'require-upstream',
+      instruction: '当前没有可重规划的章节大纲；停止生成并要求作者先建立章纲。',
+    },
+    partial: {
+      handling: 'reference-and-create',
+      instruction: '以现有章纲、作者保护边界和可用正文证据为准；证据缺失时只提出可审查建议，不把推断写成既成事实。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格依据已写进度、连续性交接、事实、角色和故事线分析影响；已写区只读，只有作者最终勾选的未来大纲 patch 可写。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
 const OUTLINE_CHAPTER_INPUT_POLICY = {
   sourceKeys: ['worldview', 'storyCore', 'characters', 'storyArcs', 'existingVolumeOutlines'],
   states: {
@@ -534,6 +574,24 @@ const OUTLINE_CHARACTER_DRIVEN_COMPRESSION_POLICY = compressionPolicy([
   'historical',
   'storyArcs',
   'existingVolumeOutlines',
+])
+const OUTLINE_CHARACTER_REVISION_COMPRESSION_POLICY = compressionPolicy([
+  'storyCore',
+  'characters',
+  'characterRelations',
+  'storyArcs',
+  'storylineProgress',
+  'existingVolumeOutlines',
+  'currentFacts',
+  'chapterContinuityHandoff',
+  'previousPlanReconciliation',
+  'recentChapterSummaries',
+  'characterFacts',
+  'characterPassages',
+  'foreshadows',
+  'canonAssertions',
+  'worldRules',
+  'codex',
 ])
 const PROSE_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
@@ -791,6 +849,32 @@ export const AGENT_SKILLS = [
     regressionTests: [
       'R-HARNESS35-character-driven-agent',
       'R-HARNESS35-character-driven-panel-ui',
+    ],
+  },
+  {
+    version: 1,
+    id: 'outline.character-revision',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '角色变更影响与中途重规划',
+    owner: 'outline-agent',
+    promptVersion: 'character-revision-copilot-v1',
+    executionMode: 'character-revision',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: OUTLINE_CHARACTER_REVISION_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: OUTLINE_CHARACTER_REVISION_INPUT_POLICY,
+    contextCompression: OUTLINE_CHARACTER_REVISION_COMPRESSION_POLICY,
+    maxOutputTokens: 12_000,
+    writeTargets: [
+      { table: 'outlineNodes', fields: ['title', 'summary'] },
+      { table: 'chapters', fields: ['title'] },
+    ],
+    lastVerifiedAt: '2026-08-09',
+    regressionTests: [
+      'R-HARNESS36-character-revision-agent',
+      'R-HARNESS36-character-revision-panel-ui',
     ],
   },
   {
@@ -1204,7 +1288,7 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'review']),
     character: new Set(['create']),
     inspiration: new Set(['reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'character-driven', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'character-driven', 'character-revision', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory']),
   }
   const ids = new Set<string>()

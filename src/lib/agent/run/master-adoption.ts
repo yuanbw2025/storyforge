@@ -33,6 +33,11 @@ import {
   parseCharacterDrivenCandidateDraftV1,
 } from '../character-driven-copilot'
 import {
+  characterRevisionCandidateMatchesBusinessStateV1,
+  repairPartialCharacterRevisionAdoptionV1,
+  type CharacterRevisionCopilotSnapshotV1,
+} from '../character-revision-copilot'
+import {
   parseStoryCoreCandidateDraft,
   storyCoreCandidateMatchesRowV1,
 } from '../story-core-copilot'
@@ -422,6 +427,13 @@ async function businessAlreadyMatches(
     return false
   }
   if (agentId === 'outline') {
+    if (candidate.payload.skillId === 'outline.character-revision') {
+      return characterRevisionCandidateMatchesBusinessStateV1({
+        scope: input.scope,
+        snapshot: candidate.payload.baseSnapshot as CharacterRevisionCopilotSnapshotV1,
+        draft: candidate.draft,
+      })
+    }
     if (candidate.payload.skillId === 'outline.character-driven') {
       const planId = candidate.payload.characterDrivenPlanId
       if (planId == null) return false
@@ -480,6 +492,15 @@ async function repairPartialOutlineAdoption(
   candidate: MasterAgentDurableCandidateV1,
 ): Promise<void> {
   if (candidate.payload.agentId !== 'outline') return
+  if (candidate.payload.skillId === 'outline.character-revision') {
+    await repairPartialCharacterRevisionAdoptionV1({
+      projectId: input.scope.projectId,
+      scope: input.scope,
+      snapshot: candidate.payload.baseSnapshot as CharacterRevisionCopilotSnapshotV1,
+      draft: candidate.draft,
+    })
+    return
+  }
   if (
     candidate.payload.skillId === 'outline.story-arcs'
     || candidate.payload.skillId === 'outline.character-driven'

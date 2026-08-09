@@ -329,6 +329,16 @@ HARNESS-35 现状（2026-08-09）：分步骤“角色驱动剧情”的开书�
 弱 `parsePlotOutput` 和无调用 Prompt 构造模块已删除；人工方案、版本、激活参考、中途重规划和 Prompt 配置保留。当前
 证据证明工程闭环和模拟模型合同，不证明真实模型的叙事编排质量收益。
 
+HARNESS-36 现状（2026-08-09）：同一角色驱动工作台的“中途重规划”已统一进入大纲 Agent 的
+`outline.character-revision` Skill。作者填写的变更类型、目标角色、变更说明、正文保护章序、过渡章数、
+策略、锚点和附加要求，以及可选方案 ID，都冻结进 durable plan；确定性章序和保护边界放入登记的
+`manualText`，故事核心、角色/关系、故事线/进度、大纲、事实、连续性交接、摘要、检索、伏笔、Canon、
+规则和词条只经 `assembleContext()` 装配。模型必须返回严格 light/balanced/deep 三档 JSON；代码拒绝已写区、
+保护区、未知节点、重复节点和锚点改名。候选刷新可恢复，作者选择具体方案和 patch 后先固化选择，再只经
+`adopt(outlineNodes.title/summary)` 写未来大纲，已有空正文行仅同步 `chapters.title`。完整 snapshot/CAS、
+部分写入恢复和终态回读已接入；正文、主线、伏笔与影响建议不自动写。旧 `useAIStream`、Prompt service
+和非 durable patch helper 已删除。当前仍是模拟模型的工程证据，不证明真实叙事质量收益。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。

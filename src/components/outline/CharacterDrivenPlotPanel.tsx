@@ -284,6 +284,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
       <CharacterRevisionPanel
         project={project}
         plan={currentPlan}
+        copilot={copilot}
         onSwitchToPlanning={() => setMode('planning')}
       />
     )

@@ -5,10 +5,8 @@ import {
   isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
-  resolveScopeLike,
   type WorkspaceScopeLike,
 } from '../world-engine/scope'
-import { adopt } from '../registry/adopt'
 import type { Chapter, OutlineNode } from '../types'
 import type { WorkspaceScope } from '../types/world-ownership'
 
@@ -119,11 +117,6 @@ export interface CharacterRevisionPlan {
   mainPlotSuggestion: string
   options: CharacterRevisionOption[]
   warnings: string[]
-}
-
-export interface CharacterRevisionApplyResult {
-  appliedOutlineNodeIds: number[]
-  skipped: Array<{ outlineNodeId: number; reason: string }>
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -426,74 +419,4 @@ export function parseCharacterRevisionOutput(
     options,
     warnings: [...new Set(warnings)],
   }
-}
-
-/**
- * 应用前重新读取项目现状，防止分析后作者又编辑了大纲。这里只允许改无正文的未来章，
- * 所有字段写入继续经过 adopt()/FIELD_REGISTRY。
- */
-export async function applyCharacterRevisionPatches(input: {
-  projectId: number
-  scope?: WorkspaceScope
-  protectedThroughOrdinal: number
-  anchorNodeIds: number[]
-  patches: CharacterRevisionPatch[]
-}): Promise<CharacterRevisionApplyResult> {
-  const scope = await resolveScopeLike(input.scope ?? input.projectId)
-  const fresh = await buildCharacterRevisionSnapshot(scope)
-  const protectedThrough = effectiveProtectedThrough(fresh, input.protectedThroughOrdinal)
-  const currentByNode = new Map(fresh.chapters.map(chapter => [chapter.outlineNodeId, chapter]))
-  const anchors = new Set(input.anchorNodeIds)
-  const result: CharacterRevisionApplyResult = { appliedOutlineNodeIds: [], skipped: [] }
-
-  for (const patch of input.patches) {
-    const current = currentByNode.get(patch.outlineNodeId)
-    if (!current) {
-      result.skipped.push({ outlineNodeId: patch.outlineNodeId, reason: '节点已删除或不属于当前项目' })
-      continue
-    }
-    if (current.written || current.ordinal <= protectedThrough) {
-      result.skipped.push({ outlineNodeId: patch.outlineNodeId, reason: '节点已进入正文保护区' })
-      continue
-    }
-    if (current.title !== patch.currentTitle || current.summary !== patch.currentSummary) {
-      result.skipped.push({ outlineNodeId: patch.outlineNodeId, reason: '分析后大纲已变化，请重新分析' })
-      continue
-    }
-    if (anchors.has(patch.outlineNodeId) && patch.proposedTitle !== current.title) {
-      result.skipped.push({ outlineNodeId: patch.outlineNodeId, reason: '锚点标题受保护' })
-      continue
-    }
-
-    const outlineWrite = await adopt({
-      projectId: input.projectId,
-      scope,
-      worldGroupId: current.worldGroupId,
-      target: 'outlineNodes',
-      recordId: patch.outlineNodeId,
-      mode: 'replace',
-      data: {
-        title: patch.proposedTitle,
-        summary: patch.proposedSummary,
-      },
-    })
-    if (!outlineWrite.written.length) {
-      result.skipped.push({ outlineNodeId: patch.outlineNodeId, reason: '统一写回层拒绝了该 patch' })
-      continue
-    }
-
-    // 历史上“仅大纲”章可能已有空 Chapter 行；标题也经 adopt() 同步，正文始终不写。
-    if (current.chapterId != null && patch.proposedTitle !== current.title) {
-      await adopt({
-        projectId: input.projectId,
-        scope,
-        target: 'chapters',
-        recordId: current.chapterId,
-        mode: 'replace',
-        data: { title: patch.proposedTitle },
-      })
-    }
-    result.appliedOutlineNodeIds.push(patch.outlineNodeId)
-  }
-  return result
 }

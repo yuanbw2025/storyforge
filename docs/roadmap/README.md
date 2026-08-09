@@ -346,6 +346,12 @@
   冻结进 durable plan，方案输入与正式上游均经登记上下文读取；严格候选可刷新恢复、编辑、拒绝或确认。第一次
   确认只保存当前方案，第二次勾选卷才写正式大纲。旧 `useAIStream`、自动保存和弱 parser 已删除，人工弧光输入、
   版本、激活参考、中途重规划和 Prompt 配置保留；角色反推世界基座仍是后续 Foundation Skill。
+- HARNESS-36 已把角色中途重规划收口为大纲 Agent 的 `outline.character-revision` Skill。角色变更、正文保护边界、
+  过渡区、策略、锚点和方案 ID 固定进 durable plan；其余正式资料只经 `assembleContext()` 装配。严格三档候选会
+  由代码拒绝未知/重复节点、已写或保护区 patch 和锚点改名。作者选择具体档位及 patch 后才经
+  `adopt(outlineNodes.title/summary)` 写未来大纲，已有空正文行只同步 `chapters.title`；正文、主线、伏笔及影响建议
+  不自动写。刷新恢复、完整 snapshot/CAS、确认后部分中断恢复和终态回读已有专项回归与 Chromium 证据；旧
+  `useAIStream`、Prompt service 和非 durable patch helper 已删除。当前不证明真实模型质量收益，也不等于完整反馈图。
 
 ### GOV-1 第一阶段交付证据
 
@@ -412,10 +418,10 @@
 - 项目 active、父版本和弧光角色 ID 均使用便携导出序号重映射；旧格式原始 ID 不猜测，导入时安全置空。
 - 采纳卷章统一走 `adopt(target=outlineNodes)`，重复采纳幂等；不改 `storyCore`，不触碰既有正文。
 - `R-CF9C-*` 覆盖 CRUD、迁移、上下文、导出导入、删除降级与采纳；Chromium 验证真实项目/角色、版本、激活与刷新恢复。
-- “开书规划 / 中途重规划”共用角色驱动入口；CF-12 从规范章序和真实正文内容划分已写保护区、近期过渡区与未写规划区，保护边界不得低于最后已写章。
-- 影响分析只经登记上下文源读取项目资料；AI 输出会在本地拒绝未知节点、重复节点、正文/保护区 patch 和锚点改名，并公开警告。
-- 轻量、中度、深度三档方案支持逐项前后对照；作者二次确认后只经 `adopt(target=outlineNodes)` 写未来标题/摘要，应用前会重读项目并拒绝过期预览。
-- `R-CF12-character-revision` 与 Chromium 真实流程验证了已写正文保护、未来 patch、流式兼容 API 和刷新持久化；完整边界见 `CHARACTER-REVISION-WORKFLOW-DESIGN.md`。
+- “开书规划 / 中途重规划”共用角色驱动入口；CF-12 从规范章序和真实正文内容划分已写保护区、近期过渡区与未写规划区，保护边界不得低于最后已写章。HARNESS-36 再把变更、保护区、锚点和方案选择冻结进 durable plan。
+- 影响分析只经登记上下文源读取项目资料；严格三档 AI 输出会在本地拒绝未知节点、重复节点、正文/保护区 patch 和锚点改名，并公开警告。
+- 作者选择先固化到候选，二次确认后只经 `adopt(target=outlineNodes)` 写未来标题/摘要；已有空正文行仅同步标题。应用前重读完整快照，确认后中断可幂等补齐。
+- `R-CF12-character-revision`、`R-HARNESS36-character-revision-agent/panel-ui` 与 Chromium 真实流程验证了已写正文保护、刷新候选恢复、未来 patch 和终态回读；完整边界见 `CHARACTER-REVISION-WORKFLOW-DESIGN.md`。
 
 ### AUTHOR-1 当前阶段证据
 

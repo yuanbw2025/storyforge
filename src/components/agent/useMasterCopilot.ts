@@ -509,6 +509,7 @@ export function useMasterCopilot(input: {
         })
       }
       runtimeCandidates.current.delete(candidate.event.id)
+      return true
     } catch (error) {
       setError(errorMessage(error))
       await appendAgentEvent({
@@ -519,6 +520,7 @@ export function useMasterCopilot(input: {
         content: errorMessage(error),
         scope: workspaceScope,
       })
+      return false
     } finally {
       releaseMasterCopilotScope(scopeKey, scopeOwner)
       await reload(conversationId)
@@ -547,3 +549,5 @@ export function useMasterCopilot(input: {
     rejectCandidate: (candidate: PendingMasterCandidate) => resolveCandidate(candidate, 'rejected'),
   }
 }
+
+export type MasterCopilotController = ReturnType<typeof useMasterCopilot>

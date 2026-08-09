@@ -84,6 +84,15 @@ import {
   prepareCharacterDrivenCopilotV1,
   type CharacterDrivenCopilotSnapshotV1,
 } from './character-driven-copilot'
+import {
+  adoptRestoredCharacterRevisionCandidateV1,
+  parseCharacterRevisionCandidateDraftV1,
+  parseCharacterRevisionTaskInputV1,
+  prepareCharacterRevisionCopilotV1,
+  serializeCharacterRevisionCandidateV1,
+  type CharacterRevisionCopilotSnapshotV1,
+  type CharacterRevisionTaskInputV1,
+} from './character-revision-copilot'
 import type {
   AgentContextEvidence,
 } from './context-policy'
@@ -141,6 +150,8 @@ export interface MasterAgentTask {
   inspirationFragmentIds?: string[]
   /** 角色驱动规划面板明确选择的方案；只允许 outline.character-driven。 */
   characterDrivenPlanId?: number
+  /** 中途重规划面板冻结的角色变更、保护区、锚点与方案选择。 */
+  characterRevisionRequest?: CharacterRevisionTaskInputV1
 }
 
 export interface MasterAgentPlan {
@@ -176,6 +187,7 @@ export interface MasterCandidatePayload {
   mode?: InspirationResultMode
   selectedFragmentIds?: string[]
   characterDrivenPlanId?: number
+  characterRevisionRequest?: CharacterRevisionTaskInputV1
   outlineMode?: OutlineCopilotMode
   outlineParentId?: number | null
   storyArcKind?: StoryArcRequestKind
@@ -222,6 +234,7 @@ export interface PinnedMasterAgentTaskV1 {
   perspectiveCharacterId?: number | null
   inspirationFragmentIds?: string[]
   characterDrivenPlanId?: number
+  characterRevisionRequest?: CharacterRevisionTaskInputV1
   id?: string
 }
 
@@ -435,6 +448,16 @@ export async function createMasterAgentPlan(input: {
     if (pinned.skillId === 'outline.character-driven' && pinned.characterDrivenPlanId === undefined) {
       throw new Error('角色驱动大纲 Skill 必须固定角色驱动方案。')
     }
+    if (
+      pinned.characterRevisionRequest !== undefined
+      && (pinned.agentId !== 'outline' || pinned.skillId !== 'outline.character-revision')
+    ) throw new Error('只有角色中途重规划 Skill 可以固定角色变更请求。')
+    if (pinned.skillId === 'outline.character-revision' && pinned.characterRevisionRequest === undefined) {
+      throw new Error('角色中途重规划 Skill 必须固定角色变更请求。')
+    }
+    const characterRevisionRequest = pinned.characterRevisionRequest === undefined
+      ? undefined
+      : parseCharacterRevisionTaskInputV1(pinned.characterRevisionRequest)
     return {
       summary: pinned.agentId === 'inspiration'
         ? '按作者选择的灵感碎片生成结构化反推候选。'
@@ -453,6 +476,9 @@ export async function createMasterAgentPlan(input: {
           : {}),
         ...(pinned.characterDrivenPlanId !== undefined
           ? { characterDrivenPlanId: pinned.characterDrivenPlanId }
+          : {}),
+        ...(characterRevisionRequest !== undefined
+          ? { characterRevisionRequest }
           : {}),
       }],
       workflow,
@@ -949,7 +975,52 @@ async function executeSequentialMasterAgentPlan(
         })
         outputs.set(task.id, draft)
       } else if (task.agentId === 'outline') {
-        if (skill.executionMode === 'character-driven') {
+        if (skill.executionMode === 'character-revision') {
+          if (!task.characterRevisionRequest) {
+            throw new Error('角色中途重规划任务缺少固定变更请求。')
+          }
+          const prepared = await prepareCharacterRevisionCopilotV1({
+            projectId: input.projectId,
+            scope,
+            worldGroupId: input.worldGroupId,
+            request: task.characterRevisionRequest,
+            authorRequest: task.instruction,
+            skillId: skill.id as AgentSkillId,
+            routingCategory: `${AGENT_ROLE_CATEGORIES.outline}.character-revision`,
+            contextProfile,
+            contextCompressionRuntime,
+            signal: input.signal,
+          })
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '角色变更影响与中途重规划 Skill',
+            maxOutputTokens: skill.maxOutputTokens,
+          })
+          const draft = serializeCharacterRevisionCandidateV1(result.output)
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              workspaceScope: scope,
+              characterRevisionRequest: task.characterRevisionRequest,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        } else if (skill.executionMode === 'character-driven') {
           if (task.characterDrivenPlanId == null) {
             throw new Error('角色驱动规划任务缺少固定方案 ID。')
           }
@@ -1446,6 +1517,11 @@ export async function adoptMasterCandidate(input: {
       ? parseStoryArcCandidateDraft(input.draft)
       : input.payload.skillId === 'outline.character-driven'
       ? parseCharacterDrivenCandidateDraftV1(input.draft)
+      : input.payload.skillId === 'outline.character-revision'
+      ? parseCharacterRevisionCandidateDraftV1(
+          input.draft,
+          input.payload.baseSnapshot as CharacterRevisionCopilotSnapshotV1,
+        )
       : input.payload.agentId === 'world-origin'
       ? input.draft
       : input.payload.agentId === 'character'
@@ -1528,7 +1604,17 @@ export async function adoptMasterCandidate(input: {
       result: result as InspirationCopilotResult,
     })
   } else if (input.payload.agentId === 'outline') {
-    if (input.payload.skillId === 'outline.character-driven') {
+    if (input.payload.skillId === 'outline.character-revision') {
+      if (!input.payload.characterRevisionRequest) {
+        throw new Error('角色中途重规划候选缺少固定变更请求，请重新生成。')
+      }
+      await adoptRestoredCharacterRevisionCandidateV1({
+        projectId: input.projectId,
+        scope,
+        snapshot: input.payload.baseSnapshot as CharacterRevisionCopilotSnapshotV1,
+        draft: input.draft,
+      })
+    } else if (input.payload.skillId === 'outline.character-driven') {
       if (input.payload.characterDrivenPlanId == null) {
         throw new Error('角色驱动候选缺少目标方案，请重新生成。')
       }
@@ -1594,7 +1680,9 @@ export async function adoptMasterCandidate(input: {
       : input.payload.agentId === 'inspiration'
         ? `已保存新的${input.payload.mode === 'multiworld' ? '多世界' : '单世界'}灵感版本。`
         : input.payload.agentId === 'outline'
-          ? input.payload.skillId === 'outline.character-driven'
+          ? input.payload.skillId === 'outline.character-revision'
+            ? '选中的未来大纲 patch 已写入项目；已写正文、故事主线和只读影响建议均未修改。'
+            : input.payload.skillId === 'outline.character-driven'
             ? '角色驱动卷章方案已保存到当前版本。'
             : input.payload.skillId === 'outline.story-arcs'
             ? '故事线已写入项目。'

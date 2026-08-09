@@ -392,6 +392,14 @@ durable plan；Skill 只读取该方案的角色起点、终点和要求，旧�
 `outlineNodes`；任一步拒绝都不改下一级数据。旧流式旁路、自动落方案和弱 parser 已删除，方案管理、激活参考、
 中途重规划与 Prompt 配置保留。完整 Narrative Blueprint、角色反推世界基座和真实模型质量 A/B 尚未由本单元交付。
 
+**HARNESS-36 已交付边界（2026-08-09）：** “中途重规划”现在属于同一大纲 Agent 的
+`outline.character-revision` Skill。变更说明、目标角色、保护区、过渡区、策略、锚点和方案 ID 固定到 durable
+任务；世界/故事/角色/故事线/大纲/事实/连续性交接/摘要/检索/伏笔/Canon/规则/词条统一经 `assembleContext()`。
+模型只返回严格三档方案，代码在候选边界拒绝未知节点、重复节点、已写或受保护节点和锚点改名。作者选择具体
+档位与 patch 后才允许写回未来大纲；正文、主线、伏笔和影响建议始终只读。刷新恢复、完整 snapshot/CAS、
+确认后部分中断恢复和正式状态终验已闭合。它交付的是受控反向反馈切片，不等于完整影响图、自动级联修订或
+真实模型质量提升。
+
 ### 8.5 阶段 4：卷纲编排
 
 | 项目 | 设计 |
@@ -627,9 +635,10 @@ Receipt 绑定 `contractHash + contextManifestHash + sourceHashes + candidateHas
 3. ~~普通角色弱 parser 与 Character Copilot 双入口~~已由 HARNESS-33 统一为 `character.create`；旧弱 parser 删除，手动角色编辑、轴/维度选择和 Prompt 配置保留。
 4. ~~灵感反推的面板级 `useAIStream` 与组件上下文装配~~已由 HARNESS-34 统一为 `inspiration.reverse` 定向 durable 任务；碎片库、版本差异和显式 Canon 采纳保留。
 5. ~~角色驱动开书规划的 `useAIStream`、自动保存和弱 parser~~已由 HARNESS-35 统一为 `outline.character-driven`；两次作者确认分别控制方案保存与正式大纲采纳。
-6. 正文接受后的 best-effort 后处理，收口为可恢复 post-step barrier。
-7. 独立一致性候选和章节整理候选，绑定统一 run/source hash，不再形成无法追踪的平行质量入口。
-8. 任何新的 Skill 不得复制数据库读取、Prompt runner、RAG、Embedding、导入导出或写回实现。
+6. ~~角色中途重规划的 `useAIStream`、Prompt service 和非 durable patch helper~~已由 HARNESS-36 统一为 `outline.character-revision`；选择先固化到 durable 候选，再只写未来大纲授权字段。
+7. 正文接受后的 best-effort 后处理，收口为可恢复 post-step barrier。
+8. 独立一致性候选和章节整理候选，绑定统一 run/source hash，不再形成无法追踪的平行质量入口。
+9. 任何新的 Skill 不得复制数据库读取、Prompt runner、RAG、Embedding、导入导出或写回实现。
 
 ## 17. 分阶段实施路线
 

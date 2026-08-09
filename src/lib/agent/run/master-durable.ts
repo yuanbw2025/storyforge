@@ -91,6 +91,7 @@ import {
 import { STORY_CORE_FIELDS } from '../story-core-copilot'
 import { WORLDVIEW_AGENT_FIELDS } from '../worldview-field-copilot'
 import { MAX_INSPIRATION_FRAGMENTS } from '../../inspiration/workspace'
+import { parseCharacterRevisionTaskInputV1 } from '../character-revision-copilot'
 
 export const MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1 = 'master-agent-plan'
 export const MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 = 1 as const
@@ -327,6 +328,29 @@ function readOptionalCharacterDrivenPlanId(
   return Number(value.characterDrivenPlanId)
 }
 
+function readOptionalCharacterRevisionRequest(
+  value: Record<string, unknown>,
+  agentId: DomainAgentId,
+  skillId: AgentSkillId | undefined,
+  label: string,
+) {
+  const present = Object.prototype.hasOwnProperty.call(value, 'characterRevisionRequest')
+  if (!present) {
+    if (skillId === 'outline.character-revision') {
+      fail(label + '.characterRevisionRequest 缺失')
+    }
+    return undefined
+  }
+  if (agentId !== 'outline' || skillId !== 'outline.character-revision') {
+    fail(label + '.characterRevisionRequest 无效')
+  }
+  try {
+    return parseCharacterRevisionTaskInputV1(value.characterRevisionRequest)
+  } catch (error) {
+    fail(`${label}.characterRevisionRequest 无效：${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 function readOptionalSkillId(
   value: Record<string, unknown>,
   agentId: DomainAgentId,
@@ -339,7 +363,7 @@ function readOptionalSkillId(
     'world-origin': new Set(['complete', 'worldview-field', 'story-core']),
     character: new Set(['create']),
     inspiration: new Set(['reverse']),
-    outline: new Set(['auto', 'story-arcs', 'character-driven', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'character-driven', 'character-revision', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue']),
   }
   if (!allowedModes[agentId].has(skill.executionMode)) {
@@ -379,7 +403,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     assertKeysWithOptional(
       item,
       ['id', 'agentId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId', 'skillId', 'inspirationFragmentIds', 'characterDrivenPlanId'],
+      ['perspectiveCharacterId', 'skillId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -412,6 +436,12 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       skillId,
       '主 Agent 计划任务 ' + id,
     )
+    const characterRevisionRequest = readOptionalCharacterRevisionRequest(
+      item,
+      agentId,
+      skillId,
+      '主 Agent 计划任务 ' + id,
+    )
     return {
       id,
       agentId,
@@ -421,6 +451,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       ...(perspectiveCharacterId !== undefined ? { perspectiveCharacterId } : {}),
       ...(inspirationFragmentIds !== undefined ? { inspirationFragmentIds } : {}),
       ...(characterDrivenPlanId !== undefined ? { characterDrivenPlanId } : {}),
+      ...(characterRevisionRequest !== undefined ? { characterRevisionRequest } : {}),
     }
   })
   const workflow = value.workflow === undefined
@@ -665,6 +696,8 @@ function sameTaskIdentity(left: MasterAgentTask, right: MasterAgentTask): boolea
     && JSON.stringify(left.inspirationFragmentIds ?? null)
       === JSON.stringify(right.inspirationFragmentIds ?? null)
     && (left.characterDrivenPlanId ?? null) === (right.characterDrivenPlanId ?? null)
+    && JSON.stringify(left.characterRevisionRequest ?? null)
+      === JSON.stringify(right.characterRevisionRequest ?? null)
 }
 
 function sameTaskDefinition(left: MasterAgentTask, right: MasterAgentTask): boolean {
@@ -1051,6 +1084,13 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
     payload.characterDrivenPlanId !== undefined
     && (!Number.isInteger(payload.characterDrivenPlanId) || payload.characterDrivenPlanId < 1)
   ) fail(label + ' characterDrivenPlanId 无效')
+  if (payload.characterRevisionRequest !== undefined) {
+    try {
+      payload.characterRevisionRequest = parseCharacterRevisionTaskInputV1(payload.characterRevisionRequest)
+    } catch (error) {
+      fail(`${label} characterRevisionRequest 无效：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
   budgetEvidence(payload.teamBudgetEvidence, `${label} payload teamBudgetEvidence`)
   return payload
 }
@@ -1094,6 +1134,15 @@ function assertCandidateMatchesTaskSkill(
     taskSkill.executionMode !== 'character-driven'
     && payload.characterDrivenPlanId !== undefined
   ) fail(`${label} 不得携带角色驱动方案`)
+  if (
+    taskSkill.executionMode === 'character-revision'
+    && JSON.stringify(payload.characterRevisionRequest ?? null)
+      !== JSON.stringify(task.characterRevisionRequest ?? null)
+  ) fail(`${label} 的角色变更请求与 Skill 计划不一致`)
+  if (
+    taskSkill.executionMode !== 'character-revision'
+    && payload.characterRevisionRequest !== undefined
+  ) fail(`${label} 不得携带角色变更请求`)
   if (
     task.agentId === 'prose'
     && (taskSkill.executionMode === 'generate' || taskSkill.executionMode === 'continue')
