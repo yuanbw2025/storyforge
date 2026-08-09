@@ -170,6 +170,26 @@ async function pendingCandidate(label: string, recordLedger = true) {
   return { fixture, snapshot, candidate, eventId: persisted.event.id! }
 }
 
+async function currentManifestHash(
+  pending: Awaited<ReturnType<typeof pendingCandidate>>,
+): Promise<string> {
+  const assembled = await assembleContext({
+    projectId: pending.fixture.scope.projectId,
+    scope: pending.fixture.scope,
+    worldGroupId: pending.fixture.worldGroupId,
+    outlineNodeId: pending.fixture.outlineNodeId,
+    sourceKeys: [...DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1],
+    inputBudgetMaxTokens: 16_000,
+  })
+  return (await detailedOutlineManifestV1({
+    runId: pending.candidate.durable.runId,
+    scope: pending.fixture.scope,
+    worldGroupId: pending.fixture.worldGroupId,
+    outlineNodeId: pending.fixture.outlineNodeId,
+    assembled,
+  })).manifestHash
+}
+
 describe.sequential('R-HARNESS8 · 细纲生成 durable run', { timeout: 15_000 }, () => {
   beforeEach(async () => {
     await db.delete()
@@ -188,6 +208,7 @@ describe.sequential('R-HARNESS8 · 细纲生成 durable run', { timeout: 15_000 
       candidate: pending.candidate,
       output: pending.candidate.output,
       currentSourceSummaryHash: () => hashDetailedOutlineSourceSummaryV1('守灯人抵达潮门。'),
+      currentContextManifestHash: () => currentManifestHash(pending),
       adopt: async () => {
         const result = await adoptChapterOutlineWorkshopResult({
           raw: pending.candidate.output,
@@ -201,6 +222,13 @@ describe.sequential('R-HARNESS8 · 细纲生成 durable run', { timeout: 15_000 
         if (!result.ok) throw new Error(result.reason)
       },
       postState: async () => await db.detailedOutlines.where('outlineNodeId').equals(pending.fixture.outlineNodeId).first(),
+      postStateMatches: state => (
+        !!state
+        && typeof state === 'object'
+        && !Array.isArray(state)
+        && (state as any).outlineNodeId === pending.fixture.outlineNodeId
+        && (state as any).scenes?.length === 1
+      ),
     })
     expect(adopted.snapshot.projection.state).toBe('completed')
     expect(adopted.receiptHash).toMatch(/^[a-f0-9]{64}$/)
@@ -225,8 +253,10 @@ describe.sequential('R-HARNESS8 · 细纲生成 durable run', { timeout: 15_000 
       candidate: pending.candidate,
       output: pending.candidate.output,
       currentSourceSummaryHash: () => hashDetailedOutlineSourceSummaryV1('作者改写了潮门目标。'),
+      currentContextManifestHash: () => currentManifestHash(pending),
       adopt: async () => { throw new Error('不应写入') },
       postState: async () => null,
+      postStateMatches: () => false,
     })).rejects.toThrow('已过期')
     const snapshot = await readAgentRunV1(pending.fixture.scope, pending.candidate.durable.runId)
     expect(snapshot.projection.state).toBe('paused')

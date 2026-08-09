@@ -99,7 +99,7 @@
 | 角色驱动开书规划 | `CharacterDrivenPlotPanel.tsx`、`character-driven-copilot.ts` | HARNESS-35 后生成按钮只提交固定 `outline.character-driven` 任务；方案输入经 `read_character_driven_plan`，其它上游经 `assembleContext()`；第一次确认经 `adopt(characterDrivenPlans)` 保存候选，第二次勾选卷才经 `adopt(outlineNodes)` | durable 刷新恢复、编辑/拒绝/确认、方案 snapshot/CAS、严格结构、未知角色/重复标题/弧光覆盖 gate 和终态回读已接入。旧 `useAIStream`、自动保存与弱 parser 已删除；版本、激活参考和 Prompt 配置保留，中途重规划由 HARNESS-36 的独立 Skill 接管 | A（HARNESS-35） |
 | 角色中途重规划 | `CharacterRevisionPanel.tsx`、`character-revision-copilot.ts` | HARNESS-36 后只提交 `outline.character-revision`；作者变更、保护章序、过渡区、锚点、目标角色和方案 ID 冻结进 durable plan，其余资料只经 `assembleContext()`；作者选定具体档位和 patch 后才经 `adopt(outlineNodes.title/summary)`，已有空正文行只同步 `chapters.title` | 严格三档 JSON、已写区/保护区/未知节点/锚点硬过滤、完整 snapshot/CAS、刷新恢复、部分写入恢复和终态回读已接入。正文、故事主线、伏笔与影响建议保持只读；旧 `useAIStream`、Prompt service 和非 durable 写入 helper 已删除 | A（HARNESS-36） |
 | 卷纲/章纲 | `OutlinePanel.tsx`、`useOutlineGenerationController.ts`、`outline/harness.ts` | 显式 source keys；`GenerationNode` 负责 prepare/run；确认后通过既有 `adopt()` 写 `outlineNodes` | 默认启用 durable trace；候选与确认后中断可刷新恢复，批量逐卷章纲有 HARNESS-11 checkpoint/receipt/终态验证。账本不可用时仍会显式降级为内存影子，因此不等于所有失败场景都可恢复 | A（durable 主路径） |
-| 细纲/场景 | `DetailedOutlinePanel.tsx`、`ScenePanel.tsx`、`detailed-outline-*-durable.ts` | 装配章纲/世界/角色/伏笔；严格过滤合法 ID；确认后经 `adopt()` 写细纲 | 单次生成和批量增强均已有 durable candidate、刷新恢复、CAS、确认/拒绝、逐项回执与 terminal receipt；场景独立面板仍需继续核对是否与同一 durable 入口完全收口 | A（细纲单次/批量），D（独立场景入口待核） |
+| 细纲/场景 | `DetailedOutlinePanel.tsx`、`ScenePanel.tsx`、`useDetailedOutlineGenerationController.ts`、`detailed-outline-*-durable.ts` | HARNESS-37 后两个界面的单章 AI 生成统一进入 `outline.details`；只经 Skill 声明的 `CONTEXT_SOURCES + assembleContext()` 读取章纲、相邻章、当前细纲、世界、故事、角色、规则、历史、地点和伏笔，确认后只经 `adopt()` 写细纲 | 单次与批量均有 durable candidate、刷新恢复、确认/拒绝和 terminal receipt；单章入口另有严格闭集 JSON、Skill execution binding、完整 Context Manifest stale 和正式后状态匹配。旧 `ScenePanel` 组件级 AI/上下文/二次模型解析已删除；人工场景 CRUD 与五阶段工坊保留 | A（HARNESS-37 单章入口；HARNESS-10 批量） |
 | 正文生成/续写 | `ChapterEditor.tsx` | `:524-568` 通过 `assembleContext()` 读取章纲、细纲、连续性、事实、认知、物品、检索、故事线等；`GenerationNode`/prose copilot 可生成候选 | 接受后先写正文，再异步检索块、摘要、状态提取、章节 memory（`:990-1044`）；大多数失败只日志/降级，无 run terminal receipt | A（生成），D（后处理） |
 | 章节记忆/计划对账 | `run-chapter-memory.ts` | 正文 hash + 计划 hash CAS，解析失败不写回（`:22-78`） | 单调用有 stale 保护；不是跨步骤运行账本，不保证所有 post steps 完成 | A（独立任务），D（主流程收口） |
 | 一致性 Agent | `consistency-agent.ts` | background Fast Guard 零 token；fast/deep 一次模型调用；结果写 `agentEvents`（`:275-311,332-405`） | 有正文 hash current 检查、持久候选和回归；未绑定分步骤主 run 的完成状态，也不自动编排上游修正 | B |
@@ -195,7 +195,7 @@ flowchart TD
 
 | 问题/失效点 | 代码或测试证据 | 结论类型 | 影响 |
 |---|---|---|---|
-| 注册表存在但主路径不统一 | 审计基线中的故事线、故事核心、世界观、普通角色、灵感反推、角色驱动开书规划和中途重规划旁路已由 HARNESS-30～36 收口；卷章纲及细纲批量已有更早的 durable 基座，不能重复开发。其它基础设定、独立场景和反馈入口仍未全部统一 | 事实 → 推断 | 剩余入口仍可能使用不同来源、预算、校验和写回标准，模型输入/输出质量受入口影响 |
+| 注册表存在但主路径不统一 | 审计基线中的故事线、故事核心、世界观、普通角色、灵感反推、角色驱动开书/中途重规划和独立场景旁路已由 HARNESS-30～37 收口；卷章纲及细纲批量已有更早的 durable 基座，不能重复开发。其它基础设定与反馈入口仍未全部统一 | 事实 → 推断 | 剩余入口仍可能使用不同来源、预算、校验和写回标准，模型输入/输出质量受入口影响 |
 | 上下文可登记但不可完整复核 | `assembleContext()` 返回内存 `included/omitted/trimmed`；正文只打印控制台日志 | 事实 → 推断 | 无法可靠回答某次生成实际读了哪些源、何时被裁剪；问题难以回放 |
 | 结构化契约强弱不一致 | 世界基座、故事核心、故事线、普通角色、角色驱动卷章方案和中途重规划已改为严格候选合同；其它入口的 parser/gate 强度仍不一致 | 事实 | 剩余弱入口中的缺字段、类型错和 Canon 冲突仍可能进入正式数据 |
 | 正文后处理无统一完成屏障 | `handleAutoPostGenerate()` 依次重建检索、状态提取、memory；失败仅 `console.error`/降级，调用方 `void` 启动 | 事实 → 推断 | UI/作者可能看到正文已保存，却不知道派生记忆、状态和检索是否完成；失败无法按步骤恢复 |
@@ -208,7 +208,7 @@ flowchart TD
 
 **推断 1：质量能力分散在多个工程批次，缺少统一执行控制面。** NS-0~NS-6、Agent、透明管线分别交付了局部能力；每个模块能证明自己的不变量，但没有一个 run 负责把步骤依赖、重试、终态和证据连接起来。
 
-**推断 2：主路径接入断裂比“记忆不足”更可能解释实际效果不稳。** 审计时的直接证据包括故事线旁路写库、世界观/故事核心手工上下文、普通角色双入口、灵感与角色驱动面板级调用；这些证据对应的入口已由 HARNESS-30～36 修复。卷章纲和细纲批量经复核已有 durable 基座。该根因仍适用于其它基础设定、独立场景和反馈入口，不能因为这些切片完成就宣称全流程质量已经稳定。
+**推断 2：主路径接入断裂比“记忆不足”更可能解释实际效果不稳。** 审计时的直接证据包括故事线旁路写库、世界观/故事核心手工上下文、普通角色双入口、灵感与角色驱动面板级调用，以及章节页独立场景生成绕过 durable run；这些证据对应的入口已由 HARNESS-30～37 修复。卷章纲和细纲批量经复核已有 durable 基座。该根因仍适用于其它基础设定和反馈入口，不能因为这些切片完成就宣称全流程质量已经稳定。
 
 **推断 3：失败可见性不足导致错误继续向后传播。** 正文后处理失败只记录日志并保留 tail/旧状态，没有 durable attempt 和明确的“部分完成/待恢复”状态，后续步骤可能继续读取旧的派生记忆。
 
@@ -309,6 +309,7 @@ verifying → stale(source/state changed)
 | ~~`InspirationPanel` 面板级 `useAIStream` / 上下文装配~~ | HARNESS-34 已迁移到 `inspiration.reverse` 定向 durable 任务，碎片选择进入计划和候选证据 | 保留碎片库、版本差异、多世界预览与显式 Canon 采纳；确认反推候选只写灵感版本 |
 | ~~`CharacterDrivenPlotPanel` 的 `useAIStream` / 自动保存 / 弱 parser~~ | HARNESS-35 已迁移到固定方案的 `outline.character-driven` durable 任务；第一次确认只写方案，第二次确认才写正式大纲 | 保留人工弧光输入、方案版本、激活参考、中途重规划和 Prompt 配置；“角色反推世界基座”仍属于另一 Foundation Skill |
 | ~~`CharacterRevisionPanel` 的 `useAIStream` / Prompt service / 非 durable patch helper~~ | HARNESS-36 已迁移到冻结保护边界与方案输入的 `outline.character-revision` durable 任务；作者选择先固化到候选，再进行受治理采纳 | 只允许未来大纲标题/摘要和已有空正文行标题；正文、主线、伏笔和影响建议只读 |
+| ~~`ScenePanel` 的组件级 `useAIStream` / 上下文装配 / 二次模型解析~~ | HARNESS-37 已与独立细纲页统一到 `outline.details` + 单章 durable 控制器；严格候选、刷新恢复、Manifest stale、`adopt()` 和 terminal receipt 共用 | 保留人工场景 CRUD、五阶段工坊与 HARNESS-10 批量入口；不恢复解析失败后的隐藏模型调用 |
 | `GenerationNode` | 继续作为领域执行抽象，由 Harness 调度 | 不把它误命名为 durable run，不另造第二套生成运行器 |
 | `agentConversations/agentEvents` | 继续承载对话/候选/确认/错误；可作为兼容投影 | 不无限扩展为 run ledger；字段扩展须先审计生命周期 |
 | `nodeFlows/nodeRuns` | 继续服务 FLOW-3 自由节点 | 不直接冒充分步骤主流程 run，除非新增明确 contract/作用域/终态语义 |

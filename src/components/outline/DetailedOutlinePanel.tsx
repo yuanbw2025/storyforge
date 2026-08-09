@@ -4,36 +4,15 @@ import { useOutlineStore } from '../../stores/outline'
 import { useDetailedOutlineStore } from '../../stores/detailed-outline'
 import { useCharacterStore } from '../../stores/character'
 import { useForeshadowStore } from '../../stores/foreshadow'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildDetailSceneGeneratePrompt, buildEnhancedDetailPrompt, normalizeParsedScenes, parseEnhancedDetailResult, parseEnhancedDetailSmart } from '../../lib/ai/adapters/detail-scene-adapter'
-import { useAIConfigStore } from '../../stores/ai-config'
+import { normalizeParsedScenes, parseEnhancedDetailResult } from '../../lib/ai/adapters/detail-scene-adapter'
 import { batchGenerateDetails, type BatchProgress } from '../../lib/ai/batch-detail-runner'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import { nanoid } from '../../lib/utils/id'
-import { adopt } from '../../lib/registry/adopt'
-import { assembleContext } from '../../lib/registry/assemble-context'
-import type { Project, DetailedOutline, DetailedScene, EmotionArc, WorkspaceScope } from '../../lib/types'
+import type { Project, DetailedOutline, DetailedScene, EmotionArc } from '../../lib/types'
 import { db } from '../../lib/db/schema'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
-import { hashCanonicalValue } from '../../lib/agent/run/hash'
 import {
-  beginDetailedOutlineGenerationStepV1,
-  commitDetailedOutlineGenerationAdoptionV1,
-  createDetailedOutlineGenerationDurableRunV1,
-  detailedOutlineManifestV1,
-  failDetailedOutlineGenerationStepV1,
-  hashDetailedOutlineGenerationCandidateV1,
   hashDetailedOutlineSourceSummaryV1,
-  readLatestDetailedOutlineGenerationCandidateV1,
-  recordDetailedOutlineGenerationCandidateV1,
-  recordDetailedOutlineGenerationModelOutputV1,
-  rejectDetailedOutlineGenerationCandidateV1,
-  persistDetailedOutlineGenerationCandidateV1,
-  DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1,
-  DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1,
-  DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
-  type DetailedOutlineGenerationCandidateV1,
   type DetailedOutlineGenerationOperationV1,
 } from '../../lib/agent/run/detailed-outline-generation-durable'
 import {
@@ -49,6 +28,7 @@ import {
 import { useToast } from '../shared/Toast'
 import DetailedOutlineSidebar from './DetailedOutlineSidebar'
 import DetailedSceneCard from './DetailedSceneCard'
+import { useDetailedOutlineGenerationController } from './useDetailedOutlineGenerationController'
 
 interface Props {
   project: Project
@@ -66,27 +46,16 @@ export function filterExistingIds(ids: number[], validIds: Set<number>): number[
   return [...new Set(ids.filter(id => validIds.has(id)))]
 }
 
-interface PendingDetailedOutlineCandidate {
-  candidate: DetailedOutlineGenerationCandidateV1
-  eventId: number
-}
-
 /** v3 §2.1 — 创作区.细纲（场景拆分 + AI） */
 export default function DetailedOutlinePanel({ project }: Props) {
   const toast = useToast()
   const { nodes, loadAll: loadOutline } = useOutlineStore()
   const { detailedOutlines, loadAll: loadDetailed, getOrCreate, save } = useDetailedOutlineStore()
   const { characters, loadAll: loadCharacters } = useCharacterStore()
-  const aiConfig = useAIConfigStore(s => s.config)
   const { foreshadows, loadAll: loadForeshadows } = useForeshadowStore()
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
-  const [pendingDetailedCandidate, setPendingDetailedCandidate] = useState<PendingDetailedOutlineCandidate | null>(null)
   const [pendingBatchCandidate, setPendingBatchCandidate] = useState<DetailedOutlineBatchCandidateV1 | null>(null)
   const batchDecisionRef = useRef<((decision: 'adopt' | 'reject') => void) | null>(null)
-  const ai = useAIStream(createAISessionKey(project.id!, 'detail.scene', selectedNodeId ?? 'unselected'))
-  const enhanceAI = useAIStream(createAISessionKey(project.id!, 'detail.enhance', selectedNodeId ?? 'unselected'))
-  const restoreDetail = ai.restore
-  const restoreEnhanced = enhanceAI.restore
 
   useEffect(() => {
     loadOutline(project.id!)
@@ -112,43 +81,33 @@ export default function DetailedOutlinePanel({ project }: Props) {
     () => new Set(foreshadows.map(f => f.id).filter((id): id is number => id != null)),
     [foreshadows],
   )
-
-  // Durable candidates are the recovery source of truth. The stream session is
-  // only the visible projection and can be safely rebuilt after a refresh.
-  useEffect(() => {
-    let active = true
-    if (pendingBatchCandidate) {
-      setPendingDetailedCandidate(null)
-      return () => { active = false }
-    }
-    if (!selectedNodeId) {
-      setPendingDetailedCandidate(null)
-      return () => { active = false }
-    }
-    void (async () => {
-      try {
-        const scope = await resolveScopeLike(project.id!)
-        const restored = await readLatestDetailedOutlineGenerationCandidateV1({
-          scope,
-          outlineNodeId: selectedNodeId,
-        })
-        if (!active) return
-        if (!restored) {
-          setPendingDetailedCandidate(null)
-          return
-        }
-        setPendingDetailedCandidate({ candidate: restored.candidate, eventId: restored.event.id! })
-        const restore = restored.candidate.operation === 'scenes' ? restoreDetail : restoreEnhanced
-        restore({
-          output: restored.candidate.output,
-          operation: `durable:${restored.candidate.operation}:${restored.candidate.durable.runId}`,
-        })
-      } catch (error) {
-        console.error('[DetailedOutline] durable candidate recovery failed', error)
-      }
-    })()
-    return () => { active = false }
-  }, [pendingBatchCandidate, project.id, restoreDetail, restoreEnhanced, selectedNodeId])
+  const reloadDetailed = useCallback(() => loadDetailed(project.id!), [loadDetailed, project.id])
+  const detailGeneration = useDetailedOutlineGenerationController({
+    projectId: project.id!,
+    outlineNodeId: selectedNodeId,
+    worldGroupId: currentChapter?.worldGroupId ?? null,
+    chapterTitle: currentChapter?.title ?? '',
+    chapterSummary: currentChapter?.summary ?? '',
+    currentDetailed,
+    validCharacterIds,
+    validForeshadowIds,
+    reloadDetailed,
+    suspendRecovery: !!pendingBatchCandidate,
+  })
+  const {
+    ai,
+    enhanceAI,
+    isRecovering,
+    pendingCandidate: pendingDetailedCandidate,
+    buildDetailContext,
+    adoptDetailedPatch,
+    generateScenes,
+    generateEnhanced,
+    acceptCandidate,
+    dismissCandidate,
+    clearPendingCandidate,
+    restoreEnhanced,
+  } = detailGeneration
 
   useEffect(() => {
     let active = true
@@ -157,7 +116,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
         const scope = await resolveScopeLike(project.id!)
         const candidate = await readLatestRecoverableDetailedOutlineBatchCandidateV1({ scope })
         if (!active || !candidate) return
-        setPendingDetailedCandidate(null)
+        clearPendingCandidate()
         setPendingBatchCandidate(candidate)
         setSelectedNodeId(candidate.outlineNodeId)
         restoreEnhanced({
@@ -169,7 +128,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
       }
     })()
     return () => { active = false }
-  }, [project.id, restoreEnhanced])
+  }, [clearPendingCandidate, project.id, restoreEnhanced])
 
   const ensureDetailed = async () => {
     if (!currentChapter) return null
@@ -207,145 +166,10 @@ export default function DetailedOutlinePanel({ project }: Props) {
     await updateScenes(currentDetailed.scenes.filter(s => s.sceneId !== sceneId))
   }
 
-  const adoptDetailedPatch = useCallback(async (
-    outlineNodeId: number,
-    patch: Partial<DetailedOutline>,
-    scope?: WorkspaceScope,
-  ) => {
-    const result = await adopt({
-      projectId: project.id!,
-      scope,
-      target: 'detailedOutlines',
-      mode: 'add',
-      data: { outlineNodeId, ...patch },
-    })
-    await loadDetailed(project.id!)
-    return result
-  }, [project.id, loadDetailed])
-
-  const buildDetailContext = useCallback(async (outlineNodeId: number, scope?: WorkspaceScope) => {
-    const node = nodes.find(n => n.id === outlineNodeId)
-    const assembled = await assembleContext({
-      projectId: project.id!,
-      scope,
-      worldGroupId: node?.worldGroupId ?? null,
-      outlineNodeId,
-      provider: aiConfig.provider,
-      model: aiConfig.model,
-      sourceKeys: [...DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1],
-    })
-    const charIdx = assembled.included.indexOf('characters')
-    const foreshadowIdx = assembled.included.indexOf('foreshadows')
-    const worldContext = assembled.segments
-      .filter((_, index) => index !== charIdx && index !== foreshadowIdx)
-      .map(segment => segment.content)
-      .filter(Boolean)
-      .join('\n\n')
-    return {
-      worldContext,
-      characterContext: charIdx >= 0 ? assembled.segments[charIdx]?.content ?? '' : '',
-      foreshadowContext: foreshadowIdx >= 0 ? assembled.segments[foreshadowIdx]?.content ?? '' : '',
-      assembled,
-    }
-  }, [project.id, nodes, aiConfig.provider, aiConfig.model])
-
-  const runDurableDetailedGeneration = useCallback(async (
-    operation: DetailedOutlineGenerationOperationV1,
-    messages: ReturnType<typeof buildEnhancedDetailPrompt>,
-    outlineNodeId: number,
-    assembled: Awaited<ReturnType<typeof assembleContext>>,
-  ) => {
-    if (pendingDetailedCandidate) return
-    const scope = await resolveScopeLike(project.id!)
-    const worldGroupId = nodes.find(node => node.id === outlineNodeId)?.worldGroupId ?? null
-    let snapshot = await createDetailedOutlineGenerationDurableRunV1({
-      scope,
-      worldGroupId,
-      outlineNodeId,
-      operation,
-    })
-    const manifest = await detailedOutlineManifestV1({
-      runId: snapshot.run.id,
-      scope,
-      worldGroupId,
-      outlineNodeId,
-      assembled,
-    })
-    const chapterSummary = nodes.find(node => node.id === outlineNodeId)?.summary ?? ''
-    snapshot = await beginDetailedOutlineGenerationStepV1({
-      scope,
-      snapshot,
-      contextManifest: manifest,
-      binding: {
-        operation,
-        sourceSummaryHash: await hashDetailedOutlineSourceSummaryV1(chapterSummary),
-        promptHash: await hashCanonicalValue(messages),
-      },
-    })
-    const target = operation === 'scenes' ? ai : enhanceAI
-    const output = await target.start(messages, undefined, {
-      category: operation === 'scenes' ? 'detail.scene' : 'detail.enhance',
-      projectId: project.id!,
-    })
-    if (!output.trim()) {
-      await failDetailedOutlineGenerationStepV1({
-        scope,
-        snapshot,
-        code: 'empty_or_cancelled_output',
-        retryable: true,
-      })
-      return
-    }
-    snapshot = await recordDetailedOutlineGenerationModelOutputV1({ scope, snapshot, output })
-    const baseCandidate: Omit<DetailedOutlineGenerationCandidateV1, 'durable'> = {
-      version: 1 as const,
-      type: DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1,
-      projectId: project.id!,
-      outlineNodeId,
-      worldGroupId,
-      operation,
-      sourceSummaryHash: await hashDetailedOutlineSourceSummaryV1(chapterSummary),
-      output,
-      outputHash: await hashCanonicalValue(output),
-      contextManifestHash: manifest.manifestHash,
-      workspaceScope: scope,
-      createdAt: Date.now(),
-    }
-    const candidateHash = await hashDetailedOutlineGenerationCandidateV1({
-      ...baseCandidate,
-      durable: {
-        runId: snapshot.run.id,
-        stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
-        attempt: 1,
-        candidateHash: '',
-      },
-    })
-    const candidate: DetailedOutlineGenerationCandidateV1 = {
-      ...baseCandidate,
-      durable: {
-        runId: snapshot.run.id,
-        stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
-        attempt: 1,
-        candidateHash,
-      },
-    }
-    const persisted = await persistDetailedOutlineGenerationCandidateV1({ scope, candidate })
-    snapshot = await recordDetailedOutlineGenerationCandidateV1({ scope, snapshot, candidate })
-    setPendingDetailedCandidate({ candidate, eventId: persisted.event.id! })
-  }, [ai, enhanceAI, nodes, pendingDetailedCandidate, project.id])
-
   const handleAIGenerate = async () => {
     if (!currentChapter) return
-    const ctx = await buildDetailContext(currentChapter.id!)
-    const messages = buildDetailSceneGeneratePrompt(
-      currentChapter.title,
-      currentChapter.summary || '',
-      ctx.worldContext,
-      ctx.characterContext,
-      '',
-    )
     try {
-      await runDurableDetailedGeneration('scenes', messages, currentChapter.id!, ctx.assembled)
+      await generateScenes()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '场景细纲生成失败，请重试。')
     }
@@ -354,21 +178,8 @@ export default function DetailedOutlinePanel({ project }: Props) {
   // D2: 完善细纲
   const handleEnhancedGenerate = async () => {
     if (!currentChapter) return
-    const {
-      worldContext: worldCtx,
-      characterContext: charCtx,
-      foreshadowContext: foreshadowCtx,
-      assembled,
-    } = await buildDetailContext(currentChapter.id!)
-
-    const messages = buildEnhancedDetailPrompt(
-      currentChapter.title,
-      currentChapter.summary || '',
-      '', '',
-      worldCtx, charCtx, foreshadowCtx,
-    )
     try {
-      await runDurableDetailedGeneration('enhanced', messages, currentChapter.id!, assembled)
+      await generateEnhanced()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '增强细纲生成失败，请重试。')
     }
@@ -461,69 +272,13 @@ export default function DetailedOutlinePanel({ project }: Props) {
       }
       return
     }
-    const pending = pendingDetailedCandidate
-    if (!pending || pending.candidate.operation !== operation) return
-    if (!currentChapter?.id || pending.candidate.output !== text) {
-      toast.error('细纲候选已变化，请刷新后重新确认。')
-      return
-    }
-    const parsed = await parseEnhancedDetailSmart(text, aiConfig)
-    if (!parsed) {
-      toast.error('解析细纲候选失败，请重试。')
-      return
-    }
-    const patch: Partial<DetailedOutline> = {}
-    if (operation === 'scenes') {
-      const scenes = normalizeParsedScenes(parsed.scenes, ids => filterExistingIds(ids, validCharacterIds))
-      if (!scenes.length) {
-        toast.error('未能从 AI 输出解析出场景，请重试。')
-        return
-      }
-      patch.scenes = [...(currentDetailed?.scenes || []), ...scenes]
-      patch.lastUsedSummary = currentChapter.summary || ''
-    } else {
-      if (parsed.openingHook) patch.openingHook = parsed.openingHook
-      if (parsed.endingCliffhanger) patch.endingCliffhanger = parsed.endingCliffhanger
-      if (parsed.sceneLocation) patch.sceneLocation = parsed.sceneLocation
-      if (parsed.emotionArc) patch.emotionArc = parsed.emotionArc as EmotionArc
-      if (parsed.appearingCharacterIds) patch.appearingCharacterIds = filterExistingIds(parsed.appearingCharacterIds, validCharacterIds)
-      if (parsed.foreshadowIds) patch.foreshadowIds = filterExistingIds(parsed.foreshadowIds, validForeshadowIds)
-      if (parsed.scenes?.length) patch.scenes = normalizeParsedScenes(parsed.scenes, ids => filterExistingIds(ids, validCharacterIds))
-      patch.lastUsedSummary = currentChapter.summary || ''
-    }
     try {
-      const scope = await resolveScopeLike(project.id!)
-      await commitDetailedOutlineGenerationAdoptionV1({
-        scope,
-        runId: pending.candidate.durable.runId,
-        candidate: pending.candidate,
-        output: text,
-        adopt: async () => {
-          const result = await adoptDetailedPatch(currentChapter.id!, patch, scope)
-          if (!result.written.length || result.typeErrors.length || result.fkErrors.length || result.skipped.length) {
-            throw new Error('细纲候选未能经正式注册表完整写入。')
-          }
-        },
-        currentSourceSummaryHash: () => hashDetailedOutlineSourceSummaryV1(currentChapter.summary || ''),
-        postState: async () => {
-          const row = await db.detailedOutlines.where('outlineNodeId').equals(currentChapter.id!).first()
-          return row ? {
-            outlineNodeId: row.outlineNodeId,
-            scenes: row.scenes,
-            openingHook: row.openingHook ?? '',
-            endingCliffhanger: row.endingCliffhanger ?? '',
-            lastUsedSummary: row.lastUsedSummary ?? '',
-          } : null
-        },
-      })
-      setPendingDetailedCandidate(null)
-      if (operation === 'scenes') ai.reset()
-      else enhanceAI.reset()
-      toast.success(operation === 'scenes' ? `已采纳 ${patch.scenes?.length ?? 0} 个场景` : '已采纳增强细纲')
+      const accepted = await acceptCandidate(operation, text)
+      if (accepted) toast.success(operation === 'scenes' ? '已采纳场景细纲' : '已采纳增强细纲')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '细纲采纳失败，请重试。')
     }
-  }, [adoptDetailedPatch, ai, aiConfig, currentChapter, currentDetailed, enhanceAI, loadDetailed, pendingBatchCandidate, pendingDetailedCandidate, project.id, toast, validCharacterIds, validForeshadowIds])
+  }, [acceptCandidate, adoptDetailedPatch, currentChapter, enhanceAI, loadDetailed, pendingBatchCandidate, project.id, toast, validCharacterIds, validForeshadowIds])
 
   const handleDismissDetailed = useCallback(async (operation: DetailedOutlineGenerationOperationV1) => {
     const batchPending = pendingBatchCandidate
@@ -550,21 +305,8 @@ export default function DetailedOutlinePanel({ project }: Props) {
       }
       return
     }
-    const pending = pendingDetailedCandidate
-    if (!pending || pending.candidate.operation !== operation) return
-    try {
-      const scope = await resolveScopeLike(project.id!)
-      await rejectDetailedOutlineGenerationCandidateV1({
-        scope,
-        runId: pending.candidate.durable.runId,
-        candidate: pending.candidate,
-      })
-    } finally {
-      setPendingDetailedCandidate(null)
-      if (operation === 'scenes') ai.reset()
-      else enhanceAI.reset()
-    }
-  }, [ai, enhanceAI, pendingBatchCandidate, pendingDetailedCandidate, project.id])
+    await dismissCandidate(operation)
+  }, [dismissCandidate, enhanceAI, pendingBatchCandidate, project.id])
 
   const totalWords = currentDetailed?.scenes.reduce((s, sc) => s + (sc.estimatedWords || 0), 0) ?? 0
 
@@ -599,9 +341,10 @@ export default function DetailedOutlinePanel({ project }: Props) {
         existingDetails: detailedOutlines,
         scope,
         contextResolver: async outlineNodeId => {
-          const context = await buildDetailContext(outlineNodeId, scope)
+          const worldGroupId = nodes.find(node => node.id === outlineNodeId)?.worldGroupId ?? null
+          const context = await buildDetailContext(outlineNodeId, scope, worldGroupId)
           return {
-            worldGroupId: nodes.find(node => node.id === outlineNodeId)?.worldGroupId ?? null,
+            worldGroupId,
             worldContext: context.worldContext,
             characterContext: context.characterContext,
             foreshadowContext: context.foreshadowContext,
@@ -610,7 +353,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
         },
         onCandidate: ({ chapter, candidate }) => new Promise(resolve => {
           setSelectedNodeId(chapter.id!)
-          setPendingDetailedCandidate(null)
+          clearPendingCandidate()
           setPendingBatchCandidate(candidate)
           restoreEnhanced({
             output: candidate.output,
@@ -648,7 +391,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
       // 3 秒后清除进度信息
       setTimeout(() => setBatchProgress(null), 3000)
     }
-  }, [adoptDetailedPatch, batchProgress, buildDetailContext, chapterNodes, detailedOutlines, loadDetailed, nodes, project.id, restoreEnhanced])
+  }, [adoptDetailedPatch, batchProgress, buildDetailContext, chapterNodes, clearPendingCandidate, detailedOutlines, loadDetailed, nodes, project.id, restoreEnhanced])
 
   const handleBatchStop = useCallback(() => {
     batchAbortRef.current?.abort()
@@ -723,14 +466,14 @@ export default function DetailedOutlinePanel({ project }: Props) {
               </button>
               <button
                 onClick={handleAIGenerate}
-                disabled={ai.isStreaming || enhanceAI.isStreaming || !!pendingDetailedCandidate || !!pendingBatchCandidate}
+                disabled={isRecovering || ai.isStreaming || enhanceAI.isStreaming || !!pendingDetailedCandidate || !!pendingBatchCandidate}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 text-accent text-sm rounded hover:bg-accent/20 disabled:opacity-50"
               >
                 <Sparkles className="w-4 h-4" /> AI 一键拆场景
               </button>
               <button
                 onClick={handleEnhancedGenerate}
-                disabled={ai.isStreaming || enhanceAI.isStreaming || !!pendingDetailedCandidate || !!pendingBatchCandidate}
+                disabled={isRecovering || ai.isStreaming || enhanceAI.isStreaming || !!pendingDetailedCandidate || !!pendingBatchCandidate}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-success/10 text-success text-sm rounded hover:bg-success/20 disabled:opacity-50"
               >
                 <Wand2 className="w-4 h-4" /> 完善细纲

@@ -339,6 +339,16 @@ HARNESS-36 现状（2026-08-09）：同一角色驱动工作台的“中途重�
 部分写入恢复和终态回读已接入；正文、主线、伏笔与影响建议不自动写。旧 `useAIStream`、Prompt service
 和非 durable patch helper 已删除。当前仍是模拟模型的工程证据，不证明真实叙事质量收益。
 
+HARNESS-37 现状（2026-08-09）：章节编辑页 `ScenePanel` 与独立细纲页不再各自维护单章 AI 执行，
+统一调用 `useDetailedOutlineGenerationController`，并归属大纲 Agent 的 `outline.details` Skill。
+Skill 冻结章纲、相邻章、当前细纲、世界、故事、角色、规则、历史、地点和伏笔等登记来源，以及
+`detailedOutlines` 的唯一可写字段；新 RunContract 同时冻结 Skill/Prompt/Tool execution binding。
+模型输出在候选持久化前经过严格闭集 JSON、字段类型、场景数量、节奏枚举和 ID 结构检查，失败直接
+记录为可重试运行失败，不再调用第二个模型“修复”输出。作者确认前业务表零写入；确认时重新装配同一
+Context Manifest，任何章纲、当前细纲或其它纳入来源变化都会使候选 stale，确认后只经 `adopt()` 写入并
+核对正式后状态，匹配后才签发 terminal receipt。人工场景 CRUD、五阶段工坊和既有批量细纲保留。
+当前证据覆盖模拟模型、组件刷新恢复和确定性合同，不证明真实模型场景质量收益。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。

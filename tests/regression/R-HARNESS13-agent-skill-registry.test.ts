@@ -25,6 +25,7 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
     expect(AGENT_SKILLS.map(skill => skill.id)).toEqual(expect.arrayContaining([
       'outline.volumes',
       'outline.chapters',
+      'outline.details',
       'prose.generate',
       'prose.continue',
     ]))

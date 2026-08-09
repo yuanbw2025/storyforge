@@ -32,6 +32,7 @@ export type AgentSkillExecutionModeV1 =
   | 'character-revision'
   | 'volumes'
   | 'chapters'
+  | 'details'
   | 'generate'
   | 'continue'
   | 'review'
@@ -199,6 +200,26 @@ const OUTLINE_CHARACTER_REVISION_CONTEXT_SOURCE_KEYS = [
   'canonAssertions',
   'worldRules',
   'codex',
+] as const
+
+export const OUTLINE_DETAIL_CONTEXT_SOURCE_KEYS = [
+  'canonAssertions',
+  'chapterOutline',
+  'adjacentChapterOutlines',
+  'detailedOutline',
+  'worldview',
+  'storyCore',
+  'activeNarrativeBlueprint',
+  'characterDrivenPlan',
+  'powerSystem',
+  'cultivationProgress',
+  'codex',
+  'characters',
+  'creativeRules',
+  'worldRules',
+  'historical',
+  'locations',
+  'foreshadows',
 ] as const
 
 const PROSE_CONTEXT_SOURCE_KEYS = [
@@ -457,6 +478,24 @@ const OUTLINE_CHAPTER_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+const OUTLINE_DETAIL_INPUT_POLICY = {
+  sourceKeys: ['chapterOutline', 'storyCore', 'characters'],
+  states: {
+    empty: {
+      handling: 'require-upstream',
+      instruction: '缺少目标章纲时停止生成，先建立或确认该章的标题与摘要。',
+    },
+    partial: {
+      handling: 'reference-and-create',
+      instruction: '以现有章纲和已填写设定为硬边界补足场景；未填写的世界或角色细节只能留作候选，不得冒充 Canon。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格依据章纲、故事核心、角色、相邻章和当前细纲拆分场景，避免重复已有场景并保持因果与信息边界。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
 const PROSE_INPUT_POLICY = {
   sourceKeys: ['chapterOutline', 'detailedOutline', 'storyCore', 'characters'],
   states: {
@@ -592,6 +631,21 @@ const OUTLINE_CHARACTER_REVISION_COMPRESSION_POLICY = compressionPolicy([
   'canonAssertions',
   'worldRules',
   'codex',
+])
+const OUTLINE_DETAIL_COMPRESSION_POLICY = compressionPolicy([
+  'detailedOutline',
+  'worldview',
+  'storyCore',
+  'activeNarrativeBlueprint',
+  'characterDrivenPlan',
+  'powerSystem',
+  'codex',
+  'characters',
+  'creativeRules',
+  'worldRules',
+  'historical',
+  'locations',
+  'foreshadows',
 ])
 const PROSE_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
@@ -936,6 +990,42 @@ export const AGENT_SKILLS = [
     writeTargets: [{ table: 'outlineNodes', fields: ['title', 'summary'] }],
     lastVerifiedAt: '2026-08-08',
     regressionTests: ['R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
+  },
+  {
+    version: 1,
+    id: 'outline.details',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '单章场景细纲',
+    owner: 'outline-agent',
+    promptVersion: 'detailed-outline-copilot-v1',
+    executionMode: 'details',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: OUTLINE_DETAIL_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: OUTLINE_DETAIL_INPUT_POLICY,
+    contextCompression: OUTLINE_DETAIL_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [{
+      table: 'detailedOutlines',
+      fields: [
+        'scenes',
+        'openingHook',
+        'endingCliffhanger',
+        'sceneLocation',
+        'appearingCharacterIds',
+        'foreshadowIds',
+        'emotionArc',
+        'prohibitions',
+        'lastUsedSummary',
+      ],
+    }],
+    lastVerifiedAt: '2026-08-09',
+    regressionTests: [
+      'R-HARNESS8-detailed-outline-generation-durable',
+      'R-HARNESS37-detailed-outline-entry',
+    ],
   },
   {
     version: 1,
@@ -1288,7 +1378,7 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'review']),
     character: new Set(['create']),
     inspiration: new Set(['reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'character-driven', 'character-revision', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
     prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory']),
   }
   const ids = new Set<string>()

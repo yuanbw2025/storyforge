@@ -189,7 +189,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 57 个 category。
+共 56 个 category。
 未分类调用: 0 个。动态 category 调用: 16 个。
 
 | category | 触发文件 |
@@ -197,7 +197,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `agent.orchestrator` | `src/lib/agent/orchestrator.ts:534` |
 | `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:621` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
-| `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:24` |
@@ -212,7 +211,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `codex.extract` | `src/components/codex/CodexPanel.tsx:226` |
 | `cultivation.progress` | `src/components/cultivation/CultivationProgressPanel.tsx:143` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
-| `detail.scene` | `src/components/outline/ScenePanel.tsx:126`<br/>`src/lib/ai/batch-detail-runner.ts:193` |
+| `detail.scene` | `src/lib/ai/batch-detail-runner.ts:193` |
 | `emotion.beat` | `src/components/editor/EmotionBeatCard.tsx:66` |
 | `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:78` |
 | `eval.h17.generation` | `src/components/settings/HarnessEvalPanel.tsx:79` |
@@ -273,4 +272,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `8f9a760`
+生成时间基准:commit `6b7bc2e`

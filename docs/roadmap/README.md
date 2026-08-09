@@ -233,7 +233,7 @@
   一个入口，同一正文只发起一次综合抽取；状态、受控事实、物品、故事年表、关系和伏笔
   六域候选均须逐字证据。候选复用归档 `agentConversations/agentEvents` 保存，刷新可恢复；
   正文 hash 变化阻断写回，物品/年表按章整批替换失败会事务回滚，事实只进入 candidate。
-- HARNESS-18/19/20/27/30/31/32/33 已把 18 个领域 Skill、14 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
+- HARNESS-18～37 已把 21 个领域 Skill、17 个提示词执行版本和 14 个只读工具的规范 schema hash 冻结进
   新主 Agent RunContract 与候选 hash；恢复会拒绝 Skill/Prompt/Tool 漂移，旧合同继续按旧协议
   恢复。CI 新增 45 天复核、owner、版本和回归证据新鲜度闸门；该能力只保证执行可归因，
   不冒充真实模型质量收益。
@@ -352,6 +352,11 @@
   `adopt(outlineNodes.title/summary)` 写未来大纲，已有空正文行只同步 `chapters.title`；正文、主线、伏笔及影响建议
   不自动写。刷新恢复、完整 snapshot/CAS、确认后部分中断恢复和终态回读已有专项回归与 Chromium 证据；旧
   `useAIStream`、Prompt service 和非 durable patch helper 已删除。当前不证明真实模型质量收益，也不等于完整反馈图。
+- HARNESS-37 已把章节正文页与独立细纲页的单章 AI 生成统一到大纲 Agent 的 `outline.details` Skill 和同一个
+  durable 控制器。Skill 声明章纲、相邻章、当前细纲及世界/故事/角色/规则等正式来源；严格闭集 JSON 在候选
+  持久化前拒绝未知字段、非法枚举和类型，解析失败不再隐藏调用第二个模型。确认前 `detailedOutlines` 零写入，
+  刷新后可恢复；确认时重算 Context Manifest，来源变化即 stale，确认后只经 `adopt()`，正式字段匹配后才签发
+  terminal receipt。人工场景 CRUD、五阶段工坊和 HARNESS-10 批量细纲保留；当前不证明真实模型场景质量收益。
 
 ### GOV-1 第一阶段交付证据
 

@@ -400,6 +400,14 @@ durable plan；Skill 只读取该方案的角色起点、终点和要求，旧�
 确认后部分中断恢复和正式状态终验已闭合。它交付的是受控反向反馈切片，不等于完整影响图、自动级联修订或
 真实模型质量提升。
 
+**HARNESS-37 已交付边界（2026-08-09）：** 单章场景/细纲 AI 现在属于大纲 Agent 的
+`outline.details` Skill。章节正文页与独立细纲页共用同一个 durable 控制器；Skill 声明章纲、相邻章、
+当前细纲及世界/故事/角色/规则等正式来源和唯一细纲写权限。输出必须先通过闭集 JSON 与字段、枚举、
+数量、ID 硬门才会持久为候选；解析失败不再隐藏发起模型重构。候选可跨页面与刷新恢复，确认前零业务
+写入；确认时重算 Context Manifest，来源变化即 stale，确认后只经 `adopt(detailedOutlines)`，正式字段
+匹配后才完成。人工场景编辑、五阶段工坊和 durable 批量细纲均保留；语义评审、真实模型质量 A/B 和
+更完整的 Scene Planner 多步推演仍未由本单元交付。
+
 ### 8.5 阶段 4：卷纲编排
 
 | 项目 | 设计 |
@@ -636,9 +644,10 @@ Receipt 绑定 `contractHash + contextManifestHash + sourceHashes + candidateHas
 4. ~~灵感反推的面板级 `useAIStream` 与组件上下文装配~~已由 HARNESS-34 统一为 `inspiration.reverse` 定向 durable 任务；碎片库、版本差异和显式 Canon 采纳保留。
 5. ~~角色驱动开书规划的 `useAIStream`、自动保存和弱 parser~~已由 HARNESS-35 统一为 `outline.character-driven`；两次作者确认分别控制方案保存与正式大纲采纳。
 6. ~~角色中途重规划的 `useAIStream`、Prompt service 和非 durable patch helper~~已由 HARNESS-36 统一为 `outline.character-revision`；选择先固化到 durable 候选，再只写未来大纲授权字段。
-7. 正文接受后的 best-effort 后处理，收口为可恢复 post-step barrier。
-8. 独立一致性候选和章节整理候选，绑定统一 run/source hash，不再形成无法追踪的平行质量入口。
-9. 任何新的 Skill 不得复制数据库读取、Prompt runner、RAG、Embedding、导入导出或写回实现。
+7. ~~章节页 `ScenePanel` 的组件级 AI、上下文和二次模型解析~~已由 HARNESS-37 与独立细纲页统一为 `outline.details` durable 控制器；人工场景编辑与五阶段工坊保留。
+8. 正文接受后的 best-effort 后处理，收口为可恢复 post-step barrier。
+9. 独立一致性候选和章节整理候选，绑定统一 run/source hash，不再形成无法追踪的平行质量入口。
+10. 任何新的 Skill 不得复制数据库读取、Prompt runner、RAG、Embedding、导入导出或写回实现。
 
 ## 17. 分阶段实施路线
 

@@ -1,7 +1,6 @@
-import type { AIConfig, ChatMessage, DetailedScene, ScenePace } from '../../types'
+import type { ChatMessage, DetailedScene, ScenePace } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
-import { aiRestructure } from '../restructure'
 import { nanoid } from '../../utils/id'
 
 /** 细纲场景生成 */
@@ -38,6 +37,7 @@ export function buildEnhancedDetailPrompt(
   worldContext: string,
   characterList: string,
   foreshadowList: string,
+  userHint?: string,
 ): ChatMessage[] {
   const systemPrompt = `你是一个小说细纲策划专家。根据章节大纲、前后章摘要和可用资源，为本章生成增强细纲信息。
 
@@ -87,6 +87,7 @@ export function buildEnhancedDetailPrompt(
   if (worldContext) parts.push(`【世界观】\n${worldContext}`)
   if (characterList) parts.push(`【可用角色】\n${characterList}`)
   if (foreshadowList) parts.push(`【可用伏笔】\n${foreshadowList}`)
+  if (userHint?.trim()) parts.push(`【Skill 输入策略】\n${userHint.trim()}`)
 
   return [
     { role: 'system', content: systemPrompt },
@@ -131,30 +132,6 @@ export function parseEnhancedDetailResult(raw: string): {
 }
 
 export type EnhancedDetailResult = NonNullable<ReturnType<typeof parseEnhancedDetailResult>>
-
-const DETAIL_SCHEMA = `目标结构：JSON 对象
-{
-  "openingHook": "开场钩子",
-  "endingCliffhanger": "结尾悬念",
-  "sceneLocation": "主要场景地点",
-  "emotionArc": "情绪曲线",
-  "scenes": [{ "title": "场景标题", "summary": "场景概要", "location": "地点", "conflict": "冲突", "pace": "节奏", "estimatedWords": 字数(整数) }]
-}
-完整保留原文里的每一个场景，不要遗漏。`
-
-/**
- * 智能解析细纲结果：JSON 优先 → 失败则 AI 重构（不靠正则）。
- * @param config 用于 AI 重构兜底
- */
-export async function parseEnhancedDetailSmart(
-  raw: string,
-  config: AIConfig,
-): Promise<EnhancedDetailResult | null> {
-  const direct = parseEnhancedDetailResult(raw)
-  if (direct) return direct
-  // JSON 解析失败 → AI 重构（不降级到正则）
-  return await aiRestructure<EnhancedDetailResult>(raw, DETAIL_SCHEMA, config)
-}
 
 const VALID_PACES: ScenePace[] = ['slow', 'medium', 'fast', 'climax']
 

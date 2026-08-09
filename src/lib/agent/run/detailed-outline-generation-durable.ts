@@ -20,6 +20,15 @@ import {
   assertRecordInScope,
   readOwnedRows,
 } from '../../world-engine/scope'
+import {
+  getAgentSkillV1,
+  OUTLINE_DETAIL_CONTEXT_SOURCE_KEYS,
+  resolveAgentSkillContextSourceKeysV1,
+} from '../skill-registry'
+import {
+  assertAgentSkillExecutionBindingV1,
+  createAgentSkillExecutionBindingV1,
+} from '../execution-binding'
 
 export const DETAILED_OUTLINE_GENERATION_STEP_ID_V1 = 'detailed-outline.generate'
 export const DETAILED_OUTLINE_GENERATION_CONVERSATION_PURPOSE_V1 = 'detailed-outline-generation'
@@ -30,24 +39,7 @@ export const DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1 = 'detailed-outline-g
  * detailed-outline UI. The prompt builder may trim individual sections, but
  * it may not silently read a source that is absent from the run contract.
  */
-export const DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1 = [
-  'canonAssertions',
-  'chapterOutline',
-  'adjacentChapterOutlines',
-  'worldview',
-  'storyCore',
-  'activeNarrativeBlueprint',
-  'characterDrivenPlan',
-  'powerSystem',
-  'cultivationProgress',
-  'codex',
-  'characters',
-  'creativeRules',
-  'worldRules',
-  'historical',
-  'locations',
-  'foreshadows',
-] as const
+export const DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1 = OUTLINE_DETAIL_CONTEXT_SOURCE_KEYS
 
 export type DetailedOutlineGenerationOperationV1 = 'scenes' | 'enhanced'
 
@@ -109,6 +101,7 @@ export function buildDetailedOutlineGenerationRunContractV1(input: {
   outlineNodeId: number
   operation: DetailedOutlineGenerationOperationV1
 }) {
+  const skill = getAgentSkillV1('outline.details', 'outline')
   return {
     version: 1 as const,
     objective: `${input.operation === 'scenes' ? '拆分场景' : '完善'}章节细纲 #${input.outlineNodeId}`,
@@ -119,23 +112,18 @@ export function buildDetailedOutlineGenerationRunContractV1(input: {
       outlineNodeIds: [input.outlineNodeId],
     },
     permissions: {
-      contextSourceKeys: [...DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1],
-      writeTargets: [{
-        table: 'detailedOutlines',
-        fields: [
-          'scenes',
-          'openingHook',
-          'endingCliffhanger',
-          'sceneLocation',
-          'emotionArc',
-          'appearingCharacterIds',
-          'foreshadowIds',
-          'prohibitions',
-          'lastUsedSummary',
-        ],
+      contextSourceKeys: resolveAgentSkillContextSourceKeysV1(skill),
+      writeTargets: skill.writeTargets.map(target => ({
+        table: target.table,
+        fields: [...target.fields],
         mode: 'author-confirmed' as const,
-      }],
+        ...(target.adoptionExtension ? { adoptionExtension: target.adoptionExtension } : {}),
+      })),
     },
+    executionBindings: [{
+      stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+      ...createAgentSkillExecutionBindingV1(skill),
+    }],
     budget: {
       maxModelCalls: 1,
       maxToolCalls: 0,
@@ -167,6 +155,25 @@ export function buildDetailedOutlineGenerationRunContractV1(input: {
       onStaleInput: 'pause-for-author' as const,
     },
   }
+}
+
+export function assertDetailedOutlineGenerationExecutionBindingV1(
+  snapshot: AgentRunSnapshotV1,
+): void {
+  if (!snapshot.contract.executionBindings) return
+  if (snapshot.contract.executionBindings.length !== 1) {
+    throw new Error('细纲生成 RunContract execution binding 数量无效。')
+  }
+  const binding = snapshot.contract.executionBindings[0]
+  if (binding?.stepId !== DETAILED_OUTLINE_GENERATION_STEP_ID_V1) {
+    throw new Error('细纲生成 RunContract execution binding 步骤无效。')
+  }
+  const { stepId: _stepId, ...skillBinding } = binding
+  assertAgentSkillExecutionBindingV1(
+    skillBinding,
+    getAgentSkillV1('outline.details', 'outline'),
+    '细纲生成',
+  )
 }
 
 export async function createDetailedOutlineGenerationDurableRunV1(input: {
@@ -221,6 +228,7 @@ export async function beginDetailedOutlineGenerationStepV1(input: {
   }
 }): Promise<AgentRunSnapshotV1> {
   const { snapshot, contextManifest } = input
+  assertDetailedOutlineGenerationExecutionBindingV1(snapshot)
   if (contextManifest.runId !== snapshot.run.id
     || contextManifest.stepId !== DETAILED_OUTLINE_GENERATION_STEP_ID_V1) {
     throw new Error('细纲生成 Context Manifest 与 durable run 不匹配。')
@@ -249,6 +257,7 @@ export async function recordDetailedOutlineGenerationModelOutputV1(input: {
   snapshot: AgentRunSnapshotV1
   output: string
 }): Promise<AgentRunSnapshotV1> {
+  assertDetailedOutlineGenerationExecutionBindingV1(input.snapshot)
   const step = input.snapshot.projection.steps[DETAILED_OUTLINE_GENERATION_STEP_ID_V1]
   if (!step || step.status !== 'running' || step.attempt !== 1) {
     throw new Error('细纲生成 durable step 不在模型响应状态。')
@@ -348,6 +357,7 @@ export async function recordDetailedOutlineGenerationCandidateV1(input: {
   snapshot: AgentRunSnapshotV1
   candidate: DetailedOutlineGenerationCandidateV1
 }): Promise<AgentRunSnapshotV1> {
+  assertDetailedOutlineGenerationExecutionBindingV1(input.snapshot)
   if (!isCandidate(input.candidate) || input.candidate.durable.runId !== input.snapshot.run.id) {
     throw new Error('细纲生成候选 durable evidence 不匹配。')
   }
@@ -409,6 +419,7 @@ export async function readLatestDetailedOutlineGenerationCandidateV1(input: {
       })
       if (expected !== candidate.durable.candidateHash) continue
       let snapshot = await readAgentRunV1(input.scope, candidate.durable.runId)
+      assertDetailedOutlineGenerationExecutionBindingV1(snapshot)
       const step = snapshot.projection.steps[DETAILED_OUTLINE_GENERATION_STEP_ID_V1]
       if (step?.status === 'running' && step.candidateHash == null) {
         snapshot = await recoverDetailedOutlineGenerationCandidateV1({
@@ -435,6 +446,7 @@ export async function recoverDetailedOutlineGenerationCandidateV1(input: {
   candidate: DetailedOutlineGenerationCandidateV1
 }): Promise<AgentRunSnapshotV1 | null> {
   const snapshot = await readAgentRunV1(input.scope, input.candidate.durable.runId)
+  assertDetailedOutlineGenerationExecutionBindingV1(snapshot)
   const step = snapshot.projection.steps[DETAILED_OUTLINE_GENERATION_STEP_ID_V1]
   if (step?.candidateHash === input.candidate.durable.candidateHash) return snapshot
   if (!step || step.status !== 'running') return null
@@ -452,6 +464,7 @@ export async function rejectDetailedOutlineGenerationCandidateV1(input: {
   candidate: DetailedOutlineGenerationCandidateV1
 }): Promise<AgentRunSnapshotV1> {
   const snapshot = await readAgentRunV1(input.scope, input.runId)
+  assertDetailedOutlineGenerationExecutionBindingV1(snapshot)
   const step = snapshot.projection.steps[DETAILED_OUTLINE_GENERATION_STEP_ID_V1]
   if (step?.status === 'failed' && step.confirmation === 'reject') return snapshot
   if (!step || step.status !== 'awaiting_confirmation') throw new Error('细纲候选当前不等待作者确认。')
@@ -470,14 +483,26 @@ export async function commitDetailedOutlineGenerationAdoptionV1(input: {
   adopt: () => Promise<void>
   postState: () => Promise<unknown>
   currentSourceSummaryHash: () => Promise<string>
+  currentContextManifestHash?: () => Promise<string>
+  postStateMatches?: (postState: unknown) => boolean
 }): Promise<DetailedOutlineGenerationAdoptionResultV1> {
   if (await hashDetailedOutlineGenerationCandidateV1(input.candidate)
     !== input.candidate.durable.candidateHash) {
     throw new Error('细纲候选 hash 校验失败，请重新生成。')
   }
   if (input.output !== input.candidate.output) throw new Error('细纲采纳内容与作者确认候选不一致。')
-  if (await input.currentSourceSummaryHash() !== input.candidate.sourceSummaryHash) {
-    const stale = await readAgentRunV1(input.scope, input.runId)
+  let snapshot = await readAgentRunV1(input.scope, input.runId)
+  assertDetailedOutlineGenerationExecutionBindingV1(snapshot)
+  const governed = snapshot.contract.executionBindings !== undefined
+  const summaryChanged = await input.currentSourceSummaryHash() !== input.candidate.sourceSummaryHash
+  const contextChanged = input.currentContextManifestHash
+    ? await input.currentContextManifestHash() !== input.candidate.contextManifestHash
+    : false
+  if (governed && !input.currentContextManifestHash) {
+    throw new Error('细纲采纳缺少当前 Context Manifest 校验。')
+  }
+  if (summaryChanged || contextChanged) {
+    const stale = snapshot
     const step = stale.projection.steps[DETAILED_OUTLINE_GENERATION_STEP_ID_V1]
     if (step?.status === 'awaiting_confirmation') {
       await append(input.scope, stale, 'candidate.staled', {
@@ -486,9 +511,10 @@ export async function commitDetailedOutlineGenerationAdoptionV1(input: {
         reason: 'source_changed',
       })
     }
-    throw new Error('章节大纲已变化，细纲候选已过期，请重新生成。')
+    throw new Error(contextChanged
+      ? '细纲生成所依据的正式上下文已变化，候选已过期，请重新生成。'
+      : '章节大纲已变化，细纲候选已过期，请重新生成。')
   }
-  let snapshot = await readAgentRunV1(input.scope, input.runId)
   const step = snapshot.projection.steps[DETAILED_OUTLINE_GENERATION_STEP_ID_V1]
   if (!step || step.status !== 'awaiting_confirmation' || step.candidateHash !== input.candidate.durable.candidateHash) {
     throw new Error('细纲 durable run 尚未满足作者采纳条件。')
@@ -517,13 +543,25 @@ export async function commitDetailedOutlineGenerationAdoptionV1(input: {
     throw error
   }
   const postState = await input.postState()
-  if (postState == null) {
+  if (postState == null || (input.postStateMatches && !input.postStateMatches(postState))) {
     await append(input.scope, snapshot, 'adoption.rejected', {
       stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
       candidateHash: input.candidate.durable.candidateHash,
-      code: 'detailed_outline_post_state_missing',
+      code: postState == null
+        ? 'detailed_outline_post_state_missing'
+        : 'detailed_outline_post_state_mismatch',
     })
-    throw new Error('细纲采纳后未找到正式数据，终态校验失败。')
+    throw new Error(postState == null
+      ? '细纲采纳后未找到正式数据，终态校验失败。'
+      : '细纲采纳后的正式数据与作者确认候选不一致。')
+  }
+  if (governed && !input.postStateMatches) {
+    await append(input.scope, snapshot, 'adoption.rejected', {
+      stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+      candidateHash: input.candidate.durable.candidateHash,
+      code: 'detailed_outline_post_state_verifier_missing',
+    })
+    throw new Error('细纲采纳缺少正式后状态匹配校验。')
   }
   const postStateHash = await hashCanonicalValue(postState)
   const adoptionHash = await hashCanonicalValue({

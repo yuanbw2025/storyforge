@@ -3,24 +3,19 @@
  *
  * 展示并编辑某章节的细纲场景列表，支持 AI 一键拆场景。
  */
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Sparkles, ChevronDown, ChevronRight, Wand2 } from 'lucide-react'
 import { useDetailedOutlineStore } from '../../stores/detailed-outline'
 import { useOutlineStore } from '../../stores/outline'
 import { useCharacterStore } from '../../stores/character'
 import { useForeshadowStore } from '../../stores/foreshadow'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildDetailSceneGeneratePrompt, normalizeParsedScenes, parseEnhancedDetailSmart } from '../../lib/ai/adapters/detail-scene-adapter'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import { nanoid } from '../../lib/utils/id'
-import { adopt } from '../../lib/registry/adopt'
-import { assembleContext } from '../../lib/registry/assemble-context'
-import { useAIConfigStore } from '../../stores/ai-config'
 import { useToast } from '../shared/Toast'
 import type { DetailedScene, Project, ScenePace } from '../../lib/types'
 import ChapterOutlineWorkshop from './ChapterOutlineWorkshop'
 import { adoptChapterOutlineWorkshopResult } from '../../lib/outline/adopt-workshop'
+import { useDetailedOutlineGenerationController } from './useDetailedOutlineGenerationController'
 
 const PACE_LABELS: Record<ScenePace, string> = {
   slow:   '🐢 慢',
@@ -47,20 +42,52 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
   const projectId = project.id!
   const { detailedOutlines, loadAll, getOrCreate, save } = useDetailedOutlineStore()
   const nodes = useOutlineStore(state => state.nodes)
-  const characters = useCharacterStore(state => state.characters)
-  const foreshadows = useForeshadowStore(state => state.foreshadows)
-  const ai = useAIStream(createAISessionKey(projectId, 'detail.scene', outlineNodeId))
-  const aiConfig = useAIConfigStore(s => s.config)
+  const { characters, loadAll: loadCharacters } = useCharacterStore()
+  const { foreshadows, loadAll: loadForeshadows } = useForeshadowStore()
   const toast = useToast()
   const [expanded, setExpanded] = useState(false)
   const [showWorkshop, setShowWorkshop] = useState(false)
 
-  useEffect(() => { loadAll(projectId) }, [projectId, loadAll])
+  useEffect(() => {
+    loadAll(projectId)
+    loadCharacters(projectId)
+    loadForeshadows(projectId)
+  }, [loadAll, loadCharacters, loadForeshadows, projectId])
   useEffect(() => { setShowWorkshop(false) }, [outlineNodeId])
 
   const detailed = detailedOutlines.find(d => d.outlineNodeId === outlineNodeId)
   const scenes = detailed?.scenes || []
   const hasScenes = scenes.length > 0
+  const chapterNode = nodes.find(node => node.id === outlineNodeId && node.type === 'chapter')
+  const validCharacterIds = useMemo(
+    () => new Set(characters.map(character => character.id).filter((id): id is number => id != null)),
+    [characters],
+  )
+  const validForeshadowIds = useMemo(
+    () => new Set(foreshadows.map(item => item.id).filter((id): id is number => id != null)),
+    [foreshadows],
+  )
+  const reloadDetailed = useCallback(() => loadAll(projectId), [loadAll, projectId])
+  const {
+    ai,
+    enhanceAI,
+    isRecovering,
+    pendingCandidate,
+    generateScenes,
+    generateEnhanced,
+    acceptCandidate,
+    dismissCandidate,
+  } = useDetailedOutlineGenerationController({
+    projectId,
+    outlineNodeId,
+    worldGroupId: chapterNode?.worldGroupId ?? null,
+    chapterTitle,
+    chapterSummary,
+    currentDetailed: detailed,
+    validCharacterIds,
+    validForeshadowIds,
+    reloadDetailed,
+  })
 
   const ensureDetailed = async () => {
     return await getOrCreate(projectId, outlineNodeId)
@@ -70,16 +97,6 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
     const dt = await ensureDetailed()
     if (!dt?.id) return
     await save(dt.id, { scenes: nextScenes })
-  }
-
-  const adoptScenes = async (nextScenes: DetailedScene[]) => {
-    await adopt({
-      projectId,
-      target: 'detailedOutlines',
-      mode: 'add',
-      data: { outlineNodeId, scenes: nextScenes },
-    })
-    await loadAll(projectId)
   }
 
   const addScene = async () => {
@@ -109,26 +126,24 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
   }
 
   const handleAIGenerate = async () => {
-    const assembled = await assembleContext({
-      projectId,
-      worldGroupId: null,
-      outlineNodeId,
-      sourceKeys: ['chapterOutline', 'canonAssertions', 'worldview', 'storyCore', 'activeNarrativeBlueprint', 'characterDrivenPlan', 'powerSystem', 'cultivationProgress', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
-    })
-    const charIdx = assembled.included.indexOf('characters')
-    const messages = buildDetailSceneGeneratePrompt(
-      chapterTitle,
-      chapterSummary || '',
-      assembled.text,
-      charIdx >= 0 ? assembled.segments[charIdx]?.content ?? '' : '',
-      '',
-    )
-    ai.start(messages, undefined, { category: 'detail.scene', projectId })
-    setExpanded(true)
+    try {
+      setExpanded(true)
+      await generateScenes()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '场景细纲生成失败，请重试。')
+    }
+  }
+
+  const handleEnhancedGenerate = async () => {
+    try {
+      setExpanded(true)
+      await generateEnhanced()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '增强细纲生成失败，请重试。')
+    }
   }
 
   const totalWords = scenes.reduce((s, sc) => s + (sc.estimatedWords || 0), 0)
-  const chapterNode = nodes.find(node => node.id === outlineNodeId && node.type === 'chapter')
 
   const handleAdoptWorkshop = async (raw: string): Promise<boolean> => {
     const result = await adoptChapterOutlineWorkshopResult({
@@ -172,7 +187,7 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
           <Plus className="w-3.5 h-3.5" />
         </span>
         <span onClick={e => { e.stopPropagation(); handleAIGenerate() }}
-          className={`p-1 text-text-muted hover:text-accent rounded ${ai.isStreaming ? 'opacity-50 pointer-events-none' : ''}`}
+          className={`p-1 text-text-muted hover:text-accent rounded ${isRecovering || ai.isStreaming || enhanceAI.isStreaming || pendingCandidate ? 'opacity-50 pointer-events-none' : ''}`}
           title="AI 一键拆场景">
           <Sparkles className="w-3.5 h-3.5" />
         </span>
@@ -217,21 +232,33 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
               onStop={ai.stop}
               onAccept={async (text) => {
                 try {
-                  const parsed = await parseEnhancedDetailSmart(text, aiConfig)
-                  const newScenes = normalizeParsedScenes(parsed?.scenes)
-                  if (newScenes.length === 0) {
-                    toast.error('未能从 AI 输出解析出场景，请重试')
-                    return
-                  }
-                  await adoptScenes([...(detailed?.scenes || []), ...newScenes])
-                  toast.success(`已采纳 ${newScenes.length} 个场景`)
+                  if (await acceptCandidate('scenes', text)) toast.success('已采纳场景细纲')
                 } catch (err) {
                   console.error('[ScenePanel] 采纳失败:', err)
-                  toast.error('采纳场景失败，请重试')
+                  toast.error(err instanceof Error ? err.message : '采纳场景失败，请重试')
                 }
-                ai.reset()
               }}
+              onDismiss={() => { void dismissCandidate('scenes') }}
               onRetry={handleAIGenerate}
+            />
+          )}
+
+          {(enhanceAI.output || enhanceAI.isStreaming || enhanceAI.error) && (
+            <AIStreamOutput
+              output={enhanceAI.output}
+              isStreaming={enhanceAI.isStreaming}
+              error={enhanceAI.error}
+              tokenUsage={enhanceAI.tokenUsage}
+              onStop={enhanceAI.stop}
+              onAccept={async text => {
+                try {
+                  if (await acceptCandidate('enhanced', text)) toast.success('已采纳增强细纲')
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : '采纳增强细纲失败，请重试')
+                }
+              }}
+              onDismiss={() => { void dismissCandidate('enhanced') }}
+              onRetry={handleEnhancedGenerate}
             />
           )}
 
