@@ -48,6 +48,7 @@ interface Props {
   onImpactPatchReasonChange: (value: string) => void
   onCreateImpactPatch: () => void
   onRunImpactRemediation: () => void
+  onReplanImpactRemediation: () => void
   onConfirmImpactPatch: () => void
   onRejectImpactPatch: () => void
   onToggleOutlinePreview: () => void
@@ -96,6 +97,7 @@ export default function ChapterEditorToolbar({
   onImpactPatchReasonChange,
   onCreateImpactPatch,
   onRunImpactRemediation,
+  onReplanImpactRemediation,
   onConfirmImpactPatch,
   onRejectImpactPatch,
   onToggleOutlinePreview,
@@ -163,6 +165,15 @@ export default function ChapterEditorToolbar({
                   {impactRemediationBusy ? '重建中...' : '执行系统重建'}
                 </button>
               )}
+              <button
+                onClick={onReplanImpactRemediation}
+                disabled={impactRemediationBusy}
+                title="重新读取当前正文和影响图，生成新的处理计划；不改正文或正式设定"
+                className="flex items-center gap-1 rounded border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[11px] text-sky-200 hover:bg-sky-400/20 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3 w-3 ${impactRemediationBusy ? 'animate-spin' : ''}`} />
+                刷新计划
+              </button>
             </div>
           )}
           {impactPatchTargets.length > 0 && !impactPatchCandidate && (

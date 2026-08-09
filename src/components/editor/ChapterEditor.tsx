@@ -130,6 +130,7 @@ import {
   type ImpactPatchCandidateV1,
 } from '../../lib/agent/run/impact-patch-durable'
 import { executeImpactRemediationV1 } from '../../lib/agent/run/impact-remediation-durable'
+import { replanImpactRemediationV1 } from '../../lib/consistency/impact-remediation-replan'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
 import {
@@ -1795,6 +1796,30 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
   }
 
+  const handleReplanImpactRemediation = async () => {
+    const previousPlan = impactRemediationPlan
+    if (!previousPlan || impactRemediationBusy) return
+    setImpactRemediationBusy(true)
+    setImpactRemediationError('')
+    try {
+      const result = await replanImpactRemediationV1({
+        scope: await resolveScopeLike(project.id!),
+        previousPlan,
+        reason: 'author-requested',
+      })
+      setImpactGraph(result.graph)
+      setImpactRemediationPlan(result.plan)
+      setImpactRemediationReceipt(null)
+      setImpactInfo(result.changed
+        ? `影响处理计划已刷新；旧计划 ${previousPlan.planHash.slice(0, 12)} 保留为历史证据，新计划 ${result.plan.planHash.slice(0, 12)} 已绑定当前正文。`
+        : `影响处理计划与当前正文一致，无需变更；计划 ${result.plan.planHash.slice(0, 12)}。`)
+    } catch (error) {
+      setImpactRemediationError(error instanceof Error ? error.message : '影响处理计划刷新失败')
+    } finally {
+      setImpactRemediationBusy(false)
+    }
+  }
+
   const handleConfirmImpactPatch = async () => {
     const candidate = impactPatchCandidate
     if (!candidate) return
@@ -2622,6 +2647,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onImpactPatchReasonChange={setImpactPatchReason}
           onCreateImpactPatch={() => { void handleCreateImpactPatch() }}
           onRunImpactRemediation={() => { void handleRunImpactRemediation() }}
+          onReplanImpactRemediation={() => { void handleReplanImpactRemediation() }}
           onConfirmImpactPatch={() => { void handleConfirmImpactPatch() }}
           onRejectImpactPatch={() => { void handleRejectImpactPatch() }}
           onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}

@@ -1077,6 +1077,12 @@ CHIRON 四类信息可映射到现有结构：
 - boundary 仍由 `buildChapterInformationBoundaryV1()` 生成并绑定当前章序、世界组、POV 角色、认知账本投影与未来规划禁区；确定性 `validateProseInformationBoundaryV1()` 继续检查逐字未来事实、私人认知和角色未来弧光。历史 V1 Run 只允许读取和迁移，不改变已存在的回执语义。
 - 验收证据为 `R-HARNESS7-prose-generation-durable` 新增“V2 合同缺边界拒绝”反例，以及既有 `R-HARNESS9-information-boundary`、`R-HARNESS19-prose-semantic-durable`；本单元不宣称上游规划层已经实现按事件释放信息。
 
+**影响处理 stale/replan（HARNESS-49，2026-08-10）**
+
+- `replanImpactRemediationV1()` 是只读控制面：校验旧计划来源和 hash 后重新调用 `buildEditImpactGraphV1()` 与 `buildImpactRemediationPlanV1()`，返回新图/新计划、`previousPlanHash` 和 `changed`。它不创建第二套事实源、不改正文或 Canon；旧计划仍可作为失败 Run 的历史证据。
+- `ChapterEditor` 的影响处理区域提供“刷新计划”按钮。正文变化、图 stale 或作者主动要求刷新后，只有新 `planHash` 才能进入 HARNESS-47 确定性执行；同一正文和图重规划保持幂等，避免重复运行或静默复用旧计划。
+- 验收证据为 `R-HARNESS49-impact-remediation-replan`、`R-HARNESS47-impact-remediation-durable` 和 `R-AUDIT6-chapter-editor-toolbar`；本单元仍不执行事实、角色状态、年表或后续正文等作者确认项。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

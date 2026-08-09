@@ -50,6 +50,7 @@ async function mount(patch: Record<string, unknown> = {}) {
     onImpactPatchReasonChange: vi.fn(),
     onCreateImpactPatch: vi.fn(),
     onRunImpactRemediation: vi.fn(),
+    onReplanImpactRemediation: vi.fn(),
     onConfirmImpactPatch: vi.fn(),
     onRejectImpactPatch: vi.fn(),
     onToggleOutlinePreview: vi.fn(),
@@ -210,6 +211,8 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     expect(host.textContent).toContain('cccccccccccc')
     await act(async () => button(host, '执行系统重建').click())
     expect(props.onRunImpactRemediation).toHaveBeenCalledOnce()
+    await act(async () => button(host, '刷新计划').click())
+    expect(props.onReplanImpactRemediation).toHaveBeenCalledOnce()
     expect(props.onCreateImpactPatch).not.toHaveBeenCalled()
   })
 
