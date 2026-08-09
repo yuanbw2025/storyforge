@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { propagateChapterEditStale, analyzeEditImpact } from '../../src/lib/consistency/impact-analysis'
+import { propagateChapterEditStale, analyzeEditImpact, buildEditImpactGraphV1 } from '../../src/lib/consistency/impact-analysis'
 
 const now = Date.now()
 async function seed() {
@@ -53,5 +53,22 @@ describe('NS-6 · 影响分析与 stale 传播', () => {
     expect(impact.factsFromChapter.length).toBe(1)
     expect(impact.downstreamChapterIds).toEqual([chaps[2]])   // 只列第3章(在第2章之后)
     expect(impact.downstreamChapterIds).not.toContain(chaps[0])
+  })
+
+  it('影响图绑定正文 hash，并列出事实、后续章节和派生节点', async () => {
+    const { pid, chaps } = await seed()
+    const factId = await addFact(pid, chaps[0], {}) as number
+    const graph = await buildEditImpactGraphV1(pid, chaps[0])
+    expect(graph.source.recordId).toBe(chaps[0])
+    expect(graph.source.sourceTextHash).toHaveLength(64)
+    expect(graph.staleFactIds).toEqual([])
+    expect(graph.downstreamChapterIds).toEqual([chaps[1], chaps[2]])
+    expect(graph.nodes.some(node => node.kind === 'fact' && node.recordId === factId)).toBe(true)
+    expect(graph.edges.some(edge => edge.relation === 'chronological-downstream')).toBe(true)
+    const same = await buildEditImpactGraphV1(pid, chaps[0])
+    expect(same.graphHash).toBe(graph.graphHash)
+    await db.chapters.update(chaps[0], { content: '正文发生变化。' })
+    const changed = await buildEditImpactGraphV1(pid, chaps[0])
+    expect(changed.graphHash).not.toBe(graph.graphHash)
   })
 })

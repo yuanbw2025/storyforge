@@ -1039,6 +1039,13 @@ CHIRON 四类信息可映射到现有结构：
 - 章节编辑器的“继续章后处理”复用已有父子 Run，按当前计划只执行可运行 step；不会为一次正文创建第二个 post-adoption Run，也不会重新调用已签发成功证据的模型步骤。刷新后仍以正文 hash、作用域和 Run Contract 做校验。
 - 四个章后 step 使用统一失败分类器写入 `category/action/fingerprint`，恢复决策不再把异常文案或默认 `retryable=true` 当成失败策略。HARNESS-42 的计划测试证明成功跳过、依赖阻断、可重试失败和运行中未知窗口四类边界；真实 UI 刷新/关闭重开仍需浏览器证据补充。
 
+**正文编辑影响图基座（HARNESS-43，2026-08-10）**
+
+- `buildEditImpactGraphV1()` 将正文修改后的确定性影响投影收口为一份只读图：变更正文 hash、来源事实及 stale 状态、事实来源记录、后续章节与大纲节点、章/卷/书摘要、检索块、故事线进度/交汇、状态卡、物品账本和年表事件均以节点和有向边表达。
+- 图只读取已登记的 `PROJECT_TABLES` 表并受当前 Work 作用域过滤；节点、边、stale 事实、后续章和来源记录排序后生成 `graphHash`，可被主 Agent 影响报告、`consistencyReport` 上下文源和编辑器影响分析共同复核。
+- 当前图仍是证据和作者提示，不会自动改正文、上游设定或 Canon；下一单元再在图 hash 和源正文 CAS 之上增加受 `FIELD_REGISTRY + AdoptionSchema + adopt()` 约束的 patch candidate。
+- `R-NS6-impact`、`R-HARNESS3-master-impact-report` 和跨 Work 边界回归覆盖图的稳定 hash、正文变化失效、节点关系和作用域隔离；这不是自动修订质量收益证明。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

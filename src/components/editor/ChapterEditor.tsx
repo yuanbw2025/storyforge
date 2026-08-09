@@ -12,7 +12,7 @@ import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buil
 import { buildReviewRevisePrompt, type ReviewResult } from '../../lib/ai/adapters/review-adapter'
 import { rebuildChapterChunks, ensureChunkEmbeddings, rebuildProjectNarrativeSummaries } from '../../lib/retrieval/retrieval'
 import { isEmbeddingReady } from '../../lib/ai/adapters/embedding-adapter'
-import { propagateChapterEditStale, analyzeEditImpact } from '../../lib/consistency/impact-analysis'
+import { propagateChapterEditStale, buildEditImpactGraphV1 } from '../../lib/consistency/impact-analysis'
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
 import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
@@ -1628,11 +1628,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       // 先把当前正文真正落盘，再据落盘正文判断证据是否失效
       await persistCurrentEditorContent()
       const { demotedFacts } = await propagateChapterEditStale(project.id, currentChapter.id)
-      const { factsFromChapter, downstreamChapterIds } = await analyzeEditImpact(project.id, currentChapter.id)
+      const graph = await buildEditImpactGraphV1(project.id, currentChapter.id)
       const parts = [
-        `源自本章事实 ${factsFromChapter.length} 条`,
+        `影响图已生成：${graph.nodes.length} 个节点、${graph.edges.length} 条边`,
+        `源自本章事实 ${graph.nodes.filter(node => node.kind === 'fact').length} 条`,
         demotedFacts > 0 ? `其中 ${demotedFacts} 条证据已失效→标记 stale 待复核` : '证据均仍成立',
-        `建议复核后续 ${downstreamChapterIds.length} 章`,
+        `建议复核后续 ${graph.downstreamChapterIds.length} 章、${graph.nodes.filter(node => node.kind === 'summary').length} 个摘要节点`,
+        `证据指纹 ${graph.graphHash.slice(0, 12)}`,
       ]
       setImpactInfo(parts.join('；'))
     } catch (err) {

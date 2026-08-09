@@ -1,5 +1,5 @@
 import { appendAgentEvent } from '../conversations'
-import { analyzeEditImpact } from '../../consistency/impact-analysis'
+import { buildEditImpactGraphV1, type EditImpactGraphV1 } from '../../consistency/impact-analysis'
 import { readOwnedRows } from '../../world-engine/scope'
 import type { AgentEvent, WorkspaceScope } from '../../types'
 import type { MasterAgentDurableCandidateV1 } from './master-durable'
@@ -22,6 +22,8 @@ export interface MasterAgentImpactReportV1 {
   staleSummaryNodeIds: number[]
   retrievalChunkCount: number
   requiresAuthorReview: boolean
+  /** HARNESS-43: deterministic, read-only impact evidence for later patch work. */
+  impactGraph?: EditImpactGraphV1
 }
 
 const TARGET_TABLE_BY_AGENT: Record<string, string> = {
@@ -47,6 +49,7 @@ function contentForReport(report: MasterAgentImpactReportV1): string {
       `采纳后影响分析：${subject} 已写入。`,
       `本章来源事实 ${report.sourceFactIds.length} 条，其中待复核 ${report.staleFactIds.length} 条。`,
       `后续可能受影响章节 ${report.downstreamChapterIds.length} 章。`,
+      report.impactGraph ? `影响图 ${report.impactGraph.nodes.length} 个节点、${report.impactGraph.edges.length} 条边（${report.impactGraph.graphHash.slice(0, 12)}）。` : '',
       report.requiresAuthorReview ? '请先复核事实和后续章节，再继续生成。' : '当前没有发现需要额外复核的下游对象。',
     ].join('\n')
   }
@@ -105,26 +108,17 @@ async function buildReport(
   const chapter = downstream.find(row => row.outlineNodeId === payload.proseOutlineNodeId)
   if (!chapter?.id) return report
   report.changed.id = chapter.id
-  const impact = await analyzeEditImpact(scope, chapter.id)
-  report.sourceFactIds = impact.factsFromChapter
-    .map(fact => fact.id)
-    .filter((id): id is number => typeof id === 'number')
-  report.staleFactIds = impact.factsFromChapter
-    .filter(fact => ['stale', 'source-missing', 'invalid-range'].includes(fact.status))
-    .map(fact => fact.id)
-    .filter((id): id is number => typeof id === 'number')
-  report.downstreamChapterIds = impact.downstreamChapterIds
-  const summaries = await readOwnedRows<any>(scope, 'narrativeSummaryNodes', { owner: 'work' })
-  report.staleSummaryNodeIds = summaries
-    .filter(summary => summary.status === 'stale' && (
-      summary.sourceChapterId === chapter.id
-      || summary.level === 'book'
-      || summary.level === 'volume'
-    ))
-    .map(summary => summary.id)
-    .filter((id): id is number => typeof id === 'number')
-  report.retrievalChunkCount = (await readOwnedRows<any>(scope, 'retrievalChunks', { owner: 'work' }))
-    .filter(chunk => chunk.sourceChapterId === chapter.id).length
+  const impactGraph = await buildEditImpactGraphV1(scope, chapter.id)
+  report.impactGraph = impactGraph
+  report.sourceFactIds = impactGraph.nodes
+    .filter(node => node.kind === 'fact' && node.recordId != null)
+    .map(node => node.recordId!)
+  report.staleFactIds = impactGraph.staleFactIds
+  report.downstreamChapterIds = impactGraph.downstreamChapterIds
+  report.staleSummaryNodeIds = impactGraph.nodes
+    .filter(node => node.kind === 'summary' && node.status === 'stale' && node.recordId != null)
+    .map(node => node.recordId!)
+  report.retrievalChunkCount = impactGraph.nodes.filter(node => node.kind === 'retrieval-chunk').length
   report.requiresAuthorReview = report.sourceFactIds.length > 0 || report.downstreamChapterIds.length > 0
   return report
 }

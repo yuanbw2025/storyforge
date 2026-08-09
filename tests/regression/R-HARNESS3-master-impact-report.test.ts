@@ -216,8 +216,12 @@ describe.sequential('R-HARNESS3-master-impact-report · 采纳后的上下游反
     expect(result.report.sourceFactIds).toEqual([factId])
     expect(result.report.downstreamChapterIds).toEqual([fixture.downstreamChapterId])
     expect(result.report.requiresAuthorReview).toBe(true)
+    expect(result.report.impactGraph?.source.recordId).toBe(fixture.firstChapterId)
+    expect(result.report.impactGraph?.nodes.some(node => node.kind === 'fact' && node.recordId === factId)).toBe(true)
+    expect(result.report.impactGraph?.graphHash).toHaveLength(64)
     const report = parseAgentEventPayload(result.event, null as any) as typeof result.report
     expect(report.kind).toBe('master-agent-impact')
+    expect(report.impactGraph?.graphHash).toBe(result.report.impactGraph?.graphHash)
     expect(result.event.content).toContain('后续可能受影响章节 1 章')
   })
 })

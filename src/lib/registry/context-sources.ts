@@ -35,7 +35,7 @@ import { formatHeldItemsContext, readProjectHeldItems } from '../consistency/hel
 import { formatCharacterKnowledgeContext, readProjectCharacterKnowledge } from '../knowledge-ledger/knowledge-ledger'
 import { formatCanonAssertionsContext, readCanonAssertions } from '../fact-ledger/setting-assertions'
 import { readStorylineProgressContext } from '../storyline/storyline-progress'
-import { analyzeEditImpact } from '../consistency/impact-analysis'
+import { buildEditImpactGraphV1 } from '../consistency/impact-analysis'
 import { readCultivationProgressContext } from '../cultivation/progress'
 import type { Chapter, Character, NarrativeModule, NarrativeNode, OutlineNode, PowerSystem, Worldview } from '../types'
 import {
@@ -350,11 +350,12 @@ async function readConsistencyReport(
   scope?: WorkspaceScope,
 ): Promise<string> {
   if (chapterId == null) return ''
-  const impact = await analyzeEditImpact(scope ?? projectId, chapterId)
-  const staleFacts = impact.factsFromChapter.filter(fact => ['stale', 'source-missing', 'invalid-range'].includes(fact.status))
+  const impact = await buildEditImpactGraphV1(scope ?? projectId, chapterId)
+  const staleFacts = impact.nodes.filter(node => node.kind === 'fact' && node.status && ['stale', 'source-missing', 'invalid-range'].includes(node.status))
   const lines = [
-    `【一致性影响报告】当前章节来源事实 ${impact.factsFromChapter.length} 条；后续可能受影响章节 ${impact.downstreamChapterIds.length} 个。`,
-    staleFacts.length ? `【待复核事实】${staleFacts.map(fact => `${fact.subjectName}/${fact.predicate}=${fact.value}`).join('；')}` : '【待复核事实】暂无已标记失效事实。',
+    `【一致性影响图】${impact.nodes.length} 个节点、${impact.edges.length} 条边；当前章节来源事实 ${impact.nodes.filter(node => node.kind === 'fact').length} 条；后续可能受影响章节 ${impact.downstreamChapterIds.length} 个。`,
+    `【影响图指纹】${impact.graphHash}`,
+    staleFacts.length ? `【待复核事实】${staleFacts.map(fact => fact.label ?? `事实#${fact.recordId ?? '?'}`).join('；')}` : '【待复核事实】暂无已标记失效事实。',
   ]
   return lines.join('\n')
 }

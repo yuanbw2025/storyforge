@@ -113,7 +113,7 @@
 | 检索/层级摘要重建 | `retrieval/retrieval.ts`、`ChapterEditor.tsx` | memory 成功后以确定性代码重建章节 chunks 与章/卷/书摘要；embedding 为可选后台派生 | 关键词检索是可用基线，embedding 失败不阻塞；现在已纳入 post-adoption retrieval step，失败后的用户续跑入口仍待 HARNESS-42 | A（新章后主路径） |
 | 一致性 Agent | `consistency-agent.ts`、`chapter-post-adoption-durable.ts` | background Fast Guard 零 token；fast/deep 一次模型调用；新章后守卫候选写入同一 post-adoption Run 的 `agentEvents` 并绑定 durable 证据 | 候选、正文 hash、Context Manifest、step attempt 和作用域可验证；V2 terminal verifier 已接入。语义 Fast/Deep 仍作者显式触发，不自动改 Canon | A（确定性主路径守卫），B（语义深审） |
 | 章节组织 Agent | `chapter-organization.ts` | 可将状态/认知/故事线/角色关系保存为候选事件，确认后 `adopt()` | 独立质量 workflow，不是正文生成必经阶段 | B |
-| 反向反馈 | `impact-analysis.ts`、`R-downstream-reverse` | 正文编辑后 stale 事实、列出后续章节；`assembleContext` 可显式读下游角色/故事核心/故事线 | 只提示作者，不自动改正文或上游；无统一影响图、候选 patch、依赖重跑和回放证据 | D |
+| 反向反馈 | `impact-analysis.ts`、`master-impact.ts`、`R-NS6-impact` | HARNESS-43 以 `buildEditImpactGraphV1()` 生成绑定正文 hash 的节点/边：事实、来源记录、后续章节/大纲、摘要、检索块、故事线交汇和章后派生状态；主 Agent 报告及 `consistencyReport` 共用该图 | 仍只生成只读证据和作者提示；没有 patch candidate、作者确认后的上游/正文改写、依赖重跑和完整回放 | D（图基座已接入） |
 | Run ledger / receipt / replay | `agentRuns`/`agentRunEvents`、`chapter-post-adoption-durable.ts`、`chapter-post-adoption-resume.ts` | post-adoption 四步均有 `step.scheduled/started/context.assembled/candidate.persisted/step.succeeded|failed` 证据；一致性候选另绑定 `agentEvents.durableRunId`；失败事件有分类、动作和 fingerprint | HARNESS-42 已接入纯确定性恢复计划和编辑器继续入口：成功步骤跳过、可重试失败按 attempt 重跑、不可重试/过期/运行中未知窗口阻断；真实浏览器关闭重开和完整回放视图仍待补证 | A（四步与恢复计划），D（浏览器回放） |
 | 离线评测 | `NS-0`、NS/AGENT/PIPELINE 回归 | 有 development/held-out fixture、预算、事实/约束/泄漏/证据指标 | 多数是模块级或 builder/eval 级；缺少真实分步骤从世界观到正文的端到端 held-out | B |
 

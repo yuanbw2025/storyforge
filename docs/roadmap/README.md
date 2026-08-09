@@ -255,6 +255,7 @@
   lineage 与物化父键，历史无 lineage 的 Run 仅保留兼容读取并标为旧链。
 - HARNESS-41 已把确定性一致性 Fast Guard 接入正文采纳后的 post-adoption durable Run。新 Run 由四步组成：六域整理、章节记忆、检索/摘要重建、一致性守卫；守卫只读、不调用模型、不写 Canon，候选以正文 hash、Context Manifest、step attempt 和 candidate hash 绑定到同一 Run。V2 terminal verifier 会回读这些证据；旧 H20 三步 Run 继续按兼容规则恢复。语义 Fast/Deep 深审仍是作者显式动作，HARNESS-41 不宣称真实模型质量收益。
 - HARNESS-42 已增加章后失败步骤恢复控制面：恢复计划从 durable 事件历史确定性计算，已成功步骤不重跑，可重试失败受 `maxAttemptsPerStep` 限制，不可重试/过期/运行中未知窗口阻断；编辑器的“继续章后处理”复用原父子 Run。该单元已有计划级回归，真实浏览器关闭重开证据仍待补。
+- HARNESS-43 已把正文编辑影响分析升级为确定性影响图：正文 hash、来源事实/stale、来源记录、后续章节/大纲、摘要、检索块、故事线进度/交汇和章后派生状态统一成有向节点/边，并由主 Agent 影响报告、`consistencyReport` 和编辑器共用。当前只读、只提示，下一单元才实现受治理 patch candidate。
 - HARNESS-22 已为主 Agent 同一轮多任务增加 frozen dependency join：下游候选绑定生成时实际读取的
   上游 candidate/output hash 和 Run generation；上游作者编辑后，旧下游不会因新版本已采纳而被放行。
   下游确认前还会回读上游 step 的正式 adoptionHash/succeeded 状态，避免把对话确认误当成写入完成。
