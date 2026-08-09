@@ -426,7 +426,8 @@
 - HARNESS-20 已将正文确认写回后的自动状态抽取旁路下线：新主路径由同一个 post-adoption durable Run 顺序执行六域综合整理、章节记忆和确定性检索重建。综合整理继续复用既有一次调用解析器与六域作者确认界面，`prose.organize` / `prose.memory` 两个非默认 Skill 冻结各自来源、写入边界、提示词和回归证据；章节记忆写回后才重建层级摘要，避免新摘要仍停留在 pending。只有三步、六域采纳证据和当前正文派生状态全部匹配才有 terminal receipt；历史 Chapter Transition V1 只保留兼容恢复。
 - HARNESS-41 将上述 Run 扩展为四步：在检索/摘要重建成功后执行 `prose.consistency` 确定性 Fast Guard。它只读正文、角色和持有物，不调用模型、不写业务 Canon；候选事件通过 `durableRunId` 与 post-adoption Run 关联，并固定正文 hash、Context Manifest hash、step attempt 和 candidate hash。V2 terminal verifier 只有在候选真实存在且全部 hash 匹配时签发回执；候选事件落库而 ledger 尚未推进的崩溃窗口可恢复且不重复调用模型。旧三步 Run 仍按 V1 verifier 兼容。
 - HARNESS-42 已将章后失败恢复从组件顺序控制提升为确定性恢复计划：`chapter-post-adoption-resume.ts` 按事件历史计算 step action、依赖、attempt 和失败分类；编辑器继续动作复用既有 post-adoption Run，跳过已成功步骤，只重跑可重试失败。过期、不可重试和运行中未知窗口不会被自动重跑；四个 step 的失败证据统一记录 category/action/fingerprint。当前已有计划级回归，真实浏览器关闭重开仍需补充。
-- HARNESS-43 已将正文编辑后的影响分析统一为 `buildEditImpactGraphV1()`：图绑定正文 hash，覆盖事实及其来源记录、后续章节/大纲、章/卷/书摘要、检索块、故事线进度/交汇和状态/物品/年表派生节点；排序后的 graph hash 进入主 Agent 影响报告与 `consistencyReport` 上下文源。图仍是只读证据，patch candidate 和作者确认写回尚未开启。
+- HARNESS-43 已将正文编辑后的影响分析统一为 `buildEditImpactGraphV1()`：图绑定正文 hash，覆盖事实及其来源记录、后续章节/大纲、章/卷/书摘要、检索块、故事线进度/交汇和状态/物品/年表派生节点；排序后的 graph hash 进入主 Agent 影响报告与 `consistencyReport` 上下文源。图仍是只读证据。
+- HARNESS-44 已在该图基座上增加第一条受限反向 patch：`impact-patch-durable.ts` 创建独立 durable Run 和作者确认候选，绑定源正文 hash、graph hash、Context Manifest、Run/step/attempt 与 candidate hash；仅允许 `outlineNodes.summary`，不允许 `chapters.content`、事实权威状态或 `locked` 数据。确认后经过 `adopt()` 写回并签发引用真实 `adoption.committed` 事件的 terminal receipt；stale、篡改、越界和锁定反例已有 `R-HARNESS44-impact-patch-durable`。
 - HARNESS-21 已将正文 Run → post-adoption Run 的父子完成关系持久化：RunContract 的 `lineage.parent`
   与 `agentRuns.parentRunId/parentReceiptHash/parentArtifactHash` 双向核对，父终态回执和正文 hash
   缺一不可；同一父 Run/关系由唯一索引去重。子 Run 的终态证明通过契约 hash 间接绑定父回执，父回执

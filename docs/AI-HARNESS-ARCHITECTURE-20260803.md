@@ -1043,8 +1043,15 @@ CHIRON 四类信息可映射到现有结构：
 
 - `buildEditImpactGraphV1()` 将正文修改后的确定性影响投影收口为一份只读图：变更正文 hash、来源事实及 stale 状态、事实来源记录、后续章节与大纲节点、章/卷/书摘要、检索块、故事线进度/交汇、状态卡、物品账本和年表事件均以节点和有向边表达。
 - 图只读取已登记的 `PROJECT_TABLES` 表并受当前 Work 作用域过滤；节点、边、stale 事实、后续章和来源记录排序后生成 `graphHash`，可被主 Agent 影响报告、`consistencyReport` 上下文源和编辑器影响分析共同复核。
-- 当前图仍是证据和作者提示，不会自动改正文、上游设定或 Canon；下一单元再在图 hash 和源正文 CAS 之上增加受 `FIELD_REGISTRY + AdoptionSchema + adopt()` 约束的 patch candidate。
+- 当前图仍是证据和作者提示，不会自动改正文、上游设定或 Canon；HARNESS-44 在图 hash 和源正文 CAS 之上增加的 patch candidate 仍受 `FIELD_REGISTRY + AdoptionSchema + adopt()` 约束，且只开放 `outlineNodes.summary`。
 - `R-NS6-impact`、`R-HARNESS3-master-impact-report` 和跨 Work 边界回归覆盖图的稳定 hash、正文变化失效、节点关系和作用域隔离；这不是自动修订质量收益证明。
+
+**第一条受限反向 patch 路径（HARNESS-44，2026-08-10）**
+
+- `createImpactPatchCandidateV1()` 将正文影响图转为独立 `plan-execute` durable Run 中的作者确认候选；候选固定源正文 hash、影响图 hash、`chapterContent` Context Manifest hash、Run/step/attempt 和 candidate hash，尚未写入业务 Canon。
+- 第一版写回白名单只有 `outlineNodes.summary`，正文 `chapters.content`、事实权威状态和其它字段均拒绝；目标带 `locked: true` 时拒绝写回。作者确认后才调用 `adopt(outlineNodes, recordId, merge-diffs)`，随后回读实际状态并签发 terminal receipt。
+- 回执的 adoption 证据引用真实 `adoption.committed` 事件 ID；源正文/影响图变化、候选 hash 篡改、越界目标或作者锁都会阻断。该单元是安全反向反馈基座，不是自动级联修订、依赖重跑或真实模型质量收益证明。
+- `R-HARNESS44-impact-patch-durable` 覆盖候选不写 Canon、作者确认写回、正文 stale、候选篡改和锁定目标反例。
 
 **范围**
 
