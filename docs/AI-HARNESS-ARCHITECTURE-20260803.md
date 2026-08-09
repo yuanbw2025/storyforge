@@ -1083,6 +1083,12 @@ CHIRON 四类信息可映射到现有结构：
 - `ChapterEditor` 的影响处理区域提供“刷新计划”按钮。正文变化、图 stale 或作者主动要求刷新后，只有新 `planHash` 才能进入 HARNESS-47 确定性执行；同一正文和图重规划保持幂等，避免重复运行或静默复用旧计划。
 - 验收证据为 `R-HARNESS49-impact-remediation-replan`、`R-HARNESS47-impact-remediation-durable` 和 `R-AUDIT6-chapter-editor-toolbar`；本单元仍不执行事实、角色状态、年表或后续正文等作者确认项。
 
+**作者影响复核证据（HARNESS-50，2026-08-10）**
+
+- `executeImpactAuthorReviewV1()` 只接受 HARNESS-46 计划中的 `author-confirmed` 项。作者可以记录 `acknowledged` 或 `needs-manual-action` 及理由；独立零模型 `plan-execute` Run 将决定绑定到当前 `sourceTextHash + graphHash + planHash + itemId`、`chapterContent` Context Manifest、候选 hash 和终态 receipt。
+- 该 Run 的写目标为空，不调用 `adopt()`，也不会产生 `adoption.committed`。两种决定都只表示作者已完成复核，不代表正文、事实、角色状态、物品、年表、故事线或大纲已经修正；相同计划/项目/决定重复执行回放已持久化的原始理由，不伪造新证据。
+- 正文或影响图变化、非作者确认项、越界章节、不完整复核事件和空理由均 fail-closed。验收证据为 `R-HARNESS50-impact-review-durable` 与 `R-HARNESS0-event-projection`；人工修正入口、受限 patch 扩展和依赖重跑仍需后续独立单元交付。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

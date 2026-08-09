@@ -330,11 +330,50 @@ function parsePayload<T extends AgentRunEventTypeV1>(
       break
     }
     case 'confirmation.recorded': {
-      const record = payloadRecord(value, type, ['stepId', 'candidateHash', 'decision'])
+      const record = payloadRecord(
+        value,
+        type,
+        ['stepId', 'candidateHash', 'decision', 'reviewItemId', 'reviewDecision', 'note'],
+        ['stepId', 'candidateHash', 'decision'],
+      )
+      const decision = readEnum(
+        record.decision,
+        ['adopt', 'reject'],
+        'event.payload(confirmation.recorded).decision',
+      )
+      const reviewFields = ['reviewItemId', 'reviewDecision', 'note'] as const
+      const presentReviewFields = reviewFields.filter(key => record[key] !== undefined)
+      if (presentReviewFields.length > 0 && presentReviewFields.length !== reviewFields.length) {
+        failSchema(
+          'missing_required_key',
+          'event.payload(confirmation.recorded)',
+          '作者复核元数据必须同时包含 reviewItemId、reviewDecision 和 note',
+        )
+      }
+      if (presentReviewFields.length > 0 && decision !== 'adopt') {
+        failSchema(
+          'invalid_enum',
+          'event.payload(confirmation.recorded).decision',
+          '作者复核元数据只能附加到 adopt 确认事件',
+        )
+      }
+      const reviewNote = record.note === undefined
+        ? undefined
+        : readString(record.note, 'event.payload(confirmation.recorded).note', { max: 2_000 })
+      if (reviewNote !== undefined && reviewNote.length < 2) {
+        failSchema(
+          'invalid_value',
+          'event.payload(confirmation.recorded).note',
+          '长度不得少于 2',
+        )
+      }
       payload = {
         stepId: readString(record.stepId, 'event.payload(confirmation.recorded).stepId', { max: 160 }),
         candidateHash: readHash(record.candidateHash, 'event.payload(confirmation.recorded).candidateHash'),
-        decision: readEnum(record.decision, ['adopt', 'reject'], 'event.payload(confirmation.recorded).decision'),
+        decision,
+        ...(record.reviewItemId === undefined ? {} : { reviewItemId: readString(record.reviewItemId, 'event.payload(confirmation.recorded).reviewItemId', { max: 200 }) }),
+        ...(record.reviewDecision === undefined ? {} : { reviewDecision: readEnum(record.reviewDecision, ['acknowledged', 'needs-manual-action'], 'event.payload(confirmation.recorded).reviewDecision') }),
+        ...(reviewNote === undefined ? {} : { note: reviewNote }),
       }
       break
     }

@@ -130,6 +130,7 @@ import {
   type ImpactPatchCandidateV1,
 } from '../../lib/agent/run/impact-patch-durable'
 import { executeImpactRemediationV1 } from '../../lib/agent/run/impact-remediation-durable'
+import { executeImpactAuthorReviewV1, type ImpactReviewDecisionV1 } from '../../lib/agent/run/impact-review-durable'
 import { replanImpactRemediationV1 } from '../../lib/consistency/impact-remediation-replan'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
@@ -232,6 +233,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [impactRemediationBusy, setImpactRemediationBusy] = useState(false)
   const [impactRemediationReceipt, setImpactRemediationReceipt] = useState<string | null>(null)
   const [impactRemediationError, setImpactRemediationError] = useState('')
+  const [impactReviewItemId, setImpactReviewItemId] = useState<string | null>(null)
+  const [impactReviewDecision, setImpactReviewDecision] = useState<ImpactReviewDecisionV1>('acknowledged')
+  const [impactReviewNote, setImpactReviewNote] = useState('')
+  const [impactReviewBusy, setImpactReviewBusy] = useState(false)
+  const [impactReviewReceipt, setImpactReviewReceipt] = useState<string | null>(null)
+  const [impactReviewError, setImpactReviewError] = useState('')
   const [impactPatchTargetId, setImpactPatchTargetId] = useState<number | null>(null)
   const [impactPatchSummary, setImpactPatchSummary] = useState('')
   const [impactPatchReason, setImpactPatchReason] = useState('')
@@ -314,6 +321,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactRemediationPlan(null)
     setImpactRemediationReceipt(null)
     setImpactRemediationError('')
+    setImpactReviewItemId(null)
+    setImpactReviewDecision('acknowledged')
+    setImpactReviewNote('')
+    setImpactReviewReceipt(null)
+    setImpactReviewError('')
     setImpactInfo(null)
     setImpactPatchTargetId(null)
     setImpactPatchSummary('')
@@ -1704,6 +1716,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactRemediationPlan(remediationPlan)
       setImpactRemediationReceipt(null)
       setImpactRemediationError('')
+      const firstAuthorItem = remediationPlan.items.find(item => item.mode === 'author-confirmed')
+      setImpactReviewItemId(firstAuthorItem?.id ?? null)
+      setImpactReviewDecision('acknowledged')
+      setImpactReviewNote('')
+      setImpactReviewReceipt(null)
+      setImpactReviewError('')
       setImpactPatchCandidate(null)
       setImpactPatchError('')
       setImpactPatchSummary('')
@@ -1741,6 +1759,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactRemediationPlan(null)
     setImpactRemediationReceipt(null)
     setImpactRemediationError('')
+    setImpactReviewItemId(null)
+    setImpactReviewDecision('acknowledged')
+    setImpactReviewNote('')
+    setImpactReviewReceipt(null)
+    setImpactReviewError('')
     setImpactPatchTargetId(null)
     setImpactPatchSummary('')
     setImpactPatchReason('')
@@ -1810,6 +1833,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactGraph(result.graph)
       setImpactRemediationPlan(result.plan)
       setImpactRemediationReceipt(null)
+      const firstAuthorItem = result.plan.items.find(item => item.mode === 'author-confirmed')
+      setImpactReviewItemId(firstAuthorItem?.id ?? null)
+      setImpactReviewDecision('acknowledged')
+      setImpactReviewNote('')
+      setImpactReviewReceipt(null)
+      setImpactReviewError('')
       setImpactInfo(result.changed
         ? `影响处理计划已刷新；旧计划 ${previousPlan.planHash.slice(0, 12)} 保留为历史证据，新计划 ${result.plan.planHash.slice(0, 12)} 已绑定当前正文。`
         : `影响处理计划与当前正文一致，无需变更；计划 ${result.plan.planHash.slice(0, 12)}。`)
@@ -1817,6 +1846,32 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactRemediationError(error instanceof Error ? error.message : '影响处理计划刷新失败')
     } finally {
       setImpactRemediationBusy(false)
+    }
+  }
+
+  const handleExecuteImpactReview = async () => {
+    const plan = impactRemediationPlan
+    const itemId = impactReviewItemId
+    if (!plan || !itemId || !currentChapter?.id || !project.id || impactReviewNote.trim().length < 2) return
+    setImpactReviewBusy(true)
+    setImpactReviewError('')
+    try {
+      const result = await executeImpactAuthorReviewV1({
+        scope: await resolveScopeLike(project.id),
+        worldGroupId: chapterWorldGroupId ?? null,
+        plan,
+        itemId,
+        decision: impactReviewDecision,
+        note: impactReviewNote.trim(),
+      })
+      setImpactReviewReceipt(result.receiptHash)
+      setImpactInfo(result.reused
+        ? `作者复核记录已复用；正式数据未改变。回执 ${result.receiptHash.slice(0, 12)}。`
+        : `作者复核已记录；正式数据未改变。回执 ${result.receiptHash.slice(0, 12)}。`)
+    } catch (error) {
+      setImpactReviewError(error instanceof Error ? error.message : '作者复核记录失败')
+    } finally {
+      setImpactReviewBusy(false)
     }
   }
 
@@ -2619,6 +2674,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           impactRemediationBusy={impactRemediationBusy}
           impactRemediationReceipt={impactRemediationReceipt}
           impactRemediationError={impactRemediationError || null}
+          impactReviewItemId={impactReviewItemId}
+          impactReviewDecision={impactReviewDecision}
+          impactReviewNote={impactReviewNote}
+          impactReviewBusy={impactReviewBusy}
+          impactReviewReceipt={impactReviewReceipt}
+          impactReviewError={impactReviewError || null}
           impactPatchTargets={impactPatchTargets}
           impactPatchTargetId={impactPatchTargetId}
           impactPatchSummary={impactPatchSummary}
@@ -2648,6 +2709,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onCreateImpactPatch={() => { void handleCreateImpactPatch() }}
           onRunImpactRemediation={() => { void handleRunImpactRemediation() }}
           onReplanImpactRemediation={() => { void handleReplanImpactRemediation() }}
+          onImpactReviewItemChange={setImpactReviewItemId}
+          onImpactReviewDecisionChange={setImpactReviewDecision}
+          onImpactReviewNoteChange={setImpactReviewNote}
+          onExecuteImpactReview={() => { void handleExecuteImpactReview() }}
           onConfirmImpactPatch={() => { void handleConfirmImpactPatch() }}
           onRejectImpactPatch={() => { void handleRejectImpactPatch() }}
           onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}

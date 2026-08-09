@@ -19,6 +19,12 @@ async function mount(patch: Record<string, unknown> = {}) {
     impactRemediationBusy: false,
     impactRemediationReceipt: null,
     impactRemediationError: null,
+    impactReviewItemId: null,
+    impactReviewDecision: 'acknowledged',
+    impactReviewNote: '',
+    impactReviewBusy: false,
+    impactReviewReceipt: null,
+    impactReviewError: null,
     impactPatchTargets: [],
     impactPatchTargetId: null,
     impactPatchSummary: '',
@@ -51,6 +57,10 @@ async function mount(patch: Record<string, unknown> = {}) {
     onCreateImpactPatch: vi.fn(),
     onRunImpactRemediation: vi.fn(),
     onReplanImpactRemediation: vi.fn(),
+    onImpactReviewItemChange: vi.fn(),
+    onImpactReviewDecisionChange: vi.fn(),
+    onImpactReviewNoteChange: vi.fn(),
+    onExecuteImpactReview: vi.fn(),
     onConfirmImpactPatch: vi.fn(),
     onRejectImpactPatch: vi.fn(),
     onToggleOutlinePreview: vi.fn(),
@@ -214,6 +224,51 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     await act(async () => button(host, '刷新计划').click())
     expect(props.onReplanImpactRemediation).toHaveBeenCalledOnce()
     expect(props.onCreateImpactPatch).not.toHaveBeenCalled()
+  })
+
+  it('作者复核项只转发决定和理由，不冒充正式修正', async () => {
+    const authorItem = {
+      id: 'impact-remediation:fact:12',
+      nodeId: 'fact:12',
+      kind: 'fact',
+      table: 'temporalFacts',
+      recordId: 12,
+      action: 'review-fact',
+      mode: 'author-confirmed',
+      reason: '事实来自被修改正文，需作者复核。',
+      dependencyNodeIds: ['source:chapters:3'],
+    }
+    const { host, props } = await mount({
+      impactInfo: '事实需要作者复核',
+      impactRemediationPlan: {
+        version: 1,
+        source: { table: 'chapters', recordId: 3, sourceTextHash: 'a'.repeat(64) },
+        graphHash: 'b'.repeat(64),
+        items: [authorItem],
+        counts: { total: 1, deterministic: 0, authorConfirmed: 1 },
+        planHash: 'c'.repeat(64),
+      },
+      impactReviewItemId: authorItem.id,
+      impactReviewNote: '证据仍然成立。',
+      impactReviewReceipt: 'd'.repeat(64),
+    })
+    expect(host.textContent).toContain('只记录决定和理由，不修改正文、事实、状态或大纲')
+    expect(host.textContent).toContain('复核事实')
+    expect(host.textContent).toContain('作者复核回执 dddddddddddd')
+
+    await act(async () => button(host, '需人工处理').click())
+    expect(props.onImpactReviewDecisionChange).toHaveBeenCalledWith('needs-manual-action')
+
+    const input = host.querySelector('input[aria-label="作者复核理由"]') as HTMLInputElement
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      setter.call(input, '需要进入事实账本处理。')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(props.onImpactReviewNoteChange).toHaveBeenCalledWith('需要进入事实账本处理。')
+    await act(async () => button(host, '记录复核').click())
+    expect(props.onExecuteImpactReview).toHaveBeenCalledOnce()
+    expect(props.onRunImpactRemediation).not.toHaveBeenCalled()
   })
 
   it('明确选择章节叙事视角并允许恢复为不指定', async () => {

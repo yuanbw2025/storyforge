@@ -91,6 +91,54 @@ describe('R-HARNESS0-event-projection · 严格事件回放', () => {
       .toThrow('仅支持版本 1')
   })
 
+  it('兼容旧确认事件，并严格解析完整的作者复核元数据', () => {
+    const legacy = parseAgentRunEventV1(event(1, 'confirmation.recorded', {
+      stepId: 'outline.generate',
+      candidateHash: OUTPUT_HASH,
+      decision: 'adopt',
+    }))
+    expect(legacy.payload).toEqual({
+      stepId: 'outline.generate',
+      candidateHash: OUTPUT_HASH,
+      decision: 'adopt',
+    })
+
+    const review = parseAgentRunEventV1(event(1, 'confirmation.recorded', {
+      stepId: 'impact-remediation:author-review',
+      candidateHash: OUTPUT_HASH,
+      decision: 'adopt',
+      reviewItemId: 'fact-ledger:12',
+      reviewDecision: 'needs-manual-action',
+      note: '需要进入事实账本人工核对。',
+    }))
+    expect(review.payload).toMatchObject({
+      reviewItemId: 'fact-ledger:12',
+      reviewDecision: 'needs-manual-action',
+      note: '需要进入事实账本人工核对。',
+    })
+
+    expect(() => parseAgentRunEventV1(event(1, 'confirmation.recorded', {
+      stepId: 'impact-remediation:author-review',
+      candidateHash: OUTPUT_HASH,
+      decision: 'adopt',
+      reviewItemId: 'fact-ledger:12',
+    }))).toThrow('作者复核元数据必须同时包含')
+    expect(() => parseAgentRunEventV1(event(1, 'confirmation.recorded', {
+      stepId: 'impact-remediation:author-review',
+      candidateHash: OUTPUT_HASH,
+      decision: 'reject',
+      reviewItemId: 'fact-ledger:12',
+      reviewDecision: 'acknowledged',
+      note: '已人工核对。',
+    }))).toThrow('只能附加到 adopt 确认事件')
+    expect(() => parseAgentRunEventV1(event(1, 'confirmation.recorded', {
+      stepId: 'outline.generate',
+      candidateHash: OUTPUT_HASH,
+      decision: 'adopt',
+      hiddenNote: '不得进入账本',
+    }))).toThrow('hiddenNote: 未知字段')
+  })
+
   it('序列缺口、scope 污染和非法状态转换均 fail-closed', () => {
     const gap = replayAgentRunEventsV1([
       event(1, 'run.created', { objectiveHash: OBJECTIVE_HASH }),

@@ -1,12 +1,22 @@
 import { BookOpenCheck, Check, ClipboardList, Eye, GitBranch, Loader2, RefreshCw, ShieldCheck, StickyNote, X } from 'lucide-react'
 import { CInput } from '../shared/CompositionInput'
 import type { ImpactPatchCandidateV1 } from '../../lib/agent/run/impact-patch-durable'
+import type { ImpactReviewDecisionV1 } from '../../lib/agent/run/impact-review-durable'
 import type { ImpactRemediationPlanV1 } from '../../lib/consistency/impact-remediation-plan'
 
 interface ImpactPatchTarget {
   id: number
   title: string
   summary: string
+}
+
+const IMPACT_REVIEW_ACTION_LABELS: Record<string, string> = {
+  'review-source': '复核当前正文',
+  'review-fact': '复核事实',
+  'review-source-record': '复核来源设定',
+  'review-derived-state': '复核状态与进度',
+  'review-outline': '复核大纲',
+  'review-downstream-chapter': '复核后续正文',
 }
 
 interface Props {
@@ -20,6 +30,12 @@ interface Props {
   impactRemediationBusy: boolean
   impactRemediationReceipt: string | null
   impactRemediationError: string | null
+  impactReviewItemId: string | null
+  impactReviewDecision: ImpactReviewDecisionV1
+  impactReviewNote: string
+  impactReviewBusy: boolean
+  impactReviewReceipt: string | null
+  impactReviewError: string | null
   impactPatchTargets: ImpactPatchTarget[]
   impactPatchTargetId: number | null
   impactPatchSummary: string
@@ -49,6 +65,10 @@ interface Props {
   onCreateImpactPatch: () => void
   onRunImpactRemediation: () => void
   onReplanImpactRemediation: () => void
+  onImpactReviewItemChange: (itemId: string | null) => void
+  onImpactReviewDecisionChange: (decision: ImpactReviewDecisionV1) => void
+  onImpactReviewNoteChange: (value: string) => void
+  onExecuteImpactReview: () => void
   onConfirmImpactPatch: () => void
   onRejectImpactPatch: () => void
   onToggleOutlinePreview: () => void
@@ -69,6 +89,12 @@ export default function ChapterEditorToolbar({
   impactRemediationBusy,
   impactRemediationReceipt,
   impactRemediationError,
+  impactReviewItemId,
+  impactReviewDecision,
+  impactReviewNote,
+  impactReviewBusy,
+  impactReviewReceipt,
+  impactReviewError,
   impactPatchTargets,
   impactPatchTargetId,
   impactPatchSummary,
@@ -98,6 +124,10 @@ export default function ChapterEditorToolbar({
   onCreateImpactPatch,
   onRunImpactRemediation,
   onReplanImpactRemediation,
+  onImpactReviewItemChange,
+  onImpactReviewDecisionChange,
+  onImpactReviewNoteChange,
+  onExecuteImpactReview,
   onConfirmImpactPatch,
   onRejectImpactPatch,
   onToggleOutlinePreview,
@@ -174,6 +204,72 @@ export default function ChapterEditorToolbar({
                 <RefreshCw className={`h-3 w-3 ${impactRemediationBusy ? 'animate-spin' : ''}`} />
                 刷新计划
               </button>
+            </div>
+          )}
+          {impactRemediationPlan && impactRemediationPlan.counts.authorConfirmed > 0 && (
+            <div className="space-y-2 rounded border border-sky-400/20 bg-sky-400/5 px-2 py-2 text-[11px] text-text-secondary">
+              <div className="text-sky-200">作者复核只记录决定和理由，不修改正文、事实、状态或大纲。</div>
+              <div className="grid gap-2 md:grid-cols-[minmax(180px,1.2fr)_auto_minmax(180px,1fr)_auto]">
+                <label className="flex min-w-0 items-center gap-2 rounded border border-border bg-bg-elevated px-2 text-text-secondary">
+                  <span className="sr-only">作者复核项</span>
+                  <select
+                    aria-label="作者复核项"
+                    value={impactReviewItemId ?? ''}
+                    onChange={event => onImpactReviewItemChange(event.target.value || null)}
+                    className="min-w-0 flex-1 bg-transparent py-1.5 text-xs text-text-primary outline-none"
+                    disabled={impactReviewBusy}
+                  >
+                    <option value="">选择复核项</option>
+                    {impactRemediationPlan.items
+                      .filter(item => item.mode === 'author-confirmed')
+                      .map(item => (
+                        <option key={item.id} value={item.id}>
+                          {IMPACT_REVIEW_ACTION_LABELS[item.action] ?? '复核影响项'} · {item.table}#{item.recordId ?? '待定'}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <div className="flex items-center rounded border border-border bg-bg-elevated p-0.5" role="group" aria-label="作者复核决定">
+                  <button
+                    type="button"
+                    onClick={() => onImpactReviewDecisionChange('acknowledged')}
+                    aria-pressed={impactReviewDecision === 'acknowledged'}
+                    className={`rounded px-2 py-1 text-[11px] transition-colors ${impactReviewDecision === 'acknowledged' ? 'bg-emerald-500/15 text-emerald-200' : 'text-text-muted hover:text-text-primary'}`}
+                    disabled={impactReviewBusy}
+                  >
+                    已确认
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onImpactReviewDecisionChange('needs-manual-action')}
+                    aria-pressed={impactReviewDecision === 'needs-manual-action'}
+                    className={`rounded px-2 py-1 text-[11px] transition-colors ${impactReviewDecision === 'needs-manual-action' ? 'bg-amber-500/15 text-amber-200' : 'text-text-muted hover:text-text-primary'}`}
+                    disabled={impactReviewBusy}
+                  >
+                    需人工处理
+                  </button>
+                </div>
+                <CInput
+                  aria-label="作者复核理由"
+                  value={impactReviewNote}
+                  onChange={event => onImpactReviewNoteChange(event.target.value)}
+                  placeholder="填写复核理由（至少 2 个字符）"
+                  className="rounded border border-border bg-bg-elevated px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent"
+                  disabled={impactReviewBusy}
+                />
+                <button
+                  type="button"
+                  onClick={onExecuteImpactReview}
+                  disabled={impactReviewBusy || !impactReviewItemId || impactReviewNote.trim().length < 2}
+                  title="记录作者复核 durable Run，不写入正式数据"
+                  className="flex items-center justify-center gap-1 rounded border border-sky-400/30 bg-sky-400/10 px-3 py-1.5 text-xs text-sky-200 hover:bg-sky-400/20 disabled:opacity-50"
+                >
+                  {impactReviewBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  {impactReviewBusy ? '记录中...' : '记录复核'}
+                </button>
+              </div>
+              {impactReviewReceipt && <div className="text-[10px] text-success">作者复核回执 {impactReviewReceipt.slice(0, 12)}</div>}
+              {impactReviewError && <div role="alert" className="text-xs text-error">{impactReviewError}</div>}
             </div>
           )}
           {impactPatchTargets.length > 0 && !impactPatchCandidate && (

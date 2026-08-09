@@ -417,6 +417,10 @@ export interface AgentRunEventPayloadByTypeV1 {
     stepId: string
     candidateHash: string
     decision: 'adopt' | 'reject'
+    /** Optional review metadata for non-Canon author decisions. */
+    reviewItemId?: string
+    reviewDecision?: 'acknowledged' | 'needs-manual-action'
+    note?: string
   }
   'adoption.started': { stepId: string; candidateHash: string; intentHash?: string }
   'adoption.committed': { stepId: string; candidateHash: string; adoptionHash: string }
