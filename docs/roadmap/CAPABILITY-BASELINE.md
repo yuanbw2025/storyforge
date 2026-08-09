@@ -428,6 +428,7 @@
 - HARNESS-42 已将章后失败恢复从组件顺序控制提升为确定性恢复计划：`chapter-post-adoption-resume.ts` 按事件历史计算 step action、依赖、attempt 和失败分类；编辑器继续动作复用既有 post-adoption Run，跳过已成功步骤，只重跑可重试失败。过期、不可重试和运行中未知窗口不会被自动重跑；四个 step 的失败证据统一记录 category/action/fingerprint。当前已有计划级回归，真实浏览器关闭重开仍需补充。
 - HARNESS-43 已将正文编辑后的影响分析统一为 `buildEditImpactGraphV1()`：图绑定正文 hash，覆盖事实及其来源记录、后续章节/大纲、章/卷/书摘要、检索块、故事线进度/交汇和状态/物品/年表派生节点；排序后的 graph hash 进入主 Agent 影响报告与 `consistencyReport` 上下文源。图仍是只读证据。
 - HARNESS-44 已在该图基座上增加第一条受限反向 patch：`impact-patch-durable.ts` 创建独立 durable Run 和作者确认候选，绑定源正文 hash、graph hash、Context Manifest、Run/step/attempt 与 candidate hash；仅允许 `outlineNodes.summary`，不允许 `chapters.content`、事实权威状态或 `locked` 数据。确认后经过 `adopt()` 写回并签发引用真实 `adoption.committed` 事件的 terminal receipt；stale、篡改、越界和锁定反例已有 `R-HARNESS44-impact-patch-durable`。
+- HARNESS-45 已将该受限 patch 接入 `ChapterEditor` 的影响分析入口：选择图中的后续大纲节点，填写候选摘要/理由，创建与恢复均回读 durable Run；作者确认/拒绝分别调用受治理写回或记录拒绝事件。恢复会重新核对 candidate/source/graph hash，过期、损坏和跨作用域候选不会显示为可确认项；`R-AUDIT6-chapter-editor-toolbar` 覆盖 UI 转发，仍不改正文、事实权威状态或 locked 数据。
 - HARNESS-21 已将正文 Run → post-adoption Run 的父子完成关系持久化：RunContract 的 `lineage.parent`
   与 `agentRuns.parentRunId/parentReceiptHash/parentArtifactHash` 双向核对，父终态回执和正文 hash
   缺一不可；同一父 Run/关系由唯一索引去重。子 Run 的终态证明通过契约 hash 间接绑定父回执，父回执

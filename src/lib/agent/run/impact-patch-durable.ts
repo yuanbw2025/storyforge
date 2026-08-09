@@ -1,5 +1,5 @@
 import { db } from '../../db/schema'
-import type { AgentEvent, WorkspaceScope } from '../../types'
+import { parseAgentEventPayload, type AgentEvent, type WorkspaceScope } from '../../types'
 import { appendAgentEvent, getOrCreateAgentConversation } from '../conversations'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt } from '../../registry/adopt'
@@ -44,6 +44,32 @@ export interface ImpactPatchCandidateV1 {
   proposal: ImpactPatchProposalV1
   createdAt: number
   durable: ImpactPatchDurableEvidenceV1
+}
+
+function isImpactPatchCandidate(value: unknown): value is ImpactPatchCandidateV1 {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<ImpactPatchCandidateV1>
+  if (
+    candidate.version !== IMPACT_PATCH_RUN_VERSION_V1
+    || candidate.type !== IMPACT_PATCH_CANDIDATE_TYPE_V1
+    || typeof candidate.projectId !== 'number'
+    || typeof candidate.sourceChapterId !== 'number'
+    || typeof candidate.sourceTextHash !== 'string'
+    || typeof candidate.sourceGraphHash !== 'string'
+    || typeof candidate.createdAt !== 'number'
+    || !candidate.durable
+  ) return false
+  try {
+    assertProposal(candidate.proposal as ImpactPatchProposalV1)
+  } catch {
+    return false
+  }
+  const durable = candidate.durable as Partial<ImpactPatchDurableEvidenceV1>
+  return durable.stepId === IMPACT_PATCH_STEP_ID_V1
+    && durable.attempt === 1
+    && typeof durable.runId === 'number'
+    && typeof durable.contextManifestHash === 'string'
+    && typeof durable.candidateHash === 'string'
 }
 
 function assertProposal(input: ImpactPatchProposalV1): void {
@@ -264,6 +290,61 @@ export async function createImpactPatchCandidateV1(input: {
     requiresConfirmation: true,
   })
   return { snapshot, candidate, event, graph }
+}
+
+/** Recover the newest candidate that is still at the author confirmation boundary. */
+export async function readLatestImpactPatchCandidateV1(input: {
+  scope: WorkspaceScope
+  sourceChapterId: number
+}): Promise<ImpactPatchCandidateV1 | null> {
+  const events = await readOwnedRows<AgentEvent>(input.scope, 'agentEvents', { owner: 'work' })
+  const candidates = events
+    .filter(event => event.kind === 'candidate')
+    .map(event => parseAgentEventPayload<unknown>(event, null))
+    .filter((value): value is ImpactPatchCandidateV1 => isImpactPatchCandidate(value))
+    .filter(candidate => (
+      candidate.projectId === input.scope.projectId
+      && candidate.sourceChapterId === input.sourceChapterId
+    ))
+    .sort((left, right) => right.createdAt - left.createdAt)
+  for (const candidate of candidates) {
+    try {
+      const { durable: _durable, ...withoutDurable } = candidate
+      if (await hashCandidateWithoutDurable(withoutDurable) !== candidate.durable.candidateHash) continue
+      const graph = await buildEditImpactGraphV1(input.scope, candidate.sourceChapterId)
+      if (graph.graphHash !== candidate.sourceGraphHash || graph.source.sourceTextHash !== candidate.sourceTextHash) continue
+      const snapshot = await readAgentRunV1(input.scope, candidate.durable.runId)
+      const step = snapshot.projection.steps[IMPACT_PATCH_STEP_ID_V1]
+      if (step?.status === 'awaiting_confirmation' && step.candidateHash === candidate.durable.candidateHash) {
+        return candidate
+      }
+    } catch {
+      // Damaged or cross-scope candidates remain auditable but are not recoverable.
+    }
+  }
+  return null
+}
+
+export async function rejectImpactPatchCandidateV1(input: {
+  scope: WorkspaceScope
+  candidate: ImpactPatchCandidateV1
+}): Promise<AgentRunSnapshotV1> {
+  assertProposal(input.candidate.proposal)
+  const { durable: _durable, ...withoutDurable } = input.candidate
+  if (await hashCandidateWithoutDurable(withoutDurable) !== input.candidate.durable.candidateHash) {
+    throw new Error('影响 patch 候选 hash 不匹配。')
+  }
+  const snapshot = await readAgentRunV1(input.scope, input.candidate.durable.runId)
+  const step = snapshot.projection.steps[IMPACT_PATCH_STEP_ID_V1]
+  if (step?.status === 'failed' && step.confirmation === 'reject') return snapshot
+  if (step?.status !== 'awaiting_confirmation' || step.candidateHash !== input.candidate.durable.candidateHash) {
+    throw new Error('影响 patch 当前不在作者确认边界。')
+  }
+  return append(input.scope, snapshot, 'confirmation.recorded', {
+    stepId: IMPACT_PATCH_STEP_ID_V1,
+    candidateHash: input.candidate.durable.candidateHash,
+    decision: 'reject',
+  })
 }
 
 export async function adoptImpactPatchCandidateV1(input: {

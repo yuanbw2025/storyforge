@@ -1053,6 +1053,12 @@ CHIRON 四类信息可映射到现有结构：
 - 回执的 adoption 证据引用真实 `adoption.committed` 事件 ID；源正文/影响图变化、候选 hash 篡改、越界目标或作者锁都会阻断。该单元是安全反向反馈基座，不是自动级联修订、依赖重跑或真实模型质量收益证明。
 - `R-HARNESS44-impact-patch-durable` 覆盖候选不写 Canon、作者确认写回、正文 stale、候选篡改和锁定目标反例。
 
+**受限反向 patch 的正文入口（HARNESS-45，2026-08-10）**
+
+- 正文编辑器现有“影响分析”结果接入 `impactPatchTargets`：只展示当前影响图中的后续 `outlineNodes`，作者填写摘要和理由后调用 `createImpactPatchCandidateV1()`；组件不直接写表，也不新增模型调用或平行上下文入口。
+- 候选 UI 支持刷新恢复、确认和拒绝。恢复时重新核对候选 hash、源正文 hash、影响图 hash 和 durable step 状态；过期、损坏或跨作用域候选不显示为可确认项。确认调用 `adoptImpactPatchCandidateV1()`，拒绝写入 durable `confirmation.recorded`，正式大纲只有确认后才变化。
+- 该入口仍只允许 `outlineNodes.summary`，不改变正文、事实权威状态、locked 数据或其它下游产物；`R-AUDIT6-chapter-editor-toolbar` 覆盖入口转发和候选操作，HARNESS-44 回归覆盖实际 durable 写回边界。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

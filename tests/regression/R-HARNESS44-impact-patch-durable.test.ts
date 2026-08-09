@@ -4,6 +4,8 @@ import type { WorkspaceScope } from '../../src/lib/types'
 import {
   adoptImpactPatchCandidateV1,
   createImpactPatchCandidateV1,
+  readLatestImpactPatchCandidateV1,
+  rejectImpactPatchCandidateV1,
 } from '../../src/lib/agent/run/impact-patch-durable'
 
 async function seed(): Promise<{
@@ -55,6 +57,10 @@ describe.sequential('R-HARNESS44 · 影响 patch 候选与作者确认写回', (
     expect(created.snapshot.projection.steps['impact-patch:apply']?.status).toBe('awaiting_confirmation')
     expect((await db.outlineNodes.get(fixture.downstreamOutlineId))?.summary).toBe('等待后续安排')
     expect(created.event.durableRunId).toBe(created.snapshot.run.id)
+    expect(await readLatestImpactPatchCandidateV1({
+      scope: fixture.scope,
+      sourceChapterId: fixture.sourceChapterId,
+    })).toEqual(created.candidate)
 
     const adopted = await adoptImpactPatchCandidateV1({ scope: fixture.scope, candidate: created.candidate })
     expect((await db.outlineNodes.get(fixture.downstreamOutlineId))?.summary).toBe(
@@ -79,6 +85,10 @@ describe.sequential('R-HARNESS44 · 影响 patch 候选与作者确认写回', (
       },
     })
     await db.chapters.update(fixture.sourceChapterId, { content: '<p>正文已改变。</p>' })
+    expect(await readLatestImpactPatchCandidateV1({
+      scope: fixture.scope,
+      sourceChapterId: fixture.sourceChapterId,
+    })).toBeNull()
     await expect(adoptImpactPatchCandidateV1({ scope: fixture.scope, candidate: created.candidate })).rejects.toThrow('候选已过期')
     expect((await db.outlineNodes.get(fixture.downstreamOutlineId))?.summary).toBe('等待后续安排')
 
@@ -104,6 +114,32 @@ describe.sequential('R-HARNESS44 · 影响 patch 候选与作者确认写回', (
     })
     await db.outlineNodes.update(fixture.downstreamOutlineId, { locked: true } as any)
     await expect(adoptImpactPatchCandidateV1({ scope: fixture.scope, candidate: created.candidate })).rejects.toThrow('已锁定')
+    expect((await db.outlineNodes.get(fixture.downstreamOutlineId))?.summary).toBe('等待后续安排')
+  })
+
+  it('作者拒绝会结束候选步骤并保持正式大纲不变', async () => {
+    const fixture = await seed()
+    const created = await createImpactPatchCandidateV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      sourceChapterId: fixture.sourceChapterId,
+      proposal: {
+        target: 'outlineNodes',
+        recordId: fixture.downstreamOutlineId,
+        fields: { summary: '作者拒绝的摘要。' },
+        reason: '验证拒绝边界。',
+        evidenceRefs: [],
+      },
+    })
+    const rejected = await rejectImpactPatchCandidateV1({ scope: fixture.scope, candidate: created.candidate })
+    expect(rejected.projection.steps['impact-patch:apply']).toMatchObject({
+      status: 'failed',
+      confirmation: 'reject',
+    })
+    expect(await readLatestImpactPatchCandidateV1({
+      scope: fixture.scope,
+      sourceChapterId: fixture.sourceChapterId,
+    })).toBeNull()
     expect((await db.outlineNodes.get(fixture.downstreamOutlineId))?.summary).toBe('等待后续安排')
   })
 })

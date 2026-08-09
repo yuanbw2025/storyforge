@@ -12,7 +12,7 @@ import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buil
 import { buildReviewRevisePrompt, type ReviewResult } from '../../lib/ai/adapters/review-adapter'
 import { rebuildChapterChunks, ensureChunkEmbeddings, rebuildProjectNarrativeSummaries } from '../../lib/retrieval/retrieval'
 import { isEmbeddingReady } from '../../lib/ai/adapters/embedding-adapter'
-import { propagateChapterEditStale, buildEditImpactGraphV1 } from '../../lib/consistency/impact-analysis'
+import { propagateChapterEditStale, buildEditImpactGraphV1, type EditImpactGraphV1 } from '../../lib/consistency/impact-analysis'
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
 import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
@@ -118,6 +118,13 @@ import { createContextManifestFromAssemblyV1 } from '../../lib/agent/run/context
 import { readAgentRunV1, type AgentRunSnapshotV1 } from '../../lib/agent/run/event-store'
 import { hashChapterText, normalizeChapterText } from '../../lib/ai/chapter-memory/text-normalization'
 import { hashCanonicalValue } from '../../lib/agent/run/hash'
+import {
+  adoptImpactPatchCandidateV1,
+  createImpactPatchCandidateV1,
+  readLatestImpactPatchCandidateV1,
+  rejectImpactPatchCandidateV1,
+  type ImpactPatchCandidateV1,
+} from '../../lib/agent/run/impact-patch-durable'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
 import {
@@ -194,7 +201,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     refreshChapter,
     loadAll: loadChapters,
   } = useChapterStore()
-  const { nodes, updateNode } = useOutlineStore()
+  const { nodes, updateNode, loadAll: loadOutlineNodes } = useOutlineStore()
   const { cards: stateCards, loadAll: loadStateCards, buildStateContext, buildSelectiveStateContext, applyDiffs } = useStateCardStore()
   const { characters, loadAll: loadCharacters } = useCharacterStore()
   const { creativeRules } = useCreativeRulesStore()
@@ -214,6 +221,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [customInstruction, setCustomInstruction] = useState('')
   const [impactInfo, setImpactInfo] = useState<string | null>(null)
   const [analyzingImpact, setAnalyzingImpact] = useState(false)
+  const [impactGraph, setImpactGraph] = useState<EditImpactGraphV1 | null>(null)
+  const [impactPatchTargetId, setImpactPatchTargetId] = useState<number | null>(null)
+  const [impactPatchSummary, setImpactPatchSummary] = useState('')
+  const [impactPatchReason, setImpactPatchReason] = useState('')
+  const [impactPatchCandidate, setImpactPatchCandidate] = useState<ImpactPatchCandidateV1 | null>(null)
+  const [impactPatchBusy, setImpactPatchBusy] = useState(false)
+  const [impactPatchError, setImpactPatchError] = useState('')
   const [pendingDiffs, setPendingDiffs] = useState<StateDiffItem[] | null>(null)
   // A2: 按需召回 — 手动额外勾选/取消的状态卡 ID
   const [extraStateIds, setExtraStateIds] = useState<number[]>([])
@@ -282,6 +296,35 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   useEffect(() => {
     proseCandidateRef.current = proseCandidate
   }, [proseCandidate])
+
+  // HARNESS-45: recover an unconfirmed impact patch when the editor remounts.
+  useEffect(() => {
+    let active = true
+    setImpactGraph(null)
+    setImpactInfo(null)
+    setImpactPatchTargetId(null)
+    setImpactPatchSummary('')
+    setImpactPatchReason('')
+    setImpactPatchCandidate(null)
+    setImpactPatchError('')
+    if (!currentChapter?.id) return () => { active = false }
+    void (async () => {
+      const scope = await resolveScopeLike(project.id!)
+      const candidate = await readLatestImpactPatchCandidateV1({
+        scope,
+        sourceChapterId: currentChapter.id!,
+      })
+      if (!active || !candidate) return
+      setImpactPatchCandidate(candidate)
+      setImpactPatchTargetId(candidate.proposal.recordId)
+      setImpactPatchSummary(candidate.proposal.fields.summary)
+      setImpactPatchReason(candidate.proposal.reason)
+      setImpactInfo('发现一条待作者确认的影响修订候选；确认前不会改动正式大纲。')
+    })().catch(error => {
+      if (active) console.warn('[ImpactPatch] durable candidate 恢复失败:', error)
+    })
+    return () => { active = false }
+  }, [currentChapter?.id, project.id])
 
   // H7: durable prose candidates survive editor unmounts and browser refreshes.
   // Only restore candidates whose source chapter hash is still current; stale
@@ -581,6 +624,20 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
     return null
   }, [project.enableMultiWorld, outlineNode, nodes])
+
+  const impactPatchTargets = useMemo(() => {
+    if (!impactGraph) return []
+    const seen = new Set<number>()
+    return impactGraph.nodes
+      .filter(node => node.kind === 'outline' && node.recordId != null && node.recordId !== outlineNode?.id)
+      .flatMap(node => {
+        const id = node.recordId!
+        if (seen.has(id)) return []
+        seen.add(id)
+        const target = nodes.find(item => item.id === id)
+        return target ? [{ id, title: target.title, summary: target.summary ?? '' }] : []
+      })
+  }, [impactGraph, nodes, outlineNode?.id])
 
   // 后台一致性 Agent：正文稳定落盘后只跑零 token 确定性守卫。
   // 没有告警时不制造归档记录；LLM fast/deep 必须由质量审校面板中的明确按钮触发。
@@ -1629,6 +1686,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       await persistCurrentEditorContent()
       const { demotedFacts } = await propagateChapterEditStale(project.id, currentChapter.id)
       const graph = await buildEditImpactGraphV1(project.id, currentChapter.id)
+      setImpactGraph(graph)
+      setImpactPatchCandidate(null)
+      setImpactPatchError('')
+      setImpactPatchSummary('')
+      setImpactPatchReason('')
+      const firstTarget = graph.nodes.find(node => (
+        node.kind === 'outline'
+        && node.recordId != null
+        && node.recordId !== currentChapter.outlineNodeId
+      ))
+      setImpactPatchTargetId(firstTarget?.recordId ?? null)
       const parts = [
         `影响图已生成：${graph.nodes.length} 个节点、${graph.edges.length} 条边`,
         `源自本章事实 ${graph.nodes.filter(node => node.kind === 'fact').length} 条`,
@@ -1642,6 +1710,87 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactInfo('影响分析失败，请重试')
     } finally {
       setAnalyzingImpact(false)
+    }
+  }
+
+  const handleDismissImpact = () => {
+    if (impactPatchCandidate) {
+      setImpactPatchError('请先确认或放弃当前影响修订候选。')
+      return
+    }
+    setImpactInfo(null)
+    setImpactGraph(null)
+    setImpactPatchTargetId(null)
+    setImpactPatchSummary('')
+    setImpactPatchReason('')
+    setImpactPatchError('')
+  }
+
+  const handleCreateImpactPatch = async () => {
+    if (!currentChapter?.id || !impactPatchTargetId || !impactPatchSummary.trim() || !impactPatchReason.trim()) return
+    setImpactPatchBusy(true)
+    setImpactPatchError('')
+    try {
+      const scope = await resolveScopeLike(project.id!)
+      const created = await createImpactPatchCandidateV1({
+        scope,
+        worldGroupId: chapterWorldGroupId ?? null,
+        sourceChapterId: currentChapter.id,
+        proposal: {
+          target: 'outlineNodes',
+          recordId: impactPatchTargetId,
+          fields: { summary: impactPatchSummary.trim() },
+          reason: impactPatchReason.trim(),
+          evidenceRefs: [`chapter:${currentChapter.id}`, `graph:${impactGraph?.graphHash ?? 'unknown'}`],
+        },
+      })
+      setImpactPatchCandidate(created.candidate)
+      setImpactInfo('影响修订候选已保存；请确认后才会写入后续大纲摘要。')
+    } catch (error) {
+      setImpactPatchError(error instanceof Error ? error.message : '影响修订候选创建失败')
+    } finally {
+      setImpactPatchBusy(false)
+    }
+  }
+
+  const handleConfirmImpactPatch = async () => {
+    const candidate = impactPatchCandidate
+    if (!candidate) return
+    setImpactPatchBusy(true)
+    setImpactPatchError('')
+    try {
+      const scope = await resolveScopeLike(project.id!)
+      const result = await adoptImpactPatchCandidateV1({ scope, candidate })
+      await loadOutlineNodes(project.id!)
+      setImpactPatchCandidate(null)
+      setImpactGraph(null)
+      setImpactPatchTargetId(null)
+      setImpactPatchSummary('')
+      setImpactPatchReason('')
+      setImpactInfo(`影响修订已写入大纲摘要；终态回执 ${result.receiptHash.slice(0, 12)}。`)
+    } catch (error) {
+      setImpactPatchError(error instanceof Error ? error.message : '影响修订写回失败')
+    } finally {
+      setImpactPatchBusy(false)
+    }
+  }
+
+  const handleRejectImpactPatch = async () => {
+    const candidate = impactPatchCandidate
+    if (!candidate) return
+    setImpactPatchBusy(true)
+    setImpactPatchError('')
+    try {
+      const scope = await resolveScopeLike(project.id!)
+      await rejectImpactPatchCandidateV1({ scope, candidate })
+      setImpactPatchCandidate(null)
+      setImpactPatchSummary('')
+      setImpactPatchReason('')
+      setImpactInfo('影响修订候选已放弃，正式大纲未改变。')
+    } catch (error) {
+      setImpactPatchError(error instanceof Error ? error.message : '影响修订拒绝失败')
+    } finally {
+      setImpactPatchBusy(false)
     }
   }
 
@@ -2396,6 +2545,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           )}
           analyzingImpact={analyzingImpact}
           impactInfo={impactInfo}
+          impactPatchTargets={impactPatchTargets}
+          impactPatchTargetId={impactPatchTargetId}
+          impactPatchSummary={impactPatchSummary}
+          impactPatchReason={impactPatchReason}
+          impactPatchCandidate={impactPatchCandidate}
+          impactPatchBusy={impactPatchBusy}
+          impactPatchError={impactPatchError || null}
           hasOutline={!!outlineNodeId}
           showOutlinePreview={showOutlinePreview}
           showReviewPanel={showReviewPanel}
@@ -2411,7 +2567,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onDeAI={() => { void handleDeAI() }}
           onOrganizeChapter={() => { void handleRunChapterOrganization() }}
           onAnalyzeImpact={() => { void handleEditImpact() }}
-          onDismissImpact={() => setImpactInfo(null)}
+          onDismissImpact={handleDismissImpact}
+          onImpactPatchTargetChange={setImpactPatchTargetId}
+          onImpactPatchSummaryChange={setImpactPatchSummary}
+          onImpactPatchReasonChange={setImpactPatchReason}
+          onCreateImpactPatch={() => { void handleCreateImpactPatch() }}
+          onConfirmImpactPatch={() => { void handleConfirmImpactPatch() }}
+          onRejectImpactPatch={() => { void handleRejectImpactPatch() }}
           onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}
           onToggleReviewPanel={() => setShowReviewPanel(!showReviewPanel)}
           onToggleNotePanel={() => setShowNotePanel(!showNotePanel)}

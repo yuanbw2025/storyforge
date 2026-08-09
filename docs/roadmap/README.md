@@ -257,6 +257,7 @@
 - HARNESS-42 已增加章后失败步骤恢复控制面：恢复计划从 durable 事件历史确定性计算，已成功步骤不重跑，可重试失败受 `maxAttemptsPerStep` 限制，不可重试/过期/运行中未知窗口阻断；编辑器的“继续章后处理”复用原父子 Run。该单元已有计划级回归，真实浏览器关闭重开证据仍待补。
 - HARNESS-43 已把正文编辑影响分析升级为确定性影响图：正文 hash、来源事实/stale、来源记录、后续章节/大纲、摘要、检索块、故事线进度/交汇和章后派生状态统一成有向节点/边，并由主 Agent 影响报告、`consistencyReport` 和编辑器共用。图保持只读、只提示；受限的 `outlineNodes.summary` patch 已由 HARNESS-44 在独立 durable Run 中补上。
 - HARNESS-44 已落地第一条受限反向 patch 路径：独立 `plan-execute` durable Run 将正文/影响图 hash 与 `chapterContent` Context Manifest 绑定到作者确认候选；白名单只有 `outlineNodes.summary`，不改正文、事实权威状态或 `locked` 数据。确认后才经 `adopt(outlineNodes, recordId, merge-diffs)` 写回，回读正式状态并签发 terminal receipt；正文/图 stale、候选篡改、越界和锁定目标均阻断。该单元不包含自动级联修订或依赖重跑。
+- HARNESS-45 已把 HARNESS-44 接入正文编辑器“影响分析”主路径：作者只能从当前影响图选择后续大纲节点并填写受限摘要候选；创建、刷新恢复、确认和拒绝均通过 durable Run，确认后才经 `adopt()` 写回。恢复重新核对 candidate/source/graph hash，过期或跨作用域候选不会显示为可确认项。该入口不新增模型调用，不改正文、事实权威状态或 locked 数据。
 - HARNESS-22 已为主 Agent 同一轮多任务增加 frozen dependency join：下游候选绑定生成时实际读取的
   上游 candidate/output hash 和 Run generation；上游作者编辑后，旧下游不会因新版本已采纳而被放行。
   下游确认前还会回读上游 step 的正式 adoptionHash/succeeded 状态，避免把对话确认误当成写入完成。

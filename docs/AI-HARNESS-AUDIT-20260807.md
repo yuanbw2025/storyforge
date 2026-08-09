@@ -113,7 +113,7 @@
 | 检索/层级摘要重建 | `retrieval/retrieval.ts`、`ChapterEditor.tsx` | memory 成功后以确定性代码重建章节 chunks 与章/卷/书摘要；embedding 为可选后台派生 | 关键词检索是可用基线，embedding 失败不阻塞；现在已纳入 post-adoption retrieval step，失败后的用户续跑入口仍待 HARNESS-42 | A（新章后主路径） |
 | 一致性 Agent | `consistency-agent.ts`、`chapter-post-adoption-durable.ts` | background Fast Guard 零 token；fast/deep 一次模型调用；新章后守卫候选写入同一 post-adoption Run 的 `agentEvents` 并绑定 durable 证据 | 候选、正文 hash、Context Manifest、step attempt 和作用域可验证；V2 terminal verifier 已接入。语义 Fast/Deep 仍作者显式触发，不自动改 Canon | A（确定性主路径守卫），B（语义深审） |
 | 章节组织 Agent | `chapter-organization.ts` | 可将状态/认知/故事线/角色关系保存为候选事件，确认后 `adopt()` | 独立质量 workflow，不是正文生成必经阶段 | B |
-| 反向反馈 | `impact-analysis.ts`、`master-impact.ts`、`impact-patch-durable.ts`、`R-HARNESS44-impact-patch-durable` | HARNESS-43 的影响图继续作为只读证据；HARNESS-44 新增独立 durable `plan-execute` Run，将图/正文 hash 绑定到作者确认候选，当前只允许 `outlineNodes.summary`，确认后经 `adopt()` 写回并签发 terminal receipt | 仍没有自动正文改写、事实权威改写、依赖重跑或通用 patch；正文/图 stale、候选篡改、越界和 locked 目标会阻断 | A（第一条受限 patch 路径）；D（通用反馈与重跑仍缺） |
+| 反向反馈 | `impact-analysis.ts`、`master-impact.ts`、`impact-patch-durable.ts`、`ChapterEditor.tsx`、`R-HARNESS44-impact-patch-durable`、`R-AUDIT6-chapter-editor-toolbar` | HARNESS-43 的影响图作为只读证据；HARNESS-44 durable `plan-execute` Run 将图/正文 hash 绑定到作者确认候选；HARNESS-45 已接入正文编辑器，选择受影响后续大纲并创建/恢复/确认/拒绝候选，确认后经 `adopt()` 写回 terminal receipt | 仍没有自动正文改写、事实权威改写、依赖重跑或通用 patch；正文/图 stale、候选篡改、越界和 locked 目标会阻断 | A（第一条受限 patch 主路径）；D（通用反馈与重跑仍缺） |
 | Run ledger / receipt / replay | `agentRuns`/`agentRunEvents`、`chapter-post-adoption-durable.ts`、`chapter-post-adoption-resume.ts` | post-adoption 四步均有 `step.scheduled/started/context.assembled/candidate.persisted/step.succeeded|failed` 证据；一致性候选另绑定 `agentEvents.durableRunId`；失败事件有分类、动作和 fingerprint | HARNESS-42 已接入纯确定性恢复计划和编辑器继续入口：成功步骤跳过、可重试失败按 attempt 重跑、不可重试/过期/运行中未知窗口阻断；真实浏览器关闭重开和完整回放视图仍待补证 | A（四步与恢复计划），D（浏览器回放） |
 | 离线评测 | `NS-0`、NS/AGENT/PIPELINE 回归 | 有 development/held-out fixture、预算、事实/约束/泄漏/证据指标 | 多数是模块级或 builder/eval 级；缺少真实分步骤从世界观到正文的端到端 held-out | B |
 
@@ -209,7 +209,7 @@ flowchart TD
 | 结构化契约强弱不一致 | 世界基座、故事核心、故事线（含 HARNESS-40 动态映射）、普通角色、角色驱动卷章方案和中途重规划已改为严格候选合同；其它入口的 parser/gate 强度仍不一致 | 事实 | 剩余弱入口中的缺字段、类型错和 Canon 冲突仍可能进入正式数据 |
 | 正文后处理无统一完成屏障 | `handleAutoPostGenerate()` 依次重建检索、状态提取、memory；失败仅 `console.error`/降级，调用方 `void` 启动 | 事实 → 推断 | UI/作者可能看到正文已保存，却不知道派生记忆、状态和检索是否完成；失败无法按步骤恢复 |
 | 质量 Agent 未绑定主 run | 一致性候选写入 `agentEvents`，有 hash current；没有 run terminal/receipt 关联 | 事实 | 审查结果可查但不能决定某次创作是否完成，也不能自动触发上游修正 |
-| 下游反馈只有提示没有闭环 | HARNESS-43 的 `impact-analysis` 只读；HARNESS-44 仅允许作者确认式 `outlineNodes.summary` patch，尚未提供通用上游/正文改写与依赖重跑 | 事实 | 第一条安全路径可追溯地修订后续大纲摘要，但其它冲突仍需作者手工判断、修改和重跑，不能宣称反馈闭环已完成 |
+| 下游反馈只有提示没有闭环 | HARNESS-43 的 `impact-analysis` 只读；HARNESS-44/45 已提供正文编辑器中的作者确认式 `outlineNodes.summary` patch 主路径，尚未提供通用上游/正文改写与依赖重跑 | 事实 | 第一条安全路径可追溯地修订后续大纲摘要，但其它冲突仍需作者手工判断、修改和重跑，不能宣称反馈闭环已完成 |
 | 测试多为模块级闭环 | NS/AGENT/PIPELINE 测试覆盖 adapter、CAS、gate、registry、roundtrip；未见跨世界观→正文的真实主路径 held-out | 事实 → 推断 | 单模块绿不能证明真实分步骤流程长期一致 |
 | 目标文档与实现成熟度混淆风险 | Harness 文档自标“提案”，但包含完整目标架构；当前代码只有节点级运行时 | 事实 | 若按文档标题重复开发，会形成平行入口或过早新增表 |
 
@@ -325,7 +325,7 @@ verifying → stale(source/state changed)
 | `agentConversations/agentEvents` | 继续承载对话/候选/确认/错误；可作为兼容投影 | 不无限扩展为 run ledger；字段扩展须先审计生命周期 |
 | `nodeFlows/nodeRuns` | 继续服务 FLOW-3 自由节点 | 不直接冒充分步骤主流程 run，除非新增明确 contract/作用域/终态语义 |
 | 正文 `handleAutoPostGenerate` best-effort 链 | 迁移为 H3 post-step barrier；保留正文先保存和 CAS | 失败不能删除正文；旧手动重建入口需收口到同一 step executor |
-| `impact-analysis` 只提示 | HARNESS-44 已增加仅写 `outlineNodes.summary` 的 H4 第一条 patch candidate/作者确认；继续保留安全默认 | 不自动级联重写正文、事实权威状态或 locked 数据 |
+| `impact-analysis` 只提示 | HARNESS-44/45 已增加并接入仅写 `outlineNodes.summary` 的 H4 第一条 patch candidate/作者确认；继续保留安全默认 | 不自动级联重写正文、事实权威状态或 locked 数据 |
 | 透明管线/章纲工坊 | 继续作为 `GenerationNode` 的 opt-in 深度模式 | 快速模式默认保留；不新增平行 AI/DB 入口 |
 
 ## 11. 验收与交付边界

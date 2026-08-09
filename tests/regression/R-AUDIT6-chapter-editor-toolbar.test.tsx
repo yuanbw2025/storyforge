@@ -15,6 +15,13 @@ async function mount(patch: Record<string, unknown> = {}) {
     hasOrganizationCandidate: false,
     analyzingImpact: false,
     impactInfo: null,
+    impactPatchTargets: [],
+    impactPatchTargetId: null,
+    impactPatchSummary: '',
+    impactPatchReason: '',
+    impactPatchCandidate: null,
+    impactPatchBusy: false,
+    impactPatchError: null,
     hasOutline: true,
     showOutlinePreview: false,
     showReviewPanel: false,
@@ -34,6 +41,12 @@ async function mount(patch: Record<string, unknown> = {}) {
     onOrganizeChapter: vi.fn(),
     onAnalyzeImpact: vi.fn(),
     onDismissImpact: vi.fn(),
+    onImpactPatchTargetChange: vi.fn(),
+    onImpactPatchSummaryChange: vi.fn(),
+    onImpactPatchReasonChange: vi.fn(),
+    onCreateImpactPatch: vi.fn(),
+    onConfirmImpactPatch: vi.fn(),
+    onRejectImpactPatch: vi.fn(),
     onToggleOutlinePreview: vi.fn(),
     onToggleReviewPanel: vi.fn(),
     onToggleNotePanel: vi.fn(),
@@ -123,6 +136,55 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     const review = Array.from(host.querySelectorAll('button'))
       .find(item => item.textContent?.includes('质量审校'))
     expect(review?.textContent).toContain('3')
+  })
+
+  it('影响修订候选只转发创建、确认和拒绝动作', async () => {
+    const { host, props } = await mount({
+      impactInfo: '后续大纲需要复核',
+      impactPatchTargets: [{ id: 12, title: '第二章', summary: '旧摘要' }],
+      impactPatchTargetId: 12,
+      impactPatchSummary: '新摘要',
+      impactPatchReason: '正文改变后续动机',
+    })
+    await act(async () => button(host, '生成修订候选').click())
+    expect(props.onCreateImpactPatch).toHaveBeenCalledOnce()
+
+    const candidate = {
+      version: 1,
+      type: 'impact-patch-candidate',
+      projectId: 1,
+      worldGroupId: null,
+      sourceChapterId: 3,
+      sourceTextHash: 'a'.repeat(64),
+      sourceGraphHash: 'b'.repeat(64),
+      proposal: {
+        target: 'outlineNodes',
+        recordId: 12,
+        fields: { summary: '候选摘要' },
+        reason: '正文改变后续动机',
+        evidenceRefs: [],
+      },
+      createdAt: 1,
+      durable: {
+        runId: 5,
+        stepId: 'impact-patch:apply',
+        attempt: 1,
+        contextManifestHash: 'c'.repeat(64),
+        candidateHash: 'd'.repeat(64),
+      },
+    } as any
+    const rendered = await mount({
+      impactInfo: '待确认',
+      impactPatchTargets: [{ id: 12, title: '第二章', summary: '旧摘要' }],
+      impactPatchTargetId: 12,
+      impactPatchSummary: '候选摘要',
+      impactPatchReason: '正文改变后续动机',
+      impactPatchCandidate: candidate,
+    })
+    await act(async () => button(rendered.host, '确认修订').click())
+    await act(async () => button(rendered.host, '放弃修订').click())
+    expect(rendered.props.onConfirmImpactPatch).toHaveBeenCalledOnce()
+    expect(rendered.props.onRejectImpactPatch).toHaveBeenCalledOnce()
   })
 
   it('明确选择章节叙事视角并允许恢复为不指定', async () => {

@@ -1,5 +1,12 @@
-import { BookOpenCheck, ClipboardList, Eye, Loader2, ShieldCheck, StickyNote } from 'lucide-react'
+import { BookOpenCheck, Check, ClipboardList, Eye, GitBranch, Loader2, ShieldCheck, StickyNote, X } from 'lucide-react'
 import { CInput } from '../shared/CompositionInput'
+import type { ImpactPatchCandidateV1 } from '../../lib/agent/run/impact-patch-durable'
+
+interface ImpactPatchTarget {
+  id: number
+  title: string
+  summary: string
+}
 
 interface Props {
   isStreaming: boolean
@@ -8,6 +15,13 @@ interface Props {
   hasOrganizationCandidate: boolean
   analyzingImpact: boolean
   impactInfo: string | null
+  impactPatchTargets: ImpactPatchTarget[]
+  impactPatchTargetId: number | null
+  impactPatchSummary: string
+  impactPatchReason: string
+  impactPatchCandidate: ImpactPatchCandidateV1 | null
+  impactPatchBusy: boolean
+  impactPatchError: string | null
   hasOutline: boolean
   showOutlinePreview: boolean
   showReviewPanel: boolean
@@ -24,6 +38,12 @@ interface Props {
   onOrganizeChapter: () => void
   onAnalyzeImpact: () => void
   onDismissImpact: () => void
+  onImpactPatchTargetChange: (targetId: number | null) => void
+  onImpactPatchSummaryChange: (value: string) => void
+  onImpactPatchReasonChange: (value: string) => void
+  onCreateImpactPatch: () => void
+  onConfirmImpactPatch: () => void
+  onRejectImpactPatch: () => void
   onToggleOutlinePreview: () => void
   onToggleReviewPanel: () => void
   onToggleNotePanel: () => void
@@ -38,6 +58,13 @@ export default function ChapterEditorToolbar({
   hasOrganizationCandidate,
   analyzingImpact,
   impactInfo,
+  impactPatchTargets,
+  impactPatchTargetId,
+  impactPatchSummary,
+  impactPatchReason,
+  impactPatchCandidate,
+  impactPatchBusy,
+  impactPatchError,
   hasOutline,
   showOutlinePreview,
   showReviewPanel,
@@ -54,6 +81,12 @@ export default function ChapterEditorToolbar({
   onOrganizeChapter,
   onAnalyzeImpact,
   onDismissImpact,
+  onImpactPatchTargetChange,
+  onImpactPatchSummaryChange,
+  onImpactPatchReasonChange,
+  onCreateImpactPatch,
+  onConfirmImpactPatch,
+  onRejectImpactPatch,
   onToggleOutlinePreview,
   onToggleReviewPanel,
   onToggleNotePanel,
@@ -97,10 +130,83 @@ export default function ChapterEditorToolbar({
         {analyzingImpact ? '分析中...' : '影响分析'}
       </button>
       {impactInfo && (
-        <span className="flex items-center gap-2 px-2 py-1 text-xs text-amber-300/90 bg-amber-500/5 rounded-md">
-          {impactInfo}
-          <button onClick={onDismissImpact} aria-label="关闭影响分析结果" className="text-text-muted hover:text-text-primary">×</button>
-        </span>
+        <div className="basis-full space-y-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300/90">
+          <div className="flex items-start gap-2">
+            <span className="flex-1">{impactInfo}</span>
+            <button onClick={onDismissImpact} aria-label="关闭影响分析结果" className="text-text-muted hover:text-text-primary"><X className="h-3.5 w-3.5" /><span className="sr-only">×</span></button>
+          </div>
+          {impactPatchTargets.length > 0 && !impactPatchCandidate && (
+            <div className="grid gap-2 md:grid-cols-[minmax(150px,0.7fr)_minmax(200px,1.5fr)_minmax(160px,1fr)_auto]">
+              <label className="flex items-center gap-2 rounded border border-border bg-bg-elevated px-2 text-text-secondary">
+                <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                <span className="sr-only">影响修订目标</span>
+                <select
+                  aria-label="影响修订目标"
+                  value={impactPatchTargetId ?? ''}
+                  onChange={event => onImpactPatchTargetChange(event.target.value ? Number(event.target.value) : null)}
+                  className="min-w-0 flex-1 bg-transparent py-1.5 text-xs text-text-primary outline-none"
+                  disabled={impactPatchBusy}
+                >
+                  <option value="">选择后续大纲</option>
+                  {impactPatchTargets.map(target => (
+                    <option key={target.id} value={target.id}>{target.title}</option>
+                  ))}
+                </select>
+              </label>
+              <textarea
+                aria-label="影响修订摘要"
+                value={impactPatchSummary}
+                onChange={event => onImpactPatchSummaryChange(event.target.value)}
+                placeholder="只修改选定后续大纲的摘要，不改正文或事实"
+                className="min-h-9 resize-y rounded border border-border bg-bg-elevated px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                disabled={impactPatchBusy}
+              />
+              <CInput
+                aria-label="影响修订理由"
+                value={impactPatchReason}
+                onChange={event => onImpactPatchReasonChange(event.target.value)}
+                placeholder="修改理由"
+                className="rounded border border-border bg-bg-elevated px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent"
+                disabled={impactPatchBusy}
+              />
+              <button
+                onClick={onCreateImpactPatch}
+                disabled={impactPatchBusy || !impactPatchTargetId || !impactPatchSummary.trim() || !impactPatchReason.trim()}
+                title="创建作者确认式大纲摘要候选"
+                className="flex items-center justify-center gap-1 rounded border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-400/20 disabled:opacity-50"
+              >
+                {impactPatchBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
+                {impactPatchBusy ? '保存中...' : '生成修订候选'}
+              </button>
+            </div>
+          )}
+          {impactPatchCandidate && (
+            <div className="space-y-2 rounded border border-accent/20 bg-bg-elevated/70 p-2 text-text-secondary">
+              <div className="text-[11px] text-text-muted">候选仅允许写入选定大纲的 `summary`，确认前不会改动正式数据。</div>
+              <div className="whitespace-pre-wrap text-xs text-text-primary">{impactPatchCandidate.proposal.fields.summary}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={onConfirmImpactPatch}
+                  disabled={impactPatchBusy}
+                  className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-50"
+                >
+                  {impactPatchBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  确认修订
+                </button>
+                <button
+                  onClick={onRejectImpactPatch}
+                  disabled={impactPatchBusy}
+                  className="flex items-center gap-1 rounded border border-border bg-bg-surface px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  放弃修订
+                </button>
+                <span className="text-[10px] text-text-muted">证据 {impactPatchCandidate.durable.candidateHash.slice(0, 12)}</span>
+              </div>
+            </div>
+          )}
+          {impactPatchError && <div role="alert" className="text-xs text-error">{impactPatchError}</div>}
+        </div>
       )}
       {hasOutline && (
         <button onClick={onToggleOutlinePreview}
