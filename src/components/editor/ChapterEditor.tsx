@@ -129,6 +129,7 @@ import {
   rejectImpactPatchCandidateV1,
   type ImpactPatchCandidateV1,
 } from '../../lib/agent/run/impact-patch-durable'
+import { executeImpactRemediationV1 } from '../../lib/agent/run/impact-remediation-durable'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
 import {
@@ -227,6 +228,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [analyzingImpact, setAnalyzingImpact] = useState(false)
   const [impactGraph, setImpactGraph] = useState<EditImpactGraphV1 | null>(null)
   const [impactRemediationPlan, setImpactRemediationPlan] = useState<ImpactRemediationPlanV1 | null>(null)
+  const [impactRemediationBusy, setImpactRemediationBusy] = useState(false)
+  const [impactRemediationReceipt, setImpactRemediationReceipt] = useState<string | null>(null)
+  const [impactRemediationError, setImpactRemediationError] = useState('')
   const [impactPatchTargetId, setImpactPatchTargetId] = useState<number | null>(null)
   const [impactPatchSummary, setImpactPatchSummary] = useState('')
   const [impactPatchReason, setImpactPatchReason] = useState('')
@@ -307,6 +311,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     let active = true
     setImpactGraph(null)
     setImpactRemediationPlan(null)
+    setImpactRemediationReceipt(null)
+    setImpactRemediationError('')
     setImpactInfo(null)
     setImpactPatchTargetId(null)
     setImpactPatchSummary('')
@@ -1695,6 +1701,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const remediationPlan = await buildImpactRemediationPlanV1(graph)
       setImpactGraph(graph)
       setImpactRemediationPlan(remediationPlan)
+      setImpactRemediationReceipt(null)
+      setImpactRemediationError('')
       setImpactPatchCandidate(null)
       setImpactPatchError('')
       setImpactPatchSummary('')
@@ -1730,6 +1738,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactInfo(null)
     setImpactGraph(null)
     setImpactRemediationPlan(null)
+    setImpactRemediationReceipt(null)
+    setImpactRemediationError('')
     setImpactPatchTargetId(null)
     setImpactPatchSummary('')
     setImpactPatchReason('')
@@ -1763,6 +1773,28 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
   }
 
+  const handleRunImpactRemediation = async () => {
+    const plan = impactRemediationPlan
+    if (!plan || !currentChapter?.id || !project.id || plan.counts.deterministic === 0) return
+    setImpactRemediationBusy(true)
+    setImpactRemediationError('')
+    try {
+      const result = await executeImpactRemediationV1({
+        scope: await resolveScopeLike(project.id),
+        worldGroupId: chapterWorldGroupId ?? null,
+        plan,
+      })
+      setImpactRemediationReceipt(result.receiptHash)
+      setImpactInfo(result.reused
+        ? `确定性影响重建已复用终态 Run；回执 ${result.receiptHash.slice(0, 12)}。`
+        : `确定性影响重建已完成；检索块 ${result.output.retrieval.count} 条，摘要层级已重建；回执 ${result.receiptHash.slice(0, 12)}。`)
+    } catch (error) {
+      setImpactRemediationError(error instanceof Error ? error.message : '确定性影响重建失败')
+    } finally {
+      setImpactRemediationBusy(false)
+    }
+  }
+
   const handleConfirmImpactPatch = async () => {
     const candidate = impactPatchCandidate
     if (!candidate) return
@@ -1775,6 +1807,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactPatchCandidate(null)
       setImpactGraph(null)
       setImpactRemediationPlan(null)
+      setImpactRemediationReceipt(null)
+      setImpactRemediationError('')
       setImpactPatchTargetId(null)
       setImpactPatchSummary('')
       setImpactPatchReason('')
@@ -2557,6 +2591,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           analyzingImpact={analyzingImpact}
           impactInfo={impactInfo}
           impactRemediationPlan={impactRemediationPlan}
+          impactRemediationBusy={impactRemediationBusy}
+          impactRemediationReceipt={impactRemediationReceipt}
+          impactRemediationError={impactRemediationError || null}
           impactPatchTargets={impactPatchTargets}
           impactPatchTargetId={impactPatchTargetId}
           impactPatchSummary={impactPatchSummary}
@@ -2584,6 +2621,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onImpactPatchSummaryChange={setImpactPatchSummary}
           onImpactPatchReasonChange={setImpactPatchReason}
           onCreateImpactPatch={() => { void handleCreateImpactPatch() }}
+          onRunImpactRemediation={() => { void handleRunImpactRemediation() }}
           onConfirmImpactPatch={() => { void handleConfirmImpactPatch() }}
           onRejectImpactPatch={() => { void handleRejectImpactPatch() }}
           onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}

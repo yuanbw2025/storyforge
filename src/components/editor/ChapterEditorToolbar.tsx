@@ -1,4 +1,4 @@
-import { BookOpenCheck, Check, ClipboardList, Eye, GitBranch, Loader2, ShieldCheck, StickyNote, X } from 'lucide-react'
+import { BookOpenCheck, Check, ClipboardList, Eye, GitBranch, Loader2, RefreshCw, ShieldCheck, StickyNote, X } from 'lucide-react'
 import { CInput } from '../shared/CompositionInput'
 import type { ImpactPatchCandidateV1 } from '../../lib/agent/run/impact-patch-durable'
 import type { ImpactRemediationPlanV1 } from '../../lib/consistency/impact-remediation-plan'
@@ -17,6 +17,9 @@ interface Props {
   analyzingImpact: boolean
   impactInfo: string | null
   impactRemediationPlan: ImpactRemediationPlanV1 | null
+  impactRemediationBusy: boolean
+  impactRemediationReceipt: string | null
+  impactRemediationError: string | null
   impactPatchTargets: ImpactPatchTarget[]
   impactPatchTargetId: number | null
   impactPatchSummary: string
@@ -44,6 +47,7 @@ interface Props {
   onImpactPatchSummaryChange: (value: string) => void
   onImpactPatchReasonChange: (value: string) => void
   onCreateImpactPatch: () => void
+  onRunImpactRemediation: () => void
   onConfirmImpactPatch: () => void
   onRejectImpactPatch: () => void
   onToggleOutlinePreview: () => void
@@ -61,6 +65,9 @@ export default function ChapterEditorToolbar({
   analyzingImpact,
   impactInfo,
   impactRemediationPlan,
+  impactRemediationBusy,
+  impactRemediationReceipt,
+  impactRemediationError,
   impactPatchTargets,
   impactPatchTargetId,
   impactPatchSummary,
@@ -88,6 +95,7 @@ export default function ChapterEditorToolbar({
   onImpactPatchSummaryChange,
   onImpactPatchReasonChange,
   onCreateImpactPatch,
+  onRunImpactRemediation,
   onConfirmImpactPatch,
   onRejectImpactPatch,
   onToggleOutlinePreview,
@@ -144,6 +152,17 @@ export default function ChapterEditorToolbar({
               <span>系统重建 {impactRemediationPlan.counts.deterministic}</span>
               <span>作者复核 {impactRemediationPlan.counts.authorConfirmed}</span>
               <span className="ml-auto text-text-muted">计划 {impactRemediationPlan.planHash.slice(0, 12)}</span>
+              {impactRemediationPlan.counts.deterministic > 0 && (
+                <button
+                  onClick={onRunImpactRemediation}
+                  disabled={impactRemediationBusy}
+                  title="只重建受影响的检索块和层级摘要，不改正文、事实或大纲"
+                  className="flex items-center gap-1 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-[11px] text-amber-200 hover:bg-amber-400/20 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3 w-3 ${impactRemediationBusy ? 'animate-spin' : ''}`} />
+                  {impactRemediationBusy ? '重建中...' : '执行系统重建'}
+                </button>
+              )}
             </div>
           )}
           {impactPatchTargets.length > 0 && !impactPatchCandidate && (
@@ -217,6 +236,8 @@ export default function ChapterEditorToolbar({
             </div>
           )}
           {impactPatchError && <div role="alert" className="text-xs text-error">{impactPatchError}</div>}
+          {impactRemediationReceipt && <div className="text-[10px] text-success">确定性重建回执 {impactRemediationReceipt.slice(0, 12)}</div>}
+          {impactRemediationError && <div role="alert" className="text-xs text-error">{impactRemediationError}</div>}
         </div>
       )}
       {hasOutline && (

@@ -259,6 +259,7 @@
 - HARNESS-44 已落地第一条受限反向 patch 路径：独立 `plan-execute` durable Run 将正文/影响图 hash 与 `chapterContent` Context Manifest 绑定到作者确认候选；白名单只有 `outlineNodes.summary`，不改正文、事实权威状态或 `locked` 数据。确认后才经 `adopt(outlineNodes, recordId, merge-diffs)` 写回，回读正式状态并签发 terminal receipt；正文/图 stale、候选篡改、越界和锁定目标均阻断。该单元不包含自动级联修订或依赖重跑。
 - HARNESS-45 已把 HARNESS-44 接入正文编辑器“影响分析”主路径：作者只能从当前影响图选择后续大纲节点并填写受限摘要候选；创建、刷新恢复、确认和拒绝均通过 durable Run，确认后才经 `adopt()` 写回。恢复重新核对 candidate/source/graph hash，过期或跨作用域候选不会显示为可确认项。该入口不新增模型调用，不改正文、事实权威状态或 locked 数据。
 - HARNESS-46 已把影响图节点转换为确定性处理计划：每个节点按系统可重建或作者确认复核分类，计划固定正文 hash、graph hash、节点依赖和计划 hash，并在正文编辑器中展示计数。该单元只读、只分类，不自动执行重建、改正文、改事实或重跑下游；后续执行器必须复用该计划并再次校验 hash。
+- HARNESS-47 已把计划中的摘要与检索项接入正文编辑器“执行系统重建”：一个零模型 `plan-execute` durable Run 读取登记的 `chapterContent` 作为 manifest 证据，重建受影响章节检索块和项目层级摘要，校验正文 hash 后签发终态 receipt；重复点击复用已完成 Run，正文 stale、来源越界或没有确定性项目时 fail-closed。作者确认项仍不自动执行。
 - HARNESS-22 已为主 Agent 同一轮多任务增加 frozen dependency join：下游候选绑定生成时实际读取的
   上游 candidate/output hash 和 Run generation；上游作者编辑后，旧下游不会因新版本已采纳而被放行。
   下游确认前还会回读上游 step 的正式 adoptionHash/succeeded 状态，避免把对话确认误当成写入完成。

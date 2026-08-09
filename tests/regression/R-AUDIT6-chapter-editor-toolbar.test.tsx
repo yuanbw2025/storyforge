@@ -16,6 +16,9 @@ async function mount(patch: Record<string, unknown> = {}) {
     analyzingImpact: false,
     impactInfo: null,
     impactRemediationPlan: null,
+    impactRemediationBusy: false,
+    impactRemediationReceipt: null,
+    impactRemediationError: null,
     impactPatchTargets: [],
     impactPatchTargetId: null,
     impactPatchSummary: '',
@@ -46,6 +49,7 @@ async function mount(patch: Record<string, unknown> = {}) {
     onImpactPatchSummaryChange: vi.fn(),
     onImpactPatchReasonChange: vi.fn(),
     onCreateImpactPatch: vi.fn(),
+    onRunImpactRemediation: vi.fn(),
     onConfirmImpactPatch: vi.fn(),
     onRejectImpactPatch: vi.fn(),
     onToggleOutlinePreview: vi.fn(),
@@ -204,6 +208,8 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     expect(host.textContent).toContain('系统重建 2')
     expect(host.textContent).toContain('作者复核 3')
     expect(host.textContent).toContain('cccccccccccc')
+    await act(async () => button(host, '执行系统重建').click())
+    expect(props.onRunImpactRemediation).toHaveBeenCalledOnce()
     expect(props.onCreateImpactPatch).not.toHaveBeenCalled()
   })
 

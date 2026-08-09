@@ -1065,6 +1065,12 @@ CHIRON 四类信息可映射到现有结构：
 - `ChapterEditor` 在影响分析结果中展示计划总数、系统重建数、作者复核数和计划指纹；该 UI 不启动模型、不写业务表、不把“计划存在”当作处理完成。后续真正执行重建或重跑必须创建新的 durable Run，在执行前重新读取影响图并校验 `sourceTextHash + graphHash + planHash`。
 - HARNESS-46 的验收证据是 `R-HARNESS46-impact-remediation-plan` 的闭集分类、依赖排序、稳定 hash 和损坏图阻断，加上 `R-AUDIT6-chapter-editor-toolbar` 的只读展示测试。它不宣称通用反向反馈、自动级联修订或文学质量收益已经交付。
 
+**确定性影响重建执行（HARNESS-47，2026-08-10）**
+
+- `executeImpactRemediationV1()` 只接受 HARNESS-46 计划中 `deterministic` 项，当前白名单为受影响章节的 `retrievalChunks` 与项目层级 `narrativeSummaryNodes`。它复用既有确定性重建函数，不新增索引、表或 AI 写入字段；作者确认项、正文、事实、角色状态和大纲不在执行范围。
+- 该执行创建独立 `plan-execute` durable Run，声明登记的 `chapterContent` 作为 Context Manifest 证据但模型调用数为零；Run 固定 `planHash + sourceTextHash + graphHash`，记录步骤、输出 hash、正文 CAS 检查和终态 receipt。相同计划且正文未变时重复点击复用已完成 Run，避免重复重建。
+- 执行期间正文发生变化、来源越界、计划没有确定性项目或派生执行失败时 fail-closed，并保留失败事件；本单元不提供通用依赖重跑、不自动改写正文或 Canon。`R-HARNESS47-impact-remediation-durable` 和工具栏回归是验收证据。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；
