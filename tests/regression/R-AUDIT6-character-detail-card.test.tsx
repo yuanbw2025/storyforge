@@ -2,7 +2,7 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import CharacterDetailCard from '../../src/components/character/CharacterDetailCard'
-import type { Character, WorldGroup } from '../../src/lib/types'
+import type { Character, Project, WorldGroup } from '../../src/lib/types'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -51,6 +51,18 @@ const worlds: WorldGroup[] = [{
   updatedAt: 1,
 }]
 
+const project = {
+  id: 1,
+  name: '镜城纪事',
+  genre: 'fantasy',
+  genres: ['fantasy'],
+  status: 'drafting',
+  description: '',
+  targetWordCount: 100_000,
+  createdAt: 1,
+  updatedAt: 1,
+} satisfies Project
+
 async function renderCard(overrides: Partial<Parameters<typeof CharacterDetailCard>[0]> = {}) {
   const host = document.createElement('div')
   document.body.append(host)
@@ -59,7 +71,7 @@ async function renderCard(overrides: Partial<Parameters<typeof CharacterDetailCa
   const props = {
     char: character(),
     glyphColor: 'test-glyph',
-    projectId: 1,
+    project,
     multiWorld: true,
     worldGroups: worlds,
     onUpdateField: vi.fn(),

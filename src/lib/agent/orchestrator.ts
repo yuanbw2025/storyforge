@@ -93,6 +93,15 @@ import {
   type CharacterRevisionCopilotSnapshotV1,
   type CharacterRevisionTaskInputV1,
 } from './character-revision-copilot'
+import {
+  adoptRestoredCharacterSupplementCandidateV1,
+  parseCharacterSupplementCandidateDraftV1,
+  parseCharacterSupplementTaskInputV1,
+  prepareCharacterSupplementCopilotV1,
+  serializeCharacterSupplementCandidateV1,
+  type CharacterSupplementCopilotSnapshotV1,
+  type CharacterSupplementTaskInputV1,
+} from './character-supplement-copilot'
 import type {
   AgentContextEvidence,
 } from './context-policy'
@@ -152,6 +161,8 @@ export interface MasterAgentTask {
   characterDrivenPlanId?: number
   /** 中途重规划面板冻结的角色变更、保护区、锚点与方案选择。 */
   characterRevisionRequest?: CharacterRevisionTaskInputV1
+  /** 已有角色补全面板冻结的目标角色、字段闭集与剧情证据开关。 */
+  characterSupplementRequest?: CharacterSupplementTaskInputV1
 }
 
 export interface MasterAgentPlan {
@@ -188,6 +199,7 @@ export interface MasterCandidatePayload {
   selectedFragmentIds?: string[]
   characterDrivenPlanId?: number
   characterRevisionRequest?: CharacterRevisionTaskInputV1
+  characterSupplementRequest?: CharacterSupplementTaskInputV1
   outlineMode?: OutlineCopilotMode
   outlineParentId?: number | null
   storyArcKind?: StoryArcRequestKind
@@ -235,6 +247,7 @@ export interface PinnedMasterAgentTaskV1 {
   inspirationFragmentIds?: string[]
   characterDrivenPlanId?: number
   characterRevisionRequest?: CharacterRevisionTaskInputV1
+  characterSupplementRequest?: CharacterSupplementTaskInputV1
   id?: string
 }
 
@@ -455,9 +468,19 @@ export async function createMasterAgentPlan(input: {
     if (pinned.skillId === 'outline.character-revision' && pinned.characterRevisionRequest === undefined) {
       throw new Error('角色中途重规划 Skill 必须固定角色变更请求。')
     }
+    if (
+      pinned.characterSupplementRequest !== undefined
+      && (pinned.agentId !== 'character' || pinned.skillId !== 'character.supplement')
+    ) throw new Error('只有角色补全 Skill 可以固定角色补全请求。')
+    if (pinned.skillId === 'character.supplement' && pinned.characterSupplementRequest === undefined) {
+      throw new Error('角色补全 Skill 必须固定角色补全请求。')
+    }
     const characterRevisionRequest = pinned.characterRevisionRequest === undefined
       ? undefined
       : parseCharacterRevisionTaskInputV1(pinned.characterRevisionRequest)
+    const characterSupplementRequest = pinned.characterSupplementRequest === undefined
+      ? undefined
+      : parseCharacterSupplementTaskInputV1(pinned.characterSupplementRequest)
     return {
       summary: pinned.agentId === 'inspiration'
         ? '按作者选择的灵感碎片生成结构化反推候选。'
@@ -479,6 +502,9 @@ export async function createMasterAgentPlan(input: {
           : {}),
         ...(characterRevisionRequest !== undefined
           ? { characterRevisionRequest }
+          : {}),
+        ...(characterSupplementRequest !== undefined
+          ? { characterSupplementRequest }
           : {}),
       }],
       workflow,
@@ -873,46 +899,94 @@ async function executeSequentialMasterAgentPlan(
           outputs.set(task.id, draft)
         }
       } else if (task.agentId === 'character') {
-        const prepared = await prepareCharacterCopilot({
-          projectId: input.projectId,
-          scope,
-          worldGroupId: input.worldGroupId,
-          authorRequest: task.instruction,
-          skillId: skill.id as AgentSkillId,
-          supplementalContext: upstream,
-          routingCategory: AGENT_ROLE_CATEGORIES.character,
-          contextProfile,
-          contextCompressionRuntime,
-          signal: input.signal,
-        })
-        const result = await runBudgetedGenerationNode({
-          node: prepared.node,
-          prepared: prepared.prepared,
-          budget,
-          callLabel: '角色领域 Agent',
-          maxOutputTokens: skill.maxOutputTokens,
-        })
-        const draft = JSON.stringify(result.output, null, 2)
-        candidates.push({
-          payload: {
-            version: 1,
-            taskId: task.id,
-            agentId: task.agentId,
+        if (skill.executionMode === 'supplement') {
+          if (!task.characterSupplementRequest) throw new Error('角色补全任务缺少固定目标与字段。')
+          const prepared = await prepareCharacterSupplementCopilotV1({
+            projectId: input.projectId,
+            scope,
+            worldGroupId: input.worldGroupId,
+            request: task.characterSupplementRequest,
+            authorRequest: task.instruction,
             skillId: skill.id as AgentSkillId,
-            executionBinding,
-            label: '新角色',
-            contextSources: prepared.contextSources,
-            contextEvidence: prepared.contextEvidence,
-            baseSnapshot: prepared.snapshot,
-            workspaceScope: scope,
-            dependsOnTaskIds: task.dependsOn,
-            dependencyBindings,
-          },
-          draft,
-          runtimeNode: prepared.node,
-          runtimeOutput: result.output,
-        })
-        outputs.set(task.id, draft)
+            routingCategory: `${AGENT_ROLE_CATEGORIES.character}.supplement`,
+            contextProfile,
+            contextCompressionRuntime,
+            signal: input.signal,
+          })
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '已有角色定向补全 Skill',
+            maxOutputTokens: skill.maxOutputTokens,
+          })
+          const draft = serializeCharacterSupplementCandidateV1(
+            result.output,
+            task.characterSupplementRequest,
+          )
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              workspaceScope: scope,
+              characterSupplementRequest: task.characterSupplementRequest,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        } else {
+          const prepared = await prepareCharacterCopilot({
+            projectId: input.projectId,
+            scope,
+            worldGroupId: input.worldGroupId,
+            authorRequest: task.instruction,
+            skillId: skill.id as AgentSkillId,
+            supplementalContext: upstream,
+            routingCategory: AGENT_ROLE_CATEGORIES.character,
+            contextProfile,
+            contextCompressionRuntime,
+            signal: input.signal,
+          })
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '角色领域 Agent',
+            maxOutputTokens: skill.maxOutputTokens,
+          })
+          const draft = JSON.stringify(result.output, null, 2)
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: '新角色',
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              workspaceScope: scope,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        }
       } else if (task.agentId === 'inspiration') {
         const workspace = (await readOwnedRows<any>(
           scope,
@@ -1525,7 +1599,12 @@ export async function adoptMasterCandidate(input: {
       : input.payload.agentId === 'world-origin'
       ? input.draft
       : input.payload.agentId === 'character'
-        ? parseCharacterCandidateDraft(input.draft)
+        ? input.payload.skillId === 'character.supplement'
+          ? parseCharacterSupplementCandidateDraftV1(
+              input.draft,
+              input.payload.characterSupplementRequest!,
+            )
+          : parseCharacterCandidateDraft(input.draft)
         : input.payload.agentId === 'inspiration'
           ? parseInspirationCandidateDraft(input.draft, input.payload.mode ?? 'single')
           : input.payload.agentId === 'outline'
@@ -1572,20 +1651,33 @@ export async function adoptMasterCandidate(input: {
       })
     }
   } else if (input.payload.agentId === 'character') {
-    const base = input.payload.baseSnapshot as CharacterRosterSnapshot
-    const current = await currentRosterSnapshot(scope, input.worldGroupId)
-    if (base.serialized !== current.serialized) throw new Error('角色主档已变化，请重新生成。')
-    const candidate = parseCharacterCandidateDraft(input.draft)
-    const normalized = candidate.name.normalize('NFKC').trim().toLocaleLowerCase('zh-CN')
-    if (current.visibleNames.includes(normalized)) throw new Error(`当前世界已存在角色“${candidate.name}”。`)
-    await adopt({
-      projectId: input.projectId,
-      scope,
-      worldGroupId: input.worldGroupId,
-      target: 'characters',
-      mode: 'add',
-      data: { ...candidate, isCrossWorld: false },
-    })
+    if (input.payload.skillId === 'character.supplement') {
+      if (!input.payload.characterSupplementRequest) {
+        throw new Error('角色补全候选缺少固定目标与字段，请重新生成。')
+      }
+      await adoptRestoredCharacterSupplementCandidateV1({
+        projectId: input.projectId,
+        scope,
+        worldGroupId: input.worldGroupId,
+        snapshot: input.payload.baseSnapshot as CharacterSupplementCopilotSnapshotV1,
+        draft: input.draft,
+      })
+    } else {
+      const base = input.payload.baseSnapshot as CharacterRosterSnapshot
+      const current = await currentRosterSnapshot(scope, input.worldGroupId)
+      if (base.serialized !== current.serialized) throw new Error('角色主档已变化，请重新生成。')
+      const candidate = parseCharacterCandidateDraft(input.draft)
+      const normalized = candidate.name.normalize('NFKC').trim().toLocaleLowerCase('zh-CN')
+      if (current.visibleNames.includes(normalized)) throw new Error(`当前世界已存在角色“${candidate.name}”。`)
+      await adopt({
+        projectId: input.projectId,
+        scope,
+        worldGroupId: input.worldGroupId,
+        target: 'characters',
+        mode: 'add',
+        data: { ...candidate, isCrossWorld: false },
+      })
+    }
   } else if (input.payload.agentId === 'inspiration') {
     const base = input.payload.baseSnapshot as InspirationWorkspaceSnapshot
     const current = await currentInspirationSnapshot(scope)
@@ -1676,7 +1768,9 @@ export async function adoptMasterCandidate(input: {
       ? `故事核心“${input.payload.label}”已写入项目。`
       : '世界来源已写入项目。'
     : input.payload.agentId === 'character'
-      ? `角色“${(parseCharacterCandidateDraft(input.draft) as CharacterCopilotCandidate).name}”已加入项目。`
+      ? input.payload.skillId === 'character.supplement'
+        ? `角色设定已补全 ${input.payload.characterSupplementRequest?.dimensions.length ?? 0} 个字段。`
+        : `角色“${(parseCharacterCandidateDraft(input.draft) as CharacterCopilotCandidate).name}”已加入项目。`
       : input.payload.agentId === 'inspiration'
         ? `已保存新的${input.payload.mode === 'multiworld' ? '多世界' : '单世界'}灵感版本。`
         : input.payload.agentId === 'outline'

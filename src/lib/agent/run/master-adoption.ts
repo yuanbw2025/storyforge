@@ -38,6 +38,10 @@ import {
   type CharacterRevisionCopilotSnapshotV1,
 } from '../character-revision-copilot'
 import {
+  characterSupplementCandidateMatchesBusinessStateV1,
+  type CharacterSupplementCopilotSnapshotV1,
+} from '../character-supplement-copilot'
+import {
   parseStoryCoreCandidateDraft,
   storyCoreCandidateMatchesRowV1,
 } from '../story-core-copilot'
@@ -398,6 +402,13 @@ async function businessAlreadyMatches(
     return (row?.worldOrigin ?? '') === candidate.draft.trim()
   }
   if (agentId === 'character') {
+    if (candidate.payload.skillId === 'character.supplement') {
+      return characterSupplementCandidateMatchesBusinessStateV1({
+        scope: input.scope,
+        snapshot: candidate.payload.baseSnapshot as CharacterSupplementCopilotSnapshotV1,
+        draft: candidate.draft,
+      })
+    }
     const parsed = parseCharacterCandidateDraft(candidate.draft)
     const rows = await readOwnedRows<any>(input.scope, 'characters', { owner: 'world' })
     return rows.some(row => (

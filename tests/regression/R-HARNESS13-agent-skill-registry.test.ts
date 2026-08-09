@@ -26,6 +26,7 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
       'outline.volumes',
       'outline.chapters',
       'outline.details',
+      'character.supplement',
       'prose.generate',
       'prose.continue',
     ]))
@@ -36,7 +37,7 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
     const base = getDefaultAgentSkillV1('character')
     const supplement: AgentSkillDefinitionV1 = {
       ...base,
-      id: 'character.supplement',
+      id: 'character.alternate',
       defaultForAgent: false,
       label: '角色定向补全',
     }

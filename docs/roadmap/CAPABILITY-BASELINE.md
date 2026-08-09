@@ -421,7 +421,7 @@
   团队预算和调用次数；刷新可恢复，正文变化后旧结果标为过期且不再显示旧角标。报告没有
   adoption 路径，不修改正文、设定、事实、物品或年表。
 - 项目概况、世界组目录、世界大纲树和本地搜索已成为正式上下文源；搜索只做当前项目/世界内的有界短摘，不调用网络或 embedding。
-- 分步骤主 Agent 与正文 Harness 当前有 21 个受治理 Skill、17 个提示词执行版本和一份由 14 个只读工具实际声明派生的 schema hash。新 RunContract 按步骤冻结 Skill/Prompt/Tool 版本，候选 hash 同步绑定；恢复会拒绝版本篡改，HARNESS-18 前无 binding 的旧运行保持原协议兼容。
+- 分步骤主 Agent 与正文 Harness 当前有 22 个受治理 Skill、18 个提示词执行版本和一份由 14 个只读工具实际声明派生的 schema hash。新 RunContract 按步骤冻结 Skill/Prompt/Tool 版本，候选 hash 同步绑定；恢复会拒绝版本篡改，HARNESS-18 前无 binding 的旧运行保持原协议兼容。
 - HARNESS-19 已在章节编辑器的正文生成/续写主路径接入 `prose.review` 和 `prose.revise`：信息边界硬门通过后才做证据型语义初审；blocking 必须同时引用候选原文和登记上下文原文，只有明确可局部修复的问题最多修订一次，修订后重跑硬门和语义复核。评审、修订、复核共用团队预算并写入 Context Manifest、冻结执行版本和 durable 事件；通过后仍停在可编辑候选，作者确认才经 `adopt(chapters)` 写回。旧候选可恢复但不会伪造语义证据。
 - HARNESS-20 已将正文确认写回后的自动状态抽取旁路下线：新主路径由同一个 post-adoption durable Run 顺序执行六域综合整理、章节记忆和确定性检索重建。综合整理继续复用既有一次调用解析器与六域作者确认界面，`prose.organize` / `prose.memory` 两个非默认 Skill 冻结各自来源、写入边界、提示词和回归证据；章节记忆写回后才重建层级摘要，避免新摘要仍停留在 pending。只有三步、六域采纳证据和当前正文派生状态全部匹配才有 terminal receipt；历史 Chapter Transition V1 只保留兼容恢复。
 - HARNESS-21 已将正文 Run → post-adoption Run 的父子完成关系持久化：RunContract 的 `lineage.parent`
@@ -538,6 +538,13 @@
   候选支持刷新恢复，确认前业务表零写入。确认会重算完整 Context Manifest，任何纳入来源变化均阻断旧候选，
   确认后只经 `adopt()` 写回并核对正式字段，匹配后才签发 terminal receipt。人工 CRUD、五阶段工坊与
   HARNESS-10 批量细纲保留；当前只有模拟模型和组件证据，没有真实模型质量 A/B。
+- HARNESS-38 已交付 `character.supplement` 已有角色补全入口收口：四个角色面板保留原按钮、维度选择和反向哺喂
+  开关，但只提交冻结角色 ID、字段闭集和证据开关的定向 durable 任务。`targetCharacter` 精确读取一个角色的完整
+  维度，世界、故事、规则和可选剧情证据只经 `assembleContext()`；逐来源原始内容 hash 用于确认前 stale 检查。
+  模型只返回所选字段的严格 JSON，候选可刷新恢复、按字段编辑、拒绝或确认，确认前正式角色零写入，确认后只经
+  `adopt({ target: 'characters', recordId, mode: 'merge-diffs' })` 并由 terminal verifier 回读。旧组件直调模型、即时写回、
+  宽松 parser 与死适配器已删除；隔离浏览器已覆盖生成、刷新恢复、拒绝、编辑和确认，当前不新建角色/关系、不改正文，
+  也没有真实模型质量 A/B 或完整影响图证据。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

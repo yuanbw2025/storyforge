@@ -76,7 +76,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 50 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 51 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -111,6 +111,7 @@
 | `powerSystem` | 力量体系 | world | L2 | 4000 |
 | `codex` | 设定词条 | world | L2 | 6000 |
 | `characters` | 角色档案 | world | L2 | 8000 |
+| `targetCharacter` | 本次目标角色完整设定 | world | L0 | 8000 |
 | `creativeRules` | 创作规则 | project | L1 | 1000 |
 | `worldRules` | 真实与幻想规则 | world | L1 | 1200 |
 | `historical` | 历史时间线 | world | L2 | 1800 |
@@ -189,13 +190,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 56 个 category。
-未分类调用: 0 个。动态 category 调用: 16 个。
+共 55 个 category。
+未分类调用: 0 个。动态 category 调用: 17 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:534` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:621` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:560` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:647` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
@@ -207,7 +208,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1430`<br/>`src/components/editor/ChapterEditor.tsx:1861` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1277` |
 | `chapter.toolbar` | `src/components/editor/FloatingToolbar.tsx:105` |
-| `character.supplement` | `src/components/character/CharacterSupplementAction.tsx:80` |
 | `codex.extract` | `src/components/codex/CodexPanel.tsx:226` |
 | `cultivation.progress` | `src/components/cultivation/CultivationProgressPanel.tsx:143` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
@@ -258,6 +258,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/character-copilot.ts:475 · chat`
 - `src/lib/agent/character-driven-copilot.ts:507 · chat`
 - `src/lib/agent/character-revision-copilot.ts:704 · chat`
+- `src/lib/agent/character-supplement-copilot.ts:528 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
 - `src/lib/agent/inspiration-copilot.ts:328 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
@@ -272,4 +273,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `6b7bc2e`
+生成时间基准:commit `0f478f0`

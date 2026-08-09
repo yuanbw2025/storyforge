@@ -349,6 +349,15 @@ Context Manifest，任何章纲、当前细纲或其它纳入来源变化都会�
 核对正式后状态，匹配后才签发 terminal receipt。人工场景 CRUD、五阶段工坊和既有批量细纲保留。
 当前证据覆盖模拟模型、组件刷新恢复和确定性合同，不证明真实模型场景质量收益。
 
+HARNESS-38 现状（2026-08-09）：已有角色“AI 补全设定”已统一进入 Character Agent 的
+`character.supplement` Skill。固定任务冻结目标角色 ID、作者勾选的角色字段和反向哺喂开关；新增 L0
+`targetCharacter` 上下文源通过 `CONTEXT_SOURCES + assembleContext()` 精确读取目标角色完整设定，角色事实与
+正文片段只在开关开启时成为授权来源。`assembleContext()` 的逐来源证据新增原始读取器完整内容 SHA-256，候选
+快照只保存 key/hash，不复制角色、正文或世界设定全文；确认时重读相同来源，任一变化都会拒绝旧候选。模型输出
+必须是只含本次字段的严格 JSON，候选可刷新恢复、按字段编辑、拒绝或确认；确认前业务表零写入，确认后只经
+`adopt(characters, recordId, merge-diffs)`，正式角色字段匹配后才签发 terminal receipt。旧组件直调模型、即时
+写回和宽松空补丁 parser 已删除；人工编辑和四个现有入口保留。当前仍没有真实 provider 质量 A/B 或完整角色影响图。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。

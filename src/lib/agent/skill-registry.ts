@@ -25,6 +25,7 @@ export type AgentSkillExecutionModeV1 =
   | 'worldview-field'
   | 'story-core'
   | 'create'
+  | 'supplement'
   | 'reverse'
   | 'auto'
   | 'story-arcs'
@@ -139,6 +140,23 @@ const WORLDVIEW_FIELD_CONTEXT_SOURCE_KEYS = [
   'storyArcs',
   'existingVolumeOutlines',
   'references',
+] as const
+
+const CHARACTER_SUPPLEMENT_CONTEXT_SOURCE_KEYS = [
+  'targetCharacter',
+  'canonAssertions',
+  'worldview',
+  'storyCore',
+  'powerSystem',
+  'codex',
+  'creativeRules',
+  'worldRules',
+  'locations',
+] as const
+
+const CHARACTER_SUPPLEMENT_OPTIONAL_CONTEXT_SOURCE_KEYS = [
+  'characterFacts',
+  'characterPassages',
 ] as const
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
@@ -370,6 +388,24 @@ const CHARACTER_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+const CHARACTER_SUPPLEMENT_INPUT_POLICY = {
+  sourceKeys: ['targetCharacter'],
+  states: {
+    empty: {
+      handling: 'require-author-input',
+      instruction: '目标角色不存在或不属于当前世界；停止补全，不得创建替代角色。',
+    },
+    partial: {
+      handling: 'reference-and-create',
+      instruction: '锁定目标角色已有设定，只补全作者本次选择的字段；不得修改身份轴、关系或其它字段。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格依据目标角色完整设定补全作者本次选择的字段；若启用剧情证据，还必须服从已确认事实与正文表现。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
 const INSPIRATION_INPUT_POLICY = {
   sourceKeys: ['inspirationWorkspace'],
   states: {
@@ -577,6 +613,17 @@ const CHARACTER_COMPRESSION_POLICY = compressionPolicy([
   'characters',
   'worldRules',
   'historical',
+])
+const CHARACTER_SUPPLEMENT_COMPRESSION_POLICY = compressionPolicy([
+  'worldview',
+  'storyCore',
+  'powerSystem',
+  'codex',
+  'creativeRules',
+  'worldRules',
+  'locations',
+  'characterFacts',
+  'characterPassages',
 ])
 const INSPIRATION_COMPRESSION_POLICY = compressionPolicy(['inspirationWorkspace'])
 const OUTLINE_COMPRESSION_POLICY = compressionPolicy([
@@ -818,6 +865,29 @@ export const AGENT_SKILLS = [
     }],
     lastVerifiedAt: '2026-08-09',
     regressionTests: ['R-AGENT1-chat-copilot-character', 'R-HARNESS33-character-panel-ui', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
+  },
+  {
+    version: 1,
+    id: 'character.supplement',
+    agentId: 'character',
+    defaultForAgent: false,
+    label: '已有角色定向补全',
+    owner: 'character-agent',
+    promptVersion: 'character-supplement-copilot-v1',
+    executionMode: 'supplement',
+    contextTaskKind: 'agent-character',
+    readToolNames: [],
+    contextSourceKeys: CHARACTER_SUPPLEMENT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: CHARACTER_SUPPLEMENT_OPTIONAL_CONTEXT_SOURCE_KEYS,
+    inputPolicy: CHARACTER_SUPPLEMENT_INPUT_POLICY,
+    contextCompression: CHARACTER_SUPPLEMENT_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [{
+      table: 'characters',
+      fields: CHARACTER_DIMENSIONS.map(dimension => dimension.key),
+    }],
+    lastVerifiedAt: '2026-08-09',
+    regressionTests: ['R-HARNESS38-character-supplement-agent', 'R-HARNESS38-character-supplement-ui'],
   },
   {
     version: 1,
@@ -1376,7 +1446,7 @@ export function validateAgentSkillDefinitionsV1(
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
     'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'review']),
-    character: new Set(['create']),
+    character: new Set(['create', 'supplement']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
     prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory']),

@@ -345,7 +345,7 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
               <CharacterDetailCard
                 char={selectedChar}
                 glyphColor={GLYPH_COLORS[characters.findIndex(c => c.id === selectedChar.id) % GLYPH_COLORS.length]}
-                projectId={project.id!}
+                project={project}
                 onUpdateField={handleUpdate}
                 onPatch={patch => updateCharacter(selectedChar.id!, patch)}
                 onReload={() => loadAll(project.id!)}

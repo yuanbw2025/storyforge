@@ -96,6 +96,15 @@ function mergeSourceEvidence(
           : 'full',
       originalTokens,
       inputTokens,
+      ...(
+        current.sourceHash && source.sourceHash && current.sourceHash === source.sourceHash
+          ? { sourceHash: current.sourceHash }
+          : current.sourceHash && !source.sourceHash
+            ? { sourceHash: current.sourceHash }
+            : source.sourceHash && !current.sourceHash
+              ? { sourceHash: source.sourceHash }
+              : {}
+      ),
       ...((current.compression ?? source.compression)
         ? { compression: current.compression ?? source.compression }
         : {}),

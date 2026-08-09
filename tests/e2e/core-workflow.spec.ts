@@ -1447,6 +1447,119 @@ test('分步骤角色面板通过 character.create Skill 生成、恢复并确�
   expect(generationCalls).toBe(2)
 })
 
+test('已有角色补全通过定向 Skill 恢复候选，确认后只写入所选字段', async ({ page }) => {
+  let characterCalls = 0
+  let supplementCalls = 0
+  const modelCharacter = {
+    name: '模型守灯人',
+    roleWeight: 'secondary',
+    moralAxis: 'good',
+    orderAxis: 'lawful',
+    relationships: '',
+    shortDescription: '守护旧港灯塔的年轻钟匠。',
+    personality: '',
+    background: '出身旧港钟匠世家。',
+    motivation: '修复失踪的潮汐钟。',
+  }
+  const supplementCandidate = {
+    version: 1,
+    patch: {
+      personality: '克制谨慎，会先核对每一次潮声再行动。',
+      goals: '短期找回潮汐钟，长期重建旧港的报时秩序。',
+    },
+  }
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'character-supplement-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    const body = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = body.messages?.map(message => message.content).join('\n') ?? ''
+    const isPlanner = combined.includes('你只把用户目标拆成幕后领域任务')
+    const isSupplement = combined.includes('只允许补全的字段')
+    let content: string
+    if (isPlanner) {
+      content = JSON.stringify({
+        summary: '交给角色领域 Agent。',
+        tasks: [{
+          id: 'character-1',
+          agentId: 'character',
+          instruction: '设计一名守灯钟匠',
+          dependsOn: [],
+        }],
+      })
+    } else if (isSupplement) {
+      supplementCalls += 1
+      expect(combined).toContain('【本次目标角色】模型守灯人')
+      expect(combined).toContain('personality（性格）')
+      expect(combined).toContain('goals（目标(短/长期)）')
+      expect(combined).toContain('已启用反向哺喂')
+      content = JSON.stringify(supplementCandidate)
+    } else {
+      characterCalls += 1
+      content = JSON.stringify(modelCharacter)
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{ message: { content } }],
+        usage: { prompt_tokens: 180, completion_tokens: 70, total_tokens: 250 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 已有角色补全闭环')
+  await openSidebarLeaf(page, '角色设计', '角色生成')
+  await page.getByPlaceholder('角色要求（可选）').fill('设计一名守灯钟匠')
+  await page.getByRole('button', { name: 'AI 设计角色', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: '角色候选内容' })).toContainText('模型守灯人')
+  await page.getByRole('button', { name: '采纳', exact: true }).click()
+  await expect(page.getByText('角色生成 · 1', { exact: true })).toBeVisible()
+
+  await page.getByTitle(/AI 补全设定/).click()
+  await page.getByRole('button', { name: '清空', exact: true }).click()
+  await page.getByLabel('性格', { exact: true }).check()
+  await page.getByLabel('目标(短/长期)', { exact: true }).check()
+  await page.getByLabel('结合剧情已写内容', { exact: false }).check()
+  await page.getByRole('button', { name: '生成 2 个字段候选', exact: true }).click()
+  await expect(page.getByRole('region', { name: '角色补全候选' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: '补全候选-性格' }))
+    .toHaveValue(supplementCandidate.patch.personality)
+  await expect(page.getByPlaceholder('性格…')).toHaveValue('')
+
+  await page.reload()
+  await openSidebarLeaf(page, '角色设计', '角色生成')
+  await page.getByRole('button', { name: /模型守灯人.*守护旧港灯塔/ }).click()
+  await expect(page.getByPlaceholder('性格…')).toHaveValue('')
+  await page.getByTitle(/AI 补全设定/).click()
+  await expect(page.getByRole('textbox', { name: '补全候选-目标(短/长期)' }))
+    .toHaveValue(supplementCandidate.patch.goals)
+  await page.getByRole('button', { name: '拒绝', exact: true }).click()
+  await expect(page.getByRole('region', { name: '角色补全候选' })).toHaveCount(0)
+  expect(supplementCalls).toBe(1)
+
+  await page.getByRole('button', { name: '生成 2 个字段候选', exact: true }).click()
+  const editedPersonality = '作者确认：克制但并不冷漠，会在钟声失准时主动求助。'
+  await page.getByRole('textbox', { name: '补全候选-性格' }).fill(editedPersonality)
+  await page.getByRole('button', { name: '确认写入', exact: true }).click()
+
+  await expect(page.getByPlaceholder('性格…')).toHaveValue(editedPersonality)
+  await expect(page.getByPlaceholder('目标(短/长期)…')).toHaveValue(supplementCandidate.patch.goals)
+  await expect(page.getByPlaceholder('背景故事…')).toHaveValue(modelCharacter.background)
+  expect(characterCalls).toBe(1)
+  expect(supplementCalls).toBe(2)
+})
+
 test('主 Agent 调度大纲领域任务，确认可见整批候选后同步到正式大纲', async ({ page }) => {
   let generationCalls = 0
   const modelCandidate = [

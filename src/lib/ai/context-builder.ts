@@ -242,6 +242,24 @@ export function buildCharacterContext(characters: Character[]): string {
   return parts.join('\n')
 }
 
+/** Full single-character source for targeted edits; unlike roster context it never downshifts NPC fields. */
+export function buildTargetCharacterContext(character: Character | null): string {
+  if (!character) return ''
+  const normalized = {
+    ...character,
+    ...normalizeCharacterAxes(character as unknown as Record<string, unknown>),
+  } as Character
+  const axes = `${ROLE_WEIGHT_LABELS[normalized.roleWeight]} · ${ORDER_AXIS_LABELS[normalized.orderAxis]}${MORAL_AXIS_LABELS[normalized.moralAxis]}`
+  return [
+    `【本次目标角色】${normalized.name}（${axes}）`,
+    ...CHARACTER_DIMENSIONS.map(dimension => {
+      const value = (normalized[dimension.key] as string | undefined)?.trim()
+      return value ? `${dimension.label}：${value}` : `${dimension.label}：（未填写）`
+    }),
+    normalized.relationships?.trim() ? `人物关系：${normalized.relationships.trim()}` : '人物关系：（未填写）',
+  ].join('\n')
+}
+
 /**
  * Phase G2: 过滤活跃角色
  * 只保留在当前章节范围内活跃的角色（主要角色始终保留）

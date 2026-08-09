@@ -22,6 +22,7 @@ import {
   type MasterCandidateDependencyBindingV1,
   type MasterCandidatePayload,
 } from '../orchestrator'
+import { parseCharacterSupplementTaskInputV1 } from '../character-supplement-copilot'
 import type { AgentTeamBudgetEvidence } from '../team-budget'
 import {
   getAgentSkillV1,
@@ -351,6 +352,27 @@ function readOptionalCharacterRevisionRequest(
   }
 }
 
+function readOptionalCharacterSupplementRequest(
+  value: Record<string, unknown>,
+  agentId: DomainAgentId,
+  skillId: AgentSkillId | undefined,
+  label: string,
+) {
+  const present = Object.prototype.hasOwnProperty.call(value, 'characterSupplementRequest')
+  if (!present) {
+    if (skillId === 'character.supplement') fail(label + '.characterSupplementRequest 缺失')
+    return undefined
+  }
+  if (agentId !== 'character' || skillId !== 'character.supplement') {
+    fail(label + '.characterSupplementRequest 无效')
+  }
+  try {
+    return parseCharacterSupplementTaskInputV1(value.characterSupplementRequest)
+  } catch (error) {
+    fail(`${label}.characterSupplementRequest 无效：${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 function readOptionalSkillId(
   value: Record<string, unknown>,
   agentId: DomainAgentId,
@@ -361,7 +383,7 @@ function readOptionalSkillId(
   const skill = getAgentSkillV1(value.skillId, agentId)
   const allowedModes: Record<DomainAgentId, ReadonlySet<string>> = {
     'world-origin': new Set(['complete', 'worldview-field', 'story-core']),
-    character: new Set(['create']),
+    character: new Set(['create', 'supplement']),
     inspiration: new Set(['reverse']),
     outline: new Set(['auto', 'story-arcs', 'character-driven', 'character-revision', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue']),
@@ -403,7 +425,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     assertKeysWithOptional(
       item,
       ['id', 'agentId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId', 'skillId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest'],
+      ['perspectiveCharacterId', 'skillId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -442,6 +464,12 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       skillId,
       '主 Agent 计划任务 ' + id,
     )
+    const characterSupplementRequest = readOptionalCharacterSupplementRequest(
+      item,
+      agentId,
+      skillId,
+      '主 Agent 计划任务 ' + id,
+    )
     return {
       id,
       agentId,
@@ -452,6 +480,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       ...(inspirationFragmentIds !== undefined ? { inspirationFragmentIds } : {}),
       ...(characterDrivenPlanId !== undefined ? { characterDrivenPlanId } : {}),
       ...(characterRevisionRequest !== undefined ? { characterRevisionRequest } : {}),
+      ...(characterSupplementRequest !== undefined ? { characterSupplementRequest } : {}),
     }
   })
   const workflow = value.workflow === undefined
@@ -479,7 +508,8 @@ function sourceKeysForPlan(plan: MasterAgentPlan): string[] {
   return [...new Set(plan.tasks.flatMap(task => {
     const skill = resolveAgentSkillV1(task.agentId, task.skillId)
     return resolveAgentSkillContextSourceKeysV1(skill, {
-      includeOptional: task.agentId === 'prose' && task.perspectiveCharacterId != null,
+      includeOptional: (task.agentId === 'prose' && task.perspectiveCharacterId != null)
+        || (task.skillId === 'character.supplement' && task.characterSupplementRequest?.useEvidence === true),
     })
   }))]
 }
@@ -698,6 +728,8 @@ function sameTaskIdentity(left: MasterAgentTask, right: MasterAgentTask): boolea
     && (left.characterDrivenPlanId ?? null) === (right.characterDrivenPlanId ?? null)
     && JSON.stringify(left.characterRevisionRequest ?? null)
       === JSON.stringify(right.characterRevisionRequest ?? null)
+    && JSON.stringify(left.characterSupplementRequest ?? null)
+      === JSON.stringify(right.characterSupplementRequest ?? null)
 }
 
 function sameTaskDefinition(left: MasterAgentTask, right: MasterAgentTask): boolean {
@@ -1091,6 +1123,13 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
       fail(`${label} characterRevisionRequest 无效：${error instanceof Error ? error.message : String(error)}`)
     }
   }
+  if (payload.characterSupplementRequest !== undefined) {
+    try {
+      payload.characterSupplementRequest = parseCharacterSupplementTaskInputV1(payload.characterSupplementRequest)
+    } catch (error) {
+      fail(`${label} characterSupplementRequest 无效：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
   budgetEvidence(payload.teamBudgetEvidence, `${label} payload teamBudgetEvidence`)
   return payload
 }
@@ -1143,6 +1182,15 @@ function assertCandidateMatchesTaskSkill(
     taskSkill.executionMode !== 'character-revision'
     && payload.characterRevisionRequest !== undefined
   ) fail(`${label} 不得携带角色变更请求`)
+  if (
+    taskSkill.executionMode === 'supplement'
+    && JSON.stringify(payload.characterSupplementRequest ?? null)
+      !== JSON.stringify(task.characterSupplementRequest ?? null)
+  ) fail(`${label} 的角色补全请求与 Skill 计划不一致`)
+  if (
+    taskSkill.executionMode !== 'supplement'
+    && payload.characterSupplementRequest !== undefined
+  ) fail(`${label} 不得携带角色补全请求`)
   if (
     task.agentId === 'prose'
     && (taskSkill.executionMode === 'generate' || taskSkill.executionMode === 'continue')

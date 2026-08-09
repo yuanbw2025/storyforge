@@ -23,6 +23,7 @@ const LAYERS_BY_TRIM_PRIORITY: ContextLayer[] = ['L3', 'L2', 'L1']
 interface KeyedContextSegment {
   key: string
   segment: ContextSegment
+  sourceHash: string
   originalTokens: number
   delivery: 'full' | 'compressed' | 'truncated'
   compression?: AssembleContextSourceEvidence['compression']
@@ -126,12 +127,13 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
   const omittedEvidence: AssembleContextSourceEvidence[] = []
   const keyedSegments: KeyedContextSegment[] = []
 
-  const omit = (key: string): void => {
+  const omit = (key: string, sourceHash?: string): void => {
     omitted.push(key)
     omittedEvidence.push({
       key,
       status: 'omitted',
       delivery: 'none',
+      ...(sourceHash ? { sourceHash } : {}),
       originalTokens: 0,
       inputTokens: 0,
     })
@@ -154,8 +156,9 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       continue
     }
     const content = await source.read(resolvedInput)
+    const sourceHash = await sha256Text(content)
     if (!content.trim()) {
-      omit(source.key)
+      omit(source.key, sourceHash)
       continue
     }
     // 单一源也不能突破整个请求预算。L0/protected 只表示不得整段丢弃，
@@ -211,6 +214,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       : { content: preparedContent, truncated: false }
     keyedSegments.push({
       key: source.key,
+      sourceHash,
       segment: {
         label: source.label,
         layer: source.layer,
@@ -242,6 +246,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
         key: source.key,
         status: 'trimmed',
         delivery: 'none',
+        sourceHash: item.sourceHash,
         originalTokens: item.originalTokens,
         inputTokens: 0,
       }
@@ -250,6 +255,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       key: source.key,
       status: 'included',
       delivery: item.delivery,
+      sourceHash: item.sourceHash,
       originalTokens: item.originalTokens,
       inputTokens: item.segment.tokens,
       ...(item.compression ? { compression: item.compression } : {}),

@@ -16,6 +16,7 @@ import {
   buildLocationContext,
   buildRefAnalysisContext,
   buildCharacterContext,
+  buildTargetCharacterContext,
   formatPowerSystemBlock,
   formatStoryCoreBlock,
   formatWorldviewBlock,
@@ -202,6 +203,12 @@ async function readCharacters(projectId: number, worldGroupId?: number | null, s
   if (worldGroupId === undefined) return rows
   const wg = worldGroupId ?? null
   return rows.filter(c => c.isCrossWorld || (c.homeWorldGroupId ?? null) === wg)
+}
+
+async function readTargetCharacter(input: AssembleContextInput): Promise<string> {
+  if (input.characterId == null) return ''
+  const characters = await readCharacters(input.projectId, input.worldGroupId, input.scope)
+  return buildTargetCharacterContext(characters.find(character => character.id === input.characterId) ?? null)
 }
 
 async function readForeshadows(projectId: number, chapterId?: number | null, scope?: WorkspaceScope): Promise<string> {
@@ -1076,6 +1083,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresWorldGroupId: true,
     ownerFrom: 'world',
     read: async input => buildCharacterContext(await readCharacters(input.projectId, input.worldGroupId, input.scope)),
+  },
+  {
+    key: 'targetCharacter',
+    label: '本次目标角色完整设定',
+    scope: 'world',
+    layer: 'L0',
+    budgetTokens: 8_000,
+    protectedFromTrim: true,
+    requiresWorldGroupId: true,
+    ownerFrom: 'world',
+    enabled: input => input.characterId != null,
+    read: readTargetCharacter,
   },
   {
     key: 'creativeRules',

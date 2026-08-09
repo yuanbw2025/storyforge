@@ -357,6 +357,11 @@
   持久化前拒绝未知字段、非法枚举和类型，解析失败不再隐藏调用第二个模型。确认前 `detailedOutlines` 零写入，
   刷新后可恢复；确认时重算 Context Manifest，来源变化即 stale，确认后只经 `adopt()`，正式字段匹配后才签发
   terminal receipt。人工场景 CRUD、五阶段工坊和 HARNESS-10 批量细纲保留；当前不证明真实模型场景质量收益。
+- HARNESS-38 已把四个角色面板的“AI 补全设定”收口为 Character Agent 的 `character.supplement` Skill。
+  目标角色 ID、字段闭集和反向哺喂开关冻结进 durable plan；`targetCharacter` 与其它正式来源只经
+  `assembleContext()`，事实和正文表现仅在开关开启时读取。严格候选确认前不写 `characters`，刷新可恢复并可按
+  字段编辑、拒绝或确认；确认时逐来源原始 hash 变化即 stale，之后只经 `adopt(recordId, merge-diffs)`，正式状态
+  匹配后才签发 terminal receipt。旧组件模型直调、即时写回和宽松空补丁 parser 已删除，人工编辑与四个入口保留。
 
 ### GOV-1 第一阶段交付证据
 

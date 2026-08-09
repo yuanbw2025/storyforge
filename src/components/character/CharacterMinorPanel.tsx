@@ -73,7 +73,7 @@ export default function CharacterMinorPanel({ project }: Props) {
                 />
                 <CharacterSupplementAction
                   character={c}
-                  projectId={project.id!}
+                  project={project}
                   worldGroupId={c.homeWorldGroupId ?? null}
                   onDone={() => loadAll(project.id!)}
                   compact

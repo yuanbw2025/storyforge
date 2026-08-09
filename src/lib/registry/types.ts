@@ -466,6 +466,8 @@ export interface AssembleContextSourceEvidence {
   key: string
   status: AssembleContextSourceStatus
   delivery: AssembleContextSourceDelivery
+  /** SHA-256 of the registered reader's complete raw output before compression or truncation. */
+  sourceHash?: string
   /** Tokens returned by the registered reader before its source budget was applied. */
   originalTokens: number
   /** Tokens actually delivered to the model. Zero for omitted/trimmed sources. */

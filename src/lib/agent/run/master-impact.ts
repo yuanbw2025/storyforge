@@ -88,6 +88,10 @@ async function buildReport(
     report.changed.id = typeof row?.id === 'number' ? row.id : null
   }
 
+  if (payload.skillId === 'character.supplement') {
+    report.changed.id = payload.characterSupplementRequest?.characterId ?? null
+  }
+
   if (agentId !== 'prose' || payload.proseOutlineNodeId == null) {
     return report
   }
