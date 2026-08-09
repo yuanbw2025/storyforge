@@ -42,6 +42,7 @@ import {
   stampNewRecord,
 } from '../world-engine/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
+import { hashCanonicalValue } from './run/hash'
 
 export const CONSISTENCY_AGENT_VERSION = 1
 export const CONSISTENCY_AGENT_PAYLOAD_TYPE = 'consistency-agent'
@@ -54,6 +55,14 @@ export interface ConsistencyAgentContextEvidence {
   trimmed: string[]
   inputTokens: number
   inputBudget: number
+}
+
+export interface ConsistencyAgentDurableEvidenceV1 {
+  runId: number
+  stepId: string
+  attempt: number
+  contextManifestHash: string
+  candidateHash: string
 }
 
 export interface ConsistencyAgentCandidate {
@@ -69,6 +78,8 @@ export interface ConsistencyAgentCandidate {
   findings: ConsistencyFinding[]
   context: ConsistencyAgentContextEvidence
   budget: AgentTeamBudgetEvidence
+  /** Present when the report is the post-adoption barrier's durable step. */
+  durable?: ConsistencyAgentDurableEvidenceV1
 }
 
 export interface ConsistencyAgentRun {
@@ -155,6 +166,7 @@ function candidateBase(input: {
   findings: ConsistencyFinding[]
   context: ConsistencyAgentContextEvidence
   budget: AgentTeamBudgetEvidence
+  contextEvidence?: ConsistencyAgentContextEvidence
 }): ConsistencyAgentCandidate {
   return {
     version: CONSISTENCY_AGENT_VERSION,
@@ -167,9 +179,17 @@ function candidateBase(input: {
     sourceTextHash: input.sourceTextHash,
     createdAt: Date.now(),
     findings: dedupeFindings(input.findings),
-    context: input.context,
+    context: input.contextEvidence ?? input.context,
     budget: input.budget,
   }
+}
+
+/** Hash the semantic report without its run-specific envelope. */
+export async function hashConsistencyAgentCandidateV1(
+  candidate: ConsistencyAgentCandidate,
+): Promise<string> {
+  const { durable: _durable, ...withoutDurableEvidence } = candidate
+  return hashCanonicalValue(withoutDurableEvidence)
 }
 
 /** 保存正文后的零 token Fast Guard。不会装配模型上下文，也不会调用提供商。 */
@@ -180,6 +200,7 @@ export async function runBackgroundConsistencyAgent(input: {
   worldGroupId: number | null
   chapterContent: string
   budget: AgentTeamBudgetTracker
+  contextEvidence?: ConsistencyAgentContextEvidence
 }): Promise<ConsistencyAgentCandidate> {
   const scope = await resolveReadScopeLike(input.projectId)
   const chapter = await db.chapters.get(input.chapterId)
@@ -201,6 +222,7 @@ export async function runBackgroundConsistencyAgent(input: {
     sourceTextHash,
     findings,
     context: emptyContext(),
+    contextEvidence: input.contextEvidence,
     budget: input.budget.snapshot(),
   })
 }
@@ -311,9 +333,25 @@ export async function runConsistencyAgent(input: {
   })
 }
 
-function isConsistencyAgentCandidate(value: unknown): value is ConsistencyAgentCandidate {
+export function isConsistencyAgentCandidateV1(value: unknown): value is ConsistencyAgentCandidate {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const candidate = value as Partial<ConsistencyAgentCandidate>
+  const durable = candidate.durable
+  const durableValid = durable === undefined || (
+    durable !== null
+    && typeof durable === 'object'
+    && !Array.isArray(durable)
+    && Number.isInteger(durable.runId)
+    && durable.runId > 0
+    && typeof durable.stepId === 'string'
+    && durable.stepId.length > 0
+    && Number.isInteger(durable.attempt)
+    && durable.attempt > 0
+    && typeof durable.contextManifestHash === 'string'
+    && /^[a-f0-9]{64}$/u.test(durable.contextManifestHash)
+    && typeof durable.candidateHash === 'string'
+    && /^[a-f0-9]{64}$/u.test(durable.candidateHash)
+  )
   return candidate.version === CONSISTENCY_AGENT_VERSION
     && candidate.type === CONSISTENCY_AGENT_PAYLOAD_TYPE
     && typeof candidate.projectId === 'number'
@@ -321,6 +359,7 @@ function isConsistencyAgentCandidate(value: unknown): value is ConsistencyAgentC
     && typeof candidate.sourceTextHash === 'string'
     && ['background', 'fast', 'deep'].includes(String(candidate.mode))
     && Array.isArray(candidate.findings)
+    && durableValid
 }
 
 export function summarizeConsistencyAgentCandidate(candidate: ConsistencyAgentCandidate): string {
@@ -345,10 +384,13 @@ export async function persistConsistencyAgentCandidate(
     .filter(event => event.kind === 'candidate')
     .map(event => ({ event, candidate: parseAgentEventPayload<unknown>(event, null) }))
     .find(row => (
-      isConsistencyAgentCandidate(row.candidate)
+      isConsistencyAgentCandidateV1(row.candidate)
       && row.candidate.chapterId === candidate.chapterId
       && row.candidate.mode === candidate.mode
       && row.candidate.sourceTextHash === candidate.sourceTextHash
+      && (candidate.durable
+        ? row.event.durableRunId === candidate.durable.runId
+        : row.event.durableRunId == null)
     ))
   const now = Date.now()
   if (existing?.event.id != null) {
@@ -356,6 +398,7 @@ export async function persistConsistencyAgentCandidate(
     if (conversation && await assertRecordInScope(scope, 'agentConversations', conversation, { owner: 'work' })) {
       await db.transaction('rw', db.agentConversations, db.agentEvents, async () => {
         await db.agentEvents.update(existing.event.id!, {
+          durableRunId: candidate.durable?.runId ?? null,
           content: summarizeConsistencyAgentCandidate(candidate),
           payload: JSON.stringify(candidate),
           createdAt: now,
@@ -388,6 +431,7 @@ export async function persistConsistencyAgentCandidate(
     const event = stampNewRecord(scope, 'agentEvents', {
       projectId: candidate.projectId,
       conversationId,
+      durableRunId: candidate.durable?.runId ?? null,
       sequence: 1,
       kind: 'candidate',
       role: 'assistant',
@@ -416,7 +460,7 @@ export async function readLatestConsistencyAgentRun(input: {
     .filter(event => event.kind === 'candidate')
     .map(event => ({ event, candidate: parseAgentEventPayload<unknown>(event, null) }))
     .filter((row): row is { event: AgentEvent; candidate: ConsistencyAgentCandidate } => (
-      isConsistencyAgentCandidate(row.candidate)
+      isConsistencyAgentCandidateV1(row.candidate)
       && row.candidate.chapterId === input.chapterId
     ))
     .sort((left, right) => right.event.createdAt - left.event.createdAt)

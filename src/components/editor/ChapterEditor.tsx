@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { FileText, ClipboardList } from 'lucide-react'
+import { FileText, ClipboardList, RotateCcw } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
 import { useStateCardStore } from '../../stores/state-card'
@@ -98,6 +98,7 @@ import {
   recordChapterPostAdoptionOutputV1,
   rejectChapterPostAdoptionOrganizationAdoptionV1,
   recoverChapterPostAdoptionOrganizationV1,
+  recoverChapterPostAdoptionConsistencyV1,
   readChapterPostAdoptionChainStatusV1,
   readLatestChapterPostAdoptionRunV1,
   scheduleChapterPostAdoptionStepsV1,
@@ -109,10 +110,15 @@ import {
   type ChapterPostAdoptionChainStateV1,
   type ChapterPostAdoptionStepIdV1,
 } from '../../lib/agent/run/chapter-post-adoption-durable'
+import {
+  buildChapterPostAdoptionResumePlanV1,
+  isChapterPostAdoptionStepRunnableV1,
+} from '../../lib/agent/run/chapter-post-adoption-resume'
 import { createContextManifestFromAssemblyV1 } from '../../lib/agent/run/context-manifest'
 import { readAgentRunV1, type AgentRunSnapshotV1 } from '../../lib/agent/run/event-store'
 import { hashChapterText, normalizeChapterText } from '../../lib/ai/chapter-memory/text-normalization'
 import { hashCanonicalValue } from '../../lib/agent/run/hash'
+import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
 import {
   beginProseGenerationStepV1,
@@ -136,6 +142,7 @@ import { runDurableProseSemanticReviewV1 } from '../../lib/agent/run/prose-seman
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
 import {
   isConsistencyAgentCurrent,
+  hashConsistencyAgentCandidateV1,
   persistConsistencyAgentCandidate,
   readLatestConsistencyAgentRun,
   runBackgroundConsistencyAgent,
@@ -430,6 +437,29 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         projectId: project.id!,
         chapterId: currentChapter.id!,
       })
+      if (run?.candidate.durable?.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency) {
+        const scope = await resolveScopeLike(project.id!)
+        const recovered = await recoverChapterPostAdoptionConsistencyV1({
+          scope,
+          candidate: run.candidate,
+        })
+        if (recovered) {
+          let currentSnapshot = recovered
+          if (recovered.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization]?.status === 'succeeded') {
+            try {
+              currentSnapshot = (await verifyChapterPostAdoptionRunV1({
+                scope,
+                runId: recovered.run.id,
+              })).snapshot
+            } catch {
+              // Earlier post-adoption steps may still need recovery or author confirmation.
+            }
+          }
+          transitionSnapshotRef.current = currentSnapshot
+          setPostAdoptionRunId(currentSnapshot.run.id)
+          setPostAdoptionChainState(chapterPostAdoptionChainStateV1(currentSnapshot))
+        }
+      }
       const current = run ? await isConsistencyAgentCurrent(run.candidate) : false
       if (!active) return
       setConsistencyRun(run)
@@ -564,6 +594,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         if (consistencyRunRef.current) {
           const current = await isConsistencyAgentCurrent(consistencyRunRef.current.candidate)
           if (active) setConsistencyCurrent(current)
+          if (current) return
         }
         const budget = new AgentTeamBudgetTracker(
           useAIConfigStore.getState().agentTeamBudgetProfile,
@@ -1725,8 +1756,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
   }
 
-  // HARNESS-20: 正文采纳后的单一 post-adoption barrier。
-  // 六域结构抽取复用“整理本章”Agent；检索与章节记忆仍是独立、可验证步骤。
+  // HARNESS-20/41: 正文采纳后的单一 post-adoption barrier。
+  // 六域结构抽取复用“整理本章”Agent；检索、章节记忆和确定性一致性守卫均有独立证据。
   const handleAutoPostGenerate = async (task: {
     chapterId: number
     chapterTitle: string
@@ -1737,6 +1768,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       receiptHash: string
       artifactHash: string
     }
+    resumeRunId?: number
   }) => {
     const controller = new AbortController()
     organizationAbortRef.current?.abort()
@@ -1754,12 +1786,24 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setTransitionCandidate(null)
     transitionCandidateRef.current = null
     setPendingDiffs(null)
-    let snapshot = await createChapterPostAdoptionDurableRunV1({
-      scope,
-      worldGroupId: transitionWorldGroupId,
-      chapterId: task.chapterId,
-      parent: task.parent,
-    })
+    let snapshot = task.resumeRunId != null
+      ? await readAgentRunV1(scope, task.resumeRunId)
+      : await createChapterPostAdoptionDurableRunV1({
+          scope,
+          worldGroupId: transitionWorldGroupId,
+          chapterId: task.chapterId,
+          parent: task.parent,
+        })
+    if (snapshot.contract.scope.chapterIds?.length !== 1 || snapshot.contract.scope.chapterIds[0] !== task.chapterId) {
+      throw new Error('章节后处理恢复运行与当前章节不匹配。')
+    }
+    if (task.resumeRunId != null) {
+      const resumePlan = buildChapterPostAdoptionResumePlanV1(snapshot)
+      if (resumePlan.terminal) return
+      if (!resumePlan.canResume) {
+        throw new Error(`章节后处理当前不可自动恢复：${resumePlan.blockedReason ?? '需要检查运行证据'}`)
+      }
+    }
     setPostAdoptionRunId(snapshot.run.id)
     setPostAdoptionChainState(chapterPostAdoptionChainStateV1(snapshot))
     transitionSnapshotRef.current = snapshot
@@ -1805,8 +1849,20 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       transitionSnapshotRef.current = next
       setPostAdoptionChainState(chapterPostAdoptionChainStateV1(next))
     }
+    const shouldRunStep = (stepId: ChapterPostAdoptionStepIdV1): boolean => {
+      if (task.resumeRunId == null) return true
+      return isChapterPostAdoptionStepRunnableV1(
+        buildChapterPostAdoptionResumePlanV1(snapshot),
+        stepId,
+      )
+    }
 
     // 1. 一次综合抽取六域候选；作者确认前业务表零写入。
+    if (!shouldRunStep(CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization)) {
+      if (snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization]?.status === 'awaiting_confirmation') {
+        setShowOrganization(true)
+      }
+    } else {
     setAutoProcessing('extracting')
     try {
       await ensureFresh()
@@ -1893,11 +1949,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       } catch {
         // Keep the original processing error when a refresh window prevents a re-read.
       }
+      const failure = await classifyAgentRunFailureV1(error)
       updateSnapshot(await failChapterPostAdoptionStepV1({
         scope,
         snapshot,
         stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
-        code: error instanceof Error ? error.message : 'organization_post_step_failed',
+        ...failure,
       }))
       if (!controller.signal.aborted) {
         setTransitionError(error instanceof Error ? error.message : '六域交接候选生成失败')
@@ -1906,9 +1963,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     } finally {
       setAutoProcessing('idle')
     }
+    }
 
     // 2. summary + handoff 仍只调用一次模型，并由原子 CAS 写回 chapters。
-    try {
+    if (shouldRunStep(CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory)) try {
       await ensureFresh()
       const memoryAssembly = await assembledFor(CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.memory)
       updateSnapshot(await beginChapterPostAdoptionStepV1({
@@ -1942,17 +2000,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         output: { status: result, sourceTextHash: expectedSourceTextHash },
       }))
     } catch (error) {
+      const failure = await classifyAgentRunFailureV1(error)
       updateSnapshot(await failChapterPostAdoptionStepV1({
         scope,
         snapshot,
         stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory,
-        code: error instanceof Error ? error.message : 'memory_post_step_failed',
+        ...failure,
       }))
       setTransitionError(error instanceof Error ? error.message : '章节记忆后处理失败')
     }
 
     // 3. 记忆写回后再重建检索与层级摘要，避免把刚生成的可信摘要留在 pending 状态。
-    try {
+    if (shouldRunStep(CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval)) try {
       await ensureFresh()
       const retrievalAssembly = await assembledFor(CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.retrieval)
       updateSnapshot(await beginChapterPostAdoptionStepV1({
@@ -1988,23 +2047,112 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
         output: { chunks, summaries, sourceTextHash: expectedSourceTextHash },
       }))
+    } catch (error) {
+      const failure = await classifyAgentRunFailureV1(error)
+      updateSnapshot(await failChapterPostAdoptionStepV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
+        ...failure,
+      }))
+      setTransitionError(error instanceof Error ? error.message : '检索后处理失败')
+    }
+
+    // 4. 零 token 确定性一致性守卫。报告进入同一 durable Run；语义深审仍由作者显式触发。
+    if (shouldRunStep(CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency)) try {
+      await ensureFresh()
+      const consistencyAssembly = await assembledFor(CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.consistency)
+      const consistencyManifest = await manifestFor(
+        CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+        1,
+        CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.consistency,
+        consistencyAssembly,
+      )
+      updateSnapshot(await beginChapterPostAdoptionStepV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+        contextManifest: consistencyManifest,
+        model: false,
+      }))
+      const guard = await runBackgroundConsistencyAgent({
+        projectId: project.id!,
+        chapterId: task.chapterId,
+        chapterTitle: task.chapterTitle,
+        worldGroupId: transitionWorldGroupId,
+        chapterContent: task.chapterContent,
+        budget: new AgentTeamBudgetTracker(useAIConfigStore.getState().agentTeamBudgetProfile),
+        contextEvidence: {
+          included: consistencyAssembly.included,
+          omitted: consistencyAssembly.omitted,
+          trimmed: consistencyAssembly.trimmed,
+          inputTokens: consistencyAssembly.totalInputTokens,
+          inputBudget: consistencyAssembly.inputBudget,
+        },
+      })
+      await ensureFresh()
+      const candidateHash = await hashConsistencyAgentCandidateV1(guard)
+      const durableGuard = {
+        ...guard,
+        durable: {
+          runId: snapshot.run.id,
+          stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+          attempt: 1,
+          contextManifestHash: consistencyManifest.manifestHash,
+          candidateHash,
+        },
+      }
+      const run = await persistConsistencyAgentCandidate(durableGuard)
+      updateSnapshot(await recordChapterPostAdoptionOutputV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+        output: durableGuard,
+        candidateHash,
+        requiresConfirmation: false,
+        modelResponded: false,
+      }))
+      updateSnapshot(await succeedChapterPostAdoptionStepV1({
+        scope,
+        snapshot,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+        output: durableGuard,
+      }))
+      setConsistencyRun(run)
+      setConsistencyCurrent(true)
+      useReviewResultStore.getState().setConsistency(task.chapterId, toConsistencyAuditResult(durableGuard))
       if (snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization]?.status === 'succeeded') {
         const verified = await verifyChapterPostAdoptionRunV1({ scope, runId: snapshot.run.id })
         updateSnapshot(verified.snapshot)
       }
     } catch (error) {
+      const failure = await classifyAgentRunFailureV1(error)
       updateSnapshot(await failChapterPostAdoptionStepV1({
         scope,
         snapshot,
-        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
-        code: error instanceof Error ? error.message : 'retrieval_post_step_failed',
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+        ...failure,
       }))
-      setTransitionError(error instanceof Error ? error.message : '检索后处理失败')
+      setTransitionError(error instanceof Error ? error.message : '正文一致性守卫失败')
     }
     } finally {
       if (organizationAbortRef.current === controller) organizationAbortRef.current = null
       setOrganizingChapter(false)
     }
+  }
+
+  const handleResumePostAdoption = () => {
+    if (!currentChapter?.id || postAdoptionRunId == null || organizingChapter) return
+    const chapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
+    void handleAutoPostGenerate({
+      chapterId: currentChapter.id,
+      chapterTitle,
+      chapterContent: currentChapter.content ?? content,
+      chapterPlainText: htmlToPlainText(currentChapter.content ?? content),
+      resumeRunId: postAdoptionRunId,
+    }).catch(error => {
+      setTransitionError(error instanceof Error ? error.message : '章节后处理恢复失败')
+    })
   }
 
   const handleAcceptAI = async (text: string) => {
@@ -2487,7 +2635,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
           : 'bg-sky-500/10 border-sky-500/20 text-sky-300'}`}>
           <div>
-            章节后处理 Run #{postAdoptionRunId ?? transitionRunId ?? '—'} · 检索、六域交接候选、章节记忆统一记录，可恢复
+            章节后处理 Run #{postAdoptionRunId ?? transitionRunId ?? '—'} · 六域交接、章节记忆、检索与一致性守卫统一记录，可恢复
           </div>
           {postAdoptionChainState && (
             <div className="mt-1">
@@ -2513,6 +2661,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             <div className="mt-1">状态候选待作者确认：{transitionCandidate.stateDiffs.length} 条</div>
           )}
           {transitionError && <div className="mt-1">{transitionError}</div>}
+          {postAdoptionChainState === 'downstream-failed' && (
+            <button
+              type="button"
+              className="mt-2 inline-flex items-center gap-1.5 rounded border border-sky-400/30 px-2 py-1 text-[11px] text-sky-200 hover:bg-sky-400/10 disabled:opacity-50"
+              onClick={handleResumePostAdoption}
+              disabled={organizingChapter}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              继续章后处理
+            </button>
+          )}
         </div>
       )}
 

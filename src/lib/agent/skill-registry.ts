@@ -42,6 +42,7 @@ export type AgentSkillExecutionModeV1 =
   | 'revise'
   | 'organize'
   | 'memory'
+  | 'consistency'
 
 export interface AgentSkillWriteTargetV1 {
   table: string
@@ -330,6 +331,12 @@ export const PROSE_MEMORY_CONTEXT_SOURCE_KEYS = [
   'detailedOutline',
   'chapterContinuityHandoff',
   'previousPlanReconciliation',
+] as const
+
+export const PROSE_CONSISTENCY_CONTEXT_SOURCE_KEYS = [
+  'chapterContent',
+  'characters',
+  'heldItems',
 ] as const
 
 const WORLD_FOUNDATION_INPUT_POLICY = {
@@ -786,6 +793,7 @@ const PROSE_MEMORY_COMPRESSION_POLICY = compressionPolicy([
   'chapterContinuityHandoff',
   'previousPlanReconciliation',
 ])
+const PROSE_CONSISTENCY_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
 
 export const AGENT_SKILLS = [
   {
@@ -1359,6 +1367,26 @@ export const AGENT_SKILLS = [
     lastVerifiedAt: '2026-08-08',
     regressionTests: ['R-NS1-T3-chapter-memory-task', 'R-HARNESS20-chapter-post-adoption-durable'],
   },
+  {
+    version: 1,
+    id: 'prose.consistency',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '正文确定性一致性守卫',
+    owner: 'prose-agent',
+    promptVersion: 'chapter-consistency-guard-v1',
+    executionMode: 'consistency',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_CONSISTENCY_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_POST_ADOPTION_INPUT_POLICY,
+    contextCompression: PROSE_CONSISTENCY_COMPRESSION_POLICY,
+    maxOutputTokens: 1,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-10',
+    regressionTests: ['R-HARNESS41-consistency-post-adoption'],
+  },
 ] as const satisfies readonly AgentSkillDefinitionV1[]
 
 export type AgentSkillId = typeof AGENT_SKILLS[number]['id']
@@ -1561,7 +1589,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
-    prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory']),
+    prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory', 'consistency']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

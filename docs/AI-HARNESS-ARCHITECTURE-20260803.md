@@ -1025,6 +1025,20 @@ CHIRON 四类信息可映射到现有结构：
 - `R-HARNESS21-parent-child-lineage` 覆盖同父关系幂等、错误父回执、父 stale 撤销子回执、正文产物
   变化和跨项目导入的父键/契约重映射；旧无 lineage Run 仍通过既有兼容回归。
 
+**正文后处理确定性一致性守卫（HARNESS-41，2026-08-10）**
+
+- 正文采纳后的新 Run Contract 现在是四步：六域综合整理、章节记忆、检索/层级摘要重建、确定性一致性 Fast Guard；第四步只读 `chapterContent`、`characters`、`heldItems`，不调用模型、不写 Canon，也不改变作者确认边界。
+- 一致性候选携带 `runId/stepId/attempt/contextManifestHash/candidateHash` durable 证据，并写入同一 Run 的 `agentEvents`；终态 verifier 会回读候选、正文 hash、Context Manifest 和 step ledger，只有证据全部匹配才签发 V2 terminal receipt。
+- 一致性步骤必须在检索重建成功后启动。候选已保存但 ledger 尚未推进的崩溃窗口可以在刷新后补写 `candidate.persisted` 和 `step.succeeded`，不会再次调用模型；历史 H20 三步 Run 没有 consistency execution binding 时继续按 V1 三步兼容恢复。
+- 语义 Fast/Deep 深审仍由作者显式触发；HARNESS-41 证明的是确定性守卫的运行绑定和恢复完整性，不证明真实模型语义质量收益，也没有把零 token 守卫误报为模型评审。
+- `R-HARNESS41-consistency-post-adoption` 覆盖 Run/候选绑定、无模型调用、刷新恢复、不写 `chapters/facts/itemLedger` 以及候选或正文 hash 不匹配时拒绝恢复。
+
+**章后失败步骤统一恢复控制面（HARNESS-42，2026-08-10）**
+
+- `chapter-post-adoption-resume.ts` 从同一 durable 事件历史生成纯确定性的恢复计划：已成功步骤只读跳过；作者确认中的候选停在确认边界；可重试失败只允许在 `maxAttemptsPerStep` 内重跑；不可重试、过期和运行中未知窗口均阻断自动重跑，并暴露具体 step/action 原因。
+- 章节编辑器的“继续章后处理”复用已有父子 Run，按当前计划只执行可运行 step；不会为一次正文创建第二个 post-adoption Run，也不会重新调用已签发成功证据的模型步骤。刷新后仍以正文 hash、作用域和 Run Contract 做校验。
+- 四个章后 step 使用统一失败分类器写入 `category/action/fingerprint`，恢复决策不再把异常文案或默认 `retryable=true` 当成失败策略。HARNESS-42 的计划测试证明成功跳过、依赖阻断、可重试失败和运行中未知窗口四类边界；真实 UI 刷新/关闭重开仍需浏览器证据补充。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

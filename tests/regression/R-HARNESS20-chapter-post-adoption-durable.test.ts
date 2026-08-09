@@ -10,6 +10,11 @@ import {
   type ChapterOrganizationCandidate,
 } from '../../src/lib/agent/chapter-organization'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
+import {
+  hashConsistencyAgentCandidateV1,
+  persistConsistencyAgentCandidate,
+  runBackgroundConsistencyAgent,
+} from '../../src/lib/agent/consistency-agent'
 import { hashChapterText, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { rebuildChapterChunks, rebuildProjectNarrativeSummaries } from '../../src/lib/retrieval/retrieval'
 import type { WorkspaceScope } from '../../src/lib/types'
@@ -117,7 +122,9 @@ async function preparePending(label: string, recordCandidate = true) {
     const sourceKeys = CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1[
       stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization
         ? 'organization'
-        : stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory ? 'memory' : 'retrieval'
+        : stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory
+          ? 'memory'
+          : stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency ? 'consistency' : 'retrieval'
     ]
     const assembled = await assembleContext({
       projectId: fixture.scope.projectId,
@@ -189,6 +196,7 @@ describe.sequential('R-HARNESS20 · 正文采纳后的统一章后处理屏障',
   it('把六域候选、检索和章节记忆绑定在同一 durable run，作者确认后才签发终态回执', async () => {
     const pending = await preparePending('post-adoption')
     let snapshot = pending.snapshot
+    const consistencyManifest = await pending.manifest(CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency)
     snapshot = await beginChapterPostAdoptionStepV1({
       scope: pending.fixture.scope,
       snapshot,
@@ -250,6 +258,64 @@ describe.sequential('R-HARNESS20 · 正文采纳后的统一章后处理屏障',
       snapshot,
       stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
       output: { rebuilt: true },
+    })
+    const consistencyAssembly = await assembleContext({
+      projectId: pending.fixture.scope.projectId,
+      scope: pending.fixture.scope,
+      worldGroupId: pending.fixture.worldGroupId,
+      chapterId: pending.fixture.chapterId,
+      outlineNodeId: pending.fixture.outlineNodeId,
+      sourceKeys: [...CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.consistency],
+      inputBudgetMaxTokens: 24_000,
+    })
+    snapshot = await beginChapterPostAdoptionStepV1({
+      scope: pending.fixture.scope,
+      snapshot,
+      stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+      contextManifest: consistencyManifest,
+      model: false,
+    })
+    const guard = await runBackgroundConsistencyAgent({
+      projectId: pending.fixture.scope.projectId,
+      chapterId: pending.fixture.chapterId,
+      chapterTitle: '潮门',
+      worldGroupId: pending.fixture.worldGroupId,
+      chapterContent: CONTENT,
+      budget: new AgentTeamBudgetTracker('economy'),
+      contextEvidence: {
+        included: consistencyAssembly.included,
+        omitted: consistencyAssembly.omitted,
+        trimmed: consistencyAssembly.trimmed,
+        inputTokens: consistencyAssembly.totalInputTokens,
+        inputBudget: consistencyAssembly.inputBudget,
+      },
+    })
+    const consistencyCandidateHash = await hashConsistencyAgentCandidateV1(guard)
+    const durableGuard = {
+      ...guard,
+      durable: {
+        runId: snapshot.run.id,
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+        attempt: 1,
+        contextManifestHash: consistencyManifest.manifestHash,
+        candidateHash: consistencyCandidateHash,
+      },
+    }
+    await persistConsistencyAgentCandidate(durableGuard)
+    snapshot = await recordChapterPostAdoptionOutputV1({
+      scope: pending.fixture.scope,
+      snapshot,
+      stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+      output: durableGuard,
+      candidateHash: consistencyCandidateHash,
+      requiresConfirmation: false,
+      modelResponded: false,
+    })
+    snapshot = await succeedChapterPostAdoptionStepV1({
+      scope: pending.fixture.scope,
+      snapshot,
+      stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+      output: durableGuard,
     })
     expect(snapshot.projection.terminalReceiptHash).toBeUndefined()
 

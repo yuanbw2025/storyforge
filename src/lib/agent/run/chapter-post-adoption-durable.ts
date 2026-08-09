@@ -4,8 +4,13 @@ import {
   hashChapterText,
 } from '../../ai/chapter-memory/text-normalization'
 import type { ContextManifestV1, VerificationReceiptV1 } from '../../types/agent-run'
-import type { WorkspaceScope } from '../../types'
+import { parseAgentEventPayload, type AgentEvent, type WorkspaceScope } from '../../types'
 import type { ChapterOrganizationCandidate } from '../chapter-organization'
+import {
+  hashConsistencyAgentCandidateV1,
+  isConsistencyAgentCandidateV1,
+  type ConsistencyAgentCandidate,
+} from '../consistency-agent'
 import {
   getAgentSkillV1,
   resolveAgentSkillContextSourceKeysV1,
@@ -26,6 +31,7 @@ import {
 import { PROSE_GENERATION_VERIFIER_SET_V1, PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3 } from './prose-generation-durable'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
+import type { AgentRunFailureActionV1, AgentRunFailureCategoryV1 } from '../../types/agent-run'
 import { verifyContextManifestIntegrityV1 } from './context-manifest'
 import {
   assertRecordInScope,
@@ -42,12 +48,14 @@ export const CHAPTER_POST_ADOPTION_STEP_IDS_V1 = {
   retrieval: 'chapter-post-adoption:retrieval',
   organization: 'chapter-post-adoption:organization',
   memory: 'chapter-post-adoption:memory',
+  consistency: 'chapter-post-adoption:consistency',
 } as const
 
 export type ChapterPostAdoptionStepIdV1 = typeof CHAPTER_POST_ADOPTION_STEP_IDS_V1[keyof typeof CHAPTER_POST_ADOPTION_STEP_IDS_V1]
 
 const ORGANIZATION_SKILL_V1 = getAgentSkillV1('prose.organize', 'prose')
 const MEMORY_SKILL_V1 = getAgentSkillV1('prose.memory', 'prose')
+const CONSISTENCY_SKILL_V1 = getAgentSkillV1('prose.consistency', 'prose')
 const PROSE_TERMINAL_VERIFIERS_V1 = new Set<string>([
   PROSE_GENERATION_VERIFIER_SET_V1,
   PROSE_GENERATION_VERIFIER_SET_V2,
@@ -57,6 +65,7 @@ const PROSE_TERMINAL_VERIFIERS_V1 = new Set<string>([
 export const CHAPTER_POST_ADOPTION_SOURCE_KEYS_V1 = Object.freeze([...new Set([
   ...resolveAgentSkillContextSourceKeysV1(ORGANIZATION_SKILL_V1),
   ...resolveAgentSkillContextSourceKeysV1(MEMORY_SKILL_V1),
+  ...resolveAgentSkillContextSourceKeysV1(CONSISTENCY_SKILL_V1),
 ])])
 
 /** Context authorization is declared per executable step, not as one union
@@ -65,15 +74,18 @@ export const CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1 = Object.freeze({
   retrieval: Object.freeze(['chapterContent', 'characters']),
   organization: Object.freeze(resolveAgentSkillContextSourceKeysV1(ORGANIZATION_SKILL_V1)),
   memory: Object.freeze(resolveAgentSkillContextSourceKeysV1(MEMORY_SKILL_V1)),
+  consistency: Object.freeze(resolveAgentSkillContextSourceKeysV1(CONSISTENCY_SKILL_V1)),
 })
 
 function sourceKeysForStep(stepId: ChapterPostAdoptionStepIdV1): readonly string[] {
   if (stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization) return CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.organization
   if (stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory) return CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.memory
+  if (stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency) return CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.consistency
   return CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.retrieval
 }
 
 export const CHAPTER_POST_ADOPTION_VERIFIER_SET_V1 = 'chapter-post-adoption-terminal-v1'
+export const CHAPTER_POST_ADOPTION_VERIFIER_SET_V2 = 'chapter-post-adoption-terminal-v2'
 export const CHAPTER_POST_ADOPTION_PARENT_RELATION_V1 = 'prose-post-adoption'
 
 export type ChapterPostAdoptionChainStateV1 =
@@ -93,8 +105,16 @@ export interface ChapterPostAdoptionDurableEvidenceV1 {
   candidateHash: string
 }
 
-function stepIds(): ChapterPostAdoptionStepIdV1[] {
-  return Object.values(CHAPTER_POST_ADOPTION_STEP_IDS_V1)
+function stepIds(snapshot?: AgentRunSnapshotV1): ChapterPostAdoptionStepIdV1[] {
+  const base = [
+    CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
+    CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
+    CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory,
+  ] as ChapterPostAdoptionStepIdV1[]
+  const hasConsistency = snapshot?.contract.executionBindings?.some(binding => (
+    binding.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency
+  ))
+  return hasConsistency ? [...base, CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency] : base
 }
 
 function append(
@@ -121,6 +141,15 @@ function assertChapterPostAdoptionExecutionBindingsV1(snapshot: AgentRunSnapshot
   const { stepId: _memoryStepId, ...memoryBinding } = memory
   assertAgentSkillExecutionBindingV1(organizationBinding, ORGANIZATION_SKILL_V1, '章节六域整理执行绑定')
   assertAgentSkillExecutionBindingV1(memoryBinding, MEMORY_SKILL_V1, '章节记忆执行绑定')
+  const consistency = bindings.get(CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency)
+  const requiresConsistency = snapshot.contract.verificationPlan.some(step => (
+    step.verifier === CHAPTER_POST_ADOPTION_VERIFIER_SET_V2
+  ))
+  if (requiresConsistency && !consistency) throw new Error('正文后处理缺少一致性守卫执行绑定。')
+  if (consistency) {
+    const { stepId: _consistencyStepId, ...consistencyBinding } = consistency
+    assertAgentSkillExecutionBindingV1(consistencyBinding, CONSISTENCY_SKILL_V1, '正文一致性守卫执行绑定')
+  }
 }
 
 export function buildChapterPostAdoptionRunContractV1(input: {
@@ -135,7 +164,7 @@ export function buildChapterPostAdoptionRunContractV1(input: {
 }) {
   return {
     version: 1 as const,
-    objective: `完成章节 #${input.chapterId} 正文采纳后的检索、六域交接与章节记忆派生处理`,
+    objective: `完成章节 #${input.chapterId} 正文采纳后的六域交接、章节记忆、检索与确定性一致性守卫`,
     workflowKind: 'multi-domain-sequential' as const,
     ...(input.parent ? { lineage: {
       parent: {
@@ -181,6 +210,10 @@ export function buildChapterPostAdoptionRunContractV1(input: {
         stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory,
         ...createAgentSkillExecutionBindingV1(MEMORY_SKILL_V1),
       },
+      {
+        stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
+        ...createAgentSkillExecutionBindingV1(CONSISTENCY_SKILL_V1),
+      },
     ],
     budget: {
       maxModelCalls: 2,
@@ -194,16 +227,18 @@ export function buildChapterPostAdoptionRunContractV1(input: {
       { id: 'chapter-post-adoption.retrieval', kind: 'deterministic-check' as const, required: true },
       { id: 'chapter-post-adoption.organization', kind: 'author-confirmed' as const, required: true },
       { id: 'chapter-post-adoption.memory', kind: 'adoption-committed' as const, required: true },
+      { id: 'chapter-post-adoption.consistency', kind: 'deterministic-check' as const, required: true },
       { id: 'chapter-post-adoption.post-state', kind: 'post-state-matches' as const, required: true },
     ],
     verificationPlan: [{
       id: 'chapter-post-adoption.terminal',
       kind: 'terminal' as const,
-      verifier: CHAPTER_POST_ADOPTION_VERIFIER_SET_V1,
+      verifier: CHAPTER_POST_ADOPTION_VERIFIER_SET_V2,
       criterionIds: [
         'chapter-post-adoption.retrieval',
         'chapter-post-adoption.organization',
         'chapter-post-adoption.memory',
+        'chapter-post-adoption.consistency',
         'chapter-post-adoption.post-state',
       ],
     }],
@@ -378,7 +413,7 @@ export async function scheduleChapterPostAdoptionStepsV1(input: {
   snapshot: AgentRunSnapshotV1
 }): Promise<AgentRunSnapshotV1> {
   let snapshot = input.snapshot
-  for (const stepId of stepIds()) {
+  for (const stepId of stepIds(snapshot)) {
     if (!snapshot.projection.steps[stepId]) {
       snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId })
     }
@@ -429,6 +464,12 @@ export async function beginChapterPostAdoptionStepV1(input: {
       throw new Error('正文后处理检索重建必须在章节记忆成功之后启动。')
     }
   }
+  if (input.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency) {
+    const retrieval = input.snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval]
+    if (!retrieval || retrieval.status !== 'succeeded') {
+      throw new Error('正文一致性守卫必须在检索与摘要重建成功之后启动。')
+    }
+  }
   let snapshot = await append(input.scope, input.snapshot, 'step.started', { stepId: input.stepId, attempt })
   snapshot = await append(input.scope, snapshot, 'context.assembled', {
     stepId: input.stepId,
@@ -452,16 +493,20 @@ export async function recordChapterPostAdoptionOutputV1(input: {
   output: unknown
   candidateHash?: string
   requiresConfirmation?: boolean
+  modelResponded?: boolean
 }): Promise<AgentRunSnapshotV1> {
   const step = input.snapshot.projection.steps[input.stepId]
   if (!step || step.status !== 'running' || step.attempt < 1) {
     throw new Error(`正文后处理 step ${input.stepId} 不在运行状态。`)
   }
-  let snapshot = await append(input.scope, input.snapshot, 'model.responded', {
-    stepId: input.stepId,
-    attempt: step.attempt,
-    outputHash: await hashCanonicalValue(input.output),
-  })
+  let snapshot = input.snapshot
+  if (input.modelResponded !== false) {
+    snapshot = await append(input.scope, snapshot, 'model.responded', {
+      stepId: input.stepId,
+      attempt: step.attempt,
+      outputHash: await hashCanonicalValue(input.output),
+    })
+  }
   if (input.candidateHash) {
     snapshot = await append(input.scope, snapshot, 'candidate.persisted', {
       stepId: input.stepId,
@@ -503,6 +548,59 @@ export async function recoverChapterPostAdoptionOrganizationV1(input: {
     : null
 }
 
+/** Recover the deterministic guard after its candidate event was stored but
+ * before the post-adoption ledger recorded candidate.persisted/step.succeeded. */
+export async function recoverChapterPostAdoptionConsistencyV1(input: {
+  scope: WorkspaceScope
+  candidate: ConsistencyAgentCandidate
+}): Promise<AgentRunSnapshotV1 | null> {
+  const durable = input.candidate.durable
+  if (!durable || durable.stepId !== CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency) return null
+  if (await hashConsistencyAgentCandidateV1(input.candidate) !== durable.candidateHash) return null
+  const chapter = await db.chapters.get(input.candidate.chapterId)
+  if (
+    !chapter
+    || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })
+    || await hashChapterText(chapter.content ?? '') !== input.candidate.sourceTextHash
+  ) return null
+  let snapshot = await readAgentRunV1(input.scope, durable.runId)
+  assertChapterPostAdoptionExecutionBindingsV1(snapshot)
+  await assertChapterPostAdoptionLineageCurrentV1(input.scope, snapshot)
+  let step = snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency]
+  const manifestCurrent = snapshot.events.some(event => (
+    event.type === 'context.assembled'
+    && event.payload.stepId === durable.stepId
+    && event.payload.attempt === durable.attempt
+    && event.payload.manifestHash === durable.contextManifestHash
+  ))
+  if (
+    !step
+    || step.attempt !== durable.attempt
+    || !manifestCurrent
+    || !['running', 'succeeded'].includes(step.status)
+  ) return null
+  if (step.status === 'running' && !step.candidateHash) {
+    snapshot = await append(input.scope, snapshot, 'candidate.persisted', {
+      stepId: durable.stepId,
+      attempt: durable.attempt,
+      candidateHash: durable.candidateHash,
+      requiresConfirmation: false,
+    })
+    step = snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency]
+  }
+  if (step?.status === 'running' && step.candidateHash === durable.candidateHash) {
+    snapshot = await append(input.scope, snapshot, 'step.succeeded', {
+      stepId: durable.stepId,
+      attempt: durable.attempt,
+      outputHash: await hashCanonicalValue(input.candidate),
+    })
+  }
+  const recovered = snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency]
+  return recovered?.status === 'succeeded' && recovered.candidateHash === durable.candidateHash
+    ? snapshot
+    : null
+}
+
 export async function succeedChapterPostAdoptionStepV1(input: {
   scope: WorkspaceScope
   snapshot: AgentRunSnapshotV1
@@ -524,6 +622,9 @@ export async function failChapterPostAdoptionStepV1(input: {
   stepId: ChapterPostAdoptionStepIdV1
   code: string
   retryable?: boolean
+  category?: AgentRunFailureCategoryV1
+  action?: AgentRunFailureActionV1
+  fingerprint?: string
 }): Promise<AgentRunSnapshotV1> {
   const step = input.snapshot.projection.steps[input.stepId]
   if (!step || !['running', 'scheduled'].includes(step.status)) return input.snapshot
@@ -536,6 +637,9 @@ export async function failChapterPostAdoptionStepV1(input: {
     attempt: step.status === 'scheduled' ? 1 : step.attempt,
     code: input.code.slice(0, 160),
     retryable: input.retryable ?? true,
+    ...(input.category ? { category: input.category } : {}),
+    ...(input.action ? { action: input.action } : {}),
+    ...(input.fingerprint ? { fingerprint: input.fingerprint } : {}),
   })
 }
 
@@ -712,6 +816,36 @@ async function postStateHash(input: { scope: WorkspaceScope; chapterId: number }
   })
 }
 
+async function verifyPostAdoptionConsistencyEvidenceV1(input: {
+  scope: WorkspaceScope
+  snapshot: AgentRunSnapshotV1
+  chapterId: number
+  sourceTextHash: string
+}): Promise<string | null> {
+  const consistencyStep = input.snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency]
+  if (!consistencyStep) return null
+  if (consistencyStep.status !== 'succeeded' || !consistencyStep.candidateHash) {
+    throw new Error('正文后处理缺少已完成的一致性守卫候选。')
+  }
+  const events = await readOwnedRows<AgentEvent>(input.scope, 'agentEvents', { owner: 'work' })
+  const candidate = events
+    .filter(event => event.durableRunId === input.snapshot.run.id && event.kind === 'candidate')
+    .map(event => parseAgentEventPayload<unknown>(event, null))
+    .filter(isConsistencyAgentCandidateV1)
+    .find(value => (
+      value.chapterId === input.chapterId
+      && value.mode === 'background'
+      && value.sourceTextHash === input.sourceTextHash
+      && value.durable?.runId === input.snapshot.run.id
+      && value.durable.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency
+      && value.durable.candidateHash === consistencyStep.candidateHash
+    ))
+  if (!candidate || await hashConsistencyAgentCandidateV1(candidate) !== consistencyStep.candidateHash) {
+    throw new Error('正文后处理一致性守卫候选缺失、过期或与运行账本不一致。')
+  }
+  return consistencyStep.candidateHash
+}
+
 export async function verifyChapterPostAdoptionRunV1(input: {
   scope: WorkspaceScope
   runId: number
@@ -733,7 +867,7 @@ export async function verifyChapterPostAdoptionRunV1(input: {
   if (snapshot.projection.state === 'completed' && snapshot.run.terminalReceiptHash) {
     return { snapshot, receiptHash: snapshot.run.terminalReceiptHash }
   }
-  const steps = stepIds().map(stepId => snapshot.projection.steps[stepId])
+  const steps = stepIds(snapshot).map(stepId => snapshot.projection.steps[stepId])
   if (steps.some(step => !step || step.status !== 'succeeded')) {
     throw new Error('正文后处理尚未完成全部必需步骤。')
   }
@@ -762,6 +896,16 @@ export async function verifyChapterPostAdoptionRunV1(input: {
   ) {
     throw new Error('正文后处理终态校验发现检索块或叙事摘要未匹配当前正文。')
   }
+  const consistencyCandidateHash = await verifyPostAdoptionConsistencyEvidenceV1({
+    scope: input.scope,
+    snapshot,
+    chapterId,
+    sourceTextHash: memory.currentSourceTextHash,
+  })
+  const verifierSetVersion = snapshot.contract.verificationPlan.find(step => step.id === 'chapter-post-adoption.terminal')?.verifier
+  if (![CHAPTER_POST_ADOPTION_VERIFIER_SET_V1, CHAPTER_POST_ADOPTION_VERIFIER_SET_V2].includes(verifierSetVersion ?? '')) {
+    throw new Error('正文后处理终态 verifier 版本不受支持。')
+  }
   const organizationStep = snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization]
   const organizationCandidateHash = organizationStep?.candidateHash
   if (!organizationCandidateHash) throw new Error('正文后处理缺少六域交接候选 hash。')
@@ -771,7 +915,7 @@ export async function verifyChapterPostAdoptionRunV1(input: {
       && event.payload.candidateHash === organizationCandidateHash
   ))
   if (!organizationAdoption) throw new Error('正文后处理缺少六域交接采纳证据。')
-  const contextManifestHashes = stepIds().map(stepId => (
+  const contextManifestHashes = stepIds(snapshot).map(stepId => (
     [...snapshot.events].reverse().find((event): event is Extract<typeof event, { type: 'context.assembled' }> => (
       event.type === 'context.assembled' && event.payload.stepId === stepId
     ))
@@ -783,7 +927,7 @@ export async function verifyChapterPostAdoptionRunV1(input: {
     .map(row => row.id!)
   const postState = await postStateHash({ scope: input.scope, chapterId })
   snapshot = await append(input.scope, snapshot, 'verification.started', {
-    verifierSetVersion: CHAPTER_POST_ADOPTION_VERIFIER_SET_V1,
+    verifierSetVersion: verifierSetVersion!,
   })
   const receipt = await createVerificationReceiptV1({
     version: 1,
@@ -794,12 +938,17 @@ export async function verifyChapterPostAdoptionRunV1(input: {
     candidateHashes,
     adoptionEventIds,
     postStateHash: postState,
-    verifierSetVersion: CHAPTER_POST_ADOPTION_VERIFIER_SET_V1,
+    verifierSetVersion: verifierSetVersion!,
     ...(snapshot.contract.lineage?.parent ? { lineage: snapshot.contract.lineage.parent } : {}),
     criteria: [
       { id: 'chapter-post-adoption.retrieval', status: 'passed', evidenceRefs: [`step:${CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval}`] },
       { id: 'chapter-post-adoption.organization', status: 'passed', evidenceRefs: [`event:${organizationCandidateHash}`] },
       { id: 'chapter-post-adoption.memory', status: 'passed', evidenceRefs: [`step:${CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory}`] },
+      ...(consistencyCandidateHash ? [{
+        id: 'chapter-post-adoption.consistency',
+        status: 'passed' as const,
+        evidenceRefs: [`candidate:${consistencyCandidateHash}`],
+      }] : []),
       { id: 'chapter-post-adoption.post-state', status: 'passed', evidenceRefs: [`post-state:${postState}`] },
     ],
     acceptedAt: Date.now(),
