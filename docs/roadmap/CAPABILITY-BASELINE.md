@@ -482,6 +482,13 @@
   按 split 存储并可刷新恢复，只展示 aggregate 且可导出完整 artifact；development 通过后才解锁 held-out。
   旧 NS-0/NS-1 模型 runner、独立语义裁判、结果 key 和按钮已删除，H17 对照保留。sealed 仅指调用/评分 API 隔离而非源码
   标签保密；真实外部 verifier 40+20 artifact、真实浏览器关闭重开、人工 held-out 复核和质量收益仍未交付。
+- HARNESS-29 已在唯一只读 Agent Runner 上增加 provider 原生工具 transport 基座。默认继续使用
+  `text-json-v1`；只有 capability matrix 已验证且显式启用时才声明 `native-tools-v1`。声明由现有 14 个
+  `AGENT_READ_TOOLS` 派生，动作重新经过同一闭集解析并只由 `executeAgentTool()` 执行，读取仍走
+  `CONTEXT_SOURCES + assembleContext()`，零业务写权限。工具 schema token 纳入物理窗口与 Runner 预算；
+  未知/畸形调用有限失败，不会隐藏回退文本协议。任务路由先冻结真实 provider/model，新 durable Run
+  绑定 transport capability hash，运行中改路由不能偏离合同；HARNESS-29 前旧 Run 不伪造绑定。当前只有
+  模拟 provider 合同测试，开关默认关闭，不能宣称 token、延迟或质量收益。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

@@ -269,6 +269,7 @@ export function trimMessagesToFit(
   model: string,
   maxOutput?: number,
   contextWindowOverride?: number,
+  reservedInputTokens = 0,
 ): TrimmedMessagesResult {
   const preset = getModelPreset(provider, model)
   const maxContext = (contextWindowOverride && contextWindowOverride > 0)
@@ -278,26 +279,30 @@ export function trimMessagesToFit(
   const safetyMargin = Math.round(maxContext * 0.05)
   const inputBudget = maxContext - outputBudget - safetyMargin
   const copy = messages.map(message => ({ ...message }))
-  let total = copy.reduce((sum, message) => sum + estimateTokens(message.content), 0)
+  const reserved = Number.isFinite(reservedInputTokens)
+    ? Math.max(0, Math.floor(reservedInputTokens))
+    : 0
+  let messageTokens = copy.reduce((sum, message) => sum + estimateTokens(message.content), 0)
   let trimmed = false
 
   let guard = 0
-  while (total > inputBudget && guard++ < copy.length * 3) {
+  while (messageTokens + reserved > inputBudget && guard++ < copy.length * 3) {
     const index = copy.findIndex(message =>
       message.role !== 'system' && message.content !== '（此段因上下文窗口限制已裁剪）')
     if (index < 0) break
     const tokens = estimateTokens(copy[index].content)
-    const overflow = total - inputBudget
+    const overflow = messageTokens + reserved - inputBudget
     if (tokens <= overflow + 128) {
       copy[index].content = '（此段因上下文窗口限制已裁剪）'
     } else {
       const keepTokens = Math.max(64, tokens - overflow - 128)
       copy[index].content = trimTextToApproxTokensPreservingContinuity(copy[index].content, keepTokens)
     }
-    total = copy.reduce((sum, message) => sum + estimateTokens(message.content), 0)
+    messageTokens = copy.reduce((sum, message) => sum + estimateTokens(message.content), 0)
     trimmed = true
   }
 
+  const total = messageTokens + reserved
   const protectedBlocks = messages.flatMap(message => extractContinuityBlocks(message.content))
   const protectedEnvelopePreserved = total <= inputBudget && protectedBlocks.every(block =>
     copy.some(message => message.content.includes(block))

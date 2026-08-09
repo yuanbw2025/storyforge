@@ -195,7 +195,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 |---|---|
 | `agent.orchestrator` | `src/lib/agent/orchestrator.ts:417` |
 | `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:504` |
-| `agent.readonly` | `src/lib/agent/client-adapter.ts:34` |
+| `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
@@ -277,4 +277,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `26e1229`
+生成时间基准:commit `0453fdc`

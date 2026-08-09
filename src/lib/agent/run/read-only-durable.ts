@@ -118,9 +118,13 @@ export function buildReadOnlyAgentRunContractV1(input: {
   worldGroupId: number | null
   limits?: Partial<ReadOnlyAgentLimits>
   maxAttemptsPerStep?: number
+  runtimeBindingHash?: string
 }): AgentRunContractV1 {
   const objective = input.goal.trim()
   if (!objective) throw new Error('Agent 目标不能为空')
+  if (input.runtimeBindingHash && !/^[0-9a-f]{64}$/u.test(input.runtimeBindingHash)) {
+    throw new Error('runtimeBindingHash 必须是 SHA-256')
+  }
   const limits = resolveReadOnlyAgentLimits(input.limits)
   return {
     version: 1,
@@ -134,6 +138,7 @@ export function buildReadOnlyAgentRunContractV1(input: {
       contextSourceKeys: [...AGENT_READ_CONTEXT_SOURCE_KEYS],
       writeTargets: [],
     },
+    ...(input.runtimeBindingHash ? { runtimeBindingHash: input.runtimeBindingHash } : {}),
     budget: {
       maxModelCalls: limits.maxSteps,
       maxToolCalls: limits.maxToolCalls,
@@ -484,22 +489,35 @@ export async function runDurableReadOnlyAgentV1(
   const context = assertContextScope(input)
   const limits = resolveReadOnlyAgentLimits(input.limits)
   const executionBinding = normalizeExecutionBinding(input.executionBinding)
+  const runtimeBindingHash = await hashCanonicalValue(executionBinding)
+  const existingSnapshot = input.runId == null
+    ? null
+    : await readAgentRunV1(input.scope, input.runId)
+  // Pre-HARNESS-29 runs did not freeze provider/model/transport. They retain
+  // their historical contract shape; every newly created run is bound.
+  const bindRuntime = input.runId == null || existingSnapshot?.contract.runtimeBindingHash !== undefined
   const contract = buildReadOnlyAgentRunContractV1({
     goal: input.goal,
     projectId: input.scope.projectId,
     worldGroupId: input.worldGroupId,
     limits,
     maxAttemptsPerStep: input.maxAttemptsPerStep,
+    ...(bindRuntime ? { runtimeBindingHash } : {}),
   })
   const accepted = await acceptAgentRunContractV1(contract)
-  let snapshot = input.runId == null
-    ? await createAgentRunV1({
-        scope: input.scope,
-        worldGroupId: input.worldGroupId,
-        contract,
-        now: input.now?.(),
-      })
-    : await readAgentRunV1(input.scope, input.runId)
+  let snapshot: AgentRunSnapshotV1
+  if (existingSnapshot) {
+    snapshot = existingSnapshot
+  } else if (input.runId == null) {
+    snapshot = await createAgentRunV1({
+      scope: input.scope,
+      worldGroupId: input.worldGroupId,
+      contract,
+      now: input.now?.(),
+    })
+  } else {
+    snapshot = await readAgentRunV1(input.scope, input.runId)
+  }
   if (snapshot.run.contractHash !== accepted.contractHash) {
     throw new Error('现有只读 Agent run 与本次目标、权限或预算契约不一致')
   }

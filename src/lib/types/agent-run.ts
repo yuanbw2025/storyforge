@@ -109,6 +109,8 @@ export interface AgentRunContractV1 {
     contextSourceKeys: string[]
     writeTargets: AgentRunWriteTargetV1[]
   }
+  /** Absent on runs created before HARNESS-29; binds provider/model/transport capabilities. */
+  runtimeBindingHash?: string
   /** Absent on runs created before HARNESS-18. */
   executionBindings?: AgentRunStepExecutionBindingV1[]
   /** Absent on runs created before HARNESS-25 and on workflows without a candidate join. */

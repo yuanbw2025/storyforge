@@ -183,7 +183,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
   const record = readRecord(value, 'contract')
   assertExactKeys(
     record,
-    ['version', 'objective', 'workflowKind', 'lineage', 'scope', 'permissions', 'executionBindings', 'dependencyReceiptPolicy', 'candidateSemanticReviewPolicy', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
+    ['version', 'objective', 'workflowKind', 'lineage', 'scope', 'permissions', 'runtimeBindingHash', 'executionBindings', 'dependencyReceiptPolicy', 'candidateSemanticReviewPolicy', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
     ['version', 'objective', 'workflowKind', 'scope', 'permissions', 'budget', 'acceptance', 'verificationPlan', 'failurePolicy'],
     'contract',
   )
@@ -372,6 +372,9 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
       outlineNodeIds: readIdArray(scopeRecord.outlineNodeIds, 'contract.scope.outlineNodeIds'),
     },
     permissions: { contextSourceKeys, writeTargets },
+    ...(record.runtimeBindingHash === undefined ? {} : {
+      runtimeBindingHash: readHash(record.runtimeBindingHash, 'contract.runtimeBindingHash'),
+    }),
     ...(executionBindings ? { executionBindings } : {}),
     ...(dependencyReceiptPolicy ? { dependencyReceiptPolicy } : {}),
     ...(candidateSemanticReviewPolicy ? { candidateSemanticReviewPolicy } : {}),

@@ -304,6 +304,13 @@
   development 门禁解锁 held-out、aggregate 展示和 checkpoint 导出均已接入；旧 NS-0/NS-1 模型入口及结果 key
   已删除，H17 保留。当前只有模拟响应/jsdom 的工程证据，sealed 不代表源码标签保密；真实外部模型 40+20
   artifact、真实浏览器关闭重开、人工 held-out 复核和质量收益仍待后续，因此 H4 和全面 Harness 重构均未完成。
+- HARNESS-29 已把 provider 原生 `tool_calls` 接到现有只读 Agent Runner，但它只是默认关闭的 transport
+  优化，不是第二套 Agent 或工具系统。工具 schema 从 `AGENT_READ_TOOLS` 派生，读取仍经
+  `CONTEXT_SOURCES + assembleContext()`，执行仍经 `executeAgentTool()` 且没有业务写权限；schema token
+  计入物理窗口和 Runner 预算，未知工具、畸形响应及非法参数 fail closed，不会在失败后隐藏重跑文本协议。
+  真实任务路由在开始时冻结，新 durable Run 绑定 provider/model/transport capability hash，旧 Run 不补造
+  历史绑定。只有 capability matrix 已验证且显式启用时才使用原生 transport；目前只有模拟端点回归，
+  尚无真实 provider 的 token、延迟和质量配对证据，因此默认仍是 `text-json-v1`。
 
 ### GOV-1 第一阶段交付证据
 

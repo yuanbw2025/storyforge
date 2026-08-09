@@ -267,6 +267,16 @@ checkpoint 结果保存，不保存完整 transcript、工具正文或隐藏推�
 `reason: 'completed'` 仍只表示 Runner 执行成功，账本停在 `paused` 等待 H2 terminal verifier，
 不会因此签发 `verification.accepted` 或进入 run `completed`。
 
+HARNESS-29 现状（2026-08-09）：只读 Runner 仍默认使用 `text-json-v1`；显式本地开关
+`storyforge:harness:native-read-tools-v1=enabled` 或调用方显式选择后，只有 capability matrix
+中已验证的 provider 才可使用 `native-tools-v1`。原生声明完全由 `AGENT_READ_TOOLS` 派生，模型动作
+重新经过与文本协议相同的闭集解析，执行仍只走 `executeAgentTool()`，项目资料仍只由
+`CONTEXT_SOURCES + assembleContext()` 读取。工具 schema token 同时计入 Runner 总预算和物理上下文窗口；
+未知工具、畸形 `tool_calls`、非法参数和额外字段进入有限协议错误，不会隐藏回退并重跑文本协议。
+任务路由在运行开始时经统一解析器冻结，durable Run 绑定真实 provider/model/transport capability hash；
+HARNESS-29 前没有该字段的旧 Run 保持历史合同恢复，不伪造绑定。该单元不新增业务写权限、表或注册表项，
+目前只有模拟 OpenAI-compatible 响应的合同测试，没有真实 provider A/B，不证明 token、延迟或生成质量收益。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。
@@ -393,7 +403,7 @@ HARNESS-28D 已把开发环境设置页迁移到 H4 40+20：development 完整�
 
 | 能力 | 入口 | 读取 | 写入 | 生命周期/调用方 | 现有测试与缺口 |
 |---|---|---|---|---|---|
-| 只读 Agent | `runReadOnlyAgent` + `runDurableReadOnlyAgentV1` | Tool Registry -> `CONTEXT_SOURCES` -> `assembleContext()` | 无业务写入；标准 usage log + run ledger/checkpoint | 首次执行可返回内存 transcript；恢复只读取有界结果 checkpoint | `R-AGENT1-readonly-runner`、`R-HARNESS1-readonly-durable-runner` 覆盖安全/预算/四边界恢复/篡改；仍缺 H2 terminal verifier |
+| 只读 Agent | `runReadOnlyAgent` + `runDurableReadOnlyAgentV1` | Tool Registry -> `CONTEXT_SOURCES` -> `assembleContext()` | 无业务写入；标准 usage log + run ledger/checkpoint | 默认文本 JSON；已验证 provider 可显式启用原生 transport；恢复只读取有界结果 checkpoint | `R-AGENT1-readonly-runner`、`R-HARNESS1-readonly-durable-runner`、`R-HARNESS29-native-tool-transport` 覆盖安全/预算/恢复/路由与协议；仍缺真实 provider A/B，Runner completed 仍不等于 terminal receipt |
 | 主 Agent 规划 | `createMasterAgentPlan` | `read_project_status` | plan event | `useMasterCopilot` | `R-AGENT2` 覆盖路由、授权、DAG；缺完整 RunContract 和持久 attempt |
 | 领域执行 | `executeMasterAgentPlan` | 各领域 context profile + 正式 sources | 仅生成候选 | `GenerationNode`、team budget、candidate event | `R-AGENT1-*`、`R-AGENT4`；缺 checkpoint/resume 和统一 completion |
 | 候选采纳 | `adoptMasterCandidate` | base/current snapshot、上游确认 | `adopt()` 或登记入口 | confirmation event、Canon refresh | 覆盖 stale、依赖、gate；缺统一 adoption receipt/post-state verifier |
@@ -829,6 +839,7 @@ CHIRON 四类信息可映射到现有结构：
 - 大纲采纳已能从确认后、业务写入前和部分批量写入后恢复，重复恢复沿既有 `adopt()` 去重语义补齐；模型返回、候选持久化、确认后和部分写入四组边界各完成 20 次中断对照；
 - 只读 Runner 已通过 awaited trace port 接入 durable adapter；运行契约绑定工具 source 闭包、零写权限和既有预算，最终答复进入有界 checkpoint，四个 Runner 边界共完成 20 次中断对照，tamper、scope、预算失败均 fail-closed；
 - 主 Agent 的 plan/task/attempt/candidate 已统一进入 durable run：计划检查点、逐任务 Context Manifest、候选恢复、作者确认、受治理采纳、中断恢复和团队预算均有回归证据；H2 terminal verifier 进一步要求正式后状态与 adoption evidence 一致后才签发 receipt。ledger 仍只做控制面和证据，不取代业务表、`adopt()` 或作者确认。
+- HARNESS-29 在同一只读 Runner 上增加可选 `native-tools-v1` transport：工具声明从现有只读 Registry 派生，动作和参数仍经同一闭集协议与执行门；schema token 纳入预算，畸形响应有限失败且不静默降级。任务路由先冻结真实连接，新 durable Run 将 provider/model/adapter/capability profile 绑定进合同 hash，运行中改路由不能改变实际请求；历史无绑定 Run 继续按旧合同恢复。该 transport 默认关闭，尚无真实 provider 对照证据。
 
 **范围**
 

@@ -90,7 +90,7 @@
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 602 个文件 / 148745 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 603 个文件 / 149059 行 | `tsconfig.json` |
 | IndexedDB schema | v53 / 69 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 69 张表 | `project-tables.ts` |
 | Prompt 主线 | 61 个 moduleKey / 206 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
