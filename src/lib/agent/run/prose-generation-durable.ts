@@ -125,6 +125,22 @@ export interface ProseGenerationCandidateV1 {
   durable: ProseGenerationDurableEvidenceV1
 }
 
+/**
+ * New prose contracts (V2/V3) make the information-boundary verifier a
+ * required acceptance criterion. Historical V1 runs did not have that
+ * criterion and remain readable for migration/recovery compatibility.
+ */
+export function requiresProseInformationBoundaryV1(
+  snapshot: AgentRunSnapshotV1,
+): boolean {
+  return snapshot.contract.acceptance.some(item => (
+    item.id === 'prose-generation.information-boundary' && item.required
+  )) || snapshot.contract.verificationPlan.some(item => (
+    item.id === 'prose-generation.terminal'
+      && [PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3].includes(item.verifier as typeof PROSE_GENERATION_VERIFIER_SET_V2 | typeof PROSE_GENERATION_VERIFIER_SET_V3)
+  ))
+}
+
 export function buildProseGenerationRunContractV1(input: {
   projectId: number
   worldGroupId: number | null
@@ -701,6 +717,15 @@ export async function isProseGenerationCandidateCurrentV1(
   if (await hashProseGenerationCandidateV1(candidateBody) !== durable.candidateHash) return false
   if (candidate.semanticReview && !await verifySemanticReviewEvidence(candidate)) return false
   let scope: WorkspaceScope | null = null
+  let run: AgentRunSnapshotV1 | null = null
+  try {
+    scope = await resolveScopeForCandidate(candidate)
+    run = await readAgentRunV1(scope, candidate.durable.runId)
+  } catch {
+    // Legacy candidates may outlive their event ledger during migration. Keep
+    // the historical hash/source checks usable, but never relax a run whose
+    // current contract is available and explicitly requires the boundary.
+  }
   if (candidate.semanticReview) {
     try {
       scope = await resolveScopeForCandidate(candidate)
@@ -715,7 +740,7 @@ export async function isProseGenerationCandidateCurrentV1(
     candidate.perspectiveFromChapter
     && (chapter.perspectiveCharacterId ?? null) !== (candidate.perspectiveCharacterId ?? null)
   ) return false
-  if (!candidate.informationBoundaryHash) return true
+  if (!candidate.informationBoundaryHash) return !run || !requiresProseInformationBoundaryV1(run)
   try {
     scope ??= await resolveScopeForCandidate(candidate)
     const boundary = await buildChapterInformationBoundaryV1({
@@ -1002,6 +1027,10 @@ export async function verifyProseGenerationRunV1(input: {
   }
   if (await hashChapterText(chapter.content ?? '') !== input.candidate.expectedContentHash) {
     throw new Error('正文生成终态校验发现章节正文与候选不一致。')
+  }
+  const requiresInformationBoundary = requiresProseInformationBoundaryV1(snapshot)
+  if (requiresInformationBoundary && !input.candidate.informationBoundaryHash) {
+    throw new Error('正文生成终态校验缺少当前合同要求的信息边界证据。')
   }
   const hasInformationBoundary = Boolean(input.candidate.informationBoundaryHash)
   if (hasInformationBoundary) {

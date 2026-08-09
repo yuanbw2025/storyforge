@@ -13,6 +13,7 @@ import {
   recordProseGenerationModelOutputV1,
   recoverProseGenerationCandidateV1,
   rejectProseGenerationCandidateV1,
+  isProseGenerationCandidateCurrentV1,
   PROSE_GENERATION_CANDIDATE_TYPE_V1,
   PROSE_GENERATION_SOURCE_KEYS_V1,
   PROSE_GENERATION_STEP_ID_V1,
@@ -328,5 +329,18 @@ describe.sequential('R-HARNESS7 · 正文生成 durable run', { timeout: 15_000 
     expect(rejected.projection.state).toBe('running')
     expect(rejected.projection.steps[PROSE_GENERATION_STEP_ID_V1].status).toBe('failed')
     expect(rejected.projection.steps[PROSE_GENERATION_STEP_ID_V1].confirmation).toBe('reject')
+  })
+
+  it('新 V2 合同缺少信息边界证据时拒绝候选，不能降级为旧 V1 校验', async () => {
+    const pending = await preparePending('正文边界必需')
+    const { durable: _durable, informationBoundaryHash: _boundary, ...candidateBody } = pending.candidate
+    const candidateWithoutBoundary: ProseGenerationCandidateV1 = {
+      ...candidateBody,
+      durable: {
+        ...pending.candidate.durable,
+        candidateHash: await hashProseGenerationCandidateV1(candidateBody),
+      },
+    }
+    expect(await isProseGenerationCandidateCurrentV1(candidateWithoutBoundary)).toBe(false)
   })
 })

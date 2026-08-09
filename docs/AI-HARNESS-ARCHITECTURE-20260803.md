@@ -1071,6 +1071,12 @@ CHIRON 四类信息可映射到现有结构：
 - 该执行创建独立 `plan-execute` durable Run，声明登记的 `chapterContent` 作为 Context Manifest 证据但模型调用数为零；Run 固定 `planHash + sourceTextHash + graphHash`，记录步骤、输出 hash、正文 CAS 检查和终态 receipt。相同计划且正文未变时重复点击复用已完成 Run，避免重复重建。
 - 执行期间正文发生变化、来源越界、计划没有确定性项目或派生执行失败时 fail-closed，并保留失败事件；本单元不提供通用依赖重跑、不自动改写正文或 Canon。`R-HARNESS47-impact-remediation-durable` 和工具栏回归是验收证据。
 
+**正文信息边界强制化（HARNESS-48，2026-08-10）**
+
+- 新正文生成合同的 acceptance 已包含 `prose-generation.information-boundary`，但历史兼容校验曾允许候选省略 `informationBoundaryHash` 并降级使用 V1 verifier。HARNESS-48 通过 `requiresProseInformationBoundaryV1()` 区分新旧合同：V2/V3 Run 缺少 boundary 证据时，候选当前性检查直接失败，终态 verifier 也拒绝签发回执。
+- boundary 仍由 `buildChapterInformationBoundaryV1()` 生成并绑定当前章序、世界组、POV 角色、认知账本投影与未来规划禁区；确定性 `validateProseInformationBoundaryV1()` 继续检查逐字未来事实、私人认知和角色未来弧光。历史 V1 Run 只允许读取和迁移，不改变已存在的回执语义。
+- 验收证据为 `R-HARNESS7-prose-generation-durable` 新增“V2 合同缺边界拒绝”反例，以及既有 `R-HARNESS9-information-boundary`、`R-HARNESS19-prose-semantic-durable`；本单元不宣称上游规划层已经实现按事件释放信息。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；
