@@ -304,6 +304,14 @@ HARNESS-32 现状（2026-08-09）：分步骤世界基座起源、自然和人�
 人工字段编辑、词条、历史年表和 Prompt 配置入口保留。当前测试证明工程闭环和模拟模型合同，不证明真实
 模型文学质量收益，也不代表世界引擎体验已被改动。
 
+HARNESS-33 现状（2026-08-09）：分步骤普通角色 AI 按钮已统一进入现有 Character Agent 的
+`character.create` Skill。Skill 的正式读取集合扩展为世界、故事核心、角色、世界规则和历史，只经 Tool
+Registry → `assembleContext()` 装配，并继续冻结输入状态、压缩预算和完整角色名单 snapshot。模型只能返回
+一个严格闭集 JSON 角色候选；候选进入 durable Run，刷新可恢复且可编辑、拒绝或确认，确认前 `characters`
+零写入，确认后只经 `adopt(target=characters)`，同名、未知字段、非法三轴、stale 和正式状态终验均保持有效。
+组件级 `useAIStream → parseCharacterOutput` 自由文本旁路及无调用解析文件已删除；人工 CRUD、角色轴/维度选择
+和 Prompt 配置入口保留。该单元不自动创建关系边、物品、状态卡或大纲，当前测试也不证明真实模型角色质量收益。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。

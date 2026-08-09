@@ -502,7 +502,7 @@
   - `characters.阵容统计`（已有角色名单、缺口）
   - `用户输入提示`
 - **提示词**：`character.generate`
-- **解析**：AI 输出 → `parseCharacterOutput`（normalizeRole 自动把中文/英文 role 归一）
+- **解析**：分步骤 AI 入口已收口到 `character.create` Skill 的严格 JSON 候选解析；未知字段、非法枚举、缺少姓名/简介和重复角色在确认前阻断。
 - **写**：`characters（新建）` 🌍按世界（盖 homeWorldGroupId）
 
 #### 动作②：单个角色单字段 AI 生成（CharacterFieldGenerator）
@@ -518,9 +518,9 @@
 #### 动作③：角色解析（粘贴文本结构化）
 - **触发**：🔘 手动，"粘贴文本 → AI 解析为角色"
 - **读**：`用户粘贴的角色描述自由文本`
-- **提示词**：内置 systemPrompt（parse-character-output.ts，非 prompt-seeds 模板）
+- **提示词**：由 `character.create` Skill 绑定 `character-copilot-v1`，继续复用 `character.generate` 的正式模板和 Prompt 配置入口。
 - **调用方式**：直接走 `chat()` 非流式（不经 useAIStream），等待 JSON 输出
-- **解析**：`parseCharacterOutput`（含 `normalizeRole` 兜底：中文 role 自动归一为英文枚举）
+- **解析**：由 `character.create` Skill 的结构化候选合同负责；确认后只经 `adopt(characters)` 写回，旧自由文本解析旁路已下线。
 - **写**：`characters（新建）` 含所有字段
 
 ---

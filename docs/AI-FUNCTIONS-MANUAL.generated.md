@@ -188,7 +188,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 62 个 category。
+共 60 个 category。
 未分类调用: 0 个。动态 category 调用: 14 个。
 
 | category | 触发文件 |
@@ -207,8 +207,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1430`<br/>`src/components/editor/ChapterEditor.tsx:1861` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1277` |
 | `chapter.toolbar` | `src/components/editor/FloatingToolbar.tsx:105` |
-| `character.generate` | `src/components/character/CharacterPanel.tsx:160` |
-| `character.structure` | `src/lib/ai/parse-character-output.ts:80` |
 | `character.supplement` | `src/components/character/CharacterSupplementAction.tsx:80` |
 | `codex.extract` | `src/components/codex/CodexPanel.tsx:226` |
 | `cultivation.progress` | `src/components/cultivation/CultivationProgressPanel.tsx:143` |
@@ -260,7 +258,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 - `src/components/editor/ChapterEditor.tsx:997 · chat`
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
-- `src/lib/agent/character-copilot.ts:472 · chat`
+- `src/lib/agent/character-copilot.ts:475 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
 - `src/lib/agent/inspiration-copilot.ts:328 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
@@ -275,4 +273,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `2f7421e`
+生成时间基准:commit `fd81750`

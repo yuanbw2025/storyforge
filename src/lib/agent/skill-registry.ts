@@ -289,7 +289,7 @@ const WORLDVIEW_FIELD_INPUT_POLICY = {
 } as const satisfies AgentSkillInputPolicyV1
 
 const CHARACTER_INPUT_POLICY = {
-  sourceKeys: ['worldview', 'powerSystem', 'codex', 'characters'],
+  sourceKeys: ['worldview', 'powerSystem', 'codex', 'storyCore', 'characters', 'worldRules', 'historical'],
   states: {
     empty: {
       handling: 'create-from-request',
@@ -451,7 +451,15 @@ const WORLDVIEW_FIELD_COMPRESSION_POLICY = compressionPolicy([
   'existingVolumeOutlines',
   'references',
 ])
-const CHARACTER_COMPRESSION_POLICY = compressionPolicy(['worldview', 'powerSystem', 'codex', 'characters'])
+const CHARACTER_COMPRESSION_POLICY = compressionPolicy([
+  'worldview',
+  'powerSystem',
+  'codex',
+  'storyCore',
+  'characters',
+  'worldRules',
+  'historical',
+])
 const INSPIRATION_COMPRESSION_POLICY = compressionPolicy(['inspirationWorkspace'])
 const OUTLINE_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
@@ -628,7 +636,7 @@ export const AGENT_SKILLS = [
     promptVersion: 'character-copilot-v1',
     executionMode: 'create',
     contextTaskKind: 'agent-character',
-    readToolNames: ['read_worldview', 'read_characters'],
+    readToolNames: ['read_worldview', 'read_story_core', 'read_characters', 'read_world_rules', 'read_history'],
     contextSourceKeys: [],
     optionalContextSourceKeys: [],
     inputPolicy: CHARACTER_INPUT_POLICY,
@@ -645,8 +653,8 @@ export const AGENT_SKILLS = [
         ...CHARACTER_DIMENSIONS.map(dimension => dimension.key),
       ],
     }],
-    lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-character', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
+    lastVerifiedAt: '2026-08-09',
+    regressionTests: ['R-AGENT1-chat-copilot-character', 'R-HARNESS33-character-panel-ui', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,

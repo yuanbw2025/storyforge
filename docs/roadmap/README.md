@@ -233,7 +233,7 @@
   一个入口，同一正文只发起一次综合抽取；状态、受控事实、物品、故事年表、关系和伏笔
   六域候选均须逐字证据。候选复用归档 `agentConversations/agentEvents` 保存，刷新可恢复；
   正文 hash 变化阻断写回，物品/年表按章整批替换失败会事务回滚，事实只进入 candidate。
-- HARNESS-18/19/20/27/30/31/32 已把 18 个领域 Skill、14 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
+- HARNESS-18/19/20/27/30/31/32/33 已把 18 个领域 Skill、14 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
   新主 Agent RunContract 与候选 hash；恢复会拒绝 Skill/Prompt/Tool 漂移，旧合同继续按旧协议
   恢复。CI 新增 45 天复核、owner、版本和回归证据新鲜度闸门；该能力只保证执行可归因，
   不冒充真实模型质量收益。
@@ -332,6 +332,12 @@
   durable 刷新恢复、作者编辑/拒绝/确认、字段错投和终态回读均有专项回归与 Chromium 证据。旧
   `world-origin.complete` 仅保留历史 durable Run 兼容，人工编辑、词条、历史年表和 Prompt 配置保留；当前
   只证明工程闭环和模拟模型合同，不证明真实模型文学质量收益，也不改动世界引擎体验。
+- HARNESS-33 已把分步骤角色面板的普通 AI 生成收口为现有 Character Agent 的
+  `character.create` Skill。Skill 只经 Tool Registry → `assembleContext()` 读取世界、故事核心、角色、世界规则
+  和历史，按 empty/partial/complete 处理并使用受治理压缩预算；每轮只返回一个严格闭集 JSON 候选。确认前
+  `characters` 零写入，确认后只经 `adopt(characters)`，roster snapshot/CAS、刷新恢复、候选编辑/拒绝/确认、
+  同名/未知字段/非法枚举/stale 和终态回读均有专项回归。旧 `useAIStream → parseCharacterOutput` 旁路及死代码
+  已删除，人工 CRUD、角色轴/维度选择和 Prompt 配置保留；当前不自动创建关系、物品或大纲，不证明真实模型质量收益。
 
 ### GOV-1 第一阶段交付证据
 

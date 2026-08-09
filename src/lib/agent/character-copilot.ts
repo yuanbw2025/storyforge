@@ -368,12 +368,11 @@ export async function prepareCharacterCopilot(input: {
       })
     : undefined
   const tools = skill.readToolNames.map(name => AGENT_TOOL_BY_NAME.get(name)!)
-  const [worldTool, characterTool] = tools
-  if (!worldTool || !characterTool || tools.length !== 2) {
+  if (tools.length < 2 || tools.some(tool => !tool)) {
     throw new Error(`Agent Skill ${skill.id} 的只读工具契约无效`)
   }
   const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
-  const [worldPolicy, characterPolicy] = splitAgentContextPolicy(
+  const toolPolicies = splitAgentContextPolicy(
     contextPolicy,
     tools.map(tool => tool.inputBudgetTokens),
   )
@@ -384,16 +383,18 @@ export async function prepareCharacterCopilot(input: {
     model: config.model,
     sourceTransformer: compression?.sourceTransformer,
   }
-  const [worldview, characters] = await Promise.all([
-    executeAgentTool(worldTool.name, { ...executionContext, contextPolicy: worldPolicy }, {}),
-    executeAgentTool(characterTool.name, { ...executionContext, contextPolicy: characterPolicy }, {}),
-  ])
-  if (!worldview.ok) throw new Error(worldview.error || '无法读取当前世界观。')
-  if (!characters.ok) throw new Error(characters.error || '无法读取当前角色。')
+  const toolResults = await Promise.all(tools.map((tool, index) => (
+    executeAgentTool(tool.name, { ...executionContext, contextPolicy: toolPolicies[index] }, {})
+  )))
+  const failed = toolResults.find(result => !result.ok)
+  if (failed && !failed.ok) throw new Error(failed.error || '无法读取角色生成所需的正式上下文。')
+  const charactersIndex = tools.findIndex(tool => tool.name === 'read_characters')
+  const characters = charactersIndex >= 0 ? toolResults[charactersIndex] : null
+  if (!characters?.ok) throw new Error('角色 Skill 缺少 read_characters 正式来源。')
   const afterRead = await readCharacterRosterSnapshot(input.projectId, worldGroupId, scope)
   if (beforeRead.serialized !== afterRead.serialized) throw new CharacterCopilotStaleError()
 
-  const contextResults = [worldview.meta, characters.meta]
+  const contextResults = toolResults.map(result => result.meta)
   const inputState = resolveAgentSkillInputStateV1(skill, contextResults)
   const contextEvidence = attachAgentContextInputStateV1(
     mergeContextEvidence(contextProfile, contextResults),
@@ -409,13 +410,15 @@ export async function prepareCharacterCopilot(input: {
     authorRequest,
     inputGuidance,
     worldContext: [
-      worldview.content,
+      ...toolResults
+        .filter((_, index) => index !== charactersIndex)
+        .map(result => result.content),
       input.supplementalContext?.trim()
         ? `【本轮上游候选（尚未采纳，不属于 Canon）】\n${input.supplementalContext.trim()}`
         : '',
     ].filter(Boolean).join('\n\n'),
     characterContext: characters.content,
-    contextSources: [...new Set([...worldview.meta.included, ...characters.meta.included])],
+    contextSources: [...new Set(toolResults.flatMap(result => result.meta.included))],
     snapshot: afterRead,
     config,
     generationOverrides: input.generationOverrides,
@@ -547,4 +550,34 @@ export async function adoptCharacterCopilotCandidate(input: {
       })
     },
   )
+}
+
+function compactCharacterRequestText(value: string | null | undefined, max: number): string {
+  return (value ?? '').trim().replace(/\s+/g, ' ').slice(0, max)
+}
+
+/**
+ * 分步骤角色面板与主 Agent 共用的任务合同入口。
+ * Prompt 参数仍可见、可审计，但不再由组件直接拼接上下文或决定写回路径。
+ */
+export function formatCharacterGenerationRequestV1(input: {
+  hint?: string
+  parameterValues?: Record<string, unknown>
+  systemOverride?: string | null
+  userOverride?: string | null
+}): string {
+  const parts = [
+    '生成一名新角色。只创建角色候选，不修改世界观、故事核心、故事线、大纲、物品或已有角色。',
+  ]
+  const hint = compactCharacterRequestText(input.hint, 640)
+  if (hint) parts.push(`作者要求与本轮维度：${hint}`)
+  if (input.parameterValues && Object.keys(input.parameterValues).length) {
+    const serialized = compactCharacterRequestText(JSON.stringify(input.parameterValues), 240)
+    if (serialized) parts.push(`模板参数：${serialized}`)
+  }
+  const systemOverride = compactCharacterRequestText(input.systemOverride, 160)
+  if (systemOverride) parts.push(`自定义系统要求：${systemOverride}`)
+  const userOverride = compactCharacterRequestText(input.userOverride, 160)
+  if (userOverride) parts.push(`自定义用户要求：${userOverride}`)
+  return parts.join('\n').slice(0, 1_000)
 }

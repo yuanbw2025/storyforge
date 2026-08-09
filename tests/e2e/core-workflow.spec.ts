@@ -1369,7 +1369,7 @@ test('主 Agent 使用项目灵感碎片生成候选，拒绝零写入并保存�
   expect(generationCalls).toBe(2)
 })
 
-test('主 Agent 调度角色领域任务，拒绝零写入并确认新增到角色面板', async ({ page }) => {
+test('分步骤角色面板通过 character.create Skill 生成、恢复并确认角色候选', async ({ page }) => {
   let generationCalls = 0
   const modelCandidate = {
     name: '模型守灯人',
@@ -1433,20 +1433,19 @@ test('主 Agent 调度角色领域任务，拒绝零写入并确认新增到角�
   await openSidebarLeaf(page, '角色设计', '角色生成')
   await expect(page.getByText('角色生成 · 0', { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: '打开 AI 对话副驾' }).click()
-  const copilot = page.getByRole('complementary', { name: '主 Agent 创作副驾' })
-  const request = copilot.getByRole('textbox', { name: '告诉主 Agent 你的目标' })
-  const candidate = copilot.getByRole('textbox', { name: '新角色候选内容' })
-
+  const request = page.getByPlaceholder('角色要求（可选）')
+  const candidate = page.getByRole('textbox', { name: '角色候选内容' })
   await request.fill('设计一名守灯钟匠，克制寡言')
-  await copilot.getByRole('button', { name: '交给主 Agent', exact: true }).click()
+  await page.getByRole('button', { name: 'AI 设计角色', exact: true }).click()
   await expect(candidate).toContainText('模型守灯人')
-  await copilot.getByRole('button', { name: '拒绝', exact: true }).click()
-  await expect(copilot.getByText('候选已拒绝，没有写入项目。', { exact: true }).last()).toBeVisible()
+  await page.reload()
+  await openSidebarLeaf(page, '角色设计', '角色生成')
+  await expect(candidate).toContainText('模型守灯人')
+  await page.getByRole('button', { name: '拒绝', exact: true }).click()
   await expect(page.getByText('角色生成 · 0', { exact: true })).toBeVisible()
 
   await request.fill('重新设计一名守灯钟匠')
-  await copilot.getByRole('button', { name: '交给主 Agent', exact: true }).click()
+  await page.getByRole('button', { name: 'AI 设计角色', exact: true }).click()
   await expect(candidate).toContainText('模型守灯人')
   const edited = {
     ...modelCandidate,
@@ -1454,9 +1453,8 @@ test('主 Agent 调度角色领域任务，拒绝零写入并确认新增到角�
     shortDescription: '作者确认的旧港守灯钟匠。',
   }
   await candidate.fill(JSON.stringify(edited, null, 2))
-  await copilot.getByRole('button', { name: '采纳', exact: true }).click()
+  await page.getByRole('button', { name: '采纳', exact: true }).click()
 
-  await expect(copilot.getByText('角色“沈砚灯”已加入项目。', { exact: true }).last()).toBeVisible()
   await expect(page.getByText('角色生成 · 1', { exact: true })).toBeVisible()
   await expect(page.getByText('沈砚灯', { exact: true })).toBeVisible()
   expect(generationCalls).toBe(2)

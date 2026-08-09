@@ -1,19 +1,13 @@
 import { useState, useEffect } from 'react'
 import {
-  Plus, Sparkles, ChevronDown,
+  Check, Plus, Sparkles, ChevronDown, Loader2, Trash2,
 } from 'lucide-react'
 import { CInput } from '../shared/CompositionInput'
 import { useCharacterStore } from '../../stores/character'
 import { useWorldGroupStore } from '../../stores/world-group'
-import { useAIConfigStore } from '../../stores/ai-config'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildCharacterPrompt } from '../../lib/ai/adapters/character-adapter'
-import { parseCharacterOutput } from '../../lib/ai/parse-character-output'
-import { adopt } from '../../lib/registry/adopt'
-import { assembleContext } from '../../lib/registry/assemble-context'
-import AIStreamOutput from '../shared/AIStreamOutput'
+import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
 import PromptRunPanel from '../shared/PromptRunPanel'
+import { CTextarea } from '../shared/CompositionInput'
 import type {
   Project, Character, CharacterMoralAxis, CharacterOrderAxis, CharacterRoleWeight,
 } from '../../lib/types'
@@ -21,6 +15,7 @@ import CharacterDimensionPicker from './CharacterDimensionPicker'
 import { CHARACTER_DIMENSIONS, type CharacterDimensionKey } from '../../lib/character/character-dimensions'
 import CharacterAxesPicker from './CharacterAxesPicker'
 import CharacterDetailCard from './CharacterDetailCard'
+import { formatCharacterGenerationRequestV1, parseCharacterCandidateDraft } from '../../lib/agent/character-copilot'
 import {
   MORAL_AXIS_LABELS,
   ORDER_AXIS_LABELS,
@@ -50,10 +45,16 @@ interface Props {
 export default function CharacterPanel({ project, view = 'generator' }: Props) {
   const { characters, loadAll, addCharacter, updateCharacter, deleteCharacter } = useCharacterStore()
   const { groups, activeGroupId } = useWorldGroupStore()
-  const { config: aiConfig } = useAIConfigStore()
+  // 多世界：角色世界过滤器（'all' | 'cross' | 世界组 id）
+  const [worldFilter, setWorldFilter] = useState<'all' | 'cross' | number>('all')
+  const copilot = useMasterCopilot({
+    project,
+    worldGroupId: project.enableMultiWorld
+      ? (typeof worldFilter === 'number' ? worldFilter : activeGroupId)
+      : null,
+  })
   const [selected, setSelected] = useState<number | null>(null)
   const [hint, setHint] = useState('')
-  const [parsing, setParsing] = useState(false)
   const [showRolePicker, setShowRolePicker] = useState(false)
   const [draftAxes, setDraftAxes] = useState<{
     roleWeight: CharacterRoleWeight | null
@@ -66,14 +67,6 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
   const [showDimPicker, setShowDimPicker] = useState(false)
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
-  // 多世界：角色世界过滤器（'all' | 'cross' | 世界组 id）
-  const [worldFilter, setWorldFilter] = useState<'all' | 'cross' | number>('all')
-  const ai = useAIStream(createAISessionKey(
-    project.id!,
-    'character.generate',
-    project.enableMultiWorld ? String(worldFilter) : 'project',
-  ))
-
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
 
   // 多世界过滤：跨世界角色在任意世界都显示
@@ -136,29 +129,24 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
       : genDims.size < allKeys.length
         ? `本次只需设计以下维度，其余维度一律留空：${selectedLabels}`
         : `请尽量完整设计以下全部维度（有内容才写，没有的留空，不要编造硬凑）：${selectedLabels}`
-    const enrichedHint = [hint, rosterGap, dimInstruction].filter(Boolean).join('\n')
-    // 多世界：按当前选中/活跃世界读取上下文（此前写死单世界）
-    const targetWorld = project.enableMultiWorld
-      ? (typeof worldFilter === 'number' ? worldFilter : activeGroupId)
-      : null
-    const assembled = await assembleContext({
-      projectId: project.id!,
-      worldGroupId: targetWorld,
-      provider: aiConfig.provider,
-      model: aiConfig.model,
-      sourceKeys: ['canonAssertions', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
-    })
-    const worldCtx = assembled.text
-    const opts = {
-      parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
-      overrides: (systemOverride != null || userOverride != null) ? {
-        systemPrompt: systemOverride ?? undefined,
-        userPromptTemplate: userOverride ?? undefined,
-      } : undefined,
-    }
-    const messages = buildCharacterPrompt(project.name, project.genre ?? '', worldCtx, existing, enrichedHint, opts)
-    ai.start(messages, undefined, { category: 'character.generate', projectId: project.id! })
+    if (project.enableMultiWorld && (worldFilter === 'cross' || activeGroupId == null)) return
+    const enrichedHint = [hint, rosterGap, dimInstruction, `已有角色：${existing || '无'}`]
+      .filter(Boolean)
+      .join('\n')
+    await copilot.submitRequest(formatCharacterGenerationRequestV1({
+      hint: enrichedHint,
+      parameterValues: Object.keys(parameterValues).length ? parameterValues : undefined,
+      systemOverride,
+      userOverride,
+    }))
   }
+
+  const pendingCharacterCandidates = copilot.pendingCandidates.filter(candidate => (
+    candidate.payload.agentId === 'character' && candidate.payload.skillId === 'character.create'
+  ))
+  const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
+    candidate.payload.agentId !== 'character' || candidate.payload.skillId !== 'character.create'
+  ))
 
   return (
     <div className="space-y-3">
@@ -215,7 +203,8 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
               </div>
               <button
                 onClick={handleAIGenerate}
-                disabled={ai.isStreaming}
+                disabled={copilot.loading || copilot.busy || copilot.pendingCandidates.length > 0
+                  || (project.enableMultiWorld && (activeGroupId == null || worldFilter === 'cross'))}
                 className="flex items-center gap-1.5 px-3 py-2 bg-bg-elevated text-text-secondary text-sm rounded-md hover:text-accent disabled:opacity-50 transition-colors border border-border hover:border-accent/50"
               >
                 <Sparkles className="w-3.5 h-3.5" /> AI 设计角色
@@ -280,55 +269,36 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
         />
       )}
 
-      {/* AI 解析中提示 */}
-      {view === 'generator' && parsing && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-accent/5 border border-accent/20 rounded-lg text-sm text-accent animate-pulse">
-          <Sparkles className="w-4 h-4 shrink-0" />
-          AI 正在将角色内容分字段整理，请稍候…
-        </div>
+      {view === 'generator' && hasOtherPendingCandidates && (
+        <p className="rounded border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-text-secondary">
+          主 Agent 还有其他待确认候选，请先在右侧副驾中处理。
+        </p>
       )}
 
-      {/* AI 输出 */}
-      {view === 'generator' && (ai.output || ai.isStreaming || ai.error) && (
-        <AIStreamOutput
-          output={ai.output}
-          isStreaming={ai.isStreaming}
-          error={ai.error} tokenUsage={ai.tokenUsage}
-          onStop={ai.stop}
-          onAccept={async (text: string) => {
-            ai.reset()
-            setParsing(true)
-            const parsed = await parseCharacterOutput(text, aiConfig)
-            setParsing(false)
-            const nameMatch = text.match(/(?:\*\*|#{1,3}\s*|【)([^*#\n【】]{1,20})(?:\*\*|】)/)
-            const fallbackName = nameMatch?.[1]?.trim() || 'AI 生成角色'
-            // 落库全部维度（含 A 扩充的 13 维）：维度字段从 CHARACTER_DIMENSIONS 统一回填，
-            // 否则 B 维度勾选器选了新维度、AI 也生成了，却在这里丢失。空串会被 adopt 跳过、不覆盖。
-            const dimData = Object.fromEntries(
-              CHARACTER_DIMENSIONS.map(d => [d.key, (parsed?.[d.key] as string) || '']),
-            )
-            const result = await adopt({
-              projectId: project.id!,
-              worldGroupId: newCharHomeWorld(),
-              target: 'characters',
-              mode: 'add',
-              data: {
-                name:          parsed?.name          || fallbackName,
-                roleWeight:    parsed?.roleWeight    || 'main',
-                moralAxis:     parsed?.moralAxis     || 'neutral',
-                orderAxis:     parsed?.orderAxis     || 'neutral',
-                relationships: parsed?.relationships || '',
-                ...dimData,
-                background:    parsed?.background     || text,  // 兜底：解析失败也保住全文
-              },
-            })
-            await loadAll(project.id!)
-            if (result.written[0]?.id != null) setSelected(result.written[0].id)
-          }}
-          onRetry={handleAIGenerate}
-          moduleKey="character.generate"
-        />
+      {view === 'generator' && copilot.error && (
+        <p className="rounded border border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
+          {copilot.error}
+        </p>
       )}
+
+      {view === 'generator' && pendingCharacterCandidates.map(candidate => (
+        <CharacterCandidateCard
+          key={candidate.event.id}
+          candidate={candidate}
+          copilot={copilot}
+          onAdopted={async () => {
+            let name = ''
+            try { name = parseCharacterCandidateDraft(candidate.event.content).name } catch { /* gate reports invalid draft */ }
+            const beforeIds = new Set(useCharacterStore.getState().characters.map(character => character.id))
+            await copilot.adoptCandidate(candidate)
+            await loadAll(project.id!)
+            const adopted = useCharacterStore.getState().characters.find(character => (
+              character.name === name && !beforeIds.has(character.id)
+            ))
+            if (adopted?.id != null) setSelected(adopted.id)
+          }}
+        />
+      ))}
 
       {/* 主体：左侧列表 + 右侧详情 */}
       {displayedChars.length === 0 ? (
@@ -392,5 +362,70 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
         </div>
       )}
     </div>
+  )
+}
+
+function CharacterCandidateCard({
+  candidate,
+  copilot,
+  onAdopted,
+}: {
+  candidate: PendingMasterCandidate
+  copilot: ReturnType<typeof useMasterCopilot>
+  onAdopted: () => Promise<void>
+}) {
+  return (
+    <section className="border border-accent/30 bg-bg-surface p-4 rounded-lg">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-text-primary">待确认 · {candidate.payload.label}</h3>
+        <span className="text-[11px] text-text-muted">
+          {candidate.payload.contextEvidence
+            ? `约 ${candidate.payload.contextEvidence.estimatedInputTokens.toLocaleString()} tokens`
+            : `${candidate.payload.contextSources.length} 个输入来源`}
+        </span>
+      </div>
+      <CTextarea
+        aria-label="角色候选内容"
+        value={candidate.event.content}
+        disabled={copilot.busy}
+        onChange={event => { void copilot.updateCandidate(candidate.event.id!, event.target.value) }}
+        className="min-h-72 w-full resize-y font-mono text-xs leading-5"
+      />
+      {candidate.payload.contextEvidence && (
+        <details className="mt-2 border border-border/60 bg-bg-base px-3 py-2 text-[11px] text-text-muted rounded">
+          <summary className="cursor-pointer text-text-secondary">本次实际输入证据</summary>
+          <p className="mt-2 break-words">
+            已纳入：{candidate.payload.contextEvidence.included.join('、') || '无'}
+          </p>
+          {candidate.payload.contextEvidence.trimmed.length > 0 && (
+            <p className="mt-1 text-warning">
+              因预算移除：{candidate.payload.contextEvidence.trimmed.join('、')}
+            </p>
+          )}
+        </details>
+      )}
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          disabled={copilot.busy}
+          onClick={() => { void copilot.rejectCandidate(candidate) }}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-text-primary rounded disabled:opacity-50"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          拒绝
+        </button>
+        <button
+          type="button"
+          disabled={copilot.busy}
+          onClick={() => { void onAdopted() }}
+          className="flex items-center gap-1 bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 rounded disabled:opacity-50"
+        >
+          {copilot.busy
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <Check className="h-3.5 w-3.5" />}
+          采纳
+        </button>
+      </div>
+    </section>
   )
 }

@@ -510,6 +510,12 @@
   durable 刷新恢复、作者编辑/拒绝/确认、字段错投和终态回读均有专项回归与 Chromium 证据。旧
   `world-origin.complete` 仅保留历史 durable Run 兼容，人工编辑、词条、历史年表和 Prompt 配置保留；当前
   证据只证明工程闭环和模拟模型合同，不证明真实模型文学质量收益，也不涉及世界引擎体验。
+- HARNESS-33 已交付 `character.create`：分步骤角色面板的普通 AI 入口统一进入现有 Character Agent，同一
+  Skill 经 Tool Registry → `assembleContext()` 读取世界、故事核心、角色、世界规则和历史，按
+  empty/partial/complete 处理，使用受治理压缩预算和完整 roster snapshot/CAS。模型只生成一个严格闭集 JSON
+  候选，确认前 `characters` 零写入，确认后只经 `adopt(characters)`；刷新恢复、编辑、拒绝、同名/未知字段/
+  非法枚举/stale 和终态回归均已覆盖。旧 `useAIStream → parseCharacterOutput` 自由文本旁路及死代码已删除，
+  人工 CRUD、角色轴/维度选择和 Prompt 配置保留；当前不自动创建关系、物品或大纲，也不证明真实模型质量收益。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。
