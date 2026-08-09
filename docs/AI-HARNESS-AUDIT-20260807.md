@@ -47,6 +47,13 @@
 > durable Run，作者确认后的 AI 写回只经 `adopt()`，对应旧旁路已删除，人工能力保留。其余审计结论不因这些
 > 垂直切片自动失效。
 
+> 2026-08-10 更新：HARNESS-40 将“已写章节故事线进度与交汇映射”接入现有 `outline` Agent 的
+> `outline.storyline-progress` Skill。章节选择、故事线展示和作者确认保留；正式上下文经
+> `CONTEXT_SOURCES + assembleContext()` 读取 `projectStatus / storyArcs / storylineProgress / chapterContent`，
+> 候选只允许闭集故事线/阶段和正文逐字证据，疑似新线仍需作者确认后才登记。候选持久化、编辑/拒绝/刷新恢复、正文
+> hash 与故事线投影 snapshot/CAS、`adopt()` 事务写回和正式状态回读已有专项回归；旧面板 `useAIStream`、手工
+> Prompt 和逐条直接采纳旁路已删除。该切片不等于正文后处理已进入统一主 run，也不证明真实模型映射质量。
+
 ## 1. 审计方法与证据等级
 
 每个结论分为：
@@ -96,6 +103,7 @@
 | 角色 Copilot | `src/lib/agent/character-copilot.ts` | 与普通分步骤 AI 按钮共用 `character.create` Skill、输入策略、压缩预算、候选合同和采纳入口 | 当前只生成一个新角色，不自动创建关系边、物品、状态卡或大纲；真实模型角色质量仍需固定评测 | A（HARNESS-33 复用） |
 | 角色补全 | `CharacterSupplementAction.tsx`、`character-supplement-copilot.ts` | HARNESS-38 后按钮只提交固定 `character.supplement` 任务；`targetCharacter` 精确读取目标角色完整设定，其余世界/故事来源只经 `assembleContext()`，事实与正文表现只在作者开启反向哺喂时纳入；确认后只经 `adopt(characters, recordId, merge-diffs)` | 角色 ID、字段闭集和证据开关冻结进 durable plan；严格候选、原始来源 hash stale、刷新候选恢复、编辑/拒绝/确认和正式状态终验已接入。旧组件直调模型、立即写入和宽松空补丁 parser 已删除 | A（HARNESS-38） |
 | 主线/支线 | `StoryArcPanel.tsx`、`story-arc-copilot.ts` | HARNESS-30 后 AI 入口只提交 `outline.story-arcs`；上下文经 `assembleContext()`，严格多阶段候选确认后经 `adopt(storyArcs)` | durable 候选、snapshot/CAS、结构 gate 和正式状态终验已接入；人工 CRUD 保留 | A（HARNESS-30） |
+| 已写章节故事线进度/交汇 | `StorylineProgressPanel.tsx`、`storyline-progress-copilot.ts`、`storyline-progress.ts` | HARNESS-40 后章节映射只提交固定 `outline.storyline-progress` 任务；经 `assembleContext()` 读取 `projectStatus / storyArcs / storylineProgress / chapterContent`，输出 `{progress,crossings,newArcs}`，闭集 ID、阶段、状态、去重和正文逐字引文由确定性 parser 校验；确认后事务内经 `adopt()` 写 `storylineProgress / storylineCrossings / storyArcs` | durable 候选可编辑、拒绝、刷新恢复；章节正文 hash、故事线投影版本和作用域组成 snapshot/CAS；正式状态回读和 terminal receipt 接入主 Agent；疑似新线不会自动获得进度。旧 `useAIStream`、手工 Prompt 和逐条直接采纳入口已删除 | A（HARNESS-40） |
 | 角色驱动开书规划 | `CharacterDrivenPlotPanel.tsx`、`character-driven-copilot.ts` | HARNESS-35 后生成按钮只提交固定 `outline.character-driven` 任务；方案输入经 `read_character_driven_plan`，其它上游经 `assembleContext()`；第一次确认经 `adopt(characterDrivenPlans)` 保存候选，第二次勾选卷才经 `adopt(outlineNodes)` | durable 刷新恢复、编辑/拒绝/确认、方案 snapshot/CAS、严格结构、未知角色/重复标题/弧光覆盖 gate 和终态回读已接入。旧 `useAIStream`、自动保存与弱 parser 已删除；版本、激活参考和 Prompt 配置保留，中途重规划由 HARNESS-36 的独立 Skill 接管 | A（HARNESS-35） |
 | 角色中途重规划 | `CharacterRevisionPanel.tsx`、`character-revision-copilot.ts` | HARNESS-36 后只提交 `outline.character-revision`；作者变更、保护章序、过渡区、锚点、目标角色和方案 ID 冻结进 durable plan，其余资料只经 `assembleContext()`；作者选定具体档位和 patch 后才经 `adopt(outlineNodes.title/summary)`，已有空正文行只同步 `chapters.title` | 严格三档 JSON、已写区/保护区/未知节点/锚点硬过滤、完整 snapshot/CAS、刷新恢复、部分写入恢复和终态回读已接入。正文、故事主线、伏笔与影响建议保持只读；旧 `useAIStream`、Prompt service 和非 durable 写入 helper 已删除 | A（HARNESS-36） |
 | 卷纲/章纲 | `OutlinePanel.tsx`、`useOutlineGenerationController.ts`、`outline/harness.ts` | 显式 source keys；`GenerationNode` 负责 prepare/run；确认后通过既有 `adopt()` 写 `outlineNodes` | 默认启用 durable trace；候选与确认后中断可刷新恢复，批量逐卷章纲有 HARNESS-11 checkpoint/receipt/终态验证。账本不可用时仍会显式降级为内存影子，因此不等于所有失败场景都可恢复 | A（durable 主路径） |
@@ -195,9 +203,9 @@ flowchart TD
 
 | 问题/失效点 | 代码或测试证据 | 结论类型 | 影响 |
 |---|---|---|---|
-| 注册表存在但主路径不统一 | 审计基线中的故事线、故事核心、世界观、普通角色、灵感反推、角色驱动开书/中途重规划和独立场景旁路已由 HARNESS-30～37 收口；卷章纲及细纲批量已有更早的 durable 基座，不能重复开发。其它基础设定与反馈入口仍未全部统一 | 事实 → 推断 | 剩余入口仍可能使用不同来源、预算、校验和写回标准，模型输入/输出质量受入口影响 |
+| 注册表存在但主路径不统一 | 审计基线中的故事线、故事核心、世界观、普通角色、灵感反推、角色驱动开书/中途重规划和独立场景旁路已由 HARNESS-30～40 收口；卷章纲及细纲批量已有更早的 durable 基座，不能重复开发。其它基础设定与反馈入口仍未全部统一 | 事实 → 推断 | 剩余入口仍可能使用不同来源、预算、校验和写回标准，模型输入/输出质量受入口影响 |
 | 上下文可登记但不可完整复核 | `assembleContext()` 返回内存 `included/omitted/trimmed`；正文只打印控制台日志 | 事实 → 推断 | 无法可靠回答某次生成实际读了哪些源、何时被裁剪；问题难以回放 |
-| 结构化契约强弱不一致 | 世界基座、故事核心、故事线、普通角色、角色驱动卷章方案和中途重规划已改为严格候选合同；其它入口的 parser/gate 强度仍不一致 | 事实 | 剩余弱入口中的缺字段、类型错和 Canon 冲突仍可能进入正式数据 |
+| 结构化契约强弱不一致 | 世界基座、故事核心、故事线（含 HARNESS-40 动态映射）、普通角色、角色驱动卷章方案和中途重规划已改为严格候选合同；其它入口的 parser/gate 强度仍不一致 | 事实 | 剩余弱入口中的缺字段、类型错和 Canon 冲突仍可能进入正式数据 |
 | 正文后处理无统一完成屏障 | `handleAutoPostGenerate()` 依次重建检索、状态提取、memory；失败仅 `console.error`/降级，调用方 `void` 启动 | 事实 → 推断 | UI/作者可能看到正文已保存，却不知道派生记忆、状态和检索是否完成；失败无法按步骤恢复 |
 | 质量 Agent 未绑定主 run | 一致性候选写入 `agentEvents`，有 hash current；没有 run terminal/receipt 关联 | 事实 | 审查结果可查但不能决定某次创作是否完成，也不能自动触发上游修正 |
 | 下游反馈只有提示没有闭环 | `impact-analysis` 明确“只读、只提示，不自动改正文” | 事实 | 发现冲突后作者仍需手工判断、修改和重跑，容易让 stale 事实继续传播 |
@@ -208,7 +216,7 @@ flowchart TD
 
 **推断 1：质量能力分散在多个工程批次，缺少统一执行控制面。** NS-0~NS-6、Agent、透明管线分别交付了局部能力；每个模块能证明自己的不变量，但没有一个 run 负责把步骤依赖、重试、终态和证据连接起来。
 
-**推断 2：主路径接入断裂比“记忆不足”更可能解释实际效果不稳。** 审计时的直接证据包括故事线旁路写库、世界观/故事核心手工上下文、普通角色双入口、灵感与角色驱动面板级调用，以及章节页独立场景生成绕过 durable run；这些证据对应的入口已由 HARNESS-30～37 修复。卷章纲和细纲批量经复核已有 durable 基座。该根因仍适用于其它基础设定和反馈入口，不能因为这些切片完成就宣称全流程质量已经稳定。
+**推断 2：主路径接入断裂比“记忆不足”更可能解释实际效果不稳。** 审计时的直接证据包括故事线旁路写库、世界观/故事核心手工上下文、普通角色双入口、灵感与角色驱动面板级调用，以及章节页独立场景生成绕过 durable run；这些证据对应的入口已由 HARNESS-30～40 修复。卷章纲和细纲批量经复核已有 durable 基座。该根因仍适用于其它基础设定和反馈入口，不能因为这些切片完成就宣称全流程质量已经稳定。
 
 **推断 3：失败可见性不足导致错误继续向后传播。** 正文后处理失败只记录日志并保留 tail/旧状态，没有 durable attempt 和明确的“部分完成/待恢复”状态，后续步骤可能继续读取旧的派生记忆。
 
@@ -311,6 +319,7 @@ verifying → stale(source/state changed)
 | ~~`CharacterRevisionPanel` 的 `useAIStream` / Prompt service / 非 durable patch helper~~ | HARNESS-36 已迁移到冻结保护边界与方案输入的 `outline.character-revision` durable 任务；作者选择先固化到候选，再进行受治理采纳 | 只允许未来大纲标题/摘要和已有空正文行标题；正文、主线、伏笔和影响建议只读 |
 | ~~`ScenePanel` 的组件级 `useAIStream` / 上下文装配 / 二次模型解析~~ | HARNESS-37 已与独立细纲页统一到 `outline.details` + 单章 durable 控制器；严格候选、刷新恢复、Manifest stale、`adopt()` 和 terminal receipt 共用 | 保留人工场景 CRUD、五阶段工坊与 HARNESS-10 批量入口；不恢复解析失败后的隐藏模型调用 |
 | ~~`CharacterSupplementAction` 的组件级模型调用、生成后立即写入和宽松空补丁 parser~~ | HARNESS-38 已迁移到固定角色/字段/证据开关的 `character.supplement` durable 任务；候选先持久化并可编辑、拒绝或确认 | 保留四个角色面板的入口、维度选择、反向哺喂开关与人工角色编辑；不新建角色、关系边或修改正文 |
+| ~~`StorylineProgressPanel` 的组件级 `useAIStream`、手工 Prompt 和逐条直接采纳~~ | HARNESS-40 已迁移到固定章节的 `outline.storyline-progress` durable 任务；候选聚合后由作者一次确认，闭集/逐字引文/快照 CAS/事务 `adopt()` 形成完整写回 | 保留章节选择、进度/交汇展示、人工故事线 CRUD；疑似新线仍需作者确认，不自动补进度 |
 | `GenerationNode` | 继续作为领域执行抽象，由 Harness 调度 | 不把它误命名为 durable run，不另造第二套生成运行器 |
 | `agentConversations/agentEvents` | 继续承载对话/候选/确认/错误；可作为兼容投影 | 不无限扩展为 run ledger；字段扩展须先审计生命周期 |
 | `nodeFlows/nodeRuns` | 继续服务 FLOW-3 自由节点 | 不直接冒充分步骤主流程 run，除非新增明确 contract/作用域/终态语义 |

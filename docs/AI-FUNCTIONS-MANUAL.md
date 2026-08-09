@@ -696,6 +696,17 @@
 - **写**：作者确认后唯一经 `adopt({ target: 'storyArcs' })` 新建；snapshot/CAS 和终态 verifier 校验正式结果
 - **保留功能**：人工新增、编辑和删除故事线继续使用原面板能力
 
+#### 动作②：映射已写章节的故事线进度与交汇（HARNESS-40）
+- **触发**：🔘 在动态进度面板选择已写章节后手动映射
+- **Agent / Skill**：主 Agent → `outline` Agent → `outline.storyline-progress`
+- **读**：`projectStatus`、`storyArcs`、`storylineProgress`、`chapterContent`，只经
+  `CONTEXT_SOURCES + assembleContext()` 装配；目标章节 ID 固定在任务中，正文全文不进入 durable snapshot
+- **输出**：严格 `{progress,crossings,newArcs}` 聚合候选；`progress` 只能引用登记故事线/阶段，所有引用必须有正文逐字证据；`newArcs` 只是疑似新线候选
+- **过程治理**：章节正文 hash、故事线边界和动态投影版本组成 snapshot/CAS；候选可刷新恢复、编辑、拒绝；章节或故事线变化后旧候选 stale
+- **写**：作者确认后一次性经 `adopt()` 原子写入 `storylineProgress`、`storylineCrossings` 和作者确认的新 `storyArcs`，不自动为新线创建进度
+- **校验**：闭集 ID、阶段归属、状态枚举、交汇去重、正文逐字引文、项目作用域、正式后状态回读和 terminal receipt
+- **保留功能**：章节选择、动态进度/交汇展示、人工故事线维护继续保留；旧面板 `useAIStream` 和直接采纳旁路已删除
+
 ---
 
 ### 4.5 章节编辑器（侧栏：chapters-list → 进入章节编辑）

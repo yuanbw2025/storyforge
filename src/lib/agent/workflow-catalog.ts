@@ -183,6 +183,9 @@ export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId
 
 export function selectAgentSkillIdV1(agentId: DomainAgentId, request: string): AgentSkillId {
   if (agentId === 'outline') {
+    if (/(?:映射|分析|更新).{0,10}(?:本章|章节).{0,10}(?:故事线|进度|交汇)|(?:动态进度|故事线进度)/.test(request)) {
+      return 'outline.storyline-progress'
+    }
     if (/故事线|主线|支线|复线/.test(request)) {
       return 'outline.story-arcs'
     }

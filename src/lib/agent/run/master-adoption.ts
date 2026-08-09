@@ -53,6 +53,7 @@ import {
   parseWorldviewFieldCandidateDraft,
   worldviewFieldCandidateMatchesRowV1,
 } from '../worldview-field-copilot'
+import { parseStorylineProgressCandidateDraftV1 } from '../storyline-progress-copilot'
 import { parseInspirationVersions } from '../../inspiration/workspace'
 import { plainTextToHtml } from '../../utils/html'
 import {
@@ -471,6 +472,36 @@ async function businessAlreadyMatches(
       const rows = await readOwnedRows<any>(input.scope, 'storyArcs', { owner: 'work' })
       return expected.every(item => rows.some(row => storyArcCandidateMatchesRowV1(item, row)))
     }
+    if (candidate.payload.skillId === 'outline.storyline-progress') {
+      const expected = parseStorylineProgressCandidateDraftV1(candidate.draft)
+      if (expected.progress.length + expected.crossings.length + expected.newArcs.length === 0) return false
+      const chapterId = candidate.payload.storylineProgressChapterId
+      if (chapterId == null) return false
+      const progressRows = await readOwnedRows<any>(input.scope, 'storylineProgress', { owner: 'work' })
+      const crossingRows = await readOwnedRows<any>(input.scope, 'storylineCrossings', { owner: 'work' })
+      const arcRows = await readOwnedRows<any>(input.scope, 'storyArcs', { owner: 'work' })
+      const progressMatch = expected.progress.every(item => progressRows.some(row => (
+        row.arcId === item.arcId
+        && row.status === item.status
+        && (row.currentStageId ?? null) === (item.currentStageId ?? null)
+        && row.progressNote === item.progressNote
+        && row.lastActiveChapterId === chapterId
+        && row.evidenceQuote === item.evidenceQuote
+      )))
+      const crossingMatch = expected.crossings.every(item => crossingRows.some(row => (
+        row.arcIdA === Math.min(item.arcIdA, item.arcIdB)
+        && row.arcIdB === Math.max(item.arcIdA, item.arcIdB)
+        && row.chapterId === chapterId
+        && row.note === item.note
+        && row.evidenceQuote === item.evidenceQuote
+      )))
+      const newArcMatch = expected.newArcs.every(item => arcRows.some(row => (
+        normalized(row.name ?? '') === normalized(item.name)
+        && row.type === item.arcType
+        && row.description === item.description
+      )))
+      return progressMatch && crossingMatch && newArcMatch
+    }
     const items = parseOutlineCandidateDraft(candidate.draft)
     const mode = candidate.payload.outlineMode
     if (!mode) return false
@@ -522,10 +553,11 @@ async function repairPartialOutlineAdoption(
     })
     return
   }
-  if (
-    candidate.payload.skillId === 'outline.story-arcs'
-    || candidate.payload.skillId === 'outline.character-driven'
-  ) return
+    if (
+      candidate.payload.skillId === 'outline.story-arcs'
+      || candidate.payload.skillId === 'outline.storyline-progress'
+      || candidate.payload.skillId === 'outline.character-driven'
+    ) return
   const mode = candidate.payload.outlineMode
   if (!mode) throw new Error('大纲候选缺少写回模式')
   const items = parseOutlineCandidateDraft(candidate.draft)

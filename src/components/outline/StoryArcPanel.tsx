@@ -219,6 +219,7 @@ export default function StoryArcPanel({ project, worldGroupId }: Props) {
           <StorylineProgressPanel
             projectId={project.id!}
             arcs={arcs}
+            copilot={copilot}
             onArcsChanged={() => loadAll(project.id!)}
           />
         </>

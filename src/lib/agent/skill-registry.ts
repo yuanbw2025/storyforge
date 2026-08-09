@@ -30,6 +30,7 @@ export type AgentSkillExecutionModeV1 =
   | 'reverse'
   | 'auto'
   | 'story-arcs'
+  | 'storyline-progress'
   | 'character-driven'
   | 'character-revision'
   | 'volumes'
@@ -185,6 +186,13 @@ const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
   'storylineProgress',
   'existingVolumeOutlines',
   'writtenChapterProgress',
+] as const
+
+const OUTLINE_STORYLINE_PROGRESS_CONTEXT_SOURCE_KEYS = [
+  'projectStatus',
+  'storyArcs',
+  'storylineProgress',
+  'chapterContent',
 ] as const
 
 const OUTLINE_CHARACTER_DRIVEN_CONTEXT_SOURCE_KEYS = [
@@ -486,6 +494,24 @@ const OUTLINE_STORY_ARC_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+const OUTLINE_STORYLINE_PROGRESS_INPUT_POLICY = {
+  sourceKeys: ['storyArcs', 'storylineProgress', 'chapterContent'],
+  states: {
+    empty: {
+      handling: 'require-author-input',
+      instruction: '缺少已登记故事线或目标章节正文时停止映射；不得凭空创建进度事实。',
+    },
+    partial: {
+      handling: 'reference-and-create',
+      instruction: '只把正文逐字证据映射到已登记故事线；缺少的阶段或交汇不得臆造，疑似新线只能作为待确认候选。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格依据当前章节正文、已登记故事线及作者确认的历史进度，输出可核查的进度、交汇和疑似新线候选。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
 const OUTLINE_CHARACTER_DRIVEN_INPUT_POLICY = {
   sourceKeys: ['characterDrivenPlan', 'storyCore', 'characters', 'storyArcs'],
   states: {
@@ -679,6 +705,11 @@ const OUTLINE_STORY_ARC_COMPRESSION_POLICY = compressionPolicy([
   'historical',
   'storyArcs',
   'existingVolumeOutlines',
+])
+const OUTLINE_STORYLINE_PROGRESS_COMPRESSION_POLICY = compressionPolicy([
+  'storyArcs',
+  'storylineProgress',
+  'chapterContent',
 ])
 const OUTLINE_CHARACTER_DRIVEN_COMPRESSION_POLICY = compressionPolicy([
   'characterDrivenPlan',
@@ -1008,6 +1039,30 @@ export const AGENT_SKILLS = [
       'R-HARNESS30-story-arc-agent',
       'R-HARNESS30-story-arc-panel-ui',
     ],
+  },
+  {
+    version: 1,
+    id: 'outline.storyline-progress',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '章节故事线进度映射',
+    owner: 'outline-agent',
+    promptVersion: 'storyline-progress-copilot-v1',
+    executionMode: 'storyline-progress',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: OUTLINE_STORYLINE_PROGRESS_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: OUTLINE_STORYLINE_PROGRESS_INPUT_POLICY,
+    contextCompression: OUTLINE_STORYLINE_PROGRESS_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [
+      { table: 'storylineProgress', fields: ['arcId', 'currentStageId', 'status', 'progressNote', 'lastActiveChapterId', 'lastActiveChapterTitle', 'involvedEntities', 'evidenceQuote'] },
+      { table: 'storylineCrossings', fields: ['arcIdA', 'arcIdB', 'chapterId', 'chapterTitle', 'note', 'evidenceQuote'] },
+      { table: 'storyArcs', fields: ['name', 'type', 'description', 'stages'] },
+    ],
+    lastVerifiedAt: '2026-08-10',
+    regressionTests: ['R-HARNESS40-storyline-progress-agent', 'R-PHASE39-storyline-progress-ui'],
   },
   {
     version: 1,
@@ -1505,7 +1560,7 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules', 'review']),
     character: new Set(['create', 'supplement']),
     inspiration: new Set(['reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
+    outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
     prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory']),
   }
   const ids = new Set<string>()

@@ -190,13 +190,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 54 个 category。
-未分类调用: 0 个。动态 category 调用: 18 个。
+共 53 个 category。
+未分类调用: 0 个。动态 category 调用: 19 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:568` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:655` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:591` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:678` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
@@ -244,7 +244,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
 | `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:85` |
-| `storyline-progress.map` | `src/components/outline/StorylineProgressPanel.tsx:76` |
 | `style.calibrate` | `src/components/style/StyleCalibrationPanel.tsx:63` |
 | `style.learn` | `src/components/style/StyleLearningPanel.tsx:125` |
 | `world-group.expand` | `src/components/world-group/WorldGroupDetail.tsx:98` |
@@ -266,6 +265,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/prose-copilot.ts:649 · chat`
 - `src/lib/agent/story-arc-copilot.ts:556 · chat`
 - `src/lib/agent/story-core-copilot.ts:458 · chat`
+- `src/lib/agent/storyline-progress-copilot.ts:376 · chat`
 - `src/lib/agent/world-origin-copilot.ts:255 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:603 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
@@ -273,4 +273,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `b81dcb7`
+生成时间基准:commit `4d31bb4`

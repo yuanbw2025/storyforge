@@ -369,6 +369,16 @@ HARNESS-39 现状（2026-08-10）：分步骤“创作规则”的写作风格�
 `atmosphere`，旧 `toneAndMood` 只保留读取兼容。当前工程证据包含隔离 Chromium 闭环，但模型响应仍为模拟，
 不证明真实 provider 的文风建议质量、成本或延迟收益。
 
+HARNESS-40 现状（2026-08-10）：分步骤“动态进度与交汇”的章节映射入口已统一进入现有大纲 Agent 的
+`outline.storyline-progress` Skill。任务固定目标章节 ID，正式上下文只经
+`CONTEXT_SOURCES + assembleContext()` 装配 `projectStatus / storyArcs / storylineProgress / chapterContent`；
+章节正文不复制进 durable snapshot，只保存正文 hash、故事线边界和动态投影版本。模型只能返回严格
+`progress / crossings / newArcs` 聚合候选，故事线 ID、阶段 ID 和正文逐字引文由确定性 parser 校验；疑似新线仍
+只能作为作者确认的静态登记，不能自动获得进度。刷新恢复、候选编辑/拒绝/确认、正文或故事线变化 stale、
+确认后原子经 `adopt()` 写入 `storylineProgress / storylineCrossings / storyArcs`，正式状态回读和 terminal receipt
+均接入主 Agent durable Run。旧面板级 `useAIStream`、手工 Prompt 和逐条直接采纳入口已删除，章节选择、作者确认
+和动态进度展示保留。当前证据覆盖真实 UI 组件与模拟模型闭环，不证明真实 provider 的映射召回率或新增故事线质量。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。

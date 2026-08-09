@@ -109,6 +109,12 @@ import {
   type CharacterSupplementCopilotSnapshotV1,
   type CharacterSupplementTaskInputV1,
 } from './character-supplement-copilot'
+import {
+  adoptRestoredStorylineProgressCandidateV1,
+  parseStorylineProgressCandidateDraftV1,
+  prepareStorylineProgressCopilotV1,
+  type StorylineProgressCopilotSnapshotV1,
+} from './storyline-progress-copilot'
 import type {
   AgentContextEvidence,
 } from './context-policy'
@@ -170,6 +176,8 @@ export interface MasterAgentTask {
   characterRevisionRequest?: CharacterRevisionTaskInputV1
   /** 已有角色补全面板冻结的目标角色、字段闭集与剧情证据开关。 */
   characterSupplementRequest?: CharacterSupplementTaskInputV1
+  /** 故事线进度映射固定的已写章节。 */
+  storylineProgressChapterId?: number
 }
 
 export interface MasterAgentPlan {
@@ -213,6 +221,7 @@ export interface MasterCandidatePayload {
   storyCoreField?: StoryCoreField
   creativeRulesField?: CreativeRulesField
   worldviewField?: WorldviewAgentField
+  storylineProgressChapterId?: number
   proseOperation?: ProseCopilotOperation
   proseOutlineNodeId?: number
   dependsOnTaskIds?: string[]
@@ -256,6 +265,7 @@ export interface PinnedMasterAgentTaskV1 {
   characterDrivenPlanId?: number
   characterRevisionRequest?: CharacterRevisionTaskInputV1
   characterSupplementRequest?: CharacterSupplementTaskInputV1
+  storylineProgressChapterId?: number
   id?: string
 }
 
@@ -483,6 +493,16 @@ export async function createMasterAgentPlan(input: {
     if (pinned.skillId === 'character.supplement' && pinned.characterSupplementRequest === undefined) {
       throw new Error('角色补全 Skill 必须固定角色补全请求。')
     }
+    if (
+      pinned.storylineProgressChapterId !== undefined
+      && (pinned.agentId !== 'outline' || pinned.skillId !== 'outline.storyline-progress')
+    ) throw new Error('只有故事线进度 Skill 可以固定映射章节。')
+    if (pinned.skillId === 'outline.storyline-progress') {
+      const chapterId = pinned.storylineProgressChapterId
+      if (typeof chapterId !== 'number' || !Number.isInteger(chapterId) || chapterId < 1) {
+        throw new Error('故事线进度 Skill 必须固定已写章节 ID。')
+      }
+    }
     const characterRevisionRequest = pinned.characterRevisionRequest === undefined
       ? undefined
       : parseCharacterRevisionTaskInputV1(pinned.characterRevisionRequest)
@@ -513,6 +533,9 @@ export async function createMasterAgentPlan(input: {
           : {}),
         ...(characterSupplementRequest !== undefined
           ? { characterSupplementRequest }
+          : {}),
+        ...(pinned.storylineProgressChapterId !== undefined
+          ? { storylineProgressChapterId: pinned.storylineProgressChapterId }
           : {}),
       }],
       workflow,
@@ -897,6 +920,53 @@ async function executeSequentialMasterAgentPlan(
               contextEvidence: prepared.contextEvidence,
               baseSnapshot: prepared.snapshot,
               creativeRulesField: prepared.targetField,
+              workspaceScope: scope,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+              generator: prepared.modelIdentity,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        } else if (skill.executionMode === 'storyline-progress') {
+          if (task.storylineProgressChapterId == null) {
+            throw new Error('故事线进度任务缺少固定章节 ID。')
+          }
+          const prepared = await prepareStorylineProgressCopilotV1({
+            projectId: input.projectId,
+            scope,
+            worldGroupId: input.worldGroupId,
+            chapterId: task.storylineProgressChapterId,
+            authorRequest: task.instruction,
+            skillId: skill.id as AgentSkillId,
+            supplementalContext: upstream,
+            routingCategory: `${AGENT_ROLE_CATEGORIES.outline}.storyline-progress`,
+            contextProfile,
+            contextCompressionRuntime,
+            signal: input.signal,
+          })
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '故事线进度映射 Skill',
+            maxOutputTokens: skill.maxOutputTokens,
+          })
+          const draft = JSON.stringify(result.output, null, 2)
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              storylineProgressChapterId: prepared.chapterId,
               workspaceScope: scope,
               dependsOnTaskIds: task.dependsOn,
               dependencyBindings,
@@ -1640,6 +1710,8 @@ export async function adoptMasterCandidate(input: {
       ? parseStoryCoreCandidateDraft(input.draft)
       : input.payload.skillId === 'world-origin.creative-rules'
       ? parseCreativeRulesCandidateDraftV1(input.draft)
+      : input.payload.skillId === 'outline.storyline-progress'
+      ? parseStorylineProgressCandidateDraftV1(input.draft)
       : input.payload.skillId === 'outline.story-arcs'
       ? parseStoryArcCandidateDraft(input.draft)
       : input.payload.skillId === 'outline.character-driven'
@@ -1787,6 +1859,17 @@ export async function adoptMasterCandidate(input: {
         snapshot: input.payload.baseSnapshot as StoryArcCopilotSnapshot,
         draft: input.draft,
       })
+    } else if (input.payload.skillId === 'outline.storyline-progress') {
+      if (input.payload.storylineProgressChapterId == null) {
+        throw new Error('故事线进度候选缺少目标章节，请重新生成。')
+      }
+      await adoptRestoredStorylineProgressCandidateV1({
+        projectId: input.projectId,
+        scope,
+        chapterId: input.payload.storylineProgressChapterId,
+        snapshot: input.payload.baseSnapshot as StorylineProgressCopilotSnapshotV1,
+        draft: input.draft,
+      })
     } else {
       const mode = input.payload.outlineMode
       if (!mode) throw new Error('大纲候选缺少写回模式，请重新生成。')
@@ -1844,6 +1927,8 @@ export async function adoptMasterCandidate(input: {
             ? '角色驱动卷章方案已保存到当前版本。'
             : input.payload.skillId === 'outline.story-arcs'
             ? '故事线已写入项目。'
+            : input.payload.skillId === 'outline.storyline-progress'
+            ? '本章故事线进度、交汇和疑似新线候选已按作者确认写入项目。'
             : input.payload.outlineMode === 'volumes'
             ? '卷级大纲已写入项目。'
             : '章节大纲已写入目标卷。'

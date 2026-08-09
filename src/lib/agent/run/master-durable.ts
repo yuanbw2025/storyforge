@@ -374,6 +374,25 @@ function readOptionalCharacterSupplementRequest(
   }
 }
 
+function readOptionalStorylineProgressChapterId(
+  value: Record<string, unknown>,
+  agentId: DomainAgentId,
+  skillId: AgentSkillId | undefined,
+  label: string,
+): number | undefined {
+  const present = Object.prototype.hasOwnProperty.call(value, 'storylineProgressChapterId')
+  if (!present) {
+    if (skillId === 'outline.storyline-progress') fail(label + '.storylineProgressChapterId 缺失')
+    return undefined
+  }
+  if (agentId !== 'outline' || skillId !== 'outline.storyline-progress') {
+    fail(label + '.storylineProgressChapterId 无效')
+  }
+  const chapterId = readInteger(value.storylineProgressChapterId, label + '.storylineProgressChapterId')
+  if (chapterId < 1) fail(label + '.storylineProgressChapterId 无效')
+  return chapterId
+}
+
 function readOptionalSkillId(
   value: Record<string, unknown>,
   agentId: DomainAgentId,
@@ -386,7 +405,7 @@ function readOptionalSkillId(
     'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules']),
     character: new Set(['create', 'supplement']),
     inspiration: new Set(['reverse']),
-    outline: new Set(['auto', 'story-arcs', 'character-driven', 'character-revision', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue']),
   }
   if (!allowedModes[agentId].has(skill.executionMode)) {
@@ -426,7 +445,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     assertKeysWithOptional(
       item,
       ['id', 'agentId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId', 'skillId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest'],
+      ['perspectiveCharacterId', 'skillId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'storylineProgressChapterId'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -471,6 +490,12 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       skillId,
       '主 Agent 计划任务 ' + id,
     )
+    const storylineProgressChapterId = readOptionalStorylineProgressChapterId(
+      item,
+      agentId,
+      skillId,
+      '主 Agent 计划任务 ' + id,
+    )
     return {
       id,
       agentId,
@@ -482,6 +507,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       ...(characterDrivenPlanId !== undefined ? { characterDrivenPlanId } : {}),
       ...(characterRevisionRequest !== undefined ? { characterRevisionRequest } : {}),
       ...(characterSupplementRequest !== undefined ? { characterSupplementRequest } : {}),
+      ...(storylineProgressChapterId !== undefined ? { storylineProgressChapterId } : {}),
     }
   })
   const workflow = value.workflow === undefined
@@ -731,6 +757,7 @@ function sameTaskIdentity(left: MasterAgentTask, right: MasterAgentTask): boolea
       === JSON.stringify(right.characterRevisionRequest ?? null)
     && JSON.stringify(left.characterSupplementRequest ?? null)
       === JSON.stringify(right.characterSupplementRequest ?? null)
+    && (left.storylineProgressChapterId ?? null) === (right.storylineProgressChapterId ?? null)
 }
 
 function sameTaskDefinition(left: MasterAgentTask, right: MasterAgentTask): boolean {
@@ -1118,6 +1145,10 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
     && !WORLDVIEW_AGENT_FIELDS.includes(payload.worldviewField)
   ) fail(label + ' worldviewField 无效')
   if (
+    payload.storylineProgressChapterId !== undefined
+    && (!Number.isInteger(payload.storylineProgressChapterId) || payload.storylineProgressChapterId < 1)
+  ) fail(label + ' storylineProgressChapterId 无效')
+  if (
     payload.characterDrivenPlanId !== undefined
     && (!Number.isInteger(payload.characterDrivenPlanId) || payload.characterDrivenPlanId < 1)
   ) fail(label + ' characterDrivenPlanId 无效')
@@ -1158,6 +1189,17 @@ function assertCandidateMatchesTaskSkill(
     taskSkill.executionMode === 'creative-rules'
     && (!payload.creativeRulesField || !CREATIVE_RULES_FIELDS.includes(payload.creativeRulesField))
   ) fail(`${label} 的创作规则字段与 Skill 不一致`)
+  if (
+    taskSkill.executionMode === 'storyline-progress'
+    && (
+      payload.storylineProgressChapterId == null
+      || payload.storylineProgressChapterId !== task.storylineProgressChapterId
+    )
+  ) fail(`${label} 的故事线进度章节与 Skill 计划不一致`)
+  if (
+    taskSkill.executionMode !== 'storyline-progress'
+    && payload.storylineProgressChapterId !== undefined
+  ) fail(`${label} 不得携带故事线进度章节`)
   if (
     taskSkill.executionMode === 'worldview-field'
     && (!payload.worldviewField || !WORLDVIEW_AGENT_FIELDS.includes(payload.worldviewField))

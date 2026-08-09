@@ -10,6 +10,7 @@ import type { MasterCandidatePayload } from '../orchestrator'
 import { parseProseCandidateDraft } from '../prose-copilot'
 import { parseStoryCoreCandidateDraft } from '../story-core-copilot'
 import { parseCreativeRulesCandidateDraftV1 } from '../creative-rules-copilot'
+import { parseStorylineProgressCandidateDraftV1 } from '../storyline-progress-copilot'
 import { parseWorldviewFieldCandidateDraft } from '../worldview-field-copilot'
 import type { AgentRunSnapshotV1 } from './event-store'
 import { hashCanonicalValue } from './hash'
@@ -65,6 +66,10 @@ function validateCandidateDraft(payload: MasterCandidatePayload, draft: string):
     return
   }
   if (payload.agentId === 'outline') {
+    if (payload.skillId === 'outline.storyline-progress') {
+      parseStorylineProgressCandidateDraftV1(draft)
+      return
+    }
     if (payload.skillId === 'outline.character-driven') {
       parseCharacterDrivenCandidateDraftV1(draft)
       return
