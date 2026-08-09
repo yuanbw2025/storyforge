@@ -37,6 +37,13 @@
 - **写回约束**:模型只能返回 `{field,value}`；候选可跨刷新编辑/拒绝/确认，确认前正式数据零写入，确认后只经 `adopt(storyCores)`。任一故事核心字段变化都会使旧候选过期。
 - **兼容边界**:`story.generate` Prompt 面板继续承载作者参数和自定义要求，但旧 `story-adapter` 已删除；Prompt 设置不会绕过 Skill 合同或直接成为写入入口。
 
+### 世界基座单字段生成 — `moduleKey: worldview.dimension`
+- **业务意图**:世界起源、自然环境和人文环境的 17 个 AI 字段按钮共用 `world-foundation-agent` 的 `world-origin.worldview-field` Skill；不是为每个字段新增 Agent。
+- **上下文**:只经 `CONTEXT_SOURCES + assembleContext()` 读取世界观、规则/事实、故事核心、力量、词条、角色、故事线、卷纲和参考资料；空、部分填写和完整填写分别执行创建、下游反推补全和受约束变更。世界观字段的原始长文本是否压缩、全文救援或确定性回退均记录上下文证据。
+- **写回约束**:文本字段只能返回 `{field,value}`；`divineDesign` 的 `value` 必须是严格四字段对象。候选进入 durable 主 Agent，确认前 `worldviews` 零写入，确认后只经 `adopt(worldviews)`；完整世界观 snapshot/CAS、字段错投 gate 和终态回读阻止过期候选覆盖作者修改。
+- **兼容边界**:人工编辑、力量/神明/自然物产/人文词条和 `worldview.dimension` Prompt 配置继续保留；面板不再调用 `useAIStream`、组件级拼接、`slice()` 或神明二次拆分模型。旧 `world-origin.complete` 只用于历史候选恢复，新请求由 `world-origin.worldview-field` 收口。
+- **证据边界**:HARNESS-32 已有 7 项领域合同测试、3 项面板 UI 测试、主 Agent durable 回归和 Chromium 神明刷新闭环；模型仍为模拟响应，不能据此宣称文学质量或真实 provider 成本收益已经提升。
+
 ### 状态提取 — `moduleKey:`(无独立模板,走 state-extract-adapter)
 - **业务意图**:章节写完后自动从正文提取已登记角色的动态状态,写回角色状态卡。
 - **坑**:用"按需召回"只把相关状态卡喂给 AI；角色名单同时作为严格白名单，地点、物品、文件夹、组织等不能再被误建为角色卡。

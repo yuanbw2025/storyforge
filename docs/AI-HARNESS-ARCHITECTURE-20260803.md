@@ -295,6 +295,15 @@ empty/partial/complete 输入策略、登记上下文集合、预算压缩与全
 `story-adapter` 和组件级上下文拼接已删除，七字段人工编辑与 Prompt 配置入口保留。当前证据覆盖真实
 orchestrator、组件和 Chromium 刷新闭环，但模型响应仍为模拟，不证明故事核心文学质量收益。
 
+HARNESS-32 现状（2026-08-09）：分步骤世界基座起源、自然和人文三面板的 17 个 AI 字段已统一归属现有
+`world-foundation-agent` 的 `world-origin.worldview-field` Skill，而不是新增顶层 Agent。Skill 由同一份
+`CONTEXT_SOURCES + assembleContext()` 配方读取正式世界基座及下游反推证据，按空/部分/完整基座选择创建、
+参考创建或受约束变换策略，并把预算压缩/全文救援证据写入候选。每轮只产生一个严格 `{field,value}` 候选；
+确认前 `worldviews` 零写入，确认后只经 `adopt(target=worldviews)`，完整基座快照/CAS、durable 刷新恢复、
+作者编辑/拒绝/确认、字段错投和终态回读均已覆盖。旧 `world-origin.complete` 只保留历史 durable Run 兼容，
+人工字段编辑、词条、历史年表和 Prompt 配置入口保留。当前测试证明工程闭环和模拟模型合同，不证明真实
+模型文学质量收益，也不代表世界引擎体验已被改动。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。
@@ -1217,7 +1226,7 @@ CHIRON 四类信息可映射到现有结构：
 
 **执行版本与新鲜度实施状态（HARNESS-18/19，2026-08-08）**
 
-- 十一个 `AGENT_SKILLS` 条目现在声明七个稳定 `promptVersion`；Tool Registry 从 14 个实际只读工具派生不含执行函数的规范 schema 快照，并以显式 `toolSchemaVersion + SHA-256` 绑定。新主 Agent 及正文语义评审 RunContract 为每个计划步骤冻结 `skillId/skillVersion/promptVersion/toolSchemaVersion/toolSchemaHash`，不再只靠当时内存中的提示词和工具实现推断运行环境；
+- 十八个 `AGENT_SKILLS` 条目现在声明十四个稳定 `promptVersion`；Tool Registry 从 14 个实际只读工具派生不含执行函数的规范 schema 快照，并以显式 `toolSchemaVersion + SHA-256` 绑定。新主 Agent 及正文语义评审 RunContract 为每个计划步骤冻结 `skillId/skillVersion/promptVersion/toolSchemaVersion/toolSchemaHash`，不再只靠当时内存中的提示词和工具实现推断运行环境；
 - 同一 execution binding 同时进入领域候选和 `candidateHash`。首次持久化、刷新恢复和继续执行都会重新核对计划任务、当前 Skill、提示词版本和工具 schema hash；Skill 身份、提示词版本或工具 hash 任一变化都会 fail-closed，不能把旧结果冒充当前版本产物；
 - HARNESS-18 之前没有 `executionBindings` 的 RunContract 和候选保持旧 hash 结构并可实际恢复。旧合同恢复后仍生成旧格式候选，避免一条运行中出现无法解释的半旧半新协议；新建运行一律使用版本绑定；
 - `check:agent-freshness` 已进入 `npm run ci`，用 TypeScript AST 检查 Skill 的 owner、提示词版本、复核日期和真实存在的回归证据，并在超过 45 天未复核时阻断。`R-HARNESS18-execution-version-freshness` 覆盖合同/候选 hash、三类篡改、实际旧运行恢复和工具 schema 漂移；

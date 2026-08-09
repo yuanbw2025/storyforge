@@ -89,6 +89,7 @@ import {
   verifyMasterCandidateSemanticReviewArtifactV1,
 } from '../master-candidate-semantic-review'
 import { STORY_CORE_FIELDS } from '../story-core-copilot'
+import { WORLDVIEW_AGENT_FIELDS } from '../worldview-field-copilot'
 
 export const MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1 = 'master-agent-plan'
 export const MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 = 1 as const
@@ -292,7 +293,7 @@ function readOptionalSkillId(
   if (typeof value.skillId !== 'string') fail(label + '.skillId 无效')
   const skill = getAgentSkillV1(value.skillId, agentId)
   const allowedModes: Record<DomainAgentId, ReadonlySet<string>> = {
-    'world-origin': new Set(['complete', 'story-core']),
+    'world-origin': new Set(['complete', 'worldview-field', 'story-core']),
     character: new Set(['create']),
     inspiration: new Set(['reverse']),
     outline: new Set(['auto', 'story-arcs', 'volumes', 'chapters']),
@@ -983,6 +984,10 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
     payload.storyCoreField !== undefined
     && !STORY_CORE_FIELDS.includes(payload.storyCoreField)
   ) fail(label + ' storyCoreField 无效')
+  if (
+    payload.worldviewField !== undefined
+    && !WORLDVIEW_AGENT_FIELDS.includes(payload.worldviewField)
+  ) fail(label + ' worldviewField 无效')
   budgetEvidence(payload.teamBudgetEvidence, `${label} payload teamBudgetEvidence`)
   return payload
 }
@@ -1002,6 +1007,10 @@ function assertCandidateMatchesTaskSkill(
     taskSkill.executionMode === 'story-core'
     && (!payload.storyCoreField || !STORY_CORE_FIELDS.includes(payload.storyCoreField))
   ) fail(`${label} 的故事核心字段与 Skill 不一致`)
+  if (
+    taskSkill.executionMode === 'worldview-field'
+    && (!payload.worldviewField || !WORLDVIEW_AGENT_FIELDS.includes(payload.worldviewField))
+  ) fail(`${label} 的世界基座字段与 Skill 不一致`)
   if (
     task.agentId === 'outline'
     && (taskSkill.executionMode === 'volumes' || taskSkill.executionMode === 'chapters')

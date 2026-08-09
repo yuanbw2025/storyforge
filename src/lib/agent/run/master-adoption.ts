@@ -32,6 +32,10 @@ import {
   parseStoryCoreCandidateDraft,
   storyCoreCandidateMatchesRowV1,
 } from '../story-core-copilot'
+import {
+  parseWorldviewFieldCandidateDraft,
+  worldviewFieldCandidateMatchesRowV1,
+} from '../worldview-field-copilot'
 import { parseInspirationVersions } from '../../inspiration/workspace'
 import { plainTextToHtml } from '../../utils/html'
 import {
@@ -365,6 +369,15 @@ async function businessAlreadyMatches(
 ): Promise<boolean> {
   const agentId = candidate.payload.agentId
   if (agentId === 'world-origin') {
+    if (candidate.payload.skillId === 'world-origin.worldview-field') {
+      const parsed = parseWorldviewFieldCandidateDraft(candidate.draft)
+      const rows = await readOwnedRows<any>(input.scope, 'worldviews', { owner: 'world' })
+      const row = rows.find(item => (
+        (item.worldGroupId ?? null) === (input.worldGroupId ?? null)
+      )) ?? (input.worldGroupId == null ? rows[0] : undefined)
+      return parsed.field === candidate.payload.worldviewField
+        && worldviewFieldCandidateMatchesRowV1(parsed, row)
+    }
     if (candidate.payload.skillId === 'world-origin.story-core') {
       const parsed = parseStoryCoreCandidateDraft(candidate.draft)
       const row = (await readOwnedRows<any>(input.scope, 'storyCores', { owner: 'work' }))[0]

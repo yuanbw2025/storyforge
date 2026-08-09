@@ -22,6 +22,7 @@ export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
 
 export type AgentSkillExecutionModeV1 =
   | 'complete'
+  | 'worldview-field'
   | 'story-core'
   | 'create'
   | 'reverse'
@@ -119,6 +120,22 @@ const STORY_CORE_CONTEXT_SOURCE_KEYS = [
   'characters',
   'storyArcs',
   'existingVolumeOutlines',
+] as const
+
+const WORLDVIEW_FIELD_CONTEXT_SOURCE_KEYS = [
+  'projectStatus',
+  'canonAssertions',
+  'worldview',
+  'storyCore',
+  'powerSystem',
+  'codex',
+  'characters',
+  'creativeRules',
+  'worldRules',
+  'historical',
+  'storyArcs',
+  'existingVolumeOutlines',
+  'references',
 ] as const
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
@@ -249,6 +266,24 @@ const STORY_CORE_INPUT_POLICY = {
     complete: {
       handling: 'grounded-transform',
       instruction: '严格依据已填写世界观与故事核心生成目标字段，并用现有角色、故事线和大纲检查下游兼容性；下游证据不能覆盖已确认上游。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
+const WORLDVIEW_FIELD_INPUT_POLICY = {
+  sourceKeys: ['worldview', 'storyCore', 'characters', 'storyArcs'],
+  states: {
+    empty: {
+      handling: 'create-from-request',
+      instruction: '世界基座和下游故事资料都为空；只依据作者本轮要求创建目标字段候选，不得声称引用了既有设定。',
+    },
+    partial: {
+      handling: 'reference-and-create',
+      instruction: '锁定已有世界字段；缺失上游可依据故事核心、角色、故事线或大纲反推，但只能写当前目标字段，推断不得冒充已确认设定。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格依据已有世界基座并用下游故事资料核对兼容性；下游证据不能覆盖已确认的世界设定。',
     },
   },
 } as const satisfies AgentSkillInputPolicyV1
@@ -405,6 +440,17 @@ const STORY_CORE_COMPRESSION_POLICY = compressionPolicy([
   'storyArcs',
   'existingVolumeOutlines',
 ])
+const WORLDVIEW_FIELD_COMPRESSION_POLICY = compressionPolicy([
+  'worldview',
+  'storyCore',
+  'powerSystem',
+  'codex',
+  'characters',
+  'historical',
+  'storyArcs',
+  'existingVolumeOutlines',
+  'references',
+])
 const CHARACTER_COMPRESSION_POLICY = compressionPolicy(['worldview', 'powerSystem', 'codex', 'characters'])
 const INSPIRATION_COMPRESSION_POLICY = compressionPolicy(['inspirationWorkspace'])
 const OUTLINE_COMPRESSION_POLICY = compressionPolicy([
@@ -501,6 +547,50 @@ export const AGENT_SKILLS = [
     writeTargets: [],
     lastVerifiedAt: '2026-08-09',
     regressionTests: ['R-HARNESS27-master-candidate-semantic-review'],
+  },
+  {
+    version: 1,
+    id: 'world-origin.worldview-field',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: '世界基座单字段生成',
+    owner: 'world-foundation-agent',
+    promptVersion: 'worldview-field-copilot-v1',
+    executionMode: 'worldview-field',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: WORLDVIEW_FIELD_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: WORLDVIEW_FIELD_INPUT_POLICY,
+    contextCompression: WORLDVIEW_FIELD_COMPRESSION_POLICY,
+    maxOutputTokens: 6_000,
+    writeTargets: [{
+      table: 'worldviews',
+      fields: [
+        'worldOrigin',
+        'powerHierarchy',
+        'divineDesign',
+        'worldStructure',
+        'worldDimensions',
+        'continentLayout',
+        'mountainsRivers',
+        'climateByRegion',
+        'naturalResourceOverview',
+        'races',
+        'factionLayout',
+        'regionDimensions',
+        'politicsOverview',
+        'economyOverview',
+        'cultureOverview',
+        'internalConflicts',
+        'itemDesign',
+      ],
+    }],
+    lastVerifiedAt: '2026-08-09',
+    regressionTests: [
+      'R-HARNESS32-worldview-field-agent',
+      'R-HARNESS32-worldview-panels-ui',
+    ],
   },
   {
     version: 1,
@@ -1029,7 +1119,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'story-core', 'review']),
+    'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'review']),
     character: new Set(['create']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'volumes', 'chapters']),

@@ -8,6 +8,7 @@ import { parseOutlineCandidateDraft } from '../outline-copilot'
 import type { MasterCandidatePayload } from '../orchestrator'
 import { parseProseCandidateDraft } from '../prose-copilot'
 import { parseStoryCoreCandidateDraft } from '../story-core-copilot'
+import { parseWorldviewFieldCandidateDraft } from '../worldview-field-copilot'
 import type { AgentRunSnapshotV1 } from './event-store'
 import { hashCanonicalValue } from './hash'
 import {
@@ -25,6 +26,13 @@ export const MASTER_CANDIDATE_STEP_VERIFIER_SET_VERSION_V1 = 'master-candidate-s
 
 function validateCandidateDraft(payload: MasterCandidatePayload, draft: string): void {
   if (payload.agentId === 'world-origin') {
+    if (payload.skillId === 'world-origin.worldview-field') {
+      const candidate = parseWorldviewFieldCandidateDraft(draft)
+      if (candidate.field !== payload.worldviewField) {
+        throw new Error('世界基座候选字段与持久化目标不一致。')
+      }
+      return
+    }
     if (payload.skillId === 'world-origin.story-core') {
       const candidate = parseStoryCoreCandidateDraft(draft)
       if (candidate.field !== payload.storyCoreField) {

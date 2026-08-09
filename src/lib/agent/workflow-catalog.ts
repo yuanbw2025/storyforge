@@ -194,7 +194,7 @@ export function selectAgentSkillIdV1(agentId: DomainAgentId, request: string): A
   if (agentId === 'world-origin') {
     return /故事核心|目标字段\s*=\s*(?:logline|concept|theme|centralConflict|plotPattern|mainPlot|subPlots)\b/i.test(request)
       ? 'world-origin.story-core'
-      : 'world-origin.complete'
+      : 'world-origin.worldview-field'
   }
   if (agentId === 'character') return 'character.create'
   return 'inspiration.reverse'

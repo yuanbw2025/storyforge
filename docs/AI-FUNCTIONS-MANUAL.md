@@ -262,40 +262,15 @@
 | `powerHierarchy` | 力量体系 |
 | `divineDesign` | 神明设定（结构体：hasDivinity/divineRank/divineNames/divineRules） |
 
-**AI 动作**：
+**AI 动作（HARNESS-32）**：
 
-#### 动作①：世界来源 AI 生成
-- **触发**：🔘 手动，字段旁"AI 生成"按钮
-- **读**：
-  - `storyCores.theme / centralConflict`
-  - `worldviews.powerHierarchy / divineDesign`（当前世界已写部分）
-  - `当前字段值: worldOrigin`
-  - `用户输入提示`
-  - `worldRulesProfiles`（节点清单作约束）
-- **提示词**：`worldview.dimension`（dimension='世界来源'）
-- **写**：`worldviews.worldOrigin（覆盖）` 🌍按世界
+三个字段共用现有 `world-foundation-agent`，由 `world-origin.worldview-field` Skill 冻结目标字段、输入状态、上下文预算和写权限；每次只返回一个严格候选：
 
-#### 动作②：力量体系 AI 生成
-- **触发**：🔘 手动
-- **读**：
-  - `storyCores.theme / centralConflict`
-  - `worldviews.worldOrigin / divineDesign`
-  - `当前字段值: powerHierarchy`
-  - `用户输入提示`
-  - `worldRulesProfiles`
-- **提示词**：`worldview.dimension`（dimension='力量体系'）
-- **写**：`worldviews.powerHierarchy（覆盖）` 🌍按世界
+```json
+{"field":"worldOrigin","value":"候选正文"}
+```
 
-#### 动作③：神明设定 AI 生成
-- **触发**：🔘 手动
-- **读**：
-  - `storyCores.theme`
-  - `worldviews.worldOrigin / powerHierarchy`
-  - `当前字段值: divineDesign`
-  - `用户输入提示`
-  - `worldRulesProfiles`
-- **提示词**：`worldview.dimension`（dimension='神明设定'）
-- **写**：`worldviews.divineDesign（覆盖 JSON）` 🌍按世界
+`powerHierarchy` 和 `divineDesign` 只需替换 `field`。神明字段的 `value` 必须是严格的 `hasDivinity/divineRank/divineNames/divineRules` 对象，不再先生成长文本再额外调用模型拆分。Skill 通过 `CONTEXT_SOURCES + assembleContext()` 读取世界观、规则/事实、故事核心、力量、词条、角色、故事线、卷纲和参考资料；世界基座为空、部分填写和完整填写分别走创建、反推补全和受约束变更。候选刷新可恢复、可编辑、可拒绝；确认前 `worldviews` 零写入，确认后只经 `adopt(target=worldviews)`，完整世界观快照/CAS 和终态回读阻止旧候选覆盖新修改。人工字段编辑、力量词条、神明词条和 Prompt 配置继续保留。
 
 ---
 
@@ -309,23 +284,16 @@
 | `worldStructure` | 世界结构 |
 | `worldDimensions` | 疆域尺寸 |
 | `continentLayout` | 大陆/地貌分布 |
-| `regionDimensions` | 区域分布/重镇 |
 | `mountainsRivers` | 山川水系 |
 | `climateByRegion` | 气候环境 |
-| `naturalResources` | 自然物产（结构体：rareCreatures/herbs/minerals/others） |
+| `naturalResourceOverview` | 自然物产总体概述 |
 
 **AI 动作**：
 
-#### 动作①~⑦：各字段 AI 生成（统一模式）
-- **触发**：🔘 手动，每个字段旁有独立"AI 生成"按钮（共 7 个）
-- **读**（每个动作都一样的模式，差异只在 dimension 名）：
-  - `worldviews.worldOrigin / powerHierarchy / historyLine`（上游基础设定）
-  - `worldviews` 本面板其它已写字段（避免互相矛盾）
-  - `当前字段值: 该字段`
-  - `用户输入提示`
-  - `worldRulesProfiles`
-- **提示词**：`worldview.dimension`（dimension 分别为：'世界结构'/'疆域尺寸'/'地貌分布'/'重镇分布'/'山川水系'/'气候环境'/'自然物产'）
-- **写**：`worldviews.对应字段（覆盖）` 🌍按世界
+#### 动作①~⑥：各字段 AI 生成（统一 Skill）
+- **触发**：🔘 手动，每个字段旁有独立按钮。
+- **目标字段**：`worldStructure`、`worldDimensions`、`continentLayout`、`mountainsRivers`、`climateByRegion`、`naturalResourceOverview`。
+- **合同**：`{"field":"目标字段","value":"候选正文"}`；上下文、预算、反推和采纳规则与 2.3 相同。
 
 > 🟡 已知问题：当前自然物产是自由文本，Phase 35-b 后会迁到 codex 词条；届时本动作改为"写入 codex 矿物/草药/异兽词条"。
 
@@ -342,22 +310,19 @@
 | `worldEvents` | 世界大事记 |
 | `races` | 种族民族 |
 | `factionLayout` | 势力分布 |
-| `politicsEconomyCulture` | 政治/经济/文化 |
+| `regionDimensions` | 城池重镇与区域格局 |
+| `politicsOverview` | 政治制度 |
+| `economyOverview` | 经济制度 |
+| `cultureOverview` | 文化制度 |
 | `internalConflicts` | 矛盾冲突 |
 | `itemDesign` | 道具设计 |
 
 **AI 动作**：
 
-#### 动作①~⑦：各字段 AI 生成
-- **触发**：🔘 手动，每字段独立按钮
-- **读**（统一模式）：
-  - `worldviews.worldOrigin / powerHierarchy / continentLayout`（自然铺垫）
-  - 本面板其它字段（互相参照）
-  - `当前字段值`
-  - `用户输入提示`
-  - `worldRulesProfiles`
-- **提示词**：`worldview.dimension`（dimension 分别为：'世界历史线'/'世界大事记'/'种族民族'/'势力分布'/'政经文化'/'矛盾冲突'/'道具设计'）
-- **写**：`worldviews.对应字段（覆盖）` 🌍按世界
+#### 动作①~⑨：各字段 AI 生成（统一 Skill）
+- **触发**：🔘 手动，每字段独立按钮；正式历史年表仍是单独入口。
+- **目标字段**：`races`、`factionLayout`、`regionDimensions`、`politicsOverview`、`economyOverview`、`cultureOverview`、`internalConflicts`、`itemDesign`，以及保留人工维护的历史字段不进入本 Skill。
+- **合同**：`{"field":"目标字段","value":"候选正文"}`；上下文、预算、反推和采纳规则与 2.3 相同。
 
 > 🟡 已知问题：势力/道具迁到 codex 后，本面板动作的"写"目标改为 codex 词条；属 Phase 35-b。
 

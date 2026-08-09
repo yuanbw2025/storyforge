@@ -233,7 +233,7 @@
   一个入口，同一正文只发起一次综合抽取；状态、受控事实、物品、故事年表、关系和伏笔
   六域候选均须逐字证据。候选复用归档 `agentConversations/agentEvents` 保存，刷新可恢复；
   正文 hash 变化阻断写回，物品/年表按章整批替换失败会事务回滚，事实只进入 candidate。
-- HARNESS-18/19/20/27/30/31 已把 17 个领域 Skill、13 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
+- HARNESS-18/19/20/27/30/31/32 已把 18 个领域 Skill、14 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
   新主 Agent RunContract 与候选 hash；恢复会拒绝 Skill/Prompt/Tool 漂移，旧合同继续按旧协议
   恢复。CI 新增 45 天复核、owner、版本和回归证据新鲜度闸门；该能力只保证执行可归因，
   不冒充真实模型质量收益。
@@ -325,6 +325,13 @@
   确认后只经 `adopt(storyCores)`，完整故事核心 snapshot/CAS、字段 gate 和 terminal verifier 回读正式值。
   旧 `story-adapter` 和组件级上下文拼接已删除，人工编辑与 Prompt 配置保留。当前只有工程闭环及模拟模型
   的 Chromium 刷新证据，不能宣称真实生成质量已经提升。
+- HARNESS-32 已把世界基座三面板的 17 个 AI 字段收口为现有世界基座 Agent 的
+  `world-origin.worldview-field` Skill。Skill 只经 `CONTEXT_SOURCES + assembleContext()` 读取正式基座和下游
+  反推证据，按 empty/partial/complete 选择创建、参考创建或受约束变换，支持预算压缩/全文救援；每轮只返回
+  一个严格 `{field,value}` 候选。确认前 `worldviews` 零写入，确认后只经 `adopt(worldviews)`，完整快照/CAS、
+  durable 刷新恢复、作者编辑/拒绝/确认、字段错投和终态回读均有专项回归与 Chromium 证据。旧
+  `world-origin.complete` 仅保留历史 durable Run 兼容，人工编辑、词条、历史年表和 Prompt 配置保留；当前
+  只证明工程闭环和模拟模型合同，不证明真实模型文学质量收益，也不改动世界引擎体验。
 
 ### GOV-1 第一阶段交付证据
 

@@ -188,13 +188,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 65 个 category。
-未分类调用: 0 个。动态 category 调用: 13 个。
+共 62 个 category。
+未分类调用: 0 个。动态 category 调用: 14 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:434` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:521` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:442` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:529` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
@@ -255,9 +255,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `style.learn` | `src/components/style/StyleLearningPanel.tsx:125` |
 | `world-group.expand` | `src/components/world-group/WorldGroupDetail.tsx:98` |
 | `world-group.suggest` | `src/components/world-group/WorldGroupOverview.tsx:57` |
-| `worldview.dimension` | `src/components/worldview/WorldviewHumanityPanel.tsx:352`<br/>`src/components/worldview/WorldviewNaturalPanel.tsx:284`<br/>`src/components/worldview/WorldviewOriginPanel.tsx:262` |
-| `worldview.divine` | `src/components/worldview/WorldviewOriginPanel.tsx:361` |
-| `worldview.divine.split` | `src/components/worldview/WorldviewOriginPanel.tsx:385` |
 
 ### 动态 category 调用
 
@@ -272,9 +269,10 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/story-arc-copilot.ts:556 · chat`
 - `src/lib/agent/story-core-copilot.ts:458 · chat`
 - `src/lib/agent/world-origin-copilot.ts:255 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:603 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/node-authoring/executor.ts:367 · chat`
 
 ---
 
-生成时间基准:commit `b6b57f4`
+生成时间基准:commit `2f7421e`

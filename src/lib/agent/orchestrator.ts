@@ -62,6 +62,13 @@ import {
   type StoryCoreField,
 } from './story-core-copilot'
 import {
+  adoptRestoredWorldviewFieldCandidate,
+  parseWorldviewFieldCandidateDraft,
+  prepareWorldviewFieldCopilot,
+  type WorldviewAgentField,
+  type WorldviewFieldCopilotSnapshot,
+} from './worldview-field-copilot'
+import {
   adoptRestoredStoryArcCandidate,
   parseStoryArcCandidateDraft,
   prepareStoryArcCopilot,
@@ -159,6 +166,7 @@ export interface MasterCandidatePayload {
   outlineParentId?: number | null
   storyArcKind?: StoryArcRequestKind
   storyCoreField?: StoryCoreField
+  worldviewField?: WorldviewAgentField
   proseOperation?: ProseCopilotOperation
   proseOutlineNodeId?: number
   dependsOnTaskIds?: string[]
@@ -644,7 +652,50 @@ async function executeSequentialMasterAgentPlan(
           + Math.max(0, budgetSnapshot.maxCanonRetries - budgetSnapshot.canonRetries),
       }
       if (task.agentId === 'world-origin') {
-        if (skill.executionMode === 'story-core') {
+        if (skill.executionMode === 'worldview-field') {
+          const prepared = await prepareWorldviewFieldCopilot({
+            projectId: input.projectId,
+            scope,
+            worldGroupId: input.worldGroupId,
+            authorRequest: task.instruction,
+            skillId: skill.id as AgentSkillId,
+            supplementalContext: upstream,
+            routingCategory: `${AGENT_ROLE_CATEGORIES['world-origin']}.worldview-field`,
+            contextProfile,
+            contextCompressionRuntime,
+            signal: input.signal,
+          })
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '世界基座字段 Skill',
+            maxOutputTokens: skill.maxOutputTokens,
+          })
+          const draft = JSON.stringify(result.output, null, 2)
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              worldviewField: prepared.targetField,
+              workspaceScope: scope,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+              generator: prepared.modelIdentity,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        } else if (skill.executionMode === 'story-core') {
           const prepared = await prepareStoryCoreCopilot({
             projectId: input.projectId,
             scope,
@@ -1261,7 +1312,9 @@ export async function adoptMasterCandidate(input: {
   const scope = await resolveCandidateScope(input)
   await assertMasterCandidateDependenciesAdoptedV1(input.event, input.payload, scope)
   if (input.runtime) {
-    const output = input.payload.skillId === 'world-origin.story-core'
+    const output = input.payload.skillId === 'world-origin.worldview-field'
+      ? parseWorldviewFieldCandidateDraft(input.draft)
+      : input.payload.skillId === 'world-origin.story-core'
       ? parseStoryCoreCandidateDraft(input.draft)
       : input.payload.skillId === 'outline.story-arcs'
       ? parseStoryArcCandidateDraft(input.draft)
@@ -1279,7 +1332,17 @@ export async function adoptMasterCandidate(input: {
       throw new Error(result.gate?.issues.map(issue => issue.message).join('；') || '候选没有通过确认闸门。')
     }
   } else if (input.payload.agentId === 'world-origin') {
-    if (input.payload.skillId === 'world-origin.story-core') {
+    if (input.payload.skillId === 'world-origin.worldview-field') {
+      if (!input.payload.worldviewField) throw new Error('世界基座候选缺少目标字段，请重新生成。')
+      await adoptRestoredWorldviewFieldCandidate({
+        projectId: input.projectId,
+        scope,
+        worldGroupId: input.worldGroupId,
+        snapshot: input.payload.baseSnapshot as WorldviewFieldCopilotSnapshot,
+        targetField: input.payload.worldviewField,
+        draft: input.draft,
+      })
+    } else if (input.payload.skillId === 'world-origin.story-core') {
       if (!input.payload.storyCoreField) throw new Error('故事核心候选缺少目标字段，请重新生成。')
       await adoptRestoredStoryCoreCandidate({
         projectId: input.projectId,
@@ -1377,7 +1440,9 @@ export async function adoptMasterCandidate(input: {
     useChapterStore.getState().loadAll(scope),
   ])
   return input.payload.agentId === 'world-origin'
-    ? input.payload.skillId === 'world-origin.story-core'
+    ? input.payload.skillId === 'world-origin.worldview-field'
+      ? `世界基座“${input.payload.label}”已写入当前世界。`
+      : input.payload.skillId === 'world-origin.story-core'
       ? `故事核心“${input.payload.label}”已写入项目。`
       : '世界来源已写入项目。'
     : input.payload.agentId === 'character'

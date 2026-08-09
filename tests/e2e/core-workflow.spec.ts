@@ -993,6 +993,14 @@ test('本地 OpenAI 兼容服务可刷新并保存模型列表', async ({ page }
 
 test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见编辑', async ({ page }) => {
   let generationCalls = 0
+  const firstCandidate = {
+    field: 'worldOrigin',
+    value: '模型候选一：潮汐退去后，最初的陆地显露。',
+  }
+  const secondCandidate = {
+    field: 'worldOrigin',
+    value: '模型候选二：群星坠落后，文明在灯塔旁诞生。',
+  }
   await page.addInitScript(() => {
     localStorage.setItem('storyforge-ai-config', JSON.stringify({
       provider: 'ollama',
@@ -1027,10 +1035,10 @@ test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见�
                   }],
                 })
               : generationCalls === 1
-                ? '短'
+                ? JSON.stringify({ field: 'powerHierarchy', value: '错投到力量体系的候选。' })
                 : generationCalls === 2
-                ? '模型候选一：潮汐退去后，最初的陆地显露。'
-                : '模型候选二：群星坠落后，文明在灯塔旁诞生。',
+                ? JSON.stringify(firstCandidate)
+                : JSON.stringify(secondCandidate),
           },
         }],
         usage: { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 },
@@ -1047,27 +1055,30 @@ test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见�
 
   await request.fill('生成一段世界来源，包含文明起点')
   await copilot.getByRole('button', { name: '交给主 Agent', exact: true }).click()
-  await expect(candidate).toHaveValue('模型候选一：潮汐退去后，最初的陆地显露。')
+  await expect(candidate).toContainText(firstCandidate.value)
   await expect(copilot.getByText(/均衡 · ≈[\d,]+ tokens/)).toBeVisible()
   await expect(copilot.getByText(/查看本次实际输入证据 · \d+ 个来源/)).toBeVisible()
   await expect(copilot.getByText(/本轮团队预算约 [\d,]+ \/ 160,000 tokens · 2\/7 次调用 · Canon 打回 1\/1/)).toBeVisible()
 
   await openSidebarLeaf(page, '世界观', '世界起源')
-  await expect(page.locator('main').getByText('模型候选一：潮汐退去后，最初的陆地显露。', { exact: true }))
+  await expect(page.locator('main').getByText(firstCandidate.value, { exact: true }))
     .toHaveCount(0)
   await copilot.getByRole('button', { name: '拒绝', exact: true }).click()
   await expect(copilot.getByText('候选已拒绝，没有写入项目。', { exact: true }).last()).toBeVisible()
 
   await request.fill('重新生成一段世界来源')
   await copilot.getByRole('button', { name: '交给主 Agent', exact: true }).click()
-  await expect(candidate).toHaveValue('模型候选二：群星坠落后，文明在灯塔旁诞生。')
-  const edited = '作者确认版：星潮退去后，观潮者点燃第一座灯塔，并以此作为文明纪元的起点。'
-  await candidate.fill(edited)
+  await expect(candidate).toContainText(secondCandidate.value)
+  const edited = {
+    ...secondCandidate,
+    value: '作者确认版：星潮退去后，观潮者点燃第一座灯塔，并以此作为文明纪元的起点。',
+  }
+  await candidate.fill(JSON.stringify(edited, null, 2))
   await copilot.getByRole('button', { name: '采纳', exact: true }).click()
 
-  await expect(copilot.getByText('世界来源已写入项目。', { exact: true }).last())
+  await expect(copilot.getByText('世界基座“世界来源”已写入当前世界。', { exact: true }).last())
     .toBeVisible()
-  await expect(page.locator('main').getByText(edited, { exact: true })).toBeVisible()
+  await expect(page.locator('main').getByText(edited.value, { exact: true })).toBeVisible()
   expect(generationCalls).toBe(3)
 })
 
@@ -1153,6 +1164,100 @@ test('故事核心面板通过主 Agent 生成单字段候选，刷新恢复后�
   await page.reload()
   await openSidebarLeaf(page, '设定库', '故事设计')
   await expect(page.getByText(edited.value, { exact: true })).toBeVisible()
+  await expect(candidate).toHaveCount(0)
+})
+
+test('神明与信仰面板一次生成结构化候选，刷新恢复后采纳并持久化', async ({ page }) => {
+  let generationCalls = 0
+  const modelCandidate = {
+    field: 'divineDesign',
+    value: {
+      hasDivinity: true,
+      divineRank: '潮母之下设三位守潮神。',
+      divineNames: '潮母掌记忆，盐灯神掌见证。',
+      divineRules: '神明不得取走未被自愿典当的记忆。',
+    },
+  }
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'worldview-field-copilot-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    const body = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = body.messages?.map(message => message.content).join('\n') ?? ''
+    const isPlanner = combined.includes('你只把用户目标拆成幕后领域任务')
+    if (!isPlanner) {
+      generationCalls += 1
+      expect(combined).toContain('worldview-field Skill')
+      expect(combined).toContain('目标字段是 divineDesign')
+      expect(combined).toContain('E2E 世界基座 Harness 闭环')
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            content: isPlanner
+              ? JSON.stringify({
+                  summary: '交给世界基座 Agent 的字段 Skill。',
+                  tasks: [{
+                    id: 'worldview-field-1',
+                    agentId: 'world-origin',
+                    skillId: 'world-origin.worldview-field',
+                    instruction: '生成世界基座字段。目标字段=divineDesign；生成模式=expand。',
+                    dependsOn: [],
+                  }],
+                })
+              : JSON.stringify(modelCandidate),
+          },
+        }],
+        usage: { prompt_tokens: 190, completion_tokens: 70, total_tokens: 260 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 世界基座 Harness 闭环')
+  await openSidebarLeaf(page, '世界观', '世界起源')
+  await page.getByRole('button', { name: '神明与信仰', exact: true }).click()
+
+  await page.getByRole('button', { name: 'AI 生成信仰体系', exact: true }).click()
+  const candidate = page.getByRole('textbox', { name: '神明与信仰候选内容' })
+  await expect(candidate).toContainText(modelCandidate.value.divineRules)
+  await expect(page.getByText('本次实际输入证据', { exact: true })).toBeVisible()
+  await expect(page.getByText('存在神明或宗教信仰', { exact: true })).toBeVisible()
+
+  await page.reload()
+  await openSidebarLeaf(page, '世界观', '世界起源')
+  await expect(candidate).toContainText(modelCandidate.value.divineNames)
+  await expect(page.getByRole('button', { name: '神明与信仰', exact: true })).toHaveAttribute('aria-pressed', 'true')
+
+  const edited = {
+    ...modelCandidate,
+    value: {
+      ...modelCandidate.value,
+      divineRules: '作者确认版：神谕必须由两名无血缘见证者共同记录。',
+    },
+  }
+  await candidate.fill(JSON.stringify(edited, null, 2))
+  await page.getByRole('button', { name: '采纳', exact: true }).click()
+  await expect(page.getByText(edited.value.divineRules, { exact: true })).toBeVisible()
+  await expect(candidate).toHaveCount(0)
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '世界观', '世界起源')
+  await page.getByRole('button', { name: '神明与信仰', exact: true }).click()
+  await expect(page.getByText(edited.value.divineRules, { exact: true })).toBeVisible()
   await expect(candidate).toHaveCount(0)
 })
 

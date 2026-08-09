@@ -1,26 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
-import { BookOpen, Sparkles } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { BookOpen } from 'lucide-react'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import { InlineTextarea } from '../shared/InlineEdit'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildWorldviewPrompt } from '../../lib/ai/adapters/worldview-adapter'
-import { assembleContext } from '../../lib/registry/assemble-context'
-import AIStreamOutput from '../shared/AIStreamOutput'
-import PromptRunPanel from '../shared/PromptRunPanel'
-import AIFieldModeTabs from '../shared/AIFieldModeTabs'
+import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
+import WorldviewAgentControls from './WorldviewAgentControls'
 import type { Project } from '../../lib/types'
-import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
-
-async function buildRulesSourceContext(projectId: number, worldGroupId: number | null): Promise<string> {
-  return (await assembleContext({
-    projectId,
-    worldGroupId,
-    sourceKeys: ['canonAssertions', 'worldRules', 'historical'],
-  })).text
-}
+import type { WorldviewAgentField } from '../../lib/agent/worldview-field-copilot'
 import CodexPanel from '../codex/CodexPanel'
 import CodexSearchBar from '../codex/CodexSearchBar'
 
@@ -28,7 +15,7 @@ import CodexSearchBar from '../codex/CodexSearchBar'
 
 interface FieldMeta {
   key: string       // skipKey for buildCtx
-  field: string     // worldview store field name
+  field: WorldviewAgentField
   emoji: string
   label: string
   description: string
@@ -70,10 +57,14 @@ interface Props {
 export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props) {
   const { worldview, saveWorldview, loadAll } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  const copilot = useMasterCopilot({
+    project,
+    worldGroupId: project.enableMultiWorld ? activeGroupId : null,
+  })
 
   const [values, setValues] = useState<Record<string, string>>({})
   const [activeKey, setActiveKey] = useState(HISTORY_NAV.key)
-  const [streamingKeys, setStreamingKeys] = useState<Set<string>>(new Set())
+  const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
 
   useEffect(() => {
     loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
@@ -99,36 +90,21 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   const save = (fieldName: string, v: string) =>
     saveWorldview({ projectId: project.id!, [fieldName]: v })
 
-  /** 拼其他字段（含世界起源 + 自然环境的关键值）做 AI 上下文 */
-  const buildCtx = useCallback((skipKey: string): string => {
-    const parts: string[] = []
-    if (worldview?.worldOrigin) parts.push(`【世界起源】${worldview.worldOrigin.slice(0, 200)}`)
-    if (worldview?.powerHierarchy) parts.push(`【力量体系】${worldview.powerHierarchy.slice(0, 150)}`)
-    if (worldview?.continentLayout) parts.push(`【大陆分布】${worldview.continentLayout.slice(0, 150)}`)
-    const map: [string, string, string][] = [
-      ['races',     '种族与民族',   values.races || ''],
-      ['factions',  '势力分布',     values.factions || ''],
-      ['politics',  '政治制度',     values.politics || ''],
-      ['economy',   '经济制度',     values.economy || ''],
-      ['culture',   '文化制度',     values.culture || ''],
-      ['conflicts', '矛盾冲突',     values.conflicts || ''],
-      ['items',     '道具与器物',   values.items || ''],
-    ]
-    for (const [k, label, val] of map) {
-      if (k !== skipKey && val) parts.push(`【${label}】${val.slice(0, 150)}`)
-    }
-    return parts.join('\n')
-  }, [worldview, values])
+  const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
+    candidate.payload.skillId === 'world-origin.worldview-field'
+  ))
+  const pendingWorldviewField = pendingWorldviewCandidates[0]?.payload.worldviewField
+  const pendingPanelKey = FIELDS.find(field => field.field === pendingWorldviewField)?.key
+  const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
+    candidate.payload.skillId !== 'world-origin.worldview-field'
+  ))
+  const streamingKeys = new Set<string>()
+  const runningPanelKey = FIELDS.find(field => field.field === runningField)?.key
+  if (copilot.busy && runningPanelKey) streamingKeys.add(runningPanelKey)
 
-  const handleStreamingChange = useCallback((key: string, streaming: boolean) => {
-    setStreamingKeys(prev => {
-      if (prev.has(key) === streaming) return prev
-      const next = new Set(prev)
-      if (streaming) next.add(key)
-      else next.delete(key)
-      return next
-    })
-  }, [])
+  useEffect(() => {
+    if (pendingPanelKey) setActiveKey(pendingPanelKey)
+  }, [pendingPanelKey])
 
   return (
     <div className="flex flex-col w-full h-full space-y-4">
@@ -174,6 +150,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
           {[HISTORY_NAV, ...FIELDS].map(f => {
             const isActive = f.key === activeKey
             const isFieldStreaming = streamingKeys.has(f.key)
+            const hasPendingCandidate = pendingPanelKey === f.key
             return (
               <button
                 key={f.key}
@@ -187,6 +164,13 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                 <span className="flex-1">{f.emoji} {f.label}</span>
                 {isFieldStreaming && !isActive && (
                   <span className="w-2 h-2 rounded-full bg-accent animate-pulse shrink-0" />
+                )}
+                {hasPendingCandidate && !isFieldStreaming && (
+                  <span
+                    aria-label={`${f.label}有待确认候选`}
+                    title="有待确认候选"
+                    className="w-2 h-2 rounded-full bg-warning shrink-0"
+                  />
                 )}
               </button>
             )
@@ -259,8 +243,16 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                   save(f.field, v)
                 }}
                 project={project}
-                contextSummary={buildCtx(f.key)}
-                onStreamingChange={streaming => handleStreamingChange(f.key, streaming)}
+                activeGroupId={activeGroupId}
+                copilot={copilot}
+                candidate={pendingWorldviewCandidates.find(candidate => candidate.payload.worldviewField === f.field)}
+                otherPendingWorldviewLabel={pendingWorldviewCandidates.find(candidate => candidate.payload.worldviewField !== f.field)?.payload.label}
+                hasOtherPendingCandidates={hasOtherPendingCandidates}
+                onRunningChange={running => setRunningField(running ? f.field : null)}
+                onAdopted={async candidate => {
+                  await copilot.adoptCandidate(candidate)
+                  await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                }}
               />
               {/* 词条（下）：在全貌之下,把"本方面"细化为一个个具体条目(只显示对应那一类,可打星) */}
               {HUMANITY_CODEX_KEYS[f.key] && (
@@ -309,49 +301,30 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
 // ── 单字段编辑器（各自独立的 AI 流） ──────────────────────────
 
 function HumanityFieldEditor({
-  meta, value, onChange, project, contextSummary, onStreamingChange,
+  meta,
+  value,
+  onChange,
+  project,
+  activeGroupId,
+  copilot,
+  candidate,
+  otherPendingWorldviewLabel,
+  hasOtherPendingCandidates,
+  onRunningChange,
+  onAdopted,
 }: {
   meta: FieldMeta
   value: string
   onChange: (v: string) => void
   project: Project
-  contextSummary: string
-  onStreamingChange: (streaming: boolean) => void
+  activeGroupId: number | null
+  copilot: ReturnType<typeof useMasterCopilot>
+  candidate?: PendingMasterCandidate
+  otherPendingWorldviewLabel?: string
+  hasOtherPendingCandidates: boolean
+  onRunningChange: (running: boolean) => void
+  onAdopted: (candidate: PendingMasterCandidate) => Promise<void>
 }) {
-  const [hint, setHint] = useState('')
-  const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
-  const [systemOverride, setSystemOverride] = useState<string | null>(null)
-  const [userOverride, setUserOverride] = useState<string | null>(null)
-  const [mode, setMode] = useState<FieldGenerationMode>('expand')
-  const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
-  const ai = useAIStream(createAISessionKey(
-    project.id!,
-    'worldview.dimension',
-    `${activeGroupId ?? 'global'}:${meta.key}`,
-  ))
-
-  useEffect(() => {
-    onStreamingChange(ai.isStreaming)
-  }, [ai.isStreaming, onStreamingChange])
-
-  const handleGenerate = async () => {
-    const rulesCtx = await buildRulesSourceContext(project.id!, project.enableMultiWorld ? activeGroupId : null)
-    const opts = {
-      parameterValues: {
-        ...parameterValues,
-        worldRulesContext: rulesCtx,
-      },
-      overrides: (systemOverride != null || userOverride != null) ? {
-        systemPrompt: systemOverride ?? undefined,
-        userPromptTemplate: userOverride ?? undefined,
-      } : undefined,
-    }
-    const messages = buildWorldviewPrompt(
-      meta.label, project.name, project.genre || '', contextSummary, hint, opts, value, mode,
-    )
-    ai.start(messages, undefined, { category: 'worldview.dimension', projectId: project.id! })
-  }
-
   return (
     <div className="max-w-3xl space-y-4">
       <div>
@@ -367,31 +340,17 @@ function HumanityFieldEditor({
       <div className="bg-bg-surface border border-border rounded-xl p-4">
         <InlineTextarea value={value} onChange={onChange} placeholder={meta.description} />
       </div>
-
-      <div className="flex items-center gap-2">
-        <AIFieldModeTabs value={mode} onChange={setMode} />
-        <input
-          value={hint} onChange={e => setHint(e.target.value)}
-          placeholder="给 AI 的补充说明（可选）"
-          className="flex-1 px-2 py-1.5 bg-bg-base border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
-        />
-        <button onClick={handleGenerate} disabled={ai.isStreaming}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded disabled:opacity-50 shrink-0 bg-accent/10 text-accent hover:bg-accent/20">
-          <Sparkles className="w-3.5 h-3.5" /> AI 生成
-        </button>
-      </div>
-
-      <PromptRunPanel moduleKey="worldview.dimension" parameterValues={parameterValues}
-        onParamChange={setParameterValues} systemOverride={systemOverride}
-        onSystemOverrideChange={setSystemOverride} userOverride={userOverride}
-        onUserOverrideChange={setUserOverride} />
-
-      {(ai.output || ai.isStreaming || ai.error) && (
-        <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error}
-          tokenUsage={ai.tokenUsage} onStop={ai.stop}
-          onAccept={(text: string) => { onChange(text); ai.reset() }}
-          onRetry={handleGenerate} moduleKey="worldview.dimension" />
-      )}
+      <WorldviewAgentControls
+        field={meta.field}
+        project={project}
+        activeGroupId={activeGroupId}
+        copilot={copilot}
+        candidate={candidate}
+        otherPendingWorldviewLabel={otherPendingWorldviewLabel}
+        hasOtherPendingCandidates={hasOtherPendingCandidates}
+        onRunningChange={onRunningChange}
+        onAdopted={onAdopted}
+      />
     </div>
   )
 }

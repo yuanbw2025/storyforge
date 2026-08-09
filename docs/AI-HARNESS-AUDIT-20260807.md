@@ -89,7 +89,7 @@
 
 | 产物/能力 | 入口与事实 | 读/生成/写回证据 | 失败、反馈、观测 | 状态 |
 |---|---|---|---|---|
-| 世界观：起源/自然/人文 | `WorldviewOriginPanel.tsx`、`WorldviewNaturalPanel.tsx`、`WorldviewHumanityPanel.tsx` | 使用 `useAIStream`；保存 action 多数经 store `adopt()`，但各面板仍在组件内手拼并截断字段（起源 `:90-107`、自然 `:86-101`、人文 `:102-121`） | 神明信仰另起一次 `streamChat` 做 JSON 拆分，失败时把全文降级到 `divineRank`（起源 `:366-409`）；无统一 source manifest/终态回执 | D |
+| 世界观：起源/自然/人文 | `WorldviewOriginPanel.tsx`、`WorldviewNaturalPanel.tsx`、`WorldviewHumanityPanel.tsx` | HARNESS-32 后 17 个世界基座字段的 AI 生成统一路由到 `world-foundation-agent` 的 `world-origin.worldview-field` Skill；上下文只经 `CONTEXT_SOURCES + assembleContext()`，每次生成一个严格 `{field,value}` 候选，确认后经 `adopt(worldviews)` 写回。人工编辑、词条、历史年表和 Prompt 配置入口保留 | 空/部分/完整状态、反推方向、预算压缩/全文救援、完整快照/CAS、durable 刷新恢复、编辑/拒绝/确认和终态回读均有专项回归与 Chromium 证据；旧 `world-origin.complete` 仅保留历史 durable Run 兼容。当前证据证明工程闭环和模拟模型合同，不证明真实模型文学质量收益 | A（HARNESS-32） |
 | 故事核心 | `StoryCorePanel.tsx`、`story-core-copilot.ts` | HARNESS-31 后 AI 入口只提交 `world-origin.story-core` 单字段任务；Skill 声明上下文并经 `assembleContext()` 读取，严格候选为 `{field,value}`，确认后经 `adopt(storyCores)` | durable 候选支持刷新恢复、编辑/拒绝/确认；完整故事核心 snapshot/CAS、正式字段回读和 terminal verifier 已接入；人工编辑仍经原 store/adopt | A（HARNESS-31） |
 | 角色普通生成 | `CharacterPanel.tsx` | `:120-160` 用 `assembleContext()`；`:298-327` 解析后 `adopt(target: 'characters')` | parser 失败可 fallback name/background，全文可作为 background；与 Copilot 的重复姓名、stale、事务 gate 不同 | D |
 | 角色 Copilot | `src/lib/agent/character-copilot.ts` | 只读工具装配世界观/角色，冻结 roster snapshot，结构化候选，事务内重复/过期检查和 `adopt()`（`:327-386,397-410`） | 有 stale/duplicate 错误和回归测试，但没有证据表明普通分步骤角色按钮已切换到该路径 | B |
@@ -102,7 +102,7 @@
 | 一致性 Agent | `consistency-agent.ts` | background Fast Guard 零 token；fast/deep 一次模型调用；结果写 `agentEvents`（`:275-311,332-405`） | 有正文 hash current 检查、持久候选和回归；未绑定分步骤主 run 的完成状态，也不自动编排上游修正 | B |
 | 章节组织 Agent | `chapter-organization.ts` | 可将状态/认知/故事线/角色关系保存为候选事件，确认后 `adopt()` | 独立质量 workflow，不是正文生成必经阶段 | B |
 | 反向反馈 | `impact-analysis.ts`、`R-downstream-reverse` | 正文编辑后 stale 事实、列出后续章节；`assembleContext` 可显式读下游角色/故事核心/故事线 | 只提示作者，不自动改正文或上游；无统一影响图、候选 patch、依赖重跑和回放证据 | D |
-| Run ledger / receipt / replay | 现有 `agentConversations`/`agentEvents`、`nodeFlows`/`nodeRuns` | 对话、候选、自由节点可持久化；注册表已登记 | `GenerationNode` 是请求内运行时抽象；没有统一 step/attempt/checkpoint、Context Manifest、terminal verifier、fresh receipt | E |
+| Run ledger / receipt / replay | 现有 `agentConversations`/`agentEvents`、`nodeFlows`/`nodeRuns` | 对话、候选、自由节点可持久化；故事核心、故事线和世界基座字段已接入 durable candidate/run 合同 | `GenerationNode` 仍是请求内运行时抽象；尚无覆盖所有分步骤产物的统一 step/attempt/checkpoint/replay ledger。已有领域 terminal verifier 不能冒充全流程完成证明 | D（局部） |
 | 离线评测 | `NS-0`、NS/AGENT/PIPELINE 回归 | 有 development/held-out fixture、预算、事实/约束/泄漏/证据指标 | 多数是模块级或 builder/eval 级；缺少真实分步骤从世界观到正文的端到端 held-out | B |
 
 ## 4. 现有分步骤链式流程（现状与新增能力同图）
@@ -329,5 +329,5 @@ npm run ci
 
 - 研究文档提出的目标 Harness 是否能提高真实长篇质量，尚无本项目端到端因果证据。
 - 当前 `agentEvents` 是否足以承载 H1 ledger，需先做容量、查询、并发和迁移评估；不能默认扩展。
-- 故事核心/故事线结构化合同现已用旧数据兼容、定向回归和浏览器刷新闭环验证；真实模型质量收益仍需固定 fixture 与 A/B 证据，不能由工程测试推断。
+- 世界基座字段、故事核心和故事线结构化合同现已用旧数据兼容、定向回归和浏览器刷新闭环验证；这些证据只证明工程闭环与模拟模型合同，真实模型质量收益仍需固定 fixture 与 A/B 证据，不能由工程测试推断。
 - 反向 patch 的最小影响范围和人工确认 UX 尚未定稿；在 H4 之前不应自动修改上游或下游 Canon。
