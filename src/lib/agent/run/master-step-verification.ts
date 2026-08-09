@@ -9,6 +9,7 @@ import { parseOutlineCandidateDraft } from '../outline-copilot'
 import type { MasterCandidatePayload } from '../orchestrator'
 import { parseProseCandidateDraft } from '../prose-copilot'
 import { parseStoryCoreCandidateDraft } from '../story-core-copilot'
+import { parseCreativeRulesCandidateDraftV1 } from '../creative-rules-copilot'
 import { parseWorldviewFieldCandidateDraft } from '../worldview-field-copilot'
 import type { AgentRunSnapshotV1 } from './event-store'
 import { hashCanonicalValue } from './hash'
@@ -38,6 +39,13 @@ function validateCandidateDraft(payload: MasterCandidatePayload, draft: string):
       const candidate = parseStoryCoreCandidateDraft(draft)
       if (candidate.field !== payload.storyCoreField) {
         throw new Error('故事核心候选字段与持久化目标不一致。')
+      }
+      return
+    }
+    if (payload.skillId === 'world-origin.creative-rules') {
+      const candidate = parseCreativeRulesCandidateDraftV1(draft)
+      if (candidate.field !== payload.creativeRulesField) {
+        throw new Error('创作规则候选字段与持久化目标不一致。')
       }
       return
     }

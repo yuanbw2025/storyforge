@@ -190,13 +190,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 55 个 category。
-未分类调用: 0 个。动态 category 调用: 17 个。
+共 54 个 category。
+未分类调用: 0 个。动态 category 调用: 18 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:560` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:647` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:568` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:655` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
@@ -241,7 +241,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:98` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:115` |
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:1320` |
-| `rules.generate` | `src/components/rules/CreativeRulesPanel.tsx:80` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
 | `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:85` |
@@ -260,6 +259,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/character-revision-copilot.ts:704 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:528 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
+- `src/lib/agent/creative-rules-copilot.ts:443 · chat`
 - `src/lib/agent/inspiration-copilot.ts:328 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:496 · chat`
@@ -273,4 +273,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `0f478f0`
+生成时间基准:commit `b81dcb7`

@@ -24,6 +24,7 @@ export type AgentSkillExecutionModeV1 =
   | 'complete'
   | 'worldview-field'
   | 'story-core'
+  | 'creative-rules'
   | 'create'
   | 'supplement'
   | 'reverse'
@@ -124,6 +125,13 @@ const STORY_CORE_CONTEXT_SOURCE_KEYS = [
   'characters',
   'storyArcs',
   'existingVolumeOutlines',
+] as const
+
+const CREATIVE_RULES_CONTEXT_SOURCE_KEYS = [
+  'projectStatus',
+  'worldview',
+  'storyCore',
+  'creativeRules',
 ] as const
 
 const WORLDVIEW_FIELD_CONTEXT_SOURCE_KEYS = [
@@ -348,6 +356,24 @@ const STORY_CORE_INPUT_POLICY = {
     complete: {
       handling: 'grounded-transform',
       instruction: '严格依据已填写世界观与故事核心生成目标字段，并用现有角色、故事线和大纲检查下游兼容性；下游证据不能覆盖已确认上游。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
+const CREATIVE_RULES_INPUT_POLICY = {
+  sourceKeys: ['worldview', 'storyCore', 'creativeRules'],
+  states: {
+    empty: {
+      handling: 'create-from-request',
+      instruction: '世界观、故事核心和创作规则都为空；只依据项目概况与本轮目标创建单字段建议，不得声称引用了作者尚未填写的设定。',
+    },
+    partial: {
+      handling: 'reference-and-create',
+      instruction: '锁定作者已经填写的世界、故事和其它创作规则，只补当前目标字段；缺失内容可以给出最小建议，不得顺手覆盖其它字段。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格依据已有世界观、故事核心和创作规则建议当前目标字段，并检查它与其它规则是否可共同执行。',
     },
   },
 } as const satisfies AgentSkillInputPolicyV1
@@ -594,6 +620,11 @@ const STORY_CORE_COMPRESSION_POLICY = compressionPolicy([
   'storyArcs',
   'existingVolumeOutlines',
 ])
+const CREATIVE_RULES_COMPRESSION_POLICY = compressionPolicy([
+  'worldview',
+  'storyCore',
+  'creativeRules',
+])
 const WORLDVIEW_FIELD_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'storyCore',
@@ -834,6 +865,32 @@ export const AGENT_SKILLS = [
     regressionTests: [
       'R-HARNESS31-story-core-agent',
       'R-HARNESS31-story-core-panel-ui',
+    ],
+  },
+  {
+    version: 1,
+    id: 'world-origin.creative-rules',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: '创作规则单字段建议',
+    owner: 'world-foundation-agent',
+    promptVersion: 'creative-rules-copilot-v1',
+    executionMode: 'creative-rules',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: CREATIVE_RULES_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: CREATIVE_RULES_INPUT_POLICY,
+    contextCompression: CREATIVE_RULES_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{
+      table: 'creativeRules',
+      fields: ['writingStyle', 'atmosphere', 'specialRequirements'],
+    }],
+    lastVerifiedAt: '2026-08-10',
+    regressionTests: [
+      'R-HARNESS39-creative-rules-agent',
+      'R-HARNESS39-creative-rules-panel-ui',
     ],
   },
   {
@@ -1445,7 +1502,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'review']),
+    'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules', 'review']),
     character: new Set(['create', 'supplement']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),

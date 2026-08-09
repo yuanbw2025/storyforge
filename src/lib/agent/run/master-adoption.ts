@@ -46,6 +46,10 @@ import {
   storyCoreCandidateMatchesRowV1,
 } from '../story-core-copilot'
 import {
+  creativeRulesCandidateMatchesRowV1,
+  parseCreativeRulesCandidateDraftV1,
+} from '../creative-rules-copilot'
+import {
   parseWorldviewFieldCandidateDraft,
   worldviewFieldCandidateMatchesRowV1,
 } from '../worldview-field-copilot'
@@ -396,6 +400,12 @@ async function businessAlreadyMatches(
       const row = (await readOwnedRows<any>(input.scope, 'storyCores', { owner: 'work' }))[0]
       return parsed.field === candidate.payload.storyCoreField
         && storyCoreCandidateMatchesRowV1(parsed, row)
+    }
+    if (candidate.payload.skillId === 'world-origin.creative-rules') {
+      const parsed = parseCreativeRulesCandidateDraftV1(candidate.draft)
+      const row = (await readOwnedRows<any>(input.scope, 'creativeRules', { owner: 'work' }))[0]
+      return parsed.field === candidate.payload.creativeRulesField
+        && creativeRulesCandidateMatchesRowV1(parsed, row)
     }
     const rows = await readOwnedRows<any>(input.scope, 'worldviews', { owner: 'world' })
     const row = rows.find(item => (item.worldGroupId ?? null) === (input.worldGroupId ?? null))

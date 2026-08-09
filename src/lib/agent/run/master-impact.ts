@@ -34,6 +34,7 @@ const TARGET_TABLE_BY_AGENT: Record<string, string> = {
 
 function targetTableFor(candidate: MasterAgentDurableCandidateV1): string {
   if (candidate.payload.skillId === 'world-origin.story-core') return 'storyCores'
+  if (candidate.payload.skillId === 'world-origin.creative-rules') return 'creativeRules'
   if (candidate.payload.skillId === 'outline.story-arcs') return 'storyArcs'
   return TARGET_TABLE_BY_AGENT[candidate.payload.agentId] ?? 'unknown'
 }
@@ -85,6 +86,11 @@ async function buildReport(
 
   if (payload.skillId === 'world-origin.story-core') {
     const row = (await readOwnedRows<any>(scope, 'storyCores', { owner: 'work' }))[0]
+    report.changed.id = typeof row?.id === 'number' ? row.id : null
+  }
+
+  if (payload.skillId === 'world-origin.creative-rules') {
+    const row = (await readOwnedRows<any>(scope, 'creativeRules', { owner: 'work' }))[0]
     report.changed.id = typeof row?.id === 'number' ? row.id : null
   }
 

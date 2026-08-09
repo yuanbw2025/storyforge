@@ -65,6 +65,13 @@ import {
   type StoryCoreField,
 } from './story-core-copilot'
 import {
+  adoptRestoredCreativeRulesCandidateV1,
+  parseCreativeRulesCandidateDraftV1,
+  prepareCreativeRulesCopilotV1,
+  type CreativeRulesCopilotSnapshotV1,
+  type CreativeRulesField,
+} from './creative-rules-copilot'
+import {
   adoptRestoredWorldviewFieldCandidate,
   parseWorldviewFieldCandidateDraft,
   prepareWorldviewFieldCopilot,
@@ -204,6 +211,7 @@ export interface MasterCandidatePayload {
   outlineParentId?: number | null
   storyArcKind?: StoryArcRequestKind
   storyCoreField?: StoryCoreField
+  creativeRulesField?: CreativeRulesField
   worldviewField?: WorldviewAgentField
   proseOperation?: ProseCopilotOperation
   proseOutlineNodeId?: number
@@ -846,6 +854,49 @@ async function executeSequentialMasterAgentPlan(
               contextEvidence: prepared.contextEvidence,
               baseSnapshot: prepared.snapshot,
               storyCoreField: prepared.targetField,
+              workspaceScope: scope,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+              generator: prepared.modelIdentity,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        } else if (skill.executionMode === 'creative-rules') {
+          const prepared = await prepareCreativeRulesCopilotV1({
+            projectId: input.projectId,
+            scope,
+            worldGroupId: input.worldGroupId,
+            authorRequest: task.instruction,
+            skillId: skill.id as AgentSkillId,
+            supplementalContext: upstream,
+            routingCategory: `${AGENT_ROLE_CATEGORIES['world-origin']}.creative-rules`,
+            contextProfile,
+            contextCompressionRuntime,
+            signal: input.signal,
+          })
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '创作规则 Skill',
+            maxOutputTokens: skill.maxOutputTokens,
+          })
+          const draft = JSON.stringify(result.output, null, 2)
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              creativeRulesField: prepared.targetField,
               workspaceScope: scope,
               dependsOnTaskIds: task.dependsOn,
               dependencyBindings,
@@ -1587,6 +1638,8 @@ export async function adoptMasterCandidate(input: {
       ? parseWorldviewFieldCandidateDraft(input.draft)
       : input.payload.skillId === 'world-origin.story-core'
       ? parseStoryCoreCandidateDraft(input.draft)
+      : input.payload.skillId === 'world-origin.creative-rules'
+      ? parseCreativeRulesCandidateDraftV1(input.draft)
       : input.payload.skillId === 'outline.story-arcs'
       ? parseStoryArcCandidateDraft(input.draft)
       : input.payload.skillId === 'outline.character-driven'
@@ -1632,6 +1685,15 @@ export async function adoptMasterCandidate(input: {
         scope,
         snapshot: input.payload.baseSnapshot as StoryCoreCopilotSnapshot,
         targetField: input.payload.storyCoreField,
+        draft: input.draft,
+      })
+    } else if (input.payload.skillId === 'world-origin.creative-rules') {
+      if (!input.payload.creativeRulesField) throw new Error('创作规则候选缺少目标字段，请重新生成。')
+      await adoptRestoredCreativeRulesCandidateV1({
+        projectId: input.projectId,
+        scope,
+        snapshot: input.payload.baseSnapshot as CreativeRulesCopilotSnapshotV1,
+        targetField: input.payload.creativeRulesField,
         draft: input.draft,
       })
     } else {
@@ -1766,6 +1828,8 @@ export async function adoptMasterCandidate(input: {
       ? `世界基座“${input.payload.label}”已写入当前世界。`
       : input.payload.skillId === 'world-origin.story-core'
       ? `故事核心“${input.payload.label}”已写入项目。`
+      : input.payload.skillId === 'world-origin.creative-rules'
+      ? `创作规则“${input.payload.label}”已写入项目。`
       : '世界来源已写入项目。'
     : input.payload.agentId === 'character'
       ? input.payload.skillId === 'character.supplement'

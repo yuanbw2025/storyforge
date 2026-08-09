@@ -1168,6 +1168,79 @@ test('故事核心面板通过主 Agent 生成单字段候选，刷新恢复后�
   await expect(candidate).toHaveCount(0)
 })
 
+test('创作规则建议通过固定 Skill 刷新恢复，拒绝重生后编辑确认并写入规范字段', async ({ page }) => {
+  let generationCalls = 0
+  const modelCandidate = {
+    field: 'writingStyle',
+    value: '采用克制的第三人称限知，多写动作与物件细节，避免全知解释人物动机。',
+  }
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'creative-rules-copilot-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    const body = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = body.messages?.map(message => message.content).join('\n') ?? ''
+    generationCalls += 1
+    expect(combined).toContain('创作规则候选硬约束')
+    expect(combined).toContain('目标字段是 writingStyle')
+    expect(combined).toContain('E2E 创作规则 Harness 闭环')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{ message: { content: JSON.stringify(modelCandidate) } }],
+        usage: { prompt_tokens: 160, completion_tokens: 45, total_tokens: 205 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 创作规则 Harness 闭环')
+  await openSidebarLeaf(page, '创作区', '创作规则')
+  await expect(page.getByRole('heading', { name: /创作规则/ })).toBeVisible()
+
+  const writingStyle = page.getByPlaceholder(/描述期望的写作风格/)
+  await page.getByRole('button', { name: 'AI 建议', exact: true }).first().click()
+  const candidate = page.getByRole('textbox', { name: '写作风格候选内容' })
+  await expect(candidate).toHaveValue(modelCandidate.value)
+  await expect(writingStyle).toHaveValue('')
+  await expect(page.getByText('本次实际输入证据', { exact: true })).toBeVisible()
+
+  await page.reload()
+  await openSidebarLeaf(page, '创作区', '创作规则')
+  await expect(candidate).toHaveValue(modelCandidate.value)
+  await expect(writingStyle).toHaveValue('')
+  await page.getByRole('button', { name: '拒绝', exact: true }).click()
+  await expect(candidate).toHaveCount(0)
+  expect(generationCalls).toBe(1)
+
+  await page.getByRole('button', { name: 'AI 建议', exact: true }).first().click()
+  const edited = '作者确认：用克制短句和可见动作呈现压力，只写视角人物能够感知的信息。'
+  await candidate.fill(edited)
+  await page.getByRole('button', { name: '确认写入', exact: true }).click()
+  await expect(writingStyle).toHaveValue(edited)
+  await expect(candidate).toHaveCount(0)
+  expect(generationCalls).toBe(2)
+
+  const atmosphere = page.getByPlaceholder(/描述作品的整体基调和氛围/)
+  await atmosphere.fill('冷峻但不绝望，危险之后必须保留可行动的希望。')
+  await atmosphere.blur()
+  await page.reload()
+  await openSidebarLeaf(page, '创作区', '创作规则')
+  await expect(writingStyle).toHaveValue(edited)
+  await expect(atmosphere).toHaveValue('冷峻但不绝望，危险之后必须保留可行动的希望。')
+  await expect(candidate).toHaveCount(0)
+})
+
 test('神明与信仰面板一次生成结构化候选，刷新恢复后采纳并持久化', async ({ page }) => {
   let generationCalls = 0
   const modelCandidate = {

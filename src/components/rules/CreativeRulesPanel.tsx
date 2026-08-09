@@ -1,14 +1,15 @@
 import { CTextarea } from '../shared/CompositionInput'
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, X, Sparkles, Microscope, Check } from 'lucide-react'
+import { Check, Loader2, Microscope, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
-import { useWorldviewStore } from '../../stores/worldview'
+import { useWorldGroupStore } from '../../stores/world-group'
 import { useReferenceStore } from '../../stores/reference'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildRulesGeneratePrompt } from '../../lib/ai/adapters/rules-adapter'
-import { adopt } from '../../lib/registry/adopt'
-import AIStreamOutput from '../shared/AIStreamOutput'
+import {
+  formatCreativeRulesGenerationRequestV1,
+  parseCreativeRulesCandidateDraftV1,
+  type CreativeRulesField,
+} from '../../lib/agent/creative-rules-copilot'
+import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
 import type { Project, NarrativePOV } from '../../lib/types'
 
 const POV_OPTIONS: { value: NarrativePOV; label: string; desc: string }[] = [
@@ -24,8 +25,12 @@ interface Props {
 
 export default function CreativeRulesPanel({ project }: Props) {
   const { creativeRules, loadAll, save } = useCreativeRulesStore()
-  const { worldview, storyCore, loadAll: loadWorldview } = useWorldviewStore()
   const { references, loadAll: loadRefs } = useReferenceStore()
+  const activeGroupId = useWorldGroupStore(state => state.activeGroupId)
+  const copilot = useMasterCopilot({
+    project,
+    worldGroupId: project.enableMultiWorld ? activeGroupId : null,
+  })
   const [writingStyle, setWritingStyle] = useState('')
   const [narrativePOV, setNarrativePOV] = useState<NarrativePOV>('third-limited')
   const [toneAndMood, setToneAndMood] = useState('')
@@ -34,15 +39,11 @@ export default function CreativeRulesPanel({ project }: Props) {
   const [specialRequirements, setSpecialRequirements] = useState('')
   const [referenceWorks, setReferenceWorks] = useState<string[]>([])
   const [citedRefIds, setCitedRefIds] = useState<number[]>([])
-  const [aiTarget, setAiTarget] = useState<'writingStyle' | 'toneAndMood' | 'specialRequirements' | null>(null)
-  const ai = useAIStream(createAISessionKey(project.id!, 'rules.generate'))
-  const currentAITarget = (ai.operation as typeof aiTarget) ?? aiTarget
 
   useEffect(() => {
     loadAll(project.id!)
-    loadWorldview(project.id!)
     loadRefs(project.id!)
-  }, [project.id, loadAll, loadWorldview, loadRefs])
+  }, [project.id, loadAll, loadRefs])
 
   useEffect(() => {
     if (creativeRules) {
@@ -61,39 +62,37 @@ export default function CreativeRulesPanel({ project }: Props) {
     await save({ projectId: project.id!, ...data })
   }, [project.id, save])
 
-  /** AI 生成某字段：调 rules.generate 模板 */
-  const generateField = (target: 'writingStyle' | 'toneAndMood' | 'specialRequirements') => {
-    const dimensionMap = {
-      writingStyle: '写作风格',
-      toneAndMood: '基调和氛围',
-      specialRequirements: '特殊创作要求',
-    }
-    setAiTarget(target)
-    ai.setOperation(target)
-    const messages = buildRulesGeneratePrompt(
-      dimensionMap[target],
-      project.name,
-      project.genre || '',
-      worldview?.summary || worldview?.worldOrigin?.slice(0, 200) || '',
-      storyCore?.theme || storyCore?.centralConflict || '',
+  const pendingRulesCandidates = copilot.pendingCandidates.filter(candidate => (
+    candidate.payload.skillId === 'world-origin.creative-rules'
+  ))
+  const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
+    candidate.payload.skillId !== 'world-origin.creative-rules'
+  ))
+  const generationBlocked = copilot.loading
+    || copilot.busy
+    || copilot.pendingCandidates.length > 0
+    || (project.enableMultiWorld === true && activeGroupId == null)
+
+  const generateField = async (target: CreativeRulesField) => {
+    const instruction = formatCreativeRulesGenerationRequestV1({ field: target })
+    await copilot.submitTargetedRequest(
+      `${instruction} 为“${project.name}”提供可执行建议。`,
+      {
+        id: `creative-rules-${target}`,
+        agentId: 'world-origin',
+        skillId: 'world-origin.creative-rules',
+        instruction,
+      },
     )
-    ai.start(messages, undefined, { category: 'rules.generate', projectId: project.id! })
   }
 
-  const acceptAi = async (text: string) => {
-    if (!currentAITarget) return
-    if (currentAITarget === 'writingStyle') setWritingStyle(text)
-    else if (currentAITarget === 'toneAndMood') setToneAndMood(text)
-    else if (currentAITarget === 'specialRequirements') setSpecialRequirements(text)
-    await adopt({
-      projectId: project.id!,
-      target: 'creativeRules',
-      mode: 'replace',
-      data: { [currentAITarget]: text },
-    })
-    await loadAll(project.id!)
-    ai.reset()
-    setAiTarget(null)
+  const candidateFor = (field: CreativeRulesField) => pendingRulesCandidates.find(candidate => (
+    candidate.payload.creativeRulesField === field
+  ))
+
+  const adoptCandidate = async (candidate: PendingMasterCandidate) => {
+    const adopted = await copilot.adoptCandidate(candidate)
+    if (adopted) await loadAll(project.id!)
   }
 
   /* ---- 列表操作通用 ---- */
@@ -185,7 +184,31 @@ export default function CreativeRulesPanel({ project }: Props) {
 
   return (
     <div className="max-w-4xl">
-      <h2 className="text-xl font-bold text-text-primary mb-4">📐 创作规则</h2>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-xl font-bold text-text-primary">📐 创作规则</h2>
+        {copilot.recoveryAvailable && pendingRulesCandidates.length === 0 && (
+          <button
+            type="button"
+            onClick={() => { void copilot.resume() }}
+            disabled={copilot.loading || copilot.busy}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border text-text-secondary text-xs rounded disabled:opacity-40 hover:text-accent"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> 恢复未完成生成
+          </button>
+        )}
+      </div>
+
+      {copilot.error && (
+        <p className="mb-4 rounded border border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
+          {copilot.error}
+        </p>
+      )}
+
+      {hasOtherPendingCandidates && (
+        <p className="mb-4 rounded border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-text-secondary">
+          当前世界还有其它待确认候选，请先处理后再生成创作规则。
+        </p>
+      )}
 
       {/* 写作风格 */}
       <div className="mb-6">
@@ -193,7 +216,7 @@ export default function CreativeRulesPanel({ project }: Props) {
           <label className="text-sm font-medium text-text-secondary">写作风格</label>
           <button
             onClick={() => generateField('writingStyle')}
-            disabled={ai.isStreaming}
+            disabled={generationBlocked}
             className="flex items-center gap-1 px-2 py-1 text-xs text-accent hover:bg-accent/10 rounded transition-colors disabled:opacity-50"
           >
             <Sparkles className="w-3 h-3" /> AI 建议
@@ -206,15 +229,11 @@ export default function CreativeRulesPanel({ project }: Props) {
           placeholder="描述期望的写作风格，如：简洁凌厉、文笔华丽、幽默诙谐、冷峻写实..."
           className="w-full h-24 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
-        {currentAITarget === 'writingStyle' && (ai.output || ai.isStreaming || ai.error) && (
-          <div className="mt-2">
-            <AIStreamOutput
-              output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
-              onStop={ai.stop} onAccept={acceptAi}
-              onRetry={() => generateField('writingStyle')}
-            />
-          </div>
-        )}
+        <CreativeRulesCandidate
+          candidate={candidateFor('writingStyle')}
+          copilot={copilot}
+          onAdopt={adoptCandidate}
+        />
       </div>
 
       {/* 叙事视角 */}
@@ -246,8 +265,8 @@ export default function CreativeRulesPanel({ project }: Props) {
         <div className="flex items-center justify-between mb-1">
           <label className="text-sm font-medium text-text-secondary">基调和氛围</label>
           <button
-            onClick={() => generateField('toneAndMood')}
-            disabled={ai.isStreaming}
+            onClick={() => generateField('atmosphere')}
+            disabled={generationBlocked}
             className="flex items-center gap-1 px-2 py-1 text-xs text-accent hover:bg-accent/10 rounded transition-colors disabled:opacity-50"
           >
             <Sparkles className="w-3 h-3" /> AI 建议
@@ -256,19 +275,15 @@ export default function CreativeRulesPanel({ project }: Props) {
         <CTextarea
           value={toneAndMood}
           onChange={e => setToneAndMood(e.target.value)}
-          onBlur={() => saveField({ toneAndMood })}
+          onBlur={() => saveField({ atmosphere: toneAndMood })}
           placeholder="描述作品的整体基调和氛围，如：黑暗压抑、热血激昂、温馨治愈..."
           className="w-full h-20 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
-        {currentAITarget === 'toneAndMood' && (ai.output || ai.isStreaming || ai.error) && (
-          <div className="mt-2">
-            <AIStreamOutput
-              output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
-              onStop={ai.stop} onAccept={acceptAi}
-              onRetry={() => generateField('toneAndMood')}
-            />
-          </div>
-        )}
+        <CreativeRulesCandidate
+          candidate={candidateFor('atmosphere')}
+          copilot={copilot}
+          onAdopt={adoptCandidate}
+        />
       </div>
 
       {/* 禁止事项 */}
@@ -348,7 +363,7 @@ export default function CreativeRulesPanel({ project }: Props) {
           <label className="text-sm font-medium text-text-secondary">特殊创作要求</label>
           <button
             onClick={() => generateField('specialRequirements')}
-            disabled={ai.isStreaming}
+            disabled={generationBlocked}
             className="flex items-center gap-1 px-2 py-1 text-xs text-accent hover:bg-accent/10 rounded transition-colors disabled:opacity-50"
           >
             <Sparkles className="w-3 h-3" /> AI 建议
@@ -361,16 +376,101 @@ export default function CreativeRulesPanel({ project }: Props) {
           placeholder="其他需要 AI 遵守的特殊创作要求..."
           className="w-full h-24 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
-        {currentAITarget === 'specialRequirements' && (ai.output || ai.isStreaming || ai.error) && (
-          <div className="mt-2">
-            <AIStreamOutput
-              output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
-              onStop={ai.stop} onAccept={acceptAi}
-              onRetry={() => generateField('specialRequirements')}
-            />
-          </div>
-        )}
+        <CreativeRulesCandidate
+          candidate={candidateFor('specialRequirements')}
+          copilot={copilot}
+          onAdopt={adoptCandidate}
+        />
       </div>
     </div>
+  )
+}
+
+function CreativeRulesCandidate({
+  candidate,
+  copilot,
+  onAdopt,
+}: {
+  candidate?: PendingMasterCandidate
+  copilot: ReturnType<typeof useMasterCopilot>
+  onAdopt: (candidate: PendingMasterCandidate) => Promise<void>
+}) {
+  if (!candidate) return null
+  let parsed: ReturnType<typeof parseCreativeRulesCandidateDraftV1> | null = null
+  try {
+    parsed = parseCreativeRulesCandidateDraftV1(candidate.event.content)
+  } catch {
+    // Keep the raw editor available so a malformed restored candidate can be repaired or rejected.
+  }
+  const updateValue = (value: string) => {
+    if (!candidate.payload.creativeRulesField) return
+    void copilot.updateCandidate(candidate.event.id!, JSON.stringify({
+      field: candidate.payload.creativeRulesField,
+      value,
+    }, null, 2))
+  }
+  return (
+    <section className="mt-2 border border-accent/30 bg-bg-surface p-3 rounded-lg">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold text-text-primary">待确认 · {candidate.payload.label}</span>
+        <span className="text-[11px] text-text-muted">
+          {candidate.payload.contextEvidence
+            ? `约 ${candidate.payload.contextEvidence.estimatedInputTokens.toLocaleString()} tokens`
+            : `${candidate.payload.contextSources.length} 个输入来源`}
+        </span>
+      </div>
+      {parsed ? (
+        <CTextarea
+          aria-label={`${candidate.payload.label}候选内容`}
+          value={parsed.value}
+          disabled={copilot.busy}
+          onChange={event => updateValue(event.target.value)}
+          className="min-h-28 w-full resize-y text-sm leading-5"
+        />
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-error">候选结构已损坏，可修复严格 JSON 后再确认，或直接拒绝。</p>
+          <CTextarea
+            aria-label={`${candidate.payload.label}候选原始内容`}
+            value={candidate.event.content}
+            disabled={copilot.busy}
+            onChange={event => { void copilot.updateCandidate(candidate.event.id!, event.target.value) }}
+            className="min-h-32 w-full resize-y font-mono text-xs leading-5"
+          />
+        </>
+      )}
+      {candidate.payload.contextEvidence && (
+        <details className="mt-2 border border-border/60 bg-bg-base px-3 py-2 text-[11px] text-text-muted rounded">
+          <summary className="cursor-pointer text-text-secondary">本次实际输入证据</summary>
+          <p className="mt-2 break-words">
+            已纳入：{candidate.payload.contextEvidence.included.join('、') || '无'}
+          </p>
+          {candidate.payload.contextEvidence.trimmed.length > 0 && (
+            <p className="mt-1 text-warning">
+              因预算移除：{candidate.payload.contextEvidence.trimmed.join('、')}
+            </p>
+          )}
+        </details>
+      )}
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          disabled={copilot.busy}
+          onClick={() => { void copilot.rejectCandidate(candidate) }}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-text-primary rounded disabled:opacity-50"
+        >
+          <Trash2 className="h-3.5 w-3.5" /> 拒绝
+        </button>
+        <button
+          type="button"
+          disabled={copilot.busy || !parsed}
+          onClick={() => { void onAdopt(candidate) }}
+          className="flex items-center gap-1 bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 rounded disabled:opacity-50"
+        >
+          {copilot.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          确认写入
+        </button>
+      </div>
+    </section>
   )
 }

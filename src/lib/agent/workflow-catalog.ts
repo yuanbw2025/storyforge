@@ -149,8 +149,16 @@ export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId
   )
   const storyCoreMention = /故事核心|目标字段\s*=\s*(?:logline|concept|theme|centralConflict|plotPattern|mainPlot|subPlots)\b/i.test(request)
   const pinnedStoryCoreTask = /^生成故事核心字段。目标字段\s*=\s*(?:logline|concept|theme|centralConflict|plotPattern|mainPlot|subPlots)\b/i.test(request)
-  const hasOutline = pinnedStoryCoreTask ? false : hasProse ? outlineAction : storyCoreMention ? outlineAction : outlineMention
-  const worldMention = /世界|设定|起源|文明|力量|体系|时代|地理|故事核心/.test(request)
+  const creativeRulesMention = /创作规则|目标字段\s*=\s*(?:writingStyle|atmosphere|specialRequirements)\b/i.test(request)
+  const pinnedCreativeRulesTask = /^生成创作规则字段。目标字段\s*=\s*(?:writingStyle|atmosphere|specialRequirements)\b/i.test(request)
+  const hasOutline = pinnedStoryCoreTask || pinnedCreativeRulesTask
+    ? false
+    : hasProse
+      ? outlineAction
+      : storyCoreMention
+        ? outlineAction
+        : outlineMention
+  const worldMention = creativeRulesMention || /世界|设定|起源|文明|力量|体系|时代|地理|故事核心/.test(request)
   const worldObject = '(?:世界观|世界|背景设定|世界起源|文明设定|力量体系|时代背景|地理设定|故事核心)'
   const worldAction = (
     new RegExp(`(?:创建|生成|设计|新增|建立|补充|完善|修改|重做).{0,12}${worldObject}`).test(request)
@@ -192,6 +200,9 @@ export function selectAgentSkillIdV1(agentId: DomainAgentId, request: string): A
       : 'prose.generate'
   }
   if (agentId === 'world-origin') {
+    if (/创作规则|目标字段\s*=\s*(?:writingStyle|atmosphere|specialRequirements)\b/i.test(request)) {
+      return 'world-origin.creative-rules'
+    }
     return /故事核心|目标字段\s*=\s*(?:logline|concept|theme|centralConflict|plotPattern|mainPlot|subPlots)\b/i.test(request)
       ? 'world-origin.story-core'
       : 'world-origin.worldview-field'

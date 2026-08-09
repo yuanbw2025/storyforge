@@ -90,6 +90,7 @@ import {
   verifyMasterCandidateSemanticReviewArtifactV1,
 } from '../master-candidate-semantic-review'
 import { STORY_CORE_FIELDS } from '../story-core-copilot'
+import { CREATIVE_RULES_FIELDS } from '../creative-rules-copilot'
 import { WORLDVIEW_AGENT_FIELDS } from '../worldview-field-copilot'
 import { MAX_INSPIRATION_FRAGMENTS } from '../../inspiration/workspace'
 import { parseCharacterRevisionTaskInputV1 } from '../character-revision-copilot'
@@ -382,7 +383,7 @@ function readOptionalSkillId(
   if (typeof value.skillId !== 'string') fail(label + '.skillId 无效')
   const skill = getAgentSkillV1(value.skillId, agentId)
   const allowedModes: Record<DomainAgentId, ReadonlySet<string>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'story-core']),
+    'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules']),
     character: new Set(['create', 'supplement']),
     inspiration: new Set(['reverse']),
     outline: new Set(['auto', 'story-arcs', 'character-driven', 'character-revision', 'volumes', 'chapters']),
@@ -1109,6 +1110,10 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
     && !STORY_CORE_FIELDS.includes(payload.storyCoreField)
   ) fail(label + ' storyCoreField 无效')
   if (
+    payload.creativeRulesField !== undefined
+    && !CREATIVE_RULES_FIELDS.includes(payload.creativeRulesField)
+  ) fail(label + ' creativeRulesField 无效')
+  if (
     payload.worldviewField !== undefined
     && !WORLDVIEW_AGENT_FIELDS.includes(payload.worldviewField)
   ) fail(label + ' worldviewField 无效')
@@ -1149,6 +1154,10 @@ function assertCandidateMatchesTaskSkill(
     taskSkill.executionMode === 'story-core'
     && (!payload.storyCoreField || !STORY_CORE_FIELDS.includes(payload.storyCoreField))
   ) fail(`${label} 的故事核心字段与 Skill 不一致`)
+  if (
+    taskSkill.executionMode === 'creative-rules'
+    && (!payload.creativeRulesField || !CREATIVE_RULES_FIELDS.includes(payload.creativeRulesField))
+  ) fail(`${label} 的创作规则字段与 Skill 不一致`)
   if (
     taskSkill.executionMode === 'worldview-field'
     && (!payload.worldviewField || !WORLDVIEW_AGENT_FIELDS.includes(payload.worldviewField))

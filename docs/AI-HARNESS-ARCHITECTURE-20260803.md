@@ -358,6 +358,17 @@ HARNESS-38 现状（2026-08-09）：已有角色“AI 补全设定”已统一�
 `adopt(characters, recordId, merge-diffs)`，正式角色字段匹配后才签发 terminal receipt。旧组件直调模型、即时
 写回和宽松空补丁 parser 已删除；人工编辑和四个现有入口保留。当前仍没有真实 provider 质量 A/B 或完整角色影响图。
 
+HARNESS-39 现状（2026-08-10）：分步骤“创作规则”的写作风格、基调氛围和特殊创作要求三个 AI 建议入口，
+已统一进入现有 `world-foundation-agent` 的 `world-origin.creative-rules` Skill，没有新增顶层 Agent。Skill 冻结
+`projectStatus / worldview / storyCore / creativeRules` 登记来源、空/部分/完整输入策略、压缩预算和三个规范写字段；
+既有 `rules.generate` 激活模板由领域 Copilot 渲染，组件不再截取世界摘要、故事核心或直接调用模型。模型只能返回
+严格 `{field,value}` 单字段候选；完整创作规则 snapshot/CAS 会在叙事视角、禁忌、引用等任一规则变化后阻止旧候选
+覆盖新基线。候选进入主 Agent durable Run，可刷新恢复、编辑、拒绝或确认；确认前 `creativeRules` 零写入，确认后
+只经 `adopt(target=creativeRules)`，终态 verifier 回读正式字段并生成影响报告。旧 `rules-adapter`、`useAIStream`
+会话暂存和组件直接采纳旁路已删除；所有人工编辑、参考作品和引用入口保留，人工基调保存同步收口到规范字段
+`atmosphere`，旧 `toneAndMood` 只保留读取兼容。当前工程证据包含隔离 Chromium 闭环，但模型响应仍为模拟，
+不证明真实 provider 的文风建议质量、成本或延迟收益。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。

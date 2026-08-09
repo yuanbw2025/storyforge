@@ -582,15 +582,19 @@
 
 **AI 动作**：
 
-#### 动作①：各维度 AI 生成
-- **触发**：🔘 手动，每字段旁按钮
-- **读**：
-  - `worldviews`（全字段 worldCtx）
-  - `storyCores.theme / centralConflict / mainPlot`
-  - `当前字段值`
-  - `用户输入提示`
-- **提示词**：`rules.generate`（dimension：写作风格/叙事视角/基调氛围/禁止事项/一致性规则/特殊要求/参考作品）
-- **写**：`creativeRules.对应字段（覆盖；prohibitions/consistencyRules 走 JSON 数组）`
+#### 动作①：写作风格 / 基调氛围 / 特殊要求 AI 建议（HARNESS-39）
+- **触发**：🔘 手动，三个字段旁的“AI 建议”按钮
+- **Agent / Skill**：`world-foundation-agent / world-origin.creative-rules`
+- **读**：`projectStatus / worldview / storyCore / creativeRules`，只经
+  `CONTEXT_SOURCES + assembleContext()`；按实际输入选择空输入创建、部分输入参考创建或完整输入受约束建议
+- **提示词**：继续复用 `rules.generate` 的激活模板，领域 Copilot 追加单字段和严格 JSON 合同
+- **候选**：只允许 `{field,value}`，`field` 仅可为
+  `writingStyle / atmosphere / specialRequirements`；刷新可恢复、可编辑、可拒绝
+- **写**：确认前 `creativeRules` 零写入；确认后只经
+  `adopt(target=creativeRules, mode=replace)` 写入本轮目标字段
+- **校验**：完整创作规则 snapshot/CAS、字段错投/未知字段/未变化候选拒绝、正式后状态回读和 terminal receipt
+- **人工编辑**：叙事视角、禁忌、一致性规则、参考作品和引用能力保持人工维护；基调统一保存到规范字段
+  `atmosphere`，旧 `toneAndMood` 仅作为读取兼容
 
 ---
 

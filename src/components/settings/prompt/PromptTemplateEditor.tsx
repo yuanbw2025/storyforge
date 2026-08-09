@@ -24,7 +24,7 @@ const ALL_MODULE_KEYS: { value: PromptModuleKey; label: string }[] = [
   { value: 'story.positioning',           label: '故事 · 定位' },
   { value: 'story.core',                  label: '故事 · 故事核心' },
   { value: 'story.packaging',             label: '故事 · 作品包装' },
-  { value: 'rules.generate',              label: '创作规则 · 生成（待启用）' },
+  { value: 'rules.generate',              label: '创作规则 · 单字段建议' },
   { value: 'research.method',             label: '研究考证 · 研究方法' },
   { value: 'prompt.operations',           label: 'Prompt · 管理与评测' },
   { value: 'outline.volume',              label: '大纲 · 卷级' },
