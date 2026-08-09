@@ -5,6 +5,7 @@ import { useChapterStore } from '../../stores/chapter'
 import { useCharacterStore } from '../../stores/character'
 import { useInspirationWorkspaceStore } from '../../stores/inspiration-workspace'
 import { useOutlineStore } from '../../stores/outline'
+import { useStoryArcStore } from '../../stores/story-arc'
 import { useWorldviewStore } from '../../stores/worldview'
 import { chat, resolveRequestConfig } from '../ai/client'
 import { db } from '../db/schema'
@@ -53,6 +54,13 @@ import {
   prepareWorldOriginCopilot,
   type WorldOriginSnapshot,
 } from './world-origin-copilot'
+import {
+  adoptRestoredStoryArcCandidate,
+  parseStoryArcCandidateDraft,
+  prepareStoryArcCopilot,
+  type StoryArcCopilotSnapshot,
+  type StoryArcRequestKind,
+} from './story-arc-copilot'
 import type {
   AgentContextEvidence,
 } from './context-policy'
@@ -142,6 +150,7 @@ export interface MasterCandidatePayload {
   selectedFragmentIds?: string[]
   outlineMode?: OutlineCopilotMode
   outlineParentId?: number | null
+  storyArcKind?: StoryArcRequestKind
   proseOperation?: ProseCopilotOperation
   proseOutlineNodeId?: number
   dependsOnTaskIds?: string[]
@@ -761,55 +770,105 @@ async function executeSequentialMasterAgentPlan(
         })
         outputs.set(task.id, draft)
       } else if (task.agentId === 'outline') {
-        const prepared = await prepareOutlineCopilot({
-          projectId: input.projectId,
-          scope,
-          worldGroupId: input.worldGroupId,
-          authorRequest: task.instruction,
-          skillId: skill.id as AgentSkillId,
-          supplementalContext: upstream,
-          routingCategory: AGENT_ROLE_CATEGORIES.outline,
-          contextProfile,
-          contextCompressionRuntime,
-          signal: input.signal,
-        })
-        const result = await runBudgetedGenerationNode({
-          node: prepared.node,
-          prepared: prepared.prepared,
-          budget,
-          callLabel: '大纲领域 Agent',
-          maxOutputTokens: skill.maxOutputTokens,
-          validate: output => validateDomainCandidateCanon({
-            agentId: task.agentId,
+        if (skill.executionMode === 'story-arcs') {
+          const prepared = await prepareStoryArcCopilot({
             projectId: input.projectId,
+            scope,
             worldGroupId: input.worldGroupId,
-            outlineNodeId: prepared.parentVolumeId,
-            outputText: JSON.stringify(output),
-          }),
-        })
-        const draft = JSON.stringify(result.output, null, 2)
-        candidates.push({
-          payload: {
-            version: 1,
-            taskId: task.id,
-            agentId: task.agentId,
+            authorRequest: task.instruction,
             skillId: skill.id as AgentSkillId,
-            executionBinding,
-            label: prepared.label,
-            contextSources: prepared.contextSources,
-            contextEvidence: prepared.contextEvidence,
-            baseSnapshot: prepared.snapshot,
-            workspaceScope: scope,
-            outlineMode: prepared.mode,
-            outlineParentId: prepared.parentVolumeId,
-            dependsOnTaskIds: task.dependsOn,
-            dependencyBindings,
-          },
-          draft,
-          runtimeNode: prepared.node,
-          runtimeOutput: result.output,
-        })
-        outputs.set(task.id, draft)
+            supplementalContext: upstream,
+            routingCategory: `${AGENT_ROLE_CATEGORIES.outline}.story-arcs`,
+            contextProfile,
+            contextCompressionRuntime,
+            signal: input.signal,
+          })
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '故事线编排 Skill',
+            maxOutputTokens: skill.maxOutputTokens,
+            validate: output => validateDomainCandidateCanon({
+              agentId: task.agentId,
+              projectId: input.projectId,
+              worldGroupId: input.worldGroupId,
+              outputText: JSON.stringify(output),
+            }),
+          })
+          const draft = JSON.stringify(result.output, null, 2)
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              workspaceScope: scope,
+              storyArcKind: prepared.kind,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        } else {
+          const prepared = await prepareOutlineCopilot({
+            projectId: input.projectId,
+            scope,
+            worldGroupId: input.worldGroupId,
+            authorRequest: task.instruction,
+            skillId: skill.id as AgentSkillId,
+            supplementalContext: upstream,
+            routingCategory: AGENT_ROLE_CATEGORIES.outline,
+            contextProfile,
+            contextCompressionRuntime,
+            signal: input.signal,
+          })
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '大纲领域 Agent',
+            maxOutputTokens: skill.maxOutputTokens,
+            validate: output => validateDomainCandidateCanon({
+              agentId: task.agentId,
+              projectId: input.projectId,
+              worldGroupId: input.worldGroupId,
+              outlineNodeId: prepared.parentVolumeId,
+              outputText: JSON.stringify(output),
+            }),
+          })
+          const draft = JSON.stringify(result.output, null, 2)
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              workspaceScope: scope,
+              outlineMode: prepared.mode,
+              outlineParentId: prepared.parentVolumeId,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        }
       } else {
         const prepared = await prepareProseCopilot({
           projectId: input.projectId,
@@ -1149,7 +1208,9 @@ export async function adoptMasterCandidate(input: {
   const scope = await resolveCandidateScope(input)
   await assertMasterCandidateDependenciesAdoptedV1(input.event, input.payload, scope)
   if (input.runtime) {
-    const output = input.payload.agentId === 'world-origin'
+    const output = input.payload.skillId === 'outline.story-arcs'
+      ? parseStoryArcCandidateDraft(input.draft)
+      : input.payload.agentId === 'world-origin'
       ? input.draft
       : input.payload.agentId === 'character'
         ? parseCharacterCandidateDraft(input.draft)
@@ -1206,17 +1267,27 @@ export async function adoptMasterCandidate(input: {
       result: result as InspirationCopilotResult,
     })
   } else if (input.payload.agentId === 'outline') {
-    const mode = input.payload.outlineMode
-    if (!mode) throw new Error('大纲候选缺少写回模式，请重新生成。')
-    await adoptRestoredOutlineCandidate({
-      projectId: input.projectId,
-      scope,
-      worldGroupId: input.worldGroupId,
-      mode,
-      parentVolumeId: input.payload.outlineParentId ?? null,
-      snapshot: input.payload.baseSnapshot as OutlineCopilotSnapshot,
-      draft: input.draft,
-    })
+    if (input.payload.skillId === 'outline.story-arcs') {
+      await adoptRestoredStoryArcCandidate({
+        projectId: input.projectId,
+        scope,
+        worldGroupId: input.worldGroupId,
+        snapshot: input.payload.baseSnapshot as StoryArcCopilotSnapshot,
+        draft: input.draft,
+      })
+    } else {
+      const mode = input.payload.outlineMode
+      if (!mode) throw new Error('大纲候选缺少写回模式，请重新生成。')
+      await adoptRestoredOutlineCandidate({
+        projectId: input.projectId,
+        scope,
+        worldGroupId: input.worldGroupId,
+        mode,
+        parentVolumeId: input.payload.outlineParentId ?? null,
+        snapshot: input.payload.baseSnapshot as OutlineCopilotSnapshot,
+        draft: input.draft,
+      })
+    }
   } else {
     if (!input.payload.proseOperation || input.payload.proseOutlineNodeId == null) {
       throw new Error('正文候选缺少目标章节或写回模式，请重新生成。')
@@ -1236,6 +1307,7 @@ export async function adoptMasterCandidate(input: {
     useWorldviewStore.getState().loadAll(scope, input.worldGroupId),
     useCharacterStore.getState().loadAll(scope),
     useOutlineStore.getState().loadAll(scope),
+    useStoryArcStore.getState().loadAll(scope),
     useChapterStore.getState().loadAll(scope),
   ])
   return input.payload.agentId === 'world-origin'
@@ -1245,7 +1317,9 @@ export async function adoptMasterCandidate(input: {
       : input.payload.agentId === 'inspiration'
         ? `已保存新的${input.payload.mode === 'multiworld' ? '多世界' : '单世界'}灵感版本。`
         : input.payload.agentId === 'outline'
-          ? input.payload.outlineMode === 'volumes'
+          ? input.payload.skillId === 'outline.story-arcs'
+            ? '故事线已写入项目。'
+            : input.payload.outlineMode === 'volumes'
             ? '卷级大纲已写入项目。'
             : '章节大纲已写入目标卷。'
           : input.payload.proseOperation === 'continue'

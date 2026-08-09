@@ -33,6 +33,38 @@ function errorMessage(error: unknown): string {
   return '操作失败，请稍后重试。'
 }
 
+const MASTER_COPILOT_SYNC_EVENT = 'storyforge:master-copilot-sync-v1'
+const MASTER_COPILOT_SCOPE_OWNERS = new Map<string, symbol>()
+
+interface MasterCopilotSyncDetail {
+  scopeKey: string
+  busy: boolean
+}
+
+function notifyMasterCopilotSync(scopeKey: string): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent<MasterCopilotSyncDetail>(MASTER_COPILOT_SYNC_EVENT, {
+    detail: {
+      scopeKey,
+      busy: MASTER_COPILOT_SCOPE_OWNERS.has(scopeKey),
+    },
+  }))
+}
+
+function claimMasterCopilotScope(scopeKey: string): symbol | null {
+  if (MASTER_COPILOT_SCOPE_OWNERS.has(scopeKey)) return null
+  const owner = Symbol(scopeKey)
+  MASTER_COPILOT_SCOPE_OWNERS.set(scopeKey, owner)
+  notifyMasterCopilotSync(scopeKey)
+  return owner
+}
+
+function releaseMasterCopilotScope(scopeKey: string, owner: symbol): void {
+  if (MASTER_COPILOT_SCOPE_OWNERS.get(scopeKey) !== owner) return
+  MASTER_COPILOT_SCOPE_OWNERS.delete(scopeKey)
+  notifyMasterCopilotSync(scopeKey)
+}
+
 export interface PendingMasterCandidate {
   event: AgentEvent
   payload: MasterCandidatePayload
@@ -49,6 +81,7 @@ export function useMasterCopilot(input: {
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [recoveryAvailable, setRecoveryAvailable] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const runtimeCandidates = useRef(new Map<number, ExecutedMasterCandidate>())
   const workspaceScope = useMemo<WorkspaceScope | undefined>(() => (
@@ -61,6 +94,18 @@ export function useMasterCopilot(input: {
   const reload = useCallback(async (id: number) => {
     setEvents(await readAgentEvents(id, workspaceScope))
   }, [workspaceScope])
+
+  useEffect(() => {
+    if (conversationId == null || typeof window === 'undefined') return
+    const handleSync = (event: Event) => {
+      const detail = (event as CustomEvent<MasterCopilotSyncDetail>).detail
+      if (detail?.scopeKey !== scopeKey) return
+      setBusy(detail.busy)
+      void reload(conversationId)
+    }
+    window.addEventListener(MASTER_COPILOT_SYNC_EVENT, handleSync)
+    return () => window.removeEventListener(MASTER_COPILOT_SYNC_EVENT, handleSync)
+  }, [conversationId, reload, scopeKey])
 
   const recordTask = useCallback(async (
     task: Parameters<NonNullable<Parameters<typeof executeMasterAgentPlan>[0]['onTask']>>[0],
@@ -82,8 +127,9 @@ export function useMasterCopilot(input: {
     let active = true
     abortRef.current?.abort()
     runtimeCandidates.current.clear()
-    setBusy(false)
+    setBusy(MASTER_COPILOT_SCOPE_OWNERS.has(scopeKey))
     setRecoveryAvailable(false)
+    setError(null)
     setLoading(true)
     void (async () => {
       const conversation = await getOrCreateAgentConversation({
@@ -154,15 +200,18 @@ export function useMasterCopilot(input: {
       }))
   }, [events])
 
-  const submit = useCallback(async () => {
-    const request = authorRequest.trim()
+  const submitRequest = useCallback(async (requestOverride?: string) => {
+    const request = (requestOverride ?? authorRequest).trim()
     if (!request || busy || conversationId == null) return
     if (pendingCandidates.length) return
+    const scopeOwner = claimMasterCopilotScope(scopeKey)
+    if (!scopeOwner) return
     const controller = new AbortController()
     abortRef.current?.abort()
     abortRef.current = controller
     setBusy(true)
-    setAuthorRequest('')
+    setError(null)
+    if (requestOverride === undefined) setAuthorRequest('')
     try {
       await appendAgentEvent({
         projectId: project.id!,
@@ -265,6 +314,7 @@ export function useMasterCopilot(input: {
     } catch (error) {
       if (!controller.signal.aborted) {
         const message = errorMessage(error)
+        setError(message)
         await appendAgentEvent({
           projectId: project.id!,
           conversationId,
@@ -283,8 +333,9 @@ export function useMasterCopilot(input: {
       }
     } finally {
       if (abortRef.current === controller) abortRef.current = null
-      setBusy(false)
+      releaseMasterCopilotScope(scopeKey, scopeOwner)
       await reload(conversationId)
+      notifyMasterCopilotSync(scopeKey)
     }
   }, [
     authorRequest,
@@ -294,9 +345,12 @@ export function useMasterCopilot(input: {
     project.id,
     recordTask,
     reload,
+    scopeKey,
     worldGroupId,
     workspaceScope,
   ])
+
+  const submit = useCallback(() => submitRequest(), [submitRequest])
 
   const resume = useCallback(async () => {
     if (busy || conversationId == null || !workspaceScope) return
@@ -308,10 +362,13 @@ export function useMasterCopilot(input: {
       setRecoveryAvailable(false)
       return
     }
+    const scopeOwner = claimMasterCopilotScope(scopeKey)
+    if (!scopeOwner) return
     const controller = new AbortController()
     abortRef.current?.abort()
     abortRef.current = controller
     setBusy(true)
+    setError(null)
     try {
       const result = await runDurableMasterAgentPlanV1({
         scope: workspaceScope,
@@ -336,6 +393,7 @@ export function useMasterCopilot(input: {
       setRecoveryAvailable(false)
     } catch (error) {
       if (!controller.signal.aborted) {
+        setError(errorMessage(error))
         await appendAgentEvent({
           projectId: project.id!,
           conversationId,
@@ -347,26 +405,31 @@ export function useMasterCopilot(input: {
       }
     } finally {
       if (abortRef.current === controller) abortRef.current = null
-      setBusy(false)
+      releaseMasterCopilotScope(scopeKey, scopeOwner)
       await reload(conversationId)
       setRecoveryAvailable(await findResumableMasterAgentRunV1({
         scope: workspaceScope,
         conversationId,
       }) != null)
+      notifyMasterCopilotSync(scopeKey)
     }
-  }, [busy, conversationId, project.id, recordTask, reload, worldGroupId, workspaceScope])
+  }, [busy, conversationId, project.id, recordTask, reload, scopeKey, worldGroupId, workspaceScope])
 
   const updateCandidate = useCallback(async (eventId: number, draft: string) => {
     await updateAgentEventCandidate(eventId, project.id!, draft, workspaceScope)
     setEvents(current => current.map(event => event.id === eventId ? { ...event, content: draft } : event))
-  }, [project.id, workspaceScope])
+    notifyMasterCopilotSync(scopeKey)
+  }, [project.id, scopeKey, workspaceScope])
 
   const resolveCandidate = useCallback(async (
     candidate: PendingMasterCandidate,
     decision: 'adopted' | 'rejected',
   ) => {
     if (busy || conversationId == null || candidate.event.id == null) return
+    const scopeOwner = claimMasterCopilotScope(scopeKey)
+    if (!scopeOwner) return
     setBusy(true)
+    setError(null)
     try {
       let message = '候选已拒绝，没有写入项目。'
       let terminalMessage: string | null = null
@@ -437,6 +500,7 @@ export function useMasterCopilot(input: {
       }
       runtimeCandidates.current.delete(candidate.event.id)
     } catch (error) {
+      setError(errorMessage(error))
       await appendAgentEvent({
         projectId: project.id!,
         conversationId,
@@ -446,10 +510,11 @@ export function useMasterCopilot(input: {
         scope: workspaceScope,
       })
     } finally {
-      setBusy(false)
+      releaseMasterCopilotScope(scopeKey, scopeOwner)
       await reload(conversationId)
+      notifyMasterCopilotSync(scopeKey)
     }
-  }, [busy, conversationId, project.id, reload, workspaceScope, worldGroupId])
+  }, [busy, conversationId, project.id, reload, scopeKey, workspaceScope, worldGroupId])
 
   const stop = useCallback(() => abortRef.current?.abort(), [])
 
@@ -461,7 +526,9 @@ export function useMasterCopilot(input: {
     busy,
     loading,
     recoveryAvailable,
+    error,
     submit,
+    submitRequest,
     resume,
     stop,
     updateCandidate,

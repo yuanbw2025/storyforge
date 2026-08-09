@@ -489,6 +489,13 @@
   未知/畸形调用有限失败，不会隐藏回退文本协议。任务路由先冻结真实 provider/model，新 durable Run
   绑定 transport capability hash，运行中改路由不能偏离合同；HARNESS-29 前旧 Run 不伪造绑定。当前只有
   模拟 provider 合同测试，开关默认关闭，不能宣称 token、延迟或质量收益。
+- HARNESS-30 已交付 `outline.story-arcs`：故事线请求由主 Agent 路由到现有 `outline` Agent 的专用 Skill，
+  上下文权限、输入状态和压缩策略由 Skill 声明并只经 `assembleContext()` 实现；严格候选契约限制
+  main/sub、阶段、关键事件、转折与卷范围。候选由 durable Run 持久化并等待作者编辑/拒绝/确认，确认前
+  `storyArcs` 零写入，确认后只经 `adopt(target=storyArcs)` 写入；snapshot/CAS、正式状态匹配和 terminal
+  verifier 防止旧候选或被篡改结果签发完成。旧 AI adapter/直接 `addArc()` 入口已删除，人工 CRUD 保留。
+  现有证据为真实 orchestrator、刷新恢复、面板交互和模拟模型回归；生成质量与更完整 Narrative Blueprint
+  仍未完成评测。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

@@ -142,10 +142,10 @@ export function isMasterFanOutEnabledV1(): boolean {
 export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId> {
   const hasInspiration = /灵感|反推|碎片|脑洞/.test(request)
   const hasProse = /正文|续写|接着写|继续写|写(?:作|出|完)?第\s*[零〇一二两三四五六七八九十\d]+\s*章/.test(request)
-  const outlineMention = /大纲|卷纲|章纲|章节规划|剧情结构|情节结构/.test(request)
+  const outlineMention = /大纲|卷纲|章纲|章节规划|剧情结构|情节结构|故事线|主线|支线|复线/.test(request)
   const outlineAction = (
-    /(?:生成|创建|新增|规划|设计|展开|补充|完善|修改|重做).{0,12}(?:大纲|卷纲|章纲|章节规划|剧情结构|情节结构)/.test(request)
-    || /(?:大纲|卷纲|章纲|章节规划|剧情结构|情节结构).{0,12}(?:生成|创建|新增|规划|设计|展开|补充|完善|修改|重做)/.test(request)
+    /(?:生成|创建|新增|规划|设计|展开|补充|完善|修改|重做).{0,12}(?:大纲|卷纲|章纲|章节规划|剧情结构|情节结构|故事线|主线|支线|复线)/.test(request)
+    || /(?:大纲|卷纲|章纲|章节规划|剧情结构|情节结构|故事线|主线|支线|复线).{0,12}(?:生成|创建|新增|规划|设计|展开|补充|完善|修改|重做)/.test(request)
   )
   const hasOutline = hasProse ? outlineAction : outlineMention
   const worldMention = /世界|设定|起源|文明|力量|体系|时代|地理/.test(request)
@@ -173,6 +173,9 @@ export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId
 
 export function selectAgentSkillIdV1(agentId: DomainAgentId, request: string): AgentSkillId {
   if (agentId === 'outline') {
+    if (/故事线|主线|支线|复线/.test(request)) {
+      return 'outline.story-arcs'
+    }
     if (/章纲|章节大纲|章节规划|展开.{0,8}(?:卷纲|章节)|(?:卷纲|章节).{0,8}展开/.test(request)) {
       return 'outline.chapters'
     }

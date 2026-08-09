@@ -41,7 +41,7 @@
 | 物品栏（获得/消耗流水 + 聚合） | `lib/types/item-ledger.ts`、`adapters/inventory-extract-adapter.ts` | 物品持有基准 |
 | 人物关系图 + 抽取 | `lib/types/character-relation.ts`、`lib/ai/relation-extractor.ts` | 关系基准 |
 | 章节审校（五维质量评分） | `adapters/review-adapter.ts`、`components/editor/ReviewPanel.tsx` | 骨架参照，并存互补 |
-| 静态故事线蓝图（主线/支线 + 阶段） | `lib/types/story-arc.ts`、`adapters/story-arc-adapter.ts` | Phase 39 线索注册表 |
+| 静态故事线蓝图（主线/支线 + 阶段） | `lib/types/story-arc.ts`、`lib/agent/story-arc-copilot.ts` | Phase 39 线索注册表；AI 入口经 `outline.story-arcs` durable 候选与 `adopt(storyArcs)`，人工 CRUD 保留 |
 | 生成后钩子（目前自动跑状态抽取） | `components/editor/ChapterEditor.tsx`：`handleAutoPostGenerate` | 不挂自动检测（手动），但可参照其链路 |
 
 ---

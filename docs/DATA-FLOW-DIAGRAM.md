@@ -272,7 +272,7 @@ flowchart LR
         G_RU_PANEL["创作规则生成 rules.generate"]
         G_CH_PANEL["角色生成 character.generate"]
         G_FO_PANEL["伏笔建议 foreshadow.suggest"]
-        G_SA_PANEL["故事线规划 storyArc.plan"]
+        G_SA_PANEL["故事线规划 outline.story-arcs<br/>durable 候选 → 作者确认 → adopt(storyArcs)"]
         G_VOL["卷大纲 outline.volume"]
         G_CHP["章大纲 outline.chapter"]
         G_DET["细纲 detail.scene 或 enhanced"]

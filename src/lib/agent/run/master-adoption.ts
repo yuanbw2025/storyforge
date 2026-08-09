@@ -24,6 +24,10 @@ import { parseCharacterCandidateDraft } from '../character-copilot'
 import { parseOutlineCandidateDraft } from '../outline-copilot'
 import { parseProseCandidateDraft } from '../prose-copilot'
 import { parseInspirationCandidateDraft } from '../inspiration-copilot'
+import {
+  parseStoryArcCandidateDraft,
+  storyArcCandidateMatchesRowV1,
+} from '../story-arc-copilot'
 import { parseInspirationVersions } from '../../inspiration/workspace'
 import { plainTextToHtml } from '../../utils/html'
 import {
@@ -391,6 +395,11 @@ async function businessAlreadyMatches(
     return false
   }
   if (agentId === 'outline') {
+    if (candidate.payload.skillId === 'outline.story-arcs') {
+      const expected = parseStoryArcCandidateDraft(candidate.draft)
+      const rows = await readOwnedRows<any>(input.scope, 'storyArcs', { owner: 'work' })
+      return expected.every(item => rows.some(row => storyArcCandidateMatchesRowV1(item, row)))
+    }
     const items = parseOutlineCandidateDraft(candidate.draft)
     const mode = candidate.payload.outlineMode
     if (!mode) return false
@@ -433,6 +442,7 @@ async function repairPartialOutlineAdoption(
   candidate: MasterAgentDurableCandidateV1,
 ): Promise<void> {
   if (candidate.payload.agentId !== 'outline') return
+  if (candidate.payload.skillId === 'outline.story-arcs') return
   const mode = candidate.payload.outlineMode
   if (!mode) throw new Error('大纲候选缺少写回模式')
   const items = parseOutlineCandidateDraft(candidate.draft)

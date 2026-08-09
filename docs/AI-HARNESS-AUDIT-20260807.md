@@ -42,6 +42,10 @@
 4. **长期一致性能力是“模块闭环”，不是“创作主流程闭环”。** NS-0~NS-6、事实/认知/物品/检索/摘要/stale/影响分析和一致性 Agent 有独立测试，但正文接受后的检索、状态提取、记忆和审查是 best-effort 异步任务，没有统一的完成判定和恢复协议。
 5. **质量不稳定的主要推断根因是接入断裂和证据断裂，而不是单纯缺少记忆模块。** 该推断由下文逐条代码、测试和调用路径支持，仍需通过后续主流程 held-out 评测验证。
 
+> 2026-08-09 更新：本审计记录的是改造前基线。HARNESS-30 已修复下文指出的故事线 AI 直接写入旁路：
+> 产品入口现路由到 `outline.story-arcs`，读取经 `assembleContext()`，候选进入 durable Run，作者确认后只经
+> `adopt(target=storyArcs)` 写入；旧 adapter 已删除，人工 CRUD 保留。其余审计结论不因该单元自动失效。
+
 ## 1. 审计方法与证据等级
 
 每个结论分为：
@@ -64,7 +68,7 @@
 
 **事实：** `FIELD_REGISTRY`、`ADOPTION_SCHEMAS` 和 `adopt()` 提供字段白名单、结构化校验、CAS/作用域检查和作者确认后的写回。`GenerationNode` 的接口注释也明确要求 `assembleInput` 复用 `assembleContext`，默认不自动 adopt（`src/lib/generation/generation-node.ts:15-30,75-120`）。
 
-**限制：** 注册表存在不等于每个主入口都使用它。故事线 AI 生成调用 `addArc()`，而 `src/stores/story-arc.ts:62-71` 直接 `db.storyArcs.add()`；这条主路径绕过了 `adopt()`。人工编辑直接写 store/DB 的路径需要与 AI 写回路径区分，而不能被测试名称掩盖。
+**审计时限制（已由 HARNESS-30 修复）：** 2026-08-07 的故事线 AI 生成曾调用 `addArc()`，而 `src/stores/story-arc.ts` 直接 `db.storyArcs.add()`；该主路径当时绕过了 `adopt()`。当前 AI 入口已改走 `outline.story-arcs` 候选与受治理采纳，store 直写只保留给明确的人工 CRUD。
 
 ### 2.3 数据生命周期
 

@@ -357,6 +357,11 @@ evidenceSpan
 | 语义评审 | 支线是否服务主题或角色、冲突递进、动机、因果、节奏和冗余 |
 | 写入 | 故事线 AI 入口必须从直接 `db.storyArcs.add()` 收口到 `adopt()` |
 
+**HARNESS-30 已交付边界（2026-08-09）：** `outline.story-arcs` 已完成主线/支线多阶段候选、正式上下文装配、
+输入状态/压缩策略、结构 gate、durable 候选、作者确认、`adopt(storyArcs)`、stale 保护和终态验证；旧 AI
+直接写入入口已删除，人工 CRUD 保留。上表中的角色弧、事件图、交汇条件、信息释放规划和完整语义评审
+仍是后续能力，不能由本单元冒充完成。
+
 ### 8.5 阶段 4：卷纲编排
 
 | 项目 | 设计 |
@@ -588,7 +593,7 @@ Receipt 绑定 `contractHash + contextManifestHash + sourceHashes + candidateHas
 ## 16. 必须收口的旧入口
 
 1. 世界观和故事核心组件内的手工上下文与 `slice()`，统一改由 Skill Recipe → `assembleContext()`。
-2. 故事线 AI 生成的直接 `db.storyArcs.add()`，统一经 `adopt()`；人工 CRUD 明确保留。
+2. ~~故事线 AI 生成的直接 `db.storyArcs.add()`~~：HARNESS-30 已收口为 `outline.story-arcs` durable 候选并统一经 `adopt()`；人工 CRUD 保留。
 3. 普通角色弱 parser 与 Character Copilot 双入口，统一 AI 契约，手动角色编辑保留。
 4. 正文接受后的 best-effort 后处理，收口为可恢复 post-step barrier。
 5. 独立一致性候选和章节整理候选，绑定统一 run/source hash，不再形成无法追踪的平行质量入口。

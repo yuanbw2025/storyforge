@@ -1354,6 +1354,108 @@ test('主 Agent 调度大纲领域任务，确认可见整批候选后同步到�
   expect(generationCalls).toBe(2)
 })
 
+test('故事线面板通过主 Agent 生成 durable 候选，确认后才写入并可刷新恢复', async ({ page }) => {
+  let generationCalls = 0
+  const modelCandidate = [{
+    name: '潮汐钟主线',
+    type: 'main',
+    description: '守灯人追查潮汐钟，并在城市存续与共同记忆之间作出选择。',
+    stages: [
+      {
+        title: '退潮启程',
+        description: '浮空城出现，守灯人从前辈遗物中发现钟声线索。',
+        keyEvents: ['浮空城升起', '前辈遗物暴露密令'],
+      },
+      {
+        title: '钟塔裂痕',
+        description: '各方争夺潮汐钟，主角确认钟声会改写全城记忆。',
+        keyEvents: ['势力争夺钟塔', '主角确认钟声代价'],
+        turningPoint: '主角发现前辈正是上一次敲钟者。',
+      },
+      {
+        title: '涨潮抉择',
+        description: '海潮吞没旧港，主角公开真相并改变潮汐钟的用途。',
+        keyEvents: ['旧港撤离', '主角公开真相'],
+      },
+    ],
+  }]
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'story-arc-copilot-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    const body = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = body.messages?.map(message => message.content).join('\n') ?? ''
+    const isPlanner = combined.includes('你只把用户目标拆成幕后领域任务')
+    if (!isPlanner) {
+      generationCalls += 1
+      expect(combined).toContain('story-arcs Skill')
+      expect(combined).toContain('E2E 故事线 Harness 闭环')
+      expect(combined).toContain('生成一条主线故事线')
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            content: isPlanner
+              ? JSON.stringify({
+                  summary: '交给故事线编排 Skill。',
+                  tasks: [{
+                    id: 'story-arcs-1',
+                    agentId: 'outline',
+                    skillId: 'outline.story-arcs',
+                    instruction: '依据当前作品生成一条主线故事线',
+                    dependsOn: [],
+                  }],
+                })
+              : JSON.stringify(modelCandidate),
+          },
+        }],
+        usage: { prompt_tokens: 240, completion_tokens: 100, total_tokens: 340 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 故事线 Harness 闭环')
+  await openSidebarLeaf(page, '创作区', '故事线')
+  await expect(page.getByRole('heading', { name: /全局故事线/ })).toBeVisible()
+
+  await page.getByRole('button', { name: 'AI 生成', exact: true }).click()
+  const candidate = page.getByRole('textbox', { name: '主线故事线候选内容' })
+  await expect(candidate).toContainText('潮汐钟主线')
+  await expect(page.getByText('还没有故事线。', { exact: true })).toBeVisible()
+  await expect(page.getByText('本次实际输入证据', { exact: true })).toBeVisible()
+
+  const edited = [{
+    ...modelCandidate[0],
+    description: '作者确认版：守灯人追查潮汐钟，并拒绝以全城记忆换取安全。',
+  }]
+  await candidate.fill(JSON.stringify(edited, null, 2))
+  await page.getByRole('button', { name: '采纳', exact: true }).click()
+
+  await expect(page.getByRole('button', { name: '潮汐钟主线', exact: true })).toBeVisible()
+  await expect(page.locator('main input').first()).toHaveValue('潮汐钟主线')
+  await expect(page.locator('main textarea').first()).toHaveValue(edited[0].description)
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '创作区', '故事线')
+  await expect(page.getByRole('button', { name: '潮汐钟主线', exact: true })).toBeVisible()
+  await expect(page.locator('main input').first()).toHaveValue('潮汐钟主线')
+  await expect(page.locator('main textarea').first()).toHaveValue(edited[0].description)
+})
+
 test('主 Agent 为明确章纲生成正文，拒绝零写入并把可见修订稿同步到编辑器', async ({ page }) => {
   let generationCalls = 0
   const modelDraft = '模型初稿：退潮后的盐海露出黑色礁脊，守灯人沿着潮痕走向沉默的钟楼。'

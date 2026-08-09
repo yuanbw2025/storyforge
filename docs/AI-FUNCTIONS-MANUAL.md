@@ -719,15 +719,17 @@
 
 #### 动作①：AI 规划故事线
 - **触发**：🔘 手动
-- **读**：
-  - `projects.name / genre`
-  - `worldviews`（全字段）
-  - `storyCores.theme / centralConflict / logline / mainPlot`
-  - `outlineNodes`（已有大纲摘要）
-  - 已有 `storyArcs`（避免重复）
-- **提示词**：`storyArc.plan`
-- **解析**：`parseStoryArcResult`
-- **写**：`storyArcs（新建）`
+- **Agent / Skill**：主 Agent → `outline` Agent → `outline.story-arcs`
+- **读**：Skill 声明的 `projectStatus`、`canonAssertions`、`worldview`、`storyCore`、
+  `characterDrivenPlan`、`powerSystem`、`cultivationProgress`、`codex`、`characters`、
+  `creativeRules`、`worldRules`、`historical`、`locations`、`storyArcs`、`storylineProgress`、
+  `existingVolumeOutlines`、`writtenChapterProgress`，统一由 `assembleContext()` 装配并记录实际输入证据
+- **输入处理**：区分 empty / partial / complete；按 Skill 压缩策略控制预算，超出物理窗口时拒绝静默裁剪
+- **提示词版本**：`story-arc-copilot-v1`
+- **解析 / 硬校验**：`parseStoryArcCandidateDraft()`；拒绝未知字段、非法 main/sub、重复名称、阶段不足和非法卷范围
+- **过程**：模型只生成可编辑 durable 候选；作者可拒绝或修改，修改后重新 gate；刷新恢复不重复模型调用
+- **写**：作者确认后唯一经 `adopt({ target: 'storyArcs' })` 新建；snapshot/CAS 和终态 verifier 校验正式结果
+- **保留功能**：人工新增、编辑和删除故事线继续使用原面板能力
 
 ---
 

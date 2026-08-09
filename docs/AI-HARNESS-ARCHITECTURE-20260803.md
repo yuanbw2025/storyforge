@@ -277,6 +277,15 @@ HARNESS-29 现状（2026-08-09）：只读 Runner 仍默认使用 `text-json-v1`
 HARNESS-29 前没有该字段的旧 Run 保持历史合同恢复，不伪造绑定。该单元不新增业务写权限、表或注册表项，
 目前只有模拟 OpenAI-compatible 响应的合同测试，没有真实 provider A/B，不证明 token、延迟或生成质量收益。
 
+HARNESS-30 现状（2026-08-09）：分步骤故事线 AI 入口已成为现有 `outline` Agent 下的
+`outline.story-arcs` Skill，而不是新增顶层 Agent。Skill 的读取集合、empty/partial/complete 输入处理、
+预算压缩和 `storyArcs.name/type/stages/description` 写权限均由合同冻结；上下文只经
+`CONTEXT_SOURCES + assembleContext()`，候选确认后只经 `adopt(target=storyArcs)` 写入。主 Agent durable
+Run 负责候选持久化、刷新恢复、作者编辑/拒绝/确认、采纳证据与终态验证；snapshot/CAS 阻止旧候选覆盖
+新的故事线基线。原 `story-arc-adapter` 和模型返回后直接 `addArc()` 的路径已删除，人工 CRUD 保留。
+回归覆盖真实 orchestrator 分支和面板交互，但仍是模拟模型响应，不证明 Narrative Blueprint 的语义质量，
+也不表示角色弧、事件图和信息释放规划已经全部交付。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。

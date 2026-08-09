@@ -3,40 +3,31 @@
  * 展示/编辑全局故事线（主线+支线），支持 AI 生成
  */
 import { useState, useEffect } from 'react'
-import { Plus, Sparkles, Loader2, Trash2, GripVertical, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { Check, Plus, Sparkles, Loader2, Trash2, GripVertical, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { useStoryArcStore } from '../../stores/story-arc'
-import { useWorldviewStore } from '../../stores/worldview'
-import { useOutlineStore } from '../../stores/outline'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildStoryArcPrompt, parseStoryArcResult } from '../../lib/ai/adapters/story-arc-adapter'
-import { assembleContext } from '../../lib/registry/assemble-context'
+import { useMasterCopilot } from '../agent/useMasterCopilot'
 import { CInput } from '../shared/CompositionInput'
 import { CTextarea } from '../shared/CompositionInput'
-import AIStreamOutput from '../shared/AIStreamOutput'
 import { useDialog } from '../shared/Dialog'
 import type { Project, StoryArc, StoryArcType } from '../../lib/types'
-import { parseStages, stringifyStages, type StoryStage } from '../../lib/types/story-arc'
+import { parseStages, type StoryStage } from '../../lib/types/story-arc'
 import { nanoid } from 'nanoid'
 import StorylineProgressPanel from './StorylineProgressPanel'
 
 interface Props {
   project: Project
+  worldGroupId: number | null
 }
 
-export default function StoryArcPanel({ project }: Props) {
+export default function StoryArcPanel({ project, worldGroupId }: Props) {
   const dialog = useDialog()
   const { arcs, activeArcId, loadAll, setActiveArc, addArc, updateArc, deleteArc, updateStages } = useStoryArcStore()
-  const { storyCore, loadAll: loadWorldview } = useWorldviewStore()
-  const { nodes, loadAll: loadOutline } = useOutlineStore()
-  const ai = useAIStream(createAISessionKey(project.id!, 'story-arc.generate'))
+  const copilot = useMasterCopilot({ project, worldGroupId })
   const [genType, setGenType] = useState<StoryArcType>('main')
 
   useEffect(() => {
     loadAll(project.id!)
-    loadWorldview(project.id!)
-    loadOutline(project.id!)
-  }, [project.id, loadAll, loadWorldview, loadOutline])
+  }, [project.id, loadAll])
 
   const activeArc = arcs.find(a => a.id === activeArcId)
   const activeStages = activeArc ? parseStages(activeArc.stages) : []
@@ -54,60 +45,17 @@ export default function StoryArcPanel({ project }: Props) {
     setActiveArc(id)
   }
 
-  // AI 生成故事线
+  const pendingStoryArcCandidates = copilot.pendingCandidates.filter(candidate => (
+    candidate.payload.skillId === 'outline.story-arcs'
+  ))
+  const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
+    candidate.payload.skillId !== 'outline.story-arcs'
+  ))
+
+  // 生成请求统一进入主 Agent 的 outline.story-arcs Skill。
   const handleGenerate = async () => {
-    const assembled = await assembleContext({
-      projectId: project.id!,
-      worldGroupId: null,
-      sourceKeys: ['canonAssertions', 'worldview', 'storyCore', 'powerSystem', 'cultivationProgress', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
-    })
-    const worldCtx = assembled.text
-    const storyCoreCtx = [
-      storyCore?.theme && `主题：${storyCore.theme}`,
-      storyCore?.centralConflict && `核心冲突：${storyCore.centralConflict}`,
-      storyCore?.logline && `Logline：${storyCore.logline}`,
-      storyCore?.mainPlot && `主线：${storyCore.mainPlot}`,
-    ].filter(Boolean).join('\n')
-
-    const outlineSummary = nodes
-      .filter(n => n.type === 'volume')
-      .sort((a, b) => a.order - b.order)
-      .map(v => `${v.title}：${v.summary || '(无摘要)'}`)
-      .join('\n')
-
-    const existingArcs = arcs.length > 0
-      ? arcs.map(a => `[${a.type === 'main' ? '主线' : '支线'}] ${a.name}：${a.description || ''}`).join('\n')
-      : undefined
-
-    const messages = buildStoryArcPrompt(
-      project.name, project.genre || '', worldCtx, storyCoreCtx, outlineSummary, genType, existingArcs,
-    )
-    const raw = await ai.start(messages, undefined, { category: 'story-arc.generate', projectId: project.id! })
-    if (!raw) return
-
-    const result = parseStoryArcResult(raw)
-    if (!result) {
-      console.error('[StoryArc] AI 结果解析失败')
-      return
-    }
-
-    const stages: StoryStage[] = result.stages.map(s => ({
-      id: nanoid(8),
-      title: s.title,
-      description: s.description,
-      keyEvents: s.keyEvents || [],
-      turningPoint: s.turningPoint,
-    }))
-
-    const id = await addArc({
-      projectId: project.id!,
-      name: result.name,
-      type: genType,
-      stages: stringifyStages(stages),
-      description: result.description,
-    })
-    setActiveArc(id)
-    ai.reset()
+    const typeLabel = genType === 'main' ? '主线' : '支线'
+    await copilot.submitRequest(`依据当前作品已确认的世界、故事核心、角色和既有规划，生成一条${typeLabel}故事线。`)
   }
 
   // 删除故事线
@@ -172,29 +120,91 @@ export default function StoryArcPanel({ project }: Props) {
           </select>
           <button
             onClick={handleGenerate}
-            disabled={ai.isStreaming}
+            disabled={
+              copilot.loading
+              || copilot.busy
+              || copilot.pendingCandidates.length > 0
+              || (project.enableMultiWorld === true && worldGroupId == null)
+            }
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors"
           >
-            {ai.isStreaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            {copilot.busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             AI 生成
           </button>
         </div>
       </div>
 
-      {/* AI 输出 */}
-      {(ai.output || ai.isStreaming || ai.error) && (
-        <div className="mb-4">
-          <AIStreamOutput
-            output={ai.output}
-            isStreaming={ai.isStreaming}
-            error={ai.error}
-            tokenUsage={ai.tokenUsage}
-            onStop={ai.stop}
-            onAccept={() => ai.reset()}
-            onRetry={handleGenerate}
-          />
-        </div>
+      {copilot.error && (
+        <p className="mb-4 rounded border border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
+          {copilot.error}
+        </p>
       )}
+
+      {hasOtherPendingCandidates && (
+        <p className="mb-4 rounded border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-text-secondary">
+          主 Agent 还有其他待确认候选，请先在右侧副驾中处理。
+        </p>
+      )}
+
+      {pendingStoryArcCandidates.map(candidate => (
+        <section
+          key={candidate.event.id}
+          className="mb-4 border border-accent/30 bg-bg-surface p-4 rounded-lg"
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-text-primary">待确认 · {candidate.payload.label}</h3>
+            <span className="text-[11px] text-text-muted">
+              {candidate.payload.contextEvidence
+                ? `约 ${candidate.payload.contextEvidence.estimatedInputTokens.toLocaleString()} tokens`
+                : `${candidate.payload.contextSources.length} 个输入来源`}
+            </span>
+          </div>
+          <CTextarea
+            aria-label={`${candidate.payload.label}候选内容`}
+            value={candidate.event.content}
+            disabled={copilot.busy}
+            onChange={event => {
+              void copilot.updateCandidate(candidate.event.id!, event.target.value)
+            }}
+            className="min-h-72 w-full resize-y font-mono text-xs leading-5"
+          />
+          {candidate.payload.contextEvidence && (
+            <details className="mt-2 border border-border/60 bg-bg-base px-3 py-2 text-[11px] text-text-muted rounded">
+              <summary className="cursor-pointer text-text-secondary">本次实际输入证据</summary>
+              <p className="mt-2 break-words">
+                已纳入：{candidate.payload.contextEvidence.included.join('、') || '无'}
+              </p>
+              {candidate.payload.contextEvidence.trimmed.length > 0 && (
+                <p className="mt-1 text-warning">
+                  因预算移除：{candidate.payload.contextEvidence.trimmed.join('、')}
+                </p>
+              )}
+            </details>
+          )}
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={copilot.busy}
+              onClick={() => { void copilot.rejectCandidate(candidate) }}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-text-muted hover:bg-bg-hover hover:text-text-primary rounded disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              拒绝
+            </button>
+            <button
+              type="button"
+              disabled={copilot.busy}
+              onClick={() => { void copilot.adoptCandidate(candidate) }}
+              className="flex items-center gap-1 bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 rounded disabled:opacity-50"
+            >
+              {copilot.busy
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Check className="h-3.5 w-3.5" />}
+              采纳
+            </button>
+          </div>
+        </section>
+      ))}
 
       {/* 故事线编辑 */}
       {activeArc ? (

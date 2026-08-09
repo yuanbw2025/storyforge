@@ -294,7 +294,7 @@ function readOptionalSkillId(
     'world-origin': new Set(['complete']),
     character: new Set(['create']),
     inspiration: new Set(['reverse']),
-    outline: new Set(['auto', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue']),
   }
   if (!allowedModes[agentId].has(skill.executionMode)) {
@@ -998,6 +998,10 @@ function assertCandidateMatchesTaskSkill(
     && (taskSkill.executionMode === 'volumes' || taskSkill.executionMode === 'chapters')
     && payload.outlineMode !== taskSkill.executionMode
   ) fail(`${label} 的大纲模式与 Skill 不一致`)
+  if (
+    taskSkill.executionMode === 'story-arcs'
+    && !['main', 'sub', 'mixed'].includes(payload.storyArcKind ?? '')
+  ) fail(`${label} 的故事线类型与 Skill 不一致`)
   if (
     task.agentId === 'prose'
     && (taskSkill.executionMode === 'generate' || taskSkill.executionMode === 'continue')

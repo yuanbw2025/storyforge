@@ -280,7 +280,7 @@ export default function WorkspacePage() {
       case 'locations':
         return <LocationPanel project={project} />
       case 'story-arc':
-        return <StoryArcPanel project={project} />
+        return <StoryArcPanel project={project} worldGroupId={copilotWorldGroupId} />
       case 'state-table':
         return <StatePanel project={project} onOpenInventory={() => setActiveModule('inventory')} />
       case 'inventory':

@@ -311,6 +311,13 @@
   真实任务路由在开始时冻结，新 durable Run 绑定 provider/model/transport capability hash，旧 Run 不补造
   历史绑定。只有 capability matrix 已验证且显式启用时才使用原生 transport；目前只有模拟端点回归，
   尚无真实 provider 的 token、延迟和质量配对证据，因此默认仍是 `text-json-v1`。
+- HARNESS-30 已把分步骤模式的故事线 AI 生成收口为现有 `outline` Agent 的 `outline.story-arcs` Skill。
+  Skill 从声明的 `CONTEXT_SOURCES` 经 `assembleContext()` 读取世界、故事核心、角色、既有故事线与大纲
+  等来源，支持 empty/partial/complete 输入策略和预算压缩；模型只产生严格的 main/sub 多阶段候选。
+  候选进入既有 durable Run，刷新可恢复，作者可编辑、拒绝或确认；确认后唯一通过
+  `adopt(target=storyArcs)` 写入，并由 snapshot/CAS、结构 gate 和正式数据终验保护。旧
+  `story-arc-adapter` 及生成后直接 `addArc()` 的 AI 旁路已删除，人工新增/编辑/删除继续保留。
+  当前只证明工程闭环和模拟模型合同，不证明故事线质量收益；角色弧、事件图和阶段 3 全量语义评审仍待后续。
 
 ### GOV-1 第一阶段交付证据
 

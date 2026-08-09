@@ -188,13 +188,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 67 个 category。
-未分类调用: 0 个。动态 category 调用: 11 个。
+共 66 个 category。
+未分类调用: 0 个。动态 category 调用: 12 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:417` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:504` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:426` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:513` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
@@ -249,7 +249,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `rules.generate` | `src/components/rules/CreativeRulesPanel.tsx:80` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
-| `story-arc.generate` | `src/components/outline/StoryArcPanel.tsx:85` |
 | `story.generate` | `src/components/worldview/StoryCorePanel.tsx:200` |
 | `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:85` |
 | `storyline-progress.map` | `src/components/outline/StorylineProgressPanel.tsx:76` |
@@ -271,10 +270,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:496 · chat`
 - `src/lib/agent/prose-copilot.ts:649 · chat`
+- `src/lib/agent/story-arc-copilot.ts:556 · chat`
 - `src/lib/agent/world-origin-copilot.ts:255 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/node-authoring/executor.ts:367 · chat`
 
 ---
 
-生成时间基准:commit `0453fdc`
+生成时间基准:commit `dc2d356`

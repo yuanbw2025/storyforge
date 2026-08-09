@@ -25,6 +25,7 @@ export type AgentSkillExecutionModeV1 =
   | 'create'
   | 'reverse'
   | 'auto'
+  | 'story-arcs'
   | 'volumes'
   | 'chapters'
   | 'generate'
@@ -101,6 +102,26 @@ const OUTLINE_CONTEXT_SOURCE_KEYS = [
   'historical',
   'locations',
   'foreshadows',
+  'storyArcs',
+  'storylineProgress',
+  'existingVolumeOutlines',
+  'writtenChapterProgress',
+] as const
+
+const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
+  'projectStatus',
+  'canonAssertions',
+  'worldview',
+  'storyCore',
+  'characterDrivenPlan',
+  'powerSystem',
+  'cultivationProgress',
+  'codex',
+  'characters',
+  'creativeRules',
+  'worldRules',
+  'historical',
+  'locations',
   'storyArcs',
   'storylineProgress',
   'existingVolumeOutlines',
@@ -255,6 +276,24 @@ const OUTLINE_VOLUME_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+const OUTLINE_STORY_ARC_INPUT_POLICY = {
+  sourceKeys: ['worldview', 'storyCore', 'characters'],
+  states: {
+    empty: {
+      handling: 'create-from-request',
+      instruction: '上游世界、故事核心和角色均为空；只按作者本轮要求创建最小故事线候选，所有补全都不得冒充已确认设定。',
+    },
+    partial: {
+      handling: 'reference-and-create',
+      instruction: '锁定已有上游内容并围绕缺失部分补足故事线；清楚区分作者事实与规划推断，不覆盖已确认设定。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格把已有世界、故事核心和角色目标编排为主线/支线，保持规则、动机、因果和阶段一致。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
 const OUTLINE_CHAPTER_INPUT_POLICY = {
   sourceKeys: ['worldview', 'storyCore', 'characters', 'storyArcs', 'existingVolumeOutlines'],
   states: {
@@ -332,6 +371,17 @@ const OUTLINE_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'storyCore',
   'activeNarrativeBlueprint',
+  'characterDrivenPlan',
+  'powerSystem',
+  'codex',
+  'characters',
+  'historical',
+  'storyArcs',
+  'existingVolumeOutlines',
+])
+const OUTLINE_STORY_ARC_COMPRESSION_POLICY = compressionPolicy([
+  'worldview',
+  'storyCore',
   'characterDrivenPlan',
   'powerSystem',
   'codex',
@@ -481,6 +531,29 @@ export const AGENT_SKILLS = [
     writeTargets: [],
     lastVerifiedAt: '2026-08-09',
     regressionTests: ['R-HARNESS27-master-candidate-semantic-review'],
+  },
+  {
+    version: 1,
+    id: 'outline.story-arcs',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '主线与支线编排',
+    owner: 'outline-agent',
+    promptVersion: 'story-arc-copilot-v1',
+    executionMode: 'story-arcs',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: OUTLINE_STORY_ARC_INPUT_POLICY,
+    contextCompression: OUTLINE_STORY_ARC_COMPRESSION_POLICY,
+    maxOutputTokens: 10_000,
+    writeTargets: [{ table: 'storyArcs', fields: ['name', 'type', 'stages', 'description'] }],
+    lastVerifiedAt: '2026-08-09',
+    regressionTests: [
+      'R-HARNESS30-story-arc-agent',
+      'R-HARNESS30-story-arc-panel-ui',
+    ],
   },
   {
     version: 1,
@@ -893,7 +966,7 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['complete', 'review']),
     character: new Set(['create']),
     inspiration: new Set(['reverse', 'review']),
-    outline: new Set(['auto', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory']),
   }
   const ids = new Set<string>()
