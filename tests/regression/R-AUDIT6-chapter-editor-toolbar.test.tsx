@@ -15,6 +15,7 @@ async function mount(patch: Record<string, unknown> = {}) {
     hasOrganizationCandidate: false,
     analyzingImpact: false,
     impactInfo: null,
+    impactRemediationPlan: null,
     impactPatchTargets: [],
     impactPatchTargetId: null,
     impactPatchSummary: '',
@@ -185,6 +186,25 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     await act(async () => button(rendered.host, '放弃修订').click())
     expect(rendered.props.onConfirmImpactPatch).toHaveBeenCalledOnce()
     expect(rendered.props.onRejectImpactPatch).toHaveBeenCalledOnce()
+  })
+
+  it('显示绑定 hash 的确定性影响处理计划，不触发隐藏执行', async () => {
+    const { host, props } = await mount({
+      impactInfo: '后续产物需要处理',
+      impactRemediationPlan: {
+        version: 1,
+        source: { table: 'chapters', recordId: 3, sourceTextHash: 'a'.repeat(64) },
+        graphHash: 'b'.repeat(64),
+        items: [],
+        counts: { total: 5, deterministic: 2, authorConfirmed: 3 },
+        planHash: 'c'.repeat(64),
+      },
+    })
+    expect(host.textContent).toContain('处理计划 5 项')
+    expect(host.textContent).toContain('系统重建 2')
+    expect(host.textContent).toContain('作者复核 3')
+    expect(host.textContent).toContain('cccccccccccc')
+    expect(props.onCreateImpactPatch).not.toHaveBeenCalled()
   })
 
   it('明确选择章节叙事视角并允许恢复为不指定', async () => {

@@ -1,6 +1,7 @@
 import { BookOpenCheck, Check, ClipboardList, Eye, GitBranch, Loader2, ShieldCheck, StickyNote, X } from 'lucide-react'
 import { CInput } from '../shared/CompositionInput'
 import type { ImpactPatchCandidateV1 } from '../../lib/agent/run/impact-patch-durable'
+import type { ImpactRemediationPlanV1 } from '../../lib/consistency/impact-remediation-plan'
 
 interface ImpactPatchTarget {
   id: number
@@ -15,6 +16,7 @@ interface Props {
   hasOrganizationCandidate: boolean
   analyzingImpact: boolean
   impactInfo: string | null
+  impactRemediationPlan: ImpactRemediationPlanV1 | null
   impactPatchTargets: ImpactPatchTarget[]
   impactPatchTargetId: number | null
   impactPatchSummary: string
@@ -58,6 +60,7 @@ export default function ChapterEditorToolbar({
   hasOrganizationCandidate,
   analyzingImpact,
   impactInfo,
+  impactRemediationPlan,
   impactPatchTargets,
   impactPatchTargetId,
   impactPatchSummary,
@@ -135,6 +138,14 @@ export default function ChapterEditorToolbar({
             <span className="flex-1">{impactInfo}</span>
             <button onClick={onDismissImpact} aria-label="关闭影响分析结果" className="text-text-muted hover:text-text-primary"><X className="h-3.5 w-3.5" /><span className="sr-only">×</span></button>
           </div>
+          {impactRemediationPlan && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border/70 bg-bg-elevated/60 px-2 py-1.5 text-[11px] text-text-secondary">
+              <span>处理计划 {impactRemediationPlan.counts.total} 项</span>
+              <span>系统重建 {impactRemediationPlan.counts.deterministic}</span>
+              <span>作者复核 {impactRemediationPlan.counts.authorConfirmed}</span>
+              <span className="ml-auto text-text-muted">计划 {impactRemediationPlan.planHash.slice(0, 12)}</span>
+            </div>
+          )}
           {impactPatchTargets.length > 0 && !impactPatchCandidate && (
             <div className="grid gap-2 md:grid-cols-[minmax(150px,0.7fr)_minmax(200px,1.5fr)_minmax(160px,1fr)_auto]">
               <label className="flex items-center gap-2 rounded border border-border bg-bg-elevated px-2 text-text-secondary">

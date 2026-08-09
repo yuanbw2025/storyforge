@@ -13,6 +13,10 @@ import { buildReviewRevisePrompt, type ReviewResult } from '../../lib/ai/adapter
 import { rebuildChapterChunks, ensureChunkEmbeddings, rebuildProjectNarrativeSummaries } from '../../lib/retrieval/retrieval'
 import { isEmbeddingReady } from '../../lib/ai/adapters/embedding-adapter'
 import { propagateChapterEditStale, buildEditImpactGraphV1, type EditImpactGraphV1 } from '../../lib/consistency/impact-analysis'
+import {
+  buildImpactRemediationPlanV1,
+  type ImpactRemediationPlanV1,
+} from '../../lib/consistency/impact-remediation-plan'
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
 import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
@@ -222,6 +226,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [impactInfo, setImpactInfo] = useState<string | null>(null)
   const [analyzingImpact, setAnalyzingImpact] = useState(false)
   const [impactGraph, setImpactGraph] = useState<EditImpactGraphV1 | null>(null)
+  const [impactRemediationPlan, setImpactRemediationPlan] = useState<ImpactRemediationPlanV1 | null>(null)
   const [impactPatchTargetId, setImpactPatchTargetId] = useState<number | null>(null)
   const [impactPatchSummary, setImpactPatchSummary] = useState('')
   const [impactPatchReason, setImpactPatchReason] = useState('')
@@ -301,6 +306,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   useEffect(() => {
     let active = true
     setImpactGraph(null)
+    setImpactRemediationPlan(null)
     setImpactInfo(null)
     setImpactPatchTargetId(null)
     setImpactPatchSummary('')
@@ -1686,7 +1692,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       await persistCurrentEditorContent()
       const { demotedFacts } = await propagateChapterEditStale(project.id, currentChapter.id)
       const graph = await buildEditImpactGraphV1(project.id, currentChapter.id)
+      const remediationPlan = await buildImpactRemediationPlanV1(graph)
       setImpactGraph(graph)
+      setImpactRemediationPlan(remediationPlan)
       setImpactPatchCandidate(null)
       setImpactPatchError('')
       setImpactPatchSummary('')
@@ -1702,6 +1710,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         `源自本章事实 ${graph.nodes.filter(node => node.kind === 'fact').length} 条`,
         demotedFacts > 0 ? `其中 ${demotedFacts} 条证据已失效→标记 stale 待复核` : '证据均仍成立',
         `建议复核后续 ${graph.downstreamChapterIds.length} 章、${graph.nodes.filter(node => node.kind === 'summary').length} 个摘要节点`,
+        `治理计划 ${remediationPlan.counts.deterministic} 项可确定性重建、${remediationPlan.counts.authorConfirmed} 项须作者确认`,
         `证据指纹 ${graph.graphHash.slice(0, 12)}`,
       ]
       setImpactInfo(parts.join('；'))
@@ -1720,6 +1729,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
     setImpactInfo(null)
     setImpactGraph(null)
+    setImpactRemediationPlan(null)
     setImpactPatchTargetId(null)
     setImpactPatchSummary('')
     setImpactPatchReason('')
@@ -1764,6 +1774,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       await loadOutlineNodes(project.id!)
       setImpactPatchCandidate(null)
       setImpactGraph(null)
+      setImpactRemediationPlan(null)
       setImpactPatchTargetId(null)
       setImpactPatchSummary('')
       setImpactPatchReason('')
@@ -2545,6 +2556,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           )}
           analyzingImpact={analyzingImpact}
           impactInfo={impactInfo}
+          impactRemediationPlan={impactRemediationPlan}
           impactPatchTargets={impactPatchTargets}
           impactPatchTargetId={impactPatchTargetId}
           impactPatchSummary={impactPatchSummary}

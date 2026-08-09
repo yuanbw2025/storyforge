@@ -1059,6 +1059,12 @@ CHIRON 四类信息可映射到现有结构：
 - 候选 UI 支持刷新恢复、确认和拒绝。恢复时重新核对候选 hash、源正文 hash、影响图 hash 和 durable step 状态；过期、损坏或跨作用域候选不显示为可确认项。确认调用 `adoptImpactPatchCandidateV1()`，拒绝写入 durable `confirmation.recorded`，正式大纲只有确认后才变化。
 - 该入口仍只允许 `outlineNodes.summary`，不改变正文、事实权威状态、locked 数据或其它下游产物；`R-AUDIT6-chapter-editor-toolbar` 覆盖入口转发和候选操作，HARNESS-44 回归覆盖实际 durable 写回边界。
 
+**影响处理计划（HARNESS-46，2026-08-10）**
+
+- `buildImpactRemediationPlanV1()` 复用 HARNESS-43 的确定性影响图，把每个节点分类为 `deterministic`（当前仅摘要和检索块可由代码重建）或 `author-confirmed`（事实、来源记录、状态/物品/年表/故事线、章纲和后续正文必须先由作者确认）。每项保存节点依赖、责任模式、动作和理由，计划 hash 绑定正文 hash 与 graph hash。
+- `ChapterEditor` 在影响分析结果中展示计划总数、系统重建数、作者复核数和计划指纹；该 UI 不启动模型、不写业务表、不把“计划存在”当作处理完成。后续真正执行重建或重跑必须创建新的 durable Run，在执行前重新读取影响图并校验 `sourceTextHash + graphHash + planHash`。
+- HARNESS-46 的验收证据是 `R-HARNESS46-impact-remediation-plan` 的闭集分类、依赖排序、稳定 hash 和损坏图阻断，加上 `R-AUDIT6-chapter-editor-toolbar` 的只读展示测试。它不宣称通用反向反馈、自动级联修订或文学质量收益已经交付。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；
