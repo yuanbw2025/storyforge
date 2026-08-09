@@ -345,6 +345,12 @@ evidenceSpan
 | 语义评审 | 角色动机与世界条件一致、物品不是无代价解法、核心冲突可持续 |
 | 写入 | 统一 Adoption；Character Copilot 的重复/stale/CAS 能力成为普通 AI 入口的共享契约 |
 
+**HARNESS-31 已交付边界（2026-08-09）：** 故事核心七字段保留原人工编辑，AI 入口归属现有
+`world-foundation-agent` 的 `world-origin.story-core` Skill。每次只生成一个 `{field,value}` 候选；
+empty/partial/complete 输入策略、正式登记上下文、预算压缩/全文救援、完整故事核心 snapshot/CAS、durable
+恢复、作者编辑/拒绝/确认、`adopt(storyCores)` 和正式字段终验已闭合。角色、物品、关系的普通入口收口及
+完整 Foundation 反推仍未由本单元交付。
+
 ### 8.4 阶段 3：主线、支线、角色弧与关键事件
 
 | 项目 | 设计 |
@@ -592,7 +598,7 @@ Receipt 绑定 `contractHash + contextManifestHash + sourceHashes + candidateHas
 
 ## 16. 必须收口的旧入口
 
-1. 世界观和故事核心组件内的手工上下文与 `slice()`，统一改由 Skill Recipe → `assembleContext()`。
+1. 世界观组件内的手工上下文与 `slice()`，统一改由 Skill Recipe → `assembleContext()`；~~故事核心手工上下文~~已由 HARNESS-31 收口到 `world-origin.story-core`，旧 `story-adapter` 已删除，人工编辑保留。
 2. ~~故事线 AI 生成的直接 `db.storyArcs.add()`~~：HARNESS-30 已收口为 `outline.story-arcs` durable 候选并统一经 `adopt()`；人工 CRUD 保留。
 3. 普通角色弱 parser 与 Character Copilot 双入口，统一 AI 契约，手动角色编辑保留。
 4. 正文接受后的 best-effort 后处理，收口为可恢复 post-step barrier。

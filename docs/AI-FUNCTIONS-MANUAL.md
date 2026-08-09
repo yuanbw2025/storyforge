@@ -456,13 +456,11 @@
 
 #### 动作①~⑦：每个字段 AI 生成
 - **触发**：🔘 手动，每个字段独立按钮
-- **读**（统一模式）：
-  - `worldviews.worldOrigin / powerHierarchy / races / factionLayout / historyLine`
-  - `storyCores.其它已写字段`
-  - `当前字段值`
-  - `用户输入提示`
-- **提示词**：`story.generate`（dimension 分别为：一句话故事 / 故事概念 / 主题 / 核心冲突 / 故事模式 / 主线 / 复线）
-- **写**：`storyCores.对应字段（覆盖）`
+- **执行**：主 Agent → `world-origin.story-core`，每轮固定一个目标字段与 expand/rewrite/polish 模式
+- **读**：Skill 声明的 `projectStatus / canonAssertions / worldview / storyCore / powerSystem / codex / characters / storyArcs / existingVolumeOutlines`，统一经 `assembleContext()`；按预算压缩并保留全文救援证据
+- **候选**：严格 `{ "field": "目标字段", "value": "候选内容" }`；刷新可恢复，可编辑或拒绝
+- **提示词配置**：`story.generate` 面板参数和自定义要求会转入受约束 Agent 请求，不改变 Skill 写权限
+- **写**：作者确认后只经 `adopt(target=storyCores)` 覆盖对应字段；确认前零写入，完整故事核心 snapshot/CAS 防止旧候选覆盖新编辑
 
 ---
 

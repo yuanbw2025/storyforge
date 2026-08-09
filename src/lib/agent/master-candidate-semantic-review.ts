@@ -165,7 +165,7 @@ function formatReviewContext(assembled: AssembleContextResult): string {
 function domainRubric(domain: MasterCandidateReviewDomainV1): string {
   return domain === 'world-origin'
     ? [
-        '核对候选是否与已登记世界来源、力量体系、词条和项目概况发生可逐字举证的冲突。',
+        '核对世界基座候选是否与已登记世界观、故事核心、力量体系、角色、故事线、词条和项目概况发生可逐字举证的冲突。',
         '没有登记来源证据时，空泛、因果不足或偏离作者意图只能记为 warning/uncertain，不能 blocking。',
       ].join('\n')
     : [

@@ -1,32 +1,26 @@
 /**
- * R-12: single-field AI generation must include current field value.
+ * R-12: single-field AI generation must preserve field-level author intent.
  *
  * Regression target:
- *   Field-level AI generation used only user hints and surrounding context,
- *   so when the user had already typed half a field, AI generation could
- *   ignore it and start over.
+ *   Worldview still uses the legacy field prompt boundary. Story core now
+ *   reads its current value from the registered storyCore source; that runtime
+ *   evidence is covered by R-HARNESS31-story-core-agent.
  */
 import { describe, it, expect } from 'vitest'
-import { buildStoryGeneratePrompt } from '../../src/lib/ai/adapters/story-adapter'
+import { formatStoryCoreGenerationRequestV1 } from '../../src/lib/agent/story-core-copilot'
 import { buildWorldviewPrompt } from '../../src/lib/ai/adapters/worldview-adapter'
 
 describe('R-12: AI field current value injection', () => {
-  it('story.generate renders current field value and mode guidance', () => {
-    const messages = buildStoryGeneratePrompt(
-      '核心冲突',
-      '镜城纪事',
-      'fantasy',
-      '【世界观】镜城按港口城邦运行。',
-      '加强主角个人代价',
-      undefined,
-      '主角想废除镜税，但父亲正是镜税账房。',
-      'expand',
-    )
+  it('story-core request freezes the governed field, mode and author hint', () => {
+    const request = formatStoryCoreGenerationRequestV1({
+      field: 'centralConflict',
+      mode: 'expand',
+      hint: '加强主角个人代价',
+    })
 
-    const prompt = messages.map(m => m.content).join('\n\n')
-    expect(prompt).toContain('主角想废除镜税')
-    expect(prompt).toContain('本次生成模式】扩写')
-    expect(prompt).toContain('加强主角个人代价')
+    expect(request).toContain('目标字段=centralConflict')
+    expect(request).toContain('生成模式=expand')
+    expect(request).toContain('加强主角个人代价')
   })
 
   it('worldview.dimension rewrite mode ignores current field value', () => {

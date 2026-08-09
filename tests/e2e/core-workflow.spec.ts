@@ -1071,6 +1071,91 @@ test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见�
   expect(generationCalls).toBe(3)
 })
 
+test('故事核心面板通过主 Agent 生成单字段候选，刷新恢复后编辑采纳并持久化', async ({ page }) => {
+  let generationCalls = 0
+  const modelCandidate = {
+    field: 'logline',
+    value: '守灯人为找回父亲遗失的记忆追查潮汐钟，却发现整座港城依靠遗忘维持秩序。',
+  }
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'story-core-copilot-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    const body = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = body.messages?.map(message => message.content).join('\n') ?? ''
+    const isPlanner = combined.includes('你只把用户目标拆成幕后领域任务')
+    if (!isPlanner) {
+      generationCalls += 1
+      expect(combined).toContain('story-core Skill')
+      expect(combined).toContain('目标字段是 logline')
+      expect(combined).toContain('E2E 故事核心 Harness 闭环')
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            content: isPlanner
+              ? JSON.stringify({
+                  summary: '交给世界基座 Agent 的故事核心 Skill。',
+                  tasks: [{
+                    id: 'story-core-1',
+                    agentId: 'world-origin',
+                    skillId: 'world-origin.story-core',
+                    instruction: '生成故事核心字段。目标字段=logline；生成模式=expand。',
+                    dependsOn: [],
+                  }],
+                })
+              : JSON.stringify(modelCandidate),
+          },
+        }],
+        usage: { prompt_tokens: 180, completion_tokens: 50, total_tokens: 230 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 故事核心 Harness 闭环')
+  await openSidebarLeaf(page, '设定库', '故事设计')
+  await expect(page.getByRole('heading', { name: /一句话故事/ })).toBeVisible()
+
+  await page.getByRole('button', { name: 'AI 生成', exact: true }).click()
+  const candidate = page.getByRole('textbox', { name: '一句话故事候选内容' })
+  await expect(candidate).toContainText(modelCandidate.value)
+  await expect(page.getByText('点击填写一句话故事…', { exact: true })).toBeVisible()
+  await expect(page.getByText('本次实际输入证据', { exact: true })).toBeVisible()
+
+  await page.reload()
+  await openSidebarLeaf(page, '设定库', '故事设计')
+  await expect(candidate).toContainText(modelCandidate.value)
+  await expect(page.getByText('点击填写一句话故事…', { exact: true })).toBeVisible()
+
+  const edited = {
+    ...modelCandidate,
+    value: '作者确认版：守灯人为找回父亲主动典当的记忆追查潮汐钟，并拒绝让港城继续以遗忘换取安稳。',
+  }
+  await candidate.fill(JSON.stringify(edited, null, 2))
+  await page.getByRole('button', { name: '采纳', exact: true }).click()
+  await expect(page.getByText(edited.value, { exact: true })).toBeVisible()
+  await expect(candidate).toHaveCount(0)
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '设定库', '故事设计')
+  await expect(page.getByText(edited.value, { exact: true })).toBeVisible()
+  await expect(candidate).toHaveCount(0)
+})
+
 test('主 Agent 使用项目灵感碎片生成候选，拒绝零写入并保存可见版本', async ({ page }) => {
   let generationCalls = 0
   const modelResult = {

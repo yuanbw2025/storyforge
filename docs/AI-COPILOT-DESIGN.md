@@ -171,7 +171,7 @@ Agent 编排不是从零开始做一个新的一致性系统。它站在“收�
 | 工具 | 复用 adapter / prompt key |
 |------|--------------------------|
 | `generate_worldview_field` | `worldview-adapter` / `worldview.dimension` |
-| `generate_story_core` | `story-adapter` / `story.generate` |
+| `generate_story_core` | 主 Agent `world-origin.story-core` / `story-core-copilot-v1`；`story.generate` 仅保留作者 Prompt 配置入口 |
 | `generate_character` | `character-adapter` / `character.generate` |
 | `generate_volume_outline` | `outline-adapter` / `outline.volume` |
 | `generate_chapter_outline` | `outline-adapter` / `outline.chapter` |

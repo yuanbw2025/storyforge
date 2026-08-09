@@ -42,9 +42,10 @@
 4. **长期一致性能力是“模块闭环”，不是“创作主流程闭环”。** NS-0~NS-6、事实/认知/物品/检索/摘要/stale/影响分析和一致性 Agent 有独立测试，但正文接受后的检索、状态提取、记忆和审查是 best-effort 异步任务，没有统一的完成判定和恢复协议。
 5. **质量不稳定的主要推断根因是接入断裂和证据断裂，而不是单纯缺少记忆模块。** 该推断由下文逐条代码、测试和调用路径支持，仍需通过后续主流程 held-out 评测验证。
 
-> 2026-08-09 更新：本审计记录的是改造前基线。HARNESS-30 已修复下文指出的故事线 AI 直接写入旁路：
-> 产品入口现路由到 `outline.story-arcs`，读取经 `assembleContext()`，候选进入 durable Run，作者确认后只经
-> `adopt(target=storyArcs)` 写入；旧 adapter 已删除，人工 CRUD 保留。其余审计结论不因该单元自动失效。
+> 2026-08-09 更新：本审计记录的是改造前基线。HARNESS-30 已修复下文指出的故事线 AI 直接写入旁路；
+> HARNESS-31 已将故事核心七个字段的 AI 入口收口到 `world-origin.story-core`。两者都只经
+> `assembleContext()` 读取，候选进入 durable Run，作者确认后只经 `adopt()` 写入，旧 AI adapter 已删除，
+> 人工编辑保留。其余审计结论不因这两个垂直切片自动失效。
 
 ## 1. 审计方法与证据等级
 
@@ -89,11 +90,11 @@
 | 产物/能力 | 入口与事实 | 读/生成/写回证据 | 失败、反馈、观测 | 状态 |
 |---|---|---|---|---|
 | 世界观：起源/自然/人文 | `WorldviewOriginPanel.tsx`、`WorldviewNaturalPanel.tsx`、`WorldviewHumanityPanel.tsx` | 使用 `useAIStream`；保存 action 多数经 store `adopt()`，但各面板仍在组件内手拼并截断字段（起源 `:90-107`、自然 `:86-101`、人文 `:102-121`） | 神明信仰另起一次 `streamChat` 做 JSON 拆分，失败时把全文降级到 `divineRank`（起源 `:366-409`）；无统一 source manifest/终态回执 | D |
-| 故事核心 | `StoryCorePanel.tsx` | `:72-85` 手工拼接 world view 并逐字段 `slice()`；`:184-200` 只装配 `historical` 后拼接；`:251-263` 接受纯文本后写 `saveStoryCore()` → `adopt()` | 有重试按钮，缺结构化 parser、语义冲突 gate、上下文快照和持久失败状态 | D |
+| 故事核心 | `StoryCorePanel.tsx`、`story-core-copilot.ts` | HARNESS-31 后 AI 入口只提交 `world-origin.story-core` 单字段任务；Skill 声明上下文并经 `assembleContext()` 读取，严格候选为 `{field,value}`，确认后经 `adopt(storyCores)` | durable 候选支持刷新恢复、编辑/拒绝/确认；完整故事核心 snapshot/CAS、正式字段回读和 terminal verifier 已接入；人工编辑仍经原 store/adopt | A（HARNESS-31） |
 | 角色普通生成 | `CharacterPanel.tsx` | `:120-160` 用 `assembleContext()`；`:298-327` 解析后 `adopt(target: 'characters')` | parser 失败可 fallback name/background，全文可作为 background；与 Copilot 的重复姓名、stale、事务 gate 不同 | D |
 | 角色 Copilot | `src/lib/agent/character-copilot.ts` | 只读工具装配世界观/角色，冻结 roster snapshot，结构化候选，事务内重复/过期检查和 `adopt()`（`:327-386,397-410`） | 有 stale/duplicate 错误和回归测试，但没有证据表明普通分步骤角色按钮已切换到该路径 | B |
 | 角色补全 | `CharacterSupplementAction.tsx` | `:49-85` 通过 `assembleContext()` 读取设定；可选读事实/正文证据；`adopt(recordId, merge-diffs)` | 解析空补丁直接返回；单任务可用，未纳入统一 run 恢复 | A（局部） |
-| 主线/支线 | `StoryArcPanel.tsx` | `:82-109` 解析 `stages` 后调用 `addArc()`；adapter `:41-45` 手工 `slice(0,500)`；parser `:58-83` 仅检查 `name` 和数组 | `story-arc.ts:62-79` 直接 DB add/update；无结构 schema、阶段/因果/Canon gate | D（明确旁路） |
+| 主线/支线 | `StoryArcPanel.tsx`、`story-arc-copilot.ts` | HARNESS-30 后 AI 入口只提交 `outline.story-arcs`；上下文经 `assembleContext()`，严格多阶段候选确认后经 `adopt(storyArcs)` | durable 候选、snapshot/CAS、结构 gate 和正式状态终验已接入；人工 CRUD 保留 | A（HARNESS-30） |
 | 卷纲/章纲 | `OutlinePanel.tsx`、`useOutlineGenerationController.ts` | `:178-205` 显式 source keys；`GenerationNode` 负责 prepare/run；`adopt-generation.ts` 通过 `adopt()` 写 `outlineNodes` | 有预览、透明模式、取消、重试、JSON/重构/兜底解析和重复标题提示；没有 durable run/checkpoint/统一 terminal verifier | A（节点级） |
 | 细纲/场景 | `DetailedOutlinePanel.tsx`、`ScenePanel.tsx` | `:124-139` 装配章纲/世界/角色/伏笔；增强细纲 `:181-214` 解析、过滤合法 ID、`adopt()`；场景采纳 `ScenePanel.tsx:75-83` | JSON 失败可 AI 重构；有 `lastUsedSummary` stale 提示；批量 `:233-260` 仅 UI 循环 + AbortController，无 durable attempt/checkpoint/resume | A（单次），D（批量） |
 | 正文生成/续写 | `ChapterEditor.tsx` | `:524-568` 通过 `assembleContext()` 读取章纲、细纲、连续性、事实、认知、物品、检索、故事线等；`GenerationNode`/prose copilot 可生成候选 | 接受后先写正文，再异步检索块、摘要、状态提取、章节 memory（`:990-1044`）；大多数失败只日志/降级，无 run terminal receipt | A（生成），D（后处理） |
@@ -191,9 +192,9 @@ flowchart TD
 
 | 问题/失效点 | 代码或测试证据 | 结论类型 | 影响 |
 |---|---|---|---|
-| 注册表存在但主路径不统一 | 世界观/故事核心手工 `slice()`；故事线 `addArc()` 直接 `db.storyArcs.add()`；普通角色与 Copilot 并存 | 推断 | 来源、预算、校验和写回标准不一致，模型输入/输出质量受入口影响 |
+| 注册表存在但主路径不统一 | 审计基线中的故事核心/故事线旁路已由 HARNESS-30/31 收口；世界观仍有组件手工 `slice()`，普通角色与 Copilot 仍并存 | 事实 → 推断 | 剩余入口仍会使用不同来源、预算、校验和写回标准，模型输入/输出质量受入口影响 |
 | 上下文可登记但不可完整复核 | `assembleContext()` 返回内存 `included/omitted/trimmed`；正文只打印控制台日志 | 事实 → 推断 | 无法可靠回答某次生成实际读了哪些源、何时被裁剪；问题难以回放 |
-| 结构化契约强弱不一致 | 细纲有 JSON 重构和合法 ID 过滤；故事线 parser 只检查 `name`/`stages`；故事核心接受任意文本 | 事实 | 缺字段、类型错、阶段因果和 Canon 冲突可能进入正式数据 |
+| 结构化契约强弱不一致 | 故事核心/故事线已改为严格候选合同；世界观、普通角色、细纲等入口的 parser/gate 强度仍不一致 | 事实 | 剩余弱入口中的缺字段、类型错和 Canon 冲突仍可能进入正式数据 |
 | 正文后处理无统一完成屏障 | `handleAutoPostGenerate()` 依次重建检索、状态提取、memory；失败仅 `console.error`/降级，调用方 `void` 启动 | 事实 → 推断 | UI/作者可能看到正文已保存，却不知道派生记忆、状态和检索是否完成；失败无法按步骤恢复 |
 | 质量 Agent 未绑定主 run | 一致性候选写入 `agentEvents`，有 hash current；没有 run terminal/receipt 关联 | 事实 | 审查结果可查但不能决定某次创作是否完成，也不能自动触发上游修正 |
 | 下游反馈只有提示没有闭环 | `impact-analysis` 明确“只读、只提示，不自动改正文” | 事实 | 发现冲突后作者仍需手工判断、修改和重跑，容易让 stale 事实继续传播 |
@@ -204,7 +205,7 @@ flowchart TD
 
 **推断 1：质量能力分散在多个工程批次，缺少统一执行控制面。** NS-0~NS-6、Agent、透明管线分别交付了局部能力；每个模块能证明自己的不变量，但没有一个 run 负责把步骤依赖、重试、终态和证据连接起来。
 
-**推断 2：主路径接入断裂比“记忆不足”更可能解释实际效果不稳。** 直接证据是故事线旁路写库、世界观/故事核心手工上下文、普通角色入口未统一到 Copilot。相同项目在不同入口上使用不同上下文和 gate，生成质量自然不可比。
+**推断 2：主路径接入断裂比“记忆不足”更可能解释实际效果不稳。** 审计时的直接证据包括故事线旁路写库、世界观/故事核心手工上下文、普通角色入口未统一到 Copilot；其中前两项里的故事线和故事核心已由 HARNESS-30/31 修复，世界观与普通角色仍需继续收口。相同项目在剩余不同入口上使用不同上下文和 gate，生成质量仍不可比。
 
 **推断 3：失败可见性不足导致错误继续向后传播。** 正文后处理失败只记录日志并保留 tail/旧状态，没有 durable attempt 和明确的“部分完成/待恢复”状态，后续步骤可能继续读取旧的派生记忆。
 
@@ -256,10 +257,10 @@ flowchart TB
 | 长期事实/状态/记忆 | NS-1~NS-6 局部能力已实现 | 作为步骤输入且与 run/receipt 绑定 | 运行状态绑定缺失 | H2/H3，高 |
 | 执行控制 | `GenerationNode` 请求内 prepare/run/gate/adopt | durable state machine、取消、重试、resume | 缺持久 run ledger | H1，高 |
 | Agent 协作 | 有 orchestrator/DAG/预算和领域 Agent | 动态选择但窄职责、依赖可验证、共享写冲突受控 | 现有 orchestrator 不是分步骤主入口 | H2，中高 |
-| 产物契约 | 角色/大纲/细纲较强，故事核心/故事线较弱 | 每个步骤有 versioned schema 和 migration/compat 策略 | parser/gate 不一致 | H2，高 |
+| 产物契约 | 故事核心/故事线已有版本化严格候选；其余入口强弱不一 | 每个步骤有 versioned schema 和 migration/compat 策略 | 剩余 parser/gate 不一致 | H2，高 |
 | 校验 | 一致性 Agent、硬 guard、局部 gate | verifier 独立签发 fresh receipt；语义评审与确定性检查分层 | 无统一终态 | H3，高 |
 | 反馈 | stale + 后续章节提示，下游反推可显式读取 | 影响图、patch candidate、作者确认、按依赖重跑 | 缺反向 patch workflow | H4，中高 |
-| 写入治理 | 三注册表强，故事线主路径旁路 | 所有 AI 写回统一 adopt；人工路径显式标注 | 需要收口旁路 | H2，高 |
+| 写入治理 | 三注册表强；故事核心/故事线 AI 已收口，剩余入口继续核查 | 所有 AI 写回统一 adopt；人工路径显式标注 | 需要逐入口证明无旁路 | H2，高 |
 | 观测与回放 | 控制台日志、agent events、透明预览 | run trace、manifest、成本/延迟、失败分类、replay | 缺 run 级持久证据 | H1/H5，高 |
 | 评测 | 模块级 NS/AGENT/PIPELINE 和少量 held-out | 真实分步骤端到端、失败注入、回放等价、质量/成本门槛 | 缺主链证据 | H0/H5，高 |
 | 数据生命周期 | `PROJECT_TABLES` 66 表，导入导出/remap 有测试 | 新 run 表（如需要）也必须注册表派生完整生命周期 | 尚未决定是否新增表 | H1 先复用现有表，避免扩表 |
@@ -328,5 +329,5 @@ npm run ci
 
 - 研究文档提出的目标 Harness 是否能提高真实长篇质量，尚无本项目端到端因果证据。
 - 当前 `agentEvents` 是否足以承载 H1 ledger，需先做容量、查询、并发和迁移评估；不能默认扩展。
-- 统一故事核心/故事线结构化契约会不会改变既有作者数据和 prompt 行为，必须用兼容 parser、回归 fixture 和可关闭 feature flag 验证。
+- 故事核心/故事线结构化合同现已用旧数据兼容、定向回归和浏览器刷新闭环验证；真实模型质量收益仍需固定 fixture 与 A/B 证据，不能由工程测试推断。
 - 反向 patch 的最小影响范围和人工确认 UX 尚未定稿；在 H4 之前不应自动修改上游或下游 Canon。

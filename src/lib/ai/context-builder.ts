@@ -119,6 +119,7 @@ export function formatStoryCoreBlock(sc: StoryCore | null): string {
   if (!sc) return ''
   const parts = [
     sc.logline && `一句话故事：${sc.logline}`,
+    sc.concept && `故事概念：${sc.concept}`,
     sc.theme && `主题：${sc.theme}`,
     sc.centralConflict && `核心冲突：${sc.centralConflict}`,
     sc.plotPattern && `情节模式：${sc.plotPattern}`,

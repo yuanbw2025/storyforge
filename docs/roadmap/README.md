@@ -233,7 +233,7 @@
   一个入口，同一正文只发起一次综合抽取；状态、受控事实、物品、故事年表、关系和伏笔
   六域候选均须逐字证据。候选复用归档 `agentConversations/agentEvents` 保存，刷新可恢复；
   正文 hash 变化阻断写回，物品/年表按章整批替换失败会事务回滚，事实只进入 candidate。
-- HARNESS-18/19/20/27 已把 15 个领域 Skill、11 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
+- HARNESS-18/19/20/27/30/31 已把 17 个领域 Skill、13 个提示词版本和 14 个只读工具的规范 schema hash 冻结进
   新主 Agent RunContract 与候选 hash；恢复会拒绝 Skill/Prompt/Tool 漂移，旧合同继续按旧协议
   恢复。CI 新增 45 天复核、owner、版本和回归证据新鲜度闸门；该能力只保证执行可归因，
   不冒充真实模型质量收益。
@@ -318,6 +318,13 @@
   `adopt(target=storyArcs)` 写入，并由 snapshot/CAS、结构 gate 和正式数据终验保护。旧
   `story-arc-adapter` 及生成后直接 `addArc()` 的 AI 旁路已删除，人工新增/编辑/删除继续保留。
   当前只证明工程闭环和模拟模型合同，不证明故事线质量收益；角色弧、事件图和阶段 3 全量语义评审仍待后续。
+- HARNESS-31 已把分步骤故事核心七字段的 AI 生成收口为现有世界基座 Agent 的
+  `world-origin.story-core` Skill。Skill 只经 `assembleContext()` 读取声明的世界、故事核心、力量、词条、
+  角色、故事线和卷纲，具备 empty/partial/complete 输入处理、预算压缩与全文救援；每轮只返回一个严格
+  `{field,value}` 候选。候选进入 durable Run，刷新可恢复且可编辑/拒绝/确认；确认前正式数据零写入，
+  确认后只经 `adopt(storyCores)`，完整故事核心 snapshot/CAS、字段 gate 和 terminal verifier 回读正式值。
+  旧 `story-adapter` 和组件级上下文拼接已删除，人工编辑与 Prompt 配置保留。当前只有工程闭环及模拟模型
+  的 Chromium 刷新证据，不能宣称真实生成质量已经提升。
 
 ### GOV-1 第一阶段交付证据
 

@@ -286,6 +286,15 @@ Run 负责候选持久化、刷新恢复、作者编辑/拒绝/确认、采纳�
 回归覆盖真实 orchestrator 分支和面板交互，但仍是模拟模型响应，不证明 Narrative Blueprint 的语义质量，
 也不表示角色弧、事件图和信息释放规划已经全部交付。
 
+HARNESS-31 现状（2026-08-09）：分步骤故事核心的七个 AI 按钮已统一归属现有
+`world-foundation-agent` 的 `world-origin.story-core` Skill，而不是新增顶层 Agent。Skill 冻结七个可写字段、
+empty/partial/complete 输入策略、登记上下文集合、预算压缩与全文救援策略；`storyCore` 来源同时修复了
+长期漏装 `concept` 的问题。模型每轮只能返回一个严格 `{field,value}` 候选，完整故事核心 snapshot/CAS
+会在任一字段变化后拒绝旧候选。候选进入主 Agent durable Run，刷新可恢复且可编辑、拒绝或确认；确认前
+`storyCores` 零写入，确认后只经 `adopt(target=storyCores)`，terminal verifier 回读正式目标字段。旧
+`story-adapter` 和组件级上下文拼接已删除，七字段人工编辑与 Prompt 配置入口保留。当前证据覆盖真实
+orchestrator、组件和 Chromium 刷新闭环，但模型响应仍为模拟，不证明故事核心文学质量收益。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。

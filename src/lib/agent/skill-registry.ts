@@ -22,6 +22,7 @@ export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
 
 export type AgentSkillExecutionModeV1 =
   | 'complete'
+  | 'story-core'
   | 'create'
   | 'reverse'
   | 'auto'
@@ -106,6 +107,18 @@ const OUTLINE_CONTEXT_SOURCE_KEYS = [
   'storylineProgress',
   'existingVolumeOutlines',
   'writtenChapterProgress',
+] as const
+
+const STORY_CORE_CONTEXT_SOURCE_KEYS = [
+  'projectStatus',
+  'canonAssertions',
+  'worldview',
+  'storyCore',
+  'powerSystem',
+  'codex',
+  'characters',
+  'storyArcs',
+  'existingVolumeOutlines',
 ] as const
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
@@ -218,6 +231,24 @@ const WORLD_FOUNDATION_INPUT_POLICY = {
     complete: {
       handling: 'grounded-transform',
       instruction: '严格依据已填写的世界基础生成，并保持规则、术语与因果一致。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
+const STORY_CORE_INPUT_POLICY = {
+  sourceKeys: ['worldview', 'storyCore'],
+  states: {
+    empty: {
+      handling: 'create-from-request',
+      instruction: '世界观与故事核心都为空；若已有角色、故事线或大纲，可把它们作为下游反推证据创建目标字段候选，否则只依据作者要求创建；任何反推都只是候选，不得冒充已确认设定。',
+    },
+    partial: {
+      handling: 'reference-and-create',
+      instruction: '锁定已有世界观或故事核心字段，只补足当前目标字段；可用角色、故事线或大纲反推缺失联系，但不得覆盖作者已填写的其他字段，也不得把反推内容写入非目标字段。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格依据已填写世界观与故事核心生成目标字段，并用现有角色、故事线和大纲检查下游兼容性；下游证据不能覆盖已确认上游。',
     },
   },
 } as const satisfies AgentSkillInputPolicyV1
@@ -365,6 +396,15 @@ function compressionPolicy(
 }
 
 const WORLD_COMPRESSION_POLICY = compressionPolicy(['worldview', 'powerSystem', 'codex'])
+const STORY_CORE_COMPRESSION_POLICY = compressionPolicy([
+  'worldview',
+  'storyCore',
+  'powerSystem',
+  'codex',
+  'characters',
+  'storyArcs',
+  'existingVolumeOutlines',
+])
 const CHARACTER_COMPRESSION_POLICY = compressionPolicy(['worldview', 'powerSystem', 'codex', 'characters'])
 const INSPIRATION_COMPRESSION_POLICY = compressionPolicy(['inspirationWorkspace'])
 const OUTLINE_COMPRESSION_POLICY = compressionPolicy([
@@ -453,7 +493,7 @@ export const AGENT_SKILLS = [
     executionMode: 'review',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
-    contextSourceKeys: ['projectStatus', 'worldview', 'powerSystem', 'codex'],
+    contextSourceKeys: ['projectStatus', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'storyArcs'],
     optionalContextSourceKeys: [],
     inputPolicy: WORLD_FOUNDATION_INPUT_POLICY,
     contextCompression: WORLD_COMPRESSION_POLICY,
@@ -461,6 +501,32 @@ export const AGENT_SKILLS = [
     writeTargets: [],
     lastVerifiedAt: '2026-08-09',
     regressionTests: ['R-HARNESS27-master-candidate-semantic-review'],
+  },
+  {
+    version: 1,
+    id: 'world-origin.story-core',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: '故事核心单字段生成',
+    owner: 'world-foundation-agent',
+    promptVersion: 'story-core-copilot-v1',
+    executionMode: 'story-core',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: STORY_CORE_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: STORY_CORE_INPUT_POLICY,
+    contextCompression: STORY_CORE_COMPRESSION_POLICY,
+    maxOutputTokens: 6_000,
+    writeTargets: [{
+      table: 'storyCores',
+      fields: ['logline', 'concept', 'theme', 'centralConflict', 'plotPattern', 'mainPlot', 'subPlots'],
+    }],
+    lastVerifiedAt: '2026-08-09',
+    regressionTests: [
+      'R-HARNESS31-story-core-agent',
+      'R-HARNESS31-story-core-panel-ui',
+    ],
   },
   {
     version: 1,
@@ -963,7 +1029,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'review']),
+    'world-origin': new Set(['complete', 'story-core', 'review']),
     character: new Set(['create']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'volumes', 'chapters']),

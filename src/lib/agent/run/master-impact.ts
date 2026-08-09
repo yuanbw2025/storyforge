@@ -32,6 +32,12 @@ const TARGET_TABLE_BY_AGENT: Record<string, string> = {
   prose: 'chapters',
 }
 
+function targetTableFor(candidate: MasterAgentDurableCandidateV1): string {
+  if (candidate.payload.skillId === 'world-origin.story-core') return 'storyCores'
+  if (candidate.payload.skillId === 'outline.story-arcs') return 'storyArcs'
+  return TARGET_TABLE_BY_AGENT[candidate.payload.agentId] ?? 'unknown'
+}
+
 function contentForReport(report: MasterAgentImpactReportV1): string {
   const subject = `${report.agentId} → ${report.changed.table}`
   if (report.agentId === 'prose') {
@@ -67,7 +73,7 @@ async function buildReport(
     stepId: payload.runStepId ?? `master:${payload.taskId}`,
     agentId,
     direction: agentId === 'prose' ? 'upstream-review' : 'downstream-review',
-    changed: { table: TARGET_TABLE_BY_AGENT[agentId] ?? 'unknown', id: null },
+    changed: { table: targetTableFor(candidate), id: null },
     upstreamContextSources: [...new Set(payload.contextSources)],
     sourceFactIds: [],
     staleFactIds: [],
@@ -75,6 +81,11 @@ async function buildReport(
     staleSummaryNodeIds: [],
     retrievalChunkCount: 0,
     requiresAuthorReview: agentId !== 'prose',
+  }
+
+  if (payload.skillId === 'world-origin.story-core') {
+    const row = (await readOwnedRows<any>(scope, 'storyCores', { owner: 'work' }))[0]
+    report.changed.id = typeof row?.id === 'number' ? row.id : null
   }
 
   if (agentId !== 'prose' || payload.proseOutlineNodeId == null) {
