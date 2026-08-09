@@ -2042,9 +2042,85 @@ test('世界地图把明确距离和方位落实到命名实体，并持久化�
   await expect(page.locator('select').last()).toHaveValue('2')
 })
 
-test('角色驱动方案可持久化、复制版本并显式设为后续 AI 参考', async ({ page }) => {
+test('角色驱动 Skill 隔离选定方案，恢复确认后持久化并导入正式大纲', async ({ page }) => {
+  let generationCalls = 0
+  const oldCandidate = [{
+    volumeTitle: '旧候选秘密卷',
+    volumeSummary: '旧结果只用于验证重新生成时不会回灌模型。',
+    characterArcs: '新角色从守塔职责走向第一次主动追查。',
+    chapters: [{
+      title: '旧候选秘密章',
+      summary: '新角色听见港务官告知潮汐钟失窃，决定离开灯塔调查。',
+      keyCharacters: ['新角色'],
+      arcProgress: '港务官的告知促使新角色从被动守塔转为主动调查。',
+    }],
+  }]
+  const modelCandidate = [{
+    volumeTitle: '第一卷 归潮',
+    volumeSummary: '新角色沿着潮汐钟线索回到旧港，并把个人抉择接入既有故事核心。',
+    characterArcs: '新角色从逃避旧港转向承担守护共同记忆的责任。',
+    chapters: [{
+      title: '第一章 失钟',
+      summary: '新角色从守灯人口中得知潮汐钟失窃，亲自查验钟楼后决定追查。',
+      keyCharacters: ['新角色'],
+      arcProgress: '守灯人的告知和现场查验推动新角色停止逃避并开始调查。',
+    }],
+  }]
+  const editedCandidate = [{
+    ...modelCandidate[0],
+    volumeSummary: '作者确认版：新角色沿着潮汐钟线索回到旧港，并拒绝让共同记忆再次被交易。',
+  }]
+
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'character-driven-copilot-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls += 1
+    const body = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = body.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain('角色驱动编排硬约束')
+    if (generationCalls === 1) {
+      expect(combined).toContain('其它激活方案秘密')
+    } else {
+      expect(generationCalls).toBe(2)
+      expect(combined).toContain('当前方案起点：逃避旧港旧案')
+      expect(combined).toContain('当前方案终点：守护共同记忆')
+      expect(combined).toContain('当前方案要求：必须服务潮汐钟故事核心')
+      expect(combined).toContain('守灯人必须在共同记忆与港城安全之间作出选择')
+      expect(combined).not.toContain('旧候选秘密卷')
+      expect(combined).not.toContain('其它激活方案秘密')
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{ message: { content: JSON.stringify(
+          generationCalls === 1 ? oldCandidate : modelCandidate,
+        ) } }],
+        usage: { prompt_tokens: 260, completion_tokens: 100, total_tokens: 360 },
+      }),
+    })
+  })
+
   await openCleanHome(page)
-  await createProject(page, 'E2E 角色驱动工作区')
+  await createProject(page, 'E2E 角色驱动 Harness 闭环')
+
+  await openSidebarLeaf(page, '设定库', '故事设计')
+  await page.getByText('点击填写一句话故事…', { exact: true }).click()
+  const storyCoreEditor = page.getByPlaceholder('点击填写一句话故事…')
+  await storyCoreEditor.fill('守灯人必须在共同记忆与港城安全之间作出选择。')
+  await storyCoreEditor.blur()
+  await expect(page.getByText('守灯人必须在共同记忆与港城安全之间作出选择。', { exact: true }))
+    .toBeVisible()
 
   await openSidebarLeaf(page, '角色设计', '角色生成')
   await page.getByRole('button', { name: /新建角色/ }).click()
@@ -2063,31 +2139,67 @@ test('角色驱动方案可持久化、复制版本并显式设为后续 AI 参�
   const initial = page.getByPlaceholder('角色在故事开始时的状态、处境、性格特点...')
   const target = page.getByPlaceholder('角色在故事结束时应达到的状态、成长结果...')
   const hint = page.getByPlaceholder(/控制在3卷以内/)
-  await initial.fill('逃避故乡与旧案')
+  await initial.fill('被动守在外海灯塔')
   await initial.blur()
-  await target.fill('主动承担守护故乡的责任')
+  await target.fill('主动追查潮汐钟失窃案')
   await target.blur()
-  await hint.fill('必须服务既有主线')
+  await hint.fill('其它激活方案秘密：必须留在外海')
   await hint.blur()
 
-  await page.getByRole('button', { name: '重命名', exact: true }).click()
-  await page.getByPlaceholder('方案名称').fill('归乡弧光')
-  await page.getByRole('button', { name: '确认', exact: true }).click()
-  await expect(page.getByLabel('当前角色驱动方案')).toContainText('归乡弧光')
+  await page.getByRole('button', { name: '生成剧情大纲', exact: true }).click()
+  const candidate = page.getByRole('textbox', { name: '角色驱动卷章候选内容' })
+  await expect(candidate).toContainText('旧候选秘密卷')
+  await expect(page.getByText('本次实际输入证据', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '保存到当前方案', exact: true }).click()
+  await expect(page.getByText('生成结果：1 卷，1 章', { exact: true })).toBeVisible()
+  await expect(page.getByText('旧候选秘密卷', { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: '复制为新版本', exact: true }).click()
-  await expect(page.getByLabel('当前角色驱动方案')).toContainText('v2')
   await page.getByRole('button', { name: '设为当前参考', exact: true }).click()
   await expect(page.getByRole('button', { name: '后续 AI 正在参考', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '复制为新版本', exact: true }).click()
+  await expect(page.getByLabel('当前角色驱动方案')).toContainText('v2')
+  await expect(page.getByRole('button', { name: '设为当前参考', exact: true })).toBeVisible()
 
+  await initial.fill('当前方案起点：逃避旧港旧案')
+  await initial.blur()
+  await target.fill('当前方案终点：守护共同记忆')
+  await target.blur()
+  await hint.fill('当前方案要求：必须服务潮汐钟故事核心')
+  await hint.blur()
+  await page.getByRole('button', { name: '生成剧情大纲', exact: true }).click()
+  await expect(candidate).toContainText('第一卷 归潮')
+  await expect(page.getByText('旧候选秘密卷', { exact: true })).toBeVisible()
+
+  await page.reload()
+  await openSidebarLeaf(page, '创作区', '角色驱动')
+  const planPicker = page.getByLabel('当前角色驱动方案')
+  const copiedPlanValue = await planPicker.locator('option').filter({ hasText: 'v2' }).getAttribute('value')
+  expect(copiedPlanValue).not.toBeNull()
+  await planPicker.selectOption(copiedPlanValue!)
+  await expect(candidate).toContainText('第一卷 归潮')
+  await candidate.fill(JSON.stringify(editedCandidate, null, 2))
+  await page.getByRole('button', { name: '保存到当前方案', exact: true }).click()
+  await expect(candidate).toHaveCount(0)
+  await expect(page.getByText(editedCandidate[0].volumeSummary, { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: '设为当前参考', exact: true }).click()
+  await expect(page.getByRole('button', { name: '后续 AI 正在参考', exact: true })).toBeVisible()
   await page.reload()
   await openSidebarLeaf(page, '创作区', '角色驱动')
   await expect(page.getByLabel('当前角色驱动方案')).toContainText('v2')
   await expect(page.getByLabel('当前角色驱动方案').locator('option')).toHaveCount(2)
-  await expect(initial).toHaveValue('逃避故乡与旧案')
-  await expect(target).toHaveValue('主动承担守护故乡的责任')
-  await expect(hint).toHaveValue('必须服务既有主线')
+  await expect(initial).toHaveValue('当前方案起点：逃避旧港旧案')
+  await expect(target).toHaveValue('当前方案终点：守护共同记忆')
+  await expect(hint).toHaveValue('当前方案要求：必须服务潮汐钟故事核心')
+  await expect(page.getByText(editedCandidate[0].volumeSummary, { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '后续 AI 正在参考', exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: '导入选中卷到大纲（1 卷）', exact: true }).click()
+  await expect(page.getByText('已成功导入到大纲', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '大纲', exact: true }).click()
+  await expect(page.locator('input[value="第一卷 归潮"]')).toBeVisible()
+  await expect(page.locator('input[value="第一章 失钟"]')).toBeVisible()
+  expect(generationCalls).toBe(2)
 })
 
 test('角色中途重规划保护已写正文，只把审查后的 patch 应用到未来大纲', async ({ page }) => {

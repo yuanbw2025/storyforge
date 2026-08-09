@@ -320,6 +320,15 @@ Canon 采纳；生成时通过主 Agent 的定向任务入口把作者选择的�
 角色或世界组。旧面板级 `useAIStream`、组件级 `assembleContext()` 和直接模型调用已删除。当前证据证明入口、
 任务契约和候选治理，不证明真实 provider 的文学质量、成本或延迟收益；多世界 Canon 采纳仍是单独的作者确认动作。
 
+HARNESS-35 现状（2026-08-09）：分步骤“角色驱动剧情”的开书规划入口已统一进入现有大纲 Agent 的
+`outline.character-driven` Skill，不把它误作“由角色反推世界基座”。面板先保存作者填写的角色起点、终点和要求，
+再把方案 ID 冻结进 durable plan；Skill 通过 `read_character_driven_plan` 只读取该方案输入，世界、故事核心、角色、
+规则、故事线和既有大纲只经 `CONTEXT_SOURCES + assembleContext()` 装配。候选使用严格卷章合同，确定性检查额外字段、
+重复标题、未知角色和角色弧覆盖；作者第一次确认只经 `adopt(recordId, characterDrivenPlans)` 保存到当前方案，第二次
+勾选卷后才经既有 `adoptCharacterDrivenVolumes() → adopt(outlineNodes)` 进入正式大纲。旧组件 `useAIStream`、自动保存、
+弱 `parsePlotOutput` 和无调用 Prompt 构造模块已删除；人工方案、版本、激活参考、中途重规划和 Prompt 配置保留。当前
+证据证明工程闭环和模拟模型合同，不证明真实模型的叙事编排质量收益。
+
 ### 3.3 主 Agent 与领域执行
 
 入口：[`createMasterAgentPlan()` / `executeMasterAgentPlan()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/lib/agent/orchestrator.ts#L304-L404) 和 [`useMasterCopilot()`](https://github.com/yuanbw2025/storyforge/blob/271fb39f14e37eef324642bf85270fda828b0f52/src/components/agent/useMasterCopilot.ts#L30-L86)。

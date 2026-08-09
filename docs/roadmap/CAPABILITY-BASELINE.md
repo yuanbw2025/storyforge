@@ -521,6 +521,12 @@
   `assembleContext()` 读取。候选可刷新恢复、编辑、拒绝或确认，确认只经 `adopt(inspirationWorkspaces)`
   新增版本，不自动写世界观、故事核心、角色或世界组。旧面板级 `useAIStream`、直接模型调用和手工上下文装配
   已删除；现有碎片库、差异审阅、多世界预览与显式 Canon 采纳保留。当前无真实模型质量、成本或延迟 A/B。
+- HARNESS-35 已交付 `outline.character-driven` 主入口收口：角色驱动开书规划把当前方案 ID 冻结进 durable plan，
+  方案输入只经 `read_character_driven_plan` 读取，其它上游只经 `assembleContext()`；重新生成不注入旧方案结果。
+  候选使用严格卷章合同，并校验额外字段、重复标题、未知角色、角色弧覆盖和信息释放边界。第一次确认只经
+  `adopt(recordId, characterDrivenPlans)` 保存方案，第二次勾选卷才经 `adopt(outlineNodes)` 写正式大纲；旧
+  `useAIStream`、自动保存、弱 parser 和无调用 Prompt 构造模块已删除。人工输入、版本、激活参考、中途重规划和
+  Prompt 配置保留；角色反推世界基座与真实模型质量 A/B 不在本单元完成。
 - `check:agent-freshness` 已进入 CI，静态检查每个 Skill 的 owner、提示词版本、45 天复核期限和可定位回归证据；工具 schema 快照另由运行时 hash 回归防漂移。
 - 应用是纯前端、本地 IndexedDB、可导出/导入和多种备份恢复路径。
 - Phase 27.2a 场景考证按钮已存在；多世界、角色、地点、状态和故事线数据可作为未来运行时底座。

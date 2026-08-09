@@ -476,6 +476,10 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   json('inspirationWorkspaces', 'fragments'),
   json('inspirationWorkspaces', 'versions'),
 
+  // STORY-1: AI 只能定点更新既有角色驱动方案的候选结果，不能创建或改写方案输入。
+  json('characterDrivenPlans', 'generatedVolumes'),
+  enumeration('characterDrivenPlans', 'status', ['draft', 'generated', 'adopted']),
+
   num('referenceChunkAnalysis', 'referenceId'),
   num('referenceChunkAnalysis', 'analysisRunId'),
   num('referenceChunkAnalysis', 'chunkIndex'),

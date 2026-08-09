@@ -521,7 +521,7 @@ flowchart LR
         WGS["world-group-ai<br/>parseWorldSuggestOutput<br/>parseWorldExpandOutput"]
         REFAN["reference-analysis pipeline<br/>分块分析 + 维度合并<br/>角色聚合 parseCharacterMergeOutput"]
         SCV["scene-verify-adapter<br/>无写回 纯建议"]
-        CDPA["character-driven-plot<br/>parsePlotOutput"]
+        CDPA["Outline Agent<br/>outline.character-driven<br/>严格候选 + durable Run"]
         REV["review-adapter<br/>parseReviewResult"]
         RDB["readability-adapter"]
     end

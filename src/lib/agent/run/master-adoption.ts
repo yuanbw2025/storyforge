@@ -29,6 +29,10 @@ import {
   storyArcCandidateMatchesRowV1,
 } from '../story-arc-copilot'
 import {
+  characterDrivenCandidateMatchesPlanV1,
+  parseCharacterDrivenCandidateDraftV1,
+} from '../character-driven-copilot'
+import {
   parseStoryCoreCandidateDraft,
   storyCoreCandidateMatchesRowV1,
 } from '../story-core-copilot'
@@ -418,6 +422,17 @@ async function businessAlreadyMatches(
     return false
   }
   if (agentId === 'outline') {
+    if (candidate.payload.skillId === 'outline.character-driven') {
+      const planId = candidate.payload.characterDrivenPlanId
+      if (planId == null) return false
+      const expected = parseCharacterDrivenCandidateDraftV1(candidate.draft)
+      const plan = (await readOwnedRows<any>(
+        input.scope,
+        'characterDrivenPlans',
+        { owner: 'work' },
+      )).find(row => row.id === planId)
+      return characterDrivenCandidateMatchesPlanV1(expected, plan)
+    }
     if (candidate.payload.skillId === 'outline.story-arcs') {
       const expected = parseStoryArcCandidateDraft(candidate.draft)
       const rows = await readOwnedRows<any>(input.scope, 'storyArcs', { owner: 'work' })
@@ -465,7 +480,10 @@ async function repairPartialOutlineAdoption(
   candidate: MasterAgentDurableCandidateV1,
 ): Promise<void> {
   if (candidate.payload.agentId !== 'outline') return
-  if (candidate.payload.skillId === 'outline.story-arcs') return
+  if (
+    candidate.payload.skillId === 'outline.story-arcs'
+    || candidate.payload.skillId === 'outline.character-driven'
+  ) return
   const mode = candidate.payload.outlineMode
   if (!mode) throw new Error('大纲候选缺少写回模式')
   const items = parseOutlineCandidateDraft(candidate.draft)

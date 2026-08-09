@@ -7,6 +7,7 @@ import { useInspirationWorkspaceStore } from '../../stores/inspiration-workspace
 import { useOutlineStore } from '../../stores/outline'
 import { useStoryArcStore } from '../../stores/story-arc'
 import { useWorldviewStore } from '../../stores/worldview'
+import { useCharacterDrivenPlanStore } from '../../stores/character-driven-plan'
 import { chat, resolveRequestConfig } from '../ai/client'
 import { db } from '../db/schema'
 import {
@@ -77,6 +78,12 @@ import {
   type StoryArcCopilotSnapshot,
   type StoryArcRequestKind,
 } from './story-arc-copilot'
+import {
+  adoptRestoredCharacterDrivenCandidateV1,
+  parseCharacterDrivenCandidateDraftV1,
+  prepareCharacterDrivenCopilotV1,
+  type CharacterDrivenCopilotSnapshotV1,
+} from './character-driven-copilot'
 import type {
   AgentContextEvidence,
 } from './context-policy'
@@ -132,6 +139,8 @@ export interface MasterAgentTask {
   perspectiveCharacterId?: number | null
   /** 灵感领域的显式碎片选择；缺省时由主 Agent 使用受限默认选择。 */
   inspirationFragmentIds?: string[]
+  /** 角色驱动规划面板明确选择的方案；只允许 outline.character-driven。 */
+  characterDrivenPlanId?: number
 }
 
 export interface MasterAgentPlan {
@@ -166,6 +175,7 @@ export interface MasterCandidatePayload {
   baseSnapshot: unknown
   mode?: InspirationResultMode
   selectedFragmentIds?: string[]
+  characterDrivenPlanId?: number
   outlineMode?: OutlineCopilotMode
   outlineParentId?: number | null
   storyArcKind?: StoryArcRequestKind
@@ -211,6 +221,7 @@ export interface PinnedMasterAgentTaskV1 {
   dependsOn?: string[]
   perspectiveCharacterId?: number | null
   inspirationFragmentIds?: string[]
+  characterDrivenPlanId?: number
   id?: string
 }
 
@@ -412,6 +423,18 @@ export async function createMasterAgentPlan(input: {
     if (pinned.agentId !== 'inspiration' && pinned.inspirationFragmentIds !== undefined) {
       throw new Error('只有灵感领域任务可以固定灵感碎片。')
     }
+    if (
+      pinned.characterDrivenPlanId !== undefined
+      && (
+        pinned.agentId !== 'outline'
+        || pinned.skillId !== 'outline.character-driven'
+        || !Number.isInteger(pinned.characterDrivenPlanId)
+        || pinned.characterDrivenPlanId < 1
+      )
+    ) throw new Error('只有角色驱动大纲 Skill 可以固定角色驱动方案。')
+    if (pinned.skillId === 'outline.character-driven' && pinned.characterDrivenPlanId === undefined) {
+      throw new Error('角色驱动大纲 Skill 必须固定角色驱动方案。')
+    }
     return {
       summary: pinned.agentId === 'inspiration'
         ? '按作者选择的灵感碎片生成结构化反推候选。'
@@ -427,6 +450,9 @@ export async function createMasterAgentPlan(input: {
           : {}),
         ...(pinned.inspirationFragmentIds !== undefined
           ? { inspirationFragmentIds: [...new Set(pinned.inspirationFragmentIds)].slice(0, 24) }
+          : {}),
+        ...(pinned.characterDrivenPlanId !== undefined
+          ? { characterDrivenPlanId: pinned.characterDrivenPlanId }
           : {}),
       }],
       workflow,
@@ -923,7 +949,58 @@ async function executeSequentialMasterAgentPlan(
         })
         outputs.set(task.id, draft)
       } else if (task.agentId === 'outline') {
-        if (skill.executionMode === 'story-arcs') {
+        if (skill.executionMode === 'character-driven') {
+          if (task.characterDrivenPlanId == null) {
+            throw new Error('角色驱动规划任务缺少固定方案 ID。')
+          }
+          const prepared = await prepareCharacterDrivenCopilotV1({
+            projectId: input.projectId,
+            scope,
+            worldGroupId: input.worldGroupId,
+            planId: task.characterDrivenPlanId,
+            authorRequest: task.instruction,
+            skillId: skill.id as AgentSkillId,
+            routingCategory: `${AGENT_ROLE_CATEGORIES.outline}.character-driven`,
+            contextProfile,
+            contextCompressionRuntime,
+            signal: input.signal,
+          })
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '角色驱动卷章编排 Skill',
+            maxOutputTokens: skill.maxOutputTokens,
+            validate: output => validateDomainCandidateCanon({
+              agentId: task.agentId,
+              projectId: input.projectId,
+              worldGroupId: input.worldGroupId,
+              outputText: JSON.stringify(output),
+            }),
+          })
+          const draft = JSON.stringify(result.output, null, 2)
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              workspaceScope: scope,
+              characterDrivenPlanId: prepared.snapshot.planId,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        } else if (skill.executionMode === 'story-arcs') {
           const prepared = await prepareStoryArcCopilot({
             projectId: input.projectId,
             scope,
@@ -1367,6 +1444,8 @@ export async function adoptMasterCandidate(input: {
       ? parseStoryCoreCandidateDraft(input.draft)
       : input.payload.skillId === 'outline.story-arcs'
       ? parseStoryArcCandidateDraft(input.draft)
+      : input.payload.skillId === 'outline.character-driven'
+      ? parseCharacterDrivenCandidateDraftV1(input.draft)
       : input.payload.agentId === 'world-origin'
       ? input.draft
       : input.payload.agentId === 'character'
@@ -1449,7 +1528,18 @@ export async function adoptMasterCandidate(input: {
       result: result as InspirationCopilotResult,
     })
   } else if (input.payload.agentId === 'outline') {
-    if (input.payload.skillId === 'outline.story-arcs') {
+    if (input.payload.skillId === 'outline.character-driven') {
+      if (input.payload.characterDrivenPlanId == null) {
+        throw new Error('角色驱动候选缺少目标方案，请重新生成。')
+      }
+      await adoptRestoredCharacterDrivenCandidateV1({
+        projectId: input.projectId,
+        scope,
+        planId: input.payload.characterDrivenPlanId,
+        snapshot: input.payload.baseSnapshot as CharacterDrivenCopilotSnapshotV1,
+        draft: input.draft,
+      })
+    } else if (input.payload.skillId === 'outline.story-arcs') {
       await adoptRestoredStoryArcCandidate({
         projectId: input.projectId,
         scope,
@@ -1491,6 +1581,7 @@ export async function adoptMasterCandidate(input: {
     useOutlineStore.getState().loadAll(scope),
     useStoryArcStore.getState().loadAll(scope),
     useChapterStore.getState().loadAll(scope),
+    useCharacterDrivenPlanStore.getState().loadAll(scope),
   ])
   return input.payload.agentId === 'world-origin'
     ? input.payload.skillId === 'world-origin.worldview-field'
@@ -1503,7 +1594,9 @@ export async function adoptMasterCandidate(input: {
       : input.payload.agentId === 'inspiration'
         ? `已保存新的${input.payload.mode === 'multiworld' ? '多世界' : '单世界'}灵感版本。`
         : input.payload.agentId === 'outline'
-          ? input.payload.skillId === 'outline.story-arcs'
+          ? input.payload.skillId === 'outline.character-driven'
+            ? '角色驱动卷章方案已保存到当前版本。'
+            : input.payload.skillId === 'outline.story-arcs'
             ? '故事线已写入项目。'
             : input.payload.outlineMode === 'volumes'
             ? '卷级大纲已写入项目。'

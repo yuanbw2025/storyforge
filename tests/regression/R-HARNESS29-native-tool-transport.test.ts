@@ -16,6 +16,7 @@ import type { AgentModelAdapter } from '../../src/lib/agent/runner'
 import { getAIProviderCapabilityProfileV1 } from '../../src/lib/ai/provider-capabilities'
 import { db } from '../../src/lib/db/schema'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
+import { AGENT_READ_TOOLS } from '../../src/lib/agent/tool-registry'
 import type { AIConfig, WorkspaceScope } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 
@@ -212,7 +213,12 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     const firstBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
     expect(firstBody.tool_choice).toBe('auto')
-    expect(firstBody.tools).toHaveLength(14)
+    expect(firstBody.tools).toHaveLength(AGENT_READ_TOOLS.length)
+    expect(firstBody.tools.map((tool: { function: { name: string } }) => tool.function.name)).toEqual(
+      AGENT_READ_TOOLS.map(tool => tool.name),
+    )
+    expect(firstBody.tools.map((tool: { function: { name: string } }) => tool.function.name))
+      .toContain('read_character_driven_plan')
     expect(JSON.stringify(firstBody.tools)).not.toMatch(/projectId|worldGroupId/u)
     expect(firstBody.messages[0].content).not.toContain('read_project_status(')
     const secondBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body))
@@ -325,7 +331,10 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
     const retryBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body))
     expect(retryBody.messages.at(-1).content).toContain('只调用已声明的只读工具')
     expect(retryBody.messages.at(-1).content).not.toContain('tool 或 final JSON')
-    expect(retryBody.tools).toHaveLength(14)
+    expect(retryBody.tools).toHaveLength(AGENT_READ_TOOLS.length)
+    expect(retryBody.tools.map((tool: { function: { name: string } }) => tool.function.name)).toEqual(
+      AGENT_READ_TOOLS.map(tool => tool.name),
+    )
   })
 
   it('selects transport from the routed provider and rejects unsupported native calls before fetch', async () => {

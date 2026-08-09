@@ -416,6 +416,8 @@ export interface AssembleContextInput {
   inspirationFragmentIds?: string[]
   /** CM-1: 单世界与多世界各自维护最近确认版本。 */
   inspirationMode?: InspirationResultMode
+  /** STORY-1: 角色驱动规划 Skill 明确冻结的方案；缺省时仍读取作者激活的下游参考方案。 */
+  characterDrivenPlanId?: number
   /** AGENT-1: 本地确定性项目搜索；只由 searchResults 上下文源消费。 */
   searchQuery?: string
   /** AGENT-1: 搜索最多返回 10 条短摘。 */

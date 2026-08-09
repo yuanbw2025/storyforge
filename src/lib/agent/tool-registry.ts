@@ -187,6 +187,21 @@ const READ_TOOL_SPECS: readonly ReadToolSpec[] = [
     argRules: { allowed: ['fragmentIds', 'mode'], required: ['fragmentIds', 'mode'] },
   },
   {
+    name: 'read_character_driven_plan',
+    description: '只读取本次明确选择的角色驱动方案输入，不注入旧生成结果。',
+    parameters: {
+      type: 'object',
+      properties: {
+        planId: { type: 'integer', minimum: 1, description: '本次角色驱动规划方案 ID' },
+      },
+      required: ['planId'],
+      additionalProperties: false,
+    },
+    sourceKeys: ['characterDrivenPlan'],
+    inputBudgetTokens: 7000,
+    argRules: { allowed: ['planId'], required: ['planId'] },
+  },
+  {
     name: 'search_text',
     description: '在当前项目与世界作用域内做本地包含匹配，只返回有界短摘，不调用网络或 embedding。',
     parameters: {
@@ -248,7 +263,7 @@ function validateArgs(spec: ReadToolSpec, raw: Record<string, unknown>): Record<
   if (missing.length) throw new Error(`缺少必填参数：${missing.join(', ')}`)
 
   const args = { ...raw }
-  for (const key of ['chapterId', 'outlineNodeId', 'characterId']) {
+  for (const key of ['chapterId', 'outlineNodeId', 'characterId', 'planId']) {
     if (key in args) args[key] = positiveInteger(args[key], key)
   }
   if ('query' in args) {
@@ -324,6 +339,7 @@ async function resolveScope(
   const chapterId = args.chapterId as number | undefined
   const outlineNodeId = args.outlineNodeId as number | undefined
   const characterId = args.characterId as number | undefined
+  const characterDrivenPlanId = args.planId as number | undefined
   let chapterOutlineNodeId: number | undefined
   const assertOutlineWorld = async (nodeId: number) => {
     let node = await db.outlineNodes.get(nodeId)
@@ -374,6 +390,15 @@ async function resolveScope(
       && (character.homeWorldGroupId ?? null) !== (worldGroupId ?? null)
     ) throw new Error('角色不属于当前世界作用域')
   }
+  if (characterDrivenPlanId != null) {
+    const plan = await db.characterDrivenPlans.get(characterDrivenPlanId)
+    if (!plan || !await assertRecordInScope(
+      workspaceScope,
+      'characterDrivenPlans',
+      plan,
+      { owner: 'work' },
+    )) throw new Error('角色驱动方案不存在或不属于当前作品')
+  }
 
   return {
     projectId,
@@ -387,6 +412,7 @@ async function resolveScope(
     searchKinds: args.kinds as string[] | undefined,
     inspirationFragmentIds: fragmentIds,
     inspirationMode,
+    characterDrivenPlanId,
     provider: context.provider,
     model: context.model,
     sourceKeys: [...spec.sourceKeys],

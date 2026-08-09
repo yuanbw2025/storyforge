@@ -384,6 +384,14 @@ empty/partial/complete 输入策略、正式登记上下文、预算压缩/全�
 直接写入入口已删除，人工 CRUD 保留。上表中的角色弧、事件图、交汇条件、信息释放规划和完整语义评审
 仍是后续能力，不能由本单元冒充完成。
 
+**HARNESS-35 已交付边界（2026-08-09）：** 现有“角色驱动剧情”开书规划属于大纲 Agent 的
+`outline.character-driven` Skill，不是 Foundation Agent 的“由单角色反推世界基座”。作者选定方案 ID 被固定到
+durable plan；Skill 只读取该方案的角色起点、终点和要求，旧生成结果不会污染重新生成，上游设定与规划统一经
+`assembleContext()` 进入受预算上下文。严格候选检查卷章结构、未知角色、重复标题和角色弧覆盖，并要求通过剧情动作
+释放角色信息。第一次作者确认只更新 `characterDrivenPlans.generatedVolumes/status`，第二次勾选卷才采纳到
+`outlineNodes`；任一步拒绝都不改下一级数据。旧流式旁路、自动落方案和弱 parser 已删除，方案管理、激活参考、
+中途重规划与 Prompt 配置保留。完整 Narrative Blueprint、角色反推世界基座和真实模型质量 A/B 尚未由本单元交付。
+
 ### 8.5 阶段 4：卷纲编排
 
 | 项目 | 设计 |
@@ -618,9 +626,10 @@ Receipt 绑定 `contractHash + contextManifestHash + sourceHashes + candidateHas
 2. ~~故事线 AI 生成的直接 `db.storyArcs.add()`~~：HARNESS-30 已收口为 `outline.story-arcs` durable 候选并统一经 `adopt()`；人工 CRUD 保留。
 3. ~~普通角色弱 parser 与 Character Copilot 双入口~~已由 HARNESS-33 统一为 `character.create`；旧弱 parser 删除，手动角色编辑、轴/维度选择和 Prompt 配置保留。
 4. ~~灵感反推的面板级 `useAIStream` 与组件上下文装配~~已由 HARNESS-34 统一为 `inspiration.reverse` 定向 durable 任务；碎片库、版本差异和显式 Canon 采纳保留。
-5. 正文接受后的 best-effort 后处理，收口为可恢复 post-step barrier。
-6. 独立一致性候选和章节整理候选，绑定统一 run/source hash，不再形成无法追踪的平行质量入口。
-7. 任何新的 Skill 不得复制数据库读取、Prompt runner、RAG、Embedding、导入导出或写回实现。
+5. ~~角色驱动开书规划的 `useAIStream`、自动保存和弱 parser~~已由 HARNESS-35 统一为 `outline.character-driven`；两次作者确认分别控制方案保存与正式大纲采纳。
+6. 正文接受后的 best-effort 后处理，收口为可恢复 post-step barrier。
+7. 独立一致性候选和章节整理候选，绑定统一 run/source hash，不再形成无法追踪的平行质量入口。
+8. 任何新的 Skill 不得复制数据库读取、Prompt runner、RAG、Embedding、导入导出或写回实现。
 
 ## 17. 分阶段实施路线
 

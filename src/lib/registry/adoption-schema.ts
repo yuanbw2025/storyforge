@@ -230,6 +230,15 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
     fkChecks: [{ field: 'referenceId', target: 'references' }],
   },
   {
+    target: 'characterDrivenPlans',
+    identity: 'id',
+    recordOnly: true,
+    duplicatePolicy: 'update',
+    required: [],
+    autoStamps: ['projectId', 'workId', 'createdAt', 'updatedAt'],
+    ownerFrom: 'work',
+  },
+  {
     target: 'referenceChunkAnalysis',
     identity: { kind: 'composite', fields: ['analysisRunId', 'chunkIndex'] },
     duplicatePolicy: 'update',

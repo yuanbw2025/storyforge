@@ -4,10 +4,10 @@ import { hashCanonicalValue } from './run/hash'
 import type { AgentSkillExecutionBindingV1 } from '../types/agent-run'
 
 export const AGENT_EXECUTION_BINDING_VERSION_V1 = 1 as const
-export const AGENT_TOOL_SCHEMA_VERSION_V1 = 'agent-read-tools-v1' as const
+export const AGENT_TOOL_SCHEMA_VERSION_V1 = 'agent-read-tools-v2' as const
 // Updated only together with AGENT_TOOL_SCHEMA_VERSION_V1 after the runtime
 // snapshot and regression evidence have been reviewed.
-export const AGENT_TOOL_SCHEMA_HASH_V1 = '51a06a2a9bdf04cf3bc38064ff9a2f9aa2cfb27a656ee8429539e8d204484562'
+export const AGENT_TOOL_SCHEMA_HASH_V1 = '7afce7157736be4d7376340e64227a87359282f0ccb10d1aa03a5a004726c3c7'
 
 export function createAgentSkillExecutionBindingV1(
   skill: AgentSkillDefinitionV1,

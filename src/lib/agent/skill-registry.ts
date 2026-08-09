@@ -28,6 +28,7 @@ export type AgentSkillExecutionModeV1 =
   | 'reverse'
   | 'auto'
   | 'story-arcs'
+  | 'character-driven'
   | 'volumes'
   | 'chapters'
   | 'generate'
@@ -144,6 +145,26 @@ const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
   'worldview',
   'storyCore',
   'characterDrivenPlan',
+  'powerSystem',
+  'cultivationProgress',
+  'codex',
+  'characters',
+  'creativeRules',
+  'worldRules',
+  'historical',
+  'locations',
+  'storyArcs',
+  'storylineProgress',
+  'existingVolumeOutlines',
+  'writtenChapterProgress',
+] as const
+
+const OUTLINE_CHARACTER_DRIVEN_CONTEXT_SOURCE_KEYS = [
+  'projectStatus',
+  'canonAssertions',
+  'worldview',
+  'storyCore',
+  'activeNarrativeBlueprint',
   'powerSystem',
   'cultivationProgress',
   'codex',
@@ -360,6 +381,24 @@ const OUTLINE_STORY_ARC_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+const OUTLINE_CHARACTER_DRIVEN_INPUT_POLICY = {
+  sourceKeys: ['characterDrivenPlan', 'storyCore', 'characters', 'storyArcs'],
+  states: {
+    empty: {
+      handling: 'require-author-input',
+      instruction: '缺少可执行的角色弧光起点和终点时停止生成，先由作者选择角色并填写状态变化。',
+    },
+    partial: {
+      handling: 'reference-and-create',
+      instruction: '锁定作者填写的角色弧光；以已有世界、故事核心和故事线为约束补足卷章编排，不得另起主线或改写角色终点。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格把作者填写的全部角色弧光编入既有主线/支线和卷章结构，并明确每章的因果、角色参与和弧光推进。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
 const OUTLINE_CHAPTER_INPUT_POLICY = {
   sourceKeys: ['worldview', 'storyCore', 'characters', 'storyArcs', 'existingVolumeOutlines'],
   states: {
@@ -477,6 +516,18 @@ const OUTLINE_STORY_ARC_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'storyCore',
   'characterDrivenPlan',
+  'powerSystem',
+  'codex',
+  'characters',
+  'historical',
+  'storyArcs',
+  'existingVolumeOutlines',
+])
+const OUTLINE_CHARACTER_DRIVEN_COMPRESSION_POLICY = compressionPolicy([
+  'characterDrivenPlan',
+  'worldview',
+  'storyCore',
+  'activeNarrativeBlueprint',
   'powerSystem',
   'codex',
   'characters',
@@ -717,6 +768,29 @@ export const AGENT_SKILLS = [
     regressionTests: [
       'R-HARNESS30-story-arc-agent',
       'R-HARNESS30-story-arc-panel-ui',
+    ],
+  },
+  {
+    version: 1,
+    id: 'outline.character-driven',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '角色弧光卷章编排',
+    owner: 'outline-agent',
+    promptVersion: 'character-driven-copilot-v1',
+    executionMode: 'character-driven',
+    contextTaskKind: 'agent-outline',
+    readToolNames: ['read_character_driven_plan'],
+    contextSourceKeys: OUTLINE_CHARACTER_DRIVEN_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: OUTLINE_CHARACTER_DRIVEN_INPUT_POLICY,
+    contextCompression: OUTLINE_CHARACTER_DRIVEN_COMPRESSION_POLICY,
+    maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'characterDrivenPlans', fields: ['generatedVolumes', 'status'] }],
+    lastVerifiedAt: '2026-08-09',
+    regressionTests: [
+      'R-HARNESS35-character-driven-agent',
+      'R-HARNESS35-character-driven-panel-ui',
     ],
   },
   {
@@ -1130,7 +1204,7 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'review']),
     character: new Set(['create']),
     inspiration: new Set(['reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'character-driven', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory']),
   }
   const ids = new Set<string>()

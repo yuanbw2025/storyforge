@@ -305,6 +305,28 @@ function readOptionalInspirationFragmentIds(
   return ids as string[]
 }
 
+function readOptionalCharacterDrivenPlanId(
+  value: Record<string, unknown>,
+  agentId: DomainAgentId,
+  skillId: AgentSkillId | undefined,
+  label: string,
+): number | undefined {
+  const present = Object.prototype.hasOwnProperty.call(value, 'characterDrivenPlanId')
+  if (!present) {
+    if (skillId === 'outline.character-driven') {
+      fail(label + '.characterDrivenPlanId 缺失')
+    }
+    return undefined
+  }
+  if (
+    agentId !== 'outline'
+    || skillId !== 'outline.character-driven'
+    || !Number.isInteger(value.characterDrivenPlanId)
+    || Number(value.characterDrivenPlanId) < 1
+  ) fail(label + '.characterDrivenPlanId 无效')
+  return Number(value.characterDrivenPlanId)
+}
+
 function readOptionalSkillId(
   value: Record<string, unknown>,
   agentId: DomainAgentId,
@@ -317,7 +339,7 @@ function readOptionalSkillId(
     'world-origin': new Set(['complete', 'worldview-field', 'story-core']),
     character: new Set(['create']),
     inspiration: new Set(['reverse']),
-    outline: new Set(['auto', 'story-arcs', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'character-driven', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue']),
   }
   if (!allowedModes[agentId].has(skill.executionMode)) {
@@ -357,7 +379,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     assertKeysWithOptional(
       item,
       ['id', 'agentId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId', 'skillId', 'inspirationFragmentIds'],
+      ['perspectiveCharacterId', 'skillId', 'inspirationFragmentIds', 'characterDrivenPlanId'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -384,6 +406,12 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       agentId,
       '主 Agent 计划任务 ' + id,
     )
+    const characterDrivenPlanId = readOptionalCharacterDrivenPlanId(
+      item,
+      agentId,
+      skillId,
+      '主 Agent 计划任务 ' + id,
+    )
     return {
       id,
       agentId,
@@ -392,6 +420,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       dependsOn,
       ...(perspectiveCharacterId !== undefined ? { perspectiveCharacterId } : {}),
       ...(inspirationFragmentIds !== undefined ? { inspirationFragmentIds } : {}),
+      ...(characterDrivenPlanId !== undefined ? { characterDrivenPlanId } : {}),
     }
   })
   const workflow = value.workflow === undefined
@@ -635,6 +664,7 @@ function sameTaskIdentity(left: MasterAgentTask, right: MasterAgentTask): boolea
     && (left.perspectiveCharacterId ?? null) === (right.perspectiveCharacterId ?? null)
     && JSON.stringify(left.inspirationFragmentIds ?? null)
       === JSON.stringify(right.inspirationFragmentIds ?? null)
+    && (left.characterDrivenPlanId ?? null) === (right.characterDrivenPlanId ?? null)
 }
 
 function sameTaskDefinition(left: MasterAgentTask, right: MasterAgentTask): boolean {
@@ -1017,6 +1047,10 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
     payload.worldviewField !== undefined
     && !WORLDVIEW_AGENT_FIELDS.includes(payload.worldviewField)
   ) fail(label + ' worldviewField 无效')
+  if (
+    payload.characterDrivenPlanId !== undefined
+    && (!Number.isInteger(payload.characterDrivenPlanId) || payload.characterDrivenPlanId < 1)
+  ) fail(label + ' characterDrivenPlanId 无效')
   budgetEvidence(payload.teamBudgetEvidence, `${label} payload teamBudgetEvidence`)
   return payload
 }
@@ -1049,6 +1083,17 @@ function assertCandidateMatchesTaskSkill(
     taskSkill.executionMode === 'story-arcs'
     && !['main', 'sub', 'mixed'].includes(payload.storyArcKind ?? '')
   ) fail(`${label} 的故事线类型与 Skill 不一致`)
+  if (
+    taskSkill.executionMode === 'character-driven'
+    && (
+      payload.characterDrivenPlanId == null
+      || payload.characterDrivenPlanId !== task.characterDrivenPlanId
+    )
+  ) fail(`${label} 的角色驱动方案与 Skill 计划不一致`)
+  if (
+    taskSkill.executionMode !== 'character-driven'
+    && payload.characterDrivenPlanId !== undefined
+  ) fail(`${label} 不得携带角色驱动方案`)
   if (
     task.agentId === 'prose'
     && (taskSkill.executionMode === 'generate' || taskSkill.executionMode === 'continue')

@@ -1,5 +1,6 @@
 import type { AgentRunStepVerificationReceiptV1 } from '../../types/agent-run'
 import { parseCharacterCandidateDraft } from '../character-copilot'
+import { parseCharacterDrivenCandidateDraftV1 } from '../character-driven-copilot'
 import {
   hasInspirationCandidateMaterialV1,
   parseInspirationCandidateDraft,
@@ -56,6 +57,10 @@ function validateCandidateDraft(payload: MasterCandidatePayload, draft: string):
     return
   }
   if (payload.agentId === 'outline') {
+    if (payload.skillId === 'outline.character-driven') {
+      parseCharacterDrivenCandidateDraftV1(draft)
+      return
+    }
     parseOutlineCandidateDraft(draft)
     return
   }

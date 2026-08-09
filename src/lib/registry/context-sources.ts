@@ -255,11 +255,17 @@ async function readInspirationWorkspaceContext(
   })
 }
 
-export async function readActiveCharacterDrivenPlanContext(projectId: number, scope?: WorkspaceScope): Promise<string> {
+export async function readActiveCharacterDrivenPlanContext(
+  projectId: number,
+  scope?: WorkspaceScope,
+  explicitPlanId?: number,
+): Promise<string> {
   const project = await db.projects.get(projectId)
   const resolved = scope ?? await resolveScope({ projectId })
   const work = resolved.workId > 0 ? await db.works.get(resolved.workId) : null
-  const activeId = work?.activeCharacterDrivenPlanId ?? project?.activeCharacterDrivenPlanId
+  const activeId = explicitPlanId
+    ?? work?.activeCharacterDrivenPlanId
+    ?? project?.activeCharacterDrivenPlanId
   if (activeId == null) return ''
 
   const plan = await db.characterDrivenPlans.get(activeId)
@@ -273,7 +279,7 @@ export async function readActiveCharacterDrivenPlanContext(projectId: number, sc
     character.id == null ? [] : [[character.id, character] as const],
   ))
   const lines = [
-    `【当前生效的角色驱动方案】${plan.name}（v${plan.version}，${plan.status}）`,
+    `【${explicitPlanId == null ? '当前生效的' : '本次选定的'}角色驱动方案】${plan.name}（v${plan.version}，${plan.status}）`,
   ]
   if (plan.userHint.trim()) lines.push(`作者要求：${plan.userHint.trim()}`)
   for (const arc of arcs) {
@@ -285,12 +291,16 @@ export async function readActiveCharacterDrivenPlanContext(projectId: number, sc
       `- ${identity}｜${arc.role || '未标注身份'}：${arc.initialState || '未填写'} → ${arc.targetState || '未填写'}`,
     )
   }
-  const volumes = parseCharacterDrivenPlotVolumes(plan.generatedVolumes)
-  for (const volume of volumes) {
-    lines.push(`卷：${volume.volumeTitle}｜${volume.volumeSummary}`)
-    if (volume.characterArcs) lines.push(`  弧光：${volume.characterArcs}`)
-    for (const chapter of volume.chapters) {
-      lines.push(`  - ${chapter.title}：${chapter.summary}${chapter.arcProgress ? `；弧光推进：${chapter.arcProgress}` : ''}`)
+  // 显式 planId 用于重新生成：只读取作者输入，避免旧生成结果污染新候选。
+  // 下游普通上下文没有显式 ID，继续读取 active 方案的完整已确认规划。
+  if (explicitPlanId == null) {
+    const volumes = parseCharacterDrivenPlotVolumes(plan.generatedVolumes)
+    for (const volume of volumes) {
+      lines.push(`卷：${volume.volumeTitle}｜${volume.volumeSummary}`)
+      if (volume.characterArcs) lines.push(`  弧光：${volume.characterArcs}`)
+      for (const chapter of volume.chapters) {
+        lines.push(`  - ${chapter.title}：${chapter.summary}${chapter.arcProgress ? `；弧光推进：${chapter.arcProgress}` : ''}`)
+      }
     }
   }
   return lines.join('\n')
@@ -1020,13 +1030,17 @@ export const CONTEXT_SOURCES: ContextSource[] = [
   },
   {
     key: 'characterDrivenPlan',
-    label: '当前生效角色驱动方案',
+    label: '角色驱动方案',
     scope: 'project',
     layer: 'L1',
     budgetTokens: 5000,
     protectedFromTrim: true,
     ownerFrom: 'work',
-    read: input => readActiveCharacterDrivenPlanContext(input.projectId, input.scope),
+    read: input => readActiveCharacterDrivenPlanContext(
+      input.projectId,
+      input.scope,
+      input.characterDrivenPlanId,
+    ),
   },
   {
     key: 'powerSystem',

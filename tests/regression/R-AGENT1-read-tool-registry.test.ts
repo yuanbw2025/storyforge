@@ -18,6 +18,7 @@ const EXPECTED_TOOLS = [
   'read_story_timeline',
   'read_world_groups',
   'read_inspiration_workspace',
+  'read_character_driven_plan',
   'search_text',
 ]
 
@@ -106,6 +107,7 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
     expect(CONTEXT_SOURCE_BY_KEY.has('outlineTree')).toBe(true)
     expect(CONTEXT_SOURCE_BY_KEY.has('searchResults')).toBe(true)
     expect(CONTEXT_SOURCE_BY_KEY.has('inspirationWorkspace')).toBe(true)
+    expect(CONTEXT_SOURCE_BY_KEY.has('characterDrivenPlan')).toBe(true)
   })
 
   it('projectId/worldGroupId 只能由执行上下文给出，跨项目实体与世界组均拒绝', async () => {
@@ -257,6 +259,24 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
       createdAt: now,
       updatedAt: now,
     })
+    const characterDrivenPlanId = await db.characterDrivenPlans.add({
+      projectId,
+      name: '只读方案',
+      arcs: JSON.stringify([{
+        characterId,
+        name: '主角',
+        role: '主角',
+        initialState: '尚未出发',
+        targetState: '完成选择',
+      }]),
+      userHint: '',
+      generatedVolumes: '[]',
+      status: 'draft',
+      version: 1,
+      parentPlanId: null,
+      createdAt: now,
+      updatedAt: now,
+    } as any)
     const beforeWithInspiration = await tableCounts()
     const args: Record<string, Record<string, unknown>> = {
       read_outline: { outlineNodeId: nodeId },
@@ -265,6 +285,7 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
       read_inventory: { chapterId, outlineNodeId: nodeId, characterId },
       read_story_timeline: { chapterId },
       read_inspiration_workspace: { fragmentIds: ['idea-1'], mode: 'single' },
+      read_character_driven_plan: { planId: characterDrivenPlanId },
       search_text: { query: '铜钥匙' },
     }
     for (const tool of AGENT_READ_TOOLS) {

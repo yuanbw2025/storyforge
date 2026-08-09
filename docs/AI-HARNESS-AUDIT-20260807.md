@@ -37,15 +37,15 @@
 ### 0.2 结论先行
 
 1. **数据和单轮生成治理已有较强地基，但没有形成分步骤主 run 的统一控制面。** `CONTEXT_SOURCES`、`assembleContext()`、`FIELD_REGISTRY`、`AdoptionSchema`、`adopt()` 和 `PROJECT_TABLES` 均存在，且有注册表、作用域、CAS、导入导出和反例测试。
-2. **主路径接入不一致。** 审计基线中卷纲/章纲、部分细纲和正文已经使用 `assembleContext()` 与 `GenerationNode`，但世界观、故事核心、故事线和普通角色曾各有组件级拼接、直接写回或双入口。HARNESS-30～33 已逐项收口这些入口；细纲批量、其它基础设定和反馈链仍需继续核对。
+2. **主路径接入不一致。** 审计基线中卷纲/章纲、部分细纲和正文已经使用 `assembleContext()` 与 `GenerationNode`，但世界观、故事核心、故事线、普通角色、灵感反推和角色驱动开书规划曾各有组件级拼接、直接写回或双入口。HARNESS-30～35 已逐项收口这些入口；细纲批量、其它基础设定和反馈链仍需继续核对。
 3. **`GenerationNode` 不是 durable Harness。** 它冻结一次请求内的消息，支持 gate 和显式 adopt，但没有持久的 run/step/attempt/checkpoint、统一终态 verifier、fresh receipt、Context Manifest 或跨刷新恢复。
 4. **长期一致性能力是“模块闭环”，不是“创作主流程闭环”。** NS-0~NS-6、事实/认知/物品/检索/摘要/stale/影响分析和一致性 Agent 有独立测试，但正文接受后的检索、状态提取、记忆和审查是 best-effort 异步任务，没有统一的完成判定和恢复协议。
 5. **质量不稳定的主要推断根因是接入断裂和证据断裂，而不是单纯缺少记忆模块。** 该推断由下文逐条代码、测试和调用路径支持，仍需通过后续主流程 held-out 评测验证。
 
-> 2026-08-09 更新：本审计记录的是改造前基线。HARNESS-30 已修复下文指出的故事线 AI 直接写入旁路；
-> HARNESS-31 已将故事核心七个字段的 AI 入口收口到 `world-origin.story-core`。两者都只经
-> `assembleContext()` 读取，候选进入 durable Run，作者确认后只经 `adopt()` 写入，旧 AI adapter 已删除，
-> 人工编辑保留。其余审计结论不因这两个垂直切片自动失效。
+> 2026-08-09 更新：本审计记录的是改造前基线。HARNESS-30～35 已依次收口故事线、故事核心、世界基座、
+> 普通角色、灵感反推和角色驱动开书规划入口；正式读取统一进入 Tool Registry / `assembleContext()`，候选进入
+> durable Run，作者确认后的 AI 写回只经 `adopt()`，对应旧旁路已删除，人工能力保留。其余审计结论不因这些
+> 垂直切片自动失效。
 
 ## 1. 审计方法与证据等级
 
@@ -96,6 +96,7 @@
 | 角色 Copilot | `src/lib/agent/character-copilot.ts` | 与普通分步骤 AI 按钮共用 `character.create` Skill、输入策略、压缩预算、候选合同和采纳入口 | 当前只生成一个新角色，不自动创建关系边、物品、状态卡或大纲；真实模型角色质量仍需固定评测 | A（HARNESS-33 复用） |
 | 角色补全 | `CharacterSupplementAction.tsx` | `:49-85` 通过 `assembleContext()` 读取设定；可选读事实/正文证据；`adopt(recordId, merge-diffs)` | 解析空补丁直接返回；单任务可用，未纳入统一 run 恢复 | A（局部） |
 | 主线/支线 | `StoryArcPanel.tsx`、`story-arc-copilot.ts` | HARNESS-30 后 AI 入口只提交 `outline.story-arcs`；上下文经 `assembleContext()`，严格多阶段候选确认后经 `adopt(storyArcs)` | durable 候选、snapshot/CAS、结构 gate 和正式状态终验已接入；人工 CRUD 保留 | A（HARNESS-30） |
+| 角色驱动开书规划 | `CharacterDrivenPlotPanel.tsx`、`character-driven-copilot.ts` | HARNESS-35 后生成按钮只提交固定 `outline.character-driven` 任务；方案输入经 `read_character_driven_plan`，其它上游经 `assembleContext()`；第一次确认经 `adopt(characterDrivenPlans)` 保存候选，第二次勾选卷才经 `adopt(outlineNodes)` | durable 刷新恢复、编辑/拒绝/确认、方案 snapshot/CAS、严格结构、未知角色/重复标题/弧光覆盖 gate 和终态回读已接入。旧 `useAIStream`、自动保存与弱 parser 已删除；版本、激活参考和中途重规划保留 | A（HARNESS-35） |
 | 卷纲/章纲 | `OutlinePanel.tsx`、`useOutlineGenerationController.ts` | `:178-205` 显式 source keys；`GenerationNode` 负责 prepare/run；`adopt-generation.ts` 通过 `adopt()` 写 `outlineNodes` | 有预览、透明模式、取消、重试、JSON/重构/兜底解析和重复标题提示；没有 durable run/checkpoint/统一 terminal verifier | A（节点级） |
 | 细纲/场景 | `DetailedOutlinePanel.tsx`、`ScenePanel.tsx` | `:124-139` 装配章纲/世界/角色/伏笔；增强细纲 `:181-214` 解析、过滤合法 ID、`adopt()`；场景采纳 `ScenePanel.tsx:75-83` | JSON 失败可 AI 重构；有 `lastUsedSummary` stale 提示；批量 `:233-260` 仅 UI 循环 + AbortController，无 durable attempt/checkpoint/resume | A（单次），D（批量） |
 | 正文生成/续写 | `ChapterEditor.tsx` | `:524-568` 通过 `assembleContext()` 读取章纲、细纲、连续性、事实、认知、物品、检索、故事线等；`GenerationNode`/prose copilot 可生成候选 | 接受后先写正文，再异步检索块、摘要、状态提取、章节 memory（`:990-1044`）；大多数失败只日志/降级，无 run terminal receipt | A（生成），D（后处理） |
@@ -193,9 +194,9 @@ flowchart TD
 
 | 问题/失效点 | 代码或测试证据 | 结论类型 | 影响 |
 |---|---|---|---|
-| 注册表存在但主路径不统一 | 审计基线中的故事线、故事核心、世界观和普通角色旁路已由 HARNESS-30～33 收口；细纲批量、其它基础设定和反馈入口仍未全部统一 | 事实 → 推断 | 剩余入口仍可能使用不同来源、预算、校验和写回标准，模型输入/输出质量受入口影响 |
+| 注册表存在但主路径不统一 | 审计基线中的故事线、故事核心、世界观、普通角色、灵感反推和角色驱动开书规划旁路已由 HARNESS-30～35 收口；细纲批量、其它基础设定和反馈入口仍未全部统一 | 事实 → 推断 | 剩余入口仍可能使用不同来源、预算、校验和写回标准，模型输入/输出质量受入口影响 |
 | 上下文可登记但不可完整复核 | `assembleContext()` 返回内存 `included/omitted/trimmed`；正文只打印控制台日志 | 事实 → 推断 | 无法可靠回答某次生成实际读了哪些源、何时被裁剪；问题难以回放 |
-| 结构化契约强弱不一致 | 世界基座、故事核心、故事线和普通角色已改为严格候选合同；细纲等入口的 parser/gate 强度仍不一致 | 事实 | 剩余弱入口中的缺字段、类型错和 Canon 冲突仍可能进入正式数据 |
+| 结构化契约强弱不一致 | 世界基座、故事核心、故事线、普通角色和角色驱动卷章方案已改为严格候选合同；细纲等入口的 parser/gate 强度仍不一致 | 事实 | 剩余弱入口中的缺字段、类型错和 Canon 冲突仍可能进入正式数据 |
 | 正文后处理无统一完成屏障 | `handleAutoPostGenerate()` 依次重建检索、状态提取、memory；失败仅 `console.error`/降级，调用方 `void` 启动 | 事实 → 推断 | UI/作者可能看到正文已保存，却不知道派生记忆、状态和检索是否完成；失败无法按步骤恢复 |
 | 质量 Agent 未绑定主 run | 一致性候选写入 `agentEvents`，有 hash current；没有 run terminal/receipt 关联 | 事实 | 审查结果可查但不能决定某次创作是否完成，也不能自动触发上游修正 |
 | 下游反馈只有提示没有闭环 | `impact-analysis` 明确“只读、只提示，不自动改正文” | 事实 | 发现冲突后作者仍需手工判断、修改和重跑，容易让 stale 事实继续传播 |
@@ -206,7 +207,7 @@ flowchart TD
 
 **推断 1：质量能力分散在多个工程批次，缺少统一执行控制面。** NS-0~NS-6、Agent、透明管线分别交付了局部能力；每个模块能证明自己的不变量，但没有一个 run 负责把步骤依赖、重试、终态和证据连接起来。
 
-**推断 2：主路径接入断裂比“记忆不足”更可能解释实际效果不稳。** 审计时的直接证据包括故事线旁路写库、世界观/故事核心手工上下文、普通角色入口未统一到 Copilot；这些证据对应的入口已由 HARNESS-30～33 修复。该根因仍适用于尚未收口的细纲批量、其它基础设定和反馈入口，不能因为前四个切片完成就宣称全流程质量已经稳定。
+**推断 2：主路径接入断裂比“记忆不足”更可能解释实际效果不稳。** 审计时的直接证据包括故事线旁路写库、世界观/故事核心手工上下文、普通角色双入口、灵感与角色驱动面板级调用；这些证据对应的入口已由 HARNESS-30～35 修复。该根因仍适用于尚未收口的细纲批量、其它基础设定和反馈入口，不能因为这些切片完成就宣称全流程质量已经稳定。
 
 **推断 3：失败可见性不足导致错误继续向后传播。** 正文后处理失败只记录日志并保留 tail/旧状态，没有 durable attempt 和明确的“部分完成/待恢复”状态，后续步骤可能继续读取旧的派生记忆。
 
@@ -305,6 +306,7 @@ verifying → stale(source/state changed)
 | `StoryArcPanel → addArc()` | AI 候选改为 `adopt()`；`addArc/updateArc` 仅作为显式人工编辑入口 | 不复制第二个 arc 写回 service |
 | ~~`CharacterPanel` 普通生成自由文本旁路~~ | HARNESS-33 已迁移到 `character.create`，旧弱 parser 与死代码已删除 | 手动角色 CRUD、轴/维度选择和 Prompt 配置保留；不自动创建关系、物品或下游规划 |
 | ~~`InspirationPanel` 面板级 `useAIStream` / 上下文装配~~ | HARNESS-34 已迁移到 `inspiration.reverse` 定向 durable 任务，碎片选择进入计划和候选证据 | 保留碎片库、版本差异、多世界预览与显式 Canon 采纳；确认反推候选只写灵感版本 |
+| ~~`CharacterDrivenPlotPanel` 的 `useAIStream` / 自动保存 / 弱 parser~~ | HARNESS-35 已迁移到固定方案的 `outline.character-driven` durable 任务；第一次确认只写方案，第二次确认才写正式大纲 | 保留人工弧光输入、方案版本、激活参考、中途重规划和 Prompt 配置；“角色反推世界基座”仍属于另一 Foundation Skill |
 | `GenerationNode` | 继续作为领域执行抽象，由 Harness 调度 | 不把它误命名为 durable run，不另造第二套生成运行器 |
 | `agentConversations/agentEvents` | 继续承载对话/候选/确认/错误；可作为兼容投影 | 不无限扩展为 run ledger；字段扩展须先审计生命周期 |
 | `nodeFlows/nodeRuns` | 继续服务 FLOW-3 自由节点 | 不直接冒充分步骤主流程 run，除非新增明确 contract/作用域/终态语义 |

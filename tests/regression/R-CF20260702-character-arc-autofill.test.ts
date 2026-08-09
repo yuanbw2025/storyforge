@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyCharacterArcAutoFill } from '../../src/components/outline/CharacterDrivenPlotPanel'
-import type { CharacterArcInput } from '../../src/lib/ai/character-driven-plot'
+import type { CharacterDrivenPlanArc as CharacterArcInput } from '../../src/lib/types'
 
 function arc(overrides: Partial<CharacterArcInput> = {}): CharacterArcInput {
   return {

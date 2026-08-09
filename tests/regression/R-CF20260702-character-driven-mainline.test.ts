@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { buildCharacterDrivenPlotPrompt } from '../../src/lib/ai/character-driven-plot'
+import { prepareCharacterDrivenCopilotV1 } from '../../src/lib/agent/character-driven-copilot'
 
 const textOf = (messages: { content: string }[]) => messages.map(m => m.content).join('\n\n')
 
@@ -28,26 +28,50 @@ describe('R-CF20260702-character-driven-mainline', () => {
       mainPlot: '少年拒绝被天命操控，联合旧敌推翻天命祭坛。',
       subPlots: '师徒裂痕与家族旧案。',
     } as any)
-
-    const messages = await buildCharacterDrivenPlotPrompt(
+    const characterId = await db.characters.add({
       projectId,
-      '测试书',
-      '玄幻',
-      [{
-        characterId: 1,
+      name: '林砚',
+      role: 'protagonist',
+      roleWeight: 'main',
+      moralAxis: 'good',
+      orderAxis: 'neutral',
+      relationships: '[]',
+      createdAt: 1,
+      updatedAt: 1,
+    } as any) as number
+    const planId = await db.characterDrivenPlans.add({
+      projectId,
+      name: '天命弧光',
+      arcs: JSON.stringify([{
+        characterId,
         name: '林砚',
         role: '主角',
         initialState: '相信天命安排。',
         targetState: '主动选择自己的道路。',
-      }],
-    )
-    const text = textOf(messages)
+      }]),
+      userHint: '',
+      generatedVolumes: '[]',
+      status: 'draft',
+      version: 1,
+      parentPlanId: null,
+      createdAt: 1,
+      updatedAt: 1,
+    } as any) as number
+
+    const prepared = await prepareCharacterDrivenCopilotV1({
+      projectId,
+      worldGroupId: null,
+      planId,
+      authorRequest: '依据角色弧光编排卷章方案',
+    })
+    const text = textOf(prepared.prepared.messages)
     expect(text).toContain('一句话故事：废柴少年被迫继承天命。')
     expect(text).toContain('主线：少年拒绝被天命操控')
     expect(text).toContain('复线：师徒裂痕与家族旧案。')
-    expect(text).toContain('角色驱动与故事主线对齐硬约束')
-    expect(text).toContain('不得另起一套主线')
-    expect(text).toContain('每一章的 arcProgress')
+    expect(text).toContain('角色驱动编排硬约束')
+    expect(text).toContain('不得另起主线')
+    expect(text).toContain('arcProgress')
+    expect(text).toContain('不得让角色预知后续安排')
     expect(text).toContain('简体中文')
   })
 })

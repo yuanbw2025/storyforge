@@ -101,7 +101,7 @@
 |------|-------|------------|
 | **灵感反推** inspiration | 用户碎片灵感 + 全世界概览(多世界) | `worldview`(worldOrigin/powerHierarchy/continentLayout/climateByRegion/historyLine/races/factionLayout) + `storyCore`(theme/centralConflict/plotPattern/mainPlot/logline) + `characters[]` → 写回对应表 |
 | **AI 建议世界** world-group-ai | 全世界概览 | 世界组 + 各世界 worldview |
-| **角色驱动剧情** character-driven-plot | `worldContext`(★) + 角色弧线 | 剧情建议（暂不直接落库） |
+| **角色驱动剧情** outline.character-driven | 固定 `characterDrivenPlan` 输入 + 登记的世界/故事/角色/故事线/大纲上下文 | durable 候选 → 首次确认写 `characterDrivenPlans.generatedVolumes/status` → 二次勾选采纳 `outlineNodes` |
 | **场景考证** scene-verify | `worldContext`(★) + 历史年表 + 世界规则 | 考证建议（无写回，纯建议） |
 | **项目参考·深度分析** reference | 上传作品分块 | 分块分析 + 角色聚合(AI) → references/analysisSummary/mergedCharacters |
 | **章节审校** review | 章节正文 + `worldContext`(★含词条) + 角色 + 伏笔 + 状态表 | 五维问题清单（建议，无写回） |

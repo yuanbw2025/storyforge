@@ -254,7 +254,7 @@ export default function WorkspacePage() {
       case 'outline':
         return <OutlinePanel project={project} onOpenChapter={handleOpenChapter} />
       case 'character-driven-plot':
-        return <CharacterDrivenPlotPanel project={project} />
+        return <CharacterDrivenPlotPanel project={project} worldGroupId={copilotWorldGroupId} />
       case 'visual-workflows':
         return <NodeAuthoringWorkspace project={project} worldGroupId={copilotWorldGroupId} />
       case 'rag-library':

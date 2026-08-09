@@ -107,7 +107,7 @@
 | `worldview` | 世界观 | world | L2 | 8000 |
 | `storyCore` | 故事核心 | project | L1 | 4000 |
 | `activeNarrativeBlueprint` | 当前选定叙事蓝图 | project | L1 | 5000 |
-| `characterDrivenPlan` | 当前生效角色驱动方案 | project | L1 | 5000 |
+| `characterDrivenPlan` | 角色驱动方案 | project | L1 | 5000 |
 | `powerSystem` | 力量体系 | world | L2 | 4000 |
 | `codex` | 设定词条 | world | L2 | 6000 |
 | `characters` | 角色档案 | world | L2 | 8000 |
@@ -140,6 +140,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | 目标表 | 可写字段 |
 |---|---|
 | `chapters` | `content` `continuityHandoff` `notes` `order` `outlineNodeId` `perspectiveCharacterId` `planReconciliation` `status` `summary` `summarySourceTextHash` `summaryTextNormalizationVersion` `title` `wordCount` |
+| `characterDrivenPlans` | `generatedVolumes` `status` |
 | `characterRelations` | `description` `fromCharacterId` `isBidirectional` `label` `relationType` `toCharacterId` |
 | `characters` | `abilities` `activeChapterRange` `alignment` `appearance` `arc` `background` `cultivationStageId` `cultivationSystemId` `ending` `exitChapterId` `fears` `firstAppearChapterId` `firstAppearance` `goals` `habits` `homeWorldGroupId` `identity` `innerConflict` `isCrossWorld` `keyEvents` `location` `moralAxis` `motivation` `name` `orderAxis` `personality` `powerLevel` `profile` `raceEntryId` `relationships` `role` `roleWeight` `shortDescription` `signatureItem` `speechStyle` `storyRole` `strengths` `values` `weaknesses` |
 | `codexCategories` | `builtInKey` `domain` `fieldSchema` `hidden` `icon` `name` `order` `parentId` `worldGroupId` |
@@ -188,13 +189,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 59 个 category。
-未分类调用: 0 个。动态 category 调用: 14 个。
+共 58 个 category。
+未分类调用: 0 个。动态 category 调用: 15 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:482` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:569` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:508` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:595` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
 | `ai.restructure` | `src/lib/ai/restructure.ts:54` |
 | `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
@@ -226,7 +227,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `location.extract` | `src/components/location/LocationPanel.tsx:106` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:319`<br/>`src/lib/node-flow/executor.ts:207` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:188`<br/>`src/lib/outline/generation-node.ts:59` |
-| `outline.character-driven` | `src/components/outline/CharacterDrivenPlotPanel.tsx:208` |
 | `outline.character-revision` | `src/components/outline/CharacterRevisionPanel.tsx:180` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:55` |
 | `outline.workshop.collision` | `src/lib/outline/workshop.ts:448` |
@@ -258,6 +258,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/components/editor/ChapterEditor.tsx:997 · chat`
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
 - `src/lib/agent/character-copilot.ts:475 · chat`
+- `src/lib/agent/character-driven-copilot.ts:507 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
 - `src/lib/agent/inspiration-copilot.ts:328 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
@@ -272,4 +273,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `c1deb89`
+生成时间基准:commit `cc6ac8d`

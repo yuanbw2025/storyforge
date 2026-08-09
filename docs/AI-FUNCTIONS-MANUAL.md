@@ -644,7 +644,7 @@
 
 ### 4.3 角色驱动（侧栏：character-driven-plot）
 
-**对应表**：无自有表（产出建议性剧情，可写回大纲）
+**对应表**：`characterDrivenPlans`（方案、版本和生成结果）→ `outlineNodes`（作者二次采纳的卷/章）
 
 **字段**：用户在面板上选择/输入 角色 + 弧线意图
 
@@ -653,14 +653,14 @@
 #### 动作①：基于角色弧线生成剧情
 - **触发**：🔘 手动
 - **读**：
-  - `projects.name / genre`
-  - `worldviews`（全字段）
-  - `characters[选中].各字段` + 用户给每个角色填的"弧线意图"
-  - `worldRulesProfiles`
-  - `用户输入提示`
-- **提示词**：`character-driven-plot`
-- **解析**：`parsePlotOutput`（卷级剧情结构）
-- **写**：用户审核 → 可采纳到 `outlineNodes`（批量新建卷+章）
+  - 固定方案 ID 经 `read_character_driven_plan → characterDrivenPlan` 读取角色起点、终点和作者要求；重新生成时不注入旧生成结果
+  - 世界观、故事核心、叙事蓝图、角色、规则、故事线、已有卷纲和已写进度经 `CONTEXT_SOURCES + assembleContext()` 读取
+  - 上下文预算、压缩和全文回退由 `outline.character-driven` Skill 冻结
+- **提示词**：大纲 Agent 的 `outline.character-driven` Skill；保留 `plot.character-driven` Prompt 配置
+- **解析/校验**：`parseCharacterDrivenCandidateDraftV1` 严格 JSON；校验额外字段、卷章数量、重复标题、未知角色、角色弧覆盖和信息释放约束
+- **第一次确认写入**：只经 `adopt(recordId, target=characterDrivenPlans)` 更新 `generatedVolumes/status`；候选生成前后对方案做 snapshot/CAS
+- **第二次确认写入**：作者勾选卷后，`adoptCharacterDrivenVolumes()` 逐项经 `adopt(target=outlineNodes)` 新增卷/章；不改故事核心或正文
+- **运行证据**：固定方案 ID、Context Manifest、候选、编辑/拒绝/确认、重试和刷新恢复进入主 Agent durable Run；旧 `useAIStream → parsePlotOutput` 入口已删除
 
 ---
 

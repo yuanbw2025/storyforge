@@ -342,6 +342,10 @@
   碎片 ID 会冻结到主 Agent durable plan，读取经正式工具和 `assembleContext()`，候选可刷新恢复、编辑、拒绝
   或确认；确认只新增灵感工作区版本，不自动写入世界观、故事核心、角色或世界组。旧 `useAIStream` 和面板级
   上下文装配已删除，碎片库、差异审阅、多世界预览和后续显式采纳保留。
+- HARNESS-35 已把角色驱动开书规划收口为现有大纲 Agent 的 `outline.character-driven` Skill。当前方案 ID
+  冻结进 durable plan，方案输入与正式上游均经登记上下文读取；严格候选可刷新恢复、编辑、拒绝或确认。第一次
+  确认只保存当前方案，第二次勾选卷才写正式大纲。旧 `useAIStream`、自动保存和弱 parser 已删除，人工弧光输入、
+  版本、激活参考、中途重规划和 Prompt 配置保留；角色反推世界基座仍是后续 Foundation Skill。
 
 ### GOV-1 第一阶段交付证据
 
