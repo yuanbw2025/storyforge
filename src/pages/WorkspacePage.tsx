@@ -69,12 +69,14 @@ const ChatCopilotPanel = lazy(() => import('../components/agent/ChatCopilotPanel
 import { useLocationStore } from '../stores/location'
 import { useWorldGroupStore } from '../stores/world-group'
 import { resolveScopeLike } from '../lib/world-engine/scope'
+import { parseImpactHandoffV1, type ImpactHandoffV1 } from '../lib/consistency/impact-handoff'
 
 export default function WorkspacePage() {
   const { projectId } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
   const { loadProject, projects, currentProjectId } = useProjectStore()
+  const loadedChapters = useChapterStore(state => state.chapters)
   const initialModule = new URLSearchParams(location.search).get('module')
   const initialSidebarModule = initialModule && Object.prototype.hasOwnProperty.call(MODULE_CONTENT_TYPES, initialModule)
     ? initialModule as SidebarModule
@@ -86,6 +88,9 @@ export default function WorkspacePage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showProperties, setShowProperties] = useState(false)
   const [showCopilot, setShowCopilot] = useState(false)
+  const [impactHandoff, setImpactHandoff] = useState<ImpactHandoffV1 | null>(() => (
+    parseImpactHandoffV1(new URLSearchParams(location.search).get('impactHandoff'))
+  ))
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
   const worldGroups = useWorldGroupStore(state => state.groups)
 
@@ -114,6 +119,18 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (initialSidebarModule) setActiveModule(initialSidebarModule)
   }, [initialSidebarModule])
+
+  useEffect(() => {
+    setImpactHandoff(parseImpactHandoffV1(new URLSearchParams(location.search).get('impactHandoff')))
+  }, [location.search])
+
+  const handoffChapterNodeId = useMemo(() => {
+    if (!impactHandoff || impactHandoff.targetModule !== 'chapters-list') return null
+    if (impactHandoff.table === 'chapters' && impactHandoff.targetRecordId != null) {
+      return loadedChapters.find(chapter => chapter.id === impactHandoff.targetRecordId)?.outlineNodeId ?? null
+    }
+    return impactHandoff.targetRecordId
+  }, [impactHandoff, loadedChapters])
 
   useEffect(() => {
     const load = async () => {
@@ -197,6 +214,41 @@ export default function WorkspacePage() {
     ? (worldGroups.find(group => group.id === activeWorldGroupId)?.name ?? '未选择世界')
     : '单世界'
 
+  const handoffTargetLabel = impactHandoff
+    ? ({
+      'chapters-list': '章节与正文',
+      'fact-library': '事实库',
+      'state-table': '状态表',
+      inventory: '物品栏',
+      'story-arc': '故事线',
+      'story-timeline': '故事年表',
+      relations: '关系网',
+      characters: '角色设计',
+      'world-rules': '真实与幻想',
+      'worldview-origin': '世界起源',
+      'worldview-natural': '自然环境',
+      'worldview-humanity': '人文环境',
+      'story-design': '故事设计',
+      outline: '大纲',
+      'detailed-outline': '细纲',
+      rules: '创作规则',
+      references: '项目参考',
+    } as Record<string, string>)[impactHandoff.targetModule]
+    : null
+
+  const dismissImpactHandoff = () => {
+    setImpactHandoff(null)
+    navigate(`/workspace/${project.id}?module=${activeModule}`, { replace: true })
+  }
+
+  const returnFromImpactHandoff = () => {
+    if (!impactHandoff) return
+    setImpactHandoff(null)
+    setEditorNodeId(impactHandoff.returnNodeId)
+    setActiveModule('chapters-list')
+    navigate(`/workspace/${project.id}?module=chapters-list`, { replace: true })
+  }
+
   /** 根据当前模块渲染主面板内容 */
   const renderMainPanel = () => {
     switch (activeModule) {
@@ -268,11 +320,14 @@ export default function WorkspacePage() {
             : undefined}
         />
       case 'detailed-outline':
-        return <DetailedOutlinePanel project={project} />
+        return <DetailedOutlinePanel
+          project={project}
+          initialNodeId={impactHandoff?.targetModule === 'detailed-outline' ? impactHandoff.targetRecordId : null}
+        />
       case 'chapters-list':
-        return <ChaptersListPanel project={project} initialNodeId={editorNodeId} />
+        return <ChaptersListPanel project={project} initialNodeId={handoffChapterNodeId ?? editorNodeId} />
       case 'editor':
-        return <ChaptersListPanel project={project} initialNodeId={editorNodeId} />
+        return <ChaptersListPanel project={project} initialNodeId={handoffChapterNodeId ?? editorNodeId} />
       case 'foreshadow':
         return <ForeshadowPanel project={project} />
       case 'style-learning':
@@ -331,7 +386,7 @@ export default function WorkspacePage() {
       {/* 左侧导航 */}
       <Sidebar
         active={activeModule}
-        onSelect={(m) => { setActiveModule(m); if (m !== 'editor') setEditorNodeId(null) }}
+        onSelect={(m) => { setImpactHandoff(null); setActiveModule(m); if (m !== 'editor') setEditorNodeId(null) }}
         onBack={() => navigate(backPath)}
         projectName={project.name}
         collapsed={sidebarCollapsed}
@@ -378,6 +433,34 @@ export default function WorkspacePage() {
             </button>
           </div>
         </div>
+        {impactHandoff && (
+          <div className="shrink-0 border-b border-amber-400/25 bg-amber-400/5 px-4 py-2 text-xs text-text-secondary">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-medium text-amber-200">影响项需要人工处理</span>
+              <span>已打开：{handoffTargetLabel ?? impactHandoff.targetModule}</span>
+              <span className="text-text-muted">{impactHandoff.table}#{impactHandoff.recordId ?? '待定'} · 计划 {impactHandoff.planHash.slice(0, 12)}</span>
+              <span className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={returnFromImpactHandoff}
+                  className="rounded border border-border bg-bg-elevated px-2 py-1 text-[11px] text-text-secondary hover:text-text-primary"
+                >
+                  返回来源章节
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissImpactHandoff}
+                  className="rounded border border-border bg-bg-elevated px-2 py-1 text-[11px] text-text-secondary hover:text-text-primary"
+                >
+                  关闭交接提示
+                </button>
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] text-text-muted">
+              这是受当前正文与影响计划 hash 约束的人工交接提示。请在现有模块中核对并按既有确认/采纳流程处理；本次导航不会自动改动正式数据。
+            </p>
+          </div>
+        )}
         <div className={`min-h-0 flex-1 overflow-y-auto ${isImmersiveModule ? '' : 'p-6'}`}>
           {/* Phase 3.5: 懒加载面板(地图类)加载时显示 fallback */}
           <Suspense fallback={<div className="flex items-center justify-center h-64 text-text-muted text-sm">面板加载中…</div>}>

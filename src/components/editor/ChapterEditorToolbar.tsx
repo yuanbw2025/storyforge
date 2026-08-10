@@ -73,6 +73,7 @@ interface Props {
   onImpactReviewDecisionChange: (decision: ImpactReviewDecisionV1) => void
   onImpactReviewNoteChange: (value: string) => void
   onExecuteImpactReview: () => void
+  onOpenImpactManualEntry: () => void
   onConfirmImpactPatch: () => void
   onRejectImpactPatch: () => void
   onToggleOutlinePreview: () => void
@@ -133,6 +134,7 @@ export default function ChapterEditorToolbar({
   onImpactReviewDecisionChange,
   onImpactReviewNoteChange,
   onExecuteImpactReview,
+  onOpenImpactManualEntry,
   onConfirmImpactPatch,
   onRejectImpactPatch,
   onToggleOutlinePreview,
@@ -283,6 +285,16 @@ export default function ChapterEditorToolbar({
                   </span>
                   <span>{selectedImpactReview.output.note}</span>
                   <span>回执 {selectedImpactReview.receiptHash.slice(0, 12)}</span>
+                  {selectedImpactReview.output.decision === 'needs-manual-action' && (
+                    <button
+                      type="button"
+                      onClick={onOpenImpactManualEntry}
+                      className="inline-flex items-center gap-1 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-200 hover:bg-amber-400/20"
+                      title="打开对应的既有人工编辑入口；不会自动修改正式数据"
+                    >
+                      <BookOpenCheck className="h-3 w-3" />打开人工入口
+                    </button>
+                  )}
                 </div>
               )}
               {impactReviewReceipt && <div className="text-[10px] text-success">作者复核回执 {impactReviewReceipt.slice(0, 12)}</div>}

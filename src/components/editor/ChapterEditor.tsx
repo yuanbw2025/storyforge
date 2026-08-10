@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useNavigate } from 'react-router'
 import { FileText, ClipboardList, RotateCcw } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
@@ -17,6 +18,10 @@ import {
   buildImpactRemediationPlanV1,
   type ImpactRemediationPlanV1,
 } from '../../lib/consistency/impact-remediation-plan'
+import {
+  buildImpactHandoffUrlV1,
+  buildImpactHandoffV1,
+} from '../../lib/consistency/impact-handoff'
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
 import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
@@ -204,6 +209,7 @@ interface Props {
 }
 
 export default function ChapterEditor({ project, outlineNodeId }: Props) {
+  const navigate = useNavigate()
   const {
     chapters,
     currentChapter,
@@ -1909,6 +1915,28 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactReviewError('')
   }
 
+  const handleOpenImpactManualEntry = () => {
+    const plan = impactRemediationPlan
+    const itemId = impactReviewItemId
+    if (!plan || !itemId || !currentChapter?.id || !project.id) return
+    const record = impactReviewRecords.find(candidate => candidate.output.itemId === itemId)
+    if (record?.output.decision !== 'needs-manual-action') {
+      setImpactReviewError('只有已记录为“需人工处理”的影响项可以打开人工入口。')
+      return
+    }
+    try {
+      const handoff = buildImpactHandoffV1({
+        plan,
+        itemId,
+        decision: 'needs-manual-action',
+        sourceOutlineNodeId: currentChapter.outlineNodeId ?? outlineNodeId ?? null,
+      })
+      navigate(buildImpactHandoffUrlV1(project.id, handoff))
+    } catch (error) {
+      setImpactReviewError(error instanceof Error ? error.message : '人工入口交接失败')
+    }
+  }
+
   const handleConfirmImpactPatch = async () => {
     const candidate = impactPatchCandidate
     if (!candidate) return
@@ -2748,6 +2776,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onImpactReviewDecisionChange={setImpactReviewDecision}
           onImpactReviewNoteChange={setImpactReviewNote}
           onExecuteImpactReview={() => { void handleExecuteImpactReview() }}
+          onOpenImpactManualEntry={handleOpenImpactManualEntry}
           onConfirmImpactPatch={() => { void handleConfirmImpactPatch() }}
           onRejectImpactPatch={() => { void handleRejectImpactPatch() }}
           onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}

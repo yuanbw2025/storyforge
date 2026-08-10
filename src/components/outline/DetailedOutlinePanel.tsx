@@ -32,6 +32,8 @@ import { useDetailedOutlineGenerationController } from './useDetailedOutlineGene
 
 interface Props {
   project: Project
+  /** 外部影响交接指定的章纲节点；仍通过既有细纲面板处理。 */
+  initialNodeId?: number | null
 }
 
 const EMOTION_LABELS: Record<EmotionArc, string> = {
@@ -47,13 +49,13 @@ export function filterExistingIds(ids: number[], validIds: Set<number>): number[
 }
 
 /** v3 §2.1 — 创作区.细纲（场景拆分 + AI） */
-export default function DetailedOutlinePanel({ project }: Props) {
+export default function DetailedOutlinePanel({ project, initialNodeId }: Props) {
   const toast = useToast()
   const { nodes, loadAll: loadOutline } = useOutlineStore()
   const { detailedOutlines, loadAll: loadDetailed, getOrCreate, save } = useDetailedOutlineStore()
   const { characters, loadAll: loadCharacters } = useCharacterStore()
   const { foreshadows, loadAll: loadForeshadows } = useForeshadowStore()
-  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(initialNodeId ?? null)
   const [pendingBatchCandidate, setPendingBatchCandidate] = useState<DetailedOutlineBatchCandidateV1 | null>(null)
   const batchDecisionRef = useRef<((decision: 'adopt' | 'reject') => void) | null>(null)
 
@@ -69,6 +71,10 @@ export default function DetailedOutlinePanel({ project }: Props) {
     nodes.filter(n => n.type === 'chapter').sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     [nodes],
   )
+
+  useEffect(() => {
+    if (initialNodeId != null) setSelectedNodeId(initialNodeId)
+  }, [initialNodeId])
 
   // 当前选中章节的细纲
   const currentChapter = chapterNodes.find(n => n.id === selectedNodeId)

@@ -62,6 +62,7 @@ async function mount(patch: Record<string, unknown> = {}) {
     onImpactReviewDecisionChange: vi.fn(),
     onImpactReviewNoteChange: vi.fn(),
     onExecuteImpactReview: vi.fn(),
+    onOpenImpactManualEntry: vi.fn(),
     onConfirmImpactPatch: vi.fn(),
     onRejectImpactPatch: vi.fn(),
     onToggleOutlinePreview: vi.fn(),
@@ -284,6 +285,47 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     await act(async () => button(host, '记录复核').click())
     expect(props.onExecuteImpactReview).toHaveBeenCalledOnce()
     expect(props.onRunImpactRemediation).not.toHaveBeenCalled()
+  })
+
+  it('已记录需人工处理时提供既有入口交接，不创建旁路修复面板', async () => {
+    const authorItem = {
+      id: 'impact-remediation:fact:12',
+      nodeId: 'fact:12',
+      kind: 'fact',
+      table: 'temporalFacts',
+      recordId: 12,
+      action: 'review-fact',
+      mode: 'author-confirmed',
+      reason: '事实证据失效。',
+      dependencyNodeIds: [],
+    }
+    const { host, props } = await mount({
+      impactInfo: '事实需要人工处理',
+      impactRemediationPlan: {
+        version: 1,
+        source: { table: 'chapters', recordId: 3, sourceTextHash: 'a'.repeat(64) },
+        graphHash: 'b'.repeat(64),
+        items: [authorItem],
+        counts: { total: 1, deterministic: 0, authorConfirmed: 1 },
+        planHash: 'c'.repeat(64),
+      },
+      impactReviewItemId: authorItem.id,
+      impactReviewRecords: [{
+        runId: 9,
+        receiptHash: 'd'.repeat(64),
+        recordedAt: 1,
+        output: {
+          planHash: 'c'.repeat(64),
+          graphHash: 'b'.repeat(64),
+          sourceTextHash: 'a'.repeat(64),
+          itemId: authorItem.id,
+          decision: 'needs-manual-action',
+          note: '请到事实库处理。',
+        },
+      }],
+    })
+    await act(async () => button(host, '打开人工入口').click())
+    expect(props.onOpenImpactManualEntry).toHaveBeenCalledOnce()
   })
 
   it('明确选择章节叙事视角并允许恢复为不指定', async () => {

@@ -1095,6 +1095,13 @@ CHIRON 四类信息可映射到现有结构：
 - `ChapterEditor` 在影响分析和计划刷新后恢复复核记录，显示“已复核/总作者项”、最新决定、原始理由和回执；切换项目时只从回放记录填充输入，不把未提交的编辑文本当成历史证据。该入口仍只读 Run 账本，不写正文、事实、状态、物品、年表、故事线或大纲。
 - 验收证据为 `R-HARNESS50-impact-review-durable`、`R-AUDIT6-chapter-editor-toolbar`；浏览器完全关闭后自动重建影响计划、独立的复核历史面板和人工处理入口仍待后续单元。
 
+**作者人工入口交接（HARNESS-52，2026-08-10）**
+
+- `src/lib/consistency/impact-handoff.ts` 是影响计划到现有分步骤模块的只读交接协议。它只接受当前计划中已有 `needs-manual-action` 决定的 `author-confirmed` 项，并把 `planHash + graphHash + sourceTextHash`、来源章节/章纲、目标表/记录和返回章节一起绑定；协议不创建表、不声明新的 AI 写入字段、不调用模型，也不调用 `adopt()`。
+- 目标模块按影响动作和 `PROJECT_TABLES` 中已存在的业务表映射：事实/状态/物品/故事线进度/年表/关系/世界设定/故事设计/大纲/细纲/章节分别进入现有面板。未知表采用事实库作为只读复核落点并在工作区显示真实 table/id，未知地址、损坏 hash、非作者项或缺少来源均 fail-closed；这不是自动修正的授权。
+- `ChapterEditorToolbar` 只在有效作者复核回放显示“打开人工入口”；`WorkspacePage` 解析交接后复用既有 Sidebar 模块，章节/细纲可带入已有节点选择，并显示来源证据和返回来源章节按钮。关闭或切换模块会清除交接提示，避免把历史导航状态误当成当前 Canon。
+- 验收证据为 `R-HARNESS52-impact-handoff`（映射、协议往返、证据拒绝）和 `R-AUDIT6-chapter-editor-toolbar`（只在 `needs-manual-action` receipt 存在时转发入口）。本单元仍不实现各领域的通用人工修正表单、自动依赖重跑或正文级级联重写。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；
