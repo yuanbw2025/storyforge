@@ -7,10 +7,15 @@ import { useDragReorder } from './useDragReorder'
 import OutlineStructureMenu from './OutlineStructureMenu'
 import { OutlineChapterRow, OutlineStoryBlockSection } from './OutlineChapterTree'
 import type { ChapterDragPayload, GetActiveChapterDrag } from './chapter-drag'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+} from '../shared/initial-record-target'
 
 interface Props {
   volume: OutlineNode | null
   nodes: OutlineNode[]
+  initialTargetNodeId?: number | null
   multiWorldEnabled: boolean
   worldGroups: WorldGroup[]
   aiStreaming: boolean
@@ -35,6 +40,7 @@ interface Props {
 export default function OutlineVolumeDetail({
   volume,
   nodes,
+  initialTargetNodeId,
   multiWorldEnabled,
   worldGroups,
   aiStreaming,
@@ -81,7 +87,10 @@ export default function OutlineVolumeDetail({
   }
 
   return (
-    <div className="space-y-4">
+    <div
+      {...initialRecordTargetAttributes(volume.id === initialTargetNodeId, volume.id)}
+      className={`space-y-4 rounded-xl ${volume.id === initialTargetNodeId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
+    >
       <div className="flex items-center justify-between">
         <CInput
           value={volume.title}
@@ -165,6 +174,7 @@ export default function OutlineVolumeDetail({
                   key={block.id}
                   block={block}
                   chapters={blockChapters}
+                  initialTargetNodeId={initialTargetNodeId}
                   onUpdateNode={onUpdateNode}
                   onDeleteNode={onDeleteNode}
                   onAddChapter={() => onAddChapter(block.id!)}
@@ -201,6 +211,7 @@ export default function OutlineVolumeDetail({
                   key={chapter.id}
                   ch={chapter}
                   idx={index}
+                  targeted={chapter.id === initialTargetNodeId}
                   onUpdate={onUpdateNode}
                   onDelete={onDeleteNode}
                   onOpen={onOpenChapter}

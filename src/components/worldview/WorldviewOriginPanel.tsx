@@ -14,6 +14,11 @@ import WorldviewOriginSidebar, {
 import CultivationSystemsPanel from './CultivationSystemsPanel'
 import type { Project, DivineDesign } from '../../lib/types'
 import type { WorldviewAgentField } from '../../lib/agent/worldview-field-copilot'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 const AGENT_FIELD_BY_ORIGIN_KEY: Record<WorldviewOriginFieldKey, WorldviewAgentField> = {
   origin: 'worldOrigin',
@@ -23,12 +28,13 @@ const AGENT_FIELD_BY_ORIGIN_KEY: Record<WorldviewOriginFieldKey, WorldviewAgentF
 
 interface Props {
   project: Project
+  initialWorldviewId?: number | null
 }
 
 // ── 主面板 ─────────────────────────────────────────────────────
 
 /** v3 §2.1 — 世界观.世界起源（三个子模块） */
-export default function WorldviewOriginPanel({ project }: Props) {
+export default function WorldviewOriginPanel({ project, initialWorldviewId }: Props) {
   const { worldview, saveWorldview, loadAll } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const copilot = useMasterCopilot({
@@ -46,6 +52,7 @@ export default function WorldviewOriginPanel({ project }: Props) {
     divineRules: '',
   })
   const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
+  useInitialRecordTarget(initialWorldviewId, worldview?.id === initialWorldviewId)
 
   // 多世界模式下按当前世界组加载，单世界传 null 走原逻辑
   useEffect(() => {
@@ -91,7 +98,12 @@ export default function WorldviewOriginPanel({ project }: Props) {
   }, [pendingOriginKey])
 
   return (
-    <div className="flex flex-col w-full max-w-5xl space-y-4">
+    <div
+      {...initialRecordTargetAttributes(worldview?.id === initialWorldviewId, worldview?.id)}
+      className={`flex flex-col w-full max-w-5xl space-y-4 rounded-xl ${
+        worldview?.id === initialWorldviewId ? INITIAL_RECORD_TARGET_CLASS : ''
+      }`}
+    >
       {/* 顶部 */}
       <div className="pb-4 border-b border-border/40">
         <div className="flex items-start justify-between gap-3">

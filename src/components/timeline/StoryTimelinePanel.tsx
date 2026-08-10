@@ -20,10 +20,16 @@ import type { Project } from '../../lib/types'
 import { splitExtractionText, uniqueBy } from '../../lib/ai/structured-extraction'
 import { adopt } from '../../lib/registry/adopt'
 import { assembleContext } from '../../lib/registry/assemble-context'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 interface Props {
   project: Project
   onOpenChapter?: (chapterId: number) => void
+  initialEventId?: number | null
 }
 
 const IMPORTANCE_STYLE: Record<number, string> = {
@@ -32,7 +38,7 @@ const IMPORTANCE_STYLE: Record<number, string> = {
   3: 'bg-amber-500/15 text-amber-400',
 }
 
-export default function StoryTimelinePanel({ project, onOpenChapter }: Props) {
+export default function StoryTimelinePanel({ project, onOpenChapter, initialEventId }: Props) {
   const { events, loading, loadAll, addEvent, updateEvent, deleteEvent, deleteByChapter } = useStoryTimelineStore()
   const { chapters, loadAll: loadChapters } = useChapterStore()
   const aiConfig = useAIConfigStore(s => s.config)
@@ -62,6 +68,7 @@ export default function StoryTimelinePanel({ project, onOpenChapter }: Props) {
     () => chapters.filter(c => c.content && htmlToPlainText(c.content).trim().length > 50),
     [chapters],
   )
+  useInitialRecordTarget(initialEventId, sorted.some(event => event.id === initialEventId))
 
   const handleExtract = async () => {
     const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'story.timeline' }).config
@@ -177,7 +184,11 @@ export default function StoryTimelinePanel({ project, onOpenChapter }: Props) {
       ) : (
         <div className="relative pl-6 border-l border-border/80 space-y-3 ml-2">
           {sorted.map(e => (
-            <div key={e.id} className="relative group">
+            <div
+              key={e.id}
+              {...initialRecordTargetAttributes(e.id === initialEventId, e.id)}
+              className={`relative group rounded-lg ${e.id === initialEventId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
+            >
               <span className={`absolute -left-[31px] top-2 w-2.5 h-2.5 rounded-full border-2 bg-bg-base ${
                 e.importance === 3 ? 'border-amber-500 ring-4 ring-amber-500/10'
                   : e.importance === 2 ? 'border-blue-500 ring-4 ring-blue-500/10'

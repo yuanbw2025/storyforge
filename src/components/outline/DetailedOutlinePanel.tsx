@@ -29,6 +29,11 @@ import { useToast } from '../shared/Toast'
 import DetailedOutlineSidebar from './DetailedOutlineSidebar'
 import DetailedSceneCard from './DetailedSceneCard'
 import { useDetailedOutlineGenerationController } from './useDetailedOutlineGenerationController'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 interface Props {
   project: Project
@@ -79,6 +84,7 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
   // 当前选中章节的细纲
   const currentChapter = chapterNodes.find(n => n.id === selectedNodeId)
   const currentDetailed = detailedOutlines.find(d => d.outlineNodeId === selectedNodeId)
+  useInitialRecordTarget(initialNodeId, currentChapter?.id === initialNodeId)
   const validCharacterIds = useMemo(
     () => new Set(characters.map(c => c.id).filter((id): id is number => id != null)),
     [characters],
@@ -423,7 +429,12 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
       />
 
       {/* 右侧：细纲编辑 */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div
+        {...initialRecordTargetAttributes(currentChapter?.id === initialNodeId, currentChapter?.id)}
+        className={`flex-1 overflow-y-auto p-6 ${
+          currentChapter?.id === initialNodeId ? INITIAL_RECORD_TARGET_CLASS : ''
+        }`}
+      >
         {!currentChapter ? (
           <div className="h-full flex items-center justify-center text-text-muted text-sm">
             从左侧选一个章节开始编辑细纲。

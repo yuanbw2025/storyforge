@@ -4,18 +4,32 @@ import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import type { Project } from '../../lib/types'
 import CultivationSystemsPanel from './CultivationSystemsPanel'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
+
+export interface PowerSystemInitialRecordTarget {
+  table: 'powerSystems' | 'cultivationSystems'
+  recordId: number
+}
 
 interface Props {
   project: Project
+  initialRecordTarget?: PowerSystemInitialRecordTarget | null
 }
 
-export default function PowerSystemPanel({ project }: Props) {
+export default function PowerSystemPanel({ project, initialRecordTarget }: Props) {
   const { powerSystem, savePowerSystem, loadAll } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [levels, setLevels] = useState('')
   const [rules, setRules] = useState('')
+  const initialPowerSystemId = initialRecordTarget?.table === 'powerSystems'
+    ? initialRecordTarget.recordId
+    : null
 
   useEffect(() => {
     loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
@@ -33,9 +47,13 @@ export default function PowerSystemPanel({ project }: Props) {
   const handleSave = async () => {
     await savePowerSystem({ projectId: project.id!, name, description, levels, rules })
   }
+  useInitialRecordTarget(initialPowerSystemId, powerSystem?.id === initialPowerSystemId)
 
   return (
-    <div className="max-w-3xl">
+    <div
+      {...initialRecordTargetAttributes(powerSystem?.id === initialPowerSystemId, powerSystem?.id)}
+      className={`max-w-3xl rounded-xl ${powerSystem?.id === initialPowerSystemId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
+    >
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-text-primary">⚡ 力量体系</h2>
         {project.enableMultiWorld && <WorldGroupSwitcher />}
@@ -85,7 +103,12 @@ export default function PowerSystemPanel({ project }: Props) {
           />
         </div>
       </div>
-      <CultivationSystemsPanel project={project} />
+      <CultivationSystemsPanel
+        project={project}
+        initialSystemId={initialRecordTarget?.table === 'cultivationSystems'
+          ? initialRecordTarget.recordId
+          : null}
+      />
     </div>
   )
 }

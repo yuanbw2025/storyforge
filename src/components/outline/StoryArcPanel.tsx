@@ -13,13 +13,24 @@ import type { Project, StoryArc, StoryArcType } from '../../lib/types'
 import { parseStages, type StoryStage } from '../../lib/types/story-arc'
 import { nanoid } from 'nanoid'
 import StorylineProgressPanel from './StorylineProgressPanel'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
+
+export interface StoryArcInitialRecordTarget {
+  table: 'storyArcs' | 'storylineProgress' | 'storylineCrossings'
+  recordId: number
+}
 
 interface Props {
   project: Project
   worldGroupId: number | null
+  initialRecordTarget?: StoryArcInitialRecordTarget | null
 }
 
-export default function StoryArcPanel({ project, worldGroupId }: Props) {
+export default function StoryArcPanel({ project, worldGroupId, initialRecordTarget }: Props) {
   const dialog = useDialog()
   const { arcs, activeArcId, loadAll, setActiveArc, addArc, updateArc, deleteArc, updateStages } = useStoryArcStore()
   const copilot = useMasterCopilot({ project, worldGroupId })
@@ -31,6 +42,14 @@ export default function StoryArcPanel({ project, worldGroupId }: Props) {
 
   const activeArc = arcs.find(a => a.id === activeArcId)
   const activeStages = activeArc ? parseStages(activeArc.stages) : []
+  const initialArcId = initialRecordTarget?.table === 'storyArcs'
+    ? initialRecordTarget.recordId
+    : null
+
+  useEffect(() => {
+    if (initialArcId != null && arcs.some(arc => arc.id === initialArcId)) setActiveArc(initialArcId)
+  }, [arcs, initialArcId, setActiveArc])
+  useInitialRecordTarget(initialArcId, activeArc?.id === initialArcId)
 
   // 新建空故事线
   const handleAddArc = async (type: StoryArcType) => {
@@ -212,6 +231,7 @@ export default function StoryArcPanel({ project, worldGroupId }: Props) {
           <StoryArcEditor
             arc={activeArc}
             stages={activeStages}
+            targeted={activeArc.id === initialArcId}
             onUpdateArc={(data) => updateArc(activeArc.id!, data)}
             onUpdateStages={(stages) => updateStages(activeArc.id!, stages)}
             onDelete={() => handleDeleteArc(activeArc.id!)}
@@ -221,6 +241,10 @@ export default function StoryArcPanel({ project, worldGroupId }: Props) {
             arcs={arcs}
             copilot={copilot}
             onArcsChanged={() => loadAll(project.id!)}
+            initialRecordTarget={initialRecordTarget?.table === 'storylineProgress'
+              || initialRecordTarget?.table === 'storylineCrossings'
+              ? initialRecordTarget
+              : null}
           />
         </>
       ) : (
@@ -235,9 +259,10 @@ export default function StoryArcPanel({ project, worldGroupId }: Props) {
 
 // ── 故事线编辑器 ──
 
-function StoryArcEditor({ arc, stages, onUpdateArc, onUpdateStages, onDelete }: {
+function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onUpdateStages, onDelete }: {
   arc: NonNullable<ReturnType<typeof useStoryArcStore.getState>['arcs'][0]>
   stages: StoryStage[]
+  targeted: boolean
   onUpdateArc: (data: Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>) => void
   onUpdateStages: (stages: StoryStage[]) => void
   onDelete: () => void
@@ -271,7 +296,10 @@ function StoryArcEditor({ arc, stages, onUpdateArc, onUpdateStages, onDelete }: 
   }
 
   return (
-    <div className="space-y-4">
+    <div
+      {...initialRecordTargetAttributes(targeted, arc.id)}
+      className={`space-y-4 rounded-xl ${targeted ? INITIAL_RECORD_TARGET_CLASS : ''}`}
+    >
       {/* 故事线基本信息 */}
       <div className="bg-bg-surface border border-border rounded-xl p-4">
         <div className="flex items-center gap-3 mb-3">

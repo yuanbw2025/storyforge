@@ -30,9 +30,15 @@ import { useDialog } from '../shared/Dialog'
 import WorldRuleEntryEditor from './WorldRuleEntryEditor'
 import WorldRulesNavigation from './WorldRulesNavigation'
 import type { WorldRuleNavigationNode } from './WorldRulesNavigation'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 interface Props {
   project: Project
+  initialProfileId?: number | null
 }
 
 // ── 辅助 ──────────────────────────────────────────────────────────
@@ -61,7 +67,7 @@ function getL2Nodes(
 
 // ── 主面板 ─────────────────────────────────────────────────────────
 
-export default function WorldRulesPanel({ project }: Props) {
+export default function WorldRulesPanel({ project, initialProfileId }: Props) {
   const dialog = useDialog()
   const {
     profile, loading, loadProfile,
@@ -86,6 +92,7 @@ export default function WorldRulesPanel({ project }: Props) {
   // 时间线 & 关键词（用于预览）
   const [timelineEvents, setTimelineEvents] = useState<HistoricalTimelineEvent[]>([])
   const [keywords, setKeywords] = useState<HistoricalKeyword[]>([])
+  useInitialRecordTarget(initialProfileId, profile?.id === initialProfileId)
 
   const projectWorldGroups = useMemo(
     () => worldGroups.filter(group => group.projectId === project.id),
@@ -300,7 +307,12 @@ export default function WorldRulesPanel({ project }: Props) {
   const filled = filledCount()
 
   return (
-    <div className="max-w-7xl mx-auto space-y-4">
+    <div
+      {...initialRecordTargetAttributes(profile.id === initialProfileId, profile.id)}
+      className={`max-w-7xl mx-auto space-y-4 rounded-xl ${
+        profile.id === initialProfileId ? INITIAL_RECORD_TARGET_CLASS : ''
+      }`}
+    >
       {/* 标题栏 */}
       <div className="flex items-center justify-between">
         <div>

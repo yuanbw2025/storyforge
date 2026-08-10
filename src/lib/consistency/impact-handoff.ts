@@ -20,6 +20,7 @@ export type ImpactHandoffModuleV2 =
   | 'worldview-origin'
   | 'worldview-natural'
   | 'worldview-humanity'
+  | 'power-system'
   | 'story-design'
   | 'outline'
   | 'detailed-outline'
@@ -58,7 +59,7 @@ const MANUAL_ACTIONS: ReadonlySet<ImpactRemediationActionV1> = new Set([
 const MODULES: ReadonlySet<ImpactHandoffModuleV2> = new Set([
   'chapters-list', 'fact-library', 'state-table', 'inventory', 'story-arc',
   'story-timeline', 'relations', 'characters', 'world-rules', 'worldview-origin',
-  'worldview-natural', 'worldview-humanity', 'story-design', 'outline',
+  'worldview-natural', 'worldview-humanity', 'power-system', 'story-design', 'outline',
   'detailed-outline', 'rules', 'references',
 ])
 
@@ -84,6 +85,7 @@ export function resolveImpactHandoffModuleV2(
     case 'review-source-record':
       if (item.table === 'worldRules') return 'world-rules'
       if (item.table === 'worldviews') return 'worldview-origin'
+      if (item.table === 'powerSystems' || item.table === 'cultivationSystems') return 'power-system'
       if (item.table === 'storyCores') return 'story-design'
       if (item.table === 'characters') return 'characters'
       if (item.table === 'characterRelations') return 'relations'
@@ -188,4 +190,12 @@ export function buildImpactHandoffUrlV2(projectId: number, handoff: ImpactHandof
     impactHandoff: serializeImpactHandoffV2(handoff),
   })
   return `/workspace/${projectId}?${params.toString()}`
+}
+
+/** A valid receipt is only actionable on the module encoded by the handoff. */
+export function isImpactHandoffRouteModuleV2(
+  routeModule: string | null | undefined,
+  handoff: Pick<ImpactHandoffV2, 'targetModule'>,
+): boolean {
+  return routeModule === handoff.targetModule
 }

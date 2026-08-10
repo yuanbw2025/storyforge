@@ -1114,6 +1114,12 @@ CHIRON 四类信息可映射到现有结构：
 - `validateCurrentImpactHandoffV2()` 在目标工作区重新校验来源章节与章纲归属，重建当前 impact graph/plan，并通过 HARNESS-51 回放当前 item 的最新有效复核。只有 action/table/record、三类 plan hash、Run、receipt 和最新决定全部一致时，`WorkspacePage` 才显示“影响项需要人工处理”；格式正确但伪造的 URL、被后续 `acknowledged` 覆盖的旧决定、跨作用域记录和 stale 正文均不会获得可信提示。
 - 该验签只读既有三注册表数据和 Run 账本，不新增表、不调用模型、不调用 `adopt()`，也不证明人工修正已经完成。`R-HARNESS54-impact-handoff-validation` 覆盖真实回执放行及伪造 Run/receipt、旧决定、正文变化反例；各领域修正后的完成证明与依赖重跑仍需后续单元。
 
+**可信人工交接的精确落点（HARNESS-55，2026-08-10）**
+
+- `resolveCurrentImpactHandoffTargetV2()` 从 `PROJECT_TABLES` 取得真实表并校验当前 World/Work 作用域；目标不存在、表未登记、同项目跨 Work、模块与 action/table 不一致均 fail-closed。章节和细纲记录不会把业务主键直接交给 UI，而是先解析为现有面板使用的 `outlineNodeId`；力量/修炼体系也回到既有力量体系面板，不再借事实库形成假落点。
+- `WorkspacePage` 只有在 URL `module`、当前可见模块和验签后的 `targetModule` 三者一致时才消费交接。事实页签、关系图/列表、角色与参考筛选、物品聚合、故事线动态投影、大纲层级、细纲/章节及单记录设定面板均复用现有选择状态，自动显露并以琥珀色标记具体记录；不自动进入编辑态、不修改任何业务数据，切换模块会撤销交接投影。
+- `R-HARNESS55-impact-target-validation` 覆盖章节/细纲 ID 归一、错误模块、目标缺失、未登记表和同项目跨 Work；`R-HARNESS55-impact-target-ui` 覆盖默认筛选隐藏事实与默认关系图隐藏关系时的真实显露。本单元仍只证明“作者到达了正确记录”，不证明作者完成修正，也不触发 stale/replan 或依赖重跑。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

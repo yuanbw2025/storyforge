@@ -27,9 +27,15 @@ import {
   selectInventoryExtractionChapters,
   type InventoryExtractionMode,
 } from '../../lib/inventory/extraction-range'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 interface Props {
   project: Project
+  initialEntryId?: number | null
 }
 
 const ROLE_WEIGHT_GROUPS: { weight: CharacterRoleWeight; label: string }[] = [
@@ -39,7 +45,7 @@ const ROLE_WEIGHT_GROUPS: { weight: CharacterRoleWeight; label: string }[] = [
   { weight: 'extra', label: '路人' },
 ]
 
-export default function InventoryPanel({ project }: Props) {
+export default function InventoryPanel({ project, initialEntryId }: Props) {
   const { entries, loading, loadAll, addEntry, updateEntry, deleteEntry, deleteByChapter } = useItemLedgerStore()
   const { chapters, loadAll: loadChapters } = useChapterStore()
   const { characters, loadAll: loadCharacters } = useCharacterStore()
@@ -104,6 +110,22 @@ export default function InventoryPanel({ project }: Props) {
   const unclaimedEntries = useMemo(
     () => entries.filter(e => (e.characterId ?? null) === null && e.heldByName === '未知(历史数据)'),
     [entries],
+  )
+  const targetEntry = entries.find(entry => entry.id === initialEntryId) ?? null
+  const targetInventoryKey = targetEntry
+    ? JSON.stringify([targetEntry.characterId ?? targetEntry.heldByName, targetEntry.itemName.trim()])
+    : null
+
+  useEffect(() => {
+    if (!targetEntry || !targetInventoryKey) return
+    setSelectedCharacterId(targetEntry.characterId ?? null)
+    setExpanded(targetInventoryKey)
+  }, [targetEntry, targetInventoryKey])
+  useInitialRecordTarget(
+    initialEntryId,
+    targetEntry != null && (
+      targetEntry.heldByName === '未知(历史数据)' || expanded === targetInventoryKey
+    ),
   )
 
   const handleExtract = async () => {
@@ -373,12 +395,13 @@ export default function InventoryPanel({ project }: Props) {
           {inventory.map(item => {
             const inventoryKey = JSON.stringify([item.characterId ?? item.heldByName, item.itemName])
             const isOpen = expanded === inventoryKey
+            const containsTarget = item.entries.some(entry => entry.id === initialEntryId)
             const gained = item.entries.filter(entry => entry.action === 'gain').reduce((sum, entry) => sum + entry.quantity, 0)
             const consumed = item.entries.filter(entry => entry.action === 'consume').reduce((sum, entry) => sum + entry.quantity, 0)
             return (
               <div key={inventoryKey} className={`bg-bg-surface border rounded-xl overflow-hidden ${
                 item.quantity > 0 ? 'border-border' : 'border-border/60 opacity-80'
-              }`}>
+              } ${containsTarget ? 'border-amber-400/60' : ''}`}>
                 {/* 物品头部 */}
                 <button
                   onClick={() => setExpanded(isOpen ? null : inventoryKey)}
@@ -412,7 +435,13 @@ export default function InventoryPanel({ project }: Props) {
                     <p className="text-[10px] uppercase tracking-wide text-text-muted mb-2">获得 / 消耗时间线</p>
                     <div className="relative ml-1 border-l border-border/70">
                     {item.entries.map(e => (
-                      <div key={e.id} className="relative flex flex-wrap items-center gap-2 pl-4 py-2 text-xs group">
+                      <div
+                        key={e.id}
+                        {...initialRecordTargetAttributes(e.id === initialEntryId, e.id)}
+                        className={`relative flex flex-wrap items-center gap-2 pl-4 py-2 text-xs group rounded ${
+                          e.id === initialEntryId ? INITIAL_RECORD_TARGET_CLASS : ''
+                        }`}
+                      >
                         <span className={`absolute -left-1.5 w-3 h-3 rounded-full border-2 bg-bg-surface ${
                           e.action === 'gain' ? 'border-green-400' : 'border-red-400'
                         }`} />
@@ -507,7 +536,11 @@ export default function InventoryPanel({ project }: Props) {
           </p>
           <div className="text-[10px] text-text-muted space-y-1">
             {unclaimedEntries.map(e => (
-              <div key={e.id} className="flex items-center gap-2">
+              <div
+                key={e.id}
+                {...initialRecordTargetAttributes(e.id === initialEntryId, e.id)}
+                className={`flex items-center gap-2 rounded ${e.id === initialEntryId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
+              >
                 <span>{e.itemName}</span>
                 <span className="text-text-muted/60">{e.action === 'gain' ? '获得' : '消耗'} ×{e.quantity}</span>
                 {e.chapterTitle && <span className="text-text-muted/60">· {e.chapterTitle}</span>}

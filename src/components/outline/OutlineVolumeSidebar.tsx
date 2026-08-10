@@ -10,11 +10,16 @@ import {
   type ChapterDragPayload,
   type GetActiveChapterDrag,
 } from './chapter-drag'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+} from '../shared/initial-record-target'
 
 interface OutlineVolumeSidebarProps {
   volumes: OutlineNode[]
   nodes: OutlineNode[]
   selectedVolumeId: number | null
+  initialTargetNodeId?: number | null
   multiWorldEnabled: boolean
   worldGroups: WorldGroup[]
   aiStreaming: boolean
@@ -39,6 +44,7 @@ export default function OutlineVolumeSidebar({
   volumes,
   nodes,
   selectedVolumeId,
+  initialTargetNodeId,
   multiWorldEnabled,
   worldGroups,
   aiStreaming,
@@ -167,6 +173,7 @@ export default function OutlineVolumeSidebar({
           return (
             <div
               key={volume.id}
+              {...initialRecordTargetAttributes(volume.id === initialTargetNodeId, volume.id)}
               {...dnd.dropProps}
               data-outline-volume-id={volume.id}
               data-chapter-drop-target={isChapterDropTarget ? 'true' : undefined}
@@ -197,7 +204,9 @@ export default function OutlineVolumeSidebar({
               }}
               className={`group/vol flex items-center rounded-lg mb-0.5 transition-all ${
                 active ? 'bg-accent/8 border-l-2 border-accent' : 'hover:bg-bg-hover border-l-2 border-transparent'
-              } ${dnd.isDragging ? 'opacity-40' : ''} ${dnd.isOver || isChapterDropTarget ? 'ring-1 ring-accent/60 bg-accent/10' : ''}`}
+              } ${dnd.isDragging ? 'opacity-40' : ''} ${dnd.isOver || isChapterDropTarget ? 'ring-1 ring-accent/60 bg-accent/10' : ''} ${
+                volume.id === initialTargetNodeId ? INITIAL_RECORD_TARGET_CLASS : ''
+              }`}
             >
               <span
                 {...dnd.dragHandleProps}

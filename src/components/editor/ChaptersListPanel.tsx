@@ -15,6 +15,11 @@ import ChapterEditor from './ChapterEditor'
 import FindReplacePanel from './FindReplacePanel'
 import { buildBestChapterByOutlineMap } from '../../lib/chapters/selectors'
 import type { Project, ChapterStatus } from '../../lib/types'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 interface Props {
   project: Project
@@ -113,6 +118,7 @@ export default function ChaptersListPanel({ project, initialNodeId }: Props) {
 
   // 选中章节的信息
   const selectedNode = nodes.find(n => n.id === selectedNodeId)
+  useInitialRecordTarget(initialNodeId, selectedNode?.id === initialNodeId)
   const totalChapters = volumeGroups.reduce((sum, g) => sum + g.chapters.length, 0)
   const totalWords = chapters.reduce((sum, c) => sum + (c.wordCount || 0), 0)
 
@@ -155,12 +161,13 @@ export default function ChaptersListPanel({ project, initialNodeId }: Props) {
                   return (
                     <button
                       key={ch.id}
+                      {...initialRecordTargetAttributes(ch.id === initialNodeId, ch.id)}
                       onClick={() => setSelectedNodeId(ch.id!)}
                       className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-all ${
                         active
                           ? 'bg-accent/10 border-l-2 border-accent'
                           : 'hover:bg-bg-hover border-l-2 border-transparent'
-                      }`}
+                      } ${ch.id === initialNodeId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
                     >
                       <span className="text-[10px] text-text-muted w-4 shrink-0 text-right">{idx + 1}</span>
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[status]}`}

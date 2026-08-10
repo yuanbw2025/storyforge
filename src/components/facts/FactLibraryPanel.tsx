@@ -11,6 +11,11 @@ import type { FactStatus } from '../../lib/types/temporal-fact'
 import { exportFactMemoryMarkdown } from '../../lib/fact-ledger/human-readable-io'
 import KnowledgeLedgerPanel from './KnowledgeLedgerPanel'
 import WorldConstitutionPanel from './WorldConstitutionPanel'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 type FactTab = FactStatus | 'exceptions'
 
@@ -40,7 +45,13 @@ const STATUS_HINT: Partial<Record<FactStatus, string>> = {
   'invalid-range': 'validFrom/validTo 指向的章节已失效；需要人工重设或确认。',
 }
 
-export default function FactLibraryPanel({ project }: { project: Project }) {
+export default function FactLibraryPanel({
+  project,
+  initialFactId,
+}: {
+  project: Project
+  initialFactId?: number | null
+}) {
   const { facts, loading, load, confirmFact, rejectFact, importCandidateDiff } = useFactLedgerStore()
   const [tab, setTab] = useState<FactTab>('exceptions')
   const [diffText, setDiffText] = useState('')
@@ -59,6 +70,20 @@ export default function FactLibraryPanel({ project }: { project: Project }) {
   const rows = useMemo(() => tab === 'exceptions'
     ? facts.filter(f => EXCEPTION_STATUSES.includes(f.status))
     : facts.filter(f => f.status === tab), [facts, tab])
+  const targetFact = useMemo(
+    () => facts.find(fact => fact.id === initialFactId) ?? null,
+    [facts, initialFactId],
+  )
+
+  useEffect(() => {
+    if (!targetFact) return
+    setLibraryMode('facts')
+    setTab(EXCEPTION_STATUSES.includes(targetFact.status) ? 'exceptions' : targetFact.status)
+  }, [targetFact])
+  useInitialRecordTarget(
+    initialFactId,
+    libraryMode === 'facts' && rows.some(fact => fact.id === initialFactId),
+  )
 
   const handleExport = async () => {
     if (project.id == null) return
@@ -149,7 +174,13 @@ export default function FactLibraryPanel({ project }: { project: Project }) {
         {rows.map(f => {
           const spec = getFactPredicate(f.predicate)
           return (
-            <div key={f.id} className="flex items-start gap-3 p-3 bg-bg-elevated rounded-lg border border-border">
+            <div
+              key={f.id}
+              {...initialRecordTargetAttributes(f.id === initialFactId, f.id)}
+              className={`flex items-start gap-3 p-3 bg-bg-elevated rounded-lg border border-border ${
+                f.id === initialFactId ? INITIAL_RECORD_TARGET_CLASS : ''
+              }`}
+            >
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-text-primary">
                   <span className="font-medium">{f.subjectName}</span>

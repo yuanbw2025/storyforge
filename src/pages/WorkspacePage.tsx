@@ -69,15 +69,21 @@ const ChatCopilotPanel = lazy(() => import('../components/agent/ChatCopilotPanel
 import { useLocationStore } from '../stores/location'
 import { useWorldGroupStore } from '../stores/world-group'
 import { resolveScopeLike } from '../lib/world-engine/scope'
-import { parseImpactHandoffV2, type ImpactHandoffV2 } from '../lib/consistency/impact-handoff'
-import { validateCurrentImpactHandoffV2 } from '../lib/agent/run/impact-handoff-durable'
+import {
+  isImpactHandoffRouteModuleV2,
+  parseImpactHandoffV2,
+  type ImpactHandoffV2,
+} from '../lib/consistency/impact-handoff'
+import {
+  validateCurrentImpactHandoffV2,
+  type CurrentImpactHandoffTargetV2,
+} from '../lib/agent/run/impact-handoff-durable'
 
 export default function WorkspacePage() {
   const { projectId } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
   const { loadProject, projects, currentProjectId } = useProjectStore()
-  const loadedChapters = useChapterStore(state => state.chapters)
   const initialModule = new URLSearchParams(location.search).get('module')
   const initialSidebarModule = initialModule && Object.prototype.hasOwnProperty.call(MODULE_CONTENT_TYPES, initialModule)
     ? initialModule as SidebarModule
@@ -90,6 +96,7 @@ export default function WorkspacePage() {
   const [showProperties, setShowProperties] = useState(false)
   const [showCopilot, setShowCopilot] = useState(false)
   const [impactHandoff, setImpactHandoff] = useState<ImpactHandoffV2 | null>(null)
+  const [impactHandoffTarget, setImpactHandoffTarget] = useState<CurrentImpactHandoffTargetV2 | null>(null)
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
   const worldGroups = useWorldGroupStore(state => state.groups)
 
@@ -122,26 +129,33 @@ export default function WorkspacePage() {
   useEffect(() => {
     let active = true
     setImpactHandoff(null)
-    const parsed = parseImpactHandoffV2(new URLSearchParams(location.search).get('impactHandoff'))
-    if (!parsed || project?.id == null) return () => { active = false }
+    setImpactHandoffTarget(null)
+    const params = new URLSearchParams(location.search)
+    const parsed = parseImpactHandoffV2(params.get('impactHandoff'))
+    if (
+      !parsed
+      || project?.id == null
+      || !isImpactHandoffRouteModuleV2(params.get('module'), parsed)
+      || activeModule !== parsed.targetModule
+    ) return () => { active = false }
     void resolveScopeLike(project.id)
       .then(scope => validateCurrentImpactHandoffV2({ scope, handoff: parsed }))
       .then(state => {
-        if (active && state) setImpactHandoff(parsed)
+        if (active && state) {
+          setImpactHandoff(parsed)
+          setImpactHandoffTarget(state.target)
+        }
       })
       .catch(error => {
         if (active) console.warn('[ImpactHandoff] 交接证据无效:', error)
       })
     return () => { active = false }
-  }, [location.search, project?.id])
+  }, [activeModule, location.search, project?.id])
 
   const handoffChapterNodeId = useMemo(() => {
     if (!impactHandoff || impactHandoff.targetModule !== 'chapters-list') return null
-    if (impactHandoff.table === 'chapters' && impactHandoff.targetRecordId != null) {
-      return loadedChapters.find(chapter => chapter.id === impactHandoff.targetRecordId)?.outlineNodeId ?? null
-    }
-    return impactHandoff.targetRecordId
-  }, [impactHandoff, loadedChapters])
+    return impactHandoffTarget?.moduleRecordId ?? null
+  }, [impactHandoff, impactHandoffTarget])
 
   useEffect(() => {
     const load = async () => {
@@ -239,6 +253,7 @@ export default function WorkspacePage() {
       'worldview-origin': '世界起源',
       'worldview-natural': '自然环境',
       'worldview-humanity': '人文环境',
+      'power-system': '力量体系',
       'story-design': '故事设计',
       outline: '大纲',
       'detailed-outline': '细纲',
@@ -249,12 +264,14 @@ export default function WorkspacePage() {
 
   const dismissImpactHandoff = () => {
     setImpactHandoff(null)
+    setImpactHandoffTarget(null)
     navigate(`/workspace/${project.id}?module=${activeModule}`, { replace: true })
   }
 
   const returnFromImpactHandoff = () => {
     if (!impactHandoff) return
     setImpactHandoff(null)
+    setImpactHandoffTarget(null)
     setEditorNodeId(impactHandoff.returnNodeId)
     setActiveModule('chapters-list')
     navigate(`/workspace/${project.id}?module=chapters-list`, { replace: true })
@@ -266,7 +283,12 @@ export default function WorkspacePage() {
       case 'info':
         return <ProjectInfoPanel project={project} onUpdate={() => useProjectStore.getState().loadProjects()} />
       case 'references':
-        return <ReferencePanel project={project} />
+        return <ReferencePanel
+          project={project}
+          initialReferenceId={impactHandoff?.targetModule === 'references' && impactHandoffTarget?.table === 'references'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
       case 'inspiration':
         return <InspirationPanel project={project} />
 
@@ -276,9 +298,19 @@ export default function WorkspacePage() {
 
       // ── 设定库 - 世界观 ─────────────────────────────────────────────
       case 'world-rules':
-        return <WorldRulesPanel project={project} />
+        return <WorldRulesPanel
+          project={project}
+          initialProfileId={impactHandoff?.targetModule === 'world-rules' && impactHandoffTarget?.table === 'worldRules'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
       case 'worldview-origin':
-        return <WorldviewOriginPanel project={project} />
+        return <WorldviewOriginPanel
+          project={project}
+          initialWorldviewId={impactHandoff?.targetModule === 'worldview-origin' && impactHandoffTarget?.table === 'worldviews'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
       case 'worldview-natural':
         return <WorldviewNaturalPanel project={project} />
       case 'worldview-humanity':
@@ -290,16 +322,32 @@ export default function WorkspacePage() {
       case 'history':
         return <HistoryPanel project={project} />
       case 'power-system':
-        return <PowerSystemPanel project={project} />
+        return <PowerSystemPanel
+          project={project}
+          initialRecordTarget={impactHandoff?.targetModule === 'power-system'
+            && (impactHandoffTarget?.table === 'powerSystems' || impactHandoffTarget?.table === 'cultivationSystems')
+            ? { table: impactHandoffTarget.table, recordId: impactHandoffTarget.moduleRecordId }
+            : null}
+        />
 
       // ── 设定库 - 故事设计 ─────────────────────────────────────────
       case 'story-design':
       case 'story-core':
-        return <StoryCorePanel project={project} />
+        return <StoryCorePanel
+          project={project}
+          initialStoryCoreId={impactHandoff?.targetModule === 'story-design' && impactHandoffTarget?.table === 'storyCores'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
 
       // ── 设定库 - 角色设计 ──────────────────────────────────────────
       case 'characters':
-        return <CharacterPanel project={project} />
+        return <CharacterPanel
+          project={project}
+          initialCharacterId={impactHandoff?.targetModule === 'characters' && impactHandoffTarget?.table === 'characters'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
       case 'characters-main':
         return <CharacterMainPanel project={project} />
       case 'characters-minor':
@@ -309,13 +357,29 @@ export default function WorkspacePage() {
       case 'characters-extra':
         return <CharacterExtraPanel project={project} />
       case 'relations':
-        return <CharacterRelationPanel project={project} />
+        return <CharacterRelationPanel
+          project={project}
+          initialRelationId={impactHandoff?.targetModule === 'relations' && impactHandoffTarget?.table === 'characterRelations'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
 
       // ── 创作区 ─────────────────────────────────────────────────────
       case 'rules':
-        return <CreativeRulesPanel project={project} />
+        return <CreativeRulesPanel
+          project={project}
+          initialRulesId={impactHandoff?.targetModule === 'rules' && impactHandoffTarget?.table === 'creativeRules'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
       case 'outline':
-        return <OutlinePanel project={project} onOpenChapter={handleOpenChapter} />
+        return <OutlinePanel
+          project={project}
+          onOpenChapter={handleOpenChapter}
+          initialNodeId={impactHandoff?.targetModule === 'outline' && impactHandoffTarget?.table === 'outlineNodes'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
       case 'character-driven-plot':
         return <CharacterDrivenPlotPanel project={project} worldGroupId={copilotWorldGroupId} />
       case 'visual-workflows':
@@ -333,7 +397,9 @@ export default function WorkspacePage() {
       case 'detailed-outline':
         return <DetailedOutlinePanel
           project={project}
-          initialNodeId={impactHandoff?.targetModule === 'detailed-outline' ? impactHandoff.targetRecordId : null}
+          initialNodeId={impactHandoff?.targetModule === 'detailed-outline'
+            ? impactHandoffTarget?.moduleRecordId ?? null
+            : null}
         />
       case 'chapters-list':
         return <ChaptersListPanel project={project} initialNodeId={handoffChapterNodeId ?? editorNodeId} />
@@ -346,16 +412,44 @@ export default function WorkspacePage() {
       case 'locations':
         return <LocationPanel project={project} />
       case 'story-arc':
-        return <StoryArcPanel project={project} worldGroupId={copilotWorldGroupId} />
+        return <StoryArcPanel
+          project={project}
+          worldGroupId={copilotWorldGroupId}
+          initialRecordTarget={impactHandoff?.targetModule === 'story-arc'
+            && (impactHandoffTarget?.table === 'storyArcs'
+              || impactHandoffTarget?.table === 'storylineProgress'
+              || impactHandoffTarget?.table === 'storylineCrossings')
+            ? { table: impactHandoffTarget.table, recordId: impactHandoffTarget.moduleRecordId }
+            : null}
+        />
       case 'state-table':
-        return <StatePanel project={project} onOpenInventory={() => setActiveModule('inventory')} />
+        return <StatePanel
+          project={project}
+          onOpenInventory={() => setActiveModule('inventory')}
+          initialStateCardId={impactHandoff?.targetModule === 'state-table' && impactHandoffTarget?.table === 'stateCards'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
       case 'inventory':
-        return <InventoryPanel project={project} />
+        return <InventoryPanel
+          project={project}
+          initialEntryId={impactHandoff?.targetModule === 'inventory' && impactHandoffTarget?.table === 'itemLedger'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
       case 'fact-library':
-        return <FactLibraryPanel project={project} />
+        return <FactLibraryPanel
+          project={project}
+          initialFactId={impactHandoff?.targetModule === 'fact-library' && impactHandoffTarget?.table === 'temporalFacts'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
+        />
       case 'story-timeline':
         return <StoryTimelinePanel
           project={project}
+          initialEventId={impactHandoff?.targetModule === 'story-timeline' && impactHandoffTarget?.table === 'storyTimelineEvents'
+            ? impactHandoffTarget.moduleRecordId
+            : null}
           onOpenChapter={(chapterId) => {
             const chapter = useChapterStore.getState().chapters.find(item => item.id === chapterId)
             if (chapter) handleOpenChapter(chapter.outlineNodeId)
@@ -397,7 +491,7 @@ export default function WorkspacePage() {
       {/* 左侧导航 */}
       <Sidebar
         active={activeModule}
-        onSelect={(m) => { setImpactHandoff(null); setActiveModule(m); if (m !== 'editor') setEditorNodeId(null) }}
+        onSelect={(m) => { setImpactHandoff(null); setImpactHandoffTarget(null); setActiveModule(m); if (m !== 'editor') setEditorNodeId(null) }}
         onBack={() => navigate(backPath)}
         projectName={project.name}
         collapsed={sidebarCollapsed}

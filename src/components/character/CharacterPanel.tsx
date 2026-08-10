@@ -22,6 +22,11 @@ import {
   ROLE_WEIGHT_LABELS,
   filterCharactersByRoleWeight,
 } from '../../lib/character/character-axes'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 // ── 常量 ───────────────────────────────────────────────────────
 
@@ -38,11 +43,12 @@ const GLYPH_COLORS = [
 interface Props {
   project: Project
   view?: 'generator' | 'main'
+  initialCharacterId?: number | null
 }
 
 // ── 主面板 ─────────────────────────────────────────────────────
 
-export default function CharacterPanel({ project, view = 'generator' }: Props) {
+export default function CharacterPanel({ project, view = 'generator', initialCharacterId }: Props) {
   const { characters, loadAll, addCharacter, updateCharacter, deleteCharacter } = useCharacterStore()
   const { groups, activeGroupId } = useWorldGroupStore()
   // 多世界：角色世界过滤器（'all' | 'cross' | 世界组 id）
@@ -80,6 +86,16 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
     : worldFilteredChars
 
   const selectedChar = characters.find(c => c.id === selected)
+
+  useEffect(() => {
+    if (!characters.some(character => character.id === initialCharacterId)) return
+    setWorldFilter('all')
+    setSelected(initialCharacterId ?? null)
+  }, [characters, initialCharacterId])
+  useInitialRecordTarget(
+    initialCharacterId,
+    displayedChars.some(character => character.id === initialCharacterId),
+  )
 
   // 多世界模式下新建角色时归属的世界（过滤器选了具体世界则用它，否则用当前活跃世界）
   const newCharHomeWorld = (): number | null => {
@@ -318,12 +334,13 @@ export default function CharacterPanel({ project, view = 'generator' }: Props) {
               return (
                 <button
                   key={c.id}
+                  {...initialRecordTargetAttributes(c.id === initialCharacterId, c.id)}
                   onClick={() => setSelected(active ? null : c.id!)}
                   className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-left transition-all ${
                     active
                       ? 'bg-accent/8 border-l-2 border-accent'
                       : 'hover:bg-bg-hover border-l-2 border-transparent'
-                  }`}
+                  } ${c.id === initialCharacterId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
                 >
                   <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${colorClass}`}>
                     {c.name.charAt(0)}

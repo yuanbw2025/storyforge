@@ -14,12 +14,23 @@ import { useWorldGroupStore } from '../../stores/world-group'
 import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
 import { InlineInput, InlineTextarea } from '../shared/InlineEdit'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 function nextStageId(): string {
   return `stage-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 }
 
-export default function CultivationSystemsPanel({ project }: { project: Project }) {
+export default function CultivationSystemsPanel({
+  project,
+  initialSystemId,
+}: {
+  project: Project
+  initialSystemId?: number | null
+}) {
   const dialog = useDialog()
   const toast = useToast()
   const { systems, loadAll, addSystem, updateSystem, deleteSystem } = useCultivationStore()
@@ -43,6 +54,10 @@ export default function CultivationSystemsPanel({ project }: { project: Project 
   useEffect(() => {
     if (selected?.id !== selectedId) setSelectedId(selected?.id ?? null)
   }, [selected, selectedId])
+  useEffect(() => {
+    if (scoped.some(system => system.id === initialSystemId)) setSelectedId(initialSystemId ?? null)
+  }, [initialSystemId, scoped])
+  useInitialRecordTarget(initialSystemId, selected?.id === initialSystemId)
 
   const handleAdd = async () => {
     if (worldGroupId === undefined) {
@@ -104,12 +119,13 @@ export default function CultivationSystemsPanel({ project }: { project: Project 
             {scoped.map(system => (
               <button
                 key={system.id}
+                {...initialRecordTargetAttributes(system.id === initialSystemId, system.id)}
                 onClick={() => setSelectedId(system.id!)}
                 className={`w-full px-3 py-2 rounded-lg text-left text-sm border ${
                   selected?.id === system.id
                     ? 'border-accent/40 bg-accent/10 text-accent'
                     : 'border-transparent hover:bg-bg-hover text-text-secondary'
-                }`}
+                } ${system.id === initialSystemId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
               >
                 <span className="block truncate">{system.name}</span>
                 <span className="text-[10px] text-text-muted">

@@ -8,14 +8,22 @@ import {
   REFERENCE_GLYPH_COLORS,
   REFERENCE_TYPE_CONFIG,
 } from './reference-view'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 // ── 常量 ─────────────────────────────────────────────────────────
 
-interface Props { project: Project }
+interface Props {
+  project: Project
+  initialReferenceId?: number | null
+}
 
 // ── 主面板 ─────────────────────────────────────────────────────────
 
-export default function ReferencePanel({ project }: Props) {
+export default function ReferencePanel({ project, initialReferenceId }: Props) {
   const dialog = useDialog()
   const { references, loadAll, updateReference, deleteReference } = useReferenceStore()
   const [filter, setFilter] = useState<ReferenceType | 'all'>('all')
@@ -32,6 +40,17 @@ export default function ReferencePanel({ project }: Props) {
   const importedCount = references.filter(r => r.importedData).length
 
   const selectedRef = references.find(r => r.id === selected)
+  const targetRef = references.find(reference => reference.id === initialReferenceId) ?? null
+
+  useEffect(() => {
+    if (!targetRef) return
+    setFilter(targetRef.type)
+    setSelected(targetRef.id ?? null)
+  }, [targetRef])
+  useInitialRecordTarget(
+    initialReferenceId,
+    displayed.some(reference => reference.id === initialReferenceId),
+  )
 
   const handleDelete = async (ref: Reference) => {
     const ok = await dialog.confirm({
@@ -92,12 +111,13 @@ export default function ReferencePanel({ project }: Props) {
             return (
               <button
                 key={ref.id}
+                {...initialRecordTargetAttributes(ref.id === initialReferenceId, ref.id)}
                 onClick={() => setSelected(active ? null : ref.id!)}
                 className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-left transition-all ${
                   active
                     ? 'bg-accent/8 border-l-2 border-accent'
                     : 'hover:bg-bg-hover border-l-2 border-transparent'
-                }`}
+                } ${ref.id === initialReferenceId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
               >
                 <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${colorClass}`}>
                   {ref.title.charAt(0)}

@@ -222,7 +222,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `geography.world-map` | `src/components/geography/WorldMapPanel.tsx:107` |
 | `history.consult` | `src/components/history/useHistoryAI.ts:118` |
 | `history.storm` | `src/components/history/useHistoryAI.ts:120` |
-| `inventory.extract` | `src/components/items/InventoryPanel.tsx:150` |
+| `inventory.extract` | `src/components/items/InventoryPanel.tsx:172` |
 | `location.extract` | `src/components/location/LocationPanel.tsx:106` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:319`<br/>`src/lib/node-flow/executor.ts:207` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:188`<br/>`src/lib/outline/generation-node.ts:59` |
@@ -234,7 +234,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
 | `reference.characters` | `src/components/project/AnalysisReportViewer.tsx:151` |
 | `reference.summary` | `src/components/project/AnalysisReportViewer.tsx:119` |
-| `relation.extract` | `src/components/relations/CharacterRelationPanel.tsx:98` |
+| `relation.extract` | `src/components/relations/CharacterRelationPanel.tsx:112` |
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:106` |
 | `review.consistency.deep` | `src/components/editor/ChapterEditor.tsx:1144` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:451` |
@@ -243,7 +243,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:1473` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
-| `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:85` |
+| `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:92` |
 | `style.calibrate` | `src/components/style/StyleCalibrationPanel.tsx:63` |
 | `style.learn` | `src/components/style/StyleLearningPanel.tsx:125` |
 | `world-group.expand` | `src/components/world-group/WorldGroupDetail.tsx:98` |
@@ -273,4 +273,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `0ce1732`
+生成时间基准:commit `1646044`

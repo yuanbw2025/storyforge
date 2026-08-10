@@ -10,10 +10,15 @@ import {
   type ChapterDragPayload,
   type GetActiveChapterDrag,
 } from './chapter-drag'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+} from '../shared/initial-record-target'
 
 interface ChapterRowProps {
   ch: { id?: number; title: string; summary: string }
   idx: number
+  targeted?: boolean
   onUpdate: (id: number, patch: Record<string, string>) => void
   onDelete: (id: number) => void
   onOpen?: (id: number) => void
@@ -31,6 +36,7 @@ interface ChapterRowProps {
 export function OutlineChapterRow({
   ch,
   idx,
+  targeted = false,
   onUpdate,
   onDelete,
   onOpen,
@@ -70,6 +76,7 @@ export function OutlineChapterRow({
 
   return (
     <div
+      {...initialRecordTargetAttributes(targeted, ch.id)}
       {...(baseDropProps ?? {})}
       onDragOver={(event) => {
         if (isCrossParentTarget) {
@@ -88,7 +95,7 @@ export function OutlineChapterRow({
       }}
       className={`flex items-start gap-1 px-2 py-2 bg-bg-surface border rounded-md group transition-colors ${
         isOver ? 'border-accent ring-1 ring-accent/50' : 'border-border hover:border-accent/30'
-      } ${dnd?.isDragging ? 'opacity-40' : ''}`}
+      } ${dnd?.isDragging ? 'opacity-40' : ''} ${targeted ? INITIAL_RECORD_TARGET_CLASS : ''}`}
     >
       {dnd && (
         <span
@@ -163,6 +170,7 @@ export function OutlineChapterRow({
 export function OutlineStoryBlockSection({
   block,
   chapters,
+  initialTargetNodeId,
   onUpdateNode,
   onDeleteNode,
   onAddChapter,
@@ -178,6 +186,7 @@ export function OutlineStoryBlockSection({
 }: {
   block: { id?: number; title: string; summary: string }
   chapters: { id?: number; title: string; summary: string }[]
+  initialTargetNodeId?: number | null
   onUpdateNode: (id: number, patch: Record<string, string>) => void
   onDeleteNode: (id: number) => void
   onAddChapter: () => void
@@ -193,6 +202,11 @@ export function OutlineStoryBlockSection({
 }) {
   const dialog = useDialog()
   const [expanded, setExpanded] = useState(true)
+  const containsInitialTarget = block.id === initialTargetNodeId
+    || chapters.some(chapter => chapter.id === initialTargetNodeId)
+  useEffect(() => {
+    if (containsInitialTarget) setExpanded(true)
+  }, [containsInitialTarget])
   const blockChaptersDnD = useDragReorder(chapters.map(chapter => chapter.id), onReorder)
   const handleDeleteBlock = async () => {
     if (!block.id) return
@@ -215,7 +229,12 @@ export function OutlineStoryBlockSection({
     : null
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
+    <div
+      {...initialRecordTargetAttributes(block.id === initialTargetNodeId, block.id)}
+      className={`border border-border rounded-lg overflow-hidden ${
+        block.id === initialTargetNodeId ? INITIAL_RECORD_TARGET_CLASS : ''
+      }`}
+    >
       <div
         onDragOver={event => dropToBlockEnd?.onDragOver(event)}
         onDrop={event => { if (dropToBlockEnd) void dropToBlockEnd.onDrop(event) }}
@@ -260,6 +279,7 @@ export function OutlineStoryBlockSection({
                 key={chapter.id}
                 ch={chapter}
                 idx={index}
+                targeted={chapter.id === initialTargetNodeId}
                 onUpdate={onUpdateNode}
                 onDelete={onDeleteNode}
                 onOpen={onOpenChapter}

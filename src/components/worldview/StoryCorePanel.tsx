@@ -13,6 +13,11 @@ import {
 } from '../../lib/agent/story-core-copilot'
 import type { Project } from '../../lib/types'
 import type { FieldGenerationMode } from '../../lib/ai/field-generation-context'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 // ── 字段定义 ──────────────────────────────────────────────────
 
@@ -37,9 +42,12 @@ const FIELDS: FieldDef[] = [
 
 // ── 主面板 ─────────────────────────────────────────────────────
 
-interface Props { project: Project }
+interface Props {
+  project: Project
+  initialStoryCoreId?: number | null
+}
 
-export default function StoryCorePanel({ project }: Props) {
+export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
   const { storyCore, saveStoryCore, loadAll } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const copilot = useMasterCopilot({
@@ -50,6 +58,7 @@ export default function StoryCorePanel({ project }: Props) {
   const [values, setValues] = useState<Record<string, string>>({})
   const [activeKey, setActiveKey] = useState(FIELDS[0].key)
   const [runningKey, setRunningKey] = useState<StoryCoreField | null>(null)
+  useInitialRecordTarget(initialStoryCoreId, storyCore?.id === initialStoryCoreId)
 
   useEffect(() => {
     loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
@@ -86,7 +95,12 @@ export default function StoryCorePanel({ project }: Props) {
   }, [pendingStoryCoreField])
 
   return (
-    <div className="flex gap-4 max-w-5xl">
+    <div
+      {...initialRecordTargetAttributes(storyCore?.id === initialStoryCoreId, storyCore?.id)}
+      className={`flex gap-4 max-w-5xl rounded-xl ${
+        storyCore?.id === initialStoryCoreId ? INITIAL_RECORD_TARGET_CLASS : ''
+      }`}
+    >
       {/* ── 左侧导航 ── */}
       <div className="w-fit min-w-32 max-w-40 shrink-0 space-y-0.5 pt-1">
         {FIELDS.map(f => {

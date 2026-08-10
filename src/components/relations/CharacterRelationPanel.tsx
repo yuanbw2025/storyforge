@@ -10,6 +10,11 @@ import { CInput, CTextarea } from '../shared/CompositionInput'
 import { useToast } from '../shared/Toast'
 import { syncRelationToCharacterFields } from '../../lib/relations/relationship-summary'
 import RelationGraph from './RelationGraph'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 const RELATION_TYPES: { value: RelationType; label: string }[] = [
   { value: 'family', label: '👨‍👩‍👧 亲属' },
@@ -26,9 +31,10 @@ const RELATION_TYPES: { value: RelationType; label: string }[] = [
 
 interface Props {
   project: Project
+  initialRelationId?: number | null
 }
 
-export default function CharacterRelationPanel({ project }: Props) {
+export default function CharacterRelationPanel({ project, initialRelationId }: Props) {
   const { relations, addRelation, updateRelation, deleteRelation } = useCharacterRelationStore()
   const { characters } = useCharacterStore()
   const toast = useToast()
@@ -64,6 +70,14 @@ export default function CharacterRelationPanel({ project }: Props) {
       projectCharacterIds.has(r.fromCharacterId) && projectCharacterIds.has(r.toCharacterId),
     ),
     [projectRelations, projectCharacterIds],
+  )
+
+  useEffect(() => {
+    if (validProjectRelations.some(relation => relation.id === initialRelationId)) setView('list')
+  }, [initialRelationId, validProjectRelations])
+  useInitialRecordTarget(
+    initialRelationId,
+    view === 'list' && validProjectRelations.some(relation => relation.id === initialRelationId),
   )
 
   useEffect(() => {
@@ -375,7 +389,10 @@ export default function CharacterRelationPanel({ project }: Props) {
           return (
             <div
               key={rel.id}
-              className="bg-bg-surface border border-border rounded-lg p-4 hover:border-accent/30 transition-colors"
+              {...initialRecordTargetAttributes(rel.id === initialRelationId, rel.id)}
+              className={`bg-bg-surface border border-border rounded-lg p-4 hover:border-accent/30 transition-colors ${
+                rel.id === initialRelationId ? INITIAL_RECORD_TARGET_CLASS : ''
+              }`}
             >
               {/* 关系概览行 */}
               <div className="flex items-center gap-3 mb-3">

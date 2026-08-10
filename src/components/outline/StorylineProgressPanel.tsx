@@ -12,6 +12,12 @@ import {
   parseStorylineProgressResult,
   type StorylineAnalysisCandidates,
 } from '../../lib/storyline/storyline-progress'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
+import type { StoryArcInitialRecordTarget } from './StoryArcPanel'
 
 const EMPTY: StorylineAnalysisCandidates = { progress: [], crossings: [], newArcs: [] }
 const STATUS_LABELS = {
@@ -27,6 +33,7 @@ export default function StorylineProgressPanel(props: {
   arcs: StoryArc[]
   copilot: ReturnType<typeof useMasterCopilot>
   onArcsChanged: () => Promise<void>
+  initialRecordTarget?: StoryArcInitialRecordTarget | null
 }) {
   const { progress, crossings, loadAll } = useStorylineProgressStore()
   const [chapters, setChapters] = useState<Chapter[]>([])
@@ -105,6 +112,13 @@ export default function StorylineProgressPanel(props: {
   }
 
   const hasCandidates = candidates.progress.length + candidates.crossings.length + candidates.newArcs.length > 0
+  const targetId = props.initialRecordTarget?.recordId ?? null
+  const targetReady = props.initialRecordTarget?.table === 'storylineProgress'
+    ? progress.some(row => row.id === targetId)
+    : props.initialRecordTarget?.table === 'storylineCrossings'
+      ? crossings.some(row => row.id === targetId)
+      : false
+  useInitialRecordTarget(targetId, targetReady)
 
   return (
     <section className="mt-6 space-y-4" aria-label="动态故事线进度">
@@ -149,7 +163,18 @@ export default function StorylineProgressPanel(props: {
             const arc = arcsById.get(row.arcId)
             const stage = arc ? parseStages(arc.stages).find(item => item.id === row.currentStageId) : null
             return (
-              <div key={row.id} className="bg-bg-surface border border-border rounded-lg p-3">
+              <div
+                key={row.id}
+                {...initialRecordTargetAttributes(
+                  props.initialRecordTarget?.table === 'storylineProgress' && row.id === targetId,
+                  row.id,
+                )}
+                className={`bg-bg-surface border border-border rounded-lg p-3 ${
+                  props.initialRecordTarget?.table === 'storylineProgress' && row.id === targetId
+                    ? INITIAL_RECORD_TARGET_CLASS
+                    : ''
+                }`}
+              >
                 <div className="flex justify-between gap-2">
                   <strong className="text-sm text-text-primary">{arc?.name ?? `故事线 #${row.arcId}`}</strong>
                   <span className="text-xs text-accent">{STATUS_LABELS[row.status]}</span>
@@ -168,7 +193,18 @@ export default function StorylineProgressPanel(props: {
           <h4 className="text-sm font-medium text-text-primary mb-3">已确认交汇节点</h4>
           <div className="space-y-2">
             {crossings.slice(-12).reverse().map(row => (
-              <div key={row.id} className="flex items-start gap-2 text-xs">
+              <div
+                key={row.id}
+                {...initialRecordTargetAttributes(
+                  props.initialRecordTarget?.table === 'storylineCrossings' && row.id === targetId,
+                  row.id,
+                )}
+                className={`flex items-start gap-2 text-xs rounded ${
+                  props.initialRecordTarget?.table === 'storylineCrossings' && row.id === targetId
+                    ? INITIAL_RECORD_TARGET_CLASS
+                    : ''
+                }`}
+              >
                 <span className="shrink-0 px-2 py-0.5 rounded-full bg-accent/10 text-accent">
                   {arcsById.get(row.arcIdA)?.name ?? `#${row.arcIdA}`}
                   {' × '}

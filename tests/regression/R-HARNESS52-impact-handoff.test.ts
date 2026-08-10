@@ -103,5 +103,7 @@ describe('R-HARNESS52 · 影响人工入口交接协议', () => {
       sourceOutlineNodeId: null,
     })).toThrow('作者确认项')
     expect(resolveImpactHandoffModuleV2({ action: 'review-source-record', table: 'unknownTable' })).toBe('fact-library')
+    expect(resolveImpactHandoffModuleV2({ action: 'review-source-record', table: 'powerSystems' })).toBe('power-system')
+    expect(resolveImpactHandoffModuleV2({ action: 'review-source-record', table: 'cultivationSystems' })).toBe('power-system')
   })
 })

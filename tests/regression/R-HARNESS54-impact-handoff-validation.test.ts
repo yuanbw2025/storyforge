@@ -64,6 +64,11 @@ describe.sequential('R-HARNESS54 · 人工影响交接 durable 验签', () => {
       receiptHash: created.handoff.reviewReceiptHash,
       output: { itemId: created.item.id, decision: 'needs-manual-action' },
     })
+    expect(validated?.target).toEqual({
+      table: created.item.table,
+      recordId: created.item.recordId,
+      moduleRecordId: fixture.outlineNodeId,
+    })
   })
 
   it('格式正确但伪造的 run/receipt、旧决定和 stale 正文全部 fail closed', async () => {

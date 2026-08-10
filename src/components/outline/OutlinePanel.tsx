@@ -29,13 +29,15 @@ import { useOutlineGenerationController } from './useOutlineGenerationController
 import { useOutlineChapterCountEstimate } from './useOutlineChapterCountEstimate'
 import { useOutlineChapterDrag } from './useOutlineChapterDrag'
 import { decodeGenerationOperation } from '../../lib/outline/generation-request'
+import { useInitialRecordTarget } from '../shared/initial-record-target'
 
 interface Props {
   project: Project
   onOpenChapter?: (nodeId: number) => void
+  initialNodeId?: number | null
 }
 
-export default function OutlinePanel({ project, onOpenChapter }: Props) {
+export default function OutlinePanel({ project, onOpenChapter, initialNodeId }: Props) {
   const dialog = useDialog()
   const toast = useToast()
   const { nodes, loadAll, addNode, updateNode, deleteNode, reorderNodes, insertNodeAt, moveNodeToParent } = useOutlineStore()
@@ -66,6 +68,26 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const normalizedNodes = useMemo(() => nodes.map(normalizeOutlineNode), [nodes])
   const volumes = getTopLevelVolumes(normalizedNodes)
   const selectedVol = volumes.find(v => v.id === selectedVolId) || null
+  const initialTargetVolumeId = useMemo(() => {
+    if (initialNodeId == null) return null
+    const byId = new Map(normalizedNodes.filter(node => node.id != null).map(node => [node.id!, node]))
+    let current = byId.get(initialNodeId)
+    const seen = new Set<number>()
+    while (current?.id != null && !seen.has(current.id)) {
+      seen.add(current.id)
+      if (current.type === 'volume') return current.id
+      current = current.parentId == null ? undefined : byId.get(current.parentId)
+    }
+    return null
+  }, [initialNodeId, normalizedNodes])
+
+  useEffect(() => {
+    if (initialTargetVolumeId != null) setSelectedVolId(initialTargetVolumeId)
+  }, [initialTargetVolumeId])
+  useInitialRecordTarget(
+    initialNodeId,
+    initialTargetVolumeId != null && selectedVolId === initialTargetVolumeId,
+  )
 
   useOutlineChapterCountEstimate({
     selectedVolumeId: selectedVolId,
@@ -448,6 +470,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       volumes={volumes}
       nodes={normalizedNodes}
       selectedVolumeId={selectedVolId}
+      initialTargetNodeId={initialNodeId}
       multiWorldEnabled={Boolean(project.enableMultiWorld)}
       worldGroups={worldGroups}
       aiStreaming={ai.isStreaming}
@@ -538,6 +561,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
         <OutlineVolumeDetail
           volume={selectedVol}
           nodes={normalizedNodes}
+          initialTargetNodeId={initialNodeId}
           multiWorldEnabled={Boolean(project.enableMultiWorld)}
           worldGroups={worldGroups}
           aiStreaming={ai.isStreaming}

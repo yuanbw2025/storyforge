@@ -5,11 +5,12 @@ import {
   type EditImpactGraphV1,
 } from '../../consistency/impact-analysis'
 import type { ImpactHandoffV2 } from '../../consistency/impact-handoff'
+import { resolveImpactHandoffModuleV2 } from '../../consistency/impact-handoff'
 import {
   buildImpactRemediationPlanV1,
   type ImpactRemediationPlanV1,
 } from '../../consistency/impact-remediation-plan'
-import { assertRecordInScope } from '../../world-engine/scope'
+import { assertRecordInScope, getTableSpec } from '../../world-engine/scope'
 import {
   readImpactAuthorReviewsV1,
   type ImpactAuthorReviewRecordV1,
@@ -19,6 +20,59 @@ export interface CurrentImpactHandoffStateV2 {
   graph: EditImpactGraphV1
   plan: ImpactRemediationPlanV1
   review: ImpactAuthorReviewRecordV1
+  target: CurrentImpactHandoffTargetV2
+}
+
+export interface CurrentImpactHandoffTargetV2 {
+  /** Governed table and primary key from the impact plan. */
+  table: string
+  recordId: number
+  /** Existing panels sometimes navigate by an owning outline node instead. */
+  moduleRecordId: number
+}
+
+/**
+ * Resolve the current, scoped business row behind a handoff. The URL record id
+ * is never passed straight into a panel because chapter/detail panels navigate
+ * by outlineNodeId rather than their own primary key.
+ */
+export async function resolveCurrentImpactHandoffTargetV2(input: {
+  scope: WorkspaceScope
+  handoff: ImpactHandoffV2
+}): Promise<CurrentImpactHandoffTargetV2 | null> {
+  const { handoff, scope } = input
+  if (resolveImpactHandoffModuleV2(handoff) !== handoff.targetModule) return null
+
+  if (handoff.action === 'review-source') {
+    if (handoff.targetRecordId == null || handoff.targetRecordId !== handoff.sourceOutlineNodeId) return null
+    const outline = await db.outlineNodes.get(handoff.targetRecordId)
+    if (!outline || !await assertRecordInScope(scope, 'outlineNodes', outline, { owner: 'work' })) return null
+    return {
+      table: 'chapters',
+      recordId: handoff.sourceChapterId,
+      moduleRecordId: handoff.targetRecordId,
+    }
+  }
+
+  if (handoff.recordId == null || handoff.targetRecordId !== handoff.recordId) return null
+  let spec
+  try {
+    spec = getTableSpec(handoff.table)
+  } catch {
+    return null
+  }
+  const record = await spec.table.get(handoff.recordId)
+  if (!record || !await assertRecordInScope(scope, handoff.table, record)) return null
+
+  let moduleRecordId = handoff.recordId
+  if (handoff.table === 'chapters' || handoff.table === 'detailedOutlines') {
+    const outlineNodeId = (record as { outlineNodeId?: unknown }).outlineNodeId
+    if (!Number.isInteger(outlineNodeId) || (outlineNodeId as number) < 1) return null
+    const outline = await db.outlineNodes.get(outlineNodeId as number)
+    if (!outline || !await assertRecordInScope(scope, 'outlineNodes', outline, { owner: 'work' })) return null
+    moduleRecordId = outlineNodeId as number
+  }
+  return { table: handoff.table, recordId: handoff.recordId, moduleRecordId }
 }
 
 /**
@@ -54,6 +108,9 @@ export async function validateCurrentImpactHandoffV2(input: {
     || item.recordId !== handoff.recordId
   ) return null
 
+  const target = await resolveCurrentImpactHandoffTargetV2({ scope, handoff })
+  if (!target) return null
+
   const reviews = await readImpactAuthorReviewsV1({ scope, plan })
   const review = reviews.find(candidate => candidate.output.itemId === handoff.itemId)
   if (
@@ -63,5 +120,5 @@ export async function validateCurrentImpactHandoffV2(input: {
     || review.receiptHash !== handoff.reviewReceiptHash
   ) return null
 
-  return { graph, plan, review }
+  return { graph, plan, review, target }
 }

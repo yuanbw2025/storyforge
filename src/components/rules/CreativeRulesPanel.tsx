@@ -11,6 +11,11 @@ import {
 } from '../../lib/agent/creative-rules-copilot'
 import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
 import type { Project, NarrativePOV } from '../../lib/types'
+import {
+  INITIAL_RECORD_TARGET_CLASS,
+  initialRecordTargetAttributes,
+  useInitialRecordTarget,
+} from '../shared/initial-record-target'
 
 const POV_OPTIONS: { value: NarrativePOV; label: string; desc: string }[] = [
   { value: 'first-person', label: '第一人称', desc: '以"我"的视角叙述' },
@@ -21,9 +26,10 @@ const POV_OPTIONS: { value: NarrativePOV; label: string; desc: string }[] = [
 
 interface Props {
   project: Project
+  initialRulesId?: number | null
 }
 
-export default function CreativeRulesPanel({ project }: Props) {
+export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
   const { creativeRules, loadAll, save } = useCreativeRulesStore()
   const { references, loadAll: loadRefs } = useReferenceStore()
   const activeGroupId = useWorldGroupStore(state => state.activeGroupId)
@@ -39,6 +45,7 @@ export default function CreativeRulesPanel({ project }: Props) {
   const [specialRequirements, setSpecialRequirements] = useState('')
   const [referenceWorks, setReferenceWorks] = useState<string[]>([])
   const [citedRefIds, setCitedRefIds] = useState<number[]>([])
+  useInitialRecordTarget(initialRulesId, creativeRules?.id === initialRulesId)
 
   useEffect(() => {
     loadAll(project.id!)
@@ -183,7 +190,12 @@ export default function CreativeRulesPanel({ project }: Props) {
   )
 
   return (
-    <div className="max-w-4xl">
+    <div
+      {...initialRecordTargetAttributes(creativeRules?.id === initialRulesId, creativeRules?.id)}
+      className={`max-w-4xl rounded-xl ${
+        creativeRules?.id === initialRulesId ? INITIAL_RECORD_TARGET_CLASS : ''
+      }`}
+    >
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-xl font-bold text-text-primary">📐 创作规则</h2>
         {copilot.recoveryAvailable && pendingRulesCandidates.length === 0 && (
