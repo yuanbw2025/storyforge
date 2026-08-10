@@ -6,6 +6,7 @@
 > - [世界引擎与社区目标架构](../WORLD-ENGINE-COMMUNITY-ARCHITECTURE.md)：纠正世界、作品、实例和社区的领域层级，保护分步骤模式并登记 WORLD-2 / PLATFORM-1 后续阶段。
 > - [当前能力基线](./CAPABILITY-BASELINE.md)：新体系或完整功能读取对应章节，记录代码当前已经具备什么。
 > - [已完成索引](./COMPLETED.md)：按功能体系索引已交付能力、测试证据和历史记录。
+> - [Agent + Harness 重构交接](../AI-HARNESS-REBUILD-HANDOFF-20260810.md)：跨电脑或跨模型接续当前功能分支时先读，包含完成度、验证状态和下一步入口。
 > - [历史完整快照](../ROADMAP-LEGACY.md)：本分支拆分前 `HEAD:docs/ROADMAP.md` 的原始内容，只读保存，不作为新的施工入口。
 > - [项目宪法](../../CLAUDE.md) 与 [施工蓝图](../MASTER-BLUEPRINT.md)：所有功能都必须服从三注册表和 Blueprint 的完成定义；读取范围由 [上下文路由](../CONTEXT-ROUTING.md) 决定。
 
