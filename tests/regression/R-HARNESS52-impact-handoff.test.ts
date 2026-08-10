@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildImpactHandoffV1,
-  buildImpactHandoffUrlV1,
-  parseImpactHandoffV1,
-  resolveImpactHandoffModuleV1,
+  buildImpactHandoffV2,
+  buildImpactHandoffUrlV2,
+  parseImpactHandoffV2,
+  resolveImpactHandoffModuleV2,
 } from '../../src/lib/consistency/impact-handoff'
 import type { ImpactRemediationPlanV1 } from '../../src/lib/consistency/impact-remediation-plan'
 
@@ -34,10 +34,12 @@ function plan(item: Partial<ImpactRemediationPlanV1['items'][number]> = {}): Imp
 
 describe('R-HARNESS52 · 影响人工入口交接协议', () => {
   it('按既有人工模块映射治理项并保留返回章节', () => {
-    const handoff = buildImpactHandoffV1({
+    const handoff = buildImpactHandoffV2({
       plan: plan(),
       itemId: 'impact-remediation:fact:1',
       decision: 'needs-manual-action',
+      reviewRunId: 8,
+      reviewReceiptHash: HASH,
       sourceOutlineNodeId: 11,
     })
     expect(handoff).toMatchObject({
@@ -47,11 +49,13 @@ describe('R-HARNESS52 · 影响人工入口交接协议', () => {
       returnModule: 'chapters-list',
       returnNodeId: 11,
       planHash: HASH,
+      reviewRunId: 8,
+      reviewReceiptHash: HASH,
     })
   })
 
   it('正文来源项回到已有章节编辑入口，而不是新建修复面板', () => {
-    const handoff = buildImpactHandoffV1({
+    const handoff = buildImpactHandoffV2({
       plan: plan({
         id: 'impact-remediation:source:7',
         nodeId: 'source:chapters:7',
@@ -62,6 +66,8 @@ describe('R-HARNESS52 · 影响人工入口交接协议', () => {
       }),
       itemId: 'impact-remediation:source:7',
       decision: 'needs-manual-action',
+      reviewRunId: 8,
+      reviewReceiptHash: HASH,
       sourceOutlineNodeId: 11,
     })
     expect(handoff.targetModule).toBe('chapters-list')
@@ -69,28 +75,33 @@ describe('R-HARNESS52 · 影响人工入口交接协议', () => {
   })
 
   it('地址可往返解析，并拒绝损坏或不完整证据', () => {
-    const handoff = buildImpactHandoffV1({
+    const handoff = buildImpactHandoffV2({
       plan: plan({ action: 'review-derived-state', kind: 'state-card', table: 'stateCards', recordId: 22 }),
       itemId: 'impact-remediation:fact:1',
       decision: 'needs-manual-action',
+      reviewRunId: 8,
+      reviewReceiptHash: HASH,
       sourceOutlineNodeId: 11,
     })
-    const url = buildImpactHandoffUrlV1(3, handoff)
+    const url = buildImpactHandoffUrlV2(3, handoff)
     const raw = new URL(url, 'http://localhost').searchParams.get('impactHandoff')
-    expect(parseImpactHandoffV1(raw)).toEqual({ ...handoff, targetModule: 'state-table', targetRecordId: 22 })
-    expect(parseImpactHandoffV1(encodeURIComponent(JSON.stringify({ ...handoff, planHash: 'bad' })))).toBeNull()
-    expect(parseImpactHandoffV1(encodeURIComponent(JSON.stringify({ ...handoff, targetModule: 'inventory' })))).toBeNull()
-    expect(parseImpactHandoffV1(encodeURIComponent(JSON.stringify({ ...handoff, action: 'rebuild-summary' })))).toBeNull()
-    expect(parseImpactHandoffV1('%7Bbroken')).toBeNull()
+    expect(parseImpactHandoffV2(raw)).toEqual({ ...handoff, targetModule: 'state-table', targetRecordId: 22 })
+    expect(parseImpactHandoffV2(encodeURIComponent(JSON.stringify({ ...handoff, planHash: 'bad' })))).toBeNull()
+    expect(parseImpactHandoffV2(encodeURIComponent(JSON.stringify({ ...handoff, reviewReceiptHash: 'bad' })))).toBeNull()
+    expect(parseImpactHandoffV2(encodeURIComponent(JSON.stringify({ ...handoff, targetModule: 'inventory' })))).toBeNull()
+    expect(parseImpactHandoffV2(encodeURIComponent(JSON.stringify({ ...handoff, action: 'rebuild-summary' })))).toBeNull()
+    expect(parseImpactHandoffV2('%7Bbroken')).toBeNull()
   })
 
   it('不允许确定性项、未知表映射或未知模块绕过人工协议', () => {
-    expect(() => buildImpactHandoffV1({
+    expect(() => buildImpactHandoffV2({
       plan: plan({ mode: 'deterministic', action: 'rebuild-summary', kind: 'summary', table: 'narrativeSummaryNodes' }),
       itemId: 'impact-remediation:fact:1',
       decision: 'needs-manual-action',
+      reviewRunId: 8,
+      reviewReceiptHash: HASH,
       sourceOutlineNodeId: null,
     })).toThrow('作者确认项')
-    expect(resolveImpactHandoffModuleV1({ action: 'review-source-record', table: 'unknownTable' })).toBe('fact-library')
+    expect(resolveImpactHandoffModuleV2({ action: 'review-source-record', table: 'unknownTable' })).toBe('fact-library')
   })
 })

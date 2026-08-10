@@ -1108,6 +1108,12 @@ CHIRON 四类信息可映射到现有结构：
 - `ChapterEditor` 重挂载或切换章节时先清空本地影响状态，再并行恢复当前作者复核与 HARNESS-45 待确认 patch。两条读取分别捕获损坏历史，任何一条失败都不会阻断另一条；恢复的优先选择是 `needs-manual-action`，否则显示第一条有效复核。该路径只读 Run 账本和三注册表，不调用模型、不传播 stale、不写 Canon。
 - `R-HARNESS50-impact-review-durable` 覆盖同一 hash 恢复、原决定/理由/receipt 保持和正文变化后返回空。当前边界是：只有已产生 durable 作者复核证据的计划会跨重挂载恢复；只生成过临时影响图、但未执行系统重建/作者复核/patch 的面板状态仍不持久化，避免为纯 UI 展开状态提前增加第二套计划事实源。
 
+**人工交接地址的 durable 验签（HARNESS-54，2026-08-10）**
+
+- `ImpactHandoffV2` 在原 `planHash + graphHash + sourceTextHash` 之外绑定产生 `needs-manual-action` 决定的 `reviewRunId + reviewReceiptHash`。V1 临时地址不带 durable 身份，升级后直接 fail-closed，不把旧浏览器地址冒充为当前复核证据。
+- `validateCurrentImpactHandoffV2()` 在目标工作区重新校验来源章节与章纲归属，重建当前 impact graph/plan，并通过 HARNESS-51 回放当前 item 的最新有效复核。只有 action/table/record、三类 plan hash、Run、receipt 和最新决定全部一致时，`WorkspacePage` 才显示“影响项需要人工处理”；格式正确但伪造的 URL、被后续 `acknowledged` 覆盖的旧决定、跨作用域记录和 stale 正文均不会获得可信提示。
+- 该验签只读既有三注册表数据和 Run 账本，不新增表、不调用模型、不调用 `adopt()`，也不证明人工修正已经完成。`R-HARNESS54-impact-handoff-validation` 覆盖真实回执放行及伪造 Run/receipt、旧决定、正文变化反例；各领域修正后的完成证明与依赖重跑仍需后续单元。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

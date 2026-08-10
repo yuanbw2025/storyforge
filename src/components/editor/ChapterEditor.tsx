@@ -19,8 +19,8 @@ import {
   type ImpactRemediationPlanV1,
 } from '../../lib/consistency/impact-remediation-plan'
 import {
-  buildImpactHandoffUrlV1,
-  buildImpactHandoffV1,
+  buildImpactHandoffUrlV2,
+  buildImpactHandoffV2,
 } from '../../lib/consistency/impact-handoff'
 import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-memory'
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
@@ -1952,13 +1952,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return
     }
     try {
-      const handoff = buildImpactHandoffV1({
+      const handoff = buildImpactHandoffV2({
         plan,
         itemId,
         decision: 'needs-manual-action',
+        reviewRunId: record.runId,
+        reviewReceiptHash: record.receiptHash,
         sourceOutlineNodeId: currentChapter.outlineNodeId ?? outlineNodeId ?? null,
       })
-      navigate(buildImpactHandoffUrlV1(project.id, handoff))
+      navigate(buildImpactHandoffUrlV2(project.id, handoff))
     } catch (error) {
       setImpactReviewError(error instanceof Error ? error.message : '人工入口交接失败')
     }

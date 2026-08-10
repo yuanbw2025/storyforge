@@ -69,7 +69,8 @@ const ChatCopilotPanel = lazy(() => import('../components/agent/ChatCopilotPanel
 import { useLocationStore } from '../stores/location'
 import { useWorldGroupStore } from '../stores/world-group'
 import { resolveScopeLike } from '../lib/world-engine/scope'
-import { parseImpactHandoffV1, type ImpactHandoffV1 } from '../lib/consistency/impact-handoff'
+import { parseImpactHandoffV2, type ImpactHandoffV2 } from '../lib/consistency/impact-handoff'
+import { validateCurrentImpactHandoffV2 } from '../lib/agent/run/impact-handoff-durable'
 
 export default function WorkspacePage() {
   const { projectId } = useParams()
@@ -88,9 +89,7 @@ export default function WorkspacePage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showProperties, setShowProperties] = useState(false)
   const [showCopilot, setShowCopilot] = useState(false)
-  const [impactHandoff, setImpactHandoff] = useState<ImpactHandoffV1 | null>(() => (
-    parseImpactHandoffV1(new URLSearchParams(location.search).get('impactHandoff'))
-  ))
+  const [impactHandoff, setImpactHandoff] = useState<ImpactHandoffV2 | null>(null)
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
   const worldGroups = useWorldGroupStore(state => state.groups)
 
@@ -121,8 +120,20 @@ export default function WorkspacePage() {
   }, [initialSidebarModule])
 
   useEffect(() => {
-    setImpactHandoff(parseImpactHandoffV1(new URLSearchParams(location.search).get('impactHandoff')))
-  }, [location.search])
+    let active = true
+    setImpactHandoff(null)
+    const parsed = parseImpactHandoffV2(new URLSearchParams(location.search).get('impactHandoff'))
+    if (!parsed || project?.id == null) return () => { active = false }
+    void resolveScopeLike(project.id)
+      .then(scope => validateCurrentImpactHandoffV2({ scope, handoff: parsed }))
+      .then(state => {
+        if (active && state) setImpactHandoff(parsed)
+      })
+      .catch(error => {
+        if (active) console.warn('[ImpactHandoff] 交接证据无效:', error)
+      })
+    return () => { active = false }
+  }, [location.search, project?.id])
 
   const handoffChapterNodeId = useMemo(() => {
     if (!impactHandoff || impactHandoff.targetModule !== 'chapters-list') return null

@@ -437,6 +437,7 @@
 - HARNESS-51 已新增 `readImpactAuthorReviewsV1()` 并接入 `ChapterEditor`：影响分析/计划刷新后，从现有 Run ledger 回放当前计划每个作者确认项的最新有效决定、理由和 receipt，显示已复核/总作者项；回放重新验证当前 `sourceTextHash + graphHash + planHash`、契约目标和 candidate hash，旧计划或损坏事件不会冒充完成。`R-HARNESS50-impact-review-durable`、`R-AUDIT6-chapter-editor-toolbar` 覆盖回放、stale 和 UI 投影；自动计划恢复及通用人工修正/依赖重跑仍未交付。
 - HARNESS-52 已新增 `impact-handoff.ts`：作者复核结果为 `needs-manual-action` 时，正文编辑器可通过绑定当前正文/影响图/处理计划 hash 的交接协议进入既有事实、状态、物品、故事线、年表、关系、设定、细纲或章节模块；工作区解析交接后展示目标表/记录和计划证据，并可按来源章纲返回正文。该协议是只读导航控制面，不新增修复面板，不写业务 Canon，不调用模型；地址证据不完整或目标不受支持时 fail-closed。`R-HARNESS52-impact-handoff` 与 `R-AUDIT6-chapter-editor-toolbar` 覆盖协议往返、模块映射和入口转发；具体人工修正及依赖重跑仍未交付。
 - HARNESS-53 已新增 `readCurrentImpactAuthorReviewStateV1()`：编辑器重挂载时按当前章节重新构建图和计划，只有 `readImpactAuthorReviewsV1()` 能针对当前 `sourceTextHash + graphHash + planHash` 回放至少一条有效 receipt 时才恢复复核面板；正文或图变化后旧 receipt 不会复活。`ChapterEditor` 将这条恢复与 HARNESS-45 patch 候选恢复并行执行并隔离错误。`R-HARNESS50-impact-review-durable` 覆盖恢复和 stale 反例；尚未产生 Run 证据的临时分析计划仍只存在于当前编辑器会话。
+- HARNESS-54 已将人工交接从“URL 结构正确”收紧为“当前 durable receipt 可回放”：`ImpactHandoffV2` 绑定复核 Run/receipt，`validateCurrentImpactHandoffV2()` 重新验证来源章节/章纲、当前 graph/plan、目标 item 和最新 `needs-manual-action` 决定。工作区只有验签成功才显示可信交接提示；伪造 hash/run/receipt、被后续决定覆盖或正文 stale 均返回空。该路径不新增表、不调用模型、不写 Canon；`R-HARNESS54-impact-handoff-validation` 是反例证据。
 - HARNESS-21 已将正文 Run → post-adoption Run 的父子完成关系持久化：RunContract 的 `lineage.parent`
   与 `agentRuns.parentRunId/parentReceiptHash/parentArtifactHash` 双向核对，父终态回执和正文 hash
   缺一不可；同一父 Run/关系由唯一索引去重。子 Run 的终态证明通过契约 hash 间接绑定父回执，父回执
