@@ -137,6 +137,7 @@ import {
 import { executeImpactRemediationV1 } from '../../lib/agent/run/impact-remediation-durable'
 import {
   executeImpactAuthorReviewV1,
+  readCurrentImpactAuthorReviewStateV1,
   readImpactAuthorReviewsV1,
   type ImpactAuthorReviewRecordV1,
   type ImpactReviewDecisionV1,
@@ -326,7 +327,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     proseCandidateRef.current = proseCandidate
   }, [proseCandidate])
 
-  // HARNESS-45: recover an unconfirmed impact patch when the editor remounts.
+  // HARNESS-45/53: recover current impact patch and author review evidence on remount.
   useEffect(() => {
     let active = true
     setImpactGraph(null)
@@ -348,18 +349,44 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!currentChapter?.id) return () => { active = false }
     void (async () => {
       const scope = await resolveScopeLike(project.id!)
-      const candidate = await readLatestImpactPatchCandidateV1({
-        scope,
-        sourceChapterId: currentChapter.id!,
-      })
-      if (!active || !candidate) return
-      setImpactPatchCandidate(candidate)
-      setImpactPatchTargetId(candidate.proposal.recordId)
-      setImpactPatchSummary(candidate.proposal.fields.summary)
-      setImpactPatchReason(candidate.proposal.reason)
-      setImpactInfo('发现一条待作者确认的影响修订候选；确认前不会改动正式大纲。')
+      const [candidate, reviewState] = await Promise.all([
+        readLatestImpactPatchCandidateV1({
+          scope,
+          sourceChapterId: currentChapter.id!,
+        }).catch(error => {
+          console.warn('[ImpactPatch] durable candidate 恢复失败:', error)
+          return null
+        }),
+        readCurrentImpactAuthorReviewStateV1({
+          scope,
+          chapterId: currentChapter.id!,
+        }).catch(error => {
+          console.warn('[ImpactReview] durable review 恢复失败:', error)
+          return null
+        }),
+      ])
+      if (!active) return
+      if (reviewState) {
+        const selectedReview = reviewState.reviews.find(record => record.output.decision === 'needs-manual-action')
+          ?? reviewState.reviews[0]
+        setImpactGraph(reviewState.graph)
+        setImpactRemediationPlan(reviewState.plan)
+        setImpactReviewRecords(reviewState.reviews)
+        setImpactReviewItemId(selectedReview.output.itemId)
+        setImpactReviewDecision(selectedReview.output.decision)
+        setImpactReviewNote(selectedReview.output.note)
+        setImpactReviewReceipt(selectedReview.receiptHash)
+        setImpactInfo(`已从 Run 账本恢复 ${reviewState.reviews.length} 项当前作者复核；正式数据未改变。`)
+      }
+      if (candidate) {
+        setImpactPatchCandidate(candidate)
+        setImpactPatchTargetId(candidate.proposal.recordId)
+        setImpactPatchSummary(candidate.proposal.fields.summary)
+        setImpactPatchReason(candidate.proposal.reason)
+        setImpactInfo('发现一条待作者确认的影响修订候选；确认前不会改动正式大纲。')
+      }
     })().catch(error => {
-      if (active) console.warn('[ImpactPatch] durable candidate 恢复失败:', error)
+      if (active) console.warn('[ImpactRecovery] 影响状态恢复失败:', error)
     })
     return () => { active = false }
   }, [currentChapter?.id, project.id])

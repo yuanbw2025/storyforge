@@ -1102,6 +1102,12 @@ CHIRON 四类信息可映射到现有结构：
 - `ChapterEditorToolbar` 只在有效作者复核回放显示“打开人工入口”；`WorkspacePage` 解析交接后复用既有 Sidebar 模块，章节/细纲可带入已有节点选择，并显示来源证据和返回来源章节按钮。关闭或切换模块会清除交接提示，避免把历史导航状态误当成当前 Canon。
 - 验收证据为 `R-HARNESS52-impact-handoff`（映射、协议往返、证据拒绝）和 `R-AUDIT6-chapter-editor-toolbar`（只在 `needs-manual-action` receipt 存在时转发入口）。本单元仍不实现各领域的通用人工修正表单、自动依赖重跑或正文级级联重写。
 
+**当前作者复核自动恢复（HARNESS-53，2026-08-10）**
+
+- `readCurrentImpactAuthorReviewStateV1()` 不把 impact plan 复制到新的业务表或浏览器缓存。它以当前章节为唯一入口，重新执行确定性的 `buildEditImpactGraphV1()` 与 `buildImpactRemediationPlanV1()`，再用 HARNESS-51 的严格回放读取当前计划 receipt；至少存在一条有效记录时才返回 `{graph, plan, reviews}`。
+- `ChapterEditor` 重挂载或切换章节时先清空本地影响状态，再并行恢复当前作者复核与 HARNESS-45 待确认 patch。两条读取分别捕获损坏历史，任何一条失败都不会阻断另一条；恢复的优先选择是 `needs-manual-action`，否则显示第一条有效复核。该路径只读 Run 账本和三注册表，不调用模型、不传播 stale、不写 Canon。
+- `R-HARNESS50-impact-review-durable` 覆盖同一 hash 恢复、原决定/理由/receipt 保持和正文变化后返回空。当前边界是：只有已产生 durable 作者复核证据的计划会跨重挂载恢复；只生成过临时影响图、但未执行系统重建/作者复核/patch 的面板状态仍不持久化，避免为纯 UI 展开状态提前增加第二套计划事实源。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

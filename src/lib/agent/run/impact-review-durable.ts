@@ -1,7 +1,10 @@
 import { db } from '../../db/schema'
 import type { AgentRunRecord, WorkspaceScope } from '../../types'
 import { assembleContext } from '../../registry/assemble-context'
-import { buildEditImpactGraphV1 } from '../../consistency/impact-analysis'
+import {
+  buildEditImpactGraphV1,
+  type EditImpactGraphV1,
+} from '../../consistency/impact-analysis'
 import {
   buildImpactRemediationPlanV1,
   type ImpactRemediationPlanV1,
@@ -247,6 +250,32 @@ export async function readImpactAuthorReviewsV1(input: {
     (itemOrder.get(left.output.itemId) ?? Number.MAX_SAFE_INTEGER)
     - (itemOrder.get(right.output.itemId) ?? Number.MAX_SAFE_INTEGER)
   ))
+}
+
+/**
+ * Rebuild the current graph/plan and recover author review receipts after an
+ * editor remount. Historical plans are never revived: only receipts that
+ * validate against the freshly rebuilt plan are returned.
+ */
+export async function readCurrentImpactAuthorReviewStateV1(input: {
+  scope: WorkspaceScope
+  chapterId: number
+}): Promise<{
+  graph: EditImpactGraphV1
+  plan: ImpactRemediationPlanV1
+  reviews: ImpactAuthorReviewRecordV1[]
+} | null> {
+  if (!Number.isInteger(input.chapterId) || input.chapterId < 1) {
+    throw new Error('影响复核恢复的来源章节无效。')
+  }
+  const chapter = await db.chapters.get(input.chapterId)
+  if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) {
+    throw new Error('影响复核恢复的来源章节不存在或越界。')
+  }
+  const graph = await buildEditImpactGraphV1(input.scope, input.chapterId)
+  const plan = await buildImpactRemediationPlanV1(graph)
+  const reviews = await readImpactAuthorReviewsV1({ scope: input.scope, plan })
+  return reviews.length > 0 ? { graph, plan, reviews } : null
 }
 
 /** Record an author-confirmed impact item without mutating any Canon table. */

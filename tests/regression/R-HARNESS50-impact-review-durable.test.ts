@@ -5,6 +5,7 @@ import { buildEditImpactGraphV1 } from '../../src/lib/consistency/impact-analysi
 import { buildImpactRemediationPlanV1 } from '../../src/lib/consistency/impact-remediation-plan'
 import {
   executeImpactAuthorReviewV1,
+  readCurrentImpactAuthorReviewStateV1,
   readImpactAuthorReviewsV1,
 } from '../../src/lib/agent/run/impact-review-durable'
 
@@ -126,6 +127,53 @@ describe.sequential('R-HARNESS50 · 作者确认项复核 durable run', () => {
         note: '复查后改为需要人工处理。',
       },
     })
+  })
+
+  it('编辑器重挂载时从当前图和 Run 账本恢复作者复核状态', async () => {
+    const fixture = await seed()
+    const graph = await buildEditImpactGraphV1(fixture.scope, fixture.chapterId)
+    const plan = await buildImpactRemediationPlanV1(graph)
+    const item = plan.items.find(candidate => candidate.mode === 'author-confirmed')!
+    const recorded = await executeImpactAuthorReviewV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      plan,
+      itemId: item.id,
+      decision: 'needs-manual-action',
+      note: '刷新后仍需继续人工处理。',
+    })
+
+    const recovered = await readCurrentImpactAuthorReviewStateV1({
+      scope: fixture.scope,
+      chapterId: fixture.chapterId,
+    })
+    expect(recovered?.plan.planHash).toBe(plan.planHash)
+    expect(recovered?.graph.graphHash).toBe(graph.graphHash)
+    expect(recovered?.reviews).toEqual([expect.objectContaining({
+      runId: recorded.snapshot.run.id,
+      receiptHash: recorded.receiptHash,
+      output: expect.objectContaining({ decision: 'needs-manual-action', note: '刷新后仍需继续人工处理。' }),
+    })])
+  })
+
+  it('正文变化后不把旧计划的复核 receipt 恢复到新计划', async () => {
+    const fixture = await seed()
+    const graph = await buildEditImpactGraphV1(fixture.scope, fixture.chapterId)
+    const plan = await buildImpactRemediationPlanV1(graph)
+    const item = plan.items.find(candidate => candidate.mode === 'author-confirmed')!
+    await executeImpactAuthorReviewV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      plan,
+      itemId: item.id,
+      decision: 'acknowledged',
+      note: '旧正文下的复核。',
+    })
+    await db.chapters.update(fixture.chapterId, { content: '<p>潮声之外又响起钟声。</p>' })
+    await expect(readCurrentImpactAuthorReviewStateV1({
+      scope: fixture.scope,
+      chapterId: fixture.chapterId,
+    })).resolves.toBeNull()
   })
 
   it('正文变化、非作者项或空理由均阻断', async () => {
