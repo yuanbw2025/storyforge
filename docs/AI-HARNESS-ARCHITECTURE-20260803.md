@@ -1089,6 +1089,12 @@ CHIRON 四类信息可映射到现有结构：
 - 该 Run 的写目标为空，不调用 `adopt()`，也不会产生 `adoption.committed`。两种决定都只表示作者已完成复核，不代表正文、事实、角色状态、物品、年表、故事线或大纲已经修正；相同计划/项目/决定重复执行回放已持久化的原始理由，不伪造新证据。
 - 正文或影响图变化、非作者确认项、越界章节、不完整复核事件和空理由均 fail-closed。验收证据为 `R-HARNESS50-impact-review-durable` 与 `R-HARNESS0-event-projection`；人工修正入口、受限 patch 扩展和依赖重跑仍需后续独立单元交付。
 
+**作者复核回放与编辑器恢复（HARNESS-51，2026-08-10）**
+
+- `readImpactAuthorReviewsV1()` 从既有 `agentRuns/agentRunEvents` 回放当前计划中每个 `author-confirmed` 项的最新有效决定、理由、Run id、记录时间和 terminal receipt；它重新校验章节来源、`sourceTextHash + graphHash + planHash`、契约目标、候选 hash、确认元数据和 receipt 绑定，旧计划或损坏事件不会投影为当前完成。
+- `ChapterEditor` 在影响分析和计划刷新后恢复复核记录，显示“已复核/总作者项”、最新决定、原始理由和回执；切换项目时只从回放记录填充输入，不把未提交的编辑文本当成历史证据。该入口仍只读 Run 账本，不写正文、事实、状态、物品、年表、故事线或大纲。
+- 验收证据为 `R-HARNESS50-impact-review-durable`、`R-AUDIT6-chapter-editor-toolbar`；浏览器完全关闭后自动重建影响计划、独立的复核历史面板和人工处理入口仍待后续单元。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

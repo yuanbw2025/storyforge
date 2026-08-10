@@ -32,6 +32,21 @@ export interface ImpactReviewOutputV1 {
   note: string
 }
 
+export interface ImpactAuthorReviewRecordV1 {
+  runId: number
+  receiptHash: string
+  recordedAt: number
+  output: ImpactReviewOutputV1
+}
+
+function reviewObjective(input: {
+  planHash: string
+  itemId: string
+  decision: ImpactReviewDecisionV1
+}): string {
+  return `作者复核影响项 ${input.itemId}（计划 ${input.planHash}，决定 ${input.decision}）`
+}
+
 function reviewContract(input: {
   projectId: number
   worldGroupId: number | null
@@ -42,7 +57,7 @@ function reviewContract(input: {
 }) {
   return {
     version: 1 as const,
-    objective: `作者复核影响项 ${input.itemId}（计划 ${input.planHash}，决定 ${input.decision}）`,
+    objective: reviewObjective(input),
     workflowKind: 'plan-execute' as const,
     scope: {
       projectId: input.projectId,
@@ -126,7 +141,7 @@ async function readExistingCompletedRun(
   decision: ImpactReviewDecisionV1,
 ): Promise<AgentRunSnapshotV1 | null> {
   const rows = await readOwnedRows<AgentRunRecord>(scope, 'agentRuns', { owner: 'work' })
-  const objective = `作者复核影响项 ${itemId}（计划 ${plan.planHash}，决定 ${decision}）`
+  const objective = reviewObjective({ planHash: plan.planHash, itemId, decision })
   for (const row of rows.sort((left, right) => (right.id ?? 0) - (left.id ?? 0))) {
     if (!row.id || row.status !== 'completed' || !row.contractJson) continue
     try {
@@ -158,6 +173,80 @@ function readRecordedReviewOutput(
     decision: event.payload.reviewDecision!,
     note: event.payload.note!,
   }
+}
+
+async function readVerifiedReviewRecord(
+  scope: WorkspaceScope,
+  plan: ImpactRemediationPlanV1,
+  row: AgentRunRecord,
+): Promise<ImpactAuthorReviewRecordV1 | null> {
+  if (!row.id || row.status !== 'completed' || !row.contractJson) return null
+  const snapshot = await readAgentRunV1(scope, row.id)
+  if (snapshot.projection.state !== 'completed' || !snapshot.projection.terminalReceiptHash) return null
+  const output = readRecordedReviewOutput(snapshot, plan)
+  if (!output || !plan.items.some(item => item.id === output.itemId && item.mode === 'author-confirmed')) return null
+  if (snapshot.contract.objective !== reviewObjective({
+    planHash: plan.planHash,
+    itemId: output.itemId,
+    decision: output.decision,
+  })) return null
+  if (
+    snapshot.contract.workflowKind !== 'plan-execute'
+    || snapshot.contract.scope.projectId !== scope.projectId
+    || snapshot.contract.scope.chapterIds?.length !== 1
+    || snapshot.contract.scope.chapterIds[0] !== plan.source.recordId
+  ) return null
+  const confirmation = [...snapshot.events].reverse().find(event => (
+    event.type === 'confirmation.recorded'
+    && event.payload.reviewItemId === output.itemId
+    && event.payload.reviewDecision === output.decision
+    && event.payload.note === output.note
+  ))
+  const receipt = [...snapshot.events].reverse().find(event => event.type === 'verification.accepted')
+  if (!confirmation || confirmation.type !== 'confirmation.recorded' || !receipt || receipt.type !== 'verification.accepted') return null
+  const outputHash = await hashCanonicalValue(output)
+  const step = snapshot.projection.steps[IMPACT_REVIEW_STEP_ID_V1]
+  if (
+    confirmation.payload.candidateHash !== outputHash
+    || step?.candidateHash !== outputHash
+    || step.outputHash !== outputHash
+    || receipt.payload.receiptHash !== snapshot.projection.terminalReceiptHash
+  ) return null
+  return {
+    runId: snapshot.run.id,
+    receiptHash: receipt.payload.receiptHash,
+    recordedAt: receipt.createdAt,
+    output,
+  }
+}
+
+/** Replay the latest valid author review for each item in a current impact plan. */
+export async function readImpactAuthorReviewsV1(input: {
+  scope: WorkspaceScope
+  plan: ImpactRemediationPlanV1
+}): Promise<ImpactAuthorReviewRecordV1[]> {
+  if (input.plan.source.table !== 'chapters' || input.plan.source.recordId == null) {
+    throw new Error('影响复核计划来源章节无效。')
+  }
+  await assertCurrentPlan(input.scope, input.plan)
+  const itemOrder = new Map(input.plan.items.map((item, index) => [item.id, index]))
+  const latest = new Map<string, ImpactAuthorReviewRecordV1>()
+  const rows = await readOwnedRows<AgentRunRecord>(input.scope, 'agentRuns', { owner: 'work' })
+  for (const row of rows.sort((left, right) => (left.id ?? 0) - (right.id ?? 0))) {
+    try {
+      const record = await readVerifiedReviewRecord(input.scope, input.plan, row)
+      const previous = record ? latest.get(record.output.itemId) : undefined
+      if (record && (!previous || record.recordedAt >= previous.recordedAt)) {
+        latest.set(record.output.itemId, record)
+      }
+    } catch {
+      // Damaged or historical runs remain auditable but are not current review evidence.
+    }
+  }
+  return [...latest.values()].sort((left, right) => (
+    (itemOrder.get(left.output.itemId) ?? Number.MAX_SAFE_INTEGER)
+    - (itemOrder.get(right.output.itemId) ?? Number.MAX_SAFE_INTEGER)
+  ))
 }
 
 /** Record an author-confirmed impact item without mutating any Canon table. */

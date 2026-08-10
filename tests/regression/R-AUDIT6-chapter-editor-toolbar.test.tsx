@@ -25,6 +25,7 @@ async function mount(patch: Record<string, unknown> = {}) {
     impactReviewBusy: false,
     impactReviewReceipt: null,
     impactReviewError: null,
+    impactReviewRecords: [],
     impactPatchTargets: [],
     impactPatchTargetId: null,
     impactPatchSummary: '',
@@ -217,7 +218,7 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     })
     expect(host.textContent).toContain('处理计划 5 项')
     expect(host.textContent).toContain('系统重建 2')
-    expect(host.textContent).toContain('作者复核 3')
+    expect(host.textContent).toContain('作者复核 0/3')
     expect(host.textContent).toContain('cccccccccccc')
     await act(async () => button(host, '执行系统重建').click())
     expect(props.onRunImpactRemediation).toHaveBeenCalledOnce()
@@ -251,10 +252,24 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
       impactReviewItemId: authorItem.id,
       impactReviewNote: '证据仍然成立。',
       impactReviewReceipt: 'd'.repeat(64),
+      impactReviewRecords: [{
+        runId: 9,
+        receiptHash: 'd'.repeat(64),
+        recordedAt: 1,
+        output: {
+          planHash: 'c'.repeat(64),
+          graphHash: 'b'.repeat(64),
+          sourceTextHash: 'a'.repeat(64),
+          itemId: authorItem.id,
+          decision: 'acknowledged',
+          note: '证据仍然成立。',
+        },
+      }],
     })
     expect(host.textContent).toContain('只记录决定和理由，不修改正文、事实、状态或大纲')
     expect(host.textContent).toContain('复核事实')
     expect(host.textContent).toContain('作者复核回执 dddddddddddd')
+    expect(host.textContent).toContain('最近决定：已确认')
 
     await act(async () => button(host, '需人工处理').click())
     expect(props.onImpactReviewDecisionChange).toHaveBeenCalledWith('needs-manual-action')

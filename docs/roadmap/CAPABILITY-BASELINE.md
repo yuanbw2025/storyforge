@@ -434,6 +434,7 @@
 - HARNESS-48 已把正文信息边界从“候选可选证据”提升为新合同必需条件：`requiresProseInformationBoundaryV1()` 识别 V2/V3 terminal contract；`isProseGenerationCandidateCurrentV1()` 与 `verifyProseGenerationRunV1()` 对缺失 `informationBoundaryHash` 的新候选 fail-closed，同时保留历史 V1 Run 的兼容读取。`R-HARNESS7-prose-generation-durable` 新增缺边界反例。
 - HARNESS-49 已新增 `replanImpactRemediationV1()` 与正文编辑器“刷新计划”入口：重读当前正文、影响图和三注册表派生节点，生成绑定新 `sourceTextHash + graphHash + planHash` 的处理计划；旧计划 hash 和 changed 标志保留作审计，刷新过程不写业务 Canon。`R-HARNESS49-impact-remediation-replan` 覆盖正文 stale、幂等重规划和损坏计划阻断。
 - HARNESS-50 已新增 `executeImpactAuthorReviewV1()`：只处理影响计划中的 `author-confirmed` 项，以零模型 durable Run 记录作者 `acknowledged` / `needs-manual-action` 决定与理由，并绑定 `sourceTextHash + graphHash + planHash + itemId`、Context Manifest、候选 hash 和 receipt。Run 的写目标为空，不调用 `adopt()`、不产生 `adoption.committed`，两种决定都不代表业务 Canon 已修正；`R-HARNESS50-impact-review-durable` 和事件 schema 回归覆盖幂等回放、stale、越界、非作者项与损坏元数据阻断。
+- HARNESS-51 已新增 `readImpactAuthorReviewsV1()` 并接入 `ChapterEditor`：影响分析/计划刷新后，从现有 Run ledger 回放当前计划每个作者确认项的最新有效决定、理由和 receipt，显示已复核/总作者项；回放重新验证当前 `sourceTextHash + graphHash + planHash`、契约目标和 candidate hash，旧计划或损坏事件不会冒充完成。`R-HARNESS50-impact-review-durable`、`R-AUDIT6-chapter-editor-toolbar` 覆盖回放、stale 和 UI 投影；自动计划恢复及通用人工修正/依赖重跑仍未交付。
 - HARNESS-21 已将正文 Run → post-adoption Run 的父子完成关系持久化：RunContract 的 `lineage.parent`
   与 `agentRuns.parentRunId/parentReceiptHash/parentArtifactHash` 双向核对，父终态回执和正文 hash
   缺一不可；同一父 Run/关系由唯一索引去重。子 Run 的终态证明通过契约 hash 间接绑定父回执，父回执

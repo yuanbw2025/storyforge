@@ -3,7 +3,10 @@ import { db } from '../../src/lib/db/schema'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { buildEditImpactGraphV1 } from '../../src/lib/consistency/impact-analysis'
 import { buildImpactRemediationPlanV1 } from '../../src/lib/consistency/impact-remediation-plan'
-import { executeImpactAuthorReviewV1 } from '../../src/lib/agent/run/impact-review-durable'
+import {
+  executeImpactAuthorReviewV1,
+  readImpactAuthorReviewsV1,
+} from '../../src/lib/agent/run/impact-review-durable'
 
 async function seed(): Promise<{ scope: WorkspaceScope; chapterId: number; worldGroupId: number }> {
   const now = Date.now()
@@ -87,7 +90,42 @@ describe.sequential('R-HARNESS50 · 作者确认项复核 durable run', () => {
       updatedAt: Date.now(),
     } as any)
     await expect(executeImpactAuthorReviewV1(input)).rejects.toThrow('影响复核计划已过期')
+    await expect(readImpactAuthorReviewsV1({ scope: fixture.scope, plan })).rejects.toThrow('影响复核计划已过期')
     expect(await db.agentRuns.where('projectId').equals(fixture.scope.projectId).count()).toBe(1)
+  })
+
+  it('按当前计划回放每项最新的决定、理由和 receipt', async () => {
+    const fixture = await seed()
+    const graph = await buildEditImpactGraphV1(fixture.scope, fixture.chapterId)
+    const plan = await buildImpactRemediationPlanV1(graph)
+    const item = plan.items.find(candidate => candidate.mode === 'author-confirmed')!
+    await executeImpactAuthorReviewV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      plan,
+      itemId: item.id,
+      decision: 'acknowledged',
+      note: '第一次确认。',
+    })
+    const latest = await executeImpactAuthorReviewV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      plan,
+      itemId: item.id,
+      decision: 'needs-manual-action',
+      note: '复查后改为需要人工处理。',
+    })
+    const records = await readImpactAuthorReviewsV1({ scope: fixture.scope, plan })
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({
+      runId: latest.snapshot.run.id,
+      receiptHash: latest.receiptHash,
+      output: {
+        itemId: item.id,
+        decision: 'needs-manual-action',
+        note: '复查后改为需要人工处理。',
+      },
+    })
   })
 
   it('正文变化、非作者项或空理由均阻断', async () => {

@@ -130,7 +130,12 @@ import {
   type ImpactPatchCandidateV1,
 } from '../../lib/agent/run/impact-patch-durable'
 import { executeImpactRemediationV1 } from '../../lib/agent/run/impact-remediation-durable'
-import { executeImpactAuthorReviewV1, type ImpactReviewDecisionV1 } from '../../lib/agent/run/impact-review-durable'
+import {
+  executeImpactAuthorReviewV1,
+  readImpactAuthorReviewsV1,
+  type ImpactAuthorReviewRecordV1,
+  type ImpactReviewDecisionV1,
+} from '../../lib/agent/run/impact-review-durable'
 import { replanImpactRemediationV1 } from '../../lib/consistency/impact-remediation-replan'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
@@ -239,6 +244,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [impactReviewBusy, setImpactReviewBusy] = useState(false)
   const [impactReviewReceipt, setImpactReviewReceipt] = useState<string | null>(null)
   const [impactReviewError, setImpactReviewError] = useState('')
+  const [impactReviewRecords, setImpactReviewRecords] = useState<ImpactAuthorReviewRecordV1[]>([])
   const [impactPatchTargetId, setImpactPatchTargetId] = useState<number | null>(null)
   const [impactPatchSummary, setImpactPatchSummary] = useState('')
   const [impactPatchReason, setImpactPatchReason] = useState('')
@@ -326,6 +332,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactReviewNote('')
     setImpactReviewReceipt(null)
     setImpactReviewError('')
+    setImpactReviewRecords([])
     setImpactInfo(null)
     setImpactPatchTargetId(null)
     setImpactPatchSummary('')
@@ -1712,16 +1719,20 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const { demotedFacts } = await propagateChapterEditStale(project.id, currentChapter.id)
       const graph = await buildEditImpactGraphV1(project.id, currentChapter.id)
       const remediationPlan = await buildImpactRemediationPlanV1(graph)
+      const impactScope = await resolveScopeLike(project.id)
+      const reviewRecords = await readImpactAuthorReviewsV1({ scope: impactScope, plan: remediationPlan })
       setImpactGraph(graph)
       setImpactRemediationPlan(remediationPlan)
       setImpactRemediationReceipt(null)
       setImpactRemediationError('')
       const firstAuthorItem = remediationPlan.items.find(item => item.mode === 'author-confirmed')
+      const firstReviewRecord = reviewRecords.find(record => record.output.itemId === firstAuthorItem?.id)
       setImpactReviewItemId(firstAuthorItem?.id ?? null)
-      setImpactReviewDecision('acknowledged')
-      setImpactReviewNote('')
-      setImpactReviewReceipt(null)
+      setImpactReviewDecision(firstReviewRecord?.output.decision ?? 'acknowledged')
+      setImpactReviewNote(firstReviewRecord?.output.note ?? '')
+      setImpactReviewReceipt(firstReviewRecord?.receiptHash ?? null)
       setImpactReviewError('')
+      setImpactReviewRecords(reviewRecords)
       setImpactPatchCandidate(null)
       setImpactPatchError('')
       setImpactPatchSummary('')
@@ -1764,6 +1775,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactReviewNote('')
     setImpactReviewReceipt(null)
     setImpactReviewError('')
+    setImpactReviewRecords([])
     setImpactPatchTargetId(null)
     setImpactPatchSummary('')
     setImpactPatchReason('')
@@ -1830,15 +1842,21 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         previousPlan,
         reason: 'author-requested',
       })
+      const reviewRecords = await readImpactAuthorReviewsV1({
+        scope: await resolveScopeLike(project.id!),
+        plan: result.plan,
+      })
       setImpactGraph(result.graph)
       setImpactRemediationPlan(result.plan)
       setImpactRemediationReceipt(null)
       const firstAuthorItem = result.plan.items.find(item => item.mode === 'author-confirmed')
+      const firstReviewRecord = reviewRecords.find(record => record.output.itemId === firstAuthorItem?.id)
       setImpactReviewItemId(firstAuthorItem?.id ?? null)
-      setImpactReviewDecision('acknowledged')
-      setImpactReviewNote('')
-      setImpactReviewReceipt(null)
+      setImpactReviewDecision(firstReviewRecord?.output.decision ?? 'acknowledged')
+      setImpactReviewNote(firstReviewRecord?.output.note ?? '')
+      setImpactReviewReceipt(firstReviewRecord?.receiptHash ?? null)
       setImpactReviewError('')
+      setImpactReviewRecords(reviewRecords)
       setImpactInfo(result.changed
         ? `影响处理计划已刷新；旧计划 ${previousPlan.planHash.slice(0, 12)} 保留为历史证据，新计划 ${result.plan.planHash.slice(0, 12)} 已绑定当前正文。`
         : `影响处理计划与当前正文一致，无需变更；计划 ${result.plan.planHash.slice(0, 12)}。`)
@@ -1864,6 +1882,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         decision: impactReviewDecision,
         note: impactReviewNote.trim(),
       })
+      const reviewRecords = await readImpactAuthorReviewsV1({
+        scope: await resolveScopeLike(project.id),
+        plan,
+      })
+      setImpactReviewRecords(reviewRecords)
+      setImpactReviewDecision(result.output.decision)
+      setImpactReviewNote(result.output.note)
       setImpactReviewReceipt(result.receiptHash)
       setImpactInfo(result.reused
         ? `作者复核记录已复用；正式数据未改变。回执 ${result.receiptHash.slice(0, 12)}。`
@@ -1873,6 +1898,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     } finally {
       setImpactReviewBusy(false)
     }
+  }
+
+  const handleImpactReviewItemChange = (itemId: string | null) => {
+    const record = impactReviewRecords.find(candidate => candidate.output.itemId === itemId)
+    setImpactReviewItemId(itemId)
+    setImpactReviewDecision(record?.output.decision ?? 'acknowledged')
+    setImpactReviewNote(record?.output.note ?? '')
+    setImpactReviewReceipt(record?.receiptHash ?? null)
+    setImpactReviewError('')
   }
 
   const handleConfirmImpactPatch = async () => {
@@ -2680,6 +2714,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           impactReviewBusy={impactReviewBusy}
           impactReviewReceipt={impactReviewReceipt}
           impactReviewError={impactReviewError || null}
+          impactReviewRecords={impactReviewRecords}
           impactPatchTargets={impactPatchTargets}
           impactPatchTargetId={impactPatchTargetId}
           impactPatchSummary={impactPatchSummary}
@@ -2709,7 +2744,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onCreateImpactPatch={() => { void handleCreateImpactPatch() }}
           onRunImpactRemediation={() => { void handleRunImpactRemediation() }}
           onReplanImpactRemediation={() => { void handleReplanImpactRemediation() }}
-          onImpactReviewItemChange={setImpactReviewItemId}
+          onImpactReviewItemChange={handleImpactReviewItemChange}
           onImpactReviewDecisionChange={setImpactReviewDecision}
           onImpactReviewNoteChange={setImpactReviewNote}
           onExecuteImpactReview={() => { void handleExecuteImpactReview() }}

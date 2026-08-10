@@ -263,6 +263,7 @@
 - HARNESS-48 已收紧正文信息隔离终态：新 V2/V3 正文合同的 `prose-generation.information-boundary` 是必需 acceptance；候选当前性检查和终态 verifier 都会拒绝缺失 boundary hash 的新 Run，或拒绝未来章纲、私人认知、角色未来弧光泄漏。历史 V1 Run 仅保留兼容读取，不作为新主路径证据。
 - HARNESS-49 已补影响处理 stale/replan：`replanImpactRemediationV1()` 在正文或影响图变化后重新读取当前图并生成新 plan，返回 `previousPlanHash + changed + graph/plan`，不写 Canon；正文编辑器增加“刷新计划”按钮，旧计划只作为历史证据保留，新的确定性执行必须再次绑定新 plan hash。
 - HARNESS-50 已将计划中的 `author-confirmed` 项变成可追踪的作者复核证据：零模型 durable Run 绑定正文、影响图、计划和项目 hash，记录 `acknowledged` / `needs-manual-action` 与理由并签发 receipt；写集合为空且没有 `adoption.committed`，所以它不代表事实、状态、大纲或正文已修正。stale、越界、非作者项和不完整复核事件均阻断；人工修正入口及依赖重跑仍待后续单元。
+- HARNESS-51 已新增 `readImpactAuthorReviewsV1()`：重新分析或刷新计划后，从既有 Run 账本回放当前计划每个作者确认项的最新有效决定、理由和 receipt，并在正文编辑器显示已复核/总数与原始证据。回放重新验证当前 source/graph/plan hash、契约目标和候选 hash；旧计划、损坏事件和跨作用域记录不算当前完成。浏览器自动恢复计划、人工修正入口及依赖重跑仍待后续单元。
 - HARNESS-22 已为主 Agent 同一轮多任务增加 frozen dependency join：下游候选绑定生成时实际读取的
   上游 candidate/output hash 和 Run generation；上游作者编辑后，旧下游不会因新版本已采纳而被放行。
   下游确认前还会回读上游 step 的正式 adoptionHash/succeeded 状态，避免把对话确认误当成写入完成。

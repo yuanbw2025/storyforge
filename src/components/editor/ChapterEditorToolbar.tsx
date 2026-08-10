@@ -1,7 +1,10 @@
 import { BookOpenCheck, Check, ClipboardList, Eye, GitBranch, Loader2, RefreshCw, ShieldCheck, StickyNote, X } from 'lucide-react'
 import { CInput } from '../shared/CompositionInput'
 import type { ImpactPatchCandidateV1 } from '../../lib/agent/run/impact-patch-durable'
-import type { ImpactReviewDecisionV1 } from '../../lib/agent/run/impact-review-durable'
+import type {
+  ImpactAuthorReviewRecordV1,
+  ImpactReviewDecisionV1,
+} from '../../lib/agent/run/impact-review-durable'
 import type { ImpactRemediationPlanV1 } from '../../lib/consistency/impact-remediation-plan'
 
 interface ImpactPatchTarget {
@@ -36,6 +39,7 @@ interface Props {
   impactReviewBusy: boolean
   impactReviewReceipt: string | null
   impactReviewError: string | null
+  impactReviewRecords: ImpactAuthorReviewRecordV1[]
   impactPatchTargets: ImpactPatchTarget[]
   impactPatchTargetId: number | null
   impactPatchSummary: string
@@ -95,6 +99,7 @@ export default function ChapterEditorToolbar({
   impactReviewBusy,
   impactReviewReceipt,
   impactReviewError,
+  impactReviewRecords,
   impactPatchTargets,
   impactPatchTargetId,
   impactPatchSummary,
@@ -136,6 +141,8 @@ export default function ChapterEditorToolbar({
   onCustomInstructionChange,
   onPerspectiveCharacterChange,
 }: Props) {
+  const reviewedImpactItemIds = new Set(impactReviewRecords.map(record => record.output.itemId))
+  const selectedImpactReview = impactReviewRecords.find(record => record.output.itemId === impactReviewItemId)
   return (
     <div className="flex flex-wrap gap-2 border-t border-border/60 bg-bg-surface/35 px-6 py-3">
       <button onClick={onGenerate} disabled={isStreaming}
@@ -182,7 +189,7 @@ export default function ChapterEditorToolbar({
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border/70 bg-bg-elevated/60 px-2 py-1.5 text-[11px] text-text-secondary">
               <span>处理计划 {impactRemediationPlan.counts.total} 项</span>
               <span>系统重建 {impactRemediationPlan.counts.deterministic}</span>
-              <span>作者复核 {impactRemediationPlan.counts.authorConfirmed}</span>
+              <span>作者复核 {impactReviewRecords.length}/{impactRemediationPlan.counts.authorConfirmed}</span>
               <span className="ml-auto text-text-muted">计划 {impactRemediationPlan.planHash.slice(0, 12)}</span>
               {impactRemediationPlan.counts.deterministic > 0 && (
                 <button
@@ -225,6 +232,7 @@ export default function ChapterEditorToolbar({
                       .map(item => (
                         <option key={item.id} value={item.id}>
                           {IMPACT_REVIEW_ACTION_LABELS[item.action] ?? '复核影响项'} · {item.table}#{item.recordId ?? '待定'}
+                          {reviewedImpactItemIds.has(item.id) ? '（已复核）' : ''}
                         </option>
                       ))}
                   </select>
@@ -268,6 +276,15 @@ export default function ChapterEditorToolbar({
                   {impactReviewBusy ? '记录中...' : '记录复核'}
                 </button>
               </div>
+              {selectedImpactReview && (
+                <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-text-muted">
+                  <span className={selectedImpactReview.output.decision === 'needs-manual-action' ? 'text-amber-200' : 'text-emerald-200'}>
+                    最近决定：{selectedImpactReview.output.decision === 'needs-manual-action' ? '需人工处理' : '已确认'}
+                  </span>
+                  <span>{selectedImpactReview.output.note}</span>
+                  <span>回执 {selectedImpactReview.receiptHash.slice(0, 12)}</span>
+                </div>
+              )}
               {impactReviewReceipt && <div className="text-[10px] text-success">作者复核回执 {impactReviewReceipt.slice(0, 12)}</div>}
               {impactReviewError && <div role="alert" className="text-xs text-error">{impactReviewError}</div>}
             </div>
