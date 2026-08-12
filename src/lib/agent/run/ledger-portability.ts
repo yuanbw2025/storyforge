@@ -232,6 +232,19 @@ async function verifyImportedCheckpoint(
   }
 }
 
+function hasNonPortableCheckpoint(checkpoints: AgentRunCheckpointRecord[]): boolean {
+  return checkpoints.some(checkpoint => {
+    if (checkpoint.resumePayloadJson == null) return false
+    try {
+      const payload = JSON.parse(checkpoint.resumePayloadJson) as Record<string, unknown>
+      return payload?.portable === false
+    } catch {
+      // verifyImportedCheckpoint reports the authoritative corruption error.
+      return false
+    }
+  })
+}
+
 async function rebindGenerationHashes(input: {
   run: AgentRunRecord & { id: number }
   events: AgentRunEventRecord[]
@@ -346,6 +359,32 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
         createdAt: staled.createdAt,
       })
       domainEvents = [...domainEvents, staled]
+      projection = replayAgentRunEventsV1(domainEvents)
+    } else if (hasNonPortableCheckpoint(checkpoints) && !['failed', 'cancelled'].includes(projection.state)) {
+      const cancelled = parseAgentRunEventV1({
+        version: 1,
+        runId,
+        sequence: projection.lastSequence + 1,
+        generation: projection.generation,
+        projectId: run.projectId,
+        worldGroupId: run.worldGroupId ?? null,
+        contractHash: run.contractHash,
+        type: 'run.cancelled',
+        payload: { reason: 'project-import-nonportable-checkpoint' },
+        createdAt: Date.now(),
+      })
+      await db.agentRunEvents.add({
+        projectId: cancelled.projectId,
+        worldGroupId: cancelled.worldGroupId,
+        runId,
+        sequence: cancelled.sequence,
+        generation: cancelled.generation,
+        contractHash: cancelled.contractHash,
+        type: cancelled.type,
+        payloadJson: canonicalStringify(cancelled.payload),
+        createdAt: cancelled.createdAt,
+      })
+      domainEvents = [...domainEvents, cancelled]
       projection = replayAgentRunEventsV1(domainEvents)
     }
     const projectionBody = toAgentRunProjectionBodyV1(projection)

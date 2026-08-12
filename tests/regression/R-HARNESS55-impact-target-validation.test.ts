@@ -178,6 +178,7 @@ describe.sequential('R-HARNESS55 · 人工交接精确目标验证', () => {
     const source = readFileSync('src/pages/WorkspacePage.tsx', 'utf8')
     expect(source).toContain("!isImpactHandoffRouteModuleV2(params.get('module'), parsed)")
     expect(source).toContain('activeModule !== parsed.targetModule')
+    expect(source).toContain('beginImpactManualCorrectionV1({ scope, handoff: parsed })')
     expect(source).toContain('impactHandoffTarget?.moduleRecordId')
     for (const prop of [
       'initialFactId', 'initialStateCardId', 'initialEntryId', 'initialEventId',

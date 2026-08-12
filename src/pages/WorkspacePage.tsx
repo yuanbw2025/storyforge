@@ -75,9 +75,12 @@ import {
   type ImpactHandoffV2,
 } from '../lib/consistency/impact-handoff'
 import {
-  validateCurrentImpactHandoffV2,
   type CurrentImpactHandoffTargetV2,
 } from '../lib/agent/run/impact-handoff-durable'
+import {
+  beginImpactManualCorrectionV1,
+  completeImpactManualCorrectionV1,
+} from '../lib/agent/run/impact-manual-correction-durable'
 
 export default function WorkspacePage() {
   const { projectId } = useParams()
@@ -97,6 +100,8 @@ export default function WorkspacePage() {
   const [showCopilot, setShowCopilot] = useState(false)
   const [impactHandoff, setImpactHandoff] = useState<ImpactHandoffV2 | null>(null)
   const [impactHandoffTarget, setImpactHandoffTarget] = useState<CurrentImpactHandoffTargetV2 | null>(null)
+  const [impactCorrectionStatus, setImpactCorrectionStatus] = useState<'idle' | 'pending' | 'verifying' | 'completed'>('idle')
+  const [impactCorrectionError, setImpactCorrectionError] = useState<string | null>(null)
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
   const worldGroups = useWorldGroupStore(state => state.groups)
 
@@ -130,6 +135,8 @@ export default function WorkspacePage() {
     let active = true
     setImpactHandoff(null)
     setImpactHandoffTarget(null)
+    setImpactCorrectionStatus('idle')
+    setImpactCorrectionError(null)
     const params = new URLSearchParams(location.search)
     const parsed = parseImpactHandoffV2(params.get('impactHandoff'))
     if (
@@ -139,11 +146,12 @@ export default function WorkspacePage() {
       || activeModule !== parsed.targetModule
     ) return () => { active = false }
     void resolveScopeLike(project.id)
-      .then(scope => validateCurrentImpactHandoffV2({ scope, handoff: parsed }))
+      .then(scope => beginImpactManualCorrectionV1({ scope, handoff: parsed }))
       .then(state => {
         if (active && state) {
           setImpactHandoff(parsed)
-          setImpactHandoffTarget(state.target)
+          setImpactHandoffTarget(state.baseline.target)
+          setImpactCorrectionStatus(state.snapshot.projection.state === 'completed' ? 'completed' : 'pending')
         }
       })
       .catch(error => {
@@ -265,6 +273,8 @@ export default function WorkspacePage() {
   const dismissImpactHandoff = () => {
     setImpactHandoff(null)
     setImpactHandoffTarget(null)
+    setImpactCorrectionStatus('idle')
+    setImpactCorrectionError(null)
     navigate(`/workspace/${project.id}?module=${activeModule}`, { replace: true })
   }
 
@@ -272,9 +282,25 @@ export default function WorkspacePage() {
     if (!impactHandoff) return
     setImpactHandoff(null)
     setImpactHandoffTarget(null)
+    setImpactCorrectionStatus('idle')
+    setImpactCorrectionError(null)
     setEditorNodeId(impactHandoff.returnNodeId)
     setActiveModule('chapters-list')
     navigate(`/workspace/${project.id}?module=chapters-list`, { replace: true })
+  }
+
+  const verifyImpactManualCorrection = async () => {
+    if (!impactHandoff || impactCorrectionStatus === 'verifying') return
+    setImpactCorrectionStatus('verifying')
+    setImpactCorrectionError(null)
+    try {
+      const scope = await resolveScopeLike(project.id!)
+      await completeImpactManualCorrectionV1({ scope, handoff: impactHandoff })
+      setImpactCorrectionStatus('completed')
+    } catch (error) {
+      setImpactCorrectionStatus('pending')
+      setImpactCorrectionError(error instanceof Error ? error.message : '人工修正完成验证失败。')
+    }
   }
 
   /** 根据当前模块渲染主面板内容 */
@@ -544,7 +570,20 @@ export default function WorkspacePage() {
               <span className="font-medium text-amber-200">影响项需要人工处理</span>
               <span>已打开：{handoffTargetLabel ?? impactHandoff.targetModule}</span>
               <span className="text-text-muted">{impactHandoff.table}#{impactHandoff.recordId ?? '待定'} · 计划 {impactHandoff.planHash.slice(0, 12)}</span>
+              <span className={impactCorrectionStatus === 'completed' ? 'text-emerald-300' : 'text-amber-200'}>
+                {impactCorrectionStatus === 'completed' ? '修正已验证' : '等待保存后验证'}
+              </span>
               <span className="ml-auto flex items-center gap-2">
+                {impactCorrectionStatus !== 'completed' && (
+                  <button
+                    type="button"
+                    onClick={() => { void verifyImpactManualCorrection() }}
+                    disabled={impactCorrectionStatus === 'verifying'}
+                    className="rounded border border-amber-300/40 bg-amber-300/10 px-2 py-1 text-[11px] text-amber-100 hover:bg-amber-300/15 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {impactCorrectionStatus === 'verifying' ? '正在验证…' : '验证已保存修正'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={returnFromImpactHandoff}
@@ -562,8 +601,11 @@ export default function WorkspacePage() {
               </span>
             </div>
             <p className="mt-1 text-[10px] text-text-muted">
-              这是受当前正文与影响计划 hash 约束的人工交接提示。请在现有模块中核对并按既有确认/采纳流程处理；本次导航不会自动改动正式数据。
+              这是受当前正文、影响计划和正式目标 pre-state 约束的人工交接。请先在现有模块按原流程保存，再验证修正；导航或仅打开记录不会被视为完成。
             </p>
+            {impactCorrectionError && (
+              <p role="alert" className="mt-1 text-[10px] text-rose-300">{impactCorrectionError}</p>
+            )}
           </div>
         )}
         <div className={`min-h-0 flex-1 overflow-y-auto ${isImmersiveModule ? '' : 'p-6'}`}>

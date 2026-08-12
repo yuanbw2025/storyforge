@@ -35,6 +35,21 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-56 完成卡：人工修正完成证据
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-56` 小功能。作者从可信 impact handoff 到达既有面板并保存后，可以验证“同一目标的正式状态确实变化”，而不是把导航、打开编辑器或点击按钮冒充修正完成。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 反向反馈后半链；复用 `ImpactHandoffV2`、HARNESS-54/55 验签与目标解析、`agentRuns / agentRunEvents / agentRunCheckpoints`、RunContract、Context Manifest、terminal receipt 和既有面板保存入口。 |
+| 范围 | 零模型开始/恢复/终验 Run；开始时冻结 target pre-state，作者仍在原面板修改，完成时回读同一正式记录并签发 pre/post hash receipt；刷新可从可信 checkpoint 恢复。 |
+| 非范围 | 不新增通用修正表单，不拦截或复制各面板保存，不自动写 Canon，不把相同 hash 当作“无需修改”，不 replan，不重跑下游，不引入 OpenCode/Pi/LangGraph/OpenHands 运行时。 |
+| 读 | `chapterContent` 仍经 `CONTEXT_SOURCES + assembleContext()` 形成 Manifest；目标正式行只经 `PROJECT_TABLES` 解析和 World/Work scope gate 回读。 |
+| 写 | 业务 Canon 零写入，`RunContract.permissions.writeTargets=[]`；只追加既有 durable ledger/checkpoint/receipt 证据，因此不新增 `FIELD_REGISTRY` / AdoptionSchema 项。 |
+| 表生命周期 | 不新增表；复用已登记的 `agentRuns / agentRunEvents / agentRunCheckpoints`。项目导入会使 terminal receipt stale；待处理 checkpoint 必须重新验证父 review、scope 与目标，不能在新项目冒充可继续证明。 |
+| 硬验证 | 来源正文、旧 plan/graph/source hash、review Run/receipt、最新决定、item、目标 table/record、World/Work、pre/post hash、verifier version 全绑定；目标缺失、跨 Work、错记录、相同 hash、证据篡改全部 fail-closed。 |
+| UI / 回滚 | 可信交接提示新增“验证已保存修正”；失败只保留待处理证据并提示作者，关闭提示或返回来源不改业务数据。删除 Run 仍由现有级联生命周期恢复到 HARNESS-55 行为。 |
+| 验收 | 导航不完成；合法保存后签发 receipt；错误记录/跨 Work/删除/覆盖/相同 hash/篡改拒绝；刷新恢复不重复建 Run；定向回归、三注册表闸门、类型、全量测试、构建和 E2E 按风险递增执行。 |
+
 ## 二、当前功能组合总表
 
 状态：`READY` 可按顺序开工；`DESIGN` 先收敛设计；`DEPENDENT` 等待前置；`LONG-TERM` 保留愿景，不进入近期施工。
@@ -269,6 +284,7 @@
 - HARNESS-53 已新增 `readCurrentImpactAuthorReviewStateV1()` 并接入正文编辑器重挂载恢复：它不持久化第二份计划，而是从当前章节重新构建 impact graph/plan，再从 Run 账本回放只属于当前 hash 的作者复核 receipt；没有当前 receipt 时不恢复面板，正文或影响图变化后旧计划返回空。影响复核与待确认 patch 并行恢复、分别隔离损坏证据。`R-HARNESS50-impact-review-durable` 覆盖当前恢复和 stale 反例；“只分析但尚未产生任何 durable 动作”的临时计划仍不会跨浏览器恢复，后续需单独决定是否值得增加持久计划证据。
 - HARNESS-54 已将人工交接协议升级为 `ImpactHandoffV2`：地址除当前正文/图/计划 hash 外，必须携带产生 `needs-manual-action` 的 Run ID 和 terminal receipt。`WorkspacePage` 不再信任结构正确的查询参数，而是调用 `validateCurrentImpactHandoffV2()` 在当前 Work 中重建图/计划并回放该 item 的最新有效复核后才展示交接证据。伪造 Run/receipt、旧决定被覆盖、来源章纲错配和正文 stale 均 fail-closed；该单元只读、不写 Canon，人工修正完成证明和依赖重跑仍未交付。
 - HARNESS-55 已把“可信地址”收紧为“可信且可达的具体记录”：durable 验签通过 `PROJECT_TABLES` 解析并校验目标存在性和 World/Work 归属，章节/细纲业务主键归一为现有面板使用的 `outlineNodeId`；工作区要求 URL、当前模块与交接模块一致，随后让事实、状态、物品、故事线、年表、关系、角色、大纲、细纲、章节、参考和单记录设定面板解除初始筛选并高亮目标。该导航不自动编辑或写 Canon；错误模块、目标缺失、未登记表、同项目跨 Work 和筛选隐藏反例由 `R-HARNESS55-impact-target-validation` / `R-HARNESS55-impact-target-ui` 覆盖。人工修正完成证据、修正后 stale/replan 和依赖重跑仍待后续单元。
+- HARNESS-56 已新增人工修正完成证明：可信 handoff 首次打开时创建零模型 child Run，冻结来源 plan/review lineage、精确目标和忽略 `updatedAt` 的正式 pre-state hash；作者仍通过既有面板保存，只有显式“验证已保存修正”回读同一作用域目标且 post-state 不同时才签发 terminal receipt。刷新复用原 Run，错误记录、相同状态、删除/跨 Work、父 review 覆盖、检查点篡改和终验后再修改均 fail-closed；包含本地物理 ID 的待处理检查点标记为不可便携，项目导入后取消，已完成 receipt 按既有规则 stale。`R-HARNESS56-impact-manual-correction` 覆盖 8 项主路径、恢复、UI 和生命周期反例；本单元不 replan、不调用模型、不写 Canon，修正后 stale/replan 与依赖重跑仍待后续单元。
 - HARNESS-22 已为主 Agent 同一轮多任务增加 frozen dependency join：下游候选绑定生成时实际读取的
   上游 candidate/output hash 和 Run generation；上游作者编辑后，旧下游不会因新版本已采纳而被放行。
   下游确认前还会回读上游 step 的正式 adoptionHash/succeeded 状态，避免把对话确认误当成写入完成。
@@ -538,6 +554,7 @@
 | 移动端适配、i18n、WebDAV、Vercel 代理、帮助与桌面安全形态 | PRODUCT-1 | 先登记独立用户故事和架构边界；不在现有功能旁顺手实现。 |
 | TipTap 长期优化 | AUTHOR-1 | 作为编辑体验的小功能或完整功能登记，必须有明确验收。 |
 | 协同编辑、账号、云同步、发布发现、社区治理 | PLATFORM-1 | 必须独立完成后端/身份/同步/治理设计后再开工。 |
+| OpenCode、Pi、LangGraph、OpenHands 等通用 Agent Harness 对标 | HARNESS-2 后续治理 | 当前先按既有 StoryForge 原生方案完成反向反馈、剩余入口和真实评测主链；不引入第二套 Agent Loop、会话、权限、checkpoint 或持久化运行时。主链完成后再以权限矩阵、turn snapshot/压缩、interrupt/幂等、事件与观测四类机制做只读差距审计，只有可验证缺口才拆成独立小单元。 |
 
 迁移分类的全量计数、部分完成裁决与防漏规则见 [COMPLETED.md](./COMPLETED.md#迁移审计账本)。CI 通过 `npm run check:roadmap` 锁定历史快照、当前归属和文档链接。
 

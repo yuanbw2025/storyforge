@@ -1120,6 +1120,12 @@ CHIRON 四类信息可映射到现有结构：
 - `WorkspacePage` 只有在 URL `module`、当前可见模块和验签后的 `targetModule` 三者一致时才消费交接。事实页签、关系图/列表、角色与参考筛选、物品聚合、故事线动态投影、大纲层级、细纲/章节及单记录设定面板均复用现有选择状态，自动显露并以琥珀色标记具体记录；不自动进入编辑态、不修改任何业务数据，切换模块会撤销交接投影。
 - `R-HARNESS55-impact-target-validation` 覆盖章节/细纲 ID 归一、错误模块、目标缺失、未登记表和同项目跨 Work；`R-HARNESS55-impact-target-ui` 覆盖默认筛选隐藏事实与默认关系图隐藏关系时的真实显露。本单元仍只证明“作者到达了正确记录”，不证明作者完成修正，也不触发 stale/replan 或依赖重跑。
 
+**人工修正完成证明（HARNESS-56，2026-08-12）**
+
+- `beginImpactManualCorrectionV1()` 只接受 HARNESS-54/55 已验签的当前 handoff，并创建 review Run 的零模型 child Run。检查点冻结完整旧 plan、review Run/receipt、目标 table/id/scope、`chapterContent` Context Manifest 和排除纯 `updatedAt` 的业务 pre-state hash；URL 导航与打开编辑器只会进入 `paused`，不会签发完成回执。
+- 作者继续使用原面板保存；`completeImpactManualCorrectionV1()` 显式回读同一 `PROJECT_TABLES` 记录，通过冻结旧 plan 回放父 review lineage，并要求 post-state 与 pre-state 不同后才签发 terminal receipt。真实修正使旧 impact graph 变化是预期行为，因此终验不要求旧 plan 仍为当前，但来源正文（目标本身不是来源章时）、父决定、目标身份和作用域必须仍有效；终验后目标再变会立即 stale。
+- 检查点明确 `portable:false`：项目导入时未完成 Run 取消，已完成 receipt 仍按 ledger 规则 stale，避免物理 ID 在新项目冒充可恢复证据。`WorkspacePage` 提供“验证已保存修正”，失败保留待处理状态；`R-HARNESS56-impact-manual-correction` 覆盖导航不完成、合法保存、刷新幂等、错误目标、删除/覆盖/篡改、终验后变化、UI 和导入生命周期。本单元不调用模型、不调用 `adopt()`、不自动写 Canon，也不执行 replan 或下游重跑。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

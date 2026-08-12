@@ -178,7 +178,7 @@ function readRecordedReviewOutput(
   }
 }
 
-async function readVerifiedReviewRecord(
+export async function readVerifiedImpactAuthorReviewRecordV1(
   scope: WorkspaceScope,
   plan: ImpactRemediationPlanV1,
   row: AgentRunRecord,
@@ -223,6 +223,37 @@ async function readVerifiedReviewRecord(
   }
 }
 
+/**
+ * Replay review receipts against the exact historical plan evidence supplied
+ * by a trusted downstream Run. Unlike readImpactAuthorReviewsV1 this helper
+ * deliberately does not require that plan to still be current: a legitimate
+ * manual edit is expected to make the old impact graph stale before its
+ * completion proof can be signed.
+ */
+export async function readFrozenImpactAuthorReviewsV1(input: {
+  scope: WorkspaceScope
+  plan: ImpactRemediationPlanV1
+}): Promise<ImpactAuthorReviewRecordV1[]> {
+  const itemOrder = new Map(input.plan.items.map((item, index) => [item.id, index]))
+  const latest = new Map<string, ImpactAuthorReviewRecordV1>()
+  const rows = await readOwnedRows<AgentRunRecord>(input.scope, 'agentRuns', { owner: 'work' })
+  for (const row of rows.sort((left, right) => (left.id ?? 0) - (right.id ?? 0))) {
+    try {
+      const record = await readVerifiedImpactAuthorReviewRecordV1(input.scope, input.plan, row)
+      const previous = record ? latest.get(record.output.itemId) : undefined
+      if (record && (!previous || record.recordedAt >= previous.recordedAt)) {
+        latest.set(record.output.itemId, record)
+      }
+    } catch {
+      // Damaged or unrelated runs remain auditable but are not review evidence.
+    }
+  }
+  return [...latest.values()].sort((left, right) => (
+    (itemOrder.get(left.output.itemId) ?? Number.MAX_SAFE_INTEGER)
+    - (itemOrder.get(right.output.itemId) ?? Number.MAX_SAFE_INTEGER)
+  ))
+}
+
 /** Replay the latest valid author review for each item in a current impact plan. */
 export async function readImpactAuthorReviewsV1(input: {
   scope: WorkspaceScope
@@ -232,24 +263,7 @@ export async function readImpactAuthorReviewsV1(input: {
     throw new Error('影响复核计划来源章节无效。')
   }
   await assertCurrentPlan(input.scope, input.plan)
-  const itemOrder = new Map(input.plan.items.map((item, index) => [item.id, index]))
-  const latest = new Map<string, ImpactAuthorReviewRecordV1>()
-  const rows = await readOwnedRows<AgentRunRecord>(input.scope, 'agentRuns', { owner: 'work' })
-  for (const row of rows.sort((left, right) => (left.id ?? 0) - (right.id ?? 0))) {
-    try {
-      const record = await readVerifiedReviewRecord(input.scope, input.plan, row)
-      const previous = record ? latest.get(record.output.itemId) : undefined
-      if (record && (!previous || record.recordedAt >= previous.recordedAt)) {
-        latest.set(record.output.itemId, record)
-      }
-    } catch {
-      // Damaged or historical runs remain auditable but are not current review evidence.
-    }
-  }
-  return [...latest.values()].sort((left, right) => (
-    (itemOrder.get(left.output.itemId) ?? Number.MAX_SAFE_INTEGER)
-    - (itemOrder.get(right.output.itemId) ?? Number.MAX_SAFE_INTEGER)
-  ))
+  return readFrozenImpactAuthorReviewsV1(input)
 }
 
 /**
