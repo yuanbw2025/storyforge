@@ -35,6 +35,20 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-58 完成卡：绑定修正后计划的确定性下游重建
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-58` 小功能。来源编辑器恢复 fresh H57 当前计划后，作者执行“系统重建”时，检索块与层级摘要重建 Run 必须成为 H57 的 child，证明它执行的是人工修正后的当前 deterministic items；刷新或重复点击只收敛到同一真实输出/receipt。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 反向反馈后半链；直接复用 HARNESS-47 `executeImpactRemediationV1()`、既有 `rebuildChapterChunks()` / `rebuildProjectNarrativeSummaries()`、H57 Run/receipt/output hash 和编辑器原按钮，不复制重建器。 |
+| 范围 | 为 H47 增加可选父 lineage、真实 output checkpoint 和逐边界幂等恢复；fresh H57 存在时只执行其当前 plan 的 deterministic items。派生写入后 graph/plan 改变会使 H57 成为历史，这是预期状态转换，H58 receipt 成为完成证据。 |
+| 非范围 | 不执行 `author-confirmed` 项，不调用模型，不改正文/大纲/事实/状态等 Canon，不自动生成候选，不一次扩展新的确定性表类型，不取消普通 H47 手动重建兼容路径。 |
+| 读 / 写 | `chapterContent` 仍经 `CONTEXT_SOURCES + assembleContext()`；父 H57 经 ledger 验证。业务写仅限 `PROJECT_TABLES` 已登记的 `retrievalChunks / narrativeSummaryNodes` 确定性派生生命周期，仍非 AI 写字段、`writeTargets=[]`、不新增 FIELD_REGISTRY。 |
+| 表生命周期 | 不新增表；重建表和 ledger 三表均已登记。checkpoint 输出随项目导入按既有非便携/terminal stale 规则处理；父子 lineage 由既有 remap 与导入 stale 闸门覆盖。 |
+| 硬验证 | H57 parent receipt/output、当前 plan/source/graph、deterministic item 闭集、Context Manifest、真实重建输出、执行后派生 post-state 与 terminal receipt 全绑定；父 stale、正文/plan 变化、无确定性项、越界、输出/checkpoint 篡改均拒绝。 |
+| UI / 回滚 | 编辑器仍使用“执行系统重建”；fresh H57 存在时显示为受控 child，完成后展示 H58 receipt 与真实计数。移除 H58 绑定可回到 H47 普通手动重建，不删除任何派生结果或 H56/H57 历史。 |
+| 验收 | H57→H58 父子 receipt 成立；只重建检索/摘要；重复点击返回原真实 output；包括“派生写入后、输出检查点前”在内的 10 个 durable 边界中断均沿同一 child 收敛；父 stale、frozen output 篡改、无 deterministic、正文变化、越界、导入反例通过；普通 H47 兼容路径保留。`R-HARNESS58-impact-post-correction-remediation` 7 项与 H47/H57 合计 20 项定向回归通过。 |
+
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 
 | 项目 | 冻结边界 |
@@ -301,6 +315,7 @@
 - HARNESS-55 已把“可信地址”收紧为“可信且可达的具体记录”：durable 验签通过 `PROJECT_TABLES` 解析并校验目标存在性和 World/Work 归属，章节/细纲业务主键归一为现有面板使用的 `outlineNodeId`；工作区要求 URL、当前模块与交接模块一致，随后让事实、状态、物品、故事线、年表、关系、角色、大纲、细纲、章节、参考和单记录设定面板解除初始筛选并高亮目标。该导航不自动编辑或写 Canon；错误模块、目标缺失、未登记表、同项目跨 Work 和筛选隐藏反例由 `R-HARNESS55-impact-target-validation` / `R-HARNESS55-impact-target-ui` 覆盖。人工修正完成证据、修正后 stale/replan 和依赖重跑仍待后续单元。
 - HARNESS-56 已新增人工修正完成证明：可信 handoff 首次打开时创建零模型 child Run，冻结来源 plan/review lineage、精确目标和忽略 `updatedAt` 的正式 pre-state hash；作者仍通过既有面板保存，只有显式“验证已保存修正”回读同一作用域目标且 post-state 不同时才签发 terminal receipt。刷新复用原 Run，错误记录、相同状态、删除/跨 Work、父 review 覆盖、检查点篡改和终验后再修改均 fail-closed；包含本地物理 ID 的待处理检查点标记为不可便携，项目导入后取消，已完成 receipt 按既有规则 stale。`R-HARNESS56-impact-manual-correction` 覆盖 8 项主路径、恢复、UI 和生命周期反例；本单元不 replan、不调用模型、不写 Canon，修正后 stale/replan 与依赖重跑仍待后续单元。
 - HARNESS-57 已把 H56 fresh receipt 接入修正后重规划：`executeImpactPostCorrectionReplanV1()` 复用 HARNESS-49 planner 创建零模型 child Run，绑定人工修正 Run/receipt、目标 post-state、旧 plan、当前 graph/plan 和差异 output hash；按稳定 item ID 保守分类 `resolved / remaining / new`，同一项仍在当前图时绝不因“编辑过”而自动关闭。工作区显式终验后立即执行，若完成 H56 后刷新会自动补做；来源编辑器优先恢复 fresh H57 计划和三类计数，已被 H56 消费的旧 review 不再作为当前计划恢复。父 receipt/目标/当前 plan 再变、检查点篡改、跨 Work 与导入均 stale 或 fail-closed；`R-HARNESS57-impact-post-correction-replan` 覆盖 9 项分类、幂等、8 个 durable 中断边界恢复、父子、防篡改、UI 与生命周期反例。本单元零模型、零 Canon 写入，不自动执行确定性重建或生成式下游重跑。
+- HARNESS-58 已把 fresh H57 当前计划接到既有 H47 确定性执行器：来源编辑器执行前重新回读 H57，而不是信任内存对象；H58 child 精确绑定父 Run/receipt/output hash，只允许重建 `retrievalChunks / narrativeSummaryNodes`。H47 新增不可便携的真实 output checkpoint，重复执行返回原计数；包括派生写入后、checkpoint 前在内的 10 个中断边界都可沿同一 child 重入，且中断不会被误记为业务失败。H58 完成后 H57 计划成为历史是预期状态，H58 receipt 证明该计划的确定性余项已经执行；普通 H47 手动重建仍兼容。`R-HARNESS58-impact-post-correction-remediation` 覆盖父子、零模型/零 Canon、真实输出、幂等、10 边界、父 stale、frozen output 篡改、导入和 UI 分流。
 - HARNESS-22 已为主 Agent 同一轮多任务增加 frozen dependency join：下游候选绑定生成时实际读取的
   上游 candidate/output hash 和 Run generation；上游作者编辑后，旧下游不会因新版本已采纳而被放行。
   下游确认前还会回读上游 step 的正式 adoptionHash/succeeded 状态，避免把对话确认误当成写入完成。

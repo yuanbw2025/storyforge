@@ -135,6 +135,7 @@ import {
   type ImpactPatchCandidateV1,
 } from '../../lib/agent/run/impact-patch-durable'
 import { executeImpactRemediationV1 } from '../../lib/agent/run/impact-remediation-durable'
+import { executeImpactPostCorrectionRemediationV1 } from '../../lib/agent/run/impact-post-correction-remediation-durable'
 import {
   executeImpactAuthorReviewV1,
   readCurrentImpactAuthorReviewStateV1,
@@ -143,7 +144,10 @@ import {
   type ImpactReviewDecisionV1,
 } from '../../lib/agent/run/impact-review-durable'
 import { replanImpactRemediationV1 } from '../../lib/consistency/impact-remediation-replan'
-import { readCurrentImpactPostCorrectionReplanV1 } from '../../lib/agent/run/impact-post-correction-replan-durable'
+import {
+  readCurrentImpactPostCorrectionReplanV1,
+  type ImpactPostCorrectionReplanResultV1,
+} from '../../lib/agent/run/impact-post-correction-replan-durable'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
 import {
@@ -246,6 +250,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [impactRemediationBusy, setImpactRemediationBusy] = useState(false)
   const [impactRemediationReceipt, setImpactRemediationReceipt] = useState<string | null>(null)
   const [impactRemediationError, setImpactRemediationError] = useState('')
+  const [impactPostCorrectionReplan, setImpactPostCorrectionReplan] = useState<ImpactPostCorrectionReplanResultV1 | null>(null)
   const [impactReviewItemId, setImpactReviewItemId] = useState<string | null>(null)
   const [impactReviewDecision, setImpactReviewDecision] = useState<ImpactReviewDecisionV1>('acknowledged')
   const [impactReviewNote, setImpactReviewNote] = useState('')
@@ -335,6 +340,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactRemediationPlan(null)
     setImpactRemediationReceipt(null)
     setImpactRemediationError('')
+    setImpactPostCorrectionReplan(null)
     setImpactReviewItemId(null)
     setImpactReviewDecision('acknowledged')
     setImpactReviewNote('')
@@ -375,6 +381,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       ])
       if (!active) return
       if (postCorrectionState) {
+        setImpactPostCorrectionReplan(postCorrectionState)
         setImpactGraph(postCorrectionState.output.graph)
         setImpactRemediationPlan(postCorrectionState.output.plan)
         setImpactRemediationReceipt(postCorrectionState.receiptHash)
@@ -1771,6 +1778,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       const reviewRecords = await readImpactAuthorReviewsV1({ scope: impactScope, plan: remediationPlan })
       setImpactGraph(graph)
       setImpactRemediationPlan(remediationPlan)
+      setImpactPostCorrectionReplan(null)
       setImpactRemediationReceipt(null)
       setImpactRemediationError('')
       const firstAuthorItem = remediationPlan.items.find(item => item.mode === 'author-confirmed')
@@ -1816,6 +1824,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactInfo(null)
     setImpactGraph(null)
     setImpactRemediationPlan(null)
+    setImpactPostCorrectionReplan(null)
     setImpactRemediationReceipt(null)
     setImpactRemediationError('')
     setImpactReviewItemId(null)
@@ -1863,11 +1872,22 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactRemediationBusy(true)
     setImpactRemediationError('')
     try {
-      const result = await executeImpactRemediationV1({
-        scope: await resolveScopeLike(project.id),
-        worldGroupId: chapterWorldGroupId ?? null,
-        plan,
-      })
+      const scope = await resolveScopeLike(project.id)
+      const currentPostCorrection = impactPostCorrectionReplan?.output.plan.planHash === plan.planHash
+        ? impactPostCorrectionReplan
+        : null
+      const result = currentPostCorrection
+        ? await executeImpactPostCorrectionRemediationV1({
+            scope,
+            worldGroupId: chapterWorldGroupId ?? null,
+            sourceChapterId: currentChapter.id,
+            expectedReplan: currentPostCorrection,
+          })
+        : await executeImpactRemediationV1({
+            scope,
+            worldGroupId: chapterWorldGroupId ?? null,
+            plan,
+          })
       setImpactRemediationReceipt(result.receiptHash)
       setImpactInfo(result.reused
         ? `确定性影响重建已复用终态 Run；回执 ${result.receiptHash.slice(0, 12)}。`
@@ -1896,6 +1916,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       })
       setImpactGraph(result.graph)
       setImpactRemediationPlan(result.plan)
+      setImpactPostCorrectionReplan(null)
       setImpactRemediationReceipt(null)
       const firstAuthorItem = result.plan.items.find(item => item.mode === 'author-confirmed')
       const firstReviewRecord = reviewRecords.find(record => record.output.itemId === firstAuthorItem?.id)
@@ -1993,6 +2014,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactPatchCandidate(null)
       setImpactGraph(null)
       setImpactRemediationPlan(null)
+      setImpactPostCorrectionReplan(null)
       setImpactRemediationReceipt(null)
       setImpactRemediationError('')
       setImpactPatchTargetId(null)

@@ -217,7 +217,7 @@ git log --oneline --reverse 774a2ae..HEAD
 
 卷纲、章纲、批量细纲和正文已有更早的 durable 主路径，不能按新标题重复开发。
 
-### 6.4 HARNESS-41～57：正文后处理与反向反馈人工修正/重规划
+### 6.4 HARNESS-41～58：正文后处理与反向反馈人工修正/重规划
 
 - HARNESS-41/42：四步 post-adoption 屏障和可恢复失败步骤计划。
 - HARNESS-43：确定性影响图覆盖来源事实、记录、后续大纲/章节、摘要、检索、故事线和派生状态。
@@ -231,13 +231,16 @@ git log --oneline --reverse 774a2ae..HEAD
 - HARNESS-55：进一步验证目标表、记录、World/Work 作用域和当前模块；章节/细纲 ID 归一为 `outlineNodeId`；既有面板会解除初始筛选、展开层级并高亮具体记录，但不会自动编辑或写 Canon。
 - HARNESS-56：可信 handoff 建立零模型 child Run 并冻结正式目标 pre-state；只有作者在既有面板保存、显式终验且同一记录业务状态确实变化后才签发 receipt。刷新、覆盖、篡改、作用域、导入和终验后变化均 fail-closed。
 - HARNESS-57：以 H56 fresh receipt/post-state 为父证据复用 HARNESS-49 planner，重建当前 graph/plan 并保守分类 resolved/remaining/new；工作区即时执行、来源编辑器可恢复，旧 review 不再冒充当前。
+- HARNESS-58：来源编辑器重新验证 fresh H57 后，将其 current plan 的确定性余项交给 H47；child 绑定 H57 receipt/output，真实 output checkpoint 支持刷新、重复点击和 10 个 durable 边界恢复，只写检索块与层级摘要。
 
-HARNESS-57 最新代码入口：
+HARNESS-58 最新代码入口：
 
 - `src/lib/consistency/impact-handoff.ts`
 - `src/lib/agent/run/impact-handoff-durable.ts`
 - `src/lib/agent/run/impact-manual-correction-durable.ts`
 - `src/lib/agent/run/impact-post-correction-replan-durable.ts`
+- `src/lib/agent/run/impact-post-correction-remediation-durable.ts`
+- `src/lib/agent/run/impact-remediation-durable.ts`
 - `src/lib/agent/run/impact-review-durable.ts`
 - `src/lib/agent/run/ledger-portability.ts`
 - `src/pages/WorkspacePage.tsx`
@@ -246,6 +249,7 @@ HARNESS-57 最新代码入口：
 - `tests/regression/R-HARNESS55-impact-target-ui.test.tsx`
 - `tests/regression/R-HARNESS56-impact-manual-correction.test.ts`
 - `tests/regression/R-HARNESS57-impact-post-correction-replan.test.ts`
+- `tests/regression/R-HARNESS58-impact-post-correction-remediation.test.ts`
 
 ## 7. 分步骤全链的真实现状
 
@@ -259,14 +263,14 @@ HARNESS-57 最新代码入口：
 | 细纲/场景 | 单章和批量 durable；章节入口旁路已收口 | 真实模型的场景质量、信息释放和上下文救援 A/B 未完成 |
 | 正文 | 生成/续写、信息隔离、语义 review/revise/review、作者确认采纳和父子 Run 已完成 | 不覆盖已有手稿；局部任意改写、长期文学质量和真实 provider 发布证据未完成 |
 | 章后状态 | 六域候选、章节记忆、检索/摘要和确定性一致性守卫进入统一 Run | 语义 Fast/Deep 仍是显式动作；所有状态类型的通用自动采纳不应实现 |
-| 反向反馈 | 影响图、受限 patch、确定性重建、作者复核、可信精确交接、人工保存 pre/post receipt 与修正后 resolved/remaining/new 当前计划已完成 | 把当前确定性项接入受控执行、AI 下游重新生成和通用依赖重跑尚未完成 |
+| 反向反馈 | 影响图、受限 patch、确定性重建、作者复核、可信精确交接、人工保存 pre/post receipt、修正后 resolved/remaining/new 当前计划及其确定性余项 child 执行已完成 | AI 下游重新生成和通用依赖重跑尚未完成；每次只允许按一个目标类型扩展 |
 | 评测/发布 | 大量模块回归、H4 工程基座、配对 gate 和防篡改证据存在 | 真实外部模型 H4 40+20 artifact、人工 held-out 复核、真实质量/成本/延迟净收益未完成 |
 
-## 8. 当前停点：HARNESS-57 已实现，当前验证证据
+## 8. 当前停点：HARNESS-58 已实现，当前验证证据
 
 ### 8.1 已通过
 
-- HARNESS-49/50/54/55/56/57 与 ledger 生命周期定向回归：47 项通过；其中 H57 9 项覆盖 8 个 durable 中断边界。
+- HARNESS-47/57/58 定向回归：20 项通过；其中 H58 7 项覆盖父子 lineage、真实输出复用、frozen output 篡改和 10 个 durable 中断边界。
 - `npx tsc --noEmit`：通过。
 - 改动范围 ESLint：通过；全仓 `npm run lint` 受用户未跟踪 `tmp/` 脚本的 7 个既有错误阻断，未改动这些文件。
 - `git diff --check`：通过。
