@@ -263,7 +263,18 @@ export async function readImpactAuthorReviewsV1(input: {
     throw new Error('影响复核计划来源章节无效。')
   }
   await assertCurrentPlan(input.scope, input.plan)
-  return readFrozenImpactAuthorReviewsV1(input)
+  const reviews = await readFrozenImpactAuthorReviewsV1(input)
+  if (reviews.length === 0) return reviews
+  const rows = await readOwnedRows<AgentRunRecord>(input.scope, 'agentRuns', { owner: 'work' })
+  const consumedReviewRunIds = new Set(rows
+    .filter(row => (
+      row.parentRunId != null
+      && row.parentRelation?.startsWith('impact-correction:')
+      && row.status === 'completed'
+      && row.terminalReceiptHash != null
+    ))
+    .map(row => row.parentRunId!))
+  return reviews.filter(review => !consumedReviewRunIds.has(review.runId))
 }
 
 /**

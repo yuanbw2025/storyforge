@@ -1126,6 +1126,12 @@ CHIRON 四类信息可映射到现有结构：
 - 作者继续使用原面板保存；`completeImpactManualCorrectionV1()` 显式回读同一 `PROJECT_TABLES` 记录，通过冻结旧 plan 回放父 review lineage，并要求 post-state 与 pre-state 不同后才签发 terminal receipt。真实修正使旧 impact graph 变化是预期行为，因此终验不要求旧 plan 仍为当前，但来源正文（目标本身不是来源章时）、父决定、目标身份和作用域必须仍有效；终验后目标再变会立即 stale。
 - 检查点明确 `portable:false`：项目导入时未完成 Run 取消，已完成 receipt 仍按 ledger 规则 stale，避免物理 ID 在新项目冒充可恢复证据。`WorkspacePage` 提供“验证已保存修正”，失败保留待处理状态；`R-HARNESS56-impact-manual-correction` 覆盖导航不完成、合法保存、刷新幂等、错误目标、删除/覆盖/篡改、终验后变化、UI 和导入生命周期。本单元不调用模型、不调用 `adopt()`、不自动写 Canon，也不执行 replan 或下游重跑。
 
+**人工修正后的 stale / replan（HARNESS-57，2026-08-13）**
+
+- `executeImpactPostCorrectionReplanV1()` 是 H56 completion Run 的零模型 child Run；父 lineage 固定 H56 terminal receipt 与目标 post-state，执行体复用 `replanImpactRemediationV1()`，把冻结旧 plan 与当前 graph/plan 一起写入带 `portable:false` 的可验签检查点。差异只按稳定 item ID 确定性分类：旧有新无=`resolved`、两边均有=`remaining`、新有旧无=`new`；目标虽被编辑但相同项仍存在时必须保持 remaining，不能靠修改动作本身推断问题解决。
+- 工作区在“验证已保存修正”成功后立即创建 H57；若 H56 已完成而 H57 曾中断，交接 URL 重挂载会自动补做。来源编辑器通过 `readCurrentImpactPostCorrectionReplanV1()` 恢复当前 plan 与三类计数，并重新验证父 H56 receipt、目标 post-state 和当前 plan；被 H56 消费的旧 `needs-manual-action` review 从当前计划恢复投影中过滤，但历史账本保留。
+- 父/目标/当前图再变、检查点或差异篡改、跨 Work 与项目导入均 stale 或 fail-closed。执行器从 `run.created`、step/context/checkpoint 到 terminal verification 的 8 个 durable 边界均可中断重入并沿同一 child Run 收敛；`R-HARNESS57-impact-post-correction-replan` 以 9 项覆盖保守分类、幂等、刷新恢复、父子 freshness、防篡改、UI 和导入生命周期。本单元不调用模型、不调用 `adopt()`、不写业务 Canon，也不自动执行 HARNESS-47 或生成式下游重跑。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

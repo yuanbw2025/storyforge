@@ -81,6 +81,7 @@ import {
   beginImpactManualCorrectionV1,
   completeImpactManualCorrectionV1,
 } from '../lib/agent/run/impact-manual-correction-durable'
+import { executeImpactPostCorrectionReplanV1 } from '../lib/agent/run/impact-post-correction-replan-durable'
 
 export default function WorkspacePage() {
   const { projectId } = useParams()
@@ -146,7 +147,13 @@ export default function WorkspacePage() {
       || activeModule !== parsed.targetModule
     ) return () => { active = false }
     void resolveScopeLike(project.id)
-      .then(scope => beginImpactManualCorrectionV1({ scope, handoff: parsed }))
+      .then(async scope => {
+        const state = await beginImpactManualCorrectionV1({ scope, handoff: parsed })
+        if (state.snapshot.projection.state === 'completed') {
+          await executeImpactPostCorrectionReplanV1({ scope, handoff: parsed })
+        }
+        return state
+      })
       .then(state => {
         if (active && state) {
           setImpactHandoff(parsed)
@@ -296,6 +303,7 @@ export default function WorkspacePage() {
     try {
       const scope = await resolveScopeLike(project.id!)
       await completeImpactManualCorrectionV1({ scope, handoff: impactHandoff })
+      await executeImpactPostCorrectionReplanV1({ scope, handoff: impactHandoff })
       setImpactCorrectionStatus('completed')
     } catch (error) {
       setImpactCorrectionStatus('pending')
@@ -571,7 +579,7 @@ export default function WorkspacePage() {
               <span>已打开：{handoffTargetLabel ?? impactHandoff.targetModule}</span>
               <span className="text-text-muted">{impactHandoff.table}#{impactHandoff.recordId ?? '待定'} · 计划 {impactHandoff.planHash.slice(0, 12)}</span>
               <span className={impactCorrectionStatus === 'completed' ? 'text-emerald-300' : 'text-amber-200'}>
-                {impactCorrectionStatus === 'completed' ? '修正已验证' : '等待保存后验证'}
+                {impactCorrectionStatus === 'completed' ? '修正已验证并重新规划' : '等待保存后验证'}
               </span>
               <span className="ml-auto flex items-center gap-2">
                 {impactCorrectionStatus !== 'completed' && (

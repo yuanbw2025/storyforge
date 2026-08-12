@@ -143,6 +143,7 @@ import {
   type ImpactReviewDecisionV1,
 } from '../../lib/agent/run/impact-review-durable'
 import { replanImpactRemediationV1 } from '../../lib/consistency/impact-remediation-replan'
+import { readCurrentImpactPostCorrectionReplanV1 } from '../../lib/agent/run/impact-post-correction-replan-durable'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
 import {
@@ -349,7 +350,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!currentChapter?.id) return () => { active = false }
     void (async () => {
       const scope = await resolveScopeLike(project.id!)
-      const [candidate, reviewState] = await Promise.all([
+      const [candidate, reviewState, postCorrectionState] = await Promise.all([
         readLatestImpactPatchCandidateV1({
           scope,
           sourceChapterId: currentChapter.id!,
@@ -364,9 +365,23 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           console.warn('[ImpactReview] durable review 恢复失败:', error)
           return null
         }),
+        readCurrentImpactPostCorrectionReplanV1({
+          scope,
+          chapterId: currentChapter.id!,
+        }).catch(error => {
+          console.warn('[ImpactReplan] 修正后重规划恢复失败:', error)
+          return null
+        }),
       ])
       if (!active) return
-      if (reviewState) {
+      if (postCorrectionState) {
+        setImpactGraph(postCorrectionState.output.graph)
+        setImpactRemediationPlan(postCorrectionState.output.plan)
+        setImpactRemediationReceipt(postCorrectionState.receiptHash)
+        setImpactInfo(
+          `已恢复人工修正后的当前计划：已解决 ${postCorrectionState.output.resolvedItemIds.length} 项、仍需处理 ${postCorrectionState.output.remainingItemIds.length} 项、新增 ${postCorrectionState.output.newItemIds.length} 项。`,
+        )
+      } else if (reviewState) {
         const selectedReview = reviewState.reviews.find(record => record.output.decision === 'needs-manual-action')
           ?? reviewState.reviews[0]
         setImpactGraph(reviewState.graph)

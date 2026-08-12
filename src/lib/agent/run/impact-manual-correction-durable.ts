@@ -32,7 +32,7 @@ import { hashCanonicalValue } from './hash'
 export const IMPACT_MANUAL_CORRECTION_STEP_ID_V1 = 'impact-remediation:manual-correction' as const
 export const IMPACT_MANUAL_CORRECTION_VERIFIER_SET_V1 = 'impact-manual-correction-terminal-v1' as const
 
-interface ImpactManualCorrectionBaselineV1 {
+export interface ImpactManualCorrectionBaselineV1 {
   version: 1
   kind: 'impact-manual-correction-baseline'
   portable: false
@@ -56,6 +56,10 @@ export interface ImpactManualCorrectionCompletionV1 {
   targetPreStateHash: string
   targetPostStateHash: string
   reused: boolean
+}
+
+export interface CompletedImpactManualCorrectionV1 extends ImpactManualCorrectionCompletionV1 {
+  baseline: ImpactManualCorrectionBaselineV1
 }
 
 async function childRelation(handoff: ImpactHandoffV2): Promise<string> {
@@ -474,5 +478,29 @@ export async function completeImpactManualCorrectionV1(input: {
     targetPreStateHash: existing.baseline.targetPreStateHash,
     targetPostStateHash,
     reused: false,
+  }
+}
+
+/** Recover a fresh completed proof without requiring the old plan to remain current. */
+export async function readCompletedImpactManualCorrectionV1(input: {
+  scope: WorkspaceScope
+  handoff: ImpactHandoffV2
+}): Promise<CompletedImpactManualCorrectionV1> {
+  const relation = await childRelation(input.handoff)
+  const existing = await readExisting({ ...input, relation })
+  if (
+    !existing
+    || existing.snapshot.projection.state !== 'completed'
+    || !existing.snapshot.projection.terminalReceiptHash
+  ) throw new Error('人工修正尚无 fresh 完成证明，不能重新规划。')
+  const targetPostStateHash = existing.snapshot.projection.steps[IMPACT_MANUAL_CORRECTION_STEP_ID_V1]?.outputHash
+  if (!targetPostStateHash) throw new Error('人工修正完成证明缺少目标 post-state。')
+  return {
+    snapshot: existing.snapshot,
+    receiptHash: existing.snapshot.projection.terminalReceiptHash,
+    targetPreStateHash: existing.baseline.targetPreStateHash,
+    targetPostStateHash,
+    reused: true,
+    baseline: existing.baseline,
   }
 }

@@ -6,7 +6,7 @@
 >
 > 远端分支：`origin/feat/harness-rebuild-20260807`
 >
-> 最新功能单元：`HARNESS-56 人工修正完成证明`（具体提交以 `git log -1` 为准）
+> 最新功能单元：`HARNESS-57 人工修正后的 stale/replan`（具体提交以 `git log -1` 为准）
 >
 > 世界引擎基线：`774a2ae feat(WORLD-2): close executable world foundation through 2F`
 >
@@ -133,11 +133,11 @@ flowchart TD
 
 ## 5. 当前完成度如何理解
 
-“约 80%”表示：核心运行底座、主要生成主路径和反向反馈从分析、交接到人工保存完成证明已经落地；修正后当前 replan、受控下游重跑、剩余入口收口和真实模型质量发布证据还没有完成。
+“约 80%”表示：核心运行底座、主要生成主路径和反向反馈从分析、交接、人工保存证明到修正后当前 replan 已经落地；受控下游重跑、剩余入口收口和真实模型质量发布证据还没有完成。
 
 不能把以下事实误解为“全面完成”：
 
-- 已有 56 个 HARNESS 编号，不代表 56 个产品阶段全部完成。
+- 已有 57 个 HARNESS 编号，不代表 57 个产品阶段全部完成。
 - 自动化测试通过只证明当前工程合同和回归，不证明真实模型文学质量。
 - RAG、Embedding、事实账本和一致性 Agent 已存在，不代表每个入口都正确使用。
 - `needs-manual-action` 已能跳到目标记录并证明同一正式记录发生了人工保存变化，但不代表旧影响已解决，也不代表下游已经重建。
@@ -217,7 +217,7 @@ git log --oneline --reverse 774a2ae..HEAD
 
 卷纲、章纲、批量细纲和正文已有更早的 durable 主路径，不能按新标题重复开发。
 
-### 6.4 HARNESS-41～56：正文后处理与反向反馈人工修正证明
+### 6.4 HARNESS-41～57：正文后处理与反向反馈人工修正/重规划
 
 - HARNESS-41/42：四步 post-adoption 屏障和可恢复失败步骤计划。
 - HARNESS-43：确定性影响图覆盖来源事实、记录、后续大纲/章节、摘要、检索、故事线和派生状态。
@@ -230,12 +230,14 @@ git log --oneline --reverse 774a2ae..HEAD
 - HARNESS-52～54：把 `needs-manual-action` 交接到既有人工入口；地址必须绑定当前 review Run/receipt，并在目标工作区重新验签 source/graph/plan/item。
 - HARNESS-55：进一步验证目标表、记录、World/Work 作用域和当前模块；章节/细纲 ID 归一为 `outlineNodeId`；既有面板会解除初始筛选、展开层级并高亮具体记录，但不会自动编辑或写 Canon。
 - HARNESS-56：可信 handoff 建立零模型 child Run 并冻结正式目标 pre-state；只有作者在既有面板保存、显式终验且同一记录业务状态确实变化后才签发 receipt。刷新、覆盖、篡改、作用域、导入和终验后变化均 fail-closed。
+- HARNESS-57：以 H56 fresh receipt/post-state 为父证据复用 HARNESS-49 planner，重建当前 graph/plan 并保守分类 resolved/remaining/new；工作区即时执行、来源编辑器可恢复，旧 review 不再冒充当前。
 
-HARNESS-56 最新代码入口：
+HARNESS-57 最新代码入口：
 
 - `src/lib/consistency/impact-handoff.ts`
 - `src/lib/agent/run/impact-handoff-durable.ts`
 - `src/lib/agent/run/impact-manual-correction-durable.ts`
+- `src/lib/agent/run/impact-post-correction-replan-durable.ts`
 - `src/lib/agent/run/impact-review-durable.ts`
 - `src/lib/agent/run/ledger-portability.ts`
 - `src/pages/WorkspacePage.tsx`
@@ -243,6 +245,7 @@ HARNESS-56 最新代码入口：
 - `tests/regression/R-HARNESS55-impact-target-validation.test.ts`
 - `tests/regression/R-HARNESS55-impact-target-ui.test.tsx`
 - `tests/regression/R-HARNESS56-impact-manual-correction.test.ts`
+- `tests/regression/R-HARNESS57-impact-post-correction-replan.test.ts`
 
 ## 7. 分步骤全链的真实现状
 
@@ -256,21 +259,21 @@ HARNESS-56 最新代码入口：
 | 细纲/场景 | 单章和批量 durable；章节入口旁路已收口 | 真实模型的场景质量、信息释放和上下文救援 A/B 未完成 |
 | 正文 | 生成/续写、信息隔离、语义 review/revise/review、作者确认采纳和父子 Run 已完成 | 不覆盖已有手稿；局部任意改写、长期文学质量和真实 provider 发布证据未完成 |
 | 章后状态 | 六域候选、章节记忆、检索/摘要和确定性一致性守卫进入统一 Run | 语义 Fast/Deep 仍是显式动作；所有状态类型的通用自动采纳不应实现 |
-| 反向反馈 | 影响图、受限 patch、确定性重建、作者复核、可信精确交接和人工保存 pre/post receipt 已完成 | 修正后当前 replan、问题 resolved/remaining/new 分类、AI 下游重新生成和依赖重跑尚未完成 |
+| 反向反馈 | 影响图、受限 patch、确定性重建、作者复核、可信精确交接、人工保存 pre/post receipt 与修正后 resolved/remaining/new 当前计划已完成 | 把当前确定性项接入受控执行、AI 下游重新生成和通用依赖重跑尚未完成 |
 | 评测/发布 | 大量模块回归、H4 工程基座、配对 gate 和防篡改证据存在 | 真实外部模型 H4 40+20 artifact、人工 held-out 复核、真实质量/成本/延迟净收益未完成 |
 
-## 8. 当前停点：HARNESS-56 已实现，当前验证证据
+## 8. 当前停点：HARNESS-57 已实现，当前验证证据
 
 ### 8.1 已通过
 
-- HARNESS-50/54/55/56 定向回归：26 项通过；ledger 项目生命周期另 5 项通过。
+- HARNESS-49/50/54/55/56/57 与 ledger 生命周期定向回归：47 项通过；其中 H57 9 项覆盖 8 个 durable 中断边界。
 - `npx tsc --noEmit`：通过。
 - 改动范围 ESLint：通过；全仓 `npm run lint` 受用户未跟踪 `tmp/` 脚本的 7 个既有错误阻断，未改动这些文件。
 - `git diff --check`：通过。
-- `npm run test:coverage` 独占资源重跑：340 个测试文件、1401 项测试全部通过。
+- `npm run test:coverage` 独占资源重跑：341 个测试文件、1410 项测试全部通过。
 - 覆盖率：statements 79.25%、branches 73.37%、functions 76.78%、lines 79.25%。
-- `npm run build`：通过，3741 个模块完成生产构建。
-- `npm run check:bundle-size`：通过；入口约 645.7 KiB，gzip 约 199.9 KiB。
+- `npm run build`：通过，3743 个模块完成生产构建。
+- `npm run check:bundle-size`：通过；入口约 646.5 KiB，gzip 约 200.0 KiB。
 - `npm run ci` 在依赖审计之前的 required tables、AI manual、architecture、source reachability、roadmap、agent context、agent freshness、Canon coverage 和 project metrics 均通过。
 
 ### 8.2 已知 CI / 工作树阻断
@@ -347,7 +350,7 @@ npm run ci:e2e
 - 篡改 candidate/receipt/target hash 时拒绝恢复。
 - 项目导出导入后明确按不可便携证据处理：待处理 Run 取消，terminal receipt stale。
 
-### 9.2 当前第一优先：修正后的 stale 与 replan
+### 9.2 已完成：修正后的 stale 与 replan
 
 目标：人工修正完成后重新计算当前影响图和处理计划，明确哪些旧项已解决、哪些仍存在、哪些是新影响；旧 handoff 和旧计划不得继续冒充当前。
 
@@ -360,7 +363,7 @@ npm run ci:e2e
 - 只有当前图不再包含等价问题或新 verifier 明确通过时，才可显示 resolved。
 - 不在本单元自动重跑任何模型任务。
 
-### 9.3 第三优先：受控下游重建与重新生成
+### 9.3 当前第一优先：受控下游重建与重新生成
 
 先分两条路径：
 
@@ -470,7 +473,7 @@ git diff --check
 | 信息隔离 | `src/lib/agent/information-boundary.ts`、`R-HARNESS9`、`R-HARNESS48` |
 | 事实/认知/物品/检索 | `src/lib/fact-ledger/`、`knowledge-ledger/`、`retrieval/`、相关 registry tests |
 | 影响反馈 | `src/lib/consistency/impact-*`、`src/lib/agent/run/impact-*` |
-| 当前 HARNESS-56 UI/完成证明 | `WorkspacePage.tsx`、`impact-manual-correction-durable.ts`、`initial-record-target.ts`、各目标 Panel |
+| 当前 HARNESS-57 UI/重规划 | `WorkspacePage.tsx`、`ChapterEditor.tsx`、`impact-manual-correction-durable.ts`、`impact-post-correction-replan-durable.ts` |
 
 ## 15. Git 交接状态
 
@@ -484,4 +487,4 @@ git diff --check
 
 当前重构已经从“提示词字段拼接 + 零散质量检查”推进到真正的 Agent/Skill + durable Harness 主体：主要生成入口有明确职责、上下文证据、结构化候选、作者确认、受治理采纳、终态验证、恢复和回放；正文也具备信息隔离、语义评审、章后状态和影响图。
 
-当前最关键的未闭环不是再造 Agent。人工修正确实发生已经可以由 HARNESS-56 证明；下一步是基于该 receipt 与新状态让旧计划 stale，重新规划并区分 resolved/remaining/new，再以确定性或作者确认的 Agent Run 重建受影响下游。完成这条链后，再审计剩余基础设定/参考解析入口，并用真实模型评测证明质量、成本和延迟收益。任何接续工作都应沿这个顺序推进。
+当前最关键的未闭环不是再造 Agent。人工修正确实发生及修正后 resolved/remaining/new 当前计划已经由 HARNESS-56/57 证明；下一步是以该新计划为输入，用确定性或作者确认的 Agent Run 重建受影响下游。完成这条链后，再审计剩余基础设定/参考解析入口，并用真实模型评测证明质量、成本和延迟收益。任何接续工作都应沿这个顺序推进。
