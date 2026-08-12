@@ -49,6 +49,17 @@
 | UI / 回滚 | 编辑器仍使用“执行系统重建”；fresh H57 存在时显示为受控 child，完成后展示 H58 receipt 与真实计数。移除 H58 绑定可回到 H47 普通手动重建，不删除任何派生结果或 H56/H57 历史。 |
 | 验收 | H57→H58 父子 receipt 成立；只重建检索/摘要；重复点击返回原真实 output；包括“派生写入后、输出检查点前”在内的 10 个 durable 边界中断均沿同一 child 收敛；父 stale、frozen output 篡改、无 deterministic、正文变化、越界、导入反例通过；普通 H47 兼容路径保留。`R-HARNESS58-impact-post-correction-remediation` 7 项与 H47/H57 合计 20 项定向回归通过。 |
 
+### HARNESS-59 完成卡：剩余分步骤 UI 模型入口注册表与清零守卫
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-59` 治理小功能。维护者必须能回答分步骤 UI 还有多少模型直调、哪些已由 durable/GenerationNode/SIM 治理、哪些确实只读、哪些仍需迁移；新增或移除直调时 CI 必须要求同步裁决。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 剩余入口 census；复用 TypeScript AST、现有 `check:architecture`/CI 和真实组件源码，不把 AI Manual 的 category 清单冒充运行治理状态。 |
+| 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
+| 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
+| 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
+| 验收 | 已冻结 29 个文件 / 44 个静态构造点：7 个 governed、4 个 auxiliary、18 个 migration。高风险物品/年表“先删后写”、关系逐条写、局部手稿替换、参考实体合并没有冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 3 项回归通过。 |
+
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 
 | 项目 | 冻结边界 |
@@ -316,6 +327,7 @@
 - HARNESS-56 已新增人工修正完成证明：可信 handoff 首次打开时创建零模型 child Run，冻结来源 plan/review lineage、精确目标和忽略 `updatedAt` 的正式 pre-state hash；作者仍通过既有面板保存，只有显式“验证已保存修正”回读同一作用域目标且 post-state 不同时才签发 terminal receipt。刷新复用原 Run，错误记录、相同状态、删除/跨 Work、父 review 覆盖、检查点篡改和终验后再修改均 fail-closed；包含本地物理 ID 的待处理检查点标记为不可便携，项目导入后取消，已完成 receipt 按既有规则 stale。`R-HARNESS56-impact-manual-correction` 覆盖 8 项主路径、恢复、UI 和生命周期反例；本单元不 replan、不调用模型、不写 Canon，修正后 stale/replan 与依赖重跑仍待后续单元。
 - HARNESS-57 已把 H56 fresh receipt 接入修正后重规划：`executeImpactPostCorrectionReplanV1()` 复用 HARNESS-49 planner 创建零模型 child Run，绑定人工修正 Run/receipt、目标 post-state、旧 plan、当前 graph/plan 和差异 output hash；按稳定 item ID 保守分类 `resolved / remaining / new`，同一项仍在当前图时绝不因“编辑过”而自动关闭。工作区显式终验后立即执行，若完成 H56 后刷新会自动补做；来源编辑器优先恢复 fresh H57 计划和三类计数，已被 H56 消费的旧 review 不再作为当前计划恢复。父 receipt/目标/当前 plan 再变、检查点篡改、跨 Work 与导入均 stale 或 fail-closed；`R-HARNESS57-impact-post-correction-replan` 覆盖 9 项分类、幂等、8 个 durable 中断边界恢复、父子、防篡改、UI 与生命周期反例。本单元零模型、零 Canon 写入，不自动执行确定性重建或生成式下游重跑。
 - HARNESS-58 已把 fresh H57 当前计划接到既有 H47 确定性执行器：来源编辑器执行前重新回读 H57，而不是信任内存对象；H58 child 精确绑定父 Run/receipt/output hash，只允许重建 `retrievalChunks / narrativeSummaryNodes`。H47 新增不可便携的真实 output checkpoint，重复执行返回原计数；包括派生写入后、checkpoint 前在内的 10 个中断边界都可沿同一 child 重入，且中断不会被误记为业务失败。H58 完成后 H57 计划成为历史是预期状态，H58 receipt 证明该计划的确定性余项已经执行；普通 H47 手动重建仍兼容。`R-HARNESS58-impact-post-correction-remediation` 覆盖父子、零模型/零 Canon、真实输出、幂等、10 边界、父 stale、frozen output 篡改、导入和 UI 分流。
+- HARNESS-59 已把剩余 UI 模型入口 census 固化为机器可检查的 `ai-entry-registry.json`：AST 从 `components/hooks/pages` 统计 `useAIStream()` 实例与直接 `chat()` 构造点，当前共 29 个文件 / 44 个静态入口；其中 7 个由 durable Run、GenerationNode 或 SIM runtime 治理，4 个只读/评测辅助，18 个明确登记为后续迁移。新增未登记入口、调用数漂移、源码已删除但注册表残留、缺少理由/机制/nextUnit 都会令 CI 失败；物品/年表先删后写、关系逐条写、局部正文直接替换和参考实体合并被明确列为 migration，而非误报“全面完成”。
 - HARNESS-22 已为主 Agent 同一轮多任务增加 frozen dependency join：下游候选绑定生成时实际读取的
   上游 candidate/output hash 和 Run generation；上游作者编辑后，旧下游不会因新版本已采纳而被放行。
   下游确认前还会回读上游 step 的正式 adoptionHash/succeeded 状态，避免把对话确认误当成写入完成。
