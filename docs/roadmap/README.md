@@ -58,7 +58,7 @@
 | 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
 | 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
 | 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
-| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～68 收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑、世界地图、世界观七字段扩写和多世界建议后，当前为 20 个文件 / 35 个静态构造点：7 个 governed、4 个 auxiliary、9 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
+| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～69 收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑、世界地图、世界观七字段扩写、多世界建议和世界宪法扫描后，当前为 19 个文件 / 34 个静态构造点：7 个 governed、4 个 auxiliary、8 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
 
 ### HARNESS-61 完成卡：情感节拍 durable 候选与采纳
 
@@ -161,6 +161,19 @@
 | 生命周期 / 作用域 | 不新增表、schema 或迁移；`worldGroups / worldGroupLinks / storyCores` 继续由 `PROJECT_TABLES` 派生 World/Work 归属、ID 重映射、导入导出和删除生命周期。候选含本地 ID，`portable:false`，导入后取消；其它项目、World 或 Work 不可恢复/采纳。 |
 | UI / 回滚 | `WorldGroupOverview` 恢复整批候选、冻结选择或不可判定运行，明示“尚未写入”。人工世界/关系 CRUD 保留。旧 `useAIStream`、内存候选、直接 `createGroup()` 循环与手拼 `buildAllWorldsOverview()` 旁路已下线，无运行调用的 `world-group-context.ts` 同步删除。 |
 | 验收 | `R-HARNESS68-world-suggest-durable` 22 项与 UI 5 项覆盖登记边界、三源 Context、候选零写、刷新/选择恢复、严格协议、同名、未知模型窗口、候选崩溃窗、六类上游 stale、拒绝、八采纳边界、终验过期、导入取消、World/Work 隔离、活跃作用域切换和旧旁路下线；与 H59/H67 合计 52 项定向回归通过。H59 census 收缩为 20 文件 / 35 入口、9 migration。完整 CI 为 354 files / 1586 tests，覆盖率 80.93% statements / 73.22% branches / 78.54% functions / 80.93% lines；3753 模块生产构建与 bundle budget 通过。项目 Chromium E2E 45/45；新用例约 7.1 秒，证明刷新不重复模型调用、确认前零写入、作者只选两项时只新建该子集。 |
+
+### HARNESS-69 完成卡：世界宪法扫描 durable 双层确认
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-69` 治理小功能。作者从世界观、力量体系、故事核心和角色档案扫描设定断言时，模型结果先成为可刷新恢复的整批候选；只有作者确认且登记闭集与事实 baseline 仍 fresh 时才能写事实候选，之后仍须逐条确认才成为 Canon。 |
+| 主归属 / 复用 | 在同一 `world-origin` Agent 下新增 `world-origin.constitution-extract` Skill，复用 Context Gateway、durable Run/checkpoint、已登记 `fact-ledger` Adoption Extension、事实生命周期和 terminal receipt，不建立平行事实或 Harness 入口。 |
+| 读 / 写 | 模型只经 `constitutionScanSources` 读取登记来源、允许主题和当前 World 主体；来源必须无损完整进入实际模型输入。写入仅为 `temporalFacts(status=candidate)`，由 `FACT_PREDICATE_REGISTRY`、来源登记和 PROJECT_TABLES 生命周期治理；不会在批次确认时升级 Canon。 |
+| 状态机 / 硬验证 | 冻结 World/Work、完整来源/主体/事实 baseline、Context Manifest/实际输入、Prompt 和 strict exact-key 候选。只接受 `{assertions:[0..80]}`；未知来源/主题/主体、非逐字证据、重复、围栏、额外字段和已有同值证据均失败，不静默跳过。未知模型结果不自动重试。 |
+| 采纳恢复 | 作者确认整批后冻结预期事实；事务内再次复核来源、主体和事实 baseline，再原子写入全部候选或零写回滚。八个 durable 采纳边界沿同一意图幂等收敛；写后中断不重复调模型或重复插入。 |
+| 生命周期 / 作用域 | 不新增表/schema；`temporalFacts` 与五类来源继续由 PROJECT_TABLES 派生导出/导入、删除、世界/作品作用域与引用重映射。含本地 ID 的候选 `portable:false`，导入后取消；其它 World/Work 不可恢复或采纳。 |
+| UI / 回滚 | `WorldConstitutionPanel` 明示扫描批次尚未入库、批次确认后仍只是待确认事实；恢复待确认、已确认采纳和不可判定运行。既有逐条确认、否决和明确取代互斥 Canon 完整保留。旧 `useAIStream`、直接 DB 查主体、宽松 parser 与立即 `adoptSetting` 旁路下线。 |
+| 验收 | durable 23 项、UI 5 项、既有 CONSISTENCY-3 4 项和 H59 3 项共 35 项通过。census 收缩为 19 文件 / 34 入口、8 migration。完整 CI 为 355 files / 1613 tests，覆盖率 80.95% statements / 73.24% branches / 78.58% functions / 80.95% lines；3754 模块生产构建与 bundle budget 通过，入口 650.4 KiB / gzip 200.9 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 46/46；新增用例约 6.8 秒，证明登记来源实际进入请求、候选刷新恢复不重复模型调用、批次确认前零事实写入，确认后仍只新增 `status=candidate` 事实并保留逐条 Canon 确认。 |
 
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 

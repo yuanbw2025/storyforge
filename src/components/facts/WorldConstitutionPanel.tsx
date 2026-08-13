@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Landmark, Loader2, ScanSearch, X } from 'lucide-react'
-import type { FactStatus, Project } from '../../lib/types'
-import { db } from '../../lib/db/schema'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
+import type { FactStatus, Project, WorkspaceScope } from '../../lib/types'
+import { useAIConfigStore } from '../../stores/ai-config'
 import { useFactLedgerStore } from '../../stores/fact-ledger'
 import { getFactPredicate, isConstitutionPredicate } from '../../lib/registry/fact-predicate-registry'
 import {
-  buildSettingAssertionExtractPrompt,
-  listSettingAssertionSources,
-  parseSettingAssertionCandidates,
-} from '../../lib/fact-ledger/setting-assertions'
+  abandonConstitutionExtractionRunV1,
+  adoptConstitutionExtractionCandidateV1,
+  generateConstitutionExtractionCandidateV1,
+  readPendingConstitutionExtractionCandidateV1,
+  readRecoverableConstitutionExtractionRunV1,
+  rejectConstitutionExtractionCandidateV1,
+  type ConstitutionExtractionCandidateV1,
+} from '../../lib/agent/run/constitution-extraction-durable'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
 
 type ConstitutionTab = 'candidate' | 'confirmed' | 'exceptions' | 'rejected'
 const EXCEPTIONS: FactStatus[] = ['stale', 'source-missing', 'invalid-range']
@@ -22,21 +25,64 @@ const TAB_LABEL: Record<ConstitutionTab, string> = {
   rejected: '已否决',
 }
 
+const ADOPTION_RECOVERY_MESSAGE = '上次扫描批次已确认但尚未完成事实候选写入；请继续原运行完成写入与终验，不会重复调用模型。'
+
 export default function WorldConstitutionPanel({ project, onShowFacts }: {
   project: Project
   onShowFacts: () => void
 }) {
   const {
-    facts, loading, load, adoptSetting, confirmFact, replaceConstitutionFact, rejectFact,
+    facts, loading, load, confirmFact, replaceConstitutionFact, rejectFact,
   } = useFactLedgerStore()
-  const ai = useAIStream(createAISessionKey(project.id!, 'canon.setting.extract'))
+  const aiConfig = useAIConfigStore(state => state.config)
   const [tab, setTab] = useState<ConstitutionTab>('candidate')
   const [message, setMessage] = useState('')
   const [replacementCandidateId, setReplacementCandidateId] = useState<number | null>(null)
+  const [scope, setScope] = useState<WorkspaceScope | null>(null)
+  const [scanCandidate, setScanCandidate] = useState<ConstitutionExtractionCandidateV1 | null>(null)
+  const [scanRunId, setScanRunId] = useState<number | null>(null)
+  const [unsafeRunId, setUnsafeRunId] = useState<number | null>(null)
+  const [resumeAdoption, setResumeAdoption] = useState(false)
+  const [scanBusy, setScanBusy] = useState(false)
 
   useEffect(() => {
-    if (project.id != null) void load(project.id)
-  }, [load, project.id])
+    if (project.id == null) return
+    let cancelled = false
+    setScope(null)
+    setScanCandidate(null)
+    setScanRunId(null)
+    setUnsafeRunId(null)
+    setResumeAdoption(false)
+    setMessage('')
+    void (async () => {
+      const resolved = await resolveScopeLike(project.id!)
+      if (cancelled) return
+      setScope(resolved)
+      await load(project.id!)
+      const pending = await readPendingConstitutionExtractionCandidateV1({ scope: resolved })
+      if (cancelled) return
+      if (pending) {
+        setScanCandidate(pending.candidate)
+        setScanRunId(pending.snapshot.run.id)
+        setMessage(`已恢复待确认扫描批次：${pending.candidate.assertions.length} 条候选，尚未写入事实库。`)
+        return
+      }
+      const recoverable = await readRecoverableConstitutionExtractionRunV1({ scope: resolved })
+      if (cancelled || !recoverable) return
+      if (recoverable.safeToResume && recoverable.candidate && recoverable.adoptionPending) {
+        setScanCandidate(recoverable.candidate)
+        setScanRunId(recoverable.snapshot.run.id)
+        setResumeAdoption(true)
+        setMessage(ADOPTION_RECOVERY_MESSAGE)
+      } else if (!recoverable.safeToResume) {
+        setUnsafeRunId(recoverable.snapshot.run.id)
+        setMessage('上次设定扫描停在模型结果不可判定窗口，系统不会自动重试。请放弃后重新扫描。')
+      }
+    })().catch(reason => {
+      if (!cancelled) setMessage(reason instanceof Error ? reason.message : String(reason))
+    })
+    return () => { cancelled = true }
+  }, [load, project.id, project.activeWorldId, project.activeWorkId])
 
   const constitutionFacts = useMemo(
     () => facts.filter(fact => isConstitutionPredicate(fact.predicate)),
@@ -52,48 +98,93 @@ export default function WorldConstitutionPanel({ project, onShowFacts }: {
   }), [constitutionFacts])
 
   const extractFromSettings = async () => {
-    if (project.id == null) return
+    if (project.id == null || !scope || scanBusy || scanCandidate || unsafeRunId != null) return
+    setScanBusy(true)
     setMessage('')
-    const [sources, worldGroups, characters] = await Promise.all([
-      listSettingAssertionSources(project.id),
-      db.worldGroups.where('projectId').equals(project.id).toArray(),
-      db.characters.where('projectId').equals(project.id).toArray(),
-    ])
-    if (!sources.length) {
-      setMessage('当前世界观、力量体系、故事核心和角色档案中没有可扫描的已登记字段。')
-      return
-    }
-    const subjects = {
-      worldGroups: worldGroups.length
-        ? worldGroups.map(item => ({ id: item.id!, name: item.name }))
-        : [{ id: null, name: '默认世界' }],
-      characters: characters
-        .filter(item => item.id != null)
-        .map(item => ({
-          id: item.id!,
-          name: item.name,
-          worldGroupId: item.homeWorldGroupId ?? null,
-        })),
-    }
     try {
-      const raw = await ai.start([
-        {
-          role: 'system',
-          content: '你是设定断言抽取器。严格遵守闭集、逐字证据和 JSON 输出要求，不补写用户未提供的设定。',
-        },
-        { role: 'user', content: buildSettingAssertionExtractPrompt(sources, subjects) },
-      ], undefined, { category: 'canon.setting.extract', projectId: project.id })
-      const candidates = parseSettingAssertionCandidates(raw, sources, subjects)
-      const result = await adoptSetting({
-        projectId: project.id,
-        candidates,
-        sources,
-        subjects,
+      const generated = await generateConstitutionExtractionCandidateV1({
+        scope,
+        aiConfig,
       })
+      setScanCandidate(generated.candidate)
+      setScanRunId(generated.snapshot.run.id)
+      setResumeAdoption(false)
+      setMessage(`扫描 ${generated.candidate.sources.length} 个登记来源，得到 ${generated.candidate.assertions.length} 条待批次确认候选；事实库仍为零写入。`)
+    } catch (reason) {
+      setMessage(`设定扫描失败：${reason instanceof Error ? reason.message : String(reason)}`)
+      const pending = await readPendingConstitutionExtractionCandidateV1({ scope }).catch(() => null)
+      if (pending) {
+        setScanCandidate(pending.candidate)
+        setScanRunId(pending.snapshot.run.id)
+        setMessage(`已恢复待确认扫描批次：${pending.candidate.assertions.length} 条候选，尚未写入事实库。`)
+      } else {
+        const recoverable = await readRecoverableConstitutionExtractionRunV1({ scope }).catch(() => null)
+        if (recoverable?.safeToResume && recoverable.candidate && recoverable.adoptionPending) {
+          setScanCandidate(recoverable.candidate)
+          setScanRunId(recoverable.snapshot.run.id)
+          setResumeAdoption(true)
+          setMessage(ADOPTION_RECOVERY_MESSAGE)
+        } else if (recoverable && !recoverable.safeToResume) {
+          setUnsafeRunId(recoverable.snapshot.run.id)
+        }
+      }
+    } finally {
+      setScanBusy(false)
+    }
+  }
+
+  const handleAdoptScan = async () => {
+    if (!scope || scanRunId == null || !scanCandidate || scanBusy) return
+    setScanBusy(true)
+    setMessage('')
+    try {
+      const result = await adoptConstitutionExtractionCandidateV1({ scope, runId: scanRunId })
+      await load(project.id!)
       setTab('candidate')
-      setMessage(`扫描 ${sources.length} 个来源字段，解析 ${candidates.length} 条闭集候选；写入 ${result.written} 条，跳过 ${result.skipped} 条。`)
-    } catch (error) {
-      setMessage(`设定扫描失败：${error instanceof Error ? error.message : String(error)}`)
+      setScanCandidate(null)
+      setScanRunId(null)
+      setResumeAdoption(false)
+      setMessage(`已原子写入 ${result.written} 条事实候选；它们仍需下方逐条确认后才会成为世界宪法。`)
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : String(reason))
+      const recoverable = await readRecoverableConstitutionExtractionRunV1({ scope }).catch(() => null)
+      if (recoverable?.safeToResume && recoverable.candidate && recoverable.adoptionPending) {
+        setScanCandidate(recoverable.candidate)
+        setScanRunId(recoverable.snapshot.run.id)
+        setResumeAdoption(true)
+        setMessage(ADOPTION_RECOVERY_MESSAGE)
+      }
+    } finally {
+      setScanBusy(false)
+    }
+  }
+
+  const handleRejectScan = async () => {
+    if (!scope || scanRunId == null || scanBusy || resumeAdoption) return
+    setScanBusy(true)
+    try {
+      await rejectConstitutionExtractionCandidateV1({ scope, runId: scanRunId })
+      setScanCandidate(null)
+      setScanRunId(null)
+      setMessage('已否决本批扫描候选，事实库没有写入。')
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setScanBusy(false)
+    }
+  }
+
+  const handleAbandonScan = async () => {
+    if (!scope || unsafeRunId == null || scanBusy) return
+    setScanBusy(true)
+    try {
+      await abandonConstitutionExtractionRunV1({ scope, runId: unsafeRunId })
+      setUnsafeRunId(null)
+      setMessage('已放弃结果不可判定的旧运行，可以重新扫描。')
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setScanBusy(false)
     }
   }
 
@@ -151,13 +242,52 @@ export default function WorldConstitutionPanel({ project, onShowFacts }: {
 
       <div className="mb-4 p-3 rounded-lg border border-border bg-bg-elevated/60">
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={() => void extractFromSettings()} disabled={ai.isStreaming}
+          <button onClick={() => void extractFromSettings()} disabled={scanBusy || !!scanCandidate || unsafeRunId != null || !scope}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500/15 text-xs text-amber-300 hover:bg-amber-500/25 disabled:opacity-50">
-            {ai.isStreaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanSearch className="w-3.5 h-3.5" />}
-            {ai.isStreaming ? '正在扫描设定…' : '扫描已登记设定'}
+            {scanBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanSearch className="w-3.5 h-3.5" />}
+            {scanBusy ? '正在处理扫描…' : '扫描已登记设定'}
           </button>
+          {unsafeRunId != null && (
+            <button onClick={() => void handleAbandonScan()} disabled={scanBusy}
+              className="px-3 py-1.5 rounded-md border border-rose-500/40 bg-rose-500/10 text-xs text-rose-300 hover:bg-rose-500/20 disabled:opacity-50">
+              放弃不可判定运行
+            </button>
+          )}
           {message && <span className="text-[11px] text-text-muted">{message}</span>}
         </div>
+        {scanCandidate && (
+          <div className="mt-3 p-3 rounded-md border border-amber-500/30 bg-amber-500/5">
+            <p className="text-xs font-medium text-amber-300">
+              扫描批次待确认（{scanCandidate.assertions.length} 条）
+            </p>
+            <p className="text-[11px] text-text-muted mt-1">
+              当前仅保存在可恢复候选中，尚未写入事实库。批次确认后也只会成为“待确认”事实，不会直接成为 Canon。
+            </p>
+            <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+              {scanCandidate.assertions.length === 0 && (
+                <p className="text-xs text-text-muted">本次没有可靠闭集断言，可确认完成空批次或直接否决。</p>
+              )}
+              {scanCandidate.assertions.map((item, index) => (
+                <div key={`${item.sourceKey}:${index}`} className="text-xs text-text-secondary">
+                  <span className="text-text-primary">{item.value}</span>
+                  <span className="text-text-muted"> · {getFactPredicate(item.predicate)?.label ?? item.predicate} · “{item.quote}”</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              <button onClick={() => void handleAdoptScan()} disabled={scanBusy}
+                className="px-3 py-1.5 rounded-md bg-emerald-500/15 text-xs text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50">
+                {resumeAdoption ? '继续已确认写入' : (scanCandidate.assertions.length ? '确认写入事实候选' : '确认完成空批次')}
+              </button>
+              {!resumeAdoption && (
+                <button onClick={() => void handleRejectScan()} disabled={scanBusy}
+                  className="px-3 py-1.5 rounded-md bg-rose-500/10 text-xs text-rose-300 hover:bg-rose-500/20 disabled:opacity-50">
+                  否决本批扫描
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {replacementCandidateId != null && (
           <button onClick={() => void handleExplicitReplacement()}
             className="mt-2 px-3 py-1.5 rounded-md border border-rose-500/40 bg-rose-500/10 text-xs text-rose-300 hover:bg-rose-500/20">

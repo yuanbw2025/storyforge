@@ -25,6 +25,7 @@ export type AgentSkillExecutionModeV1 =
   | 'worldview-field'
   | 'world-suggest'
   | 'worldview-expand'
+  | 'constitution-extract'
   | 'story-core'
   | 'creative-rules'
   | 'create'
@@ -174,6 +175,8 @@ const WORLD_SUGGEST_CONTEXT_SOURCE_KEYS = [
   'worldGroups',
   'storyCore',
 ] as const
+
+const CONSTITUTION_EXTRACT_CONTEXT_SOURCE_KEYS = ['constitutionScanSources'] as const
 
 const CHARACTER_SUPPLEMENT_CONTEXT_SOURCE_KEYS = [
   'targetCharacter',
@@ -814,6 +817,7 @@ const WORLD_SUGGEST_COMPRESSION_POLICY = compressionPolicy([
   'worldGroups',
   'storyCore',
 ])
+const CONSTITUTION_EXTRACT_COMPRESSION_POLICY = compressionPolicy(['constitutionScanSources'])
 const CHARACTER_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'powerSystem',
@@ -1090,6 +1094,33 @@ export const AGENT_SKILLS = [
     }],
     lastVerifiedAt: '2026-08-14',
     regressionTests: ['R-HARNESS67-worldview-expand-durable'],
+  },
+  {
+    version: 1,
+    id: 'world-origin.constitution-extract',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: '世界宪法设定断言抽取',
+    owner: 'world-foundation-agent',
+    promptVersion: 'constitution-extract-v1',
+    executionMode: 'constitution-extract',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: CONSTITUTION_EXTRACT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: {
+      sourceKeys: CONSTITUTION_EXTRACT_CONTEXT_SOURCE_KEYS,
+      states: {
+        empty: { handling: 'require-upstream', instruction: '没有已登记非空设定源时不调用模型，不创造断言。' },
+        partial: { handling: 'grounded-transform', instruction: '只从当前登记源、主题、主体和逐字证据闭集抽取候选。' },
+        complete: { handling: 'grounded-transform', instruction: '只从完整登记闭集抽取候选，不确认或取代 Canon。' },
+      },
+    },
+    contextCompression: CONSTITUTION_EXTRACT_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [{ table: 'temporalFacts', fields: [], adoptionExtension: 'fact-ledger' }],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS69-constitution-extraction-durable'],
   },
   {
     version: 1,
@@ -1971,7 +2002,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
+    'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'constitution-extract', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),

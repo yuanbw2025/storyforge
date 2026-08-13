@@ -2872,3 +2872,92 @@ test('多世界建议刷新恢复整批候选，作者选择后只创建所选�
   await expect(restoredWorldList.getByText('星梯上界', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('兽潮棋盘', { exact: true })).toHaveCount(0)
 })
+
+test('世界宪法扫描刷新恢复批次，确认后仍只写待确认事实', async ({ page }) => {
+  let generationCalls = 0
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'constitution-extract-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls += 1
+    const request = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = request.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain('世界宪法扫描登记边界')
+    expect(combined).toContain('魔法源于月亮潮汐')
+    expect(combined).toContain('magicSource')
+    const sourceKey = combined.match(/\[(worldviews:\d+:worldOrigin)\]/)?.[1]
+    const worldGroupToken = combined.match(/世界主体：\s*(null|\d+)\s*\|/)?.[1]
+    const worldGroupId = worldGroupToken === 'null' ? null : Number(worldGroupToken)
+    expect(sourceKey).toBeTruthy()
+    expect(worldGroupId === null || Number.isInteger(worldGroupId)).toBe(true)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: JSON.stringify({ assertions: [{
+              subjectType: 'worldGroup',
+              subjectId: worldGroupId,
+              predicate: 'magicSource',
+              value: '月亮潮汐',
+              sourceKey,
+              quote: '魔法源于月亮潮汐',
+            }] }),
+          },
+          finish_reason: 'stop',
+        }],
+        usage: { prompt_tokens: 180, completion_tokens: 60, total_tokens: 240 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 世界宪法 Harness 闭环')
+  await openSidebarLeaf(page, '世界观', '世界起源')
+  const originPlaceholder = '创世神话 / 历史时期 / 文明起源……世界从何而来？'
+  await page.getByText(originPlaceholder, { exact: true }).last().click()
+  await page.getByRole('textbox', { name: originPlaceholder }).fill('曜月界的魔法源于月亮潮汐。')
+  await page.getByRole('heading', { name: '🌌 世界来源' }).click()
+  await expect(page.getByText('曜月界的魔法源于月亮潮汐。', { exact: true })).toBeVisible()
+
+  await sidebarButton(page, '事实库').click()
+  await page.getByRole('button', { name: '查看世界宪法', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '世界宪法（CONSISTENCY-3）' })).toBeVisible()
+  await page.getByRole('button', { name: '扫描已登记设定', exact: true }).click()
+  await expect(page.getByText('扫描批次待确认（1 条）', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('月亮潮汐', { exact: true })).toBeVisible()
+  await expect(page.getByText(/事实库仍为零写入/)).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await sidebarButton(page, '事实库').click()
+  await page.getByRole('button', { name: '查看世界宪法', exact: true }).click()
+  await expect(page.getByText('扫描批次待确认（1 条）', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/已恢复待确认扫描批次/)).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.getByRole('button', { name: '确认写入事实候选', exact: true }).click()
+  await expect(page.getByText(/已原子写入 1 条事实候选/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('button', { name: '已确认（0）', exact: true })).toHaveCount(0)
+  await expect(page.getByTitle('确认世界宪法')).toHaveCount(1)
+  await expect(page.getByText('月亮潮汐', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await sidebarButton(page, '事实库').click()
+  await page.getByRole('button', { name: '查看世界宪法', exact: true }).click()
+  await expect(page.getByTitle('确认世界宪法')).toHaveCount(1)
+  await expect(page.getByText('月亮潮汐', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+})

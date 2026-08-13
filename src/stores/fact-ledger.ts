@@ -14,11 +14,6 @@ import {
   type ConfirmFactResult,
   type ReplaceConstitutionFactResult,
 } from '../lib/fact-ledger/fact-ledger'
-import {
-  adoptSettingAssertionCandidates,
-  type ExtractedSettingAssertion,
-  type SettingAssertionSource,
-} from '../lib/fact-ledger/setting-assertions'
 import { importFactCandidateDiff, type ImportFactCandidateDiffResult } from '../lib/fact-ledger/human-readable-io'
 import type { WorkspaceScope } from '../lib/types/world-ownership'
 
@@ -27,16 +22,6 @@ interface FactLedgerStore {
   loading: boolean
   load: (projectId: number) => Promise<void>
   adopt: (args: { projectId: number; scope?: WorkspaceScope; sourceChapterId: number; worldGroupId?: number | null; candidates: ExtractedFactCandidate[] }) => Promise<number>
-  adoptSetting: (args: {
-    projectId: number
-    worldGroupId?: number | null
-    candidates: readonly ExtractedSettingAssertion[]
-    sources: readonly SettingAssertionSource[]
-    subjects: {
-      worldGroups: readonly { id: number | null; name: string }[]
-      characters: readonly { id: number; name: string; worldGroupId?: number | null }[]
-    }
-  }) => Promise<{ written: number; skipped: number }>
   confirmFact: (projectId: number, factId: number) => Promise<ConfirmFactResult>
   replaceConstitutionFact: (projectId: number, factId: number) => Promise<ReplaceConstitutionFactResult>
   rejectFact: (projectId: number, factId: number) => Promise<void>
@@ -60,12 +45,6 @@ export const useFactLedgerStore = create<FactLedgerStore>((set, get) => ({
     const result = await adoptFactCandidates({ projectId, scope, sourceChapterId, worldGroupId, candidates })
     await get().load(projectId)
     return result.written
-  },
-
-  adoptSetting: async (args) => {
-    const result = await adoptSettingAssertionCandidates(args)
-    await get().load(args.projectId)
-    return result
   },
 
   confirmFact: async (projectId, factId) => {

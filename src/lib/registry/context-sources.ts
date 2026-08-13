@@ -33,7 +33,11 @@ import { parseBeats } from '../types/emotion-beat'
 import { buildForeshadowTaskContext } from '../foreshadow/context'
 import { formatHeldItemsContext, readProjectHeldItems } from '../consistency/held-items'
 import { formatCharacterKnowledgeContext, readProjectCharacterKnowledge } from '../knowledge-ledger/knowledge-ledger'
-import { formatCanonAssertionsContext, readCanonAssertions } from '../fact-ledger/setting-assertions'
+import {
+  formatCanonAssertionsContext,
+  readCanonAssertions,
+  readSettingAssertionScanContext,
+} from '../fact-ledger/setting-assertions'
 import { readStorylineProgressContext } from '../storyline/storyline-progress'
 import { buildEditImpactGraphV1 } from '../consistency/impact-analysis'
 import { readCultivationProgressContext } from '../cultivation/progress'
@@ -1008,6 +1012,16 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: async input => formatCanonAssertionsContext(
       await readCanonAssertions(input.projectId, input.worldGroupId),
     ),
+  },
+  {
+    key: 'constitutionScanSources',
+    label: '世界宪法扫描来源闭集',
+    scope: 'project',
+    layer: 'L0',
+    budgetTokens: 30_000,
+    protectedFromTrim: true,
+    ownerFrom: 'work',
+    read: input => readSettingAssertionScanContext(input.scope!),
   },
   {
     key: 'characterKnowledge',

@@ -4,10 +4,11 @@ import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import {
   adoptSettingAssertionCandidates,
-  buildSettingAssertionExtractPrompt,
+  buildSettingAssertionExtractMessagesFromRegisteredContextV1,
+  formatSettingAssertionScanContext,
   fingerprintSettingSource,
   listSettingAssertionSources,
-  parseSettingAssertionCandidates,
+  parseSettingAssertionCandidatesStrictV1,
 } from '../../src/lib/fact-ledger/setting-assertions'
 import {
   confirmFactCandidate,
@@ -107,40 +108,28 @@ describe('CONSISTENCY-3 · 世界宪法闭集、生命周期与回报通道', ()
     }
     const worldviewSource = sources.find(source =>
       source.table === 'worldviews' && source.field === 'worldOrigin')!
-    const prompt = buildSettingAssertionExtractPrompt(sources, subjects)
+    const prompt = buildSettingAssertionExtractMessagesFromRegisteredContextV1(
+      formatSettingAssertionScanContext(sources, subjects),
+    ).map(message => message.content).join('\n')
     expect(prompt).toContain(worldviewSource.sourceKey)
     expect(prompt).toContain('magicSource')
 
-    const parsed = parseSettingAssertionCandidates(`以下是抽取结果：
-${JSON.stringify({
-      assertions: [
-        {
-          subjectType: 'worldGroup',
-          subjectId: seeded.worldGroupId,
-          predicate: 'magicSource',
-          value: '月亮潮汐',
-          sourceKey: worldviewSource.sourceKey,
-          quote: '魔法源于月亮潮汐',
-        },
-        {
-          subjectType: 'worldGroup',
-          subjectId: seeded.worldGroupId,
-          predicate: 'inventedRule',
-          value: '模型自造',
-          sourceKey: worldviewSource.sourceKey,
-          quote: '魔法源于月亮潮汐',
-        },
-        {
-          subjectType: 'worldGroup',
-          subjectId: seeded.worldGroupId,
-          predicate: 'magicSource',
-          value: '伪造证据',
-          sourceKey: worldviewSource.sourceKey,
-          quote: '原文里不存在的句子',
-        },
-      ],
-    })}
-请复核。`, sources, subjects)
+    const valid = {
+      subjectType: 'worldGroup' as const,
+      subjectId: seeded.worldGroupId,
+      predicate: 'magicSource',
+      value: '月亮潮汐',
+      sourceKey: worldviewSource.sourceKey,
+      quote: '魔法源于月亮潮汐',
+    }
+    const parsed = parseSettingAssertionCandidatesStrictV1(
+      JSON.stringify({ assertions: [valid] }),
+      sources,
+      subjects,
+    )
+    expect(() => parseSettingAssertionCandidatesStrictV1(JSON.stringify({
+      assertions: [{ ...valid, predicate: 'inventedRule' }],
+    }), sources, subjects)).toThrow('闭集')
 
     expect(parsed).toHaveLength(1)
     const adopted = await adoptSettingAssertionCandidates({

@@ -79,7 +79,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 54 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 55 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -101,6 +101,7 @@
 | `writtenChapterProgress` | 本卷已写正文进度 | node | L1 | 3000 |
 | `currentFacts` | 当前有效事实(事实账本投影) | chapter | L1 | 2000 |
 | `canonAssertions` | 世界宪法(已确认设定断言) | world | L1 | 1800 |
+| `constitutionScanSources` | 世界宪法扫描来源闭集 | project | L0 | 30000 |
 | `characterKnowledge` | 角色认知边界(认知账本投影) | chapter | L1 | 1600 |
 | `retrievedPassages` | 相关前文召回(NS-5 混合检索) | chapter | L2 | 2500 |
 | `consistencyReport` | 一致性报告 | chapter | L1 | 1800 |
@@ -207,7 +208,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `agent.orchestrator` | `src/lib/agent/orchestrator.ts:591` |
 | `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:678` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
-| `canon.setting.extract` | `src/components/facts/WorldConstitutionPanel.tsx:79` |
+| `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:509` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:24` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:451`<br/>`src/lib/node-authoring/domain-execution.ts:515` |
@@ -282,4 +283,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `97e6bc9`
+生成时间基准:commit `a359e05`
