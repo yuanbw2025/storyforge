@@ -5,21 +5,26 @@
  * 与「历史年表（世界背景）」「故事线（结构）」严格区分。
  */
 import { useState, useEffect, useMemo } from 'react'
-import { CalendarClock, Sparkles, Loader2, Trash2, Plus, BookOpen, Flag } from 'lucide-react'
+import { CalendarClock, Sparkles, Loader2, Trash2, Plus, BookOpen, Flag, AlertTriangle, RotateCcw } from 'lucide-react'
 import { useStoryTimelineStore } from '../../stores/story-timeline'
 import { useChapterStore } from '../../stores/chapter'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { chat, resolveRequestConfig } from '../../lib/ai/client'
+import { resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
-import {
-  buildStoryTimelinePrompt, parseStoryEvents, type ExtractedStoryEvent,
-} from '../../lib/ai/adapters/story-timeline-adapter'
 import { htmlToPlainText } from '../../lib/utils/html'
 import { STORY_IMPORTANCE_LABELS } from '../../lib/types/story-timeline'
 import type { Project } from '../../lib/types'
-import { splitExtractionText, uniqueBy } from '../../lib/ai/structured-extraction'
-import { adopt } from '../../lib/registry/adopt'
-import { assembleContext } from '../../lib/registry/assemble-context'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
+import ExtractionReviewPanel from '../shared/ExtractionReviewPanel'
+import {
+  abandonStoryTimelineExtractionV1,
+  adoptStoryTimelineExtractionCandidateV1,
+  generateStoryTimelineExtractionCandidateV1,
+  readPendingStoryTimelineExtractionCandidateV1,
+  readRecoverableStoryTimelineExtractionV1,
+  resumeStoryTimelineExtractionCandidateV1,
+  type StoryTimelineExtractionCandidateItemV1,
+} from '../../lib/agent/run/story-timeline-extraction-durable'
 import {
   INITIAL_RECORD_TARGET_CLASS,
   initialRecordTargetAttributes,
@@ -39,18 +44,65 @@ const IMPORTANCE_STYLE: Record<number, string> = {
 }
 
 export default function StoryTimelinePanel({ project, onOpenChapter, initialEventId }: Props) {
-  const { events, loading, loadAll, addEvent, updateEvent, deleteEvent, deleteByChapter } = useStoryTimelineStore()
+  const { events, loading, loadAll, addEvent, updateEvent, deleteEvent } = useStoryTimelineStore()
   const { chapters, loadAll: loadChapters } = useChapterStore()
   const aiConfig = useAIConfigStore(s => s.config)
 
   const [extracting, setExtracting] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [extractRunId, setExtractRunId] = useState<number | null>(null)
+  const [candidateAction, setCandidateAction] = useState<'adopt' | 'abandon' | null>(null)
+  const [recoverable, setRecoverable] = useState<{
+    runId: number
+    nextCallIndex: number
+    totalCalls: number
+    safeToResume: boolean
+  } | null>(null)
+  const [candidates, setCandidates] = useState<StoryTimelineExtractionCandidateItemV1[]>([])
+  const [selectedCandidates, setSelectedCandidates] = useState<Set<number>>(new Set())
+  const [selectionFrozen, setSelectionFrozen] = useState(false)
+  const [adoptionStarted, setAdoptionStarted] = useState(false)
 
   useEffect(() => {
     loadAll(project.id!)
     loadChapters(project.id!)
   }, [project.id, loadAll, loadChapters])
+
+  useEffect(() => {
+    let active = true
+    setExtractRunId(null)
+    setRecoverable(null)
+    setCandidates([])
+    setSelectedCandidates(new Set())
+    setSelectionFrozen(false)
+    setAdoptionStarted(false)
+    void resolveScopeLike(project.id!).then(async scope => {
+      const pending = await readPendingStoryTimelineExtractionCandidateV1({ scope })
+      if (pending) return { pending, recoverable: null }
+      return { pending: null, recoverable: await readRecoverableStoryTimelineExtractionV1({ scope }) }
+    }).then(result => {
+      if (!active) return
+      if (result.pending) {
+        setExtractRunId(result.pending.snapshot.run.id)
+        setCandidates(result.pending.candidate.events)
+        setSelectedCandidates(new Set(
+          result.pending.selectedIndexes ?? result.pending.candidate.events.map((_, index) => index),
+        ))
+        setSelectionFrozen(result.pending.selectedIndexes != null)
+        setAdoptionStarted(result.pending.adoptionStarted)
+      } else if (result.recoverable) {
+        setRecoverable({
+          runId: result.recoverable.snapshot.run.id,
+          nextCallIndex: result.recoverable.nextCallIndex,
+          totalCalls: result.recoverable.totalCalls,
+          safeToResume: result.recoverable.safeToResume,
+        })
+      }
+    }).catch(recoveryError => {
+      if (active) setError(recoveryError instanceof Error ? recoveryError.message : '故事年表提取运行恢复失败')
+    })
+    return () => { active = false }
+  }, [project.id])
 
   // 按章节进程排序（章节顺序 = 故事进程），同章按 order
   const sorted = useMemo(() => {
@@ -76,52 +128,118 @@ export default function StoryTimelinePanel({ project, onOpenChapter, initialEven
     if (writtenChapters.length === 0) { setError('还没有已写正文的章节，先去写作再提取'); return }
     setExtracting(true)
     setError(null)
-    setProgress({ done: 0, total: writtenChapters.length })
+    setExtractRunId(null)
+    setCandidates([])
+    setSelectedCandidates(new Set())
+    setSelectionFrozen(false)
     try {
-      for (let i = 0; i < writtenChapters.length; i++) {
-        const ch = writtenChapters[i]
-        try {
-          const found: ExtractedStoryEvent[] = []
-          const chapterSource = await assembleContext({
-            projectId: project.id!,
-            chapterId: ch.id,
-            sourceKeys: ['chapterContent'],
-          })
-          for (const chunk of splitExtractionText(chapterSource.text)) {
-            const messages = buildStoryTimelinePrompt(ch.title, chunk)
-            const raw = await chat(messages, aiConfig, { category: 'story.timeline', projectId: project.id! })
-            found.push(...parseStoryEvents(raw))
-          }
-          const parsed = uniqueBy(
-            found,
-            event => `${event.title.trim().toLocaleLowerCase()}\u0000${event.storyTime.trim()}`,
-          )
-          if (ch.id != null) await deleteByChapter(project.id!, ch.id)
-          if (parsed.length > 0) {
-            await adopt({
-              projectId: project.id!,
-              target: 'storyTimelineEvents',
-              mode: 'add-many',
-              data: parsed.map((e, idx) => ({
-                title: e.title,
-                storyTime: e.storyTime || '',
-                importance: e.importance,
-                description: e.description || '',
-                chapterId: ch.id ?? null,
-                chapterTitle: ch.title,
-                order: idx,
-              })),
-            })
-            await loadAll(project.id!)
-          }
-        } catch (err) {
-          console.error('[StoryTimeline] 章节提取失败:', ch.title, err)
-        }
-        setProgress({ done: i + 1, total: writtenChapters.length })
-      }
+      const generated = await generateStoryTimelineExtractionCandidateV1({
+        scope: await resolveScopeLike(project.id!), aiConfig,
+      })
+      setExtractRunId(generated.snapshot.run.id)
+      setRecoverable(null)
+      setCandidates(generated.candidate.events)
+      setSelectedCandidates(new Set(generated.candidate.events.map((_, index) => index)))
+      setSelectionFrozen(false)
+      setAdoptionStarted(false)
+    } catch (extractError) {
+      setError(extractError instanceof Error ? extractError.message : '故事年表提取失败')
+      try {
+        const recovery = await readRecoverableStoryTimelineExtractionV1({ scope: await resolveScopeLike(project.id!) })
+        setRecoverable(recovery ? {
+          runId: recovery.snapshot.run.id,
+          nextCallIndex: recovery.nextCallIndex,
+          totalCalls: recovery.totalCalls,
+          safeToResume: recovery.safeToResume,
+        } : null)
+      } catch { /* Preserve the original extraction failure. */ }
     } finally {
       setExtracting(false)
-      setProgress(null)
+    }
+  }
+
+  const handleResumeExtraction = async () => {
+    if (!recoverable?.safeToResume) return
+    const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'story.timeline' }).config
+    if (!isAIConfigReady(effectiveConfig)) { setError(getAIConfigRequiredMessage(effectiveConfig)); return }
+    setExtracting(true)
+    setError(null)
+    try {
+      const generated = await resumeStoryTimelineExtractionCandidateV1({
+        scope: await resolveScopeLike(project.id!), runId: recoverable.runId, aiConfig,
+      })
+      setExtractRunId(generated.snapshot.run.id)
+      setRecoverable(null)
+      setCandidates(generated.candidate.events)
+      setSelectedCandidates(new Set(generated.candidate.events.map((_, index) => index)))
+      setSelectionFrozen(false)
+      setAdoptionStarted(false)
+    } catch (resumeError) {
+      setError(resumeError instanceof Error ? resumeError.message : '继续故事年表提取失败')
+      try {
+        const recovery = await readRecoverableStoryTimelineExtractionV1({ scope: await resolveScopeLike(project.id!) })
+        setRecoverable(recovery ? {
+          runId: recovery.snapshot.run.id,
+          nextCallIndex: recovery.nextCallIndex,
+          totalCalls: recovery.totalCalls,
+          safeToResume: recovery.safeToResume,
+        } : null)
+      } catch { /* Preserve the original resume failure. */ }
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  const handleAdoptCandidates = async () => {
+    if (extractRunId == null || candidateAction) return
+    setCandidateAction('adopt')
+    setError(null)
+    try {
+      const scope = await resolveScopeLike(project.id!)
+      await adoptStoryTimelineExtractionCandidateV1({
+        scope, runId: extractRunId, selectedIndexes: [...selectedCandidates],
+        onDurableBoundary: boundary => {
+          if (boundary === 'intent.checkpoint') setSelectionFrozen(true)
+          if (boundary === 'confirmation.recorded') setAdoptionStarted(true)
+        },
+      })
+      await loadAll(scope)
+      setCandidates([])
+      setSelectedCandidates(new Set())
+      setSelectionFrozen(false)
+      setExtractRunId(null)
+      setAdoptionStarted(false)
+    } catch (adoptError) {
+      setError(adoptError instanceof Error ? adoptError.message : '故事年表采纳与终验失败')
+    } finally {
+      setCandidateAction(null)
+    }
+  }
+
+  const handleAbandonExtraction = async () => {
+    const runId = extractRunId ?? recoverable?.runId
+    if (candidateAction || adoptionStarted) return
+    if (runId == null) {
+      setCandidates([])
+      setSelectedCandidates(new Set())
+      setSelectionFrozen(false)
+      setError(null)
+      return
+    }
+    setCandidateAction('abandon')
+    setError(null)
+    try {
+      await abandonStoryTimelineExtractionV1({ scope: await resolveScopeLike(project.id!), runId })
+      setCandidates([])
+      setSelectedCandidates(new Set())
+      setSelectionFrozen(false)
+      setExtractRunId(null)
+      setRecoverable(null)
+      setAdoptionStarted(false)
+    } catch (abandonError) {
+      setError(abandonError instanceof Error ? abandonError.message : '放弃故事年表提取运行失败')
+    } finally {
+      setCandidateAction(null)
     }
   }
 
@@ -151,10 +269,11 @@ export default function StoryTimelinePanel({ project, onOpenChapter, initialEven
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-bg-elevated text-text-secondary border border-border hover:text-text-primary transition-colors">
               <Plus className="w-3.5 h-3.5" /> 手动添加
             </button>
-            <button onClick={handleExtract} disabled={extracting}
+            <button onClick={handleExtract}
+              disabled={extracting || candidateAction != null || extractRunId != null || recoverable != null}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-50 transition-colors">
               {extracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-              {extracting ? `提取中 ${progress?.done}/${progress?.total}` : '从正文提取年表'}
+              {extracting ? '正在分析正文…' : '从正文提取年表'}
             </button>
           </div>
         </div>
@@ -162,15 +281,75 @@ export default function StoryTimelinePanel({ project, onOpenChapter, initialEven
 
       {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">{error}</div>}
 
-      {extracting && progress && (
-        <div className="p-3 bg-accent/10 border border-accent/20 rounded-lg">
-          <div className="flex items-center gap-2 text-sm text-accent mb-1.5">
-            <Loader2 className="w-4 h-4 animate-spin" /> 正在逐章提取剧情大事…（{progress.done}/{progress.total}）
+      {recoverable && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+          <div className="flex items-start gap-2 text-sm text-text-primary">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <div>
+              <div className="font-medium">
+                {recoverable.safeToResume ? '发现未完成的故事年表提取' : '上次调用的模型结果无法判定'}
+              </div>
+              <p className="mt-0.5 text-xs text-text-muted">
+                {recoverable.safeToResume
+                  ? `已完成 ${recoverable.nextCallIndex}/${recoverable.totalCalls} 个分块；继续时不会重复调用已完成分块。`
+                  : '为防止重复计费或重复候选，不会自动重试；请放弃这次运行后重新提取。'}
+              </p>
+            </div>
           </div>
-          <div className="h-1.5 bg-bg-base rounded-full overflow-hidden">
-            <div className="h-full bg-accent transition-all" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
+          <div className="flex justify-end gap-2">
+            <button onClick={handleAbandonExtraction} disabled={extracting || candidateAction != null}
+              className="px-3 py-1.5 text-xs text-text-muted hover:text-text-primary disabled:opacity-40">
+              {candidateAction === 'abandon' ? '正在放弃…' : '放弃这次运行'}
+            </button>
+            {recoverable.safeToResume && (
+              <button onClick={handleResumeExtraction} disabled={extracting || candidateAction != null}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-40">
+                {extracting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                继续提取
+              </button>
+            )}
           </div>
         </div>
+      )}
+
+      {(extracting || extractRunId != null || candidates.length > 0) && (
+        <ExtractionReviewPanel
+          title="故事年表候选"
+          items={candidates}
+          selected={selectedCandidates}
+          loading={extracting}
+          busy={candidateAction != null}
+          selectionLocked={selectionFrozen}
+          closeDisabled={adoptionStarted}
+          allowEmptyConfirm={extractRunId != null}
+          confirmLabel={adoptionStarted ? '继续完成冻结采纳' : `确认替换已写章节（${selectedCandidates.size} 条）`}
+          error={error}
+          onToggle={index => {
+            if (selectionFrozen) return
+            setSelectedCandidates(previous => {
+              const next = new Set(previous)
+              if (next.has(index)) next.delete(index)
+              else next.add(index)
+              return next
+            })
+          }}
+          onConfirm={handleAdoptCandidates}
+          onClose={handleAbandonExtraction}
+          renderItem={item => (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-medium text-text-primary">{item.title}</span>
+                <span className={`rounded px-1.5 py-0.5 text-[10px] ${IMPORTANCE_STYLE[item.importance]}`}>
+                  {STORY_IMPORTANCE_LABELS[item.importance]}
+                </span>
+              </div>
+              <div className="text-[11px] text-text-muted">
+                {item.chapterTitle}{item.storyTime ? ` · ${item.storyTime}` : ''}
+              </div>
+              {item.description && <p className="text-xs text-text-secondary">{item.description}</p>}
+            </div>
+          )}
+        />
       )}
 
       {loading ? (

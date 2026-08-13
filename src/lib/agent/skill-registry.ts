@@ -42,6 +42,7 @@ export type AgentSkillExecutionModeV1 =
   | 'continue'
   | 'emotion-beats'
   | 'inventory-extraction'
+  | 'story-timeline-extraction'
   | 'review'
   | 'revise'
   | 'organize'
@@ -222,6 +223,17 @@ const PROSE_INVENTORY_EXTRACTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
 }
 
 const PROSE_INVENTORY_EXTRACTION_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
+
+const PROSE_STORY_TIMELINE_EXTRACTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['chapterContent'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '没有已写正文时不得提取故事年表。' },
+    partial: { handling: 'grounded-transform', instruction: '只记录正文中明确发生的剧情事件，不补写缺失时间或因果。' },
+    complete: { handling: 'grounded-transform', instruction: '逐章提取正文明确发生的剧情大事，保持故事时间、重要度和章节归属可核对。' },
+  },
+}
+
+const PROSE_STORY_TIMELINE_EXTRACTION_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
   'projectStatus',
@@ -1459,6 +1471,29 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'prose.story-timeline-extraction',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '已写正文故事年表提取',
+    owner: 'prose-agent',
+    promptVersion: 'story-timeline-extract-v1',
+    executionMode: 'story-timeline-extraction',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['chapterContent'],
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_STORY_TIMELINE_EXTRACTION_INPUT_POLICY,
+    contextCompression: PROSE_STORY_TIMELINE_EXTRACTION_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{
+      table: 'storyTimelineEvents',
+      fields: ['title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle', 'order'],
+    }],
+    lastVerifiedAt: '2026-08-13',
+    regressionTests: ['R-HARNESS64-story-timeline-extraction-durable'],
+  },
+  {
+    version: 1,
     id: 'prose.review',
     agentId: 'prose',
     defaultForAgent: false,
@@ -1769,7 +1804,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'review', 'revise', 'organize', 'memory', 'consistency']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'review', 'revise', 'organize', 'memory', 'consistency']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()
