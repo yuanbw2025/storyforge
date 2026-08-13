@@ -219,15 +219,16 @@
 - **写**：`worldGroups（批量新建，用户审核采纳）`，可选 `worldGroupLinks（关系）`
 
 #### 动作②：AI 扩写单个世界设定（WorldGroupDetail）
-- **触发**：🔘 手动，世界详情页"AI 扩写本世界"
+- **触发**：🔘 手动，世界详情页“AI 扩写世界观”；名称、类型或描述有未保存改动时拒绝生成
 - **读**：
-  - `worldGroups[当前].name / description / 设定草稿`
-  - `worldGroups.其它世界概览`（避免雷同 + 保证差异化）
-  - `storyCores.theme / centralConflict`
-  - `用户输入提示`
+  - `manualText`：已保存目标世界组的名称、类型与描述
+  - `worldGroups`：当前 World 的世界目录
+  - `storyCore`：当前 Work 的故事核心
+  - `worldview`：目标世界组的正式世界观 baseline
 - **提示词**：`world-group.expand`
-- **解析**：`parseWorldExpandOutput → ExpandedWorldview`
-- **写**：本世界的 `worldviews（覆盖各字段：worldOrigin / powerHierarchy / continentLayout / climateByRegion / historyLine / races / factionLayout）` 🌍按世界
+- **解析**：`parseWorldExpandOutputStrictV1`；只接受七个 exact-key、2～30000 字符的非空 JSON 文本字段，拒绝 Markdown、缺失项、额外项和静默默认值
+- **运行证据**：`world-origin.worldview-expand` durable 候选绑定 World/Work/世界组、完整正式 baseline、非目标字段、Context Manifest、Prompt 与一次模型调用；未知结果窗口暂停且不自动重试
+- **写**：确认前零正式写入；作者确认且目标组、Context、Prompt 和 baseline 仍一致后，在事务中经 `FIELD_REGISTRY + adopt(worldviews)` 原子覆盖 `worldOrigin / powerHierarchy / continentLayout / climateByRegion / historyLine / races / factionLayout`，其它字段保持不变 🌍按世界
 
 ---
 

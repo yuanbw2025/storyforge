@@ -23,6 +23,7 @@ export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
 export type AgentSkillExecutionModeV1 =
   | 'complete'
   | 'worldview-field'
+  | 'worldview-expand'
   | 'story-core'
   | 'creative-rules'
   | 'create'
@@ -158,6 +159,13 @@ const WORLDVIEW_FIELD_CONTEXT_SOURCE_KEYS = [
   'storyArcs',
   'existingVolumeOutlines',
   'references',
+] as const
+
+const WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS = [
+  'manualText',
+  'worldGroups',
+  'storyCore',
+  'worldview',
 ] as const
 
 const CHARACTER_SUPPLEMENT_CONTEXT_SOURCE_KEYS = [
@@ -788,6 +796,12 @@ const WORLDVIEW_FIELD_COMPRESSION_POLICY = compressionPolicy([
   'existingVolumeOutlines',
   'references',
 ])
+const WORLDVIEW_EXPAND_COMPRESSION_POLICY = compressionPolicy([
+  'manualText',
+  'worldGroups',
+  'storyCore',
+  'worldview',
+])
 const CHARACTER_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'powerSystem',
@@ -1004,6 +1018,36 @@ export const AGENT_SKILLS = [
       'R-HARNESS32-worldview-field-agent',
       'R-HARNESS32-worldview-panels-ui',
     ],
+  },
+  {
+    version: 1,
+    id: 'world-origin.worldview-expand',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: '世界组七字段扩写',
+    owner: 'world-foundation-agent',
+    promptVersion: 'worldview-expand-v1',
+    executionMode: 'worldview-expand',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: {
+      sourceKeys: WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS,
+      states: {
+        empty: { handling: 'create-from-request', instruction: '只依据作者已保存的世界草稿创建七字段候选，不得声称引用了不存在的设定。' },
+        partial: { handling: 'reference-and-create', instruction: '锁定已有世界观和故事核心，只补足本次七字段候选并保持其它世界差异化。' },
+        complete: { handling: 'grounded-transform', instruction: '严格依据当前世界正式设定扩写七字段，禁止覆盖非目标字段或其它世界。' },
+      },
+    },
+    contextCompression: WORLDVIEW_EXPAND_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [{
+      table: 'worldviews',
+      fields: ['worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'historyLine', 'races', 'factionLayout'],
+    }],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS67-worldview-expand-durable'],
   },
   {
     version: 1,
@@ -1885,7 +1929,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
+    'world-origin': new Set(['complete', 'worldview-field', 'worldview-expand', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),

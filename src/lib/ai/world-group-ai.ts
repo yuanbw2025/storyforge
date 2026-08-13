@@ -68,6 +68,18 @@ export interface ExpandedWorldview {
   factionLayout: string
 }
 
+export const WORLDVIEW_EXPAND_FIELDS_V1 = [
+  'worldOrigin',
+  'powerHierarchy',
+  'continentLayout',
+  'climateByRegion',
+  'historyLine',
+  'races',
+  'factionLayout',
+] as const
+
+export const WORLDVIEW_EXPAND_PROMPT_VERSION_V1 = 'worldview-expand-v1' as const
+
 export function buildWorldExpandPrompt(args: {
   worldName: string
   worldType: string
@@ -105,4 +117,49 @@ export function parseWorldExpandOutput(output: string): ExpandedWorldview | null
   } catch {
     return null
   }
+}
+
+/** HARNESS-67: all model-visible project data has already passed through the
+ * Context Gateway. The adapter adds no database reads or hidden defaults. */
+export function buildWorldExpandPromptFromRegisteredContextV1(contextText: string): ChatMessage[] {
+  return buildWorldExpandPrompt({
+    worldName: '',
+    worldType: '',
+    draft: `【经过登记的当前世界资料】\n${contextText || '（登记来源为空）'}`,
+    otherWorlds: '',
+    storyCore: '',
+    userHint: '只依据上方登记资料生成；严格输出既定七字段且每字段非空，不得输出 Markdown、解释或额外字段。',
+  })
+}
+
+export function readWorldExpandPromptTemplateSnapshotV1(): ChatMessage[] {
+  return buildWorldExpandPromptFromRegisteredContextV1('{{REGISTERED_CONTEXT}}')
+}
+
+/** Strict parser for the governed route. The legacy parser above remains only
+ * for historical callers until their migrations are completed. */
+export function parseWorldExpandOutputStrictV1(output: string): ExpandedWorldview {
+  const input = output.trim()
+  if (!input) throw new Error('世界扩写候选为空。')
+  if (/^```|```$/.test(input)) throw new Error('世界扩写候选不得包含 Markdown 代码围栏。')
+  let parsed: unknown
+  try { parsed = JSON.parse(input) } catch { throw new Error('世界扩写候选不是有效的严格 JSON 对象。') }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('世界扩写候选必须是 JSON 对象。')
+  }
+  const source = parsed as Record<string, unknown>
+  const actual = Object.keys(source).sort()
+  const expected = [...WORLDVIEW_EXPAND_FIELDS_V1].sort()
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
+    throw new Error(`世界扩写候选只能包含 ${expected.join('、')}。`)
+  }
+  const result = {} as Record<(typeof WORLDVIEW_EXPAND_FIELDS_V1)[number], string>
+  for (const field of WORLDVIEW_EXPAND_FIELDS_V1) {
+    const value = source[field]
+    if (typeof value !== 'string' || value.trim().length < 2 || value.length > 30_000) {
+      throw new Error(`世界扩写候选 ${field} 必须是 2-30000 字符的非空文本。`)
+    }
+    result[field] = value.trim()
+  }
+  return result
 }

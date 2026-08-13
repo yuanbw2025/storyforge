@@ -2652,3 +2652,111 @@ test('角色中途重规划保护已写正文，只把审查后的 patch 应用�
   await expect(page.locator('input[value="第1章"]')).toBeVisible()
   await expect(page.locator('input[value="归途重排"]')).toBeVisible()
 })
+
+test('世界组七字段扩写只产生可恢复候选，作者确认后一次性写入正式世界观', async ({ page }) => {
+  let generationCalls = 0
+  const modelCandidate = {
+    worldOrigin: '作者确认前不可见的新世界来源：黑潮来自被封存的旧纪元。',
+    powerHierarchy: '守灯人通过记忆契约维持力量，拾忆者能短暂夺回被典当的往事。',
+    continentLayout: '群岛环绕沉没钟塔分布，西侧旧港与东侧灯塔群隔海相望。',
+    climateByRegion: '外海终年暴雨，内港受潮汐钟庇护，北岸每月经历一次记忆雾。',
+    historyLine: '旧纪元崩毁后，港城以周期性遗忘换取存续，拾忆者随后开始反抗。',
+    races: '人类、潮裔与失忆者共同生活，各自保存不同版本的旧纪元历史。',
+    factionLayout: '灯塔议会维护遗忘契约，拾忆者试图公开真相，港务会在两者之间摇摆。',
+  }
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'worldview-expand-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls += 1
+    const request = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = request.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain('经过登记的当前世界资料')
+    expect(combined).toContain('黑潮前的世界由七座灯塔共同守护。')
+    expect(combined).toContain('守灯人必须在共同记忆与港城安全之间作出选择。')
+    expect(combined).toContain('黑潮每年抹去港城的一段共同历史。')
+    expect(combined).toContain('严格输出既定七字段')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: JSON.stringify(modelCandidate) }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 360, completion_tokens: 180, total_tokens: 540 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 世界组七字段 Harness 闭环')
+
+  await openSidebarLeaf(page, '世界观', '世界起源')
+  const originPlaceholder = '创世神话 / 历史时期 / 文明起源……世界从何而来？'
+  await page.getByText(originPlaceholder, { exact: true }).last().click()
+  await page.getByRole('textbox', { name: originPlaceholder })
+    .fill('黑潮前的世界由七座灯塔共同守护。')
+  await page.getByRole('heading', { name: '🌌 世界来源' }).click()
+  await expect(page.getByText('黑潮前的世界由七座灯塔共同守护。', { exact: true })).toBeVisible()
+
+  await openSidebarLeaf(page, '设定库', '故事设计')
+  await page.getByText('点击填写一句话故事…', { exact: true }).click()
+  const logline = page.getByPlaceholder('点击填写一句话故事…')
+  await logline.fill('守灯人必须在共同记忆与港城安全之间作出选择。')
+  await logline.blur()
+
+  await sidebarButton(page, '项目概况').click()
+  const multiWorldToggle = page.getByText(/多世界模式/)
+    .locator('xpath=ancestor::div[contains(@class,"justify-between")][1]/button')
+  await multiWorldToggle.click()
+  await expect(page.getByRole('heading', { name: '危险操作:启用多世界模式' })).toBeVisible()
+  await page.getByRole('button', { name: '继续', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '是否立即下载备份(JSON 文件到本地)?' })).toBeVisible()
+  await page.getByRole('button', { name: '已备份，继续', exact: true }).click()
+  await expect(sidebarButton(page, '世界总览')).toHaveCount(1)
+
+  await sidebarButton(page, '世界总览').click()
+  await expect(page.getByRole('heading', { name: '🌐 世界总览' })).toBeVisible()
+  const primaryRow = page.getByText('主世界', { exact: true })
+    .locator('xpath=ancestor::div[contains(@class,"group")][1]')
+  await primaryRow.getByTitle('编辑').click()
+  const description = page.getByPlaceholder('这个世界的核心特征、氛围、独特之处...')
+  await description.fill('黑潮每年抹去港城的一段共同历史。')
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(page.getByRole('button', { name: '保存中...', exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'AI 扩写世界观', exact: true }).click()
+  await expect(page.getByText('七字段世界观候选尚未写入', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(modelCandidate.worldOrigin, { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await openSidebarLeaf(page, '世界观', '世界起源')
+  await expect(page.getByText('黑潮前的世界由七座灯塔共同守护。', { exact: true })).toBeVisible()
+  await expect(page.getByText(modelCandidate.worldOrigin, { exact: true })).toHaveCount(0)
+
+  await page.reload()
+  await sidebarButton(page, '世界总览').click()
+  await expect(page.getByRole('heading', { name: '🌐 世界总览' })).toBeVisible()
+  const restoredPrimaryRow = page.getByText('主世界', { exact: true })
+    .locator('xpath=ancestor::div[contains(@class,"group")][1]')
+  await restoredPrimaryRow.getByTitle('编辑').click()
+  await expect(page.getByText('七字段世界观候选尚未写入', { exact: true })).toBeVisible({ timeout: 30_000 })
+  expect(generationCalls).toBe(1)
+
+  await page.getByRole('button', { name: '确认写入七字段', exact: true }).click()
+  await expect(page.getByRole('button', { name: '已写入世界观', exact: true })).toBeVisible({ timeout: 30_000 })
+  await openSidebarLeaf(page, '世界观', '世界起源')
+  await expect(page.getByText(modelCandidate.worldOrigin, { exact: true })).toBeVisible()
+  await expect(page.getByText('黑潮前的世界由七座灯塔共同守护。', { exact: true })).toHaveCount(0)
+  await page.reload()
+  await openSidebarLeaf(page, '世界观', '世界起源')
+  await expect(page.getByText(modelCandidate.worldOrigin, { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+})

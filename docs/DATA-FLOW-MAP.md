@@ -29,7 +29,7 @@
 | 著作信息 | 项目概况 | 元数据 | `projects` | project |
 | 著作信息 | 灵感反推 | 🛠️工具(反向) | （写回 worldview/storyCore/characters） | inspiration→worldview/character |
 | 著作信息 | 项目参考 | 🛠️工具(分析) | `references` / `referenceChunkAnalysis` | reference |
-| 设定库 | 世界总览 | 📥聚合展示 | （读多表） | worldview/worldGroup |
+| 设定库 | 世界总览 | 📥设定/聚合展示 | `worldGroups`；七字段扩写确认后写 `worldviews` | worldGroup/worldview |
 | 设定库 | 真实与幻想 | 📥设定 | `worldRulesProfiles` | world-rules |
 | 设定库 | 世界起源 | 📥设定 | `worldviews`(worldOrigin/powerHierarchy/divineDesign) | worldview |
 | 设定库 | 自然环境 | 📥设定 | `worldviews`(worldStructure/continentLayout/naturalResources…) | worldview |
@@ -75,6 +75,7 @@
 | **重要地点** importantLocations | `name/tags/description/significance/parentId`(树状) | 作者填；AI 只经 `chapterContent / locations` 登记源从当前 Work 已写正文生成 durable 分块候选 | 作者确认 → `adopt(importantLocations)` |
 | **历史年表** histories/historical* | 概述 + 时间线事件 + 关键词（按世界标签） | （作者填，与世界规则「事件」联动） | → historical* |
 | **世界地图** worldNodes | 节点/区域/连线、空间实体/关系、比例尺 | 当前世界观 + `codex` + `locations` 登记上下文 | → `worldNodes.mapConfigJSON` |
+| **世界组七字段扩写** worldGroups/worldviews | 已保存目标组名称/类型/描述；`worldOrigin/powerHierarchy/continentLayout/climateByRegion/historyLine/races/factionLayout` | `manualText + worldGroups + storyCore + worldview` 登记上下文 | durable 候选；作者确认并通过完整 baseline CAS → `adopt(worldviews)` 原子写七字段 |
 | **故事线** storyArcs | `name/type(main/sub)/stages`(起承转合) | `worldContext`(★ 已接词条) + `storyCore` + 大纲摘要 | → storyArc |
 | **大纲** outlineNodes | `parentId/type(volume/chapter)/title/summary/order/worldGroupId` | `worldContext`(★) + `storyCore` + `characterContext` + `worldRulesContext` | 卷/章 JSON → outlineNodes |
 | **伏笔** foreshadows | `name/type/status/description/plantChapterId/echoChapterIds/resolveChapterId/importance/urgency` | `worldContext`(★) + `characterContext` + 已有伏笔 | 伏笔 JSON → foreshadows |
@@ -241,7 +242,7 @@
 
 **核对确认安全（排除嫌疑）**：
 - 版本快照还原复用 export/import（已含数据丢失修复）；`ensure-schema` REQUIRED_TABLES 保守（不误删老用户）。
-- WorldMapPanel 在 HARNESS-66 后只经登记 Context Gateway 读取当前 World，并以目标节点/世界组证据隔离；HistoryPanel 多世界按当前世界；EmotionBeat 经 prop 拿真实上下文。
+- WorldMapPanel 在 HARNESS-66 后只经登记 Context Gateway 读取当前 World，并以目标节点/世界组证据隔离；WorldGroupDetail 在 HARNESS-67 后只经四个登记源读取已保存草稿，七字段候选确认后才原子采纳；HistoryPanel 多世界按当前世界；EmotionBeat 经 prop 拿真实上下文。
 - 所有解析器（inventory/timeline/arc/relation/plot/character/outline/import）字段与表对齐、防御性默认。
 - 无跨项目查询泄漏（toArray 均带 projectId，除有意的全局表）；导入大纲正确重建 parentId 树。
 - 所有 `JSON.parse(AI 输出)` 均被 try/catch 保护（解析器内部 return null/[]，或调用方 try/catch + 错误展示，如 voronoi 地图）。
@@ -255,7 +256,7 @@
 | # | 问题 | 处置 |
 |---|------|------|
 | A | **创作规则仅注入「章节正文」**，大纲/细纲/批量生成未注入 | R-1 统一执行层一并接入 |
-| D | 「AI 建议世界」输出 7 个世界观字段（缺 worldStructure/politics/worldEvents 等） | 便捷生成器，可手动补；低优先，待补 schema |
+| D | `WorldGroupDetail` 七字段扩写已由 HARNESS-67 durable 治理，但字段闭集仍不含 worldStructure/politics/worldEvents 等 | 便捷扩写器的明确边界；其它字段继续由对应单字段 Skill/人工面板维护，若扩闭集须另立合同 |
 | E | 重要地点 `importantLocations` **无 worldGroupId**，多世界下全量注入（非按世界隔离） | 需 DB 迁移，niche，权衡后再做 |
 | G | ForeshadowPanel / StoryArcPanel 在多世界下用单世界/全局上下文（伏笔、故事线本为项目级，模糊） | 低，项目级概念，可用活跃世界或 all-worlds |
 | H | 批量细纲 / 批量大纲 在多世界下用单一上下文（非逐章按世界） | 中低，批量场景 |

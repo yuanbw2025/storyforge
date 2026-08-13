@@ -58,7 +58,7 @@
 | 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
 | 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
 | 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
-| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～66 分别收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑和世界地图后，当前为 22 个文件 / 37 个静态构造点：7 个 governed、4 个 auxiliary、11 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
+| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～67 分别收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑、世界地图和世界组七字段扩写后，当前为 21 个文件 / 36 个静态构造点：7 个 governed、4 个 auxiliary、10 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
 
 ### HARNESS-61 完成卡：情感节拍 durable 候选与采纳
 
@@ -135,6 +135,19 @@
 | 生命周期 / 作用域 | 不新增表或 schema；`worldNodes` 继续由 `PROJECT_TABLES` 派生 World 归属、树、传送门引用重映射、导入导出和删除生命周期。候选含本地节点 ID，`portable:false`，导入后取消；其它项目、World、世界组或节点均不可采纳。 |
 | UI / 回滚 | `WorldMapPanel` 恢复同节点候选或不可判定运行，明确显示“尚未写入”；作者可确认或放弃。人工比例尺及其它地图参数编辑保留。旧组件 `useAIStream`、直接 DB 扫描、手拼 Context 与 `updateNode(mapConfigJSON)` AI 旁路下线。 |
 | 验收 | `R-HARNESS66-world-map-durable` 22 项覆盖登记 Context、候选零写/刷新恢复、严格协议、模型未知窗口、候选事件崩溃窗、Context/Prompt/节点名/原配置 CAS、拒绝、8 个采纳中断点、写后 checkpoint 窗口、导入取消、World/世界组/节点隔离、terminal stale 与旧旁路下线；与地图读全、空间约束、导出重映射和 H59 组合为 36 项。H59 census 收缩为 22 文件 / 37 入口、11 migration；完整 CI 为 350 files / 1532 tests，项目 Chromium E2E 为 43/43。真实 UI/API 证明候选刷新恢复不重复模型调用、确认前零正式变更、确认后地图生效且人工比例尺刷新持久化。 |
+
+### HARNESS-67 完成卡：世界组七字段扩写 durable 候选与原子采纳
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-67` 治理小功能。作者在世界详情中根据已保存草稿一次扩写世界观时，七字段模型结果必须先成为可恢复候选；只有作者确认且目标世界组、登记 Context、Prompt 与原七字段 baseline 仍一致时，才能原子写入正式世界观。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 剩余入口清零；在同一 `world-origin` Agent 下新增有界 `world-origin.worldview-expand` Skill，复用 Context Gateway、durable Run/checkpoint、`adopt(worldviews)` 与 terminal receipt。现有单字段 `world-origin.worldview-field` 保持不变，不引入平行 Harness。 |
+| 读 / 写 | 模型只经 `manualText / worldGroups / storyCore / worldview` 登记源读取已保存目标草稿、世界目录、当前 Work 故事核心和当前世界组世界观。写入闭集仅为 `worldOrigin / powerHierarchy / continentLayout / climateByRegion / historyLine / races / factionLayout`，七字段全部非空并在作者确认后经 `FIELD_REGISTRY + adopt()` 一次采纳。 |
+| 状态机 / 硬验证 | 冻结 Work/World、目标世界组完整快照、七字段正式 baseline、非目标世界观字段、Context Manifest/实际来源 hash、Prompt 模板/hash 和严格候选/hash。一次模型调用；`model.requested` 后结果不可判定时暂停且不自动重试。输出必须是 exact-key、非空、有长度上限的 JSON 对象，禁止 Markdown 围栏、缺字段、额外字段和静默默认值。 |
+| 采纳恢复 | 候选持久化后等待作者确认；确认前正式世界观零写入。八个 durable 采纳边界冻结同一意图；同一 IndexedDB 事务中回读目标世界组与世界观 baseline，再经 `adopt()` 写七字段。正式写入后、事件或终验前中断时回读同值正式状态继续收敛，不重复调用模型或部分覆盖。 |
+| 生命周期 / 作用域 | 不新增表、schema 或迁移；`worldviews / worldGroups` 继续由 `PROJECT_TABLES` 派生 World 归属、世界组 ID 重映射、导入导出和删除生命周期。候选含本地世界组 ID，`portable:false`，导入后取消；其它项目、World、Work 或世界组均不可恢复/采纳。 |
+| UI / 回滚 | `WorldGroupDetail` 恢复同世界组候选或不可判定运行，明确显示“尚未写入”并提供确认/放弃；存在未保存的世界名称、类型或描述时先要求作者保存，避免模型读取无法持久验证的内存草稿。人工世界组编辑保留。旧 `useAIStream`、直接 DB 读故事核心/手拼跨世界 Context、宽松 parser 和模型返回后立即 `adopt()` 旁路下线。 |
+| 验收 | `R-HARNESS67-worldview-expand-durable` 22 项覆盖登记 Context、七字段零写候选/刷新恢复、严格协议、模型未知窗口、候选崩溃窗、目标组/Context/Prompt/baseline CAS、拒绝、八采纳边界、写后恢复、导入取消、World/Work/世界组隔离、terminal stale 和旧旁路下线；组件 UI 5 项与 H59/H13 合计 37 项通过。H59 census 收缩为 21 文件 / 36 入口、10 migration。完整 CI 为 352 files / 1559 tests，3753 模块生产构建与 bundle budget 通过；项目 Chromium E2E 44/44。真实 UI/API 证明候选刷新恢复不重复模型调用、确认前正式世界观不变、确认后七字段持久化。 |
 
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 
