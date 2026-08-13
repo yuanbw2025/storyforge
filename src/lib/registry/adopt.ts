@@ -13,7 +13,7 @@ import {
   stampNewRecord,
 } from '../world-engine/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
-import { hashChapterText, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../ai/chapter-memory/text-normalization'
+import { hashChapterText, sha256Text, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../ai/chapter-memory/text-normalization'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
 import { FIELD_BY_TARGET } from './field-registry'
 import { ADOPTION_BY_TARGET } from './adoption-schema'
@@ -272,6 +272,13 @@ async function adoptChapterMemoryRecordWithCas(
     const currentHash = await Dexie.waitFor(hashChapterText(String(target.content ?? '')))
     if (currentHash !== cas.expectedHash) {
       result.skipped.push({ reason: 'CAS 失败：章节正文已变化，丢弃旧派生记忆', data: input.data })
+      return
+    }
+    if (
+      cas.expectedContentHash
+      && await Dexie.waitFor(sha256Text(String(target.content ?? ''))) !== cas.expectedContentHash
+    ) {
+      result.skipped.push({ reason: 'CAS 失败：章节正文 HTML 或格式已变化，丢弃旧局部编辑候选', data: input.data })
       return
     }
 

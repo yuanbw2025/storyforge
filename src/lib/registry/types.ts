@@ -320,6 +320,8 @@ export interface AdoptInput {
     kind: 'chapter-source-text-hash'
     expectedHash: string
     textNormalizationVersion: string
+    /** Optional exact HTML guard for range edits where formatting changes matter. */
+    expectedContentHash?: string
   }
   target: string
   data: Record<string, unknown> | Record<string, unknown>[]

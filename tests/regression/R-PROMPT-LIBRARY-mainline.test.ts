@@ -114,7 +114,7 @@ describe('小说创作 Prompt 内容回归主模板体系', () => {
 
     const templates = await db.promptTemplates.toArray()
     const migrated = templates.find(template => template.name === NOVEL_CONTENT_PROMPT_SEEDS[0].name)
-    expect(templates).toHaveLength(206)
+    expect(templates).toHaveLength(209)
     expect(migrated?.moduleKey).toBe('story.brief')
     expect(migrated?.isActive).toBe(true)
   })

@@ -43,6 +43,7 @@ interface CharacterDrivenPlanStore {
 }
 
 const now = () => Date.now()
+const inputSaveChains = new Map<number, Promise<void>>()
 
 function updatedPlan(
   plan: CharacterDrivenPlan,
@@ -149,28 +150,37 @@ export const useCharacterDrivenPlanStore = create<CharacterDrivenPlanStore>((set
   },
 
   saveInputs: async (id, input) => {
-    const resolved = await resolveOwnedPlan(id)
-    if (!resolved) throw new Error('方案不存在或不属于当前作品')
-    const { scope } = resolved
-    const validCharacterIds = new Set(
-      (await readOwnedRows<any>(scope, 'characters', { owner: 'world' }))
-        .map(character => character.id)
-        .filter((characterId): characterId is number => typeof characterId === 'number'),
-    )
-    const normalizedArcs = input.arcs.map(arc => ({
-      ...arc,
-      characterId: arc.characterId != null && validCharacterIds.has(arc.characterId)
-        ? arc.characterId
-        : null,
-    }))
-    const patch: Partial<CharacterDrivenPlan> = {
-      arcs: stringifyCharacterDrivenPlanArcs(normalizedArcs),
-      userHint: input.userHint,
-      status: 'draft',
-      updatedAt: now(),
+    const previous = inputSaveChains.get(id) ?? Promise.resolve()
+    const pending = previous.catch(() => undefined).then(async () => {
+      const resolved = await resolveOwnedPlan(id)
+      if (!resolved) throw new Error('方案不存在或不属于当前作品')
+      const { scope } = resolved
+      const validCharacterIds = new Set(
+        (await readOwnedRows<any>(scope, 'characters', { owner: 'world' }))
+          .map(character => character.id)
+          .filter((characterId): characterId is number => typeof characterId === 'number'),
+      )
+      const normalizedArcs = input.arcs.map(arc => ({
+        ...arc,
+        characterId: arc.characterId != null && validCharacterIds.has(arc.characterId)
+          ? arc.characterId
+          : null,
+      }))
+      const patch: Partial<CharacterDrivenPlan> = {
+        arcs: stringifyCharacterDrivenPlanArcs(normalizedArcs),
+        userHint: input.userHint,
+        status: 'draft',
+        updatedAt: now(),
+      }
+      await db.characterDrivenPlans.update(id, patch)
+      set({ plans: get().plans.map(plan => plan.id === id ? updatedPlan(plan, patch) : plan) })
+    })
+    inputSaveChains.set(id, pending)
+    try {
+      await pending
+    } finally {
+      if (inputSaveChains.get(id) === pending) inputSaveChains.delete(id)
     }
-    set({ plans: get().plans.map(plan => plan.id === id ? updatedPlan(plan, patch) : plan) })
-    await db.characterDrivenPlans.update(id, patch)
   },
 
   saveGenerated: async (id, volumes) => {

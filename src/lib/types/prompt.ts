@@ -21,6 +21,9 @@ export type PromptModuleKey =
   | 'chapter.memory'
   | 'chapter.polish'
   | 'chapter.expand'
+  | 'chapter.condense'
+  | 'chapter.rewrite'
+  | 'chapter.check'
   | 'chapter.de-ai'
   // 伏笔
   | 'foreshadow.generate'

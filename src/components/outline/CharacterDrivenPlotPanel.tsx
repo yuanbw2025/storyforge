@@ -4,7 +4,7 @@
  * 用户为选中的角色设定初始/目标状态 → AI 生成中间情节大纲 → 可批量导入到大纲
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Sparkles, Trash2, Check, ChevronDown, ChevronRight,
   Users, BookOpen, Loader2, ArrowRight, Copy, Plus, Pencil, Power,
@@ -89,25 +89,47 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
     () => plans.find(plan => plan.id === currentPlanId) ?? null,
     [plans, currentPlanId],
   )
+  const selectedPlanId = currentPlan?.id ?? null
+  const selectedPlanCreatedAt = currentPlan?.createdAt ?? null
+  const selectedPlanGeneratedVolumes = currentPlan?.generatedVolumes ?? null
+  const selectedPlanStatus = currentPlan?.status ?? null
+  const selectedPlanInputsRef = useRef<{ arcs: string | null; userHint: string }>({
+    arcs: null,
+    userHint: '',
+  })
+  selectedPlanInputsRef.current = {
+    arcs: currentPlan?.arcs ?? null,
+    userHint: currentPlan?.userHint ?? '',
+  }
 
+  // Hydrate author inputs only when selecting/loading a different immutable plan
+  // identity. Same-plan async saves update the store object and must not replay an
+  // older blur snapshot over newer local typing.
   useEffect(() => {
-    if (!currentPlan) {
+    const selectedPlanInputs = selectedPlanInputsRef.current
+    if (selectedPlanId == null || selectedPlanInputs.arcs == null) {
       setArcs([])
       setUserHint('')
+      return
+    }
+    const nextArcs = parseCharacterDrivenPlanArcs(selectedPlanInputs.arcs)
+    setArcs(nextArcs)
+    setUserHint(selectedPlanInputs.userHint)
+  }, [selectedPlanId, selectedPlanCreatedAt])
+
+  useEffect(() => {
+    if (selectedPlanGeneratedVolumes == null) {
       setParsedVolumes(null)
       return
     }
-    const nextArcs = parseCharacterDrivenPlanArcs(currentPlan.arcs)
-    const nextVolumes = parseCharacterDrivenPlotVolumes(currentPlan.generatedVolumes)
-    setArcs(nextArcs)
-    setUserHint(currentPlan.userHint)
+    const nextVolumes = parseCharacterDrivenPlotVolumes(selectedPlanGeneratedVolumes)
     setParsedVolumes(nextVolumes.length ? nextVolumes : null)
     setSelectedVolumes(new Set(nextVolumes.map((_, index) => index)))
     setExpandedVolumes(new Set(nextVolumes.map((_, index) => index)))
-    setImportDone(currentPlan.status === 'adopted')
-  }, [currentPlan])
+    setImportDone(selectedPlanStatus === 'adopted')
+  }, [selectedPlanGeneratedVolumes, selectedPlanId, selectedPlanStatus])
 
-  const persistInputs = (nextArcs: CharacterArcInput[], nextHint = userHint) => {
+  const persistInputs = async (nextArcs: CharacterArcInput[], nextHint = userHint) => {
     if (currentPlan?.id == null) return
     const characterIds = new Set(characters.flatMap(character =>
       character.id == null ? [] : [character.id],
@@ -121,7 +143,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
     if (normalized.some((arc, index) => arc.characterId !== nextArcs[index]?.characterId)) {
       setArcs(normalized)
     }
-    void saveInputs(currentPlan.id, { arcs: normalized, userHint: nextHint })
+    await saveInputs(currentPlan.id, { arcs: normalized, userHint: nextHint })
   }
 
   // 可选角色列表（排除已添加的）

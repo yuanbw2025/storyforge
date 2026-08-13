@@ -66,7 +66,7 @@ import { useItemLedgerStore } from '../../stores/item-ledger'
 import { useLocationStore } from '../../stores/location'
 import { useCodexStore } from '../../stores/codex'
 import { buildEditorEntityReferences } from '../../lib/editor/entity-reference'
-import type { ChatMessage, Project, StateDiffItem } from '../../lib/types'
+import type { ChatMessage, Project, StateDiffItem, WorkspaceScope } from '../../lib/types'
 import {
   adoptChapterOrganizationSelection,
   isChapterOrganizationCurrent,
@@ -241,6 +241,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [savedContent, setSavedContent] = useState('')
   const [manualSaving, setManualSaving] = useState(false)
   const [manualSaveError, setManualSaveError] = useState('')
+  const [editorWorkspaceScope, setEditorWorkspaceScope] = useState<WorkspaceScope | null>(null)
   const [showContext, setShowContext] = useState(false)
   const [customInstruction, setCustomInstruction] = useState('')
   const [impactInfo, setImpactInfo] = useState<string | null>(null)
@@ -711,6 +712,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
     return null
   }, [project.enableMultiWorld, outlineNode, nodes])
+
+  useEffect(() => {
+    let cancelled = false
+    void resolveScopeLike(project.id!).then(scope => {
+      if (!cancelled) setEditorWorkspaceScope(scope)
+    }).catch(() => {
+      if (!cancelled) setEditorWorkspaceScope(null)
+    })
+    return () => { cancelled = true }
+  }, [project.id])
 
   const impactPatchTargets = useMemo(() => {
     if (!impactGraph) return []
@@ -3164,15 +3175,33 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       )}
 
       {/* Phase 24.3: 选中文本浮动工具栏 */}
-      {compareSourceHtml == null && <FloatingToolbar
-        getSelectedText={() => editorRef.current?.getSelectedText() || ''}
+      {compareSourceHtml == null && editorWorkspaceScope && currentChapter.id && <FloatingToolbar
+        key={`selection-edit-${currentChapter.id}`}
+        scope={editorWorkspaceScope}
+        projectId={project.id!}
+        chapterId={currentChapter.id}
+        worldGroupId={chapterWorldGroupId}
+        aiConfig={aiConfig}
+        getSelectionSnapshot={() => editorRef.current?.getSelectionSnapshot() ?? null}
         getSelectionRect={() => {
           const sel = window.getSelection()
           if (!sel || sel.isCollapsed || !sel.rangeCount) return null
           return sel.getRangeAt(0).getBoundingClientRect()
         }}
-        replaceSelectedText={(text) => {
-          editorRef.current?.replaceSelection(text)
+        getCurrentHtml={() => editorRef.current?.getHTML() ?? content}
+        previewRangeReplacement={(from, to, text) => (
+          editorRef.current?.previewRangeReplacement(from, to, text) ?? null
+        )}
+        persistBeforeGenerate={persistCurrentEditorContent}
+        onContentAdopted={(html, demotedFacts) => {
+          editorRef.current?.setContent(html)
+          setContent(html)
+          setPlainText(htmlToPlainText(html))
+          setSavedContent(html)
+          void refreshChapter(currentChapter.id!)
+          setImpactInfo(demotedFacts > 0
+            ? `局部编辑已写入；${demotedFacts} 条失去逐字证据的确认事实已标为待复核。`
+            : '局部编辑已写入并通过正文终验。')
         }}
         disabled={ai.isStreaming}
       />}

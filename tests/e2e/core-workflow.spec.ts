@@ -577,6 +577,89 @@ test('建卷建章、保存正文、刷新恢复并导出正文与隐私诊断',
   expect(diagnosticText).not.toContain(chapterText)
 })
 
+test('局部改写只读取冻结选区，刷新恢复候选并在作者确认后精确替换正文', async ({ page }) => {
+  let selectionEditCalls = 0
+  const sourceText = '暮色沉入河谷，旧塔的铜铃忽然响了三声。守门人抬头望向北方，认出了久违的归鸟。'
+  const selectedText = '旧塔的铜铃忽然响了三声。'
+  const replacementText = '旧塔沉默多年的铜铃骤然连响三声。'
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'selection-edit-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+      contextWindow: 100000,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    selectionEditCalls += 1
+    const request = route.request().postDataJSON() as { messages?: Array<{ content?: string }> }
+    const visiblePrompt = request.messages?.map(message => message.content ?? '').join('\n') ?? ''
+    expect(visiblePrompt).toContain(selectedText)
+    expect(visiblePrompt).not.toContain('暮色沉入河谷')
+    expect(visiblePrompt).not.toContain('守门人抬头望向北方')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{ message: { content: replacementText } }],
+        usage: { prompt_tokens: 96, completion_tokens: 22, total_tokens: 118 },
+      }),
+    })
+  })
+
+  await createBookWithSavedChapter(page, 'E2E 局部改写闭环', sourceText)
+  const editor = page.locator('.tiptap-editor')
+  await editor.evaluate((element, text) => {
+    const node = element.querySelector('p')?.firstChild
+    if (!node) throw new Error('正文缺少可选文本节点')
+    const content = node.textContent ?? ''
+    const start = content.indexOf(text)
+    if (start < 0) throw new Error('正文缺少目标选区')
+    const selection = window.getSelection()
+    const range = document.createRange()
+    range.setStart(node, start)
+    range.setEnd(node, start + text.length)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    document.dispatchEvent(new Event('selectionchange'))
+  }, selectedText)
+
+  await expect(page.getByRole('button', { name: '改写', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '改写', exact: true }).click()
+  await expect(page.getByText('候选尚未写入正文', { exact: true })).toBeVisible()
+  await expect(page.getByText(replacementText, { exact: true })).toBeVisible()
+  await expect(editor).toContainText(sourceText)
+  expect(selectionEditCalls).toBe(1)
+
+  await page.reload()
+  await sidebarButton(page, '章节').click()
+  await expect(page.getByText('候选尚未写入正文', { exact: true })).toBeVisible()
+  await expect(page.getByText(replacementText, { exact: true })).toBeVisible()
+  await expect(editor).toContainText(sourceText)
+  expect(selectionEditCalls).toBe(1)
+
+  await editor.fill(`${sourceText}作者临时补写。`)
+  await page.getByRole('button', { name: '确认替换', exact: true }).click()
+  await expect(page.getByText('当前编辑器正文已变化，旧候选不会覆盖你的新修改。请保存后重新选择。', { exact: true })).toBeVisible()
+  await expect(editor).toContainText('作者临时补写。')
+  expect(selectionEditCalls).toBe(1)
+
+  await page.reload()
+  await sidebarButton(page, '章节').click()
+  await expect(page.getByText('候选尚未写入正文', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '确认替换', exact: true }).click()
+  await expect(editor).toContainText(`暮色沉入河谷，${replacementText}守门人抬头望向北方，认出了久违的归鸟。`)
+  await expect(editor).not.toContainText(selectedText)
+  expect(selectionEditCalls).toBe(1)
+
+  await page.reload()
+  await sidebarButton(page, '章节').click()
+  await expect(editor).toContainText(replacementText)
+})
+
 test('整理本章只调用一次模型，刷新恢复候选并在确认后写入故事年表', async ({ page }) => {
   let organizationCalls = 0
   await page.addInitScript(() => {

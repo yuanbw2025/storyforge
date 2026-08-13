@@ -43,6 +43,8 @@ export type AgentSkillExecutionModeV1 =
   | 'emotion-beats'
   | 'inventory-extraction'
   | 'story-timeline-extraction'
+  | 'selection-edit'
+  | 'selection-check'
   | 'review'
   | 'revise'
   | 'organize'
@@ -234,6 +236,17 @@ const PROSE_STORY_TIMELINE_EXTRACTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
 }
 
 const PROSE_STORY_TIMELINE_EXTRACTION_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
+
+const PROSE_SELECTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['manualText'],
+  states: {
+    empty: { handling: 'require-author-input', instruction: '没有作者冻结的选中文字时不得执行局部编辑或查漏。' },
+    partial: { handling: 'grounded-transform', instruction: '只处理作者冻结的选中文字，不推断或补写选区外正文。' },
+    complete: { handling: 'grounded-transform', instruction: '只处理作者冻结的选中文字，不推断或补写选区外正文。' },
+  },
+}
+
+const PROSE_SELECTION_COMPRESSION_POLICY = compressionPolicy(['manualText'])
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
   'projectStatus',
@@ -1494,6 +1507,46 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'prose.selection-edit',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '正文局部保真编辑',
+    owner: 'prose-agent',
+    promptVersion: 'prose-selection-edit-v1',
+    executionMode: 'selection-edit',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['manualText'],
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_SELECTION_INPUT_POLICY,
+    contextCompression: PROSE_SELECTION_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS65-selection-edit-durable'],
+  },
+  {
+    version: 1,
+    id: 'prose.selection-check',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '正文局部只读查漏',
+    owner: 'prose-agent',
+    promptVersion: 'prose-selection-check-v1',
+    executionMode: 'selection-check',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['manualText'],
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_SELECTION_INPUT_POLICY,
+    contextCompression: PROSE_SELECTION_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS65-selection-edit-durable'],
+  },
+  {
+    version: 1,
     id: 'prose.review',
     agentId: 'prose',
     defaultForAgent: false,
@@ -1804,7 +1857,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'review', 'revise', 'organize', 'memory', 'consistency']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

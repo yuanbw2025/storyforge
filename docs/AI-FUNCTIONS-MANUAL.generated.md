@@ -8,7 +8,7 @@
 
 ## 一、Prompt 模板清单（PromptModuleKey 事实源）
 
-共 61 个唯一 moduleKey，206 条内置模板定义。
+共 64 个唯一 moduleKey，209 条内置模板定义。
 
 | moduleKey | 模板数 | 代表名称 | 说明 | 读取变量 |
 |---|---:|---|---|---|
@@ -22,6 +22,9 @@
 | `chapter.memory` | 1 | 内置-章节连续性记忆 | 一次调用同时提取章节摘要、下一章承接 handoff 与计划正文对账；引文 offset 由系统回查，不信任模型位置。 | `chapterTitle` `chapterPlan` `nextChapterPlan` `chapterText` |
 | `chapter.polish` | 1 | 内置-文本润色 | 按用户指令润色文本，保持原意不变。 | `instruction` `text` |
 | `chapter.expand` | 1 | 内置-文本扩写 | 将文本扩展丰富，增加细节、心理与环境，情节走向不变。 | `userHint` `text` |
+| `chapter.condense` | 1 | 内置-文本缩写 | 在保留事实、因果与人物立场的前提下压缩局部正文。 | `text` |
+| `chapter.rewrite` | 1 | 内置-保真改写 | 以不同表达重写局部正文，同时保持故事事实和信息边界。 | `text` |
+| `chapter.check` | 1 | 内置-局部正文查漏 | 检查局部正文中的可核对问题，只给报告，不生成替换稿。 | `text` |
 | `chapter.de-ai` | 1 | 内置-去 AI 味改写 | 把 AI 味重的文本改写得更像真人写的。 | `text` |
 | `foreshadow.generate` | 2 | 内置-伏笔建议 | 基于世界观、角色和已有伏笔，建议 3-5 个新伏笔。 | `projectName` `genres` `worldContext` `characters` `existingForeshadows` `hasNoForeshadows` |
 | `geography.concept-map` | 1 | 内置-概念地图 SVG | 基于地点列表生成奇幻风格的 SVG 概念地图。 | `overview` `locationList` |
@@ -205,12 +208,12 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:24` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:451`<br/>`src/lib/node-authoring/domain-execution.ts:515` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1480` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1460` |
-| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:870` |
-| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1605`<br/>`src/components/editor/ChapterEditor.tsx:2321` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1452` |
-| `chapter.toolbar` | `src/components/editor/FloatingToolbar.tsx:105` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1491` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1471` |
+| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:881` |
+| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1616`<br/>`src/components/editor/ChapterEditor.tsx:2332` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1463` |
+| `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `codex.extract` | `src/components/codex/CodexPanel.tsx:226` |
 | `cultivation.progress` | `src/components/cultivation/CultivationProgressPanel.tsx:143` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
@@ -239,11 +242,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `reference.summary` | `src/components/project/AnalysisReportViewer.tsx:119` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:286` |
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:106` |
-| `review.consistency.deep` | `src/components/editor/ChapterEditor.tsx:1166` |
+| `review.consistency.deep` | `src/components/editor/ChapterEditor.tsx:1177` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:451` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:98` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:115` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:1495` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:1506` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
 | `story.timeline` | `src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
@@ -254,7 +257,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ### 动态 category 调用
 
-- `src/components/editor/ChapterEditor.tsx:1172 · chat`
+- `src/components/editor/ChapterEditor.tsx:1183 · chat`
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
 - `src/lib/agent/character-copilot.ts:475 · chat`
 - `src/lib/agent/character-driven-copilot.ts:507 · chat`
@@ -276,4 +279,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `267b559`
+生成时间基准:commit `32a996f`

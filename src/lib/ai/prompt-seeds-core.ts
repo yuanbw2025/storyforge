@@ -574,6 +574,51 @@ export const CORE_PROMPT_SEEDS: PromptSeed[] = [
     isActive: true,
   },
 
+  // HARNESS-65.1 章节-缩写
+  {
+    scope: 'system',
+    moduleKey: 'chapter.condense',
+    promptType: 'edit',
+    name: '内置-文本缩写',
+    description: '在保留事实、因果与人物立场的前提下压缩局部正文。',
+    systemPrompt: `你是一位严谨的小说文字编辑。只压缩作者提供的原文：优先删除重复说明、低功能动作和冗余修饰，保留全部事实、因果、事件顺序、人物立场、视角与信息边界。直接输出压缩后的完整文本，不要解释、标题、字数统计或 Markdown 代码围栏。`,
+    userPromptTemplate: `请将以下文字压缩到原字数的约 60%–70%：
+
+{{text}}`,
+    variables: ['text'],
+    isActive: true,
+  },
+
+  // HARNESS-65.2 章节-改写
+  {
+    scope: 'system',
+    moduleKey: 'chapter.rewrite',
+    promptType: 'edit',
+    name: '内置-保真改写',
+    description: '以不同表达重写局部正文，同时保持故事事实和信息边界。',
+    systemPrompt: `你是一位小说文字编辑。用明显不同的句式、措辞和节奏改写作者提供的原文，但不得改变事实、因果、事件顺序、人物立场、视角、语气目的或信息边界。直接输出改写后的完整文本，不要解释、标题、变更说明或 Markdown 代码围栏。`,
+    userPromptTemplate: `请保真改写以下文字：
+
+{{text}}`,
+    variables: ['text'],
+    isActive: true,
+  },
+
+  // HARNESS-65.3 章节-局部查漏（只读）
+  {
+    scope: 'system',
+    moduleKey: 'chapter.check',
+    promptType: 'diagnose',
+    name: '内置-局部正文查漏',
+    description: '检查局部正文中的可核对问题，只给报告，不生成替换稿。',
+    systemPrompt: `你是一位严谨的审稿编辑。只检查作者提供的文字，按严重度指出有逐字依据的逻辑矛盾、用词不当、语法错误、指代不清或局部前后不一致。不要补写未提供的上下文，不要输出改写稿。用简短列表回答；没有可核对问题时只输出“未发现问题”。`,
+    userPromptTemplate: `请检查以下文字：
+
+{{text}}`,
+    variables: ['text'],
+    isActive: true,
+  },
+
   // 10. 章节-去 AI 味
   {
     scope: 'system',
