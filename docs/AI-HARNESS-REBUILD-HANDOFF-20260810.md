@@ -232,7 +232,7 @@ git log --oneline --reverse 774a2ae..HEAD
 - HARNESS-56：可信 handoff 建立零模型 child Run 并冻结正式目标 pre-state；只有作者在既有面板保存、显式终验且同一记录业务状态确实变化后才签发 receipt。刷新、覆盖、篡改、作用域、导入和终验后变化均 fail-closed。
 - HARNESS-57：以 H56 fresh receipt/post-state 为父证据复用 HARNESS-49 planner，重建当前 graph/plan 并保守分类 resolved/remaining/new；工作区即时执行、来源编辑器可恢复，旧 review 不再冒充当前。
 - HARNESS-58：来源编辑器重新验证 fresh H57 后，将其 current plan 的确定性余项交给 H47；child 绑定 H57 receipt/output，真实 output checkpoint 支持刷新、重复点击和 10 个 durable 边界恢复，只写检索块与层级摘要。
-- HARNESS-59：以 AST 注册表冻结 UI 直调模型 census；初始 29 个文件 / 44 个静态入口，HARNESS-60/61/62/63 收口后为 25 个文件 / 40 个入口，分为 7 governed、4 auxiliary、14 migration；CI 拒绝未登记新增、计数漂移、残留和无迁移归属。
+- HARNESS-59：以 AST 注册表冻结 UI 直调模型 census；初始 29 个文件 / 44 个静态入口，HARNESS-60/61/62/63 完成、HARNESS-64 旧 UI 旁路下线后为 24 个文件 / 39 个入口，分为 7 governed、4 auxiliary、13 migration；CI 拒绝未登记新增、计数漂移、残留和无迁移归属。HARNESS-64 仍是 WIP，当前数字只证明旧组件直调已移除，不证明年表 durable 语义全部验收。
 - HARNESS-60：将角色关系 AI 提取收口到 `character.relationships` Skill；上下文只经注册源读取并按 World 隔离，严格候选持久化后由作者勾选，确认才经 `adopt()` 写关系表与角色摘要，支持八个采纳中断点恢复、baseline stale、导入取消和 terminal receipt。
 - HARNESS-61：情感节拍进入 `prose.emotion-beats` durable Skill；七个 Context Gateway 源、严格 3–6 拍候选、作者确认后 `adopt(emotionBeatCards)`、八边界恢复、baseline/context stale、导入取消与 terminal receipt 过期已闭合。
 - HARNESS-62：重要地点进入 `world-origin.locations` durable 长任务；只读当前 Work/World 登记上下文，冻结章节/分块/模板/地点 baseline，每个已完成分块 checkpoint、只续跑剩余分块；模型结果不确定窗口不自动重试。全部调用后持久化严格候选，冻结作者选择后只经 `adopt(importantLocations)` 写入；八采纳边界、导入取消、作用域隔离和 terminal stale 已闭合。
@@ -491,9 +491,8 @@ git diff --check
 
 ## 15. Git 交接状态
 
-- 功能提交 `f5615a8` 已推送到 `origin/feat/harness-rebuild-20260807`。
+- 2026-08-13 跨电脑交接前的代码提交为 `757ce47`，已推送到 `origin/feat/harness-rebuild-20260807`；本交接文档随后作为独立 docs commit 推送，接手时以远端 `git log -1` 为准。
 - 没有创建 PR，没有修改或推送 `main`。
-- 本交接文档已作为独立 docs commit 推送到同一分支；具体 SHA 以远端 `git log -1` 为准。
 - 接手者拉取后先执行 `git status --short --branch` 和 `git log -5 --oneline --decorate`，确认没有本地脏改动或分支偏移。
 - 合并前必须处理 `origin/main` 的 1 个新提交，并重新生成可能漂移的 AI manual/project metrics；不要手改生成文件冲突。
 
@@ -501,4 +500,115 @@ git diff --check
 
 当前重构已经从“提示词字段拼接 + 零散质量检查”推进到真正的 Agent/Skill + durable Harness 主体：主要生成入口有明确职责、上下文证据、结构化候选、作者确认、受治理采纳、终态验证、恢复和回放；正文也具备信息隔离、语义评审、章后状态和影响图。
 
-当前最关键的未闭环不是再造 Agent。人工修正确实发生及修正后 resolved/remaining/new 当前计划已经由 HARNESS-56/57 证明；下一步是以该新计划为输入，用确定性或作者确认的 Agent Run 重建受影响下游。完成这条链后，再审计剩余基础设定/参考解析入口，并用真实模型评测证明质量、成本和延迟收益。任何接续工作都应沿这个顺序推进。
+当前最关键的未闭环不是再造 Agent。HARNESS-56～58 的反向反馈后半链、HARNESS-59 census 和 HARNESS-60～63 的高风险入口已经分别闭合；HARNESS-64 正在把故事年表提取迁入同一 durable Harness，但专属反例、文档和完整发布闸门尚未完成。接手者必须先完成 H64，再按 census 清理剩余 13 个 migration；最后取得真实模型质量/成本/延迟、真实 E2E 和完整 CI 发布证据。任何接续工作都应沿这个顺序推进。
+
+## 17. 2026-08-13 跨电脑接续状态（当前权威入口）
+
+### 17.1 接续目标与非范围
+
+目标保持为：按照原计划原方案，全部完成 StoryForge 当前 Agent + Harness 重构工作；闭合反向反馈后半链，收口剩余分步骤入口，完成三注册表与数据生命周期治理，并取得真实模型质量、成本、延迟、E2E 与 CI 发布证据；不迁移或引入平行外部 Harness 运行时。
+
+- OpenCode、Pi 等外部 Harness 只作为后续对标/优化方向；本轮不迁移、不引入，也不因此改变原设计。
+- 继续使用 `feat/harness-rebuild-20260807`，不得直接修改或推送 `main`。
+- 不要改写已推送历史或 force-push；从远端最新提交继续追加。
+- 用户本机未跟踪的 `output/`、`tmp/` 不属于项目交付，禁止删除、暂存或提交。
+- 未完成剩余入口、真实模型、E2E 和 CI 证据前，不得把总目标标记为完成。
+
+### 17.2 拉取与状态确认
+
+新电脑执行：
+
+```bash
+git fetch origin
+git switch -c feat/harness-rebuild-20260807 --track origin/feat/harness-rebuild-20260807
+# 若本地已有该分支，则改为：
+# git switch feat/harness-rebuild-20260807
+# git pull --ff-only
+
+git status --short --branch
+git log -10 --oneline --decorate
+```
+
+若 GitHub HTTPS 在代理环境中连接异常，可对单次命令使用 `git -c http.version=HTTP/1.1 fetch origin`；不要为此静默改写全局配置。
+
+交接时分支上的连续实现提交：
+
+```text
+631818e HARNESS-56 手工影响修正验证
+ae6725a HARNESS-57 修正后重规划
+e947dba HARNESS-58 修正后派生重建
+55f0b9b HARNESS-59 AI 入口 census
+42216d1 HARNESS-60 角色关系 durable 治理
+b8ae29d HARNESS-61 情感节拍 durable 治理
+87fcb11 HARNESS-62 重要地点 durable 治理
+dba6670 HARNESS-63 物品栏 durable 提取
+757ce47 HARNESS-64 故事年表 durable 提取 WIP
+```
+
+### 17.3 HARNESS-64 已落地但尚未验收的内容
+
+`757ce47` 是明确的 WIP 提交，不得因为可编译或旧入口已清零就宣称 H64 完成。当前已实现：
+
+- 新增 `prose.story-timeline-extraction` Skill 和 `story-timeline-extraction` 执行模式。
+- Skill 只声明 `chapterContent` 模型上下文；写目标严格登记为 `storyTimelineEvents` 的 `title / storyTime / importance / description / chapterId / chapterTitle / order` 七字段。
+- `story-timeline-adapter.ts` 新增提示词模板快照和 exact-key/exact-type 严格 JSON parser；旧容错 parser 暂留给未迁移调用方。
+- 新增 `src/lib/agent/run/story-timeline-extraction-durable.ts`，包含 Work 级正文/正式年表 baseline 冻结、章节 Context Manifest、分块计划与 hash、逐分块 checkpoint、未知模型结果不自动重试、严格协议失败、全部调用后候选、候选崩溃窗恢复、作者选择冻结、按 `replaceScope=['chapterId']` 逐章事务替换、空结果清理、跨章采纳恢复、terminal receipt/stale 和 `portable:false` 边界。
+- `StoryTimelinePanel` 已移除组件级 `chat()`、组件内 `assembleContext()`、分块/parser、吞掉单章错误及 `deleteByChapter + adopt()` 先删后写旁路；已接入刷新恢复、继续、放弃、候选勾选和冻结采纳 UI，人工 CRUD 保留。
+- `src/lib/agent/ai-entry-registry.json` 已移除年表旧 UI 直调项；当前 census 为 `24 files / 39 calls`，其中 `7 governed / 4 auxiliary / 13 migration`。
+
+当前已通过的最小证据：
+
+```bash
+node scripts/check-ai-entry-registry.mjs
+npx vitest run tests/regression/R-HARNESS59-ai-entry-registry.test.ts tests/regression/R-HARNESS13-agent-skill-registry.test.ts
+npx tsc --noEmit --pretty false
+npx eslint src/components/timeline/StoryTimelinePanel.tsx src/lib/ai/adapters/story-timeline-adapter.ts src/lib/agent/skill-registry.ts src/lib/agent/run/story-timeline-extraction-durable.ts
+```
+
+两组回归共 10 项通过；这不是 H64 领域验收证据。
+
+### 17.4 接手后的第一任务：完成 HARNESS-64
+
+先审计当前 runner，再以 `R-HARNESS63-inventory-extraction-durable.test.ts` 为结构参考新增：
+
+```text
+tests/regression/R-HARNESS64-story-timeline-extraction-durable.test.ts
+```
+
+至少覆盖以下反例和恢复边界：
+
+1. Skill/RunContract 只声明 `chapterContent` 读取和年表七字段确认写入。
+2. 全部分块完成前正式表零写入；安全中断只从下一个分块继续。
+3. `candidate.persisted` 与候选 checkpoint 之间崩溃可从完整进度重建同一候选。
+4. 模型结果不可判定时暂停且不自动重试；非 JSON、额外/缺失字段、非 1～3 整数 importance 等严格协议错误使整次 Run 失败。
+5. 正文、提示词或正式年表 baseline 漂移时，恢复/采纳 fail-closed。
+6. 候选去重必须与 AdoptionSchema 的 `chapterId + title` 身份一致，不能等到正式采纳才隐式合并。
+7. 作者选择后逐章原子替换；每章 `order` 必须压缩为 `0..n-1`；未写/范围外正式行保持冻结。
+8. 空候选或作者空选择必须在明确确认后清理所有目标已写章节，而不是保留旧结果。
+9. 以下八个采纳边界逐一中断后均收敛到同一 Run 和同一冻结正式结果：`intent.checkpoint`、`confirmation.recorded`、`adoption.started`、`formal.chapter`、`adoption.committed`、`step.succeeded`、`verification.started`、`verification.accepted`。
+10. 正式章节写入完成但 checkpoint 未完成时，恢复识别已写状态并前进，不得重复改写。
+11. `portable:false` 的 progress/candidate 导入后明确取消。
+12. 只读取当前 Work 的章节和正式年表，隔离同项目其它 Work。
+13. terminal 后正文、目标章正式行或范围外正式行漂移均令旧 receipt stale。
+14. 静态源码反例证明旧组件旁路下线且人工 CRUD 保留。
+
+重点复核：Context Manifest 必须对应真实模型可见输入；正式 baseline 可由治理层读取做 CAS，但不得绕过 Context Gateway 塞进模型 Prompt；数据库生成的 `id/createdAt` 不得破坏正式意图等价判断；完成 Run 再次调用时必须同时验证上游与完整正式状态。
+
+H64 专属回归通过后，同步更新 `docs/roadmap/README.md`、`docs/roadmap/CAPABILITY-BASELINE.md`、`docs/AI-HARNESS-AUDIT-20260807.md`、本文、`docs/AI-FUNCTIONS-MANUAL.md`、生成版 AI manual、`docs/DATA-FLOW-DIAGRAM.md` 和项目指标。以独立完成提交追加到 `757ce47`，不要 amend。
+
+### 17.5 H64 后续总路线
+
+H64 完成后读取 `src/lib/agent/ai-entry-registry.json`，按真实写入风险与可复用 durable 模式清理剩余 13 个 migration。不要为追求数字机械搬运辅助入口，也不要建立平行 runtime。随后继续闭合生成下游/通用依赖、三注册表和数据生命周期遗漏，最后取得：
+
+- 真实外部模型的质量、人工修改量、完成率、token、成本、延迟和 p95 证据；H4 development 40 + held-out 20 必须使用真实独立 generator/verifier artifact，并完成人工 held-out 复核。
+- 独立浏览器数据中的真实 UI/API E2E，不得修改作者当前预览项目。
+- 根 `AGENTS.md` 要求的全部架构、表、AI manual、TypeScript、相关测试、构建、bundle、`npm run ci` 与适用的 `npm run ci:e2e` 证据。
+
+已知环境问题不能被误报为通过：
+
+- 全量 `npm run lint` 的既知 7 个错误来自用户未跟踪 `tmp/` 的演示脚本；不得修改/提交 `tmp/`，但每个交付单元的变更文件 ESLint 必须干净。
+- `npm run ci` 可能只被 `nanoid` 的 `GHSA-28wg-ghj8-5hjv` 审计公告阻塞；禁止 `npm audit fix --force`，其余闸门仍全部运行并单独报告。
+- 原电脑缺 Playwright Chromium 1228；新电脑网络可用后应安装匹配浏览器，取得真实 `ci:e2e` 证据。
+- 最近一次全量 coverage 是 H61 时期的 341 files / 1410 tests；H62/H63/H64 不能借此宣称最新全量 coverage。
+
+提交前以根 `AGENTS.md` 的最新闸门为准，至少运行 H64 定向回归、H59/H63/H64 联合回归、三注册表/architecture/roadmap/freshness/source reachability/canon 检查、`npx tsc --noEmit`、`npm run build`、bundle 检查和 `git diff --check`。所有文档、生成物和源码必须提交到当前功能分支，工作树除明确属于用户的本地未跟踪文件外不得留下交接改动。
