@@ -6,7 +6,7 @@
 >
 > 远端分支：`origin/feat/harness-rebuild-20260807`
 >
-> 最新功能单元：`HARNESS-62 重要地点 durable 分块提取与采纳`（具体提交以 `git log -1` 为准）
+> 最新功能单元：`HARNESS-63 物品栏 durable 分块提取与逐章原子替换`（具体提交以 `git log -1` 为准）
 >
 > 世界引擎基线：`774a2ae feat(WORLD-2): close executable world foundation through 2F`
 >
@@ -232,10 +232,11 @@ git log --oneline --reverse 774a2ae..HEAD
 - HARNESS-56：可信 handoff 建立零模型 child Run 并冻结正式目标 pre-state；只有作者在既有面板保存、显式终验且同一记录业务状态确实变化后才签发 receipt。刷新、覆盖、篡改、作用域、导入和终验后变化均 fail-closed。
 - HARNESS-57：以 H56 fresh receipt/post-state 为父证据复用 HARNESS-49 planner，重建当前 graph/plan 并保守分类 resolved/remaining/new；工作区即时执行、来源编辑器可恢复，旧 review 不再冒充当前。
 - HARNESS-58：来源编辑器重新验证 fresh H57 后，将其 current plan 的确定性余项交给 H47；child 绑定 H57 receipt/output，真实 output checkpoint 支持刷新、重复点击和 10 个 durable 边界恢复，只写检索块与层级摘要。
-- HARNESS-59：以 AST 注册表冻结 UI 直调模型 census；初始 29 个文件 / 44 个静态入口，HARNESS-60/61/62 收口后为 26 个文件 / 41 个入口，分为 7 governed、4 auxiliary、15 migration；CI 拒绝未登记新增、计数漂移、残留和无迁移归属。
+- HARNESS-59：以 AST 注册表冻结 UI 直调模型 census；初始 29 个文件 / 44 个静态入口，HARNESS-60/61/62/63 收口后为 25 个文件 / 40 个入口，分为 7 governed、4 auxiliary、14 migration；CI 拒绝未登记新增、计数漂移、残留和无迁移归属。
 - HARNESS-60：将角色关系 AI 提取收口到 `character.relationships` Skill；上下文只经注册源读取并按 World 隔离，严格候选持久化后由作者勾选，确认才经 `adopt()` 写关系表与角色摘要，支持八个采纳中断点恢复、baseline stale、导入取消和 terminal receipt。
 - HARNESS-61：情感节拍进入 `prose.emotion-beats` durable Skill；七个 Context Gateway 源、严格 3–6 拍候选、作者确认后 `adopt(emotionBeatCards)`、八边界恢复、baseline/context stale、导入取消与 terminal receipt 过期已闭合。
 - HARNESS-62：重要地点进入 `world-origin.locations` durable 长任务；只读当前 Work/World 登记上下文，冻结章节/分块/模板/地点 baseline，每个已完成分块 checkpoint、只续跑剩余分块；模型结果不确定窗口不自动重试。全部调用后持久化严格候选，冻结作者选择后只经 `adopt(importantLocations)` 写入；八采纳边界、导入取消、作用域隔离和 terminal stale 已闭合。
+- HARNESS-63：物品栏进入 `prose.inventory-extraction` durable 长任务；只读当前 Work 正文/流水与当前 World 角色，冻结提取范围、章节/分块/模板/roster/正式 baseline。全部调用后才形成严格候选，作者确认后按 `itemLedger.replaceScope=['chapterId']` 逐章事务替换；空候选可明确清理目标章，唯一姓名才绑定角色 FK。分块/跨章恢复、八采纳边界、导入取消、作用域隔离与 terminal stale 已闭合。
 
 HARNESS-58 最新代码入口：
 
@@ -270,15 +271,16 @@ HARNESS-58 最新代码入口：
 | 反向反馈 | 影响图、受限 patch、确定性重建、作者复核、可信精确交接、人工保存 pre/post receipt、修正后 resolved/remaining/new 当前计划及其确定性余项 child 执行已完成 | AI 下游重新生成和通用依赖重跑尚未完成；每次只允许按一个目标类型扩展 |
 | 评测/发布 | 大量模块回归、H4 工程基座、配对 gate 和防篡改证据存在 | 真实外部模型 H4 40+20 artifact、人工 held-out 复核、真实质量/成本/延迟净收益未完成 |
 
-## 8. 当前停点：HARNESS-62 已实现，当前验证证据
+## 8. 当前停点：HARNESS-63 已实现，当前验证证据
 
 ### 8.1 已通过
 
 - HARNESS-47/57/58 定向回归：20 项通过；其中 H58 7 项覆盖父子 lineage、真实输出复用、frozen output 篡改和 10 个 durable 中断边界。
-- HARNESS-59 AST census 守卫与 3 项回归通过：HARNESS-60/61/62 后为 26 个文件 / 41 个入口，7 governed、4 auxiliary、15 migration。
+- HARNESS-59 AST census 守卫与 3 项回归通过：HARNESS-60/61/62/63 后为 25 个文件 / 40 个入口，7 governed、4 auxiliary、14 migration。
 - HARNESS-60 定向回归 10 项通过：候选零写入、严格 parser/精确实体、刷新恢复、baseline stale、拒绝、八个持久化边界中断恢复、导入取消和多世界隔离。
 - HARNESS-61 定向回归 14 项通过：七源真实 prompt、候选零写入、严格 parser、刷新/拒绝、八边界恢复、写前二次 CAS、写后上游 stale 拒绝终验、adoption 后正式卡漂移暂停、terminal 后卡/上游改变撤销 receipt、导入取消和作用域隔离。
 - HARNESS-62 定向回归 14 项通过：多分块全完成后候选、零正式写入、只续跑剩余分块、候选事件与检查点间中断重建、模型结果不确定禁止重试、任一分块协议失败时无部分候选、上游 CAS、候选/冻结选择恢复、严格 parser、八采纳边界、导入取消、Work/World 隔离、terminal stale 和旧旁路下线。与 H59/C 组合计 24 项定向回归通过。
+- HARNESS-63 定向回归 14 项通过：范围与分块冻结、候选前零正式写入、只续跑剩余调用、候选崩溃窗重建、模型不确定与协议失败、上游/baseline CAS、空候选清理、唯一姓名/同名角色 FK、逐章事务替换、八采纳边界、导入取消、Work/World 隔离、terminal stale 和旧旁路下线。与 H59 组合计 17 项通过。
 - `npx tsc --noEmit`：通过。
 - 改动范围 ESLint：通过；全仓 `npm run lint` 受用户未跟踪 `tmp/` 脚本的 7 个既有错误阻断，未改动这些文件。
 - `git diff --check`：通过。

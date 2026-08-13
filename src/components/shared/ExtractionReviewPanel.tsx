@@ -6,6 +6,10 @@ interface Props<T> {
   selected: Set<number>
   loading?: boolean
   busy?: boolean
+  selectionLocked?: boolean
+  closeDisabled?: boolean
+  allowEmptyConfirm?: boolean
+  confirmLabel?: string
   error?: string | null
   renderItem: (item: T) => React.ReactNode
   onToggle: (index: number) => void
@@ -14,7 +18,8 @@ interface Props<T> {
 }
 
 export default function ExtractionReviewPanel<T>({
-  title, items, selected, loading, busy, error, renderItem, onToggle, onConfirm, onClose,
+  title, items, selected, loading, busy, selectionLocked, closeDisabled, allowEmptyConfirm, confirmLabel,
+  error, renderItem, onToggle, onConfirm, onClose,
 }: Props<T>) {
   return (
     <div className="mt-3 rounded-xl border border-accent/30 bg-bg-surface p-3 space-y-3">
@@ -24,7 +29,7 @@ export default function ExtractionReviewPanel<T>({
         </h3>
         <button
           onClick={onClose}
-          disabled={busy}
+          disabled={busy || closeDisabled}
           className="p-1 text-text-muted hover:text-text-primary disabled:opacity-40"
           title="关闭"
         >
@@ -40,7 +45,7 @@ export default function ExtractionReviewPanel<T>({
       {!loading && !error && items.length === 0 && (
         <p className="text-xs text-text-muted">没有发现可写入的新内容。</p>
       )}
-      {items.length > 0 && (
+      {(items.length > 0 || (!loading && !error && allowEmptyConfirm)) && (
         <>
           <div className="max-h-72 overflow-y-auto space-y-2">
             {items.map((item, index) => (
@@ -53,7 +58,7 @@ export default function ExtractionReviewPanel<T>({
                 <input
                   type="checkbox"
                   checked={selected.has(index)}
-                  disabled={busy}
+                  disabled={busy || selectionLocked}
                   onChange={() => onToggle(index)}
                   className="mt-0.5 accent-accent"
                 />
@@ -64,13 +69,13 @@ export default function ExtractionReviewPanel<T>({
           <div className="flex justify-end">
             <button
               onClick={onConfirm}
-              disabled={selected.size === 0 || busy}
+              disabled={(!allowEmptyConfirm && selected.size === 0) || busy}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white text-xs disabled:opacity-40"
             >
               {busy
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 : <Check className="w-3.5 h-3.5" />}
-              {busy ? '正在写入并终验…' : `确认写入（${selected.size}）`}
+              {busy ? '正在写入并终验…' : (confirmLabel ?? `确认写入（${selected.size}）`)}
             </button>
           </div>
         </>

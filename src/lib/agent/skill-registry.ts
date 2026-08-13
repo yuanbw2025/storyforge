@@ -41,6 +41,7 @@ export type AgentSkillExecutionModeV1 =
   | 'generate'
   | 'continue'
   | 'emotion-beats'
+  | 'inventory-extraction'
   | 'review'
   | 'revise'
   | 'organize'
@@ -210,6 +211,17 @@ const WORLD_LOCATION_EXTRACTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
 }
 
 const WORLD_LOCATION_EXTRACTION_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
+
+const PROSE_INVENTORY_EXTRACTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['chapterContent'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '没有所选章节正文时不得提取物品流水。' },
+    partial: { handling: 'grounded-transform', instruction: '只记录所选正文中明确发生、持有人明确的物品变动。' },
+    complete: { handling: 'grounded-transform', instruction: '逐章提取真实发生的物品变动，保持角色归属、方向和规范名称一致。' },
+  },
+}
+
+const PROSE_INVENTORY_EXTRACTION_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
   'projectStatus',
@@ -1424,6 +1436,29 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'prose.inventory-extraction',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '已写正文物品流水提取',
+    owner: 'prose-agent',
+    promptVersion: 'inventory-extract-v1',
+    executionMode: 'inventory-extraction',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['chapterContent', 'itemLedger', 'characters'],
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_INVENTORY_EXTRACTION_INPUT_POLICY,
+    contextCompression: PROSE_INVENTORY_EXTRACTION_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{
+      table: 'itemLedger',
+      fields: ['itemName', 'action', 'quantity', 'heldByName', 'characterId', 'chapterId', 'chapterTitle', 'note'],
+    }],
+    lastVerifiedAt: '2026-08-13',
+    regressionTests: ['R-HARNESS63-inventory-extraction-durable'],
+  },
+  {
+    version: 1,
     id: 'prose.review',
     agentId: 'prose',
     defaultForAgent: false,
@@ -1734,7 +1769,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'review', 'revise', 'organize', 'memory', 'consistency']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'review', 'revise', 'organize', 'memory', 'consistency']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

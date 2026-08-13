@@ -58,7 +58,7 @@
 | 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
 | 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
 | 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
-| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60/61/62 分别收口角色关系、情感节拍和重要地点后，当前为 26 个文件 / 41 个静态构造点：7 个 governed、4 个 auxiliary、15 个 migration。高风险物品/年表“先删后写”、局部手稿替换、参考实体合并没有冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 3 项回归通过。 |
+| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60/61/62/63 分别收口角色关系、情感节拍、重要地点和物品栏后，当前为 25 个文件 / 40 个静态构造点：7 个 governed、4 个 auxiliary、14 个 migration。故事年表“先删后写”、局部手稿替换、参考实体合并没有冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 3 项回归通过。 |
 
 ### HARNESS-61 完成卡：情感节拍 durable 候选与采纳
 
@@ -82,7 +82,20 @@
 | 状态机 / 硬验证 | 计划冻结提示词模板、章节顺序、每章 Manifest、分块 hash、已有地点 Manifest/baseline 和 Work；每个已完成分块建立进度检查点。只有检查点为最后事件时可续跑；`model.requested` 后结果不可判定则暂停且不自动重试。严格 exact-key JSON、登记标签、唯一地点名与数量上限 fail-closed。 |
 | 生命周期 / 作用域 | 不新增表或 schema；`importantLocations` 继续由 `PROJECT_TABLES` 派生 World 归属、树 parent 重映射、导出/导入、删除与引用生命周期。候选/进度含本地 ID、`portable:false`，导入后取消；terminal 后正文、提示词、原有或所选地点漂移均撤销旧 receipt。 |
 | UI / 回滚 | `LocationPanel` 恢复候选或安全进度，明示不可判定运行必须放弃重来；采纳中断时恢复冻结选择。人工新建、编辑、树层级和删除保留。旧组件逐章 `chat`、手拼 Context、内存候选和直接 `adopt()` 旁路已下线。 |
-| 验收 | `R-HARNESS62-location-extraction-durable` 14 项覆盖多分块零写候选、从下一分块续跑、候选事件与检查点间中断重建同一候选、模型结果不确定窗口、任一分块协议失败时无部分候选、上游 CAS、候选恢复/选择写入、严格 parser、8 个采纳边界幂等收敛、导入取消、Work/World 隔离、terminal 漂移与旧旁路下线。H59 census 同步收缩为 26 文件 / 41 入口，15 migration。 |
+| 验收 | `R-HARNESS62-location-extraction-durable` 14 项覆盖多分块零写候选、从下一分块续跑、候选事件与检查点间中断重建同一候选、模型结果不确定窗口、任一分块协议失败时无部分候选、上游 CAS、候选恢复/选择写入、严格 parser、8 个采纳边界幂等收敛、导入取消、Work/World 隔离、terminal 漂移与旧旁路下线。当时 H59 census 为 26 文件 / 41 入口、15 migration；当前总数以 H59 完成卡为准。 |
+
+### HARNESS-63 完成卡：物品栏 durable 分块提取与逐章原子替换
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-63` 治理小功能。作者按全部已写章或自定义起止章重提物品流水时，长任务必须可断点续跑，确认前不改任何正式流水；确认后即使跨章中断，也不能留下不可恢复的“部分删旧、部分写新”。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 剩余入口清零；新增 `prose.inventory-extraction` Skill，复用 Context Gateway、Run/event/checkpoint、`replaceAdoptedCollection()` 与 terminal receipt，不引入平行 Harness。 |
+| 读 / 写 | 只经 `chapterContent / itemLedger / characters` 登记源读取当前 Work 正文/流水与当前 World 角色。写入闭集为 `itemLedger.itemName/action/quantity/heldByName/characterId/chapterId/chapterTitle/note`；作者确认后按登记的 `replaceScope=['chapterId']` 逐章事务替换。 |
+| 状态机 / 硬验证 | 冻结范围、提示词、章节清单/Manifest/分块、角色 roster 与正式流水 baseline；每个确定完成分块 checkpoint，只续跑剩余调用。模型结果不可判定则暂停不重试；严格 exact-key JSON、动作枚举、正整数、持有人、去重与总量上限 fail-closed。空候选仍可确认，语义是明确清理所选章旧提取结果。 |
+| 采纳恢复 / FK | 采纳意图冻结作者选择和每章正式行；每章清旧+整批写入同一 IndexedDB 事务。若写入后、进度 checkpoint 前中断，恢复先回读同值正式状态再推进，不重复替换；未处理章仍须等于原 baseline。角色姓名只有在冻结 roster 中唯一匹配才写 `characterId`，重名或未知只保留 `heldByName`。 |
+| 生命周期 / 作用域 | 不新增表或 schema；`itemLedger` 继续由 `PROJECT_TABLES` 派生 Work 归属、角色/章节软引用、导入导出和重映射生命周期。Work 级范围可包含多个世界组章节；当前 World roster 与其它 Work/World 数据隔离。含本地 ID 的进度/候选 `portable:false`，导入后取消。 |
+| UI / 回滚 | `InventoryPanel` 恢复候选或安全分块进度；不可判定运行需放弃重来。意图冻结后不可改勾选，正式替换开始后只能继续收敛。人工新增、编辑、认领和删除保留。旧组件逐章 `chat`、手拼 Context、吞掉单章失败、`deleteByChapter + adopt()` 旁路已下线。 |
+| 验收 | `R-HARNESS63-inventory-extraction-durable` 14 项覆盖范围/分块零写候选、从下一分块续跑、候选事件崩溃窗重建、模型结果不可判定、严格协议失败、上游/baseline CAS、空结果清理、唯一姓名/同名角色 FK、8 个采纳边界幂等收敛、导入取消、Work/World 隔离、terminal 漂移与旧旁路下线。H59 census 同步收缩为 25 文件 / 40 入口、14 migration。 |
 
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 

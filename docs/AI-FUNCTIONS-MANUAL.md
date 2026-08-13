@@ -955,10 +955,11 @@
 
 #### 动作①：一键从已写章节提取物品流水 🔄
 - **触发**：🔘 手动
-- **读**：所有已写章节 `chapters[content]`，逐章
+- **读**：只经 Context Gateway 的 `chapterContent / itemLedger / characters`；支持全部已写章或自定义起止章
+- **Skill**：`prose.inventory-extraction`，提示词执行版本 `inventory-extract-v1`
 - **提示词**：`inventory.extract`
-- **解析**：`parseInventoryEvents`
-- **写**：`itemLedger（每章先 deleteByChapter 再批量新建，防重复）`
+- **解析**：严格 exact-key JSON；动作仅 `gain/consume`、数量为正整数、持有人必填；所有分块完成后才持久化候选
+- **写**：确认前零正式写入；作者冻结选择后按 `itemLedger.replaceScope=['chapterId']` 逐章事务替换并签发 terminal receipt，空候选表示清理所选章旧结果
 
 ---
 
