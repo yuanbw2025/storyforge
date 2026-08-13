@@ -6,20 +6,23 @@ import { CInput } from '../../components/shared/CompositionInput'
 import { useState, useEffect } from 'react'
 import { Heart, Sparkles, ChevronUp, Trash2, Edit3, Save, Plus, X, RotateCcw } from 'lucide-react'
 import { useEmotionBeatStore } from '../../stores/emotion-beat'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildEmotionBeatPrompt, parseEmotionBeats } from '../../lib/ai/adapters/emotion-beat-adapter'
 import type { EmotionBeat } from '../../lib/types'
 import { useDialog } from '../shared/Dialog'
+import { useAIConfigStore } from '../../stores/ai-config'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
+import {
+  adoptEmotionBeatCandidateV1,
+  generateEmotionBeatCandidateV1,
+  readPendingEmotionBeatCandidateV1,
+  rejectEmotionBeatCandidateV1,
+  type EmotionBeatCandidateV1,
+} from '../../lib/agent/run/emotion-beat-durable'
 
 interface Props {
   projectId: number
   chapterId: number
   chapterTitle: string
-  chapterSummary: string
-  worldContext: string
-  characterContext: string
-  prevChapterEnding: string
+  worldGroupId: number | null
 }
 
 const TONE_COLORS: Record<string, string> = {
@@ -42,8 +45,7 @@ function getToneColor(tone: string): string {
 }
 
 export default function EmotionBeatCard({
-  projectId, chapterId, chapterTitle, chapterSummary,
-  worldContext, characterContext, prevChapterEnding,
+  projectId, chapterId, chapterTitle, worldGroupId,
 }: Props) {
   const dialog = useDialog()
   const { getByChapter, saveCard, updateCard, deleteCard, loadAll } = useEmotionBeatStore()
@@ -51,37 +53,85 @@ export default function EmotionBeatCard({
   const [editing, setEditing] = useState(false)
   const [editBeats, setEditBeats] = useState<EmotionBeat[]>([])
   const [editArc, setEditArc] = useState('')
-  const ai = useAIStream(createAISessionKey(projectId, 'emotion-beat.generate', chapterId))
+  const aiConfig = useAIConfigStore(state => state.config)
+  const [generating, setGenerating] = useState(false)
+  const [generationError, setGenerationError] = useState('')
+  const [candidateRunId, setCandidateRunId] = useState<number | null>(null)
+  const [candidate, setCandidate] = useState<EmotionBeatCandidateV1 | null>(null)
+  const [candidateAction, setCandidateAction] = useState<'accept' | 'reject' | null>(null)
 
   useEffect(() => { loadAll(projectId) }, [projectId, loadAll])
 
   const card = getByChapter(chapterId)
 
-  const handleGenerate = async () => {
-    try {
-      const messages = buildEmotionBeatPrompt(
-        chapterTitle, chapterSummary, worldContext, characterContext, prevChapterEnding,
-      )
-      console.log('[EmotionBeat] 开始生成节拍卡:', chapterTitle)
-      const raw = await ai.start(messages, undefined, { category: 'emotion.beat', projectId })
-      const { overallArc, beats, error } = parseEmotionBeats(raw)
-      if (error) console.warn('[EmotionBeat] 解析警告:', error)
-      if (beats.length > 0) {
-        await saveCard({
-          projectId,
-          chapterId,
-          chapterTitle,
-          overallArc,
-          beats,
-          source: 'ai',
-        })
-        console.log(`[EmotionBeat] 节拍卡已保存: ${beats.length} 个节拍`)
+  useEffect(() => {
+    let active = true
+    setCandidateRunId(null)
+    setCandidate(null)
+    setCandidateAction(null)
+    void resolveScopeLike(projectId)
+      .then(scope => readPendingEmotionBeatCandidateV1({ scope, chapterId, worldGroupId }))
+      .then(recovered => {
+        if (!active || !recovered) return
+        setCandidateRunId(recovered.snapshot.run.id)
+        setCandidate(recovered.candidate)
         setExpanded(true)
-      }
-      ai.reset()
+      })
+      .catch(error => { if (active) setGenerationError(error instanceof Error ? error.message : '候选恢复失败') })
+    return () => { active = false }
+  }, [chapterId, projectId, worldGroupId])
+
+  const handleGenerate = async () => {
+    setExpanded(true)
+    setGenerating(true)
+    setGenerationError('')
+    try {
+      const scope = await resolveScopeLike(projectId)
+      const generated = await generateEmotionBeatCandidateV1({
+        scope, chapterId, worldGroupId, aiConfig,
+      })
+      setCandidateRunId(generated.snapshot.run.id)
+      setCandidate(generated.candidate)
+      setExpanded(true)
     } catch (err) {
-      console.error('[EmotionBeat] 生成失败:', err)
+      setGenerationError(err instanceof Error ? err.message : '情感节拍生成失败')
+    } finally {
+      setGenerating(false)
     }
+  }
+
+  const handleAcceptCandidate = async () => {
+    if (candidateRunId == null || candidateAction) return
+    setCandidateAction('accept')
+    try {
+      const scope = await resolveScopeLike(projectId)
+      await adoptEmotionBeatCandidateV1({ scope, runId: candidateRunId })
+      await loadAll(scope)
+      setCandidate(null)
+      setCandidateRunId(null)
+      setGenerationError('')
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : '情感节拍采纳失败')
+    } finally {
+      setCandidateAction(null)
+    }
+  }
+
+  const handleRejectCandidate = async () => {
+    if (candidateAction) return
+    setCandidateAction('reject')
+    if (candidateRunId != null) {
+      try {
+        await rejectEmotionBeatCandidateV1({ scope: await resolveScopeLike(projectId), runId: candidateRunId })
+      } catch (error) {
+        setGenerationError(error instanceof Error ? error.message : '情感节拍拒绝失败')
+        setCandidateAction(null)
+        return
+      }
+    }
+    setCandidate(null)
+    setCandidateRunId(null)
+    setCandidateAction(null)
   }
 
   const handleStartEdit = () => {
@@ -153,11 +203,11 @@ export default function EmotionBeatCard({
       <div className="mb-3 flex items-center gap-2">
         <button
           onClick={() => card ? setExpanded(true) : handleGenerate()}
-          disabled={ai.isStreaming}
+          disabled={generating || candidateRunId != null}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors bg-pink-500/10 text-pink-400 hover:bg-pink-500/20 disabled:opacity-50"
         >
           <Heart className="w-3.5 h-3.5" />
-          {ai.isStreaming ? '生成中...' : card ? `情感节拍（${card.beats.length}拍）` : '生成情感节拍'}
+          {generating ? '生成中...' : card ? `情感节拍（${card.beats.length}拍）` : '生成情感节拍'}
         </button>
         {card && (
           <span className="text-[10px] text-text-muted">{card.overallArc.slice(0, 40)}{card.overallArc.length > 40 ? '...' : ''}</span>
@@ -227,7 +277,7 @@ export default function EmotionBeatCard({
           {card && <span className="text-[10px] text-text-muted">（{card.beats.length}拍 · {card.source === 'ai' ? 'AI生成' : '手动'}）</span>}
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={handleGenerate} disabled={ai.isStreaming}
+          <button onClick={handleGenerate} disabled={generating || candidateRunId != null}
             title="重新生成"
             className="p-1 text-text-muted hover:text-accent transition-colors disabled:opacity-50">
             <RotateCcw className="w-3.5 h-3.5" />
@@ -248,6 +298,36 @@ export default function EmotionBeatCard({
           </button>
         </div>
       </div>
+
+      {generationError && <p className="mb-2 text-xs text-error">{generationError}</p>}
+
+      {candidate && (
+        <div className="mb-3 rounded-lg border border-pink-500/30 bg-pink-500/5 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold text-pink-300">AI 候选 · 尚未写入正式节拍卡</div>
+              <p className="mt-1 text-xs text-text-secondary">{candidate.overallArc}</p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <button disabled={candidateAction != null} onClick={() => { void handleRejectCandidate() }} className="px-2 py-1 text-xs text-text-muted hover:text-text-primary disabled:opacity-50">
+                {candidateAction === 'reject' ? '拒绝中…' : '拒绝'}
+              </button>
+              <button disabled={candidateAction != null} onClick={() => { void handleAcceptCandidate() }} className="rounded bg-accent px-2 py-1 text-xs text-white hover:bg-accent-hover disabled:opacity-50">
+                {candidateAction === 'accept' ? '写入中…' : '确认写入'}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            {candidate.beats.map((beat, index) => (
+              <div key={`${beat.label}-${index}`} className="text-xs text-text-secondary">
+                <span className="font-medium text-text-primary">{index + 1}. {beat.label}</span>
+                <span className="ml-2 text-pink-300">{beat.emotionTone}</span>
+                <span className="ml-2">{beat.sceneGoal}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {card?.overallArc && (
         <p className="text-xs text-text-secondary mb-2 italic">{card.overallArc}</p>
@@ -278,18 +358,10 @@ export default function EmotionBeatCard({
         </div>
       )}
 
-      {ai.isStreaming && (
+      {generating && (
         <p className="text-xs text-text-muted mt-2 animate-pulse">
           <Sparkles className="w-3 h-3 inline mr-1" />正在生成情感节拍...
-          {ai.output.length > 0 && (
-            <span className="ml-1">≈ ~{Math.round(ai.output.length * 1.5).toLocaleString()} tokens</span>
-          )}
         </p>
-      )}
-      {ai.tokenUsage && !ai.isStreaming && (
-        <div className="mt-1 text-[10px] text-text-muted">
-          Token: ↑{ai.tokenUsage.inputTokens.toLocaleString()} ↓{ai.tokenUsage.outputTokens.toLocaleString()}
-        </div>
       )}
     </div>
   )

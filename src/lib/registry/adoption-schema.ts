@@ -73,6 +73,15 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
     ],
   },
   {
+    target: 'emotionBeatCards',
+    identity: { kind: 'composite', fields: ['chapterId'] },
+    duplicatePolicy: 'update',
+    required: ['chapterId', 'chapterTitle', 'overallArc', 'beats', 'source'],
+    autoStamps: ['projectId', 'createdAt', 'updatedAt'],
+    ownerFrom: 'work',
+    fkChecks: [{ field: 'chapterId', target: 'chapters' }],
+  },
+  {
     target: 'storyArcs',
     identity: 'name',
     duplicatePolicy: 'merge',

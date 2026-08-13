@@ -152,6 +152,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `cultivationProgress` | `characterId` `characterName` `cultivationSystemId` `cultivationSystemName` `sourceChapterId` `sourceChapterTitle` `sourceOffset` `sourceQuote` `stageId` `stageName` `status` `transition` `trigger` `worldGroupId` |
 | `cultivationSystems` | `description` `name` `stages` `worldGroupId` |
 | `detailedOutlines` | `appearingCharacterIds` `emotionArc` `endingCliffhanger` `foreshadowIds` `lastUsedSummary` `openingHook` `outlineNodeId` `prohibitions` `sceneLocation` `scenes` |
+| `emotionBeatCards` | `beats` `chapterId` `chapterTitle` `overallArc` `source` |
 | `foreshadows` | `description` `echoChapterIds` `expectedResolveChapterId` `importance` `name` `notes` `plantChapterId` `resolveChapterId` `status` `timelinePosition` `type` `urgency` |
 | `historicalKeywords` | `aiBrainstorm` `aiConsult` |
 | `historicalTimelineEvents` | `aiBrainstorm` `aiConsult` |
@@ -214,7 +215,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `cultivation.progress` | `src/components/cultivation/CultivationProgressPanel.tsx:143` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
 | `detail.scene` | `src/lib/ai/batch-detail-runner.ts:193` |
-| `emotion.beat` | `src/components/editor/EmotionBeatCard.tsx:66` |
+| `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:78` |
 | `eval.h17.generation` | `src/components/settings/HarnessEvalPanel.tsx:79` |
 | `eval.h4.verifier` | `src/components/settings/HarnessEvalPanel.tsx:108` |
@@ -275,4 +276,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `55f0b9b`
+生成时间基准:commit `42216d1`

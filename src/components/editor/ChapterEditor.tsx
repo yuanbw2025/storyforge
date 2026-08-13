@@ -2937,13 +2937,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           projectId={project.id!}
           chapterId={currentChapter.id}
           chapterTitle={outlineNode.title || currentChapter.title}
-          chapterSummary={outlineNode.summary || ''}
-          worldContext={worldCtx}
-          characterContext={charCtx}
-          prevChapterEnding={(() => {
-            const prev = findPreviousCanonicalChapter(nodes, chapters, currentChapter)
-            return htmlToPlainText(prev?.content || '').slice(-500)
-          })()}
+          worldGroupId={chapterWorldGroupId ?? null}
         />
       )}
 

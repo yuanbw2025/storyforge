@@ -290,6 +290,13 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   arr('detailedOutlines', 'prohibitions'),
   longtext('detailedOutlines', 'lastUsedSummary'),
 
+  // AI 情感节拍候选确认后经 adopt() 定点更新当前章节卡。
+  num('emotionBeatCards', 'chapterId'),
+  text('emotionBeatCards', 'chapterTitle'),
+  longtext('emotionBeatCards', 'overallArc'),
+  json('emotionBeatCards', 'beats'),
+  enumeration('emotionBeatCards', 'source', ['ai', 'manual']),
+
   // foreshadows / story arcs
   text('foreshadows', 'name', ['伏笔名']),
   enumeration('foreshadows', 'type', ['chekhov', 'prophecy', 'symbol', 'character', 'dialogue', 'environment', 'timeline', 'red-herring', 'parallel', 'callback'], foreshadowTypeAliases),

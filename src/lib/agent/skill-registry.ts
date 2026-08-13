@@ -39,6 +39,7 @@ export type AgentSkillExecutionModeV1 =
   | 'details'
   | 'generate'
   | 'continue'
+  | 'emotion-beats'
   | 'review'
   | 'revise'
   | 'organize'
@@ -337,6 +338,16 @@ const PROSE_REVIEW_CONTEXT_SOURCE_KEYS = [
   'currentFacts',
   'canonAssertions',
   'heldItems',
+] as const
+
+const PROSE_EMOTION_BEAT_CONTEXT_SOURCE_KEYS = [
+  'chapterOutline',
+  'detailedOutline',
+  'previousChapterEnding',
+  'worldview',
+  'storyCore',
+  'characters',
+  'creativeRules',
 ] as const
 
 export const PROSE_ORGANIZATION_CONTEXT_SOURCE_KEYS = [
@@ -638,6 +649,24 @@ const PROSE_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+const PROSE_EMOTION_BEAT_INPUT_POLICY = {
+  sourceKeys: ['chapterOutline', 'detailedOutline', 'storyCore', 'characters'],
+  states: {
+    empty: {
+      handling: 'require-upstream',
+      instruction: '缺少当前章纲时不得规划情感节拍，先完成或确认该章标题与摘要。',
+    },
+    partial: {
+      handling: 'reference-and-create',
+      instruction: '以现有章纲和已填写设定为硬边界规划节拍，未规定细节不得冒充已确认剧情。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格落实章纲、细纲、故事核心与角色约束，让 3–6 个节拍形成可执行的情感递进或反转。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
 const PROSE_POST_ADOPTION_INPUT_POLICY = {
   sourceKeys: ['chapterContent'],
   states: {
@@ -808,6 +837,12 @@ const PROSE_REVIEW_COMPRESSION_POLICY = compressionPolicy([
   'storyCore',
   'characters',
   'storyArcs',
+])
+const PROSE_EMOTION_BEAT_COMPRESSION_POLICY = compressionPolicy([
+  'detailedOutline',
+  'worldview',
+  'storyCore',
+  'characters',
 ])
 const PROSE_ORGANIZATION_COMPRESSION_POLICY = compressionPolicy([
   'chapterOutline',
@@ -1331,6 +1366,29 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'prose.emotion-beats',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '章节情感节拍规划',
+    owner: 'prose-agent',
+    promptVersion: 'prose-emotion-beats-v1',
+    executionMode: 'emotion-beats',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_EMOTION_BEAT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_EMOTION_BEAT_INPUT_POLICY,
+    contextCompression: PROSE_EMOTION_BEAT_COMPRESSION_POLICY,
+    maxOutputTokens: 3_000,
+    writeTargets: [{
+      table: 'emotionBeatCards',
+      fields: ['chapterId', 'chapterTitle', 'overallArc', 'beats', 'source'],
+    }],
+    lastVerifiedAt: '2026-08-13',
+    regressionTests: ['R-HARNESS61-emotion-beat-durable'],
+  },
+  {
+    version: 1,
     id: 'prose.review',
     agentId: 'prose',
     defaultForAgent: false,
@@ -1641,7 +1699,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
-    prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory', 'consistency']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'review', 'revise', 'organize', 'memory', 'consistency']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

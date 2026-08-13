@@ -791,12 +791,12 @@
 - **提示词**：`summary`
 - **写**：`chapters.summary（覆盖）`
 
-#### 动作⑨：情感节拍提取
+#### 动作⑨：情感节拍规划
 - **触发**：🔘 手动（EmotionBeatCard）
-- **读**：`chapters[当前].title / summary / content` + `worldCtx / charCtx` + `chapters[上一章].正文末尾`
-- **提示词**：`emotion-beat`
-- **解析**：`parseEmotionBeats`
-- **写**：`emotionBeatCards`（关联当前章节）
+- **读**：只经 Context Gateway 的 `chapterOutline / detailedOutline / previousChapterEnding / worldview / storyCore / characters / creativeRules`
+- **Skill**：`prose.emotion-beats`，提示词执行版本 `prose-emotion-beats-v1`
+- **解析**：严格 exact-key JSON；整体弧线 + 3–6 个唯一节拍，每拍五字段均非空
+- **写**：模型输出先持久化为 durable 候选，确认前不写业务表；作者确认后才经 `adopt(emotionBeatCards)` 写入当前章节卡并签发 terminal receipt
 
 #### 动作⑩：质量审校（ReviewPanel）
 - **触发**：🔘 手动
@@ -1153,7 +1153,7 @@
 - 物品流水提取（§4.10 ①）
 - 故事年表提取（§4.11 ①）
 - 关系网建议（§3.2 ①）
-- 情感节拍提取（§4.5 ⑨）
+- 情感节拍规划（§4.5 ⑨）
 - 章节摘要生成（§4.5 ⑧）
 
 ---
@@ -1180,7 +1180,7 @@
 
 ### `chapters.content`（章节正文）
 - **被写入**：章节正文 AI 生成/续写（§4.5①②）、选区润色/扩写/去 AI（§4.5③④⑤）、自动保存、导入正文
-- **被读取**：状态提取、物品提取、年表提取、关系提取、摘要生成、情感节拍、审校、追读力、反 AI 检测、上一章正文末尾（下章生成时）
+- **被读取**：状态提取、物品提取、年表提取、关系提取、摘要生成、审校、追读力、反 AI 检测、上一章正文末尾（下章生成和情感节拍规划时）
 
 ### `creativeRules.atmosphere`（基调）
 - **被写入**：创作规则 AI 生成（§4.1）

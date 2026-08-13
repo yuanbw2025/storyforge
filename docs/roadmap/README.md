@@ -58,7 +58,19 @@
 | 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
 | 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
 | 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
-| 验收 | 已冻结 29 个文件 / 44 个静态构造点：7 个 governed、4 个 auxiliary、18 个 migration。高风险物品/年表“先删后写”、关系逐条写、局部手稿替换、参考实体合并没有冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 3 项回归通过。 |
+| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60/61 分别收口角色关系与情感节拍后，当前为 27 个文件 / 42 个静态构造点：7 个 governed、4 个 auxiliary、16 个 migration。高风险物品/年表“先删后写”、局部手稿替换、参考实体合并没有冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 3 项回归通过。 |
+
+### HARNESS-61 完成卡：情感节拍 durable 候选与采纳
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-61` 治理小功能。作者在正文前生成情感节拍时，模型输出必须先成为可恢复候选，确认前不能写正式节拍卡。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 剩余入口清零；新增 `prose.emotion-beats` Skill，复用 Context Gateway、durable Run/checkpoint、`adopt()` 与 terminal receipt，不引入平行 Harness。 |
+| 读 / 写 | 只经 `chapterOutline / detailedOutline / previousChapterEnding / worldview / storyCore / characters / creativeRules` 登记源读取。写入闭集为 `emotionBeatCards.chapterId/chapterTitle/overallArc/beats/source`，只在作者确认后经 `adopt(emotionBeatCards)` 执行。 |
+| 硬验证 | 严格 exact-key JSON，3–6 个唯一命名节拍，五字段均非空；候选绑定 Work/World/章节/章纲、Context Manifest、实际输入 hash、现有正式卡 baseline 与 candidate hash。上下文或正式卡改变均 fail-closed。 |
+| 生命周期 | `emotionBeatCards` 沿用 `PROJECT_TABLES` 的 Work 归属、章节级联删、导出/导入与 chapter ID 重映射。含物理 ID 的未完成候选 `portable:false`，导入后取消；终验后正式卡变化会撤销旧 receipt。 |
+| UI / 回滚 | `EmotionBeatCard` 展示“尚未写入”候选与确认/拒绝；人工新建、编辑、删除保留。旧 `useAIStream` 直调、组件手拼上下文、宽松回退 parser 与生成后立即 `saveCard` 旁路已下线。 |
+| 验收 | `R-HARNESS61-emotion-beat-durable` 14 项覆盖真实上下文、零写候选、刷新恢复、严格 parser、stale/拒绝、8 个采纳中断点、写入前二次 CAS、写入后上游 stale 拒绝终验、adoption 后终验前正式卡漂移暂停、终验后卡或上游改变撤销 receipt、导入取消、作用域及旧旁路下线。H59 census 同步收缩为 27 文件 / 42 入口，16 migration。 |
 
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 

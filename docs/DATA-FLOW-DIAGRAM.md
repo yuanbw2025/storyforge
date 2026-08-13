@@ -447,7 +447,7 @@ flowchart LR
         IEX["inventory-extract-adapter<br/>buildInventoryExtractPrompt<br/>parseInventoryEvents"]
         TEX["story-timeline-adapter<br/>buildStoryTimelinePrompt<br/>parseStoryEvents"]
         REX["relation-extractor<br/>parseRelationOutput<br/>+ matchRelations 名→id"]
-        EBA["emotion-beat-adapter<br/>buildEmotionBeatPrompt<br/>parseEmotionBeats"]
+        EBA["prose.emotion-beats durable Skill<br/>Context Gateway + strict parser"]
         FCO["foreshadow-adapter<br/>parseForeshadowStructured"]
     end
 
@@ -465,7 +465,8 @@ flowchart LR
         IL["itemLedger<br/>重新提取前 deleteByChapter<br/>防重复累加"]
         ST_T["storyTimelineEvents<br/>重新提取前 deleteByChapter"]
         CR["characterRelations"]
-        EB["emotionBeatCards"]
+        EBC["durable 候选<br/>确认前零业务写入"]
+        EB["emotionBeatCards<br/>adopt + terminal receipt"]
         FO["foreshadows"]
     end
 
@@ -487,7 +488,8 @@ flowchart LR
     IEX ==parseInventoryEvents==> IL
     TEX ==parseStoryEvents==> ST_T
     REX ==matchRelations==> CR
-    EBA ==parseEmotionBeats==> EB
+    EBA ==strict candidate==> EBC
+    EBC ==作者确认 + adopt==> EB
     FCO ==parseForeshadowStructured==> FO
 
     ST -.按需召回 buildSelectiveStateContext.-> RECALL["写章节时注入<br/>三层记忆 Episodic 层"]
@@ -497,6 +499,7 @@ flowchart LR
     classDef trig fill:#ca8a04,stroke:#a16207,color:#fff;
     classDef src fill:#ea580c,stroke:#c2410c,color:#fff;
     class ST,IL,ST_T,CR,EB,FO table
+    class EBC trig
     class SEX,IEX,TEX,REX,EBA,FCO adp
     class AUTO,MANU_S,MANU_I,MANU_T,MANU_R,MANU_E trig
     class CHAPTERS src
@@ -875,7 +878,7 @@ flowchart TB
         P17["InspirationPanel"]
         P18["WorldGroup Detail/Overview"]
         P19["ReviewPanel"]
-        P20["EmotionBeatCard"]
+        P20["EmotionBeatCard<br/>durable 候选确认"]
         P21["FloatingToolbar 选区润色"]
         P22["AIFieldCard 通用"]
         P23["InventoryPanel 一键提取"]
@@ -890,6 +893,8 @@ flowchart TB
     HOOK["🪝 useAIStream Hook<br/>start messages overrideConfig meta<br/>meta category projectId<br/>tokenUsage 输出"]
 
     PANELS --> HOOK
+    PANELS ~~~ P20
+    P20 --> AICTX
 
     subgraph CLIENT["🔌 lib/ai/client.ts 唯一出口"]
         STREAM["streamChat msgs config signal result meta<br/>SSE 流式 解析 DONE + usage"]
