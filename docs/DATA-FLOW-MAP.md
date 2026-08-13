@@ -72,7 +72,7 @@
 | **设定词条** codex | 分类(domain/builtInKey/fieldSchema) + 词条(name/summary/description/fields/refs，7 内置类) | （作者填 / 词条内 ref 关联） | → codexEntries |
 | **道具系统** itemSystems | overview + items(JSON) | （作者填） | → itemSystem ⚠️ 将被词条 artifact 取代(35-b) |
 | **角色** characters | `name/role/alignment/shortDescription/appearance/personality/background/motivation/abilities/relationships/arc`、章节出场范围、世界归属 | `worldContext`(★ 已接词条) + 已有角色名单 | 角色 JSON → characters 表 |
-| **重要地点** importantLocations | `name/tags/description/significance/parentId`(树状) | （作者填） | → importantLocations |
+| **重要地点** importantLocations | `name/tags/description/significance/parentId`(树状) | 作者填；AI 只经 `chapterContent / locations` 登记源从当前 Work 已写正文生成 durable 分块候选 | 作者确认 → `adopt(importantLocations)` |
 | **历史年表** histories/historical* | 概述 + 时间线事件 + 关键词（按世界标签） | （作者填，与世界规则「事件」联动） | → historical* |
 | **世界地图** worldNodes | 节点/区域/连线、空间实体/关系、比例尺 | 当前世界观 + `codex` + `locations` 登记上下文 | → `worldNodes.mapConfigJSON` |
 | **故事线** storyArcs | `name/type(main/sub)/stages`(起承转合) | `worldContext`(★ 已接词条) + `storyCore` + 大纲摘要 | → storyArc |

@@ -226,7 +226,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `history.consult` | `src/components/history/useHistoryAI.ts:118` |
 | `history.storm` | `src/components/history/useHistoryAI.ts:120` |
 | `inventory.extract` | `src/components/items/InventoryPanel.tsx:172` |
-| `location.extract` | `src/components/location/LocationPanel.tsx:106` |
+| `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:319`<br/>`src/lib/node-flow/executor.ts:207` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:188`<br/>`src/lib/outline/generation-node.ts:59` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:55` |
@@ -276,4 +276,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `42216d1`
+生成时间基准:commit `b8ae29d`

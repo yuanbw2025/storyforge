@@ -28,6 +28,7 @@ export type AgentSkillExecutionModeV1 =
   | 'create'
   | 'supplement'
   | 'relationships'
+  | 'locations'
   | 'reverse'
   | 'auto'
   | 'story-arcs'
@@ -198,6 +199,17 @@ const CHARACTER_RELATIONSHIP_COMPRESSION_POLICY: AgentSkillContextCompressionPol
   maxFullTextFallbackTokens: 12_000,
   maxFullTextBudgetScale: 1.5,
 }
+
+const WORLD_LOCATION_EXTRACTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['chapterContent'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '没有已写正文时不得提取重要地点。' },
+    partial: { handling: 'grounded-transform', instruction: '只从当前已写正文明确出现的地点中提取候选。' },
+    complete: { handling: 'grounded-transform', instruction: '综合全部已写章节去重，只保留有明确剧情作用的地点。' },
+  },
+}
+
+const WORLD_LOCATION_EXTRACTION_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
   'projectStatus',
@@ -1028,6 +1040,29 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'world-origin.locations',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: '已写正文重要地点提取',
+    owner: 'world-foundation-agent',
+    promptVersion: 'location-extract-v1',
+    executionMode: 'locations',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: ['chapterContent', 'locations'],
+    optionalContextSourceKeys: [],
+    inputPolicy: WORLD_LOCATION_EXTRACTION_INPUT_POLICY,
+    contextCompression: WORLD_LOCATION_EXTRACTION_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{
+      table: 'importantLocations',
+      fields: ['name', 'tags', 'description', 'significance', 'parentId', 'sortOrder'],
+    }],
+    lastVerifiedAt: '2026-08-13',
+    regressionTests: ['R-HARNESS62-location-extraction-durable'],
+  },
+  {
+    version: 1,
     id: 'character.supplement',
     agentId: 'character',
     defaultForAgent: false,
@@ -1695,7 +1730,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules', 'review']),
+    'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules', 'locations', 'review']),
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),

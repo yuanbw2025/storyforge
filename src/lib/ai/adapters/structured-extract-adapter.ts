@@ -66,23 +66,83 @@ export function parseCodexEntries(raw: string, allowedFieldKeys: string[]): Extr
   }).filter(item => item.name)
 }
 
-export function buildLocationExtractPrompt(chapterText: string, existingNames: string[]): ChatMessage[] {
+/** HARNESS-62: existing location text must come from the Context Gateway. */
+export function buildLocationExtractPromptFromContext(
+  chapterText: string,
+  existingLocationContext: string,
+  discoveredNames: string[],
+): ChatMessage[] {
   const template = usePromptStore.getState().getActive('location.extract')
   return renderPrompt(template, {
     sourceText: chapterText,
-    existingEntries: existingNames.join('、') || '无',
+    existingEntries: [
+      existingLocationContext || '【已有重要地点】\n无',
+      discoveredNames.length ? `【本轮前置分块已发现】\n${discoveredNames.join('、')}` : '',
+    ].filter(Boolean).join('\n\n'),
     allowedTags: ALL_LOCATION_TAGS.join('、'),
   }).messages
 }
 
+export function buildLocationExtractPromptTemplateProbeV1(): ChatMessage[] {
+  return buildLocationExtractPromptFromContext('__CHAPTER_SOURCE__', '__LOCATION_CONTEXT__', ['__DISCOVERED__'])
+}
+
+export function readLocationExtractPromptTemplateSnapshotV1() {
+  const template = usePromptStore.getState().getActive('location.extract')
+  return {
+    moduleKey: template.moduleKey,
+    systemPrompt: template.systemPrompt,
+    userPromptTemplate: template.userPromptTemplate,
+    variables: template.variables,
+    modelOverride: template.modelOverride ?? null,
+    examples: template.examples ?? null,
+    parameters: template.parameters ?? null,
+  }
+}
+
 export function parseLocations(raw: string): ExtractedLocation[] {
-  const allowed = new Set<string>(ALL_LOCATION_TAGS)
-  return parseJsonArray<Record<string, unknown>>(raw).map(item => ({
-    name: String(item.name ?? '').trim(),
-    tags: (Array.isArray(item.tags) ? item.tags.map(String).filter(tag => allowed.has(tag)) : []) as LocationTag[],
-    description: String(item.description ?? '').trim(),
-    significance: String(item.significance ?? '').trim(),
-  })).filter(item => item.name)
+  let source = raw.trim()
+  const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)
+  if (fenced) source = fenced[1]
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(source)
+  } catch {
+    throw new Error('地点提取输出不是有效 JSON。')
+  }
+  if (!Array.isArray(parsed)) throw new Error('地点提取输出必须是 JSON 数组。')
+  const allowedTags = new Set<string>(ALL_LOCATION_TAGS)
+  const tagOrder = new Map<string, number>(ALL_LOCATION_TAGS.map((tag, index) => [tag, index]))
+  return parsed.map((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`地点候选 ${index + 1} 不是对象。`)
+    }
+    const row = value as Record<string, unknown>
+    const keys = ['name', 'tags', 'description', 'significance'] as const
+    if (Object.keys(row).length !== keys.length || Object.keys(row).some(key => !keys.includes(key as typeof keys[number]))) {
+      throw new Error(`地点候选 ${index + 1} 字段不在允许闭集。`)
+    }
+    if (
+      typeof row.name !== 'string' || !row.name.trim() || row.name.trim().length > 120
+      || typeof row.description !== 'string' || row.description.trim().length > 2_000
+      || typeof row.significance !== 'string' || row.significance.trim().length > 2_000
+      || (!row.description.trim() && !row.significance.trim())
+      || !Array.isArray(row.tags)
+    ) throw new Error(`地点候选 ${index + 1} 字段类型、长度或必需内容无效。`)
+    const tags = row.tags.map(tag => {
+      if (typeof tag !== 'string' || !allowedTags.has(tag)) {
+        throw new Error(`地点候选 ${index + 1} 包含未登记标签。`)
+      }
+      return tag as LocationTag
+    })
+    if (new Set(tags).size !== tags.length) throw new Error(`地点候选 ${index + 1} 标签重复。`)
+    return {
+      name: row.name.trim(),
+      tags: [...tags].sort((left, right) => tagOrder.get(left)! - tagOrder.get(right)!),
+      description: row.description.trim(),
+      significance: row.significance.trim(),
+    }
+  })
 }
 
 export { splitExtractionText }

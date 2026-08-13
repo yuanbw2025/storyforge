@@ -13,7 +13,6 @@
     { "file": "src/components/geography/WorldMapPanel.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "模型地图配置解析成功后直接持久化世界节点。" },
     { "file": "src/components/history/HistoryPanel.tsx", "calls": 2, "status": "migration", "nextUnit": "HARNESS-60", "reason": "历史咨询/头脑风暴的接受路径仍由局部控制器写回。" },
     { "file": "src/components/items/InventoryPanel.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "批量提取会在逐章模型调用后替换正式物品流水，存在失败窗口。" },
-    { "file": "src/components/location/LocationPanel.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "地点候选显式确认后 adopt，但缺少 durable candidate/receipt。" },
     { "file": "src/components/outline/ChapterOutlineWorkshop.tsx", "calls": 1, "status": "governed", "mechanism": "generation-node", "reason": "五阶段章纲工坊通过 GenerationNode 和既有确认式采纳。" },
     { "file": "src/components/outline/OutlinePanel.tsx", "calls": 1, "status": "governed", "mechanism": "durable-run", "reason": "卷纲/章纲主路径已接 durable adapter。" },
     { "file": "src/components/outline/useDetailedOutlineGenerationController.ts", "calls": 2, "status": "governed", "mechanism": "durable-run", "reason": "单章细纲共用 HARNESS-37 durable 控制器。" },

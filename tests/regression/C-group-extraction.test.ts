@@ -42,13 +42,19 @@ describe('C group: structured extraction foundation', () => {
     }])
   })
 
-  it('location parser only accepts registered location tags', () => {
-    expect(parseLocations(JSON.stringify([{
+  it('location parser rejects unregistered tags instead of silently changing model output', () => {
+    expect(() => parseLocations(JSON.stringify([{
       name: '黑潮港',
       tags: ['港口', '不存在标签'],
       description: '终年黑雾',
       significance: '主角第一次出海',
-    }]))[0].tags).toEqual(['港口'])
+    }]))).toThrow('未登记标签')
+    expect(parseLocations(JSON.stringify([{
+      name: '黑潮港',
+      tags: ['港口', '海湾'],
+      description: '终年黑雾',
+      significance: '主角第一次出海',
+    }]))[0].tags).toEqual(['海湾', '港口'])
   })
 
   it('inventory prompt receives the full chunk and known canonical names', () => {

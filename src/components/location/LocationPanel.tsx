@@ -5,25 +5,27 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Plus, Trash2, ChevronDown, ChevronRight, MapPin,
-  GitBranch, List, Sparkles, Loader2,
+  GitBranch, List, Sparkles, Loader2, RotateCcw, AlertTriangle,
 } from 'lucide-react'
 import { useLocationStore } from '../../stores/location'
 import type { Project, ImportantLocation, LocationTag } from '../../lib/types'
 import { TAG_EMOJI } from '../../lib/types/location'
 import LocationTagPicker from './LocationTagPicker'
 import LocationTreeView from './LocationTreeView'
-import { useChapterStore } from '../../stores/chapter'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { chat, resolveRequestConfig } from '../../lib/ai/client'
+import { resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
-import {
-  buildLocationExtractPrompt, parseLocations, splitExtractionText, type ExtractedLocation,
-} from '../../lib/ai/adapters/structured-extract-adapter'
-import { htmlToPlainText } from '../../lib/utils/html'
-import { uniqueBy } from '../../lib/ai/structured-extraction'
-import { adopt } from '../../lib/registry/adopt'
+import type { ExtractedLocation } from '../../lib/ai/adapters/structured-extract-adapter'
 import ExtractionReviewPanel from '../shared/ExtractionReviewPanel'
-import { assembleContext } from '../../lib/registry/assemble-context'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
+import {
+  abandonLocationExtractionV1,
+  adoptLocationExtractionCandidateV1,
+  generateLocationExtractionCandidateV1,
+  readPendingLocationExtractionCandidateV1,
+  readRecoverableLocationExtractionV1,
+  resumeLocationExtractionCandidateV1,
+} from '../../lib/agent/run/location-extraction-durable'
 
 interface Props {
   project: Project
@@ -35,7 +37,6 @@ export default function LocationPanel({ project }: Props) {
     addLocation, updateLocation, deleteLocation,
     getTree,
   } = useLocationStore()
-  const { chapters, loadAll: loadChapters } = useChapterStore()
   const aiConfig = useAIConfigStore(s => s.config)
 
   const [view, setView] = useState<'tree' | 'list'>('tree')
@@ -43,13 +44,53 @@ export default function LocationPanel({ project }: Props) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState<string | null>(null)
+  const [extractRunId, setExtractRunId] = useState<number | null>(null)
+  const [candidateAction, setCandidateAction] = useState<'adopt' | 'abandon' | null>(null)
+  const [recoverable, setRecoverable] = useState<{
+    runId: number
+    nextCallIndex: number
+    totalCalls: number
+    safeToResume: boolean
+  } | null>(null)
   const [candidates, setCandidates] = useState<ExtractedLocation[]>([])
   const [selectedCandidates, setSelectedCandidates] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     loadAll(project.id!)
-    loadChapters(project.id!)
-  }, [project.id, loadAll, loadChapters])
+  }, [project.id, loadAll])
+
+  // HARNESS-62: candidate and per-chunk progress survive component/browser interruption.
+  useEffect(() => {
+    let active = true
+    setExtractRunId(null)
+    setRecoverable(null)
+    setCandidates([])
+    setSelectedCandidates(new Set())
+    void resolveScopeLike(project.id!).then(async scope => {
+      const pending = await readPendingLocationExtractionCandidateV1({ scope })
+      if (pending) return { pending, recoverable: null }
+      return { pending: null, recoverable: await readRecoverableLocationExtractionV1({ scope }) }
+    }).then(result => {
+      if (!active) return
+      if (result.pending) {
+        setExtractRunId(result.pending.snapshot.run.id)
+        setCandidates(result.pending.candidate.locations)
+        setSelectedCandidates(new Set(
+          result.pending.selectedIndexes ?? result.pending.candidate.locations.map((_, index) => index),
+        ))
+      } else if (result.recoverable) {
+        setRecoverable({
+          runId: result.recoverable.snapshot.run.id,
+          nextCallIndex: result.recoverable.nextCallIndex,
+          totalCalls: result.recoverable.totalCalls,
+          safeToResume: result.recoverable.safeToResume,
+        })
+      }
+    }).catch(error => {
+      if (active) setExtractError(error instanceof Error ? error.message : '地点提取运行恢复失败')
+    })
+    return () => { active = false }
+  }, [project.id])
 
   const tree = getTree()
 
@@ -86,67 +127,109 @@ export default function LocationPanel({ project }: Props) {
       setExtractError(getAIConfigRequiredMessage(effectiveConfig))
       return
     }
-    const written = chapters.filter(chapter => htmlToPlainText(chapter.content || '').trim().length > 50)
-    if (written.length === 0) {
-      setExtractError('还没有已写正文的章节')
+    setExtracting(true)
+    setExtractError(null)
+    setExtractRunId(null)
+    setCandidates([])
+    try {
+      const generated = await generateLocationExtractionCandidateV1({
+        scope: await resolveScopeLike(project.id!), aiConfig,
+      })
+      setExtractRunId(generated.snapshot.run.id)
+      setRecoverable(null)
+      setCandidates(generated.candidate.locations)
+      setSelectedCandidates(new Set(generated.candidate.locations.map((_, index) => index)))
+    } catch (error) {
+      setExtractError(error instanceof Error ? error.message : '地点提取失败')
+      try {
+        const recovery = await readRecoverableLocationExtractionV1({ scope: await resolveScopeLike(project.id!) })
+        setRecoverable(recovery ? {
+          runId: recovery.snapshot.run.id,
+          nextCallIndex: recovery.nextCallIndex,
+          totalCalls: recovery.totalCalls,
+          safeToResume: recovery.safeToResume,
+        } : null)
+      } catch { /* Preserve the original model/extraction failure. */ }
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  const handleResumeExtraction = async () => {
+    if (!recoverable?.safeToResume) return
+    const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'location.extract' }).config
+    if (!isAIConfigReady(effectiveConfig)) {
+      setExtractError(getAIConfigRequiredMessage(effectiveConfig))
       return
     }
     setExtracting(true)
     setExtractError(null)
-    setCandidates([])
     try {
-      const found: ExtractedLocation[] = []
-      for (const chapter of written) {
-        const chapterSource = await assembleContext({
-          projectId: project.id!,
-          chapterId: chapter.id,
-          sourceKeys: ['chapterContent'],
-        })
-        for (const chunk of splitExtractionText(chapterSource.text)) {
-          const raw = await chat(
-            buildLocationExtractPrompt(chunk, [...locations.map(location => location.name), ...found.map(item => item.name)]),
-            aiConfig,
-            { category: 'location.extract', projectId: project.id! },
-          )
-          found.push(...parseLocations(raw))
-        }
-      }
-      const existing = new Set(locations.map(location => location.name.trim().toLocaleLowerCase()))
-      const unique = uniqueBy(
-        found.filter(item => !existing.has(item.name.toLocaleLowerCase())),
-        item => item.name.toLocaleLowerCase(),
-      )
-      setCandidates(unique)
-      setSelectedCandidates(new Set(unique.map((_, index) => index)))
+      const generated = await resumeLocationExtractionCandidateV1({
+        scope: await resolveScopeLike(project.id!), runId: recoverable.runId, aiConfig,
+      })
+      setExtractRunId(generated.snapshot.run.id)
+      setRecoverable(null)
+      setCandidates(generated.candidate.locations)
+      setSelectedCandidates(new Set(generated.candidate.locations.map((_, index) => index)))
     } catch (error) {
-      setExtractError(error instanceof Error ? error.message : '地点提取失败')
+      setExtractError(error instanceof Error ? error.message : '继续地点提取失败')
+      try {
+        const recovery = await readRecoverableLocationExtractionV1({ scope: await resolveScopeLike(project.id!) })
+        setRecoverable(recovery ? {
+          runId: recovery.snapshot.run.id,
+          nextCallIndex: recovery.nextCallIndex,
+          totalCalls: recovery.totalCalls,
+          safeToResume: recovery.safeToResume,
+        } : null)
+      } catch { /* Preserve the original resume failure. */ }
     } finally {
       setExtracting(false)
     }
   }
 
   const handleAdoptLocations = async () => {
-    const selected = candidates.filter((_, index) => selectedCandidates.has(index))
-    const result = await adopt({
-      projectId: project.id!,
-      target: 'importantLocations',
-      mode: 'add-many',
-      data: selected.map((item, index) => ({
-        name: item.name,
-        tags: item.tags,
-        description: item.description,
-        significance: item.significance,
-        parentId: null,
-        sortOrder: locations.length + index,
-      })),
-    })
-    if (!result.written.length && result.skipped.length) {
-      setExtractError(result.skipped.map(item => item.reason).join('；'))
+    if (extractRunId == null || candidateAction) return
+    setCandidateAction('adopt')
+    setExtractError(null)
+    try {
+      const scope = await resolveScopeLike(project.id!)
+      await adoptLocationExtractionCandidateV1({
+        scope, runId: extractRunId, selectedIndexes: [...selectedCandidates],
+      })
+      await loadAll(scope)
+      setCandidates([])
+      setSelectedCandidates(new Set())
+      setExtractRunId(null)
+    } catch (error) {
+      setExtractError(error instanceof Error ? error.message : '地点采纳与终验失败')
+    } finally {
+      setCandidateAction(null)
+    }
+  }
+
+  const handleAbandonExtraction = async () => {
+    const runId = extractRunId ?? recoverable?.runId
+    if (candidateAction) return
+    if (runId == null) {
+      setCandidates([])
+      setSelectedCandidates(new Set())
+      setExtractError(null)
       return
     }
-    await loadAll(project.id!)
-    setCandidates([])
-    setSelectedCandidates(new Set())
+    setCandidateAction('abandon')
+    setExtractError(null)
+    try {
+      await abandonLocationExtractionV1({ scope: await resolveScopeLike(project.id!), runId })
+      setCandidates([])
+      setSelectedCandidates(new Set())
+      setExtractRunId(null)
+      setRecoverable(null)
+    } catch (error) {
+      setExtractError(error instanceof Error ? error.message : '放弃地点提取运行失败')
+    } finally {
+      setCandidateAction(null)
+    }
   }
 
   // 递归渲染列表项
@@ -355,7 +438,7 @@ export default function LocationPanel({ project }: Props) {
           </button>
           <button
             onClick={handleExtractLocations}
-            disabled={extracting}
+            disabled={extracting || candidateAction != null || extractRunId != null || recoverable != null}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-accent/30 bg-accent/5 text-accent text-sm rounded-md hover:bg-accent/10 disabled:opacity-50 transition-colors"
           >
             {extracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -364,12 +447,53 @@ export default function LocationPanel({ project }: Props) {
         </div>
       </div>
 
-      {(extracting || extractError || candidates.length > 0) && (
+      {recoverable && (
+        <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+          <div className="flex items-start gap-2 text-sm text-text-primary">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <div>
+              <div className="font-medium">
+                {recoverable.safeToResume ? '发现未完成的地点提取' : '上次调用的模型结果无法判定'}
+              </div>
+              <p className="mt-0.5 text-xs text-text-muted">
+                {recoverable.safeToResume
+                  ? `已完成 ${recoverable.nextCallIndex}/${recoverable.totalCalls} 个分块；继续时不会重复调用已完成分块。`
+                  : '为防止重复计费或重复候选，不会自动重试；请放弃这次运行后重新提取。'}
+              </p>
+            </div>
+          </div>
+          {extractError && <p className="text-xs text-red-400">{extractError}</p>}
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={handleAbandonExtraction}
+              disabled={extracting || candidateAction != null}
+              className="px-3 py-1.5 text-xs text-text-muted hover:text-text-primary disabled:opacity-40"
+            >
+              {candidateAction === 'abandon' ? '正在放弃…' : '放弃这次运行'}
+            </button>
+            {recoverable.safeToResume && (
+              <button
+                onClick={handleResumeExtraction}
+                disabled={extracting || candidateAction != null}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-40"
+              >
+                {extracting
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <RotateCcw className="h-3.5 w-3.5" />}
+                继续提取
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(extracting || (extractError && !recoverable) || extractRunId != null || candidates.length > 0) && (
         <ExtractionReviewPanel
           title="地点候选"
           items={candidates}
           selected={selectedCandidates}
           loading={extracting}
+          busy={candidateAction != null}
           error={extractError}
           onToggle={index => setSelectedCandidates(prev => {
             const next = new Set(prev)
@@ -378,7 +502,7 @@ export default function LocationPanel({ project }: Props) {
             return next
           })}
           onConfirm={handleAdoptLocations}
-          onClose={() => { setCandidates([]); setExtractError(null) }}
+          onClose={handleAbandonExtraction}
           renderItem={item => (
             <div>
               <div className="font-medium text-sm text-text-primary">{item.name}</div>

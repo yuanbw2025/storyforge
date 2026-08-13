@@ -5,6 +5,7 @@ interface Props<T> {
   items: T[]
   selected: Set<number>
   loading?: boolean
+  busy?: boolean
   error?: string | null
   renderItem: (item: T) => React.ReactNode
   onToggle: (index: number) => void
@@ -13,7 +14,7 @@ interface Props<T> {
 }
 
 export default function ExtractionReviewPanel<T>({
-  title, items, selected, loading, error, renderItem, onToggle, onConfirm, onClose,
+  title, items, selected, loading, busy, error, renderItem, onToggle, onConfirm, onClose,
 }: Props<T>) {
   return (
     <div className="mt-3 rounded-xl border border-accent/30 bg-bg-surface p-3 space-y-3">
@@ -21,7 +22,12 @@ export default function ExtractionReviewPanel<T>({
         <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-accent" /> {title}
         </h3>
-        <button onClick={onClose} className="p-1 text-text-muted hover:text-text-primary" title="关闭">
+        <button
+          onClick={onClose}
+          disabled={busy}
+          className="p-1 text-text-muted hover:text-text-primary disabled:opacity-40"
+          title="关闭"
+        >
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -47,6 +53,7 @@ export default function ExtractionReviewPanel<T>({
                 <input
                   type="checkbox"
                   checked={selected.has(index)}
+                  disabled={busy}
                   onChange={() => onToggle(index)}
                   className="mt-0.5 accent-accent"
                 />
@@ -57,10 +64,13 @@ export default function ExtractionReviewPanel<T>({
           <div className="flex justify-end">
             <button
               onClick={onConfirm}
-              disabled={selected.size === 0}
+              disabled={selected.size === 0 || busy}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white text-xs disabled:opacity-40"
             >
-              <Check className="w-3.5 h-3.5" /> 确认写入（{selected.size}）
+              {busy
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Check className="w-3.5 h-3.5" />}
+              {busy ? '正在写入并终验…' : `确认写入（${selected.size}）`}
             </button>
           </div>
         </>

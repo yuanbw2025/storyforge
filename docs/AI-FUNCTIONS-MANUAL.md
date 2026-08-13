@@ -920,7 +920,7 @@
 |---|---|
 | `name / tags / description / significance / parentId / sortOrder` | 地点（树状） |
 
-**AI 动作**：（当前面板**无 AI 直接生成动作**，手动 CRUD）
+**AI 动作**：“AI 从正文提取”会读取当前 Work 全部已写正文和当前 World 的已有地点，以 durable 长任务逐分块提取。已完成分块有 checkpoint，刷新后从下一分块继续；模型结果不可判定时不会自动重试。全部分块完成后才显示候选，作者勾选确认后才经 `adopt(importantLocations)` 写入地点树顶层。手动 CRUD 、树层级和标签编辑保留。
 
 **作为上游被读取**：章节正文生成时被 `buildLocationContext` 注入
 
