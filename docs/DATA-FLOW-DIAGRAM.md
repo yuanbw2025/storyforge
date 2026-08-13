@@ -525,7 +525,7 @@ flowchart LR
 
     subgraph TOOLAI["🛠️ AI 工具适配器"]
         INV["inspiration-reverse<br/>parseReverseOutput<br/>parseReverseMultiWorldOutput"]
-        WGS["world-group-ai<br/>parseWorldSuggestOutput<br/>parseWorldExpandOutput"]
+        WGS["World Origin Agent<br/>world-suggest / worldview-expand<br/>strict durable candidates"]
         REFAN["reference-analysis pipeline<br/>分块分析 + 维度合并<br/>角色聚合 parseCharacterMergeOutput"]
         SCV["scene-verify-adapter<br/>无写回 纯建议"]
         CDPA["Outline Agent<br/>outline.character-driven<br/>严格候选 + durable Run"]
@@ -544,7 +544,7 @@ flowchart LR
         REV_ADV["审校建议 不写回"]
     end
 
-    BLDWV2["buildWorldContext<br/>或 buildAllWorldsOverview"]
+    BLDWV2["Context Gateway<br/>assembleContext 登记源"]
     BLDCH2["buildCharacterContext"]
     HISTC["buildHistoricalContext"]
     WRC2["buildWorldRulesContext"]
@@ -561,9 +561,9 @@ flowchart LR
     INV ==handleAdoptCharacters==> CH_OUT
     INV ==handleAdoptMultiWorld==> WG_OUT
 
-    WG_OUT ==全世界概览==> WGS
-    WGS ==建议 采纳==> WG_OUT
-    WGS ==扩写 采纳==> WV_OUT
+    WG_OUT ==worldGroups 登记源==> WGS
+    WGS ==候选 选择确认 adopt==> WG_OUT
+    WGS ==七字段候选 确认 adopt==> WV_OUT
 
     REFC --> REFAN
     REFAN ==分块分析 合并 角色聚合==> RA_OUT
@@ -656,7 +656,7 @@ flowchart TB
     subgraph CTX2["📥 按世界读取上下文"]
         BCW["buildCurrentWorldContext<br/>按 wgId 取本世界 wv/ps<br/>+ 项目级 sc + 本世界 codex"]
         BNW["buildNodeWritingContext<br/>沿父链解析所属世界<br/>未归属 走单世界路径"]
-        BAW["buildAllWorldsOverview<br/>跨世界规划 灵感反推用"]
+        BAW["worldGroups Context Source<br/>当前 World 目录<br/>由 assembleContext 统一读取"]
     end
 
     T1 --> BCW
@@ -664,7 +664,7 @@ flowchart TB
     P1 --> BCW
     T10 --> BCW
     BCW --> BNW
-    WG ==全世界摘要==> BAW
+    WG ==登记世界目录==> BAW
 
     subgraph EXP_S["📦 导出/导入"]
         EXP_OUT["exportProjectJSON<br/>worldGroups 用 _exportId index<br/>其它 worldGroupId 同协议重映射<br/>portalsJSON 引用同步 remap"]

@@ -174,6 +174,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `storyTimelineEvents` | `chapterId` `chapterTitle` `description` `importance` `order` `storyTime` `title` |
 | `storylineCrossings` | `arcIdA` `arcIdB` `chapterId` `chapterTitle` `evidenceQuote` `note` |
 | `storylineProgress` | `arcId` `currentStageId` `evidenceQuote` `involvedEntities` `lastActiveChapterId` `lastActiveChapterTitle` `progressNote` `status` |
+| `worldGroups` | `description` `entryCondition` `icon` `name` `order` `plannedChapterCount` `powerRestriction` `type` |
 | `worldNodes` | `mapConfigJSON` |
 | `worldviews` | `climateByRegion` `continentLayout` `culture` `cultureOverview` `divineDesign` `economy` `economyOverview` `factionLayout` `geography` `history` `historyLine` `internalConflicts` `itemDesign` `mountainsRivers` `naturalResourceOverview` `naturalResources` `politicsEconomyCulture` `politicsOverview` `powerHierarchy` `races` `regionDimensions` `rules` `society` `worldDimensions` `worldEvents` `worldOrigin` `worldStructure` |
 
@@ -255,7 +256,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `style.calibrate` | `src/components/style/StyleCalibrationPanel.tsx:63` |
 | `style.learn` | `src/components/style/StyleLearningPanel.tsx:125` |
 | `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:475` |
-| `world-group.suggest` | `src/components/world-group/WorldGroupOverview.tsx:57` |
+| `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:614` |
 
 ### 动态 category 调用
 
@@ -281,4 +282,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `d968a5d`
+生成时间基准:commit `97e6bc9`

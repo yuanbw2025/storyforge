@@ -18,6 +18,18 @@ export interface SuggestedWorld {
 }
 
 const VALID_TYPES: WorldGroupType[] = ['primary', 'traversal', 'instance', 'parallel', 'ascension', 'custom']
+const SUGGESTED_TYPES: WorldGroupType[] = ['traversal', 'instance', 'parallel', 'ascension', 'custom']
+
+export const WORLD_SUGGEST_FIELDS_V1 = [
+  'name',
+  'type',
+  'description',
+  'entryCondition',
+  'powerRestriction',
+  'plannedChapterCount',
+] as const
+
+export const WORLD_SUGGEST_PROMPT_VERSION_V1 = 'world-suggest-v1' as const
 
 export function buildWorldSuggestPrompt(args: {
   projectName: string
@@ -54,6 +66,70 @@ export function parseWorldSuggestOutput(output: string): SuggestedWorld[] {
   } catch {
     return []
   }
+}
+
+/** HARNESS-68: all model-visible project data has already passed through the
+ * Context Gateway. The prompt adapter adds no database reads or hidden data. */
+export function buildWorldSuggestPromptFromRegisteredContextV1(contextText: string): ChatMessage[] {
+  return buildWorldSuggestPrompt({
+    projectName: '',
+    genres: '',
+    concept: `【经过登记的世界规划资料】\n${contextText || '（登记来源为空）'}`,
+    existingWorlds: '',
+    userHint: '只依据上方登记资料建议 2-4 个尚不存在的新世界；严格输出既定六字段 JSON 数组，不得输出 Markdown、解释、主世界类型或额外字段。',
+  })
+}
+
+export function readWorldSuggestPromptTemplateSnapshotV1(): ChatMessage[] {
+  return buildWorldSuggestPromptFromRegisteredContextV1('{{REGISTERED_CONTEXT}}')
+}
+
+export function parseWorldSuggestOutputStrictV1(output: string): SuggestedWorld[] {
+  const input = output.trim()
+  if (!input) throw new Error('世界建议候选为空。')
+  if (/^```|```$/.test(input)) throw new Error('世界建议候选不得包含 Markdown 代码围栏。')
+  let parsed: unknown
+  try { parsed = JSON.parse(input) } catch { throw new Error('世界建议候选不是有效的严格 JSON 数组。') }
+  if (!Array.isArray(parsed) || parsed.length < 2 || parsed.length > 4) {
+    throw new Error('世界建议候选必须包含 2-4 个世界。')
+  }
+  const names = new Set<string>()
+  return parsed.map((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`世界建议候选第 ${index + 1} 项必须是 JSON 对象。`)
+    }
+    const row = value as Record<string, unknown>
+    const actual = Object.keys(row).sort()
+    const expected = [...WORLD_SUGGEST_FIELDS_V1].sort()
+    if (actual.length !== expected.length || actual.some((key, keyIndex) => key !== expected[keyIndex])) {
+      throw new Error(`世界建议候选只能包含 ${expected.join('、')}。`)
+    }
+    const name = typeof row.name === 'string' ? row.name.trim() : ''
+    const description = typeof row.description === 'string' ? row.description.trim() : ''
+    const entryCondition = typeof row.entryCondition === 'string' ? row.entryCondition.trim() : ''
+    const powerRestriction = typeof row.powerRestriction === 'string' ? row.powerRestriction.trim() : ''
+    if (name.length < 2 || name.length > 80) throw new Error(`世界建议候选第 ${index + 1} 项名称必须为 2-80 字符。`)
+    const nameKey = name.toLocaleLowerCase()
+    if (names.has(nameKey)) throw new Error(`世界建议候选存在重复名称“${name}”。`)
+    names.add(nameKey)
+    if (!SUGGESTED_TYPES.includes(row.type as WorldGroupType)) {
+      throw new Error(`世界建议候选“${name}”的 type 不在允许闭集。`)
+    }
+    if (description.length < 2 || description.length > 2_000) throw new Error(`世界建议候选“${name}”的描述必须为 2-2000 字符。`)
+    if (entryCondition.length < 2 || entryCondition.length > 1_000) throw new Error(`世界建议候选“${name}”的进入条件必须为 2-1000 字符。`)
+    if (powerRestriction.length < 2 || powerRestriction.length > 1_000) throw new Error(`世界建议候选“${name}”的能力限制必须为 2-1000 字符。`)
+    if (!Number.isInteger(row.plannedChapterCount) || Number(row.plannedChapterCount) < 1 || Number(row.plannedChapterCount) > 10_000) {
+      throw new Error(`世界建议候选“${name}”的预计章节数必须为 1-10000 的整数。`)
+    }
+    return {
+      name,
+      type: row.type as WorldGroupType,
+      description,
+      entryCondition,
+      powerRestriction,
+      plannedChapterCount: Number(row.plannedChapterCount),
+    }
+  })
 }
 
 // ── 世界扩写 ────────────────────────────────────────────────────────────

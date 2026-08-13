@@ -2760,3 +2760,115 @@ test('世界组七字段扩写只产生可恢复候选，作者确认后一次�
   await expect(page.getByText(modelCandidate.worldOrigin, { exact: true })).toBeVisible()
   expect(generationCalls).toBe(1)
 })
+
+test('多世界建议刷新恢复整批候选，作者选择后只创建所选世界', async ({ page }) => {
+  let generationCalls = 0
+  const modelCandidate = [{
+    name: '灰烬钟庭',
+    type: 'traversal',
+    description: '燃尽未来换取当下力量的钟塔世界。',
+    entryCondition: '在退潮时敲响无主铜钟',
+    powerRestriction: '每次使用高阶能力都会提前遗忘一段未来计划',
+    plannedChapterCount: 18,
+  }, {
+    name: '兽潮棋盘',
+    type: 'instance',
+    description: '城邦按季节重排，居民必须在兽潮前完成迁城。',
+    entryCondition: '持有上一世界获得的潮纹棋子',
+    powerRestriction: '外来能力只能通过本地棋阵节点释放',
+    plannedChapterCount: 12,
+  }, {
+    name: '星梯上界',
+    type: 'ascension',
+    description: '漂浮阶梯连接不同重力层级，越高处时间越慢。',
+    entryCondition: '集齐三枚世界门坐标',
+    powerRestriction: '只能携带一个已被本地法则承认的核心能力',
+    plannedChapterCount: 24,
+  }]
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'world-suggest-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls += 1
+    const request = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = request.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain('经过登记的世界规划资料')
+    expect(combined).toContain('希望下一批世界逐步挑战主角对记忆和身份的选择。')
+    expect(combined).toContain('主世界')
+    expect(combined).toContain('守灯人必须在共同记忆与港城安全之间作出选择。')
+    expect(combined).toContain('严格输出既定六字段')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: JSON.stringify(modelCandidate) }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 280, completion_tokens: 160, total_tokens: 440 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 多世界建议 Harness 闭环')
+  await openSidebarLeaf(page, '设定库', '故事设计')
+  await page.getByText('点击填写一句话故事…', { exact: true }).click()
+  const logline = page.getByPlaceholder('点击填写一句话故事…')
+  await logline.fill('守灯人必须在共同记忆与港城安全之间作出选择。')
+  await logline.blur()
+
+  await sidebarButton(page, '项目概况').click()
+  const multiWorldToggle = page.getByText(/多世界模式/)
+    .locator('xpath=ancestor::div[contains(@class,"justify-between")][1]/button')
+  await multiWorldToggle.click()
+  await expect(page.getByRole('heading', { name: '危险操作:启用多世界模式' })).toBeVisible()
+  await page.getByRole('button', { name: '继续', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '是否立即下载备份(JSON 文件到本地)?' })).toBeVisible()
+  await page.getByRole('button', { name: '已备份，继续', exact: true }).click()
+
+  await sidebarButton(page, '世界总览').click()
+  await page.getByRole('button', { name: 'AI 建议世界', exact: true }).click()
+  const concept = page.getByPlaceholder(/描述你的整体故事概念/)
+  await concept.fill('希望下一批世界逐步挑战主角对记忆和身份的选择。')
+  await page.getByRole('button', { name: '生成建议', exact: true }).click()
+  await expect(page.getByText('世界建议候选尚未写入；请选择后统一确认', { exact: true }))
+    .toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('灰烬钟庭', { exact: true })).toBeVisible()
+  await expect(page.getByText('兽潮棋盘', { exact: true })).toBeVisible()
+  await expect(page.getByText('星梯上界', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  const beforeRows = page.locator('section').filter({ hasText: '世界列表' }).first().locator('div.group')
+  await expect(beforeRows).toHaveCount(1)
+  await page.reload()
+  await sidebarButton(page, '世界总览').click()
+  await expect(page.getByText('世界建议候选尚未写入；请选择后统一确认', { exact: true }))
+    .toBeVisible({ timeout: 30_000 })
+  expect(generationCalls).toBe(1)
+
+  const greyRow = page.getByText('灰烬钟庭', { exact: true }).locator('xpath=ancestor::div[contains(@class,"items-start")][1]')
+  const starRow = page.getByText('星梯上界', { exact: true }).locator('xpath=ancestor::div[contains(@class,"items-start")][1]')
+  await greyRow.getByRole('button', { name: '选择', exact: true }).click()
+  await starRow.getByRole('button', { name: '选择', exact: true }).click()
+  await page.getByRole('button', { name: '确认写入所选 2 项', exact: true }).click()
+  await expect(page.getByText('已写入 2 个世界', { exact: true })).toBeVisible({ timeout: 30_000 })
+  const worldList = page.locator('section').filter({ hasText: '世界列表' }).first()
+  await expect(worldList.getByText('灰烬钟庭', { exact: true }).first()).toBeVisible()
+  await expect(worldList.getByText('星梯上界', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('兽潮棋盘', { exact: true })).toHaveCount(0)
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await sidebarButton(page, '世界总览').click()
+  const restoredWorldList = page.locator('section').filter({ hasText: '世界列表' }).first()
+  await expect(restoredWorldList.getByText('灰烬钟庭', { exact: true }).first()).toBeVisible()
+  await expect(restoredWorldList.getByText('星梯上界', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('兽潮棋盘', { exact: true })).toHaveCount(0)
+})

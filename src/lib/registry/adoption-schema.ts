@@ -9,6 +9,14 @@ import { REGISTRY_BY_NAME } from './project-tables'
 
 const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
   {
+    target: 'worldGroups',
+    identity: 'name',
+    duplicatePolicy: 'error',
+    required: ['name', 'type', 'description', 'icon', 'order', 'entryCondition', 'powerRestriction', 'plannedChapterCount'],
+    autoStamps: ['projectId', 'worldId', 'createdAt', 'updatedAt'],
+    ownerFrom: 'world',
+  },
+  {
     target: 'characters',
     identity: { kind: 'composite', fields: ['homeWorldGroupId', 'name'] },
     duplicatePolicy: 'merge',

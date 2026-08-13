@@ -202,7 +202,7 @@
 **字段**：
 | 字段 | 含义 |
 |---|---|
-| `worldGroups.name / icon / type / description / powerRestriction / entryCondition / order` | 世界 |
+| `worldGroups.name / icon / type / description / powerRestriction / entryCondition / order / plannedChapterCount` | 世界 |
 | `worldGroupLinks.fromGroupId / toGroupId / linkType / label / description` | 世界间关系（诸天/穿越/飞升/分支） |
 
 **AI 动作**：
@@ -210,13 +210,13 @@
 #### 动作①：AI 建议多个世界（WorldGroupOverview）
 - **触发**：🔘 手动，多世界模式下"AI 建议"按钮
 - **读**：
-  - `projects.name / genre / description`
-  - `worldviews / storyCores / characters`（已有项目内容）
-  - `worldGroups.全世界概览`（已建世界）
-  - `用户输入提示`
+  - `manualText`：作者当次输入的世界方向
+  - `worldGroups`：当前 World 已建世界目录
+  - `storyCore`：当前 Work 故事核心
 - **提示词**：`world-group.suggest`
-- **解析**：`parseWorldSuggestOutput → SuggestedWorld[]`
-- **写**：`worldGroups（批量新建，用户审核采纳）`，可选 `worldGroupLinks（关系）`
+- **解析**：`parseWorldSuggestOutputStrictV1`；只接受 2～4 项 exact-key JSON，每项仅含 `name / type / description / entryCondition / powerRestriction / plannedChapterCount`；拒绝 Markdown、`primary`、额外/缺失字段、批内或与已有世界同名及越界值
+- **运行证据**：`world-origin.world-suggest` durable 候选冻结 World/Work、项目提示、完整世界目录/关系/故事核心、Context Manifest、Prompt 和一次模型调用；未知结果暂停且不自动重试
+- **写**：确认前零正式写入；作者勾选任意非空子集后，冻结选择与顺序，只在上游、Context 和 Prompt 仍 fresh 时经 `FIELD_REGISTRY + AdoptionSchema + adopt(worldGroups)` 原子新增 `name / type / description / icon / order / entryCondition / powerRestriction / plannedChapterCount`。`worldGroupLinks` 不由该 AI 动作写入，世界关系继续人工管理
 
 #### 动作②：AI 扩写单个世界设定（WorldGroupDetail）
 - **触发**：🔘 手动，世界详情页“AI 扩写世界观”；名称、类型或描述有未保存改动时拒绝生成

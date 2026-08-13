@@ -113,6 +113,17 @@ function enumeration(
 }
 
 export const FIELD_REGISTRY: FieldSpec[] = [
+  // HARNESS-68: AI may propose new World-owned worldGroups only through the
+  // registered collection adoption boundary. Owner IDs and timestamps are stamped.
+  text('worldGroups', 'name', ['世界名称']),
+  enumeration('worldGroups', 'type', ['traversal', 'instance', 'parallel', 'ascension', 'custom']),
+  longtext('worldGroups', 'description', ['世界描述']),
+  text('worldGroups', 'icon', ['世界图标']),
+  num('worldGroups', 'order', ['世界顺序']),
+  longtext('worldGroups', 'entryCondition', ['进入条件']),
+  longtext('worldGroups', 'powerRestriction', ['能力限制']),
+  num('worldGroups', 'plannedChapterCount', ['预计章节数']),
+
   // worldviews: legacy free-text fields still used by existing panels.
   longtext('worldviews', 'geography', ['地理']),
   longtext('worldviews', 'history', ['旧历史']),

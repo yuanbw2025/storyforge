@@ -23,6 +23,7 @@ export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
 export type AgentSkillExecutionModeV1 =
   | 'complete'
   | 'worldview-field'
+  | 'world-suggest'
   | 'worldview-expand'
   | 'story-core'
   | 'creative-rules'
@@ -166,6 +167,12 @@ const WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS = [
   'worldGroups',
   'storyCore',
   'worldview',
+] as const
+
+const WORLD_SUGGEST_CONTEXT_SOURCE_KEYS = [
+  'manualText',
+  'worldGroups',
+  'storyCore',
 ] as const
 
 const CHARACTER_SUPPLEMENT_CONTEXT_SOURCE_KEYS = [
@@ -802,6 +809,11 @@ const WORLDVIEW_EXPAND_COMPRESSION_POLICY = compressionPolicy([
   'storyCore',
   'worldview',
 ])
+const WORLD_SUGGEST_COMPRESSION_POLICY = compressionPolicy([
+  'manualText',
+  'worldGroups',
+  'storyCore',
+])
 const CHARACTER_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'powerSystem',
@@ -1018,6 +1030,36 @@ export const AGENT_SKILLS = [
       'R-HARNESS32-worldview-field-agent',
       'R-HARNESS32-worldview-panels-ui',
     ],
+  },
+  {
+    version: 1,
+    id: 'world-origin.world-suggest',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: '多世界建议',
+    owner: 'world-foundation-agent',
+    promptVersion: 'world-suggest-v1',
+    executionMode: 'world-suggest',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: WORLD_SUGGEST_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: {
+      sourceKeys: WORLD_SUGGEST_CONTEXT_SOURCE_KEYS,
+      states: {
+        empty: { handling: 'create-from-request', instruction: '只依据作者本轮概念生成新世界候选，不得声称已有不存在的世界或故事核心。' },
+        partial: { handling: 'reference-and-create', instruction: '锁定已有世界目录或故事核心，只建议尚不存在且有差异化的新世界。' },
+        complete: { handling: 'grounded-transform', instruction: '严格依据当前世界目录和故事核心建议递进世界，不得改写已有世界。' },
+      },
+    },
+    contextCompression: WORLD_SUGGEST_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{
+      table: 'worldGroups',
+      fields: ['name', 'type', 'description', 'icon', 'order', 'entryCondition', 'powerRestriction', 'plannedChapterCount'],
+    }],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS68-world-suggest-durable'],
   },
   {
     version: 1,
@@ -1929,7 +1971,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'worldview-expand', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
+    'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),

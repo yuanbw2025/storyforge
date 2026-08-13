@@ -21,7 +21,6 @@
     { "file": "src/components/simulation/ChatGamePanel.tsx", "calls": 1, "status": "governed", "mechanism": "simulation-runtime", "reason": "角色聊天写入隔离的 SIM 事件/消息运行时，不反写创作 Canon。" },
     { "file": "src/components/simulation/SimulationRuntimePanel.tsx", "calls": 3, "status": "governed", "mechanism": "simulation-runtime", "reason": "NPC/TTRPG 候选和事件由 SIM 专用状态机、确认与回放边界治理。" },
     { "file": "src/components/style/StyleCalibrationPanel.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "校准输出会更新作者风格档案，尚未进入统一 durable 候选。" },
-    { "file": "src/components/style/StyleLearningPanel.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "风格学习结果直接形成可保存档案，缺少 Run/receipt。" },
-    { "file": "src/components/world-group/WorldGroupOverview.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "世界建议候选只驻留组件内存，确认后直接创建世界组。" }
+    { "file": "src/components/style/StyleLearningPanel.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "风格学习结果直接形成可保存档案，缺少 Run/receipt。" }
   ]
 }
