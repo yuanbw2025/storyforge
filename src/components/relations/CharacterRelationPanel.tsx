@@ -2,13 +2,18 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Plus, Trash2, ArrowRightLeft, ArrowRight, Users, GitFork, List, Sparkles, Check, X, AlertCircle } from 'lucide-react'
 import { useCharacterRelationStore } from '../../stores/character-relation'
 import { useCharacterStore } from '../../stores/character'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildRelationExtractPrompt, parseRelationOutput, matchRelations, type MatchedRelation } from '../../lib/ai/relation-extractor'
+import type { MatchedRelation } from '../../lib/ai/relation-extractor'
 import type { Project, RelationType } from '../../lib/types'
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import { useToast } from '../shared/Toast'
-import { syncRelationToCharacterFields } from '../../lib/relations/relationship-summary'
+import { useAIConfigStore } from '../../stores/ai-config'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
+import {
+  adoptCharacterRelationshipCandidateV1,
+  generateCharacterRelationshipCandidateV1,
+  readPendingCharacterRelationshipCandidateV1,
+  rejectCharacterRelationshipCandidateV1,
+} from '../../lib/agent/run/character-relationship-durable'
 import RelationGraph from './RelationGraph'
 import {
   INITIAL_RECORD_TARGET_CLASS,
@@ -31,10 +36,11 @@ const RELATION_TYPES: { value: RelationType; label: string }[] = [
 
 interface Props {
   project: Project
+  worldGroupId: number | null
   initialRelationId?: number | null
 }
 
-export default function CharacterRelationPanel({ project, initialRelationId }: Props) {
+export default function CharacterRelationPanel({ project, worldGroupId, initialRelationId }: Props) {
   const { relations, addRelation, updateRelation, deleteRelation } = useCharacterRelationStore()
   const { characters } = useCharacterStore()
   const toast = useToast()
@@ -46,7 +52,10 @@ export default function CharacterRelationPanel({ project, initialRelationId }: P
   const [graphWidth, setGraphWidth] = useState(700)
 
   // ── AI 提取相关状态 ──
-  const ai = useAIStream(createAISessionKey(projectId, 'relation.extract'))
+  const aiConfig = useAIConfigStore(state => state.config)
+  const [extracting, setExtracting] = useState(false)
+  const [extractError, setExtractError] = useState('')
+  const [extractRunId, setExtractRunId] = useState<number | null>(null)
   const [extractedRelations, setExtractedRelations] = useState<MatchedRelation[]>([])
   const [selectedExtracted, setSelectedExtracted] = useState<Set<number>>(new Set())
   const [showExtractPanel, setShowExtractPanel] = useState(false)
@@ -54,8 +63,11 @@ export default function CharacterRelationPanel({ project, initialRelationId }: P
   const [savedId, setSavedId] = useState<number | null>(null)
 
   const projectCharacters = useMemo(
-    () => characters.filter((c) => c.projectId === projectId),
-    [characters, projectId],
+    () => characters.filter((c) => (
+      c.projectId === projectId
+      && (c.isCrossWorld || (c.homeWorldGroupId ?? null) === worldGroupId)
+    )),
+    [characters, projectId, worldGroupId],
   )
   const projectRelations = useMemo(
     () => relations.filter((r) => r.projectId === projectId),
@@ -90,59 +102,82 @@ export default function CharacterRelationPanel({ project, initialRelationId }: P
     return () => ro.disconnect()
   }, [])
 
-  // ── AI 提取：流完成后自动解析 ──
+  // HARNESS-60: recover durable candidate instead of component session output.
   useEffect(() => {
-    if (!ai.isStreaming && ai.output) {
-      setShowExtractPanel(true)
-      const parsed = parseRelationOutput(ai.output)
-      const matched = matchRelations(parsed, projectCharacters, validProjectRelations)
-      setExtractedRelations(matched)
-      // 默认选中所有非重复的
-      const sel = new Set<number>()
-      matched.forEach((r, i) => { if (!r.isDuplicate) sel.add(i) })
-      setSelectedExtracted(sel)
-    }
-  }, [ai.isStreaming, ai.output, projectCharacters, validProjectRelations])
+    let active = true
+    void resolveScopeLike(projectId).then(scope => readPendingCharacterRelationshipCandidateV1({ scope, worldGroupId }))
+      .then(recovered => {
+        if (!active || !recovered) return
+        setShowExtractPanel(true)
+        setExtractRunId(recovered.snapshot.run.id)
+        setExtractedRelations(recovered.candidate.relations)
+        setSelectedExtracted(new Set(recovered.candidate.relations.flatMap((relation, index) => (
+          relation.isDuplicate ? [] : [index]
+        ))))
+      })
+      .catch(error => { if (active) setExtractError(error instanceof Error ? error.message : '候选恢复失败') })
+    return () => { active = false }
+  }, [projectId, worldGroupId])
 
   const handleAIExtract = useCallback(async () => {
     setShowExtractPanel(true)
+    setExtracting(true)
+    setExtractError('')
     setExtractedRelations([])
     setSelectedExtracted(new Set())
-    const messages = await buildRelationExtractPrompt(projectId, projectCharacters)
-    ai.start(messages, undefined, { category: 'relation.extract', projectId })
-  }, [projectId, projectCharacters, ai])
+    try {
+      const scope = await resolveScopeLike(projectId)
+      const generated = await generateCharacterRelationshipCandidateV1({
+        scope,
+        worldGroupId,
+        aiConfig,
+      })
+      setExtractRunId(generated.snapshot.run.id)
+      setExtractedRelations(generated.candidate.relations)
+      setSelectedExtracted(new Set(generated.candidate.relations.flatMap((relation, index) => (
+        relation.isDuplicate ? [] : [index]
+      ))))
+    } catch (error) {
+      setExtractError(error instanceof Error ? error.message : '角色关系提取失败')
+    } finally {
+      setExtracting(false)
+    }
+  }, [aiConfig, projectId, worldGroupId])
 
   const handleAcceptExtracted = async () => {
-    let written = 0
+    if (extractRunId == null) return
     try {
-      for (const [i, rel] of extractedRelations.entries()) {
-        if (!selectedExtracted.has(i)) continue
-        if (!projectCharacterIds.has(rel.fromCharacterId) || !projectCharacterIds.has(rel.toCharacterId)) {
-          toast.error('存在不属于当前项目的角色关系，已跳过。')
-          continue
-        }
-        const relation = {
-          projectId,
-          fromCharacterId: rel.fromCharacterId,
-          toCharacterId: rel.toCharacterId,
-          relationType: rel.type,
-          label: rel.label,
-          description: rel.description,
-          isBidirectional: rel.bidirectional,
-        }
-        await addRelation(relation)
-        await syncRelationToCharacterFields({ projectId, relation, characters: projectCharacters })
-        written++
-      }
-      if (written > 0) await useCharacterStore.getState().loadAll(projectId)
-      toast.success(`已导入 ${written} 条关系，并同步到角色词条。`)
+      const scope = await resolveScopeLike(projectId)
+      const result = await adoptCharacterRelationshipCandidateV1({
+        scope, runId: extractRunId, selectedIndexes: [...selectedExtracted],
+      })
+      await Promise.all([
+        useCharacterStore.getState().loadAll(projectId),
+        useCharacterRelationStore.getState().loadAll(scope),
+      ])
+      toast.success(`已导入 ${result.written} 条关系并完成终验；回执 ${result.receiptHash.slice(0, 12)}。`)
     } catch (err) {
       toast.error(`导入关系失败：${err instanceof Error ? err.message : '未知错误'}`)
       return
     }
     setShowExtractPanel(false)
     setExtractedRelations([])
-    ai.reset()
+    setExtractRunId(null)
+  }
+
+  const handleRejectExtracted = async () => {
+    if (extractRunId != null) {
+      try {
+        await rejectCharacterRelationshipCandidateV1({ scope: await resolveScopeLike(projectId), runId: extractRunId })
+      } catch (error) {
+        setExtractError(error instanceof Error ? error.message : '放弃候选失败')
+        return
+      }
+    }
+    setShowExtractPanel(false)
+    setExtractedRelations([])
+    setSelectedExtracted(new Set())
+    setExtractRunId(null)
   }
 
   // 新建关系
@@ -229,12 +264,12 @@ export default function CharacterRelationPanel({ project, initialRelationId }: P
           </div>
           <button
             onClick={handleAIExtract}
-            disabled={projectCharacters.length < 2 || ai.isStreaming}
+            disabled={projectCharacters.length < 2 || extracting || extractRunId != null}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-sm hover:bg-accent/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="AI 从大纲和章节中自动提取角色关系"
           >
             <Sparkles className="w-4 h-4" />
-            {ai.isStreaming ? 'AI 提取中...' : 'AI 提取'}
+            {extracting ? 'AI 提取中...' : 'AI 提取'}
           </button>
           <button
             onClick={handleAdd}
@@ -257,24 +292,24 @@ export default function CharacterRelationPanel({ project, initialRelationId }: P
               AI 关系提取
             </h3>
             <button
-              onClick={() => { setShowExtractPanel(false); ai.reset() }}
+              onClick={() => { void handleRejectExtracted() }}
               className="text-text-muted hover:text-text-primary"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {ai.isStreaming && (
+          {extracting && (
             <div className="flex items-center gap-2 text-sm text-text-muted">
               <span className="animate-spin">⏳</span>
               正在分析大纲和章节内容，提取角色关系...
             </div>
           )}
 
-          {ai.error && (
+          {extractError && (
             <div className="flex items-center gap-2 text-sm text-red-400">
               <AlertCircle className="w-4 h-4" />
-              {ai.error}
+              {extractError}
             </div>
           )}
 
@@ -337,7 +372,7 @@ export default function CharacterRelationPanel({ project, initialRelationId }: P
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
-                  onClick={() => { setShowExtractPanel(false); ai.reset() }}
+                  onClick={() => { void handleRejectExtracted() }}
                   className="px-3 py-1.5 text-sm text-text-muted hover:text-text-primary transition-colors"
                 >
                   取消
@@ -354,7 +389,7 @@ export default function CharacterRelationPanel({ project, initialRelationId }: P
             </>
           )}
 
-          {!ai.isStreaming && !ai.error && extractedRelations.length === 0 && ai.output && (
+          {!extracting && !extractError && extractedRelations.length === 0 && extractRunId != null && (
             <div className="text-sm text-text-muted py-2">
               未能从文本中提取到有效的角色关系。请确保已填写大纲摘要或章节正文。
             </div>

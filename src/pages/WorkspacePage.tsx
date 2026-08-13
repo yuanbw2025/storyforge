@@ -393,6 +393,7 @@ export default function WorkspacePage() {
       case 'relations':
         return <CharacterRelationPanel
           project={project}
+          worldGroupId={copilotWorldGroupId}
           initialRelationId={impactHandoff?.targetModule === 'relations' && impactHandoffTarget?.table === 'characterRelations'
             ? impactHandoffTarget.moduleRecordId
             : null}

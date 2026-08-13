@@ -428,6 +428,48 @@ async function readExistingVolumeOutlines(projectId: number, scope?: WorkspaceSc
   ].join('\n')
 }
 
+async function readOutlineSummariesForAnalysis(
+  projectId: number,
+  worldGroupId: number | null,
+  scope?: WorkspaceScope,
+): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = (await readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' }))
+    .filter(node => (node.worldGroupId ?? null) === worldGroupId)
+    .filter(node => node.title || node.summary)
+    .sort((left, right) => left.order - right.order || (left.id ?? 0) - (right.id ?? 0))
+  return rows.map(node => `[${node.type}] ${node.title}${node.summary ? `：${node.summary}` : ''}`).join('\n')
+}
+
+async function readWrittenChaptersForAnalysis(
+  projectId: number,
+  worldGroupId: number | null,
+  scope?: WorkspaceScope,
+): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const [allChapters, outlineNodes] = await Promise.all([
+    readOwnedRows<Chapter>(resolved, 'chapters', { owner: 'work' }),
+    readOwnedRows<OutlineNode>(resolved, 'outlineNodes', { owner: 'work' }),
+  ])
+  const visibleOutlineIds = new Set(outlineNodes
+    .filter(node => (node.worldGroupId ?? null) === worldGroupId)
+    .flatMap(node => node.id == null ? [] : [node.id]))
+  const chapters = allChapters
+    .filter(chapter => visibleOutlineIds.has(chapter.outlineNodeId))
+    .filter(chapter => htmlToPlainText(chapter.content || '').trim())
+    .sort((left, right) => left.order - right.order || (left.id ?? 0) - (right.id ?? 0))
+  let remaining = 24_000
+  const parts: string[] = []
+  for (const chapter of chapters) {
+    if (remaining <= 0) break
+    const text = htmlToPlainText(chapter.content || '').trim()
+    const excerpt = text.slice(0, Math.min(3_000, remaining))
+    if (excerpt) parts.push(`【${chapter.title}】\n${excerpt}`)
+    remaining -= excerpt.length
+  }
+  return parts.join('\n\n')
+}
+
 function findVolumeAncestor(nodeId: number, nodesById: Map<number, OutlineNode>): OutlineNode | null {
   let current = nodesById.get(nodeId) ?? null
   const visited = new Set<number>()
@@ -884,6 +926,24 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L1',
     budgetTokens: 2400,
     read: input => readExistingVolumeOutlines(input.projectId, input.scope),
+  },
+  {
+    key: 'outlineSummaries',
+    label: '大纲标题与摘要（分析）',
+    scope: 'project',
+    layer: 'L2',
+    budgetTokens: 6_000,
+    requiresWorldGroupId: true,
+    read: input => readOutlineSummariesForAnalysis(input.projectId, input.worldGroupId ?? null, input.scope),
+  },
+  {
+    key: 'writtenChapters',
+    label: '已写章节正文（分析摘录）',
+    scope: 'project',
+    layer: 'L2',
+    budgetTokens: 8_000,
+    requiresWorldGroupId: true,
+    read: input => readWrittenChaptersForAnalysis(input.projectId, input.worldGroupId ?? null, input.scope),
   },
   {
     key: 'writtenChapterProgress',

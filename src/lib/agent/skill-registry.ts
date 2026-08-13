@@ -27,6 +27,7 @@ export type AgentSkillExecutionModeV1 =
   | 'creative-rules'
   | 'create'
   | 'supplement'
+  | 'relationships'
   | 'reverse'
   | 'auto'
   | 'story-arcs'
@@ -168,6 +169,34 @@ const CHARACTER_SUPPLEMENT_OPTIONAL_CONTEXT_SOURCE_KEYS = [
   'characterFacts',
   'characterPassages',
 ] as const
+
+const CHARACTER_RELATIONSHIP_CONTEXT_SOURCE_KEYS = [
+  'characters',
+  'characterRelations',
+  'outlineSummaries',
+  'writtenChapters',
+] as const
+
+const CHARACTER_RELATIONSHIP_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['characters', 'outlineSummaries', 'writtenChapters'],
+  states: {
+    empty: { handling: 'create-from-request', instruction: '没有足够的角色与剧情资料时返回空数组，不得编造关系。' },
+    partial: { handling: 'reference-and-create', instruction: '只提取现有资料逐字支持的关系，不补写缺失剧情。' },
+    complete: { handling: 'grounded-transform', instruction: '综合现有角色、关系、大纲与正文，输出可核对的关系候选。' },
+  },
+}
+
+const CHARACTER_RELATIONSHIP_COMPRESSION_POLICY: AgentSkillContextCompressionPolicyV1 = {
+  version: 1,
+  sourceKeys: CHARACTER_RELATIONSHIP_CONTEXT_SOURCE_KEYS,
+  minimumOriginalTokens: 700,
+  maxSourcesPerTask: 4,
+  maxAttemptsPerSource: 1,
+  maxAnchors: 16,
+  maxOutputTokens: 3_000,
+  maxFullTextFallbackTokens: 12_000,
+  maxFullTextBudgetScale: 1.5,
+}
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
   'projectStatus',
@@ -987,6 +1016,29 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'character.relationships',
+    agentId: 'character',
+    defaultForAgent: false,
+    label: '角色关系证据提取',
+    owner: 'character-agent',
+    promptVersion: 'character-relationships-v1',
+    executionMode: 'relationships',
+    contextTaskKind: 'agent-character',
+    readToolNames: [],
+    contextSourceKeys: CHARACTER_RELATIONSHIP_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: CHARACTER_RELATIONSHIP_INPUT_POLICY,
+    contextCompression: CHARACTER_RELATIONSHIP_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [
+      { table: 'characterRelations', fields: ['fromCharacterId', 'toCharacterId', 'relationType', 'label', 'description', 'isBidirectional'] },
+      { table: 'characters', fields: ['relationships'] },
+    ],
+    lastVerifiedAt: '2026-08-13',
+    regressionTests: ['R-HARNESS60-character-relationship-durable'],
+  },
+  {
+    version: 1,
     id: 'inspiration.reverse',
     agentId: 'inspiration',
     defaultForAgent: true,
@@ -1586,7 +1638,7 @@ export function validateAgentSkillDefinitionsV1(
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
     'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules', 'review']),
-    character: new Set(['create', 'supplement']),
+    character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
     prose: new Set(['auto', 'generate', 'continue', 'review', 'revise', 'organize', 'memory', 'consistency']),

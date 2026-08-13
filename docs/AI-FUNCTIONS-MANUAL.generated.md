@@ -76,7 +76,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 51 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 53 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -93,6 +93,8 @@
 | `chapterOutline` | 当前章节大纲 | node | L1 | 800 |
 | `adjacentChapterOutlines` | 相邻章纲 | node | L1 | 1000 |
 | `existingVolumeOutlines` | 已有卷大纲 | project | L1 | 2400 |
+| `outlineSummaries` | 大纲标题与摘要（分析） | project | L2 | 6000 |
+| `writtenChapters` | 已写章节正文（分析摘录） | project | L2 | 8000 |
 | `writtenChapterProgress` | 本卷已写正文进度 | node | L1 | 3000 |
 | `currentFacts` | 当前有效事实(事实账本投影) | chapter | L1 | 2000 |
 | `canonAssertions` | 世界宪法(已确认设定断言) | world | L1 | 1800 |
@@ -234,7 +236,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
 | `reference.characters` | `src/components/project/AnalysisReportViewer.tsx:151` |
 | `reference.summary` | `src/components/project/AnalysisReportViewer.tsx:119` |
-| `relation.extract` | `src/components/relations/CharacterRelationPanel.tsx:112` |
+| `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:286` |
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:106` |
 | `review.consistency.deep` | `src/components/editor/ChapterEditor.tsx:1166` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:451` |
@@ -273,4 +275,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `ae6725a`
+生成时间基准:commit `55f0b9b`
