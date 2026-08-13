@@ -445,7 +445,7 @@ flowchart LR
     subgraph EXTRACT["🔍 提取适配器"]
         SEX["state-extract-adapter<br/>buildStateExtractPrompt<br/>parseStateDiffs"]
         IEX["prose.inventory-extraction durable Skill<br/>Context Gateway + strict parser"]
-        TEX["story-timeline-adapter<br/>buildStoryTimelinePrompt<br/>parseStoryEvents"]
+        TEX["prose.story-timeline-extraction durable Skill<br/>Context Gateway + strict parser"]
         REX["relation-extractor<br/>parseRelationOutput<br/>+ matchRelations 名→id"]
         EBA["prose.emotion-beats durable Skill<br/>Context Gateway + strict parser"]
         FCO["foreshadow-adapter<br/>parseForeshadowStructured"]
@@ -464,7 +464,8 @@ flowchart LR
         ST["stateCards<br/>applyDiffs 按实体合并字段<br/>防重复"]
         IC["durable 候选<br/>范围/分块/roster/baseline 冻结"]
         IL["itemLedger<br/>逐章事务替换 + terminal receipt"]
-        ST_T["storyTimelineEvents<br/>重新提取前 deleteByChapter"]
+        TC["durable 候选<br/>章节/分块/正式 baseline 冻结"]
+        ST_T["storyTimelineEvents<br/>逐章事务替换 + terminal receipt"]
         CR["characterRelations"]
         EBC["durable 候选<br/>确认前零业务写入"]
         EB["emotionBeatCards<br/>adopt + terminal receipt"]
@@ -488,7 +489,8 @@ flowchart LR
     SEX ==parseStateDiffs==> ST
     IEX ==strict candidate==> IC
     IC ==作者确认 + replaceScope(chapterId)==> IL
-    TEX ==parseStoryEvents==> ST_T
+    TEX ==strict candidate==> TC
+    TC ==作者确认 + replaceScope(chapterId)==> ST_T
     REX ==matchRelations==> CR
     EBA ==strict candidate==> EBC
     EBC ==作者确认 + adopt==> EB
@@ -501,7 +503,7 @@ flowchart LR
     classDef trig fill:#ca8a04,stroke:#a16207,color:#fff;
     classDef src fill:#ea580c,stroke:#c2410c,color:#fff;
     class ST,IL,ST_T,CR,EB,FO table
-    class EBC,IC trig
+    class EBC,IC,TC trig
     class SEX,IEX,TEX,REX,EBA,FCO adp
     class AUTO,MANU_S,MANU_I,MANU_T,MANU_R,MANU_E trig
     class CHAPTERS src

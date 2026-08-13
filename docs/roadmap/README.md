@@ -58,7 +58,7 @@
 | 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
 | 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
 | 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
-| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60/61/62/63 分别收口角色关系、情感节拍、重要地点和物品栏后，当前为 25 个文件 / 40 个静态构造点：7 个 governed、4 个 auxiliary、14 个 migration。故事年表“先删后写”、局部手稿替换、参考实体合并没有冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 3 项回归通过。 |
+| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60/61/62/63/64 分别收口角色关系、情感节拍、重要地点、物品栏和故事年表后，当前为 24 个文件 / 39 个静态构造点：7 个 governed、4 个 auxiliary、13 个 migration。局部手稿替换、参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 3 项回归通过。 |
 
 ### HARNESS-61 完成卡：情感节拍 durable 候选与采纳
 
@@ -96,6 +96,19 @@
 | 生命周期 / 作用域 | 不新增表或 schema；`itemLedger` 继续由 `PROJECT_TABLES` 派生 Work 归属、角色/章节软引用、导入导出和重映射生命周期。Work 级范围可包含多个世界组章节；当前 World roster 与其它 Work/World 数据隔离。含本地 ID 的进度/候选 `portable:false`，导入后取消。 |
 | UI / 回滚 | `InventoryPanel` 恢复候选或安全分块进度；不可判定运行需放弃重来。意图冻结后不可改勾选，正式替换开始后只能继续收敛。人工新增、编辑、认领和删除保留。旧组件逐章 `chat`、手拼 Context、吞掉单章失败、`deleteByChapter + adopt()` 旁路已下线。 |
 | 验收 | `R-HARNESS63-inventory-extraction-durable` 14 项覆盖范围/分块零写候选、从下一分块续跑、候选事件崩溃窗重建、模型结果不可判定、严格协议失败、上游/baseline CAS、空结果清理、唯一姓名/同名角色 FK、8 个采纳边界幂等收敛、导入取消、Work/World 隔离、terminal 漂移与旧旁路下线。H59 census 同步收缩为 25 文件 / 40 入口、14 migration。 |
+
+### HARNESS-64 完成卡：故事年表 durable 分块提取与逐章原子替换
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-64` 治理小功能。作者从当前 Work 的全部已写正文重新提取故事进程年表时，长任务必须可断点续跑，确认前不改正式年表；确认后跨章中断也必须沿同一冻结意图恢复。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 剩余入口清零；新增 `prose.story-timeline-extraction` Skill，复用 Context Gateway、Run/event/checkpoint、`replaceAdoptedCollection()` 与 terminal receipt，不引入平行 Harness。 |
+| 读 / 写 | 模型只经 `chapterContent` 登记源读取当前 Work 正文；正式年表仅由治理层回读作 CAS，不进入模型 Prompt。写入闭集为 `storyTimelineEvents.title/storyTime/importance/description/chapterId/chapterTitle/order`；作者确认后按登记的 `replaceScope=['chapterId']` 逐章事务替换。 |
+| 状态机 / 硬验证 | 冻结提示词、章节清单/Manifest/分块、正文 hash 和完整正式年表 baseline；每个确定完成分块 checkpoint，只续跑剩余调用。模型结果不可判定则暂停且不重试；严格 exact-key JSON、1～3 整数重要度、`chapterId + title` 候选身份和总量上限 fail-closed。 |
+| 采纳恢复 | 作者选择冻结后为每个目标章生成 `order=0..n-1` 的正式意图；每章清旧+整批写入同一事务。若写入后、进度 checkpoint 前中断，恢复回读同值正式状态后前进，不重复替换。空候选或空选择只有在作者明确确认后才清理全部目标已写章。 |
+| 生命周期 / 作用域 | 不新增表或 schema；`storyTimelineEvents` 继续由 `PROJECT_TABLES` 派生 Work 归属、章节软引用、导入导出和 ID 重映射生命周期。短章/未写章及其它 Work 的正式行保持范围外冻结。进度/候选 `portable:false`，导入后取消。 |
+| UI / 回滚 | `StoryTimelinePanel` 恢复候选或安全分块进度；不可判定运行需放弃重来。意图冻结后不可改勾选，正式替换开始后只能继续收敛。人工新增、编辑、删除和章节跳转保留。旧组件 `chat`、手拼 Context、宽松 parser、吞错及 `deleteByChapter + adopt()` 旁路已下线。 |
+| 验收 | `R-HARNESS64-story-timeline-extraction-durable` 14 项覆盖合同/Manifest、分块零写与续跑、候选崩溃窗重建、未知模型结果、严格协议、正文/Prompt/baseline CAS、候选身份去重、逐章 order 压缩与范围外冻结、空选择清理、8 个采纳边界、写后 checkpoint 窗口、导入取消、Work 隔离、terminal stale 和旧旁路下线。与 H59/H63 联合回归共 31 项通过；H59 census 收缩为 24 文件 / 39 入口、13 migration。交付基线为完整 CI 348 files / 1486 tests 与项目 Chromium E2E 42/42。 |
 
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 

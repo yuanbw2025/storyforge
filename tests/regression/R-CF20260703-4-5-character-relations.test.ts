@@ -9,6 +9,7 @@ import type { Character, CharacterRelation } from '../../src/lib/types'
 
 const panelSource = readFileSync('src/components/relations/CharacterRelationPanel.tsx', 'utf8')
 const graphSource = readFileSync('src/components/relations/RelationGraph.tsx', 'utf8')
+const durableSource = readFileSync('src/lib/agent/run/character-relationship-durable.ts', 'utf8')
 
 const now = 1_780_000_000_000
 
@@ -78,15 +79,20 @@ describe('CF-20260703-4/5 · 角色关系保存反馈与角色词条同步', () 
     expect(graphSource).not.toContain('useCharacterStore')
     expect(graphSource).not.toContain('useCharacterRelationStore')
 
-    expect(panelSource).toContain('characters.filter((c) => c.projectId === projectId)')
+    expect(panelSource).toContain('c.projectId === projectId')
+    expect(panelSource).toContain('c.isCrossWorld || (c.homeWorldGroupId ?? null) === worldGroupId')
     expect(panelSource).toContain('relations.filter((r) => r.projectId === projectId)')
     expect(panelSource).toContain('<RelationGraph characters={projectCharacters} relations={validProjectRelations}')
   })
 
-  it('只在采纳 AI 抽取关系后同步角色词条，手动占位关系不会污染人物关系描述', () => {
-    const syncCalls = panelSource.match(/await syncRelationToCharacterFields/g) ?? []
+  it('只在受治理采纳 AI 关系后同步角色词条，手动占位关系不会污染人物关系描述', () => {
+    const syncCalls = durableSource.match(/await syncRelationToCharacterFields/g) ?? []
     expect(syncCalls).toHaveLength(1)
-    expect(panelSource).toContain('await addRelation(relation)\n        await syncRelationToCharacterFields')
+    expect(durableSource).toContain('await adopt({')
+    expect(durableSource).toContain("target: 'characterRelations'")
+    expect(durableSource).toContain('await syncRelationToCharacterFields')
+    expect(panelSource).not.toContain('syncRelationToCharacterFields')
+    expect(panelSource).toContain('await addRelation(relation)')
     expect(panelSource).not.toContain("toast.success('关系已保存，并同步到角色词条。')")
     expect(panelSource).toContain("toast.success('关系已保存。')")
   })

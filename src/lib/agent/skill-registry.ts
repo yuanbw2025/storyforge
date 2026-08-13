@@ -1489,7 +1489,7 @@ export const AGENT_SKILLS = [
       table: 'storyTimelineEvents',
       fields: ['title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle', 'order'],
     }],
-    lastVerifiedAt: '2026-08-13',
+    lastVerifiedAt: '2026-08-14',
     regressionTests: ['R-HARNESS64-story-timeline-extraction-durable'],
   },
   {

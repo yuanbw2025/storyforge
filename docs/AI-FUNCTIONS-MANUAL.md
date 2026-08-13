@@ -976,10 +976,11 @@
 
 #### 动作①：一键从已写章节提取故事年表 🔄
 - **触发**：🔘 手动
-- **读**：所有已写章节 `chapters[content]`
-- **提示词**：`story.timeline`
-- **解析**：`parseStoryEvents`
-- **写**：`storyTimelineEvents（每章先 deleteByChapter 再批量新建）`
+- **读**：模型只经 Context Gateway 的 `chapterContent` 读取当前 Work 的全部已写正文；正式年表仅由治理层回读作 CAS
+- **Skill**：`prose.story-timeline-extraction`，提示词执行版本 `story-timeline-extract-v1`
+- **提示词**：`story-timeline.extract`
+- **解析**：严格 exact-key JSON；`importance` 仅允许 1～3 整数，候选按 `chapterId + title` 去重；所有分块完成后才持久化候选
+- **写**：确认前零正式写入；作者冻结选择后按 `storyTimelineEvents.replaceScope=['chapterId']` 逐章事务替换，章内 `order` 压缩为 `0..n-1` 并签发 terminal receipt；空选择表示明确清理目标已写章
 
 ---
 

@@ -171,8 +171,8 @@ describe('R-HARNESS55 · 人工交接目标在现有面板精确显露', () => {
 
   it('关系目标在默认关系图中不可见时，自动切到列表但不自动进入编辑态', async () => {
     mocks.characterStore.characters = [
-      { id: 1, projectId: 1, name: '林飞' },
-      { id: 2, projectId: 1, name: '沈砚' },
+      { id: 1, projectId: 1, homeWorldGroupId: 7, name: '林飞' },
+      { id: 2, projectId: 1, homeWorldGroupId: 7, name: '沈砚' },
     ]
     mocks.relationStore.relations = [{
       id: 23,
@@ -188,6 +188,7 @@ describe('R-HARNESS55 · 人工交接目标在现有面板精确显露', () => {
     }]
     const host = await render(createElement(CharacterRelationPanel, {
       project,
+      worldGroupId: 7,
       initialRelationId: 23,
     }))
     await act(async () => {

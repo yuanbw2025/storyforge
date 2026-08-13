@@ -246,7 +246,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:1495` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
-| `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:92` |
+| `story.timeline` | `src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
 | `style.calibrate` | `src/components/style/StyleCalibrationPanel.tsx:63` |
 | `style.learn` | `src/components/style/StyleLearningPanel.tsx:125` |
 | `world-group.expand` | `src/components/world-group/WorldGroupDetail.tsx:98` |
@@ -276,4 +276,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `87fcb11`
+生成时间基准:commit `267b559`
