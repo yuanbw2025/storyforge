@@ -199,7 +199,9 @@ async function adoptCollectionRecord(
     return result
   }
   if (input.compareAndSet) {
-    return adoptChapterMemoryRecordWithCas(input, fieldSpecs, tableSpec, result)
+    return input.compareAndSet.kind === 'record-field-value-hash'
+      ? adoptRegisteredRecordFieldWithCas(input, fieldSpecs, tableSpec, result)
+      : adoptChapterMemoryRecordWithCas(input, fieldSpecs, tableSpec, result)
   }
   const target = await tableSpec.table.get(input.recordId!)
   if (!target || !await assertRecordInScope(input.scope!, input.target, target, {
@@ -232,6 +234,65 @@ async function adoptCollectionRecord(
   }
   await refreshCanonSourceAfterWrite(input.target, input.projectId, input.recordId!, Object.keys(patch))
   result.written.push({ id: input.recordId!, fields: Object.keys(patch) })
+  return result
+}
+
+/** Stable hash shared by durable candidates and the atomic writer. */
+export async function hashAdoptFieldValueV1(value: unknown): Promise<string> {
+  return sha256Text(JSON.stringify({
+    present: value !== undefined,
+    value: value === undefined ? null : value,
+  }))
+}
+
+async function adoptRegisteredRecordFieldWithCas(
+  input: AdoptInput,
+  fieldSpecs: FieldSpec[],
+  tableSpec: TableSpec,
+  result: AdoptResult,
+): Promise<AdoptResult> {
+  const cas = input.compareAndSet!
+  const adoption = ADOPTION_BY_TARGET.get(input.target)
+  if (
+    cas.kind !== 'record-field-value-hash'
+    || input.mode !== 'replace'
+    || !adoption?.recordOnly
+    || Array.isArray(input.data)
+    || !/^[a-f0-9]{64}$/.test(cas.expectedHash)
+  ) {
+    result.skipped.push({ reason: '通用 compareAndSet 仅支持已登记 record-only 目标的定点 replace', data: input.data })
+    return result
+  }
+  const registered = fieldSpecs.find(spec => spec.field === cas.field)
+  if (!registered) {
+    result.skipped.push({ reason: `CAS 字段 ${input.target}.${cas.field} 未在 FIELD_REGISTRY 登记`, data: input.data })
+    return result
+  }
+  const patch = normalizeAndValidate(input.data, fieldSpecs, result)
+  if (
+    !patch
+    || result.unknown.length > 0
+    || result.typeErrors.length > 0
+    || Object.keys(patch).length !== 1
+    || !Object.prototype.hasOwnProperty.call(patch, cas.field)
+  ) {
+    result.skipped.push({ reason: '通用 compareAndSet 每次只允许替换其声明的单一字段', data: input.data })
+    return result
+  }
+  await db.transaction('rw', scopeTransactionTables(tableSpec.table), async () => {
+    const target = await tableSpec.table.get(input.recordId!)
+    if (!target || !await assertRecordInScope(input.scope!, input.target, target, { owner: adoption.ownerFrom })) {
+      result.skipped.push({ reason: `record ${input.recordId} 不存在或不属于当前 scope`, data: input.data })
+      return
+    }
+    if (await Dexie.waitFor(hashAdoptFieldValueV1(target[cas.field])) !== cas.expectedHash) {
+      result.skipped.push({ reason: `CAS 失败：${input.target}.${cas.field} 已变化`, data: input.data })
+      return
+    }
+    patch.updatedAt = Date.now()
+    await tableSpec.table.update(input.recordId!, patch as any)
+    result.written.push({ id: input.recordId!, fields: [cas.field] })
+  })
   return result
 }
 

@@ -165,6 +165,15 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
     fkChecks: [{ field: 'parentId', target: 'importantLocations' }],
   },
   {
+    target: 'worldNodes',
+    identity: 'id',
+    recordOnly: true,
+    duplicatePolicy: 'update',
+    required: [],
+    autoStamps: ['projectId', 'worldGroupId', 'createdAt', 'updatedAt'],
+    ownerFrom: 'world',
+  },
+  {
     target: 'itemLedger',
     identity: { kind: 'composite', fields: ['chapterId', 'itemName', 'action', 'heldByName', 'note'] },
     duplicatePolicy: 'skip',

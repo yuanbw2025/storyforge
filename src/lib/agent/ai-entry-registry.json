@@ -9,7 +9,6 @@
     { "file": "src/components/facts/WorldConstitutionPanel.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "设定断言抽取经候选事实入口写入，但模型调用本身没有 durable Run。" },
     { "file": "src/components/foreshadow/ForeshadowPanel.tsx", "calls": 2, "status": "migration", "nextUnit": "HARNESS-60", "reason": "建议和二次结构化仍是面板级两次模型调用，确认后写伏笔表。" },
     { "file": "src/components/geography/GeographyPanel.tsx", "calls": 1, "status": "auxiliary", "mechanism": "ephemeral-visual", "reason": "概念地图只形成当前 UI SVG，不写 Canon。" },
-    { "file": "src/components/geography/WorldMapPanel.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "模型地图配置解析成功后直接持久化世界节点。" },
     { "file": "src/components/history/HistoryPanel.tsx", "calls": 2, "status": "migration", "nextUnit": "HARNESS-60", "reason": "历史咨询/头脑风暴的接受路径仍由局部控制器写回。" },
     { "file": "src/components/outline/ChapterOutlineWorkshop.tsx", "calls": 1, "status": "governed", "mechanism": "generation-node", "reason": "五阶段章纲工坊通过 GenerationNode 和既有确认式采纳。" },
     { "file": "src/components/outline/OutlinePanel.tsx", "calls": 1, "status": "governed", "mechanism": "durable-run", "reason": "卷纲/章纲主路径已接 durable adapter。" },

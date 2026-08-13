@@ -401,6 +401,9 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   num('importantLocations', 'parentId'),
   num('importantLocations', 'sortOrder'),
 
+  // HARNESS-66: AI map configurations may update one existing world node only.
+  json('worldNodes', 'mapConfigJSON', ['地图配置']),
+
   text('itemLedger', 'itemName', ['物品名']),
   enumeration('itemLedger', 'action', ['gain', 'consume'], { 获得: 'gain', 消耗: 'consume', 失去: 'consume' }),
   num('itemLedger', 'quantity', ['数量']),

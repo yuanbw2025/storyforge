@@ -29,6 +29,7 @@ export type AgentSkillExecutionModeV1 =
   | 'supplement'
   | 'relationships'
   | 'locations'
+  | 'map-config'
   | 'reverse'
   | 'auto'
   | 'story-arcs'
@@ -214,6 +215,17 @@ const WORLD_LOCATION_EXTRACTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
 }
 
 const WORLD_LOCATION_EXTRACTION_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
+
+const WORLD_MAP_CONTEXT_SOURCE_KEYS = ['worldview', 'geography', 'codex', 'locations'] as const
+const WORLD_MAP_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: WORLD_MAP_CONTEXT_SOURCE_KEYS,
+  states: {
+    empty: { handling: 'create-from-request', instruction: '当前世界资料为空；只生成最小可用地图，不得声称引用作者设定。' },
+    partial: { handling: 'reference-and-create', instruction: '锁定已有地理实体、名称与空间证据，只补足地图运行所需参数。' },
+    complete: { handling: 'grounded-transform', instruction: '严格依据当前世界的世界观、地理、词条和重要地点生成可核查地图配置。' },
+  },
+}
+const WORLD_MAP_COMPRESSION_POLICY = compressionPolicy(WORLD_MAP_CONTEXT_SOURCE_KEYS)
 
 const PROSE_INVENTORY_EXTRACTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   sourceKeys: ['chapterContent'],
@@ -1100,6 +1112,26 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'world-origin.map-config',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: '世界地图配置生成',
+    owner: 'world-foundation-agent',
+    promptVersion: 'world-map-config-v1',
+    executionMode: 'map-config',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: WORLD_MAP_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: WORLD_MAP_INPUT_POLICY,
+    contextCompression: WORLD_MAP_COMPRESSION_POLICY,
+    maxOutputTokens: 6_000,
+    writeTargets: [{ table: 'worldNodes', fields: ['mapConfigJSON'] }],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS66-world-map-durable'],
+  },
+  {
+    version: 1,
     id: 'character.supplement',
     agentId: 'character',
     defaultForAgent: false,
@@ -1853,7 +1885,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules', 'locations', 'review']),
+    'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),

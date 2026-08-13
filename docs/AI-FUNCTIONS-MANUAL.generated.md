@@ -79,7 +79,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 53 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 54 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -110,6 +110,7 @@
 | `previousPlanReconciliation` | 前章计划正文对账 | chapter | L1 | 1400 |
 | `recentChapterSummaries` | 当前世界最近已验证摘要 | chapter | L1 | 2200 |
 | `worldview` | 世界观 | world | L2 | 8000 |
+| `geography` | 地理环境 | world | L2 | 3000 |
 | `storyCore` | 故事核心 | project | L1 | 4000 |
 | `activeNarrativeBlueprint` | 当前选定叙事蓝图 | project | L1 | 5000 |
 | `characterDrivenPlan` | 角色驱动方案 | project | L1 | 5000 |
@@ -173,6 +174,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `storyTimelineEvents` | `chapterId` `chapterTitle` `description` `importance` `order` `storyTime` `title` |
 | `storylineCrossings` | `arcIdA` `arcIdB` `chapterId` `chapterTitle` `evidenceQuote` `note` |
 | `storylineProgress` | `arcId` `currentStageId` `evidenceQuote` `involvedEntities` `lastActiveChapterId` `lastActiveChapterTitle` `progressNote` `status` |
+| `worldNodes` | `mapConfigJSON` |
 | `worldviews` | `climateByRegion` `continentLayout` `culture` `cultureOverview` `divineDesign` `economy` `economyOverview` `factionLayout` `geography` `history` `historyLine` `internalConflicts` `itemDesign` `mountainsRivers` `naturalResourceOverview` `naturalResources` `politicsEconomyCulture` `politicsOverview` `powerHierarchy` `races` `regionDimensions` `rules` `society` `worldDimensions` `worldEvents` `worldOrigin` `worldStructure` |
 
 ### 领域写回扩展（不是第二套通用 adopt）
@@ -225,7 +227,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `foreshadow.structure` | `src/components/foreshadow/ForeshadowPanel.tsx:67` |
 | `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:216` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
-| `geography.world-map` | `src/components/geography/WorldMapPanel.tsx:107` |
+| `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `history.consult` | `src/components/history/useHistoryAI.ts:118` |
 | `history.storm` | `src/components/history/useHistoryAI.ts:120` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
@@ -279,4 +281,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `32a996f`
+生成时间基准:commit `92dc146`

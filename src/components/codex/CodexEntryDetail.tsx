@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronRight, Star } from 'lucide-react'
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import {
@@ -24,7 +24,7 @@ interface Props {
   allCategories: CodexCategory[]
   allEntries: CodexEntry[]
   nameDuplicate?: boolean
-  onChange: (patch: Partial<CodexEntry>) => void
+  onChange: (patch: Partial<CodexEntry>) => void | Promise<void>
 }
 
 export default function CodexEntryDetail({
@@ -143,12 +143,25 @@ function CodexImportantLocationLink({
   onChange,
 }: {
   entry: CodexEntry
-  onChange: (patch: Partial<CodexEntry>) => void
+  onChange: (patch: Partial<CodexEntry>) => void | Promise<void>
 }) {
   const locations = useLocationStore(state => state.locations)
   const loadAll = useLocationStore(state => state.loadAll)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  const saveSequence = useRef(0)
   useEffect(() => { void loadAll(entry.projectId) }, [entry.projectId, loadAll])
   const projectLocations = locations.filter(location => location.projectId === entry.projectId)
+
+  const saveLocation = async (value: string) => {
+    const sequence = ++saveSequence.current
+    setSaveState('saving')
+    try {
+      await onChange({ importantLocationId: value ? Number(value) : null })
+      if (saveSequence.current === sequence) setSaveState('saved')
+    } catch {
+      if (saveSequence.current === sequence) setSaveState('failed')
+    }
+  }
 
   return (
     <label className="block border-t border-border pt-3">
@@ -156,9 +169,7 @@ function CodexImportantLocationLink({
       <select
         aria-label="城池重要地点"
         value={entry.importantLocationId ?? ''}
-        onChange={event => onChange({
-          importantLocationId: event.target.value ? Number(event.target.value) : null,
-        })}
+        onChange={event => { void saveLocation(event.target.value) }}
         className="w-full px-3 py-1.5 rounded-lg bg-bg-elevated border border-border text-sm"
       >
         <option value="">未关联</option>
@@ -169,6 +180,11 @@ function CodexImportantLocationLink({
       <span className="block mt-1 text-[11px] text-text-muted">
         地点树负责空间层级；这里保留城池的人文属性。删除地点只会断开关联，不会删除词条。
       </span>
+      {saveState !== 'idle' && (
+        <span role="status" className={`block mt-1 text-[11px] ${saveState === 'failed' ? 'text-red-400' : 'text-text-muted'}`}>
+          {saveState === 'saving' ? '地点关联保存中…' : saveState === 'saved' ? '地点关联已保存' : '地点关联保存失败'}
+        </span>
+      )}
     </label>
   )
 }
@@ -178,7 +194,7 @@ function CodexCultivationLink({
   onChange,
 }: {
   entry: CodexEntry
-  onChange: (patch: Partial<CodexEntry>) => void
+  onChange: (patch: Partial<CodexEntry>) => void | Promise<void>
 }) {
   const systems = useCultivationStore(state => state.systems)
   const loadAll = useCultivationStore(state => state.loadAll)

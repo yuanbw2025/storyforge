@@ -41,6 +41,8 @@ const VALID_DISTANCE_TIERS: SpatialDistanceTier[] = [
 ]
 const VALID_DISTANCE_UNITS: SpatialDistanceUnit[] = ['km', 'li', 'day', 'month']
 
+export const VORONOI_MAP_PROMPT_VERSION_V1 = 'world-map-config-v1' as const
+
 /**
  * 构建 AI prompt，让 AI 根据世界观描述输出 MapGenConfig
  */
@@ -219,6 +221,25 @@ ${locationList ? `\n已设定的地点：\n${locationList}` : ''}
   ]
 }
 
+/** HARNESS-66: the model-visible project facts are exactly the registered
+ * Context Gateway output. The target node name is a frozen write anchor, not a
+ * second data-reading path. */
+export function buildVoronoiMapPromptFromRegisteredContextV1(
+  contextText: string,
+  targetNodeName: string,
+): ChatMessage[] {
+  const messages = buildVoronoiMapPrompt(null, '', [], '')
+  messages[1] = {
+    role: 'user',
+    content: `请根据以下经过登记的当前世界资料，为目标世界“${targetNodeName}”设计地图生成参数 JSON。\n\n${contextText || '（当前登记来源均为空，请生成最小可用地图。）'}\n\nmapName 必须填写目标世界名称“${targetNodeName}”。请输出纯 JSON 格式的地图参数。`,
+  }
+  return messages
+}
+
+export function readVoronoiMapPromptTemplateSnapshotV1(): ChatMessage[] {
+  return buildVoronoiMapPromptFromRegisteredContextV1('{{REGISTERED_CONTEXT}}', '{{TARGET_WORLD_NODE}}')
+}
+
 /**
  * 解析 AI 返回的 JSON 为 MapGenConfig
  */
@@ -281,6 +302,187 @@ export function parseVoronoiMapConfig(raw: string, sourceText = ''): MapGenConfi
   }
 
   return config
+}
+
+const STRICT_TOP_LEVEL_KEYS = [
+  'seed', 'mapName', 'pointCount', 'landRatio', 'continentCount', 'stateCount',
+  'burgDensity', 'temperatureShift', 'precipitationFactor', 'heightmapTemplate',
+  'namingStyle', 'stateNames', 'burgNames', 'riverNames', 'mapWidthKm',
+  'mapWidthEvidenceQuote', 'spatialEntities', 'spatialRelations',
+] as const
+const STRICT_REQUIRED_KEYS = [
+  'seed', 'mapName', 'pointCount', 'landRatio', 'continentCount', 'stateCount',
+  'burgDensity', 'temperatureShift', 'precipitationFactor', 'heightmapTemplate',
+  'namingStyle', 'stateNames', 'burgNames', 'riverNames', 'spatialEntities',
+  'spatialRelations',
+] as const
+
+function assertExactObjectKeys(
+  value: unknown,
+  allowed: readonly string[],
+  required: readonly string[],
+  label: string,
+): asserts value is Record<string, unknown> {
+  if (!isRecord(value)) throw new Error(`${label}必须是对象。`)
+  const keys = Object.keys(value)
+  const unknown = keys.find(key => !allowed.includes(key))
+  const missing = required.find(key => !Object.prototype.hasOwnProperty.call(value, key))
+  if (unknown) throw new Error(`${label}包含未允许字段 ${unknown}。`)
+  if (missing) throw new Error(`${label}缺少字段 ${missing}。`)
+}
+
+function strictNumber(value: unknown, label: string, min: number, max: number, integer = false): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
+    throw new Error(`${label}超出允许范围。`)
+  }
+  return value
+}
+
+function strictText(value: unknown, label: string, max = 100): string {
+  if (typeof value !== 'string' || value.trim().length < 1 || value.trim().length > max) {
+    throw new Error(`${label}必须是 1～${max} 字符的非空字符串。`)
+  }
+  return value.trim()
+}
+
+function strictNames(value: unknown, label: string, max: number): string[] {
+  if (!Array.isArray(value) || value.length > max) throw new Error(`${label}必须是不超过 ${max} 项的数组。`)
+  const names = value.map((item, index) => strictText(item, `${label}[${index}]`))
+  if (new Set(names).size !== names.length) throw new Error(`${label}不得包含重名。`)
+  return names
+}
+
+/** Strict durable protocol. Unlike the legacy parser it never clamps, drops,
+ * demotes or invents a random seed to conceal malformed model output. */
+export function parseVoronoiMapConfigStrictV1(raw: string, sourceText: string): MapGenConfig {
+  const cleaned = raw.trim()
+  if (cleaned.startsWith('```') || cleaned.endsWith('```')) {
+    throw new Error('地图配置必须是纯 JSON，不得包含 Markdown 代码围栏。')
+  }
+  const parsed: unknown = JSON.parse(cleaned)
+  assertExactObjectKeys(parsed, STRICT_TOP_LEVEL_KEYS, STRICT_REQUIRED_KEYS, '地图配置')
+
+  const stateCount = strictNumber(parsed.stateCount, 'stateCount', 2, 15, true)
+  const stateNames = strictNames(parsed.stateNames, 'stateNames', 15)
+  const burgNames = strictNames(parsed.burgNames, 'burgNames', 100)
+  const riverNames = strictNames(parsed.riverNames, 'riverNames', 100)
+  if (stateNames.length < stateCount) throw new Error('stateNames 数量不得少于 stateCount。')
+  if (burgNames.length < stateCount) throw new Error('burgNames 数量不得少于 stateCount。')
+  if (!isAllowed(parsed.heightmapTemplate, VALID_TEMPLATES)) throw new Error('heightmapTemplate 不在闭集。')
+  if (!isAllowed(parsed.namingStyle, VALID_NAMING)) throw new Error('namingStyle 不在闭集。')
+
+  if (!Array.isArray(parsed.spatialEntities) || parsed.spatialEntities.length > 120) {
+    throw new Error('spatialEntities 必须是不超过 120 项的数组。')
+  }
+  const entityNames = new Set<string>()
+  const spatialEntities = parsed.spatialEntities.map((value, index): MapSpatialEntity => {
+    assertExactObjectKeys(
+      value,
+      ['name', 'kind', 'scaleTier', 'capitalName', 'source', 'evidenceQuote'],
+      ['name', 'kind', 'source'],
+      `spatialEntities[${index}]`,
+    )
+    const name = strictText(value.name, `spatialEntities[${index}].name`)
+    if (entityNames.has(name)) throw new Error(`spatialEntities 出现重复实体 ${name}。`)
+    entityNames.add(name)
+    if (!isAllowed(value.kind, VALID_ENTITY_KINDS)) throw new Error(`spatialEntities[${index}].kind 不在闭集。`)
+    if (value.scaleTier !== undefined && !isAllowed(value.scaleTier, VALID_SCALE_TIERS)) {
+      throw new Error(`spatialEntities[${index}].scaleTier 不在闭集。`)
+    }
+    if (value.capitalName !== undefined && value.kind !== 'state') throw new Error('只有 state 实体可声明 capitalName。')
+    if (value.source !== 'explicit' && value.source !== 'inferred') throw new Error('实体 source 不在闭集。')
+    const evidenceQuote = value.evidenceQuote === undefined ? undefined : strictText(value.evidenceQuote, '实体 evidenceQuote', 300)
+    if (value.source === 'explicit' && (!evidenceQuote || !hasExactEvidence(sourceText, evidenceQuote))) {
+      throw new Error(`实体 ${name} 的 explicit 证据不是登记来源逐字引文。`)
+    }
+    if (value.source === 'inferred' && evidenceQuote !== undefined) throw new Error(`推断实体 ${name} 不得伪装逐字证据。`)
+    return {
+      name,
+      kind: value.kind,
+      ...(value.scaleTier === undefined ? {} : { scaleTier: value.scaleTier }),
+      ...(value.capitalName === undefined ? {} : { capitalName: strictText(value.capitalName, 'capitalName') }),
+      source: value.source,
+      ...(evidenceQuote === undefined ? {} : { evidenceQuote }),
+    }
+  })
+
+  if (!Array.isArray(parsed.spatialRelations) || parsed.spatialRelations.length > 240) {
+    throw new Error('spatialRelations 必须是不超过 240 项的数组。')
+  }
+  const spatialRelations = parsed.spatialRelations.map((value, index): MapSpatialRelation => {
+    assertExactObjectKeys(
+      value,
+      ['from', 'to', 'direction', 'distanceTier', 'distanceValue', 'distanceUnit', 'source', 'evidenceQuote'],
+      ['from', 'to', 'source'],
+      `spatialRelations[${index}]`,
+    )
+    const from = strictText(value.from, 'relation.from')
+    const to = strictText(value.to, 'relation.to')
+    if (from === to || !entityNames.has(from) || !entityNames.has(to)) throw new Error('空间关系端点必须是两个不同的登记实体。')
+    if (value.direction !== undefined && !isAllowed(value.direction, VALID_DIRECTIONS)) throw new Error('relation.direction 不在闭集。')
+    if (value.distanceTier !== undefined && !isAllowed(value.distanceTier, VALID_DISTANCE_TIERS)) throw new Error('relation.distanceTier 不在闭集。')
+    const hasDistance = value.distanceValue !== undefined || value.distanceUnit !== undefined
+    if (hasDistance && (value.distanceValue === undefined || !isAllowed(value.distanceUnit, VALID_DISTANCE_UNITS))) {
+      throw new Error('distanceValue 与 distanceUnit 必须成对出现。')
+    }
+    const distanceValue = value.distanceValue === undefined
+      ? undefined
+      : strictNumber(value.distanceValue, 'relation.distanceValue', 0.001, 10_000_000)
+    if (value.direction === undefined && value.distanceTier === undefined && distanceValue === undefined) {
+      throw new Error('空间关系至少需要方向、距离档或精确距离之一。')
+    }
+    if (value.source !== 'explicit' && value.source !== 'inferred') throw new Error('关系 source 不在闭集。')
+    const evidenceQuote = value.evidenceQuote === undefined ? undefined : strictText(value.evidenceQuote, '关系 evidenceQuote', 300)
+    if (value.source === 'explicit' && (!evidenceQuote || !hasExactEvidence(sourceText, evidenceQuote))) {
+      throw new Error(`${from}→${to} 的 explicit 证据不是登记来源逐字引文。`)
+    }
+    if (value.source === 'inferred' && evidenceQuote !== undefined) throw new Error('推断关系不得伪装逐字证据。')
+    return {
+      from,
+      to,
+      ...(value.direction === undefined ? {} : { direction: value.direction }),
+      ...(value.distanceTier === undefined ? {} : { distanceTier: value.distanceTier }),
+      ...(distanceValue === undefined ? {} : { distanceValue, distanceUnit: value.distanceUnit as SpatialDistanceUnit }),
+      source: value.source,
+      ...(evidenceQuote === undefined ? {} : { evidenceQuote }),
+    }
+  })
+
+  const hasMapWidth = parsed.mapWidthKm !== undefined || parsed.mapWidthEvidenceQuote !== undefined
+  if (hasMapWidth && (parsed.mapWidthKm === undefined || parsed.mapWidthEvidenceQuote === undefined)) {
+    throw new Error('mapWidthKm 与 mapWidthEvidenceQuote 必须成对出现。')
+  }
+  const mapWidthEvidenceQuote = parsed.mapWidthEvidenceQuote === undefined
+    ? undefined
+    : strictText(parsed.mapWidthEvidenceQuote, 'mapWidthEvidenceQuote', 300)
+  if (mapWidthEvidenceQuote && !hasExactEvidence(sourceText, mapWidthEvidenceQuote)) {
+    throw new Error('mapWidthEvidenceQuote 不是登记来源逐字引文。')
+  }
+
+  return {
+    width: 1200,
+    height: 800,
+    seed: strictText(parsed.seed, 'seed', 200),
+    mapName: strictText(parsed.mapName, 'mapName', 200),
+    pointCount: strictNumber(parsed.pointCount, 'pointCount', 5_000, 20_000, true),
+    landRatio: strictNumber(parsed.landRatio, 'landRatio', 0.15, 0.8),
+    continentCount: strictNumber(parsed.continentCount, 'continentCount', 1, 5, true),
+    stateCount,
+    burgDensity: strictNumber(parsed.burgDensity, 'burgDensity', 0.1, 1.5),
+    temperatureShift: strictNumber(parsed.temperatureShift, 'temperatureShift', -20, 20),
+    precipitationFactor: strictNumber(parsed.precipitationFactor, 'precipitationFactor', 0.2, 3),
+    heightmapTemplate: parsed.heightmapTemplate,
+    namingStyle: parsed.namingStyle,
+    stateNames,
+    burgNames,
+    riverNames,
+    spatialEntities,
+    spatialRelations,
+    ...(parsed.mapWidthKm === undefined ? {} : {
+      mapWidthKm: strictNumber(parsed.mapWidthKm, 'mapWidthKm', 1, 1_000_000),
+      mapWidthEvidenceQuote,
+    }),
+  }
 }
 
 function clamp(v: number, min: number, max: number): number {

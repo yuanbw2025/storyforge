@@ -3,22 +3,23 @@
  * 顶层容器：世界树导航 + AI 生成按钮 + Voronoi/2D/3D 切换 + Canvas + 属性编辑器
  */
 
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
-import { Sparkles, Loader2, RefreshCw, Map, Box, Globe } from 'lucide-react'
-import { useGeographyStore } from '../../stores/project-singletons'
-import { useWorldviewStore } from '../../stores/worldview'
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
+import { Check, Sparkles, Loader2, RefreshCw, Map, Box, Globe, X } from 'lucide-react'
 import { useWorldNodeStore } from '../../stores/world-node'
 import { useWorldGroupStore } from '../../stores/world-group'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { db } from '../../lib/db/schema'
+import { useAIConfigStore } from '../../stores/ai-config'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import {
-  buildVoronoiMapPrompt,
-  parseVoronoiMapConfig,
-} from '../../lib/ai/adapters/voronoi-map-adapter'
-import { assembleContext } from '../../lib/registry/assemble-context'
-import type { Project, Location, Worldview, Geography } from '../../lib/types'
+  abandonWorldMapConfigRunV1,
+  adoptWorldMapConfigCandidateV1,
+  generateWorldMapConfigCandidateV1,
+  readPendingWorldMapConfigCandidateV1,
+  readRecoverableWorldMapConfigRunV1,
+  rejectWorldMapConfigCandidateV1,
+  type WorldMapConfigCandidateV1,
+} from '../../lib/agent/run/world-map-config-durable'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
+import type { Project, WorkspaceScope } from '../../lib/types'
 import type { MapGenConfig } from '../../lib/world-map/engine'
 import WorldTreeSidebar from './WorldTreeSidebar'
 
@@ -32,29 +33,42 @@ interface Props {
 type ViewMode = '3d' | 'voronoi'
 
 export default function WorldMapPanel({ project }: Props) {
-  const { geography } = useGeographyStore()
-  const { worldview } = useWorldviewStore()
   const { nodes, activeWorldId, loadNodes, ensureRootWorld, updateNode } = useWorldNodeStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
-  const ai = useAIStream(createAISessionKey(
-    project.id!,
-    'geography.world-map',
-    activeWorldId ?? activeGroupId ?? 'root',
-  ))
+  const aiConfig = useAIConfigStore(state => state.config)
 
   const [viewMode, setViewMode] = useState<ViewMode>('voronoi')
 
   // 当前活跃世界的 Voronoi 配置
   const [voronoiConfig, setVoronoiConfig] = useState<Partial<MapGenConfig> | undefined>(undefined)
-  const [parseError, setParseError] = useState<string | null>(null)
+  const [scope, setScope] = useState<WorkspaceScope | null>(null)
+  const [candidate, setCandidate] = useState<WorldMapConfigCandidateV1 | null>(null)
+  const [runId, setRunId] = useState<number | null>(null)
+  const [unsafeRunId, setUnsafeRunId] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const modelInFlightNodeId = useRef<number | null>(null)
 
   // 多世界模式下世界树按世界组隔离；单世界传 null 走原逻辑
   const scopedGroupId = project.enableMultiWorld ? activeGroupId : null
+  const isCurrentTarget = (worldNodeId: number, worldGroupId: number | null) => (
+    useWorldNodeStore.getState().activeWorldId === worldNodeId
+    && (!project.enableMultiWorld
+      || (useWorldGroupStore.getState().activeGroupId ?? null) === worldGroupId)
+  )
 
   // ── 初始化世界树（按世界组作用域） ──
   useEffect(() => {
     if (!project.id) return
-    ensureRootWorld(project.id, scopedGroupId).then(() => loadNodes(project.id!, scopedGroupId))
+    let cancelled = false
+    void resolveScopeLike(project.id).then(async resolved => {
+      await ensureRootWorld(resolved, scopedGroupId)
+      await loadNodes(resolved, scopedGroupId)
+      if (!cancelled) setScope(resolved)
+    }).catch(reason => {
+      if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
+    })
+    return () => { cancelled = true }
   }, [project.id, scopedGroupId, ensureRootWorld, loadNodes])
 
   // ── 切换世界时加载该世界的地图配置 ──
@@ -77,57 +91,148 @@ export default function WorldMapPanel({ project }: Props) {
     }
   }, [activeNode])
 
+  useEffect(() => {
+    setCandidate(null)
+    setRunId(null)
+    setUnsafeRunId(null)
+    setError(null)
+    if (!scope || !activeWorldId) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const pending = await readPendingWorldMapConfigCandidateV1({
+          scope,
+          worldGroupId: scopedGroupId,
+          worldNodeId: activeWorldId,
+        })
+        if (cancelled) return
+        if (pending) {
+          setCandidate(pending.candidate)
+          setRunId(pending.snapshot.run.id)
+          return
+        }
+        if (modelInFlightNodeId.current === activeWorldId) return
+        const recoverable = await readRecoverableWorldMapConfigRunV1({
+          scope,
+          worldGroupId: scopedGroupId,
+          worldNodeId: activeWorldId,
+        })
+        if (!cancelled && recoverable && !recoverable.safeToResume) {
+          setUnsafeRunId(recoverable.snapshot.run.id)
+          setError('上次地图运行停在模型结果不可判定窗口，系统不会自动重试。请放弃后重新生成。')
+        }
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [activeWorldId, scope, scopedGroupId])
+
   // ── AI 生成地图 ─────────────────────────────────────────
   const handleGenerate = async () => {
-    // 多世界模式：读取当前世界组的世界观 + 地理（store 里的可能不是本世界组的）
-    // 单世界模式：直接用 store（同原逻辑）
-    let wv: Partial<Worldview> | null = worldview
-    let geo: Geography | undefined = geography ?? undefined
-    if (project.enableMultiWorld && scopedGroupId != null) {
-      const allWv = await db.worldviews.where('projectId').equals(project.id!).toArray()
-      wv = allWv.find(w => w.worldGroupId === scopedGroupId) ?? null
-      const allGeo = await db.geographies.where('projectId').equals(project.id!).toArray()
-      geo = allGeo.find(g => g.worldGroupId === scopedGroupId)
+    if (!scope || !activeWorldId || busy || candidate || unsafeRunId) return
+    const targetWorldNodeId = activeWorldId
+    const targetWorldGroupId = scopedGroupId
+    modelInFlightNodeId.current = targetWorldNodeId
+    setBusy(true)
+    setError(null)
+    try {
+      const generated = await generateWorldMapConfigCandidateV1({
+        scope,
+        worldGroupId: targetWorldGroupId,
+        worldNodeId: targetWorldNodeId,
+        aiConfig,
+      })
+      if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
+        setCandidate(generated.candidate)
+        setRunId(generated.snapshot.run.id)
+      }
+    } catch (reason) {
+      const recoverable = await readRecoverableWorldMapConfigRunV1({
+        scope,
+        worldGroupId: targetWorldGroupId,
+        worldNodeId: targetWorldNodeId,
+      }).catch(() => null)
+      if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+        if (recoverable && !recoverable.safeToResume) setUnsafeRunId(recoverable.snapshot.run.id)
+      }
+    } finally {
+      if (modelInFlightNodeId.current === targetWorldNodeId) modelInFlightNodeId.current = null
+      setBusy(false)
     }
+  }
 
-    const overview = geo?.overview || ''
-    let locations: Location[] = []
+  const handleAcceptCandidate = async () => {
+    if (!scope || runId == null || !candidate || busy) return
+    const targetWorldNodeId = candidate.worldNodeId
+    const targetWorldGroupId = candidate.worldGroupId
+    setBusy(true)
+    setError(null)
     try {
-      locations = JSON.parse(geo?.locations || '[]')
-    } catch { /* empty */ }
+      const adopted = await adoptWorldMapConfigCandidateV1({
+        scope,
+        worldGroupId: scopedGroupId,
+        runId,
+      })
+      useWorldNodeStore.setState(state => ({
+        nodes: state.nodes.map(node => node.id === targetWorldNodeId
+          ? { ...node, mapConfigJSON: adopted.candidate.mapConfigJSON }
+          : node),
+      }))
+      if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
+        setVoronoiConfig(adopted.candidate.mapConfig)
+        setCandidate(null)
+        setRunId(null)
+      }
+    } catch (reason) {
+      if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
 
-    setParseError(null)
-    // 读全:把当前世界作用域下的自然/人文词条(具体山川/势力/城池)也喂给地图生成
-    const codexCtx = (await assembleContext({
-      projectId: project.id!,
-      worldGroupId: scopedGroupId,
-      sourceKeys: ['codex', 'locations'],
-    })).text
-    const messages = buildVoronoiMapPrompt(wv, overview, locations, codexCtx)
-    const result = await ai.start(messages, undefined, { category: 'geography.world-map', projectId: project.id! })
-    if (!result) return
-
+  const handleRejectCandidate = async () => {
+    if (!scope || runId == null || busy) return
+    const targetWorldNodeId = candidate?.worldNodeId ?? activeWorldId
+    const targetWorldGroupId = candidate?.worldGroupId ?? scopedGroupId
+    if (targetWorldNodeId == null) return
+    setBusy(true)
+    setError(null)
     try {
-      // 证据只能命中用户资料，不能借用 system prompt 中的示例文字。
-      const sourceText = messages
-        .filter(message => message.role === 'user')
-        .map(message => message.content)
-        .join('\n\n')
-      const config = parseVoronoiMapConfig(result, sourceText)
-      if (activeNode) {
-        config.mapName = activeNode.name
+      await rejectWorldMapConfigCandidateV1({ scope, worldGroupId: scopedGroupId, runId })
+      if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
+        setCandidate(null)
+        setRunId(null)
       }
-      setVoronoiConfig(config)
+    } catch (reason) {
+      if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
 
-      // 持久化到世界节点
-      if (activeWorldId) {
-        await updateNode(activeWorldId, {
-          mapConfigJSON: JSON.stringify(config),
-        })
+  const handleAbandonUnsafeRun = async () => {
+    if (!scope || unsafeRunId == null || busy || activeWorldId == null) return
+    const targetWorldNodeId = activeWorldId
+    const targetWorldGroupId = scopedGroupId
+    setBusy(true)
+    try {
+      await abandonWorldMapConfigRunV1({ scope, runId: unsafeRunId })
+      if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
+        setUnsafeRunId(null)
+        setError(null)
       }
-    } catch (err) {
-      console.error('Failed to parse AI Voronoi config:', err)
-      setParseError(`AI 返回的地图参数解析失败，请重试。错误：${err instanceof Error ? err.message : '未知错误'}`)
+    } catch (reason) {
+      if (isCurrentTarget(targetWorldNodeId, targetWorldGroupId)) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      }
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -184,13 +289,13 @@ export default function WorldMapPanel({ project }: Props) {
 
           <button
             onClick={handleGenerate}
-            disabled={ai.isStreaming}
+            disabled={busy || !scope || !activeWorldId || !!candidate || unsafeRunId != null}
             className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-sm rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors"
           >
-            {ai.isStreaming ? (
+            {busy ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                AI 分析中...
+                记录可恢复运行...
               </>
             ) : voronoiConfig ? (
               <>
@@ -208,31 +313,37 @@ export default function WorldMapPanel({ project }: Props) {
       </div>
 
       {/* AI 错误提示 */}
-      {(ai.error || parseError) && (
+      {error && (
         <div className="mb-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
-          {ai.error || parseError}
+          {error}
+          {unsafeRunId != null && (
+            <button type="button" onClick={() => { void handleAbandonUnsafeRun() }} disabled={busy}
+              className="ml-3 rounded px-2 py-1 text-xs text-red-300 hover:bg-red-400/10 disabled:opacity-50">
+              放弃未知运行
+            </button>
+          )}
         </div>
       )}
 
-      {/* AI 流式输出进度 */}
-      {ai.isStreaming && (
+      {candidate && (
         <div className="mb-3 p-3 bg-accent/10 border border-accent/20 rounded-lg">
-          <div className="flex items-center gap-2 text-sm text-accent mb-1">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            AI 正在分析世界设定，生成地图参数...
-            {ai.output.length > 0 && (
-              <span className="text-xs text-text-muted">≈ ~{Math.round(ai.output.length * 1.5).toLocaleString()} tokens</span>
-            )}
+          <div className="text-xs text-amber-400 mb-1">地图候选尚未写入</div>
+          <div className="text-sm text-text-primary mb-1">
+            {candidate.mapConfig.mapName} · {candidate.mapConfig.stateCount ?? 0} 国 · {candidate.mapConfig.heightmapTemplate}
           </div>
-          <div className="text-xs text-text-muted max-h-20 overflow-y-auto font-mono">
-            {ai.output.slice(0, 200)}
-            {ai.output.length > 200 && '...'}
+          <div className="text-xs text-text-muted mb-2">
+            命名实体 {candidate.mapConfig.spatialEntities?.length ?? 0} 个，空间关系 {candidate.mapConfig.spatialRelations?.length ?? 0} 条。确认前主地图和正式数据保持不变。
           </div>
-        </div>
-      )}
-      {ai.tokenUsage && !ai.isStreaming && (
-        <div className="mb-2 text-[10px] text-text-muted">
-          Token: ↑{ai.tokenUsage.inputTokens.toLocaleString()} ↓{ai.tokenUsage.outputTokens.toLocaleString()}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => { void handleAcceptCandidate() }} disabled={busy}
+              className="flex items-center gap-1 rounded bg-accent px-2 py-1 text-xs text-white hover:bg-accent-hover disabled:opacity-50">
+              <Check className="h-3 w-3" />确认使用此地图
+            </button>
+            <button type="button" onClick={() => { void handleRejectCandidate() }} disabled={busy}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-text-muted hover:bg-bg-hover hover:text-text-primary disabled:opacity-50">
+              <X className="h-3 w-3" />放弃候选
+            </button>
+          </div>
         </div>
       )}
 

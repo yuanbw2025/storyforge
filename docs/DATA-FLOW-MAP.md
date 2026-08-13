@@ -241,7 +241,7 @@
 
 **核对确认安全（排除嫌疑）**：
 - 版本快照还原复用 export/import（已含数据丢失修复）；`ensure-schema` REQUIRED_TABLES 保守（不误删老用户）。
-- WorldMapPanel / HistoryPanel 多世界正确（按当前世界）；EmotionBeat 经 prop 拿真实上下文。
+- WorldMapPanel 在 HARNESS-66 后只经登记 Context Gateway 读取当前 World，并以目标节点/世界组证据隔离；HistoryPanel 多世界按当前世界；EmotionBeat 经 prop 拿真实上下文。
 - 所有解析器（inventory/timeline/arc/relation/plot/character/outline/import）字段与表对齐、防御性默认。
 - 无跨项目查询泄漏（toArray 均带 projectId，除有意的全局表）；导入大纲正确重建 parentId 树。
 - 所有 `JSON.parse(AI 输出)` 均被 try/catch 保护（解析器内部 return null/[]，或调用方 try/catch + 错误展示，如 voronoi 地图）。
@@ -259,7 +259,7 @@
 | E | 重要地点 `importantLocations` **无 worldGroupId**，多世界下全量注入（非按世界隔离） | 需 DB 迁移，niche，权衡后再做 |
 | G | ForeshadowPanel / StoryArcPanel 在多世界下用单世界/全局上下文（伏笔、故事线本为项目级，模糊） | 低，项目级概念，可用活跃世界或 all-worlds |
 | H | 批量细纲 / 批量大纲 在多世界下用单一上下文（非逐章按世界） | 中低，批量场景 |
-| I | HistoryPanel / WorldMapPanel 生成时用 store 内 worldview（多世界未必是目标世界） | 低 |
+| I | ~~WorldMapPanel 使用 store 内 worldview~~ 已由 HARNESS-66 改为 `worldview / geography / codex / locations → assembleContext()`；HistoryPanel 仍需独立收口 | 低 |
 | J | 死代码：`WorldviewPanel`（侧栏不可达）+ `buildExistingWorldview`（读 v2，仅它用） | 清理项，待删 |
 | K | 创作规则未注入大纲/细纲生成 | 判定：写作风格不适用于结构规划，不强注入（避免无谓 token） |
 

@@ -5,7 +5,7 @@
  *       ② 词条 importance(1-5 星)能持久化;
  *       ③ AI 词条上下文按 importance 降序排(高星优先)并标星。
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useCodexStore } from '../../src/stores/codex'
 import { buildCodexContext } from '../../src/lib/ai/codex-context'
@@ -39,6 +39,32 @@ describe('Codex C6 · 分类全貌 + 词条星级', () => {
     await store.updateEntry(id, { importance: 4 })
     const e = await db.codexEntries.get(id)
     expect(e!.importance).toBe(4)
+  })
+
+  it('同一词条的自动保存按调用顺序串行，不让慢旧值覆盖新值', async () => {
+    const pid = await createProject()
+    const store = useCodexStore.getState()
+    await store.loadAll(pid)
+    const cat = await cityCategory(pid)
+    const id = await store.addEntry({
+      projectId: pid, categoryId: cat.id!, name: '初名', summary: '', description: '',
+      fields: '{}', order: 0, worldGroupId: null,
+    } as any)
+    const update = db.codexEntries.update.bind(db.codexEntries)
+    vi.spyOn(db.codexEntries, 'update').mockImplementation(async (key, patch) => {
+      if ((patch as { name?: string }).name === '慢旧值') {
+        await new Promise(resolve => setTimeout(resolve, 20))
+      }
+      return update(key, patch)
+    })
+
+    await Promise.all([
+      store.updateEntry(id, { name: '慢旧值' }),
+      store.updateEntry(id, { name: '最终值' }),
+    ])
+
+    expect((await db.codexEntries.get(id))?.name).toBe('最终值')
+    expect(useCodexStore.getState().entries.find(entry => entry.id === id)?.name).toBe('最终值')
   })
 
   it('AI 上下文:高星词条优先排序并标星', async () => {

@@ -37,7 +37,17 @@ import { formatCanonAssertionsContext, readCanonAssertions } from '../fact-ledge
 import { readStorylineProgressContext } from '../storyline/storyline-progress'
 import { buildEditImpactGraphV1 } from '../consistency/impact-analysis'
 import { readCultivationProgressContext } from '../cultivation/progress'
-import type { Chapter, Character, NarrativeModule, NarrativeNode, OutlineNode, PowerSystem, Worldview } from '../types'
+import type {
+  Chapter,
+  Character,
+  Geography,
+  Location,
+  NarrativeModule,
+  NarrativeNode,
+  OutlineNode,
+  PowerSystem,
+  Worldview,
+} from '../types'
 import {
   parseCharacterDrivenPlanArcs,
   parseCharacterDrivenPlotVolumes,
@@ -186,6 +196,29 @@ async function readWorldview(projectId: number, worldGroupId?: number | null, sc
     return rows.find(w => w.worldGroupId === worldGroupId) ?? null
   }
   return rows.find(w => (w.worldGroupId ?? null) === null) ?? rows[0] ?? null
+}
+
+async function readGeographyContext(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<string> {
+  const resolved = scope ?? await resolveScope({ projectId })
+  const rows = await readOwnedRows<Geography>(resolved, 'geographies', { owner: 'world' })
+  const geography = worldGroupId != null
+    ? rows.find(row => row.worldGroupId === worldGroupId)
+    : rows.find(row => (row.worldGroupId ?? null) === null) ?? rows[0]
+  if (!geography) return ''
+  const parts: string[] = []
+  if (geography.overview?.trim()) parts.push(`【地理总述】\n${geography.overview.trim()}`)
+  try {
+    const locations = JSON.parse(geography.locations || '[]') as Location[]
+    if (Array.isArray(locations) && locations.length) {
+      parts.push(`【旧版地理地点】\n${locations.slice(0, 100).map(location => (
+        `- ${String(location.name ?? '').trim()}（${String(location.type ?? 'other')}）：${String(location.description ?? '').trim() || '无描述'}`
+      )).join('\n')}`)
+    }
+  } catch {
+    // Corrupt legacy location JSON is omitted; the registered source never
+    // guesses a replacement or exposes a component-level parsing bypass.
+  }
+  return parts.join('\n\n')
 }
 
 async function readPowerSystem(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<PowerSystem | null> {
@@ -1076,6 +1109,16 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresWorldGroupId: true,
     ownerFrom: 'world',
     read: async input => formatWorldviewBlock(await readWorldview(input.projectId, input.worldGroupId, input.scope)),
+  },
+  {
+    key: 'geography',
+    label: '地理环境',
+    scope: 'world',
+    layer: 'L2',
+    budgetTokens: 3_000,
+    requiresWorldGroupId: true,
+    ownerFrom: 'world',
+    read: input => readGeographyContext(input.projectId, input.worldGroupId, input.scope),
   },
   {
     key: 'storyCore',

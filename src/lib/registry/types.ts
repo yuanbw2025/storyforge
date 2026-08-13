@@ -322,6 +322,11 @@ export interface AdoptInput {
     textNormalizationVersion: string
     /** Optional exact HTML guard for range edits where formatting changes matter. */
     expectedContentHash?: string
+  } | {
+    /** HARNESS-66: exact CAS for one FIELD_REGISTRY-governed record field. */
+    kind: 'record-field-value-hash'
+    field: string
+    expectedHash: string
   }
   target: string
   data: Record<string, unknown> | Record<string, unknown>[]

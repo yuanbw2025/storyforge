@@ -520,6 +520,7 @@ test('人文知识主入口可保存拆分概述，并安全关联与断开城�
   await page.getByRole('button', { name: /新建词条/ }).click()
   await page.getByPlaceholder('名称', { exact: true }).fill('雁门城')
   await page.getByLabel('城池重要地点').selectOption({ label: '雁门关' })
+  await expect(page.getByText('地点关联已保存', { exact: true })).toBeVisible()
 
   await page.reload()
   await sidebarButton(page, '人文环境').click()
@@ -2198,6 +2199,10 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
 })
 
 test('世界地图把明确距离和方位落实到命名实体，并持久化手动比例尺', async ({ page }) => {
+  let generationCalls = 0
+  let releaseMapResponse: (() => void) | null = null
+  let responseFulfilled = false
+  const mapResponseGate = new Promise<void>(resolve => { releaseMapResponse = resolve })
   await page.addInitScript(() => {
     localStorage.setItem('storyforge-ai-config', JSON.stringify({
       provider: 'ollama',
@@ -2209,6 +2214,7 @@ test('世界地图把明确距离和方位落实到命名实体，并持久化�
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls++
     const request = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
     }
@@ -2217,16 +2223,19 @@ test('世界地图把明确距离和方位落实到命名实体，并持久化�
     expect(source).toContain('东港在西京以东，相距六百公里')
     const content = JSON.stringify({
       seed: 'e2e-spatial-map',
-      mapName: '空间约束世界',
-      pointCount: 3000,
+      mapName: '主世界',
+      pointCount: 5000,
       landRatio: 0.68,
       continentCount: 1,
       stateCount: 2,
       burgDensity: 0.2,
+      temperatureShift: 0,
+      precipitationFactor: 1,
       heightmapTemplate: 'pangea',
       namingStyle: 'chinese',
       stateNames: ['西陆帝国', '东海王国'],
       burgNames: ['西京', '东港'],
+      riverNames: ['潮河'],
       mapWidthKm: 3000,
       mapWidthEvidenceQuote: '疆域东西横跨三千公里',
       spatialEntities: [
@@ -2270,19 +2279,16 @@ test('世界地图把明确距离和方位落实到命名实体，并持久化�
         evidenceQuote: '东港在西京以东，相距六百公里',
       }],
     })
+    await mapResponseGate
     await route.fulfill({
       status: 200,
-      contentType: 'text/event-stream',
-      body: [
-        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`,
-        `data: ${JSON.stringify({
-          choices: [{ delta: {} }],
-          usage: { prompt_tokens: 200, completion_tokens: 80, total_tokens: 280 },
-        })}`,
-        'data: [DONE]',
-        '',
-      ].join('\n\n'),
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 200, completion_tokens: 80, total_tokens: 280 },
+      }),
     })
+    responseFulfilled = true
   })
 
   await openCleanHome(page)
@@ -2298,10 +2304,29 @@ test('世界地图把明确距离和方位落实到命名实体，并持久化�
   await page.getByRole('heading', { name: '⛰ 山川水系' }).click()
 
   await openSidebarLeaf(page, '世界观', '世界地图')
+  await page.getByTitle('新建根世界').click()
+  await expect(page.getByText('新世界', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'AI 生成地图', exact: true }).click()
+  await expect.poll(() => generationCalls).toBe(1)
+  await page.getByText('新世界', { exact: true }).click()
+  releaseMapResponse?.()
+  await expect.poll(() => responseFulfilled).toBe(true)
+  await expect(page.getByText('地图候选尚未写入', { exact: true })).toHaveCount(0)
+  await page.getByText('主世界', { exact: true }).click()
+  await expect(page.getByText('地图候选尚未写入', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('确认前主地图和正式数据保持不变。', { exact: false })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'AI 生成地图', exact: true })).toBeDisabled()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '世界观', '世界地图')
+  await expect(page.getByText('地图候选尚未写入', { exact: true })).toBeVisible({ timeout: 30_000 })
+  expect(generationCalls).toBe(1)
+  await page.getByRole('button', { name: '确认使用此地图', exact: true }).click()
   await expect(page.getByText('比例尺：用户疆域尺寸', { exact: true })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByRole('button', { name: 'AI 重新生成', exact: true })).toBeVisible()
   await expect(page.getByText(/2 国/)).toBeVisible()
+  expect(generationCalls).toBe(1)
 
   const scale = page.locator('select').last()
   await scale.selectOption('2')

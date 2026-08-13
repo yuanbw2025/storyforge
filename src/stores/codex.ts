@@ -46,6 +46,16 @@ const now = () => Date.now()
 // 防止并发调用(如 React StrictMode 开发期把 effect 跑两遍、或多个面板内嵌词条同时挂载)
 // 各自判定"内置分类缺失"而重复播种,产生每类两条的重复。
 const ensureBuiltInsInFlight = new Map<string, Promise<void>>()
+const entryUpdateQueues = new Map<number, Promise<void>>()
+
+function enqueueEntryUpdate(id: number, task: () => Promise<void>): Promise<void> {
+  const previous = entryUpdateQueues.get(id) ?? Promise.resolve()
+  const next = previous.catch(() => undefined).then(task)
+  entryUpdateQueues.set(id, next)
+  return next.finally(() => {
+    if (entryUpdateQueues.get(id) === next) entryUpdateQueues.delete(id)
+  })
+}
 
 export const useCodexStore = create<CodexStore>((set, get) => ({
   categories: [],
@@ -221,7 +231,7 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
     return id
   },
 
-  updateEntry: async (id, patch) => {
+  updateEntry: (id, patch) => enqueueEntryUpdate(id, async () => {
     const beforeMigration = get().entries.find(e => e.id === id) ?? await db.codexEntries.get(id)
     if (!beforeMigration) return
     const scope = await resolveScopeLike(beforeMigration.projectId)
@@ -234,7 +244,7 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
     const next = { ...patch, updatedAt: now() }
     await db.codexEntries.update(id, next)
     set({ entries: get().entries.map(e => e.id === id ? { ...e, ...next } : e) })
-  },
+  }),
 
   deleteEntry: async (id) => {
     const beforeMigration = get().entries.find(item => item.id === id) ?? await db.codexEntries.get(id)
