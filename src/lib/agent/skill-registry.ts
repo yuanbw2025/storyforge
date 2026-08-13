@@ -26,6 +26,7 @@ export type AgentSkillExecutionModeV1 =
   | 'world-suggest'
   | 'worldview-expand'
   | 'constitution-extract'
+  | 'codex-extract'
   | 'story-core'
   | 'creative-rules'
   | 'create'
@@ -177,6 +178,7 @@ const WORLD_SUGGEST_CONTEXT_SOURCE_KEYS = [
 ] as const
 
 const CONSTITUTION_EXTRACT_CONTEXT_SOURCE_KEYS = ['constitutionScanSources'] as const
+const CODEX_EXTRACT_CONTEXT_SOURCE_KEYS = ['manualText', 'codexExtractionBaseline'] as const
 
 const CHARACTER_SUPPLEMENT_CONTEXT_SOURCE_KEYS = [
   'targetCharacter',
@@ -818,6 +820,7 @@ const WORLD_SUGGEST_COMPRESSION_POLICY = compressionPolicy([
   'storyCore',
 ])
 const CONSTITUTION_EXTRACT_COMPRESSION_POLICY = compressionPolicy(['constitutionScanSources'])
+const CODEX_EXTRACT_COMPRESSION_POLICY = compressionPolicy(['manualText', 'codexExtractionBaseline'])
 const CHARACTER_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'powerSystem',
@@ -1121,6 +1124,36 @@ export const AGENT_SKILLS = [
     writeTargets: [{ table: 'temporalFacts', fields: [], adoptionExtension: 'fact-ledger' }],
     lastVerifiedAt: '2026-08-14',
     regressionTests: ['R-HARNESS69-constitution-extraction-durable'],
+  },
+  {
+    version: 1,
+    id: 'world-origin.codex-extract',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: 'Codex 内容分块词条抽取',
+    owner: 'world-foundation-agent',
+    promptVersion: 'codex-extract-v1',
+    executionMode: 'codex-extract',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: CODEX_EXTRACT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: {
+      sourceKeys: CODEX_EXTRACT_CONTEXT_SOURCE_KEYS,
+      states: {
+        empty: { handling: 'require-upstream', instruction: '缺少作者来源或登记分类基线时不调用模型。' },
+        partial: { handling: 'require-upstream', instruction: '必须同时冻结作者来源、目标分类 schema 和同类既有词条。' },
+        complete: { handling: 'grounded-transform', instruction: '只按当前分类字段闭集拆分可确认词条，不写入未选候选。' },
+      },
+    },
+    contextCompression: CODEX_EXTRACT_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{
+      table: 'codexEntries',
+      fields: ['categoryId', 'name', 'icon', 'summary', 'description', 'fields', 'refs', 'tags', 'importance', 'order', 'worldGroupId'],
+    }],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS70-codex-extraction-durable'],
   },
   {
     version: 1,
@@ -2002,7 +2035,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'constitution-extract', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
+    'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'constitution-extract', 'codex-extract', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),

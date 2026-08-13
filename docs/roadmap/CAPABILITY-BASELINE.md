@@ -254,7 +254,11 @@
 ### 已有能力
 
 - Codex 分类 schema 项目级共享、词条严格按世界隔离；手动新增、AI 拆分、编辑器提示、
-  ref 选择和 AI 上下文使用同一作用域判定。删词条/世界会清理 JSON 引用和角色种族 FK。
+  ref 选择和 AI 上下文使用同一作用域判定。HARNESS-70 后 AI 拆分只经登记的
+  `manualText / codexExtractionBaseline` 读取来源、分类 schema 与既有词条，长来源分块可续跑，
+  exact-key 候选确认前零写入，作者子集冻结后经 `adopt(codexEntries)` 原子新增；零候选、
+  未知模型窗口、八采纳边界、导入取消和 terminal stale 均有反例。删词条/世界会清理 JSON
+  引用和角色种族 FK。
 - 世界规则、多世界、历史年表、重要地点、地图和角色设计已有产品能力。
 - Phase 36 已为上游设定、正文、下游产物和系统入口建立内容类型标记。
 - Phase 37-a 已交付：DB v41 `cultivationSystems`、多套体系、境界 DAG 分叉/合流编辑、
@@ -452,6 +456,7 @@
 - HARNESS-67 已把 `WorldGroupDetail` 的 `useAIStream`、直接 DB 读故事核心/跨世界 Context 拼装、宽松 parser 和模型返回后立即 `adopt(worldviews)` 下线。`world-origin.worldview-expand` 只经 `manualText / worldGroups / storyCore / worldview` 登记源读取作者已保存的目标世界草稿、当前 Work 与当前 World；严格七字段结果先成为不可便携 durable 候选。作者确认且目标组、Context、Prompt 与完整正式 baseline 均 fresh 后，才在事务中经 `FIELD_REGISTRY + adopt(worldviews)` 原子采纳七字段。八采纳边界、首次创建、写后恢复、导入取消、作用域隔离和 terminal stale 由 `R-HARNESS67-worldview-expand-durable` 反例闭合。
 - HARNESS-68 已把 `WorldGroupOverview` 的 `useAIStream`、内存建议、手拼全世界摘要和直接 `createGroup()` 循环下线。`world-origin.world-suggest` 只经 `manualText / worldGroups / storyCore` 登记源读当前 World/Work，严格 2～4 项建议作为不可便携整批 durable 候选；作者选择的非空子集与最终顺序冻结后，只能在项目提示、世界目录/关系、故事核心、Context 与 Prompt 仍 fresh 时，在同一事务中经 `FIELD_REGISTRY + AdoptionSchema + adopt(worldGroups)` 新增八字段记录。世界关系保持人工 CRUD；八采纳边界、同名/上游 stale、写后恢复、导入取消、World/Work 隔离和 terminal stale 由 `R-HARNESS68-world-suggest-durable` 反例闭合。无运行调用的 `world-group-context.ts` 已删除，不再保留平行 Context builder。
 - HARNESS-69 已把 `WorldConstitutionPanel` 的 `useAIStream`、直接 DB 查主体、宽松 parser 和模型返回后立即写事实候选下线。`world-origin.constitution-extract` 只经 `constitutionScanSources` 登记源读取当前 World/Work 的来源、允许主题和主体；无损闭集必须与 runner 冻结快照逐字一致。strict 0～80 项整批候选确认前零写入；作者批次确认后，在事务内复核来源、主体和完整事实 baseline，才经 `fact-ledger` Adoption Extension 原子新增 `temporalFacts(status=candidate)`。批次确认不等于 Canon，既有逐条确认/互斥明确取代保持第二层门。八采纳边界、未知结果、导入取消、World/Work 隔离和 terminal stale 由 `R-HARNESS69-constitution-extraction-durable` 反例闭合。
+- HARNESS-70 已把 `CodexPanel` 的直接 `chat()`、组件内 `assembleContext()`、宽松 parser、内存候选和直接 `adopt(codexEntries)` 下线。`world-origin.codex-extract` 只经 `manualText / codexExtractionBaseline` 登记源读取作者来源、目标分类/schema 与同世界组既有词条；逐分块 checkpoint 只续跑剩余调用，未知模型结果不重试。strict 0～200 项整批候选确认前零写入；作者子集与顺序冻结后不可改选或取消，事务内复核完整 baseline 后才经登记采纳层原子新增。零候选、八采纳边界、导入取消、World/Work/世界组/分类隔离和 terminal stale 由 `R-HARNESS70-codex-extraction-durable` 反例闭合。
 - HARNESS-21 已将正文 Run → post-adoption Run 的父子完成关系持久化：RunContract 的 `lineage.parent`
   与 `agentRuns.parentRunId/parentReceiptHash/parentArtifactHash` 双向核对，父终态回执和正文 hash
   缺一不可；同一父 Run/关系由唯一索引去重。子 Run 的终态证明通过契约 hash 间接绑定父回执，父回执

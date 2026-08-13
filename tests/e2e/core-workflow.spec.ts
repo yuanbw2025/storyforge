@@ -2961,3 +2961,82 @@ test('世界宪法扫描刷新恢复批次，确认后仍只写待确认事实',
   await expect(page.getByText('月亮潮汐', { exact: true })).toBeVisible()
   expect(generationCalls).toBe(1)
 })
+
+test('Codex 内容拆分刷新恢复候选，作者确认后才原子新增词条', async ({ page }) => {
+  let generationCalls = 0
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'codex-extract-durable-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+      contextWindow: 100000,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls += 1
+    const request = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = request.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain('Codex 词条抽取登记基线')
+    expect(combined).toContain('目标分类：世界结构')
+    expect(combined).toContain('"type"')
+    expect(combined).toContain('月环城悬浮在潮汐海上空')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: JSON.stringify([{
+              name: '月环城',
+              icon: '🌙',
+              summary: '悬浮于潮汐海上空的环形城邦。',
+              description: '月环城依靠七座潮汐锚稳定在海面上空。',
+              fields: { type: '浮空城邦', scope: '潮汐海外环', feature: '七座潮汐锚维持高度' },
+              tags: ['浮空城', '潮汐锚'],
+              importance: 4,
+            }]),
+          },
+          finish_reason: 'stop',
+        }],
+        usage: { prompt_tokens: 220, completion_tokens: 90, total_tokens: 310 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E Codex durable 拆分闭环')
+  await openSidebarLeaf(page, '世界观', '自然环境')
+  await expect(page.getByRole('heading', { name: '🏔️ 自然环境与地理' })).toBeVisible()
+  await expect(page.getByText('📚 世界结构 · 具体词条', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'AI 从内容拆分词条', exact: true }).click()
+  const source = page.getByPlaceholder('粘贴或编辑要拆分的整段设定内容')
+  await source.fill('月环城悬浮在潮汐海上空，由七座潮汐锚固定。')
+  await page.getByRole('button', { name: '开始拆分', exact: true }).click()
+  await expect(page.getByText('月环城', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('button', { name: '写入所选 1 项', exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '世界观', '自然环境')
+  await expect(page.getByText('月环城', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'AI 从内容拆分词条', exact: true }).click()
+  await expect(page.getByText('月环城', { exact: true })).toBeVisible({ timeout: 30_000 })
+  expect(generationCalls).toBe(1)
+
+  await page.getByRole('button', { name: '写入所选 1 项', exact: true }).click()
+  await expect(page.getByText('月环城', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('已原子写入 1 个词条。', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '世界观', '自然环境')
+  await expect(page.getByText('月环城', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+})

@@ -2,7 +2,6 @@
   "version": 1,
   "scope": "step-by-step-ui-direct-model-entry",
   "entries": [
-    { "file": "src/components/codex/CodexPanel.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "词条候选显式确认后写入，但尚无 durable candidate/receipt。" },
     { "file": "src/components/cultivation/CultivationProgressPanel.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "修炼进度分析仍由组件直调模型并形成可保存候选。" },
     { "file": "src/components/editor/ChapterEditor.tsx", "calls": 8, "status": "governed", "mechanism": "durable-run", "reason": "正文生成、语义复核、六域整理和章节记忆已进入 GenerationNode/Run 证据链。" },
     { "file": "src/components/editor/ReviewPanel.tsx", "calls": 1, "status": "auxiliary", "mechanism": "read-only-review", "reason": "显式审校结果只展示，不直接写业务表。" },

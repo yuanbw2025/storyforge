@@ -58,7 +58,7 @@
 | 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
 | 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
 | 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
-| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～69 收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑、世界地图、世界观七字段扩写、多世界建议和世界宪法扫描后，当前为 19 个文件 / 34 个静态构造点：7 个 governed、4 个 auxiliary、8 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
+| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～70 收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑、世界地图、世界观七字段扩写、多世界建议、世界宪法扫描和 Codex 词条拆分后，当前为 18 个文件 / 33 个静态构造点：7 个 governed、4 个 auxiliary、7 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
 
 ### HARNESS-61 完成卡：情感节拍 durable 候选与采纳
 
@@ -174,6 +174,19 @@
 | 生命周期 / 作用域 | 不新增表/schema；`temporalFacts` 与五类来源继续由 PROJECT_TABLES 派生导出/导入、删除、世界/作品作用域与引用重映射。含本地 ID 的候选 `portable:false`，导入后取消；其它 World/Work 不可恢复或采纳。 |
 | UI / 回滚 | `WorldConstitutionPanel` 明示扫描批次尚未入库、批次确认后仍只是待确认事实；恢复待确认、已确认采纳和不可判定运行。既有逐条确认、否决和明确取代互斥 Canon 完整保留。旧 `useAIStream`、直接 DB 查主体、宽松 parser 与立即 `adoptSetting` 旁路下线。 |
 | 验收 | durable 23 项、UI 5 项、既有 CONSISTENCY-3 4 项和 H59 3 项共 35 项通过。census 收缩为 19 文件 / 34 入口、8 migration。完整 CI 为 355 files / 1613 tests，覆盖率 80.95% statements / 73.24% branches / 78.58% functions / 80.95% lines；3754 模块生产构建与 bundle budget 通过，入口 650.4 KiB / gzip 200.9 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 46/46；新增用例约 6.8 秒，证明登记来源实际进入请求、候选刷新恢复不重复模型调用、批次确认前零事实写入，确认后仍只新增 `status=candidate` 事实并保留逐条 Canon 确认。 |
+
+### HARNESS-70 完成卡：Codex 词条 durable 分块拆分与原子采纳
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-70` 治理小功能。作者把一段设定拆成当前分类的 Codex 词条时，长来源必须可续跑，模型结果必须先成为可刷新恢复的候选；确认前正式词条零写入。 |
+| 主归属 / 复用 | 在同一 `world-origin` Agent 下新增 `world-origin.codex-extract` Skill，复用 Context Gateway、durable Run/checkpoint、`FIELD_REGISTRY + AdoptionSchema + adopt(codexEntries)` 与 terminal receipt，不建立平行提取或写入入口。 |
+| 读 / 写 | 模型只经 `manualText / codexExtractionBaseline` 登记源读取作者来源、目标分类/schema 和同世界组既有词条。写入闭集为 `codexEntries` 的分类、名称、图标、摘要、描述、自定义字段、引用、标签、重要度、顺序与世界组字段；只在作者确认后统一采纳。 |
+| 状态机 / 硬验证 | 冻结 World/Work/世界组、分类/schema、既有词条、Context Manifest、Prompt、分块和逐调用 hash。每个确定完成分块 checkpoint，只续跑剩余调用；未知模型结果不自动重试。输出只接受 0～200 个 exact-key JSON 对象，未知 schema 字段、类型修复、重复名、围栏与越界值均 fail-closed。 |
+| 采纳恢复 | 作者子集与最终顺序冻结后不可改选或取消，只能沿同一意图收敛。事务内二次复核分类、schema、完整既有词条 baseline 后，经 `adopt()` 原子新增全部冻结项；八个采纳边界可幂等恢复。零候选也可确认并签发零写入终态回执。 |
+| 生命周期 / 作用域 | 不新增表/schema；`codexEntries / codexCategories` 继续由 `PROJECT_TABLES` 派生 World 归属、ref/FK 清理、导入导出、删除和重映射生命周期。候选含本地分类/词条 ID，`portable:false`，导入后取消；其它 World/Work/世界组/分类不可恢复或采纳。 |
+| UI / 回滚 | `CodexPanel` 恢复待确认候选、安全分块进度、冻结选择或不可判定运行。人工 CRUD、字段管理与 ref 编辑保留。旧组件 `chat()`、组件内 `assembleContext()`、宽松 parser、内存候选和直接 `adopt(codexEntries)` 旁路已下线。 |
+| 验收 | durable 21 项、UI 5 项和 H59 3 项共 29 项通过；Codex 导入/生命周期/受控视图/Skill 联合回归 43 项通过。census 收缩为 18 文件 / 33 入口、7 migration。完整 CI 为 357 files / 1639 tests，覆盖率 81.05% statements / 73.51% branches / 78.77% functions / 81.05% lines；3756 模块生产构建与 bundle budget 通过，入口 652.6 KiB / gzip 201.6 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 47/47；新增用例约 6.0 秒，证明登记分类/schema/来源实际进入请求、候选刷新恢复不重复模型调用、确认前零正式写入，确认后词条跨刷新持久化。 |
 
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 

@@ -243,7 +243,7 @@
 
 **核对确认安全（排除嫌疑）**：
 - 版本快照还原复用 export/import（已含数据丢失修复）；`ensure-schema` REQUIRED_TABLES 保守（不误删老用户）。
-- WorldMapPanel 在 HARNESS-66 后只经登记 Context Gateway 读取当前 World，并以目标节点/世界组证据隔离；WorldGroupDetail 在 HARNESS-67 后只经四个登记源读已保存草稿，七字段候选确认后才原子采纳；WorldGroupOverview 在 HARNESS-68 后只经三个登记源生成整批 durable 候选，勾选子集确认后才原子新建世界，旧 `buildAllWorldsOverview` 已删除；WorldConstitutionPanel 在 HARNESS-69 后只经 `constitutionScanSources` 读取登记闭集，批次确认只原子新增事实候选，仍需逐条确认成为 Canon；HistoryPanel 多世界按当前世界；EmotionBeat 经 prop 拿真实上下文。
+- WorldMapPanel 在 HARNESS-66 后只经登记 Context Gateway 读取当前 World，并以目标节点/世界组证据隔离；WorldGroupDetail 在 HARNESS-67 后只经四个登记源读已保存草稿，七字段候选确认后才原子采纳；WorldGroupOverview 在 HARNESS-68 后只经三个登记源生成整批 durable 候选，勾选子集确认后才原子新建世界，旧 `buildAllWorldsOverview` 已删除；WorldConstitutionPanel 在 HARNESS-69 后只经 `constitutionScanSources` 读取登记闭集，批次确认只原子新增事实候选，仍需逐条确认成为 Canon；CodexPanel 在 HARNESS-70 后只经 `manualText / codexExtractionBaseline` 读取作者来源、分类 schema 和同世界组既有词条，长来源候选完成并由作者冻结子集后才原子新增词条；HistoryPanel 多世界按当前世界；EmotionBeat 经 prop 拿真实上下文。
 - 所有解析器（inventory/timeline/arc/relation/plot/character/outline/import）字段与表对齐、防御性默认。
 - 无跨项目查询泄漏（toArray 均带 projectId，除有意的全局表）；导入大纲正确重建 parentId 树。
 - 所有 `JSON.parse(AI 输出)` 均被 try/catch 保护（解析器内部 return null/[]，或调用方 try/catch + 错误展示，如 voronoi 地图）。

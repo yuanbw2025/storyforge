@@ -745,6 +745,13 @@ flowchart TB
     FS_C --> ENTRIES
     FS_A --> ENTRIES
 
+    AUTHOR_TEXT["作者指定设定内容"] --> CODEX_GATE["Context Gateway<br/>manualText + codexExtractionBaseline"]
+    CAT_TREE --> CODEX_GATE
+    ENTRIES --> CODEX_GATE
+    CODEX_GATE --> CODEX_RUN["world-origin.codex-extract<br/>durable 分块 + strict 候选"]
+    CODEX_RUN --> CODEX_CONFIRM["作者冻结子集<br/>baseline CAS + adopt"]
+    CODEX_CONFIRM --> ENTRIES
+
     REF["🔗 词条间 ref 关联<br/>矿物 → 可炼器物<br/>器物 → 所需材料<br/>城池 → 所属势力<br/>异兽 → 可产出材料"]
     ENTRIES -.refs.-> REF
     REF -.指向其它词条.-> ENTRIES
@@ -762,7 +769,7 @@ flowchart TB
     classDef inj fill:#16a34a,stroke:#15803d,color:#fff;
     class ROOT_N,ROOT_H,BI_MIN,BI_HERB,BI_BEAST,BI_RACE,BI_FAC,BI_CITY,BI_ART,CUSTOM cat
     class FS_M,FS_H,FS_B,FS_R,FS_F,FS_C,FS_A fs
-    class ENTRIES,REF ent
+    class ENTRIES,REF,CODEX_RUN,CODEX_CONFIRM ent
     class CTXBLD,INJ inj
 ```
 

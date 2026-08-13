@@ -11,22 +11,26 @@ import {
 } from 'lucide-react'
 import { useCodexStore } from '../../stores/codex'
 import {
-  CODEX_DOMAIN_LABELS, filterCodexEntriesByWorld, parseFieldSchema,
+  CODEX_DOMAIN_LABELS, filterCodexEntriesByWorld,
   type CodexDomain, type CodexCategory, type CodexEntry,
 } from '../../lib/types/codex'
 import type { Project } from '../../lib/types'
 import { useDialog } from '../shared/Dialog'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useWorldGroupStore } from '../../stores/world-group'
-import { chat, resolveRequestConfig } from '../../lib/ai/client'
+import { resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
-import {
-  buildCodexExtractPrompt, parseCodexEntries, splitExtractionText,
-} from '../../lib/ai/adapters/structured-extract-adapter'
-import { adopt } from '../../lib/registry/adopt'
+import type { ExtractedCodexEntry } from '../../lib/ai/adapters/structured-extract-adapter'
 import { useToast } from '../shared/Toast'
-import { uniqueBy } from '../../lib/ai/structured-extraction'
-import { assembleContext } from '../../lib/registry/assemble-context'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
+import {
+  abandonCodexExtractionV1,
+  adoptCodexExtractionCandidateV1,
+  generateCodexExtractionCandidateV1,
+  readPendingCodexExtractionCandidateV1,
+  readRecoverableCodexExtractionV1,
+  resumeCodexExtractionCandidateV1,
+} from '../../lib/agent/run/codex-extraction-durable'
 import CodexCategoryFieldsEditor from './CodexCategoryFieldsEditor'
 import CodexEntryDetail from './CodexEntryDetail'
 
@@ -78,8 +82,17 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   const [extractText, setExtractText] = useState('')
   const [supplementTags, setSupplementTags] = useState(true)
   const [extracting, setExtracting] = useState(false)
-  const [candidates, setCandidates] = useState<ReturnType<typeof parseCodexEntries>>([])
+  const [candidates, setCandidates] = useState<ExtractedCodexEntry[]>([])
   const [selectedCandidates, setSelectedCandidates] = useState<Set<number>>(new Set())
+  const [selectionFrozen, setSelectionFrozen] = useState(false)
+  const [extractRunId, setExtractRunId] = useState<number | null>(null)
+  const [recoverable, setRecoverable] = useState<{
+    runId: number
+    nextCallIndex: number
+    totalCalls: number
+    safeToResume: boolean
+  } | null>(null)
+  const [extractError, setExtractError] = useState<string | null>(null)
 
   useEffect(() => { loadAll(projectId) }, [projectId, loadAll])
 
@@ -206,7 +219,81 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     setExtractText(extractionSourceText)
     setCandidates([])
     setSelectedCandidates(new Set())
+    setSelectionFrozen(false)
+    setExtractRunId(null)
+    setRecoverable(null)
+    setExtractError(null)
     setExtractOpen(true)
+  }
+
+  useEffect(() => {
+    if (!extractOpen || !activeCat?.id || !scopeReady) return
+    let active = true
+    void resolveScopeLike(projectId).then(async scope => {
+      const filter = { scope, categoryId: activeCat.id!, worldGroupId: scopedWorldGroupId ?? null }
+      const pending = await readPendingCodexExtractionCandidateV1(filter)
+      return { pending, recoverable: pending ? null : await readRecoverableCodexExtractionV1(filter) }
+    }).then(result => {
+      if (!active) return
+      if (result.pending) {
+        setExtractRunId(result.pending.snapshot.run.id)
+        setCandidates(result.pending.candidate.entries)
+        setExtractText(result.pending.candidate.plan.request.sourceText)
+        setSupplementTags(result.pending.candidate.plan.request.supplementTags)
+        setSelectedCandidates(new Set(
+          result.pending.selectedIndexes ?? result.pending.candidate.entries.map((_, index) => index),
+        ))
+        setSelectionFrozen(result.pending.selectedIndexes != null)
+      } else if (result.recoverable) {
+        setRecoverable({
+          runId: result.recoverable.snapshot.run.id,
+          nextCallIndex: result.recoverable.nextCallIndex,
+          totalCalls: result.recoverable.totalCalls,
+          safeToResume: result.recoverable.safeToResume,
+        })
+        if (result.recoverable.request) {
+          setExtractText(result.recoverable.request.sourceText)
+          setSupplementTags(result.recoverable.request.supplementTags)
+        }
+      }
+    }).catch(error => {
+      if (active) setExtractError(error instanceof Error ? error.message : 'Codex 提取运行恢复失败')
+    })
+    return () => { active = false }
+  }, [activeCat?.id, extractOpen, projectId, scopeReady, scopedWorldGroupId])
+
+  const reconcileExtractionState = async () => {
+    if (!activeCat?.id || !scopeReady) return
+    const scope = await resolveScopeLike(projectId)
+    const filter = { scope, categoryId: activeCat.id, worldGroupId: scopedWorldGroupId ?? null }
+    const pending = await readPendingCodexExtractionCandidateV1(filter)
+    if (pending) {
+      setExtractRunId(pending.snapshot.run.id)
+      setRecoverable(null)
+      setCandidates(pending.candidate.entries)
+      setExtractText(pending.candidate.plan.request.sourceText)
+      setSupplementTags(pending.candidate.plan.request.supplementTags)
+      setSelectedCandidates(new Set(
+        pending.selectedIndexes ?? pending.candidate.entries.map((_, index) => index),
+      ))
+      setSelectionFrozen(pending.selectedIndexes != null)
+      return
+    }
+    setExtractRunId(null)
+    setCandidates([])
+    setSelectedCandidates(new Set())
+    setSelectionFrozen(false)
+    const recovery = await readRecoverableCodexExtractionV1(filter)
+    setRecoverable(recovery ? {
+      runId: recovery.snapshot.run.id,
+      nextCallIndex: recovery.nextCallIndex,
+      totalCalls: recovery.totalCalls,
+      safeToResume: recovery.safeToResume,
+    } : null)
+    if (recovery?.request) {
+      setExtractText(recovery.request.sourceText)
+      setSupplementTags(recovery.request.supplementTags)
+    }
   }
 
   const handleExtractEntries = async () => {
@@ -214,62 +301,104 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'codex.extract' }).config
     if (!isAIConfigReady(effectiveConfig)) { toast.error(getAIConfigRequiredMessage(effectiveConfig)); return }
     setExtracting(true)
+    setExtractError(null)
     try {
-      const schema = parseFieldSchema(activeCat.fieldSchema)
-      const found: ReturnType<typeof parseCodexEntries> = []
-      for (const chunk of splitExtractionText(extractText)) {
-        const source = await assembleContext({
-          projectId,
-          sourceKeys: ['manualText'],
-          manualSourceText: chunk,
-        })
-        const raw = await chat(buildCodexExtractPrompt({
-          categoryName: activeCat.name,
-          sourceText: source.text,
-          fieldSchema: schema,
-          existingNames: [...catEntries.map(e => e.name), ...found.map(e => e.name)],
+      const generated = await generateCodexExtractionCandidateV1({
+        scope: await resolveScopeLike(projectId),
+        request: {
+          categoryId: activeCat.id!,
+          worldGroupId: scopedWorldGroupId ?? null,
+          sourceText: extractText,
           supplementTags,
-        }), aiConfig, { category: 'codex.extract', projectId })
-        found.push(...parseCodexEntries(raw, schema.map(f => f.key)))
-      }
-      const existingNames = new Set(catEntries.map(entry => entry.name.trim().toLocaleLowerCase()))
-      const parsed = uniqueBy(
-        found.filter(item => !existingNames.has(item.name.toLocaleLowerCase())),
-        item => item.name.toLocaleLowerCase(),
-      )
-      setCandidates(parsed)
-      setSelectedCandidates(new Set(parsed.map((_, index) => index)))
-      if (!parsed.length) toast.info('AI 未从这段内容中识别出可独立登记的词条。')
+        },
+        aiConfig,
+      })
+      setExtractRunId(generated.snapshot.run.id)
+      setRecoverable(null)
+      setCandidates(generated.candidate.entries)
+      setSelectedCandidates(new Set(generated.candidate.entries.map((_, index) => index)))
+      setSelectionFrozen(false)
+      if (!generated.candidate.entries.length) toast.info('AI 未从这段内容中识别出可独立登记的词条。')
+    } catch (error) {
+      setExtractError(error instanceof Error ? error.message : 'Codex 词条提取失败')
+      try {
+        await reconcileExtractionState()
+      } catch { /* Preserve original failure. */ }
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  const handleResumeExtraction = async () => {
+    if (!recoverable?.safeToResume || extracting) return
+    setExtracting(true)
+    setExtractError(null)
+    try {
+      const resumed = await resumeCodexExtractionCandidateV1({
+        scope: await resolveScopeLike(projectId), runId: recoverable.runId, aiConfig,
+      })
+      setExtractRunId(resumed.snapshot.run.id)
+      setRecoverable(null)
+      setCandidates(resumed.candidate.entries)
+      setSelectedCandidates(new Set(resumed.candidate.entries.map((_, index) => index)))
+      setSelectionFrozen(false)
+    } catch (error) {
+      setExtractError(error instanceof Error ? error.message : '继续 Codex 提取失败')
+      try { await reconcileExtractionState() } catch { /* Preserve original failure. */ }
     } finally {
       setExtracting(false)
     }
   }
 
   const handleAdoptCandidates = async () => {
-    if (!activeCat || !scopeReady) return
-    const chosen = candidates.filter((_, index) => selectedCandidates.has(index))
-    const result = await adopt({
-      projectId,
-      worldGroupId: scopedWorldGroupId,
-      target: 'codexEntries',
-      mode: 'add-many',
-      data: chosen.map((item, index) => ({
-        categoryId: activeCat.id!,
-        name: item.name,
-        icon: item.icon || activeCat.icon,
-        summary: item.summary,
-        description: item.description,
-        fields: JSON.stringify(item.fields),
-        refs: '{}',
-        tags: JSON.stringify(item.tags),
-        importance: item.importance,
-        order: catEntries.length + index,
-        worldGroupId: scopedWorldGroupId,
-      })),
-    })
-    await loadAll(projectId)
+    if (!activeCat || !scopeReady || extractRunId == null) return
+    setExtracting(true)
+    setExtractError(null)
+    let result: Awaited<ReturnType<typeof adoptCodexExtractionCandidateV1>>
+    try {
+      result = await adoptCodexExtractionCandidateV1({
+        scope: await resolveScopeLike(projectId),
+        runId: extractRunId,
+        selectedIndexes: [...selectedCandidates],
+      })
+    } catch (error) {
+      setExtractError(error instanceof Error ? error.message : 'Codex 词条采纳失败')
+      try { await reconcileExtractionState() } catch { /* Preserve original failure. */ }
+      setExtracting(false)
+      return
+    }
     setExtractOpen(false)
-    toast.success(`已写入 ${result.written.length} 个词条${result.skipped.length ? `，跳过 ${result.skipped.length} 个重复项` : ''}。`)
+    setExtractRunId(null)
+    setCandidates([])
+    setSelectionFrozen(false)
+    try {
+      await loadAll(projectId)
+      toast.success(`已原子写入 ${result.written} 个词条。`)
+    } catch {
+      toast.error(`已原子写入 ${result.written} 个词条，但界面刷新失败；重新打开页面即可恢复。`)
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  const handleAbandonExtraction = async (close = true) => {
+    const runId = extractRunId ?? recoverable?.runId
+    if (runId == null || extracting) return
+    setExtracting(true)
+    try {
+      await abandonCodexExtractionV1({ scope: await resolveScopeLike(projectId), runId })
+      setExtractRunId(null)
+      setRecoverable(null)
+      setCandidates([])
+      setSelectedCandidates(new Set())
+      setSelectionFrozen(false)
+      setExtractError(null)
+      if (close) setExtractOpen(false)
+    } catch (error) {
+      setExtractError(error instanceof Error ? error.message : '放弃 Codex 提取失败')
+    } finally {
+      setExtracting(false)
+    }
   }
 
   return (
@@ -456,32 +585,66 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
         />
       )}
       {extractOpen && activeCat && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={() => setExtractOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
           <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-bg-surface border border-border rounded-xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-text-primary">AI 拆分「{activeCat.name}」词条</h3>
-                <p className="text-xs text-text-muted">AI 只生成候选，确认后才写入；同名词条会自动合并/跳过。</p>
+                <p className="text-xs text-text-muted">AI 只生成候选，确认后才原子写入；既有同名项会排除，并发变化会拒绝采纳。</p>
               </div>
-              <button onClick={() => setExtractOpen(false)}><X className="w-4 h-4 text-text-muted" /></button>
+              <button disabled={extracting} className="disabled:opacity-40" onClick={() => {
+                if (extracting) return
+                if (selectionFrozen) setExtractOpen(false)
+                else if (extractRunId != null || recoverable) void handleAbandonExtraction(true)
+                else setExtractOpen(false)
+              }}><X className="w-4 h-4 text-text-muted" /></button>
             </div>
             <textarea value={extractText} onChange={e => setExtractText(e.target.value)} rows={8}
+              disabled={extractRunId != null || recoverable != null}
               placeholder="粘贴或编辑要拆分的整段设定内容"
-              className="w-full p-3 bg-bg-base border border-border rounded-lg text-sm text-text-primary resize-y" />
+              className="w-full p-3 bg-bg-base border border-border rounded-lg text-sm text-text-primary resize-y disabled:opacity-60" />
             <label className="flex items-start gap-2 text-xs text-text-secondary">
-              <input type="checkbox" checked={supplementTags} onChange={e => setSupplementTags(e.target.checked)} className="mt-0.5 accent-accent" />
+              <input type="checkbox" checked={supplementTags} onChange={e => setSupplementTags(e.target.checked)}
+                disabled={extractRunId != null || recoverable != null} className="mt-0.5 accent-accent disabled:opacity-60" />
               <span>AI 补充词条标签 <span className="text-amber-400">⚠ 会增加少量 token 消耗</span></span>
             </label>
-            <button onClick={handleExtractEntries} disabled={extracting || !extractText.trim()}
+            <button onClick={handleExtractEntries} disabled={extracting || !extractText.trim() || extractRunId != null || recoverable != null}
               className="px-3 py-1.5 bg-accent text-white rounded-lg text-sm disabled:opacity-40 inline-flex items-center gap-1.5">
               {extracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {extracting ? 'AI 拆分中…' : '开始拆分'}
             </button>
-            {candidates.length > 0 && (
+            {recoverable && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-text-secondary">
+                <p>
+                  已恢复分块进度 {recoverable.nextCallIndex}/{recoverable.totalCalls}。
+                  {recoverable.safeToResume ? '可从下一分块继续，不重复已有模型调用。' : '模型结果不可判定，系统不会自动重试。'}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  {recoverable.safeToResume && (
+                    <button onClick={() => void handleResumeExtraction()} disabled={extracting}
+                      className="rounded bg-accent px-2.5 py-1 text-white disabled:opacity-40">继续提取</button>
+                  )}
+                  <button onClick={() => void handleAbandonExtraction(false)} disabled={extracting}
+                    className="rounded border border-border px-2.5 py-1 text-text-muted disabled:opacity-40">放弃旧运行</button>
+                </div>
+              </div>
+            )}
+            {extractError && <p className="rounded bg-error/10 p-2 text-xs text-error">{extractError}</p>}
+            {extractRunId != null && (
               <div className="space-y-2 border-t border-border pt-3">
+                {candidates.length === 0 && (
+                  <p className="rounded-lg border border-border bg-bg-base p-3 text-xs text-text-muted">
+                    本次模型调用未识别出新增词条。确认后将保存零写入回执，正式词条不会变化。
+                  </p>
+                )}
+                {selectionFrozen && (
+                  <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-text-secondary">
+                    作者选择已冻结。此运行只可沿同一选择继续写入与终验，不会重复调用模型。
+                  </p>
+                )}
                 {candidates.map((item, index) => (
                   <label key={`${item.name}-${index}`} className="flex gap-3 p-3 border border-border rounded-lg bg-bg-base">
-                    <input type="checkbox" checked={selectedCandidates.has(index)} onChange={() => {
+                    <input type="checkbox" checked={selectedCandidates.has(index)} disabled={selectionFrozen} onChange={() => {
                       setSelectedCandidates(prev => {
                         const next = new Set(prev)
                         if (next.has(index)) next.delete(index); else next.add(index)
@@ -496,10 +659,16 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
                   </label>
                 ))}
                 <div className="flex justify-end gap-2">
-                  <button onClick={() => setExtractOpen(false)} className="px-3 py-1.5 text-xs text-text-muted">取消</button>
-                  <button onClick={handleAdoptCandidates} disabled={!selectedCandidates.size}
+                  {!selectionFrozen && (
+                    <button onClick={() => void handleAbandonExtraction(true)} disabled={extracting}
+                      className="px-3 py-1.5 text-xs text-text-muted disabled:opacity-40">否决并关闭</button>
+                  )}
+                  <button onClick={handleAdoptCandidates}
+                    disabled={(candidates.length > 0 && !selectedCandidates.size) || extracting}
                     className="px-3 py-1.5 text-xs bg-accent text-white rounded disabled:opacity-40">
-                    写入所选 {selectedCandidates.size} 项
+                    {selectionFrozen
+                      ? '继续写入与终验'
+                      : candidates.length > 0 ? `写入所选 ${selectedCandidates.size} 项` : '确认无新增词条'}
                   </button>
                 </div>
               </div>

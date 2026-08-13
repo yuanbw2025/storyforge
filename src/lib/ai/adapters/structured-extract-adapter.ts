@@ -66,6 +66,114 @@ export function parseCodexEntries(raw: string, allowedFieldKeys: string[]): Extr
   }).filter(item => item.name)
 }
 
+/** HARNESS-70: durable Codex extraction rejects repairable/ambiguous model output. */
+export function parseCodexEntriesStrictV1(
+  raw: string,
+  allowedFields: readonly string[] | readonly CodexFieldDef[],
+): ExtractedCodexEntry[] {
+  const source = raw.trim()
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(source)
+  } catch {
+    throw new Error('词条提取输出不是严格 JSON。')
+  }
+  if (!Array.isArray(parsed)) throw new Error('词条提取输出必须是 JSON 数组。')
+  if (parsed.length > 200) throw new Error('词条候选超过单次协议上限 200。')
+  const fieldDefs = new Map<string, CodexFieldDef>()
+  for (const value of allowedFields) {
+    const field = typeof value === 'string' ? { key: value, label: value, type: 'text' as const } : value
+    fieldDefs.set(field.key, field)
+  }
+  const exactKeys = ['name', 'icon', 'summary', 'description', 'fields', 'tags', 'importance'] as const
+  const names = new Set<string>()
+  return parsed.map((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`词条候选 ${index + 1} 不是对象。`)
+    }
+    const row = value as Record<string, unknown>
+    if (Object.keys(row).length !== exactKeys.length || Object.keys(row).some(key => !exactKeys.includes(key as typeof exactKeys[number]))) {
+      throw new Error(`词条候选 ${index + 1} 字段不在允许闭集。`)
+    }
+    if (
+      typeof row.name !== 'string' || !row.name.trim() || row.name.trim().length > 120
+      || typeof row.icon !== 'string' || row.icon.trim().length > 16
+      || typeof row.summary !== 'string' || !row.summary.trim() || row.summary.trim().length > 1_000
+      || typeof row.description !== 'string' || !row.description.trim() || row.description.trim().length > 8_000
+      || !row.fields || typeof row.fields !== 'object' || Array.isArray(row.fields)
+      || !Array.isArray(row.tags) || row.tags.length > 5
+      || !Number.isInteger(row.importance) || (row.importance as number) < 0 || (row.importance as number) > 5
+    ) throw new Error(`词条候选 ${index + 1} 字段类型、长度或范围无效。`)
+    const normalizedName = row.name.trim().toLocaleLowerCase()
+    if (names.has(normalizedName)) throw new Error(`词条候选 ${index + 1} 名称重复。`)
+    names.add(normalizedName)
+    const fields: Record<string, string> = {}
+    for (const [key, fieldValue] of Object.entries(row.fields as Record<string, unknown>)) {
+      const field = fieldDefs.get(key)
+      if (!field) throw new Error(`词条候选 ${index + 1} 包含未登记字段 ${key}。`)
+      if (typeof fieldValue !== 'string' || !fieldValue.trim() || fieldValue.trim().length > 2_000) {
+        throw new Error(`词条候选 ${index + 1} 字段 ${key} 的值无效。`)
+      }
+      const normalized = fieldValue.trim()
+      if (field.type === 'ref') throw new Error(`词条候选 ${index + 1} 不得伪造引用字段 ${key}。`)
+      if (field.type === 'number' && !Number.isFinite(Number(normalized))) {
+        throw new Error(`词条候选 ${index + 1} 数值字段 ${key} 无效。`)
+      }
+      if (field.type === 'select' && field.options?.length && !field.options.includes(normalized)) {
+        throw new Error(`词条候选 ${index + 1} 枚举字段 ${key} 不在登记选项内。`)
+      }
+      fields[key] = normalized
+    }
+    const tags = row.tags.map((tag, tagIndex) => {
+      if (typeof tag !== 'string' || !tag.trim() || tag.trim().length > 60) {
+        throw new Error(`词条候选 ${index + 1} 标签 ${tagIndex + 1} 无效。`)
+      }
+      return tag.trim()
+    })
+    if (new Set(tags.map(tag => tag.toLocaleLowerCase())).size !== tags.length) {
+      throw new Error(`词条候选 ${index + 1} 标签重复。`)
+    }
+    return {
+      name: row.name.trim(),
+      icon: row.icon.trim(),
+      summary: row.summary.trim(),
+      description: row.description.trim(),
+      fields,
+      tags,
+      importance: row.importance as number,
+    }
+  })
+}
+
+export function buildCodexExtractPromptFromRegisteredContextV1(input: {
+  sourceText: string
+  baselineContext: string
+  discoveredNames: readonly string[]
+  supplementTags: boolean
+}): ChatMessage[] {
+  const template = usePromptStore.getState().getActive('codex.extract')
+  return renderPrompt(template, {
+    categoryName: input.baselineContext,
+    fieldSchema: '严格使用上述登记基线中的字段 schema；select 必须取登记选项，number 必须是有限数值字符串，ref 必须留空并由作者之后关联，不得添加其它 key。',
+    existingEntries: input.discoveredNames.join('、') || '登记基线之外，本轮前置分块尚无新候选。',
+    supplementTags: input.supplementTags ? '是' : '否',
+    sourceText: input.sourceText,
+  }).messages
+}
+
+export function readCodexExtractPromptTemplateSnapshotV1() {
+  const template = usePromptStore.getState().getActive('codex.extract')
+  return {
+    moduleKey: template.moduleKey,
+    systemPrompt: template.systemPrompt,
+    userPromptTemplate: template.userPromptTemplate,
+    variables: template.variables,
+    modelOverride: template.modelOverride ?? null,
+    examples: template.examples ?? null,
+    parameters: template.parameters ?? null,
+  }
+}
+
 /** HARNESS-62: existing location text must come from the Context Gateway. */
 export function buildLocationExtractPromptFromContext(
   chapterText: string,

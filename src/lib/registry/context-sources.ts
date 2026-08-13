@@ -39,6 +39,7 @@ import {
   readSettingAssertionScanContext,
 } from '../fact-ledger/setting-assertions'
 import { readStorylineProgressContext } from '../storyline/storyline-progress'
+import { readCodexExtractionBaselineContextV1 } from '../codex/extraction'
 import { buildEditImpactGraphV1 } from '../consistency/impact-analysis'
 import { readCultivationProgressContext } from '../cultivation/progress'
 import type {
@@ -904,6 +905,22 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L0',
     budgetTokens: 100_000,
     read: async input => input.manualSourceText || '',
+  },
+  {
+    key: 'codexExtractionBaseline',
+    label: 'Codex 目标分类与既有词条闭集',
+    scope: 'world',
+    layer: 'L0',
+    budgetTokens: 8_000,
+    protectedFromTrim: true,
+    ownerFrom: 'world',
+    requiresWorldGroupId: true,
+    enabled: input => Number.isInteger(input.codexCategoryId),
+    read: input => readCodexExtractionBaselineContextV1({
+      scope: input.scope!,
+      categoryId: input.codexCategoryId!,
+      worldGroupId: input.worldGroupId ?? null,
+    }),
   },
   {
     key: 'priorOutlineCandidate',

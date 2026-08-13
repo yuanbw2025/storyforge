@@ -391,6 +391,8 @@ export interface AssembleContextInput {
   scope?: WorkspaceScope
   /** Explicit world target. null is a valid explicit single-world/global target. */
   worldGroupId?: number | null
+  /** HARNESS-70: trusted target category for the registered Codex extraction baseline. */
+  codexCategoryId?: number
   outlineNodeId?: number | null
   chapterId?: number | null
   currentChapterOrder?: number

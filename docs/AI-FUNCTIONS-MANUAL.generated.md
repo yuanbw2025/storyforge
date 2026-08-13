@@ -79,7 +79,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 55 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 56 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -90,6 +90,7 @@
 | `searchResults` | 项目内搜索结果 | world | L2 | 2200 |
 | `ragSelection` | 作者选择的资料字段 | manual | L0 | 100000 |
 | `manualText` | 用户指定内容 | manual | L0 | 100000 |
+| `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000 |
 | `priorOutlineCandidate` | 同批次上一卷章纲候选 | runtime | L1 | 2400 |
 | `chapterContent` | 章节正文 | chapter | L0 | 100000 |
 | `contextMemo` | 上下文快照 | project | L3 | 1500 |
@@ -218,7 +219,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1616`<br/>`src/components/editor/ChapterEditor.tsx:2332` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1463` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
-| `codex.extract` | `src/components/codex/CodexPanel.tsx:226` |
+| `codex.extract` | `src/lib/agent/run/codex-extraction-durable.ts:627` |
 | `cultivation.progress` | `src/components/cultivation/CultivationProgressPanel.tsx:143` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
 | `detail.scene` | `src/lib/ai/batch-detail-runner.ts:193` |
@@ -283,4 +284,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `a359e05`
+生成时间基准:commit `715cb38`
