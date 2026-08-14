@@ -2,6 +2,7 @@ import { BookOpenCheck, Check, ClipboardList, Eye, GitBranch, Loader2, RefreshCw
 import { CInput } from '../shared/CompositionInput'
 import type { ImpactPatchCandidateV1 } from '../../lib/agent/run/impact-patch-durable'
 import type { ImpactOutlineRegenerationCandidateV1 } from '../../lib/agent/run/impact-outline-regeneration-durable'
+import type { ImpactStoryTimelineRegenerationCandidateV1 } from '../../lib/agent/run/impact-story-timeline-regeneration-durable'
 import type {
   ImpactAuthorReviewRecordV1,
   ImpactReviewDecisionV1,
@@ -16,6 +17,12 @@ interface ImpactPatchTarget {
 
 interface ImpactOutlineRegenerationTarget extends ImpactPatchTarget {
   itemId: string
+}
+
+interface ImpactStoryTimelineRegenerationTarget {
+  itemId: string
+  id: number
+  title: string
 }
 
 const IMPACT_REVIEW_ACTION_LABELS: Record<string, string> = {
@@ -58,6 +65,12 @@ interface Props {
   impactOutlineRegenerationBusy: boolean
   impactOutlineRegenerationReceipt: string | null
   impactOutlineRegenerationError: string | null
+  impactStoryTimelineRegenerationTargets: ImpactStoryTimelineRegenerationTarget[]
+  impactStoryTimelineRegenerationItemId: string | null
+  impactStoryTimelineRegenerationCandidate: ImpactStoryTimelineRegenerationCandidateV1 | null
+  impactStoryTimelineRegenerationBusy: boolean
+  impactStoryTimelineRegenerationReceipt: string | null
+  impactStoryTimelineRegenerationError: string | null
   hasOutline: boolean
   showOutlinePreview: boolean
   showReviewPanel: boolean
@@ -91,6 +104,10 @@ interface Props {
   onGenerateImpactOutlineRegeneration: () => void
   onConfirmImpactOutlineRegeneration: () => void
   onRejectImpactOutlineRegeneration: () => void
+  onImpactStoryTimelineRegenerationItemChange: (itemId: string | null) => void
+  onGenerateImpactStoryTimelineRegeneration: () => void
+  onConfirmImpactStoryTimelineRegeneration: () => void
+  onRejectImpactStoryTimelineRegeneration: () => void
   onToggleOutlinePreview: () => void
   onToggleReviewPanel: () => void
   onToggleNotePanel: () => void
@@ -129,6 +146,12 @@ export default function ChapterEditorToolbar({
   impactOutlineRegenerationBusy,
   impactOutlineRegenerationReceipt,
   impactOutlineRegenerationError,
+  impactStoryTimelineRegenerationTargets,
+  impactStoryTimelineRegenerationItemId,
+  impactStoryTimelineRegenerationCandidate,
+  impactStoryTimelineRegenerationBusy,
+  impactStoryTimelineRegenerationReceipt,
+  impactStoryTimelineRegenerationError,
   hasOutline,
   showOutlinePreview,
   showReviewPanel,
@@ -162,6 +185,10 @@ export default function ChapterEditorToolbar({
   onGenerateImpactOutlineRegeneration,
   onConfirmImpactOutlineRegeneration,
   onRejectImpactOutlineRegeneration,
+  onImpactStoryTimelineRegenerationItemChange,
+  onGenerateImpactStoryTimelineRegeneration,
+  onConfirmImpactStoryTimelineRegeneration,
+  onRejectImpactStoryTimelineRegeneration,
   onToggleOutlinePreview,
   onToggleReviewPanel,
   onToggleNotePanel,
@@ -328,6 +355,7 @@ export default function ChapterEditorToolbar({
           )}
           {impactOutlineRegenerationTargets.length > 0
             && !impactOutlineRegenerationCandidate
+            && !impactStoryTimelineRegenerationCandidate
             && !impactPatchCandidate && (
             <div className="space-y-2 rounded border border-violet-400/20 bg-violet-400/5 p-2">
               <div className="text-[11px] text-violet-200">
@@ -365,7 +393,7 @@ export default function ChapterEditorToolbar({
               </div>
             </div>
           )}
-          {impactOutlineRegenerationCandidate && (
+          {impactOutlineRegenerationCandidate && !impactStoryTimelineRegenerationCandidate && (
             <div className="space-y-2 rounded border border-violet-400/25 bg-bg-elevated/70 p-2 text-text-secondary">
               <div className="text-[11px] text-text-muted">H57 child 候选只允许写目标章纲摘要；作者确认前正式数据不变。</div>
               <div className="whitespace-pre-wrap text-xs text-text-primary">{impactOutlineRegenerationCandidate.result.summary}</div>
@@ -393,7 +421,91 @@ export default function ChapterEditorToolbar({
               </div>
             </div>
           )}
-          {impactPatchTargets.length > 0 && !impactPatchCandidate && !impactOutlineRegenerationCandidate && (
+          {impactStoryTimelineRegenerationTargets.length > 0
+            && !impactStoryTimelineRegenerationCandidate
+            && !impactOutlineRegenerationCandidate
+            && !impactPatchCandidate && (
+            <div className="space-y-2 rounded border border-cyan-400/20 bg-cyan-400/5 p-2">
+              <div className="text-[11px] text-cyan-200">
+                H57 年表重建一次只修订一个既有事件的故事时间、重要度和描述；标题、章节绑定与顺序保持冻结。
+              </div>
+              <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_auto]">
+                <label className="flex items-center gap-2 rounded border border-border bg-bg-elevated px-2 text-text-secondary">
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+                  <span className="sr-only">生成式故事年表目标</span>
+                  <select
+                    aria-label="生成式故事年表目标"
+                    value={impactStoryTimelineRegenerationItemId ?? ''}
+                    onChange={event => onImpactStoryTimelineRegenerationItemChange(event.target.value || null)}
+                    className="min-w-0 flex-1 bg-transparent py-1.5 text-xs text-text-primary outline-none"
+                    disabled={impactStoryTimelineRegenerationBusy}
+                  >
+                    <option value="">选择 H57 当前年表影响项</option>
+                    {impactStoryTimelineRegenerationTargets.map(target => (
+                      <option key={target.itemId} value={target.itemId}>{target.title} · 事件 #{target.id}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={onGenerateImpactStoryTimelineRegeneration}
+                  disabled={impactStoryTimelineRegenerationBusy || !impactStoryTimelineRegenerationItemId}
+                  title="创建绑定 H57 receipt 的单事件年表 child Run 与作者确认候选"
+                  className="flex items-center justify-center gap-1 rounded border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-400/20 disabled:opacity-50"
+                >
+                  {impactStoryTimelineRegenerationBusy
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <RefreshCw className="h-3.5 w-3.5" />}
+                  {impactStoryTimelineRegenerationBusy ? '重建中...' : 'AI 重建年表候选'}
+                </button>
+              </div>
+            </div>
+          )}
+          {impactStoryTimelineRegenerationCandidate && !impactOutlineRegenerationCandidate && (
+            <div className="space-y-2 rounded border border-cyan-400/25 bg-bg-elevated/70 p-2 text-text-secondary">
+              <div className="text-[11px] text-text-muted">
+                H57 child 候选：{impactStoryTimelineRegenerationCandidate.targetBaseline.title}；确认前正式年表不变。
+              </div>
+              <div className="grid gap-1 text-[11px] md:grid-cols-2">
+                <div className="rounded border border-border/70 bg-bg-surface/60 p-2">
+                  <div className="text-text-muted">当前值</div>
+                  <div>时间：{impactStoryTimelineRegenerationCandidate.targetBaseline.storyTime || '未标注'}</div>
+                  <div>重要度：{impactStoryTimelineRegenerationCandidate.targetBaseline.importance}</div>
+                  <div className="whitespace-pre-wrap">{impactStoryTimelineRegenerationCandidate.targetBaseline.description || '暂无描述'}</div>
+                </div>
+                <div className="rounded border border-cyan-400/20 bg-cyan-400/5 p-2">
+                  <div className="text-cyan-200">候选值</div>
+                  <div>时间：{impactStoryTimelineRegenerationCandidate.result.storyTime || '未标注'}</div>
+                  <div>重要度：{impactStoryTimelineRegenerationCandidate.result.importance}</div>
+                  <div className="whitespace-pre-wrap text-text-primary">{impactStoryTimelineRegenerationCandidate.result.description || '暂无描述'}</div>
+                </div>
+              </div>
+              <div className="text-[11px] text-text-secondary">理由：{impactStoryTimelineRegenerationCandidate.result.reason}</div>
+              <div className="text-[10px] text-text-muted">证据：{impactStoryTimelineRegenerationCandidate.result.evidenceRefs.join('、')}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onConfirmImpactStoryTimelineRegeneration}
+                  disabled={impactStoryTimelineRegenerationBusy}
+                  className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-50"
+                >
+                  {impactStoryTimelineRegenerationBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  确认重建年表事件
+                </button>
+                <button
+                  type="button"
+                  onClick={onRejectImpactStoryTimelineRegeneration}
+                  disabled={impactStoryTimelineRegenerationBusy}
+                  className="flex items-center gap-1 rounded border border-border bg-bg-surface px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50"
+                >
+                  <X className="h-3.5 w-3.5" />放弃年表候选
+                </button>
+                <span className="text-[10px] text-text-muted">child {impactStoryTimelineRegenerationCandidate.candidateHash.slice(0, 12)}</span>
+              </div>
+            </div>
+          )}
+          {impactPatchTargets.length > 0 && !impactPatchCandidate
+            && !impactOutlineRegenerationCandidate && !impactStoryTimelineRegenerationCandidate && (
             <div className="grid gap-2 md:grid-cols-[minmax(150px,0.7fr)_minmax(200px,1.5fr)_minmax(160px,1fr)_auto]">
               <label className="flex items-center gap-2 rounded border border-border bg-bg-elevated px-2 text-text-secondary">
                 <GitBranch className="h-3.5 w-3.5 shrink-0" />
@@ -438,7 +550,7 @@ export default function ChapterEditorToolbar({
               </button>
             </div>
           )}
-          {impactPatchCandidate && !impactOutlineRegenerationCandidate && (
+          {impactPatchCandidate && !impactOutlineRegenerationCandidate && !impactStoryTimelineRegenerationCandidate && (
             <div className="space-y-2 rounded border border-accent/20 bg-bg-elevated/70 p-2 text-text-secondary">
               <div className="text-[11px] text-text-muted">候选仅允许写入选定大纲的 `summary`，确认前不会改动正式数据。</div>
               <div className="whitespace-pre-wrap text-xs text-text-primary">{impactPatchCandidate.proposal.fields.summary}</div>
@@ -466,6 +578,8 @@ export default function ChapterEditorToolbar({
           {impactPatchError && <div role="alert" className="text-xs text-error">{impactPatchError}</div>}
           {impactOutlineRegenerationReceipt && <div className="text-[10px] text-success">生成式章纲重建回执 {impactOutlineRegenerationReceipt.slice(0, 12)}</div>}
           {impactOutlineRegenerationError && <div role="alert" className="text-xs text-error">{impactOutlineRegenerationError}</div>}
+          {impactStoryTimelineRegenerationReceipt && <div className="text-[10px] text-success">故事年表重建回执 {impactStoryTimelineRegenerationReceipt.slice(0, 12)}</div>}
+          {impactStoryTimelineRegenerationError && <div role="alert" className="text-xs text-error">{impactStoryTimelineRegenerationError}</div>}
           {impactRemediationReceipt && <div className="text-[10px] text-success">确定性重建回执 {impactRemediationReceipt.slice(0, 12)}</div>}
           {impactRemediationError && <div role="alert" className="text-xs text-error">{impactRemediationError}</div>}
         </div>

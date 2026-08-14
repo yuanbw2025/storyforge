@@ -3430,9 +3430,10 @@ test('参考分析总结刷新恢复持久候选，确认后同步版本和激�
   expect(generationCalls).toBe(1)
 })
 
-test('影响人工修正后可恢复生成式章纲候选并经确认原子写回', async ({ page }) => {
+test('影响人工修正后可恢复章纲与年表生成式候选并经确认原子写回', async ({ page }) => {
   let generationCalls = 0
   const regeneratedSummary = '钟楼根据半开启的潮门重新安排守夜人撤离，并留下追查潮声来源的因果钩子。'
+  const regeneratedTimelineDescription = '潮门只开启一半，钟声穿过旧港，但船队尚不能完整通行。'
   await page.addInitScript(() => {
     localStorage.setItem('storyforge-ai-config', JSON.stringify({
       provider: 'ollama',
@@ -3451,8 +3452,14 @@ test('影响人工修正后可恢复生成式章纲候选并经确认原子写�
     }
     const combined = request.messages?.map(message => message.content).join('\n') ?? ''
     expect(combined).toContain('潮门只开启一半')
-    expect(combined).toContain('钟楼照常回应')
-    expect(combined).toContain('HARNESS-77 严格输出协议')
+    const isTimeline = combined.includes('HARNESS-79 严格输出协议')
+    if (isTimeline) {
+      expect(combined).toContain('潮门开启')
+      expect(combined).toContain('目标故事年表事件')
+    } else {
+      expect(combined).toContain('钟楼照常回应')
+      expect(combined).toContain('HARNESS-77 严格输出协议')
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -3460,11 +3467,19 @@ test('影响人工修正后可恢复生成式章纲候选并经确认原子写�
         choices: [{
           message: {
             role: 'assistant',
-            content: JSON.stringify({
-              summary: regeneratedSummary,
-              reason: '人工修正后的潮门状态改变了后续行动条件。',
-              evidenceRefs: ['章节正文', '当前章节大纲'],
-            }),
+            content: JSON.stringify(isTimeline
+              ? {
+                  storyTime: '潮汐纪元第七日黄昏',
+                  importance: 3,
+                  description: regeneratedTimelineDescription,
+                  reason: '人工修正后的潮门状态要求年表保留阻滞状态。',
+                  evidenceRefs: ['章节正文', '目标故事年表事件'],
+                }
+              : {
+                  summary: regeneratedSummary,
+                  reason: '人工修正后的潮门状态改变了后续行动条件。',
+                  evidenceRefs: ['章节正文', '当前章节大纲'],
+                }),
           },
           finish_reason: 'stop',
         }],
@@ -3504,7 +3519,7 @@ test('影响人工修正后可恢复生成式章纲候选并经确认原子写�
     const volume = outlines.find(row => row.type === 'volume')!
     const sourceChapter = chapters.find(row => row.outlineNodeId === sourceOutline.id)!
     const now = Date.now()
-    const transaction = database.transaction(['outlineNodes', 'chapters', 'temporalFacts'], 'readwrite')
+    const transaction = database.transaction(['outlineNodes', 'chapters', 'temporalFacts', 'storyTimelineEvents'], 'readwrite')
     await request(transaction.objectStore('outlineNodes').put({
       ...sourceOutline,
       summary: '潮门由完全开启改为只开启一半。',
@@ -3554,10 +3569,23 @@ test('影响人工修正后可恢复生成式章纲候选并经确认原子写�
       createdAt: now,
       updatedAt: now,
     })) as number
+    const timelineEventId = await request(transaction.objectStore('storyTimelineEvents').add({
+      projectId: currentProjectId,
+      workId: project.activeWorkId,
+      title: '潮门开启',
+      storyTime: '潮汐纪元第七日',
+      importance: 2,
+      description: '潮门完全开启，船队恢复通行。',
+      chapterId: sourceChapter.id,
+      chapterTitle: sourceChapter.title,
+      order: 0,
+      createdAt: now,
+    })) as number
     database.close()
     return {
       factId,
       sourceChapterId: sourceChapter.id as number,
+      timelineEventId,
       targetChapterId,
       targetOutlineNodeId,
     }
@@ -3682,6 +3710,134 @@ test('影响人工修正后可恢复生成式章纲候选并经确认原子写�
   await expect(page.getByText(/生成式章纲重建回执/)).toBeVisible({ timeout: 20_000 })
   await expect(page.getByLabel('生成式后续章纲目标')).toHaveCount(0)
   expect(generationCalls).toBe(1)
+
+  const sourceDependencyReview = page.getByLabel('作者复核项')
+  await sourceDependencyReview.selectOption({
+    label: `复核当前正文 · chapters#${fixture.sourceChapterId}`,
+  })
+  await page.getByRole('button', { name: '已确认', exact: true }).click()
+  await page.getByLabel('作者复核理由').fill('已复核第一章当前正文，允许修订其既有年表事件。')
+  await page.getByRole('button', { name: '记录复核', exact: true }).click()
+  await expect(page.getByText('最近决定：已确认', { exact: true })).toBeVisible()
+
+  const timelineTarget = page.getByLabel('生成式故事年表目标')
+  await expect(timelineTarget).toBeVisible({ timeout: 20_000 })
+  const timelineValue = await timelineTarget.locator('option').filter({ hasText: '潮门开启' }).getAttribute('value')
+  expect(timelineValue).toBeTruthy()
+  await timelineTarget.selectOption(timelineValue!)
+  await page.getByRole('button', { name: 'AI 重建年表候选', exact: true }).click()
+  await expect(page.getByText(regeneratedTimelineDescription, { exact: true })).toBeVisible({ timeout: 30_000 })
+  expect(generationCalls).toBe(2)
+
+  const pendingTimeline = await page.evaluate(async ({ currentProjectId, eventId }) => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const event = await request(database.transaction('storyTimelineEvents').objectStore('storyTimelineEvents').get(eventId)) as {
+      title: string
+      description: string
+    }
+    const runs = await request(
+      database.transaction('agentRuns').objectStore('agentRuns').index('projectId').getAll(currentProjectId),
+    ) as Array<{ id: number; parentRunId: number | null; status: string; contractJson: string }>
+    const child = runs.find(run => run.contractJson.includes('impact-remediation:story-timeline-regenerate'))!
+    const parent = runs.find(run => run.id === child.parentRunId)!
+    database.close()
+    return { title: event.title, description: event.description, childStatus: child.status, parentStatus: parent.status }
+  }, { currentProjectId: projectId, eventId: fixture.timelineEventId })
+  expect(pendingTimeline).toEqual({
+    title: '潮门开启',
+    description: '潮门完全开启，船队恢复通行。',
+    childStatus: 'awaiting_confirmation',
+    parentStatus: 'completed',
+  })
+
+  await page.reload()
+  await sidebarButton(page, '章节').click()
+  await expect(page.getByText('已恢复一条 H57 故事年表重建候选；确认前不会修改正式事件。', { exact: true }))
+    .toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(regeneratedTimelineDescription, { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(2)
+  await page.getByRole('button', { name: '确认重建年表事件', exact: true }).click()
+  await expect(page.getByText(/故事年表事件已由作者确认写入/)).toBeVisible({ timeout: 20_000 })
+
+  const completedTimeline = await page.evaluate(async ({ currentProjectId, eventId, sourceChapterId }) => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const event = await request(database.transaction('storyTimelineEvents').objectStore('storyTimelineEvents').get(eventId)) as {
+      id: number
+      title: string
+      storyTime: string
+      importance: number
+      description: string
+      chapterId: number
+      order: number
+    }
+    const runs = await request(
+      database.transaction('agentRuns').objectStore('agentRuns').index('projectId').getAll(currentProjectId),
+    ) as Array<{
+      id: number
+      parentRunId: number | null
+      status: string
+      terminalReceiptHash: string | null
+      contractJson: string
+    }>
+    const child = runs.find(run => run.contractJson.includes('impact-remediation:story-timeline-regenerate'))!
+    const parent = runs.find(run => run.id === child.parentRunId)!
+    database.close()
+    return {
+      event: {
+        id: event.id,
+        title: event.title,
+        storyTime: event.storyTime,
+        importance: event.importance,
+        description: event.description,
+        chapterId: event.chapterId,
+        order: event.order,
+      },
+      sourceChapterId,
+      childStatus: child.status,
+      childReceiptLength: child.terminalReceiptHash?.length ?? 0,
+      parentStatus: parent.status,
+      parentReceiptLength: parent.terminalReceiptHash?.length ?? 0,
+    }
+  }, { currentProjectId: projectId, eventId: fixture.timelineEventId, sourceChapterId: fixture.sourceChapterId })
+  expect(completedTimeline).toEqual({
+    event: {
+      id: fixture.timelineEventId,
+      title: '潮门开启',
+      storyTime: '潮汐纪元第七日黄昏',
+      importance: 3,
+      description: regeneratedTimelineDescription,
+      chapterId: fixture.sourceChapterId,
+      order: 0,
+    },
+    sourceChapterId: fixture.sourceChapterId,
+    childStatus: 'completed',
+    childReceiptLength: 64,
+    parentStatus: 'completed',
+    parentReceiptLength: 64,
+  })
+  expect(generationCalls).toBe(2)
+
+  await page.reload()
+  await sidebarButton(page, '章节').click()
+  await expect(page.getByText(/故事年表重建回执/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByLabel('生成式故事年表目标')).toHaveCount(0)
+  expect(generationCalls).toBe(2)
 })
 
 test('Prompt 示例 AI 只进入编辑草稿，作者保存后才写全局模板', async ({ page }) => {

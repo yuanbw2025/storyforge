@@ -35,6 +35,19 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-79 完成卡：H57 单事件故事年表受控重建
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-79` 小功能。作者取得 fresh H57 当前计划并完成直接依赖复核后，可让既有 Prose Agent 为一个仍受影响的 `storyTimelineEvents` 记录生成修订候选；刷新不重复调用模型，只有作者确认后才更新正式事件。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 反向反馈后半链；复用 H50 复核 receipt、H57 parent lineage、H64 `prose.story-timeline-extraction` Skill/登记 Context/严格字段约束、统一 durable ledger/checkpoint、`FIELD_REGISTRY + AdoptionSchema + adopt(storyTimelineEvents)` 和 terminal receipt，不建立第二套年表表或组件级模型入口。 |
+| 范围 / 非范围 | 本单元只接受 H57 `remaining/new` 中单个 `review-derived-state + timeline-event` 项，只允许更新既有记录的 `storyTime / importance / description`。冻结 `id / title / chapterId / chapterTitle / order`，不新增、删除、重排事件，不自动批量或级联；整章集合提取继续由 H64 独立承担。 |
+| 读 / 写 | 模型只经 `chapterContent / storyTimelineTarget` 两个登记源无损读取目标事件绑定章节的当前正文与精确正式事件；候选额外冻结 H57 item/parent、依赖 proof、目标完整 baseline、Context/Prompt 与严格结果。确认后只经 `adopt(target=storyTimelineEvents, mode=merge-diffs)` 定点写三个允许字段。 |
+| 状态机 / 硬验证 | 目标必须仍属于同一 Work 且绑定有效章节；每个直接依赖必须映射到同一 current plan，并有 fresh `acknowledged` 作者复核证明。缺 proof、`needs-manual-action`、删除/越界/漂移目标均在模型调用或正式写前 fail-closed。一次模型调用，未知结果不自动重试；exact-key JSON、目标 CAS、八采纳边界和 terminal verifier 沿同一 child Run 收敛。 |
+| 生命周期 / 作用域 | 不新增表/schema/迁移；年表、章节和 ledger 三表均已登记。物理 ID 候选 `portable:false`，导入后未完成 Run 取消、完成回执 stale；其它 World/Work 记录不可恢复或采纳。 |
+| UI / 回滚 | H57 面板一次只展示一个就绪的年表事件目标，并与 H77/H44 候选互斥；候选显示旧值、新值、理由和登记证据，可确认或放弃。移除本入口不影响 H64 整章年表提取和人工 CRUD，拒绝候选不改正式数据。 |
+| 验收 | H79 专项 9 项、工具栏 11 项通过；与 H64/H77 合跑为 4 文件 / 49 项。独立 Chromium 主路径最终代码 1/1（15.5 秒）与完整套件 52/52（5.1 分钟）均通过，完整套件中 H79 所在用例为 12.5 秒。完整 `npm run ci` 为 369 文件 / 1775 项，覆盖率 81.95% / 73.72% / 79.68% / 81.95%，3773 模块构建和 bundle budget 通过。专项覆盖跨章 RunContract、真实登记 Context/parent、缺依赖零模型零 Run、严格协议、确认前零写、候选恢复、八采纳边界、来源/目标/Context/Prompt/parent/proof stale、Work/导入隔离和完成回执 stale。 |
+
 ### HARNESS-78 完成卡：H57 生成式 child 的依赖证明门
 
 | 项目 | 冻结边界 |

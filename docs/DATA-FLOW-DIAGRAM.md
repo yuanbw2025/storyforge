@@ -76,6 +76,7 @@ flowchart TB
         AIDETAIL["AI 生成细纲"]
         AICHAP["AI 生成章节正文"]
         AIREGEN["H77 后续章纲摘要重建<br/>outline.impact-summary-regenerate"]
+        AITIMEREGEN["H79 单事件年表重建<br/>prose.story-timeline-extraction"]
         CHAPTERS["📖 章节正文 chapters"]
         DETAILS["细纲 detailedOutlines"]
         EBEAT["情感节拍 emotionBeatCards"]
@@ -161,6 +162,11 @@ flowchart TB
     H50DEP["H50 fresh acknowledged review<br/>direct dependency proof"] ==H78 依赖门==> AIREGEN
     BLDNODE ==登记 Context==> AIREGEN
     AIREGEN ==作者确认 + CAS + adopt(summary)==> OUTL
+    H57TIME["H57 fresh current plan<br/>remaining/new timeline-event"] ==父 lineage==> AITIMEREGEN
+    H50DEP ==H78 通用依赖门==> AITIMEREGEN
+    CHAPTERS ==chapterContent 登记 Context==> AITIMEREGEN
+    TIME ==storyTimelineTarget 精确 Context==> AITIMEREGEN
+    AITIMEREGEN ==作者确认 + CAS + adopt(三字段)==> TIME
     CHAPTERS --关联--> EBEAT
 
     CHAPTERS ==提取==> STATE

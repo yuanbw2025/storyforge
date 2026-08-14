@@ -1145,6 +1145,13 @@ CHIRON 四类信息可映射到现有结构：
 - 依赖 proof 冻结 `nodeId/itemId/review Run/receipt/decision` 并进入 candidate、contract objective、candidate hash 与 terminal receipt。候选恢复、采纳意图前、正式写前和终验均重新读取当前 review evidence 并逐项匹配；旧 review receipt stale 后候选不可恢复或写入。
 - UI 从 H57 current plan 恢复当前复核记录，只展示依赖已经就绪的章纲目标；多个目标按各自直接依赖逐项解锁。该门不自动替作者确认、不批量调用模型、不新增表或第二套 scheduler；其它目标类型和跨类型 DAG 仍按一次一类型扩展。
 
+**绑定 H57 的单事件故事年表重建（HARNESS-79，2026-08-14）**
+
+- `generateImpactStoryTimelineRegenerationCandidateV1()` 只接受 fresh H57 current plan 中 `remaining/new` 的 `review-derived-state + timeline-event` 项，并要求精确 `storyTimelineEvents` 目标和每个直接依赖的 H50 fresh `acknowledged` proof。通用 `impact-dependency-readiness` 同时服务 H77/H79，避免复制第二套依赖判定。
+- H79 复用既有 Prose Agent 与 `prose.story-timeline-extraction` Skill，但模型权限只扩到登记的 `chapterContent / storyTimelineTarget`：前者提供目标章当前正文，后者以 scope-validated 精确记录提供旧事件。RunContract 对来源章与目标章去重后同时冻结，不能用“多数情况同章”弱化跨章边界。一次调用只接受 exact-key `{storyTime,importance,description,reason,evidenceRefs}`，引用必须来自实际 Context 分段；候选 `portable:false`，未知模型窗口暂停且不自动重试。
+- 作者确认前正式年表零写。采纳前重新验证 H57 parent/plan/item、依赖 proofs、目标章节正文、精确事件 baseline、Context 和 Prompt；事务内做完整目标 CAS，随后唯一经 `adopt(storyTimelineEvents, merge-diffs)` 写 `storyTime / importance / description`。`id / title / chapterId / chapterTitle / order / createdAt` 全部冻结，故单事件修订不会改变影响图节点身份或标签，H57 parent 可在终验后保持 current。
+- 刷新恢复、候选事件崩溃窗、八个采纳边界、拒绝/显式新 child 重试、父/依赖/正文/目标漂移、Work/导入隔离和 terminal stale 均沿同一 ledger 收敛。本单元不新增、删除、重排或重命名事件；整章集合替换继续由 H64 承担，跨类型通用 scheduler 仍是后续范围。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

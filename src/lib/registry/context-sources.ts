@@ -693,6 +693,26 @@ async function readStoryTimeline(projectId: number, scope?: WorkspaceScope): Pro
   ].join('\n')
 }
 
+async function readStoryTimelineTarget(
+  projectId: number,
+  eventId?: number,
+  scope?: WorkspaceScope,
+): Promise<string> {
+  if (!Number.isInteger(eventId) || (eventId ?? 0) < 1) return ''
+  const resolved = scope ?? await resolveScope({ projectId })
+  const row = await db.storyTimelineEvents.get(eventId!)
+  if (!row || !await assertRecordInScope(resolved, 'storyTimelineEvents', row, { owner: 'work' })) return ''
+  return [
+    '【目标故事年表事件】',
+    `#${row.id} ${row.title}`,
+    `故事时间：${row.storyTime ?? ''}`,
+    `重要度：${row.importance}`,
+    `描述：${row.description ?? ''}`,
+    `章节：#${row.chapterId ?? '?'} ${row.chapterTitle ?? ''}`,
+    `章内顺序：${row.order}`,
+  ].join('\n')
+}
+
 async function readCharacterRelations(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<string> {
   const resolved = scope ?? await resolveScope({ projectId })
   const [rows, characters] = await Promise.all([
@@ -1450,6 +1470,17 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L2',
     budgetTokens: 2600,
     read: input => readStoryTimeline(input.projectId, input.scope),
+  },
+  {
+    key: 'storyTimelineTarget',
+    label: '目标故事年表事件',
+    scope: 'project',
+    layer: 'L1',
+    budgetTokens: 600,
+    protectedFromTrim: true,
+    ownerFrom: 'work',
+    enabled: input => Number.isInteger(input.storyTimelineEventId) && (input.storyTimelineEventId ?? 0) > 0,
+    read: input => readStoryTimelineTarget(input.projectId, input.storyTimelineEventId, input.scope),
   },
   {
     key: 'characterRelations',

@@ -402,6 +402,8 @@ export interface AssembleContextInput {
   referenceAnalysisRunId?: number
   /** HARNESS-76: trusted chapter selection for the registered style-learning baseline. */
   styleLearningChapterIds?: number[]
+  /** HARNESS-79: trusted existing story-timeline event for single-record impact remediation. */
+  storyTimelineEventId?: number
   outlineNodeId?: number | null
   chapterId?: number | null
   currentChapterOrder?: number

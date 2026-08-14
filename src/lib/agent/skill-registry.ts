@@ -304,7 +304,7 @@ const PROSE_STORY_TIMELINE_EXTRACTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   },
 }
 
-const PROSE_STORY_TIMELINE_EXTRACTION_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
+const PROSE_STORY_TIMELINE_EXTRACTION_COMPRESSION_POLICY = compressionPolicy(['chapterContent', 'storyTimelineTarget'])
 
 const PROSE_SELECTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   sourceKeys: ['manualText'],
@@ -1891,7 +1891,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-prose',
     readToolNames: [],
     contextSourceKeys: ['chapterContent'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['storyTimelineTarget'],
     inputPolicy: PROSE_STORY_TIMELINE_EXTRACTION_INPUT_POLICY,
     contextCompression: PROSE_STORY_TIMELINE_EXTRACTION_COMPRESSION_POLICY,
     maxOutputTokens: 4_000,
@@ -1900,7 +1900,10 @@ export const AGENT_SKILLS = [
       fields: ['title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle', 'order'],
     }],
     lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-HARNESS64-story-timeline-extraction-durable'],
+    regressionTests: [
+      'R-HARNESS64-story-timeline-extraction-durable',
+      'R-HARNESS79-impact-story-timeline-regeneration',
+    ],
   },
   {
     version: 1,

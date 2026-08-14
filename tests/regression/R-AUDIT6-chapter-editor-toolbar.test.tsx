@@ -39,6 +39,12 @@ async function mount(patch: Record<string, unknown> = {}) {
     impactOutlineRegenerationBusy: false,
     impactOutlineRegenerationReceipt: null,
     impactOutlineRegenerationError: null,
+    impactStoryTimelineRegenerationTargets: [],
+    impactStoryTimelineRegenerationItemId: null,
+    impactStoryTimelineRegenerationCandidate: null,
+    impactStoryTimelineRegenerationBusy: false,
+    impactStoryTimelineRegenerationReceipt: null,
+    impactStoryTimelineRegenerationError: null,
     hasOutline: true,
     showOutlinePreview: false,
     showReviewPanel: false,
@@ -75,6 +81,10 @@ async function mount(patch: Record<string, unknown> = {}) {
     onGenerateImpactOutlineRegeneration: vi.fn(),
     onConfirmImpactOutlineRegeneration: vi.fn(),
     onRejectImpactOutlineRegeneration: vi.fn(),
+    onImpactStoryTimelineRegenerationItemChange: vi.fn(),
+    onGenerateImpactStoryTimelineRegeneration: vi.fn(),
+    onConfirmImpactStoryTimelineRegeneration: vi.fn(),
+    onRejectImpactStoryTimelineRegeneration: vi.fn(),
     onToggleOutlinePreview: vi.fn(),
     onToggleReviewPanel: vi.fn(),
     onToggleNotePanel: vi.fn(),
@@ -254,6 +264,54 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     await act(async () => button(rendered.host, '放弃候选').click())
     expect(rendered.props.onConfirmImpactOutlineRegeneration).toHaveBeenCalledOnce()
     expect(rendered.props.onRejectImpactOutlineRegeneration).toHaveBeenCalledOnce()
+  })
+
+  it('H57 单事件年表入口冻结身份字段，并与章纲及手填候选互斥', async () => {
+    const target = {
+      itemId: 'impact-remediation:timeline-event:21',
+      id: 21,
+      title: '潮门开启',
+    }
+    const { host, props } = await mount({
+      impactInfo: '已恢复人工修正后的当前计划',
+      impactStoryTimelineRegenerationTargets: [target],
+      impactStoryTimelineRegenerationItemId: target.itemId,
+      impactPatchTargets: [{ id: 12, title: '第二章', summary: '旧摘要' }],
+    })
+    expect(host.textContent).toContain('H57 年表重建')
+    expect(host.textContent).toContain('标题、章节绑定与顺序保持冻结')
+    await act(async () => button(host, 'AI 重建年表候选').click())
+    expect(props.onGenerateImpactStoryTimelineRegeneration).toHaveBeenCalledOnce()
+    expect(props.onCreateImpactPatch).not.toHaveBeenCalled()
+
+    const candidate = {
+      candidateHash: 'f'.repeat(64),
+      targetBaseline: {
+        title: '潮门开启', storyTime: '第七日', importance: 2,
+        description: '潮门完全开启。',
+      },
+      result: {
+        storyTime: '第七日黄昏', importance: 3,
+        description: '潮门只开启一半。',
+        reason: '与作者修正后的正文一致。',
+        evidenceRefs: ['章节正文', '目标故事年表事件'],
+      },
+    } as any
+    const rendered = await mount({
+      impactInfo: '待作者确认',
+      impactStoryTimelineRegenerationTargets: [target],
+      impactStoryTimelineRegenerationItemId: target.itemId,
+      impactStoryTimelineRegenerationCandidate: candidate,
+      impactOutlineRegenerationTargets: [{ itemId: 'outline:12', id: 12, title: '第二章', summary: '旧摘要' }],
+      impactPatchTargets: [{ id: 12, title: '第二章', summary: '旧摘要' }],
+    })
+    expect(rendered.host.textContent).toContain('潮门只开启一半')
+    expect(rendered.host.textContent).not.toContain('AI 重建章纲候选')
+    expect(rendered.host.textContent).not.toContain('生成修订候选')
+    await act(async () => button(rendered.host, '确认重建年表事件').click())
+    await act(async () => button(rendered.host, '放弃年表候选').click())
+    expect(rendered.props.onConfirmImpactStoryTimelineRegeneration).toHaveBeenCalledOnce()
+    expect(rendered.props.onRejectImpactStoryTimelineRegeneration).toHaveBeenCalledOnce()
   })
 
   it('显示绑定 hash 的确定性影响处理计划，不触发隐藏执行', async () => {

@@ -835,6 +835,15 @@
 - **写**：作者确认且 H57、来源、非目标上游 Context、Prompt 与目标 baseline 均 fresh 时，事务内二次 CAS 后只经 `adopt(outlineNodes, merge-diffs)` 写 `summary`；正文、事实、title、锁定节点和其它字段不改
 - **终验**：回读正式摘要并签发绑定 H57 lineage 的 terminal receipt；终验后目标或上游变化会撤销旧完成证明
 
+#### 动作⑭：人工修正后的单事件故事年表重建（HARNESS-79）
+- **触发**：🔘 作者取得 fresh H57 current plan、完成目标直接依赖复核后，选择一个仍受影响的既有年表事件，点击“AI 重建年表候选”
+- **Agent / Skill**：既有 Prose Agent / `prose.story-timeline-extraction`；Run 是 H57 的直接 child，并与 H77 共用同一依赖证明门
+- **读**：模型只经 `chapterContent / storyTimelineTarget` 与 `assembleContext()` 读取目标章节当前正文和精确正式事件；目标必须属于当前 Work 且绑定有效章节
+- **解析**：严格 exact-key JSON `{storyTime,importance,description,reason,evidenceRefs}`；`importance` 只能为 1～3 整数，证据只能引用实际 Context 分段。一次模型调用，未知结果不自动重试
+- **候选 / 恢复**：不可便携候选冻结 H57 parent/item、依赖 receipts、章节正文、目标完整 baseline、Context 和 Prompt；确认前正式年表零写，刷新恢复不重复模型调用
+- **写**：作者确认且全部证据仍 fresh 时，只经 `adopt(storyTimelineEvents, merge-diffs)` 更新 `storyTime / importance / description`；`id / title / chapterId / chapterTitle / order / createdAt` 不变，不新增、删除、重排或重命名事件
+- **终验**：回读精确正式事件并签发绑定 H57 lineage 的 receipt；父计划、proof、正文或目标漂移会阻断恢复/采纳或撤销旧完成证明。整章集合提取仍由 §4.11① 独立承担
+
 ---
 
 ### 4.6 细纲（ScenePanel / DetailedOutlinePanel，从大纲节点进入）
@@ -991,6 +1000,13 @@
 - **提示词**：`story-timeline.extract`
 - **解析**：严格 exact-key JSON；`importance` 仅允许 1～3 整数，候选按 `chapterId + title` 去重；所有分块完成后才持久化候选
 - **写**：确认前零正式写入；作者冻结选择后按 `storyTimelineEvents.replaceScope=['chapterId']` 逐章事务替换，章内 `order` 压缩为 `0..n-1` 并签发 terminal receipt；空选择表示明确清理目标已写章
+
+#### 动作②：从影响计划重建一个既有年表事件（HARNESS-79）
+- **触发**：🔘 当前章节的 H57 修正后计划中存在就绪的 `review-derived-state + timeline-event` 项，且目标直接依赖均已有 fresh `acknowledged` review
+- **读**：只经 `chapterContent / storyTimelineTarget → assembleContext()` 读取目标章正文和精确旧事件；正式 baseline 同时供 Harness 做完整 CAS
+- **Skill / 解析**：复用 `prose.story-timeline-extraction`，只接受 `{storyTime,importance,description,reason,evidenceRefs}`；候选持久化且 `portable:false`
+- **写**：确认前零正式写入；确认后只经 `adopt(storyTimelineEvents, merge-diffs)` 更新时间、重要性和描述，身份、标题、章节归属、顺序及创建时间冻结
+- **边界**：不新增、删除、重排、重命名事件，不自动级联其它影响项；集合级重新提取继续使用动作①
 
 ---
 
@@ -1165,7 +1181,7 @@
 **下游提取（从正文派生）**：
 - 状态提取（§4.5 ⑥⑦）
 - 物品流水提取（§4.10 ①）
-- 故事年表提取（§4.11 ①）
+- 故事年表提取与单事件影响重建（§4.11 ①②）
 - 关系网建议（§3.2 ①）
 - 情感节拍规划（§4.5 ⑨）
 - 章节摘要生成（§4.5 ⑧）

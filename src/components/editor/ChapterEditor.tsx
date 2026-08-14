@@ -157,6 +157,15 @@ import {
   type ImpactOutlineRegenerationCandidateV1,
   type ImpactOutlineRegenerationCompletionV1,
 } from '../../lib/agent/run/impact-outline-regeneration-durable'
+import {
+  adoptImpactStoryTimelineRegenerationCandidateV1,
+  generateImpactStoryTimelineRegenerationCandidateV1,
+  readCompletedImpactStoryTimelineRegenerationsV1,
+  readPendingImpactStoryTimelineRegenerationCandidateV1,
+  rejectImpactStoryTimelineRegenerationCandidateV1,
+  type ImpactStoryTimelineRegenerationCandidateV1,
+  type ImpactStoryTimelineRegenerationCompletionV1,
+} from '../../lib/agent/run/impact-story-timeline-regeneration-durable'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
 import {
@@ -280,6 +289,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [impactOutlineRegenerationBusy, setImpactOutlineRegenerationBusy] = useState(false)
   const [impactOutlineRegenerationReceipt, setImpactOutlineRegenerationReceipt] = useState<string | null>(null)
   const [impactOutlineRegenerationError, setImpactOutlineRegenerationError] = useState('')
+  const [impactStoryTimelineRegenerationItemId, setImpactStoryTimelineRegenerationItemId] = useState<string | null>(null)
+  const [impactStoryTimelineRegenerationCandidate, setImpactStoryTimelineRegenerationCandidate] = useState<ImpactStoryTimelineRegenerationCandidateV1 | null>(null)
+  const [impactStoryTimelineRegenerationCompleted, setImpactStoryTimelineRegenerationCompleted] = useState<ImpactStoryTimelineRegenerationCompletionV1[]>([])
+  const [impactStoryTimelineRegenerationBusy, setImpactStoryTimelineRegenerationBusy] = useState(false)
+  const [impactStoryTimelineRegenerationReceipt, setImpactStoryTimelineRegenerationReceipt] = useState<string | null>(null)
+  const [impactStoryTimelineRegenerationError, setImpactStoryTimelineRegenerationError] = useState('')
   const [pendingDiffs, setPendingDiffs] = useState<StateDiffItem[] | null>(null)
   // A2: 按需召回 — 手动额外勾选/取消的状态卡 ID
   const [extraStateIds, setExtraStateIds] = useState<number[]>([])
@@ -374,6 +389,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactOutlineRegenerationCompleted([])
     setImpactOutlineRegenerationReceipt(null)
     setImpactOutlineRegenerationError('')
+    setImpactStoryTimelineRegenerationItemId(null)
+    setImpactStoryTimelineRegenerationCandidate(null)
+    setImpactStoryTimelineRegenerationCompleted([])
+    setImpactStoryTimelineRegenerationReceipt(null)
+    setImpactStoryTimelineRegenerationError('')
     if (!currentChapter?.id) return () => { active = false }
     void (async () => {
       const scope = await resolveScopeLike(project.id!)
@@ -402,7 +422,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       ])
       if (!active) return
       if (postCorrectionState) {
-        const [pendingRegeneration, completedRegenerations, currentReviews] = await Promise.all([
+        const [
+          pendingRegeneration,
+          completedRegenerations,
+          pendingTimelineRegeneration,
+          completedTimelineRegenerations,
+          currentReviews,
+        ] = await Promise.all([
           readPendingImpactOutlineRegenerationCandidateV1({
             scope,
             sourceChapterId: currentChapter.id!,
@@ -417,6 +443,20 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             console.warn('[ImpactOutlineRegeneration] terminal receipt 恢复失败:', error)
             return []
           }),
+          readPendingImpactStoryTimelineRegenerationCandidateV1({
+            scope,
+            sourceChapterId: currentChapter.id!,
+          }).catch(error => {
+            console.warn('[ImpactStoryTimelineRegeneration] durable candidate 恢复失败:', error)
+            return null
+          }),
+          readCompletedImpactStoryTimelineRegenerationsV1({
+            scope,
+            sourceChapterId: currentChapter.id!,
+          }).catch(error => {
+            console.warn('[ImpactStoryTimelineRegeneration] terminal receipt 恢复失败:', error)
+            return []
+          }),
           readImpactAuthorReviewsV1({
             scope,
             plan: postCorrectionState.output.plan,
@@ -428,23 +468,37 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         if (!active) return
         const currentReviewByItem = new Map(currentReviews.map(review => [review.output.itemId, review]))
         const planItemByNode = new Map(postCorrectionState.output.plan.items.map(item => [item.nodeId, item]))
-        const pendingRegenerationItems = postCorrectionState.output.plan.items.filter(item => (
+        const pendingOutlineRegenerationItems = postCorrectionState.output.plan.items.filter(item => (
           (postCorrectionState.output.remainingItemIds.includes(item.id)
             || postCorrectionState.output.newItemIds.includes(item.id))
           && item.action === 'review-outline'
           && item.recordId !== currentChapter.outlineNodeId
           && !completedRegenerations.some(record => record.candidate.item.id === item.id)
         ))
-        const dependenciesReady = (item: typeof pendingRegenerationItems[number]) => (
+        const pendingTimelineRegenerationItems = postCorrectionState.output.plan.items.filter(item => (
+          (postCorrectionState.output.remainingItemIds.includes(item.id)
+            || postCorrectionState.output.newItemIds.includes(item.id))
+          && item.action === 'review-derived-state'
+          && item.kind === 'timeline-event'
+          && item.table === 'storyTimelineEvents'
+          && !completedTimelineRegenerations.some(record => record.candidate.item.id === item.id)
+        ))
+        const dependenciesReady = (item: typeof postCorrectionState.output.plan.items[number]) => (
           item.dependencyNodeIds.every(nodeId => {
             const dependency = planItemByNode.get(nodeId)
             return dependency?.mode === 'author-confirmed'
               && currentReviewByItem.get(dependency.id)?.output.decision === 'acknowledged'
           })
         )
-        const eligibleRegenerationItems = pendingRegenerationItems.filter(dependenciesReady)
-        const blockedRegenerationItem = pendingRegenerationItems.find(item => !dependenciesReady(item))
-        const reviewTarget = blockedRegenerationItem ?? eligibleRegenerationItems[0]
+        const eligibleRegenerationItems = pendingOutlineRegenerationItems.filter(dependenciesReady)
+        const eligibleTimelineRegenerationItems = pendingTimelineRegenerationItems.filter(dependenciesReady)
+        const blockedRegenerationItem = [
+          ...pendingOutlineRegenerationItems,
+          ...pendingTimelineRegenerationItems,
+        ].find(item => !dependenciesReady(item))
+        const reviewTarget = blockedRegenerationItem
+          ?? eligibleRegenerationItems[0]
+          ?? eligibleTimelineRegenerationItems[0]
         const firstReviewDependency = postCorrectionState.output.plan.items.find(item => (
           reviewTarget?.dependencyNodeIds.includes(item.nodeId) && item.mode === 'author-confirmed'
         ))
@@ -455,6 +509,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         setImpactRemediationReceipt(postCorrectionState.receiptHash)
         setImpactOutlineRegenerationCandidate(pendingRegeneration?.candidate ?? null)
         setImpactOutlineRegenerationCompleted(completedRegenerations)
+        setImpactStoryTimelineRegenerationCandidate(pendingTimelineRegeneration?.candidate ?? null)
+        setImpactStoryTimelineRegenerationCompleted(completedTimelineRegenerations)
         setImpactReviewRecords(currentReviews)
         setImpactReviewItemId(firstReviewDependency?.id ?? null)
         setImpactReviewDecision(selectedReview?.output.decision ?? 'acknowledged')
@@ -466,8 +522,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           ?? null,
         )
         setImpactOutlineRegenerationReceipt(completedRegenerations[0]?.receiptHash ?? null)
+        setImpactStoryTimelineRegenerationItemId(
+          pendingTimelineRegeneration?.candidate.item.id
+          ?? eligibleTimelineRegenerationItems[0]?.id
+          ?? null,
+        )
+        setImpactStoryTimelineRegenerationReceipt(completedTimelineRegenerations[0]?.receiptHash ?? null)
         setImpactInfo(
-          pendingRegeneration
+          pendingTimelineRegeneration
+            ? '已恢复一条 H57 故事年表重建候选；确认前不会修改正式事件。'
+            : pendingRegeneration
             ? '已恢复一条 H57 生成式后续章纲候选；确认前不会修改正式摘要。'
             : blockedRegenerationItem && firstReviewDependency
               ? `H57 生成式目标仍等待直接依赖复核：${firstReviewDependency.reason}`
@@ -845,6 +909,36 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return target ? [{ itemId: item.id, id: target.id!, title: target.title, summary: target.summary ?? '' }] : []
     })
   }, [impactOutlineRegenerationCompleted, impactPostCorrectionReplan, impactReviewRecords, nodes, outlineNode?.id])
+
+  const impactStoryTimelineRegenerationTargets = useMemo(() => {
+    const replan = impactPostCorrectionReplan
+    if (!replan) return []
+    const activeIds = new Set([
+      ...replan.output.remainingItemIds,
+      ...replan.output.newItemIds,
+    ])
+    const completedIds = new Set(impactStoryTimelineRegenerationCompleted.map(record => record.candidate.item.id))
+    const reviewByItem = new Map(impactReviewRecords.map(review => [review.output.itemId, review]))
+    const itemByNode = new Map(replan.output.plan.items.map(item => [item.nodeId, item]))
+    const graphById = new Map(replan.output.graph.nodes.map(node => [node.id, node]))
+    return replan.output.plan.items.flatMap(item => {
+      if (!activeIds.has(item.id) || completedIds.has(item.id)
+        || item.action !== 'review-derived-state' || item.kind !== 'timeline-event'
+        || item.table !== 'storyTimelineEvents' || item.recordId == null) return []
+      const dependenciesReady = item.dependencyNodeIds.every(nodeId => {
+        const dependency = itemByNode.get(nodeId)
+        return dependency?.mode === 'author-confirmed'
+          && reviewByItem.get(dependency.id)?.output.decision === 'acknowledged'
+      })
+      if (!dependenciesReady) return []
+      const graphNode = graphById.get(item.nodeId)
+      return [{
+        itemId: item.id,
+        id: item.recordId,
+        title: graphNode?.label ?? `年表事件 #${item.recordId}`,
+      }]
+    })
+  }, [impactPostCorrectionReplan, impactReviewRecords, impactStoryTimelineRegenerationCompleted])
 
   // 后台一致性 Agent：正文稳定落盘后只跑零 token 确定性守卫。
   // 没有告警时不制造归档记录；LLM fast/deep 必须由质量审校面板中的明确按钮触发。
@@ -1918,6 +2012,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactOutlineRegenerationCompleted([])
       setImpactOutlineRegenerationReceipt(null)
       setImpactOutlineRegenerationError('')
+      setImpactStoryTimelineRegenerationItemId(null)
+      setImpactStoryTimelineRegenerationCandidate(null)
+      setImpactStoryTimelineRegenerationCompleted([])
+      setImpactStoryTimelineRegenerationReceipt(null)
+      setImpactStoryTimelineRegenerationError('')
       const firstTarget = graph.nodes.find(node => (
         node.kind === 'outline'
         && node.recordId != null
@@ -1942,9 +2041,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleDismissImpact = () => {
-    if (impactPatchCandidate || impactOutlineRegenerationCandidate) {
+    if (impactPatchCandidate || impactOutlineRegenerationCandidate || impactStoryTimelineRegenerationCandidate) {
       if (impactPatchCandidate) setImpactPatchError('请先确认或放弃当前影响修订候选。')
       if (impactOutlineRegenerationCandidate) setImpactOutlineRegenerationError('请先确认或放弃当前生成式重建候选。')
+      if (impactStoryTimelineRegenerationCandidate) setImpactStoryTimelineRegenerationError('请先确认或放弃当前年表重建候选。')
       return
     }
     setImpactInfo(null)
@@ -1968,6 +2068,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactOutlineRegenerationCompleted([])
     setImpactOutlineRegenerationReceipt(null)
     setImpactOutlineRegenerationError('')
+    setImpactStoryTimelineRegenerationItemId(null)
+    setImpactStoryTimelineRegenerationCandidate(null)
+    setImpactStoryTimelineRegenerationCompleted([])
+    setImpactStoryTimelineRegenerationReceipt(null)
+    setImpactStoryTimelineRegenerationError('')
   }
 
   const handleCreateImpactPatch = async () => {
@@ -2000,7 +2105,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const handleGenerateImpactOutlineRegeneration = async () => {
     const expectedReplan = impactPostCorrectionReplan
     const itemId = impactOutlineRegenerationItemId
-    if (!expectedReplan || !itemId || impactOutlineRegenerationCandidate || impactPatchCandidate) return
+    if (!expectedReplan || !itemId || impactOutlineRegenerationCandidate
+      || impactStoryTimelineRegenerationCandidate || impactPatchCandidate) return
     setImpactOutlineRegenerationBusy(true)
     setImpactOutlineRegenerationError('')
     try {
@@ -2062,6 +2168,74 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactOutlineRegenerationError(error instanceof Error ? error.message : '生成式后续章纲候选拒绝失败')
     } finally {
       setImpactOutlineRegenerationBusy(false)
+    }
+  }
+
+  const handleGenerateImpactStoryTimelineRegeneration = async () => {
+    const expectedReplan = impactPostCorrectionReplan
+    const itemId = impactStoryTimelineRegenerationItemId
+    if (!expectedReplan || !itemId || impactStoryTimelineRegenerationCandidate
+      || impactOutlineRegenerationCandidate || impactPatchCandidate) return
+    setImpactStoryTimelineRegenerationBusy(true)
+    setImpactStoryTimelineRegenerationError('')
+    try {
+      const result = await generateImpactStoryTimelineRegenerationCandidateV1({
+        scope: await resolveScopeLike(project.id!),
+        expectedReplan,
+        itemId,
+        aiConfig,
+      })
+      setImpactStoryTimelineRegenerationCandidate(result.candidate)
+      setImpactStoryTimelineRegenerationReceipt(null)
+      setImpactInfo('H57 故事年表重建候选已持久化；作者确认前正式事件保持不变。')
+    } catch (error) {
+      setImpactStoryTimelineRegenerationError(error instanceof Error ? error.message : '故事年表重建失败')
+    } finally {
+      setImpactStoryTimelineRegenerationBusy(false)
+    }
+  }
+
+  const handleConfirmImpactStoryTimelineRegeneration = async () => {
+    const candidate = impactStoryTimelineRegenerationCandidate
+    if (!candidate) return
+    setImpactStoryTimelineRegenerationBusy(true)
+    setImpactStoryTimelineRegenerationError('')
+    try {
+      const result = await adoptImpactStoryTimelineRegenerationCandidateV1({
+        scope: await resolveScopeLike(project.id!),
+        runId: candidate.durableRunId,
+      })
+      setImpactStoryTimelineRegenerationCandidate(null)
+      setImpactStoryTimelineRegenerationCompleted(previous => [
+        result,
+        ...previous.filter(record => record.candidate.item.id !== result.candidate.item.id),
+      ])
+      setImpactStoryTimelineRegenerationReceipt(result.receiptHash)
+      setImpactStoryTimelineRegenerationItemId(null)
+      setImpactInfo(`故事年表事件已由作者确认写入；终态回执 ${result.receiptHash.slice(0, 12)}。`)
+    } catch (error) {
+      setImpactStoryTimelineRegenerationError(error instanceof Error ? error.message : '故事年表重建采纳失败')
+    } finally {
+      setImpactStoryTimelineRegenerationBusy(false)
+    }
+  }
+
+  const handleRejectImpactStoryTimelineRegeneration = async () => {
+    const candidate = impactStoryTimelineRegenerationCandidate
+    if (!candidate) return
+    setImpactStoryTimelineRegenerationBusy(true)
+    setImpactStoryTimelineRegenerationError('')
+    try {
+      await rejectImpactStoryTimelineRegenerationCandidateV1({
+        scope: await resolveScopeLike(project.id!),
+        runId: candidate.durableRunId,
+      })
+      setImpactStoryTimelineRegenerationCandidate(null)
+      setImpactInfo('故事年表重建候选已放弃，正式事件未改变。')
+    } catch (error) {
+      setImpactStoryTimelineRegenerationError(error instanceof Error ? error.message : '故事年表重建候选拒绝失败')
+    } finally {
+      setImpactStoryTimelineRegenerationBusy(false)
     }
   }
 
@@ -2130,6 +2304,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactOutlineRegenerationCompleted([])
       setImpactOutlineRegenerationReceipt(null)
       setImpactOutlineRegenerationError('')
+      setImpactStoryTimelineRegenerationItemId(null)
+      setImpactStoryTimelineRegenerationCandidate(null)
+      setImpactStoryTimelineRegenerationCompleted([])
+      setImpactStoryTimelineRegenerationReceipt(null)
+      setImpactStoryTimelineRegenerationError('')
       setImpactInfo(result.changed
         ? `影响处理计划已刷新；旧计划 ${previousPlan.planHash.slice(0, 12)} 保留为历史证据，新计划 ${result.plan.planHash.slice(0, 12)} 已绑定当前正文。`
         : `影响处理计划与当前正文一致，无需变更；计划 ${result.plan.planHash.slice(0, 12)}。`)
@@ -3026,6 +3205,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           impactOutlineRegenerationBusy={impactOutlineRegenerationBusy}
           impactOutlineRegenerationReceipt={impactOutlineRegenerationReceipt}
           impactOutlineRegenerationError={impactOutlineRegenerationError || null}
+          impactStoryTimelineRegenerationTargets={impactStoryTimelineRegenerationTargets}
+          impactStoryTimelineRegenerationItemId={impactStoryTimelineRegenerationItemId}
+          impactStoryTimelineRegenerationCandidate={impactStoryTimelineRegenerationCandidate}
+          impactStoryTimelineRegenerationBusy={impactStoryTimelineRegenerationBusy}
+          impactStoryTimelineRegenerationReceipt={impactStoryTimelineRegenerationReceipt}
+          impactStoryTimelineRegenerationError={impactStoryTimelineRegenerationError || null}
           hasOutline={!!outlineNodeId}
           showOutlinePreview={showOutlinePreview}
           showReviewPanel={showReviewPanel}
@@ -3059,6 +3244,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onGenerateImpactOutlineRegeneration={() => { void handleGenerateImpactOutlineRegeneration() }}
           onConfirmImpactOutlineRegeneration={() => { void handleConfirmImpactOutlineRegeneration() }}
           onRejectImpactOutlineRegeneration={() => { void handleRejectImpactOutlineRegeneration() }}
+          onImpactStoryTimelineRegenerationItemChange={setImpactStoryTimelineRegenerationItemId}
+          onGenerateImpactStoryTimelineRegeneration={() => { void handleGenerateImpactStoryTimelineRegeneration() }}
+          onConfirmImpactStoryTimelineRegeneration={() => { void handleConfirmImpactStoryTimelineRegeneration() }}
+          onRejectImpactStoryTimelineRegeneration={() => { void handleRejectImpactStoryTimelineRegeneration() }}
           onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}
           onToggleReviewPanel={() => setShowReviewPanel(!showReviewPanel)}
           onToggleNotePanel={() => setShowNotePanel(!showNotePanel)}

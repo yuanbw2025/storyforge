@@ -79,7 +79,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 61 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 62 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -138,6 +138,7 @@
 | `itemLedger` | 物品流水 | project | L2 | 2400 |
 | `heldItems` | 当前已持有物品 | chapter | L1 | 1000 |
 | `storyTimeline` | 故事年表 | project | L2 | 2600 |
+| `storyTimelineTarget` | 目标故事年表事件 | project | L1 | 600 |
 | `characterRelations` | 角色关系 | project | L2 | 2200 |
 | `references` | 引用手法 | project | L3 | 2000 |
 | `userStyleProfile` | 我的文风 | project | L2 | 1800 |
@@ -219,11 +220,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:24` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:451`<br/>`src/lib/node-authoring/domain-execution.ts:515` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1600` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1580` |
-| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:990` |
-| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1725`<br/>`src/components/editor/ChapterEditor.tsx:2525` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1572` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1694` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1674` |
+| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:1084` |
+| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1819`<br/>`src/components/editor/ChapterEditor.tsx:2704` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1666` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `codex.extract` | `src/lib/agent/run/codex-extraction-durable.ts:627` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
@@ -240,7 +241,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:319`<br/>`src/lib/node-flow/executor.ts:207` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:188`<br/>`src/lib/outline/generation-node.ts:59` |
-| `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:767` |
+| `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:663` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:55` |
 | `outline.workshop.collision` | `src/lib/outline/workshop.ts:448` |
 | `outline.workshop.motivation` | `src/lib/outline/workshop.ts:445` |
@@ -249,14 +250,14 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:286` |
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:106` |
-| `review.consistency.deep` | `src/components/editor/ChapterEditor.tsx:1286` |
+| `review.consistency.deep` | `src/components/editor/ChapterEditor.tsx:1380` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:451` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:98` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:115` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:1615` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:1709` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
-| `story.timeline` | `src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
+| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:681`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
 | `style.calibrate` | `src/components/style/StyleCalibrationPanel.tsx:63` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
 | `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:475` |
@@ -264,7 +265,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ### 动态 category 调用
 
-- `src/components/editor/ChapterEditor.tsx:1292 · chat`
+- `src/components/editor/ChapterEditor.tsx:1386 · chat`
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
 - `src/lib/agent/character-copilot.ts:475 · chat`
 - `src/lib/agent/character-driven-copilot.ts:507 · chat`
@@ -288,4 +289,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `6f3d92b`
+生成时间基准:commit `017ccfb`
