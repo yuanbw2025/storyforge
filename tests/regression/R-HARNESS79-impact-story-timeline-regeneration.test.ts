@@ -214,7 +214,7 @@ describe.sequential('R-HARNESS79 · H57 单事件故事年表受控重建', { ti
       })).rejects.toThrow('依赖未就绪')
       expect(calls).toBe(0)
       expect((await db.agentRuns.where('projectId').equals(fixture.projectId).toArray())
-        .filter(row => row.parentRelation?.startsWith('impact-story-timeline-regen:'))).toHaveLength(0)
+        .filter(row => row.parentRelation?.startsWith('impact-generative-target:'))).toHaveLength(0)
       expect((await db.storyTimelineEvents.get(fixture.eventId))?.description).toContain('完全开启')
     }
   })
@@ -258,7 +258,7 @@ describe.sequential('R-HARNESS79 · H57 单事件故事年表受控重建', { ti
       })).rejects.toThrow()
       expect((await db.storyTimelineEvents.get(fixture.eventId))?.description).toContain('完全开启')
       expect((await db.agentRuns.where('projectId').equals(fixture.projectId).toArray())
-        .find(row => row.parentRelation?.startsWith('impact-story-timeline-regen:'))?.status).toBe('failed')
+        .find(row => row.parentRelation?.startsWith('impact-generative-target:'))?.status).toBe('failed')
     }
   })
 
@@ -273,7 +273,7 @@ describe.sequential('R-HARNESS79 · H57 单事件故事年表受控重建', { ti
       runAI: async () => { calls++; throw new Error('network outcome unknown') },
     })).rejects.toThrow('network outcome unknown')
     expect((await db.agentRuns.where('projectId').equals(unknown.projectId).toArray())
-      .find(row => row.parentRelation?.startsWith('impact-story-timeline-regen:'))?.status).toBe('paused')
+      .find(row => row.parentRelation?.startsWith('impact-generative-target:'))?.status).toBe('paused')
 
     const crash = await seed('checkpoint-crash')
     const crashPrepared = await prepare(crash)
@@ -413,7 +413,7 @@ describe.sequential('R-HARNESS79 · H57 单事件故事年表受控重建', { ti
     await adoptImpactStoryTimelineRegenerationCandidateV1({ scope: fixture.scope, runId: generated.snapshot.run.id })
     const importedId = await importProjectJSON(await exportProjectJSON(fixture.projectId))
     const imported = (await db.agentRuns.where('projectId').equals(importedId).toArray())
-      .find(row => row.parentRelation?.startsWith('impact-story-timeline-regen:'))!
+      .find(row => row.parentRelation?.startsWith('impact-generative-target:'))!
     expect(imported.status).toBe('running')
     expect(imported.terminalReceiptHash).toBeNull()
   })

@@ -35,6 +35,19 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-80 完成卡：H57 跨类型下游调度与完成投影
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-80` 小功能。作者从 fresh H57 current plan 继续处理时，界面以一个可验签调度投影统一显示人工复核、确定性重建、章纲重建和单事件年表重建的依赖状态；不能同时创建两个跨类型待确认候选，也不能把缺失/过期回执算作完成。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 反向反馈通用 DAG；复用 H50 review、H57 plan/graph、H58/H77/H79 child receipt、现有 `agentRuns` 父子索引与单父变更锁，不新增 scheduler 表、队列、Agent、模型调用或第二套状态机。 |
+| 范围 / 非范围 | 本单元只建立当前计划的确定性 schedule read model、跨类型单 pending 槽和完成语义；不自动点击、不批量调用模型、不替作者确认、不新增第三个生成式目标类型，也不把 unsupported/manual 项伪装成完成。 |
+| 读 / 写 | 只读 fresh H57 output、当前 H50 review 和 H58/H77/H79 terminal/pending 证据；schedule 本身按 canonical hash 派生。零 Context Gateway 输入、零模型、零业务 Canon 写、零 `adopt()`；只有既有 child 创建仍写统一 ledger。 |
+| 状态 / 依赖 | 当前 active item 只能处于 `blocked / ready / awaiting-confirmation / needs-manual-action / completed`。直接依赖必须已有 current completion proof；目标自身 `acknowledged` 直接完成，`needs-manual-action` 必须走既有 H52～57 修正链，不能继续生成。H58 receipt 覆盖确定性项，H77/H79 receipt 只覆盖精确 item。 |
+| 并发 / 恢复 | H77/H79 使用共享 generation slot relation；同一 H57 parent 下已有 active 生成式 child 时，新建在 Run 之前 fail-closed。两个并发请求计算同一 slot，并由现有 parent mutation lock + 唯一 parent/relation 拒绝第二个；刷新从 ledger 重建相同 schedule，不依赖组件内存。 |
+| 生命周期 / 回滚 | 不新增表/schema/迁移。调度证据全部由 `PROJECT_TABLES` 已登记 ledger 和现有候选生命周期派生；跨 Work 与导入后旧物理 lineage 不参与 current schedule。移除 H80 只退回 H77/H79 各自入口，不改已确认 Canon。 |
+| 验收 | H80 专项 7 项、工具栏 12 项通过；与 H77/H79/工具栏合跑为 4 文件 / 43 项。完整 `npm run ci` 为 370 文件 / 1783 项，覆盖率 81.95% / 73.71% / 79.68% / 81.95%，3775 模块构建和 bundle budget 通过。完整 Chromium 为 52/52（5.5 分钟），H80 组合主路径为 21.4 秒；最终代码独立复跑 1/1（17.0 秒）。专项覆盖稳定拓扑/hash、目标 review 优先级、H58/H77/H79 精确完成、候选崩溃窗单链恢复、跨类型 pending、顺序/并发单 child、父/Work stale 和 UI 五态计数。 |
+
 ### HARNESS-79 完成卡：H57 单事件故事年表受控重建
 
 | 项目 | 冻结边界 |

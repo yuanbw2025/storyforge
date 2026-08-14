@@ -844,6 +844,13 @@
 - **写**：作者确认且全部证据仍 fresh 时，只经 `adopt(storyTimelineEvents, merge-diffs)` 更新 `storyTime / importance / description`；`id / title / chapterId / chapterTitle / order / createdAt` 不变，不新增、删除、重排或重命名事件
 - **终验**：回读精确正式事件并签发绑定 H57 lineage 的 receipt；父计划、proof、正文或目标漂移会阻断恢复/采纳或撤销旧完成证明。整章集合提取仍由 §4.11① 独立承担
 
+#### 动作⑮：H57 跨类型下游调度（HARNESS-80，零模型控制面）
+- **触发**：🔘 恢复 fresh H57 current plan，或作者完成复核、确定性重建、生成候选确认/拒绝后自动刷新只读投影
+- **读**：H57 `remaining/new` 与 graph/plan、H50 current review、H58/H77/H79 current pending/terminal evidence；不读取模型 Context，不建立新的 AI 输入
+- **投影**：按稳定拓扑产生 `blocked / ready / awaiting-confirmation / needs-manual-action / completed` 五态和 canonical `scheduleHash`。目标自身“已确认”直接完成，“需人工处理”必须回到既有 H52～57 链
+- **并发**：H77/H79 共用一个 generation slot；已有活动 child 时新请求在模型前停止，并发创建由同 relation、parent mutation lock 和唯一父子索引收敛为一个 Run
+- **写**：schedule 零 Canon 写、零 `adopt()`、零新表/队列；只有作者显式选择的既有 H77/H79 child 按各自协议写 ledger。界面仅展示 ready 目标，不自动执行或批量调用模型
+
 ---
 
 ### 4.6 细纲（ScenePanel / DetailedOutlinePanel，从大纲节点进入）

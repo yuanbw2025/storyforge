@@ -1152,6 +1152,13 @@ CHIRON 四类信息可映射到现有结构：
 - 作者确认前正式年表零写。采纳前重新验证 H57 parent/plan/item、依赖 proofs、目标章节正文、精确事件 baseline、Context 和 Prompt；事务内做完整目标 CAS，随后唯一经 `adopt(storyTimelineEvents, merge-diffs)` 写 `storyTime / importance / description`。`id / title / chapterId / chapterTitle / order / createdAt` 全部冻结，故单事件修订不会改变影响图节点身份或标签，H57 parent 可在终验后保持 current。
 - 刷新恢复、候选事件崩溃窗、八个采纳边界、拒绝/显式新 child 重试、父/依赖/正文/目标漂移、Work/导入隔离和 terminal stale 均沿同一 ledger 收敛。本单元不新增、删除、重排或重命名事件；整章集合替换继续由 H64 承担，跨类型通用 scheduler 仍是后续范围。
 
+**H57 跨类型下游调度与完成投影（HARNESS-80，2026-08-14）**
+
+- `readImpactDownstreamScheduleV1()` 先验签 H57 current output，再把 `remaining/new` 项按当前图稳定拓扑排序；它只从 H50 review 和 H58/H77/H79 的 current pending/terminal evidence 投影 `blocked / ready / awaiting-confirmation / needs-manual-action / completed`，输出绑定 parent/plan/graph 的 canonical `scheduleHash`。调度不新增表、Agent、模型调用、Context Source、业务写入或第二套 durable 状态机。
+- 目标自身的 current H50 review 优先于旧 child：`acknowledged` 直接算完成，`needs-manual-action` 必须回到 H52～57 可信修正链，H77/H79 后端在创建 Run 前同样拒绝继续生成。H58 receipt 只完成确定性项，H77/H79 terminal receipt 只完成精确 item；缺失、损坏、过期、跨 Work 或导入后的物理 lineage 都不能冒充完成。
+- H77/H79 共用 `impact-generative-target:{H57 outputHash}:{slot}` relation。同一 parent 已有活动生成式 child 时顺序请求在模型前停止；并发请求计算相同 slot，由现有 parent mutation lock 和唯一 parent/relation 保证只创建一个 child，失败方不会调用模型。暂停/拒绝/失败/完成后仍需作者显式发起下一 slot，不做自动批量执行。
+- `ChapterEditor` 只依据该 schedule 暴露 ready 目标，并显示完成、可继续、待确认、阻断和需人工计数；调度无法恢复时生成入口 fail closed。H44 手填 patch 仍与生成候选互斥，作者确认、拒绝和人工导航权不变。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

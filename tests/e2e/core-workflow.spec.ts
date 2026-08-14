@@ -3629,6 +3629,8 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
   await regenerationTarget.selectOption(targetValue!)
   await page.getByRole('button', { name: 'AI 重建章纲候选', exact: true }).click()
   await expect(page.getByText(regeneratedSummary, { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByLabel('H57 下游调度进度')).toContainText('待确认 1')
+  await expect(page.getByLabel('生成式故事年表目标')).toHaveCount(0)
   expect(generationCalls).toBe(1)
 
   const pending = await page.evaluate(async ({ currentProjectId, targetId }) => {
@@ -3644,17 +3646,18 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
     const target = await request(database.transaction('outlineNodes').objectStore('outlineNodes').get(targetId)) as { summary: string }
     const runs = await request(
       database.transaction('agentRuns').objectStore('agentRuns').index('projectId').getAll(currentProjectId),
-    ) as Array<{ id: number; parentRunId: number | null; status: string; contractJson: string }>
+    ) as Array<{ id: number; parentRunId: number | null; parentRelation: string | null; status: string; contractJson: string }>
     const child = runs.find(run => run.contractJson.includes('outline.impact-summary-regenerate'))!
     const parent = runs.find(run => run.id === child.parentRunId)!
     database.close()
-    return { summary: target.summary, childStatus: child.status, parentStatus: parent.status }
+    return { summary: target.summary, childStatus: child.status, parentStatus: parent.status, relation: child.parentRelation }
   }, { currentProjectId: projectId, targetId: fixture.targetOutlineNodeId })
-  expect(pending).toEqual({
+  expect(pending).toMatchObject({
     summary: '钟楼照常回应',
     childStatus: 'awaiting_confirmation',
     parentStatus: 'completed',
   })
+  expect(pending.relation).toMatch(/^impact-generative-target:[a-f0-9]{64}:1$/)
 
   await page.reload()
   await sidebarButton(page, '章节').click()
@@ -3727,6 +3730,8 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
   await timelineTarget.selectOption(timelineValue!)
   await page.getByRole('button', { name: 'AI 重建年表候选', exact: true }).click()
   await expect(page.getByText(regeneratedTimelineDescription, { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByLabel('H57 下游调度进度')).toContainText('待确认 1')
+  await expect(page.getByLabel('生成式后续章纲目标')).toHaveCount(0)
   expect(generationCalls).toBe(2)
 
   const pendingTimeline = await page.evaluate(async ({ currentProjectId, eventId }) => {
@@ -3745,18 +3750,25 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
     }
     const runs = await request(
       database.transaction('agentRuns').objectStore('agentRuns').index('projectId').getAll(currentProjectId),
-    ) as Array<{ id: number; parentRunId: number | null; status: string; contractJson: string }>
+    ) as Array<{ id: number; parentRunId: number | null; parentRelation: string | null; status: string; contractJson: string }>
     const child = runs.find(run => run.contractJson.includes('impact-remediation:story-timeline-regenerate'))!
     const parent = runs.find(run => run.id === child.parentRunId)!
     database.close()
-    return { title: event.title, description: event.description, childStatus: child.status, parentStatus: parent.status }
+    return {
+      title: event.title,
+      description: event.description,
+      childStatus: child.status,
+      parentStatus: parent.status,
+      relation: child.parentRelation,
+    }
   }, { currentProjectId: projectId, eventId: fixture.timelineEventId })
-  expect(pendingTimeline).toEqual({
+  expect(pendingTimeline).toMatchObject({
     title: '潮门开启',
     description: '潮门完全开启，船队恢复通行。',
     childStatus: 'awaiting_confirmation',
     parentStatus: 'completed',
   })
+  expect(pendingTimeline.relation).toMatch(/^impact-generative-target:[a-f0-9]{64}:2$/)
 
   await page.reload()
   await sidebarButton(page, '章节').click()

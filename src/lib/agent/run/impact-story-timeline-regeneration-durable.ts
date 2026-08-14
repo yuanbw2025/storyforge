@@ -40,6 +40,7 @@ import {
   readCurrentImpactPostCorrectionReplanV1,
   type ImpactPostCorrectionReplanResultV1,
 } from './impact-post-correction-replan-durable'
+import { nextImpactGenerativeSlotRelationV1 } from './impact-generative-slot'
 import { createVerificationReceiptV1 } from './verification-receipt'
 
 export const IMPACT_STORY_TIMELINE_REGENERATION_STEP_ID_V1 = 'impact-remediation:story-timeline-regenerate' as const
@@ -596,18 +597,6 @@ async function currentEvidence(
   }
 }
 
-async function nextRelation(input: {
-  scope: WorkspaceScope
-  replan: ImpactPostCorrectionReplanResultV1
-  itemId: string
-}): Promise<string> {
-  const itemHash = await hashCanonicalValue({ itemId: input.itemId })
-  const prefix = `impact-story-timeline-regen:${input.replan.output.outputHash.slice(0, 24)}:${itemHash.slice(0, 24)}:`
-  const rows = await readOwnedRows<AgentRunRecord>(input.scope, 'agentRuns', { owner: 'work' })
-  const count = rows.filter(row => row.parentRunId === input.replan.snapshot.run.id && row.parentRelation?.startsWith(prefix)).length
-  return `${prefix}${count + 1}`
-}
-
 export async function generateImpactStoryTimelineRegenerationCandidateV1(input: {
   scope: WorkspaceScope
   expectedReplan: ImpactPostCorrectionReplanResultV1
@@ -635,7 +624,7 @@ export async function generateImpactStoryTimelineRegenerationCandidateV1(input: 
   const readiness = await resolveImpactDependencyReadinessV1({ scope: input.scope, replan, item })
   if (!readiness.ready) throw new Error(`年表重建依赖未就绪：${readiness.blockers.join('；')}`)
   const prepared = await prepareInput({ scope: input.scope, replan, item })
-  const relation = await nextRelation({ scope: input.scope, replan, itemId: item.id })
+  const relation = await nextImpactGenerativeSlotRelationV1({ scope: input.scope, replan })
   let snapshot = await createAgentRunV1({
     scope: input.scope,
     worldGroupId: prepared.worldGroupId,
@@ -771,8 +760,7 @@ export async function generateImpactStoryTimelineRegenerationCandidateV1(input: 
 }
 
 function isImpactStoryTimelineRun(row: AgentRunRecord): boolean {
-  return row.parentRelation?.startsWith('impact-story-timeline-regen:') === true
-    && row.contractJson.includes(IMPACT_STORY_TIMELINE_REGENERATION_STEP_ID_V1)
+  return row.contractJson.includes(IMPACT_STORY_TIMELINE_REGENERATION_STEP_ID_V1)
 }
 
 export async function readPendingImpactStoryTimelineRegenerationCandidateV1(input: {

@@ -3,6 +3,7 @@ import { CInput } from '../shared/CompositionInput'
 import type { ImpactPatchCandidateV1 } from '../../lib/agent/run/impact-patch-durable'
 import type { ImpactOutlineRegenerationCandidateV1 } from '../../lib/agent/run/impact-outline-regeneration-durable'
 import type { ImpactStoryTimelineRegenerationCandidateV1 } from '../../lib/agent/run/impact-story-timeline-regeneration-durable'
+import type { ImpactDownstreamScheduleV1 } from '../../lib/agent/run/impact-downstream-schedule'
 import type {
   ImpactAuthorReviewRecordV1,
   ImpactReviewDecisionV1,
@@ -42,6 +43,7 @@ interface Props {
   analyzingImpact: boolean
   impactInfo: string | null
   impactRemediationPlan: ImpactRemediationPlanV1 | null
+  impactDownstreamSchedule: ImpactDownstreamScheduleV1 | null
   impactRemediationBusy: boolean
   impactRemediationReceipt: string | null
   impactRemediationError: string | null
@@ -123,6 +125,7 @@ export default function ChapterEditorToolbar({
   analyzingImpact,
   impactInfo,
   impactRemediationPlan,
+  impactDownstreamSchedule,
   impactRemediationBusy,
   impactRemediationReceipt,
   impactRemediationError,
@@ -265,6 +268,23 @@ export default function ChapterEditorToolbar({
                 <RefreshCw className={`h-3 w-3 ${impactRemediationBusy ? 'animate-spin' : ''}`} />
                 刷新计划
               </button>
+            </div>
+          )}
+          {impactDownstreamSchedule && (
+            <div
+              aria-label="H57 下游调度进度"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-indigo-400/20 bg-indigo-400/5 px-2 py-1.5 text-[11px] text-text-secondary"
+            >
+              <span className="text-indigo-200">
+                H57 下游 {impactDownstreamSchedule.counts.completed}/{impactDownstreamSchedule.items.length}
+              </span>
+              <span>可继续 {impactDownstreamSchedule.counts.ready}</span>
+              <span>待确认 {impactDownstreamSchedule.counts['awaiting-confirmation']}</span>
+              <span>依赖阻断 {impactDownstreamSchedule.counts.blocked}</span>
+              <span>需人工 {impactDownstreamSchedule.counts['needs-manual-action']}</span>
+              <span className={`ml-auto ${impactDownstreamSchedule.settled ? 'text-success' : 'text-text-muted'}`}>
+                {impactDownstreamSchedule.settled ? '已全部完成' : `调度 ${impactDownstreamSchedule.scheduleHash.slice(0, 12)}`}
+              </span>
             </div>
           )}
           {impactRemediationPlan && impactRemediationPlan.counts.authorConfirmed > 0 && (

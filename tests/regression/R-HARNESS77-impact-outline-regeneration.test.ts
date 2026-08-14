@@ -278,7 +278,7 @@ describe.sequential('R-HARNESS77 · H57 生成式下游章纲摘要重建', { ti
     })).rejects.toThrow(/协议外字段|Context/)
     expect((await db.outlineNodes.get(fixture.targetOutlineNodeId))?.summary).toBe('钟楼照常回应')
     expect((await db.agentRuns.where('projectId').equals(fixture.projectId).toArray())
-      .filter(row => row.parentRelation?.startsWith('impact-outline-regen:'))[0]?.status).toBe('failed')
+      .filter(row => row.parentRelation?.startsWith('impact-generative-target:'))[0]?.status).toBe('failed')
   })
 
   it('配置缺失时模型调用和新 Run 都为零', async () => {
@@ -306,7 +306,7 @@ describe.sequential('R-HARNESS77 · H57 生成式下游章纲摘要重建', { ti
     })
     expect(calls).toBe(2)
     const runs = (await db.agentRuns.where('projectId').equals(fixture.projectId).toArray())
-      .filter(row => row.parentRelation?.startsWith('impact-outline-regen:'))
+      .filter(row => row.parentRelation?.startsWith('impact-generative-target:'))
     expect(runs).toHaveLength(2)
     expect(retry.snapshot.run.id).not.toBe(runs.find(row => row.status === 'paused')?.id)
   })
@@ -472,7 +472,7 @@ describe.sequential('R-HARNESS77 · H57 生成式下游章纲摘要重建', { ti
     await adoptImpactOutlineRegenerationCandidateV1({ scope: fixture.scope, runId: generated.snapshot.run.id })
     const importedId = await importProjectJSON(await exportProjectJSON(fixture.projectId))
     const imported = (await db.agentRuns.where('projectId').equals(importedId).toArray())
-      .find(row => row.parentRelation?.startsWith('impact-outline-regen:'))!
+      .find(row => row.parentRelation?.startsWith('impact-generative-target:'))!
     expect(imported.status).toBe('running')
     expect(imported.terminalReceiptHash).toBeNull()
   })

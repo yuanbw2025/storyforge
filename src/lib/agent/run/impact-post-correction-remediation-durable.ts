@@ -60,3 +60,24 @@ export async function executeImpactPostCorrectionRemediationV1(input: {
     onDurableBoundary: input.onDurableBoundary,
   })
 }
+
+/**
+ * Read the exact completed H58 child for a fresh H57 result without creating
+ * or resuming work. The existing executor remains the single verifier for its
+ * terminal checkpoint and frozen plan lineage.
+ */
+export async function readCompletedImpactPostCorrectionRemediationV1(input: {
+  scope: WorkspaceScope
+  worldGroupId: number | null
+  sourceChapterId: number
+  expectedReplan: ImpactPostCorrectionReplanResultV1
+}): Promise<Awaited<ReturnType<typeof executeImpactPostCorrectionRemediationV1>> | null> {
+  const relation = `impact-remediation-after-replan:${input.expectedReplan.output.outputHash}`
+  const child = await readAgentRunChildV1({
+    scope: input.scope,
+    parentRunId: input.expectedReplan.snapshot.run.id,
+    relation,
+  })
+  if (child?.projection.state !== 'completed' || !child.projection.terminalReceiptHash) return null
+  return executeImpactPostCorrectionRemediationV1(input)
+}

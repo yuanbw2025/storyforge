@@ -82,6 +82,12 @@ export async function resolveImpactDependencyReadinessV1(input: {
   const itemByNode = new Map(input.replan.output.plan.items.map(item => [item.nodeId, item]))
   const proofs: ImpactDependencyProofV1[] = []
   const blockers: string[] = []
+  const targetReview = reviewByItem.get(input.item.id)
+  if (targetReview?.output.decision === 'acknowledged') {
+    blockers.push(`目标 ${input.item.id} 已由作者确认，无需创建生成式 child。`)
+  } else if (targetReview?.output.decision === 'needs-manual-action') {
+    blockers.push(`目标 ${input.item.id} 已标记为需人工处理，必须先走可信修正与 replan。`)
+  }
   for (const nodeId of [...new Set(input.item.dependencyNodeIds)].sort()) {
     const dependency = itemByNode.get(nodeId)
     if (!dependency) {

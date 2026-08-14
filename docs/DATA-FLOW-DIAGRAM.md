@@ -77,6 +77,7 @@ flowchart TB
         AICHAP["AI 生成章节正文"]
         AIREGEN["H77 后续章纲摘要重建<br/>outline.impact-summary-regenerate"]
         AITIMEREGEN["H79 单事件年表重建<br/>prose.story-timeline-extraction"]
+        H80SCHEDULE["H80 H57 下游 schedule<br/>五态 + 共享 generation slot"]
         CHAPTERS["📖 章节正文 chapters"]
         DETAILS["细纲 detailedOutlines"]
         EBEAT["情感节拍 emotionBeatCards"]
@@ -158,8 +159,12 @@ flowchart TB
     AIOUTL ==写==> OUTL
     AIDETAIL ==写==> DETAILS
     AICHAP ==写==> CHAPTERS
-    H57PLAN["H57 fresh current plan<br/>remaining/new review-outline"] ==父 lineage==> AIREGEN
-    H50DEP["H50 fresh acknowledged review<br/>direct dependency proof"] ==H78 依赖门==> AIREGEN
+    H57PLAN["H57 fresh current plan<br/>remaining/new active items"] ==验签 + 稳定拓扑==> H80SCHEDULE
+    H50DEP["H50 fresh acknowledged review<br/>direct dependency proof"] ==current review evidence==> H80SCHEDULE
+    H80SCHEDULE ==ready + 单活动 slot==> AIREGEN
+    H80SCHEDULE ==ready + 单活动 slot==> AITIMEREGEN
+    H57PLAN ==父 lineage==> AIREGEN
+    H50DEP ==H78 依赖门==> AIREGEN
     BLDNODE ==登记 Context==> AIREGEN
     AIREGEN ==作者确认 + CAS + adopt(summary)==> OUTL
     H57TIME["H57 fresh current plan<br/>remaining/new timeline-event"] ==父 lineage==> AITIMEREGEN

@@ -16,6 +16,7 @@ async function mount(patch: Record<string, unknown> = {}) {
     analyzingImpact: false,
     impactInfo: null,
     impactRemediationPlan: null,
+    impactDownstreamSchedule: null,
     impactRemediationBusy: false,
     impactRemediationReceipt: null,
     impactRemediationError: null,
@@ -435,6 +436,41 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     })
     await act(async () => button(host, '打开人工入口').click())
     expect(props.onOpenImpactManualEntry).toHaveBeenCalledOnce()
+  })
+
+  it('展示 H57 跨类型调度的完成、待确认、阻断与人工计数', async () => {
+    const { host } = await mount({
+      impactInfo: '已恢复人工修正后的当前计划。',
+      impactDownstreamSchedule: {
+        version: 1,
+        kind: 'impact-downstream-schedule',
+        portable: false,
+        sourceChapterId: 3,
+        replanRunId: 12,
+        replanReceiptHash: 'a'.repeat(64),
+        replanOutputHash: 'b'.repeat(64),
+        planHash: 'c'.repeat(64),
+        graphHash: 'd'.repeat(64),
+        items: [{}, {}, {}, {}, {}, {}],
+        counts: {
+          blocked: 1,
+          ready: 2,
+          'awaiting-confirmation': 1,
+          'needs-manual-action': 1,
+          completed: 1,
+        },
+        nextItemIds: ['ready:1', 'ready:2'],
+        settled: false,
+        scheduleHash: 'e'.repeat(64),
+      },
+    })
+    const progress = host.querySelector('[aria-label="H57 下游调度进度"]')
+    expect(progress?.textContent).toContain('H57 下游 1/6')
+    expect(progress?.textContent).toContain('可继续 2')
+    expect(progress?.textContent).toContain('待确认 1')
+    expect(progress?.textContent).toContain('依赖阻断 1')
+    expect(progress?.textContent).toContain('需人工 1')
+    expect(progress?.textContent).toContain('调度 eeeeeeeeeeee')
   })
 
   it('明确选择章节叙事视角并允许恢复为不指定', async () => {
