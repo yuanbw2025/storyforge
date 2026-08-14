@@ -5,16 +5,20 @@ import { useForeshadowStore } from '../../stores/foreshadow'
 import { useChapterStore } from '../../stores/chapter'
 import { useOutlineStore } from '../../stores/outline'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
-import { buildForeshadowSuggestPrompt, buildForeshadowStructurePrompt, parseForeshadowStructured } from '../../lib/ai/adapters/foreshadow-adapter'
-import { chat, resolveRequestConfig } from '../../lib/ai/client'
+import { resolveRequestConfig } from '../../lib/ai/client'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
-import { adopt } from '../../lib/registry/adopt'
-import { assembleContext } from '../../lib/registry/assemble-context'
+import {
+  abandonForeshadowSuggestionRunV1,
+  adoptForeshadowSuggestionCandidateV1,
+  generateForeshadowSuggestionCandidateV1,
+  readPendingForeshadowSuggestionCandidateV1,
+  readRecoverableForeshadowSuggestionRunV1,
+  rejectForeshadowSuggestionCandidateV1,
+  type ForeshadowSuggestionCandidateV1,
+} from '../../lib/agent/run/foreshadow-suggestions-durable'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
 import { resolveCanonicalChapterSequence } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import { parseForeshadowEchoChapterIds } from '../../lib/foreshadow/context'
-import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import ForeshadowKanban from './ForeshadowKanban'
 import type { Project, Foreshadow, ForeshadowStatus, ForeshadowType } from '../../lib/types'
@@ -41,16 +45,21 @@ export default function ForeshadowPanel({ project }: Props) {
   const { chapters, loadAll: loadChapters } = useChapterStore()
   const { nodes: outlineNodes, loadAll: loadOutline } = useOutlineStore()
   const { config } = useAIConfigStore()
-  const ai = useAIStream(createAISessionKey(project.id!, 'foreshadow.suggest'))
   const [filterStatus, setFilterStatus] = useState<ForeshadowStatus | 'all'>('all')
   const [selected, setSelected] = useState<number | null>(null)
-  const [showAI, setShowAI] = useState(() => !!(ai.output || ai.isStreaming || ai.error))
+  const [showAI, setShowAI] = useState(false)
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban')
   const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
-  const [adopting, setAdopting] = useState(false)
-  const [adoptMsg, setAdoptMsg] = useState<string | null>(null)
+  const [aiCandidate, setAICandidate] = useState<ForeshadowSuggestionCandidateV1 | null>(null)
+  const [aiRunId, setAIRunId] = useState<number | null>(null)
+  const [selectedCandidates, setSelectedCandidates] = useState<Set<number>>(new Set())
+  const [selectionFrozen, setSelectionFrozen] = useState(false)
+  const [resumeAdoption, setResumeAdoption] = useState(false)
+  const [unsafeRunId, setUnsafeRunId] = useState<number | null>(null)
+  const [aiBusy, setAIBusy] = useState(false)
+  const [aiMessage, setAIMessage] = useState<string | null>(null)
 
   useEffect(() => {
     loadForeshadows(project.id!)
@@ -58,42 +67,48 @@ export default function ForeshadowPanel({ project }: Props) {
     loadOutline(project.id!)
   }, [project.id, loadForeshadows, loadChapters, loadOutline])
 
-  // 采纳 AI 伏笔建议：用 AI 把自由文本结构化 → 批量写入伏笔表
-  const handleAdoptForeshadows = async (text: string) => {
-    if (!text.trim()) return
-    setAdopting(true)
-    setAdoptMsg(null)
-    try {
-      const raw = await chat(buildForeshadowStructurePrompt(text), config, { category: 'foreshadow.structure', projectId: project.id! })
-      const items = parseForeshadowStructured(raw)
-      if (items.length === 0) {
-        setAdoptMsg('未能解析出伏笔条目，请重试或手动添加')
+  useEffect(() => {
+    if (!project.id) return
+    let cancelled = false
+    setAICandidate(null)
+    setAIRunId(null)
+    setSelectedCandidates(new Set())
+    setSelectionFrozen(false)
+    setResumeAdoption(false)
+    setUnsafeRunId(null)
+    void (async () => {
+      const scope = await resolveScopeLike(project.id!)
+      const pending = await readPendingForeshadowSuggestionCandidateV1({ scope })
+      if (cancelled) return
+      if (pending) {
+        setAICandidate(pending.candidate)
+        setAIRunId(pending.snapshot.run.id)
+        setSelectedCandidates(new Set(pending.candidate.suggestions.map((_, index) => index)))
+        setShowAI(true)
+        setViewMode('list')
+        setAIMessage(`已恢复 ${pending.candidate.suggestions.length} 条待确认伏笔候选；没有重复调用模型。`)
         return
       }
-      const result = await adopt({
-        projectId: project.id!,
-        target: 'foreshadows',
-        mode: 'add-many',
-        data: items.map(it => ({
-          name: it.name,
-          type: it.type,
-          status: 'planned',
-          description: it.description,
-          plantChapterId: null,
-          echoChapterIds: [],
-          resolveChapterId: null,
-          notes: '',
-        })),
-      })
-      await loadForeshadows(project.id!)
-      setAdoptMsg(`已写入 ${result.written.length} 条伏笔${result.skipped.length ? `，跳过 ${result.skipped.length} 条` : ''}`)
-      setShowAI(false)
-    } catch (err) {
-      setAdoptMsg(`采纳失败：${err instanceof Error ? err.message : '未知错误'}`)
-    } finally {
-      setAdopting(false)
-    }
-  }
+      const recoverable = await readRecoverableForeshadowSuggestionRunV1({ scope })
+      if (cancelled || !recoverable) return
+      setShowAI(true)
+      setViewMode('list')
+      if (recoverable.safeToResume && recoverable.candidate && recoverable.adoptionPending) {
+        setAICandidate(recoverable.candidate)
+        setAIRunId(recoverable.snapshot.run.id)
+        setSelectedCandidates(new Set(recoverable.selectedIndexes ?? []))
+        setSelectionFrozen(true)
+        setResumeAdoption(true)
+        setAIMessage('上次选择已冻结但尚未完成写入；继续确认会沿原运行幂等收敛，不会重复调用模型。')
+      } else if (!recoverable.safeToResume) {
+        setUnsafeRunId(recoverable.snapshot.run.id)
+        setAIMessage('上次建议停在模型结果不可判定窗口，系统不会自动重试。请先放弃旧运行。')
+      }
+    })().catch(error => {
+      if (!cancelled) setAIMessage(error instanceof Error ? error.message : String(error))
+    })
+    return () => { cancelled = true }
+  }, [project.id, project.activeWorldId, project.activeWorkId])
 
   const projectForeshadows = useMemo(
     () => foreshadows.filter(f => f.projectId === project.id),
@@ -193,27 +208,123 @@ export default function ForeshadowPanel({ project }: Props) {
   // AI 建议伏笔
   const handleAISuggest = async () => {
     if (!isAIConfigReady(resolveRequestConfig(config, { category: 'foreshadow.suggest' }).config)) return
+    if (!project.id || aiCandidate || unsafeRunId != null) return
     setShowAI(true)
-    const assembled = await assembleContext({
-      projectId: project.id!,
-      worldGroupId: null,
-      provider: config.provider,
-      model: config.model,
-      sourceKeys: ['canonAssertions', 'worldview', 'storyCore', 'powerSystem', 'cultivationProgress', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
-    })
-    const charIdx = assembled.included.indexOf('characters')
-    const worldCtx = assembled.text
-    const charCtx = charIdx >= 0 ? assembled.segments[charIdx]?.content ?? '' : ''
-    const existingForeshadows = projectForeshadows.map(f => `${f.name}（${TYPE_LABELS[f.type]}，${STATUS_LABELS[f.status].label}）：${f.description.slice(0, 100)}`).join('\n')
-    const opts = {
-      parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
-      overrides: (systemOverride != null || userOverride != null) ? {
-        systemPrompt: systemOverride ?? undefined,
-        userPromptTemplate: userOverride ?? undefined,
-      } : undefined,
+    setViewMode('list')
+    setAIBusy(true)
+    setAIMessage(null)
+    try {
+      const scope = await resolveScopeLike(project.id)
+      const generated = await generateForeshadowSuggestionCandidateV1({
+        scope,
+        worldGroupId: null,
+        aiConfig: config,
+        options: {
+          parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
+          overrides: (systemOverride != null || userOverride != null) ? {
+            systemPrompt: systemOverride ?? undefined,
+            userPromptTemplate: userOverride ?? undefined,
+          } : undefined,
+        },
+      })
+      setAICandidate(generated.candidate)
+      setAIRunId(generated.snapshot.run.id)
+      setSelectedCandidates(new Set(generated.candidate.suggestions.map((_, index) => index)))
+      setSelectionFrozen(false)
+      setResumeAdoption(false)
+      setAIMessage(generated.candidate.suggestions.length
+        ? `生成 ${generated.candidate.suggestions.length} 条严格候选；可取消不采纳项后批次确认。`
+        : '没有生成可靠的新伏笔；确认空批次即可留下完整审计回执。')
+    } catch (error) {
+      setAIMessage(error instanceof Error ? error.message : '伏笔建议失败')
+      const scope = await resolveScopeLike(project.id)
+      const pending = await readPendingForeshadowSuggestionCandidateV1({ scope }).catch(() => null)
+      if (pending) {
+        setAICandidate(pending.candidate)
+        setAIRunId(pending.snapshot.run.id)
+        setSelectedCandidates(new Set(pending.candidate.suggestions.map((_, index) => index)))
+        setAIMessage(`已恢复 ${pending.candidate.suggestions.length} 条待确认伏笔候选；没有重复调用模型。`)
+      } else {
+        const recoverable = await readRecoverableForeshadowSuggestionRunV1({ scope }).catch(() => null)
+        if (recoverable?.safeToResume && recoverable.candidate && recoverable.adoptionPending) {
+          setAICandidate(recoverable.candidate)
+          setAIRunId(recoverable.snapshot.run.id)
+          setSelectedCandidates(new Set(recoverable.selectedIndexes ?? []))
+          setSelectionFrozen(true)
+          setResumeAdoption(true)
+        } else if (recoverable && !recoverable.safeToResume) {
+          setUnsafeRunId(recoverable.snapshot.run.id)
+        }
+      }
+    } finally {
+      setAIBusy(false)
     }
-    const messages = buildForeshadowSuggestPrompt(project.name, project.genre, worldCtx, charCtx, existingForeshadows, opts)
-    ai.start(messages, undefined, { category: 'foreshadow.suggest', projectId: project.id! })
+  }
+
+  const handleAcceptSuggestions = async () => {
+    if (!project.id || aiRunId == null || !aiCandidate) return
+    setAIBusy(true)
+    setAIMessage(null)
+    try {
+      const scope = await resolveScopeLike(project.id)
+      const result = await adoptForeshadowSuggestionCandidateV1({
+        scope,
+        runId: aiRunId,
+        ...(resumeAdoption ? {} : { selectedIndexes: [...selectedCandidates] }),
+      })
+      await loadForeshadows(scope)
+      setAICandidate(null)
+      setAIRunId(null)
+      setSelectedCandidates(new Set())
+      setSelectionFrozen(false)
+      setResumeAdoption(false)
+      setAIMessage(`已原子写入 ${result.written} 条伏笔并完成终验。`)
+    } catch (error) {
+      setAIMessage(error instanceof Error ? error.message : '确认伏笔失败')
+      const scope = await resolveScopeLike(project.id)
+      const recoverable = await readRecoverableForeshadowSuggestionRunV1({ scope }).catch(() => null)
+      if (recoverable?.safeToResume && recoverable.candidate && recoverable.adoptionPending) {
+        setAICandidate(recoverable.candidate)
+        setAIRunId(recoverable.snapshot.run.id)
+        setSelectedCandidates(new Set(recoverable.selectedIndexes ?? []))
+        setSelectionFrozen(true)
+        setResumeAdoption(true)
+      }
+    } finally {
+      setAIBusy(false)
+    }
+  }
+
+  const handleRejectSuggestions = async () => {
+    if (!project.id || aiRunId == null || !aiCandidate || selectionFrozen) return
+    setAIBusy(true)
+    try {
+      const scope = await resolveScopeLike(project.id)
+      await rejectForeshadowSuggestionCandidateV1({ scope, runId: aiRunId })
+      setAICandidate(null)
+      setAIRunId(null)
+      setSelectedCandidates(new Set())
+      setAIMessage('已拒绝本批候选；正式伏笔没有写入。')
+    } catch (error) {
+      setAIMessage(error instanceof Error ? error.message : '拒绝伏笔失败')
+    } finally {
+      setAIBusy(false)
+    }
+  }
+
+  const handleAbandonUnsafeRun = async () => {
+    if (!project.id || unsafeRunId == null || aiBusy) return
+    setAIBusy(true)
+    try {
+      const scope = await resolveScopeLike(project.id)
+      await abandonForeshadowSuggestionRunV1({ scope, runId: unsafeRunId })
+      setUnsafeRunId(null)
+      setAIMessage('已放弃结果不可判定的旧运行，可以重新生成。')
+    } catch (error) {
+      setAIMessage(error instanceof Error ? error.message : '放弃伏笔运行失败')
+    } finally {
+      setAIBusy(false)
+    }
   }
 
   return (
@@ -233,10 +344,10 @@ export default function ForeshadowPanel({ project }: Props) {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleAISuggest}
-            disabled={ai.isStreaming || !isAIConfigReady(resolveRequestConfig(config, { category: 'foreshadow.suggest' }).config)}
+            disabled={aiBusy || aiCandidate != null || unsafeRunId != null || !isAIConfigReady(resolveRequestConfig(config, { category: 'foreshadow.suggest' }).config)}
             className="flex items-center gap-1.5 rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm text-text-secondary transition-colors hover:text-accent disabled:opacity-40"
             title="AI 建议伏笔">
-            {ai.isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            {aiBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             AI 建议
           </button>
           <button onClick={handleAdd}
@@ -346,21 +457,56 @@ export default function ForeshadowPanel({ project }: Props) {
               userOverride={userOverride}
               onUserOverrideChange={setUserOverride}
             />
-            {adopting && (
+            {aiBusy && (
               <div className="flex items-center gap-2 text-xs text-accent">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> AI 正在把建议整理为伏笔条目并写入…
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> 正在处理伏笔候选与 durable 证据…
               </div>
             )}
-            {adoptMsg && <div className="text-xs text-text-muted">{adoptMsg}</div>}
-            <AIStreamOutput
-              output={ai.output}
-              isStreaming={ai.isStreaming}
-              error={ai.error} tokenUsage={ai.tokenUsage}
-              onStop={ai.stop}
-              onRetry={handleAISuggest}
-              onAccept={(text: string) => { handleAdoptForeshadows(text) }}
-              moduleKey="foreshadow.generate"
-            />
+            {aiMessage && <div className="text-xs text-text-muted">{aiMessage}</div>}
+            {unsafeRunId != null && (
+              <button onClick={handleAbandonUnsafeRun} disabled={aiBusy}
+                className="rounded border border-error/40 px-3 py-1.5 text-xs text-error disabled:opacity-40">
+                放弃不可判定运行
+              </button>
+            )}
+            {aiCandidate && (
+              <div className="space-y-2">
+                {aiCandidate.suggestions.map((candidate, index) => (
+                  <label key={`${candidate.name}:${index}`}
+                    className={`block rounded-lg border p-3 ${selectedCandidates.has(index) ? 'border-accent/30 bg-accent/5' : 'border-border opacity-60'}`}>
+                    <div className="flex items-start gap-3">
+                      <input type="checkbox" aria-label={`选择伏笔候选 ${index + 1}`}
+                        checked={selectedCandidates.has(index)} disabled={selectionFrozen || aiBusy}
+                        onChange={event => setSelectedCandidates(current => {
+                          const next = new Set(current)
+                          if (event.target.checked) next.add(index)
+                          else next.delete(index)
+                          return next
+                        })} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-text-primary">{candidate.name}</p>
+                        <p className="mt-0.5 text-xs text-accent">{TYPE_LABELS[candidate.type]}</p>
+                        <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">{candidate.description}</p>
+                      </div>
+                    </div>
+                  </label>
+                ))}
+                <div className="flex justify-end gap-2 pt-1">
+                  {!selectionFrozen && (
+                    <button onClick={handleRejectSuggestions} disabled={aiBusy}
+                      className="rounded border border-border px-3 py-1.5 text-xs text-text-secondary disabled:opacity-40">
+                      拒绝整批
+                    </button>
+                  )}
+                  <button onClick={handleAcceptSuggestions}
+                    aria-label="确认所选伏笔候选"
+                    disabled={aiBusy || (!resumeAdoption && aiCandidate.suggestions.length > 0 && selectedCandidates.size === 0)}
+                    className="rounded bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-40">
+                    {resumeAdoption ? '继续已冻结写入' : `确认所选（${selectedCandidates.size}）`}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

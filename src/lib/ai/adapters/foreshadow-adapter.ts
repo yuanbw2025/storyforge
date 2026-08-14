@@ -40,6 +40,99 @@ export interface StructuredForeshadow {
   description: string
 }
 
+const FORESHADOW_STRICT_PROTOCOL_V1 = `
+
+【HARNESS-72 严格输出协议】
+只输出一个 JSON 对象，不得输出 Markdown 围栏、解释或其它文字：
+{"foreshadows":[{"name":"伏笔名称","type":"chekhov|prophecy|symbol|character|dialogue|environment|timeline|red-herring|parallel|callback","description":"完整描述，包含埋设思路与回收承诺"}]}
+
+foreshadows 可以为空数组，最多 12 项。每项只能有 name、type、description 三个字段；名称不得与登记的已有伏笔重复。不要输出状态、章节 ID、owner ID 或数据库字段；所有候选都由系统固定为 planned，章节关联由作者之后设置。`
+
+export function buildForeshadowSuggestionMessagesV1(input: {
+  projectName: string
+  genre: string
+  worldContext: string
+  characterContext: string
+  existingForeshadows: string
+  options?: RunOptions
+}): ChatMessage[] {
+  const messages = buildForeshadowSuggestPrompt(
+    input.projectName,
+    input.genre,
+    input.worldContext,
+    input.characterContext,
+    input.existingForeshadows,
+    input.options,
+  )
+  const firstSystem = messages.findIndex(message => message.role === 'system')
+  if (firstSystem >= 0) {
+    messages[firstSystem] = {
+      ...messages[firstSystem],
+      content: `${messages[firstSystem].content}${FORESHADOW_STRICT_PROTOCOL_V1}`,
+    }
+  } else {
+    messages.unshift({ role: 'system', content: FORESHADOW_STRICT_PROTOCOL_V1.trim() })
+  }
+  return messages
+}
+
+export function readForeshadowSuggestionPromptTemplateSnapshotV1() {
+  const template = usePromptStore.getState().getActive('foreshadow.generate')
+  return {
+    moduleKey: template.moduleKey,
+    systemPrompt: template.systemPrompt,
+    userPromptTemplate: template.userPromptTemplate,
+    variables: template.variables,
+    modelOverride: template.modelOverride ?? null,
+    examples: template.examples ?? null,
+    parameters: template.parameters ?? null,
+    strictProtocol: FORESHADOW_STRICT_PROTOCOL_V1,
+  }
+}
+
+export function parseForeshadowSuggestionsStrictV1(
+  raw: string,
+  existingNames: readonly string[],
+): StructuredForeshadow[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw.trim())
+  } catch {
+    throw new Error('伏笔建议输出不是严格 JSON。')
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('伏笔建议输出必须是 JSON 对象。')
+  }
+  const root = parsed as Record<string, unknown>
+  if (Object.keys(root).length !== 1 || !Object.prototype.hasOwnProperty.call(root, 'foreshadows')) {
+    throw new Error('伏笔建议根字段不在允许闭集。')
+  }
+  if (!Array.isArray(root.foreshadows) || root.foreshadows.length > 12) {
+    throw new Error('伏笔建议必须包含 0 到 12 个条目。')
+  }
+  const used = new Set(existingNames.map(name => name.trim().toLocaleLowerCase()).filter(Boolean))
+  return root.foreshadows.map((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`伏笔候选 ${index + 1} 不是对象。`)
+    }
+    const row = value as Record<string, unknown>
+    const keys = ['name', 'type', 'description'] as const
+    if (Object.keys(row).length !== keys.length || Object.keys(row).some(key => !keys.includes(key as typeof keys[number]))) {
+      throw new Error(`伏笔候选 ${index + 1} 字段不在允许闭集。`)
+    }
+    if (typeof row.name !== 'string' || row.name !== row.name.trim() || !row.name || row.name.length > 120
+      || typeof row.description !== 'string' || row.description !== row.description.trim()
+      || !row.description || row.description.length > 8_000
+      || typeof row.type !== 'string' || !VALID_FORESHADOW_TYPES.includes(row.type as ForeshadowType)) {
+      throw new Error(`伏笔候选 ${index + 1} 字段类型、长度或枚举无效。`)
+    }
+    const normalizedName = row.name.toLocaleLowerCase()
+    if (used.has(normalizedName)) throw new Error(`伏笔候选 ${index + 1} 名称与已有或本批伏笔重复。`)
+    used.add(normalizedName)
+    return { name: row.name, type: row.type as ForeshadowType, description: row.description }
+  })
+}
+
 /** 构建"把伏笔建议文本拆成结构化 JSON"的二次解析 prompt */
 export function buildForeshadowStructurePrompt(text: string): ChatMessage[] {
   const system = `你是一个文本结构化助手。用户提供了一段 AI 生成的伏笔建议文本，请把其中每一个伏笔拆分为结构化条目，输出纯 JSON 数组（不要 markdown 代码块，不要解释）：

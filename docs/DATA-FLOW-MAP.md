@@ -79,7 +79,7 @@
 | **世界组七字段扩写** worldGroups/worldviews | 已保存目标组名称/类型/描述；`worldOrigin/powerHierarchy/continentLayout/climateByRegion/historyLine/races/factionLayout` | `manualText + worldGroups + storyCore + worldview` 登记上下文 | durable 候选；作者确认并通过完整 baseline CAS → `adopt(worldviews)` 原子写七字段 |
 | **故事线** storyArcs | `name/type(main/sub)/stages`(起承转合) | `worldContext`(★ 已接词条) + `storyCore` + 大纲摘要 | → storyArc |
 | **大纲** outlineNodes | `parentId/type(volume/chapter)/title/summary/order/worldGroupId` | `worldContext`(★) + `storyCore` + `characterContext` + `worldRulesContext` | 卷/章 JSON → outlineNodes |
-| **伏笔** foreshadows | `name/type/status/description/plantChapterId/echoChapterIds/resolveChapterId/importance/urgency` | `worldContext`(★) + `characterContext` + 已有伏笔 | 伏笔 JSON → foreshadows |
+| **伏笔** foreshadows | `name/type/status/description/plantChapterId/echoChapterIds/resolveChapterId/importance/urgency` | HARNESS-72 后 AI 只经登记的 Canon/世界/故事/角色/规则/历史/地点 + 当前 Work 完整伏笔 baseline | strict 0～12 项 durable 候选；作者选择且上游/正式 baseline/Prompt CAS 通过 → `adopt(foreshadows)` 原子新增 `planned` 记录；人工 CRUD/章节关联保留 |
 
 ### ✍️ 正文创作
 
@@ -243,7 +243,7 @@
 
 **核对确认安全（排除嫌疑）**：
 - 版本快照还原复用 export/import（已含数据丢失修复）；`ensure-schema` REQUIRED_TABLES 保守（不误删老用户）。
-- WorldMapPanel 在 HARNESS-66 后只经登记 Context Gateway 读取当前 World，并以目标节点/世界组证据隔离；WorldGroupDetail 在 HARNESS-67 后只经四个登记源读已保存草稿，七字段候选确认后才原子采纳；WorldGroupOverview 在 HARNESS-68 后只经三个登记源生成整批 durable 候选，勾选子集确认后才原子新建世界，旧 `buildAllWorldsOverview` 已删除；WorldConstitutionPanel 在 HARNESS-69 后只经 `constitutionScanSources` 读取登记闭集，批次确认只原子新增事实候选，仍需逐条确认成为 Canon；CodexPanel 在 HARNESS-70 后只经 `manualText / codexExtractionBaseline` 读取作者来源、分类 schema 和同世界组既有词条，长来源候选完成并由作者冻结子集后才原子新增词条；HistoryPanel 多世界按当前世界；EmotionBeat 经 prop 拿真实上下文。
+- WorldMapPanel 在 HARNESS-66 后只经登记 Context Gateway 读取当前 World，并以目标节点/世界组证据隔离；WorldGroupDetail 在 HARNESS-67 后只经四个登记源读已保存草稿，七字段候选确认后才原子采纳；WorldGroupOverview 在 HARNESS-68 后只经三个登记源生成整批 durable 候选，勾选子集确认后才原子新建世界，旧 `buildAllWorldsOverview` 已删除；WorldConstitutionPanel 在 HARNESS-69 后只经 `constitutionScanSources` 读取登记闭集，批次确认只原子新增事实候选，仍需逐条确认成为 Canon；CodexPanel 在 HARNESS-70 后只经 `manualText / codexExtractionBaseline` 读取作者来源、分类 schema 和同世界组既有词条，长来源候选完成并由作者冻结子集后才原子新增词条；ForeshadowPanel 在 HARNESS-72 后只经登记上游和完整 Work baseline 一次生成 strict durable 候选，作者冻结子集后才原子新增 `planned` 伏笔；HistoryPanel 多世界按当前世界；EmotionBeat 经 prop 拿真实上下文。
 - 所有解析器（inventory/timeline/arc/relation/plot/character/outline/import）字段与表对齐、防御性默认。
 - 无跨项目查询泄漏（toArray 均带 projectId，除有意的全局表）；导入大纲正确重建 parentId 树。
 - 所有 `JSON.parse(AI 输出)` 均被 try/catch 保护（解析器内部 return null/[]，或调用方 try/catch + 错误展示，如 voronoi 地图）。

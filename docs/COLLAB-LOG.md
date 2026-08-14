@@ -2224,3 +2224,25 @@ budget 与生产依赖审计通过，入口 657.2 KiB / gzip 203.0 KiB。项目 
 
 👉 球在 Codex：继续按 census 清理剩余 6 个 migration；下一优先目标为伏笔两段模型链，仍按
 一个真实目标类型冻结 Context、候选、原子采纳和生命周期，禁止建立平行 runtime。
+
+### [2026-08-14] Codex · REPORT · HARNESS-72 伏笔建议 durable 候选与原子采纳 / `feat/harness-rebuild-20260807`
+
+伏笔 AI 建议已从两段组件直连模型迁入 `outline.foreshadow-suggestions`。模型只经登记的 Canon、
+世界、故事、角色、规则、历史、地点与 `foreshadowSuggestionBaseline` 读取当前 Work，一次调用
+直接返回 strict 0～12 项候选；旧“先自由文本、再第二次模型结构化”的链路、内存候选和逐条
+写入旁路已下线。候选可跨刷新恢复，作者可取消不采纳项；确认前正式伏笔零写入。
+
+作者选择冻结后，runner 会复核项目、完整正式伏笔 baseline、上游 Context、实际 Prompt 与模板；
+事务内再次 CAS 后，全部冻结项才经 `FIELD_REGISTRY + AdoptionSchema + adopt(foreshadows)` 原子
+新增，状态固定为 `planned`，章节引用与备注保持空值供作者后续维护。未知模型结果不重试，候选
+崩溃窗、空结果、拒绝、选择冻结、八个采纳中断点、terminal stale、导入取消与 Work 隔离均有
+反例；人工伏笔 CRUD、状态推进与章节关联保留。
+
+定向验证：durable 18 项、组件 UI 2 项、H59 3 项和 Context Gateway 通用预算 3 项通过；H59
+census 收缩为 16 文件 / 30 调用，分类为 7 governed、4 auxiliary、5 migration。完整 CI 360 files /
+1681 tests 全绿，覆盖率为 81.34% statements / 73.68% branches / 78.86% functions / 81.34%
+lines；3759 模块生产构建、bundle budget 与生产依赖审计通过，入口 660.2 KiB / gzip 203.9 KiB。
+项目 Chromium E2E 48/48，伏笔用例约 5.8 秒且模型只调用一次；`git diff --check` 通过。
+
+👉 球在 Codex：继续按 census 清理剩余 5 个 migration；下一优先从 `HistoryPanel` 两个模型入口
+开始，先厘清“只读生成建议”与“正式历史写入”的目标合同，再冻结 Context、候选和采纳边界。

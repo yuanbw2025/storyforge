@@ -79,7 +79,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 57 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 58 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -126,6 +126,7 @@
 | `historical` | 历史时间线 | world | L2 | 1800 |
 | `locations` | 重要地点 | project | L2 | 1200 |
 | `foreshadows` | 伏笔状态 | chapter | L2 | 1200 |
+| `foreshadowSuggestionBaseline` | 伏笔建议正式基线 | project | L0 | 8000 |
 | `storyArcs` | 故事线 | project | L2 | 1500 |
 | `storylineProgress` | 作者确认的故事线进度与交汇 | project | L1 | 1400 |
 | `cultivationProgress` | 作者确认的正文修炼进度 | world | L1 | 1000 |
@@ -202,7 +203,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 53 个 category。
+共 52 个 category。
 未分类调用: 0 个。动态 category 调用: 19 个。
 
 | category | 触发文件 |
@@ -228,8 +229,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:78` |
 | `eval.h17.generation` | `src/components/settings/HarnessEvalPanel.tsx:79` |
 | `eval.h4.verifier` | `src/components/settings/HarnessEvalPanel.tsx:108` |
-| `foreshadow.structure` | `src/components/foreshadow/ForeshadowPanel.tsx:67` |
-| `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:216` |
+| `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `history.consult` | `src/components/history/useHistoryAI.ts:118` |
@@ -285,4 +285,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `dd6db9b`
+生成时间基准:commit `c4b88d8`

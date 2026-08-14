@@ -58,7 +58,7 @@
 | 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
 | 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
 | 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
-| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～71 收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑、世界地图、世界观七字段扩写、多世界建议、世界宪法扫描、Codex 词条拆分和修炼进度提取后，当前为 17 个文件 / 32 个静态构造点：7 个 governed、4 个 auxiliary、6 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
+| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～72 收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑、世界地图、世界观七字段扩写、多世界建议、世界宪法扫描、Codex 词条拆分、修炼进度提取和伏笔建议后，当前为 16 个文件 / 30 个静态构造点：7 个 governed、4 个 auxiliary、5 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
 
 ### HARNESS-61 完成卡：情感节拍 durable 候选与采纳
 
@@ -200,6 +200,19 @@
 | 生命周期 / 作用域 | 不新增表/schema；进度、章节、角色和修炼体系继续由 PROJECT_TABLES 派生 Work/World 归属、导入导出、删除与引用重映射。含本地 ID 的候选 `portable:false`，其它 World/Work/世界组不可恢复或采纳。 |
 | UI / 回滚 | `CultivationProgressPanel` 恢复待确认、选择冻结或不可判定运行；人工删除与反哺开关保留。旧组件 `chat()`、硬编码 prompt、宽松 parser、内存逐条候选与非原子逐条采纳旁路下线。 |
 | 验收 | durable 22 项与既有修炼领域/UI 7 项通过；census 收缩为 17 文件 / 32 入口、6 migration。完整 CI 为 358 files / 1661 tests，覆盖率 81.07% statements / 73.50% branches / 78.81% functions / 81.07% lines；3757 模块生产构建与 bundle budget 通过，入口 657.2 KiB / gzip 203.0 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 47/47；修炼主路径用例约 11.3 秒，证明登记正文/baseline 实际进入请求、候选刷新恢复不重复模型调用、确认前零正式写入，确认后进度及系统确定的 transition 原子持久化。 |
+
+### HARNESS-72 完成卡：伏笔建议 durable 候选与原子采纳
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-72` 治理小功能。作者请求 AI 建议伏笔时，一次模型调用直接生成严格结构候选；候选可刷新恢复，确认前正式伏笔零写入，作者只采纳所选子集。 |
+| 主归属 / 复用 | 在同一 `outline` Agent 下新增 `outline.foreshadow-suggestions` Skill，复用 Context Gateway、durable Run/checkpoint、`FIELD_REGISTRY + AdoptionSchema + adopt(foreshadows)`、PROJECT_TABLES 生命周期与 terminal receipt，不建立第二套伏笔表或 Harness。 |
+| 读 / 写 | 模型只经登记的 Canon、世界观、故事核心、力量体系、修炼进度、Codex、角色、创作/世界规则、历史、地点与 `foreshadowSuggestionBaseline` 读取当前 Work。作者确认后只新增伏笔名称、类型、描述和系统固定的 `planned` 状态；章节引用与备注固定为空，后续由作者维护。 |
+| 状态机 / 硬验证 | 冻结 World/Work、项目、完整正式伏笔 baseline、上游 Context Manifest、实际 Prompt 与 Prompt 模板。只接受 exact-key `{foreshadows:[0..12]}`，每项仅 `name/type/description`；围栏、额外字段、非法枚举、隐式修剪、已有或批内重名均 fail-closed。未知模型结果不自动重试。 |
+| 采纳恢复 | 作者可选择子集；选择冻结后不可换项或取消。项目、正式 baseline、上游 Context 与 Prompt fresh 时，事务内二次 CAS 并经 `adopt()` 原子新增全部冻结项；八个 durable 采纳边界沿同一意图幂等收敛，空结果可签发零写回执。 |
+| 生命周期 / 作用域 | 不新增表/schema；`foreshadows` 继续由 PROJECT_TABLES 派生 Work 归属、导入导出、删除和引用重映射生命周期。候选含本地作用域证据，`portable:false`，导入后取消；其它 Work 不可恢复或采纳。 |
+| UI / 回滚 | `ForeshadowPanel` 恢复待确认、冻结选择或不可判定运行；人工新建、编辑、状态推进与章节关联保留。旧 `useAIStream` 自由文本调用、第二次结构化模型调用、内存候选与逐条 `adopt()` 旁路下线。 |
+| 验收 | durable 18 项、组件 UI 2 项、H59 3 项与通用 Context Gateway 3 项通过；census 收缩为 16 文件 / 30 入口、5 migration。完整 CI 为 360 files / 1681 tests，覆盖率 81.34% statements / 73.68% branches / 78.86% functions / 81.34% lines；3759 模块生产构建与 bundle budget 通过，入口 660.2 KiB / gzip 203.9 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 48/48；新用例约 5.8 秒，证明登记 baseline/严格协议实际进入请求、候选刷新恢复不重复模型调用、确认前零正式写入，确认后伏笔跨刷新持久化。 |
 
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 

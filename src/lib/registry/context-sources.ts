@@ -45,6 +45,7 @@ import {
   readCultivationProgressContext,
   readCultivationProgressExtractionBaselineContextV1,
 } from '../cultivation/progress'
+import { readForeshadowSuggestionBaselineContextV1 } from '../foreshadow/suggestions'
 import type {
   Chapter,
   Character,
@@ -1292,6 +1293,19 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     layer: 'L2',
     budgetTokens: 1200,
     read: input => readForeshadows(input.projectId, input.chapterId, input.scope),
+  },
+  {
+    key: 'foreshadowSuggestionBaseline',
+    label: '伏笔建议正式基线',
+    scope: 'project',
+    layer: 'L0',
+    budgetTokens: 8_000,
+    protectedFromTrim: true,
+    ownerFrom: 'work',
+    read: input => readForeshadowSuggestionBaselineContextV1({
+      scope: input.scope!,
+      worldGroupId: input.worldGroupId,
+    }),
   },
   {
     key: 'storyArcs',

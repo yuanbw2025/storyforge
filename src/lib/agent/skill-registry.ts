@@ -37,6 +37,7 @@ export type AgentSkillExecutionModeV1 =
   | 'reverse'
   | 'auto'
   | 'story-arcs'
+  | 'foreshadow-suggestions'
   | 'storyline-progress'
   | 'character-driven'
   | 'character-revision'
@@ -184,6 +185,20 @@ const CULTIVATION_PROGRESS_EXTRACTION_CONTEXT_SOURCE_KEYS = [
   'chapterContent',
   'cultivationProgressExtractionBaseline',
 ] as const
+const FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS = [
+  'canonAssertions',
+  'worldview',
+  'storyCore',
+  'powerSystem',
+  'cultivationProgress',
+  'codex',
+  'characters',
+  'creativeRules',
+  'worldRules',
+  'historical',
+  'locations',
+  'foreshadowSuggestionBaseline',
+] as const
 
 const CHARACTER_SUPPLEMENT_CONTEXT_SOURCE_KEYS = [
   'targetCharacter',
@@ -284,6 +299,7 @@ const PROSE_SELECTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
 }
 
 const PROSE_SELECTION_COMPRESSION_POLICY = compressionPolicy(['manualText'])
+const FORESHADOW_SUGGESTION_COMPRESSION_POLICY = compressionPolicy(FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS)
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
   'projectStatus',
@@ -1726,6 +1742,36 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'outline.foreshadow-suggestions',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '伏笔规划建议',
+    owner: 'outline-agent',
+    promptVersion: 'foreshadow-suggestions-v1',
+    executionMode: 'foreshadow-suggestions',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: {
+      sourceKeys: FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS,
+      states: {
+        empty: { handling: 'create-from-request', instruction: '项目设定为空时只创建最小伏笔候选，不得声称引用了既有 Canon。' },
+        partial: { handling: 'reference-and-create', instruction: '锁定已有世界、角色与伏笔，新增候选不得覆盖或重复作者记录。' },
+        complete: { handling: 'grounded-transform', instruction: '依据完整登记上下文设计可埋设、可兑现且不重复的伏笔候选。' },
+      },
+    },
+    contextCompression: FORESHADOW_SUGGESTION_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{
+      table: 'foreshadows',
+      fields: ['name', 'type', 'status', 'description', 'plantChapterId', 'echoChapterIds', 'resolveChapterId', 'notes'],
+    }],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS72-foreshadow-suggestions-durable'],
+  },
+  {
+    version: 1,
     id: 'prose.selection-edit',
     agentId: 'prose',
     defaultForAgent: false,
@@ -2075,7 +2121,7 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'constitution-extract', 'codex-extract', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
+    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
     prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency']),
   }
   const ids = new Set<string>()

@@ -3049,3 +3049,80 @@ test('Codex 内容拆分刷新恢复候选，作者确认后才原子新增词�
   await expect(page.getByText('月环城', { exact: true })).toBeVisible()
   expect(generationCalls).toBe(1)
 })
+
+test('伏笔建议刷新恢复候选，作者确认后才原子新增正式伏笔', async ({ page }) => {
+  let generationCalls = 0
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'foreshadow-suggestions-durable-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+      contextWindow: 100000,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls += 1
+    const request = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = request.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain('【伏笔建议正式基线】')
+    expect(combined).toContain('项目：E2E 伏笔 durable 建议闭环')
+    expect(combined).toContain('已有伏笔：无')
+    expect(combined).toContain('【HARNESS-72 严格输出协议】')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: JSON.stringify({
+              foreshadows: [{
+                name: '反照的空椅',
+                type: 'symbol',
+                description: '议事厅始终空着一把椅子，终局揭示它属于被抹去的建国者。',
+              }],
+            }),
+          },
+          finish_reason: 'stop',
+        }],
+        usage: { prompt_tokens: 210, completion_tokens: 55, total_tokens: 265 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 伏笔 durable 建议闭环')
+  await openSidebarLeaf(page, '创作区', '伏笔')
+  await expect(page.getByRole('heading', { name: '伏笔追踪', exact: true })).toBeVisible()
+  await expect(page.getByText(/0 个伏笔/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'AI 建议', exact: true }).click()
+  await expect(page.getByText('反照的空椅', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('生成 1 条严格候选；可取消不采纳项后批次确认。', { exact: true })).toBeVisible()
+  await expect(page.getByText(/0 个伏笔/)).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '创作区', '伏笔')
+  await expect(page.getByText('已恢复 1 条待确认伏笔候选；没有重复调用模型。', { exact: true })).toBeVisible()
+  await expect(page.getByText('反照的空椅', { exact: true })).toBeVisible()
+  await expect(page.getByText(/0 个伏笔/)).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.getByLabel('确认所选伏笔候选').click()
+  await expect(page.getByText('已原子写入 1 条伏笔并完成终验。', { exact: true })).toBeVisible()
+  await expect(page.getByText(/1 个伏笔/)).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '创作区', '伏笔')
+  await page.getByTitle('列表视图').click()
+  await expect(page.getByText('反照的空椅', { exact: true })).toBeVisible()
+  await expect(page.getByText(/1 个伏笔/)).toBeVisible()
+  expect(generationCalls).toBe(1)
+})
