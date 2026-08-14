@@ -3630,6 +3630,7 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
   await page.getByRole('button', { name: 'AI 重建章纲候选', exact: true }).click()
   await expect(page.getByText(regeneratedSummary, { exact: true })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByLabel('H57 下游调度进度')).toContainText('待确认 1')
+  await expect(page.getByLabel('H57 当前执行器策略')).toContainText('outline-regeneration-v1')
   await expect(page.getByLabel('生成式故事年表目标')).toHaveCount(0)
   expect(generationCalls).toBe(1)
 
@@ -3731,6 +3732,7 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
   await page.getByRole('button', { name: 'AI 重建年表候选', exact: true }).click()
   await expect(page.getByText(regeneratedTimelineDescription, { exact: true })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByLabel('H57 下游调度进度')).toContainText('待确认 1')
+  await expect(page.getByLabel('H57 当前执行器策略')).toContainText('story-timeline-regeneration-v1')
   await expect(page.getByLabel('生成式后续章纲目标')).toHaveCount(0)
   expect(generationCalls).toBe(2)
 

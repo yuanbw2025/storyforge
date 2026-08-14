@@ -1,4 +1,5 @@
 import { db } from '../../db/schema'
+import type { ImpactHandoffModuleV2 } from '../../consistency/impact-handoff'
 import type { ImpactRemediationItemV1 } from '../../consistency/impact-remediation-plan'
 import type { WorkspaceScope } from '../../types'
 import { assertRecordInScope } from '../../world-engine/scope'
@@ -10,6 +11,11 @@ import {
   isActiveImpactGenerativeRunV1,
   readImpactGenerativeSiblingRunsV1,
 } from './impact-generative-slot'
+import {
+  resolveImpactDownstreamExecutorPolicyV1,
+  type ImpactDownstreamExecutorV1,
+  type ImpactDownstreamPolicyIdV1,
+} from './impact-downstream-policy'
 import {
   readCompletedImpactOutlineRegenerationsV1,
   readPendingImpactOutlineRegenerationCandidateV1,
@@ -32,12 +38,6 @@ export type ImpactDownstreamScheduleStatusV1 =
   | 'needs-manual-action'
   | 'completed'
 
-export type ImpactDownstreamExecutorV1 =
-  | 'author-review'
-  | 'deterministic-remediation'
-  | 'outline-regeneration'
-  | 'story-timeline-regeneration'
-
 export interface ImpactDownstreamScheduleItemV1 {
   itemId: string
   nodeId: string
@@ -47,6 +47,9 @@ export interface ImpactDownstreamScheduleItemV1 {
   action: ImpactRemediationItemV1['action']
   mode: ImpactRemediationItemV1['mode']
   executor: ImpactDownstreamExecutorV1
+  policyId: ImpactDownstreamPolicyIdV1
+  policyReason: string
+  manualModule: ImpactHandoffModuleV2 | null
   status: ImpactDownstreamScheduleStatusV1
   dependencyItemIds: string[]
   blockers: string[]
@@ -68,34 +71,6 @@ export interface ImpactDownstreamScheduleV1 {
   nextItemIds: string[]
   settled: boolean
   scheduleHash: string
-}
-
-function isOutlineTarget(item: ImpactRemediationItemV1, sourceOutlineNodeId: number | null): boolean {
-  return item.mode === 'author-confirmed'
-    && item.action === 'review-outline'
-    && item.kind === 'outline'
-    && item.table === 'outlineNodes'
-    && Number.isInteger(item.recordId)
-    && item.recordId !== sourceOutlineNodeId
-}
-
-function isStoryTimelineTarget(item: ImpactRemediationItemV1): boolean {
-  return item.mode === 'author-confirmed'
-    && item.action === 'review-derived-state'
-    && item.kind === 'timeline-event'
-    && item.table === 'storyTimelineEvents'
-    && Number.isInteger(item.recordId)
-    && item.nodeId === `timeline-event:${item.recordId}`
-}
-
-function executorFor(
-  item: ImpactRemediationItemV1,
-  sourceOutlineNodeId: number | null,
-): ImpactDownstreamExecutorV1 {
-  if (item.mode === 'deterministic') return 'deterministic-remediation'
-  if (isOutlineTarget(item, sourceOutlineNodeId)) return 'outline-regeneration'
-  if (isStoryTimelineTarget(item)) return 'story-timeline-regeneration'
-  return 'author-review'
 }
 
 function topologicalItems(items: ImpactRemediationItemV1[]): ImpactRemediationItemV1[] {
@@ -177,7 +152,11 @@ export async function readImpactDownstreamScheduleV1(input: {
   const scheduleItems: ImpactDownstreamScheduleItemV1[] = []
 
   for (const item of ordered) {
-    const executor = executorFor(item, source.outlineNodeId ?? null)
+    const policy = resolveImpactDownstreamExecutorPolicyV1({
+      item,
+      sourceOutlineNodeId: source.outlineNodeId ?? null,
+    })
+    const executor = policy.executor
     const review = reviewByItem.get(item.id)
     const dependencyItemIds = item.dependencyNodeIds
       .map(nodeId => itemByNode.get(nodeId)?.id)
@@ -234,6 +213,9 @@ export async function readImpactDownstreamScheduleV1(input: {
       action: item.action,
       mode: item.mode,
       executor,
+      policyId: policy.policyId,
+      policyReason: policy.reason,
+      manualModule: policy.manualModule,
       status,
       dependencyItemIds,
       blockers,

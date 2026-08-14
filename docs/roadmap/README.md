@@ -35,6 +35,16 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-81 完成卡：H57 下游执行器政策闭集
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-81` 治理任务。作者恢复 fresh H57 current plan 时，每一种计划节点都必须命中显式、可审计的执行器政策；新增或错配的 kind/action/table 组合不能静默退回通用复核，更不能意外获得模型或写权限。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 反向反馈通用 DAG；复用 H50 作者复核与 H52～57 可信人工入口、H58 确定性重建、H77/H79 生成式 child 和 H80 canonical schedule，不新增 Agent、模型入口、表或平行状态机。 |
+| 范围 / 非范围 | 闭集登记 changed source、fact、source record、summary、retrieval、outline、downstream chapter、storyline progress/crossing、state card、item ledger 与 timeline event 的唯一执行边界。H40/H63/H20 的耦合/整章集合流程不能冒充 H57 单记录 CAS，因此本单元不新增第三个生成式目标，不自动改正文、事实或派生集合。 |
+| 读 / 写 / 生命周期 | 只读取 H57 已冻结 item 与来源章纲 ID，精确核对 item/node identity 后返回 executor policy id、执行器和理由并进入 schedule hash。零 Context、零模型、零 Canon 写、零 schema/迁移；人工项继续由既有 handoff 进入精确现有面板并以 H56/H57 证明保存。 |
+| 验收 / 回滚 | H81 表驱动专项 2 项覆盖 13 条合法政策路径和 14 个已有来源记录表变体，以及错 item id、kind/action/table/mode/nodeId、非正记录 ID 和未来类型 fail-closed；与 H80、工具栏、H52、H55～57 合跑为 8 文件 / 50 项。完整 `npm run ci` 为 371 文件 / 1785 项，覆盖率 81.95% / 73.72% / 79.68% / 81.95%，3776 模块构建、bundle budget 和生产依赖审计通过。最终代码精确 Chromium 主路径 1/1（17.5 秒）和完整套件 52/52（5.9 分钟）通过；UI 在 H77/H79 阶段分别显示唯一政策与人工模块。移除本政策层只会退回 H80 旧分类，不改变任何正式数据。 |
+
 ### HARNESS-80 完成卡：H57 跨类型下游调度与完成投影
 
 | 项目 | 冻结边界 |

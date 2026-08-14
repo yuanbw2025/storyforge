@@ -168,10 +168,13 @@ describe.sequential('R-HARNESS80 · H57 跨类型下游调度与完成投影', {
     expect(first.scheduleHash).toHaveLength(64)
     expect(first.portable).toBe(false)
     expect(first.items.find(item => item.itemId === outlineItem.id)).toMatchObject({
-      executor: 'outline-regeneration', status: 'ready',
+      executor: 'outline-regeneration', policyId: 'outline-regeneration-v1', status: 'ready',
     })
     expect(first.items.find(item => item.itemId === timelineItem.id)).toMatchObject({
-      executor: 'story-timeline-regeneration', status: 'ready',
+      executor: 'story-timeline-regeneration', policyId: 'story-timeline-regeneration-v1', status: 'ready',
+    })
+    expect(first.items.find(item => item.kind === 'changed-source')).toMatchObject({
+      executor: 'author-review', policyId: 'author-source-v1', manualModule: 'chapters-list',
     })
     for (const dependency of dependencies) {
       expect(first.items.findIndex(item => item.itemId === dependency.id))

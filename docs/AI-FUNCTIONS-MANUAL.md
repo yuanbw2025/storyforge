@@ -851,6 +851,12 @@
 - **并发**：H77/H79 共用一个 generation slot；已有活动 child 时新请求在模型前停止，并发创建由同 relation、parent mutation lock 和唯一父子索引收敛为一个 Run
 - **写**：schedule 零 Canon 写、零 `adopt()`、零新表/队列；只有作者显式选择的既有 H77/H79 child 按各自协议写 ledger。界面仅展示 ready 目标，不自动执行或批量调用模型
 
+#### 动作⑯：H57 下游执行器政策闭集（HARNESS-81，零模型控制面）
+- **触发**：🔘 每次从 fresh H57 item 构造 H80 schedule 时自动解析；作者无需额外点击
+- **政策**：只接受当前 planner 已登记的 kind/action/table/mode/nodeId 组合和正整数记录 ID；`source-record` 另限制为已有精确人工面板覆盖的 14 个表，并固定映射到 H58 确定性重建、H77 章纲、H79 年表或 H50/H52～57 作者复核/人工修正；未知或错配组合立即停止调度
+- **人工边界**：正文、事实、来源记录和当前章纲不自动覆盖；`storylineProgress / storylineCrossings / stateCards / itemLedger` 属于耦合或整章集合产物，单条 H57 item 不能扩大为 H40/H20/H63 的集合替换，只能进入现有精确人工面板
+- **读 / 写**：只读冻结 item 与来源章纲 ID，输出 policy id、理由和人工模块并进入 `scheduleHash`。零模型、零 Context、零 Canon 写、零新 Run/表/schema
+
 ---
 
 ### 4.6 细纲（ScenePanel / DetailedOutlinePanel，从大纲节点进入）

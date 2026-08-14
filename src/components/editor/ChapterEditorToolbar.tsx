@@ -200,6 +200,10 @@ export default function ChapterEditorToolbar({
 }: Props) {
   const reviewedImpactItemIds = new Set(impactReviewRecords.map(record => record.output.itemId))
   const selectedImpactReview = impactReviewRecords.find(record => record.output.itemId === impactReviewItemId)
+  const impactDownstreamFocus = impactDownstreamSchedule?.items.find(item => item.status === 'awaiting-confirmation')
+    ?? impactDownstreamSchedule?.items.find(item => item.status === 'needs-manual-action')
+    ?? impactDownstreamSchedule?.items.find(item => item.status === 'ready')
+    ?? impactDownstreamSchedule?.items.find(item => item.status === 'blocked')
   return (
     <div className="flex flex-wrap gap-2 border-t border-border/60 bg-bg-surface/35 px-6 py-3">
       <button onClick={onGenerate} disabled={isStreaming}
@@ -285,6 +289,12 @@ export default function ChapterEditorToolbar({
               <span className={`ml-auto ${impactDownstreamSchedule.settled ? 'text-success' : 'text-text-muted'}`}>
                 {impactDownstreamSchedule.settled ? '已全部完成' : `调度 ${impactDownstreamSchedule.scheduleHash.slice(0, 12)}`}
               </span>
+              {impactDownstreamFocus && (
+                <span aria-label="H57 当前执行器策略" className="basis-full text-indigo-100/80">
+                  策略 {impactDownstreamFocus.policyId}：{impactDownstreamFocus.policyReason}
+                  {impactDownstreamFocus.manualModule ? ` · 人工入口 ${impactDownstreamFocus.manualModule}` : ''}
+                </span>
+              )}
             </div>
           )}
           {impactRemediationPlan && impactRemediationPlan.counts.authorConfirmed > 0 && (

@@ -1159,6 +1159,12 @@ CHIRON 四类信息可映射到现有结构：
 - H77/H79 共用 `impact-generative-target:{H57 outputHash}:{slot}` relation。同一 parent 已有活动生成式 child 时顺序请求在模型前停止；并发请求计算相同 slot，由现有 parent mutation lock 和唯一 parent/relation 保证只创建一个 child，失败方不会调用模型。暂停/拒绝/失败/完成后仍需作者显式发起下一 slot，不做自动批量执行。
 - `ChapterEditor` 只依据该 schedule 暴露 ready 目标，并显示完成、可继续、待确认、阻断和需人工计数；调度无法恢复时生成入口 fail closed。H44 手填 patch 仍与生成候选互斥，作者确认、拒绝和人工导航权不变。
 
+**H57 下游执行器政策闭集（HARNESS-81，2026-08-14）**
+
+- `resolveImpactDownstreamExecutorPolicyV1()` 对当前 planner 能产生的全部节点形状做 exact kind/action/table/mode/nodeId/正整数 recordId 分类；`source-record` 只接受已有精确人工面板覆盖的 14 个表。摘要与检索只进 H58，非来源章纲只进 H77，精确既有年表事件只进 H79；正文、事实、来源记录、当前章纲和后续正文只进作者复核。
+- `storylineProgress / storylineCrossings` 的既有 H40 是 progress/crossings/newArcs 耦合候选，`stateCards / itemLedger` 的 H20/H63 是整章集合写入；H57 图中单条记录没有删除、新增和集合 baseline 边界，因此禁止把这些入口复用为单记录自动重建。它们经 H52～56 进入现有 story-arc/state/inventory 面板，真实保存后再由 H57 replan 证明结果。
+- policy id、理由和人工模块进入 H80 canonical schedule 与界面当前策略提示。未来新增 kind 或任何错 action/table/mode/nodeId 不会退回宽泛 `author-review`，而是 fail-closed，必须先登记新政策和反例。该层不调用模型、不读 Context、不创建 Run、不写 Canon，也不改变三注册表。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

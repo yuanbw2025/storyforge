@@ -451,7 +451,12 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
         replanOutputHash: 'b'.repeat(64),
         planHash: 'c'.repeat(64),
         graphHash: 'd'.repeat(64),
-        items: [{}, {}, {}, {}, {}, {}],
+        items: [{
+          status: 'ready',
+          policyId: 'author-coupled-derived-v1',
+          policyReason: '该记录属于耦合或整章集合产物；单条 H57 item 不得扩大为集合替换。',
+          manualModule: 'inventory',
+        }, {}, {}, {}, {}, {}],
         counts: {
           blocked: 1,
           ready: 2,
@@ -471,6 +476,10 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     expect(progress?.textContent).toContain('依赖阻断 1')
     expect(progress?.textContent).toContain('需人工 1')
     expect(progress?.textContent).toContain('调度 eeeeeeeeeeee')
+    expect(host.querySelector('[aria-label="H57 当前执行器策略"]')?.textContent)
+      .toContain('策略 author-coupled-derived-v1')
+    expect(host.querySelector('[aria-label="H57 当前执行器策略"]')?.textContent)
+      .toContain('人工入口 inventory')
   })
 
   it('明确选择章节叙事视角并允许恢复为不指定', async () => {
