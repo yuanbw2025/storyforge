@@ -234,6 +234,7 @@ flowchart LR
         CCTX["buildCharacterContext<br/>filterActiveCharacters 按出场章节"]
         FCTX["buildForeshadowContext 开放伏笔"]
         HCTX["buildHistoricalContext 历史年表"]
+        HAGCTX["historyAgentBaseline<br/>已保存总述/纪年 + 精确事件/关键词 + 作者边界"]
         LCTX["buildLocationContext 重要地点"]
         WRCTX["buildWorldRulesContext 真实与幻想"]
         RCTX["buildRefAnalysisContext 引用参考"]
@@ -252,6 +253,7 @@ flowchart LR
     CHAR --> CCTX
     FORE --> FCTX
     HIST --> HCTX
+    HIST --> HAGCTX
     LOC --> LCTX
     WR --> WRCTX
     RULES --> R_RULES
@@ -272,6 +274,7 @@ flowchart LR
         G_RU_PANEL["创作规则生成 rules.generate"]
         G_CH_PANEL["角色生成 character.generate"]
         G_FO_PANEL["伏笔建议 foreshadow.suggest"]
+        G_HAG["历史考据 / 风暴<br/>world-origin.history-consult / history-storm<br/>durable 候选 → 确认 → adopt(aiConsult|aiBrainstorm)"]
         G_SA_PANEL["故事线规划 outline.story-arcs<br/>durable 候选 → 作者确认 → adopt(storyArcs)"]
         G_VOL["卷大纲 outline.volume"]
         G_CHP["章大纲 outline.chapter"]
@@ -289,6 +292,8 @@ flowchart LR
     SWORLD ==> G_RU_PANEL
     SWORLD ==> G_CH_PANEL
     SWORLD ==> G_FO_PANEL
+    F1 ==> G_HAG
+    HAGCTX ==精确目标快照==> G_HAG
     SWORLD ==> G_SA_PANEL
     SWORLD ==> G_VOL
     NODECTX ==注入按节点==> G_CHP
@@ -338,9 +343,9 @@ flowchart LR
     classDef aux fill:#0e7490,stroke:#155e75,color:#fff;
     class F1,F2,F3 share
     class SWORLD,MWORLD,NODECTX path
-    class G_WV_PANEL,G_SC_PANEL,G_RU_PANEL,G_CH_PANEL,G_FO_PANEL,G_SA_PANEL,G_VOL,G_CHP,G_DET,G_CONT,G_SV,G_CDP,G_RV,G_READ,G_SUM gen
+    class G_WV_PANEL,G_SC_PANEL,G_RU_PANEL,G_CH_PANEL,G_FO_PANEL,G_HAG,G_SA_PANEL,G_VOL,G_CHP,G_DET,G_CONT,G_SV,G_CDP,G_RV,G_READ,G_SUM gen
     class WV,SC,PS,CHAR,FORE,CODEX,WR,LOC,HIST,RULES,EBEAT_NODE table
-    class CCTX,FCTX,HCTX,LCTX,WRCTX,RCTX,ICTX,MEMO,STX,GENRE,STYLE,CDXCTX,R_RULES,MEM aux
+    class CCTX,FCTX,HCTX,HAGCTX,LCTX,WRCTX,RCTX,ICTX,MEMO,STX,GENRE,STYLE,CDXCTX,R_RULES,MEM aux
 ```
 
 ---

@@ -393,6 +393,10 @@ export interface AssembleContextInput {
   worldGroupId?: number | null
   /** HARNESS-70: trusted target category for the registered Codex extraction baseline. */
   codexCategoryId?: number
+  /** HARNESS-73: trusted target for the registered history consultation baseline. */
+  historyAgentMode?: 'consult' | 'storm'
+  historyAgentTargetKind?: 'event' | 'keyword'
+  historyAgentTargetId?: number
   outlineNodeId?: number | null
   chapterId?: number | null
   currentChapterOrder?: number

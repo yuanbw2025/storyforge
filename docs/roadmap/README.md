@@ -214,6 +214,19 @@
 | UI / 回滚 | `ForeshadowPanel` 恢复待确认、冻结选择或不可判定运行；人工新建、编辑、状态推进与章节关联保留。旧 `useAIStream` 自由文本调用、第二次结构化模型调用、内存候选与逐条 `adopt()` 旁路下线。 |
 | 验收 | durable 18 项、组件 UI 2 项、H59 3 项与通用 Context Gateway 3 项通过；census 收缩为 16 文件 / 30 入口、5 migration。完整 CI 为 360 files / 1681 tests，覆盖率 81.34% statements / 73.68% branches / 78.86% functions / 81.34% lines；3759 模块生产构建与 bundle budget 通过，入口 660.2 KiB / gzip 203.9 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 48/48；新用例约 5.8 秒，证明登记 baseline/严格协议实际进入请求、候选刷新恢复不重复模型调用、确认前零正式写入，确认后伏笔跨刷新持久化。 |
 
+### HARNESS-73 完成卡：历史考据 / 头脑风暴 durable 定点结果
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-73` 治理小功能。作者对历史事件或历史关键词发起考据/头脑风暴时，结果先成为可刷新恢复的持久候选；确认前正式条目零写入，确认后只替换对应结果字段。 |
+| 主归属 / 复用 | 在同一 `world-origin` Agent 下新增 `world-origin.history-consult / world-origin.history-storm` 两个 Skill，共用一个目标类型闭集运行器，复用 Context Gateway、durable Run/checkpoint、通用 record-field CAS、`FIELD_REGISTRY + AdoptionSchema + adopt()`、PROJECT_TABLES 生命周期与 terminal receipt。 |
+| 读 / 写 | 模型只经 `worldview / historyAgentBaseline` 读取当前 World/世界组、目标事件或关键词、已保存历史总述/纪年与作者补充说明。确认后，考据只写 `historicalTimelineEvents|historicalKeywords.aiConsult`，风暴只写对应 `aiBrainstorm`；条目定稿、概念、另一路结果和其它字段不改。 |
+| 状态机 / 硬验证 | 冻结 World/Work/世界组、目标表/ID、完整目标 baseline、来源字段、原结果字段 presence/value、Context Manifest、实际 Prompt 和模板。输出只接受有序标题闭集的非围栏 Markdown；未知模型结果不自动重试，候选 checkpoint 后无需二次模型调用即可恢复。 |
+| 采纳恢复 | 确认前复核来源、Context、Prompt 与目标结果字段 CAS；另一结果字段可独立变化。采纳意图冻结后不可取消，只能沿同一 Run 收敛；八个 durable 采纳边界均可幂等恢复，终验回读真实目标字段后才签发 receipt。 |
+| 生命周期 / 作用域 | 不新增表/schema；`histories / historicalTimelineEvents / historicalKeywords` 继续由 PROJECT_TABLES 派生 World 归属、世界组、导入导出、删除和重映射生命周期。候选含本地目标 ID，`portable:false`，导入后取消；其它 World/Work/世界组或已删除目标不可恢复/采纳。 |
+| UI / 回滚 | `HistoryPanel` 保留人工事件/关键词/总述编辑与已保存结果清除；两个 lane 各自展示候选、拒绝、重试、确认与不可判定运行显式放弃。旧 `useAIStream`、组件内 `assembleContext()`、组件控制器直接 `adopt()` 和内存输出旁路下线。 |
+| 验收 | durable 18 项、控制器/UI/既有历史 17 项和注册表 11 项共 46 项定向回归通过；census 收缩为 15 文件 / 28 入口、4 migration。完整 CI 为 361 files / 1699 tests，覆盖率 81.37% statements / 73.69% branches / 78.93% functions / 81.37% lines；3761 模块生产构建与 bundle budget 通过，入口 664.9 KiB / gzip 205.4 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 49/49；新主路径约 6.3 秒，证明登记 baseline/严格协议进入真实请求、刷新恢复不重复模型调用、确认前零正式结果写入、确认后结果跨刷新持久化。 |
+
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 
 | 项目 | 冻结边界 |

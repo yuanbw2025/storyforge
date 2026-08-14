@@ -2246,3 +2246,24 @@ lines；3759 模块生产构建、bundle budget 与生产依赖审计通过，�
 
 👉 球在 Codex：继续按 census 清理剩余 5 个 migration；下一优先从 `HistoryPanel` 两个模型入口
 开始，先厘清“只读生成建议”与“正式历史写入”的目标合同，再冻结 Context、候选和采纳边界。
+
+### [2026-08-14] Codex · REPORT · HARNESS-73 历史考据/风暴 durable 定点结果 / `feat/harness-rebuild-20260807`
+
+历史事件与关键词的考据/头脑风暴已从 `HistoryPanel` 两路组件直连模型迁入
+`world-origin.history-consult / world-origin.history-storm`。模型只经登记的 `worldview / historyAgentBaseline`
+读取当前 World/世界组、已保存历史总述/纪年、精确目标和作者边界；严格 Markdown 输出先成为可刷新恢复的
+持久候选，确认前正式结果字段零写入。
+
+作者确认时重新 CAS 来源、Context、Prompt 与目标结果字段的 presence/value，只经
+`FIELD_REGISTRY + AdoptionSchema + adopt()` 写对应 `aiConsult` 或 `aiBrainstorm`；另一结果字段可独立变化。
+未知模型窗口不重试，候选崩溃窗、八个采纳边界、目标删除、导入取消、World/Work/世界组隔离和 terminal
+stale 均有反例。旧两路 `useAIStream`、组件内 Context 和即时写回旁路下线；人工历史 CRUD 与结果清除保留。
+
+定向验证共 46 项通过；H59 census 收缩为 15 文件 / 28 调用，分类为 7 governed、4 auxiliary、
+4 migration。完整 CI 为 361 files / 1699 tests，覆盖率为 81.37% statements / 73.69% branches /
+78.93% functions / 81.37% lines；3761 模块生产构建、bundle budget 与生产依赖审计通过，入口
+664.9 KiB / gzip 205.4 KiB。项目 Chromium E2E 49/49，历史考据用例约 6.3 秒且模型只调用一次；
+`git diff --check` 通过。
+
+👉 球在 Codex：继续按 census 清理剩余 4 个 migration；下一优先审计 `AnalysisReportViewer` 的参考摘要与
+角色合并写入链，冻结报告来源、候选选择、正式写入和数据生命周期，禁止复用导入旁路绕过治理。

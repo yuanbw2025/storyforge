@@ -40,6 +40,7 @@ import {
 } from '../fact-ledger/setting-assertions'
 import { readStorylineProgressContext } from '../storyline/storyline-progress'
 import { readCodexExtractionBaselineContextV1 } from '../codex/extraction'
+import { readHistoryAgentBaselineContextV1 } from '../history/agent-baseline'
 import { buildEditImpactGraphV1 } from '../consistency/impact-analysis'
 import {
   readCultivationProgressContext,
@@ -924,6 +925,28 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       scope: input.scope!,
       categoryId: input.codexCategoryId!,
       worldGroupId: input.worldGroupId ?? null,
+    }),
+  },
+  {
+    key: 'historyAgentBaseline',
+    label: '历史 Agent 正式输入基线',
+    scope: 'world',
+    layer: 'L0',
+    budgetTokens: 12_000,
+    protectedFromTrim: true,
+    ownerFrom: 'world',
+    requiresWorldGroupId: true,
+    enabled: input => (
+      (input.historyAgentMode === 'consult' || input.historyAgentMode === 'storm')
+      && (input.historyAgentTargetKind === 'event' || input.historyAgentTargetKind === 'keyword')
+      && Number.isInteger(input.historyAgentTargetId)
+    ),
+    read: input => readHistoryAgentBaselineContextV1({
+      scope: input.scope!,
+      worldGroupId: input.worldGroupId ?? null,
+      mode: input.historyAgentMode!,
+      targetKind: input.historyAgentTargetKind!,
+      targetId: input.historyAgentTargetId!,
     }),
   },
   {

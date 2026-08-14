@@ -34,6 +34,8 @@ export type AgentSkillExecutionModeV1 =
   | 'relationships'
   | 'locations'
   | 'map-config'
+  | 'history-consult'
+  | 'history-storm'
   | 'reverse'
   | 'auto'
   | 'story-arcs'
@@ -199,6 +201,7 @@ const FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS = [
   'locations',
   'foreshadowSuggestionBaseline',
 ] as const
+const HISTORY_AGENT_CONTEXT_SOURCE_KEYS = ['worldview', 'historyAgentBaseline'] as const
 
 const CHARACTER_SUPPLEMENT_CONTEXT_SOURCE_KEYS = [
   'targetCharacter',
@@ -300,6 +303,16 @@ const PROSE_SELECTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
 
 const PROSE_SELECTION_COMPRESSION_POLICY = compressionPolicy(['manualText'])
 const FORESHADOW_SUGGESTION_COMPRESSION_POLICY = compressionPolicy(FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS)
+const HISTORY_AGENT_COMPRESSION_POLICY = compressionPolicy(HISTORY_AGENT_CONTEXT_SOURCE_KEYS)
+
+const HISTORY_AGENT_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: HISTORY_AGENT_CONTEXT_SOURCE_KEYS,
+  states: {
+    empty: { handling: 'require-author-input', instruction: '目标历史条目不存在时不得调用模型。' },
+    partial: { handling: 'grounded-transform', instruction: '只依据已登记目标条目和可用世界观提供咨询，不补写缺失 Canon。' },
+    complete: { handling: 'grounded-transform', instruction: '依据完整登记输入提供可审查建议，只写候选结果字段。' },
+  },
+}
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
   'projectStatus',
@@ -1306,6 +1319,52 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'world-origin.history-consult',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: '历史条目考据',
+    owner: 'world-foundation-agent',
+    promptVersion: 'history-consult-v1',
+    executionMode: 'history-consult',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: HISTORY_AGENT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: HISTORY_AGENT_INPUT_POLICY,
+    contextCompression: HISTORY_AGENT_COMPRESSION_POLICY,
+    maxOutputTokens: 5_000,
+    writeTargets: [
+      { table: 'historicalTimelineEvents', fields: ['aiConsult'] },
+      { table: 'historicalKeywords', fields: ['aiConsult'] },
+    ],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS73-history-agent-durable'],
+  },
+  {
+    version: 1,
+    id: 'world-origin.history-storm',
+    agentId: 'world-origin',
+    defaultForAgent: false,
+    label: '历史条目头脑风暴',
+    owner: 'world-foundation-agent',
+    promptVersion: 'history-storm-v1',
+    executionMode: 'history-storm',
+    contextTaskKind: 'agent-world-origin',
+    readToolNames: [],
+    contextSourceKeys: HISTORY_AGENT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: HISTORY_AGENT_INPUT_POLICY,
+    contextCompression: HISTORY_AGENT_COMPRESSION_POLICY,
+    maxOutputTokens: 5_000,
+    writeTargets: [
+      { table: 'historicalTimelineEvents', fields: ['aiBrainstorm'] },
+      { table: 'historicalKeywords', fields: ['aiBrainstorm'] },
+    ],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS73-history-agent-durable'],
+  },
+  {
+    version: 1,
     id: 'character.supplement',
     agentId: 'character',
     defaultForAgent: false,
@@ -2118,7 +2177,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'constitution-extract', 'codex-extract', 'story-core', 'creative-rules', 'locations', 'map-config', 'review']),
+    'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'constitution-extract', 'codex-extract', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),

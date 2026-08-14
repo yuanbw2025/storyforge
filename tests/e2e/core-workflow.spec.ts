@@ -3126,3 +3126,82 @@ test('伏笔建议刷新恢复候选，作者确认后才原子新增正式伏�
   await expect(page.getByText(/1 个伏笔/)).toBeVisible()
   expect(generationCalls).toBe(1)
 })
+
+test('历史考据刷新恢复持久候选，确认后只写正式考据结果', async ({ page }) => {
+  let generationCalls = 0
+  const result = `## 前提识别
+- 镜税署与盐晶是作者声明的架空设定。
+
+## 可能存在的问题
+- 垄断执行成本需要解释，信心：高。
+
+## 修改方案 / 折中方案
+- 增设行会连带责任与分级验票。
+
+## 时代质感补充
+- 可描写封签、簿册和码头抽验；真实类比出处待考。`
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'history-agent-durable-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+      contextWindow: 100000,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls += 1
+    const request = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = request.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain('【历史 Agent 正式输入基线】')
+    expect(combined).toContain('盐晶新律颁布')
+    expect(combined).toContain('星历三百年')
+    expect(combined).toContain('【HARNESS-73 严格输出协议】')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: result }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 180, completion_tokens: 80, total_tokens: 260 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 历史 Agent durable 闭环')
+  await openSidebarLeaf(page, '世界观', '历史年表')
+  await expect(page.getByRole('heading', { name: '📜 历史年表与时间线' })).toBeVisible()
+  await page.getByRole('button', { name: '添加事件', exact: true }).click()
+  const title = page.locator('input[value="新历史事件"]')
+  await title.fill('盐晶新律颁布')
+  await page.getByLabel('数字化年份').fill('300')
+  await page.getByPlaceholder('如：开元十三年、公元725年').fill('星历三百年')
+  await page.getByRole('heading', { name: '📜 历史年表与时间线' }).click()
+
+  await page.getByRole('button', { name: 'AI 历史考据', exact: true }).click()
+  await expect(page.getByText('历史考据持久候选', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('垄断执行成本需要解释，信心：高。', { exact: false })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '世界观', '历史年表')
+  await page.getByText('盐晶新律颁布', { exact: true }).click()
+  await expect(page.getByText('已恢复待确认候选；没有重复调用模型。', { exact: true })).toBeVisible()
+  await expect(page.getByText('历史考据持久候选', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.getByRole('button', { name: '确认写入', exact: true }).click()
+  await expect(page.getByText('AI 历史考据结果', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('垄断执行成本需要解释，信心：高。', { exact: false })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '世界观', '历史年表')
+  await page.getByText('盐晶新律颁布', { exact: true }).click()
+  await expect(page.getByText('AI 历史考据结果', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+})

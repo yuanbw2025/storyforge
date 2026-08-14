@@ -8,8 +8,6 @@ import { useHistoricalStore } from '../../stores/historical'
 import { useChapterStore } from '../../stores/chapter'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { useAIStream } from '../../hooks/useAIStream'
-import { createAISessionKey } from '../../stores/ai-generation-session'
 import type { Project, HistoricalTimelineEvent, HistoricalEra, HistoricalKeyword, HistoricalKeywordCategory } from '../../lib/types'
 import { HISTORICAL_ERA_LABELS, KEYWORD_CATEGORY_LABELS } from '../../lib/types/history'
 import { useDialog } from '../shared/Dialog'
@@ -87,19 +85,11 @@ export default function HistoryPanel({ project }: Props) {
   const [filterCategory, setFilterCategory] = useState<HistoricalKeywordCategory | 'all'>('all')
   const [filterEra, setFilterEra] = useState<HistoricalEra | 'all'>('all')
 
-  const historySessionScope = scopeGroupId ?? 'project'
-  const consultAI = useAIStream(createAISessionKey(project.id!, 'history.consult', historySessionScope))
-  const stormAI = useAIStream(createAISessionKey(project.id!, 'history.storm', historySessionScope))
   const aiConfig = useAIConfigStore(state => state.config)
   const historyAI = useHistoryAI({
     projectId: project.id!,
     worldGroupId: scopeGroupId,
-    provider: aiConfig.provider,
-    model: aiConfig.model,
-    overview,
-    eraSystem,
-    consultAI,
-    stormAI,
+    aiConfig,
     reloadEvents: () => loadEvents(project.id!),
     reloadKeywords: () => loadKeywords(project.id!),
     onError: toast.error,
@@ -172,8 +162,8 @@ export default function HistoryPanel({ project }: Props) {
   const handleAIStorm = (event: HistoricalTimelineEvent) => { void historyAI.run('storm', { kind: 'event', item: event }) }
   const handleAIKeywordConsult = (keyword: HistoricalKeyword) => { void historyAI.run('consult', { kind: 'keyword', item: keyword }) }
   const handleAIKeywordStorm = (keyword: HistoricalKeyword) => { void historyAI.run('storm', { kind: 'keyword', item: keyword }) }
-  const handleAcceptConsult = (text: string) => { void historyAI.accept('consult', text) }
-  const handleAcceptStorm = (text: string) => { void historyAI.accept('storm', text) }
+  const handleAcceptConsult = () => { void historyAI.accept('consult') }
+  const handleAcceptStorm = () => { void historyAI.accept('storm') }
 
   const {
     consultEventId,
@@ -277,6 +267,30 @@ export default function HistoryPanel({ project }: Props) {
         </button>
       </nav>
 
+      {(historyAI.consult.unsafeRunId != null || historyAI.storm.unsafeRunId != null) && (
+        <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-xs text-text-secondary">
+          <p>检测到停在模型结果不可判定窗口的历史 Agent 运行。系统不会自动重试，以免重复计费或产生冲突候选。</p>
+          <div className="mt-2 flex gap-2">
+            {historyAI.consult.unsafeRunId != null && (
+              <button
+                type="button"
+                disabled={historyAI.consult.busy}
+                onClick={() => { void historyAI.abandonUnsafe('consult') }}
+                className="rounded-md border border-border px-2.5 py-1 text-[11px] disabled:opacity-50"
+              >放弃旧考据运行</button>
+            )}
+            {historyAI.storm.unsafeRunId != null && (
+              <button
+                type="button"
+                disabled={historyAI.storm.busy}
+                onClick={() => { void historyAI.abandonUnsafe('storm') }}
+                className="rounded-md border border-border px-2.5 py-1 text-[11px] disabled:opacity-50"
+              >放弃旧风暴运行</button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tab 内容：历史总述 */}
       {activeTab === 'overview' && (
         <HistoryOverviewTab
@@ -348,10 +362,8 @@ export default function HistoryPanel({ project }: Props) {
                       worldBadge={worldBadge}
                       consultActive={consultEventId === event.id}
                       stormActive={stormEventId === event.id}
-                      consultPreparing={historyAI.consultPreparing}
-                      stormPreparing={historyAI.stormPreparing}
-                      consultAI={consultAI}
-                      stormAI={stormAI}
+                      consultAI={historyAI.consult}
+                      stormAI={historyAI.storm}
                       onToggle={() => setExpandedId(expanded ? null : event.id || null)}
                       onChange={patch => {
                         if (event.id) void updateEvent(event.id, patch)
@@ -363,6 +375,10 @@ export default function HistoryPanel({ project }: Props) {
                       }}
                       onAcceptConsult={handleAcceptConsult}
                       onAcceptStorm={handleAcceptStorm}
+                      onRejectConsult={() => { void historyAI.reject('consult') }}
+                      onRejectStorm={() => { void historyAI.reject('storm') }}
+                      onRetryConsult={() => { void historyAI.retry('consult') }}
+                      onRetryStorm={() => { void historyAI.retry('storm') }}
                     />
                   )
                 })}
@@ -452,10 +468,8 @@ export default function HistoryPanel({ project }: Props) {
                       canEdit={canEdit}
                       consultActive={consultKeywordId === keyword.id}
                       stormActive={stormKeywordId === keyword.id}
-                      consultPreparing={historyAI.consultPreparing}
-                      stormPreparing={historyAI.stormPreparing}
-                      consultAI={consultAI}
-                      stormAI={stormAI}
+                      consultAI={historyAI.consult}
+                      stormAI={historyAI.storm}
                       onToggle={() => setExpandedKeywordId(expanded ? null : keyword.id || null)}
                       onChange={patch => {
                         if (keyword.id) void updateKeyword(keyword.id, patch)
@@ -467,6 +481,10 @@ export default function HistoryPanel({ project }: Props) {
                       }}
                       onAcceptConsult={handleAcceptConsult}
                       onAcceptStorm={handleAcceptStorm}
+                      onRejectConsult={() => { void historyAI.reject('consult') }}
+                      onRejectStorm={() => { void historyAI.reject('storm') }}
+                      onRetryConsult={() => { void historyAI.retry('consult') }}
+                      onRetryStorm={() => { void historyAI.retry('storm') }}
                     />
                   )
                 })}

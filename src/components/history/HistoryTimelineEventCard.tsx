@@ -14,8 +14,6 @@ interface Props {
   worldBadge?: { icon: string; name: string }
   consultActive: boolean
   stormActive: boolean
-  consultPreparing: boolean
-  stormPreparing: boolean
   consultAI: HistoryAgentViewState
   stormAI: HistoryAgentViewState
   onToggle: () => void
@@ -23,8 +21,12 @@ interface Props {
   onConsult: () => void
   onStorm: () => void
   onDelete: () => void
-  onAcceptConsult: (text: string) => void
-  onAcceptStorm: (text: string) => void
+  onAcceptConsult: () => void
+  onAcceptStorm: () => void
+  onRejectConsult: () => void
+  onRejectStorm: () => void
+  onRetryConsult: () => void
+  onRetryStorm: () => void
 }
 
 export default function HistoryTimelineEventCard({
@@ -35,8 +37,6 @@ export default function HistoryTimelineEventCard({
   worldBadge,
   consultActive,
   stormActive,
-  consultPreparing,
-  stormPreparing,
   consultAI,
   stormAI,
   onToggle,
@@ -46,6 +46,10 @@ export default function HistoryTimelineEventCard({
   onDelete,
   onAcceptConsult,
   onAcceptStorm,
+  onRejectConsult,
+  onRejectStorm,
+  onRetryConsult,
+  onRetryStorm,
 }: Props) {
   const eraLabel = HISTORICAL_ERA_LABELS[event.era as HistoricalEra] || event.era
   const yearText = formatHistoricalYear(event.year)
@@ -280,8 +284,6 @@ export default function HistoryTimelineEventCard({
               canEdit={canEdit}
               consultActive={consultActive}
               stormActive={stormActive}
-              consultPreparing={consultPreparing}
-              stormPreparing={stormPreparing}
               consultAI={consultAI}
               stormAI={stormAI}
               savedConsult={event.aiConsult}
@@ -293,6 +295,10 @@ export default function HistoryTimelineEventCard({
               onDelete={onDelete}
               onAcceptConsult={onAcceptConsult}
               onAcceptStorm={onAcceptStorm}
+              onRejectConsult={onRejectConsult}
+              onRejectStorm={onRejectStorm}
+              onRetryConsult={onRetryConsult}
+              onRetryStorm={onRetryStorm}
               onClearConsult={() => onChange({ aiConsult: undefined })}
               onClearStorm={() => onChange({ aiBrainstorm: undefined })}
             />

@@ -5,7 +5,6 @@
     { "file": "src/components/editor/ChapterEditor.tsx", "calls": 8, "status": "governed", "mechanism": "durable-run", "reason": "正文生成、语义复核、六域整理和章节记忆已进入 GenerationNode/Run 证据链。" },
     { "file": "src/components/editor/ReviewPanel.tsx", "calls": 1, "status": "auxiliary", "mechanism": "read-only-review", "reason": "显式审校结果只展示，不直接写业务表。" },
     { "file": "src/components/geography/GeographyPanel.tsx", "calls": 1, "status": "auxiliary", "mechanism": "ephemeral-visual", "reason": "概念地图只形成当前 UI SVG，不写 Canon。" },
-    { "file": "src/components/history/HistoryPanel.tsx", "calls": 2, "status": "migration", "nextUnit": "HARNESS-60", "reason": "历史咨询/头脑风暴的接受路径仍由局部控制器写回。" },
     { "file": "src/components/outline/ChapterOutlineWorkshop.tsx", "calls": 1, "status": "governed", "mechanism": "generation-node", "reason": "五阶段章纲工坊通过 GenerationNode 和既有确认式采纳。" },
     { "file": "src/components/outline/OutlinePanel.tsx", "calls": 1, "status": "governed", "mechanism": "durable-run", "reason": "卷纲/章纲主路径已接 durable adapter。" },
     { "file": "src/components/outline/useDetailedOutlineGenerationController.ts", "calls": 2, "status": "governed", "mechanism": "durable-run", "reason": "单章细纲共用 HARNESS-37 durable 控制器。" },

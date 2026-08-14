@@ -1,92 +1,53 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { UseAIStreamReturn } from '../../src/hooks/useAIStream'
-import type { AssembleContextResult } from '../../src/lib/registry/types'
-import type { HistoricalTimelineEvent } from '../../src/lib/types'
-import { SYSTEM_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds'
+import type { HistoricalTimelineEvent, WorkspaceScope } from '../../src/lib/types'
 
 const mocks = vi.hoisted(() => ({
-  assemble: vi.fn(),
+  generate: vi.fn(),
   adopt: vi.fn(),
+  reject: vi.fn(),
+  abandon: vi.fn(),
+  pending: vi.fn(),
+  recoverable: vi.fn(),
+  resolveScope: vi.fn(),
 }))
 
-vi.mock('../../src/lib/registry/assemble-context', () => ({ assembleContext: mocks.assemble }))
-vi.mock('../../src/lib/registry/adopt', () => ({ adopt: mocks.adopt }))
-vi.mock('../../src/stores/prompt', () => ({
-  usePromptStore: {
-    getState: () => ({
-      getActive: (key: string) => {
-        const seed = SYSTEM_PROMPT_SEEDS.find(item => item.moduleKey === key)!
-        return { ...seed, createdAt: 1, updatedAt: 1 }
-      },
-    }),
-  },
+vi.mock('../../src/lib/agent/run/history-agent-durable', () => ({
+  generateHistoryAgentCandidateV1: mocks.generate,
+  adoptHistoryAgentCandidateV1: mocks.adopt,
+  rejectHistoryAgentCandidateV1: mocks.reject,
+  abandonHistoryAgentRunV1: mocks.abandon,
+  readPendingHistoryAgentCandidateV1: mocks.pending,
+  readRecoverableHistoryAgentRunV1: mocks.recoverable,
 }))
+vi.mock('../../src/lib/world-engine/scope', () => ({ resolveScopeLike: mocks.resolveScope }))
 
 import { useHistoryAI } from '../../src/components/history/useHistoryAI'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-function assembled(text: string): AssembleContextResult {
-  return {
-    text,
-    included: ['worldview', 'manualText'],
-    segments: [],
-    omitted: [],
-    trimmed: [],
-    totalInputTokens: 2,
-    inputBudget: 48_000,
-    overBudgetBeforeTrim: false,
-    overBudgetAfterTrim: false,
-  }
+const scope: WorkspaceScope = { projectId: 1, worldId: 2, workId: 3 }
+const event: HistoricalTimelineEvent = {
+  id: 7, projectId: 1, era: 'custom', year: 1, date: '元年', title: '建城',
+  description: '建城定稿', isHistorical: false, createdAt: 1, updatedAt: 1,
 }
 
-function event(id: number, title: string): HistoricalTimelineEvent {
+function candidate(mode: 'consult' | 'storm' = 'consult', targetId = 7) {
   return {
-    id,
-    projectId: 1,
-    era: 'custom',
-    year: id,
-    date: `${id}年`,
-    title,
-    description: `${title}定稿`,
-    isHistorical: false,
-    createdAt: 1,
-    updatedAt: 1,
-  }
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>(res => { resolve = res })
-  return { promise, resolve }
-}
-
-function ai(operation: string | null = null) {
-  return {
-    operation,
-    reset: vi.fn(),
-    setOperation: vi.fn(),
-    start: vi.fn(async () => ''),
-  } satisfies Pick<UseAIStreamReturn, 'operation' | 'reset' | 'setOperation' | 'start'>
+    request: { mode, targetKind: 'event', targetId, worldGroupId: 9 },
+    result: mode === 'consult' ? '持久考据候选' : '持久风暴候选',
+  } as any
 }
 
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 let controller: ReturnType<typeof useHistoryAI>
 
 async function mount(patch: Partial<Parameters<typeof useHistoryAI>[0]> = {}) {
-  const consultAI = ai()
-  const stormAI = ai()
   const options: Parameters<typeof useHistoryAI>[0] = {
     projectId: 1,
     worldGroupId: 9,
-    provider: 'deepseek',
-    model: 'deepseek-chat',
-    overview: '王朝三百年',
-    eraSystem: '星历',
-    consultAI,
-    stormAI,
+    aiConfig: { provider: 'deepseek', model: 'deepseek-chat' } as any,
     reloadEvents: vi.fn(async () => undefined),
     reloadKeywords: vi.fn(async () => undefined),
     onError: vi.fn(),
@@ -94,24 +55,29 @@ async function mount(patch: Partial<Parameters<typeof useHistoryAI>[0]> = {}) {
   }
   function Harness() {
     controller = useHistoryAI(options)
-    return createElement('div', null, controller.consultPreparing ? 'preparing' : 'idle')
+    return createElement('div', null, controller.consult.busy ? 'busy' : 'idle')
   }
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
   mounted.push({ host, root })
-  await act(async () => root.render(createElement(Harness)))
-  return { options, consultAI, stormAI }
+  await act(async () => {
+    root.render(createElement(Harness))
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  return options
 }
 
 beforeEach(() => {
-  mocks.assemble.mockReset()
-  mocks.adopt.mockReset()
-  mocks.assemble.mockResolvedValue(assembled('【世界观】默认'))
-  mocks.adopt.mockResolvedValue({
-    written: [{ id: 1, fields: ['aiConsult'] }],
-    aliasMapped: [], unknown: [], typeErrors: [], fkErrors: [], skipped: [],
-  })
+  vi.clearAllMocks()
+  mocks.resolveScope.mockResolvedValue(scope)
+  mocks.pending.mockResolvedValue(null)
+  mocks.recoverable.mockResolvedValue(null)
+  mocks.generate.mockResolvedValue({ snapshot: { run: { id: 41 } }, candidate: candidate() })
+  mocks.adopt.mockResolvedValue({ snapshot: { projection: { state: 'completed' } } })
+  mocks.reject.mockResolvedValue({ projection: { state: 'cancelled' } })
+  mocks.abandon.mockResolvedValue({ projection: { state: 'cancelled' } })
 })
 
 afterEach(async () => {
@@ -122,91 +88,53 @@ afterEach(async () => {
   }
 })
 
-describe('AUDIT-6 · 历史双 agent controller', () => {
-  it('按当前世界组经注册表装配世界观和手动历史摘要后启动考据', async () => {
-    const { consultAI } = await mount()
-    await act(async () => {
-      await controller.run('consult', { kind: 'event', item: event(7, '建城') })
-    })
-
-    expect(mocks.assemble).toHaveBeenCalledWith({
-      projectId: 1,
+describe('AUDIT-6 · 历史双 Agent durable controller', () => {
+  it('按当前 World/Work/世界组和目标启动持久生成，不再装配组件内 manualText', async () => {
+    await mount()
+    await act(async () => { await controller.run('consult', { kind: 'event', item: event }) })
+    expect(mocks.generate).toHaveBeenCalledWith({
+      scope,
       worldGroupId: 9,
-      provider: 'deepseek',
-      model: 'deepseek-chat',
-      sourceKeys: ['worldview', 'manualText'],
-      manualSourceText: '【历史总述】王朝三百年\n【纪年体系】星历',
+      mode: 'consult',
+      targetKind: 'event',
+      targetId: 7,
+      aiConfig: expect.objectContaining({ provider: 'deepseek', model: 'deepseek-chat' }),
     })
-    expect(consultAI.setOperation).toHaveBeenCalledWith('event:7')
-    expect(consultAI.start.mock.calls[0][2]).toEqual({ category: 'history.consult', projectId: 1 })
-    expect(consultAI.start.mock.calls[0][0].map(message => message.content).join('\n')).toContain('【世界观】默认')
-    expect(controller.consultPreparing).toBe(false)
+    expect(controller.consult.candidate?.result).toBe('持久考据候选')
+    expect(controller.consultEventId).toBe(7)
   })
 
-  it('同一 agent 快速切换目标时，晚到的旧上下文不能启动旧请求', async () => {
-    const first = deferred<AssembleContextResult>()
-    const second = deferred<AssembleContextResult>()
-    mocks.assemble
-      .mockImplementationOnce(() => first.promise)
-      .mockImplementationOnce(() => second.promise)
-    const { consultAI } = await mount()
-
-    let firstRun!: Promise<void>
-    let secondRun!: Promise<void>
-    await act(async () => {
-      firstRun = controller.run('consult', { kind: 'event', item: event(1, '旧目标') })
-      await Promise.resolve()
-      secondRun = controller.run('consult', { kind: 'event', item: event(2, '新目标') })
-      await Promise.resolve()
-    })
-    await act(async () => {
-      second.resolve(assembled('NEW'))
-      await secondRun
-    })
-    await act(async () => {
-      first.resolve(assembled('OLD'))
-      await firstRun
-    })
-
-    expect(consultAI.start).toHaveBeenCalledOnce()
-    expect(consultAI.start.mock.calls[0][0].map(message => message.content).join('\n')).toContain('新目标')
-    expect(controller.consultEventId).toBe(2)
-    expect(controller.consultPreparing).toBe(false)
+  it('刷新时恢复 checkpoint 候选且不调用模型', async () => {
+    mocks.pending.mockImplementation(async (input: { mode?: string }) => input.mode === 'consult'
+      ? { snapshot: { run: { id: 51 } }, candidate: candidate('consult', 8) }
+      : null)
+    await mount()
+    expect(mocks.generate).not.toHaveBeenCalled()
+    expect(controller.consult.runId).toBe(51)
+    expect(controller.consultEventId).toBe(8)
+    expect(controller.consult.message).toContain('没有重复调用模型')
   })
 
-  it('上下文装配失败会复位 agent 并显示错误', async () => {
-    const onError = vi.fn()
-    mocks.assemble.mockRejectedValue(new Error('读取损坏'))
-    const { consultAI } = await mount({ onError })
-
-    await act(async () => {
-      await controller.run('consult', { kind: 'event', item: event(3, '失败目标') })
-    })
-
-    expect(consultAI.start).not.toHaveBeenCalled()
-    expect(consultAI.reset).toHaveBeenCalledOnce()
-    expect(onError).toHaveBeenCalledWith('历史 AI 准备失败：读取损坏。')
-    expect(controller.consultPreparing).toBe(false)
+  it('生成失败会暴露不可自动重试运行并保留显式放弃入口', async () => {
+    mocks.generate.mockRejectedValue(new Error('网络结果未知'))
+    const options = await mount()
+    mocks.recoverable.mockImplementation(async (input: { mode?: string }) => input.mode === 'consult'
+      ? { snapshot: { run: { id: 61 } }, safeToResume: false }
+      : null)
+    await act(async () => { await controller.run('consult', { kind: 'event', item: event }) })
+    expect(controller.consult.unsafeRunId).toBe(61)
+    expect(options.onError).toHaveBeenCalledWith('历史 Agent 生成失败：网络结果未知。')
+    await act(async () => { await controller.abandonUnsafe('consult') })
+    expect(mocks.abandon).toHaveBeenCalledWith({ scope, runId: 61 })
   })
 
-  it('采纳考据结果只通过 adopt 定点写回并刷新事件列表', async () => {
+  it('确认只调用 durable 采纳并刷新对应目标列表', async () => {
     const reloadEvents = vi.fn(async () => undefined)
-    const { consultAI } = await mount({ reloadEvents })
-    await act(async () => {
-      await controller.run('consult', { kind: 'event', item: event(7, '建城') })
-    })
-    await act(async () => { await controller.accept('consult', '可信考据') })
-
-    expect(mocks.adopt).toHaveBeenCalledWith({
-      projectId: 1,
-      worldGroupId: 9,
-      target: 'historicalTimelineEvents',
-      recordId: 7,
-      mode: 'replace',
-      data: { aiConsult: '可信考据' },
-    })
+    await mount({ reloadEvents })
+    await act(async () => { await controller.run('consult', { kind: 'event', item: event }) })
+    await act(async () => { await controller.accept('consult') })
+    expect(mocks.adopt).toHaveBeenCalledWith({ scope, runId: 41 })
     expect(reloadEvents).toHaveBeenCalledOnce()
-    expect(consultAI.reset).toHaveBeenCalledOnce()
-    expect(controller.consultEventId).toBeNull()
+    expect(controller.consult.candidate).toBeNull()
   })
 })
