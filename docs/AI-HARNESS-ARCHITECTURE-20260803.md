@@ -1399,6 +1399,19 @@ CHIRON 四类信息可映射到现有结构：
 - 真实 Doubao 与 Agnes 均从中途协议失败提升到 40/40 completion，但高严重度 hard TP 都只有 15/32。Doubao precision/recall 为 51.7%/46.9%，Agnes 为 45.5%/46.9%；Doubao 还有 2/2 clean 硬误报。逐字 evidence 均为 100%，说明严格协议未放宽；
 - 结果与已验签 hash、token、成本、延迟见 `docs/evals/HARNESS-83-VERIFIER-REPAIR-EVIDENCE-20260815.md`。协议恢复成功不等于 verifier 质量通过，held-out、fan-out、自动语义审查和发布门继续关闭。
 
+**taxonomy 校准与失败重试收口（HARNESS-84，2026-08-15）**
+
+- v4 错误分解证明 Agnes/Doubao 分别找到 30/32、25/32 个正确证据对，却都只有 15 个 exact subtype；
+  两者 exact 正确交集仅 11/32，简单投票不能解决问题；
+- judge v5～v7 依次冻结 19 subtype 操作定义/相邻边界、8 项与 clean exact 空根、repair 后静态全约束
+  复核。旧 v1～v6 的实际消息不被原地改写；相同 repair 不再盲重试，非重试型 4xx 一次终止；
+- Agnes v7 完成 40/40，TP/FP/FN 为 21/13/11，precision/recall 61.8%/65.6%，evidence 36/36，
+  intent 与 clean 控制均为零误升级，仍低于发布门。Doubao v7 被真实方舟 `403 AccountOverdueError`
+  在 0/40 阻断，代码侧已实测只保留一次无用量失败；
+- 证据见 `docs/evals/HARNESS-84-TAXONOMY-CALIBRATION-EVIDENCE-20260815.md`。held-out 继续锁定；
+  下一实验若拆为候选发现与定向分类，必须逐次记录调用、阶段 hash、用量、成本和身份，不能把多调用
+  折叠成一个 attempt。
+
 **范围**
 
 - 建立 40 个 development + 20 个 sealed held-out 的中文长篇用例，目标每例 8,000–12,000 中文字符；

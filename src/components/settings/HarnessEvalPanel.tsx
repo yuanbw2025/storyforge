@@ -221,7 +221,7 @@ export default function HarnessEvalPanel() {
           },
         },
         call: input => callH4Verifier(input, config),
-        maxAttemptsPerFixture: existing?.maxAttemptsPerFixture ?? 2,
+        maxAttemptsPerFixture: existing?.maxAttemptsPerFixture ?? 3,
         resumeFrom: existing?.status === 'running' ? existing : undefined,
         onCheckpoint: async next => {
           await persistH4LongConsistencyBrowserCheckpointV1(next)

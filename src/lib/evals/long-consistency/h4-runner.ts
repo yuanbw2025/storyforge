@@ -18,6 +18,9 @@ import {
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V2,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V3,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V5,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V6,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V7,
   createLongConsistencyJudgeRepairV1,
   createLongConsistencyFixtureBindingV1,
   parseLongConsistencyEvalArtifactV1,
@@ -135,7 +138,35 @@ const SUPPORTED_JUDGE_PROMPT_VERSIONS = [
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V2,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V3,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V5,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V6,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V7,
 ] as const
+
+function supportsJudgeRepair(promptVersion: string): boolean {
+  return promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+    || promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V5
+    || promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V6
+    || promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V7
+}
+
+function repeatedRepairWouldBeIdentical(
+  failures: readonly H4LongConsistencyRunFailureV1[],
+  fixtureId: string,
+  completedAttempts: number,
+): boolean {
+  if (completedAttempts < 2) return false
+  const prior = failures.find(failure => (
+    failure.fixtureId === fixtureId && failure.attempt === completedAttempts - 1
+  ))
+  const latest = failures.find(failure => (
+    failure.fixtureId === fixtureId && failure.attempt === completedAttempts
+  ))
+  if (!prior || !latest) return false
+  const priorRepair = createLongConsistencyJudgeRepairV1(prior.code)
+  const latestRepair = createLongConsistencyJudgeRepairV1(latest.code)
+  return priorRepair != null && sameValue(priorRepair, latestRepair)
+}
 
 function isSupportedJudgePromptVersion(value: string): boolean {
   return SUPPORTED_JUDGE_PROMPT_VERSIONS.some(version => version === value)
@@ -445,10 +476,21 @@ function failureFrom(
   attempt: number,
   usage: LongConsistencyModelUsageV1 | null,
 ): H4LongConsistencyRunFailureV1 {
-  const candidate = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : null
-  const code = typeof candidate?.code === 'string' && candidate.code.trim()
-    ? candidate.code.trim().slice(0, 120)
-    : 'verifier_error'
+  const candidate = error && typeof error === 'object'
+    ? error as { code?: unknown; message?: unknown; status?: unknown }
+    : null
+  const status = typeof candidate?.status === 'number' ? candidate.status : 0
+  const nonRetryableProviderError = status >= 400
+    && status < 500
+    && status !== 408
+    && status !== 409
+    && status !== 425
+    && status !== 429
+  const code = nonRetryableProviderError
+    ? 'verifier_error_non_retryable'
+    : typeof candidate?.code === 'string' && candidate.code.trim()
+      ? candidate.code.trim().slice(0, 120)
+      : 'verifier_error'
   const message = typeof candidate?.message === 'string' && candidate.message.trim()
     ? candidate.message.trim().slice(0, 500)
     : String(error).slice(0, 500) || 'unknown verifier error'
@@ -525,8 +567,7 @@ async function assertCheckpointAgainstCatalog(checkpoint: H4LongConsistencyRunCh
           failure.fixtureId === fixture.id && failure.attempt === completed.attempts - 1
         ))
       : undefined
-    const expectedJudgeRepair = checkpoint.execution.verifier.promptVersion
-      === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+    const expectedJudgeRepair = supportsJudgeRepair(checkpoint.execution.verifier.promptVersion)
       ? previousFailure ? createLongConsistencyJudgeRepairV1(previousFailure.code) : null
       : undefined
     if (!sameValue(completed.artifact.judgeRepair, expectedJudgeRepair)) {
@@ -567,7 +608,18 @@ async function assertCheckpointAgainstCatalog(checkpoint: H4LongConsistencyRunCh
   }
   if (
     checkpoint.status === 'failed'
-    && (checkpoint.completed.length === fixtures.length || currentAttempt !== maxAttempts)
+    && (
+      checkpoint.completed.length === fixtures.length
+      || (
+        currentAttempt !== maxAttempts
+        && checkpoint.failures[checkpoint.failures.length - 1]?.code !== 'verifier_error_non_retryable'
+        && !repeatedRepairWouldBeIdentical(
+          checkpoint.failures,
+          fixtures[checkpoint.completed.length]?.id ?? '',
+          currentAttempt,
+        )
+      )
+    )
   ) throw new Error('H4 checkpoint failed 与终止尝试不匹配')
   if (checkpoint.status === 'budget-exhausted' && !budgetExceeded(checkpoint.usage, checkpoint.budget)) {
     throw new Error('H4 checkpoint budget-exhausted 缺少预算证据')
@@ -744,8 +796,7 @@ export async function runH4LongConsistencyVerifierV1(
             failure.fixtureId === fixture.id && failure.attempt === attempt - 1
           ))
         : undefined
-      const judgeRepair = checkpoint.execution.verifier.promptVersion
-        === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+      const judgeRepair = supportsJudgeRepair(checkpoint.execution.verifier.promptVersion)
         ? previousFailure ? createLongConsistencyJudgeRepairV1(previousFailure.code) : null
         : undefined
       let artifact: LongConsistencyEvalArtifactV1
@@ -799,7 +850,12 @@ export async function runH4LongConsistencyVerifierV1(
         const failure = failureFrom(error, fixture.id, attempt, failedAttemptUsage)
         const failures = [...checkpoint.failures, failure]
         const usage = aggregateUsage({ attempts, completed: checkpoint.completed, failures })
-        const terminal = attempt >= checkpoint.maxAttemptsPerFixture
+        const terminal = failure.code === 'verifier_error_non_retryable'
+          || attempt >= checkpoint.maxAttemptsPerFixture
+          || (
+            supportsJudgeRepair(checkpoint.execution.verifier.promptVersion)
+            && repeatedRepairWouldBeIdentical(failures, fixture.id, attempt)
+          )
         checkpoint = await updateCheckpoint(checkpoint, input, {
           attempts,
           usage,

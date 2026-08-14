@@ -31,6 +31,9 @@ export type LongConsistencyJudgePromptVersionV1 =
   | 'h4-long-consistency-judge-v2'
   | 'h4-long-consistency-judge-v3'
   | 'h4-long-consistency-judge-v4'
+  | 'h4-long-consistency-judge-v5'
+  | 'h4-long-consistency-judge-v6'
+  | 'h4-long-consistency-judge-v7'
 
 export type LongConsistencyJudgeRepairReasonV1 =
   | 'json-contract'

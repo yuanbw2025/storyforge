@@ -46,7 +46,10 @@ export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1 = 'h4-long-consistency-jud
 export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V2 = 'h4-long-consistency-judge-v2'
 export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V3 = 'h4-long-consistency-judge-v3'
 export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 = 'h4-long-consistency-judge-v4'
-export const LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1 = LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V5 = 'h4-long-consistency-judge-v5'
+export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V6 = 'h4-long-consistency-judge-v6'
+export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V7 = 'h4-long-consistency-judge-v7'
+export const LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1 = LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V7
 export const LONG_CONSISTENCY_JUDGE_REPAIR_PROTOCOL_VERSION_V1 = 'h4-long-consistency-repair-v1'
 export const LONG_CONSISTENCY_ARTIFACT_TYPE_V1 = 'storyforge-long-consistency-eval'
 
@@ -57,6 +60,9 @@ const LONG_CONSISTENCY_JUDGE_PROMPT_VERSIONS_V1 = [
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V2,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V3,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V5,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V6,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V7,
 ] as const
 const LONG_CONSISTENCY_JUDGE_REPAIR_REASONS_V1 = [
   'json-contract',
@@ -128,6 +134,30 @@ export function createLongConsistencyJudgeRepairV1(
   }
 }
 
+export function longConsistencyJudgeSupportsRepairV1(
+  promptVersion: LongConsistencyJudgePromptVersionV1,
+): boolean {
+  return promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+    || promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V5
+    || promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V6
+    || promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V7
+}
+
+function longConsistencyJudgeHasOperationalTaxonomyV1(
+  promptVersion: LongConsistencyJudgePromptVersionV1,
+): boolean {
+  return promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V5
+    || promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V6
+    || promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V7
+}
+
+function longConsistencyJudgeHasBoundedIssueSetV1(
+  promptVersion: LongConsistencyJudgePromptVersionV1,
+): boolean {
+  return promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V6
+    || promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V7
+}
+
 function parseLongConsistencyJudgeRepairV1(
   value: unknown,
   path: string,
@@ -145,7 +175,10 @@ function parseLongConsistencyJudgeRepairV1(
   }
 }
 
-function judgeRepairInstruction(repair: LongConsistencyJudgeRepairV1): string {
+function judgeRepairInstruction(
+  repair: LongConsistencyJudgeRepairV1,
+  promptVersion: LongConsistencyJudgePromptVersionV1,
+): string {
   const instructions: Record<LongConsistencyJudgeRepairReasonV1, string> = {
     'json-contract': '上一次输出不是单一合法 JSON 对象。只返回根对象，不要围栏、解释、前后缀或多个对象。',
     'exact-schema': '上一次输出违反精确字段契约。逐层只保留示例列出的字段，不得新增标签、类别名、偏移或解释字段。',
@@ -157,6 +190,10 @@ function judgeRepairInstruction(repair: LongConsistencyJudgeRepairV1): string {
   return [
     '【确定性协议纠错重试】',
     instructions[repair.reason],
+    ...(promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V7 ? [
+      '修复指定问题后必须重新执行全部冻结检查：单一 JSON 根对象、exact-key 字段、最多 8 项、合法枚举、已声明 sourceId、逐字存在、来源内唯一、两证据不同区间；任一项不满足就删除整条 issue。',
+      '不得为补齐字段而虚构证据；如果没有剩余合格 issue，只返回 {"schemaVersion":1,"issues":[]}。',
+    ] : []),
     '这不是新任务；不得读取隐藏标签、猜测期望答案或放宽审查标准。请重新审查同一只读来源并输出完整根 JSON 对象。',
   ].join('\n')
 }
@@ -201,7 +238,10 @@ function parseEvidenceReference(
   }
 }
 
-export function parseLongConsistencyJudgeResponseV1(raw: string): LongConsistencyJudgeCandidateV1[] {
+export function parseLongConsistencyJudgeResponseV1(
+  raw: string,
+  maximumIssues = MAX_REPORT_ISSUES_V1,
+): LongConsistencyJudgeCandidateV1[] {
   const root = parseJsonResponse(raw)
   const rootKeys = ['schemaVersion', 'issues'] as const
   assertExactKeys(root, rootKeys, rootKeys, 'judgeResponse')
@@ -209,8 +249,8 @@ export function parseLongConsistencyJudgeResponseV1(raw: string): LongConsistenc
     failSchema('unsupported_version', 'judgeResponse.schemaVersion', '仅支持版本 1')
   }
   const rawIssues = readArray(root.issues, 'judgeResponse.issues')
-  if (rawIssues.length > MAX_REPORT_ISSUES_V1) {
-    failSchema('too_many_items', 'judgeResponse.issues', `最多允许 ${MAX_REPORT_ISSUES_V1} 项`)
+  if (rawIssues.length > maximumIssues) {
+    failSchema('too_many_items', 'judgeResponse.issues', `最多允许 ${maximumIssues} 项`)
   }
   const issues = rawIssues.map((value, index): LongConsistencyJudgeCandidateV1 => {
     const path = `judgeResponse.issues[${index}]`
@@ -287,14 +327,18 @@ function messagesForPreparedSources(
   promptVersion: LongConsistencyJudgePromptVersionV1,
   judgeRepair: LongConsistencyJudgeRepairV1 | null = null,
 ): ChatMessage[] {
-  if (promptVersion !== LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 && judgeRepair != null) {
-    failSchema('binding_mismatch', 'judgeRepair', '只有 judge v4 可绑定纠错消息')
+  if (!longConsistencyJudgeSupportsRepairV1(promptVersion) && judgeRepair != null) {
+    failSchema('binding_mismatch', 'judgeRepair', '只有支持纠错协议的 judge 版本可绑定纠错消息')
   }
   const taxonomy = LONG_CONSISTENCY_TAXONOMY_V1.map(entry => ({
     category: entry.category,
     categoryLabel: entry.categoryLabel,
     subtype: entry.subtype,
     subtypeLabel: entry.subtypeLabel,
+    ...(longConsistencyJudgeHasOperationalTaxonomyV1(promptVersion) ? {
+      operationalDefinitionZh: entry.operationalDefinitionZh,
+      decisionBoundaryZh: entry.decisionBoundaryZh,
+    } : {}),
   }))
   const payload = sources.map(source => ({ id: source.id, kind: source.kind, content: source.content }))
   const messages: ChatMessage[] = [{
@@ -308,9 +352,17 @@ function messagesForPreparedSources(
         '输出前逐条执行字面回查：quote 必须能在对应 sourceId 的 content 中原样搜索到且只出现一次；重复时向前后扩大到包含专名或数字的唯一完整句。',
         '任何一段证据无法通过上述逐字唯一回查时，必须删除整条 issue；宁可不报告，也不得输出推测或改写引文。',
       ] : []),
-      ...(promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 ? [
+      ...(longConsistencyJudgeSupportsRepairV1(promptVersion) ? [
         '提交前做最终结构检查：根对象只能有 schemaVersion、issues；每个 issue 只能有 id、subtype、severity、intentClassification、summary、factEvidence、contradictionEvidence；两种 evidence 只能有 sourceId、quote。',
         '删除所有示例之外的字段。无法同时满足精确字段、合法枚举、逐字存在、来源内唯一和两证据不同区间时，删除整条 issue。',
+      ] : []),
+      ...(longConsistencyJudgeHasOperationalTaxonomyV1(promptVersion) ? [
+        '分类时必须逐条对照 taxonomy 的 operationalDefinitionZh 与 decisionBoundaryZh；先确认两段证据描述的具体冲突机制，再选择唯一最具体的 subtype。',
+        '不得用更宽泛的 absolute-time-contradiction、causal-logic-violation 或 core-rules-violation 代替已经满足边界条件的更具体 subtype；无法唯一分类时删除整条 issue。',
+      ] : []),
+      ...(longConsistencyJudgeHasBoundedIssueSetV1(promptVersion) ? [
+        '最多报告 8 条最高置信 issue，不得为了覆盖 taxonomy 而凑数；只有两段证据形成直接且具体的矛盾时才能保留。',
+        '如果没有任何候选同时通过分类边界、逐字证据和作者意图检查，必须只返回 {"schemaVersion":1,"issues":[]}。',
       ] : []),
       '不要输出字符偏移、来源哈希、顶层类别或 hard/advisory 结论，这些均由程序计算。',
       'intentional 表示有明确作者意图支持的伏笔、延迟揭示、不可靠叙述或有意风格变化；ambiguous 表示证据不足；其余才是 unintentional。',
@@ -324,7 +376,7 @@ function messagesForPreparedSources(
     role: 'user',
     content: `【只读来源】\n${JSON.stringify(payload)}`,
   }]
-  if (judgeRepair) messages.push({ role: 'user', content: judgeRepairInstruction(judgeRepair) })
+  if (judgeRepair) messages.push({ role: 'user', content: judgeRepairInstruction(judgeRepair, promptVersion) })
   return messages
 }
 
@@ -594,11 +646,11 @@ export function parseLongConsistencyEvalArtifactV1(value: unknown): LongConsiste
     'artifact.benchmark.judgePromptVersion',
   )
   const hasJudgeRepair = Object.prototype.hasOwnProperty.call(record, 'judgeRepair')
-  if (judgePromptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 && !hasJudgeRepair) {
-    failSchema('missing_field', 'artifact.judgeRepair', 'judge v4 必须显式绑定纠错状态')
+  if (longConsistencyJudgeSupportsRepairV1(judgePromptVersion) && !hasJudgeRepair) {
+    failSchema('missing_field', 'artifact.judgeRepair', '支持纠错协议的 judge 必须显式绑定纠错状态')
   }
-  if (judgePromptVersion !== LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 && hasJudgeRepair) {
-    failSchema('binding_mismatch', 'artifact.judgeRepair', '旧 judge 版本不得携带 v4 纠错状态')
+  if (!longConsistencyJudgeSupportsRepairV1(judgePromptVersion) && hasJudgeRepair) {
+    failSchema('binding_mismatch', 'artifact.judgeRepair', '旧 judge 版本不得携带纠错状态')
   }
   const judgeRepair = hasJudgeRepair
     ? parseLongConsistencyJudgeRepairV1(record.judgeRepair, 'artifact.judgeRepair')
@@ -662,8 +714,11 @@ export function parseLongConsistencyEvalArtifactV1(value: unknown): LongConsiste
 
   const issues = readArray(record.issues, 'artifact.issues')
     .map((issue, index) => parseIssue(issue, `artifact.issues[${index}]`, sourceById))
-  if (issues.length > MAX_REPORT_ISSUES_V1) {
-    failSchema('too_many_items', 'artifact.issues', `最多允许 ${MAX_REPORT_ISSUES_V1} 项`)
+  const maximumIssues = longConsistencyJudgeHasBoundedIssueSetV1(judgePromptVersion)
+    ? 8
+    : MAX_REPORT_ISSUES_V1
+  if (issues.length > maximumIssues) {
+    failSchema('too_many_items', 'artifact.issues', `最多允许 ${maximumIssues} 项`)
   }
   assertUnique(issues.map(issue => issue.id), 'artifact.issues.id')
   assertUnique(issues.map(issue => [
@@ -756,14 +811,18 @@ export async function createLongConsistencyEvalArtifactV1(
     LONG_CONSISTENCY_JUDGE_PROMPT_VERSIONS_V1,
     'verifier.promptVersion',
   )
-  if (judgePromptVersion !== LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 && input.judgeRepair != null) {
-    failSchema('binding_mismatch', 'judgeRepair', '只有 judge v4 可绑定纠错状态')
+  if (!longConsistencyJudgeSupportsRepairV1(judgePromptVersion) && input.judgeRepair != null) {
+    failSchema('binding_mismatch', 'judgeRepair', '只有支持纠错协议的 judge 版本可绑定纠错状态')
   }
-  const judgeRepair = judgePromptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+  const judgeRepair = longConsistencyJudgeSupportsRepairV1(judgePromptVersion)
     ? parseLongConsistencyJudgeRepairV1(input.judgeRepair ?? null, 'judgeRepair')
     : null
   const messages = messagesForPreparedSources(preparedSources, judgePromptVersion, judgeRepair)
-  const issues = resolveIssues(parseLongConsistencyJudgeResponseV1(input.rawJudgeOutput), preparedSources)
+  const candidates = parseLongConsistencyJudgeResponseV1(
+    input.rawJudgeOutput,
+    longConsistencyJudgeHasBoundedIssueSetV1(judgePromptVersion) ? 8 : MAX_REPORT_ISSUES_V1,
+  )
+  const issues = resolveIssues(candidates, preparedSources)
   const provisional: LongConsistencyEvalArtifactV1 = {
     schemaVersion: 1,
     artifactType: LONG_CONSISTENCY_ARTIFACT_TYPE_V1,
@@ -789,7 +848,7 @@ export async function createLongConsistencyEvalArtifactV1(
       verifierUsage: input.verifierUsage,
     },
     sourceSetHash: await hashCanonicalValue(sources),
-    ...(judgePromptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 ? { judgeRepair } : {}),
+    ...(longConsistencyJudgeSupportsRepairV1(judgePromptVersion) ? { judgeRepair } : {}),
     judgeInputHash: await hashCanonicalValue(messages),
     judgeOutputHash: await sha256Text(input.rawJudgeOutput),
     sources,
@@ -812,10 +871,10 @@ export async function runLongConsistencySemanticAuditV1(
     LONG_CONSISTENCY_JUDGE_PROMPT_VERSIONS_V1,
     'verifier.promptVersion',
   )
-  if (judgePromptVersion !== LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 && input.judgeRepair != null) {
-    failSchema('binding_mismatch', 'judgeRepair', '只有 judge v4 可绑定纠错状态')
+  if (!longConsistencyJudgeSupportsRepairV1(judgePromptVersion) && input.judgeRepair != null) {
+    failSchema('binding_mismatch', 'judgeRepair', '只有支持纠错协议的 judge 版本可绑定纠错状态')
   }
-  const judgeRepair = judgePromptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+  const judgeRepair = longConsistencyJudgeSupportsRepairV1(judgePromptVersion)
     ? parseLongConsistencyJudgeRepairV1(input.judgeRepair ?? null, 'judgeRepair')
     : null
   const messages = await buildLongConsistencyJudgeMessagesV1(input.sources, judgePromptVersion, judgeRepair)

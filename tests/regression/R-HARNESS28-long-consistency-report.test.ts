@@ -132,6 +132,9 @@ describe('R-HARNESS28 · H4 long-consistency evidence report', () => {
       'Tone Inconsistencies',
       'Style Shifts',
     ])
+    expect(LONG_CONSISTENCY_TAXONOMY_V1.every(entry => (
+      entry.operationalDefinitionZh.length >= 20 && entry.decisionBoundaryZh.length >= 20
+    ))).toBe(true)
   })
 
   it('shows only normalized sources and taxonomy to the judge, never hidden fixture labels', async () => {

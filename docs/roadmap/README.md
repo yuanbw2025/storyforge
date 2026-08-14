@@ -35,6 +35,16 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-84 完成卡：verifier taxonomy 校准与失败重试收口
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-84` 评测可靠性任务。真实 verifier 已找到正确证据却错分相邻 subtype 时，taxonomy 必须提供可审计操作定义和判别边界；协议修复不得因修 A 坏 B、同输入盲重试或重复不可恢复 4xx 耗尽预算。 |
+| 主归属 / 复用 | 归 H4/H5；复用 H28 artifact/checkpoint/scorer、H83 repair binding、同一 40+20 fixture 和共享 `chat()`。不新增表、业务写入、模型入口或生产自动 gate。 |
+| 协议 | judge v5 冻结 19 subtype 中文操作定义/边界；v6 加 8 项上限和 clean exact 空根；v7 为 repair 加不含旧输出/标签的静态全约束复核。v1～v6 消息/归档继续可验。每例最多三次且相同 repair 不再调用；非重试型 4xx 一次终止。 |
+| 真实结果 / 发布门 | Agnes v7 完成 40/40，TP/FP/FN 21/13/11，precision/recall 61.8%/65.6%，evidence 36/36，intent 与 clean 控制均 0 误升级，仍 FAIL。Doubao v7 被方舟 `403 AccountOverdueError` 在 0/40 阻断，当前 runner 实测只调用一次并记录 unmetered failure。held-out 继续锁定。 |
+| 验收 / 回滚 | 定向 report/runner/UI/transport 7 files / 42 tests 通过，覆盖旧 prompt 隔离、v7 repair 全清单、8 项上限、不同错误第三次恢复、相同 repair 提前停止和不可恢复 4xx 单次终止；完整 CI 374 files / 1805 tests、生产构建与 bundle budget 通过，项目 Chromium E2E 52/52（4.6 分钟）。真实 aggregate、hash、用量和失败归档见 `docs/evals/HARNESS-84-TAXONOMY-CALIBRATION-EVIDENCE-20260815.md`。下一步只能以诚实多调用 artifact 验证候选证据的定向 adjudication，不能继续扩大单轮提示词后宣称可靠。 |
+
 ### HARNESS-83 完成卡：不泄漏标签的 verifier 确定性纠错
 
 | 项目 | 冻结边界 |
