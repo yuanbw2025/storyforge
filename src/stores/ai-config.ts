@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { AIConfig, AIProvider, AIConfigPreset, EmbeddingConfig } from '../lib/types'
-import { PROVIDER_PRESETS } from '../lib/types'
+import { normalizeProviderModel, PROVIDER_PRESETS } from '../lib/types'
 import { createLog, updateLog } from '../lib/ai/logger'
 import { nanoid } from '../lib/utils/id'
 import { buildOpenAIEndpoint, normalizeOpenAIBaseUrl } from '../lib/ai/openai-endpoint'
@@ -70,7 +70,16 @@ function loadPresets(): AIConfigPreset[] {
     const saved = localStorage.getItem(PRESETS_KEY)
     if (saved) {
       const arr = JSON.parse(saved)
-      if (Array.isArray(arr)) return arr
+      if (Array.isArray(arr)) {
+        const normalized = arr.map((preset: AIConfigPreset) => ({
+          ...preset,
+          config: normalizeConfigModel(preset.config),
+        }))
+        if (normalized.some((preset, index) => preset.config.model !== arr[index]?.config?.model)) {
+          savePresets(normalized)
+        }
+        return normalized
+      }
     }
   } catch { /* ignore */ }
   return []
@@ -117,6 +126,13 @@ function saveAgentTeamBudgetProfile(profile: AgentTeamBudgetProfile): void {
 /** 根据 HTTP 状态码和英文错误信息，返回中文解释 */
 function getChineseExplanation(status: number, msg: string): string {
   const lower = msg.toLowerCase()
+
+  if (lower.includes('无可用渠道') || lower.includes('distributor'))
+    return '该模型当前无可用上游渠道，请切换其他模型或稍后重试'
+  if (lower.includes('api key format is incorrect'))
+    return 'API Key 类型或格式不正确；豆包请使用火山方舟 API Key，不要使用 IAM Access Key、API Key ID 或 Secret'
+  if (lower.includes('has not activated the model'))
+    return '账号尚未开通该模型，请在火山方舟「开通管理」启用对应模型'
 
   // 按 HTTP 状态码
   if (status === 401) return 'API Key 无效或已过期'
@@ -176,14 +192,24 @@ function loadInitialConfig(): { config: AIConfig; rememberApiKey: boolean } {
   const rememberApiKey = rememberRaw == null ? legacyHasLocalKey : rememberRaw === 'true'
   const sessionKey = sessionStorage.getItem(SESSION_API_KEY) || ''
 
+  const config = normalizeConfigModel({
+    ...DEFAULT_CONFIG,
+    ...savedConfig,
+    apiKey: rememberApiKey ? (savedConfig.apiKey || '') : sessionKey,
+  })
+  if (savedConfig.model && config.model !== savedConfig.model) {
+    persistConfig(config, rememberApiKey)
+  }
+
   return {
-    config: {
-      ...DEFAULT_CONFIG,
-      ...savedConfig,
-      apiKey: rememberApiKey ? (savedConfig.apiKey || '') : sessionKey,
-    },
+    config,
     rememberApiKey,
   }
+}
+
+function normalizeConfigModel(config: AIConfig): AIConfig {
+  const model = normalizeProviderModel(config.provider, config.model)
+  return model === config.model ? config : { ...config, model }
 }
 
 function persistConfig(config: AIConfig, rememberApiKey: boolean): void {
@@ -259,7 +285,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   },
 
   setConfig: (partial: Partial<AIConfig>) => {
-    const newConfig = { ...get().config, ...partial }
+    const newConfig = normalizeConfigModel({ ...get().config, ...partial })
     persistConfig(newConfig, get().rememberApiKey)
     // 手动改动配置后，与已选预设脱钩（除非改动等于该预设）
     set({ config: newConfig, activePresetId: null })
@@ -287,7 +313,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   applyPreset: (id: string) => {
     const preset = get().presets.find(p => p.id === id)
     if (!preset) return
-    const newConfig = { ...preset.config, apiKey: preset.config.apiKey || get().config.apiKey }
+    const newConfig = normalizeConfigModel({ ...preset.config, apiKey: preset.config.apiKey || get().config.apiKey })
     persistConfig(newConfig, get().rememberApiKey)
     set({ config: newConfig, activePresetId: id, editingPresetId: id })
   },
@@ -350,12 +376,12 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
 
   switchProvider: (provider: AIProvider) => {
     const preset = PROVIDER_PRESETS[provider] || {}
-    const newConfig: AIConfig = {
+    const newConfig = normalizeConfigModel({
       ...get().config,
       provider,
       ...preset,
       apiKey: provider === get().config.provider ? get().config.apiKey : (preset.apiKey || ''),
-    }
+    })
     persistConfig(newConfig, get().rememberApiKey)
     set({ config: newConfig, activePresetId: null, editingPresetId: null })
   },

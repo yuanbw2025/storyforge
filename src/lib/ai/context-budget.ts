@@ -9,6 +9,7 @@
  */
 
 import type { AIProvider, ChatMessage } from '../types'
+import { normalizeProviderModel } from '../types/ai'
 import {
   CONTINUITY_CORE_END,
   CONTINUITY_CORE_START,
@@ -61,6 +62,7 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
 
   // Doubao
   'doubao': { label: '豆包默认', maxContext: 32_000, maxOutput: 4_096 },
+  'doubao:doubao-1-5-pro-32k-250115': { label: 'Doubao 1.5 Pro 32K', maxContext: 32_000, maxOutput: 4_096 },
 
   // GLM
   'glm': { label: 'GLM 默认', maxContext: 128_000, maxOutput: 4_096 },
@@ -77,10 +79,11 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
   'nvidia:mistralai/mistral-large-2-instruct': { label: 'Mistral Large 2', maxContext: 128_000, maxOutput: 4_096 },
   'nvidia:nvidia/llama-3.1-nemotron-70b-instruct': { label: 'Nemotron 70B', maxContext: 128_000, maxOutput: 4_096 },
 
-  // Agnes AI(清华系免费 · 1M 上下文)
-  'agnes': { label: 'Agnes 默认', maxContext: 1_000_000, maxOutput: 8_192 },
-  'agnes:agnes-1.5-flash': { label: 'Agnes 1.5 Flash', maxContext: 1_000_000, maxOutput: 8_192 },
-  'agnes:Agnes-2.0-Flash': { label: 'Agnes 2.0 Flash', maxContext: 1_000_000, maxOutput: 8_192 },
+  // Agnes AI（官方模型目录 2026-07-30；2.0 的临时 1M 窗口已撤回）
+  'agnes': { label: 'Agnes 默认', maxContext: 524_288, maxOutput: 65_536 },
+  'agnes:agnes-2.5-flash': { label: 'Agnes 2.5 Flash', maxContext: 524_288, maxOutput: 65_536 },
+  'agnes:agnes-1.5-flash': { label: 'Agnes 1.5 Flash', maxContext: 262_144, maxOutput: 65_536 },
+  'agnes:agnes-2.0-flash': { label: 'Agnes 2.0 Flash', maxContext: 262_144, maxOutput: 65_536 },
 
   // LongCat(美团 · OpenAI 兼容 · 1M 上下文)
   'longcat': { label: 'LongCat 默认', maxContext: 1_000_000, maxOutput: 128_000 },
@@ -113,7 +116,7 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
 /** 获取模型的上下文窗口预设 */
 export function getModelPreset(provider: AIProvider, model: string): ModelContextPreset {
   // 先精确匹配 provider:model
-  const exact = MODEL_CONTEXT_PRESETS[`${provider}:${model}`]
+  const exact = MODEL_CONTEXT_PRESETS[`${provider}:${normalizeProviderModel(provider, model)}`]
   if (exact) return exact
   // 再用 provider 默认
   const fallback = MODEL_CONTEXT_PRESETS[provider]

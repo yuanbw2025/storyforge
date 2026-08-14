@@ -119,4 +119,73 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(useAIConfigStore.getState().config.baseUrl).toBe('https://api.longcat.chat/openai/v1')
     expect(useAIConfigStore.getState().config.model).toBe('LongCat-2.0')
   })
+
+  it('Agnes provider 使用当前官方模型 ID 和上下文预设', async () => {
+    expect(PROVIDER_PRESETS.agnes?.baseUrl).toBe('https://apihub.agnes-ai.com/v1')
+    expect(PROVIDER_PRESETS.agnes?.model).toBe('agnes-2.5-flash')
+    expect(PROVIDER_MODELS.agnes?.map(model => model.value)).toEqual([
+      'agnes-2.5-flash',
+      'agnes-1.5-flash',
+      'agnes-2.0-flash',
+    ])
+
+    expect(getModelPreset('agnes', 'agnes-2.5-flash')).toMatchObject({
+      maxContext: 524_288,
+      maxOutput: 65_536,
+    })
+    expect(getModelPreset('agnes', 'agnes-1.5-flash').maxContext).toBe(262_144)
+    expect(getModelPreset('agnes', 'agnes-2.0-flash').maxContext).toBe(262_144)
+
+    const useAIConfigStore = await freshStore()
+    useAIConfigStore.getState().switchProvider('agnes')
+    expect(useAIConfigStore.getState().config.baseUrl).toBe('https://apihub.agnes-ai.com/v1')
+    expect(useAIConfigStore.getState().config.model).toBe('agnes-2.5-flash')
+  })
+
+  it('加载时无损迁移 Agnes 历史大小写模型 ID', async () => {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({
+      provider: 'agnes',
+      apiKey: 'agnes-key',
+      model: 'Agnes-2.0-Flash',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      temperature: 0.7,
+      maxTokens: 0,
+    }))
+
+    const useAIConfigStore = await freshStore()
+
+    expect(useAIConfigStore.getState().config.model).toBe('agnes-2.0-flash')
+    expect(useAIConfigStore.getState().config.apiKey).toBe('agnes-key')
+    expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}')).toMatchObject({
+      provider: 'agnes',
+      apiKey: 'agnes-key',
+      model: 'agnes-2.0-flash',
+    })
+    expect(getModelPreset('agnes', 'Agnes-2.0-Flash').maxContext).toBe(262_144)
+  })
+
+  it('豆包 provider 使用当前方舟在线推理模型并迁移旧模型名', async () => {
+    expect(PROVIDER_PRESETS.doubao?.baseUrl).toBe('https://ark.cn-beijing.volces.com/api/v3')
+    expect(PROVIDER_PRESETS.doubao?.model).toBe('doubao-1-5-pro-32k-250115')
+    expect(PROVIDER_MODELS.doubao?.map(model => model.value)).toEqual([
+      'doubao-1-5-pro-32k-250115',
+    ])
+    expect(getModelPreset('doubao', 'doubao-1-5-pro-32k-250115')).toMatchObject({
+      maxContext: 32_000,
+      maxOutput: 4_096,
+    })
+    expect(getModelPreset('doubao', 'doubao-pro-32k').maxContext).toBe(32_000)
+
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({
+      provider: 'doubao',
+      apiKey: '',
+      model: 'doubao-pro-32k',
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+      temperature: 0.7,
+      maxTokens: 0,
+    }))
+    const useAIConfigStore = await freshStore()
+    expect(useAIConfigStore.getState().config.model).toBe('doubao-1-5-pro-32k-250115')
+    expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}').model).toBe('doubao-1-5-pro-32k-250115')
+  })
 })
