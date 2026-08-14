@@ -14,7 +14,9 @@ import {
   readString,
 } from '../../agent/run/schema-utils'
 import {
+  LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V2,
   createLongConsistencyFixtureBindingV1,
   parseLongConsistencyEvalArtifactV1,
   runLongConsistencySemanticAuditV1,
@@ -126,6 +128,15 @@ export interface RunH4LongConsistencyVerifierInputV1 {
 }
 
 const CHECKPOINT_STATUSES = ['running', 'completed', 'failed', 'budget-exhausted'] as const
+const SUPPORTED_JUDGE_PROMPT_VERSIONS = [
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V2,
+  LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1,
+] as const
+
+function isSupportedJudgePromptVersion(value: string): boolean {
+  return SUPPORTED_JUDGE_PROMPT_VERSIONS.some(version => version === value)
+}
 
 function isoTimestamp(value: unknown, path: string): string {
   const text = readString(value, path, { max: 40 })
@@ -449,7 +460,7 @@ async function assertCheckpointAgainstCatalog(checkpoint: H4LongConsistencyRunCh
     checkpoint.execution.generator.provider === checkpoint.execution.verifier.provider
     && checkpoint.execution.generator.model === checkpoint.execution.verifier.model
   ) throw new Error('H4 checkpoint 的 generator/verifier 身份未隔离')
-  if (checkpoint.execution.verifier.promptVersion !== LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1) {
+  if (!isSupportedJudgePromptVersion(checkpoint.execution.verifier.promptVersion)) {
     throw new Error('H4 checkpoint verifier Prompt 版本不匹配')
   }
   const fixtures = selectFixtures(checkpoint.split, checkpoint.fixtureIds)
@@ -610,8 +621,8 @@ async function initialCheckpoint(input: RunH4LongConsistencyVerifierInputV1) {
     execution.generator.provider === execution.verifier.provider
     && execution.generator.model === execution.verifier.model
   ) throw new Error('H4 发布评测要求 generator 与 verifier 使用不同 provider/model 身份')
-  if (execution.verifier.promptVersion !== LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1) {
-    throw new Error(`H4 verifier promptVersion 必须是 ${LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1}`)
+  if (!isSupportedJudgePromptVersion(execution.verifier.promptVersion)) {
+    throw new Error(`H4 verifier promptVersion 必须是 ${SUPPORTED_JUDGE_PROMPT_VERSIONS.join(' 或 ')}`)
   }
   const timestamp = new Date(input.now?.() ?? Date.now()).toISOString()
   const bindings = await fixtureBindings(fixtures)

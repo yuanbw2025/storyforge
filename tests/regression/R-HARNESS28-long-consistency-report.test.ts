@@ -141,6 +141,8 @@ describe('R-HARNESS28 · H4 long-consistency evidence report', () => {
     expect(prompt).not.toContain('<p>')
     expect(prompt).not.toContain('hidden-marker')
     expect(prompt).toContain('不要输出字符偏移')
+    expect(prompt).toContain('必须直接从来源 content 复制完整原句')
+    expect(prompt).toContain('宁可不报告，也不得输出推测或改写引文')
   })
 
   it('derives category, offsets, source hashes, disposition and metrics in code', async () => {
@@ -182,7 +184,7 @@ describe('R-HARNESS28 · H4 long-consistency evidence report', () => {
       verifier: {
         provider: 'provider-b',
         model: 'verifier-b',
-        promptVersion: 'h4-long-consistency-judge-v1',
+        promptVersion: 'h4-long-consistency-judge-v2',
       },
       generationUsage: { inputTokens: 4_000, outputTokens: 8_000, durationMs: 12_000, costUsd: 0.4 },
       sources: SOURCES,
@@ -196,6 +198,8 @@ describe('R-HARNESS28 · H4 long-consistency evidence report', () => {
       },
     })
     expect(visiblePrompt).toContain('intentional 和 ambiguous')
+    expect(visiblePrompt).toContain('逐条执行字面回查')
+    expect(artifact.benchmark.judgePromptVersion).toBe('h4-long-consistency-judge-v2')
     expect(artifact.execution.verifierUsage).toEqual({
       inputTokens: 321,
       outputTokens: 45,

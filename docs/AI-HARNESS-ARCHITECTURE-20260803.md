@@ -1384,6 +1384,14 @@ CHIRON 四类信息可映射到现有结构：
 - 旧 `runEvalInBrowser()`、`runPairedEvalInBrowser()`、独立 `semantic-judge.ts`、NS-0/NS-1 结果 key 和开发按钮已删除。17+4 旧夹具只保留纯构造/确定性评分回归及 H17 依赖，不能形成第二条外部模型入口；
 - `R-HARNESS28-long-consistency-browser-storage` 与 `R-HARNESS17-context-compression-eval-ui` 覆盖逐例持久化、刷新恢复、不重复调用、损坏拒绝、split 隔离、旧按钮不可达、H17 保留以及共享危险确认对话框的取消/清除双分支。测试使用模拟 provider/jsdom；真实浏览器关闭重开、真实 provider 40+20 与人工 held-out 复核仍未交付。
 
+**真实 development 证据与凭证隔离状态（HARNESS-82，2026-08-15）**
+
+- 设置页不再只展示 verifier 名称：明确标出静态 `fixture/h4-synthetic-corpus` generator，显示完整 checkpoint hash、最后协议失败、验证调用/token/估算成本/累计延迟，并增加验签后复制 checkpoint JSON 的下载降级路径；失败 evidence 不再只剩 aggregate gate 文案；
+- judge v2 在不读取 hidden label 的前提下，加强完整原句、逐字唯一搜索和“无法回查则不报告”的通用协议；judge v3 进一步把同一 Prompt 绑定 OpenAI-compatible JSON object transport。v1/v2/v3 都由 artifact benchmark 与 verifier binding 精确区分，旧 artifact 继续可验签；exact-key、逐字来源、唯一定位和 hidden-label 隔离门槛没有放宽；
+- AI 预设的 session-only Key 改为按 preset id 保存在 `sessionStorage`。刷新、跨 provider 应用和后台任务路由可取回各自 Key，localStorage 预设仍为空；没有会话 Key 的异 provider 预设不再错误继承当前 Key，删除预设同步清理会话 Key；
+- 真实浏览器中 Agnes 2.5 Flash 与 Doubao 1.5 Pro 32K 文本连接均成功并完成多轮 development 尝试。Doubao v1/v3 均在 16/40 终止；Agnes v1/v2/v3 分别在 2/40、13/40、14/40 终止。所有已接收 issue 的逐字 evidence verification 为 100%，但没有模型同时完成 40 例并达到 90% precision / 80% recall；
+- 失败 checkpoint 已以 `0600` 权限保存到本机 Downloads，去内容化 hash、质量、token、成本和延迟见 `docs/evals/HARNESS-82-REAL-MODEL-EVIDENCE-20260815.md`。development 未通过，所以 held-out 继续锁定；fan-out、native tool transport 和自动语义审查继续默认关闭。该结果是可信负面发布证据，不是 H4 完成或真实 generator 质量收益。
+
 **范围**
 
 - 建立 40 个 development + 20 个 sealed held-out 的中文长篇用例，目标每例 8,000–12,000 中文字符；

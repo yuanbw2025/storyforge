@@ -23,6 +23,7 @@ import {
 const STORAGE_KEY = 'storyforge-ai-config'
 const PRESETS_KEY = 'storyforge-ai-presets'
 const SESSION_API_KEY = 'storyforge-ai-api-key-session'
+const PRESET_SESSION_API_KEYS = 'storyforge-ai-preset-api-keys-session'
 const REMEMBER_API_KEY = 'storyforge-ai-api-key-remember'
 const EMBEDDING_KEY = 'storyforge-embedding-config'
 const EMBEDDING_SESSION_KEY = 'storyforge-embedding-key-session'
@@ -87,6 +88,32 @@ function loadPresets(): AIConfigPreset[] {
 
 function savePresets(presets: AIConfigPreset[]) {
   localStorage.setItem(PRESETS_KEY, JSON.stringify(presets))
+}
+
+function loadPresetSessionApiKeys(): Record<string, string> {
+  try {
+    const raw = sessionStorage.getItem(PRESET_SESSION_API_KEYS)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => (
+      typeof entry[0] === 'string' && typeof entry[1] === 'string' && entry[1].length > 0
+    )))
+  } catch {
+    return {}
+  }
+}
+
+function savePresetSessionApiKey(id: string, apiKey: string): void {
+  const keys = loadPresetSessionApiKeys()
+  if (apiKey) keys[id] = apiKey
+  else delete keys[id]
+  if (Object.keys(keys).length) sessionStorage.setItem(PRESET_SESSION_API_KEYS, JSON.stringify(keys))
+  else sessionStorage.removeItem(PRESET_SESSION_API_KEYS)
+}
+
+export function getAIConfigPresetSessionApiKey(id: string): string {
+  return loadPresetSessionApiKeys()[id] || ''
 }
 
 function loadTaskRoutes(): AITaskRoutes {
@@ -306,6 +333,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
     }
     const presets = [...get().presets, preset]
     savePresets(presets)
+    savePresetSessionApiKey(id, get().rememberApiKey ? '' : get().config.apiKey)
     set({ presets, activePresetId: id, editingPresetId: id })
     return id
   },
@@ -313,7 +341,11 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   applyPreset: (id: string) => {
     const preset = get().presets.find(p => p.id === id)
     if (!preset) return
-    const newConfig = normalizeConfigModel({ ...preset.config, apiKey: preset.config.apiKey || get().config.apiKey })
+    const current = get().config
+    const apiKey = preset.config.apiKey
+      || getAIConfigPresetSessionApiKey(id)
+      || (preset.config.provider === current.provider ? current.apiKey : '')
+    const newConfig = normalizeConfigModel({ ...preset.config, apiKey })
     persistConfig(newConfig, get().rememberApiKey)
     set({ config: newConfig, activePresetId: id, editingPresetId: id })
   },
@@ -324,6 +356,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
       config: presetConfig(get().config, get().rememberApiKey),
     } : p)
     savePresets(presets)
+    savePresetSessionApiKey(id, get().rememberApiKey ? '' : get().config.apiKey)
     set({ presets, activePresetId: id, editingPresetId: id })
   },
 
@@ -340,6 +373,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
     ) as AITaskRoutes
     savePresets(presets)
     saveTaskRoutes(taskRoutes)
+    savePresetSessionApiKey(id, '')
     set({
       presets,
       taskRoutes,

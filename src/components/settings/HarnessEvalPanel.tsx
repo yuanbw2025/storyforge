@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, LoaderCircle, Play, RotateCcw, ShieldCheck } from 'lucide-react'
+import { ClipboardCopy, Download, LoaderCircle, Play, RotateCcw, ShieldCheck } from 'lucide-react'
 import { chat, type ChatResult } from '../../lib/ai/client'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { estimateTokens } from '../../lib/ai/context-budget'
@@ -16,7 +16,7 @@ import {
   exportH4LongConsistencyRunCheckpointV1,
   H4_LONG_CONSISTENCY_FIXTURE_VERSION_V1,
   loadH4LongConsistencyBrowserStateV1,
-  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1,
+  LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1,
   persistH4LongConsistencyBrowserCheckpointV1,
   runH4LongConsistencyVerifierV1,
   scoreH4LongConsistencyCheckpointV1,
@@ -111,6 +111,9 @@ async function callH4Verifier(
       { category: 'eval.h4.verifier', contextOverflowPolicy: 'reject' },
       controller.signal,
       result,
+      input.verifier.promptVersion === LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1
+        ? { responseFormat: 'json_object' }
+        : undefined,
     )
     const inputTokens = result.usage?.inputTokens
       ?? input.messages.reduce((sum, message) => sum + estimateTokens(message.content), 0)
@@ -149,6 +152,7 @@ export default function HarnessEvalPanel() {
   const [compressionRecords, setCompressionRecords] = useState<ContextCompressionEvalRecordV1[]>([])
   const [runningSplit, setRunningSplit] = useState<EvalSplit | null>(null)
   const [compressionRunning, setCompressionRunning] = useState(false)
+  const [copiedSplit, setCopiedSplit] = useState<EvalSplit | null>(null)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
 
@@ -213,7 +217,7 @@ export default function HarnessEvalPanel() {
           verifier: {
             provider: config.provider,
             model: config.model,
-            promptVersion: LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1,
+            promptVersion: LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1,
           },
         },
         call: input => callH4Verifier(input, config),
@@ -258,6 +262,19 @@ export default function HarnessEvalPanel() {
     try {
       const raw = await exportH4LongConsistencyRunCheckpointV1(checkpoint)
       downloadJson(raw, `storyforge-h4-${split}-${checkpoint.runId}.json`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+
+  const copySplit = async (split: EvalSplit) => {
+    const checkpoint = splits[split].checkpoint
+    if (!checkpoint) return
+    try {
+      const raw = await exportH4LongConsistencyRunCheckpointV1(checkpoint)
+      await navigator.clipboard.writeText(raw)
+      setCopiedSplit(split)
+      setError('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
@@ -308,6 +325,7 @@ export default function HarnessEvalPanel() {
     const state = splits[split]
     const checkpoint = state.checkpoint
     const score = state.score
+    const latestFailure = checkpoint?.failures[checkpoint.failures.length - 1] ?? null
     const isRunning = runningSplit === split
     const isResumable = checkpoint?.status === 'running'
     const locked = checkpoint != null && checkpoint.status !== 'running'
@@ -319,7 +337,7 @@ export default function HarnessEvalPanel() {
             <h4 className="text-xs font-medium text-text-primary">{label}</h4>
             <p className="mt-0.5 text-[11px] text-text-muted">
               {checkpoint
-                ? `${checkpoint.execution.verifier.provider}/${checkpoint.execution.verifier.model} · ${STATUS_LABELS[checkpoint.status]} · ${checkpoint.completed.length}/${checkpoint.fixtureIds.length}`
+                ? `生成 ${checkpoint.execution.generator.provider}/${checkpoint.execution.generator.model} · 验证 ${checkpoint.execution.verifier.provider}/${checkpoint.execution.verifier.model} · ${STATUS_LABELS[checkpoint.status]} · ${checkpoint.completed.length}/${checkpoint.fixtureIds.length}`
                 : split === 'development' ? '40 例' : '20 例 · development 通过后解锁'}
             </p>
           </div>
@@ -335,6 +353,18 @@ export default function HarnessEvalPanel() {
                 : <Play className="h-3.5 w-3.5" />}
               {isRunning ? progress : isResumable ? '继续' : '运行'}
             </button>
+            {checkpoint && (
+              <button
+                type="button"
+                onClick={() => { void copySplit(split) }}
+                disabled={runningSplit != null}
+                title={copiedSplit === split ? '已复制 checkpoint JSON' : '复制 checkpoint JSON'}
+                aria-label={`复制 ${label}`}
+                className="grid h-8 w-8 place-items-center rounded-md text-text-muted hover:bg-bg-hover hover:text-text-primary disabled:opacity-40"
+              >
+                <ClipboardCopy className="h-3.5 w-3.5" />
+              </button>
+            )}
             {checkpoint && (
               <button
                 type="button"
@@ -369,11 +399,29 @@ export default function HarnessEvalPanel() {
             <span className={score.gate.passed ? 'text-success' : 'text-error'}>
               {score.gate.passed ? '门禁 PASS' : `门禁 FAIL · ${score.gate.failures.join(', ')}`}
             </span>
-            <span>调用 {score.usage.modelCalls}</span>
-            <span>输入 {score.usage.inputTokens} tokens</span>
-            <span>输出 {score.usage.outputTokens} tokens</span>
-            <span>估算成本 ${score.usage.costUsd.toFixed(4)}</span>
+            <span>验证调用 {score.usage.modelCalls}</span>
+            <span>验证输入 {score.usage.inputTokens} tokens</span>
+            <span>验证输出 {score.usage.outputTokens} tokens</span>
+            <span>验证估算成本 ${score.usage.costUsd.toFixed(4)}</span>
+            <span>累计延迟 {(score.usage.durationMs / 1_000).toFixed(1)}s</span>
           </div>
+        )}
+        {checkpoint && (
+          <p
+            data-testid={`h4-${split}-checkpoint-hash`}
+            className="mt-2 break-all font-mono text-[10px] text-text-muted"
+          >
+            checkpoint {checkpoint.checkpointHash}
+          </p>
+        )}
+        {latestFailure && (
+          <p
+            data-testid={`h4-${split}-failure`}
+            className="mt-2 break-words text-[11px] text-error"
+          >
+            最近失败：{latestFailure.code} · {latestFailure.message}
+            {latestFailure.usage == null ? ' · 未取得 provider 用量' : ''}
+          </p>
         )}
       </section>
     )

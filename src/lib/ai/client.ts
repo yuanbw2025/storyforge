@@ -4,7 +4,7 @@ import { createLog, updateLog, type TokenUsage } from './logger'
 import { recordUsage } from './usage-log'
 import { estimateTokens, trimMessagesToFit } from './context-budget'
 import { buildOpenAIEndpoint } from './openai-endpoint'
-import { useAIConfigStore } from '../../stores/ai-config'
+import { getAIConfigPresetSessionApiKey, useAIConfigStore } from '../../stores/ai-config'
 import { resolveAIConfigForTask, type AITaskKind } from './task-routing'
 
 /** 调用元信息（用于消耗统计分类） */
@@ -27,7 +27,13 @@ export function resolveRequestConfig(config: AIConfig, meta?: AICallMeta) {
     category: meta?.category,
     requestedConfig: config,
     globalConfig: state.config,
-    presets: state.presets,
+    presets: state.presets.map(preset => ({
+      ...preset,
+      config: {
+        ...preset.config,
+        apiKey: preset.config.apiKey || getAIConfigPresetSessionApiKey(preset.id),
+      },
+    })),
     routes: state.taskRoutes,
     explicitOverrides: meta?.configOverrides,
   })
@@ -83,15 +89,17 @@ export interface ChatToolDefinition {
 }
 
 export interface ChatRequestOptions {
-  tools: readonly ChatToolDefinition[]
-  toolChoice: 'auto'
+  tools?: readonly ChatToolDefinition[]
+  toolChoice?: 'auto'
+  responseFormat?: 'json_object'
 }
 
 export function estimateChatRequestOptionsTokens(options?: ChatRequestOptions): number {
-  return options ? estimateTokens(JSON.stringify({
-    tools: options.tools,
-    tool_choice: options.toolChoice,
-  })) : 0
+  if (!options) return 0
+  return estimateTokens(JSON.stringify({
+    ...(options.tools ? { tools: options.tools, tool_choice: options.toolChoice } : {}),
+    ...(options.responseFormat ? { response_format: { type: options.responseFormat } } : {}),
+  }))
 }
 
 /**
@@ -109,10 +117,11 @@ function buildRequest(
     messages,
     stream,
   }
-  if (options) {
+  if (options?.tools) {
     body.tools = options.tools
     body.tool_choice = options.toolChoice
   }
+  if (options?.responseFormat) body.response_format = { type: options.responseFormat }
 
   // 流式请求时要求返回 token 用量
   // stream_options 仅 OpenAI / DeepSeek / Qwen 等兼容 provider 支持

@@ -304,9 +304,9 @@ HARNESS-81 最新代码入口：
 | 正文 | 生成/续写、信息隔离、语义 review/revise/review、作者确认采纳和父子 Run已完成；局部润色/扩写/缩写/改写已进入 durable 候选与精确采纳，查漏保持只读 | 不覆盖已有手稿；长期文学质量和真实 provider 发布证据未完成 |
 | 章后状态 | 六域候选、章节记忆、检索/摘要和确定性一致性守卫进入统一 Run | 语义 Fast/Deep 仍是显式动作；所有状态类型的通用自动采纳不应实现 |
 | 反向反馈 | 影响图、受限作者 patch、确定性重建、作者复核、可信人工修正 pre/post receipt、修正后 current plan、确定性余项 child、两个带 proof 的生成式 child、统一 schedule/共享 slot，以及全部当前节点的闭集执行器政策已完成 | 新增生成类型不再是默认待办；正文与耦合/整章集合派生刻意走精确人工链。真实模型质量、成本、延迟和人工 held-out 证据仍缺 |
-| 评测/发布 | 大量模块回归、H4 工程基座、配对 gate 和防篡改证据存在 | 真实外部模型 H4 40+20 artifact、人工 held-out 复核、真实质量/成本/延迟净收益未完成 |
+| 评测/发布 | 大量模块回归、H4 工程基座、配对 gate 和防篡改证据存在；HARNESS-82 已取得 Agnes 2.5 Flash 与 Doubao 1.5 Pro 文本的真实 development 负面 artifact，并补齐 session-only 双预设 Key 隔离 | 两模型均未通过完整 development 门；可靠独立 verifier、H4 40+20、人工 held-out、真实 generator 主路径质量/成本/延迟净收益仍未完成 |
 
-## 8. 当前停点：HARNESS-81 已实现并完成全量交付验证
+## 8. 当前停点：HARNESS-82 已取得真实负面证据，发布门保持关闭
 
 ### 8.1 已通过
 
@@ -658,11 +658,12 @@ tests/regression/R-HARNESS64-story-timeline-extraction-durable.test.ts
 
 H64 专属回归、H59/H63/H64 联合回归通过；`docs/roadmap/README.md`、`docs/roadmap/CAPABILITY-BASELINE.md`、`docs/AI-HARNESS-AUDIT-20260807.md`、本文、`docs/AI-FUNCTIONS-MANUAL.md`、生成版 AI manual、`docs/DATA-FLOW-DIAGRAM.md` 和项目指标均随独立完成提交同步，不 amend `757ce47`。
 
-### 17.5 H81 完成后的总路线
+### 17.5 H82 真实 verifier 证据后的总路线
 
-H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77/H78/H79 已从 fresh H57 current plan 交付带直接依赖 proof 的章纲摘要和单事件年表两个生成目标，H80 已用 canonical schedule 与共享 generation slot 闭合跨类型调度和完成语义，H81 又为全部当前节点冻结 exact executor policy。当前没有证据支持继续增加生成式目标；未来若产品要求集合级自动重建，必须另行冻结删除/新增范围、集合 baseline、CAS 和终验，不能复用单记录 item 偷渡。下一阶段取得：
+H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77/H78/H79 已从 fresh H57 current plan 交付带直接依赖 proof 的章纲摘要和单事件年表两个生成目标，H80 已用 canonical schedule 与共享 generation slot 闭合跨类型调度和完成语义，H81 又为全部当前节点冻结 exact executor policy。H82 用 Agnes 2.5 Flash 与 Doubao 1.5 Pro 文本真实运行冻结 development，分别在严格 JSON/证据协议和质量门前失败；因此当前没有证据支持继续增加生成式目标或打开更宽运行能力。未来若产品要求集合级自动重建，必须另行冻结删除/新增范围、集合 baseline、CAS 和终验，不能复用单记录 item 偷渡。下一阶段取得：
 
-- 真实外部模型的质量、人工修改量、完成率、token、成本、延迟和 p95 证据；H4 development 40 + held-out 20 必须使用真实独立 generator/verifier artifact，并完成人工 held-out 复核。
+- 取得能通过冻结 H4 development 的可靠独立 verifier 后，才运行 20 例 held-out；当前两款免费文本模型的负面结果、checkpoint hash、token、估算成本和延迟已记录在 `docs/evals/HARNESS-82-REAL-MODEL-EVIDENCE-20260815.md`，不得重复冒充 PASS。
+- 真实 generator 主路径仍须另做旧入口/Agent+Harness 配对，记录质量、人工修改量、完成率、token、成本、延迟和 p95，并完成人工 held-out 复核；H4 静态合成 generator 不等于真实生成证据。
 - 独立浏览器数据中的真实 UI/API E2E，不得修改作者当前预览项目。
 - 根 `AGENTS.md` 要求的全部架构、表、AI manual、TypeScript、相关测试、构建、bundle、`npm run ci` 与适用的 `npm run ci:e2e` 证据。
 

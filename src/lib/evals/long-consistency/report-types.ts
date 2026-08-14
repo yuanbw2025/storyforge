@@ -26,6 +26,10 @@ export type LongConsistencyIntentClassificationV1 = typeof LONG_CONSISTENCY_INTE
 
 export type LongConsistencyDispositionV1 = 'hard-conflict' | 'advisory'
 export type LongConsistencyEvalTaskV1 = 'generation' | 'continuation' | 'expansion' | 'completion'
+export type LongConsistencyJudgePromptVersionV1 =
+  | 'h4-long-consistency-judge-v1'
+  | 'h4-long-consistency-judge-v2'
+  | 'h4-long-consistency-judge-v3'
 
 export interface LongConsistencyReportSourceInputV1 {
   id: string
@@ -102,7 +106,7 @@ export interface LongConsistencyEvalArtifactV1 {
   benchmark: {
     version: 'storyforge-h4-evidence-v1'
     taxonomyVersion: 'constory-bench-19-v1'
-    judgePromptVersion: 'h4-long-consistency-judge-v1'
+    judgePromptVersion: LongConsistencyJudgePromptVersionV1
   }
   evidenceProtocol: {
     normalizationVersion: 'chapter-text-v1'

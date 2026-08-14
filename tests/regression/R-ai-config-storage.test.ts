@@ -4,6 +4,7 @@ import { PROVIDER_MODELS, PROVIDER_PRESETS } from '../../src/lib/types'
 
 const CONFIG_KEY = 'storyforge-ai-config'
 const SESSION_KEY = 'storyforge-ai-api-key-session'
+const PRESET_SESSION_KEYS = 'storyforge-ai-preset-api-keys-session'
 const REMEMBER_KEY = 'storyforge-ai-api-key-remember'
 
 async function freshStore() {
@@ -63,6 +64,66 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
 
     const presets = JSON.parse(localStorage.getItem('storyforge-ai-presets') || '[]')
     expect(presets[0].config.apiKey).toBe('')
+  })
+
+  it('session-only 模式按预设隔离 API Key，跨 provider 切换和刷新都不串用', async () => {
+    const useAIConfigStore = await freshStore()
+    useAIConfigStore.getState().setConfig({
+      provider: 'agnes',
+      model: 'agnes-2.5-flash',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      apiKey: 'agnes-session-key',
+    })
+    const agnesId = useAIConfigStore.getState().saveAsPreset('Agnes')
+    useAIConfigStore.getState().setConfig({
+      provider: 'doubao',
+      model: 'doubao-1-5-pro-32k-250115',
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+      apiKey: 'doubao-session-key',
+    })
+    const doubaoId = useAIConfigStore.getState().saveAsPreset('豆包文本')
+
+    const persistedPresets = JSON.parse(localStorage.getItem('storyforge-ai-presets') || '[]')
+    expect(persistedPresets.map((preset: { config: { apiKey: string } }) => preset.config.apiKey)).toEqual(['', ''])
+    expect(JSON.parse(sessionStorage.getItem(PRESET_SESSION_KEYS) || '{}')).toEqual({
+      [agnesId]: 'agnes-session-key',
+      [doubaoId]: 'doubao-session-key',
+    })
+
+    useAIConfigStore.getState().applyPreset(agnesId)
+    expect(useAIConfigStore.getState().config.apiKey).toBe('agnes-session-key')
+    useAIConfigStore.getState().applyPreset(doubaoId)
+    expect(useAIConfigStore.getState().config.apiKey).toBe('doubao-session-key')
+
+    const reloadedStore = await freshStore()
+    reloadedStore.getState().applyPreset(agnesId)
+    expect(reloadedStore.getState().config.apiKey).toBe('agnes-session-key')
+    reloadedStore.getState().applyPreset(doubaoId)
+    expect(reloadedStore.getState().config.apiKey).toBe('doubao-session-key')
+    reloadedStore.getState().deletePreset(doubaoId)
+    expect(JSON.parse(sessionStorage.getItem(PRESET_SESSION_KEYS) || '{}')).toEqual({
+      [agnesId]: 'agnes-session-key',
+    })
+  })
+
+  it('缺少预设会话 Key 时不跨 provider 继承当前 Key', async () => {
+    const useAIConfigStore = await freshStore()
+    useAIConfigStore.getState().setConfig({
+      provider: 'doubao',
+      model: 'doubao-1-5-pro-32k-250115',
+      apiKey: '',
+    })
+    const doubaoId = useAIConfigStore.getState().saveAsPreset('无 Key 豆包')
+    useAIConfigStore.getState().setConfig({
+      provider: 'agnes',
+      model: 'agnes-2.5-flash',
+      apiKey: 'agnes-only-key',
+    })
+
+    useAIConfigStore.getState().applyPreset(doubaoId)
+
+    expect(useAIConfigStore.getState().config.provider).toBe('doubao')
+    expect(useAIConfigStore.getState().config.apiKey).toBe('')
   })
 
   it('应用预设后修改配置仍保留可覆盖的来源预设', async () => {

@@ -1,6 +1,6 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import HarnessEvalPanel from '../../src/components/settings/HarnessEvalPanel'
 import { DialogProvider } from '../../src/components/shared/Dialog'
 import { H17_CONTEXT_COMPRESSION_RESULTS_STORAGE_KEY } from '../../src/lib/evals/context-compression/runner'
@@ -13,6 +13,7 @@ import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import {
   H4_LONG_CONSISTENCY_FIXTURES_V1,
   clearH4LongConsistencyBrowserCheckpointV1,
+  importH4LongConsistencyRunCheckpointV1,
   loadH4LongConsistencyBrowserStateV1,
   persistH4LongConsistencyBrowserCheckpointV1,
   runH4LongConsistencyVerifierV1,
@@ -24,6 +25,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 const ORIGINAL_AI_CONFIG = structuredClone(useAIConfigStore.getState().config)
+const ORIGINAL_CLIPBOARD = navigator.clipboard
 
 async function flushAsyncEffects(delayMs = 1_000): Promise<void> {
   await act(async () => {
@@ -116,6 +118,7 @@ afterEach(async () => {
   clearH4LongConsistencyBrowserCheckpointV1('development')
   clearH4LongConsistencyBrowserCheckpointV1('held-out')
   useAIConfigStore.setState({ config: structuredClone(ORIGINAL_AI_CONFIG) })
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: ORIGINAL_CLIPBOARD })
 })
 
 describe('R-HARNESS17 · 压缩评测面板', () => {
@@ -238,6 +241,73 @@ describe('R-HARNESS17 · 压缩评测面板', () => {
     })
     expect(await loadH4LongConsistencyBrowserStateV1('development')).toBeNull()
     expect(host.querySelector('[data-testid="h4-development-section"]')?.textContent).toContain('40 例')
+  })
+
+  it('surfaces the last H4 provider failure instead of leaving only an aggregate gate failure', async () => {
+    const checkpoint = await runH4LongConsistencyVerifierV1({
+      runId: 'h4-ui-provider-failure',
+      split: 'development',
+      codeRevision: 'h4-ui-test',
+      fixtureIds: ['h4-dev-01'],
+      maxAttemptsPerFixture: 1,
+      execution: {
+        generator: { provider: 'fixture', model: 'h4-synthetic-corpus', promptVersion: 'h4-synthetic-zh-60-v1' },
+        verifier: { provider: 'doubao', model: 'doubao-1-5-pro-32k-250115', promptVersion: 'h4-long-consistency-judge-v1' },
+      },
+      call: async () => { throw new Error('provider request rejected') },
+      now: () => 0,
+    })
+    await persistH4LongConsistencyBrowserCheckpointV1(checkpoint)
+
+    const host = await mountHarness()
+    await flushAsyncEffects()
+
+    const failure = host.querySelector('[data-testid="h4-development-failure"]')
+    const section = host.querySelector('[data-testid="h4-development-section"]')
+    expect(section?.textContent).toContain('生成 fixture/h4-synthetic-corpus')
+    expect(section?.textContent).toContain('验证 doubao/doubao-1-5-pro-32k-250115')
+    expect(section?.textContent).toContain(`checkpoint ${checkpoint.checkpointHash}`)
+    expect(section?.textContent).toContain('累计延迟 0.0s')
+    expect(failure?.textContent).toContain('verifier_error · provider request rejected')
+    expect(failure?.textContent).toContain('未取得 provider 用量')
+  })
+
+  it('copies an integrity-checked H4 checkpoint when browser downloads are unavailable', async () => {
+    const fixture = H4_LONG_CONSISTENCY_FIXTURES_V1[0]
+    const checkpoint = await runH4LongConsistencyVerifierV1({
+      runId: 'h4-ui-copy',
+      split: 'development',
+      codeRevision: 'h4-ui-test',
+      fixtureIds: [fixture.id],
+      execution: {
+        generator: { provider: 'fixture', model: 'h4-synthetic-corpus', promptVersion: 'h4-synthetic-zh-60-v1' },
+        verifier: { provider: 'independent', model: 'h4-ui-verifier', promptVersion: 'h4-long-consistency-judge-v1' },
+      },
+      call: async () => ({
+        output: JSON.stringify({ schemaVersion: 1, issues: [] }),
+        usage: { inputTokens: 1_000, outputTokens: 100, durationMs: 10, costUsd: 0.01 },
+      }),
+      now: () => 0,
+    })
+    await persistH4LongConsistencyBrowserCheckpointV1(checkpoint)
+    const writeText = vi.fn(async (_raw: string) => undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+
+    const host = await mountHarness()
+    await flushAsyncEffects()
+    const copyButton = host.querySelector<HTMLButtonElement>('[aria-label="复制 H4 Development"]')
+    expect(copyButton).not.toBeNull()
+    await act(async () => {
+      clickButton(copyButton)
+      await new Promise(resolve => setTimeout(resolve, 100))
+    })
+
+    expect(writeText).toHaveBeenCalledTimes(1)
+    const raw = writeText.mock.calls[0][0]
+    await expect(importH4LongConsistencyRunCheckpointV1(raw)).resolves.toEqual(checkpoint)
   })
 
   it('恢复三路汇总并同时展示生成输入缩减和总输入倍率', async () => {

@@ -35,6 +35,17 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-82 完成卡：真实 verifier 证据与双模型会话凭证隔离
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-82` 评测与发布治理任务。开发者可用两个真实文本 provider 运行 H4 development，并取得可恢复、可复制、可验签的质量、token、成本、延迟和失败证据；未记住本机的多预设 API Key 必须按预设隔离，不能在切换 provider 时串用。 |
+| 主归属 / 复用 | 归 H4/H5 评测发布；复用 `h4-synthetic-zh-60-v1`、H28 runner/scorer/browser checkpoint、共享 `chat()` 和 AI 预设，不新增表、Canon、模型入口或平行评测运行时。 |
+| 范围 / 非范围 | 增加 judge v2 的逐字唯一证据协议与 v3 JSON object transport；页面明确区分静态合成 generator 与真实 verifier，展示最后失败、完整 checkpoint hash、验证用量/估算成本/累计延迟，并提供完整性校验后的剪贴板备份。真实 generator 质量、主路径 A/B、人工 held-out 和质量净收益不在本单元内，不能拿 H4 verifier 结果冒充。 |
+| 凭证 / 隐私 | session-only 预设 Key 以 preset id 写入 `sessionStorage`，刷新和任务路由可恢复；localStorage 预设继续只保存空 Key。应用无会话 Key 的异 provider 预设不再继承当前 provider Key；删除预设同步删除会话 Key。零凭证进入仓库、日志或 checkpoint。 |
+| 真实结果 / 发布门 | Doubao v1 为 16/40、80% precision、75% recall 后因非唯一引文终止；Agnes v1/v2/v3 分别在 2/40、13/40、14/40 终止；Doubao v3 为 16/40、61.5% precision、50% recall 后终止。所有证据回查为 100%，各 checkpoint 已以 `0600` 权限归档到本机 Downloads，去内容化结果见 `docs/evals/HARNESS-82-REAL-MODEL-EVIDENCE-20260815.md`。两模型均未达到 90%/80% development 门，因此 held-out 继续锁定，fan-out、原生 tool transport 和自动语义审查继续默认关闭。 |
+| 验收 / 回滚 | H4 report/runner/storage/UI、JSON transport、预设存储与真实任务路由定向回归 85/85，通过完整 `npm run ci`（1,794 tests）与隔离 `npm run ci:e2e`（52/52）；旧 judge v1/v2 artifact 继续可验签，v3 只增加受版本绑定的 JSON object 请求。移除 v3 可回到 v2 严格文本 JSON，移除 session preset key 可回到单全局会话 Key，但不得重新允许跨 provider 继承。 |
+
 ### HARNESS-81 完成卡：H57 下游执行器政策闭集
 
 | 项目 | 冻结边界 |
