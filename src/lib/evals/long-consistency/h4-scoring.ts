@@ -87,6 +87,37 @@ export interface H4LongConsistencySealedScoreV1 {
   scoreHash: string
 }
 
+export interface H4LongConsistencyIssueCaseV1 {
+  fixtureId: string
+  issues: readonly LongConsistencyIssueV1[]
+}
+
+export interface H4LongConsistencyMetricSummaryV1 {
+  taskCounts: Record<LongConsistencyEvalTaskV1, number>
+  highSeverityHard: {
+    truePositive: number
+    falsePositive: number
+    falseNegative: number
+    precision: H4WilsonIntervalV1
+    recall: H4WilsonIntervalV1
+  }
+  evidence: {
+    reportedPairs: number
+    verifiedPairs: number
+    verificationRate: H4WilsonIntervalV1
+  }
+  intentControls: {
+    cases: number
+    hardEscalations: number
+    escalationRate: H4WilsonIntervalV1
+  }
+  cleanControls: {
+    cases: number
+    hardFalsePositives: number
+    falsePositiveRate: H4WilsonIntervalV1
+  }
+}
+
 interface ExpectedSpan {
   sourceId: string
   startOffset: number
@@ -109,7 +140,7 @@ function unit(value: number, path: string): number {
   return value
 }
 
-function resolveThresholds(
+export function resolveH4LongConsistencyReleaseThresholdsV1(
   split: H4LongConsistencyRunCheckpointV1['split'],
   override?: Partial<H4LongConsistencyReleaseThresholdsV1>,
 ): H4LongConsistencyReleaseThresholdsV1 {
@@ -196,61 +227,21 @@ function taskCounts(fixtures: readonly H4LongConsistencyFixtureV1[]): Record<Lon
   return result
 }
 
-function scoreBody(score: H4LongConsistencySealedScoreV1): Omit<H4LongConsistencySealedScoreV1, 'scoreHash'> {
-  const { scoreHash: _scoreHash, ...body } = score
-  return body
-}
-
-function evaluateGate(input: {
-  checkpoint: H4LongConsistencyRunCheckpointV1
-  completedCases: number
-  precision: H4WilsonIntervalV1
-  recall: H4WilsonIntervalV1
-  evidenceRate: H4WilsonIntervalV1
-  intentRate: H4WilsonIntervalV1
-  cleanRate: H4WilsonIntervalV1
-  thresholds: H4LongConsistencyReleaseThresholdsV1
-}): H4LongConsistencySealedScoreV1['gate'] {
-  const failures: H4LongConsistencyGateFailureV1[] = []
-  if (input.checkpoint.status !== 'completed') failures.push('run-not-completed')
-  if (input.completedCases < input.thresholds.minimumCompletedCases) failures.push('minimum-completed-cases')
-  if (
-    input.precision.estimate == null
-    || input.precision.estimate < input.thresholds.minimumHighSeverityHardPrecision
-  ) failures.push('high-severity-hard-precision')
-  if (input.recall.estimate == null || input.recall.estimate < input.thresholds.minimumHighSeverityHardRecall) {
-    failures.push('high-severity-hard-recall')
-  }
-  if (
-    input.evidenceRate.estimate == null
-    || input.evidenceRate.estimate < input.thresholds.minimumEvidenceVerificationRate
-  ) failures.push('evidence-verification')
-  if (input.intentRate.estimate != null && input.intentRate.estimate > input.thresholds.maximumIntentEscalationRate) {
-    failures.push('intent-escalation')
-  }
-  if (input.cleanRate.estimate != null && input.cleanRate.estimate > input.thresholds.maximumCleanHardFalsePositiveRate) {
-    failures.push('clean-hard-false-positive')
-  }
-  if (input.checkpoint.status === 'budget-exhausted') failures.push('budget-exceeded')
-  if (!input.checkpoint.completed.every(item => item.artifact.execution.modelIdentitySeparated)) {
-    failures.push('identity-separation')
-  }
-  if (input.checkpoint.usage.unmeteredModelCalls > 0) failures.push('usage-evidence-missing')
-  return { passed: failures.length === 0, failures }
-}
-
-export async function scoreH4LongConsistencyCheckpointV1(input: {
-  checkpoint: unknown
-  thresholds?: Partial<H4LongConsistencyReleaseThresholdsV1>
-}): Promise<H4LongConsistencySealedScoreV1> {
-  if (!await verifyH4LongConsistencyRunCheckpointV1(input.checkpoint)) {
-    throw new Error('H4 checkpoint 无法通过完整性验证')
-  }
-  const checkpoint = parseH4LongConsistencyRunCheckpointV1(input.checkpoint)
-  const fixtureById = new Map(getH4LongConsistencyFixturesV1(checkpoint.split).map(fixture => (
+export function computeH4LongConsistencyMetricSummaryV1(
+  split: H4LongConsistencyRunCheckpointV1['split'],
+  cases: readonly H4LongConsistencyIssueCaseV1[],
+): H4LongConsistencyMetricSummaryV1 {
+  const fixtureById = new Map(getH4LongConsistencyFixturesV1(split).map(fixture => (
     [fixture.id, fixture] as const
   )))
-  const completedFixtures = checkpoint.completed.map(item => fixtureById.get(item.fixtureId)!)
+  const seen = new Set<string>()
+  const completedFixtures = cases.map(item => {
+    if (seen.has(item.fixtureId)) throw new Error(`H4 score 重复 fixture ${item.fixtureId}`)
+    seen.add(item.fixtureId)
+    const fixture = fixtureById.get(item.fixtureId)
+    if (!fixture) throw new Error(`H4 score 包含未知 fixture ${item.fixtureId}`)
+    return fixture
+  })
   let truePositive = 0
   let falsePositive = 0
   let falseNegative = 0
@@ -260,9 +251,9 @@ export async function scoreH4LongConsistencyCheckpointV1(input: {
   let cleanCases = 0
   let cleanHardFalsePositives = 0
 
-  for (const completed of checkpoint.completed) {
+  for (const completed of cases) {
     const fixture = fixtureById.get(completed.fixtureId)!
-    const predictedHigh = completed.artifact.issues.filter(issue => (
+    const predictedHigh = completed.issues.filter(issue => (
       issue.disposition === 'hard-conflict' && issue.severity === 'high'
     ))
     const expectedHigh = fixture.hiddenLabels.expectedIssues.filter(issue => (
@@ -281,40 +272,124 @@ export async function scoreH4LongConsistencyCheckpointV1(input: {
       }
     }
     falseNegative += expectedHigh.length - matchedExpected.size
-    reportedPairs += completed.artifact.issues.length
+    reportedPairs += completed.issues.length
 
     const intentExpected = fixture.hiddenLabels.expectedIssues.filter(issue => (
       issue.intentClassification !== 'unintentional'
     ))
     for (const expected of intentExpected) {
       intentCases += 1
-      if (completed.artifact.issues.some(issue => (
+      if (completed.issues.some(issue => (
         issue.disposition === 'hard-conflict' && pairMatches(fixture, issue, expected, false)
       ))) hardEscalations += 1
     }
     if (fixture.hiddenLabels.cleanControl) {
       cleanCases += 1
-      if (completed.artifact.issues.some(issue => issue.disposition === 'hard-conflict')) {
+      if (completed.issues.some(issue => issue.disposition === 'hard-conflict')) {
         cleanHardFalsePositives += 1
       }
     }
   }
 
-  const precision = wilsonInterval95V1(truePositive, truePositive + falsePositive)
-  const recall = wilsonInterval95V1(truePositive, truePositive + falseNegative)
-  const evidenceRate = wilsonInterval95V1(reportedPairs, reportedPairs)
-  const intentRate = wilsonInterval95V1(hardEscalations, intentCases)
-  const cleanRate = wilsonInterval95V1(cleanHardFalsePositives, cleanCases)
-  const thresholds = resolveThresholds(checkpoint.split, input.thresholds)
-  const gate = evaluateGate({
-    checkpoint,
+  return {
+    taskCounts: taskCounts(completedFixtures),
+    highSeverityHard: {
+      truePositive,
+      falsePositive,
+      falseNegative,
+      precision: wilsonInterval95V1(truePositive, truePositive + falsePositive),
+      recall: wilsonInterval95V1(truePositive, truePositive + falseNegative),
+    },
+    evidence: {
+      reportedPairs,
+      verifiedPairs: reportedPairs,
+      verificationRate: wilsonInterval95V1(reportedPairs, reportedPairs),
+    },
+    intentControls: {
+      cases: intentCases,
+      hardEscalations,
+      escalationRate: wilsonInterval95V1(hardEscalations, intentCases),
+    },
+    cleanControls: {
+      cases: cleanCases,
+      hardFalsePositives: cleanHardFalsePositives,
+      falsePositiveRate: wilsonInterval95V1(cleanHardFalsePositives, cleanCases),
+    },
+  }
+}
+
+function scoreBody(score: H4LongConsistencySealedScoreV1): Omit<H4LongConsistencySealedScoreV1, 'scoreHash'> {
+  const { scoreHash: _scoreHash, ...body } = score
+  return body
+}
+
+export function evaluateH4LongConsistencyReleaseGateV1(input: {
+  status: H4LongConsistencyRunCheckpointV1['status'] | 'provider-blocked'
+  completedCases: number
+  precision: H4WilsonIntervalV1
+  recall: H4WilsonIntervalV1
+  evidenceRate: H4WilsonIntervalV1
+  intentRate: H4WilsonIntervalV1
+  cleanRate: H4WilsonIntervalV1
+  thresholds: H4LongConsistencyReleaseThresholdsV1
+  budgetExceeded: boolean
+  identitySeparated: boolean
+  unmeteredModelCalls: number
+}): H4LongConsistencySealedScoreV1['gate'] {
+  const failures: H4LongConsistencyGateFailureV1[] = []
+  if (input.status !== 'completed') failures.push('run-not-completed')
+  if (input.completedCases < input.thresholds.minimumCompletedCases) failures.push('minimum-completed-cases')
+  if (
+    input.precision.estimate == null
+    || input.precision.estimate < input.thresholds.minimumHighSeverityHardPrecision
+  ) failures.push('high-severity-hard-precision')
+  if (input.recall.estimate == null || input.recall.estimate < input.thresholds.minimumHighSeverityHardRecall) {
+    failures.push('high-severity-hard-recall')
+  }
+  if (
+    input.evidenceRate.estimate == null
+    || input.evidenceRate.estimate < input.thresholds.minimumEvidenceVerificationRate
+  ) failures.push('evidence-verification')
+  if (input.intentRate.estimate != null && input.intentRate.estimate > input.thresholds.maximumIntentEscalationRate) {
+    failures.push('intent-escalation')
+  }
+  if (input.cleanRate.estimate != null && input.cleanRate.estimate > input.thresholds.maximumCleanHardFalsePositiveRate) {
+    failures.push('clean-hard-false-positive')
+  }
+  if (input.budgetExceeded) failures.push('budget-exceeded')
+  if (!input.identitySeparated) failures.push('identity-separation')
+  if (input.unmeteredModelCalls > 0) failures.push('usage-evidence-missing')
+  return { passed: failures.length === 0, failures }
+}
+
+export async function scoreH4LongConsistencyCheckpointV1(input: {
+  checkpoint: unknown
+  thresholds?: Partial<H4LongConsistencyReleaseThresholdsV1>
+}): Promise<H4LongConsistencySealedScoreV1> {
+  if (!await verifyH4LongConsistencyRunCheckpointV1(input.checkpoint)) {
+    throw new Error('H4 checkpoint 无法通过完整性验证')
+  }
+  const checkpoint = parseH4LongConsistencyRunCheckpointV1(input.checkpoint)
+  const metrics = computeH4LongConsistencyMetricSummaryV1(
+    checkpoint.split,
+    checkpoint.completed.map(item => ({
+      fixtureId: item.fixtureId,
+      issues: item.artifact.issues,
+    })),
+  )
+  const thresholds = resolveH4LongConsistencyReleaseThresholdsV1(checkpoint.split, input.thresholds)
+  const gate = evaluateH4LongConsistencyReleaseGateV1({
+    status: checkpoint.status,
     completedCases: checkpoint.completed.length,
-    precision,
-    recall,
-    evidenceRate,
-    intentRate,
-    cleanRate,
+    precision: metrics.highSeverityHard.precision,
+    recall: metrics.highSeverityHard.recall,
+    evidenceRate: metrics.evidence.verificationRate,
+    intentRate: metrics.intentControls.escalationRate,
+    cleanRate: metrics.cleanControls.falsePositiveRate,
     thresholds,
+    budgetExceeded: checkpoint.status === 'budget-exhausted',
+    identitySeparated: checkpoint.completed.every(item => item.artifact.execution.modelIdentitySeparated),
+    unmeteredModelCalls: checkpoint.usage.unmeteredModelCalls,
   })
   const artifactSetHash = await hashCanonicalValue(checkpoint.completed.map(item => ({
     fixtureId: item.fixtureId,
@@ -335,29 +410,11 @@ export async function scoreH4LongConsistencyCheckpointV1(input: {
     fixtureSetHash: checkpoint.fixtureSetHash,
     artifactSetHash,
     completedCases: checkpoint.completed.length,
-    taskCounts: taskCounts(completedFixtures),
-    highSeverityHard: {
-      truePositive,
-      falsePositive,
-      falseNegative,
-      precision,
-      recall,
-    },
-    evidence: {
-      reportedPairs,
-      verifiedPairs: reportedPairs,
-      verificationRate: evidenceRate,
-    },
-    intentControls: {
-      cases: intentCases,
-      hardEscalations,
-      escalationRate: intentRate,
-    },
-    cleanControls: {
-      cases: cleanCases,
-      hardFalsePositives: cleanHardFalsePositives,
-      falsePositiveRate: cleanRate,
-    },
+    taskCounts: metrics.taskCounts,
+    highSeverityHard: metrics.highSeverityHard,
+    evidence: metrics.evidence,
+    intentControls: metrics.intentControls,
+    cleanControls: metrics.cleanControls,
     failedAttempts: checkpoint.failures.length,
     usage: checkpoint.usage,
     thresholds,

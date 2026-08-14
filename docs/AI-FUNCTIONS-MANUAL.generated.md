@@ -231,9 +231,9 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
 | `detail.scene` | `src/lib/ai/batch-detail-runner.ts:193` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
-| `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:78` |
-| `eval.h17.generation` | `src/components/settings/HarnessEvalPanel.tsx:79` |
-| `eval.h4.verifier` | `src/components/settings/HarnessEvalPanel.tsx:108` |
+| `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:118` |
+| `eval.h17.generation` | `src/components/settings/HarnessEvalPanel.tsx:119` |
+| `eval.h4.verifier` | `src/components/settings/HarnessEvalPanel.tsx:148`<br/>`src/components/settings/HarnessEvalPanel.tsx:187` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
@@ -289,4 +289,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `82182ae`
+生成时间基准:commit `3ae7395`

@@ -1412,6 +1412,23 @@ CHIRON 四类信息可映射到现有结构：
   下一实验若拆为候选发现与定向分类，必须逐次记录调用、阶段 hash、用量、成本和身份，不能把多调用
   折叠成一个 attempt。
 
+**已验真证据二阶段判类（HARNESS-85，2026-08-15）**
+
+- `h4-long-consistency-subtype-adjudication-v1` 复用已验签 judge v7 artifact；第二阶段只读取确定性
+  candidate ID、已逐字验证 quote pair 与 taxonomy，物理隔离第一阶段 subtype/summary/severity/intent、
+  hidden label 和完整来源；零候选 case 不产生模型调用；
+- 自包含 H85 checkpoint 内嵌父 checkpoint，并逐调用记录 stage、模型身份、trace/input/output hash、
+  token、成本、延迟、协议失败和 provider 失败。candidate/source/derived set 与父子 hash 均可重算，
+  重签篡改仍 fail closed；
+- 协议失败最多两次且仅使用静态 repair；非重试型 4xx 单次终止。429/瞬时 provider 失败改为一次后
+  `provider-blocked`，只有明确继续才新增调用，且不消耗协议 repair 次数；旧版两次 429 失败 checkpoint
+  可验签续跑；
+- 真实 Agnes development 从父 v7 的 TP/FP/FN 21/13/11 提升到 26/7/6，precision/recall 从
+  61.8%/65.6% 提升到 78.8%/81.3%，证据 35/35、intent 与 clean 均零误升级；但 precision 未达 90%，
+  两次旧 429 又造成 unmetered usage，故 gate 仍 FAIL，held-out 未运行；
+- 证据见 `docs/evals/HARNESS-85-TWO-STAGE-ADJUDICATION-EVIDENCE-20260815.md`。本单元只改评测
+  控制面，不新增表、Context Source、可写字段、业务模型入口或生产 gate。
+
 **范围**
 
 - 建立 40 个 development + 20 个 sealed held-out 的中文长篇用例，目标每例 8,000–12,000 中文字符；

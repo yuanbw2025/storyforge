@@ -12,11 +12,16 @@ import type {
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import {
   H4_LONG_CONSISTENCY_FIXTURES_V1,
+  H4_SUBTYPE_ADJUDICATION_PROMPT_VERSION_V1,
   clearH4LongConsistencyBrowserCheckpointV1,
+  clearH4SubtypeAdjudicationBrowserCheckpointV1,
   importH4LongConsistencyRunCheckpointV1,
+  importH4SubtypeAdjudicationCheckpointV1,
   loadH4LongConsistencyBrowserStateV1,
   persistH4LongConsistencyBrowserCheckpointV1,
+  persistH4SubtypeAdjudicationBrowserCheckpointV1,
   runH4LongConsistencyVerifierV1,
+  runH4SubtypeAdjudicationV1,
   type H4LongConsistencyVerifierCallInputV1,
 } from '../../src/lib/evals/long-consistency'
 import { useAIConfigStore } from '../../src/stores/ai-config'
@@ -117,6 +122,8 @@ afterEach(async () => {
   localStorage.removeItem(H17_CONTEXT_COMPRESSION_RESULTS_STORAGE_KEY)
   clearH4LongConsistencyBrowserCheckpointV1('development')
   clearH4LongConsistencyBrowserCheckpointV1('held-out')
+  clearH4SubtypeAdjudicationBrowserCheckpointV1('development')
+  clearH4SubtypeAdjudicationBrowserCheckpointV1('held-out')
   useAIConfigStore.setState({ config: structuredClone(ORIGINAL_AI_CONFIG) })
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: ORIGINAL_CLIPBOARD })
 })
@@ -130,6 +137,13 @@ describe('R-HARNESS17 · 压缩评测面板', () => {
     expect(host.textContent).toContain('40 例')
     expect(host.textContent).toContain('H4 Held-out')
     expect(host.textContent).toContain('20 例')
+    expect(host.textContent).toContain('H85 两阶段判类 Development')
+    expect(host.textContent).toContain('H85 两阶段判类 Held-out')
+    expect(host.querySelector<HTMLButtonElement>(
+      '[data-testid="h85-development-section"] button',
+    )?.disabled).toBe(true)
+    expect(host.querySelector('[data-testid="h85-development-section"]')?.textContent)
+      .toContain('需要同 split 已完成的 H4 judge v7 父 checkpoint')
     expect(host.textContent).not.toContain('NS-0 长期一致性基线')
     expect(host.textContent).not.toContain('NS-1 最终配对 A/B')
   })
@@ -308,6 +322,75 @@ describe('R-HARNESS17 · 压缩评测面板', () => {
     expect(writeText).toHaveBeenCalledTimes(1)
     const raw = writeText.mock.calls[0][0]
     await expect(importH4LongConsistencyRunCheckpointV1(raw)).resolves.toEqual(checkpoint)
+  })
+
+  it('shows an integrity-checked self-contained H85 JSON fallback without exposing case output by default', async () => {
+    const fixture = H4_LONG_CONSISTENCY_FIXTURES_V1[0]
+    const base = await runH4LongConsistencyVerifierV1({
+      runId: 'h85-ui-base',
+      split: 'development',
+      codeRevision: 'h85-ui-test',
+      fixtureIds: [fixture.id],
+      execution: {
+        generator: { provider: 'fixture', model: 'h4-synthetic-corpus', promptVersion: 'h4-synthetic-zh-60-v1' },
+        verifier: { provider: 'agnes', model: 'agnes-2.5-flash', promptVersion: 'h4-long-consistency-judge-v7' },
+      },
+      call: async () => ({
+        output: JSON.stringify({
+          schemaVersion: 1,
+          issues: fixture.hiddenLabels.expectedIssues.map((issue, index) => ({
+            id: `h85-ui-source-${index + 1}`,
+            subtype: issue.subtype,
+            severity: issue.severity,
+            intentClassification: issue.intentClassification,
+            summary: 'H85-CASE-OUTPUT-HIDDEN-BY-DEFAULT',
+            factEvidence: issue.factEvidence,
+            contradictionEvidence: issue.contradictionEvidence,
+          })),
+        }),
+      }),
+      now: () => 0,
+    })
+    const checkpoint = await runH4SubtypeAdjudicationV1({
+      runId: 'h85-ui-export',
+      codeRevision: 'h85-ui-test',
+      baseCheckpoint: base,
+      adjudicator: {
+        provider: 'agnes',
+        model: 'agnes-2.5-flash',
+        promptVersion: H4_SUBTYPE_ADJUDICATION_PROMPT_VERSION_V1,
+      },
+      call: async () => ({
+        output: JSON.stringify({
+          schemaVersion: 1,
+          decisions: fixture.hiddenLabels.expectedIssues.map((issue, index) => ({
+            candidateId: `candidate-${String(index + 1).padStart(2, '0')}`,
+            verdict: 'conflict',
+            subtype: issue.subtype,
+            reason: '证据满足冻结定义。',
+          })),
+        }),
+      }),
+      now: () => 0,
+    })
+    await persistH4SubtypeAdjudicationBrowserCheckpointV1(checkpoint)
+
+    const host = await mountHarness()
+    await flushAsyncEffects()
+    const section = host.querySelector('[data-testid="h85-development-section"]')
+    expect(section?.textContent).toContain('已完成 · 1/1')
+    expect(section?.textContent).not.toContain('H85-CASE-OUTPUT-HIDDEN-BY-DEFAULT')
+    const showButton = section?.querySelector<HTMLButtonElement>(
+      '[aria-label="显示 H85 两阶段判类 Development JSON"]',
+    )
+    expect(showButton).not.toBeNull()
+    await act(async () => {
+      clickButton(showButton)
+      await new Promise(resolve => setTimeout(resolve, 200))
+    })
+    const textarea = section?.querySelector<HTMLTextAreaElement>('[data-testid="h85-development-export-json"]')
+    expect(textarea).not.toBeNull()
+    await expect(importH4SubtypeAdjudicationCheckpointV1(textarea!.value)).resolves.toEqual(checkpoint)
   })
 
   it('恢复三路汇总并同时展示生成输入缩减和总输入倍率', async () => {
