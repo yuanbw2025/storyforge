@@ -45,6 +45,7 @@ export type AgentSkillExecutionModeV1 =
   | 'storyline-progress'
   | 'character-driven'
   | 'character-revision'
+  | 'impact-summary-regenerate'
   | 'volumes'
   | 'chapters'
   | 'details'
@@ -396,6 +397,18 @@ const OUTLINE_CHARACTER_REVISION_CONTEXT_SOURCE_KEYS = [
   'codex',
 ] as const
 
+export const OUTLINE_IMPACT_REGENERATION_CONTEXT_SOURCE_KEYS = [
+  'chapterContent',
+  'chapterOutline',
+  'adjacentChapterOutlines',
+  'canonAssertions',
+  'storyCore',
+  'characters',
+  'storyArcs',
+  'writtenChapterProgress',
+  'consistencyReport',
+] as const
+
 export const OUTLINE_DETAIL_CONTEXT_SOURCE_KEYS = [
   'canonAssertions',
   'chapterOutline',
@@ -724,6 +737,24 @@ const OUTLINE_CHARACTER_REVISION_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+const OUTLINE_IMPACT_REGENERATION_INPUT_POLICY = {
+  sourceKeys: ['chapterContent', 'chapterOutline'],
+  states: {
+    empty: {
+      handling: 'require-upstream',
+      instruction: '缺少来源正文或目标后续章纲时停止重建，不得创建替代目标。',
+    },
+    partial: {
+      handling: 'require-upstream',
+      instruction: '来源正文与目标章纲必须同时存在；资料不完整时保持当前摘要并要求作者补齐。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '严格依据 H57 当前影响项与登记 Context 重建一个后续章纲摘要，只输出可确认候选，不改正文、事实或其它大纲字段。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
 const OUTLINE_CHAPTER_INPUT_POLICY = {
   sourceKeys: ['worldview', 'storyCore', 'characters', 'storyArcs', 'existingVolumeOutlines'],
   states: {
@@ -951,6 +982,9 @@ const OUTLINE_CHARACTER_REVISION_COMPRESSION_POLICY = compressionPolicy([
   'worldRules',
   'codex',
 ])
+const OUTLINE_IMPACT_REGENERATION_COMPRESSION_POLICY = compressionPolicy(
+  OUTLINE_IMPACT_REGENERATION_CONTEXT_SOURCE_KEYS,
+)
 const OUTLINE_DETAIL_COMPRESSION_POLICY = compressionPolicy([
   'detailedOutline',
   'worldview',
@@ -1625,6 +1659,26 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'outline.impact-summary-regenerate',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '影响计划后续章纲摘要重建',
+    owner: 'outline-agent',
+    promptVersion: 'impact-outline-regeneration-v1',
+    executionMode: 'impact-summary-regenerate',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: OUTLINE_IMPACT_REGENERATION_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: OUTLINE_IMPACT_REGENERATION_INPUT_POLICY,
+    contextCompression: OUTLINE_IMPACT_REGENERATION_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [{ table: 'outlineNodes', fields: ['summary'] }],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS77-impact-outline-regeneration'],
+  },
+  {
+    version: 1,
     id: 'outline.compose',
     agentId: 'outline',
     defaultForAgent: true,
@@ -2281,7 +2335,7 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'constitution-extract', 'codex-extract', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
+    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details']),
     prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency']),
   }
   const ids = new Set<string>()

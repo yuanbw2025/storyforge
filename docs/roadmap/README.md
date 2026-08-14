@@ -35,6 +35,19 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-77 完成卡：H57 生成式后续章纲摘要重建
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-77` 小功能。作者完成人工修正并取得 fresh H57 当前计划后，可以让大纲 Agent 为其中一个仍受影响的后续章纲生成新摘要候选；刷新不重复调用模型，只有作者确认后才改正式摘要。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 反向反馈后半链；复用 H56/H57 parent lineage、现有影响图/计划、`outline` Agent、Context Gateway、durable ledger/checkpoint、`FIELD_REGISTRY + AdoptionSchema + adopt(outlineNodes)` 与 terminal receipt，不建立第二个计划器、章纲表或 Harness。 |
+| 范围 / 非范围 | 首个生成式目标类型只允许 fresh H57 `remaining/new` 中非来源章的 `review-outline` 项，且只写 `outlineNodes.summary`。不自动挑选或级联全部目标，不改 title/正文/事实/锁定节点/其它字段，不把 H44 作者手填 patch 冒充模型重建，也不扩展 H58 的确定性表白名单。 |
+| 读 / 写 | 模型只经 `chapterContent / chapterOutline / adjacentChapterOutlines / canonAssertions / storyCore / characters / storyArcs / writtenChapterProgress / consistencyReport` 登记源读取当前上下文；关键正文与目标章纲必须全文进入真实 Prompt。确认后只经 `adopt(target=outlineNodes, mode=merge-diffs)` 写 `summary`。 |
+| 状态机 / 硬验证 | child Run 精确绑定 H57 Run/receipt/output、plan/graph/item；冻结来源正文、完整 Context/Prompt、非目标上游证据和目标业务 baseline。严格 exact-key JSON 仅接受 `summary/reason/evidenceRefs`，证据名必须来自实际分段。一次模型调用；未知结果暂停且不自动重试，重试创建新 child。写入事务内同时做来源与目标 CAS，八个采纳边界沿同一冻结意图幂等收敛。 |
+| 生命周期 / 作用域 | 不新增表/schema；`outlineNodes` 与 ledger 三表均已登记。候选含物理 ID 且 `portable:false`，项目导入后未完成 Run 取消、terminal receipt stale；其它 Work、来源章、已解决项、锁定/删除/漂移目标均不可恢复或采纳。 |
+| UI / 回滚 | H57 影响面板只在存在合格目标时显示“AI 重建章纲候选”；候选展示摘要、理由和登记证据，可确认或放弃。候选存在时隐藏 H44 手填 patch，避免两套候选并行；拒绝或移除 H77 不修改正式数据，原人工修正、H57/H58 与 H44 路径保留。 |
+| 验收 | `R-HARNESS77-impact-outline-regeneration` 12 项与工具栏 10 项覆盖真实 Context/parent、零写候选、严格协议、配置前置、未知模型窗、候选崩溃窗、确认后写前 Context 漂移、来源/目标/Context/H57 stale、八采纳边界、拒绝/重试、完成恢复、终验 stale、作用域和导入生命周期。独立 Chromium 主路径 1/1 通过（10.7 秒）：真实走 H50→H56→H57→H77，刷新恢复时模型仍只调用一次，确认前正式摘要不变，确认后 child/parent 与终态回执、跨刷新正式值均成立。完整 CI 为 368 files / 1762 tests，覆盖率 81.91% statements / 73.87% branches / 79.57% functions / 81.91% lines；3770 模块生产构建、bundle budget 与生产依赖审计通过。完整项目 Chromium E2E 为 52/52（6.3 分钟），其中 H77 路径 10.4 秒。 |
+
 ### HARNESS-58 完成卡：绑定修正后计划的确定性下游重建
 
 | 项目 | 冻结边界 |

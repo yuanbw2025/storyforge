@@ -825,6 +825,15 @@
 - **解析**：`parseAntiAIResult`
 - **写**：无（仅展示）
 
+#### 动作⑬：人工修正后的后续章纲摘要重建（HARNESS-77）
+- **触发**：🔘 作者从当前章节完成影响项人工修正并取得 fresh H57 plan 后，选择一个仍受影响的后续章纲，点击“AI 重建章纲候选”
+- **Agent / Skill**：`outline / outline.impact-summary-regenerate`；Run 是 H57 的直接 child，绑定父 Run/receipt/output、当前 plan/graph/item
+- **读**：只经 `chapterContent / chapterOutline / adjacentChapterOutlines / canonAssertions / storyCore / characters / storyArcs / writtenChapterProgress / consistencyReport` 与 `assembleContext()`；正文与目标章纲必须 full delivery，正式目标 baseline 只由治理层用于 CAS
+- **解析**：严格 exact-key JSON `{summary,reason,evidenceRefs}`；证据引用只能来自实际进入模型的 Context 分段。一次模型调用，未知结果不自动重试
+- **候选 / 恢复**：候选持久化且 `portable:false`，确认前正式摘要零写；刷新恢复同一候选不重复模型调用，拒绝后可显式创建新 child
+- **写**：作者确认且 H57、来源、非目标上游 Context、Prompt 与目标 baseline 均 fresh 时，事务内二次 CAS 后只经 `adopt(outlineNodes, merge-diffs)` 写 `summary`；正文、事实、title、锁定节点和其它字段不改
+- **终验**：回读正式摘要并签发绑定 H57 lineage 的 terminal receipt；终验后目标或上游变化会撤销旧完成证明
+
 ---
 
 ### 4.6 细纲（ScenePanel / DetailedOutlinePanel，从大纲节点进入）

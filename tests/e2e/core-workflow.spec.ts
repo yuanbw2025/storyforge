@@ -3430,6 +3430,249 @@ test('参考分析总结刷新恢复持久候选，确认后同步版本和激�
   expect(generationCalls).toBe(1)
 })
 
+test('影响人工修正后可恢复生成式章纲候选并经确认原子写回', async ({ page }) => {
+  let generationCalls = 0
+  const regeneratedSummary = '钟楼根据半开启的潮门重新安排守夜人撤离，并留下追查潮声来源的因果钩子。'
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'impact-outline-regeneration-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+      contextWindow: 100000,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls += 1
+    const request = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = request.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain('潮门只开启一半')
+    expect(combined).toContain('钟楼照常回应')
+    expect(combined).toContain('HARNESS-77 严格输出协议')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: JSON.stringify({
+              summary: regeneratedSummary,
+              reason: '人工修正后的潮门状态改变了后续行动条件。',
+              evidenceRefs: ['章节正文', '当前章节大纲'],
+            }),
+          },
+          finish_reason: 'stop',
+        }],
+        usage: { prompt_tokens: 210, completion_tokens: 55, total_tokens: 265 },
+      }),
+    })
+  })
+
+  await createBookWithSavedChapter(
+    page,
+    'E2E 影响章纲重建闭环',
+    '潮门只开启一半，钟声穿过旧港。',
+  )
+  const projectId = Number(page.url().match(/workspace\/(\d+)/)?.[1])
+  expect(projectId).toBeGreaterThan(0)
+  const fixture = await page.evaluate(async currentProjectId => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const project = await request(database.transaction('projects').objectStore('projects').get(currentProjectId)) as {
+      activeWorldId: number
+      activeWorkId: number
+    }
+    const outlines = await request(
+      database.transaction('outlineNodes').objectStore('outlineNodes').index('projectId').getAll(currentProjectId),
+    ) as Array<Record<string, any>>
+    const chapters = await request(
+      database.transaction('chapters').objectStore('chapters').index('projectId').getAll(currentProjectId),
+    ) as Array<Record<string, any>>
+    const sourceOutline = outlines.find(row => row.type === 'chapter')!
+    const volume = outlines.find(row => row.type === 'volume')!
+    const sourceChapter = chapters.find(row => row.outlineNodeId === sourceOutline.id)!
+    const now = Date.now()
+    const transaction = database.transaction(['outlineNodes', 'chapters', 'temporalFacts'], 'readwrite')
+    await request(transaction.objectStore('outlineNodes').put({
+      ...sourceOutline,
+      summary: '潮门由完全开启改为只开启一半。',
+      updatedAt: now,
+    }))
+    const targetOutlineNodeId = await request(transaction.objectStore('outlineNodes').add({
+      projectId: currentProjectId,
+      workId: project.activeWorkId,
+      worldGroupId: sourceOutline.worldGroupId ?? null,
+      parentId: volume.id,
+      type: 'chapter',
+      title: '第2章',
+      summary: '钟楼照常回应',
+      order: 1,
+      createdAt: now,
+      updatedAt: now,
+    })) as number
+    await request(transaction.objectStore('chapters').add({
+      projectId: currentProjectId,
+      workId: project.activeWorkId,
+      outlineNodeId: targetOutlineNodeId,
+      title: '第2章',
+      content: '<p>钟楼仍按旧计划回应。</p>',
+      wordCount: 11,
+      status: 'draft',
+      order: 1,
+      notes: '',
+      createdAt: now,
+      updatedAt: now,
+    }))
+    const factId = await request(transaction.objectStore('temporalFacts').add({
+      projectId: currentProjectId,
+      workId: project.activeWorkId,
+      worldGroupId: sourceOutline.worldGroupId ?? null,
+      subjectType: 'location',
+      subjectId: null,
+      subjectName: '潮门',
+      predicate: 'state',
+      value: '完全开启',
+      validFromChapterId: sourceChapter.id,
+      validToChapterId: null,
+      sourceChapterId: sourceChapter.id,
+      sourceQuote: '潮门完全开启',
+      sourceTextHash: '',
+      status: 'confirmed',
+      locked: false,
+      createdAt: now,
+      updatedAt: now,
+    })) as number
+    database.close()
+    return {
+      factId,
+      sourceChapterId: sourceChapter.id as number,
+      targetOutlineNodeId,
+    }
+  }, projectId)
+
+  await page.reload()
+  await sidebarButton(page, '章节').click()
+  await expect(page.locator('.tiptap-editor')).toContainText('潮门只开启一半')
+  await page.getByRole('button', { name: '影响分析', exact: true }).click()
+  await expect(page.getByText(/影响图已生成/)).toBeVisible()
+  await page.getByLabel('作者复核项').selectOption({
+    label: `复核事实 · temporalFacts#${fixture.factId}`,
+  })
+  await page.getByRole('button', { name: '需人工处理', exact: true }).click()
+  await page.getByLabel('作者复核理由').fill('重新确认潮门的当前状态。')
+  await page.getByRole('button', { name: '记录复核', exact: true }).click()
+  await expect(page.getByText('最近决定：需人工处理', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '打开人工入口', exact: true }).click()
+
+  await expect(page.getByRole('heading', { name: '事实库（NS-4 长期一致性）', exact: true })).toBeVisible()
+  await expect(page.getByText('潮门', { exact: true })).toBeVisible()
+  await page.getByTitle('确认为权威事实（Canon）').click()
+  await page.getByRole('button', { name: '验证已保存修正', exact: true }).click()
+  await expect(page.getByText('修正已验证并重新规划', { exact: true })).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('button', { name: '返回来源章节', exact: true }).click()
+
+  const regenerationTarget = page.getByLabel('生成式后续章纲目标')
+  await expect(regenerationTarget).toBeVisible({ timeout: 20_000 })
+  const targetValue = await regenerationTarget.locator('option').filter({ hasText: '第2章' }).getAttribute('value')
+  expect(targetValue).toBeTruthy()
+  await regenerationTarget.selectOption(targetValue!)
+  await page.getByRole('button', { name: 'AI 重建章纲候选', exact: true }).click()
+  await expect(page.getByText(regeneratedSummary, { exact: true })).toBeVisible({ timeout: 30_000 })
+  expect(generationCalls).toBe(1)
+
+  const pending = await page.evaluate(async ({ currentProjectId, targetId }) => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const target = await request(database.transaction('outlineNodes').objectStore('outlineNodes').get(targetId)) as { summary: string }
+    const runs = await request(
+      database.transaction('agentRuns').objectStore('agentRuns').index('projectId').getAll(currentProjectId),
+    ) as Array<{ id: number; parentRunId: number | null; status: string; contractJson: string }>
+    const child = runs.find(run => run.contractJson.includes('outline.impact-summary-regenerate'))!
+    const parent = runs.find(run => run.id === child.parentRunId)!
+    database.close()
+    return { summary: target.summary, childStatus: child.status, parentStatus: parent.status }
+  }, { currentProjectId: projectId, targetId: fixture.targetOutlineNodeId })
+  expect(pending).toEqual({
+    summary: '钟楼照常回应',
+    childStatus: 'awaiting_confirmation',
+    parentStatus: 'completed',
+  })
+
+  await page.reload()
+  await sidebarButton(page, '章节').click()
+  await expect(page.getByText('已恢复一条 H57 生成式后续章纲候选；确认前不会修改正式摘要。', { exact: true }))
+    .toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(regeneratedSummary, { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+  await page.getByRole('button', { name: '确认重建摘要', exact: true }).click()
+  await expect(page.getByText(/后续章纲摘要已由作者确认写入/)).toBeVisible({ timeout: 20_000 })
+
+  const completed = await page.evaluate(async ({ currentProjectId, targetId }) => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const target = await request(database.transaction('outlineNodes').objectStore('outlineNodes').get(targetId)) as { summary: string }
+    const runs = await request(
+      database.transaction('agentRuns').objectStore('agentRuns').index('projectId').getAll(currentProjectId),
+    ) as Array<{
+      id: number
+      parentRunId: number | null
+      status: string
+      terminalReceiptHash: string | null
+      contractJson: string
+    }>
+    const child = runs.find(run => run.contractJson.includes('outline.impact-summary-regenerate'))!
+    const parent = runs.find(run => run.id === child.parentRunId)!
+    database.close()
+    return {
+      summary: target.summary,
+      childStatus: child.status,
+      childReceiptLength: child.terminalReceiptHash?.length ?? 0,
+      parentStatus: parent.status,
+      parentReceiptLength: parent.terminalReceiptHash?.length ?? 0,
+    }
+  }, { currentProjectId: projectId, targetId: fixture.targetOutlineNodeId })
+  expect(completed).toEqual({
+    summary: regeneratedSummary,
+    childStatus: 'completed',
+    childReceiptLength: 64,
+    parentStatus: 'completed',
+    parentReceiptLength: 64,
+  })
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await sidebarButton(page, '章节').click()
+  await expect(page.getByText(/生成式章纲重建回执/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByLabel('生成式后续章纲目标')).toHaveCount(0)
+  expect(generationCalls).toBe(1)
+})
+
 test('Prompt 示例 AI 只进入编辑草稿，作者保存后才写全局模板', async ({ page }) => {
   let generationCalls = 0
   const systemDraft = '你是只用具体动作呈现人物犹疑的叙事编辑。'

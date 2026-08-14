@@ -33,6 +33,12 @@ async function mount(patch: Record<string, unknown> = {}) {
     impactPatchCandidate: null,
     impactPatchBusy: false,
     impactPatchError: null,
+    impactOutlineRegenerationTargets: [],
+    impactOutlineRegenerationItemId: null,
+    impactOutlineRegenerationCandidate: null,
+    impactOutlineRegenerationBusy: false,
+    impactOutlineRegenerationReceipt: null,
+    impactOutlineRegenerationError: null,
     hasOutline: true,
     showOutlinePreview: false,
     showReviewPanel: false,
@@ -65,6 +71,10 @@ async function mount(patch: Record<string, unknown> = {}) {
     onOpenImpactManualEntry: vi.fn(),
     onConfirmImpactPatch: vi.fn(),
     onRejectImpactPatch: vi.fn(),
+    onImpactOutlineRegenerationItemChange: vi.fn(),
+    onGenerateImpactOutlineRegeneration: vi.fn(),
+    onConfirmImpactOutlineRegeneration: vi.fn(),
+    onRejectImpactOutlineRegeneration: vi.fn(),
     onToggleOutlinePreview: vi.fn(),
     onToggleReviewPanel: vi.fn(),
     onToggleNotePanel: vi.fn(),
@@ -203,6 +213,47 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     await act(async () => button(rendered.host, '放弃修订').click())
     expect(rendered.props.onConfirmImpactPatch).toHaveBeenCalledOnce()
     expect(rendered.props.onRejectImpactPatch).toHaveBeenCalledOnce()
+  })
+
+  it('H57 生成式章纲入口只转发目标、生成、确认和拒绝，不与手填 patch 混用', async () => {
+    const target = {
+      itemId: 'impact-remediation:outline:12',
+      id: 12,
+      title: '第二章',
+      summary: '旧摘要',
+    }
+    const { host, props } = await mount({
+      impactInfo: '已恢复人工修正后的当前计划',
+      impactOutlineRegenerationTargets: [target],
+      impactOutlineRegenerationItemId: target.itemId,
+      impactPatchTargets: [{ id: 12, title: '第二章', summary: '旧摘要' }],
+    })
+    expect(host.textContent).toContain('H57 生成式下游重建')
+    await act(async () => button(host, 'AI 重建章纲候选').click())
+    expect(props.onGenerateImpactOutlineRegeneration).toHaveBeenCalledOnce()
+    expect(props.onCreateImpactPatch).not.toHaveBeenCalled()
+
+    const candidate = {
+      candidateHash: 'e'.repeat(64),
+      result: {
+        summary: '半开启的潮门迫使钟楼改变撤离计划。',
+        reason: '保持上游事实与后续因果一致。',
+        evidenceRefs: ['章节正文', '当前章节大纲'],
+      },
+    } as any
+    const rendered = await mount({
+      impactInfo: '待作者确认',
+      impactOutlineRegenerationTargets: [target],
+      impactOutlineRegenerationItemId: target.itemId,
+      impactOutlineRegenerationCandidate: candidate,
+      impactPatchTargets: [{ id: 12, title: '第二章', summary: '旧摘要' }],
+    })
+    expect(rendered.host.textContent).toContain('半开启的潮门')
+    expect(rendered.host.textContent).not.toContain('生成修订候选')
+    await act(async () => button(rendered.host, '确认重建摘要').click())
+    await act(async () => button(rendered.host, '放弃候选').click())
+    expect(rendered.props.onConfirmImpactOutlineRegeneration).toHaveBeenCalledOnce()
+    expect(rendered.props.onRejectImpactOutlineRegeneration).toHaveBeenCalledOnce()
   })
 
   it('显示绑定 hash 的确定性影响处理计划，不触发隐藏执行', async () => {

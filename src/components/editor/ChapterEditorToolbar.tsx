@@ -1,6 +1,7 @@
 import { BookOpenCheck, Check, ClipboardList, Eye, GitBranch, Loader2, RefreshCw, ShieldCheck, StickyNote, X } from 'lucide-react'
 import { CInput } from '../shared/CompositionInput'
 import type { ImpactPatchCandidateV1 } from '../../lib/agent/run/impact-patch-durable'
+import type { ImpactOutlineRegenerationCandidateV1 } from '../../lib/agent/run/impact-outline-regeneration-durable'
 import type {
   ImpactAuthorReviewRecordV1,
   ImpactReviewDecisionV1,
@@ -11,6 +12,10 @@ interface ImpactPatchTarget {
   id: number
   title: string
   summary: string
+}
+
+interface ImpactOutlineRegenerationTarget extends ImpactPatchTarget {
+  itemId: string
 }
 
 const IMPACT_REVIEW_ACTION_LABELS: Record<string, string> = {
@@ -47,6 +52,12 @@ interface Props {
   impactPatchCandidate: ImpactPatchCandidateV1 | null
   impactPatchBusy: boolean
   impactPatchError: string | null
+  impactOutlineRegenerationTargets: ImpactOutlineRegenerationTarget[]
+  impactOutlineRegenerationItemId: string | null
+  impactOutlineRegenerationCandidate: ImpactOutlineRegenerationCandidateV1 | null
+  impactOutlineRegenerationBusy: boolean
+  impactOutlineRegenerationReceipt: string | null
+  impactOutlineRegenerationError: string | null
   hasOutline: boolean
   showOutlinePreview: boolean
   showReviewPanel: boolean
@@ -76,6 +87,10 @@ interface Props {
   onOpenImpactManualEntry: () => void
   onConfirmImpactPatch: () => void
   onRejectImpactPatch: () => void
+  onImpactOutlineRegenerationItemChange: (itemId: string | null) => void
+  onGenerateImpactOutlineRegeneration: () => void
+  onConfirmImpactOutlineRegeneration: () => void
+  onRejectImpactOutlineRegeneration: () => void
   onToggleOutlinePreview: () => void
   onToggleReviewPanel: () => void
   onToggleNotePanel: () => void
@@ -108,6 +123,12 @@ export default function ChapterEditorToolbar({
   impactPatchCandidate,
   impactPatchBusy,
   impactPatchError,
+  impactOutlineRegenerationTargets,
+  impactOutlineRegenerationItemId,
+  impactOutlineRegenerationCandidate,
+  impactOutlineRegenerationBusy,
+  impactOutlineRegenerationReceipt,
+  impactOutlineRegenerationError,
   hasOutline,
   showOutlinePreview,
   showReviewPanel,
@@ -137,6 +158,10 @@ export default function ChapterEditorToolbar({
   onOpenImpactManualEntry,
   onConfirmImpactPatch,
   onRejectImpactPatch,
+  onImpactOutlineRegenerationItemChange,
+  onGenerateImpactOutlineRegeneration,
+  onConfirmImpactOutlineRegeneration,
+  onRejectImpactOutlineRegeneration,
   onToggleOutlinePreview,
   onToggleReviewPanel,
   onToggleNotePanel,
@@ -301,7 +326,74 @@ export default function ChapterEditorToolbar({
               {impactReviewError && <div role="alert" className="text-xs text-error">{impactReviewError}</div>}
             </div>
           )}
-          {impactPatchTargets.length > 0 && !impactPatchCandidate && (
+          {impactOutlineRegenerationTargets.length > 0
+            && !impactOutlineRegenerationCandidate
+            && !impactPatchCandidate && (
+            <div className="space-y-2 rounded border border-violet-400/20 bg-violet-400/5 p-2">
+              <div className="text-[11px] text-violet-200">
+                H57 生成式下游重建只处理一个后续章纲的 `summary`；模型重新装配当前 Context，确认前不会覆盖正式摘要。
+              </div>
+              <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_auto]">
+                <label className="flex items-center gap-2 rounded border border-border bg-bg-elevated px-2 text-text-secondary">
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+                  <span className="sr-only">生成式后续章纲目标</span>
+                  <select
+                    aria-label="生成式后续章纲目标"
+                    value={impactOutlineRegenerationItemId ?? ''}
+                    onChange={event => onImpactOutlineRegenerationItemChange(event.target.value || null)}
+                    className="min-w-0 flex-1 bg-transparent py-1.5 text-xs text-text-primary outline-none"
+                    disabled={impactOutlineRegenerationBusy}
+                  >
+                    <option value="">选择 H57 当前影响项</option>
+                    {impactOutlineRegenerationTargets.map(target => (
+                      <option key={target.itemId} value={target.itemId}>{target.title} · {target.summary || '暂无摘要'}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={onGenerateImpactOutlineRegeneration}
+                  disabled={impactOutlineRegenerationBusy || !impactOutlineRegenerationItemId}
+                  title="创建绑定 H57 receipt 的生成式 child Run 与作者确认候选"
+                  className="flex items-center justify-center gap-1 rounded border border-violet-400/30 bg-violet-400/10 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-400/20 disabled:opacity-50"
+                >
+                  {impactOutlineRegenerationBusy
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <RefreshCw className="h-3.5 w-3.5" />}
+                  {impactOutlineRegenerationBusy ? '重建中...' : 'AI 重建章纲候选'}
+                </button>
+              </div>
+            </div>
+          )}
+          {impactOutlineRegenerationCandidate && (
+            <div className="space-y-2 rounded border border-violet-400/25 bg-bg-elevated/70 p-2 text-text-secondary">
+              <div className="text-[11px] text-text-muted">H57 child 候选只允许写目标章纲摘要；作者确认前正式数据不变。</div>
+              <div className="whitespace-pre-wrap text-xs text-text-primary">{impactOutlineRegenerationCandidate.result.summary}</div>
+              <div className="text-[11px] text-text-secondary">理由：{impactOutlineRegenerationCandidate.result.reason}</div>
+              <div className="text-[10px] text-text-muted">证据：{impactOutlineRegenerationCandidate.result.evidenceRefs.join('、')}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onConfirmImpactOutlineRegeneration}
+                  disabled={impactOutlineRegenerationBusy}
+                  className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-50"
+                >
+                  {impactOutlineRegenerationBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  确认重建摘要
+                </button>
+                <button
+                  type="button"
+                  onClick={onRejectImpactOutlineRegeneration}
+                  disabled={impactOutlineRegenerationBusy}
+                  className="flex items-center gap-1 rounded border border-border bg-bg-surface px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50"
+                >
+                  <X className="h-3.5 w-3.5" />放弃候选
+                </button>
+                <span className="text-[10px] text-text-muted">child {impactOutlineRegenerationCandidate.candidateHash.slice(0, 12)}</span>
+              </div>
+            </div>
+          )}
+          {impactPatchTargets.length > 0 && !impactPatchCandidate && !impactOutlineRegenerationCandidate && (
             <div className="grid gap-2 md:grid-cols-[minmax(150px,0.7fr)_minmax(200px,1.5fr)_minmax(160px,1fr)_auto]">
               <label className="flex items-center gap-2 rounded border border-border bg-bg-elevated px-2 text-text-secondary">
                 <GitBranch className="h-3.5 w-3.5 shrink-0" />
@@ -346,7 +438,7 @@ export default function ChapterEditorToolbar({
               </button>
             </div>
           )}
-          {impactPatchCandidate && (
+          {impactPatchCandidate && !impactOutlineRegenerationCandidate && (
             <div className="space-y-2 rounded border border-accent/20 bg-bg-elevated/70 p-2 text-text-secondary">
               <div className="text-[11px] text-text-muted">候选仅允许写入选定大纲的 `summary`，确认前不会改动正式数据。</div>
               <div className="whitespace-pre-wrap text-xs text-text-primary">{impactPatchCandidate.proposal.fields.summary}</div>
@@ -372,6 +464,8 @@ export default function ChapterEditorToolbar({
             </div>
           )}
           {impactPatchError && <div role="alert" className="text-xs text-error">{impactPatchError}</div>}
+          {impactOutlineRegenerationReceipt && <div className="text-[10px] text-success">生成式章纲重建回执 {impactOutlineRegenerationReceipt.slice(0, 12)}</div>}
+          {impactOutlineRegenerationError && <div role="alert" className="text-xs text-error">{impactOutlineRegenerationError}</div>}
           {impactRemediationReceipt && <div className="text-[10px] text-success">确定性重建回执 {impactRemediationReceipt.slice(0, 12)}</div>}
           {impactRemediationError && <div role="alert" className="text-xs text-error">{impactRemediationError}</div>}
         </div>

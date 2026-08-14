@@ -148,6 +148,15 @@ import {
   readCurrentImpactPostCorrectionReplanV1,
   type ImpactPostCorrectionReplanResultV1,
 } from '../../lib/agent/run/impact-post-correction-replan-durable'
+import {
+  adoptImpactOutlineRegenerationCandidateV1,
+  generateImpactOutlineRegenerationCandidateV1,
+  readCompletedImpactOutlineRegenerationsV1,
+  readPendingImpactOutlineRegenerationCandidateV1,
+  rejectImpactOutlineRegenerationCandidateV1,
+  type ImpactOutlineRegenerationCandidateV1,
+  type ImpactOutlineRegenerationCompletionV1,
+} from '../../lib/agent/run/impact-outline-regeneration-durable'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
 import { resolveScopeLike } from '../../lib/world-engine/scope'
 import {
@@ -265,6 +274,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [impactPatchCandidate, setImpactPatchCandidate] = useState<ImpactPatchCandidateV1 | null>(null)
   const [impactPatchBusy, setImpactPatchBusy] = useState(false)
   const [impactPatchError, setImpactPatchError] = useState('')
+  const [impactOutlineRegenerationItemId, setImpactOutlineRegenerationItemId] = useState<string | null>(null)
+  const [impactOutlineRegenerationCandidate, setImpactOutlineRegenerationCandidate] = useState<ImpactOutlineRegenerationCandidateV1 | null>(null)
+  const [impactOutlineRegenerationCompleted, setImpactOutlineRegenerationCompleted] = useState<ImpactOutlineRegenerationCompletionV1[]>([])
+  const [impactOutlineRegenerationBusy, setImpactOutlineRegenerationBusy] = useState(false)
+  const [impactOutlineRegenerationReceipt, setImpactOutlineRegenerationReceipt] = useState<string | null>(null)
+  const [impactOutlineRegenerationError, setImpactOutlineRegenerationError] = useState('')
   const [pendingDiffs, setPendingDiffs] = useState<StateDiffItem[] | null>(null)
   // A2: 按需召回 — 手动额外勾选/取消的状态卡 ID
   const [extraStateIds, setExtraStateIds] = useState<number[]>([])
@@ -354,6 +369,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactPatchReason('')
     setImpactPatchCandidate(null)
     setImpactPatchError('')
+    setImpactOutlineRegenerationItemId(null)
+    setImpactOutlineRegenerationCandidate(null)
+    setImpactOutlineRegenerationCompleted([])
+    setImpactOutlineRegenerationReceipt(null)
+    setImpactOutlineRegenerationError('')
     if (!currentChapter?.id) return () => { active = false }
     void (async () => {
       const scope = await resolveScopeLike(project.id!)
@@ -382,12 +402,45 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       ])
       if (!active) return
       if (postCorrectionState) {
+        const [pendingRegeneration, completedRegenerations] = await Promise.all([
+          readPendingImpactOutlineRegenerationCandidateV1({
+            scope,
+            sourceChapterId: currentChapter.id!,
+          }).catch(error => {
+            console.warn('[ImpactOutlineRegeneration] durable candidate 恢复失败:', error)
+            return null
+          }),
+          readCompletedImpactOutlineRegenerationsV1({
+            scope,
+            sourceChapterId: currentChapter.id!,
+          }).catch(error => {
+            console.warn('[ImpactOutlineRegeneration] terminal receipt 恢复失败:', error)
+            return []
+          }),
+        ])
+        if (!active) return
         setImpactPostCorrectionReplan(postCorrectionState)
         setImpactGraph(postCorrectionState.output.graph)
         setImpactRemediationPlan(postCorrectionState.output.plan)
         setImpactRemediationReceipt(postCorrectionState.receiptHash)
+        setImpactOutlineRegenerationCandidate(pendingRegeneration?.candidate ?? null)
+        setImpactOutlineRegenerationCompleted(completedRegenerations)
+        setImpactOutlineRegenerationItemId(
+          pendingRegeneration?.candidate.item.id
+          ?? postCorrectionState.output.plan.items.find(item => (
+            (postCorrectionState.output.remainingItemIds.includes(item.id)
+              || postCorrectionState.output.newItemIds.includes(item.id))
+            && item.action === 'review-outline'
+            && item.recordId !== currentChapter.outlineNodeId
+            && !completedRegenerations.some(record => record.candidate.item.id === item.id)
+          ))?.id
+          ?? null,
+        )
+        setImpactOutlineRegenerationReceipt(completedRegenerations[0]?.receiptHash ?? null)
         setImpactInfo(
-          `已恢复人工修正后的当前计划：已解决 ${postCorrectionState.output.resolvedItemIds.length} 项、仍需处理 ${postCorrectionState.output.remainingItemIds.length} 项、新增 ${postCorrectionState.output.newItemIds.length} 项。`,
+          pendingRegeneration
+            ? '已恢复一条 H57 生成式后续章纲候选；确认前不会修改正式摘要。'
+            : `已恢复人工修正后的当前计划：已解决 ${postCorrectionState.output.resolvedItemIds.length} 项、仍需处理 ${postCorrectionState.output.remainingItemIds.length} 项、新增 ${postCorrectionState.output.newItemIds.length} 项。`,
         )
       } else if (reviewState) {
         const selectedReview = reviewState.reviews.find(record => record.output.decision === 'needs-manual-action')
@@ -412,7 +465,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       if (active) console.warn('[ImpactRecovery] 影响状态恢复失败:', error)
     })
     return () => { active = false }
-  }, [currentChapter?.id, project.id])
+  }, [currentChapter?.id, currentChapter?.outlineNodeId, project.id])
 
   // H7: durable prose candidates survive editor unmounts and browser refreshes.
   // Only restore candidates whose source chapter hash is still current; stale
@@ -736,6 +789,23 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         return target ? [{ id, title: target.title, summary: target.summary ?? '' }] : []
       })
   }, [impactGraph, nodes, outlineNode?.id])
+
+  const impactOutlineRegenerationTargets = useMemo(() => {
+    const replan = impactPostCorrectionReplan
+    if (!replan) return []
+    const activeIds = new Set([
+      ...replan.output.remainingItemIds,
+      ...replan.output.newItemIds,
+    ])
+    const completedIds = new Set(impactOutlineRegenerationCompleted.map(record => record.candidate.item.id))
+    return replan.output.plan.items.flatMap(item => {
+      if (!activeIds.has(item.id) || completedIds.has(item.id)
+        || item.action !== 'review-outline' || item.recordId == null
+        || item.recordId === outlineNode?.id) return []
+      const target = nodes.find(node => node.id === item.recordId && node.type === 'chapter')
+      return target ? [{ itemId: item.id, id: target.id!, title: target.title, summary: target.summary ?? '' }] : []
+    })
+  }, [impactOutlineRegenerationCompleted, impactPostCorrectionReplan, nodes, outlineNode?.id])
 
   // 后台一致性 Agent：正文稳定落盘后只跑零 token 确定性守卫。
   // 没有告警时不制造归档记录；LLM fast/deep 必须由质量审校面板中的明确按钮触发。
@@ -1804,6 +1874,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactPatchError('')
       setImpactPatchSummary('')
       setImpactPatchReason('')
+      setImpactOutlineRegenerationItemId(null)
+      setImpactOutlineRegenerationCandidate(null)
+      setImpactOutlineRegenerationCompleted([])
+      setImpactOutlineRegenerationReceipt(null)
+      setImpactOutlineRegenerationError('')
       const firstTarget = graph.nodes.find(node => (
         node.kind === 'outline'
         && node.recordId != null
@@ -1828,8 +1903,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleDismissImpact = () => {
-    if (impactPatchCandidate) {
-      setImpactPatchError('请先确认或放弃当前影响修订候选。')
+    if (impactPatchCandidate || impactOutlineRegenerationCandidate) {
+      if (impactPatchCandidate) setImpactPatchError('请先确认或放弃当前影响修订候选。')
+      if (impactOutlineRegenerationCandidate) setImpactOutlineRegenerationError('请先确认或放弃当前生成式重建候选。')
       return
     }
     setImpactInfo(null)
@@ -1848,6 +1924,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     setImpactPatchSummary('')
     setImpactPatchReason('')
     setImpactPatchError('')
+    setImpactOutlineRegenerationItemId(null)
+    setImpactOutlineRegenerationCandidate(null)
+    setImpactOutlineRegenerationCompleted([])
+    setImpactOutlineRegenerationReceipt(null)
+    setImpactOutlineRegenerationError('')
   }
 
   const handleCreateImpactPatch = async () => {
@@ -1874,6 +1955,74 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactPatchError(error instanceof Error ? error.message : '影响修订候选创建失败')
     } finally {
       setImpactPatchBusy(false)
+    }
+  }
+
+  const handleGenerateImpactOutlineRegeneration = async () => {
+    const expectedReplan = impactPostCorrectionReplan
+    const itemId = impactOutlineRegenerationItemId
+    if (!expectedReplan || !itemId || impactOutlineRegenerationCandidate || impactPatchCandidate) return
+    setImpactOutlineRegenerationBusy(true)
+    setImpactOutlineRegenerationError('')
+    try {
+      const result = await generateImpactOutlineRegenerationCandidateV1({
+        scope: await resolveScopeLike(project.id!),
+        expectedReplan,
+        itemId,
+        aiConfig,
+      })
+      setImpactOutlineRegenerationCandidate(result.candidate)
+      setImpactOutlineRegenerationReceipt(null)
+      setImpactInfo('H57 生成式后续章纲候选已持久化；作者确认前正式摘要保持不变。')
+    } catch (error) {
+      setImpactOutlineRegenerationError(error instanceof Error ? error.message : '生成式后续章纲重建失败')
+    } finally {
+      setImpactOutlineRegenerationBusy(false)
+    }
+  }
+
+  const handleConfirmImpactOutlineRegeneration = async () => {
+    const candidate = impactOutlineRegenerationCandidate
+    if (!candidate) return
+    setImpactOutlineRegenerationBusy(true)
+    setImpactOutlineRegenerationError('')
+    try {
+      const result = await adoptImpactOutlineRegenerationCandidateV1({
+        scope: await resolveScopeLike(project.id!),
+        runId: candidate.durableRunId,
+      })
+      await loadOutlineNodes(project.id!)
+      setImpactOutlineRegenerationCandidate(null)
+      setImpactOutlineRegenerationCompleted(previous => [
+        result,
+        ...previous.filter(record => record.candidate.item.id !== result.candidate.item.id),
+      ])
+      setImpactOutlineRegenerationReceipt(result.receiptHash)
+      setImpactOutlineRegenerationItemId(null)
+      setImpactInfo(`后续章纲摘要已由作者确认写入；终态回执 ${result.receiptHash.slice(0, 12)}。`)
+    } catch (error) {
+      setImpactOutlineRegenerationError(error instanceof Error ? error.message : '生成式后续章纲采纳失败')
+    } finally {
+      setImpactOutlineRegenerationBusy(false)
+    }
+  }
+
+  const handleRejectImpactOutlineRegeneration = async () => {
+    const candidate = impactOutlineRegenerationCandidate
+    if (!candidate) return
+    setImpactOutlineRegenerationBusy(true)
+    setImpactOutlineRegenerationError('')
+    try {
+      await rejectImpactOutlineRegenerationCandidateV1({
+        scope: await resolveScopeLike(project.id!),
+        runId: candidate.durableRunId,
+      })
+      setImpactOutlineRegenerationCandidate(null)
+      setImpactInfo('生成式后续章纲候选已放弃，正式摘要未改变。')
+    } catch (error) {
+      setImpactOutlineRegenerationError(error instanceof Error ? error.message : '生成式后续章纲候选拒绝失败')
+    } finally {
+      setImpactOutlineRegenerationBusy(false)
     }
   }
 
@@ -1937,6 +2086,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setImpactReviewReceipt(firstReviewRecord?.receiptHash ?? null)
       setImpactReviewError('')
       setImpactReviewRecords(reviewRecords)
+      setImpactOutlineRegenerationItemId(null)
+      setImpactOutlineRegenerationCandidate(null)
+      setImpactOutlineRegenerationCompleted([])
+      setImpactOutlineRegenerationReceipt(null)
+      setImpactOutlineRegenerationError('')
       setImpactInfo(result.changed
         ? `影响处理计划已刷新；旧计划 ${previousPlan.planHash.slice(0, 12)} 保留为历史证据，新计划 ${result.plan.planHash.slice(0, 12)} 已绑定当前正文。`
         : `影响处理计划与当前正文一致，无需变更；计划 ${result.plan.planHash.slice(0, 12)}。`)
@@ -2827,6 +2981,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           impactPatchCandidate={impactPatchCandidate}
           impactPatchBusy={impactPatchBusy}
           impactPatchError={impactPatchError || null}
+          impactOutlineRegenerationTargets={impactOutlineRegenerationTargets}
+          impactOutlineRegenerationItemId={impactOutlineRegenerationItemId}
+          impactOutlineRegenerationCandidate={impactOutlineRegenerationCandidate}
+          impactOutlineRegenerationBusy={impactOutlineRegenerationBusy}
+          impactOutlineRegenerationReceipt={impactOutlineRegenerationReceipt}
+          impactOutlineRegenerationError={impactOutlineRegenerationError || null}
           hasOutline={!!outlineNodeId}
           showOutlinePreview={showOutlinePreview}
           showReviewPanel={showReviewPanel}
@@ -2856,6 +3016,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onOpenImpactManualEntry={handleOpenImpactManualEntry}
           onConfirmImpactPatch={() => { void handleConfirmImpactPatch() }}
           onRejectImpactPatch={() => { void handleRejectImpactPatch() }}
+          onImpactOutlineRegenerationItemChange={setImpactOutlineRegenerationItemId}
+          onGenerateImpactOutlineRegeneration={() => { void handleGenerateImpactOutlineRegeneration() }}
+          onConfirmImpactOutlineRegeneration={() => { void handleConfirmImpactOutlineRegeneration() }}
+          onRejectImpactOutlineRegeneration={() => { void handleRejectImpactOutlineRegeneration() }}
           onToggleOutlinePreview={() => setShowOutlinePreview(!showOutlinePreview)}
           onToggleReviewPanel={() => setShowReviewPanel(!showReviewPanel)}
           onToggleNotePanel={() => setShowNotePanel(!showNotePanel)}

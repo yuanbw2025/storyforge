@@ -1132,6 +1132,13 @@ CHIRON 四类信息可映射到现有结构：
 - 工作区在“验证已保存修正”成功后立即创建 H57；若 H56 已完成而 H57 曾中断，交接 URL 重挂载会自动补做。来源编辑器通过 `readCurrentImpactPostCorrectionReplanV1()` 恢复当前 plan 与三类计数，并重新验证父 H56 receipt、目标 post-state 和当前 plan；被 H56 消费的旧 `needs-manual-action` review 从当前计划恢复投影中过滤，但历史账本保留。
 - 父/目标/当前图再变、检查点或差异篡改、跨 Work 与项目导入均 stale 或 fail-closed。执行器从 `run.created`、step/context/checkpoint 到 terminal verification 的 8 个 durable 边界均可中断重入并沿同一 child Run 收敛；`R-HARNESS57-impact-post-correction-replan` 以 9 项覆盖保守分类、幂等、刷新恢复、父子 freshness、防篡改、UI 和导入生命周期。本单元不调用模型、不调用 `adopt()`、不写业务 Canon，也不自动执行 HARNESS-47 或生成式下游重跑。
 
+**绑定 H57 的生成式后续章纲重建（HARNESS-77，2026-08-14）**
+
+- `generateImpactOutlineRegenerationCandidateV1()` 只接受 fresh H57 current plan 中 `remaining/new`、非来源章且未锁定的 `review-outline` 项。它在既有 `outline` Agent 下执行 `outline.impact-summary-regenerate`，九个 Context Source 全部经 `assembleContext()` 装配；`chapterContent` 与目标 `chapterOutline` 必须以 full delivery 实际进入 Prompt，模型不得读取组件手拼或登记外数据。
+- H77 Run 是 H57 的直接 child，lineage 固定 parent Run/receipt/output、plan/graph/item。一次模型调用只生成 exact-key `{summary,reason,evidenceRefs}`，引用必须来自真实 Context 分段；未知结果窗口暂停且不重试，作者显式重试创建新 child。候选 checkpoint 明确 `portable:false`，刷新修复缺失 candidate event 而不重调模型。
+- 作者确认前正式摘要零写。采纳先冻结意图，再验证父计划、来源正文、非目标上游 Context、Prompt 模板和目标 baseline；事务内同时执行来源 hash 与目标字段 CAS，随后唯一经 `adopt(outlineNodes, merge-diffs)` 写 `summary`。八个 durable 采纳边界均沿同一 Run 收敛，终态 verifier 回读真实摘要并绑定 H57 lineage；终验后任何目标/上游变化会撤销旧 receipt。
+- UI 只在 H57 有合格目标时显示生成入口，候选存在时不同时展示 H44 手填 patch；拒绝候选零写。`R-HARNESS77-impact-outline-regeneration` 与真实 Chromium 路径覆盖 H50→H56→H57→H77、刷新恢复、父子终态、作用域与导入反例。本单元不自动级联所有下游，不改正文/事实/title/锁定数据，通用依赖编排仍是后续范围。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

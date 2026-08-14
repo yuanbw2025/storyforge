@@ -75,6 +75,7 @@ flowchart TB
         AIOUTL["AI 生成卷/章大纲"]
         AIDETAIL["AI 生成细纲"]
         AICHAP["AI 生成章节正文"]
+        AIREGEN["H77 后续章纲摘要重建<br/>outline.impact-summary-regenerate"]
         CHAPTERS["📖 章节正文 chapters"]
         DETAILS["细纲 detailedOutlines"]
         EBEAT["情感节拍 emotionBeatCards"]
@@ -156,6 +157,9 @@ flowchart TB
     AIOUTL ==写==> OUTL
     AIDETAIL ==写==> DETAILS
     AICHAP ==写==> CHAPTERS
+    H57PLAN["H57 fresh current plan<br/>remaining/new review-outline"] ==父 lineage==> AIREGEN
+    BLDNODE ==登记 Context==> AIREGEN
+    AIREGEN ==作者确认 + CAS + adopt(summary)==> OUTL
     CHAPTERS --关联--> EBEAT
 
     CHAPTERS ==提取==> STATE
@@ -191,7 +195,7 @@ flowchart TB
     classDef top fill:#9ca3af,stroke:#6b7280,color:#fff;
 
     class WV,SC,PS,WR,HIST,WMAP,CODEX,ITEM,LOC,CHAR,REL,RULES,OUTL,SARC,FORE up
-    class AIOUTL,AIDETAIL,AICHAP,CHAPTERS,DETAILS,EBEAT write
+    class AIOUTL,AIDETAIL,AICHAP,AIREGEN,CHAPTERS,DETAILS,EBEAT write
     class STATE,LEDGER,TIME down
     class CDP,SVERIFY,WGAI,REVIEW,READAB,SUMMARY,INSP,REFER tool
     class FMTWV,FMTSC,FMTPS,BLDWV,BLDCW,BLDNODE,BLDCODEX,BLDCHAR,BLDRULES,BLDFORE,BLDHIST,BLDLOC,BLDWRC,BLDREF,BLDINS,BLDMEM ctx
