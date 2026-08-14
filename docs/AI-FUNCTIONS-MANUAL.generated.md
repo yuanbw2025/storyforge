@@ -79,7 +79,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 59 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 60 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -92,6 +92,7 @@
 | `manualText` | 用户指定内容 | manual | L0 | 100000 |
 | `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000 |
 | `historyAgentBaseline` | 历史 Agent 正式输入基线 | world | L0 | 12000 |
+| `referenceDerivedBaseline` | 参考分析派生 Agent 正式输入基线 | project | L0 | 36000 |
 | `priorOutlineCandidate` | 同批次上一卷章纲候选 | runtime | L1 | 2400 |
 | `chapterContent` | 章节正文 | chapter | L0 | 100000 |
 | `cultivationProgressExtractionBaseline` | 修炼进度角色、体系 DAG 与既有事件闭集 | chapter | L0 | 30000 |
@@ -204,8 +205,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 50 个 category。
-未分类调用: 0 个。动态 category 调用: 20 个。
+共 48 个 category。
+未分类调用: 0 个。动态 category 调用: 21 个。
 
 | category | 触发文件 |
 |---|---|
@@ -243,8 +244,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `outline.workshop.scan` | `src/lib/outline/workshop.ts:442` |
 | `outline.workshop.scenes` | `src/lib/outline/workshop.ts:453` |
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
-| `reference.characters` | `src/components/project/AnalysisReportViewer.tsx:151` |
-| `reference.summary` | `src/components/project/AnalysisReportViewer.tsx:119` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:286` |
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:106` |
 | `review.consistency.deep` | `src/components/editor/ChapterEditor.tsx:1177` |
@@ -275,6 +274,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/outline-copilot.ts:496 · chat`
 - `src/lib/agent/prose-copilot.ts:649 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
+- `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
 - `src/lib/agent/story-arc-copilot.ts:556 · chat`
 - `src/lib/agent/story-core-copilot.ts:458 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:376 · chat`
@@ -285,4 +285,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `c65242f`
+生成时间基准:commit `57bb519`

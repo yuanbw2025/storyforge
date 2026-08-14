@@ -118,7 +118,7 @@
 
 ### 1.3 项目参考（侧栏：references）
 
-**对应表**：`references` + `referenceChunkAnalysis`
+**对应表**：`references` + `referenceAnalysisRuns` + `referenceChunkAnalysis` + `referenceAnalysisSources`
 
 **字段**：
 | 字段 | 含义 |
@@ -143,19 +143,17 @@
 
 #### 动作②：全书 AI 总结
 - **触发**：🔘 手动，分析完后点"生成总结"
-- **读**：
-  - `referenceChunkAnalysis.所有块.各维度`（按维度合并取样）
-  - `references.title / author`
-- **提示词**：`reference.summarize`
-- **写**：`references.analysisSummary（JSON 覆盖）`
+- **读**：只经 `referenceDerivedBaseline` 读取当前 Work 中精确参考、精确分析版本、来源声明与该版本全部分块维度取样
+- **提示词 / 解析**：`inspiration.reference-summary`；一次调用只接受与非空维度同序的 exact-key 纯 JSON
+- **运行证据**：HARNESS-74 durable 候选冻结来源 baseline、版本/投影原字段、Context Manifest、Prompt 和模型输出；未知结果不自动重试，刷新恢复不重复调用
+- **写**：确认前零写入；确认后经 CAS + `adopt(referenceAnalysisRuns.analysisSummary)` 写目标版本，仅当版本仍 active 时同步 `adopt(references.analysisSummary)` 兼容投影
 
 #### 动作③：AI 角色卡聚合
 - **触发**：🔘 手动，点"AI 整理角色卡"
-- **读**：
-  - `referenceChunkAnalysis.所有块.characterCraft`（人物塑造维度）
-  - `references.title / author`
-- **提示词**：`reference.aggregate-characters`
-- **写**：`references.mergedCharacters（JSON 覆盖）`
+- **读**：只经 `referenceDerivedBaseline` 读取当前 Work 中精确参考、精确分析版本、来源声明与该版本 `characterCraft` 分析
+- **提示词 / 解析**：`inspiration.reference-characters`；一次调用只接受根键 `characters`，每项严格为唯一 `name/role/summary/analysis` 四字段
+- **运行证据**：与总结使用独立 durable lane；候选、拒绝、重试、确认和不可判定运行显式放弃均绑定原 Run
+- **写**：确认前零写入；确认后经 CAS + `adopt(referenceAnalysisRuns.mergedCharacters)` 写目标版本，仅 active 版本同步 `adopt(references.mergedCharacters)` 兼容投影
 
 #### 动作④：采纳引用到创作规则
 - **触发**：🔘 手动，"作为创作参考引用"

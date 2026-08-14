@@ -10,22 +10,20 @@
  */
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import {
-  ChevronDown, ChevronRight, Loader2, Sparkles,
-  Users2,
+  AlertTriangle, Check, ChevronDown, ChevronRight, Loader2, RotateCcw, Sparkles,
+  Users2, X,
 } from 'lucide-react'
 import type { Reference, ReferenceAnalysisRun, ReferenceChunkAnalysis, AnalysisDimension } from '../../lib/types'
 import { DIMENSION_LABELS } from '../../lib/types/reference'
 import {
-  mergeAnalysisResults, buildSummaryPrompt,
-  collectCharacterCraftTexts, buildCharacterMergePrompt, parseCharacterMergeOutput,
+  mergeAnalysisResults,
+  collectCharacterCraftTexts,
   type MergedAnalysisResult, type MergedDimension, type AIMergedCharacter,
 } from '../../lib/reference-analysis/merge-analysis'
-import { chat, resolveRequestConfig } from '../../lib/ai/client'
-import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { extractJSON } from '../../lib/ai/adapters/import-adapter'
 import { useToast } from '../shared/Toast'
-import { updateReferenceAnalysisDerived } from '../../lib/reference-analysis/lifecycle'
+import type { ReferenceDerivedModeV1 } from '../../lib/reference-analysis/derived-agent-baseline'
+import { useReferenceDerivedAI, type ReferenceDerivedLaneState } from './useReferenceDerivedAI'
 
 const DIM_COLORS: Partial<Record<AnalysisDimension, string>> = {
   narrativeStyle:     'text-blue-400',
@@ -57,13 +55,24 @@ interface Props {
 
 export default function AnalysisReportViewer({ reference, run, chunks, isHistorical }: Props) {
   const toast = useToast()
+  const aiConfig = useAIConfigStore(state => state.config)
   const [view, setView] = useState<'merged' | 'chunks'>('merged')
   const [activeDim, setActiveDim] = useState<string | null>(null)
-  const [generatingSummary, setGeneratingSummary] = useState(false)
-  const [aggregatingChars, setAggregatingChars] = useState(false)
   const [summaryJSON, setSummaryJSON] = useState(run.analysisSummary)
   const [charactersJSON, setCharactersJSON] = useState(run.mergedCharacters)
   const contentRef = useRef<HTMLDivElement>(null)
+
+  const handleCommitted = useCallback((mode: ReferenceDerivedModeV1, resultJson: string) => {
+    if (mode === 'summary') setSummaryJSON(resultJson)
+    else setCharactersJSON(resultJson)
+  }, [])
+  const derivedAI = useReferenceDerivedAI({
+    projectId: reference.projectId,
+    analysisRunId: run.id!,
+    aiConfig,
+    onCommitted: handleCommitted,
+    onError: toast.error,
+  })
 
   useEffect(() => {
     setSummaryJSON(run.analysisSummary)
@@ -104,66 +113,10 @@ export default function AnalysisReportViewer({ reference, run, chunks, isHistori
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
-  // AI 全书总结
-  const handleGenerateSummary = async () => {
-    if (!reference.id || !run.id) return
-    setGeneratingSummary(true)
-    try {
-      const { system, user } = buildSummaryPrompt(
-        reference.title, reference.author || '', merged, isHistorical,
-      )
-      const config = useAIConfigStore.getState().config
-      const meta = { category: 'reference.summary', projectId: reference.projectId, configOverrides: { maxTokens: 4096 } } as const
-      const effectiveConfig = resolveRequestConfig(config, meta).config
-      if (!isAIConfigReady(effectiveConfig)) throw new Error(getAIConfigRequiredMessage(effectiveConfig))
-      const output = await chat(
-        [{ role: 'system', content: system }, { role: 'user', content: user }],
-        { ...config, maxTokens: 4096 },
-        { category: 'reference.summary', projectId: reference.projectId, configOverrides: { maxTokens: 4096 } },
-      )
-      const json = extractJSON(output)
-      if (json) {
-        const summaryStr = JSON.stringify(json)
-        await updateReferenceAnalysisDerived(run.id, { analysisSummary: summaryStr })
-        setSummaryJSON(summaryStr)
-      }
-    } catch (err) {
-      toast.error(`生成总结失败：${err instanceof Error ? err.message : String(err)}`)
-    } finally {
-      setGeneratingSummary(false)
-    }
-  }
+  const handleGenerateSummary = () => derivedAI.run('summary')
 
   // AI 角色卡聚合（替代正则抠名，彻底去重）
-  const handleAggregateCharacters = async () => {
-    if (!reference.id || !run.id) return
-    setAggregatingChars(true)
-    try {
-      const craftTexts = collectCharacterCraftTexts(chunks)
-      if (craftTexts.length === 0) throw new Error('暂无人物塑造分析可供整理')
-      const config = useAIConfigStore.getState().config
-      const meta = { category: 'reference.characters', projectId: reference.projectId, configOverrides: { maxTokens: 4096 } } as const
-      const effectiveConfig = resolveRequestConfig(config, meta).config
-      if (!isAIConfigReady(effectiveConfig)) throw new Error(getAIConfigRequiredMessage(effectiveConfig))
-      const { system, user } = buildCharacterMergePrompt(
-        reference.title, reference.author || '', craftTexts,
-      )
-      const output = await chat(
-        [{ role: 'system', content: system }, { role: 'user', content: user }],
-        { ...config, maxTokens: 4096 },
-        { category: 'reference.characters', projectId: reference.projectId, configOverrides: { maxTokens: 4096 } },
-      )
-      const characters = parseCharacterMergeOutput(output)
-      if (characters.length === 0) throw new Error('AI 未能解析出角色，请重试')
-      const next = JSON.stringify(characters)
-      await updateReferenceAnalysisDerived(run.id, { mergedCharacters: next })
-      setCharactersJSON(next)
-    } catch (err) {
-      toast.error(`整理角色卡失败：${err instanceof Error ? err.message : String(err)}`)
-    } finally {
-      setAggregatingChars(false)
-    }
-  }
+  const handleAggregateCharacters = () => derivedAI.run('characters')
 
   // 非空维度
   const nonEmptyDims = merged.dimensions.filter(d => d.items.length > 0)
@@ -256,16 +209,33 @@ export default function AnalysisReportViewer({ reference, run, chunks, isHistori
           {view === 'merged' && !summaryJSON && (
             <button
               onClick={handleGenerateSummary}
-              disabled={generatingSummary || nonEmptyDims.length === 0}
+              disabled={derivedAI.summary.busy || derivedAI.summary.candidate != null || nonEmptyDims.length === 0}
               className="flex items-center gap-1 px-3 py-1.5 text-xs bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors"
             >
-              {generatingSummary
+              {derivedAI.summary.busy
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 : <Sparkles className="w-3.5 h-3.5" />}
-              {generatingSummary ? '生成中…' : 'AI 全书总结'}
+              {derivedAI.summary.busy ? '生成中…' : 'AI 全书总结'}
             </button>
           )}
         </div>
+
+        <ReferenceDerivedCandidatePanel
+          mode="summary"
+          lane={derivedAI.summary}
+          onAccept={() => derivedAI.accept('summary')}
+          onReject={() => derivedAI.reject('summary')}
+          onRetry={() => derivedAI.retry('summary')}
+          onAbandon={() => derivedAI.abandonUnsafe('summary')}
+        />
+        <ReferenceDerivedCandidatePanel
+          mode="characters"
+          lane={derivedAI.characters}
+          onAccept={() => derivedAI.accept('characters')}
+          onReject={() => derivedAI.reject('characters')}
+          onRetry={() => derivedAI.retry('characters')}
+          onAbandon={() => derivedAI.abandonUnsafe('characters')}
+        />
 
         {view === 'merged' ? (
           <MergedView
@@ -274,7 +244,8 @@ export default function AnalysisReportViewer({ reference, run, chunks, isHistori
             aiCharacters={aiCharacters}
             hasCharacterCraft={hasCharacterCraft}
             onAggregate={handleAggregateCharacters}
-            aggregating={aggregatingChars}
+            aggregating={derivedAI.characters.busy}
+            aggregatePending={derivedAI.characters.candidate != null}
           />
         ) : (
           <ChunkListView chunks={chunks} isHistorical={isHistorical} />
@@ -284,10 +255,109 @@ export default function AnalysisReportViewer({ reference, run, chunks, isHistori
   )
 }
 
+function ReferenceDerivedCandidatePanel({
+  mode,
+  lane,
+  onAccept,
+  onReject,
+  onRetry,
+  onAbandon,
+}: {
+  mode: ReferenceDerivedModeV1
+  lane: ReferenceDerivedLaneState
+  onAccept: () => void
+  onReject: () => void
+  onRetry: () => void
+  onAbandon: () => void
+}) {
+  if (!lane.candidate && lane.unsafeRunId == null && !lane.message) return null
+  const label = mode === 'summary' ? '全书总结' : '角色卡聚合'
+  let preview: unknown = null
+  try { preview = lane.candidate ? JSON.parse(lane.candidate.resultJson) : null } catch { /* verified runner owns parsing */ }
+
+  return (
+    <div
+      className="rounded-xl border border-amber-400/30 bg-amber-500/5 p-3 space-y-3"
+      data-testid={`reference-derived-${mode}-candidate`}
+    >
+      <div className="flex items-center gap-2">
+        <Sparkles className="w-4 h-4 text-amber-400" />
+        <h3 className="text-sm font-medium text-text-primary">{label}持久候选</h3>
+        {lane.candidate && <span className="text-[10px] text-text-muted">Run #{lane.runId}</span>}
+      </div>
+      {lane.message && <p className="text-xs text-text-muted">{lane.message}</p>}
+      {lane.unsafeRunId != null && (
+        <div className="flex items-start gap-2 text-xs text-amber-300">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>模型结果是否返回无法判定；系统不会自动重试，以免产生双调用。</span>
+        </div>
+      )}
+      {lane.candidate && mode === 'summary' && Boolean(preview) && typeof preview === 'object' && !Array.isArray(preview) && (
+        <div className="space-y-2 max-h-72 overflow-y-auto">
+          {Object.entries(preview as Record<string, unknown>).map(([key, value]) => (
+            <div key={key} className="rounded-lg border border-border/40 bg-bg-surface p-2">
+              <div className="text-[10px] text-amber-400 mb-1">{DIMENSION_LABELS[key as AnalysisDimension] ?? key}</div>
+              <p className="text-xs text-text-primary whitespace-pre-wrap">{String(value)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {lane.candidate && mode === 'characters' && Array.isArray(preview) && (
+        <div className="space-y-2 max-h-72 overflow-y-auto">
+          {(preview as AIMergedCharacter[]).map(card => <AICharacterCard key={card.name} card={card} />)}
+        </div>
+      )}
+      <div className="flex flex-wrap justify-end gap-2">
+        {lane.unsafeRunId != null && (
+          <button
+            type="button"
+            onClick={onAbandon}
+            disabled={lane.busy}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded border border-amber-400/40 text-amber-300 disabled:opacity-50"
+          >
+            <X className="w-3.5 h-3.5" /> 放弃不可判定运行
+          </button>
+        )}
+        {lane.candidate && !lane.adoptionPending && (
+          <>
+            <button
+              type="button"
+              onClick={onReject}
+              disabled={lane.busy}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded border border-border text-text-muted disabled:opacity-50"
+            >
+              <X className="w-3.5 h-3.5" /> 拒绝
+            </button>
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={lane.busy}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded border border-border text-text-secondary disabled:opacity-50"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> 重试
+            </button>
+          </>
+        )}
+        {lane.candidate && (
+          <button
+            type="button"
+            onClick={onAccept}
+            disabled={lane.busy}
+            className="inline-flex items-center gap-1 px-3 py-1 text-xs rounded bg-accent text-white disabled:opacity-50"
+          >
+            {lane.busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            {lane.adoptionPending ? '继续确认' : '确认写入'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── 合并视图 ─────────────────────────────────────────────────
 
 function MergedView({
-  merged, summaryMap, aiCharacters, hasCharacterCraft, onAggregate, aggregating,
+  merged, summaryMap, aiCharacters, hasCharacterCraft, onAggregate, aggregating, aggregatePending,
 }: {
   merged: MergedAnalysisResult
   summaryMap: Record<string, string>
@@ -295,6 +365,7 @@ function MergedView({
   hasCharacterCraft: boolean
   onAggregate: () => void
   aggregating: boolean
+  aggregatePending: boolean
 }) {
   const hasSummary = Object.keys(summaryMap).length > 0
 
@@ -335,11 +406,13 @@ function MergedView({
             {hasCharacterCraft && (
               <button
                 onClick={onAggregate}
-                disabled={aggregating}
+                disabled={aggregating || aggregatePending}
                 className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg border border-purple-400/30 text-purple-400 hover:bg-purple-500/10 transition disabled:opacity-50"
               >
                 {aggregating
                   ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 整理中…</>
+                  : aggregatePending
+                    ? <><Sparkles className="w-3.5 h-3.5" /> 候选待确认</>
                   : <><Sparkles className="w-3.5 h-3.5" /> {aiCharacters.length > 0 ? '重新整理角色卡' : 'AI 整理角色卡'}</>}
               </button>
             )}

@@ -36,6 +36,8 @@ export type AgentSkillExecutionModeV1 =
   | 'map-config'
   | 'history-consult'
   | 'history-storm'
+  | 'reference-summary'
+  | 'reference-characters'
   | 'reverse'
   | 'auto'
   | 'story-arcs'
@@ -202,6 +204,7 @@ const FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS = [
   'foreshadowSuggestionBaseline',
 ] as const
 const HISTORY_AGENT_CONTEXT_SOURCE_KEYS = ['worldview', 'historyAgentBaseline'] as const
+const REFERENCE_DERIVED_CONTEXT_SOURCE_KEYS = ['referenceDerivedBaseline'] as const
 
 const CHARACTER_SUPPLEMENT_CONTEXT_SOURCE_KEYS = [
   'targetCharacter',
@@ -233,6 +236,15 @@ const CHARACTER_RELATIONSHIP_INPUT_POLICY: AgentSkillInputPolicyV1 = {
     empty: { handling: 'create-from-request', instruction: '没有足够的角色与剧情资料时返回空数组，不得编造关系。' },
     partial: { handling: 'reference-and-create', instruction: '只提取现有资料逐字支持的关系，不补写缺失剧情。' },
     complete: { handling: 'grounded-transform', instruction: '综合现有角色、关系、大纲与正文，输出可核对的关系候选。' },
+  },
+}
+
+const REFERENCE_DERIVED_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: REFERENCE_DERIVED_CONTEXT_SOURCE_KEYS,
+  states: {
+    empty: { handling: 'require-upstream', instruction: '没有已完成的版本化分块分析时不得生成派生结果。' },
+    partial: { handling: 'grounded-transform', instruction: '只整理已登记的分析维度或人物塑造文本，不补造来源内容。' },
+    complete: { handling: 'grounded-transform', instruction: '严格压缩版本化分析证据，保持来源、维度和角色归并可核查。' },
   },
 }
 
@@ -304,6 +316,7 @@ const PROSE_SELECTION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
 const PROSE_SELECTION_COMPRESSION_POLICY = compressionPolicy(['manualText'])
 const FORESHADOW_SUGGESTION_COMPRESSION_POLICY = compressionPolicy(FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS)
 const HISTORY_AGENT_COMPRESSION_POLICY = compressionPolicy(HISTORY_AGENT_CONTEXT_SOURCE_KEYS)
+const REFERENCE_DERIVED_COMPRESSION_POLICY = compressionPolicy(REFERENCE_DERIVED_CONTEXT_SOURCE_KEYS)
 
 const HISTORY_AGENT_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   sourceKeys: HISTORY_AGENT_CONTEXT_SOURCE_KEYS,
@@ -1411,6 +1424,52 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'inspiration.reference-summary',
+    agentId: 'inspiration',
+    defaultForAgent: false,
+    label: '参考分析全书总结',
+    owner: 'inspiration-agent',
+    promptVersion: 'reference-derived-v1',
+    executionMode: 'reference-summary',
+    contextTaskKind: 'agent-inspiration',
+    readToolNames: [],
+    contextSourceKeys: REFERENCE_DERIVED_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: REFERENCE_DERIVED_INPUT_POLICY,
+    contextCompression: REFERENCE_DERIVED_COMPRESSION_POLICY,
+    maxOutputTokens: 4_096,
+    writeTargets: [
+      { table: 'referenceAnalysisRuns', fields: ['analysisSummary'] },
+      { table: 'references', fields: ['analysisSummary'], adoptionExtension: 'reference-analysis-reference-lifecycle' },
+    ],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS74-reference-derived-durable'],
+  },
+  {
+    version: 1,
+    id: 'inspiration.reference-characters',
+    agentId: 'inspiration',
+    defaultForAgent: false,
+    label: '参考分析角色卡聚合',
+    owner: 'inspiration-agent',
+    promptVersion: 'reference-derived-v1',
+    executionMode: 'reference-characters',
+    contextTaskKind: 'agent-inspiration',
+    readToolNames: [],
+    contextSourceKeys: REFERENCE_DERIVED_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: REFERENCE_DERIVED_INPUT_POLICY,
+    contextCompression: REFERENCE_DERIVED_COMPRESSION_POLICY,
+    maxOutputTokens: 4_096,
+    writeTargets: [
+      { table: 'referenceAnalysisRuns', fields: ['mergedCharacters'] },
+      { table: 'references', fields: ['mergedCharacters'], adoptionExtension: 'reference-analysis-reference-lifecycle' },
+    ],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS74-reference-derived-durable'],
+  },
+  {
+    version: 1,
     id: 'inspiration.reverse',
     agentId: 'inspiration',
     defaultForAgent: true,
@@ -2179,7 +2238,7 @@ export function validateAgentSkillDefinitionsV1(
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
     'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'constitution-extract', 'codex-extract', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'relationships']),
-    inspiration: new Set(['reverse', 'review']),
+    inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
     prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency']),
   }

@@ -8,7 +8,6 @@
     { "file": "src/components/outline/ChapterOutlineWorkshop.tsx", "calls": 1, "status": "governed", "mechanism": "generation-node", "reason": "五阶段章纲工坊通过 GenerationNode 和既有确认式采纳。" },
     { "file": "src/components/outline/OutlinePanel.tsx", "calls": 1, "status": "governed", "mechanism": "durable-run", "reason": "卷纲/章纲主路径已接 durable adapter。" },
     { "file": "src/components/outline/useDetailedOutlineGenerationController.ts", "calls": 2, "status": "governed", "mechanism": "durable-run", "reason": "单章细纲共用 HARNESS-37 durable 控制器。" },
-    { "file": "src/components/project/AnalysisReportViewer.tsx", "calls": 2, "status": "migration", "nextUnit": "HARNESS-60", "reason": "参考总结与角色合并直接更新分析派生结果，实体消歧证据不足。" },
     { "file": "src/components/scene/SceneVerifyPanel.tsx", "calls": 1, "status": "auxiliary", "mechanism": "read-only-review", "reason": "场景考证只读登记上下文并展示建议，不写业务表。" },
     { "file": "src/components/settings/HarnessEvalPanel.tsx", "calls": 3, "status": "auxiliary", "mechanism": "eval-only", "reason": "开发评测入口只生成评测 artifact，不进入创作 Canon。" },
     { "file": "src/components/settings/prompt/PromptExamplesEditor.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "示例生成结果可写 Prompt 配置，尚无 durable 候选证据。" },

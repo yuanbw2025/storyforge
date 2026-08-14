@@ -58,7 +58,7 @@
 | 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
 | 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
 | 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
-| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～72 收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑、世界地图、世界观七字段扩写、多世界建议、世界宪法扫描、Codex 词条拆分、修炼进度提取和伏笔建议后，当前为 16 个文件 / 30 个静态构造点：7 个 governed、4 个 auxiliary、5 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
+| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～74 已依次收口角色关系、情感节拍、地点/物品/年表提取、局部正文、世界地图/扩写/建议、宪法扫描、Codex、修炼进度、伏笔、历史双 Agent 与参考分析派生，当前为 14 个文件 / 26 个静态构造点：7 个 governed、4 个 auxiliary、3 个 migration。剩余 Prompt 示例与两处文风入口仍明确登记，未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
 
 ### HARNESS-61 完成卡：情感节拍 durable 候选与采纳
 
@@ -226,6 +226,19 @@
 | 生命周期 / 作用域 | 不新增表/schema；`histories / historicalTimelineEvents / historicalKeywords` 继续由 PROJECT_TABLES 派生 World 归属、世界组、导入导出、删除和重映射生命周期。候选含本地目标 ID，`portable:false`，导入后取消；其它 World/Work/世界组或已删除目标不可恢复/采纳。 |
 | UI / 回滚 | `HistoryPanel` 保留人工事件/关键词/总述编辑与已保存结果清除；两个 lane 各自展示候选、拒绝、重试、确认与不可判定运行显式放弃。旧 `useAIStream`、组件内 `assembleContext()`、组件控制器直接 `adopt()` 和内存输出旁路下线。 |
 | 验收 | durable 18 项、控制器/UI/既有历史 17 项和注册表 11 项共 46 项定向回归通过；census 收缩为 15 文件 / 28 入口、4 migration。完整 CI 为 361 files / 1699 tests，覆盖率 81.37% statements / 73.69% branches / 78.93% functions / 81.37% lines；3761 模块生产构建与 bundle budget 通过，入口 664.9 KiB / gzip 205.4 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 49/49；新主路径约 6.3 秒，证明登记 baseline/严格协议进入真实请求、刷新恢复不重复模型调用、确认前零正式结果写入、确认后结果跨刷新持久化。 |
+
+### HARNESS-74 完成卡：参考分析总结 / 角色聚合 durable 版本派生
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-74` 治理小功能。作者从一个已完成的参考分析版本生成全书总结或角色聚合时，结果先成为可刷新恢复的持久候选；确认前版本和激活参考投影均零写入。 |
+| 主归属 / 复用 | 在同一 `inspiration` Agent 下新增 `inspiration.reference-summary / inspiration.reference-characters` 两个 Skill，共用版本派生运行器，复用 Context Gateway、durable Run/checkpoint、通用 record-field CAS、`FIELD_REGISTRY + AdoptionSchema + adopt()`、PROJECT_TABLES 生命周期与 terminal receipt。 |
+| 读 / 写 | 模型只经 `referenceDerivedBaseline` 读取当前 Work 中精确参考、精确分析版本及其分块分析、来源/授权声明。总结只写 `referenceAnalysisRuns.analysisSummary`，角色聚合只写 `referenceAnalysisRuns.mergedCharacters`；仅当目标版本仍为 `active` 时同步同字段到 `references` 兼容投影。 |
+| 状态机 / 硬验证 | 冻结 Work、参考/版本 ID、版本状态、完整分块派生输入、来源声明、版本与参考投影原字段 presence/value、Context Manifest、实际 Prompt 和模板。总结只接受与非空维度同序 exact-key JSON；角色只接受 1～80 张四字段唯一角色卡。未知模型结果不自动重试。 |
+| 采纳恢复 | 确认前复核来源 baseline、Context、Prompt 及两个目标字段 CAS；ready/superseded 版本只写版本字段，active 版本依次写版本和兼容投影。采纳冻结后只能沿原 Run 收敛，版本写后或投影写后中断均可幂等恢复，终验回读两个真实目标后才签发 receipt。 |
+| 生命周期 / 作用域 | 不新增表/schema；`references / referenceAnalysisRuns / referenceChunkAnalysis / referenceAnalysisSources` 继续由 PROJECT_TABLES 派生 Work 归属、导入导出、删除和引用重映射生命周期。候选含本地版本 ID，`portable:false`，导入后取消；其它 Work、参考、版本或已删除目标不可恢复/采纳。 |
+| UI / 回滚 | `AnalysisReportViewer` 为总结和角色分别展示候选、拒绝、重试、确认与不可判定运行显式放弃；人工版本激活、删除和分块报告阅读保留。旧组件两处直接 `chat()`、内存结果和即时 `updateReferenceAnalysisDerived()` 写回旁路下线。 |
+| 验收 | durable 20 项、控制器 3 项、组件 UI 3 项与 H59 3 项共 29 项定向回归通过；缺少模型配置时零 Run，census 收缩为 14 文件 / 26 入口、3 migration。最终完整 CI 为 364 files / 1725 tests，覆盖率 81.41% statements / 73.71% branches / 79.18% functions / 81.41% lines；3765 模块生产构建与 bundle budget 通过，入口 669.7 KiB / gzip 207.1 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 50/50；新主路径约 8.1 秒，最终代码同路径精确复跑 1/1（9.4 秒），证明登记版本 baseline/严格协议进入真实请求、候选刷新恢复不重复模型调用、确认前零正式写入，确认后版本及 active 参考投影跨刷新持久化。 |
 
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 

@@ -397,6 +397,9 @@ export interface AssembleContextInput {
   historyAgentMode?: 'consult' | 'storm'
   historyAgentTargetKind?: 'event' | 'keyword'
   historyAgentTargetId?: number
+  /** HARNESS-74: trusted version target for reference summary/character derivation. */
+  referenceDerivedMode?: 'summary' | 'characters'
+  referenceAnalysisRunId?: number
   outlineNodeId?: number | null
   chapterId?: number | null
   currentChapterOrder?: number

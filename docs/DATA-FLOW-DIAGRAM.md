@@ -215,6 +215,7 @@ flowchart LR
         WR["worldRulesProfiles"]
         LOC["importantLocations"]
         HIST["historical events + keywords"]
+        REF["references + referenceAnalysisRuns<br/>+ referenceChunkAnalysis"]
         RULES["creativeRules"]
     end
 
@@ -235,6 +236,7 @@ flowchart LR
         FCTX["buildForeshadowContext 开放伏笔"]
         HCTX["buildHistoricalContext 历史年表"]
         HAGCTX["historyAgentBaseline<br/>已保存总述/纪年 + 精确事件/关键词 + 作者边界"]
+        RDCTX["referenceDerivedBaseline<br/>精确参考/版本 + 分块派生输入 + 来源声明"]
         LCTX["buildLocationContext 重要地点"]
         WRCTX["buildWorldRulesContext 真实与幻想"]
         RCTX["buildRefAnalysisContext 引用参考"]
@@ -254,6 +256,7 @@ flowchart LR
     FORE --> FCTX
     HIST --> HCTX
     HIST --> HAGCTX
+    REF --> RDCTX
     LOC --> LCTX
     WR --> WRCTX
     RULES --> R_RULES
@@ -275,6 +278,7 @@ flowchart LR
         G_CH_PANEL["角色生成 character.generate"]
         G_FO_PANEL["伏笔建议 foreshadow.suggest"]
         G_HAG["历史考据 / 风暴<br/>world-origin.history-consult / history-storm<br/>durable 候选 → 确认 → adopt(aiConsult|aiBrainstorm)"]
+        G_RD["参考总结 / 角色聚合<br/>inspiration.reference-summary / reference-characters<br/>durable 候选 → 版本写入 → active 投影"]
         G_SA_PANEL["故事线规划 outline.story-arcs<br/>durable 候选 → 作者确认 → adopt(storyArcs)"]
         G_VOL["卷大纲 outline.volume"]
         G_CHP["章大纲 outline.chapter"]
@@ -294,6 +298,7 @@ flowchart LR
     SWORLD ==> G_FO_PANEL
     F1 ==> G_HAG
     HAGCTX ==精确目标快照==> G_HAG
+    RDCTX ==精确版本快照==> G_RD
     SWORLD ==> G_SA_PANEL
     SWORLD ==> G_VOL
     NODECTX ==注入按节点==> G_CHP
@@ -343,9 +348,9 @@ flowchart LR
     classDef aux fill:#0e7490,stroke:#155e75,color:#fff;
     class F1,F2,F3 share
     class SWORLD,MWORLD,NODECTX path
-    class G_WV_PANEL,G_SC_PANEL,G_RU_PANEL,G_CH_PANEL,G_FO_PANEL,G_HAG,G_SA_PANEL,G_VOL,G_CHP,G_DET,G_CONT,G_SV,G_CDP,G_RV,G_READ,G_SUM gen
-    class WV,SC,PS,CHAR,FORE,CODEX,WR,LOC,HIST,RULES,EBEAT_NODE table
-    class CCTX,FCTX,HCTX,HAGCTX,LCTX,WRCTX,RCTX,ICTX,MEMO,STX,GENRE,STYLE,CDXCTX,R_RULES,MEM aux
+    class G_WV_PANEL,G_SC_PANEL,G_RU_PANEL,G_CH_PANEL,G_FO_PANEL,G_HAG,G_RD,G_SA_PANEL,G_VOL,G_CHP,G_DET,G_CONT,G_SV,G_CDP,G_RV,G_READ,G_SUM gen
+    class WV,SC,PS,CHAR,FORE,CODEX,WR,LOC,HIST,REF,RULES,EBEAT_NODE table
+    class CCTX,FCTX,HCTX,HAGCTX,RDCTX,LCTX,WRCTX,RCTX,ICTX,MEMO,STX,GENRE,STYLE,CDXCTX,R_RULES,MEM aux
 ```
 
 ---

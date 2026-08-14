@@ -3205,3 +3205,156 @@ test('历史考据刷新恢复持久候选，确认后只写正式考据结果',
   await expect(page.getByText('AI 历史考据结果', { exact: true })).toBeVisible()
   expect(generationCalls).toBe(1)
 })
+
+test('参考分析总结刷新恢复持久候选，确认后同步版本和激活参考投影', async ({ page }) => {
+  let generationCalls = 0
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'reference-derived-durable-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+      contextWindow: 100000,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls += 1
+    const request = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = request.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain('【参考分析派生 Agent 正式输入基线】')
+    expect(combined).toContain('镜城证词')
+    expect(combined).toContain('有限视角在关键证词处切换')
+    expect(combined).toContain('【HARNESS-74 严格输出协议】')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: JSON.stringify({
+              narrativeStyle: '全书用受限视角保持证词之间的信息差。',
+              characterCraft: '林照雪通过克制行动而非自述完成立场变化。',
+            }),
+          },
+          finish_reason: 'stop',
+        }],
+        usage: { prompt_tokens: 170, completion_tokens: 58, total_tokens: 228 },
+      }),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E 参考派生 durable 闭环')
+  const projectId = Number(page.url().match(/workspace\/(\d+)/)?.[1])
+  expect(projectId).toBeGreaterThan(0)
+  await page.evaluate(async currentProjectId => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const project = await request(database.transaction('projects').objectStore('projects').get(currentProjectId)) as {
+      activeWorldId: number
+      activeWorkId: number
+    }
+    const now = Date.now()
+    const transaction = database.transaction([
+      'references', 'referenceAnalysisRuns', 'referenceChunkAnalysis',
+    ], 'readwrite')
+    const referenceId = await request(transaction.objectStore('references').add({
+      projectId: currentProjectId,
+      worldId: project.activeWorldId,
+      workId: project.activeWorkId,
+      title: '镜城证词',
+      author: '测试作者',
+      type: 'story',
+      note: '验证版本化总结派生',
+      url: '',
+      genre: '悬疑',
+      totalChars: 300,
+      fileHash: 'e2e-reference-hash',
+      analysisDepth: 'deep',
+      analysisStatus: 'done',
+      analysisProgress: 100,
+      createdAt: now,
+      updatedAt: now,
+    })) as number
+    const analysisRunId = await request(transaction.objectStore('referenceAnalysisRuns').add({
+      projectId: currentProjectId,
+      worldId: project.activeWorldId,
+      workId: project.activeWorkId,
+      referenceId,
+      version: 1,
+      status: 'active',
+      depth: 'deep',
+      sourceFilename: 'mirror.md',
+      fileHash: 'e2e-reference-hash',
+      totalChars: 300,
+      sourceKind: 'own-work',
+      usageScope: 'creative-reference',
+      rightsNote: '作者自有测试文本',
+      rightsConfirmed: true,
+      rightsDeclaredAt: now,
+      expectedChunks: 1,
+      completedChunks: 1,
+      progress: 100,
+      completedAt: now,
+      activatedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })) as number
+    await request(transaction.objectStore('referenceChunkAnalysis').add({
+      projectId: currentProjectId,
+      worldId: project.activeWorldId,
+      workId: project.activeWorkId,
+      referenceId,
+      analysisRunId,
+      chunkIndex: 0,
+      label: '第一章',
+      narrativeStyle: '有限视角在关键证词处切换。',
+      characterCraft: '林照雪以克制行动推动角色弧。',
+      createdAt: now,
+    }))
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+      transaction.onabort = () => reject(transaction.error)
+    })
+    database.close()
+  }, projectId)
+
+  await page.reload()
+  await openSidebarLeaf(page, '著作信息', '项目参考')
+  await page.getByText('镜城证词', { exact: true }).click()
+  await expect(page.getByText('v1 · 深层 · mirror.md', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'AI 全书总结', exact: true }).click()
+  await expect(page.getByText('全书总结持久候选', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('全书用受限视角保持证词之间的信息差。', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '著作信息', '项目参考')
+  await page.getByText('镜城证词', { exact: true }).click()
+  await expect(page.getByText('已恢复待确认候选；没有重复调用模型。', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.getByRole('button', { name: '确认写入', exact: true }).click()
+  await expect(page.getByText('AI 全书总结', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('全书用受限视角保持证词之间的信息差。', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '著作信息', '项目参考')
+  await page.getByText('镜城证词', { exact: true }).click()
+  await expect(page.getByText('全书用受限视角保持证词之间的信息差。', { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+})

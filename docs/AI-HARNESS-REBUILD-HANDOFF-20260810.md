@@ -6,7 +6,7 @@
 >
 > 远端分支：`origin/feat/harness-rebuild-20260807`
 >
-> 最新功能单元：`HARNESS-73 历史考据 / 头脑风暴 durable 定点结果`（具体提交以 `git log -1` 为准）
+> 最新功能单元：`HARNESS-74 参考分析总结 / 角色聚合 durable 版本派生`（具体提交以 `git log -1` 为准）
 >
 > 世界引擎基线：`774a2ae feat(WORLD-2): close executable world foundation through 2F`
 >
@@ -232,7 +232,7 @@ git log --oneline --reverse 774a2ae..HEAD
 - HARNESS-56：可信 handoff 建立零模型 child Run 并冻结正式目标 pre-state；只有作者在既有面板保存、显式终验且同一记录业务状态确实变化后才签发 receipt。刷新、覆盖、篡改、作用域、导入和终验后变化均 fail-closed。
 - HARNESS-57：以 H56 fresh receipt/post-state 为父证据复用 HARNESS-49 planner，重建当前 graph/plan 并保守分类 resolved/remaining/new；工作区即时执行、来源编辑器可恢复，旧 review 不再冒充当前。
 - HARNESS-58：来源编辑器重新验证 fresh H57 后，将其 current plan 的确定性余项交给 H47；child 绑定 H57 receipt/output，真实 output checkpoint 支持刷新、重复点击和 10 个 durable 边界恢复，只写检索块与层级摘要。
-- HARNESS-59：以 AST 注册表冻结 UI 直调模型 census；初始 29 个文件 / 44 个静态入口，HARNESS-60～73 完成后为 15 个文件 / 28 个入口，分为 7 governed、4 auxiliary、4 migration；CI 拒绝未登记新增、计数漂移、残留和无迁移归属。
+- HARNESS-59：以 AST 注册表冻结 UI 直调模型 census；初始 29 个文件 / 44 个静态入口，HARNESS-60～74 完成后为 14 个文件 / 26 个入口，分为 7 governed、4 auxiliary、3 migration；CI 拒绝未登记新增、计数漂移、残留和无迁移归属。
 - HARNESS-60：将角色关系 AI 提取收口到 `character.relationships` Skill；上下文只经注册源读取并按 World 隔离，严格候选持久化后由作者勾选，确认才经 `adopt()` 写关系表与角色摘要，支持八个采纳中断点恢复、baseline stale、导入取消和 terminal receipt。
 - HARNESS-61：情感节拍进入 `prose.emotion-beats` durable Skill；七个 Context Gateway 源、严格 3–6 拍候选、作者确认后 `adopt(emotionBeatCards)`、八边界恢复、baseline/context stale、导入取消与 terminal receipt 过期已闭合。
 - HARNESS-62：重要地点进入 `world-origin.locations` durable 长任务；只读当前 Work/World 登记上下文，冻结章节/分块/模板/地点 baseline，每个已完成分块 checkpoint、只续跑剩余分块；模型结果不确定窗口不自动重试。全部调用后持久化严格候选，冻结作者选择后只经 `adopt(importantLocations)` 写入；八采纳边界、导入取消、作用域隔离和 terminal stale 已闭合。
@@ -247,6 +247,7 @@ git log --oneline --reverse 774a2ae..HEAD
 - HARNESS-71：修炼进度分析进入 `prose.cultivation-progress-extraction`。模型只经 `chapterContent / cultivationProgressExtractionBaseline` 读取目标正文、当前 World 角色、体系 DAG、规范章序和当前 Work 全量进度 baseline；严格候选不允许模型决定 transition。作者子集冻结后，事务内二次 CAS 并由系统按 DAG/章序确定新增与既有后续事件 transition，再经登记采纳层原子提交。空结果、未知模型窗、候选崩溃窗、八采纳边界、上游/正式状态 stale、World/Work/世界组隔离与 terminal receipt 已闭合；旧组件直调、宽松 parser、内存逐条写入旁路下线。
 - HARNESS-72：伏笔建议进入 `outline.foreshadow-suggestions`。模型只经登记的 Canon、世界、故事、角色、规则、历史、地点与 `foreshadowSuggestionBaseline` 读取当前 Work；一次 strict exact-key JSON 调用直接生成 0～12 项规划候选，不再先生成自由文本、再调用第二个模型结构化。作者可选择子集，冻结后只有项目、完整伏笔 baseline、上游 Context 与 Prompt 仍 fresh，才在事务内二次 CAS 并经 `FIELD_REGISTRY + AdoptionSchema + adopt(foreshadows)` 原子新增 `planned` 伏笔，章节引用固定为空。未知模型窗、候选崩溃窗、八采纳边界、空结果、导入取消、Work 隔离与 terminal stale 已闭合；旧组件双模型直调、内存候选和逐条写入旁路下线，人工伏笔 CRUD 保留。
 - HARNESS-73：历史事件/关键词的考据与风暴分别进入 `world-origin.history-consult / world-origin.history-storm`。模型只经 `worldview / historyAgentBaseline` 读取当前 World/世界组、已保存历史总述/纪年、精确目标与作者边界；严格 Markdown 先成为不可便携持久候选。作者确认且来源、Context、Prompt 与原结果字段 presence/value CAS 仍 fresh 时，才只经 `adopt()` 写 `aiConsult` 或 `aiBrainstorm`，另一路结果可独立变化。未知模型窗、候选恢复、八采纳边界、目标删除、导入取消、World/Work/世界组隔离与 terminal stale 已闭合；旧两路 `useAIStream`、组件内 Context 和即时写回旁路下线，人工历史 CRUD 与结果清除保留。
+- HARNESS-74：参考分析总结/角色聚合分别进入 `inspiration.reference-summary / inspiration.reference-characters`。模型只经 `referenceDerivedBaseline` 读取当前 Work 的精确参考、精确分析版本、分块派生输入与来源声明；strict JSON 先成为不可便携持久候选。作者确认且来源、Context、Prompt、版本字段及兼容投影字段 presence/value CAS 仍 fresh 时，才先经 `adopt(referenceAnalysisRuns)` 写版本字段；仅 active 版本同步 `adopt(references)` 投影，ready/superseded 不污染当前参考。未知模型窗、候选恢复、版本/投影分段写入、十个采纳边界、目标删除、导入取消、Work/版本隔离与 terminal stale 已闭合；旧两处组件 `chat()`、内存输出和即时写回旁路下线。
 
 HARNESS-58 最新代码入口：
 
@@ -281,12 +282,12 @@ HARNESS-58 最新代码入口：
 | 反向反馈 | 影响图、受限 patch、确定性重建、作者复核、可信精确交接、人工保存 pre/post receipt、修正后 resolved/remaining/new 当前计划及其确定性余项 child 执行已完成 | AI 下游重新生成和通用依赖重跑尚未完成；每次只允许按一个目标类型扩展 |
 | 评测/发布 | 大量模块回归、H4 工程基座、配对 gate 和防篡改证据存在 | 真实外部模型 H4 40+20 artifact、人工 held-out 复核、真实质量/成本/延迟净收益未完成 |
 
-## 8. 当前停点：HARNESS-73 已完成，当前验证证据
+## 8. 当前停点：HARNESS-74 已完成，当前验证证据
 
 ### 8.1 已通过
 
 - HARNESS-47/57/58 定向回归：20 项通过；其中 H58 7 项覆盖父子 lineage、真实输出复用、frozen output 篡改和 10 个 durable 中断边界。
-- HARNESS-59 AST census 守卫通过：HARNESS-60～73 后为 15 个文件 / 28 个入口，7 governed、4 auxiliary、4 migration。
+- HARNESS-59 AST census 守卫通过：HARNESS-60～74 后为 14 个文件 / 26 个入口，7 governed、4 auxiliary、3 migration。
 - HARNESS-60 定向回归 10 项通过：候选零写入、严格 parser/精确实体、刷新恢复、baseline stale、拒绝、八个持久化边界中断恢复、导入取消和多世界隔离。
 - HARNESS-61 定向回归 14 项通过：七源真实 prompt、候选零写入、严格 parser、刷新/拒绝、八边界恢复、写前二次 CAS、写后上游 stale 拒绝终验、adoption 后正式卡漂移暂停、terminal 后卡/上游改变撤销 receipt、导入取消和作用域隔离。
 - HARNESS-62 定向回归 14 项通过：多分块全完成后候选、零正式写入、只续跑剩余分块、候选事件与检查点间中断重建、模型结果不确定禁止重试、任一分块协议失败时无部分候选、上游 CAS、候选/冻结选择恢复、严格 parser、八采纳边界、导入取消、Work/World 隔离、terminal stale 和旧旁路下线。与 H59/C 组合计 24 项定向回归通过。
@@ -301,13 +302,14 @@ HARNESS-58 最新代码入口：
 - HARNESS-71 durable 专项 22 项与原修炼领域/UI 7 项通过：两登记 Context 实际进入模型、候选前零正式写入、strict exact-key JSON、闭集 ID/唯一逐字证据、transition 系统确定、空结果、模型未知窗、候选崩溃窗、正文/章序/角色/体系 DAG/完整进度 baseline/Prompt stale、事务内二次 CAS、选择冻结、八采纳边界、既有后续事件原子归一化、导入取消、World/Work 隔离、terminal stale 与旧旁路下线均闭合。
 - HARNESS-72 durable 专项 18 项、组件 UI 2 项、H59 3 项与 Context Gateway 通用预算反例 3 项通过：登记 Canon/角色/完整伏笔 baseline 实际进入一次模型调用、候选前零正式写入、strict exact-key 0～12 项 JSON、枚举/空白/重复名拒绝、空结果、模型未知窗、候选崩溃窗、项目/正式伏笔/故事核心/角色/Context/Prompt stale、事务内二次 CAS、选择冻结、八采纳边界、导入取消、Work 隔离、terminal stale、通用空项目装配与旧双模型旁路下线均闭合。
 - HARNESS-73 durable 专项 18 项，更新后的控制器/UI/既有历史 17 项与注册表 11 项共 46 项定向回归通过：两登记 Context 实际进入模型、事件/关键词 × 考据/风暴目标闭集、确认前正式结果零写入、有序标题严格 Markdown、模型未知窗、候选崩溃窗、来源/Context/Prompt/原结果字段 stale、另一路结果独立变化、八采纳边界、目标删除、导入取消、World/Work/世界组隔离、terminal stale 与旧两路组件旁路均闭合。
+- HARNESS-74 durable 专项 20 项、控制器 3 项、组件 UI 3 项与 H59 3 项共 29 项定向回归通过：登记版本 baseline 实际进入模型、总结/角色两模式严格协议、恢复完成前快速点击阻断、缺少模型配置时零 Run、重试真实创建新 Run、确认前版本与参考投影零写入、模型未知窗、候选崩溃窗、来源/Context/Prompt/版本及投影字段 stale、active 双写/ready 单写、版本/投影分段写入后的十个采纳边界、目标删除、导入取消、Work/版本隔离、terminal stale 与旧两处组件直调旁路均闭合。
 - `npx tsc --noEmit`：通过。
 - 改动范围 ESLint 与全仓 `npm run lint`：通过。
 - `git diff --check`：通过。
-- `npm run test:coverage` 独占资源重跑：361 个测试文件、1699 项测试全部通过。
-- 覆盖率：statements 81.37%、branches 73.69%、functions 78.93%、lines 81.37%。
-- `npm run build`：通过，3761 个模块完成生产构建。
-- `npm run check:bundle-size`：通过；入口约 664.9 KiB，gzip 约 205.4 KiB。
+- `npm run test:coverage` 独占资源重跑：364 个测试文件、1725 项测试全部通过。
+- 覆盖率：statements 81.41%、branches 73.71%、functions 79.18%、lines 81.41%。
+- `npm run build`：通过，3765 个模块完成生产构建。
+- `npm run check:bundle-size`：通过；入口约 669.7 KiB，gzip 约 207.1 KiB。
 - `npm run ci`：完整通过，包括 required tables、AI manual/entry registry、architecture、source reachability、roadmap、agent context/freshness、Canon coverage、project metrics、生产依赖审计、全仓 lint、TypeScript、全量 coverage、生产构建和 bundle budget。
 
 ### 8.2 CI / 工作树状态
@@ -319,7 +321,7 @@ HARNESS-58 最新代码入口：
 found 0 vulnerabilities
 ```
 
-H64～H73 在独立 worktree 中完成；原工作树的作者改动及未跟踪 `output/` / `tmp/` 未被读取、修改或提交。H73 的最终架构、CI 与 E2E 数字以本节最新记录为准。
+H64～H74 在独立 worktree 中完成；原工作树的作者改动及未跟踪 `output/` / `tmp/` 未被读取、修改或提交。H74 的最终架构、CI 与 E2E 数字以本节最新记录为准。
 
 ### 8.3 E2E 状态
 
@@ -338,6 +340,8 @@ HARNESS-71 最终 `npm run ci:e2e` 使用同一项目 Chromium、单 worker 和�
 HARNESS-72 最终 `npm run ci:e2e` 使用同一项目 Chromium、单 worker 和独立浏览器数据原样运行，48/48 通过，耗时 4.0 分钟。伏笔主路径用例约 5.8 秒：从零创建项目并进入伏笔面板，拦截真实 OpenAI-compatible 请求并验证项目、正式伏笔 baseline 与严格协议进入实际 Prompt；候选生成后刷新，正式伏笔仍为零且同一候选从 ledger 恢复，模型调用保持一次；作者确认后才原子新增 `planned` 伏笔，再次刷新仍持久化。没有使用或修改作者当前预览项目。
 
 HARNESS-73 最终 `npm run ci:e2e` 使用同一项目 Chromium、单 worker 和独立浏览器数据原样运行，49/49 通过，耗时 4.2 分钟。历史考据主路径用例约 6.3 秒：从零创建项目和历史事件，拦截真实 OpenAI-compatible 请求并验证登记世界观、精确历史 baseline 与严格协议进入实际 Prompt；候选生成后刷新，正式考据结果仍为空且同一候选从 ledger 恢复，模型调用保持一次；作者确认后才只写目标 `aiConsult`，再次刷新仍持久化。没有使用或修改作者当前预览项目。
+
+HARNESS-74 最终 `npm run ci:e2e` 使用同一项目 Chromium、单 worker 和独立浏览器数据原样运行，50/50 通过，耗时 4.3 分钟。参考派生主路径约 8.1 秒：从零创建项目并在独立浏览器 IndexedDB 构造 active 参考分析版本，拦截真实 OpenAI-compatible 请求并验证精确版本 baseline、分块取样与 HARNESS-74 严格协议进入实际 Prompt；候选生成后刷新，版本和参考投影仍为空且同一候选从 ledger 恢复，模型调用保持一次；作者确认后版本与 active 参考投影同步写入，再次刷新仍持久化。配置前置修正后的最终代码又精确复跑该路径 1/1 通过（9.4 秒）。没有使用或修改作者当前预览项目。
 
 ### 8.4 测试负载注意事项
 
@@ -515,7 +519,7 @@ git diff --check
 
 当前重构已经从“提示词字段拼接 + 零散质量检查”推进到真正的 Agent/Skill + durable Harness 主体：主要生成入口有明确职责、上下文证据、结构化候选、作者确认、受治理采纳、终态验证、恢复和回放；正文也具备信息隔离、语义评审、章后状态和影响图。
 
-当前最关键的未闭环不是再造 Agent。HARNESS-56～58 的反向反馈后半链、HARNESS-59 census 和 HARNESS-60～73 的高风险入口已经分别闭合。接手者应按 census 继续清理剩余 4 个 migration，每次只扩展一个真实目标类型；随后完成生成式下游重建与通用依赖闭环，最后取得真实模型质量/成本/延迟、真实 E2E 和完整 CI 发布证据。任何接续工作都应沿这个顺序推进。
+当前最关键的未闭环不是再造 Agent。HARNESS-56～58 的反向反馈后半链、HARNESS-59 census 和 HARNESS-60～74 的高风险入口已经分别闭合。接手者应按 census 继续清理剩余 3 个 migration，每次只扩展一个真实目标类型；随后完成生成式下游重建与通用依赖闭环，最后取得真实模型质量/成本/延迟、真实 E2E 和完整 CI 发布证据。任何接续工作都应沿这个顺序推进。
 
 ## 17. 2026-08-14 跨电脑接续状态（当前权威入口）
 
@@ -611,9 +615,9 @@ tests/regression/R-HARNESS64-story-timeline-extraction-durable.test.ts
 
 H64 专属回归、H59/H63/H64 联合回归通过；`docs/roadmap/README.md`、`docs/roadmap/CAPABILITY-BASELINE.md`、`docs/AI-HARNESS-AUDIT-20260807.md`、本文、`docs/AI-FUNCTIONS-MANUAL.md`、生成版 AI manual、`docs/DATA-FLOW-DIAGRAM.md` 和项目指标均随独立完成提交同步，不 amend `757ce47`。
 
-### 17.5 H73 完成后的总路线
+### 17.5 H74 完成后的总路线
 
-H73 已完成；继续读取 `src/lib/agent/ai-entry-registry.json`，按真实写入风险与可复用 durable 模式清理剩余 4 个 migration。不要为追求数字机械搬运辅助入口，也不要建立平行 runtime。随后继续闭合生成下游/通用依赖、三注册表和数据生命周期遗漏，最后取得：
+H74 已完成；继续读取 `src/lib/agent/ai-entry-registry.json`，按真实写入风险与可复用 durable 模式清理剩余 3 个 migration。不要为追求数字机械搬运辅助入口，也不要建立平行 runtime。随后继续闭合生成下游/通用依赖、三注册表和数据生命周期遗漏，最后取得：
 
 - 真实外部模型的质量、人工修改量、完成率、token、成本、延迟和 p95 证据；H4 development 40 + held-out 20 必须使用真实独立 generator/verifier artifact，并完成人工 held-out 复核。
 - 独立浏览器数据中的真实 UI/API E2E，不得修改作者当前预览项目。
@@ -622,8 +626,8 @@ H73 已完成；继续读取 `src/lib/agent/ai-entry-registry.json`，按真实�
 当前交付基线已经更新：
 
 - 全仓 `npm run lint` 与完整 `npm run ci` 通过；生产依赖审计为 0 漏洞，`nanoid` 公告已通过同主版本 `5.1.16` 修复，未使用强制审计修复。
-- 项目指定 Playwright Chromium 在 H73 最终交付重跑为 49/49；历史考据 durable 主路径包含在内。后续单元仍须按适用范围重跑，不能借用历史结果。
-- 最近一次全量 coverage 为 361 files / 1699 tests，全部通过；覆盖率为 81.37% statements / 73.69% branches / 78.93% functions / 81.37% lines。
+- 项目指定 Playwright Chromium 在 H74 最终交付重跑为 50/50；参考派生 durable 主路径包含在内。后续单元仍须按适用范围重跑，不能借用历史结果。
+- 最近一次全量 coverage 为 364 files / 1725 tests，全部通过；覆盖率为 81.41% statements / 73.71% branches / 79.18% functions / 81.41% lines。
 - 原工作树仍属于作者且保持未触碰；后续继续使用独立 worktree，不得把其未跟踪文件带入提交。
 
 提交前以根 `AGENTS.md` 的最新闸门为准，至少运行当前单元定向回归、H59 census 回归、三注册表/architecture/roadmap/freshness/source reachability/canon 检查、`npx tsc --noEmit`、`npm run build`、bundle 检查和 `git diff --check`。所有文档、生成物和源码必须提交到当前功能分支，工作树除明确属于用户的本地未跟踪文件外不得留下交接改动。

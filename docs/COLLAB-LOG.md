@@ -2267,3 +2267,27 @@ stale 均有反例。旧两路 `useAIStream`、组件内 Context 和即时写回
 
 👉 球在 Codex：继续按 census 清理剩余 4 个 migration；下一优先审计 `AnalysisReportViewer` 的参考摘要与
 角色合并写入链，冻结报告来源、候选选择、正式写入和数据生命周期，禁止复用导入旁路绕过治理。
+
+### [2026-08-14] Codex · REPORT · HARNESS-74 参考分析总结/角色聚合 durable 版本派生 / `feat/harness-rebuild-20260807`
+
+参考分析的全书总结与角色聚合已从 `AnalysisReportViewer` 两处直接 `chat()` 迁入
+`inspiration.reference-summary / inspiration.reference-characters`。模型只经登记的
+`referenceDerivedBaseline` 读取当前 Work 的精确参考、精确分析版本、来源声明和该版本分块派生输入；
+总结只接受与非空维度同序的 exact-key JSON，角色只接受 1～80 张唯一四字段角色卡。两路结果先成为
+可刷新恢复的持久候选，确认前版本和当前参考投影均零写入。
+
+作者确认时重新 CAS 来源、Context、Prompt、版本字段和参考投影字段的 presence/value；先经
+`FIELD_REGISTRY + AdoptionSchema + adopt(referenceAnalysisRuns)` 写版本字段，只有目标版本仍 active
+才同步 `adopt(references)` 兼容投影，ready/superseded 版本不会污染当前参考。未知模型窗口不重试，
+候选崩溃窗、版本写后/投影写后的十个采纳边界、目标删除、导入取消、Work/版本隔离和 terminal stale
+均有反例。旧组件内存输出与即时 `updateReferenceAnalysisDerived()` 写回旁路下线；人工版本生命周期保留。
+
+定向验证为 durable 20 项、控制器 3 项、UI 3 项和 H59 3 项，共 29 项；其中控制器反例阻断恢复查询前
+的快速重复运行，证明缺少模型配置时不会创建悬空 Run，且重试会拒绝旧候选后真实创建新 Run。census
+收缩为 14 files / 26 calls，分类为 7 governed、4 auxiliary、3 migration。最终完整 CI 为 364 files /
+1725 tests，覆盖率为 81.41% statements / 73.71% branches / 79.18% functions / 81.41% lines；3765 模块生产构建、bundle budget 与
+生产依赖审计通过，入口 669.7 KiB / gzip 207.1 KiB。项目 Chromium E2E 50/50，参考派生用例约
+8.1 秒且模型只调用一次；最终代码的同路径精确复跑 1/1 通过（9.4 秒）；`git diff --check` 通过。
+
+👉 球在 Codex：继续按 census 清理剩余 3 个 migration；下一优先审计 `PromptExamplesEditor` 的示例生成
+是设置辅助还是需要 durable 证据，按真实语义归类并收口，不为追求清零机械建立业务写入合同。

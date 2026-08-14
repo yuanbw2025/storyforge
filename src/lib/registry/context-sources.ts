@@ -41,6 +41,7 @@ import {
 import { readStorylineProgressContext } from '../storyline/storyline-progress'
 import { readCodexExtractionBaselineContextV1 } from '../codex/extraction'
 import { readHistoryAgentBaselineContextV1 } from '../history/agent-baseline'
+import { readReferenceDerivedBaselineContextV1 } from '../reference-analysis/derived-agent-baseline'
 import { buildEditImpactGraphV1 } from '../consistency/impact-analysis'
 import {
   readCultivationProgressContext,
@@ -947,6 +948,24 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       mode: input.historyAgentMode!,
       targetKind: input.historyAgentTargetKind!,
       targetId: input.historyAgentTargetId!,
+    }),
+  },
+  {
+    key: 'referenceDerivedBaseline',
+    label: '参考分析派生 Agent 正式输入基线',
+    scope: 'project',
+    layer: 'L0',
+    budgetTokens: 36_000,
+    protectedFromTrim: true,
+    ownerFrom: 'work',
+    enabled: input => (
+      (input.referenceDerivedMode === 'summary' || input.referenceDerivedMode === 'characters')
+      && Number.isInteger(input.referenceAnalysisRunId)
+    ),
+    read: input => readReferenceDerivedBaselineContextV1({
+      scope: input.scope!,
+      mode: input.referenceDerivedMode!,
+      runId: input.referenceAnalysisRunId!,
     }),
   },
   {

@@ -74,6 +74,7 @@
 | **角色** characters | `name/role/alignment/shortDescription/appearance/personality/background/motivation/abilities/relationships/arc`、章节出场范围、世界归属 | `worldContext`(★ 已接词条) + 已有角色名单 | 角色 JSON → characters 表 |
 | **重要地点** importantLocations | `name/tags/description/significance/parentId`(树状) | 作者填；AI 只经 `chapterContent / locations` 登记源从当前 Work 已写正文生成 durable 分块候选 | 作者确认 → `adopt(importantLocations)` |
 | **历史年表** histories/historical* | 概述 + 时间线事件 + 关键词（按世界标签） | HARNESS-73 后考据/风暴只经 `worldview + historyAgentBaseline` 读取已保存总述、纪年、精确目标和作者边界 | strict Markdown durable 候选；作者确认且来源/Prompt/原结果字段 CAS 通过 → 只 `adopt(historical*.aiConsult|aiBrainstorm)`；条目定稿与人工 CRUD 保留 |
+| **项目参考分析派生** references/referenceAnalysis* | 版本化分块分析 + `analysisSummary/mergedCharacters` | HARNESS-74 后总结/角色聚合只经 `referenceDerivedBaseline` 读取当前 Work 的精确参考、精确版本、分块分析和来源声明 | strict JSON durable 候选；作者确认且来源/Context/Prompt/原字段 CAS 通过 → `adopt(referenceAnalysisRuns)`；仅 active 版本同步 `adopt(references)` 兼容投影 |
 | **世界地图** worldNodes | 节点/区域/连线、空间实体/关系、比例尺 | 当前世界观 + `codex` + `locations` 登记上下文 | → `worldNodes.mapConfigJSON` |
 | **多世界建议** worldGroups | 作者方向；当前 World 完整世界目录/关系；当前 Work 故事核心 | `manualText + worldGroups + storyCore` 登记上下文 | strict 2～4 项 durable 整批候选；作者选择非空子集且完整上游 CAS 通过 → `adopt(worldGroups)` 原子新增八字段；关系表不自动写 |
 | **世界组七字段扩写** worldGroups/worldviews | 已保存目标组名称/类型/描述；`worldOrigin/powerHierarchy/continentLayout/climateByRegion/historyLine/races/factionLayout` | `manualText + worldGroups + storyCore + worldview` 登记上下文 | durable 候选；作者确认并通过完整 baseline CAS → `adopt(worldviews)` 原子写七字段 |
@@ -207,7 +208,7 @@
 | **大纲生成读遗留字段**：`OutlinePanel` 的故事核心上下文读 `storyLines`（v3 已改名 mainPlot，用户填的是 mainPlot → 读到空） | ✅ 修复：改读 `mainPlot \|\| storyLines`，并补复线 |
 | 创作规则 `toneAndMood`（旧名）vs `atmosphere`（v3） | ✅ 核对：面板读写一致用 toneAndMood，`buildCreativeRulesContext` 取 `atmosphere \|\| toneAndMood`，无错位 |
 | 导入写回（chunk-writer）worldview 字段 | ✅ 核对：import prompt 输出 v3 keys，写回 v3，对齐 |
-| 项目参考（ReferencePanel）是否漏采纳 | ✅ 核对：参考分析为只读分析工具，不写回项目（设计如此），无字段错位 |
+| 项目参考（ReferencePanel）是否漏采纳 | ✅ HARNESS-74 后派生结果先写版本化 `referenceAnalysisRuns`，仅 active 版本同步 `references` 兼容投影；不会自动写入当前作品 Canon |
 | 历史年表 / 世界地图 / 情感节拍 生成读字段 | ✅ HARNESS-73 后 HistoryPanel 只提交登记 baseline durable 任务；地图与情感节拍继续走既有登记上下文 |
 | 状态表 / 物品栏 / 故事年表 无 worldGroupId | ✅ 核对：**设计如此**——物品栏明确「项目级，诸天流主角跨世界携带」；非 bug |
 
@@ -243,7 +244,7 @@
 
 **核对确认安全（排除嫌疑）**：
 - 版本快照还原复用 export/import（已含数据丢失修复）；`ensure-schema` REQUIRED_TABLES 保守（不误删老用户）。
-- WorldMapPanel 在 HARNESS-66 后只经登记 Context Gateway 读取当前 World，并以目标节点/世界组证据隔离；WorldGroupDetail 在 HARNESS-67 后只经四个登记源读已保存草稿，七字段候选确认后才原子采纳；WorldGroupOverview 在 HARNESS-68 后只经三个登记源生成整批 durable 候选，勾选子集确认后才原子新建世界，旧 `buildAllWorldsOverview` 已删除；WorldConstitutionPanel 在 HARNESS-69 后只经 `constitutionScanSources` 读取登记闭集，批次确认只原子新增事实候选，仍需逐条确认成为 Canon；CodexPanel 在 HARNESS-70 后只经 `manualText / codexExtractionBaseline` 读取作者来源、分类 schema 和同世界组既有词条，长来源候选完成并由作者冻结子集后才原子新增词条；ForeshadowPanel 在 HARNESS-72 后只经登记上游和完整 Work baseline 一次生成 strict durable 候选，作者冻结子集后才原子新增 `planned` 伏笔；HistoryPanel 在 HARNESS-73 后只经 `worldview / historyAgentBaseline` 生成考据或风暴持久候选，确认后定点写对应结果字段；EmotionBeat 经 prop 拿真实上下文。
+- WorldMapPanel 在 HARNESS-66 后只经登记 Context Gateway 读取当前 World，并以目标节点/世界组证据隔离；WorldGroupDetail 在 HARNESS-67 后只经四个登记源读已保存草稿，七字段候选确认后才原子采纳；WorldGroupOverview 在 HARNESS-68 后只经三个登记源生成整批 durable 候选，勾选子集确认后才原子新建世界，旧 `buildAllWorldsOverview` 已删除；WorldConstitutionPanel 在 HARNESS-69 后只经 `constitutionScanSources` 读取登记闭集，批次确认只原子新增事实候选，仍需逐条确认成为 Canon；CodexPanel 在 HARNESS-70 后只经 `manualText / codexExtractionBaseline` 读取作者来源、分类 schema 和同世界组既有词条，长来源候选完成并由作者冻结子集后才原子新增词条；ForeshadowPanel 在 HARNESS-72 后只经登记上游和完整 Work baseline 一次生成 strict durable 候选，作者冻结子集后才原子新增 `planned` 伏笔；HistoryPanel 在 HARNESS-73 后只经 `worldview / historyAgentBaseline` 生成考据或风暴持久候选，确认后定点写对应结果字段；AnalysisReportViewer 在 HARNESS-74 后只经 `referenceDerivedBaseline` 生成版本派生候选，确认后先写版本、active 时再同步兼容投影；EmotionBeat 经 prop 拿真实上下文。
 - 所有解析器（inventory/timeline/arc/relation/plot/character/outline/import）字段与表对齐、防御性默认。
 - 无跨项目查询泄漏（toArray 均带 projectId，除有意的全局表）；导入大纲正确重建 parentId 树。
 - 所有 `JSON.parse(AI 输出)` 均被 try/catch 保护（解析器内部 return null/[]，或调用方 try/catch + 错误展示，如 voronoi 地图）。
