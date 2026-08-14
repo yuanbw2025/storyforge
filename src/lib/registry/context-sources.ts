@@ -41,7 +41,10 @@ import {
 import { readStorylineProgressContext } from '../storyline/storyline-progress'
 import { readCodexExtractionBaselineContextV1 } from '../codex/extraction'
 import { buildEditImpactGraphV1 } from '../consistency/impact-analysis'
-import { readCultivationProgressContext } from '../cultivation/progress'
+import {
+  readCultivationProgressContext,
+  readCultivationProgressExtractionBaselineContextV1,
+} from '../cultivation/progress'
 import type {
   Chapter,
   Character,
@@ -944,6 +947,22 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       if (!chapter || !input.scope || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) return ''
       return htmlToPlainText(chapter.content || '')
     },
+  },
+  {
+    key: 'cultivationProgressExtractionBaseline',
+    label: '修炼进度角色、体系 DAG 与既有事件闭集',
+    scope: 'chapter',
+    layer: 'L0',
+    budgetTokens: 30_000,
+    protectedFromTrim: true,
+    ownerFrom: 'work',
+    requiresChapterId: true,
+    requiresWorldGroupId: true,
+    read: input => readCultivationProgressExtractionBaselineContextV1({
+      scope: input.scope!,
+      chapterId: input.chapterId!,
+      worldGroupId: input.worldGroupId ?? null,
+    }),
   },
   {
     key: 'contextMemo',

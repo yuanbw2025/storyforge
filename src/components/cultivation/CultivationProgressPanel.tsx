@@ -4,14 +4,18 @@ import type { Project } from '../../lib/types'
 import { cultivationStageTiers, parseCultivationStages } from '../../lib/types'
 import { resolveCanonicalChapterSequence } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import {
-  acceptCultivationProgressCandidate,
-  buildCultivationProgressPrompt,
-  parseCultivationProgressResult,
-  type CultivationProgressCandidate,
-} from '../../lib/cultivation/progress'
+  abandonCultivationProgressExtractionRunV1,
+  adoptCultivationProgressExtractionCandidateV1,
+  generateCultivationProgressExtractionCandidateV1,
+  readPendingCultivationProgressExtractionCandidateV1,
+  readRecoverableCultivationProgressExtractionRunV1,
+  rejectCultivationProgressExtractionCandidateV1,
+  type CultivationProgressExtractionCandidateV1,
+} from '../../lib/agent/run/cultivation-progress-extraction-durable'
 import { htmlToPlainText } from '../../lib/utils/html'
-import { chat, resolveRequestConfig } from '../../lib/ai/client'
+import { resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
+import { resolveScopeLike } from '../../lib/world-engine/scope'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useChapterStore } from '../../stores/chapter'
 import { useCharacterStore } from '../../stores/character'
@@ -44,9 +48,13 @@ export default function CultivationProgressPanel({ project }: { project: Project
 
   const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null)
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null)
-  const [candidates, setCandidates] = useState<CultivationProgressCandidate[]>([])
+  const [extractCandidate, setExtractCandidate] = useState<CultivationProgressExtractionCandidateV1 | null>(null)
+  const [extractRunId, setExtractRunId] = useState<number | null>(null)
+  const [selectedCandidates, setSelectedCandidates] = useState<Set<number>>(new Set())
+  const [selectionFrozen, setSelectionFrozen] = useState(false)
+  const [resumeAdoption, setResumeAdoption] = useState(false)
+  const [unsafeRunId, setUnsafeRunId] = useState<number | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
-  const [acceptingKey, setAcceptingKey] = useState<string | null>(null)
   const [message, setMessage] = useState('')
 
   useEffect(() => {
@@ -57,6 +65,47 @@ export default function CultivationProgressPanel({ project }: { project: Project
     loadSystems(project.id)
     loadEvents(project.id)
   }, [loadChapters, loadCharacters, loadEvents, loadOutline, loadSystems, project.id])
+
+  useEffect(() => {
+    if (!project.id) return
+    let cancelled = false
+    setExtractCandidate(null)
+    setExtractRunId(null)
+    setSelectedCandidates(new Set())
+    setSelectionFrozen(false)
+    setResumeAdoption(false)
+    setUnsafeRunId(null)
+    void (async () => {
+      const scope = await resolveScopeLike(project.id!)
+      const pending = await readPendingCultivationProgressExtractionCandidateV1({ scope })
+      if (cancelled) return
+      if (pending) {
+        setExtractCandidate(pending.candidate)
+        setExtractRunId(pending.snapshot.run.id)
+        setSelectedChapterId(pending.candidate.chapterId)
+        setSelectedCandidates(new Set(pending.candidate.events.map((_, index) => index)))
+        setMessage(`已恢复 ${pending.candidate.events.length} 条待确认修炼候选；没有重复调用模型。`)
+        return
+      }
+      const recoverable = await readRecoverableCultivationProgressExtractionRunV1({ scope })
+      if (cancelled || !recoverable) return
+      if (recoverable.safeToResume && recoverable.candidate && recoverable.adoptionPending) {
+        setExtractCandidate(recoverable.candidate)
+        setExtractRunId(recoverable.snapshot.run.id)
+        setSelectedChapterId(recoverable.candidate.chapterId)
+        setSelectedCandidates(new Set(recoverable.selectedIndexes ?? []))
+        setSelectionFrozen(true)
+        setResumeAdoption(true)
+        setMessage('上次选择已冻结但尚未完成写入；继续确认会沿原运行幂等收敛，不会重复调用模型。')
+      } else if (!recoverable.safeToResume) {
+        setUnsafeRunId(recoverable.snapshot.run.id)
+        setMessage('上次分析停在模型结果不可判定窗口，系统不会自动重试。请先放弃旧运行。')
+      }
+    })().catch(error => {
+      if (!cancelled) setMessage(error instanceof Error ? error.message : String(error))
+    })
+    return () => { cancelled = true }
+  }, [project.id, project.activeWorldId, project.activeWorkId])
 
   const sequence = useMemo(
     () => resolveCanonicalChapterSequence(outlineNodes, chapters).sequence,
@@ -117,7 +166,7 @@ export default function CultivationProgressPanel({ project }: { project: Project
 
   const analyze = async () => {
     const chapter = chapters.find(row => row.id === selectedChapterId)
-    if (!chapter) return
+    if (!chapter || !project.id || extractCandidate || unsafeRunId != null) return
     const effective = resolveRequestConfig(aiConfig, { category: 'cultivation.progress' }).config
     if (!isAIConfigReady(effective)) {
       setMessage(getAIConfigRequiredMessage(effective))
@@ -125,65 +174,115 @@ export default function CultivationProgressPanel({ project }: { project: Project
     }
     const outline = outlineNodes.find(node => node.id === chapter.outlineNodeId)
     const worldGroupId = outline?.worldGroupId ?? null
-    const scopedSystems = systems.filter(system => (system.worldGroupId ?? null) === worldGroupId)
-    const systemIds = new Set(scopedSystems.map(system => system.id))
-    const scopedCharacters = trackableCharacters.filter(character =>
-      character.cultivationSystemId != null
-      && systemIds.has(character.cultivationSystemId)
-      && (character.isCrossWorld || (character.homeWorldGroupId ?? null) === worldGroupId))
-    if (!scopedCharacters.length) {
-      setMessage('本章世界没有已关联修炼体系的角色，请先在角色卡设置主修体系。')
-      return
-    }
-    const content = htmlToPlainText(chapter.content || '').trim()
     setAnalyzing(true)
     setMessage('')
-    setCandidates([])
     try {
-      const raw = await chat(
-        buildCultivationProgressPrompt({
-          chapterTitle: chapter.title,
-          chapterContent: content,
-          characters: scopedCharacters,
-          systems: scopedSystems,
-        }),
+      const scope = await resolveScopeLike(project.id)
+      const generated = await generateCultivationProgressExtractionCandidateV1({
+        scope,
+        chapterId: chapter.id!,
+        worldGroupId,
         aiConfig,
-        { category: 'cultivation.progress', projectId: project.id! },
-      )
-      const next = parseCultivationProgressResult({
-        raw,
-        chapterContent: content,
-        characters: scopedCharacters,
-        systems: scopedSystems,
       })
-      setCandidates(next)
-      setMessage(next.length ? `发现 ${next.length} 条可靠候选，请逐条确认。` : '没有发现可可靠确认的境界变化。')
+      setExtractCandidate(generated.candidate)
+      setExtractRunId(generated.snapshot.run.id)
+      setSelectedCandidates(new Set(generated.candidate.events.map((_, index) => index)))
+      setSelectionFrozen(false)
+      setResumeAdoption(false)
+      setMessage(generated.candidate.events.length
+        ? `发现 ${generated.candidate.events.length} 条严格证据候选；可取消不采纳项后批次确认。`
+        : '没有发现可可靠确认的境界变化；确认空批次即可留下完整审计回执。')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '分析失败')
+      const scope = await resolveScopeLike(project.id)
+      const pending = await readPendingCultivationProgressExtractionCandidateV1({ scope }).catch(() => null)
+      if (pending) {
+        setExtractCandidate(pending.candidate)
+        setExtractRunId(pending.snapshot.run.id)
+        setSelectedCandidates(new Set(pending.candidate.events.map((_, index) => index)))
+        setMessage(`已恢复 ${pending.candidate.events.length} 条待确认修炼候选；没有重复调用模型。`)
+      } else {
+        const recoverable = await readRecoverableCultivationProgressExtractionRunV1({ scope }).catch(() => null)
+        if (recoverable?.safeToResume && recoverable.candidate && recoverable.adoptionPending) {
+          setExtractCandidate(recoverable.candidate)
+          setExtractRunId(recoverable.snapshot.run.id)
+          setSelectedCandidates(new Set(recoverable.selectedIndexes ?? []))
+          setSelectionFrozen(true)
+          setResumeAdoption(true)
+        } else if (recoverable && !recoverable.safeToResume) {
+          setUnsafeRunId(recoverable.snapshot.run.id)
+        }
+      }
     } finally {
       setAnalyzing(false)
     }
   }
 
-  const accept = async (candidate: CultivationProgressCandidate) => {
-    if (selectedChapterId == null) return
-    const key = candidateKey(candidate)
-    setAcceptingKey(key)
+  const accept = async () => {
+    if (!project.id || extractRunId == null || !extractCandidate) return
+    setAnalyzing(true)
     setMessage('')
     try {
-      await acceptCultivationProgressCandidate({
-        projectId: project.id!,
-        chapterId: selectedChapterId,
-        candidate,
+      const scope = await resolveScopeLike(project.id)
+      const result = await adoptCultivationProgressExtractionCandidateV1({
+        scope,
+        runId: extractRunId,
+        ...(resumeAdoption ? {} : { selectedIndexes: [...selectedCandidates] }),
       })
-      await loadEvents(project.id!)
-      setCandidates(currentRows => currentRows.filter(row => candidateKey(row) !== key))
-      setSelectedCharacterId(candidate.characterId)
-      setMessage('已确认并写入修炼历程。')
+      await loadEvents(project.id)
+      const firstSelected = [...selectedCandidates][0]
+      if (firstSelected != null) setSelectedCharacterId(extractCandidate.events[firstSelected]?.characterId ?? null)
+      setExtractCandidate(null)
+      setExtractRunId(null)
+      setSelectedCandidates(new Set())
+      setSelectionFrozen(false)
+      setResumeAdoption(false)
+      setMessage(`已原子写入 ${result.written} 条修炼历程并完成终验。`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '确认失败')
+      const scope = await resolveScopeLike(project.id)
+      const recoverable = await readRecoverableCultivationProgressExtractionRunV1({ scope }).catch(() => null)
+      if (recoverable?.safeToResume && recoverable.candidate && recoverable.adoptionPending) {
+        setExtractCandidate(recoverable.candidate)
+        setExtractRunId(recoverable.snapshot.run.id)
+        setSelectedCandidates(new Set(recoverable.selectedIndexes ?? []))
+        setSelectionFrozen(true)
+        setResumeAdoption(true)
+      }
     } finally {
-      setAcceptingKey(null)
+      setAnalyzing(false)
+    }
+  }
+
+  const reject = async () => {
+    if (!project.id || extractRunId == null || !extractCandidate || selectionFrozen) return
+    setAnalyzing(true)
+    try {
+      const scope = await resolveScopeLike(project.id)
+      await rejectCultivationProgressExtractionCandidateV1({ scope, runId: extractRunId })
+      setExtractCandidate(null)
+      setExtractRunId(null)
+      setSelectedCandidates(new Set())
+      setMessage('已拒绝本批候选；正式修炼历程没有写入。')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '拒绝失败')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const abandonUnsafe = async () => {
+    if (!project.id || unsafeRunId == null || analyzing) return
+    setAnalyzing(true)
+    try {
+      const scope = await resolveScopeLike(project.id)
+      await abandonCultivationProgressExtractionRunV1({ scope, runId: unsafeRunId })
+      setUnsafeRunId(null)
+      setMessage('已放弃结果不可判定的旧运行，可以重新分析。')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '放弃失败')
+    } finally {
+      setAnalyzing(false)
     }
   }
 
@@ -230,9 +329,9 @@ export default function CultivationProgressPanel({ project }: { project: Project
               value={selectedChapterId ?? ''}
               onChange={event => {
                 setSelectedChapterId(event.target.value ? Number(event.target.value) : null)
-                setCandidates([])
                 setMessage('')
               }}
+              disabled={extractCandidate != null || unsafeRunId != null}
               className="w-full bg-bg-base border border-border rounded-lg px-3 py-2 text-sm text-text-primary"
             >
               {writtenChapters.length === 0 && <option value="">暂无已写章节</option>}
@@ -241,7 +340,7 @@ export default function CultivationProgressPanel({ project }: { project: Project
           </label>
           <button
             onClick={analyze}
-            disabled={analyzing || selectedChapterId == null}
+            disabled={analyzing || selectedChapterId == null || extractCandidate != null || unsafeRunId != null}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent text-white text-sm disabled:opacity-40"
           >
             {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -249,49 +348,76 @@ export default function CultivationProgressPanel({ project }: { project: Project
           </button>
         </div>
         {message && <p className="text-xs text-text-secondary">{message}</p>}
-        {candidates.length > 0 && (
+        {unsafeRunId != null && (
+          <button
+            onClick={abandonUnsafe}
+            disabled={analyzing}
+            className="text-xs px-3 py-1.5 rounded border border-error/40 text-error disabled:opacity-40"
+          >
+            放弃不可判定运行
+          </button>
+        )}
+        {extractCandidate && (
           <div className="space-y-2 pt-2">
-            {candidates.map(candidate => {
+            {extractCandidate.events.map((candidate, index) => {
               const character = characters.find(row => row.id === candidate.characterId)
               const system = systems.find(row => row.id === candidate.cultivationSystemId)
               const stage = parseCultivationStages(system?.stages).find(row => row.id === candidate.stageId)
-              const key = candidateKey(candidate)
+              const key = `${candidate.characterId}:${candidate.cultivationSystemId}:${candidate.stageId}:${candidate.sourceOffset}`
               return (
-                <article key={key} className="border border-accent/25 bg-accent/5 rounded-lg p-3">
+                <article
+                  key={key}
+                  className={`border rounded-lg p-3 ${selectedCandidates.has(index)
+                    ? 'border-accent/25 bg-accent/5'
+                    : 'border-border bg-bg-base/40 opacity-60'}`}
+                >
                   <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      aria-label={`选择修炼候选 ${index + 1}`}
+                      checked={selectedCandidates.has(index)}
+                      disabled={selectionFrozen || analyzing}
+                      onChange={event => setSelectedCandidates(current => {
+                        const next = new Set(current)
+                        if (event.target.checked) next.add(index)
+                        else next.delete(index)
+                        return next
+                      })}
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-text-primary">
                         {character?.name} · {system?.name} → {stage?.name}
-                        <span className="ml-2 text-[10px] text-accent">{TRANSITION_LABELS[candidate.transition]}</span>
                       </p>
                       {candidate.trigger && <p className="text-xs text-text-muted mt-1">{candidate.trigger}</p>}
                       <blockquote className="text-xs text-text-secondary mt-2 border-l-2 border-accent/40 pl-2">
                         {candidate.evidenceQuote}
                       </blockquote>
                     </div>
-                    <div className="flex gap-1">
-                      <button
-                        aria-label="确认修炼候选"
-                        disabled={acceptingKey === key}
-                        onClick={() => accept(candidate)}
-                        className="p-1.5 rounded text-green-500 hover:bg-green-500/10 disabled:opacity-40"
-                      >
-                        {acceptingKey === key
-                          ? <Loader2 className="w-4 h-4 animate-spin" />
-                          : <Check className="w-4 h-4" />}
-                      </button>
-                      <button
-                        aria-label="忽略修炼候选"
-                        onClick={() => setCandidates(rows => rows.filter(row => candidateKey(row) !== key))}
-                        className="p-1.5 rounded text-text-muted hover:text-error"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
                   </div>
                 </article>
               )
             })}
+            <div className="flex justify-end gap-2 pt-1">
+              {!selectionFrozen && (
+                <button
+                  aria-label="拒绝修炼候选批次"
+                  onClick={reject}
+                  disabled={analyzing}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-border text-xs text-text-secondary disabled:opacity-40"
+                >
+                  <X className="w-3.5 h-3.5" /> 拒绝整批
+                </button>
+              )}
+              <button
+                aria-label="确认所选修炼候选"
+                onClick={accept}
+                disabled={analyzing || (extractCandidate.events.length > 0 && selectedCandidates.size === 0)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-accent text-white text-xs disabled:opacity-40"
+              >
+                {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                {resumeAdoption ? '继续已冻结写入' : extractCandidate.events.length ? `确认所选 ${selectedCandidates.size} 条` : '确认空批次'}
+              </button>
+            </div>
           </div>
         )}
       </section>
@@ -405,8 +531,4 @@ export default function CultivationProgressPanel({ project }: { project: Project
       )}
     </div>
   )
-}
-
-function candidateKey(candidate: CultivationProgressCandidate): string {
-  return `${candidate.characterId}:${candidate.cultivationSystemId}:${candidate.stageId}:${candidate.sourceOffset}`
 }

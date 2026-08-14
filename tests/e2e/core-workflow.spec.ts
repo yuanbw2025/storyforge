@@ -2078,6 +2078,7 @@ test('真实章节入口可打开五阶段工坊并预览首节点最终提示�
 })
 
 test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ page }) => {
+  let progressExtractionCalls = 0
   await page.addInitScript(() => {
     localStorage.setItem('storyforge-ai-config', JSON.stringify({
       provider: 'ollama',
@@ -2089,20 +2090,19 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    progressExtractionCalls += 1
     const request = route.request().postDataJSON() as {
       messages?: Array<{ role: string; content: string }>
     }
-    const userMessage = request.messages?.find(message => message.role === 'user')?.content ?? ''
-    const registryText = userMessage.match(
-      /【角色与修炼体系闭集】\n([\s\S]*?)\n\n【章节】/,
-    )?.[1]
-    const registry = registryText ? JSON.parse(registryText) as Array<{
-      characterId: number
-      cultivationSystemId: number
-      stages: Array<{ id: string; name: string }>
-    }> : []
-    const subject = registry[0]
-    const stage = subject?.stages.find(item => item.name === '筑基境')
+    const combined = request.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain('修炼进度提取登记闭集')
+    expect(combined).toContain('正式踏入筑基境')
+    const characterId = Number(combined.match(/"characterId":(\d+)/)?.[1])
+    const cultivationSystemId = Number(combined.match(/"cultivationSystemId":(\d+)/)?.[1])
+    const stageId = combined.match(/"id":"([^"]+)","name":"筑基境"/)?.[1]
+    expect(Number.isInteger(characterId)).toBe(true)
+    expect(Number.isInteger(cultivationSystemId)).toBe(true)
+    expect(stageId).toBeTruthy()
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -2110,14 +2110,13 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
         choices: [{
           message: {
             content: JSON.stringify({
-              events: subject && stage ? [{
-                characterId: subject.characterId,
-                cultivationSystemId: subject.cultivationSystemId,
-                stageId: stage.id,
-                transition: 'enter',
+              events: [{
+                characterId,
+                cultivationSystemId,
+                stageId,
                 trigger: '生死关头凝成道基',
                 quote: '在生死关头凝成道基，正式踏入筑基境',
-              }] : [],
+              }],
             }),
           },
         }],
@@ -2183,11 +2182,20 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
   await expect(page.getByText('正文尚无已确认境界', { exact: true })).toBeVisible()
   await expect(page.getByText('角色卡设定：筑基境', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '分析本章', exact: true }).click()
-  await expect(page.getByText('发现 1 条可靠候选，请逐条确认。', { exact: true })).toBeVisible()
+  await expect(page.getByText('发现 1 条严格证据候选；可取消不采纳项后批次确认。', { exact: true })).toBeVisible()
   await expect(page.getByText('生死关头凝成道基', { exact: true })).toBeVisible()
-  await page.getByLabel('确认修炼候选').click()
+  expect(progressExtractionCalls).toBe(1)
+
+  await page.reload()
+  await openSidebarLeaf(page, '创作区', '修炼进度')
+  await expect(page.getByText(/已恢复 1 条待确认修炼候选/)).toBeVisible()
+  await expect(page.getByText('生死关头凝成道基', { exact: true })).toBeVisible()
+  expect(progressExtractionCalls).toBe(1)
+
+  await page.getByLabel('确认所选修炼候选').click()
   await expect(page.getByText('正文当前：筑基境', { exact: true })).toBeVisible()
-  await expect(page.getByText('已确认并写入修炼历程。', { exact: true })).toBeVisible()
+  await expect(page.getByText('已原子写入 1 条修炼历程并完成终验。', { exact: true })).toBeVisible()
+  expect(progressExtractionCalls).toBe(1)
 
   const feedbackToggle = page.getByLabel('反哺后续写作（默认关闭）')
   await feedbackToggle.click()
@@ -2196,6 +2204,7 @@ test('真实世界观入口可维护修炼 DAG 并关联角色境界', async ({ 
   await openSidebarLeaf(page, '创作区', '修炼进度')
   await expect(page.getByText('正文当前：筑基境', { exact: true })).toBeVisible()
   await expect(page.getByLabel('反哺后续写作（默认关闭）')).toBeChecked()
+  expect(progressExtractionCalls).toBe(1)
 })
 
 test('世界地图把明确距离和方位落实到命名实体，并持久化手动比例尺', async ({ page }) => {

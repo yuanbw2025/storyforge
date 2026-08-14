@@ -79,7 +79,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 56 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 57 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -93,6 +93,7 @@
 | `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000 |
 | `priorOutlineCandidate` | 同批次上一卷章纲候选 | runtime | L1 | 2400 |
 | `chapterContent` | 章节正文 | chapter | L0 | 100000 |
+| `cultivationProgressExtractionBaseline` | 修炼进度角色、体系 DAG 与既有事件闭集 | chapter | L0 | 30000 |
 | `contextMemo` | 上下文快照 | project | L3 | 1500 |
 | `chapterOutline` | 当前章节大纲 | node | L1 | 800 |
 | `adjacentChapterOutlines` | 相邻章纲 | node | L1 | 1000 |
@@ -220,7 +221,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1463` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `codex.extract` | `src/lib/agent/run/codex-extraction-durable.ts:627` |
-| `cultivation.progress` | `src/components/cultivation/CultivationProgressPanel.tsx:143` |
+| `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
 | `detail.scene` | `src/lib/ai/batch-detail-runner.ts:193` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
@@ -284,4 +285,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `715cb38`
+生成时间基准:commit `dd6db9b`

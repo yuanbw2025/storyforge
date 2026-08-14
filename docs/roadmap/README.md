@@ -58,7 +58,7 @@
 | 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
 | 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
 | 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
-| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～70 收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑、世界地图、世界观七字段扩写、多世界建议、世界宪法扫描和 Codex 词条拆分后，当前为 18 个文件 / 33 个静态构造点：7 个 governed、4 个 auxiliary、7 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
+| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～71 收口角色关系、情感节拍、重要地点、物品栏、故事年表、局部正文编辑、世界地图、世界观七字段扩写、多世界建议、世界宪法扫描、Codex 词条拆分和修炼进度提取后，当前为 17 个文件 / 32 个静态构造点：7 个 governed、4 个 auxiliary、6 个 migration。参考实体合并等仍未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
 
 ### HARNESS-61 完成卡：情感节拍 durable 候选与采纳
 
@@ -187,6 +187,19 @@
 | 生命周期 / 作用域 | 不新增表/schema；`codexEntries / codexCategories` 继续由 `PROJECT_TABLES` 派生 World 归属、ref/FK 清理、导入导出、删除和重映射生命周期。候选含本地分类/词条 ID，`portable:false`，导入后取消；其它 World/Work/世界组/分类不可恢复或采纳。 |
 | UI / 回滚 | `CodexPanel` 恢复待确认候选、安全分块进度、冻结选择或不可判定运行。人工 CRUD、字段管理与 ref 编辑保留。旧组件 `chat()`、组件内 `assembleContext()`、宽松 parser、内存候选和直接 `adopt(codexEntries)` 旁路已下线。 |
 | 验收 | durable 21 项、UI 5 项和 H59 3 项共 29 项通过；Codex 导入/生命周期/受控视图/Skill 联合回归 43 项通过。census 收缩为 18 文件 / 33 入口、7 migration。完整 CI 为 357 files / 1639 tests，覆盖率 81.05% statements / 73.51% branches / 78.77% functions / 81.05% lines；3756 模块生产构建与 bundle budget 通过，入口 652.6 KiB / gzip 201.6 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 47/47；新增用例约 6.0 秒，证明登记分类/schema/来源实际进入请求、候选刷新恢复不重复模型调用、确认前零正式写入，确认后词条跨刷新持久化。 |
+
+### HARNESS-71 完成卡：修炼进度 durable 证据提取与原子投影
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-71` 治理小功能。作者分析已写章节的境界变化时，模型只负责提出逐字证据候选；刷新不丢失，确认前正式进度零写入，DAG 变化类型由系统确定。 |
+| 主归属 / 复用 | 在同一 `prose` Agent 下新增 `prose.cultivation-progress-extraction` Skill，复用 Context Gateway、durable Run/checkpoint、既有 `cultivation-progress-lifecycle` Adoption Extension、规范章序与 terminal receipt，不建立第二套修炼历程。 |
+| 读 / 写 | 模型只经 `chapterContent / cultivationProgressExtractionBaseline` 读取目标正文、当前 World 角色/体系/DAG、规范章序和当前 Work 进度；作者确认后才写 `cultivationProgress` 登记字段，并同步归一化同角色体系的既有后续 transition。 |
+| 状态机 / 硬验证 | 冻结 World/Work/世界组/章节、角色/体系/DAG、完整正式进度 baseline、Context Manifest 与 Prompt。只接受 exact-key `{events:[0..100]}`，闭集整数 ID、至少四字且唯一的逐字证据、正文顺序和重复身份均严格验证；模型不得输出 transition，未知结果不重试。 |
+| 采纳恢复 | 作者可选择子集；选择与系统投影冻结后不可换项或取消。事务内二次 CAS，全部冻结项经 `adopt(cultivationProgress)` 写入，既有 transition 同事务更新；八个 durable 采纳边界沿同一意图幂等收敛，空结果可签发零写回执。 |
+| 生命周期 / 作用域 | 不新增表/schema；进度、章节、角色和修炼体系继续由 PROJECT_TABLES 派生 Work/World 归属、导入导出、删除与引用重映射。含本地 ID 的候选 `portable:false`，其它 World/Work/世界组不可恢复或采纳。 |
+| UI / 回滚 | `CultivationProgressPanel` 恢复待确认、选择冻结或不可判定运行；人工删除与反哺开关保留。旧组件 `chat()`、硬编码 prompt、宽松 parser、内存逐条候选与非原子逐条采纳旁路下线。 |
+| 验收 | durable 22 项与既有修炼领域/UI 7 项通过；census 收缩为 17 文件 / 32 入口、6 migration。完整 CI 为 358 files / 1661 tests，覆盖率 81.07% statements / 73.50% branches / 78.81% functions / 81.07% lines；3757 模块生产构建与 bundle budget 通过，入口 657.2 KiB / gzip 203.0 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 47/47；修炼主路径用例约 11.3 秒，证明登记正文/baseline 实际进入请求、候选刷新恢复不重复模型调用、确认前零正式写入，确认后进度及系统确定的 transition 原子持久化。 |
 
 ### HARNESS-57 完成卡：人工修正后的 stale / replan
 

@@ -48,6 +48,7 @@ export type AgentSkillExecutionModeV1 =
   | 'emotion-beats'
   | 'inventory-extraction'
   | 'story-timeline-extraction'
+  | 'cultivation-progress-extraction'
   | 'selection-edit'
   | 'selection-check'
   | 'review'
@@ -179,6 +180,10 @@ const WORLD_SUGGEST_CONTEXT_SOURCE_KEYS = [
 
 const CONSTITUTION_EXTRACT_CONTEXT_SOURCE_KEYS = ['constitutionScanSources'] as const
 const CODEX_EXTRACT_CONTEXT_SOURCE_KEYS = ['manualText', 'codexExtractionBaseline'] as const
+const CULTIVATION_PROGRESS_EXTRACTION_CONTEXT_SOURCE_KEYS = [
+  'chapterContent',
+  'cultivationProgressExtractionBaseline',
+] as const
 
 const CHARACTER_SUPPLEMENT_CONTEXT_SOURCE_KEYS = [
   'targetCharacter',
@@ -821,6 +826,9 @@ const WORLD_SUGGEST_COMPRESSION_POLICY = compressionPolicy([
 ])
 const CONSTITUTION_EXTRACT_COMPRESSION_POLICY = compressionPolicy(['constitutionScanSources'])
 const CODEX_EXTRACT_COMPRESSION_POLICY = compressionPolicy(['manualText', 'codexExtractionBaseline'])
+const CULTIVATION_PROGRESS_EXTRACTION_COMPRESSION_POLICY = compressionPolicy(
+  CULTIVATION_PROGRESS_EXTRACTION_CONTEXT_SOURCE_KEYS,
+)
 const CHARACTER_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'powerSystem',
@@ -1689,6 +1697,35 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'prose.cultivation-progress-extraction',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '已写正文修炼进度提取',
+    owner: 'prose-agent',
+    promptVersion: 'cultivation-progress-extraction-v1',
+    executionMode: 'cultivation-progress-extraction',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: CULTIVATION_PROGRESS_EXTRACTION_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_POST_ADOPTION_INPUT_POLICY,
+    contextCompression: CULTIVATION_PROGRESS_EXTRACTION_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{
+      table: 'cultivationProgress',
+      fields: [
+        'worldGroupId', 'characterId', 'characterName', 'cultivationSystemId',
+        'cultivationSystemName', 'stageId', 'stageName', 'transition',
+        'sourceChapterId', 'sourceChapterTitle', 'sourceQuote', 'sourceOffset',
+        'trigger', 'status',
+      ],
+      adoptionExtension: 'cultivation-progress-lifecycle',
+    }],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS71-cultivation-progress-extraction-durable'],
+  },
+  {
+    version: 1,
     id: 'prose.selection-edit',
     agentId: 'prose',
     defaultForAgent: false,
@@ -2039,7 +2076,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

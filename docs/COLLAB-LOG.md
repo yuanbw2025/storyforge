@@ -2202,3 +2202,25 @@ Agent 和世界 Agent 两次。候选显示约 `4,545 / 80,000 tokens`、`2/7` �
 
 👉 27.1-e 当前范围完成，但不意味着已开放并行自治、投票或长期静默 Agent。下一开发单位
 进入 27.2b“整理本章 Agent”，继续保持后台默认只读、候选可见和作者确认写入。
+### [2026-08-14] Codex · REPORT · HARNESS-71 修炼进度 durable 证据提取 / `feat/harness-rebuild-20260807`
+
+修炼进度分析已从组件直连模型迁入 `prose.cultivation-progress-extraction`。模型只经登记的
+`chapterContent / cultivationProgressExtractionBaseline` 读取目标正文、当前 World 角色与体系
+DAG、规范章序和当前 Work 完整进度 baseline；严格协议只接受闭集 ID、原因和唯一逐字证据，
+不再允许模型自行决定 `transition`。候选可跨刷新恢复，作者选择子集后冻结；确认前正式进度
+零写入。
+
+采纳时在单一事务内重读并 CAS 章节、章序、角色、体系 DAG 与完整进度表，再由系统按规范章序
+和 DAG 计算新增事件及既有后续事件的变化类型，全部经登记采纳层写入并原子归一化。未知模型
+结果不重试，候选崩溃窗、空结果、拒绝、选择冻结、八个采纳中断点、terminal stale 和作用域
+隔离均有反例。旧组件 `chat()`、硬编码 prompt、宽松 parser、内存逐条候选和逐条采纳旁路下线；
+人工删除事件和后续写作反哺开关保留。
+
+定向验证：durable 22 项与既有领域/UI 7 项通过；H59 census 收缩为 17 文件 / 32 调用，分类为
+7 governed、4 auxiliary、6 migration。完整 CI 358 files / 1661 tests 全绿，覆盖率为 81.07%
+statements / 73.50% branches / 78.81% functions / 81.07% lines；3757 模块生产构建、bundle
+budget 与生产依赖审计通过，入口 657.2 KiB / gzip 203.0 KiB。项目 Chromium E2E 47/47，
+修炼用例约 11.3 秒且模型只调用一次；`git diff --check` 通过。
+
+👉 球在 Codex：继续按 census 清理剩余 6 个 migration；下一优先目标为伏笔两段模型链，仍按
+一个真实目标类型冻结 Context、候选、原子采纳和生命周期，禁止建立平行 runtime。

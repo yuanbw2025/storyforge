@@ -18,8 +18,8 @@ const registry = JSON.parse(readFileSync('src/lib/agent/ai-entry-registry.json',
 describe('R-HARNESS59 · 分步骤 UI 模型入口注册表', () => {
   it('AST 守卫证明所有直调入口均登记且调用计数一致', () => {
     const output = execFileSync(process.execPath, ['scripts/check-ai-entry-registry.mjs'], { encoding: 'utf8' })
-    expect(output).toContain('18 files / 33 calls')
-    expect(output).toContain('governed 7, auxiliary 4, migration 7')
+    expect(output).toContain('17 files / 32 calls')
+    expect(output).toContain('governed 7, auxiliary 4, migration 6')
   })
 
   it('高风险正式写入入口不能冒充已治理或只读辅助', () => {
@@ -34,7 +34,8 @@ describe('R-HARNESS59 · 分步骤 UI 模型入口注册表', () => {
   it('已治理运行时与真正只读入口保留明确机制，迁移时可逐项清零', () => {
     expect(registry.entries.filter(entry => entry.status === 'governed')).toHaveLength(7)
     expect(registry.entries.filter(entry => entry.status === 'auxiliary')).toHaveLength(4)
-    expect(registry.entries.filter(entry => entry.status === 'migration')).toHaveLength(7)
+    expect(registry.entries.filter(entry => entry.status === 'migration')).toHaveLength(6)
+    expect(registry.entries.some(entry => entry.file.endsWith('CultivationProgressPanel.tsx'))).toBe(false)
     expect(registry.entries.some(entry => entry.file.endsWith('CodexPanel.tsx'))).toBe(false)
     expect(registry.entries.some(entry => entry.file.endsWith('InventoryPanel.tsx'))).toBe(false)
     expect(registry.entries.some(entry => entry.file.endsWith('StoryTimelinePanel.tsx'))).toBe(false)
