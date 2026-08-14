@@ -39,6 +39,10 @@ import {
   readCurrentImpactPostCorrectionReplanV1,
   type ImpactPostCorrectionReplanResultV1,
 } from './impact-post-correction-replan-durable'
+import {
+  readImpactAuthorReviewsV1,
+  type ImpactAuthorReviewRecordV1,
+} from './impact-review-durable'
 import { createVerificationReceiptV1 } from './verification-receipt'
 
 export const IMPACT_OUTLINE_REGENERATION_STEP_ID_V1 = 'impact-remediation:outline-regenerate' as const
@@ -67,6 +71,24 @@ interface ImpactOutlineRegenerationLineageV1 {
   itemId: string
 }
 
+export interface ImpactOutlineDependencyProofV1 {
+  version: 1
+  kind: 'impact-author-review-dependency'
+  nodeId: string
+  itemId: string
+  reviewRunId: number
+  reviewReceiptHash: string
+  decision: 'acknowledged'
+}
+
+export interface ImpactOutlineRegenerationReadinessV1 {
+  itemId: string
+  ready: boolean
+  proofs: ImpactOutlineDependencyProofV1[]
+  blockers: string[]
+  proofHash: string
+}
+
 export interface ImpactOutlineRegenerationCandidateV1 {
   version: 1
   kind: 'impact-outline-regeneration-candidate'
@@ -80,6 +102,8 @@ export interface ImpactOutlineRegenerationCandidateV1 {
   durableRunId: number
   item: ImpactRemediationItemV1
   lineage: ImpactOutlineRegenerationLineageV1
+  dependencyProofs: ImpactOutlineDependencyProofV1[]
+  dependencyProofHash: string
   targetBaseline: TargetOutlineBaselineV1
   targetBaselineHash: string
   sourceTextHash: string
@@ -248,6 +272,78 @@ async function assertExpectedReplanCurrent(input: {
   return current
 }
 
+function dependencyProof(
+  nodeId: string,
+  item: ImpactRemediationItemV1,
+  review: ImpactAuthorReviewRecordV1,
+): ImpactOutlineDependencyProofV1 {
+  return {
+    version: 1,
+    kind: 'impact-author-review-dependency',
+    nodeId,
+    itemId: item.id,
+    reviewRunId: review.runId,
+    reviewReceiptHash: review.receiptHash,
+    decision: 'acknowledged',
+  }
+}
+
+async function resolveDependencyReadiness(input: {
+  scope: WorkspaceScope
+  replan: ImpactPostCorrectionReplanResultV1
+  item: ImpactRemediationItemV1
+}): Promise<ImpactOutlineRegenerationReadinessV1> {
+  const reviews = await readImpactAuthorReviewsV1({
+    scope: input.scope,
+    plan: input.replan.output.plan,
+  })
+  const reviewByItem = new Map(reviews.map(review => [review.output.itemId, review]))
+  const itemByNode = new Map(input.replan.output.plan.items.map(item => [item.nodeId, item]))
+  const proofs: ImpactOutlineDependencyProofV1[] = []
+  const blockers: string[] = []
+  for (const nodeId of [...new Set(input.item.dependencyNodeIds)].sort()) {
+    const dependency = itemByNode.get(nodeId)
+    if (!dependency) {
+      blockers.push(`直接依赖 ${nodeId} 未映射到 H57 当前计划。`)
+      continue
+    }
+    if (dependency.mode !== 'author-confirmed') {
+      blockers.push(`直接依赖 ${dependency.id} 必须先完成确定性重建证明。`)
+      continue
+    }
+    const review = reviewByItem.get(dependency.id)
+    if (!review) {
+      blockers.push(`直接依赖 ${dependency.id} 尚无作者复核回执。`)
+      continue
+    }
+    if (review.output.decision !== 'acknowledged') {
+      blockers.push(`直接依赖 ${dependency.id} 仍标记为需人工处理。`)
+      continue
+    }
+    proofs.push(dependencyProof(nodeId, dependency, review))
+  }
+  return {
+    itemId: input.item.id,
+    ready: blockers.length === 0,
+    proofs,
+    blockers,
+    proofHash: await hashCanonicalValue(proofs),
+  }
+}
+
+export async function readImpactOutlineRegenerationReadinessV1(input: {
+  scope: WorkspaceScope
+  expectedReplan: ImpactPostCorrectionReplanResultV1
+  itemId: string
+}): Promise<ImpactOutlineRegenerationReadinessV1> {
+  const replan = await assertExpectedReplanCurrent({
+    scope: input.scope,
+    expectedReplan: input.expectedReplan,
+  })
+  const item = assertEligibleItem(replan, input.itemId)
+  return resolveDependencyReadiness({ scope: input.scope, replan, item })
+}
+
 async function prepareInput(input: {
   scope: WorkspaceScope
   replan: ImpactPostCorrectionReplanResultV1
@@ -314,11 +410,12 @@ function contract(input: {
   targetOutlineNodeId: number
   parent: ImpactPostCorrectionReplanResultV1
   relation: string
+  dependencyProofHash: string
 }) {
   const skill = getAgentSkillV1(IMPACT_OUTLINE_REGENERATION_SKILL_ID_V1, 'outline')
   return {
     version: 1 as const,
-    objective: `根据 H57 当前影响计划重建后续章纲 #${input.targetOutlineNodeId} 的摘要候选`,
+    objective: `根据 H57 当前影响计划重建后续章纲 #${input.targetOutlineNodeId} 的摘要候选（依赖 ${input.dependencyProofHash}）`,
     workflowKind: 'generate-verify-revise' as const,
     lineage: { parent: {
       runId: input.parent.snapshot.run.id,
@@ -346,6 +443,7 @@ function contract(input: {
     },
     acceptance: [
       { id: 'impact-outline.candidate', kind: 'output-present' as const, required: true },
+      { id: 'impact-outline.dependencies', kind: 'deterministic-check' as const, required: true },
       { id: 'impact-outline.author', kind: 'author-confirmed' as const, required: true },
       { id: 'impact-outline.adoption', kind: 'adoption-committed' as const, required: true },
       { id: 'impact-outline.post-state', kind: 'post-state-matches' as const, required: true },
@@ -353,7 +451,7 @@ function contract(input: {
     verificationPlan: [{
       id: 'impact-outline.terminal', kind: 'terminal' as const,
       verifier: IMPACT_OUTLINE_REGENERATION_VERIFIER_SET_V1,
-      criterionIds: ['impact-outline.candidate', 'impact-outline.author', 'impact-outline.adoption', 'impact-outline.post-state'],
+      criterionIds: ['impact-outline.candidate', 'impact-outline.dependencies', 'impact-outline.author', 'impact-outline.adoption', 'impact-outline.post-state'],
     }],
     failurePolicy: {
       onProtocolError: 'fail' as const,
@@ -390,12 +488,27 @@ function assertTargetBaseline(value: unknown): asserts value is TargetOutlineBas
   }
 }
 
+function assertDependencyProof(value: unknown): asserts value is ImpactOutlineDependencyProofV1 {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('生成式重建依赖证明无效。')
+  const row = value as Record<string, unknown>
+  exactKeys(row, [
+    'version', 'kind', 'nodeId', 'itemId', 'reviewRunId', 'reviewReceiptHash', 'decision',
+  ], '生成式重建依赖证明 ')
+  if (row.version !== 1 || row.kind !== 'impact-author-review-dependency'
+    || typeof row.nodeId !== 'string' || typeof row.itemId !== 'string'
+    || !Number.isInteger(row.reviewRunId) || (row.reviewRunId as number) < 1
+    || !isHash(row.reviewReceiptHash) || row.decision !== 'acknowledged') {
+    throw new Error('生成式重建依赖证明不完整。')
+  }
+}
+
 async function parseCandidate(value: unknown): Promise<ImpactOutlineRegenerationCandidateV1> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('生成式重建候选检查点无效。')
   const row = value as Record<string, any>
   exactKeys(row, [
     'version', 'kind', 'portable', 'projectId', 'worldId', 'workId', 'worldGroupId',
-    'sourceChapterId', 'targetOutlineNodeId', 'durableRunId', 'item', 'lineage', 'targetBaseline',
+    'sourceChapterId', 'targetOutlineNodeId', 'durableRunId', 'item', 'lineage',
+    'dependencyProofs', 'dependencyProofHash', 'targetBaseline',
     'targetBaselineHash', 'sourceTextHash', 'contextManifestHash', 'contextInputHash',
     'sourceContextHash', 'promptTemplateHash', 'promptHash', 'modelOutputHash',
     'allowedEvidenceRefs', 'result', 'resultHash', 'candidateHash',
@@ -405,13 +518,19 @@ async function parseCandidate(value: unknown): Promise<ImpactOutlineRegeneration
       .every((id: unknown) => Number.isInteger(id) && (id as number) > 0)
     || !(row.worldGroupId == null || Number.isInteger(row.worldGroupId))
     || ![
-      row.targetBaselineHash, row.sourceTextHash, row.contextManifestHash, row.contextInputHash,
+      row.dependencyProofHash, row.targetBaselineHash, row.sourceTextHash, row.contextManifestHash, row.contextInputHash,
       row.sourceContextHash, row.promptTemplateHash, row.promptHash, row.modelOutputHash,
       row.resultHash, row.candidateHash,
     ].every(isHash)
-    || !Array.isArray(row.allowedEvidenceRefs)) throw new Error('生成式重建候选检查点不完整。')
+    || !Array.isArray(row.allowedEvidenceRefs) || !Array.isArray(row.dependencyProofs)) {
+    throw new Error('生成式重建候选检查点不完整。')
+  }
   assertItem(row.item)
   assertTargetBaseline(row.targetBaseline)
+  row.dependencyProofs.forEach(assertDependencyProof)
+  if (await hashCanonicalValue(row.dependencyProofs) !== row.dependencyProofHash) {
+    throw new Error('生成式重建依赖证明 hash 不匹配。')
+  }
   if (!row.lineage || typeof row.lineage !== 'object' || Array.isArray(row.lineage)) throw new Error('生成式重建 lineage 无效。')
   exactKeys(row.lineage, ['replanRunId', 'replanReceiptHash', 'replanOutputHash', 'planHash', 'graphHash', 'itemId'], '生成式重建 lineage ')
   if (!Number.isInteger(row.lineage.replanRunId)
@@ -518,6 +637,17 @@ async function currentEvidence(
     && currentReplan.output.graph.graphHash === candidate.lineage.graphHash
   const item = currentReplan?.output.plan.items.find(row => row.id === candidate.item.id)
   const itemFresh = lineageFresh && !!item && sameValue(item, candidate.item)
+  let dependencyFresh = false
+  if (currentReplan && itemFresh && item) {
+    try {
+      const readiness = await resolveDependencyReadiness({ scope, replan: currentReplan, item })
+      dependencyFresh = readiness.ready
+        && readiness.proofHash === candidate.dependencyProofHash
+        && sameValue(readiness.proofs, candidate.dependencyProofs)
+    } catch {
+      dependencyFresh = false
+    }
+  }
   let prepared: PreparedInputV1 | null = null
   if (currentReplan && item) {
     try { prepared = await prepareInput({ scope, replan: currentReplan, item }) } catch { /* stale */ }
@@ -538,6 +668,7 @@ async function currentEvidence(
   return {
     lineageFresh,
     itemFresh,
+    dependencyFresh,
     prepared,
     sourceFresh: prepared?.sourceTextHash === candidate.sourceTextHash
       && prepared?.sourceContextHash === candidate.sourceContextHash,
@@ -586,6 +717,10 @@ export async function generateImpactOutlineRegenerationCandidateV1(input: {
   }
   const replan = await assertExpectedReplanCurrent({ scope: input.scope, expectedReplan: input.expectedReplan })
   const item = assertEligibleItem(replan, input.itemId)
+  const readiness = await resolveDependencyReadiness({ scope: input.scope, replan, item })
+  if (!readiness.ready) {
+    throw new Error(`生成式重建依赖未就绪：${readiness.blockers.join('；')}`)
+  }
   const prepared = await prepareInput({ scope: input.scope, replan, item })
   const relation = await nextRelation({ scope: input.scope, replan, itemId: item.id })
   let snapshot = await createAgentRunV1({
@@ -598,6 +733,7 @@ export async function generateImpactOutlineRegenerationCandidateV1(input: {
       targetOutlineNodeId: item.recordId!,
       parent: replan,
       relation,
+      dependencyProofHash: readiness.proofHash,
     }),
   })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: IMPACT_OUTLINE_REGENERATION_STEP_ID_V1 })
@@ -682,6 +818,8 @@ export async function generateImpactOutlineRegenerationCandidateV1(input: {
     durableRunId: snapshot.run.id,
     item,
     lineage,
+    dependencyProofs: readiness.proofs,
+    dependencyProofHash: readiness.proofHash,
     targetBaseline: prepared.targetBaseline,
     targetBaselineHash: prepared.targetBaselineHash,
     sourceTextHash: prepared.sourceTextHash,
@@ -733,7 +871,7 @@ export async function readPendingImpactOutlineRegenerationCandidateV1(input: {
       snapshot = await repairCandidateEventIfNeeded(input.scope, snapshot, state.candidate)
       const evidence = await currentEvidence(input.scope, state.candidate)
       if (snapshot.projection.state === 'awaiting_confirmation' && !state.intent
-        && evidence.lineageFresh && evidence.itemFresh && evidence.sourceFresh
+        && evidence.lineageFresh && evidence.itemFresh && evidence.dependencyFresh && evidence.sourceFresh
         && evidence.contextFresh && evidence.promptFresh && evidence.targetOriginalFresh) {
         return { snapshot, candidate: state.candidate }
       }
@@ -795,7 +933,7 @@ export async function adoptImpactOutlineRegenerationCandidateV1(input: {
   snapshot = await repairCandidateEventIfNeeded(input.scope, snapshot, candidate)
   let evidence = await currentEvidence(input.scope, candidate, intent)
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash && intent) {
-    if (!evidence.lineageFresh || !evidence.itemFresh || !evidence.sourceFresh
+    if (!evidence.lineageFresh || !evidence.itemFresh || !evidence.dependencyFresh || !evidence.sourceFresh
       || !evidence.templateFresh || !evidence.targetPostMatches) {
       snapshot = await staleAgentRunVerificationV1({
         scope: input.scope, runId: snapshot.run.id, reason: 'impact-outline-terminal-evidence-stale',
@@ -805,7 +943,7 @@ export async function adoptImpactOutlineRegenerationCandidateV1(input: {
     return { snapshot, candidate, receiptHash: snapshot.projection.terminalReceiptHash }
   }
   if (snapshot.projection.state === 'awaiting_confirmation' && !intent) {
-    if (!evidence.lineageFresh || !evidence.itemFresh || !evidence.sourceFresh
+    if (!evidence.lineageFresh || !evidence.itemFresh || !evidence.dependencyFresh || !evidence.sourceFresh
       || !evidence.contextFresh || !evidence.promptFresh || !evidence.targetOriginalFresh) {
       snapshot = await append(input.scope, snapshot, 'candidate.staled', {
         stepId: IMPACT_OUTLINE_REGENERATION_STEP_ID_V1,
@@ -845,7 +983,7 @@ export async function adoptImpactOutlineRegenerationCandidateV1(input: {
     await input.onDurableBoundary?.('adoption.started', snapshot)
   }
   evidence = await currentEvidence(input.scope, candidate, intent)
-  if (!evidence.lineageFresh || !evidence.itemFresh || !evidence.sourceFresh || !evidence.templateFresh
+  if (!evidence.lineageFresh || !evidence.itemFresh || !evidence.dependencyFresh || !evidence.sourceFresh || !evidence.templateFresh
     || (!evidence.targetPostMatches && (!evidence.contextFresh || !evidence.promptFresh))) {
     await pauseUnsafeRun(input.scope, snapshot, 'impact-outline-source-or-parent-changed-after-confirmation')
     throw new Error('确认后来源 Context、Prompt 模板或 H57 plan 已变化，正式写入已停止。')
@@ -886,7 +1024,7 @@ export async function adoptImpactOutlineRegenerationCandidateV1(input: {
     await input.onDurableBoundary?.('verification.started', snapshot)
   }
   evidence = await currentEvidence(input.scope, candidate, intent)
-  if (!evidence.lineageFresh || !evidence.itemFresh || !evidence.sourceFresh
+  if (!evidence.lineageFresh || !evidence.itemFresh || !evidence.dependencyFresh || !evidence.sourceFresh
     || !evidence.templateFresh || !evidence.targetPostMatches) {
     await pauseUnsafeRun(input.scope, snapshot, 'impact-outline-terminal-evidence-stale')
     throw new Error('生成式重建终验时父计划、来源或正式摘要已变化。')
@@ -915,6 +1053,7 @@ export async function adoptImpactOutlineRegenerationCandidateV1(input: {
     },
     criteria: [
       { id: 'impact-outline.candidate', status: 'passed', evidenceRefs: [`candidate:${candidate.candidateHash}`] },
+      { id: 'impact-outline.dependencies', status: 'passed', evidenceRefs: [`dependencies:${candidate.dependencyProofHash}`] },
       { id: 'impact-outline.author', status: 'passed', evidenceRefs: [`intent:${intent.intentHash}`] },
       { id: 'impact-outline.adoption', status: 'passed', evidenceRefs: [`summary:${intent.summaryHash}`] },
       { id: 'impact-outline.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
@@ -965,7 +1104,7 @@ export async function readCompletedImpactOutlineRegenerationsV1(input: {
       assertCandidateScope(input.scope, snapshot, state.candidate)
       if (!state.intent || !snapshot.projection.terminalReceiptHash || seen.has(state.candidate.item.id)) continue
       const evidence = await currentEvidence(input.scope, state.candidate, state.intent)
-      if (!evidence.lineageFresh || !evidence.itemFresh || !evidence.sourceFresh
+      if (!evidence.lineageFresh || !evidence.itemFresh || !evidence.dependencyFresh || !evidence.sourceFresh
         || !evidence.templateFresh || !evidence.targetPostMatches) {
         snapshot = await staleAgentRunVerificationV1({
           scope: input.scope, runId: row.id, reason: 'impact-outline-completion-stale',

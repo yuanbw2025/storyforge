@@ -14,6 +14,7 @@ import {
   adoptImpactOutlineRegenerationCandidateV1,
   generateImpactOutlineRegenerationCandidateV1,
   readCompletedImpactOutlineRegenerationsV1,
+  readImpactOutlineRegenerationReadinessV1,
   readPendingImpactOutlineRegenerationCandidateV1,
   rejectImpactOutlineRegenerationCandidateV1,
   type ImpactOutlineRegenerationAdoptionBoundaryV1,
@@ -82,7 +83,10 @@ async function seed(label = 'h77') {
   }
 }
 
-async function prepare(fixture: Awaited<ReturnType<typeof seed>>) {
+async function prepare(
+  fixture: Awaited<ReturnType<typeof seed>>,
+  options: { dependencyDecision?: 'acknowledged' | 'needs-manual-action' | null } = {},
+) {
   const graph = await buildEditImpactGraphV1(fixture.scope, fixture.sourceChapterId)
   const plan = await buildImpactRemediationPlanV1(graph)
   const factItem = plan.items.find(item => item.table === 'temporalFacts' && item.recordId === fixture.factId)!
@@ -102,7 +106,54 @@ async function prepare(fixture: Awaited<ReturnType<typeof seed>>) {
     candidate.table === 'outlineNodes' && candidate.recordId === fixture.targetOutlineNodeId
   ))!
   expect(replan.output.remainingItemIds).toContain(item.id)
-  return { replan, item }
+  const dependencyItem = replan.output.plan.items.find(candidate => item.dependencyNodeIds.includes(candidate.nodeId))!
+  expect(dependencyItem.action).toBe('review-downstream-chapter')
+  const dependencyDecision = options.dependencyDecision === undefined ? 'acknowledged' : options.dependencyDecision
+  const dependencyReview = dependencyDecision
+    ? await executeImpactAuthorReviewV1({
+        scope: fixture.scope,
+        worldGroupId: fixture.worldGroupId,
+        plan: replan.output.plan,
+        itemId: dependencyItem.id,
+        decision: dependencyDecision,
+        note: dependencyDecision === 'acknowledged'
+          ? '已复核下游正文，可以重建对应章纲摘要。'
+          : '下游正文仍需人工处理，暂不允许重建章纲。',
+      })
+    : null
+  return { replan, item, dependencyItem, dependencyReview }
+}
+
+async function addDownstreamTarget(
+  fixture: Awaited<ReturnType<typeof seed>>,
+): Promise<{ outlineNodeId: number; chapterId: number }> {
+  const now = Date.now() + 10
+  const outlineNodeId = await db.outlineNodes.add({
+    projectId: fixture.projectId,
+    workId: fixture.scope.workId,
+    worldGroupId: fixture.worldGroupId,
+    parentId: fixture.volumeId,
+    type: 'chapter',
+    title: '第三章',
+    summary: '潮声调查继续',
+    order: 2,
+    createdAt: now,
+    updatedAt: now,
+  } as any) as number
+  const chapterId = await db.chapters.add({
+    projectId: fixture.projectId,
+    workId: fixture.scope.workId,
+    outlineNodeId,
+    title: '第三章',
+    content: '<p>调查队仍按旧线索前往潮井。</p>',
+    wordCount: 14,
+    status: 'draft',
+    order: 2,
+    notes: '',
+    createdAt: now,
+    updatedAt: now,
+  } as any) as number
+  return { outlineNodeId, chapterId }
 }
 
 describe.sequential('R-HARNESS77 · H57 生成式下游章纲摘要重建', { timeout: 30_000 }, () => {
@@ -124,6 +175,11 @@ describe.sequential('R-HARNESS77 · H57 生成式下游章纲摘要重建', { ti
     expect(result.snapshot.run.parentRunId).toBe(replan.snapshot.run.id)
     expect(result.snapshot.run.parentReceiptHash).toBe(replan.receiptHash)
     expect(result.snapshot.run.parentArtifactHash).toBe(replan.output.outputHash)
+    expect(result.candidate.dependencyProofs).toHaveLength(1)
+    expect(result.candidate.dependencyProofs[0]).toMatchObject({
+      nodeId: item.dependencyNodeIds[0],
+      decision: 'acknowledged',
+    })
     expect(result.snapshot.contract.permissions.contextSourceKeys)
       .toEqual(expect.arrayContaining(['chapterContent', 'chapterOutline', 'consistencyReport']))
     expect(result.snapshot.contract.permissions.writeTargets).toEqual([
@@ -131,6 +187,84 @@ describe.sequential('R-HARNESS77 · H57 生成式下游章纲摘要重建', { ti
     ])
     expect((await db.outlineNodes.get(fixture.targetOutlineNodeId))?.summary).toBe('钟楼照常回应')
     expect(result.snapshot.projection.state).toBe('awaiting_confirmation')
+  })
+
+  it('直接依赖缺少复核或仍需人工处理时模型调用与 H77 Run 均为零', async () => {
+    for (const dependencyDecision of [null, 'needs-manual-action'] as const) {
+      const fixture = await seed(`dependency-${dependencyDecision ?? 'missing'}`)
+      const { replan, item } = await prepare(fixture, { dependencyDecision })
+      let calls = 0
+      await expect(generateImpactOutlineRegenerationCandidateV1({
+        scope: fixture.scope,
+        expectedReplan: replan,
+        itemId: item.id,
+        runAI: async () => { calls += 1; return VALID_OUTPUT },
+      })).rejects.toThrow('依赖未就绪')
+      expect(calls).toBe(0)
+      expect((await db.agentRuns.where('projectId').equals(fixture.projectId).toArray())
+        .filter(run => run.contractJson.includes('outline.impact-summary-regenerate'))).toHaveLength(0)
+      expect((await db.outlineNodes.get(fixture.targetOutlineNodeId))?.summary).toBe('钟楼照常回应')
+    }
+  })
+
+  it('候选冻结的作者复核 proof 过期后不再恢复或采纳', async () => {
+    const fixture = await seed('dependency-stale')
+    const { replan, item, dependencyReview } = await prepare(fixture)
+    const generated = await generateImpactOutlineRegenerationCandidateV1({
+      scope: fixture.scope,
+      expectedReplan: replan,
+      itemId: item.id,
+      runAI: async () => VALID_OUTPUT,
+    })
+    await staleAgentRunVerificationV1({
+      scope: fixture.scope,
+      runId: dependencyReview!.snapshot.run.id,
+      reason: '测试依赖复核 proof 过期',
+    })
+    expect(await readPendingImpactOutlineRegenerationCandidateV1({
+      scope: fixture.scope,
+      sourceChapterId: fixture.sourceChapterId,
+    })).toBeNull()
+    await expect(adoptImpactOutlineRegenerationCandidateV1({
+      scope: fixture.scope,
+      runId: generated.snapshot.run.id,
+    })).rejects.toThrow('已变化')
+    expect((await db.outlineNodes.get(fixture.targetOutlineNodeId))?.summary).toBe('钟楼照常回应')
+  })
+
+  it('多个后续目标按各自直接依赖逐项解锁，不因另一目标已就绪而越过证明', async () => {
+    const fixture = await seed('dependency-multiple')
+    const third = await addDownstreamTarget(fixture)
+    const { replan, item } = await prepare(fixture)
+    const thirdItem = replan.output.plan.items.find(candidate => candidate.recordId === third.outlineNodeId)!
+    expect((await readImpactOutlineRegenerationReadinessV1({
+      scope: fixture.scope,
+      expectedReplan: replan,
+      itemId: item.id,
+    })).ready).toBe(true)
+    const blocked = await readImpactOutlineRegenerationReadinessV1({
+      scope: fixture.scope,
+      expectedReplan: replan,
+      itemId: thirdItem.id,
+    })
+    expect(blocked.ready).toBe(false)
+    expect(blocked.blockers[0]).toContain('尚无作者复核回执')
+    const dependency = replan.output.plan.items.find(candidate => (
+      thirdItem.dependencyNodeIds.includes(candidate.nodeId)
+    ))!
+    await executeImpactAuthorReviewV1({
+      scope: fixture.scope,
+      worldGroupId: fixture.worldGroupId,
+      plan: replan.output.plan,
+      itemId: dependency.id,
+      decision: 'acknowledged',
+      note: '第三章正文已独立复核，可以重建对应章纲。',
+    })
+    expect((await readImpactOutlineRegenerationReadinessV1({
+      scope: fixture.scope,
+      expectedReplan: replan,
+      itemId: thirdItem.id,
+    })).ready).toBe(true)
   })
 
   it('严格拒绝协议外字段与未进入模型的证据标签，且不产生正式写入', async () => {

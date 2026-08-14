@@ -148,6 +148,9 @@ describe('SIM-1B · 互动运行时 UI', () => {
     expect(child).toMatchObject({ parentThroughSequence: 2 })
     expect(child?.parentSessionId).toBeTypeOf('number')
 
+    await viWaitFor(() => expect(host.querySelector(
+      'button[aria-label="删除会话 拒绝密钥分支"]',
+    )).not.toBeNull())
     const remove = host.querySelector<HTMLButtonElement>(
       'button[aria-label="删除会话 拒绝密钥分支"]',
     )!

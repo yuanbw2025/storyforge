@@ -35,6 +35,19 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-78 完成卡：H57 生成式 child 的依赖证明门
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-78` 小功能。作者只能在 H57 当前计划中某个生成式目标的直接上游影响项已有 fresh 作者复核证明后生成候选；不能跳过仍待人工处理的下游正文，靠目标下拉框任意越过依赖。 |
+| 主归属 / 复用 | 归 `HARNESS-2` 反向反馈通用依赖闭环；复用 H50 作者复核 receipt、H57 current plan、H77 child Run 和现有 ledger，不建立第二个计划器、队列表或自动级联执行器。 |
+| 范围 / 非范围 | 本单元只为 H77 的直接 `dependencyNodeIds` 建立可验证 readiness/proof；首个目标仍只写单个 `outlineNodes.summary`。不自动确认依赖、不自动批量调用模型、不改正文/事实/锁定字段，不把 UI 顺序冒充依赖顺序。 |
+| 读 / 写 | 只读 H57 plan、对应 H50 terminal review 与既有 H77 completion；依赖证明随候选冻结并进入 hash。正式写入仍完全由 H77 的 `adopt(outlineNodes, merge-diffs)` 承担，不新增表或写字段。 |
+| 状态机 / 硬验证 | 每个直接依赖必须映射到同一 current plan 项；作者确认依赖必须有同 plan/source 的 fresh `acknowledged` receipt，`needs-manual-action` 或缺失证明均阻断且模型调用/新 Run 为零。候选恢复、采纳和终验重新读取并逐项匹配冻结 proof；proof stale 后不得写入。 |
+| 生命周期 / 作用域 | proof 只引用已登记、不可便携的 agent ledger 物理 Run/receipt；沿现有 Work 隔离、导入取消和 terminal stale 规则处理，不新增 schema/迁移/导出表。 |
+| UI / 回滚 | 目标列表只展示 readiness 已满足的章纲，并说明被哪条上游复核阻断；作者可在既有影响复核控件完成依赖后再生成。移除本门只回到 H77 的单目标选择，不影响任何已确认 Canon。 |
+| 验收 | 更新后的 H77 专项 15 项覆盖缺证明、`needs-manual-action`、fresh acknowledged、proof stale、候选前零模型/零 Run、刷新恢复、采纳前 proof 漂移、多个目标逐项解锁、Work/导入隔离；与 H50/H52/H54～58、工具栏合跑 9 文件 / 68 项通过。真实 Chromium 1/1（13.2 秒）从 H57 先确认下游正文依赖，再生成、刷新和确认 H77 候选；完整 `npm run ci` 为 368 文件 / 1765 项全绿，完整 `npm run ci:e2e` 为 52/52（4.9 分钟）。 |
+
 ### HARNESS-77 完成卡：H57 生成式后续章纲摘要重建
 
 | 项目 | 冻结边界 |

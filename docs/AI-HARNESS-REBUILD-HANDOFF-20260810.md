@@ -6,7 +6,7 @@
 >
 > 远端分支：`origin/feat/harness-rebuild-20260807`
 >
-> 最新功能单元：`HARNESS-77 H57 生成式后续章纲摘要重建`（具体提交以 `git log -1` 为准）
+> 最新功能单元：`HARNESS-78 H57 生成式 child 依赖证明门`（具体提交以 `git log -1` 为准）
 >
 > 世界引擎基线：`774a2ae feat(WORLD-2): close executable world foundation through 2F`
 >
@@ -251,8 +251,9 @@ git log --oneline --reverse 774a2ae..HEAD
 - HARNESS-75：`PromptExamplesEditor` 经实际数据路径复核后归 `authoring-draft` auxiliary，而非机械建立 durable Agent。模型只读 Prompt 编辑器当前未保存 draft，输出只经父组件 `onChange` 进入内存；生成后 `promptTemplates` 和 Agent ledger 零写，作者另点顶部「保存」后才经原 Prompt store 写全局本机配置。`promptTemplates` 已由 PROJECT_TABLES 登记为 `owner=global / exportable=false`；未保存离开丢弃、系统模板只读、配置缺失零调用与显式保存由专项反例闭合。
 - HARNESS-76：文风学习进入 `prose.style-learn` durable Skill。模型只经 `styleLearningBaseline` 读取当前 Work 的已选定稿/修订稿章节样本、既有修订对、校准反馈和正式文风目标状态；严格六标题 Markdown 先成为不可便携持久候选。作者确认且章节内容/状态、修订对、反馈、Context、Prompt 与完整正式目标仍 fresh 后，才在事务中二次 CAS 并经 `adopt(userStyleProfiles)` 原子写入画像、启用状态、样本章节和统计。首份画像默认启用，更新既有画像保留作者启用选择；未知模型窗、候选恢复、八采纳边界、目标删除、导入取消、Work 隔离和 terminal stale 已闭合。旧组件 `chat()`、组件内 Context 和直接保存画像旁路下线；校准生成经真实 DB 反例确认仅为 `authoring-draft`，只有作者另点保存反馈/修订对才写相应字段。
 - HARNESS-77：fresh H57 当前计划中的单个后续 `review-outline` 项进入 `outline.impact-summary-regenerate`。模型重新经九个登记源装配当前 Context，只调用一次并生成 strict `{summary,reason,evidenceRefs}` 不可便携候选；Run 精确绑定 H57 parent Run/receipt/output、plan/graph/item、来源、Context/Prompt 与目标 baseline。确认前正式摘要零写；作者确认时事务内做来源/目标 CAS，只经 `adopt(outlineNodes, merge-diffs)` 写 `summary`。未知模型窗不自动重试，刷新恢复、候选事件崩溃窗、八采纳边界、拒绝/新 child 重试、父/来源/Context/目标 stale、锁定/越界、Work 隔离、导入取消和 terminal stale 已闭合。H44 手填 patch、H58 确定性重建和其它正式字段保持独立。
+- HARNESS-78：H77 目标的每个直接 `dependencyNodeId` 必须映射到同一 H57 current plan；下游正文依赖须先取得 H50 fresh `acknowledged` terminal review。缺 proof 或仍为 `needs-manual-action` 时模型调用与新 H77 Run 均为零。proof 冻结 review Run/receipt/decision 并进入 candidate/contract/terminal receipt；恢复、采纳、正式写前和终验逐项重读匹配，proof stale 后不再恢复或写入。UI 恢复 current review，只按各目标自身依赖逐项解锁，不自动确认、批量调用或级联正文。
 
-HARNESS-77 最新代码入口：
+HARNESS-78 最新代码入口：
 
 - `src/lib/consistency/impact-handoff.ts`
 - `src/lib/agent/run/impact-handoff-durable.ts`
@@ -285,10 +286,10 @@ HARNESS-77 最新代码入口：
 | 细纲/场景 | 单章和批量 durable；章节入口旁路已收口 | 真实模型的场景质量、信息释放和上下文救援 A/B 未完成 |
 | 正文 | 生成/续写、信息隔离、语义 review/revise/review、作者确认采纳和父子 Run已完成；局部润色/扩写/缩写/改写已进入 durable 候选与精确采纳，查漏保持只读 | 不覆盖已有手稿；长期文学质量和真实 provider 发布证据未完成 |
 | 章后状态 | 六域候选、章节记忆、检索/摘要和确定性一致性守卫进入统一 Run | 语义 Fast/Deep 仍是显式动作；所有状态类型的通用自动采纳不应实现 |
-| 反向反馈 | 影响图、受限作者 patch、确定性重建、作者复核、可信人工修正 pre/post receipt、修正后 current plan、确定性余项 child，以及首个后续章纲摘要生成式 child 已完成 | 通用多目标依赖重跑尚未完成；后续仍须一次只扩展一个目标类型，禁止自动覆盖正文/事实/锁定数据 |
+| 反向反馈 | 影响图、受限作者 patch、确定性重建、作者复核、可信人工修正 pre/post receipt、修正后 current plan、确定性余项 child，以及带直接 review proof 的首个后续章纲摘要生成式 child 已完成 | 其它目标类型与跨类型调度尚未完成；后续仍须一次只扩展一个目标类型，禁止自动覆盖正文/事实/锁定数据 |
 | 评测/发布 | 大量模块回归、H4 工程基座、配对 gate 和防篡改证据存在 | 真实外部模型 H4 40+20 artifact、人工 held-out 复核、真实质量/成本/延迟净收益未完成 |
 
-## 8. 当前停点：HARNESS-77 已实现并完成定向验证，当前验证证据
+## 8. 当前停点：HARNESS-78 已实现、完整验证并待提交，当前验证证据
 
 ### 8.1 已通过
 
@@ -311,11 +312,11 @@ HARNESS-77 最新代码入口：
 - HARNESS-74 durable 专项 20 项、控制器 3 项、组件 UI 3 项与 H59 3 项共 29 项定向回归通过：登记版本 baseline 实际进入模型、总结/角色两模式严格协议、恢复完成前快速点击阻断、缺少模型配置时零 Run、重试真实创建新 Run、确认前版本与参考投影零写入、模型未知窗、候选崩溃窗、来源/Context/Prompt/版本及投影字段 stale、active 双写/ready 单写、版本/投影分段写入后的十个采纳边界、目标删除、导入取消、Work/版本隔离、terminal stale 与旧两处组件直调旁路均闭合。
 - HARNESS-75 专项 3 项与 H59 3 项共 6 项定向回归通过：模型只读当前 Prompt draft 并保留 `prompt.examples` 消耗分类；生成后 DB/Agent ledger 零写，作者显式保存后才写全局模板；未保存离开丢弃、系统模板只读、配置缺失零调用和 PROJECT_TABLES 全局生命周期均已闭合。
 - HARNESS-76 durable 专项 20 项、校准真实 IndexedDB 4 项与既有文风/H59 9 项共 33 项定向回归通过：登记 baseline 实际进入模型、确认前正式画像零写入、严格六标题协议、未知模型窗、候选崩溃窗、既有/首份画像启用语义、章节内容/状态/修订对/反馈/画像/toggle/Context/Prompt stale、事务内二次 CAS、八采纳边界、拒绝、目标删除、竞争插入、导入取消、Work 隔离、terminal stale 和旧直接保存旁路下线均闭合；校准生成/编辑零画像与 ledger 写入，只有显式保存反馈或修订对才精确写对应字段。
-- HARNESS-77 专项 12 项与工具栏 10 项共 22 项定向回归通过：登记 Context 实际进入 Prompt、H57 parent lineage、确认前正式摘要零写、strict exact-key/evidence 标签、配置缺失零 Run、模型未知窗显式新 child 重试、候选 checkpoint 崩溃恢复、确认后写前 Context 漂移、来源/目标/Context/H57 stale、八采纳边界、拒绝、完成恢复与 terminal stale、来源章/非章纲/作用域/导入生命周期均闭合。独立 Chromium 真实路径 1/1 通过（10.7 秒），从 H50 作者复核经 H56 人工修正、H57 replan 到 H77 候选/刷新/确认/终态，模型调用始终为一次。
+- HARNESS-77/78 专项 15 项与 H50/H52/H54～58、工具栏合跑 9 文件 / 68 项通过：除原登记 Context、H57 parent、零写候选、严格协议、未知模型窗、八采纳边界与 stale/lifecycle 边界外，新增缺依赖 proof、`needs-manual-action` 时零模型/零 Run、fresh acknowledged、proof stale、多个目标逐项解锁。独立 Chromium 真实路径 1/1 通过（13.2 秒），从 H50→H56→H57 后先确认目标的下游正文依赖，再进入 H77 候选/刷新/确认/终态，模型调用始终为一次。
 - `npx tsc --noEmit`：通过。
 - 改动范围 ESLint 与全仓 `npm run lint`：通过。
 - `git diff --check`：通过。
-- `npm run test:coverage` 独占资源重跑：368 个测试文件、1762 项测试全部通过。
+- `npm run test:coverage` 独占资源重跑：368 个测试文件、1765 项测试全部通过。
 - 覆盖率：statements 81.91%、branches 73.87%、functions 79.57%、lines 81.91%。
 - `npm run build`：通过，3770 个模块完成生产构建。
 - `npm run check:bundle-size`：通过；入口约 677.2 KiB，gzip 约 210.1 KiB。
@@ -330,7 +331,7 @@ HARNESS-77 最新代码入口：
 found 0 vulnerabilities
 ```
 
-H64～H77 在独立 worktree 中完成；原工作树的作者改动及未跟踪 `output/` / `tmp/` 未被读取、修改或提交。H77 的完整 CI 与完整项目 E2E 均已实际重跑通过，以下记录不借用前序单元结果。
+H64～H78 在独立 worktree 中完成；原工作树的作者改动及未跟踪 `output/` / `tmp/` 未被读取、修改或提交。H78 的完整 CI 与完整项目 E2E 均已实际重跑通过，以下记录不借用前序单元结果。
 
 ### 8.3 E2E 状态
 
@@ -357,6 +358,8 @@ HARNESS-75 把完整项目 Chromium 套件扩展为 51 条并整套重跑，51/5
 HARNESS-76 在独立端口重跑完整项目 Chromium 套件，51/51 通过，耗时 4.4 分钟，零失败和重试。文风主路径约 8.6 秒：从零创建项目和定稿章节，拦截实际 OpenAI-compatible 请求并验证登记 baseline、样本与严格协议进入 Prompt；候选生成后正式画像仍为空且 Run 等待确认，刷新恢复同一候选时模型调用保持一次；作者确认后画像、启用状态和样本统计才原子持久化。随后校准模型调用不增加 Agent ledger，只有作者显式保存反馈/修订对才分别持久化，刷新后仍存在。独立精确复跑也 1/1 通过（11.3 秒）。默认端口被另一独立 worktree 的开发服务占用，因此 Playwright 新增 `PLAYWRIGHT_PORT` 环境覆盖并在 4181 运行；未终止其它进程，也未使用或修改作者当前预览项目。
 
 HARNESS-77 独立精确 Chromium 路径 1/1 通过，耗时 10.7 秒：从零创建项目与两章/事实 fixture，真实执行影响分析和事实 stale，记录 `needs-manual-action` review，进入既有事实库确认并签发 H56 completion，返回来源恢复 H57 current plan；拦截实际 OpenAI-compatible 请求并验证正文、目标章纲及 HARNESS-77 严格协议进入 Prompt。候选阶段 IndexedDB 正式摘要保持旧值，刷新后恢复同一 child 且模型调用仍为一次；确认后目标摘要、H77 child 与 H57 parent 的 completed 状态和两个 64 位 receipt 均成立，再次刷新仍恢复 terminal receipt。最终完整项目 Chromium 套件在独立端口重跑为 52/52，耗时 6.3 分钟、零失败；其中 H77 路径为 10.4 秒。全部测试使用独立浏览器数据，没有使用或修改作者当前预览项目。
+
+HARNESS-78 更新后的同一路径独立复跑 1/1 通过，耗时 13.2 秒：返回来源恢复 H57 后，生成式目标在下游正文依赖没有 review proof 时保持隐藏；作者通过既有复核控件对精确 `chapters#id` 记录 `acknowledged` terminal receipt 后，目标才解锁，随后 H77 模型调用、候选刷新恢复、确认写回和终态证明均继续成立。最终完整项目 Chromium 套件在独立端口 4184 重跑为 52/52，耗时 4.9 分钟、零失败；全部测试使用独立浏览器数据，没有使用或修改作者当前预览项目。
 
 ### 8.4 测试负载注意事项
 
@@ -630,9 +633,9 @@ tests/regression/R-HARNESS64-story-timeline-extraction-durable.test.ts
 
 H64 专属回归、H59/H63/H64 联合回归通过；`docs/roadmap/README.md`、`docs/roadmap/CAPABILITY-BASELINE.md`、`docs/AI-HARNESS-AUDIT-20260807.md`、本文、`docs/AI-FUNCTIONS-MANUAL.md`、生成版 AI manual、`docs/DATA-FLOW-DIAGRAM.md` 和项目指标均随独立完成提交同步，不 amend `757ce47`。
 
-### 17.5 H77 完成后的总路线
+### 17.5 H78 完成后的总路线
 
-H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77 已从 fresh H57 current plan 交付一个真实生成式后续章纲目标，不建立平行 runtime。下一阶段继续闭合通用依赖、三注册表和数据生命周期遗漏，随后取得：
+H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77 已从 fresh H57 current plan 交付一个真实生成式后续章纲目标，H78 又补齐其直接依赖 review proof 和逐目标解锁，不建立平行 runtime。下一阶段继续一次一个类型闭合必要的生成式下游目标，随后取得：
 
 - 真实外部模型的质量、人工修改量、完成率、token、成本、延迟和 p95 证据；H4 development 40 + held-out 20 必须使用真实独立 generator/verifier artifact，并完成人工 held-out 复核。
 - 独立浏览器数据中的真实 UI/API E2E，不得修改作者当前预览项目。
@@ -641,8 +644,8 @@ H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77 �
 当前交付基线已经更新：
 
 - 全仓 `npm run lint` 与完整 `npm run ci` 通过；生产依赖审计为 0 漏洞，`nanoid` 公告已通过同主版本 `5.1.16` 修复，未使用强制审计修复。
-- 项目指定 Playwright Chromium 在 H77 最终交付重跑为 52/52；H50→H56→H57→H77 生成式下游重建、文风学习 durable、校准 authoring-draft、Prompt authoring-draft 与参考派生 durable 主路径均包含在内。后续单元仍须按适用范围重跑，不能借用历史结果。
-- 最近一次全量 coverage 为 368 files / 1762 tests，全部通过；覆盖率为 81.91% statements / 73.87% branches / 79.57% functions / 81.91% lines。
+- 项目指定 Playwright Chromium 在 H78 最终交付重跑为 52/52（4.9 分钟）；H50→H56→H57→依赖复核→H77 生成式下游重建、文风学习 durable、校准 authoring-draft、Prompt authoring-draft 与参考派生 durable 主路径均包含在内。后续单元仍须按适用范围重跑，不能借用历史结果。
+- 最近一次全量 coverage 为 368 files / 1765 tests，全部通过；覆盖率为 81.91% statements / 73.87% branches / 79.57% functions / 81.91% lines。
 - 原工作树仍属于作者且保持未触碰；后续继续使用独立 worktree，不得把其未跟踪文件带入提交。
 
 提交前以根 `AGENTS.md` 的最新闸门为准，至少运行当前单元定向回归、H59 census 回归、三注册表/architecture/roadmap/freshness/source reachability/canon 检查、`npx tsc --noEmit`、`npm run build`、bundle 检查和 `git diff --check`。所有文档、生成物和源码必须提交到当前功能分支，工作树除明确属于用户的本地未跟踪文件外不得留下交接改动。

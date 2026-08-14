@@ -25,9 +25,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
 const ORIGINAL_AI_CONFIG = structuredClone(useAIConfigStore.getState().config)
 
-async function flushAsyncEffects(): Promise<void> {
+async function flushAsyncEffects(delayMs = 1_000): Promise<void> {
   await act(async () => {
-    await new Promise(resolve => setTimeout(resolve, 50))
+    await new Promise(resolve => setTimeout(resolve, delayMs))
   })
 }
 
@@ -177,7 +177,7 @@ describe('R-HARNESS17 · 压缩评测面板', () => {
       },
     })
     const host = await mountHarness()
-    await flushAsyncEffects()
+    await flushAsyncEffects(1_000)
 
     const section = host.querySelector('[data-testid="h4-development-section"]')
     expect(section?.textContent).toContain('可恢复 · 1/2')

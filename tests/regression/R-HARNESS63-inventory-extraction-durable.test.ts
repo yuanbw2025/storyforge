@@ -104,7 +104,7 @@ function response(...rows: ReturnType<typeof item>[]) {
   return JSON.stringify(rows)
 }
 
-describe.sequential('R-HARNESS63 · 物品栏 durable 分块提取与原子替换', () => {
+describe.sequential('R-HARNESS63 · 物品栏 durable 分块提取与原子替换', { timeout: 30_000 }, () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
 

@@ -402,7 +402,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       ])
       if (!active) return
       if (postCorrectionState) {
-        const [pendingRegeneration, completedRegenerations] = await Promise.all([
+        const [pendingRegeneration, completedRegenerations, currentReviews] = await Promise.all([
           readPendingImpactOutlineRegenerationCandidateV1({
             scope,
             sourceChapterId: currentChapter.id!,
@@ -417,29 +417,60 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             console.warn('[ImpactOutlineRegeneration] terminal receipt 恢复失败:', error)
             return []
           }),
+          readImpactAuthorReviewsV1({
+            scope,
+            plan: postCorrectionState.output.plan,
+          }).catch(error => {
+            console.warn('[ImpactOutlineRegeneration] 依赖复核恢复失败:', error)
+            return []
+          }),
         ])
         if (!active) return
+        const currentReviewByItem = new Map(currentReviews.map(review => [review.output.itemId, review]))
+        const planItemByNode = new Map(postCorrectionState.output.plan.items.map(item => [item.nodeId, item]))
+        const pendingRegenerationItems = postCorrectionState.output.plan.items.filter(item => (
+          (postCorrectionState.output.remainingItemIds.includes(item.id)
+            || postCorrectionState.output.newItemIds.includes(item.id))
+          && item.action === 'review-outline'
+          && item.recordId !== currentChapter.outlineNodeId
+          && !completedRegenerations.some(record => record.candidate.item.id === item.id)
+        ))
+        const dependenciesReady = (item: typeof pendingRegenerationItems[number]) => (
+          item.dependencyNodeIds.every(nodeId => {
+            const dependency = planItemByNode.get(nodeId)
+            return dependency?.mode === 'author-confirmed'
+              && currentReviewByItem.get(dependency.id)?.output.decision === 'acknowledged'
+          })
+        )
+        const eligibleRegenerationItems = pendingRegenerationItems.filter(dependenciesReady)
+        const blockedRegenerationItem = pendingRegenerationItems.find(item => !dependenciesReady(item))
+        const reviewTarget = blockedRegenerationItem ?? eligibleRegenerationItems[0]
+        const firstReviewDependency = postCorrectionState.output.plan.items.find(item => (
+          reviewTarget?.dependencyNodeIds.includes(item.nodeId) && item.mode === 'author-confirmed'
+        ))
+        const selectedReview = currentReviewByItem.get(firstReviewDependency?.id ?? '')
         setImpactPostCorrectionReplan(postCorrectionState)
         setImpactGraph(postCorrectionState.output.graph)
         setImpactRemediationPlan(postCorrectionState.output.plan)
         setImpactRemediationReceipt(postCorrectionState.receiptHash)
         setImpactOutlineRegenerationCandidate(pendingRegeneration?.candidate ?? null)
         setImpactOutlineRegenerationCompleted(completedRegenerations)
+        setImpactReviewRecords(currentReviews)
+        setImpactReviewItemId(firstReviewDependency?.id ?? null)
+        setImpactReviewDecision(selectedReview?.output.decision ?? 'acknowledged')
+        setImpactReviewNote(selectedReview?.output.note ?? '')
+        setImpactReviewReceipt(selectedReview?.receiptHash ?? null)
         setImpactOutlineRegenerationItemId(
           pendingRegeneration?.candidate.item.id
-          ?? postCorrectionState.output.plan.items.find(item => (
-            (postCorrectionState.output.remainingItemIds.includes(item.id)
-              || postCorrectionState.output.newItemIds.includes(item.id))
-            && item.action === 'review-outline'
-            && item.recordId !== currentChapter.outlineNodeId
-            && !completedRegenerations.some(record => record.candidate.item.id === item.id)
-          ))?.id
+          ?? eligibleRegenerationItems[0]?.id
           ?? null,
         )
         setImpactOutlineRegenerationReceipt(completedRegenerations[0]?.receiptHash ?? null)
         setImpactInfo(
           pendingRegeneration
             ? '已恢复一条 H57 生成式后续章纲候选；确认前不会修改正式摘要。'
+            : blockedRegenerationItem && firstReviewDependency
+              ? `H57 生成式目标仍等待直接依赖复核：${firstReviewDependency.reason}`
             : `已恢复人工修正后的当前计划：已解决 ${postCorrectionState.output.resolvedItemIds.length} 项、仍需处理 ${postCorrectionState.output.remainingItemIds.length} 项、新增 ${postCorrectionState.output.newItemIds.length} 项。`,
         )
       } else if (reviewState) {
@@ -798,14 +829,22 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       ...replan.output.newItemIds,
     ])
     const completedIds = new Set(impactOutlineRegenerationCompleted.map(record => record.candidate.item.id))
+    const reviewByItem = new Map(impactReviewRecords.map(review => [review.output.itemId, review]))
+    const itemByNode = new Map(replan.output.plan.items.map(item => [item.nodeId, item]))
     return replan.output.plan.items.flatMap(item => {
       if (!activeIds.has(item.id) || completedIds.has(item.id)
         || item.action !== 'review-outline' || item.recordId == null
         || item.recordId === outlineNode?.id) return []
+      const dependenciesReady = item.dependencyNodeIds.every(nodeId => {
+        const dependency = itemByNode.get(nodeId)
+        return dependency?.mode === 'author-confirmed'
+          && reviewByItem.get(dependency.id)?.output.decision === 'acknowledged'
+      })
+      if (!dependenciesReady) return []
       const target = nodes.find(node => node.id === item.recordId && node.type === 'chapter')
       return target ? [{ itemId: item.id, id: target.id!, title: target.title, summary: target.summary ?? '' }] : []
     })
-  }, [impactOutlineRegenerationCompleted, impactPostCorrectionReplan, nodes, outlineNode?.id])
+  }, [impactOutlineRegenerationCompleted, impactPostCorrectionReplan, impactReviewRecords, nodes, outlineNode?.id])
 
   // 后台一致性 Agent：正文稳定落盘后只跑零 token 确定性守卫。
   // 没有告警时不制造归档记录；LLM fast/deep 必须由质量审校面板中的明确按钮触发。

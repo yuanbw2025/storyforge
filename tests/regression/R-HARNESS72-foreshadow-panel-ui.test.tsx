@@ -84,6 +84,8 @@ describe('R-HARNESS72 · 伏笔建议作者确认 UI', () => {
       ],
     }
     runnerMocks.generate.mockResolvedValue({ snapshot: { run: { id: 72 } }, candidate })
+    let resolveAdoption!: () => void
+    const adoptionCompleted = new Promise<void>(resolve => { resolveAdoption = resolve })
     runnerMocks.adopt.mockImplementation(async () => {
       await db.foreshadows.add({
         projectId, name: '逆流的钟声', type: 'timeline', status: 'planned',
@@ -92,6 +94,7 @@ describe('R-HARNESS72 · 伏笔建议作者确认 UI', () => {
         createdAt: now, updatedAt: now,
       } as any)
       await useForeshadowStore.getState().loadAll(projectId)
+      resolveAdoption()
       return { written: 1 }
     })
 
@@ -106,7 +109,9 @@ describe('R-HARNESS72 · 伏笔建议作者确认 UI', () => {
       suggest.click()
       await new Promise(resolve => setTimeout(resolve, 0))
     })
-    await vi.waitFor(() => expect(host.textContent).toContain('反照的空椅'))
+    await act(async () => {
+      await vi.waitFor(() => expect(host.textContent).toContain('反照的空椅'))
+    })
     expect(await db.foreshadows.count()).toBe(0)
 
     const first = host.querySelector<HTMLInputElement>('input[aria-label="选择伏笔候选 1"]')!
@@ -114,8 +119,7 @@ describe('R-HARNESS72 · 伏笔建议作者确认 UI', () => {
     const accept = host.querySelector<HTMLButtonElement>('button[aria-label="确认所选伏笔候选"]')!
     await act(async () => {
       accept.click()
-      await vi.waitFor(() => expect(runnerMocks.adopt).toHaveBeenCalled())
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await adoptionCompleted
     })
     expect(runnerMocks.adopt).toHaveBeenCalledWith(expect.objectContaining({ runId: 72, selectedIndexes: [1] }))
     expect(await db.foreshadows.toArray()).toEqual([

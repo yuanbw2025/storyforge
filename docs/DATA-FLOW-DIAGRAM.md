@@ -158,6 +158,7 @@ flowchart TB
     AIDETAIL ==写==> DETAILS
     AICHAP ==写==> CHAPTERS
     H57PLAN["H57 fresh current plan<br/>remaining/new review-outline"] ==父 lineage==> AIREGEN
+    H50DEP["H50 fresh acknowledged review<br/>direct dependency proof"] ==H78 依赖门==> AIREGEN
     BLDNODE ==登记 Context==> AIREGEN
     AIREGEN ==作者确认 + CAS + adopt(summary)==> OUTL
     CHAPTERS --关联--> EBEAT

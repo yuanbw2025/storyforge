@@ -1139,6 +1139,12 @@ CHIRON 四类信息可映射到现有结构：
 - 作者确认前正式摘要零写。采纳先冻结意图，再验证父计划、来源正文、非目标上游 Context、Prompt 模板和目标 baseline；事务内同时执行来源 hash 与目标字段 CAS，随后唯一经 `adopt(outlineNodes, merge-diffs)` 写 `summary`。八个 durable 采纳边界均沿同一 Run 收敛，终态 verifier 回读真实摘要并绑定 H57 lineage；终验后任何目标/上游变化会撤销旧 receipt。
 - UI 只在 H57 有合格目标时显示生成入口，候选存在时不同时展示 H44 手填 patch；拒绝候选零写。`R-HARNESS77-impact-outline-regeneration` 与真实 Chromium 路径覆盖 H50→H56→H57→H77、刷新恢复、父子终态、作用域与导入反例。本单元不自动级联所有下游，不改正文/事实/title/锁定数据，通用依赖编排仍是后续范围。
 
+**H57 child 依赖证明门（HARNESS-78，2026-08-14）**
+
+- H77 不再把 `dependencyNodeIds` 只当 Prompt 文本：每个直接依赖必须映射到同一 H57 current plan 项，当前章纲目标的下游正文依赖必须已有 H50 fresh `acknowledged` terminal review；缺 proof 或仍为 `needs-manual-action` 时，在模型调用与创建 child Run 之前 fail closed。
+- 依赖 proof 冻结 `nodeId/itemId/review Run/receipt/decision` 并进入 candidate、contract objective、candidate hash 与 terminal receipt。候选恢复、采纳意图前、正式写前和终验均重新读取当前 review evidence 并逐项匹配；旧 review receipt stale 后候选不可恢复或写入。
+- UI 从 H57 current plan 恢复当前复核记录，只展示依赖已经就绪的章纲目标；多个目标按各自直接依赖逐项解锁。该门不自动替作者确认、不批量调用模型、不新增表或第二套 scheduler；其它目标类型和跨类型 DAG 仍按一次一类型扩展。
+
 **范围**
 
 - 先为结构最确定的领域实现 verifier：只读 audit、角色新建、世界来源、outline、章节候选/采纳；

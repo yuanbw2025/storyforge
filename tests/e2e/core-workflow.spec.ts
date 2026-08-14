@@ -3522,7 +3522,7 @@ test('影响人工修正后可恢复生成式章纲候选并经确认原子写�
       createdAt: now,
       updatedAt: now,
     })) as number
-    await request(transaction.objectStore('chapters').add({
+    const targetChapterId = await request(transaction.objectStore('chapters').add({
       projectId: currentProjectId,
       workId: project.activeWorkId,
       outlineNodeId: targetOutlineNodeId,
@@ -3534,7 +3534,7 @@ test('影响人工修正后可恢复生成式章纲候选并经确认原子写�
       notes: '',
       createdAt: now,
       updatedAt: now,
-    }))
+    })) as number
     const factId = await request(transaction.objectStore('temporalFacts').add({
       projectId: currentProjectId,
       workId: project.activeWorkId,
@@ -3558,6 +3558,7 @@ test('影响人工修正后可恢复生成式章纲候选并经确认原子写�
     return {
       factId,
       sourceChapterId: sourceChapter.id as number,
+      targetChapterId,
       targetOutlineNodeId,
     }
   }, projectId)
@@ -3582,6 +3583,16 @@ test('影响人工修正后可恢复生成式章纲候选并经确认原子写�
   await page.getByRole('button', { name: '验证已保存修正', exact: true }).click()
   await expect(page.getByText('修正已验证并重新规划', { exact: true })).toBeVisible({ timeout: 20_000 })
   await page.getByRole('button', { name: '返回来源章节', exact: true }).click()
+
+  const dependencyReview = page.getByLabel('作者复核项')
+  await expect(dependencyReview).toBeVisible({ timeout: 20_000 })
+  await dependencyReview.selectOption({
+    label: `复核后续正文 · chapters#${fixture.targetChapterId}`,
+  })
+  await page.getByRole('button', { name: '已确认', exact: true }).click()
+  await page.getByLabel('作者复核理由').fill('已复核第二章正文，允许重建对应章纲摘要。')
+  await page.getByRole('button', { name: '记录复核', exact: true }).click()
+  await expect(page.getByText('最近决定：已确认', { exact: true })).toBeVisible()
 
   const regenerationTarget = page.getByLabel('生成式后续章纲目标')
   await expect(regenerationTarget).toBeVisible({ timeout: 20_000 })
