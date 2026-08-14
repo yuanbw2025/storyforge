@@ -1392,6 +1392,13 @@ CHIRON 四类信息可映射到现有结构：
 - 真实浏览器中 Agnes 2.5 Flash 与 Doubao 1.5 Pro 32K 文本连接均成功并完成多轮 development 尝试。Doubao v1/v3 均在 16/40 终止；Agnes v1/v2/v3 分别在 2/40、13/40、14/40 终止。所有已接收 issue 的逐字 evidence verification 为 100%，但没有模型同时完成 40 例并达到 90% precision / 80% recall；
 - 失败 checkpoint 已以 `0600` 权限保存到本机 Downloads，去内容化 hash、质量、token、成本和延迟见 `docs/evals/HARNESS-82-REAL-MODEL-EVIDENCE-20260815.md`。development 未通过，所以 held-out 继续锁定；fan-out、native tool transport 和自动语义审查继续默认关闭。该结果是可信负面发布证据，不是 H4 完成或真实 generator 质量收益。
 
+**确定性纠错与完整 development 状态（HARNESS-83，2026-08-15）**
+
+- judge v4 将首次确定性 parser 失败映射成六种闭集 repair reason，第二次调用只追加静态纠错消息；不回传上一轮 raw output、错误 message、引文、hidden labels 或期望答案，provider/网络错误也不伪装成协议反馈；
+- v4 artifact 显式记录 `h4-long-consistency-repair-v1` reason 或 `null`，`judgeInputHash` 覆盖实际消息；checkpoint 再要求 repair 与同 fixture 前一 attempt 的失败码一致。即使攻击者重签外层 hash，修改 reason 仍会被 input hash 或 checkpoint binding 拒绝；v1/v2/v3 保持兼容；
+- 真实 Doubao 与 Agnes 均从中途协议失败提升到 40/40 completion，但高严重度 hard TP 都只有 15/32。Doubao precision/recall 为 51.7%/46.9%，Agnes 为 45.5%/46.9%；Doubao 还有 2/2 clean 硬误报。逐字 evidence 均为 100%，说明严格协议未放宽；
+- 结果与已验签 hash、token、成本、延迟见 `docs/evals/HARNESS-83-VERIFIER-REPAIR-EVIDENCE-20260815.md`。协议恢复成功不等于 verifier 质量通过，held-out、fan-out、自动语义审查和发布门继续关闭。
+
 **范围**
 
 - 建立 40 个 development + 20 个 sealed held-out 的中文长篇用例，目标每例 8,000–12,000 中文字符；

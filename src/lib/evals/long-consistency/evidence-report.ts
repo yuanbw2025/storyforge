@@ -33,6 +33,8 @@ import {
   type LongConsistencyIssueV1,
   type LongConsistencyJudgeCandidateV1,
   type LongConsistencyJudgePromptVersionV1,
+  type LongConsistencyJudgeRepairReasonV1,
+  type LongConsistencyJudgeRepairV1,
   type LongConsistencyModelBindingV1,
   type LongConsistencyModelUsageV1,
   type LongConsistencyReportSourceInputV1,
@@ -43,7 +45,9 @@ export const LONG_CONSISTENCY_BENCHMARK_VERSION_V1 = 'storyforge-h4-evidence-v1'
 export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1 = 'h4-long-consistency-judge-v1'
 export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V2 = 'h4-long-consistency-judge-v2'
 export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V3 = 'h4-long-consistency-judge-v3'
-export const LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1 = LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V3
+export const LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 = 'h4-long-consistency-judge-v4'
+export const LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1 = LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+export const LONG_CONSISTENCY_JUDGE_REPAIR_PROTOCOL_VERSION_V1 = 'h4-long-consistency-repair-v1'
 export const LONG_CONSISTENCY_ARTIFACT_TYPE_V1 = 'storyforge-long-consistency-eval'
 
 const LONG_CONSISTENCY_TASKS_V1 = ['generation', 'continuation', 'expansion', 'completion'] as const
@@ -52,7 +56,34 @@ const LONG_CONSISTENCY_JUDGE_PROMPT_VERSIONS_V1 = [
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V2,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V3,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4,
 ] as const
+const LONG_CONSISTENCY_JUDGE_REPAIR_REASONS_V1 = [
+  'json-contract',
+  'exact-schema',
+  'verbatim-evidence',
+  'unique-evidence',
+  'distinct-evidence',
+  'protocol-contract',
+] as const satisfies readonly LongConsistencyJudgeRepairReasonV1[]
+const LONG_CONSISTENCY_JUDGE_REPAIR_REASON_BY_FAILURE_CODE_V1: Readonly<
+  Partial<Record<string, LongConsistencyJudgeRepairReasonV1>>
+> = {
+  invalid_json: 'json-contract',
+  unknown_field: 'exact-schema',
+  missing_field: 'exact-schema',
+  evidence_not_found: 'verbatim-evidence',
+  non_verbatim_quote: 'verbatim-evidence',
+  evidence_mismatch: 'verbatim-evidence',
+  ambiguous_evidence: 'unique-evidence',
+  duplicate_evidence: 'distinct-evidence',
+  invalid_type: 'protocol-contract',
+  invalid_value: 'protocol-contract',
+  unsupported_version: 'protocol-contract',
+  too_many_items: 'protocol-contract',
+  duplicate_value: 'protocol-contract',
+  unknown_source: 'protocol-contract',
+}
 const MAX_REPORT_ISSUES_V1 = 200
 const MAX_EVIDENCE_QUOTE_CHARS_V1 = 2_000
 
@@ -74,6 +105,7 @@ export interface CreateLongConsistencyEvalArtifactInputV1 {
   sources: LongConsistencyReportSourceInputV1[]
   rawJudgeOutput: string
   traceHashes: string[]
+  judgeRepair?: LongConsistencyJudgeRepairV1 | null
 }
 
 export interface LongConsistencyAuditCallResultV1 {
@@ -84,6 +116,49 @@ export interface LongConsistencyAuditCallResultV1 {
     durationMs?: number
     costUsd?: number
   }
+}
+
+export function createLongConsistencyJudgeRepairV1(
+  failureCode: string,
+): LongConsistencyJudgeRepairV1 | null {
+  const reason = LONG_CONSISTENCY_JUDGE_REPAIR_REASON_BY_FAILURE_CODE_V1[failureCode]
+  return reason == null ? null : {
+    protocolVersion: LONG_CONSISTENCY_JUDGE_REPAIR_PROTOCOL_VERSION_V1,
+    reason,
+  }
+}
+
+function parseLongConsistencyJudgeRepairV1(
+  value: unknown,
+  path: string,
+): LongConsistencyJudgeRepairV1 | null {
+  if (value === null) return null
+  const record = readRecord(value, path)
+  const keys = ['protocolVersion', 'reason'] as const
+  assertExactKeys(record, keys, keys, path)
+  if (record.protocolVersion !== LONG_CONSISTENCY_JUDGE_REPAIR_PROTOCOL_VERSION_V1) {
+    failSchema('unsupported_version', `${path}.protocolVersion`, '纠错协议版本不匹配')
+  }
+  return {
+    protocolVersion: LONG_CONSISTENCY_JUDGE_REPAIR_PROTOCOL_VERSION_V1,
+    reason: readEnum(record.reason, LONG_CONSISTENCY_JUDGE_REPAIR_REASONS_V1, `${path}.reason`),
+  }
+}
+
+function judgeRepairInstruction(repair: LongConsistencyJudgeRepairV1): string {
+  const instructions: Record<LongConsistencyJudgeRepairReasonV1, string> = {
+    'json-contract': '上一次输出不是单一合法 JSON 对象。只返回根对象，不要围栏、解释、前后缀或多个对象。',
+    'exact-schema': '上一次输出违反精确字段契约。逐层只保留示例列出的字段，不得新增标签、类别名、偏移或解释字段。',
+    'verbatim-evidence': '上一次引文无法逐字回查。每段 quote 必须从对应 sourceId 的 content 原样复制完整句；不能改写、补字或纠错。',
+    'unique-evidence': '上一次引文在来源中出现多次。扩大 quote 到含专名、数字或上下文的唯一完整句；仍不唯一就删除整条 issue。',
+    'distinct-evidence': '上一次事实与矛盾证据指向同一文本区间。两段证据必须分别定位声明与冲突；否则删除整条 issue。',
+    'protocol-contract': '上一次输出未通过冻结协议。重新检查枚举、来源 ID、字段数量和逐字证据；无法完全满足时删除对应 issue。',
+  }
+  return [
+    '【确定性协议纠错重试】',
+    instructions[repair.reason],
+    '这不是新任务；不得读取隐藏标签、猜测期望答案或放宽审查标准。请重新审查同一只读来源并输出完整根 JSON 对象。',
+  ].join('\n')
 }
 
 function readVerbatimQuote(value: unknown, path: string): string {
@@ -210,7 +285,11 @@ function sourceDescriptors(
 function messagesForPreparedSources(
   sources: readonly PreparedLongConsistencySourceV1[],
   promptVersion: LongConsistencyJudgePromptVersionV1,
+  judgeRepair: LongConsistencyJudgeRepairV1 | null = null,
 ): ChatMessage[] {
+  if (promptVersion !== LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 && judgeRepair != null) {
+    failSchema('binding_mismatch', 'judgeRepair', '只有 judge v4 可绑定纠错消息')
+  }
   const taxonomy = LONG_CONSISTENCY_TAXONOMY_V1.map(entry => ({
     category: entry.category,
     categoryLabel: entry.categoryLabel,
@@ -218,7 +297,7 @@ function messagesForPreparedSources(
     subtypeLabel: entry.subtypeLabel,
   }))
   const payload = sources.map(source => ({ id: source.id, kind: source.kind, content: source.content }))
-  return [{
+  const messages: ChatMessage[] = [{
     role: 'system',
     content: [
       '你是只读的中文长篇一致性审查 Agent。只检查给定来源，不续写、不修改作品。',
@@ -228,6 +307,10 @@ function messagesForPreparedSources(
         '证据 quote 必须直接从来源 content 复制完整原句，保留原字、数字、专名和标点；禁止概括、同义改写、纠错、补字或省略。',
         '输出前逐条执行字面回查：quote 必须能在对应 sourceId 的 content 中原样搜索到且只出现一次；重复时向前后扩大到包含专名或数字的唯一完整句。',
         '任何一段证据无法通过上述逐字唯一回查时，必须删除整条 issue；宁可不报告，也不得输出推测或改写引文。',
+      ] : []),
+      ...(promptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 ? [
+        '提交前做最终结构检查：根对象只能有 schemaVersion、issues；每个 issue 只能有 id、subtype、severity、intentClassification、summary、factEvidence、contradictionEvidence；两种 evidence 只能有 sourceId、quote。',
+        '删除所有示例之外的字段。无法同时满足精确字段、合法枚举、逐字存在、来源内唯一和两证据不同区间时，删除整条 issue。',
       ] : []),
       '不要输出字符偏移、来源哈希、顶层类别或 hard/advisory 结论，这些均由程序计算。',
       'intentional 表示有明确作者意图支持的伏笔、延迟揭示、不可靠叙述或有意风格变化；ambiguous 表示证据不足；其余才是 unintentional。',
@@ -241,13 +324,16 @@ function messagesForPreparedSources(
     role: 'user',
     content: `【只读来源】\n${JSON.stringify(payload)}`,
   }]
+  if (judgeRepair) messages.push({ role: 'user', content: judgeRepairInstruction(judgeRepair) })
+  return messages
 }
 
 export async function buildLongConsistencyJudgeMessagesV1(
   sources: readonly LongConsistencyReportSourceInputV1[],
   promptVersion: LongConsistencyJudgePromptVersionV1 = LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1,
+  judgeRepair: LongConsistencyJudgeRepairV1 | null = null,
 ): Promise<ChatMessage[]> {
-  return messagesForPreparedSources(await prepareSources(sources), promptVersion)
+  return messagesForPreparedSources(await prepareSources(sources), promptVersion, judgeRepair)
 }
 
 function locateQuote(
@@ -467,7 +553,7 @@ function parseIssue(
 
 export function parseLongConsistencyEvalArtifactV1(value: unknown): LongConsistencyEvalArtifactV1 {
   const record = readRecord(value, 'artifact')
-  const keys = [
+  const requiredKeys = [
     'schemaVersion',
     'artifactType',
     'benchmark',
@@ -486,7 +572,8 @@ export function parseLongConsistencyEvalArtifactV1(value: unknown): LongConsiste
     'traceHashes',
     'artifactHash',
   ] as const
-  assertExactKeys(record, keys, keys, 'artifact')
+  const allowedKeys = [...requiredKeys, 'judgeRepair'] as const
+  assertExactKeys(record, allowedKeys, requiredKeys, 'artifact')
   if (record.schemaVersion !== 1) failSchema('unsupported_version', 'artifact.schemaVersion', '仅支持版本 1')
   if (record.artifactType !== LONG_CONSISTENCY_ARTIFACT_TYPE_V1) {
     failSchema('invalid_value', 'artifact.artifactType', `必须是 ${LONG_CONSISTENCY_ARTIFACT_TYPE_V1}`)
@@ -506,6 +593,16 @@ export function parseLongConsistencyEvalArtifactV1(value: unknown): LongConsiste
     LONG_CONSISTENCY_JUDGE_PROMPT_VERSIONS_V1,
     'artifact.benchmark.judgePromptVersion',
   )
+  const hasJudgeRepair = Object.prototype.hasOwnProperty.call(record, 'judgeRepair')
+  if (judgePromptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 && !hasJudgeRepair) {
+    failSchema('missing_field', 'artifact.judgeRepair', 'judge v4 必须显式绑定纠错状态')
+  }
+  if (judgePromptVersion !== LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 && hasJudgeRepair) {
+    failSchema('binding_mismatch', 'artifact.judgeRepair', '旧 judge 版本不得携带 v4 纠错状态')
+  }
+  const judgeRepair = hasJudgeRepair
+    ? parseLongConsistencyJudgeRepairV1(record.judgeRepair, 'artifact.judgeRepair')
+    : undefined
 
   const protocol = readRecord(record.evidenceProtocol, 'artifact.evidenceProtocol')
   const protocolKeys = ['normalizationVersion', 'offsetUnit', 'endOffset'] as const
@@ -638,6 +735,7 @@ export function parseLongConsistencyEvalArtifactV1(value: unknown): LongConsiste
       verifierUsage: parseModelUsage(execution.verifierUsage, 'artifact.execution.verifierUsage'),
     },
     sourceSetHash: readHash(record.sourceSetHash, 'artifact.sourceSetHash'),
+    ...(hasJudgeRepair ? { judgeRepair: judgeRepair ?? null } : {}),
     judgeInputHash: readHash(record.judgeInputHash, 'artifact.judgeInputHash'),
     judgeOutputHash: readHash(record.judgeOutputHash, 'artifact.judgeOutputHash'),
     sources,
@@ -658,7 +756,13 @@ export async function createLongConsistencyEvalArtifactV1(
     LONG_CONSISTENCY_JUDGE_PROMPT_VERSIONS_V1,
     'verifier.promptVersion',
   )
-  const messages = messagesForPreparedSources(preparedSources, judgePromptVersion)
+  if (judgePromptVersion !== LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 && input.judgeRepair != null) {
+    failSchema('binding_mismatch', 'judgeRepair', '只有 judge v4 可绑定纠错状态')
+  }
+  const judgeRepair = judgePromptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+    ? parseLongConsistencyJudgeRepairV1(input.judgeRepair ?? null, 'judgeRepair')
+    : null
+  const messages = messagesForPreparedSources(preparedSources, judgePromptVersion, judgeRepair)
   const issues = resolveIssues(parseLongConsistencyJudgeResponseV1(input.rawJudgeOutput), preparedSources)
   const provisional: LongConsistencyEvalArtifactV1 = {
     schemaVersion: 1,
@@ -685,6 +789,7 @@ export async function createLongConsistencyEvalArtifactV1(
       verifierUsage: input.verifierUsage,
     },
     sourceSetHash: await hashCanonicalValue(sources),
+    ...(judgePromptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 ? { judgeRepair } : {}),
     judgeInputHash: await hashCanonicalValue(messages),
     judgeOutputHash: await sha256Text(input.rawJudgeOutput),
     sources,
@@ -707,7 +812,13 @@ export async function runLongConsistencySemanticAuditV1(
     LONG_CONSISTENCY_JUDGE_PROMPT_VERSIONS_V1,
     'verifier.promptVersion',
   )
-  const messages = await buildLongConsistencyJudgeMessagesV1(input.sources, judgePromptVersion)
+  if (judgePromptVersion !== LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4 && input.judgeRepair != null) {
+    failSchema('binding_mismatch', 'judgeRepair', '只有 judge v4 可绑定纠错状态')
+  }
+  const judgeRepair = judgePromptVersion === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+    ? parseLongConsistencyJudgeRepairV1(input.judgeRepair ?? null, 'judgeRepair')
+    : null
+  const messages = await buildLongConsistencyJudgeMessagesV1(input.sources, judgePromptVersion, judgeRepair)
   const startedAt = performance.now()
   const { call, ...artifactInput } = input
   const response = await call(messages)
@@ -756,7 +867,11 @@ export async function verifyLongConsistencyEvalArtifactV1(
     const descriptors = sourceDescriptors(prepared)
     if (await hashCanonicalValue(descriptors) !== artifact.sourceSetHash) return false
     if (
-      await hashCanonicalValue(messagesForPreparedSources(prepared, artifact.benchmark.judgePromptVersion))
+      await hashCanonicalValue(messagesForPreparedSources(
+        prepared,
+        artifact.benchmark.judgePromptVersion,
+        artifact.judgeRepair ?? null,
+      ))
       !== artifact.judgeInputHash
     ) return false
     const sourceById = new Map(prepared.map(source => [source.id, source] as const))

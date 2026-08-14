@@ -35,6 +35,16 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-83 完成卡：不泄漏标签的 verifier 确定性纠错
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-83` 评测可靠性任务。H4 verifier 的首次协议失败不能在 temperature 0 下原样重试；第二次尝试必须得到可验签、不可注入、无标签泄漏的闭集纠错输入，并保留全部严格 parser 门。 |
+| 主归属 / 复用 | 归 H4/H5；复用 H28 artifact/checkpoint、H82 JSON object transport、同一 40+20 fixture 和共享 `chat()`，不新增表、业务写入、模型入口或第二套 runner。 |
+| 纠错契约 | judge v4 把确定性错误码映射到六种静态 reason；不传上一轮输出、错误 message、引文或 hidden labels。artifact `judgeRepair + judgeInputHash` 与 checkpoint 前一 attempt 失败码共同验签；provider/网络错误不伪造成协议反馈。v1/v2/v3 artifact/checkpoint 继续可验证。 |
+| 真实结果 / 发布门 | Doubao 与 Agnes v4 都从中途终止提升到 40/40，但 TP 均为 15/32：Doubao precision/recall 为 51.7%/46.9%，另有 2/2 clean 硬误报；Agnes 为 45.5%/46.9%。逐字 evidence 均 100%。协议完成不等于质量通过，held-out、fan-out 和自动语义审查继续锁定。 |
+| 验收 / 回滚 | 相关 report/runner/UI/transport 定向回归 5 files / 31 tests 通过，覆盖闭集映射、无 raw output/label 泄漏、输入 hash、纠错绑定篡改和旧版本兼容；完整 CI 373 files / 1798 tests、项目 Chromium E2E 52/52 通过。真实 checkpoint 已验签并以 `0600` 归档，aggregate 见 `docs/evals/HARNESS-83-VERIFIER-REPAIR-EVIDENCE-20260815.md`。移除 v4 可回到 v3，但会恢复无效的同输入重试，不能删除严格 parser。 |
+
 ### HARNESS-82 完成卡：真实 verifier 证据与双模型会话凭证隔离
 
 | 项目 | 冻结边界 |

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import {
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4,
   buildLongConsistencyJudgeMessagesV1,
+  createLongConsistencyJudgeRepairV1,
   createLongConsistencyEvalArtifactV1,
   createLongConsistencyFixtureBindingV1,
   exportLongConsistencyEvalArtifactV1,
@@ -143,6 +145,57 @@ describe('R-HARNESS28 · H4 long-consistency evidence report', () => {
     expect(prompt).toContain('不要输出字符偏移')
     expect(prompt).toContain('必须直接从来源 content 复制完整原句')
     expect(prompt).toContain('宁可不报告，也不得输出推测或改写引文')
+  })
+
+  it('binds a closed v4 repair reason into the judge input without exposing prior output or labels', async () => {
+    const judgeRepair = createLongConsistencyJudgeRepairV1('ambiguous_evidence')
+    expect(judgeRepair).toEqual({
+      protocolVersion: 'h4-long-consistency-repair-v1',
+      reason: 'unique-evidence',
+    })
+    expect(createLongConsistencyJudgeRepairV1('verifier_error')).toBeNull()
+    const messages = await buildLongConsistencyJudgeMessagesV1(
+      SOURCES,
+      LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4,
+      judgeRepair,
+    )
+    const prompt = messages.map(message => message.content).join('\n')
+    expect(messages).toHaveLength(3)
+    expect(prompt).toContain('确定性协议纠错重试')
+    expect(prompt).toContain('扩大 quote 到含专名、数字或上下文的唯一完整句')
+    expect(prompt).not.toContain('hidden-marker')
+
+    const artifact = await runLongConsistencySemanticAuditV1({
+      runId: 'h4-repair-run',
+      createdAt: new Date(0).toISOString(),
+      codeRevision: 'test-revision',
+      fixture: await fixtureBinding(),
+      generator: { provider: 'fixture', model: 'synthetic', promptVersion: 'fixture-v1' },
+      verifier: {
+        provider: 'provider-b',
+        model: 'verifier-b',
+        promptVersion: LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4,
+      },
+      generationUsage: { inputTokens: 0, outputTokens: 0, durationMs: 0, costUsd: 0 },
+      sources: SOURCES,
+      traceHashes: ['d'.repeat(64)],
+      judgeRepair,
+      call: async () => ({ output: rawReport() }),
+    })
+    expect(artifact.judgeRepair).toEqual(judgeRepair)
+    await expect(verifyLongConsistencyEvalArtifactV1(artifact, {
+      sources: SOURCES,
+      rawJudgeOutput: rawReport(),
+    })).resolves.toBe(true)
+
+    const tampered = structuredClone(artifact)
+    tampered.judgeRepair = {
+      protocolVersion: 'h4-long-consistency-repair-v1',
+      reason: 'exact-schema',
+    }
+    const { artifactHash: _artifactHash, ...body } = tampered
+    tampered.artifactHash = await hashCanonicalValue(body)
+    await expect(verifyLongConsistencyEvalArtifactV1(tampered, { sources: SOURCES })).resolves.toBe(false)
   })
 
   it('derives category, offsets, source hashes, disposition and metrics in code', async () => {

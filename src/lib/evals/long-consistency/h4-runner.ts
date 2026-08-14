@@ -14,9 +14,11 @@ import {
   readString,
 } from '../../agent/run/schema-utils'
 import {
-  LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V2,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V3,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4,
+  createLongConsistencyJudgeRepairV1,
   createLongConsistencyFixtureBindingV1,
   parseLongConsistencyEvalArtifactV1,
   runLongConsistencySemanticAuditV1,
@@ -131,7 +133,8 @@ const CHECKPOINT_STATUSES = ['running', 'completed', 'failed', 'budget-exhausted
 const SUPPORTED_JUDGE_PROMPT_VERSIONS = [
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V1,
   LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V2,
-  LONG_CONSISTENCY_CURRENT_JUDGE_PROMPT_VERSION_V1,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V3,
+  LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4,
 ] as const
 
 function isSupportedJudgePromptVersion(value: string): boolean {
@@ -517,6 +520,18 @@ async function assertCheckpointAgainstCatalog(checkpoint: H4LongConsistencyRunCh
       || !sameValue(completed.artifact.execution.generator, checkpoint.execution.generator)
       || !sameValue(completed.artifact.execution.verifier, checkpoint.execution.verifier)
     ) throw new Error(`H4 checkpoint 完成项 ${fixture.id} 的执行绑定不匹配`)
+    const previousFailure = completed.attempts > 1
+      ? checkpoint.failures.find(failure => (
+          failure.fixtureId === fixture.id && failure.attempt === completed.attempts - 1
+        ))
+      : undefined
+    const expectedJudgeRepair = checkpoint.execution.verifier.promptVersion
+      === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+      ? previousFailure ? createLongConsistencyJudgeRepairV1(previousFailure.code) : null
+      : undefined
+    if (!sameValue(completed.artifact.judgeRepair, expectedJudgeRepair)) {
+      throw new Error(`H4 checkpoint 完成项 ${fixture.id} 的纠错绑定不匹配`)
+    }
     const expectedTraceHash = await hashCanonicalValue({
       runnerVersion: H4_LONG_CONSISTENCY_RUNNER_VERSION_V1,
       runId: checkpoint.runId,
@@ -724,6 +739,15 @@ export async function runH4LongConsistencyVerifierV1(
       const attempts = checkpoint.attempts.map((item, index) => (
         index === attemptIndex ? { ...item, count: attempt } : item
       ))
+      const previousFailure = attempt > 1
+        ? checkpoint.failures.find(failure => (
+            failure.fixtureId === fixture.id && failure.attempt === attempt - 1
+          ))
+        : undefined
+      const judgeRepair = checkpoint.execution.verifier.promptVersion
+        === LONG_CONSISTENCY_JUDGE_PROMPT_VERSION_V4
+        ? previousFailure ? createLongConsistencyJudgeRepairV1(previousFailure.code) : null
+        : undefined
       let artifact: LongConsistencyEvalArtifactV1
       let rawJudgeOutput = ''
       let failedAttemptUsage: LongConsistencyModelUsageV1 | null = null
@@ -745,6 +769,7 @@ export async function runH4LongConsistencyVerifierV1(
           generationUsage: { inputTokens: 0, outputTokens: 0, durationMs: 0, costUsd: 0 },
           sources: fixture.sources,
           traceHashes: [traceHash],
+          ...(judgeRepair !== undefined ? { judgeRepair } : {}),
           call: async messages => {
             const startedAt = performance.now()
             const response = await input.call({

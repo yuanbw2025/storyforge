@@ -197,6 +197,57 @@ describe('R-HARNESS28 · H4 verifier runner, recovery and sealed scoring', { tim
     })
   })
 
+  it('turns a v4 protocol failure into a label-free deterministic repair input and binds it to the checkpoint', async () => {
+    const priorOutputMarker = 'PRIOR-OUTPUT-MUST-NOT-BE-ECHOED'
+    const execution: H4LongConsistencyRunCheckpointV1['execution'] = {
+      generator: EXECUTION.generator,
+      verifier: {
+        provider: 'independent',
+        model: 'h4-verifier-v4',
+        promptVersion: 'h4-long-consistency-judge-v4',
+      },
+    }
+    const call = vi.fn(async (input: H4LongConsistencyVerifierCallInputV1) => {
+      const prompt = input.messages.map(message => message.content).join('\n')
+      expect(prompt).not.toContain('hiddenLabels')
+      if (input.attempt === 1) {
+        expect(prompt).not.toContain('确定性协议纠错重试')
+        return {
+          output: `not-json-${priorOutputMarker}`,
+          usage: { inputTokens: 10, outputTokens: 1, durationMs: 2, costUsd: 0 },
+        }
+      }
+      expect(prompt).toContain('确定性协议纠错重试')
+      expect(prompt).toContain('只返回根对象')
+      expect(prompt).not.toContain(priorOutputMarker)
+      return successfulCall()(input)
+    })
+    const checkpoint = await runH4LongConsistencyVerifierV1(runnerInput({
+      fixtureIds: ['h4-held-01'],
+      execution,
+      call,
+    }))
+
+    expect(call).toHaveBeenCalledTimes(2)
+    expect(checkpoint.status).toBe('completed')
+    expect(checkpoint.completed[0].artifact.judgeRepair).toEqual({
+      protocolVersion: 'h4-long-consistency-repair-v1',
+      reason: 'json-contract',
+    })
+    expect(JSON.stringify(checkpoint)).not.toContain(priorOutputMarker)
+    await expect(verifyH4LongConsistencyRunCheckpointV1(checkpoint)).resolves.toBe(true)
+
+    const tampered = structuredClone(checkpoint)
+    tampered.completed[0].artifact.judgeRepair = {
+      protocolVersion: 'h4-long-consistency-repair-v1',
+      reason: 'exact-schema',
+    }
+    const { artifactHash: _artifactHash, ...artifactBody } = tampered.completed[0].artifact
+    tampered.completed[0].artifact.artifactHash = await hashCanonicalValue(artifactBody)
+    const resigned = await resignCheckpoint(tampered)
+    await expect(verifyH4LongConsistencyRunCheckpointV1(resigned)).resolves.toBe(false)
+  })
+
   it('resumes after a persisted interruption without re-running a completed fixture', async () => {
     const fixtureIds = ['h4-dev-01', 'h4-dev-02']
     let persisted: H4LongConsistencyRunCheckpointV1 | null = null

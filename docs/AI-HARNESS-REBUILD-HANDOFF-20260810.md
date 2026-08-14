@@ -304,9 +304,9 @@ HARNESS-81 最新代码入口：
 | 正文 | 生成/续写、信息隔离、语义 review/revise/review、作者确认采纳和父子 Run已完成；局部润色/扩写/缩写/改写已进入 durable 候选与精确采纳，查漏保持只读 | 不覆盖已有手稿；长期文学质量和真实 provider 发布证据未完成 |
 | 章后状态 | 六域候选、章节记忆、检索/摘要和确定性一致性守卫进入统一 Run | 语义 Fast/Deep 仍是显式动作；所有状态类型的通用自动采纳不应实现 |
 | 反向反馈 | 影响图、受限作者 patch、确定性重建、作者复核、可信人工修正 pre/post receipt、修正后 current plan、确定性余项 child、两个带 proof 的生成式 child、统一 schedule/共享 slot，以及全部当前节点的闭集执行器政策已完成 | 新增生成类型不再是默认待办；正文与耦合/整章集合派生刻意走精确人工链。真实模型质量、成本、延迟和人工 held-out 证据仍缺 |
-| 评测/发布 | 大量模块回归、H4 工程基座、配对 gate 和防篡改证据存在；HARNESS-82 已取得 Agnes 2.5 Flash 与 Doubao 1.5 Pro 文本的真实 development 负面 artifact，并补齐 session-only 双预设 Key 隔离 | 两模型均未通过完整 development 门；可靠独立 verifier、H4 40+20、人工 held-out、真实 generator 主路径质量/成本/延迟净收益仍未完成 |
+| 评测/发布 | 大量模块回归、H4 工程基座、配对 gate 和防篡改证据存在；H82 补齐真实负面 artifact 与双预设 Key 隔离，H83 用闭集无标签纠错使 Agnes/Doubao 均完成 40/40 | 两模型均未通过 precision/recall development 门；可靠独立 verifier、H4 held-out 20、人工复核、真实 generator 主路径质量/成本/延迟净收益仍未完成 |
 
-## 8. 当前停点：HARNESS-82 已取得真实负面证据，发布门保持关闭
+## 8. 当前停点：HARNESS-83 已闭合协议恢复，质量发布门保持关闭
 
 ### 8.1 已通过
 
@@ -333,11 +333,13 @@ HARNESS-81 最新代码入口：
 - HARNESS-79 专项 9 项通过：登记精确 `storyTimelineTarget`、来源章与目标章同时冻结的跨章 RunContract、H57 parent、缺 proof/待人工处理时零模型零 Run、strict 五字段协议、importance/evidence gate、未知模型窗与候选崩溃窗、目标/正文/parent/proof stale、八采纳边界、拒绝/新 child 重试、完成回执、Work/导入隔离均闭合；更新后的工具栏 11 项通过。最终代码独立 Chromium 路径 1/1 通过（15.5 秒），同一 H50→H56→H57 流程先完成 H77，再对精确旧年表事件生成 H79 候选；刷新后模型仍只调用一次，确认前正式三字段不变，确认后身份字段冻结且 child/parent receipt 可回放。
 - HARNESS-80 专项 7 项、更新后的工具栏 12 项通过；与 H77/H79/工具栏合跑为 4 文件 / 43 项。稳定 topology/hash、目标 review 优先级、H58/H77/H79 精确完成、候选 checkpoint/event 崩溃窗单链恢复、顺序 pending slot、并发同 relation 单 child/单模型、parent/Work stale 与 UI 五态计数均闭合。独立 Chromium 组合路径 1/1（17.0 秒），完整套件中的同一路径为 21.4 秒；H77 待确认时 H79 入口不可见，两类完成后分别使用共享 slot `:1 / :2`。
 - HARNESS-81 表驱动专项 2 项通过：当前 planner 的 13 条合法政策路径与 14 个已有来源记录表变体全部命中唯一 policy/executor/manual module；错 item id、kind/action/table/mode/nodeId、非正记录 ID 和未来未知类型全部 fail-closed。与 H80、工具栏、H52、H55～57 合跑为 8 文件 / 50 项，证明 policy 进入 canonical schedule hash 与作者可见 UI，并且人工边界不创建模型 Run 或扩大写入。最终代码精确 Chromium 主路径 1/1（17.5 秒），完整套件中的同一路径为 20.9 秒；H77/H79 待处理阶段分别显示 `outline-regeneration-v1` / `story-timeline-regeneration-v1`。
+- HARNESS-82 已补齐按 preset id 的 session-only Key 隔离、H4 失败可见/可复制证据和 v3 JSON object transport；真实 Agnes/Doubao 在严格 development 中途失败，负面证据与五份旧 checkpoint 已归档。
+- HARNESS-83 相关 report/runner/UI/transport 回归 31/31 通过，闭集 repair reason、无 raw output/label 泄漏、输入 hash、前序失败绑定篡改和 v1/v2/v3 兼容均有反例；真实 Doubao 与 Agnes v4 都完成 40/40，但 precision/recall 分别只有 51.7%/46.9% 与 45.5%/46.9%，所以 held-out 未运行。
 - `npx tsc --noEmit`：通过。
 - 改动范围 ESLint 与全仓 `npm run lint`：通过。
 - `git diff --check`：通过。
-- `npm run test:coverage` 独占资源重跑：371 个测试文件、1785 项测试全部通过。
-- 覆盖率：statements 81.95%、branches 73.72%、functions 79.68%、lines 81.95%。
+- `npm run test:coverage` 独占资源重跑：373 个测试文件、1798 项测试全部通过。
+- 覆盖率：statements 81.95%、branches 73.73%、functions 79.68%、lines 81.95%。
 - `npm run build`：通过，3776 个模块完成生产构建。
 - `npm run check:bundle-size`：通过；入口约 677.9 KiB，gzip 约 210.2 KiB。
 - `npm run ci`：完整通过，包括 required tables、AI manual/entry registry、architecture、source reachability、roadmap、agent context/freshness、Canon coverage、project metrics、生产依赖审计、全仓 lint、TypeScript、全量 coverage、生产构建和 bundle budget。
@@ -384,6 +386,8 @@ HARNESS-78 更新后的同一路径独立复跑 1/1 通过，耗时 13.2 秒：�
 HARNESS-80 扩展后的最终代码路径独立复跑 1/1 通过，耗时 17.0 秒；完整项目 Chromium 套件在独立端口 4190 重跑为 52/52，耗时 5.5 分钟、零失败，其中 H50→H56→H57 后依次完成 H77 章纲摘要与 H79 单事件年表重建并验证 H80 调度计数/共享 slot 的组合路径为 21.4 秒。H77 待确认时 H79 入口隐藏，刷新后模型调用不增加；两个生成 child 的 relation 分别稳定落在同一 H57 output 下的 slot `:1 / :2`。全部测试使用独立浏览器数据，没有使用或修改作者当前预览项目。
 
 HARNESS-81 在最终代码上独立复跑同一精确 Chromium 主路径 1/1 通过，耗时 17.5 秒；界面在 H77 与 H79 阶段分别显示唯一执行器政策 `outline-regeneration-v1` 与 `story-timeline-regeneration-v1`。完整项目 Chromium 套件在独立端口 4194 重跑为 52/52，耗时 5.9 分钟、零失败，其中 H50→H56→H57→H77→H79 组合路径为 20.9 秒。全部测试使用独立浏览器数据，没有使用或修改作者当前预览项目。
+
+HARNESS-83 在最终代码上使用项目指定 Playwright Chromium、单 worker 和独立浏览器数据完整重跑 52/52 通过，耗时 4.6 分钟、零失败。该轮不增加业务 E2E；重点证明 verifier 修复协议与旧 artifact/checkpoint 兼容改动没有破坏既有 Agent/Harness、候选确认和正式写回主路径。没有使用或修改作者当前预览项目。
 
 ### 8.4 测试负载注意事项
 
@@ -658,11 +662,11 @@ tests/regression/R-HARNESS64-story-timeline-extraction-durable.test.ts
 
 H64 专属回归、H59/H63/H64 联合回归通过；`docs/roadmap/README.md`、`docs/roadmap/CAPABILITY-BASELINE.md`、`docs/AI-HARNESS-AUDIT-20260807.md`、本文、`docs/AI-FUNCTIONS-MANUAL.md`、生成版 AI manual、`docs/DATA-FLOW-DIAGRAM.md` 和项目指标均随独立完成提交同步，不 amend `757ce47`。
 
-### 17.5 H82 真实 verifier 证据后的总路线
+### 17.5 H83 verifier 协议恢复后的总路线
 
-H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77/H78/H79 已从 fresh H57 current plan 交付带直接依赖 proof 的章纲摘要和单事件年表两个生成目标，H80 已用 canonical schedule 与共享 generation slot 闭合跨类型调度和完成语义，H81 又为全部当前节点冻结 exact executor policy。H82 用 Agnes 2.5 Flash 与 Doubao 1.5 Pro 文本真实运行冻结 development，分别在严格 JSON/证据协议和质量门前失败；因此当前没有证据支持继续增加生成式目标或打开更宽运行能力。未来若产品要求集合级自动重建，必须另行冻结删除/新增范围、集合 baseline、CAS 和终验，不能复用单记录 item 偷渡。下一阶段取得：
+H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77/H78/H79 已从 fresh H57 current plan 交付带直接依赖 proof 的章纲摘要和单事件年表两个生成目标，H80 已用 canonical schedule 与共享 generation slot 闭合跨类型调度和完成语义，H81 又为全部当前节点冻结 exact executor policy。H82/H83 用 Agnes 2.5 Flash 与 Doubao 1.5 Pro 文本真实运行冻结 development；闭集纠错已让两者完整跑完，但质量仍远低于发布门。因此当前没有证据支持继续增加生成式目标或打开更宽运行能力。未来若产品要求集合级自动重建，必须另行冻结删除/新增范围、集合 baseline、CAS 和终验，不能复用单记录 item 偷渡。下一阶段取得：
 
-- 取得能通过冻结 H4 development 的可靠独立 verifier 后，才运行 20 例 held-out；当前两款免费文本模型的负面结果、checkpoint hash、token、估算成本和延迟已记录在 `docs/evals/HARNESS-82-REAL-MODEL-EVIDENCE-20260815.md`，不得重复冒充 PASS。
+- 取得能通过冻结 H4 development 的可靠独立 verifier 后，才运行 20 例 held-out；当前两款免费文本模型的 v1–v3 协议失败见 H82，v4 完整 40/40 但质量失败见 `docs/evals/HARNESS-83-VERIFIER-REPAIR-EVIDENCE-20260815.md`，不得把 protocol completion 冒充 PASS。
 - 真实 generator 主路径仍须另做旧入口/Agent+Harness 配对，记录质量、人工修改量、完成率、token、成本、延迟和 p95，并完成人工 held-out 复核；H4 静态合成 generator 不等于真实生成证据。
 - 独立浏览器数据中的真实 UI/API E2E，不得修改作者当前预览项目。
 - 根 `AGENTS.md` 要求的全部架构、表、AI manual、TypeScript、相关测试、构建、bundle、`npm run ci` 与适用的 `npm run ci:e2e` 证据。
@@ -670,8 +674,8 @@ H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77/H7
 当前交付基线已经更新：
 
 - 全仓 `npm run lint` 与完整 `npm run ci` 通过；生产依赖审计为 0 漏洞，`nanoid` 公告已通过同主版本 `5.1.16` 修复，未使用强制审计修复。
-- 项目指定 Playwright Chromium 在 H81 最终代码重跑为 52/52（5.9 分钟）；精确主路径另独立通过 1/1（17.5 秒），完整套件中的 H77+H79+H80+H81 组合路径为 20.9 秒。
-- 最近一次全量 coverage 为 371 files / 1785 tests，全部通过；覆盖率为 81.95% statements / 73.72% branches / 79.68% functions / 81.95% lines；3776 模块生产构建通过。
+- 项目指定 Playwright Chromium 在 H83 最终代码重跑为 52/52（4.6 分钟）；H81 精确主路径此前另独立通过 1/1（17.5 秒），完整套件中的 H77+H79+H80+H81 组合路径为 20.9 秒。
+- 最近一次全量 coverage 为 373 files / 1798 tests，全部通过；覆盖率为 81.95% statements / 73.73% branches / 79.68% functions / 81.95% lines；3776 模块生产构建通过。
 - 原工作树仍属于作者且保持未触碰；后续继续使用独立 worktree，不得把其未跟踪文件带入提交。
 
 提交前以根 `AGENTS.md` 的最新闸门为准，至少运行当前单元定向回归、H59 census 回归、三注册表/architecture/roadmap/freshness/source reachability/canon 检查、`npx tsc --noEmit`、`npm run build`、bundle 检查和 `git diff --check`。所有文档、生成物和源码必须提交到当前功能分支，工作树除明确属于用户的本地未跟踪文件外不得留下交接改动。

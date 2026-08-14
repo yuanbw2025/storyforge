@@ -30,6 +30,20 @@ export type LongConsistencyJudgePromptVersionV1 =
   | 'h4-long-consistency-judge-v1'
   | 'h4-long-consistency-judge-v2'
   | 'h4-long-consistency-judge-v3'
+  | 'h4-long-consistency-judge-v4'
+
+export type LongConsistencyJudgeRepairReasonV1 =
+  | 'json-contract'
+  | 'exact-schema'
+  | 'verbatim-evidence'
+  | 'unique-evidence'
+  | 'distinct-evidence'
+  | 'protocol-contract'
+
+export interface LongConsistencyJudgeRepairV1 {
+  protocolVersion: 'h4-long-consistency-repair-v1'
+  reason: LongConsistencyJudgeRepairReasonV1
+}
 
 export interface LongConsistencyReportSourceInputV1 {
   id: string
@@ -125,6 +139,7 @@ export interface LongConsistencyEvalArtifactV1 {
     verifierUsage: LongConsistencyModelUsageV1
   }
   sourceSetHash: string
+  judgeRepair?: LongConsistencyJudgeRepairV1 | null
   judgeInputHash: string
   judgeOutputHash: string
   sources: LongConsistencyReportSourceV1[]
