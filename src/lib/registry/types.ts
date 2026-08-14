@@ -400,6 +400,8 @@ export interface AssembleContextInput {
   /** HARNESS-74: trusted version target for reference summary/character derivation. */
   referenceDerivedMode?: 'summary' | 'characters'
   referenceAnalysisRunId?: number
+  /** HARNESS-76: trusted chapter selection for the registered style-learning baseline. */
+  styleLearningChapterIds?: number[]
   outlineNodeId?: number | null
   chapterId?: number | null
   currentChapterOrder?: number

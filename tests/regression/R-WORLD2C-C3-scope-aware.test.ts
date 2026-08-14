@@ -13,7 +13,6 @@ import { useWorldNodeStore } from '../../src/stores/world-node'
 import { useCharacterDrivenPlanStore } from '../../src/stores/character-driven-plan'
 import { useEmotionBeatStore } from '../../src/stores/emotion-beat'
 import { useNoteStore } from '../../src/stores/note'
-import { useUserStyleStore } from '../../src/stores/user-style'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
 
 async function createGoldenProject(): Promise<{ projectId: number; worldId: number; a: WorkspaceScope; b: WorkspaceScope }> {
@@ -259,11 +258,12 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
     expect((await db.notes.get(noteId) as any)?.workId).toBe(a.workId)
     expect(await readOwnedRows(b, 'emotionBeatCards', { owner: 'work' })).toEqual([])
     expect(await readOwnedRows(b, 'notes', { owner: 'work' })).toEqual([])
-    await useUserStyleStore.getState().saveProfile(a.projectId, {
-      profile: '作品 A 的克制文风',
-      sourceChapterIds: [chapterId],
-      sampleCount: 1,
-      sampleWords: 22,
+    await adopt({
+      projectId: a.projectId, scope: a, target: 'userStyleProfiles', mode: 'replace',
+      data: {
+        profile: '作品 A 的克制文风', enabled: true,
+        sourceChapterIds: [chapterId], sampleCount: 1, sampleWords: 22,
+      },
     })
     expect((await db.userStyleProfiles.where('projectId').equals(a.projectId).first() as any)?.workId).toBe(a.workId)
     expect(await readOwnedRows(b, 'userStyleProfiles', { owner: 'work' })).toEqual([])

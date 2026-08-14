@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildStyleCalibrationPrompt, buildStyleLearnPrompt } from '../../src/lib/ai/adapters/style-adapter'
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
+import { adopt } from '../../src/lib/registry/adopt'
+import { resolveScopeLike } from '../../src/lib/world-engine/scope'
 import {
   createStyleRevisionPair,
   formatStyleFewShotPairs,
@@ -130,11 +132,13 @@ describe('R-FB5 · 有界改稿样本与互动校准', () => {
     } as never)
     expect(context.included).not.toContain('userStyleProfile')
 
-    await useUserStyleStore.getState().saveProfile(projectId, {
-      profile: '## 句式与节奏\n- 短句',
-      sourceChapterIds: [],
-      sampleCount: 0,
-      sampleWords: 0,
+    const scope = await resolveScopeLike(projectId)
+    await adopt({
+      projectId, scope, target: 'userStyleProfiles', mode: 'replace',
+      data: {
+        profile: '## 句式与节奏\n- 短句', enabled: true,
+        sourceChapterIds: [], sampleCount: 0, sampleWords: 0,
+      },
     })
     row = await db.userStyleProfiles.where('projectId').equals(projectId).first()
     expect(row?.enabled).toBe(true)

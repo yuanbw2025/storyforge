@@ -1,21 +1,20 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Sparkles, Brain, Loader2, Check, AlertCircle, Power } from 'lucide-react'
+import { Sparkles, Brain, Loader2, Check, AlertCircle, Power, RotateCcw, X } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useUserStyleStore } from '../../stores/user-style'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { buildStyleLearnPrompt } from '../../lib/ai/adapters/style-adapter'
-import { chat, resolveRequestConfig } from '../../lib/ai/client'
-import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import {
-  formatStyleCalibrationFeedback,
-  formatStyleFewShotPairs,
-  parseStyleCalibrationFeedback,
   parseStyleRevisionPairs,
 } from '../../lib/style/style-learning'
 import { countWords, htmlToPlainText } from '../../lib/utils/html'
-import type { Project, Chapter, ChapterStatus } from '../../lib/types'
+import type { Project, ChapterStatus } from '../../lib/types'
+import {
+  STYLE_LEARNING_CHAPTER_CHARS_V1,
+  STYLE_LEARNING_MAX_CHAPTERS_V1,
+} from '../../lib/style/learning-agent'
 import StyleCalibrationPanel from './StyleCalibrationPanel'
 import StyleRevisionPairsPanel from './StyleRevisionPairsPanel'
+import { useStyleLearningAI } from './useStyleLearningAI'
 
 interface Props {
   project: Project
@@ -25,15 +24,14 @@ interface Props {
 const CORPUS_STATUSES: ChapterStatus[] = ['revised', 'polished', 'final']
 const STATUS_LABEL: Record<string, string> = { revised: '已修改', polished: '已润色', final: '定稿' }
 /** 每章取样上限(控 token);整体也按选中章数自然封顶 */
-const PER_CHAPTER_CHARS = 2500
-const MAX_CORPUS_CHAPTERS = 6
+const PER_CHAPTER_CHARS = STYLE_LEARNING_CHAPTER_CHARS_V1
+const MAX_CORPUS_CHAPTERS = STYLE_LEARNING_MAX_CHAPTERS_V1
 
 export default function StyleLearningPanel({ project }: Props) {
   const { chapters, loadAll } = useChapterStore()
   const {
     profile,
     loadProfile,
-    saveProfile,
     updateProfileText,
     setEnabled,
     updateRevisionPairNote,
@@ -42,7 +40,6 @@ export default function StyleLearningPanel({ project }: Props) {
   const aiConfig = useAIConfigStore(s => s.config)
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const taRef = useRef<HTMLTextAreaElement>(null)
@@ -72,18 +69,14 @@ export default function StyleLearningPanel({ project }: Props) {
     () => parseStyleRevisionPairs(profile?.revisionPairs),
     [profile?.revisionPairs],
   )
-  const formattedRevisionPairs = useMemo(
-    () => formatStyleFewShotPairs(revisionPairs),
-    [revisionPairs],
-  )
-  const formattedCalibrationFeedback = useMemo(
-    () => formatStyleCalibrationFeedback(
-      parseStyleCalibrationFeedback(profile?.calibrationFeedback),
-    ),
-    [profile?.calibrationFeedback],
-  )
   const hasLearnableSources = selected.length > 0 || revisionPairs.length > 0
   const hasProfile = !!profile?.profile.trim()
+  const styleAI = useStyleLearningAI({
+    projectId: project.id!,
+    aiConfig,
+    onCommitted: () => loadProfile(project.id!),
+    onError: setError,
+  })
 
   const toggle = (id: number) => {
     if (!selectedIds.has(id) && selectedIds.size >= MAX_CORPUS_CHAPTERS) {
@@ -99,44 +92,10 @@ export default function StyleLearningPanel({ project }: Props) {
     })
   }
 
-  const buildSamples = (chs: Chapter[]): string =>
-    chs.map((c, i) => {
-      const plain = htmlToPlainText(c.content).trim()
-      const body = plain.slice(0, PER_CHAPTER_CHARS)
-      const more = plain.length > PER_CHAPTER_CHARS ? '\n（……本章节选，后略）' : ''
-      return `【样本 ${i + 1}·${c.title}】\n${body}${more}`
-    }).join('\n\n────────\n\n')
-
-  const handleLearn = async () => {
+  const handleLearn = () => {
     if (!hasLearnableSources) return
-    const effectiveConfig = resolveRequestConfig(aiConfig, { category: 'style.learn' }).config
-    if (!isAIConfigReady(effectiveConfig)) {
-      setError(getAIConfigRequiredMessage(effectiveConfig))
-      return
-    }
-    setRunning(true)
     setError(null)
-    try {
-      const samples = buildSamples(selected)
-      const messages = buildStyleLearnPrompt(samples, selected.length, sampleWords, {
-        revisionPairs: formattedRevisionPairs,
-        calibrationFeedback: formattedCalibrationFeedback,
-      })
-      const out = await chat(messages, aiConfig, { category: 'style.learn', projectId: project.id! })
-      const text = out.trim()
-      if (!text) { setError('AI 未返回内容,请重试。'); return }
-      await saveProfile(project.id!, {
-        profile: text,
-        sourceChapterIds: selected.map(c => c.id!),
-        sampleCount: selected.length,
-        sampleWords,
-      })
-    } catch (e) {
-      console.error('[StyleLearning] 学习失败:', e)
-      setError(e instanceof Error ? e.message : '学习失败,请重试。')
-    } finally {
-      setRunning(false)
-    }
+    void styleAI.run(selected.map(chapter => chapter.id!))
   }
 
   return (
@@ -191,10 +150,10 @@ export default function StyleLearningPanel({ project }: Props) {
 
           <button
             onClick={handleLearn}
-            disabled={running || !hasLearnableSources}
+            disabled={styleAI.lane.busy || !!styleAI.lane.candidate || styleAI.lane.unsafeRunId != null || !hasLearnableSources}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-accent text-white rounded-md text-sm font-medium hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {running
+            {styleAI.lane.busy
               ? <><Loader2 className="w-4 h-4 animate-spin" /> 正在学习你的文风…</>
               : <><Sparkles className="w-4 h-4" /> {hasProfile ? '重新学习我的文风' : '一键学习我的文风'}</>}
           </button>
@@ -209,7 +168,68 @@ export default function StyleLearningPanel({ project }: Props) {
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> <span>{error}</span>
             </div>
           )}
+
+          {styleAI.lane.message && (
+            <p className="rounded bg-bg-base p-2 text-xs leading-5 text-text-muted">{styleAI.lane.message}</p>
+          )}
+
+          {styleAI.lane.unsafeRunId != null && (
+            <button
+              type="button"
+              onClick={() => { void styleAI.abandonUnsafe() }}
+              disabled={styleAI.lane.busy}
+              className="w-full rounded border border-warning/40 px-3 py-2 text-xs font-medium text-warning hover:bg-warning/10 disabled:opacity-50"
+            >
+              放弃结果不可判定的旧运行
+            </button>
+          )}
         </div>
+
+        {styleAI.lane.candidate && (
+          <div className="space-y-3 rounded-lg border border-accent/40 bg-accent/5 p-4" data-testid="style-learning-candidate">
+            <div>
+              <h3 className="text-sm font-medium text-text-primary">待确认文风画像</h3>
+              <p className="mt-1 text-[11px] leading-5 text-text-muted">
+                基于 {styleAI.lane.candidate.baseline.sampleCount} 章、约 {styleAI.lane.candidate.baseline.sampleWords.toLocaleString()} 字。
+                候选已持久化；确认前不会改写正式画像，也不会开启下游注入。
+              </p>
+            </div>
+            <textarea
+              value={styleAI.lane.candidate.result}
+              readOnly
+              rows={16}
+              aria-label="待确认文风画像"
+              className="w-full resize-y rounded border border-accent/30 bg-bg-base px-3 py-2 font-mono text-sm leading-relaxed text-text-secondary focus:outline-none"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => { void styleAI.accept() }}
+                disabled={styleAI.lane.busy}
+                className="inline-flex items-center gap-1.5 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+              >
+                {styleAI.lane.busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                确认采用画像
+              </button>
+              <button
+                type="button"
+                onClick={() => { void styleAI.reject() }}
+                disabled={styleAI.lane.busy || styleAI.lane.adoptionPending}
+                className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:border-error hover:text-error disabled:opacity-50"
+              >
+                <X className="h-3.5 w-3.5" /> 拒绝
+              </button>
+              <button
+                type="button"
+                onClick={() => { void styleAI.retry() }}
+                disabled={styleAI.lane.busy || styleAI.lane.adoptionPending}
+                className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:border-accent hover:text-accent disabled:opacity-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> 重新学习
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-3 rounded-lg border border-border bg-bg-surface p-4">
           <div className="flex items-center justify-between gap-3">

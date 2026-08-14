@@ -533,6 +533,15 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   longtext('historicalKeywords', 'aiConsult'),
   longtext('historicalKeywords', 'aiBrainstorm'),
 
+  // HARNESS-76: durable style learning may replace only the generated profile
+  // and its deterministic sampling receipt. Revision pairs and calibration
+  // feedback remain explicit author actions outside this AI write boundary.
+  longtext('userStyleProfiles', 'profile'),
+  bool('userStyleProfiles', 'enabled'),
+  json('userStyleProfiles', 'sourceChapterIds'),
+  num('userStyleProfiles', 'sampleCount'),
+  num('userStyleProfiles', 'sampleWords'),
+
   enumeration('stateCards', 'category', ['character', 'location', 'item', 'faction', 'event']),
   text('stateCards', 'entityName', ['角色名', '实体名']),
   json('stateCards', 'fields', ['状态字段']),

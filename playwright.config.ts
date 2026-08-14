@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const port = 4178
+const configuredPort = Number(process.env.PLAYWRIGHT_PORT ?? 4178)
+const port = Number.isInteger(configuredPort) && configuredPort > 0 ? configuredPort : 4178
 
 export default defineConfig({
   testDir: './tests/e2e',

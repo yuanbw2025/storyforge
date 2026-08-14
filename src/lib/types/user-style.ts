@@ -5,7 +5,7 @@
  * 节奏、对话、描写等习惯,作为下游章节生成的上下文源之一。画像可被用户手改。
  *
  * 表生命周期登记在 PROJECT_TABLES(userStyleProfiles);读取走 CONTEXT_SOURCES
- * (userStyleProfile);生成由 store.learnFromChapters 调 AI(style.learn)产出并 upsert。
+ * (userStyleProfile);AI 生成经 prose.style-learn durable Run 确认后采纳。
  */
 
 export interface StyleRevisionPair {
@@ -29,10 +29,12 @@ export interface StyleCalibrationFeedback {
   createdAt: number
 }
 
-/** 文风画像(每项目单例,按 projectId 唯一) */
+/** 文风画像（每个 Work 单例；projectId 字段保留旧库兼容）。 */
 export interface UserStyleProfile {
   id?: number
   projectId: number
+  worldId?: number
+  workId?: number
   /** AI 生成的文风画像(markdown 文本,给人看 + 给 AI 读;用户可手改) */
   profile: string
   /** 是否注入下游章节生成(关闭则不进上下文) */

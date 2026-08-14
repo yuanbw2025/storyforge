@@ -48,6 +48,7 @@ import {
   readCultivationProgressExtractionBaselineContextV1,
 } from '../cultivation/progress'
 import { readForeshadowSuggestionBaselineContextV1 } from '../foreshadow/suggestions'
+import { readStyleLearningBaselineContextV1 } from '../style/learning-agent'
 import type {
   Chapter,
   Character,
@@ -966,6 +967,20 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       scope: input.scope!,
       mode: input.referenceDerivedMode!,
       runId: input.referenceAnalysisRunId!,
+    }),
+  },
+  {
+    key: 'styleLearningBaseline',
+    label: '文风学习正式输入基线',
+    scope: 'project',
+    layer: 'L0',
+    budgetTokens: 28_000,
+    protectedFromTrim: true,
+    ownerFrom: 'work',
+    enabled: input => Array.isArray(input.styleLearningChapterIds),
+    read: input => readStyleLearningBaselineContextV1({
+      scope: input.scope!,
+      chapterIds: input.styleLearningChapterIds!,
     }),
   },
   {

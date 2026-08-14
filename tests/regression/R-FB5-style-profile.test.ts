@@ -2,7 +2,7 @@
  * R-FB5 · 自适应文风学习(社区反馈 FB-5)
  *
  * 验证文风画像走三注册表:
- *  ① 持久化:store saveProfile / updateProfileText / setEnabled 落库;
+ *  ① 持久化:adopt() / store updateProfileText / setEnabled 落库;
  *  ② 读取源:CONTEXT_SOURCE `userStyleProfile` 在 enabled 时进上下文、disabled 时不进;
  *  ③ 生命周期:导出含 userStyleProfiles、导入重映射 projectId、删项目级联清除。
  */
@@ -12,6 +12,8 @@ import { useUserStyleStore } from '../../src/stores/user-style'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
+import { adopt } from '../../src/lib/registry/adopt'
+import { resolveScopeLike } from '../../src/lib/world-engine/scope'
 
 async function createProject(): Promise<number> {
   const now = Date.now()
@@ -23,14 +25,25 @@ async function createProject(): Promise<number> {
 
 const PROFILE_TEXT = '## 用词习惯\n- 偏爱短句与白描\n## 句式与节奏\n- 节奏偏快,多对话'
 
+async function seedProfile(projectId: number, chapterIds: number[], sampleCount: number, sampleWords: number) {
+  const scope = await resolveScopeLike(projectId)
+  await adopt({
+    projectId, scope, target: 'userStyleProfiles', mode: 'replace',
+    data: {
+      profile: PROFILE_TEXT, enabled: true, sourceChapterIds: chapterIds,
+      sampleCount, sampleWords,
+    },
+  })
+  await useUserStyleStore.getState().loadProfile(scope)
+}
+
 describe('R-FB5 · 文风画像持久化 + 注入 + 生命周期', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(async () => { db.close() })
 
-  it('① store 保存 / 手改 / 开关 都落库', async () => {
+  it('① 登记采纳 / store 手改 / 开关都落库', async () => {
     const pid = await createProject()
-    const store = useUserStyleStore.getState()
-    await store.saveProfile(pid, { profile: PROFILE_TEXT, sourceChapterIds: [1, 2], sampleCount: 2, sampleWords: 3000 })
+    await seedProfile(pid, [1, 2], 2, 3000)
 
     let row = await db.userStyleProfiles.where('projectId').equals(pid).first()
     expect(row?.profile).toBe(PROFILE_TEXT)
@@ -51,7 +64,7 @@ describe('R-FB5 · 文风画像持久化 + 注入 + 生命周期', () => {
 
   it('② CONTEXT_SOURCE:enabled 时进上下文,disabled 时不进', async () => {
     const pid = await createProject()
-    await useUserStyleStore.getState().saveProfile(pid, { profile: PROFILE_TEXT, sourceChapterIds: [], sampleCount: 1, sampleWords: 100 })
+    await seedProfile(pid, [], 1, 100)
 
     // 开启:进上下文
     const onCtx = await assembleContext({ projectId: pid, sourceKeys: ['userStyleProfile'] } as any)
@@ -67,7 +80,7 @@ describe('R-FB5 · 文风画像持久化 + 注入 + 生命周期', () => {
 
   it('③ 导出含画像 / 导入重映射 projectId / 删项目级联清除', async () => {
     const pid = await createProject()
-    await useUserStyleStore.getState().saveProfile(pid, { profile: PROFILE_TEXT, sourceChapterIds: [], sampleCount: 1, sampleWords: 100 })
+    await seedProfile(pid, [], 1, 100)
     await useUserStyleStore.getState().captureRevisionPair(pid, {
       chapterTitle: '导出样本',
       beforeText: '他非常快速地走过去。',

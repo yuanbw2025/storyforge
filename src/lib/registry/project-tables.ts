@@ -431,7 +431,7 @@ export const PROJECT_TABLES: TableSpec[] = [
   // ───────────────────── 文风学习（FB-5） ─────────────────────
   { table: db.userStyleProfiles, name: 'userStyleProfiles', owner: 'project', exportable: true,
     domainOwner: LEGACY_WORK_OWNER,
-    note: '每项目一份 AI 文风画像;projectId 单例' },
+    note: '每个 Work 一份作者文风画像；物理 projectId 兼容旧库，逻辑归属由 Work scope 隔离' },
 
   // ───────────────────── 增量灵感工作区（CM-1） ─────────────────────
   { table: db.inspirationWorkspaces, name: 'inspirationWorkspaces', owner: 'project', exportable: true,

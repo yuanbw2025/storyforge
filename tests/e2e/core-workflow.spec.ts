@@ -849,6 +849,8 @@ test('智能实体改名先预览，再原子同步正文与角色主档并可�
 })
 
 test('对照润色沉淀有界样本，并完成文风画像与互动校准闭环', async ({ page }) => {
+  let styleLearningCalls = 0
+  let calibrationCalls = 0
   await page.addInitScript(() => {
     localStorage.setItem('storyforge-ai-config', JSON.stringify({
       provider: 'ollama',
@@ -865,9 +867,18 @@ test('对照润色沉淀有界样本，并完成文风画像与互动校准闭�
       messages?: Array<{ role: string; content: string }>
     }
     const system = body.messages?.find(message => message.role === 'system')?.content ?? ''
-    const content = system.includes('克制的文学改稿助手')
+    const isCalibration = system.includes('克制的文学改稿助手')
+    if (isCalibration) calibrationCalls++
+    else {
+      styleLearningCalls++
+      const combined = body.messages?.map(message => message.content).join('\n') ?? ''
+      expect(combined).toContain('【文风学习正式输入基线】')
+      expect(combined).toContain('他非常快速地跑过长街')
+      expect(combined).toContain('HARNESS-76 严格输出协议')
+    }
+    const content = isCalibration
       ? '他掠过长街，雨声在身后收紧。'
-      : '## 用词习惯\n- 偏爱克制动词\n## 句式与节奏\n- 短句推进\n## 对话风格\n- 少解释\n## 描写与画面\n- 以动作带景\n## 标志性表达\n- 收束干净\n## 倾向与禁忌\n- 避免冗余副词'
+      : '## 用词习惯\n- 偏爱克制动词和具体名词，避免抽象评价。\n## 句式与节奏\n- 以短句推进，在关键动作后断句留白。\n## 对话风格\n- 对话稀疏，用动作承接而不解释情绪。\n## 描写与画面\n- 以感官细节带出环境，不堆叠形容词。\n## 标志性表达\n- 转折处用克制动作收束，不追加总结句。\n## 倾向与禁忌\n- 避免冗余副词、情绪直说与全知式解释。'
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -895,15 +906,73 @@ test('对照润色沉淀有界样本，并完成文风画像与互动校准闭�
   await expect(page.getByText('已保存 1 / 8 组', { exact: false })).toBeVisible()
   await expect(page.getByText('他非常快速地跑过长街', { exact: false })).toBeVisible()
   await page.getByRole('button', { name: '一键学习我的文风', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '待确认文风画像', exact: true })).toBeVisible()
+  await expect(page.getByLabel('待确认文风画像')).toHaveValue(/偏爱克制动词/)
+  expect(styleLearningCalls).toBe(1)
+
+  const beforeConfirmation = await page.evaluate(async () => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const profiles = await request(database.transaction('userStyleProfiles').objectStore('userStyleProfiles').getAll()) as Array<{ profile: string; enabled: boolean }>
+    const runs = await request(database.transaction('agentRuns').objectStore('agentRuns').getAll()) as Array<{ status: string; contractJson: string }>
+    database.close()
+    return { profiles, runs: runs.filter(run => run.contractJson.includes('prose.style-learn')) }
+  })
+  expect(beforeConfirmation.profiles).toEqual([expect.objectContaining({ profile: '', enabled: false })])
+  expect(beforeConfirmation.runs).toEqual([expect.objectContaining({ status: 'awaiting_confirmation' })])
+
+  await page.reload()
+  await sidebarButton(page, '文风学习').click()
+  await expect(page.getByText('已恢复待确认文风候选；没有重复调用模型。', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('待确认文风画像')).toHaveValue(/偏爱克制动词/)
+  expect(styleLearningCalls).toBe(1)
+  await page.getByRole('button', { name: '确认采用画像', exact: true }).click()
   await expect(page.getByText('我的文风画像', { exact: true })).toBeVisible()
-  await expect(page.locator('textarea[placeholder*="文风画像"]')).toContainText('偏爱克制动词')
+  await expect(page.locator('textarea[placeholder*="文风画像"]')).toHaveValue(/偏爱克制动词/)
   await expect(page.getByRole('button', { name: /注入中/ })).toBeVisible()
+
+  const runCountBeforeCalibration = await page.evaluate(async () => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const count = await request(database.transaction('agentRuns').objectStore('agentRuns').count())
+    database.close()
+    return count
+  })
 
   await page.getByPlaceholder('粘贴一段待校准短文（最多 1600 字符）')
     .fill('他很快地跑过长街，身后是连绵的雨。')
   await page.getByRole('button', { name: '生成校准稿', exact: true }).click()
   const result = page.locator('#style-calibration-result')
   await expect(result).toHaveValue('他掠过长街，雨声在身后收紧。')
+  expect(calibrationCalls).toBe(1)
+  expect(await page.evaluate(async () => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const count = await request(database.transaction('agentRuns').objectStore('agentRuns').count())
+    database.close()
+    return count
+  })).toBe(runCountBeforeCalibration)
   await result.fill('他掠过长街，雨声在身后收紧。')
   await page.getByPlaceholder('可选：具体哪里像 / 哪里还不对').fill('动作更克制，收束更干净')
   await page.getByRole('button', { name: '接近我的风格', exact: true }).click()
@@ -913,7 +982,9 @@ test('对照润色沉淀有界样本，并完成文风画像与互动校准闭�
   await page.reload()
   await sidebarButton(page, '文风学习').click()
   await expect(page.getByText('已保存 2 / 8 组', { exact: false })).toBeVisible()
-  await expect(page.locator('textarea[placeholder*="文风画像"]')).toContainText('偏爱克制动词')
+  await expect(page.locator('textarea[placeholder*="文风画像"]')).toHaveValue(/偏爱克制动词/)
+  expect(styleLearningCalls).toBe(1)
+  expect(calibrationCalls).toBe(1)
 })
 
 test('完整 JSON 导出后可重新导入且正文不丢', async ({ page }) => {

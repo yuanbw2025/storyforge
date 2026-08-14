@@ -54,6 +54,7 @@ export type AgentSkillExecutionModeV1 =
   | 'inventory-extraction'
   | 'story-timeline-extraction'
   | 'cultivation-progress-extraction'
+  | 'style-learn'
   | 'selection-edit'
   | 'selection-check'
   | 'review'
@@ -1002,6 +1003,24 @@ const PROSE_MEMORY_COMPRESSION_POLICY = compressionPolicy([
   'previousPlanReconciliation',
 ])
 const PROSE_CONSISTENCY_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
+const PROSE_STYLE_LEARNING_INPUT_POLICY = {
+  sourceKeys: ['styleLearningBaseline'],
+  states: {
+    empty: {
+      handling: 'require-author-input',
+      instruction: '缺少合格章节或作者保存的改稿对照时停止学习，不得凭空生成文风画像。',
+    },
+    partial: {
+      handling: 'grounded-transform',
+      instruction: '只依据登记的有限章节样本或改稿对照提炼；证据不足的维度必须明确标注。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '综合登记的章节样本、改稿对照与校准反馈，提炼具体可执行且不挪用剧情实体的文风画像。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+const PROSE_STYLE_LEARNING_COMPRESSION_POLICY = compressionPolicy(['styleLearningBaseline'])
 
 export const AGENT_SKILLS = [
   {
@@ -1890,6 +1909,29 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'prose.style-learn',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '作者文风画像学习',
+    owner: 'prose-agent',
+    promptVersion: 'style-learning-agent-v1',
+    executionMode: 'style-learn',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['styleLearningBaseline'],
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_STYLE_LEARNING_INPUT_POLICY,
+    contextCompression: PROSE_STYLE_LEARNING_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{
+      table: 'userStyleProfiles',
+      fields: ['profile', 'enabled', 'sourceChapterIds', 'sampleCount', 'sampleWords'],
+    }],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS76-style-learning-durable'],
+  },
+  {
+    version: 1,
     id: 'prose.selection-edit',
     agentId: 'prose',
     defaultForAgent: false,
@@ -2240,7 +2282,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'relationships']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters', 'details']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()
