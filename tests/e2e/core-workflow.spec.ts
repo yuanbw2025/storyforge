@@ -3358,3 +3358,122 @@ test('参考分析总结刷新恢复持久候选，确认后同步版本和激�
   await expect(page.getByText('全书用受限视角保持证词之间的信息差。', { exact: true })).toBeVisible()
   expect(generationCalls).toBe(1)
 })
+
+test('Prompt 示例 AI 只进入编辑草稿，作者保存后才写全局模板', async ({ page }) => {
+  let generationCalls = 0
+  const systemDraft = '你是只用具体动作呈现人物犹疑的叙事编辑。'
+  const userDraft = '请重写这段内容：{{userHint}}'
+  const firstExample = '好示例一：她把未寄出的信重新压回抽屉。'
+  const secondExample = '好示例二：门把转了半圈，又慢慢回到原处。'
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'ollama',
+      apiKey: '',
+      model: 'prompt-examples-authoring-draft-e2e',
+      baseUrl: 'http://localhost:1234/v1',
+      temperature: 0,
+      maxTokens: 0,
+      contextWindow: 100000,
+    }))
+  })
+  await page.route('http://localhost:1234/v1/chat/completions', async route => {
+    generationCalls += 1
+    const request = route.request().postDataJSON() as {
+      messages?: Array<{ role: string; content: string }>
+    }
+    const combined = request.messages?.map(message => message.content).join('\n') ?? ''
+    expect(combined).toContain(systemDraft)
+    expect(combined).toContain(userDraft)
+    expect(combined).not.toContain('E2E Prompt 草稿边界')
+    const content = `${firstExample}\n===EXAMPLE===\n${secondExample}`
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: [
+        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`,
+        `data: ${JSON.stringify({
+          choices: [{ delta: {} }],
+          usage: { prompt_tokens: 90, completion_tokens: 30, total_tokens: 120 },
+        })}`,
+        'data: [DONE]',
+        '',
+      ].join('\n\n'),
+    })
+  })
+
+  await openCleanHome(page)
+  await createProject(page, 'E2E Prompt 草稿边界')
+  await sidebarButton(page, '提示词库').click()
+  await page.getByRole('button', { name: '新建', exact: true }).click()
+
+  const editor = page.locator('main')
+  const nameInput = editor.locator('input[type="text"]').first()
+  await nameInput.fill('E2E Prompt 示例草稿')
+  const systemPrompt = editor.getByText('System Prompt', { exact: true })
+    .locator('xpath=..').locator('textarea')
+  const userPrompt = editor.getByText('User Prompt 模板', { exact: true })
+    .locator('xpath=../..').locator('textarea')
+  await systemPrompt.fill(systemDraft)
+  await userPrompt.fill(userDraft)
+
+  const generate = editor.getByRole('button', { name: 'AI 生成', exact: true }).first()
+  await generate.click()
+  await expect(editor.getByText(firstExample, { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('已将 2 条好示例加入当前草稿；点击顶部「保存」后才会生效。', { exact: true }))
+    .toBeVisible()
+  expect(generationCalls).toBe(1)
+
+  const beforeSave = await page.evaluate(async () => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const templates = await request(database.transaction('promptTemplates').objectStore('promptTemplates').getAll()) as Array<{
+      scope: string
+      name: string
+      systemPrompt: string
+      userPromptTemplate: string
+      examples?: unknown
+    }>
+    const runCount = await request(database.transaction('agentRuns').objectStore('agentRuns').count())
+    database.close()
+    return {
+      template: templates.find(template => template.scope === 'user' && template.name === '未命名模板'),
+      runCount,
+    }
+  })
+  expect(beforeSave.template).toMatchObject({ systemPrompt: '', userPromptTemplate: '' })
+  expect(beforeSave.template?.examples).toBeUndefined()
+  expect(beforeSave.runCount).toBe(0)
+
+  await editor.getByRole('button', { name: /^保存/ }).click()
+  await expect.poll(async () => page.evaluate(async () => {
+    const request = <T>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      value.onsuccess = () => resolve(value.result)
+      value.onerror = () => reject(value.error)
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const opening = indexedDB.open('storyforge')
+      opening.onsuccess = () => resolve(opening.result)
+      opening.onerror = () => reject(opening.error)
+    })
+    const templates = await request(database.transaction('promptTemplates').objectStore('promptTemplates').getAll()) as Array<{
+      name: string
+      examples?: { good?: Array<{ text: string }> }
+    }>
+    database.close()
+    return templates.find(template => template.name === 'E2E Prompt 示例草稿')
+      ?.examples?.good?.map(example => example.text) ?? []
+  })).toEqual([firstExample, secondExample])
+
+  await page.reload()
+  await sidebarButton(page, '提示词库').click()
+  await page.getByText('E2E Prompt 示例草稿', { exact: true }).first().click()
+  await expect(editor.getByText(firstExample, { exact: true })).toBeVisible()
+  expect(generationCalls).toBe(1)
+})

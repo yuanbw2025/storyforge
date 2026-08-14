@@ -1018,11 +1018,12 @@
 
 **AI 动作**：
 
-#### 动作①：测试运行某个模板（PromptExamplesEditor）
+#### 动作①：AI 生成模板好示例 / 反例（PromptExamplesEditor）
 - **触发**：🔘 手动
-- **读**：`promptTemplates[当前]` + 用户给的示例参数
-- **提示词**：被测试的模板自身
-- **写**：无（仅展示输出）
+- **读**：只读取 `PromptTemplateEditor` 当前未保存 draft 中的 `systemPrompt / userPromptTemplate`；不读取项目、World、Work 或 Canon 上下文
+- **提示词**：固定 `prompt.examples` 元提示词，要求基于当前模板生成好示例或反例
+- **写**：模型输出只经 `onChange` 加入父组件内存 draft；作者另行点击顶部「保存」后，才由 Prompt store 写入全局、本机且不随项目导出的 `promptTemplates.examples`。系统模板保持只读；此处不是项目业务写入，不建立 durable Agent Run
+- **证据**：HARNESS-75 的 `authoring-draft` 反例证明生成后数据库零写、离开页面丢弃未保存草稿、显式保存后才落库，配置缺失零调用
 
 #### 动作②：工作流执行（WorkflowRunner）
 - **触发**：🔘 手动

@@ -2268,6 +2268,25 @@ stale 均有反例。旧两路 `useAIStream`、组件内 Context 和即时写回
 👉 球在 Codex：继续按 census 清理剩余 4 个 migration；下一优先审计 `AnalysisReportViewer` 的参考摘要与
 角色合并写入链，冻结报告来源、候选选择、正式写入和数据生命周期，禁止复用导入旁路绕过治理。
 
+### [2026-08-14] Codex · REPORT · HARNESS-75 Prompt 示例生成 authoring-draft 风险裁决 / `feat/harness-rebuild-20260807`
+
+`PromptExamplesEditor` 已按真实数据路径完成风险裁决，没有为清零 census 机械制造 durable 业务 Run。模型只读
+`PromptTemplateEditor` 当前未保存 draft 的 `systemPrompt / userPromptTemplate`，生成结果只经 `onChange`
+进入父组件内存；生成后 `promptTemplates` 与 Agent ledger 均零写。作者必须另点顶部「保存」，才由既有
+Prompt store 写入全局本机配置。`PROJECT_TABLES` 已把该表登记为 `owner=global / exportable=false`，它不属于
+项目 Canon；未保存离开即丢弃正是编辑草稿语义。
+
+UI 现在明确提示“已加入当前草稿，保存后才生效”。`R-HARNESS75-prompt-examples-authoring-draft` 3 项与
+H59 3 项共 6 项定向回归通过，覆盖真实输入/category、DB/ledger 零写、显式保存、离开丢弃、系统模板只读、
+配置缺失和全局表登记。census 保持 14 files / 26 calls，分类变为 7 governed、5 auxiliary、2 migration。
+完整 CI 为 365 files / 1728 tests，覆盖率 81.78% statements / 73.79% branches / 79.15% functions /
+81.78% lines；3765 模块生产构建、bundle budget 与 0 生产依赖漏洞守卫通过，入口仍为 669.7 KiB /
+gzip 207.1 KiB。完整 Chromium E2E 扩展为 51/51，耗时 4.3 分钟；新路径 3.9 秒且模型只调用一次，
+独立精确复跑 1/1（5.5 秒）。
+
+👉 球在 Codex：继续审计并收口两处文风入口；它们写 `userStyleProfiles`，必须依据实际保存/反馈路径决定
+是否共用一个 durable 风格候选体系，不把已经存在的人工校准反馈边界抹掉。
+
 ### [2026-08-14] Codex · REPORT · HARNESS-74 参考分析总结/角色聚合 durable 版本派生 / `feat/harness-rebuild-20260807`
 
 参考分析的全书总结与角色聚合已从 `AnalysisReportViewer` 两处直接 `chat()` 迁入

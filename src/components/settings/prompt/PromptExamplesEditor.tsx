@@ -125,6 +125,7 @@ ${template.systemPrompt}
           ...examples,
           [kind]: [...(kind === 'good' ? good : bad), ...newExamples],
         })
+        toast.info(`已将 ${newExamples.length} 条${kind === 'good' ? '好示例' : '反例'}加入当前草稿；点击顶部「保存」后才会生效。`)
       }
     } catch (e) {
       toast.error(`生成失败：${e instanceof Error ? e.message : String(e)}`)
@@ -229,7 +230,7 @@ ${template.systemPrompt}
         </div>
       )}
       <p className="mt-3 text-xs text-text-muted">
-        提示：好示例最多取前 3 条、反例最多前 2 条拼入 prompt（避免 token 浪费）。
+        提示：AI 结果只加入当前编辑草稿，点击顶部「保存」后才会生效；好示例最多取前 3 条、反例最多前 2 条拼入 prompt（避免 token 浪费）。
       </p>
     </div>
   )

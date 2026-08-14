@@ -10,7 +10,7 @@
     { "file": "src/components/outline/useDetailedOutlineGenerationController.ts", "calls": 2, "status": "governed", "mechanism": "durable-run", "reason": "单章细纲共用 HARNESS-37 durable 控制器。" },
     { "file": "src/components/scene/SceneVerifyPanel.tsx", "calls": 1, "status": "auxiliary", "mechanism": "read-only-review", "reason": "场景考证只读登记上下文并展示建议，不写业务表。" },
     { "file": "src/components/settings/HarnessEvalPanel.tsx", "calls": 3, "status": "auxiliary", "mechanism": "eval-only", "reason": "开发评测入口只生成评测 artifact，不进入创作 Canon。" },
-    { "file": "src/components/settings/prompt/PromptExamplesEditor.tsx", "calls": 1, "status": "migration", "nextUnit": "HARNESS-60", "reason": "示例生成结果可写 Prompt 配置，尚无 durable 候选证据。" },
+    { "file": "src/components/settings/prompt/PromptExamplesEditor.tsx", "calls": 1, "status": "auxiliary", "mechanism": "authoring-draft", "reason": "HARNESS-75 证明模型只读当前未保存 Prompt 草稿，输出只进入父组件内存 draft；作者另行点击保存后才写全局本机 promptTemplates，不写项目 Canon。" },
     { "file": "src/components/settings/prompt/WorkflowRunner.tsx", "calls": 1, "status": "governed", "mechanism": "generation-node", "reason": "自由工作流通过 Workflow GenerationNode 执行且不绕过正式采纳。" },
     { "file": "src/components/simulation/ChatGamePanel.tsx", "calls": 1, "status": "governed", "mechanism": "simulation-runtime", "reason": "角色聊天写入隔离的 SIM 事件/消息运行时，不反写创作 Canon。" },
     { "file": "src/components/simulation/SimulationRuntimePanel.tsx", "calls": 3, "status": "governed", "mechanism": "simulation-runtime", "reason": "NPC/TTRPG 候选和事件由 SIM 专用状态机、确认与回放边界治理。" },

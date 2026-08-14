@@ -58,7 +58,7 @@
 | 范围 | 登记 `components/hooks/pages` 中 `useAIStream()` 实例与直接 `chat()` 调用构造点的文件、静态数量、三态、机制/迁移单元和理由；一次运行中的重试/分块次数不计作新的静态入口。AST 守卫拒绝漏登、残留、调用数漂移、无理由或无 nextUnit。 |
 | 非范围 | 本单元不改模型行为、不迁移具体入口、不宣称 18 个 migration 已完成，不扫描测试/设置外的 lib 内部受控调用，不禁止只读建议或 SIM 隔离运行时。 |
 | 读 / 写 / 表 | 仅读源码和静态 JSON 注册表；业务表零读写，不新增 Context/Field/PROJECT_TABLES 项。 |
-| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～74 已依次收口角色关系、情感节拍、地点/物品/年表提取、局部正文、世界地图/扩写/建议、宪法扫描、Codex、修炼进度、伏笔、历史双 Agent 与参考分析派生，当前为 14 个文件 / 26 个静态构造点：7 个 governed、4 个 auxiliary、3 个 migration。剩余 Prompt 示例与两处文风入口仍明确登记，未冒充已治理；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
+| 验收 | 初始冻结 29 个文件 / 44 个静态构造点；HARNESS-60～75 已依次收口高风险入口并完成 Prompt 示例的真实风险裁决，当前为 14 个文件 / 26 个静态构造点：7 个 governed、5 个 auxiliary、2 个 migration。Prompt 示例由 HARNESS-75 的 DB/草稿反例证明是 `authoring-draft`，剩余两处文风入口仍明确登记；`check:ai-entry-registry` 已进入 `npm run ci`，AST 自测与 `R-HARNESS59-ai-entry-registry` 回归通过。 |
 
 ### HARNESS-61 完成卡：情感节拍 durable 候选与采纳
 
@@ -226,6 +226,17 @@
 | 生命周期 / 作用域 | 不新增表/schema；`histories / historicalTimelineEvents / historicalKeywords` 继续由 PROJECT_TABLES 派生 World 归属、世界组、导入导出、删除和重映射生命周期。候选含本地目标 ID，`portable:false`，导入后取消；其它 World/Work/世界组或已删除目标不可恢复/采纳。 |
 | UI / 回滚 | `HistoryPanel` 保留人工事件/关键词/总述编辑与已保存结果清除；两个 lane 各自展示候选、拒绝、重试、确认与不可判定运行显式放弃。旧 `useAIStream`、组件内 `assembleContext()`、组件控制器直接 `adopt()` 和内存输出旁路下线。 |
 | 验收 | durable 18 项、控制器/UI/既有历史 17 项和注册表 11 项共 46 项定向回归通过；census 收缩为 15 文件 / 28 入口、4 migration。完整 CI 为 361 files / 1699 tests，覆盖率 81.37% statements / 73.69% branches / 78.93% functions / 81.37% lines；3761 模块生产构建与 bundle budget 通过，入口 664.9 KiB / gzip 205.4 KiB，生产依赖审计 0 漏洞。项目 Chromium E2E 49/49；新主路径约 6.3 秒，证明登记 baseline/严格协议进入真实请求、刷新恢复不重复模型调用、确认前零正式结果写入、确认后结果跨刷新持久化。 |
+
+### HARNESS-75 完成卡：Prompt 示例生成 authoring-draft 风险裁决
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-75` 治理小功能。维护者必须依据真实写入路径判断 Prompt 示例生成是否需要 durable Agent，而不是为了 census 清零机械建立项目业务合同。作者要清楚生成结果仍是未保存草稿。 |
+| 主归属 / 复用 | 保留设置区 `PromptExamplesEditor → PromptTemplateEditor draft → Prompt store` 单一路径；census 机制登记为 `authoring-draft`，复用既有 AI 配置/消耗分类和 `PROJECT_TABLES` 全局表生命周期，不引入平行 Runner、Context Source 或 AdoptionSchema。 |
+| 读 / 写 | 模型只读当前未保存 draft 的 `systemPrompt / userPromptTemplate`，不读取项目/World/Work/Canon。输出只触发父组件 `onChange`；生成后 `promptTemplates` 与 Agent ledger 零写，作者另点顶部「保存」后才写 `promptTemplates.examples`。 |
+| 生命周期 / 作用域 | `promptTemplates` 已登记为 `owner=global / exportable=false`，是本机设置而非项目内容；系统模板只读。未保存即离开会按既有编辑器语义丢弃草稿，不把它伪装成可跨项目恢复的 durable 候选。 |
+| UI / 失败 | 生成成功明确提示“已加入当前草稿，保存后才生效”；配置缺失零模型调用。作者仍可手动增删示例、预览和一次性保存整个模板。 |
+| 验收 | `R-HARNESS75-prompt-examples-authoring-draft` 3 项与 H59 3 项共 6 项定向回归通过：真实 Prompt 输入/category、生成后 DB/ledger 零写、显式保存、离开丢弃、系统模板只读、配置缺失和全局表登记均闭合；census 保持 14 文件 / 26 入口，变为 7 governed / 5 auxiliary / 2 migration。完整 CI 为 365 files / 1728 tests，覆盖率 81.78% statements / 73.79% branches / 79.15% functions / 81.78% lines；3765 模块生产构建、bundle budget 和生产依赖审计通过。项目 Chromium E2E 51/51；新路径 3.9 秒，真实拦截模型请求并验证草稿输入、零 DB/ledger 写入、显式保存和刷新持久化。 |
 
 ### HARNESS-74 完成卡：参考分析总结 / 角色聚合 durable 版本派生
 
