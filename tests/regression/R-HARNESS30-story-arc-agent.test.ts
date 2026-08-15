@@ -38,6 +38,7 @@ import {
   verifyMasterAgentRunV1,
 } from '../../src/lib/agent/run/master-verification'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { db } from '../../src/lib/db/schema'
 import {
   adoptGenerationNodeOutput,
@@ -211,6 +212,9 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       expect(prompt).toContain('依据现有设定生成一条主线故事线')
       expect(prompt).toContain('盐海每十年退潮一次')
       expect(prompt).toContain('绝不能放在故事线顶层')
+      expect(prompt).toContain('本轮叙事任务（运行时合同，不是新增 Canon）')
+      expect(prompt).toContain('退出变化')
+      expect(prompt).toContain('不要用世界观介绍代替故事推进')
       expect(body.response_format).toEqual({ type: 'json_object' })
       return new Response(JSON.stringify({
         choices: [{ message: { content: JSON.stringify({ storyArcs: [mainArc()] }) } }],
@@ -234,6 +238,10 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       skillId: 'outline.story-arcs',
       storyArcKind: 'main',
       workspaceScope: scope,
+      narrativeBrief: {
+        creativeGoal: '依据现有设定生成一条主线故事线',
+        obstacle: '守灯人必须决定是否敲响会抹除全城记忆的潮汐钟。',
+      },
       creativeArtifact: {
         status: 'ready',
         qualityMode: 'balanced',
@@ -251,6 +259,68 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
     expect(candidates[0].runtimeNode.kind).toBe('outline.story-arcs')
     expect(parseStoryArcCandidateDraft(candidates[0].draft)).toEqual([mainArc()])
     expect(await db.storyArcs.count()).toBe(0)
+  })
+
+  it('上游临时假设通过独立元数据进入后续任务且不改变依赖草稿哈希', async () => {
+    const { project, scope } = await createWorkspace()
+    let callIndex = 0
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      const prompt = body.messages.map((message: { content: string }) => message.content).join('\n')
+      callIndex += 1
+      if (callIndex === 2) {
+        expect(prompt).toContain('上游临时假设（作者采纳前不是正式设定）')
+        expect(prompt).toContain('潮汐钟可以只抹除一段指定记忆')
+      }
+      const arc = callIndex === 1
+        ? mainArc()
+        : { ...mainArc('失忆者支线'), type: 'sub' as const }
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({
+          storyArcs: [arc],
+          ...(callIndex === 1
+            ? { assumptions: ['潮汐钟可以只抹除一段指定记忆'] }
+            : {}),
+        }) } }],
+        usage: { prompt_tokens: 30, completion_tokens: 40, total_tokens: 70 },
+      }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const candidates = await executeMasterAgentPlan({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      plan: {
+        summary: '先规划主线，再规划依赖主线假设的支线。',
+        tasks: [{
+          id: 'main-arc',
+          agentId: 'outline',
+          skillId: 'outline.story-arcs',
+          instruction: '生成一条主线故事线',
+          dependsOn: [],
+        }, {
+          id: 'sub-arc',
+          agentId: 'outline',
+          skillId: 'outline.story-arcs',
+          instruction: '生成一条支线故事线',
+          dependsOn: ['main-arc'],
+        }],
+      },
+      budget: new AgentTeamBudgetTracker('balanced'),
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(candidates[1].payload.creativeArtifact?.assumptions).toEqual([
+      expect.objectContaining({
+        text: '潮汐钟可以只抹除一段指定记忆',
+        status: 'provisional',
+      }),
+    ])
+    expect(candidates[1].payload.dependencyBindings).toEqual([{
+      taskId: 'main-arc',
+      outputHash: await hashCanonicalValue(candidates[0].draft),
+    }])
   })
 
   it('生成候选后保持零写入，作者确认眼前候选后才写入 storyArcs', async () => {
@@ -319,11 +389,19 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
 
   it('模型响应必须使用无额外字段的 storyArcs 对象信封，编辑草稿仍保持数组合同', () => {
     expect(parseStoryArcModelResponseV2(JSON.stringify({ storyArcs: [mainArc()] }))).toEqual([mainArc()])
+    expect(parseStoryArcModelResponseV2(JSON.stringify({
+      storyArcs: [mainArc()],
+      assumptions: ['潮汐钟可被改造成只抹除一段指定记忆'],
+    }))).toEqual([mainArc()])
     expect(parseStoryArcCandidateDraft(JSON.stringify([mainArc()]))).toEqual([mainArc()])
     expect(() => parseStoryArcModelResponseV2(JSON.stringify([mainArc()])))
       .toThrow('单个 JSON 对象')
     expect(() => parseStoryArcModelResponseV2(JSON.stringify({ storyArcs: [mainArc()], projectId: 7 })))
       .toThrow('不允许的字段')
+    expect(() => parseStoryArcModelResponseV2(JSON.stringify({
+      storyArcs: [mainArc()],
+      assumptions: [7],
+    }))).toThrow('非空短字符串')
     expect(parseStoryArcModelResponseV2(
       `\`\`\`json\n${JSON.stringify({ storyArcs: [mainArc()] })}\n\`\`\``,
     )).toEqual([mainArc()])
@@ -478,6 +556,57 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
     expect(result.artifact.validFragments).toHaveLength(1)
     expect(result.artifact.rejectedFragments).toHaveLength(1)
     expect(parseStoryArcCandidateDraft(result.draft)).toEqual([mainArc()])
+  })
+
+  it('同一次故事线生成携带临时假设，损坏的假设元数据不会拖垮合法产物', async () => {
+    const { project, scope } = await createWorkspace()
+    const runAI = vi.fn(async () => JSON.stringify({
+      storyArcs: [mainArc()],
+      assumptions: [
+        '潮汐钟可以被改造成只抹除一段指定记忆',
+        7,
+      ],
+    }))
+    const prepared = await prepareStoryArcCopilot({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      authorRequest: '生成一条主线故事线',
+      inheritedAssumptions: [{
+        version: 1,
+        id: 'upstream:1',
+        text: '守灯人此前见过潮汐钟的内部结构',
+        derivedFrom: ['candidate:outline-0'],
+        confidence: 'low',
+        conflictsWith: [],
+        status: 'provisional',
+      }],
+    }, { runAI })
+
+    const result = await runStoryArcCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker('balanced'),
+      qualityMode: 'balanced',
+    })
+
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(result.output).toEqual([mainArc()])
+    expect(result.artifact.status).toBe('usable-with-warnings')
+    expect(result.artifact.assumptions).toEqual([
+      expect.objectContaining({
+        text: '守灯人此前见过潮汐钟的内部结构',
+        status: 'provisional',
+      }),
+      expect.objectContaining({
+        text: '潮汐钟可以被改造成只抹除一段指定记忆',
+        status: 'provisional',
+        confidence: 'low',
+      }),
+    ])
+    expect(runAI.mock.calls[0][0].map((message: { content: string }) => message.content).join('\n'))
+      .toContain('守灯人此前见过潮汐钟的内部结构')
+    expect(result.artifact.issues.map(issue => issue.code)).toContain('story-arc-assumption-item-invalid')
+    expect(result.artifact.repair).toBeNull()
   })
 
   it('作者修订后只做本地重新校验，合法草稿恢复采纳资格且不增加模型调用', async () => {

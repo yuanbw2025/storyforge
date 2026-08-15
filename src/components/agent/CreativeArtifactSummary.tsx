@@ -1,4 +1,5 @@
 import type { CreativeArtifactV1 } from '../../lib/agent/creative-reliability'
+import type { NarrativeBriefV1 } from '../../lib/agent/narrative-brief'
 
 const STATUS_VIEW = {
   ready: {
@@ -25,13 +26,26 @@ const REPAIR_LABELS = {
   failed: '定向修复未成功，已停止自动调用',
 } as const
 
-export default function CreativeArtifactSummary({ artifact }: { artifact: CreativeArtifactV1 }) {
+export default function CreativeArtifactSummary({
+  artifact,
+  narrativeBrief,
+}: {
+  artifact: CreativeArtifactV1
+  narrativeBrief?: NarrativeBriefV1
+}) {
   const view = STATUS_VIEW[artifact.status]
   const totalTokens = artifact.callEvidence.reduce(
     (sum, call) => sum + (call.totalTokens ?? 0),
     0,
   )
   const tokenEvidenceComplete = artifact.callEvidence.every(call => call.totalTokens != null)
+  const totalLatencyMs = artifact.callEvidence.reduce((sum, call) => sum + (call.latencyMs ?? 0), 0)
+  const latencyEvidenceComplete = artifact.callEvidence.every(call => call.latencyMs != null)
+  const totalCostUsd = artifact.callEvidence.reduce(
+    (sum, call) => sum + (call.estimatedCostUsd ?? 0),
+    0,
+  )
+  const costEvidenceComplete = artifact.callEvidence.every(call => call.estimatedCostUsd != null)
 
   return (
     <section
@@ -45,6 +59,11 @@ export default function CreativeArtifactSummary({ artifact }: { artifact: Creati
           {tokenEvidenceComplete ? ` · ${totalTokens.toLocaleString()} tokens` : ' · token 用量不完整'}
         </span>
       </div>
+      <p className="mt-1">
+        {costEvidenceComplete ? `估算费用 $${totalCostUsd.toFixed(6)}` : '费用暂无法估算'}
+        {' · '}
+        {latencyEvidenceComplete ? `模型耗时 ${totalLatencyMs.toLocaleString()}ms` : '耗时证据不完整'}
+      </p>
       {artifact.repair && (
         <p className="mt-1">{REPAIR_LABELS[artifact.repair.result]}</p>
       )}
@@ -52,6 +71,28 @@ export default function CreativeArtifactSummary({ artifact }: { artifact: Creati
         <p className="mt-1">
           已保留 {artifact.validFragments.length} 个合法片段，拒绝 {artifact.rejectedFragments.length} 个损坏片段。
         </p>
+      )}
+      {narrativeBrief && (
+        <details className="mt-1.5">
+          <summary className="cursor-pointer">查看本轮故事推进目标</summary>
+          <div className="mt-1 space-y-0.5">
+            <p>目标：{narrativeBrief.creativeGoal}</p>
+            <p>要发生的变化：{narrativeBrief.exitChange}</p>
+            <p>下一步压力：{narrativeBrief.nextPressure}</p>
+          </div>
+        </details>
+      )}
+      {artifact.assumptions.length > 0 && (
+        <details className="mt-1.5">
+          <summary className="cursor-pointer">
+            查看 {artifact.assumptions.length} 项临时假设（采纳前不是正式设定）
+          </summary>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {artifact.assumptions.slice(0, 12).map(assumption => (
+              <li key={assumption.id}>{assumption.text}</li>
+            ))}
+          </ul>
+        </details>
       )}
       {artifact.issues.length > 0 && (
         <details className="mt-1.5">

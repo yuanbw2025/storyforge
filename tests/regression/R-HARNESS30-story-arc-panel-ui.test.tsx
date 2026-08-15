@@ -77,7 +77,15 @@ function creativeArtifact(status: 'ready' | 'manual-repair') {
       evidenceRefs: [],
       deterministic: true,
     }],
-    assumptions: [],
+    assumptions: [{
+      version: 1,
+      id: 'assumption:1',
+      text: '潮汐钟可以只抹除一段指定记忆',
+      derivedFrom: ['creativeGoal'],
+      confidence: 'low',
+      conflictsWith: [],
+      status: 'provisional',
+    }],
     canonEvidenceRefs: [],
     callEvidence: [{
       version: 1,
@@ -123,6 +131,21 @@ function candidate(status: 'ready' | 'manual-repair' = 'ready') {
       },
       baseSnapshot: {},
       creativeArtifact: creativeArtifact(status),
+      narrativeBrief: {
+        version: 1,
+        creativeGoal: '规划潮汐钟主线',
+        protagonistDesire: '进入钟塔',
+        obstacle: '守卫封锁入口',
+        stakes: '姐姐会失去最后一段记忆',
+        requiredChoice: '是否敲钟',
+        entryState: '主角抵达钟塔',
+        exitChange: '主角取得进入钟室的资格',
+        nextPressure: '守卫将在日出时封死钟室',
+        mustHonor: [],
+        mustNotReveal: [],
+        creativeFreedom: [],
+        assumptions: [],
+      },
     },
   }
 }
@@ -185,6 +208,8 @@ describe('R-HARNESS30 · 故事线面板统一进入主 Agent Harness', () => {
     expect(host.textContent).toContain('本次实际输入证据')
     expect(host.textContent).toContain('可直接采纳')
     expect(host.textContent).toContain('1 次模型调用 · 150 tokens')
+    expect(host.textContent).toContain('查看本轮故事推进目标')
+    expect(host.textContent).toContain('1 项临时假设（采纳前不是正式设定）')
     expect(host.textContent).toContain('还没有故事线')
 
     const editor = host.querySelector<HTMLTextAreaElement>(

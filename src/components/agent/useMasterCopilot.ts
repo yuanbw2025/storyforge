@@ -29,6 +29,8 @@ import { parseAgentEventPayload } from '../../lib/types'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { revalidateStoryArcCreativeDraftV1 } from '../../lib/agent/story-arc-copilot'
+import { revalidateOutlineCreativeDraftV1 } from '../../lib/agent/outline-copilot'
+import { revalidateProseCreativeDraftV1 } from '../../lib/agent/prose-copilot'
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message
@@ -428,16 +430,27 @@ export function useMasterCopilot(input: {
 
   const updateCandidate = useCallback(async (eventId: number, draft: string) => {
     const candidate = pendingCandidates.find(item => item.event.id === eventId)
-    const creativeArtifact = candidate?.payload.creativeArtifact
-      && candidate.payload.skillId === 'outline.story-arcs'
-      && candidate.payload.storyArcKind
-      ? revalidateStoryArcCreativeDraftV1({
+    let creativeArtifact = candidate?.payload.creativeArtifact
+    if (creativeArtifact && candidate?.payload.skillId === 'outline.story-arcs' && candidate.payload.storyArcKind) {
+      creativeArtifact = revalidateStoryArcCreativeDraftV1({
           draft,
           snapshot: candidate.payload.baseSnapshot as Parameters<typeof revalidateStoryArcCreativeDraftV1>[0]['snapshot'],
           kind: candidate.payload.storyArcKind,
-          previousArtifact: candidate.payload.creativeArtifact,
+          previousArtifact: creativeArtifact,
         })
-      : undefined
+    } else if (creativeArtifact && candidate?.payload.agentId === 'outline' && candidate.payload.outlineMode) {
+      creativeArtifact = revalidateOutlineCreativeDraftV1({
+        draft,
+        snapshot: candidate.payload.baseSnapshot as Parameters<typeof revalidateOutlineCreativeDraftV1>[0]['snapshot'],
+        previousArtifact: creativeArtifact,
+      })
+    } else if (creativeArtifact && candidate?.payload.agentId === 'prose' && candidate.payload.informationBoundary) {
+      creativeArtifact = revalidateProseCreativeDraftV1({
+        draft,
+        informationBoundary: candidate.payload.informationBoundary,
+        previousArtifact: creativeArtifact,
+      })
+    }
     const nextPayload = await updateAgentEventCandidate(
       eventId,
       project.id!,

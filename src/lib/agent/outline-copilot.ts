@@ -1,6 +1,6 @@
 import JSON5 from 'json5'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { chat, resolveRequestConfig } from '../ai/client'
+import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import {
   parseChapterOutlineOutput,
   parseVolumeOutlineOutput,
@@ -29,6 +29,7 @@ import {
 } from '../world-engine/scope'
 import type {
   AIConfig,
+  ChatMessage,
   OutlineNode,
   Project,
   WorkspaceScope,
@@ -52,6 +53,21 @@ import {
   type AgentSkillExecutionModeV1,
   type AgentSkillId,
 } from './skill-registry'
+import {
+  buildNarrativeBriefV1,
+  formatNarrativeBriefForPromptV1,
+  type NarrativeBriefV1,
+} from './narrative-brief'
+import {
+  createCreativeIssueV1,
+  runCreativeExecutionV1,
+  type CreativeExecutionResultV1,
+  type CreativeParseOutcomeV1,
+  type CreativeRawModelResultV1,
+} from './creative-execution'
+import type { CreativeAssumptionV1, CreativeQualityModeV1 } from './creative-reliability'
+import { parseCreativeArtifactV1, type CreativeArtifactV1 } from './creative-reliability'
+import type { AgentTeamBudgetTracker } from './team-budget'
 
 export const OUTLINE_COPILOT_SOURCE_KEYS = getDefaultAgentSkillV1('outline').contextSourceKeys
 
@@ -75,6 +91,7 @@ export interface OutlineCopilotInput {
   nodes: OutlineNode[]
   volumes: OutlineNode[]
   assembled: Awaited<ReturnType<typeof assembleContext>>
+  narrativeBrief: NarrativeBriefV1
   snapshot: OutlineCopilotSnapshot
   config: AIConfig
   parameterValues?: Record<string, unknown>
@@ -96,6 +113,9 @@ export interface PreparedOutlineCopilot {
   parentVolumeId: number | null
   label: string
   contextEvidence: AgentContextEvidence
+  input: OutlineCopilotInput
+  modelIdentity: { provider: string; model: string }
+  runRaw: (messages: ChatMessage[]) => Promise<CreativeRawModelResultV1>
 }
 
 interface OutlineCopilotDependencies {
@@ -302,7 +322,11 @@ function buildOutlineMessages(input: OutlineCopilotInput) {
     nodes: input.nodes,
     volumes: input.volumes,
     assembled: input.assembled,
-    hint: `${input.inputGuidance}\n\n${input.authorRequest}${supplemental}`,
+    hint: [
+      input.inputGuidance,
+      input.authorRequest + supplemental,
+      formatNarrativeBriefForPromptV1(input.narrativeBrief),
+    ].join('\n\n'),
     options: { parameterValues: input.parameterValues },
   })
   if (plan.status === 'skip') throw new Error(plan.reason)
@@ -375,8 +399,9 @@ export async function prepareOutlineCopilot(input: {
   configOverride?: AIConfig
   generationOverrides?: { temperature?: number; maxTokens?: number }
   contextCompressionRuntime?: AgentContextCompressionRuntimeV1
+  inheritedAssumptions?: readonly CreativeAssumptionV1[]
   signal?: AbortSignal
-}): Promise<PreparedOutlineCopilot> {
+}, dependencies: OutlineCopilotDependencies = {}): Promise<PreparedOutlineCopilot> {
   const project = await db.projects.get(input.projectId)
   if (!project) throw new Error('项目不存在。')
   if (project.enableMultiWorld && input.worldGroupId == null) {
@@ -439,6 +464,11 @@ export async function prepareOutlineCopilot(input: {
     inputState,
   )
   const inputGuidance = buildAgentSkillInputGuidanceV1(skill, inputState)
+  const narrativeBrief = buildNarrativeBriefV1({
+    authorRequest: request,
+    assembled,
+    inheritedAssumptions: input.inheritedAssumptions,
+  })
   const nodeInput: OutlineCopilotInput = {
     project,
     scope,
@@ -451,6 +481,7 @@ export async function prepareOutlineCopilot(input: {
     nodes: rowsInWorld(currentNodes, worldGroupId),
     volumes,
     assembled,
+    narrativeBrief,
     snapshot,
     config,
     parameterValues: input.parameterValues,
@@ -458,7 +489,32 @@ export async function prepareOutlineCopilot(input: {
     routingCategory,
     signal: input.signal,
   }
-  const node = createOutlineCopilotNode(nodeInput)
+  const runRaw = async (messages: ChatMessage[]): Promise<CreativeRawModelResultV1> => {
+    const startedAt = Date.now()
+    const result: ChatResult = {}
+    const output = dependencies.runAI
+      ? await dependencies.runAI(messages)
+      : await chat(messages, config, {
+          category: routingCategory,
+          projectId: input.projectId,
+          configOverrides: {
+            maxTokens: input.generationOverrides?.maxTokens ?? (mode === 'volumes' ? 8_000 : 12_000),
+            ...(input.generationOverrides?.temperature != null
+              ? { temperature: input.generationOverrides.temperature }
+              : {}),
+          },
+          contextOverflowPolicy: 'reject',
+        }, input.signal, result)
+    return {
+      output,
+      ...(result.usage ? { usage: result.usage } : {}),
+      durationMs: Math.max(0, Date.now() - startedAt),
+    }
+  }
+  const node = createOutlineCopilotNode(nodeInput, {
+    ...dependencies,
+    runAI: async messages => (await runRaw(messages)).output,
+  })
   return {
     node,
     prepared: prepareGenerationNode(node, nodeInput),
@@ -467,10 +523,207 @@ export async function prepareOutlineCopilot(input: {
     mode,
     parentVolumeId,
     contextEvidence,
+    input: nodeInput,
+    modelIdentity: { provider: config.provider, model: config.model },
+    runRaw,
     label: mode === 'volumes'
       ? '卷级大纲'
       : `《${targetVolume!.title}》章节大纲`,
   }
+}
+
+function parseOutlineCreativeOutcomeV1(
+  raw: string,
+  prepared: PreparedOutlineCopilot,
+): CreativeParseOutcomeV1<GeneratedOutlineItem[]> {
+  if (raw.length > MAX_CANDIDATE_CHARS) {
+    const issue = createCreativeIssueV1({
+      code: 'outline-response-too-large',
+      path: '$',
+      message: `大纲响应超过 ${MAX_CANDIDATE_CHARS} 字符，不能安全持久化。`,
+      disposition: 'blocking',
+      action: 'replan',
+    })
+    return {
+      status: 'blocked',
+      output: [],
+      editableText: raw.slice(0, MAX_CANDIDATE_CHARS),
+      validFragments: [],
+      rejectedFragments: [{
+        version: 1,
+        id: 'outline-response',
+        path: '$',
+        text: raw.slice(0, 40_000),
+        status: 'rejected',
+        issueCodes: [issue.code],
+      }],
+      issues: [issue],
+      assumptions: prepared.input.narrativeBrief.assumptions,
+    }
+  }
+  try {
+    const parsed = prepared.mode === 'volumes'
+      ? parseVolumeOutlineOutput(raw)
+      : parseChapterOutlineOutput(raw)
+    const output = parseOutlineCandidateDraft(JSON.stringify(parsed))
+    const gateIssues = candidateIssues(output, prepared.snapshot)
+    const issues = gateIssues.map(item => createCreativeIssueV1({
+      code: item.code,
+      path: '$',
+      message: item.message,
+      disposition: 'blocking',
+      action: 'repair-once',
+    }))
+    return {
+      status: issues.length ? 'blocked' : 'ready',
+      output,
+      editableText: JSON.stringify(output, null, 2),
+      validFragments: output.map((item, index) => ({
+        version: 1,
+        id: `outline:${index}`,
+        path: `$[${index}]`,
+        text: JSON.stringify(item, null, 2),
+        status: 'valid',
+        issueCodes: [],
+      })),
+      rejectedFragments: [],
+      issues,
+      assumptions: prepared.input.narrativeBrief.assumptions,
+    }
+  } catch (error) {
+    const issue = createCreativeIssueV1({
+      code: 'outline-response-invalid',
+      path: '$',
+      message: error instanceof Error ? error.message : '大纲响应结构无效。',
+    })
+    return {
+      status: 'manual-repair',
+      output: [],
+      editableText: raw.trim(),
+      validFragments: [],
+      rejectedFragments: [{
+        version: 1,
+        id: 'outline-response',
+        path: '$',
+        text: raw.slice(0, 40_000),
+        status: 'rejected',
+        issueCodes: [issue.code],
+      }],
+      issues: [issue],
+      assumptions: prepared.input.narrativeBrief.assumptions,
+    }
+  }
+}
+
+function buildOutlineRepairMessagesV1(
+  raw: string,
+  issues: readonly import('./creative-reliability').CreativeArtifactIssueV1[],
+  mode: OutlineCopilotMode,
+): ChatMessage[] {
+  return [{
+    role: 'system',
+    content: [
+      '你是大纲 JSON 结构修复器，只修列出的确定性问题，不重新设计情节。',
+      '保留原有标题、摘要、顺序、因果和事实；不得引入新人物、新设定或新剧情。',
+      mode === 'volumes'
+        ? '返回卷纲 JSON 数组，每项只保留 title 和 summary。'
+        : '返回章纲 JSON 数组，每项只保留 title 和 summary。',
+      '只输出 JSON，不要解释，不要 Markdown。',
+    ].join('\n'),
+  }, {
+    role: 'user',
+    content: [
+      '【只允许修复的问题】',
+      JSON.stringify(issues.map(issue => ({ code: issue.code, path: issue.path }))),
+      '【上一次原始输出】',
+      raw,
+    ].join('\n'),
+  }]
+}
+
+export async function runOutlineCreativeReliabilityV1(input: {
+  prepared: PreparedOutlineCopilot
+  budget: AgentTeamBudgetTracker
+  qualityMode: CreativeQualityModeV1
+  validate?: (output: GeneratedOutlineItem[]) => Promise<GenerationGateIssue[]> | GenerationGateIssue[]
+}): Promise<CreativeExecutionResultV1<GeneratedOutlineItem[]>> {
+  return runCreativeExecutionV1({
+    initialMessages: input.prepared.prepared.messages,
+    runRaw: input.prepared.runRaw,
+    parse: raw => parseOutlineCreativeOutcomeV1(raw, input.prepared),
+    buildRepairMessages: (raw, issues) => buildOutlineRepairMessagesV1(
+      raw,
+      issues,
+      input.prepared.mode,
+    ),
+    validate: input.validate,
+    budget: input.budget,
+    callLabel: '大纲领域 Agent',
+    maxOutputTokens: input.prepared.input.generationOverrides?.maxTokens
+      ?? (input.prepared.mode === 'volumes' ? 8_000 : 12_000),
+    qualityMode: input.qualityMode,
+    modelIdentity: input.prepared.modelIdentity,
+    canonEvidenceRefs: input.prepared.contextEvidence.sourceEvidence
+      ?.filter(item => item.status === 'included' && item.sourceHash)
+      .map(item => `${item.key}:${item.sourceHash}`),
+  })
+}
+
+export function revalidateOutlineCreativeDraftV1(input: {
+  draft: string
+  snapshot: OutlineCopilotSnapshot
+  previousArtifact: CreativeArtifactV1
+}): CreativeArtifactV1 {
+  let status: CreativeArtifactV1['status'] = 'ready'
+  let validFragments: CreativeArtifactV1['validFragments'] = []
+  let rejectedFragments: CreativeArtifactV1['rejectedFragments'] = []
+  let issues: CreativeArtifactV1['issues'] = []
+  try {
+    const output = parseOutlineCandidateDraft(input.draft)
+    const gateIssues = candidateIssues(output, input.snapshot)
+    validFragments = output.map((item, index) => ({
+      version: 1,
+      id: `outline:${index}`,
+      path: `$[${index}]`,
+      text: JSON.stringify(item, null, 2),
+      status: 'valid',
+      issueCodes: [],
+    }))
+    if (gateIssues.length) {
+      status = 'blocked'
+      issues = gateIssues.map(item => createCreativeIssueV1({
+        code: item.code,
+        path: '$',
+        message: item.message,
+        disposition: 'blocking',
+        action: 'edit',
+      }))
+    }
+  } catch (error) {
+    status = 'manual-repair'
+    issues = [createCreativeIssueV1({
+      code: 'outline-author-draft-invalid',
+      path: '$',
+      message: error instanceof Error ? error.message : '作者修订的大纲结构无效。',
+      action: 'edit',
+    })]
+    rejectedFragments = [{
+      version: 1,
+      id: 'outline-author-draft',
+      path: '$',
+      text: input.draft.slice(0, 40_000),
+      status: 'rejected',
+      issueCodes: issues.map(issue => issue.code),
+    }]
+  }
+  return parseCreativeArtifactV1({
+    ...input.previousArtifact,
+    status,
+    editableText: input.draft.slice(0, MAX_CANDIDATE_CHARS),
+    validFragments,
+    rejectedFragments,
+    issues,
+  })
 }
 
 export function createOutlineCopilotNode(

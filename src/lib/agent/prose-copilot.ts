@@ -1,6 +1,6 @@
 import { useAIConfigStore } from '../../stores/ai-config'
 import { buildChapterContentPrompt, buildContinuePrompt } from '../ai/adapters/chapter-adapter'
-import { chat, resolveRequestConfig } from '../ai/client'
+import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import { db } from '../db/schema'
 import type {
@@ -13,7 +13,7 @@ import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outlin
 import { adopt } from '../registry/adopt'
 import { assembleContext } from '../registry/assemble-context'
 import { rebuildChapterChunks } from '../retrieval/retrieval'
-import type { AIConfig, Chapter, OutlineNode, Project, WorkspaceScope } from '../types'
+import type { AIConfig, Chapter, ChatMessage, OutlineNode, Project, WorkspaceScope } from '../types'
 import { countWords, htmlToPlainText, plainTextToHtml } from '../utils/html'
 import {
   assertRecordInScope,
@@ -47,6 +47,26 @@ import {
   type AgentSkillExecutionModeV1,
   type AgentSkillId,
 } from './skill-registry'
+import {
+  buildNarrativeBriefV1,
+  formatNarrativeBriefForPromptV1,
+  type NarrativeBriefV1,
+} from './narrative-brief'
+import {
+  createCreativeIssueV1,
+  runCreativeExecutionV1,
+  type CreativeExecutionResultV1,
+  type CreativeParseOutcomeV1,
+  type CreativeRawModelResultV1,
+} from './creative-execution'
+import {
+  parseCreativeArtifactV1,
+  type CreativeAssumptionV1,
+  type CreativeArtifactIssueV1,
+  type CreativeArtifactV1,
+  type CreativeQualityModeV1,
+} from './creative-reliability'
+import type { AgentTeamBudgetTracker } from './team-budget'
 
 export const PROSE_COPILOT_SOURCE_KEYS = resolveAgentSkillContextSourceKeysV1(
   getDefaultAgentSkillV1('prose'),
@@ -83,6 +103,7 @@ export interface ProseCopilotInput {
   chapter: Chapter | null
   snapshot: ProseCopilotSnapshot
   assembled: Awaited<ReturnType<typeof assembleContext>>
+  narrativeBrief: NarrativeBriefV1
   previousTail: string
   config: AIConfig
   /** 显式叙事视角。不得让模型从正文或角色列表自行猜测。 */
@@ -106,6 +127,9 @@ export interface PreparedProseCopilot {
   contextEvidence: AgentContextEvidence
   perspectiveCharacterId?: number | null
   informationBoundary: InformationBoundaryManifestV1
+  input: ProseCopilotInput
+  modelIdentity: { provider: string; model: string }
+  runRaw: (messages: ChatMessage[]) => Promise<CreativeRawModelResultV1>
 }
 
 interface ProseCopilotDependencies {
@@ -327,7 +351,11 @@ function buildProseMessages(input: ProseCopilotInput) {
   const wordCountHint = Number.isFinite(targetWordCount) && targetWordCount > 0
     ? `\n\n【节点字数目标】正文候选尽量接近 ${Math.floor(targetWordCount)} 字。`
     : ''
-  const hint = `${input.inputGuidance}\n\n${input.authorRequest}${wordCountHint}${supplemental}`
+  const hint = [
+    input.inputGuidance,
+    input.authorRequest + wordCountHint + supplemental,
+    formatNarrativeBriefForPromptV1(input.narrativeBrief),
+  ].join('\n\n')
   if (input.operation === 'continue') {
     const context = characters ? `${world}\n\n${characters}` : world
     return buildContinuePrompt(
@@ -492,8 +520,9 @@ export async function prepareProseCopilot(input: {
   perspectiveCharacterId?: number | null
   generationOverrides?: { temperature?: number; maxTokens?: number }
   contextCompressionRuntime?: AgentContextCompressionRuntimeV1
+  inheritedAssumptions?: readonly CreativeAssumptionV1[]
   signal?: AbortSignal
-}): Promise<PreparedProseCopilot> {
+}, dependencies: ProseCopilotDependencies = {}): Promise<PreparedProseCopilot> {
   const project = await db.projects.get(input.projectId)
   if (!project) throw new Error('项目不存在。')
   if (project.enableMultiWorld && input.worldGroupId == null) {
@@ -592,6 +621,11 @@ export async function prepareProseCopilot(input: {
     inputState,
   )
   const inputGuidance = buildAgentSkillInputGuidanceV1(skill, inputState)
+  const narrativeBrief = buildNarrativeBriefV1({
+    authorRequest: request,
+    assembled,
+    inheritedAssumptions: input.inheritedAssumptions,
+  })
   const nodeInput: ProseCopilotInput = {
     project,
     scope,
@@ -604,6 +638,7 @@ export async function prepareProseCopilot(input: {
     chapter: target.chapter,
     snapshot,
     assembled,
+    narrativeBrief,
     previousTail,
     config,
     parameterValues: input.parameterValues,
@@ -614,7 +649,32 @@ export async function prepareProseCopilot(input: {
     routingCategory,
     signal: input.signal,
   }
-  const node = createProseCopilotNode(nodeInput)
+  const runRaw = async (messages: ChatMessage[]): Promise<CreativeRawModelResultV1> => {
+    const startedAt = Date.now()
+    const result: ChatResult = {}
+    const output = dependencies.runAI
+      ? await dependencies.runAI(messages)
+      : await chat(messages, config, {
+          category: routingCategory,
+          projectId: input.projectId,
+          configOverrides: {
+            maxTokens: input.generationOverrides?.maxTokens ?? 16_000,
+            ...(input.generationOverrides?.temperature != null
+              ? { temperature: input.generationOverrides.temperature }
+              : {}),
+          },
+          contextOverflowPolicy: 'reject',
+        }, input.signal, result)
+    return {
+      output,
+      ...(result.usage ? { usage: result.usage } : {}),
+      durationMs: Math.max(0, Date.now() - startedAt),
+    }
+  }
+  const node = createProseCopilotNode(nodeInput, {
+    ...dependencies,
+    runAI: async messages => (await runRaw(messages)).output,
+  })
   return {
     node,
     prepared: prepareGenerationNode(node, nodeInput),
@@ -625,10 +685,223 @@ export async function prepareProseCopilot(input: {
     contextEvidence,
     perspectiveCharacterId,
     informationBoundary,
+    input: nodeInput,
+    modelIdentity: { provider: config.provider, model: config.model },
+    runRaw,
     label: operation === 'continue'
       ? `续写《${target.outline.title}》`
       : `《${target.outline.title}》正文`,
   }
+}
+
+const PROSE_MOTION_SIGNAL = /决定|选择|拒绝|答应|追|逃|进入|离开|推开|抓住|放下|寻找|阻止|发现|失去|得到|改变|打断|转身|冲向|退后|开口|回答/
+
+function parseProseCreativeOutcomeV1(
+  raw: string,
+  prepared: PreparedProseCopilot,
+): CreativeParseOutcomeV1<string> {
+  if (raw.length > MAX_PROSE_CHARS) {
+    const issue = createCreativeIssueV1({
+      code: 'prose-response-too-large',
+      path: '$',
+      message: `正文响应超过 ${MAX_PROSE_CHARS} 字符，不能安全持久化。`,
+      disposition: 'blocking',
+      action: 'replan',
+    })
+    return {
+      status: 'blocked',
+      output: raw.slice(0, MAX_PROSE_CHARS),
+      editableText: raw.slice(0, MAX_PROSE_CHARS),
+      validFragments: [],
+      rejectedFragments: [{
+        version: 1,
+        id: 'prose-response',
+        path: '$',
+        text: raw.slice(0, 40_000),
+        status: 'rejected',
+        issueCodes: [issue.code],
+      }],
+      issues: [issue],
+      assumptions: prepared.input.narrativeBrief.assumptions,
+    }
+  }
+  try {
+    const output = parseProseCandidateDraft(raw)
+    const gateIssues = candidateIssues(output, prepared.informationBoundary)
+    const issues = gateIssues.map(item => createCreativeIssueV1({
+      code: item.code,
+      path: '$',
+      message: item.message,
+      disposition: 'blocking',
+      action: 'repair-once',
+    }))
+    if (!PROSE_MOTION_SIGNAL.test(output)) {
+      issues.push(createCreativeIssueV1({
+        code: 'prose-narrative-motion-weak',
+        path: '$',
+        message: '没有识别到明确的行动、选择或状态变化信号；正文仍可用，但建议作者检查是否真正推进了故事。',
+        severity: 'warning',
+        disposition: 'advisory',
+        action: 'none',
+        deterministic: false,
+      }))
+    }
+    const hasBlocking = issues.some(issue => issue.disposition === 'blocking')
+    return {
+      status: hasBlocking ? 'blocked' : issues.length ? 'usable-with-warnings' : 'ready',
+      output,
+      editableText: output,
+      validFragments: [{
+        version: 1,
+        id: 'prose:body',
+        path: '$',
+        text: output.slice(0, 40_000),
+        status: 'valid',
+        issueCodes: [],
+      }],
+      rejectedFragments: [],
+      issues,
+      assumptions: prepared.input.narrativeBrief.assumptions,
+    }
+  } catch (error) {
+    const issue = createCreativeIssueV1({
+      code: 'prose-response-invalid',
+      path: '$',
+      message: error instanceof Error ? error.message : '正文响应无效。',
+    })
+    return {
+      status: 'manual-repair',
+      output: raw.trim(),
+      editableText: raw.trim(),
+      validFragments: [],
+      rejectedFragments: [{
+        version: 1,
+        id: 'prose-response',
+        path: '$',
+        text: raw.slice(0, 40_000),
+        status: 'rejected',
+        issueCodes: [issue.code],
+      }],
+      issues: [issue],
+      assumptions: prepared.input.narrativeBrief.assumptions,
+    }
+  }
+}
+
+function buildProseRepairMessagesV1(
+  raw: string,
+  issues: readonly CreativeArtifactIssueV1[],
+): ChatMessage[] {
+  return [{
+    role: 'system',
+    content: [
+      '你是正文局部问题修复器，只修列出的确定性问题。',
+      '保留原文中所有未被点名的情节、段落顺序、人物行为、语气和事实，不整体重写。',
+      '不得引入新人物、新设定、新因果或提前泄露角色未知信息。',
+      '返回修复后的完整正文，不要解释，不要 Markdown 围栏。',
+    ].join('\n'),
+  }, {
+    role: 'user',
+    content: [
+      '【只允许修复的问题】',
+      JSON.stringify(issues.map(issue => ({ code: issue.code, path: issue.path }))),
+      '【上一次原始正文】',
+      raw,
+    ].join('\n'),
+  }]
+}
+
+export async function runProseCreativeReliabilityV1(input: {
+  prepared: PreparedProseCopilot
+  budget: AgentTeamBudgetTracker
+  qualityMode: CreativeQualityModeV1
+  validate?: (output: string) => Promise<GenerationGateIssue[]> | GenerationGateIssue[]
+}): Promise<CreativeExecutionResultV1<string>> {
+  return runCreativeExecutionV1({
+    initialMessages: input.prepared.prepared.messages,
+    runRaw: input.prepared.runRaw,
+    parse: raw => parseProseCreativeOutcomeV1(raw, input.prepared),
+    buildRepairMessages: buildProseRepairMessagesV1,
+    validate: input.validate,
+    budget: input.budget,
+    callLabel: '正文领域 Agent',
+    maxOutputTokens: input.prepared.input.generationOverrides?.maxTokens ?? 16_000,
+    qualityMode: input.qualityMode,
+    modelIdentity: input.prepared.modelIdentity,
+    canonEvidenceRefs: input.prepared.contextEvidence.sourceEvidence
+      ?.filter(item => item.status === 'included' && item.sourceHash)
+      .map(item => `${item.key}:${item.sourceHash}`),
+  })
+}
+
+export function revalidateProseCreativeDraftV1(input: {
+  draft: string
+  informationBoundary: InformationBoundaryManifestV1
+  previousArtifact: CreativeArtifactV1
+}): CreativeArtifactV1 {
+  let status: CreativeArtifactV1['status'] = 'ready'
+  let validFragments: CreativeArtifactV1['validFragments'] = []
+  let rejectedFragments: CreativeArtifactV1['rejectedFragments'] = []
+  let issues: CreativeArtifactV1['issues'] = []
+  try {
+    const output = parseProseCandidateDraft(input.draft)
+    const gateIssues = candidateIssues(output, input.informationBoundary)
+    issues = gateIssues.map(item => createCreativeIssueV1({
+      code: item.code,
+      path: '$',
+      message: item.message,
+      disposition: 'blocking',
+      action: 'edit',
+    }))
+    if (!PROSE_MOTION_SIGNAL.test(output)) {
+      issues.push(createCreativeIssueV1({
+        code: 'prose-narrative-motion-weak',
+        path: '$',
+        message: '没有识别到明确的行动、选择或状态变化信号；正文仍可用，但建议作者检查是否真正推进了故事。',
+        severity: 'warning',
+        disposition: 'advisory',
+        action: 'none',
+        deterministic: false,
+      }))
+    }
+    status = issues.some(issue => issue.disposition === 'blocking')
+      ? 'blocked'
+      : issues.length
+        ? 'usable-with-warnings'
+        : 'ready'
+    validFragments = [{
+      version: 1,
+      id: 'prose:body',
+      path: '$',
+      text: output.slice(0, 40_000),
+      status: 'valid',
+      issueCodes: [],
+    }]
+  } catch (error) {
+    status = 'manual-repair'
+    issues = [createCreativeIssueV1({
+      code: 'prose-author-draft-invalid',
+      path: '$',
+      message: error instanceof Error ? error.message : '作者修订的正文无效。',
+      action: 'edit',
+    })]
+    rejectedFragments = [{
+      version: 1,
+      id: 'prose-author-draft',
+      path: '$',
+      text: input.draft.slice(0, 40_000),
+      status: 'rejected',
+      issueCodes: issues.map(issue => issue.code),
+    }]
+  }
+  return parseCreativeArtifactV1({
+    ...input.previousArtifact,
+    status,
+    editableText: input.draft.slice(0, MAX_PROSE_CHARS),
+    validFragments,
+    rejectedFragments,
+    issues,
+  })
 }
 
 export function createProseCopilotNode(

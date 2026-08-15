@@ -190,7 +190,10 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
             className="min-h-72 w-full resize-y font-mono text-xs leading-5"
           />
           {candidate.payload.creativeArtifact && (
-            <CreativeArtifactSummary artifact={candidate.payload.creativeArtifact} />
+            <CreativeArtifactSummary
+              artifact={candidate.payload.creativeArtifact}
+              narrativeBrief={candidate.payload.narrativeBrief}
+            />
           )}
           {candidate.payload.contextEvidence && (
             <details className="mt-2 border border-border/60 bg-bg-base px-3 py-2 text-[11px] text-text-muted rounded">
@@ -228,7 +231,9 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
               {copilot.busy
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <Check className="h-3.5 w-3.5" />}
-              采纳
+              {candidate.payload.creativeArtifact?.status === 'usable-with-warnings'
+                ? '接受提示并采纳'
+                : '采纳'}
             </button>
           </div>
         </section>

@@ -218,7 +218,10 @@ export default function ChatCopilotPanel({
               这是领域 Agent 的真实输出。刷新后仍会保留；只有采纳才会进入项目正式数据。
             </p>
             {candidate.payload.creativeArtifact && (
-              <CreativeArtifactSummary artifact={candidate.payload.creativeArtifact} />
+              <CreativeArtifactSummary
+                artifact={candidate.payload.creativeArtifact}
+                narrativeBrief={candidate.payload.narrativeBrief}
+              />
             )}
             {candidate.payload.contextEvidence && (
               <details className="mt-2 rounded border border-border/60 bg-bg-surface px-2 py-1.5 text-[10px] text-text-muted">
@@ -276,7 +279,9 @@ export default function ChatCopilotPanel({
                 {copilot.busy
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <Check className="h-3.5 w-3.5" />}
-                采纳
+                {candidate.payload.creativeArtifact?.status === 'usable-with-warnings'
+                  ? '接受提示并采纳'
+                  : '采纳'}
               </button>
             </div>
           </section>

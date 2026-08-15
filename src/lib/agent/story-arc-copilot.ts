@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
+import { computeCostUsd } from '../ai/usage-log'
 import { supportsVerifiedJsonObjectResponseV1 } from '../ai/provider-capabilities'
 import { db } from '../db/schema'
 import type {
@@ -42,12 +43,19 @@ import {
   parseCreativeArtifactV1,
   resolveCreativeQualityPolicyV1,
   type CreativeArtifactFragmentV1,
+  type CreativeAssumptionV1,
   type CreativeArtifactIssueV1,
   type CreativeArtifactV1,
   type CreativeCallEvidenceV1,
   type CreativeQualityModeV1,
 } from './creative-reliability'
 import { normalizeCreativeJsonEnvelopeV1 } from './creative-json-normalizer'
+import {
+  buildNarrativeBriefV1,
+  formatNarrativeBriefForPromptV1,
+  mergeProvisionalAssumptionsV1,
+  type NarrativeBriefV1,
+} from './narrative-brief'
 import { hashCanonicalValue } from './run/hash'
 import type { AgentTeamBudgetTracker } from './team-budget'
 
@@ -83,6 +91,7 @@ export interface StoryArcCopilotInput {
   inputGuidance: string
   kind: StoryArcRequestKind
   assembled: Awaited<ReturnType<typeof assembleContext>>
+  narrativeBrief: NarrativeBriefV1
   snapshot: StoryArcCopilotSnapshot
   config: AIConfig
   routingCategory: string
@@ -339,10 +348,11 @@ export function parseStoryArcModelResponseV2(raw: string): StoryArcCopilotCandid
   const normalized = normalizeCreativeJsonEnvelopeV1(raw)
   if (!normalized.value) throw new Error(normalized.issues[0]?.message ?? '故事线模型响应无效。')
   const source = normalized.value
-  assertExactKeys(source, ['storyArcs'], [], '故事线模型响应')
+  assertExactKeys(source, ['storyArcs'], ['assumptions'], '故事线模型响应')
   if (!Array.isArray(source.storyArcs)) {
     throw new Error('故事线模型响应.storyArcs 必须是 JSON 数组。')
   }
+  if (source.assumptions !== undefined) parseStoryArcAssumptionTextsV1(source.assumptions, true)
   return parseStoryArcCandidateDraft(JSON.stringify(source.storyArcs))
 }
 
@@ -391,6 +401,57 @@ interface StoryArcCreativeParseOutcomeV1 {
   validFragments: CreativeArtifactFragmentV1[]
   rejectedFragments: CreativeArtifactFragmentV1[]
   issues: CreativeArtifactIssueV1[]
+  assumptions: CreativeAssumptionV1[]
+}
+
+function parseStoryArcAssumptionTextsV1(
+  value: unknown,
+  strict: boolean,
+): { assumptions: CreativeAssumptionV1[]; issues: CreativeArtifactIssueV1[] } {
+  if (value === undefined) return { assumptions: [], issues: [] }
+  if (!Array.isArray(value) || value.length > 7) {
+    if (strict) throw new Error('故事线模型响应.assumptions 必须是最多 7 项的字符串数组。')
+    return {
+      assumptions: [],
+      issues: [creativeIssue({
+        code: 'story-arc-assumptions-invalid',
+        path: '$.assumptions',
+        message: 'assumptions 必须是最多 7 项的字符串数组；已忽略损坏的假设元数据。',
+        severity: 'warning',
+        disposition: 'advisory',
+        action: 'remove',
+      })],
+    }
+  }
+  const assumptions: CreativeAssumptionV1[] = []
+  const issues: CreativeArtifactIssueV1[] = []
+  const seen = new Set<string>()
+  value.forEach((item, index) => {
+    const text = typeof item === 'string' ? item.trim() : ''
+    if (!text || text.length > 500 || seen.has(text)) {
+      if (strict) throw new Error(`故事线模型响应.assumptions[${index}] 必须是唯一的非空短字符串。`)
+      issues.push(creativeIssue({
+        code: 'story-arc-assumption-item-invalid',
+        path: `$.assumptions[${index}]`,
+        message: `第 ${index + 1} 项临时假设无效，已忽略；合法故事线仍保留。`,
+        severity: 'warning',
+        disposition: 'advisory',
+        action: 'remove',
+      }))
+      return
+    }
+    seen.add(text)
+    assumptions.push({
+      version: 1,
+      id: `story-arc-assumption:${index + 1}`,
+      text,
+      derivedFrom: ['narrativeBrief:creativeFreedom'],
+      confidence: 'low',
+      conflictsWith: [],
+      status: 'provisional',
+    })
+  })
+  return { assumptions, issues }
 }
 
 function creativeIssue(input: {
@@ -433,6 +494,7 @@ function storyArcCreativeParseOutcomeV1(
       validFragments: [],
       rejectedFragments: [],
       issues: [empty],
+      assumptions: [],
     }
   }
   if (raw.length > MAX_CANDIDATE_CHARS) {
@@ -450,6 +512,7 @@ function storyArcCreativeParseOutcomeV1(
       validFragments: [],
       rejectedFragments: [],
       issues: [tooLarge],
+      assumptions: [],
     }
   }
   const envelope = normalizeCreativeJsonEnvelopeV1(raw)
@@ -468,15 +531,16 @@ function storyArcCreativeParseOutcomeV1(
         issueCodes: envelope.issues.map(issue => issue.code),
       }],
       issues: envelope.issues,
+      assumptions: [],
     }
   }
 
   const rootKeys = Object.keys(envelope.value)
-  if (rootKeys.length !== 1 || rootKeys[0] !== 'storyArcs') {
+  if (!rootKeys.includes('storyArcs') || rootKeys.some(key => key !== 'storyArcs' && key !== 'assumptions')) {
     const rootIssue = creativeIssue({
       code: 'story-arc-root-fields-invalid',
       path: '$',
-      message: '故事线响应顶层只能包含 storyArcs。',
+      message: '故事线响应顶层必须包含 storyArcs，且只能额外包含 assumptions。',
     })
     return {
       status: 'manual-repair',
@@ -492,6 +556,7 @@ function storyArcCreativeParseOutcomeV1(
         issueCodes: [rootIssue.code],
       }],
       issues: [rootIssue],
+      assumptions: [],
     }
   }
   if (!Array.isArray(envelope.value.storyArcs)) {
@@ -514,6 +579,7 @@ function storyArcCreativeParseOutcomeV1(
         issueCodes: [arrayIssue.code],
       }],
       issues: [arrayIssue],
+      assumptions: [],
     }
   }
 
@@ -521,6 +587,8 @@ function storyArcCreativeParseOutcomeV1(
   const validFragments: CreativeArtifactFragmentV1[] = []
   const rejectedFragments: CreativeArtifactFragmentV1[] = []
   const issues: CreativeArtifactIssueV1[] = []
+  const assumptionResult = parseStoryArcAssumptionTextsV1(envelope.value.assumptions, false)
+  issues.push(...assumptionResult.issues)
   envelope.value.storyArcs.forEach((value, index) => {
     try {
       const candidate = parseStoryArcCandidateDraft(JSON.stringify([value]))[0]
@@ -570,6 +638,7 @@ function storyArcCreativeParseOutcomeV1(
     validFragments,
     rejectedFragments,
     issues,
+    assumptions: assumptionResult.assumptions,
   }
 }
 
@@ -673,7 +742,7 @@ function buildStoryArcRepairMessagesV1(input: {
       '你是结构修复器，只修下面列出的确定性问题，不重新创作故事。',
       '保留原输出中全部合法名称、描述、事件顺序和事实，不引入新人物、新设定或新因果。',
       kindRule,
-      '只返回严格 JSON 对象，顶层只能有 storyArcs。',
+      '只返回严格 JSON 对象，顶层必须有 storyArcs，可保留合法的 assumptions 字符串数组。',
       '每项严格为 name/type/description/stages；每个阶段必须有 title/description/keyEvents，',
       'turningPoint/startVolume/endVolume 没有明确内容时直接省略，禁止 null 或占位值。',
       '不要解释，不要 Markdown。',
@@ -704,6 +773,8 @@ function storyArcCallEvidenceV1(input: {
     const estimatedInput = input.messages.reduce((sum, message) => sum + estimateTokens(message.content), 0)
     const estimatedOutput = input.result ? estimateTokens(input.result.output) : null
     const usage = input.result?.usage
+    const inputTokens = usage?.inputTokens ?? (input.result ? estimatedInput : null)
+    const outputTokens = usage?.outputTokens ?? estimatedOutput
     return {
       version: 1,
       callIndex: input.callIndex,
@@ -712,13 +783,15 @@ function storyArcCallEvidenceV1(input: {
       provider: input.modelIdentity.provider,
       model: input.modelIdentity.model,
       usageSource: usage ? 'provider' : input.result ? 'estimated' : 'unknown',
-      inputTokens: usage?.inputTokens ?? (input.result ? estimatedInput : null),
-      outputTokens: usage?.outputTokens ?? estimatedOutput,
+      inputTokens,
+      outputTokens,
       totalTokens: usage?.totalTokens ?? (
         estimatedOutput === null ? null : estimatedInput + estimatedOutput
       ),
       latencyMs: input.result?.durationMs ?? null,
-      estimatedCostUsd: null,
+      estimatedCostUsd: inputTokens == null || outputTokens == null
+        ? null
+        : computeCostUsd(input.modelIdentity.model, inputTokens, outputTokens),
       outputHash: input.result ? await hashCanonicalValue(input.result.output) : null,
     }
   })()
@@ -778,10 +851,11 @@ export async function runStoryArcCreativeReliabilityV1(input: {
   const repairable = outcome.issues.some(issue => issue.suggestedAction === 'repair-once')
   let repair: CreativeArtifactV1['repair'] = null
   if (policy.allowAutomaticRepair && repairable) {
-    const repairTargetIssueCodes = [...new Set(outcome.issues.map(issue => issue.code))]
+    const repairIssues = outcome.issues.filter(issue => issue.suggestedAction === 'repair-once')
+    const repairTargetIssueCodes = [...new Set(repairIssues.map(issue => issue.code))]
     const repairMessages = buildStoryArcRepairMessagesV1({
       raw: first.output,
-      issues: outcome.issues,
+      issues: repairIssues,
       kind: input.prepared.kind,
     })
     const reservation = input.budget.reserveCall({
@@ -828,16 +902,16 @@ export async function runStoryArcCreativeReliabilityV1(input: {
         modelIdentity: input.prepared.modelIdentity,
         failed: true,
       }))
-      if (outcome.status !== 'blocked') {
-        outcome.status = 'manual-repair'
-        outcome.issues.push(creativeIssue({
-          code: 'story-arc-repair-provider-failed',
-          path: '$',
-          message: '唯一一次定向修复调用失败；已停止自动调用并保留首次产物。',
-          action: 'edit',
-          deterministic: false,
-        }))
-      }
+      const wasBlocked = outcome.status === 'blocked'
+      if (!wasBlocked) outcome.status = 'manual-repair'
+      outcome.issues.push(creativeIssue({
+        code: 'story-arc-repair-provider-failed',
+        path: '$',
+        message: '唯一一次定向修复调用失败；已停止自动调用并保留首次产物。',
+        disposition: wasBlocked ? 'blocking' : 'repairable',
+        action: 'edit',
+        deterministic: false,
+      }))
     }
     repair = {
       version: 1,
@@ -864,7 +938,10 @@ export async function runStoryArcCreativeReliabilityV1(input: {
     validFragments: outcome.validFragments,
     rejectedFragments: outcome.rejectedFragments,
     issues: outcome.issues,
-    assumptions: [],
+    assumptions: mergeProvisionalAssumptionsV1(
+      input.prepared.input.narrativeBrief.assumptions,
+      outcome.assumptions,
+    ),
     canonEvidenceRefs: [],
     callEvidence: calls,
     repair,
@@ -897,14 +974,16 @@ function buildStoryArcMessages(input: StoryArcCopilotInput): ChatMessage[] {
 3. 每条故事线顶层只能有 name/type/description/stages 四个字段。turningPoint、startVolume、endVolume 只能放在 stages 数组内的阶段对象上，绝不能放在故事线顶层；只有确有卷级依据时才同时填写 startVolume/endVolume，均为从 1 开始的整数。
 4. 已有设定是硬约束；不得改变既定时限、能力、代价、因果或实体身份，也不得为未命名人物擅自命名。设定缺失时只做不与现有事实冲突的候选补全，不声称它已经成为 Canon。
 5. 避免复制已有故事线；支线必须有独立目标，也要说明与主线的因果交汇。
-6. 只输出一个严格 JSON 对象，不输出 Markdown、解释或额外字段。顶层只能有 storyArcs；最小结构严格使用：
+6. 只输出一个严格 JSON 对象，不输出 Markdown、解释或额外字段。顶层必须有 storyArcs，可选 assumptions；最小结构严格使用：
 {"storyArcs":[{"name":"名称","type":"main|sub","description":"整体描述","stages":[{"title":"阶段标题","description":"阶段描述","keyEvents":["事件"]}]}]}
-7. 阶段对象内的 turningPoint、startVolume、endVolume 都是可选字段；没有明确依据就省略，不要输出占位值。`,
+7. 阶段对象内的 turningPoint、startVolume、endVolume 都是可选字段；没有明确依据就省略，不要输出占位值。
+8. 若你为“开放创作空间”补充了会被下游依赖、但正式上下文没有确认的事实，可增加 assumptions 字符串数组，最多 7 项；不要把故事线本身重复抄入 assumptions。`,
   }, {
     role: 'user' as const,
     content: [
       input.inputGuidance,
       `【作者要求】\n${input.authorRequest}${supplemental}`,
+      formatNarrativeBriefForPromptV1(input.narrativeBrief),
       `【正式上下文】\n${input.assembled.text || '（当前没有已填写的正式上游内容）'}`,
     ].join('\n\n'),
   }]
@@ -1010,6 +1089,7 @@ export async function prepareStoryArcCopilot(
     configOverride?: AIConfig
     generationOverrides?: { temperature?: number; maxTokens?: number }
     contextCompressionRuntime?: AgentContextCompressionRuntimeV1
+    inheritedAssumptions?: readonly CreativeAssumptionV1[]
     signal?: AbortSignal
   },
   dependencies: StoryArcCopilotDependencies = {},
@@ -1063,6 +1143,11 @@ export async function prepareStoryArcCopilot(
     inputState,
   )
   const kind = resolveStoryArcRequestKindV1(request)
+  const narrativeBrief = buildNarrativeBriefV1({
+    authorRequest: request,
+    assembled,
+    inheritedAssumptions: input.inheritedAssumptions,
+  })
   const nodeInput: StoryArcCopilotInput = {
     projectId: input.projectId,
     scope,
@@ -1072,6 +1157,7 @@ export async function prepareStoryArcCopilot(
     inputGuidance: buildAgentSkillInputGuidanceV1(skill, inputState),
     kind,
     assembled,
+    narrativeBrief,
     snapshot,
     config,
     routingCategory,

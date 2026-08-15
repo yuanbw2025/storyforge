@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   buildChapterInformationBoundaryV1,
+  parseInformationBoundaryManifestV1,
   validateProseInformationBoundaryV1,
   verifyInformationBoundaryManifestV1,
 } from '../../src/lib/agent/information-boundary'
@@ -330,5 +331,26 @@ describe.sequential('R-HARNESS9 · 正文信息边界', () => {
     )
     expect(gate?.status).toBe('blocked')
     expect(gate?.issues.some(issue => issue.code.includes('future-outline'))).toBe(true)
+  })
+
+  it('持久化信息边界严格拒绝额外字段、坏哈希和重复认知键', async () => {
+    const fixture = await seedBoundaryProject()
+    const boundary = await buildChapterInformationBoundaryV1({
+      scope: fixture.scope,
+      chapterId: fixture.currentChapterId,
+      outlineNodeId: fixture.currentOutlineId,
+      worldGroupId: null,
+      perspectiveCharacterId: fixture.perspectiveCharacterId,
+    })
+
+    expect(parseInformationBoundaryManifestV1(boundary)).toEqual(boundary)
+    expect(() => parseInformationBoundaryManifestV1({ ...boundary, leaked: true }))
+      .toThrow('字段无效')
+    expect(() => parseInformationBoundaryManifestV1({ ...boundary, manifestHash: 'bad' }))
+      .toThrow('manifestHash 无效')
+    expect(() => parseInformationBoundaryManifestV1({
+      ...boundary,
+      allowedKnowledgeKeys: ['same', 'same'],
+    })).toThrow('allowedKnowledgeKeys 重复')
   })
 })

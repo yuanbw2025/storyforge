@@ -211,7 +211,7 @@ function parseFragment(value: unknown, index: number, label: string): CreativeAr
   }
 }
 
-function parseAssumption(value: unknown, index: number): CreativeAssumptionV1 {
+export function parseCreativeAssumptionV1(value: unknown, index = 0): CreativeAssumptionV1 {
   if (!isRecord(value)) fail(`assumptions[${index}] 必须是对象`)
   exactKeys(value, [
     'version', 'id', 'text', 'derivedFrom', 'confidence', 'conflictsWith', 'status',
@@ -326,7 +326,7 @@ export function parseCreativeArtifactV1(value: unknown): CreativeArtifactV1 {
   const issues = value.issues.map(parseIssue)
   const validFragments = value.validFragments.map((item, index) => parseFragment(item, index, 'validFragments'))
   const rejectedFragments = value.rejectedFragments.map((item, index) => parseFragment(item, index, 'rejectedFragments'))
-  const assumptions = value.assumptions.map(parseAssumption)
+  const assumptions = value.assumptions.map(parseCreativeAssumptionV1)
   const callEvidence = value.callEvidence.map(parseCallEvidence)
   const repair = parseRepair(value.repair)
 

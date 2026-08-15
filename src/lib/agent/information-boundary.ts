@@ -52,6 +52,90 @@ export interface InformationBoundaryManifestV1 {
   manifestHash: string
 }
 
+function boundaryRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function boundaryInteger(value: unknown, label: string, nullable = false): number | null {
+  if (nullable && value === null) return null
+  if (!Number.isInteger(value) || (value as number) < 0) throw new Error(`${label} 必须是非负整数。`)
+  return value as number
+}
+
+function boundaryString(value: unknown, label: string, nullable = false): string | null {
+  if (nullable && value === null) return null
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} 必须是非空字符串。`)
+  return value.trim()
+}
+
+export function parseInformationBoundaryManifestV1(value: unknown): InformationBoundaryManifestV1 {
+  if (!boundaryRecord(value)) throw new Error('信息边界清单必须是对象。')
+  const keys = [
+    'version', 'projectId', 'worldGroupId', 'chapterId', 'outlineNodeId', 'chapterOrdinal',
+    'perspectiveCharacterId', 'perspectiveCharacterName', 'allowedKnowledgeKeys',
+    'forbiddenClaims', 'manifestHash',
+  ]
+  if (Object.keys(value).length !== keys.length || Object.keys(value).some(key => !keys.includes(key))) {
+    throw new Error('信息边界清单字段无效。')
+  }
+  if (value.version !== INFORMATION_BOUNDARY_VERSION_V1) throw new Error('信息边界清单版本无效。')
+  if (!Array.isArray(value.allowedKnowledgeKeys) || value.allowedKnowledgeKeys.length > 10_000) {
+    throw new Error('信息边界清单 allowedKnowledgeKeys 无效。')
+  }
+  const allowedKnowledgeKeys = value.allowedKnowledgeKeys.map((item, index) => (
+    boundaryString(item, `allowedKnowledgeKeys[${index}]`)!
+  ))
+  if (new Set(allowedKnowledgeKeys).size !== allowedKnowledgeKeys.length) {
+    throw new Error('信息边界清单 allowedKnowledgeKeys 重复。')
+  }
+  if (!Array.isArray(value.forbiddenClaims) || value.forbiddenClaims.length > 10_000) {
+    throw new Error('信息边界清单 forbiddenClaims 无效。')
+  }
+  const forbiddenClaims = value.forbiddenClaims.map((item, index): InformationBoundaryClaimV1 => {
+    if (!boundaryRecord(item)) throw new Error(`forbiddenClaims[${index}] 必须是对象。`)
+    const required = ['id', 'kind', 'text', 'sourceId']
+    const optional = ['characterId', 'characterName']
+    const actual = Object.keys(item)
+    if (required.some(key => !(key in item)) || actual.some(key => !required.includes(key) && !optional.includes(key))) {
+      throw new Error(`forbiddenClaims[${index}] 字段无效。`)
+    }
+    const kind = item.kind
+    if (!['future-outline', 'private-knowledge', 'character-future', 'storyline-future'].includes(String(kind))) {
+      throw new Error(`forbiddenClaims[${index}].kind 无效。`)
+    }
+    return {
+      id: boundaryString(item.id, `forbiddenClaims[${index}].id`)!,
+      kind: kind as InformationBoundaryClaimKindV1,
+      text: boundaryString(item.text, `forbiddenClaims[${index}].text`)!,
+      sourceId: boundaryString(item.sourceId, `forbiddenClaims[${index}].sourceId`)!,
+      ...(item.characterId === undefined ? {} : {
+        characterId: boundaryInteger(item.characterId, `forbiddenClaims[${index}].characterId`)!,
+      }),
+      ...(item.characterName === undefined ? {} : {
+        characterName: boundaryString(item.characterName, `forbiddenClaims[${index}].characterName`)!,
+      }),
+    }
+  })
+  if (new Set(forbiddenClaims.map(claim => claim.id)).size !== forbiddenClaims.length) {
+    throw new Error('信息边界清单 forbiddenClaims 身份重复。')
+  }
+  const manifestHash = boundaryString(value.manifestHash, 'manifestHash')!
+  if (!/^[a-f0-9]{64}$/i.test(manifestHash)) throw new Error('信息边界清单 manifestHash 无效。')
+  return {
+    version: INFORMATION_BOUNDARY_VERSION_V1,
+    projectId: boundaryInteger(value.projectId, 'projectId')!,
+    worldGroupId: boundaryInteger(value.worldGroupId, 'worldGroupId', true),
+    chapterId: boundaryInteger(value.chapterId, 'chapterId', true),
+    outlineNodeId: boundaryInteger(value.outlineNodeId, 'outlineNodeId')!,
+    chapterOrdinal: boundaryInteger(value.chapterOrdinal, 'chapterOrdinal')!,
+    perspectiveCharacterId: boundaryInteger(value.perspectiveCharacterId, 'perspectiveCharacterId', true),
+    perspectiveCharacterName: boundaryString(value.perspectiveCharacterName, 'perspectiveCharacterName', true),
+    allowedKnowledgeKeys,
+    forbiddenClaims,
+    manifestHash: manifestHash.toLowerCase(),
+  }
+}
+
 type InformationBoundaryBodyV1 = Omit<InformationBoundaryManifestV1, 'manifestHash'>
 
 const MIN_CLAIM_CHARS = 10

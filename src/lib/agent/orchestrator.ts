@@ -43,6 +43,7 @@ import {
   adoptRestoredOutlineCandidate,
   parseOutlineCandidateDraft,
   prepareOutlineCopilot,
+  runOutlineCreativeReliabilityV1,
   type OutlineCopilotMode,
   type OutlineCopilotSnapshot,
 } from './outline-copilot'
@@ -50,6 +51,7 @@ import {
   adoptRestoredProseCandidate,
   parseProseCandidateDraft,
   prepareProseCopilot,
+  runProseCreativeReliabilityV1,
   type ProseCopilotOperation,
   type ProseCopilotSnapshot,
 } from './prose-copilot'
@@ -158,8 +160,14 @@ import type {
 } from './master-candidate-semantic-review'
 import {
   creativeArtifactCanAdoptV1,
+  type CreativeAssumptionV1,
   type CreativeArtifactV1,
 } from './creative-reliability'
+import {
+  mergeProvisionalAssumptionsV1,
+  type NarrativeBriefV1,
+} from './narrative-brief'
+import type { InformationBoundaryManifestV1 } from './information-boundary'
 
 export { DOMAIN_AGENT_IDS }
 export type { DomainAgentId }
@@ -244,6 +252,10 @@ export interface MasterCandidatePayload {
   semanticReview?: MasterCandidateSemanticReviewArtifactV1
   /** Present on candidates governed by the bounded creative-reliability policy. */
   creativeArtifact?: CreativeArtifactV1
+  /** Per-run narrative drive derived only from already assembled registered sources. */
+  narrativeBrief?: NarrativeBriefV1
+  /** Prose-only immutable knowledge boundary used for local author revalidation. */
+  informationBoundary?: InformationBoundaryManifestV1
 }
 
 export interface ExecutedMasterCandidate {
@@ -754,12 +766,24 @@ export interface ExecuteMasterAgentPlanInput {
   budget?: AgentTeamBudgetTracker
   signal?: AbortSignal
   completedTaskOutputs?: Readonly<Record<string, string>>
+  completedTaskAssumptions?: Readonly<Record<string, readonly CreativeAssumptionV1[]>>
   executionTrace?: MasterAgentExecutionTrace
   onTask?: (
     task: MasterAgentTask,
     status: 'running' | 'completed' | 'failed',
     error?: string,
   ) => void | Promise<void>
+}
+
+function scopeRuntimeAssumptionsV1(
+  taskId: string,
+  assumptions: readonly CreativeAssumptionV1[],
+): CreativeAssumptionV1[] {
+  return mergeProvisionalAssumptionsV1(assumptions).map(assumption => ({
+    ...assumption,
+    id: assumption.id.startsWith(`${taskId}:`) ? assumption.id : `${taskId}:${assumption.id}`,
+    derivedFrom: [...new Set([`candidate:${taskId}`, ...assumption.derivedFrom])],
+  }))
 }
 
 async function executeSequentialMasterAgentPlan(
@@ -769,12 +793,16 @@ async function executeSequentialMasterAgentPlan(
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
   const candidates: ExecutedMasterCandidate[] = []
   const outputs = new Map<string, string>()
+  const runtimeAssumptions = new Map<string, CreativeAssumptionV1[]>()
   const contextProfiles = useAIConfigStore.getState().agentContextProfiles
   const budget = input.budget ?? new AgentTeamBudgetTracker(
     useAIConfigStore.getState().agentTeamBudgetProfile,
   )
   for (const [taskId, output] of Object.entries(input.completedTaskOutputs ?? {})) {
     if (output.trim()) outputs.set(taskId, output)
+  }
+  for (const [taskId, assumptions] of Object.entries(input.completedTaskAssumptions ?? {})) {
+    runtimeAssumptions.set(taskId, scopeRuntimeAssumptionsV1(taskId, assumptions))
   }
   const orderedTasks = topologicalTasks(input.plan)
   for (let taskIndex = 0; taskIndex < orderedTasks.length; taskIndex += 1) {
@@ -796,6 +824,9 @@ async function executeSequentialMasterAgentPlan(
         .map(id => outputs.get(id))
         .filter((value): value is string => Boolean(value?.trim()))
         .join('\n\n')
+      const inheritedAssumptions = mergeProvisionalAssumptionsV1(
+        ...task.dependsOn.map(id => runtimeAssumptions.get(id) ?? []),
+      )
       const skill = resolveAgentSkillV1(task.agentId, task.skillId)
       const executionBinding = createAgentSkillExecutionBindingV1(skill)
       const contextProfile = contextProfiles[skill.contextTaskKind]
@@ -1284,6 +1315,7 @@ async function executeSequentialMasterAgentPlan(
             routingCategory: `${AGENT_ROLE_CATEGORIES.outline}.story-arcs`,
             contextProfile,
             contextCompressionRuntime,
+            inheritedAssumptions,
             signal: input.signal,
           })
           const result = await runStoryArcCreativeReliabilityV1({
@@ -1314,6 +1346,7 @@ async function executeSequentialMasterAgentPlan(
               dependsOnTaskIds: task.dependsOn,
               dependencyBindings,
               creativeArtifact: result.artifact,
+              narrativeBrief: prepared.input.narrativeBrief,
             },
             draft,
             runtimeNode: prepared.node,
@@ -1331,14 +1364,13 @@ async function executeSequentialMasterAgentPlan(
             routingCategory: AGENT_ROLE_CATEGORIES.outline,
             contextProfile,
             contextCompressionRuntime,
+            inheritedAssumptions,
             signal: input.signal,
           })
-          const result = await runBudgetedGenerationNode({
-            node: prepared.node,
-            prepared: prepared.prepared,
+          const result = await runOutlineCreativeReliabilityV1({
+            prepared,
             budget,
-            callLabel: '大纲领域 Agent',
-            maxOutputTokens: skill.maxOutputTokens,
+            qualityMode: useAIConfigStore.getState().creativeQualityMode,
             validate: output => validateDomainCandidateCanon({
               agentId: task.agentId,
               projectId: input.projectId,
@@ -1347,7 +1379,7 @@ async function executeSequentialMasterAgentPlan(
               outputText: JSON.stringify(output),
             }),
           })
-          const draft = JSON.stringify(result.output, null, 2)
+          const draft = result.draft
           candidates.push({
             payload: {
               version: 1,
@@ -1364,6 +1396,8 @@ async function executeSequentialMasterAgentPlan(
               outlineParentId: prepared.parentVolumeId,
               dependsOnTaskIds: task.dependsOn,
               dependencyBindings,
+              creativeArtifact: result.artifact,
+              narrativeBrief: prepared.input.narrativeBrief,
             },
             draft,
             runtimeNode: prepared.node,
@@ -1382,15 +1416,14 @@ async function executeSequentialMasterAgentPlan(
           routingCategory: AGENT_ROLE_CATEGORIES.prose,
           contextProfile,
           contextCompressionRuntime,
+          inheritedAssumptions,
           perspectiveCharacterId: task.perspectiveCharacterId ?? null,
           signal: input.signal,
         })
-        const result = await runBudgetedGenerationNode({
-          node: prepared.node,
-          prepared: prepared.prepared,
+        const result = await runProseCreativeReliabilityV1({
+          prepared,
           budget,
-          callLabel: '正文领域 Agent',
-          maxOutputTokens: skill.maxOutputTokens,
+          qualityMode: useAIConfigStore.getState().creativeQualityMode,
           validate: output => validateDomainCandidateCanon({
             agentId: task.agentId,
             projectId: input.projectId,
@@ -1399,7 +1432,7 @@ async function executeSequentialMasterAgentPlan(
             outputText: output,
           }),
         })
-        const draft = result.output
+        const draft = result.draft
         candidates.push({
           payload: {
             version: 1,
@@ -1417,6 +1450,9 @@ async function executeSequentialMasterAgentPlan(
             perspectiveCharacterId: prepared.perspectiveCharacterId,
             dependsOnTaskIds: task.dependsOn,
             dependencyBindings,
+            creativeArtifact: result.artifact,
+            narrativeBrief: prepared.input.narrativeBrief,
+            informationBoundary: prepared.informationBoundary,
           },
           draft,
           runtimeNode: prepared.node,
@@ -1425,6 +1461,13 @@ async function executeSequentialMasterAgentPlan(
         outputs.set(task.id, draft)
       }
       const candidate = candidates[candidates.length - 1]
+      const candidateAssumptions = candidate.payload.creativeArtifact?.assumptions
+        ?? candidate.payload.narrativeBrief?.assumptions
+        ?? []
+      runtimeAssumptions.set(
+        task.id,
+        scopeRuntimeAssumptionsV1(task.id, candidateAssumptions),
+      )
       candidate.payload.teamBudgetEvidence = budget.snapshot()
       await input.executionTrace?.candidateReady?.(task, candidate)
       await input.onTask?.(task, 'completed')
@@ -1456,8 +1499,12 @@ async function executeFanOutMasterAgentPlan(
     useAIConfigStore.getState().agentTeamBudgetProfile,
   )
   const outputs = new Map<string, string>()
+  const runtimeAssumptions = new Map<string, CreativeAssumptionV1[]>()
   for (const [taskId, output] of Object.entries(input.completedTaskOutputs ?? {})) {
     if (output.trim()) outputs.set(taskId, output)
+  }
+  for (const [taskId, assumptions] of Object.entries(input.completedTaskAssumptions ?? {})) {
+    runtimeAssumptions.set(taskId, scopeRuntimeAssumptionsV1(taskId, assumptions))
   }
   const completed = new Set(
     input.plan.tasks.filter(task => outputs.has(task.id)).map(task => task.id),
@@ -1474,6 +1521,7 @@ async function executeFanOutMasterAgentPlan(
     }
 
     const completedTaskOutputs = Object.fromEntries(outputs)
+    const completedTaskAssumptions = Object.fromEntries(runtimeAssumptions)
     const requiredFutureModelCalls = input.plan.tasks.length - completed.size
     const settled = await Promise.all(batch.map(async task => {
       try {
@@ -1482,6 +1530,7 @@ async function executeFanOutMasterAgentPlan(
           plan: { summary: input.plan.summary, tasks: [task] },
           budget,
           completedTaskOutputs,
+          completedTaskAssumptions,
           executionTrace: undefined,
           onTask: undefined,
         }, { requiredFutureModelCalls })
@@ -1500,6 +1549,15 @@ async function executeFanOutMasterAgentPlan(
       .sort((left, right) => compareCandidateBudgetEvidence(left.candidate, right.candidate))
     for (const item of fulfilled) {
       outputs.set(item.task.id, item.candidate.draft)
+      runtimeAssumptions.set(
+        item.task.id,
+        scopeRuntimeAssumptionsV1(
+          item.task.id,
+          item.candidate.payload.creativeArtifact?.assumptions
+            ?? item.candidate.payload.narrativeBrief?.assumptions
+            ?? [],
+        ),
+      )
       completed.add(item.task.id)
       candidates.push(item.candidate)
       await input.executionTrace?.candidateReady?.(item.task, item.candidate)

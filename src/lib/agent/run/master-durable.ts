@@ -25,6 +25,8 @@ import {
 import { parseCharacterSupplementTaskInputV1 } from '../character-supplement-copilot'
 import type { AgentTeamBudgetEvidence } from '../team-budget'
 import { parseCreativeArtifactV1 } from '../creative-reliability'
+import { parseNarrativeBriefV1 } from '../narrative-brief'
+import { parseInformationBoundaryManifestV1 } from '../information-boundary'
 import {
   getAgentSkillV1,
   resolveAgentSkillV1,
@@ -1101,6 +1103,18 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
   }
   if (payload.creativeArtifact !== undefined) {
     payload.creativeArtifact = parseCreativeArtifactV1(payload.creativeArtifact)
+  }
+  if (payload.narrativeBrief !== undefined) {
+    payload.narrativeBrief = parseNarrativeBriefV1(payload.narrativeBrief)
+  }
+  if (payload.informationBoundary !== undefined) {
+    payload.informationBoundary = parseInformationBoundaryManifestV1(payload.informationBoundary)
+    if (
+      payload.informationBoundary.projectId !== payload.workspaceScope?.projectId
+      || payload.informationBoundary.outlineNodeId !== payload.proseOutlineNodeId
+      || payload.informationBoundary.manifestHash
+        !== (payload.baseSnapshot as { informationBoundaryHash?: string }).informationBoundaryHash
+    ) fail(`${label} payload informationBoundary 与正文候选身份不一致`)
   }
   if (!Array.isArray(payload.contextSources) || payload.contextSources.some(source => typeof source !== 'string')) {
     fail(`${label} payload contextSources 无效`)
@@ -2202,6 +2216,12 @@ export async function runDurableMasterAgentPlanV1(
       budget,
       signal: input.signal,
       completedTaskOutputs: restored.outputs,
+      completedTaskAssumptions: Object.fromEntries(restored.candidates.map(candidate => [
+        candidate.payload.taskId,
+        candidate.payload.creativeArtifact?.assumptions
+          ?? candidate.payload.narrativeBrief?.assumptions
+          ?? [],
+      ])),
       executionTrace: trace,
       onTask: input.onTask,
     })
