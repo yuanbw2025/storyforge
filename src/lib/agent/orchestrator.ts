@@ -82,6 +82,7 @@ import {
   adoptRestoredStoryArcCandidate,
   parseStoryArcCandidateDraft,
   prepareStoryArcCopilot,
+  runStoryArcCreativeReliabilityV1,
   type StoryArcCopilotSnapshot,
   type StoryArcRequestKind,
 } from './story-arc-copilot'
@@ -155,6 +156,10 @@ import type {
   MasterCandidateModelIdentityV1,
   MasterCandidateSemanticReviewArtifactV1,
 } from './master-candidate-semantic-review'
+import {
+  creativeArtifactCanAdoptV1,
+  type CreativeArtifactV1,
+} from './creative-reliability'
 
 export { DOMAIN_AGENT_IDS }
 export type { DomainAgentId }
@@ -237,6 +242,8 @@ export interface MasterCandidatePayload {
   /** Present on candidates covered by independent semantic review. */
   generator?: MasterCandidateModelIdentityV1
   semanticReview?: MasterCandidateSemanticReviewArtifactV1
+  /** Present on candidates governed by the bounded creative-reliability policy. */
+  creativeArtifact?: CreativeArtifactV1
 }
 
 export interface ExecutedMasterCandidate {
@@ -1279,12 +1286,10 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
-          const result = await runBudgetedGenerationNode({
-            node: prepared.node,
-            prepared: prepared.prepared,
+          const result = await runStoryArcCreativeReliabilityV1({
+            prepared,
             budget,
-            callLabel: '故事线编排 Skill',
-            maxOutputTokens: skill.maxOutputTokens,
+            qualityMode: useAIConfigStore.getState().creativeQualityMode,
             validate: output => validateDomainCandidateCanon({
               agentId: task.agentId,
               projectId: input.projectId,
@@ -1292,7 +1297,7 @@ async function executeSequentialMasterAgentPlan(
               outputText: JSON.stringify(output),
             }),
           })
-          const draft = JSON.stringify(result.output, null, 2)
+          const draft = result.draft
           candidates.push({
             payload: {
               version: 1,
@@ -1308,6 +1313,7 @@ async function executeSequentialMasterAgentPlan(
               storyArcKind: prepared.kind,
               dependsOnTaskIds: task.dependsOn,
               dependencyBindings,
+              creativeArtifact: result.artifact,
             },
             draft,
             runtimeNode: prepared.node,
@@ -1701,6 +1707,7 @@ export async function adoptMasterCandidate(input: {
   draft: string
   runtime?: ExecutedMasterCandidate
 }): Promise<string> {
+  assertMasterCreativeArtifactAdoptableV1(input.payload)
   const scope = await resolveCandidateScope(input)
   await assertMasterCandidateDependenciesAdoptedV1(input.event, input.payload, scope)
   if (input.runtime) {
@@ -1935,4 +1942,15 @@ export async function adoptMasterCandidate(input: {
           : input.payload.proseOperation === 'continue'
             ? '续写内容已追加到目标章节。'
             : '正文已写入目标章节。'
+}
+
+export function assertMasterCreativeArtifactAdoptableV1(payload: MasterCandidatePayload): void {
+  const artifact = payload.creativeArtifact
+  if (!artifact || creativeArtifactCanAdoptV1(artifact)) return
+  const summary = artifact.issues.slice(0, 3).map(issue => issue.message).join('；')
+  throw new Error(
+    artifact.status === 'blocked'
+      ? `该候选存在阻断问题，不能采纳。${summary}`
+      : `该候选需要手动修复并通过本地校验后才能采纳。${summary}`,
+  )
 }

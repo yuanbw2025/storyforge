@@ -265,6 +265,21 @@ describe('R-CF20260702-10 · route storage and client boundary', () => {
     expect(fresh.useAIConfigStore.getState().agentTeamBudgetProfile).toBe('balanced')
   })
 
+  it('persists a bounded creative quality mode and falls back to balanced', async () => {
+    const {
+      CREATIVE_QUALITY_MODE_KEY,
+      useAIConfigStore,
+    } = await import('../../src/stores/ai-config')
+    expect(useAIConfigStore.getState().creativeQualityMode).toBe('balanced')
+    useAIConfigStore.getState().setCreativeQualityMode('economy')
+    expect(localStorage.getItem(CREATIVE_QUALITY_MODE_KEY)).toBe('economy')
+
+    localStorage.setItem(CREATIVE_QUALITY_MODE_KEY, 'unlimited')
+    vi.resetModules()
+    const fresh = await import('../../src/stores/ai-config')
+    expect(fresh.useAIConfigStore.getState().creativeQualityMode).toBe('balanced')
+  })
+
   it('routes a real chat request and logs the actual provider, model and task kind', async () => {
     const routed = preset('local-writer', {
       provider: 'ollama',

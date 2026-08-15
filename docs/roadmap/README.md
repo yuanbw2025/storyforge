@@ -12,6 +12,15 @@
 
 **迁移安全**：`docs/ROADMAP-LEGACY.md` 与本分支拆分前的 `HEAD:docs/ROADMAP.md` 字节级一致，共 3181 行，SHA-256 为 `e497de7d0f8100489bdcb3a7b3fcb528d07024b9dcb832f7de6e2701d584667d`。任何任务信息丢失或状态不明，先回到历史快照核对，不凭记忆补写。
 
+## 当前主体系：CREL 创作可靠性工程
+
+`feat/harness-creative-reliability` 在已完成的 Agent + Harness 基线上补齐有限成本下的可用创作交付，
+不新增平行 Agent、数据库或模型旁路。权威范围、数据合同、CREL-0～14 施工顺序和发布门见
+[创作可靠性工程开发文档](../AI-CREATIVE-RELIABILITY-DEVELOPMENT-20260816.md)。
+
+当前活动单元为 `CREL-0～4`：统一创作产物、产物级 1+1 调用上限、免费归一化、精确问题定位和一次定向修复。
+首个纵向验收入口为 `outline.story-arcs`；在新冻结 development 通过前不扩张到其它创作入口。
+
 ## 一、开发单位标准
 
 | 类型 | 定义 | 交付要求 |

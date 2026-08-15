@@ -4,6 +4,8 @@ import {
   parseStoryArcCandidateDraft,
   parseStoryArcModelResponseV2,
   prepareStoryArcCopilot,
+  revalidateStoryArcCreativeDraftV1,
+  runStoryArcCreativeReliabilityV1,
   type StoryArcCopilotCandidate,
 } from '../../src/lib/agent/story-arc-copilot'
 import { getOrCreateAgentConversation, updateAgentEventCandidate } from '../../src/lib/agent/conversations'
@@ -11,7 +13,10 @@ import type {
   ExecutedMasterCandidate,
   MasterAgentPlan,
 } from '../../src/lib/agent/orchestrator'
-import { executeMasterAgentPlan } from '../../src/lib/agent/orchestrator'
+import {
+  assertMasterCreativeArtifactAdoptableV1,
+  executeMasterAgentPlan,
+} from '../../src/lib/agent/orchestrator'
 import {
   getAgentSkillV1,
 } from '../../src/lib/agent/skill-registry'
@@ -55,6 +60,7 @@ const ORIGINAL_AI_STATE = {
   config: structuredClone(useAIConfigStore.getState().config),
   presets: structuredClone(useAIConfigStore.getState().presets),
   taskRoutes: structuredClone(useAIConfigStore.getState().taskRoutes),
+  creativeQualityMode: useAIConfigStore.getState().creativeQualityMode,
 }
 
 const directWorkflow = {
@@ -166,7 +172,12 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    useAIConfigStore.setState({ config: STORY_ARC_CONFIG, presets: [], taskRoutes: {} })
+    useAIConfigStore.setState({
+      config: STORY_ARC_CONFIG,
+      presets: [],
+      taskRoutes: {},
+      creativeQualityMode: 'balanced',
+    })
   })
 
   afterEach(() => {
@@ -223,6 +234,19 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       skillId: 'outline.story-arcs',
       storyArcKind: 'main',
       workspaceScope: scope,
+      creativeArtifact: {
+        status: 'ready',
+        qualityMode: 'balanced',
+        callEvidence: [{
+          callIndex: 1,
+          purpose: 'generate',
+          usageSource: 'provider',
+          inputTokens: 31,
+          outputTokens: 47,
+          totalTokens: 78,
+        }],
+        repair: null,
+      },
     })
     expect(candidates[0].runtimeNode.kind).toBe('outline.story-arcs')
     expect(parseStoryArcCandidateDraft(candidates[0].draft)).toEqual([mainArc()])
@@ -297,11 +321,12 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
     expect(parseStoryArcModelResponseV2(JSON.stringify({ storyArcs: [mainArc()] }))).toEqual([mainArc()])
     expect(parseStoryArcCandidateDraft(JSON.stringify([mainArc()]))).toEqual([mainArc()])
     expect(() => parseStoryArcModelResponseV2(JSON.stringify([mainArc()])))
-      .toThrow('必须是 JSON 对象')
+      .toThrow('单个 JSON 对象')
     expect(() => parseStoryArcModelResponseV2(JSON.stringify({ storyArcs: [mainArc()], projectId: 7 })))
       .toThrow('不允许的字段')
-    expect(() => parseStoryArcModelResponseV2('```json\n{"storyArcs":[]}\n```'))
-      .toThrow('严格 JSON 对象')
+    expect(parseStoryArcModelResponseV2(
+      `\`\`\`json\n${JSON.stringify({ storyArcs: [mainArc()] })}\n\`\`\``,
+    )).toEqual([mainArc()])
     expect(parseStoryArcModelResponseV2(JSON.stringify({
       storyArcs: [{
         ...mainArc(),
@@ -318,6 +343,178 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
           : stage),
       }],
     }))).toThrow('turningPoint 必须是非空字符串')
+  })
+
+  it('平衡模式仅用第二次调用定向修复结构错误，并记录真实调用边界', async () => {
+    const { project, scope } = await createWorkspace()
+    const invalid = {
+      ...mainArc(),
+      stages: mainArc().stages.map((stage, index) => index === 0
+        ? { ...stage, turningPoint: null }
+        : stage),
+    }
+    const runAI = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify({ storyArcs: [invalid] }))
+      .mockResolvedValueOnce(JSON.stringify({ storyArcs: [mainArc()] }))
+    const prepared = await prepareStoryArcCopilot({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      authorRequest: '生成一条主线故事线',
+    }, { runAI })
+
+    const result = await runStoryArcCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker('balanced'),
+      qualityMode: 'balanced',
+    })
+
+    expect(runAI).toHaveBeenCalledTimes(2)
+    expect(result.output).toEqual([mainArc()])
+    expect(result.artifact).toMatchObject({
+      status: 'ready',
+      qualityMode: 'balanced',
+      repair: {
+        targetIssueCodes: expect.arrayContaining(['story-arc-item-invalid']),
+        callIndex: 2,
+        result: 'repaired',
+      },
+      callEvidence: [
+        { callIndex: 1, purpose: 'generate', status: 'succeeded' },
+        { callIndex: 2, purpose: 'repair', status: 'succeeded' },
+      ],
+    })
+    const repairPrompt = runAI.mock.calls[1][0]
+      .map((message: { content: string }) => message.content)
+      .join('\n')
+    expect(repairPrompt).toContain('story-arc-item-invalid')
+    expect(repairPrompt).toContain('turningPoint')
+    expect(repairPrompt).not.toContain('盐海每十年退潮一次')
+  })
+
+  it('唯一一次修复调用失败后停止消耗并保留首次可编辑产物', async () => {
+    const { project, scope } = await createWorkspace()
+    const invalidRaw = JSON.stringify({
+      storyArcs: [{ ...mainArc(), stages: mainArc().stages.slice(0, 2) }],
+    })
+    const runAI = vi.fn()
+      .mockResolvedValueOnce(invalidRaw)
+      .mockRejectedValueOnce(new Error('provider unavailable'))
+    const prepared = await prepareStoryArcCopilot({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      authorRequest: '生成一条主线故事线',
+    }, { runAI })
+
+    const result = await runStoryArcCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker('balanced'),
+      qualityMode: 'balanced',
+    })
+
+    expect(runAI).toHaveBeenCalledTimes(2)
+    expect(result.output).toEqual([])
+    expect(result.draft).toBe(invalidRaw)
+    expect(result.artifact).toMatchObject({
+      status: 'manual-repair',
+      originalText: invalidRaw,
+      repair: { callIndex: 2, result: 'failed' },
+      callEvidence: [
+        { callIndex: 1, status: 'succeeded' },
+        { callIndex: 2, status: 'failed', usageSource: 'unknown' },
+      ],
+    })
+    expect(result.artifact.issues.map(issue => issue.code)).toEqual(expect.arrayContaining([
+      'story-arc-item-invalid',
+      'story-arc-repair-provider-failed',
+    ]))
+  })
+
+  it('经济模式结构失败只调用一次并把问题交给作者，不做隐藏重试', async () => {
+    const { project, scope } = await createWorkspace()
+    const runAI = vi.fn(async () => JSON.stringify({
+      storyArcs: [{ ...mainArc(), stages: mainArc().stages.slice(0, 2) }],
+    }))
+    const prepared = await prepareStoryArcCopilot({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      authorRequest: '生成一条主线故事线',
+    }, { runAI })
+
+    const result = await runStoryArcCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker('balanced'),
+      qualityMode: 'economy',
+    })
+
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(result.artifact.status).toBe('manual-repair')
+    expect(result.artifact.repair).toBeNull()
+    expect(result.artifact.callEvidence).toHaveLength(1)
+  })
+
+  it('经济模式保留合法故事线片段并明确标出被拒绝片段', async () => {
+    const { project, scope } = await createWorkspace()
+    const invalid = { ...mainArc('损坏支线'), type: 'sub', stages: mainArc().stages.slice(0, 2) }
+    const runAI = vi.fn(async () => JSON.stringify({ storyArcs: [mainArc(), invalid] }))
+    const prepared = await prepareStoryArcCopilot({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      authorRequest: '生成一条主线故事线',
+    }, { runAI })
+
+    const result = await runStoryArcCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker('balanced'),
+      qualityMode: 'economy',
+    })
+
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(result.output).toEqual([mainArc()])
+    expect(result.artifact.status).toBe('usable-with-warnings')
+    expect(result.artifact.validFragments).toHaveLength(1)
+    expect(result.artifact.rejectedFragments).toHaveLength(1)
+    expect(parseStoryArcCandidateDraft(result.draft)).toEqual([mainArc()])
+  })
+
+  it('作者修订后只做本地重新校验，合法草稿恢复采纳资格且不增加模型调用', async () => {
+    const { project, scope } = await createWorkspace()
+    const runAI = vi.fn(async () => JSON.stringify({
+      storyArcs: [{ ...mainArc(), stages: mainArc().stages.slice(0, 2) }],
+    }))
+    const prepared = await prepareStoryArcCopilot({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      authorRequest: '生成一条主线故事线',
+    }, { runAI })
+    const generated = await runStoryArcCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker('balanced'),
+      qualityMode: 'economy',
+    })
+
+    const revalidated = revalidateStoryArcCreativeDraftV1({
+      draft: JSON.stringify([mainArc()], null, 2),
+      snapshot: prepared.snapshot,
+      kind: prepared.kind,
+      previousArtifact: generated.artifact,
+    })
+
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(revalidated.status).toBe('ready')
+    expect(revalidated.issues).toEqual([])
+    expect(revalidated.callEvidence).toEqual(generated.artifact.callEvidence)
+    expect(revalidated.originalText).toBe(generated.artifact.originalText)
+    expect(() => assertMasterCreativeArtifactAdoptableV1({
+      creativeArtifact: generated.artifact,
+    } as never)).toThrow('需要手动修复')
+    expect(() => assertMasterCreativeArtifactAdoptableV1({
+      creativeArtifact: revalidated,
+    } as never)).not.toThrow()
   })
 
   it('作者把候选改成非法结构时重新 gate，且不触发写入', async () => {

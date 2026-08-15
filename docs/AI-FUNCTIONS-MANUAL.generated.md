@@ -209,12 +209,12 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
 共 49 个 category。
-未分类调用: 0 个。动态 category 调用: 22 个。
+未分类调用: 0 个。动态 category 调用: 23 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:591` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:678` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:598` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:685` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:509` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
@@ -279,7 +279,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/prose-copilot.ts:649 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
-- `src/lib/agent/story-arc-copilot.ts:595 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1086 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1133 · chat`
 - `src/lib/agent/story-core-copilot.ts:458 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:376 · chat`
 - `src/lib/agent/world-origin-copilot.ts:255 · chat`
@@ -290,4 +291,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `068a0a0`
+生成时间基准:commit `f7300b0`

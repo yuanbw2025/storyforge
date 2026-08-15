@@ -56,7 +56,49 @@ const project = {
   enableMultiWorld: false,
 } as Project
 
-function candidate() {
+function creativeArtifact(status: 'ready' | 'manual-repair') {
+  return {
+    version: 1,
+    policyVersion: 'creative-reliability-v1',
+    status,
+    qualityMode: 'balanced',
+    originalText: '{}',
+    editableText: '[]',
+    validFragments: [],
+    rejectedFragments: [],
+    issues: status === 'ready' ? [] : [{
+      version: 1,
+      code: 'story-arc-item-invalid',
+      severity: 'error',
+      disposition: 'repairable',
+      path: '$[0]',
+      message: '阶段数量不足，请补充到至少三个阶段。',
+      suggestedAction: 'edit',
+      evidenceRefs: [],
+      deterministic: true,
+    }],
+    assumptions: [],
+    canonEvidenceRefs: [],
+    callEvidence: [{
+      version: 1,
+      callIndex: 1,
+      purpose: 'generate',
+      status: 'succeeded',
+      provider: 'openai',
+      model: 'test',
+      usageSource: 'provider',
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 150,
+      latencyMs: 120,
+      estimatedCostUsd: null,
+      outputHash: 'a'.repeat(64),
+    }],
+    repair: null,
+  } as any
+}
+
+function candidate(status: 'ready' | 'manual-repair' = 'ready') {
   return {
     event: {
       id: 31,
@@ -80,6 +122,7 @@ function candidate() {
         trimmed: ['historical'],
       },
       baseSnapshot: {},
+      creativeArtifact: creativeArtifact(status),
     },
   }
 }
@@ -140,6 +183,8 @@ describe('R-HARNESS30 · 故事线面板统一进入主 Agent Harness', () => {
     expect(host.textContent).toContain('待确认 · 主线故事线')
     expect(host.textContent).toContain('约 712 tokens')
     expect(host.textContent).toContain('本次实际输入证据')
+    expect(host.textContent).toContain('可直接采纳')
+    expect(host.textContent).toContain('1 次模型调用 · 150 tokens')
     expect(host.textContent).toContain('还没有故事线')
 
     const editor = host.querySelector<HTMLTextAreaElement>(
@@ -164,5 +209,18 @@ describe('R-HARNESS30 · 故事线面板统一进入主 Agent Harness', () => {
     expect(mocks.copilot.rejectCandidate).toHaveBeenCalledWith(mocks.copilot.pendingCandidates[0])
     expect(mocks.copilot.adoptCandidate).toHaveBeenCalledWith(mocks.copilot.pendingCandidates[0])
     expect(mocks.storyArcStore.addArc).not.toHaveBeenCalled()
+  })
+
+  it('需要手修的候选展示具体问题并禁用采纳，不会把失败伪装成无产出', async () => {
+    mocks.copilot.pendingCandidates = [candidate('manual-repair')]
+    const host = await renderPanel()
+
+    expect(host.textContent).toContain('需要手动修复')
+    expect(host.textContent).toContain('查看 1 个问题')
+    const adopt = Array.from(host.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('采纳'))!
+    expect(adopt.disabled).toBe(true)
+    expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="主线故事线候选内容"]'))
+      .not.toBeNull()
   })
 })

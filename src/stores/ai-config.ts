@@ -19,6 +19,10 @@ import {
   sanitizeAgentTeamBudgetProfile,
   type AgentTeamBudgetProfile,
 } from '../lib/agent/team-budget'
+import {
+  sanitizeCreativeQualityModeV1,
+  type CreativeQualityModeV1,
+} from '../lib/agent/creative-reliability'
 
 const STORAGE_KEY = 'storyforge-ai-config'
 const PRESETS_KEY = 'storyforge-ai-presets'
@@ -30,6 +34,7 @@ const EMBEDDING_SESSION_KEY = 'storyforge-embedding-key-session'
 export const TASK_ROUTES_KEY = 'storyforge-ai-task-routes'
 export const AGENT_CONTEXT_PROFILES_KEY = 'storyforge-agent-context-profiles'
 export const AGENT_TEAM_BUDGET_PROFILE_KEY = 'storyforge-agent-team-budget-profile'
+export const CREATIVE_QUALITY_MODE_KEY = 'storyforge-creative-quality-mode-v1'
 
 const DEFAULT_CONFIG: AIConfig = {
   provider: 'deepseek',
@@ -148,6 +153,14 @@ function loadAgentTeamBudgetProfile(): AgentTeamBudgetProfile {
 
 function saveAgentTeamBudgetProfile(profile: AgentTeamBudgetProfile): void {
   localStorage.setItem(AGENT_TEAM_BUDGET_PROFILE_KEY, profile)
+}
+
+function loadCreativeQualityMode(): CreativeQualityModeV1 {
+  return sanitizeCreativeQualityModeV1(localStorage.getItem(CREATIVE_QUALITY_MODE_KEY))
+}
+
+function saveCreativeQualityMode(mode: CreativeQualityModeV1): void {
+  localStorage.setItem(CREATIVE_QUALITY_MODE_KEY, mode)
 }
 
 /** 根据 HTTP 状态码和英文错误信息，返回中文解释 */
@@ -275,6 +288,7 @@ interface AIConfigStore {
   taskRoutes: AITaskRoutes
   agentContextProfiles: AgentContextProfiles
   agentTeamBudgetProfile: AgentTeamBudgetProfile
+  creativeQualityMode: CreativeQualityModeV1
   /** 当前生效的预设 id（null = 未对应任何预设/已改动） */
   activePresetId: string | null
   /** 最近一次应用/保存的预设 id；表单改动后仍保留,用于显式覆盖当前预设。 */
@@ -295,6 +309,7 @@ interface AIConfigStore {
   setTaskRoute: (taskKind: AITaskKind, presetId: string | null) => void
   setAgentContextProfile: (taskKind: AgentContextTaskKind, profile: AgentContextProfile) => void
   setAgentTeamBudgetProfile: (profile: AgentTeamBudgetProfile) => void
+  setCreativeQualityMode: (mode: CreativeQualityModeV1) => void
 }
 
 const initial = loadInitialConfig()
@@ -306,6 +321,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   taskRoutes: loadTaskRoutes(),
   agentContextProfiles: loadAgentContextProfiles(),
   agentTeamBudgetProfile: loadAgentTeamBudgetProfile(),
+  creativeQualityMode: loadCreativeQualityMode(),
   activePresetId: null,
   editingPresetId: null,
   embedding: loadEmbeddingConfig(initial.rememberApiKey),
@@ -411,6 +427,12 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
     const agentTeamBudgetProfile = sanitizeAgentTeamBudgetProfile(profile)
     saveAgentTeamBudgetProfile(agentTeamBudgetProfile)
     set({ agentTeamBudgetProfile })
+  },
+
+  setCreativeQualityMode: mode => {
+    const creativeQualityMode = sanitizeCreativeQualityModeV1(mode)
+    saveCreativeQualityMode(creativeQualityMode)
+    set({ creativeQualityMode })
   },
 
   switchProvider: (provider: AIProvider) => {

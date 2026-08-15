@@ -28,6 +28,7 @@ import type { AgentEvent, Project, WorkspaceScope } from '../../lib/types'
 import { parseAgentEventPayload } from '../../lib/types'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
 import { useAIConfigStore } from '../../stores/ai-config'
+import { revalidateStoryArcCreativeDraftV1 } from '../../lib/agent/story-arc-copilot'
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message
@@ -426,10 +427,29 @@ export function useMasterCopilot(input: {
   }, [busy, conversationId, project.id, recordTask, reload, scopeKey, worldGroupId, workspaceScope])
 
   const updateCandidate = useCallback(async (eventId: number, draft: string) => {
-    await updateAgentEventCandidate(eventId, project.id!, draft, workspaceScope)
-    setEvents(current => current.map(event => event.id === eventId ? { ...event, content: draft } : event))
+    const candidate = pendingCandidates.find(item => item.event.id === eventId)
+    const creativeArtifact = candidate?.payload.creativeArtifact
+      && candidate.payload.skillId === 'outline.story-arcs'
+      && candidate.payload.storyArcKind
+      ? revalidateStoryArcCreativeDraftV1({
+          draft,
+          snapshot: candidate.payload.baseSnapshot as Parameters<typeof revalidateStoryArcCreativeDraftV1>[0]['snapshot'],
+          kind: candidate.payload.storyArcKind,
+          previousArtifact: candidate.payload.creativeArtifact,
+        })
+      : undefined
+    const nextPayload = await updateAgentEventCandidate(
+      eventId,
+      project.id!,
+      draft,
+      workspaceScope,
+      { creativeArtifact },
+    )
+    setEvents(current => current.map(event => event.id === eventId
+      ? { ...event, content: draft, ...(nextPayload ? { payload: nextPayload } : {}) }
+      : event))
     notifyMasterCopilotSync(scopeKey)
-  }, [project.id, scopeKey, workspaceScope])
+  }, [pendingCandidates, project.id, scopeKey, workspaceScope])
 
   const resolveCandidate = useCallback(async (
     candidate: PendingMasterCandidate,

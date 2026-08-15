@@ -2,6 +2,7 @@ import { db } from '../../db/schema'
 import type { WorkspaceScope } from '../../types'
 import {
   assertMasterCandidateDependenciesAdoptedV1,
+  assertMasterCreativeArtifactAdoptableV1,
   adoptMasterCandidate,
   type ExecutedMasterCandidate,
 } from '../orchestrator'
@@ -215,6 +216,7 @@ export async function commitMasterAgentCandidateAdoptionV1(
   dependencies: MasterAgentAdoptionDependenciesV1 = {},
 ): Promise<MasterAgentCandidateAdoptionResultV1> {
   let resolved = await resolveCandidate(input)
+  assertMasterCreativeArtifactAdoptableV1(resolved.candidate.payload)
   let step = resolved.snapshot.projection.steps[resolved.stepId]
   if (step.status === 'succeeded' && step.adoptionHash) {
     return {

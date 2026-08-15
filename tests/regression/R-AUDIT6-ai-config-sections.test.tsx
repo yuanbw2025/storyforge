@@ -72,16 +72,19 @@ describe('AUDIT-6 / HEALTH-4 · AI 设置分区', () => {
     const onSetRoute = vi.fn()
     const onSetContextProfile = vi.fn()
     const onSetTeamBudgetProfile = vi.fn()
+    const onSetCreativeQualityMode = vi.fn()
     const host = await mount(AITaskRoutingSection as ComponentType<never>, {
       presets: [preset],
       routes: { creation: 'writer' },
       contextProfiles: DEFAULT_AGENT_CONTEXT_PROFILES,
       teamBudgetProfile: 'balanced',
+      creativeQualityMode: 'balanced',
       onSetRoute,
       onSetContextProfile,
       onSetTeamBudgetProfile,
+      onSetCreativeQualityMode,
     })
-    expect(host.querySelectorAll('select')).toHaveLength(16)
+    expect(host.querySelectorAll('select')).toHaveLength(17)
     expect(host.textContent).toContain('结构提取')
     expect(host.textContent).toContain('主 Agent 团队角色')
     expect(host.textContent).toContain('正文领域 Agent')
@@ -113,6 +116,13 @@ describe('AUDIT-6 / HEALTH-4 · AI 设置分区', () => {
       teamBudget.dispatchEvent(new Event('change', { bubbles: true }))
     })
     expect(onSetTeamBudgetProfile).toHaveBeenCalledWith('economy')
+    const qualityMode = host.querySelector<HTMLSelectElement>('select[aria-label="创作结果模式"]')!
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+      setter.call(qualityMode, 'economy')
+      qualityMode.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(onSetCreativeQualityMode).toHaveBeenCalledWith('economy')
   })
 
   it('连接日志保留可读格式并转发清空命令', async () => {

@@ -13,6 +13,8 @@ import type { Project, StoryArc, StoryArcType } from '../../lib/types'
 import { parseStages, type StoryStage } from '../../lib/types/story-arc'
 import { nanoid } from 'nanoid'
 import StorylineProgressPanel from './StorylineProgressPanel'
+import CreativeArtifactSummary from '../agent/CreativeArtifactSummary'
+import { creativeArtifactCanAdoptV1 } from '../../lib/agent/creative-reliability'
 import {
   INITIAL_RECORD_TARGET_CLASS,
   initialRecordTargetAttributes,
@@ -187,6 +189,9 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
             }}
             className="min-h-72 w-full resize-y font-mono text-xs leading-5"
           />
+          {candidate.payload.creativeArtifact && (
+            <CreativeArtifactSummary artifact={candidate.payload.creativeArtifact} />
+          )}
           {candidate.payload.contextEvidence && (
             <details className="mt-2 border border-border/60 bg-bg-base px-3 py-2 text-[11px] text-text-muted rounded">
               <summary className="cursor-pointer text-text-secondary">本次实际输入证据</summary>
@@ -212,7 +217,11 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
             </button>
             <button
               type="button"
-              disabled={copilot.busy}
+              disabled={
+                copilot.busy
+                || (candidate.payload.creativeArtifact != null
+                  && !creativeArtifactCanAdoptV1(candidate.payload.creativeArtifact))
+              }
               onClick={() => { void copilot.adoptCandidate(candidate) }}
               className="flex items-center gap-1 bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 rounded disabled:opacity-50"
             >

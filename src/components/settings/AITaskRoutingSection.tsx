@@ -12,6 +12,7 @@ import {
   type AgentContextTaskKind,
 } from '../../lib/agent/context-policy'
 import type { AgentTeamBudgetProfile } from '../../lib/agent/team-budget'
+import type { CreativeQualityModeV1 } from '../../lib/agent/creative-reliability'
 
 const TASK_ROUTE_META: Record<AITaskKind, { label: string; description: string }> = {
   creation: { label: '创作生成', description: '正文、大纲、细纲、世界观与角色生成' },
@@ -31,9 +32,11 @@ interface Props {
   routes: AITaskRoutes
   contextProfiles: AgentContextProfiles
   teamBudgetProfile: AgentTeamBudgetProfile
+  creativeQualityMode: CreativeQualityModeV1
   onSetRoute: (taskKind: AITaskKind, presetId: string | null) => void
   onSetContextProfile: (taskKind: AgentContextTaskKind, profile: AgentContextProfile) => void
   onSetTeamBudgetProfile: (profile: AgentTeamBudgetProfile) => void
+  onSetCreativeQualityMode: (mode: CreativeQualityModeV1) => void
 }
 
 const CONTEXT_PROFILE_META: Record<AgentContextProfile, { label: string; description: string }> = {
@@ -48,6 +51,12 @@ const TEAM_BUDGET_META: Record<AgentTeamBudgetProfile, { label: string; descript
   expanded: { label: '充分', description: '每轮最多约 240K tokens' },
 }
 
+const CREATIVE_QUALITY_META: Record<CreativeQualityModeV1, { label: string; description: string }> = {
+  economy: { label: '节省', description: '一次生成，只做免费本地校验' },
+  balanced: { label: '均衡（推荐）', description: '必要时最多一次定向修复' },
+  refine: { label: '精修', description: '自动调用仍为 1+1；语义评审由作者另行触发' },
+}
+
 function isContextTaskKind(taskKind: AITaskKind): taskKind is AgentContextTaskKind {
   return AGENT_CONTEXT_TASK_KINDS.includes(taskKind as AgentContextTaskKind)
 }
@@ -57,9 +66,11 @@ export default function AITaskRoutingSection({
   routes,
   contextProfiles,
   teamBudgetProfile,
+  creativeQualityMode,
   onSetRoute,
   onSetContextProfile,
   onSetTeamBudgetProfile,
+  onSetCreativeQualityMode,
 }: Props) {
   const renderRoutes = (taskKinds: readonly AITaskKind[]) => (
     <div className="grid gap-2 sm:grid-cols-2">
@@ -118,6 +129,23 @@ export default function AITaskRoutingSection({
           五个领域还可独立收窄登记源预算；“完整”保持原上下文上限。
         </p>
       </div>
+      <label className="mb-2 block rounded border border-border bg-bg-base p-2.5">
+        <span className="block text-xs font-medium text-text-primary">创作结果模式</span>
+        <span className="mt-0.5 block text-[10px] text-text-muted">
+          控制单个创作产物的自动调用；任何模式都禁止隐藏第三次调用和自动切换服务商。
+        </span>
+        <select
+          value={creativeQualityMode}
+          onChange={event => onSetCreativeQualityMode(event.target.value as CreativeQualityModeV1)}
+          aria-label="创作结果模式"
+          className="mt-2 w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
+        >
+          {(Object.entries(CREATIVE_QUALITY_META) as Array<[CreativeQualityModeV1, typeof CREATIVE_QUALITY_META[CreativeQualityModeV1]]>)
+            .map(([mode, meta]) => (
+              <option key={mode} value={mode}>{meta.label} · {meta.description}</option>
+            ))}
+        </select>
+      </label>
       <label className="mb-2 block rounded border border-border bg-bg-base p-2.5">
         <span className="block text-xs font-medium text-text-primary">本轮团队总预算</span>
         <span className="mt-0.5 block text-[10px] text-text-muted">

@@ -20,6 +20,7 @@ import {
 } from './run/event-store'
 import { parseAgentRunEventV1 } from './run/event-schema'
 import type { MasterCandidatePayload } from './orchestrator'
+import { parseCreativeArtifactV1, type CreativeArtifactV1 } from './creative-reliability'
 import {
   contextManifestHashForStepAttemptV1,
   createMasterCandidateStepReceiptV1,
@@ -127,7 +128,8 @@ export async function updateAgentEventCandidate(
   projectId: number,
   content: string,
   scope?: WorkspaceScope,
-): Promise<void> {
+  options?: { creativeArtifact?: CreativeArtifactV1 },
+): Promise<string | null> {
   const event = await db.agentEvents.get(eventId)
   const resolved = scope ?? await resolveScope({ projectId })
   if (!event || !await assertRecordInScope(resolved, 'agentEvents', event, { owner: 'work' }) || event.kind !== 'candidate') {
@@ -141,6 +143,12 @@ export async function updateAgentEventCandidate(
     }
   } catch {
     payload = null
+  }
+  if (payload && options?.creativeArtifact) {
+    payload = {
+      ...payload,
+      creativeArtifact: parseCreativeArtifactV1(options.creativeArtifact),
+    }
   }
 
   // Legacy conversational candidates have no durable run binding and keep
@@ -252,8 +260,13 @@ export async function updateAgentEventCandidate(
         }
       },
     )
-    return
+    return nextPayload
   }
 
-  await db.agentEvents.update(eventId, { content })
+  const nextPayload = payload ? JSON.stringify(payload) : null
+  await db.agentEvents.update(eventId, {
+    content,
+    ...(nextPayload ? { payload: nextPayload } : {}),
+  })
+  return nextPayload
 }

@@ -24,6 +24,7 @@ import {
 } from '../orchestrator'
 import { parseCharacterSupplementTaskInputV1 } from '../character-supplement-copilot'
 import type { AgentTeamBudgetEvidence } from '../team-budget'
+import { parseCreativeArtifactV1 } from '../creative-reliability'
 import {
   getAgentSkillV1,
   resolveAgentSkillV1,
@@ -1097,6 +1098,9 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
       || payload.semanticReview.candidateStepId !== payload.runStepId
     ) fail(`${label} payload semanticReview 与候选身份不一致`)
     if (!payload.generator) fail(`${label} payload semanticReview 缺少 generator 身份`)
+  }
+  if (payload.creativeArtifact !== undefined) {
+    payload.creativeArtifact = parseCreativeArtifactV1(payload.creativeArtifact)
   }
   if (!Array.isArray(payload.contextSources) || payload.contextSources.some(source => typeof source !== 'string')) {
     fail(`${label} payload contextSources 无效`)

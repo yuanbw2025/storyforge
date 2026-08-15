@@ -14,7 +14,9 @@ import {
 } from 'lucide-react'
 import type { Project } from '../../lib/types'
 import { parseAgentEventPayload } from '../../lib/types'
+import { creativeArtifactCanAdoptV1 } from '../../lib/agent/creative-reliability'
 import { useMasterCopilot } from './useMasterCopilot'
+import CreativeArtifactSummary from './CreativeArtifactSummary'
 
 interface Props {
   project: Project
@@ -215,6 +217,9 @@ export default function ChatCopilotPanel({
             <p className="mt-1 text-[10px] text-text-muted">
               这是领域 Agent 的真实输出。刷新后仍会保留；只有采纳才会进入项目正式数据。
             </p>
+            {candidate.payload.creativeArtifact && (
+              <CreativeArtifactSummary artifact={candidate.payload.creativeArtifact} />
+            )}
             {candidate.payload.contextEvidence && (
               <details className="mt-2 rounded border border-border/60 bg-bg-surface px-2 py-1.5 text-[10px] text-text-muted">
                 <summary className="cursor-pointer text-text-secondary">
@@ -260,7 +265,11 @@ export default function ChatCopilotPanel({
               </button>
               <button
                 type="button"
-                disabled={copilot.busy}
+                disabled={
+                  copilot.busy
+                  || (candidate.payload.creativeArtifact != null
+                    && !creativeArtifactCanAdoptV1(candidate.payload.creativeArtifact))
+                }
                 onClick={() => { void copilot.adoptCandidate(candidate) }}
                 className="flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90 disabled:opacity-50"
               >
