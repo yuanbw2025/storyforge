@@ -188,7 +188,6 @@ import {
   PROSE_GENERATION_STEP_ID_V1,
   type ProseGenerationCandidateV1,
 } from '../../lib/agent/run/prose-generation-durable'
-import { runDurableProseSemanticReviewV1 } from '../../lib/agent/run/prose-semantic-durable'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
 import {
   isConsistencyAgentCurrent,
@@ -314,7 +313,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const transitionCandidateRef = useRef<ChapterTransitionCandidateV1 | null>(null)
   const proseCandidateRef = useRef<ProseGenerationCandidateV1 | null>(null)
   const proseSnapshotRef = useRef<AgentRunSnapshotV1 | null>(null)
-  const proseSemanticAbortRef = useRef<AbortController | null>(null)
   const consistencyRunRef = useRef<ConsistencyAgentRun | null>(null)
   const memoryRebuildInFlightRef = useRef(new Set<number>())
   const creatingChapterForOutlineRef = useRef(new Set<number>())
@@ -330,7 +328,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [pendingGeneration, setPendingGeneration] = useState<PendingChapterGeneration | null>(null)
   const [proseCandidate, setProseCandidate] = useState<ProseGenerationCandidateV1 | null>(null)
   const [proseGenerationError, setProseGenerationError] = useState('')
-  const [proseHarnessStage, setProseHarnessStage] = useState<'idle' | 'reviewing' | 'revising' | 'rereviewing'>('idle')
   const [planReconciliationCurrent, setPlanReconciliationCurrent] = useState(false)
   const [organizationRun, setOrganizationRun] = useState<ChapterOrganizationRun | null>(null)
   const [organizationCurrent, setOrganizationCurrent] = useState(false)
@@ -584,11 +581,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
     return () => { active = false }
   }, [currentChapter?.id, project.id, restoreAI])
-
-  useEffect(() => () => {
-    proseSemanticAbortRef.current?.abort()
-    proseSemanticAbortRef.current = null
-  }, [currentChapter?.id])
 
   // 字数（基于纯文本）
   const wordCount = useMemo(() => countWords(plainText), [plainText])
@@ -1248,9 +1240,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!sourceChapter) throw new Error('正文生成开始前找不到章节。')
     const sourceTextHash = await hashChapterText(sourceChapter.content ?? '')
     const actualMessages = input.messages ?? input.prepared.messages
-    proseSemanticAbortRef.current?.abort()
-    proseSemanticAbortRef.current = null
-    setProseHarnessStage('idle')
     const budget = new AgentTeamBudgetTracker(
       useAIConfigStore.getState().agentTeamBudgetProfile,
     )
@@ -1277,7 +1266,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       worldGroupId: chapterWorldGroupId ?? null,
       chapterId,
       operation: input.operation,
-      semanticReview: true,
+      semanticReview: false,
     })
     const contextManifest = await createContextManifestFromAssemblyV1({
       runId: snapshot.run.id,
@@ -1326,77 +1315,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           proseSnapshotRef.current = snapshot
         },
         candidateReady: async output => {
-          const originalOutputText = String(output ?? '')
-          if (!originalOutputText.trim()) throw new Error('模型没有返回可采纳的正文候选。')
-          const generationConfig = resolveRequestConfig(aiConfig, {
-            category: input.category,
-            projectId: project.id!,
-          }).config
-          const reviewMeta = {
-            category: 'review.consistency.deep',
-            projectId: project.id!,
-            configOverrides: { maxTokens: 3_000 },
-            contextOverflowPolicy: 'reject' as const,
-          }
-          const reviewConfig = resolveRequestConfig(aiConfig, reviewMeta).config
-          const semanticController = new AbortController()
-          proseSemanticAbortRef.current = semanticController
-          let cycle
-          try {
-            const semanticResult = await runDurableProseSemanticReviewV1({
-              scope,
-              snapshot,
-              projectId: project.id!,
-              worldGroupId: chapterWorldGroupId ?? null,
-              chapterId,
-              outlineNodeId: sourceChapter.outlineNodeId,
-              chapterTitle,
-              originalText: originalOutputText,
-              generationMessages: actualMessages,
-              generationAssembled: input.assembled!,
-              informationBoundary: input.informationBoundary,
-              generationProvider: generationConfig.provider,
-              generationModel: generationConfig.model,
-              reviewerProvider: reviewConfig.provider,
-              reviewerModel: reviewConfig.model,
-              budget,
-              review: messages => chat(messages, aiConfig, {
-                category: 'review.consistency.deep',
-                projectId: project.id!,
-                configOverrides: { maxTokens: 3_000 },
-                contextOverflowPolicy: 'reject',
-              }, semanticController.signal),
-              revise: messages => chat(messages, aiConfig, {
-                category: input.category,
-                projectId: project.id!,
-                configOverrides: { maxTokens: 16_000 },
-                contextOverflowPolicy: 'reject',
-              }, semanticController.signal),
-              onStage: setProseHarnessStage,
-              onSnapshot: nextSnapshot => {
-                snapshot = nextSnapshot
-                proseSnapshotRef.current = nextSnapshot
-              },
-            })
-            snapshot = semanticResult.snapshot
-            cycle = semanticResult.cycle
-            proseSnapshotRef.current = snapshot
-          } finally {
-            if (proseSemanticAbortRef.current === semanticController) {
-              proseSemanticAbortRef.current = null
-            }
-            setProseHarnessStage('idle')
-          }
-          if (cycle.status !== 'passed') {
-            const reviewIssues = cycle.finalReview.issues
-              .filter(issue => issue.severity === 'blocking')
-              .map(issue => `${issue.code}: ${issue.reason}`)
-            const hardIssues = cycle.deterministicIssues.map(issue => `${issue.code}: ${issue.message}`)
-            const message = [...hardIssues, ...reviewIssues].join('；') || '语义评审未签发通过结论。'
-            setProseGenerationError(message)
-            throw new Error(message)
-          }
-          const outputText = cycle.outputText
+          const outputText = String(output ?? '')
+          if (!outputText.trim()) throw new Error('模型没有返回可采纳的正文候选。')
           const baseCandidate = {
             version: 1 as const,
             type: 'prose-generation-candidate' as const,
@@ -1418,13 +1338,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             informationBoundaryHash: input.informationBoundary.manifestHash,
             perspectiveCharacterId,
             perspectiveFromChapter: true,
-            semanticReview: {
-              version: 1 as const,
-              initial: cycle.initialReview,
-              final: cycle.finalReview,
-              ...(cycle.revision ? { revision: cycle.revision } : {}),
-              budget: cycle.budget,
-            },
             createdAt: Date.now(),
           }
           const candidateHash = await hashProseGenerationCandidateV1(baseCandidate)
@@ -3050,9 +2963,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleDismissAI = async () => {
-    proseSemanticAbortRef.current?.abort()
-    proseSemanticAbortRef.current = null
-    setProseHarnessStage('idle')
     const candidate = proseCandidateRef.current
     if (candidate) {
       try {
@@ -3388,33 +3298,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         </div>
       )}
 
-      {proseHarnessStage !== 'idle' && (
-        <div className="mb-3 border-l-2 border-l-accent bg-accent/5 px-3 py-2 text-xs text-text-secondary">
-          {proseHarnessStage === 'reviewing' && '正在核对候选与章纲、角色、事实和信息边界...'}
-          {proseHarnessStage === 'revising' && '正在按有逐字证据的问题定向修订一次...'}
-          {proseHarnessStage === 'rereviewing' && '正在复核修订稿；通过前不会开放采纳...'}
-        </div>
-      )}
-
-      {proseCandidate?.semanticReview && (
-        <div className="mb-3 border-l-2 border-l-success bg-success/5 px-3 py-2 text-xs text-text-secondary">
-          <span className="font-medium text-success">语义评审通过</span>
-          <span className="ml-2">
-            {proseCandidate.semanticReview.revision ? '已完成一次证据定向修订并复核' : '原候选无需自动修订'}
-            {proseCandidate.semanticReview.final.issues.filter(issue => issue.severity !== 'blocking').length > 0
-              ? `；保留 ${proseCandidate.semanticReview.final.issues.filter(issue => issue.severity !== 'blocking').length} 条非阻断提示`
-              : ''}
-          </span>
+      {proseCandidate && (
+        <div data-testid="prose-explicit-review-notice" className="mb-3 border-l-2 border-l-accent bg-accent/5 px-3 py-2 text-xs text-text-secondary">
+          本次正文只调用模型生成一次，没有自动追加语义评审或整章重写。你可以先采纳这个可编辑候选；
+          需要深度评审时，再由你从评审入口显式发起并确认费用。
         </div>
       )}
 
       {(ai.output || ai.isStreaming || ai.error) && (
         <div className="mb-3">
-          <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming || proseHarnessStage !== 'idle'} error={ai.error} tokenUsage={ai.tokenUsage}
-            onStop={() => {
-              ai.stop()
-              proseSemanticAbortRef.current?.abort()
-            }}
+          <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
+            onStop={ai.stop}
             onAccept={(
               ai.operation === 'generate' || ai.operation === 'continue'
             ) && !proseCandidate ? undefined : handleAcceptAI}

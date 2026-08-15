@@ -141,6 +141,9 @@ describe('R-HARNESS17 · 压缩评测面板', () => {
     expect(host.textContent).toContain('H85 两阶段判类 Held-out')
     expect(host.textContent).toContain('H86 真实故事线主路径 A/B')
     expect(host.querySelector('[data-testid="h86-story-arc-eval"]')).not.toBeNull()
+    expect(host.textContent).toContain('CREL-13 创作可靠性验收')
+    expect(host.querySelector('[data-testid="crel-eval-panel"]')).not.toBeNull()
+    expect(host.textContent).toContain('最多 18 次生成')
     expect(host.querySelector<HTMLButtonElement>(
       '[data-testid="h85-development-section"] button',
     )?.disabled).toBe(true)

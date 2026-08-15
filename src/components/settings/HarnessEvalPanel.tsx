@@ -42,6 +42,7 @@ import { APP_BUILD_ID } from '../../lib/version'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useDialog } from '../shared/Dialog'
 import H86StoryArcEvalPanel from './H86StoryArcEvalPanel'
+import CreativeReliabilityEvalPanel from './CreativeReliabilityEvalPanel'
 
 interface SplitViewState {
   checkpoint: H4LongConsistencyRunCheckpointV1 | null
@@ -882,6 +883,7 @@ export default function HarnessEvalPanel() {
       {renderAdjudicationSplit('development', 'H85 两阶段判类 Development')}
       {renderAdjudicationSplit('held-out', 'H85 两阶段判类 Held-out')}
       <H86StoryArcEvalPanel />
+      <CreativeReliabilityEvalPanel />
 
       <section className="border-t border-border pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">

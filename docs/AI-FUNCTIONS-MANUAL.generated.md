@@ -208,7 +208,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 49 个 category。
+共 48 个 category。
 未分类调用: 0 个。动态 category 调用: 25 个。
 
 | category | 触发文件 |
@@ -220,20 +220,20 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:24` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:451`<br/>`src/lib/node-authoring/domain-execution.ts:515` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1677` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1657` |
-| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:1067` |
-| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1802`<br/>`src/components/editor/ChapterEditor.tsx:2687` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1649` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1590` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1570` |
+| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:1059` |
+| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1715`<br/>`src/components/editor/ChapterEditor.tsx:2600` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1562` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `codex.extract` | `src/lib/agent/run/codex-extraction-durable.ts:627` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
 | `detail.scene` | `src/lib/ai/batch-detail-runner.ts:193` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
-| `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:119` |
-| `eval.h17.generation` | `src/components/settings/HarnessEvalPanel.tsx:120` |
-| `eval.h4.verifier` | `src/components/settings/HarnessEvalPanel.tsx:149`<br/>`src/components/settings/HarnessEvalPanel.tsx:188` |
+| `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:120` |
+| `eval.h17.generation` | `src/components/settings/HarnessEvalPanel.tsx:121` |
+| `eval.h4.verifier` | `src/components/settings/HarnessEvalPanel.tsx:150`<br/>`src/components/settings/HarnessEvalPanel.tsx:189` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
@@ -250,11 +250,10 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:286` |
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:106` |
-| `review.consistency.deep` | `src/components/editor/ChapterEditor.tsx:1363` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:451` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:98` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:115` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:1692` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:1605` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
 | `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:670`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
@@ -265,7 +264,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ### 动态 category 调用
 
-- `src/components/editor/ChapterEditor.tsx:1369 · chat`
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
 - `src/lib/agent/character-copilot.ts:475 · chat`
 - `src/lib/agent/character-driven-copilot.ts:507 · chat`
@@ -288,9 +286,10 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/world-origin-copilot.ts:255 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:603 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:97 · chat`
+- `src/lib/evals/creative-reliability/browser.ts:88 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/node-authoring/executor.ts:367 · chat`
 
 ---
 
-生成时间基准:commit `2cb4e75`
+生成时间基准:commit `c9205e3`
