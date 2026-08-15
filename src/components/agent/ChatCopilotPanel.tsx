@@ -15,6 +15,8 @@ import {
 import type { Project } from '../../lib/types'
 import { parseAgentEventPayload } from '../../lib/types'
 import { creativeArtifactCanAdoptV1 } from '../../lib/agent/creative-reliability'
+import { estimateCreativeRunPreviewV1 } from '../../lib/agent/creative-run-preview'
+import { useAIConfigStore } from '../../stores/ai-config'
 import { useMasterCopilot } from './useMasterCopilot'
 import CreativeArtifactSummary from './CreativeArtifactSummary'
 
@@ -38,6 +40,8 @@ export default function ChatCopilotPanel({
   onClose,
 }: Props) {
   const copilot = useMasterCopilot({ project, worldGroupId })
+  const creativeQualityMode = useAIConfigStore(state => state.creativeQualityMode)
+  const teamBudgetProfile = useAIConfigStore(state => state.agentTeamBudgetProfile)
   const [showDetails, setShowDetails] = useState(false)
   const endRef = useRef<HTMLDivElement | null>(null)
   const messages = copilot.events.filter(event => event.kind === 'message')
@@ -65,6 +69,16 @@ export default function ChatCopilotPanel({
     })
     return [...result.values()]
   }, [taskEvents])
+  const previewRequest = copilot.activeRequest ?? copilot.authorRequest
+  const runPreview = useMemo(() => (
+    previewRequest.trim().length >= 2
+      ? estimateCreativeRunPreviewV1({
+          request: previewRequest,
+          qualityMode: creativeQualityMode,
+          teamBudgetProfile,
+        })
+      : null
+  ), [creativeQualityMode, previewRequest, teamBudgetProfile])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'nearest' })
@@ -296,6 +310,31 @@ export default function ChatCopilotPanel({
           void copilot.submit()
         }}
       >
+        {runPreview && copilot.pendingCandidates.length === 0 && (
+          <section
+            aria-label="本轮调用预估"
+            className="mb-2 rounded-md border border-accent/20 bg-accent/5 px-3 py-2 text-[10px] leading-4 text-text-secondary"
+          >
+            <p className="font-medium text-text-primary">
+              本轮预计 {runPreview.artifactCount} 份可编辑候选：{runPreview.artifactLabels.join('、')}
+            </p>
+            <p className="mt-1">
+              通常 {runPreview.usualModelCalls} 次模型调用；本轮硬上限 {runPreview.hardMaxModelCalls} 次 /{' '}
+              {runPreview.hardMaxTokens.toLocaleString()} tokens，达到上限会在调用前停止。
+            </p>
+            <p className="mt-1">
+              {runPreview.automaticRepairCallsPerArtifact
+                ? '只有可定位的结构问题才允许每份最多追加 1 次定向修复；主观质量提示不会自动重试。'
+                : '节省模式只生成 1 次，后续校验和作者修改不再调用模型。'}
+            </p>
+            {runPreview.deferredArtifactLabels.length > 0 && (
+              <p className="mt-1 text-warning">
+                {runPreview.deferredArtifactLabels.join('、')}会等你先确认故事规划后，下一轮再生成。
+              </p>
+            )}
+            <p className="mt-1 text-text-muted">执行中可随时停止；已保存的计划和候选可恢复。</p>
+          </section>
+        )}
         <textarea
           aria-label="告诉主 Agent 你的目标"
           value={copilot.authorRequest}

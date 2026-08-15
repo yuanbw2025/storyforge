@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Project } from '../../src/lib/types'
 
 const mocks = vi.hoisted(() => ({
+  authorRequest: '',
+  activeRequest: null as string | null,
+  showPendingCandidate: true,
   setAuthorRequest: vi.fn(),
   submit: vi.fn(),
   stop: vi.fn(),
@@ -14,7 +17,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../src/components/agent/useMasterCopilot', () => ({
   useMasterCopilot: () => ({
-    authorRequest: '',
+    authorRequest: mocks.authorRequest,
+    activeRequest: mocks.activeRequest,
     setAuthorRequest: mocks.setAuthorRequest,
     events: [
       {
@@ -35,7 +39,7 @@ vi.mock('../../src/components/agent/useMasterCopilot', () => ({
         }),
       },
     ],
-    pendingCandidates: [{
+    pendingCandidates: mocks.showPendingCandidate ? [{
       event: {
         id: 3,
         kind: 'candidate',
@@ -50,7 +54,7 @@ vi.mock('../../src/components/agent/useMasterCopilot', () => ({
         contextSources: ['projectStatus', 'worldview'],
         baseSnapshot: {},
       },
-    }],
+    }] : [],
     busy: false,
     loading: false,
     submit: mocks.submit,
@@ -69,6 +73,9 @@ const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot>
 
 afterEach(async () => {
   vi.clearAllMocks()
+  mocks.authorRequest = ''
+  mocks.activeRequest = null
+  mocks.showPendingCandidate = true
   while (mounted.length) {
     const item = mounted.pop()!
     await act(async () => item.root.unmount())
@@ -123,5 +130,33 @@ describe('AGENT-2 · 单一主 Agent 对话入口', () => {
     await act(async () => buttons.find(button => button.textContent?.includes('采纳'))!.click())
     expect(mocks.rejectCandidate).toHaveBeenCalledTimes(1)
     expect(mocks.adoptCandidate).toHaveBeenCalledTimes(1)
+  })
+
+  it('在调用模型前展示产物、常规调用与硬预算边界', async () => {
+    mocks.activeRequest = '规划第一章章纲，然后写出第一章正文'
+    mocks.showPendingCandidate = false
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    mounted.push({ host, root })
+
+    await act(async () => root.render(createElement(ChatCopilotPanel, {
+      project: {
+        id: 1,
+        name: '潮汐纪元',
+        genre: 'fantasy',
+        genres: ['fantasy'],
+      } as Project,
+      worldGroupId: 3,
+      worldName: '盐海世界',
+      onClose: vi.fn(),
+    })))
+
+    const preview = host.querySelector('[aria-label="本轮调用预估"]')
+    expect(preview?.textContent).toContain('本轮预计 1 份可编辑候选：故事规划')
+    expect(preview?.textContent).toContain('通常 2 次模型调用')
+    expect(preview?.textContent).toContain('本轮硬上限 7 次')
+    expect(preview?.textContent).toContain('正文会等你先确认故事规划后')
+    expect(preview?.textContent).toContain('执行中可随时停止')
   })
 })

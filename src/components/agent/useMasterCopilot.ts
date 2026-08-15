@@ -82,6 +82,7 @@ export function useMasterCopilot(input: {
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [authorRequest, setAuthorRequest] = useState('')
+  const [activeRequest, setActiveRequest] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [recoveryAvailable, setRecoveryAvailable] = useState(false)
@@ -217,6 +218,7 @@ export function useMasterCopilot(input: {
     abortRef.current?.abort()
     abortRef.current = controller
     setBusy(true)
+    setActiveRequest(request)
     setError(null)
     if (requestOverride === undefined) setAuthorRequest('')
     try {
@@ -341,6 +343,7 @@ export function useMasterCopilot(input: {
       }
     } finally {
       if (abortRef.current === controller) abortRef.current = null
+      setActiveRequest(null)
       releaseMasterCopilotScope(scopeKey, scopeOwner)
       await reload(conversationId)
       notifyMasterCopilotSync(scopeKey)
@@ -565,6 +568,7 @@ export function useMasterCopilot(input: {
 
   return {
     authorRequest,
+    activeRequest,
     setAuthorRequest,
     events,
     pendingCandidates,
