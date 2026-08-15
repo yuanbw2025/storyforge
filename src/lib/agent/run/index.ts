@@ -14,6 +14,10 @@ export * from './master-durable'
 export * from './master-impact'
 export * from './master-verification'
 export * from './projection'
+// Explicit opt-in boundary only: the normal chapter path never invokes this
+// multi-call semantic review cycle automatically. Callers must present their
+// own cost confirmation before using it.
+export * from './prose-semantic-durable'
 export * from './read-only-durable'
 export * from './schema-utils'
 export * from './verification-receipt'

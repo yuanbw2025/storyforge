@@ -2,7 +2,7 @@
   "version": 1,
   "scope": "step-by-step-ui-direct-model-entry",
   "entries": [
-    { "file": "src/components/editor/ChapterEditor.tsx", "calls": 8, "status": "governed", "mechanism": "durable-run", "reason": "正文生成、语义复核、六域整理和章节记忆已进入 GenerationNode/Run 证据链。" },
+    { "file": "src/components/editor/ChapterEditor.tsx", "calls": 6, "status": "governed", "mechanism": "durable-run", "reason": "正文生成、六域整理和章节记忆已进入 GenerationNode/Run 证据链；CREL 默认正文路径不再隐藏自动复审，质量审校由 ReviewPanel 显式发起。" },
     { "file": "src/components/editor/ReviewPanel.tsx", "calls": 1, "status": "auxiliary", "mechanism": "read-only-review", "reason": "显式审校结果只展示，不直接写业务表。" },
     { "file": "src/components/geography/GeographyPanel.tsx", "calls": 1, "status": "auxiliary", "mechanism": "ephemeral-visual", "reason": "概念地图只形成当前 UI SVG，不写 Canon。" },
     { "file": "src/components/outline/ChapterOutlineWorkshop.tsx", "calls": 1, "status": "governed", "mechanism": "generation-node", "reason": "五阶段章纲工坊通过 GenerationNode 和既有确认式采纳。" },

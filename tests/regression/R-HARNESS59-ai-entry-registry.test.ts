@@ -18,7 +18,7 @@ const registry = JSON.parse(readFileSync('src/lib/agent/ai-entry-registry.json',
 describe('R-HARNESS59 · 分步骤 UI 模型入口注册表', () => {
   it('AST 守卫证明所有直调入口均登记且调用计数一致', () => {
     const output = execFileSync(process.execPath, ['scripts/check-ai-entry-registry.mjs'], { encoding: 'utf8' })
-    expect(output).toContain('13 files / 26 calls')
+    expect(output).toContain('13 files / 24 calls')
     expect(output).toContain('governed 7, auxiliary 6, migration 0')
   })
 
