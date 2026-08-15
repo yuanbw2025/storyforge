@@ -88,27 +88,38 @@ vi.mock('../../src/hooks/useAIStream', async () => {
 vi.mock('../../src/components/shared/AIStreamOutput', async () => {
   const React = await import('react')
   return {
-    default: (props: {
+    default: function MockAIStreamOutput(props: {
       output: string
       onAccept?: (value: string) => void
       onDismiss?: () => void
-    }) => React.createElement('div', { 'data-testid': 'durable-detail-output' },
-      React.createElement('span', null, props.output),
-      props.onAccept
-        ? React.createElement('button', {
-            type: 'button',
-            'data-testid': 'accept-detail',
-            onClick: () => props.onAccept?.(props.output),
-          }, '采纳')
-        : null,
-      props.onDismiss
-        ? React.createElement('button', {
-            type: 'button',
-            'data-testid': 'dismiss-detail',
-            onClick: props.onDismiss,
-          }, '拒绝')
-        : null,
-    ),
+      editable?: boolean
+    }) {
+      const [draft, setDraft] = React.useState(props.output)
+      React.useEffect(() => setDraft(props.output), [props.output])
+      return React.createElement('div', { 'data-testid': 'durable-detail-output' },
+        props.editable
+          ? React.createElement('textarea', {
+              'data-testid': 'edit-detail',
+              value: draft,
+              onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => setDraft(event.target.value),
+            })
+          : React.createElement('span', null, props.output),
+        props.onAccept
+          ? React.createElement('button', {
+              type: 'button',
+              'data-testid': 'accept-detail',
+              onClick: () => props.onAccept?.(draft),
+            }, '采纳')
+          : null,
+        props.onDismiss
+          ? React.createElement('button', {
+              type: 'button',
+              'data-testid': 'dismiss-detail',
+              onClick: props.onDismiss,
+            }, '拒绝')
+          : null,
+      )
+    },
   }
 })
 
@@ -119,6 +130,7 @@ vi.mock('../../src/components/outline/ChapterOutlineWorkshop', () => ({
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
+const validSceneOutput = mocks.sceneOutput
 
 async function waitUntil(predicate: () => boolean | Promise<boolean>): Promise<void> {
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -233,6 +245,7 @@ async function seedWorkspace(): Promise<{
 
 beforeEach(async () => {
   mocks.starts.length = 0
+  mocks.sceneOutput = validSceneOutput
   await db.delete()
   await db.open()
   useOutlineStore.setState({ nodes: [], loading: false })
@@ -344,6 +357,40 @@ describe.sequential('R-HARNESS37 · 章节页场景细纲 Agent/Harness 收口',
     const snapshot = await readAgentRunV1(fixture.scope, run!.id!)
     expect(snapshot.projection.state).toBe('completed')
     expect(snapshot.projection.terminalReceiptHash).toMatch(/^[a-f0-9]{64}$/)
+  })
+
+  it('结构失败保留可编辑细纲，作者修订后本地重校验并更新 durable 候选', async () => {
+    mocks.sceneOutput = '场景一：潮门试探（需要作者整理为 JSON）'
+    const fixture = await seedWorkspace()
+    const host = await mountScenePanel(fixture)
+    await waitUntil(() => !host.querySelector<HTMLElement>('[title="AI 一键拆场景"]')!
+      .className.includes('pointer-events-none'))
+    await act(async () => {
+      host.querySelector<HTMLElement>('[title="AI 一键拆场景"]')!.click()
+    })
+    await waitUntil(() => host.textContent?.includes('需要手动修复') === true)
+    expect(await db.detailedOutlines.count()).toBe(0)
+    expect(mocks.starts).toHaveLength(1)
+
+    const editor = host.querySelector<HTMLTextAreaElement>('[data-testid="edit-detail"]')!
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!
+      setter.call(editor, validSceneOutput)
+      editor.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-testid="accept-detail"]')!.click()
+    })
+    await waitUntil(async () => (await db.detailedOutlines.count()) === 1)
+
+    const run = await db.agentRuns.orderBy('id').last()
+    await waitUntil(async () => (
+      await readAgentRunV1(fixture.scope, run!.id!)
+    ).projection.state === 'completed')
+    const snapshot = await readAgentRunV1(fixture.scope, run!.id!)
+    expect(snapshot.events.map(event => event.type)).toContain('candidate.revised')
+    expect(snapshot.projection.state).toBe('completed')
+    expect(mocks.starts).toHaveLength(1)
   })
 
   it('ScenePanel 不再自行拼上下文、直接调用 AI 或使用二次模型解析', () => {

@@ -18,9 +18,17 @@ import {
 } from '../../lib/agent/skill-registry'
 import {
   buildDetailedOutlineCopilotPatchV1,
+  createDetailedOutlineCreativeArtifactV1,
   detailedOutlinePostStateMatchesPatchV1,
-  parseDetailedOutlineCopilotDraftV1,
+  revalidateDetailedOutlineCreativeDraftV1,
 } from '../../lib/agent/detailed-outline-copilot'
+import { updateAgentEventCandidate } from '../../lib/agent/conversations'
+import { creativeArtifactCanAdoptV1 } from '../../lib/agent/creative-reliability'
+import {
+  buildNarrativeBriefV1,
+  formatNarrativeBriefForPromptV1,
+} from '../../lib/agent/narrative-brief'
+import { resolveRequestConfig } from '../../lib/ai/client'
 import {
   beginDetailedOutlineGenerationStepV1,
   commitDetailedOutlineGenerationAdoptionV1,
@@ -76,6 +84,7 @@ export function useDetailedOutlineGenerationController(
     suspendRecovery,
   } = input
   const aiConfig = useAIConfigStore(state => state.config)
+  const creativeQualityMode = useAIConfigStore(state => state.creativeQualityMode)
   const ai = useAIStream(createAISessionKey(
     projectId,
     'detail.scene',
@@ -186,7 +195,7 @@ export function useDetailedOutlineGenerationController(
     const skill = getAgentSkillV1('outline.details', 'outline')
     const inputState = resolveAgentSkillInputStateV1(skill, [context.assembled])
     const guidance = buildAgentSkillInputGuidanceV1(skill, inputState)
-    const messages = operation === 'scenes'
+    const baseMessages = operation === 'scenes'
       ? buildDetailSceneGeneratePrompt(
           chapterTitle,
           chapterSummary,
@@ -205,6 +214,16 @@ export function useDetailedOutlineGenerationController(
           context.foreshadowContext,
           guidance,
         )
+    const narrativeBrief = buildNarrativeBriefV1({
+      authorRequest: operation === 'scenes'
+        ? `把《${chapterTitle}》拆成可执行场景，必须推动章节状态发生变化。`
+        : `完善《${chapterTitle}》的场景、冲突、情绪变化和结尾压力。`,
+      assembled: context.assembled,
+    })
+    const messages = [{
+      role: 'system' as const,
+      content: formatNarrativeBriefForPromptV1(narrativeBrief),
+    }, ...baseMessages]
     let snapshot = await createDetailedOutlineGenerationDurableRunV1({
       scope,
       worldGroupId,
@@ -230,6 +249,7 @@ export function useDetailedOutlineGenerationController(
     })
     const target = operation === 'scenes' ? ai : enhanceAI
     let output = ''
+    const startedAt = Date.now()
     try {
       output = await target.start(messages, undefined, {
         category: operation === 'scenes' ? 'detail.scene' : 'detail.enhance',
@@ -237,7 +257,6 @@ export function useDetailedOutlineGenerationController(
       })
       if (!output.trim()) throw new Error('模型没有返回可用的细纲内容。')
       snapshot = await recordDetailedOutlineGenerationModelOutputV1({ scope, snapshot, output })
-      parseDetailedOutlineCopilotDraftV1(output, operation)
     } catch (error) {
       await failDetailedOutlineGenerationStepV1({
         scope,
@@ -247,6 +266,17 @@ export function useDetailedOutlineGenerationController(
       })
       throw error
     }
+    const category = operation === 'scenes' ? 'detail.scene' : 'detail.enhance'
+    const modelIdentity = resolveRequestConfig(aiConfig, { category }).config
+    const creativeArtifact = await createDetailedOutlineCreativeArtifactV1({
+      raw: output,
+      operation,
+      narrativeBrief,
+      qualityMode: creativeQualityMode,
+      modelIdentity: { provider: modelIdentity.provider, model: modelIdentity.model },
+      inputText: messages.map(message => message.content).join('\n'),
+      durationMs: Math.max(0, Date.now() - startedAt),
+    })
     const baseCandidate: Omit<DetailedOutlineGenerationCandidateV1, 'durable'> = {
       version: 1,
       type: DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1,
@@ -258,6 +288,8 @@ export function useDetailedOutlineGenerationController(
       output,
       outputHash: await hashCanonicalValue(output),
       contextManifestHash: manifest.manifestHash,
+      creativeArtifact,
+      narrativeBrief,
       workspaceScope: scope,
       createdAt: Date.now(),
     }
@@ -288,6 +320,8 @@ export function useDetailedOutlineGenerationController(
     enhanceAI,
     chapterSummary,
     chapterTitle,
+    aiConfig,
+    creativeQualityMode,
     selectedOutlineNodeId,
     projectId,
     worldGroupId,
@@ -299,11 +333,45 @@ export function useDetailedOutlineGenerationController(
     operation: DetailedOutlineGenerationOperationV1,
     output: string,
   ) => {
-    const pending = pendingCandidate
+    let pending = pendingCandidate
     const outlineNodeId = selectedOutlineNodeId
     if (!pending || pending.candidate.operation !== operation || outlineNodeId == null) return false
-    if (pending.candidate.outlineNodeId !== outlineNodeId || pending.candidate.output !== output) {
+    if (pending.candidate.outlineNodeId !== outlineNodeId) {
       throw new Error('细纲候选已变化，请刷新后重新确认。')
+    }
+    if (pending.candidate.creativeArtifact && pending.candidate.narrativeBrief) {
+      const creativeArtifact = revalidateDetailedOutlineCreativeDraftV1({
+        raw: output,
+        operation,
+        narrativeBrief: pending.candidate.narrativeBrief,
+        previousArtifact: pending.candidate.creativeArtifact,
+      })
+      if (!creativeArtifactCanAdoptV1(creativeArtifact)) {
+        throw new Error('场景细纲仍有结构问题；请编辑 JSON 后再次校验。')
+      }
+      if (pending.candidate.output !== output) {
+        await updateAgentEventCandidate(
+          pending.eventId,
+          projectId,
+          output,
+          await resolveScopeLike(projectId),
+          { creativeArtifact, refreshOutputHash: true },
+        )
+        const restored = await readLatestDetailedOutlineGenerationCandidateV1({
+          scope: await resolveScopeLike(projectId),
+          outlineNodeId,
+        })
+        if (!restored) throw new Error('作者修订后的场景细纲未能恢复。')
+        pending = { candidate: restored.candidate, eventId: restored.event.id! }
+        setPendingCandidate(pending)
+        const restore = operation === 'scenes' ? restoreDetail : restoreEnhanced
+        restore({
+          output,
+          operation: `durable:${operation}:${pending.candidate.durable.runId}`,
+        })
+      }
+    } else if (pending.candidate.output !== output) {
+      throw new Error('旧版细纲候选不支持在线修订，请关闭后重新生成。')
     }
     const patch = buildDetailedOutlineCopilotPatchV1({
       raw: output,
@@ -360,6 +428,8 @@ export function useDetailedOutlineGenerationController(
     validForeshadowIds,
     worldGroupId,
     pendingCandidate,
+    restoreDetail,
+    restoreEnhanced,
   ])
 
   const dismissCandidate = useCallback(async (operation: DetailedOutlineGenerationOperationV1) => {

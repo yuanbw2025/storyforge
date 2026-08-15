@@ -29,6 +29,7 @@ import { useToast } from '../shared/Toast'
 import DetailedOutlineSidebar from './DetailedOutlineSidebar'
 import DetailedSceneCard from './DetailedSceneCard'
 import { useDetailedOutlineGenerationController } from './useDetailedOutlineGenerationController'
+import CreativeArtifactSummary from '../agent/CreativeArtifactSummary'
 import {
   INITIAL_RECORD_TARGET_CLASS,
   initialRecordTargetAttributes,
@@ -502,11 +503,19 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
               <div className="mb-4">
                 <AIStreamOutput
                   output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
+                  editable
                   onStop={ai.stop}
                   onAccept={text => { void handleAcceptDetailed('scenes', text) }}
                   onDismiss={() => { void handleDismissDetailed('scenes') }}
                   onRetry={handleAIGenerate}
                 />
+                {pendingDetailedCandidate?.candidate.operation === 'scenes'
+                  && pendingDetailedCandidate.candidate.creativeArtifact && (
+                  <CreativeArtifactSummary
+                    artifact={pendingDetailedCandidate.candidate.creativeArtifact}
+                    narrativeBrief={pendingDetailedCandidate.candidate.narrativeBrief}
+                  />
+                )}
               </div>
             )}
 
@@ -515,11 +524,19 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
               <div className="mb-4">
                 <AIStreamOutput
                   output={enhanceAI.output} isStreaming={enhanceAI.isStreaming} error={enhanceAI.error} tokenUsage={enhanceAI.tokenUsage}
+                  editable
                   onStop={enhanceAI.stop}
                   onAccept={text => { void handleAcceptDetailed('enhanced', text) }}
                   onDismiss={() => { void handleDismissDetailed('enhanced') }}
                   onRetry={handleEnhancedGenerate}
                 />
+                {pendingDetailedCandidate?.candidate.operation === 'enhanced'
+                  && pendingDetailedCandidate.candidate.creativeArtifact && (
+                  <CreativeArtifactSummary
+                    artifact={pendingDetailedCandidate.candidate.creativeArtifact}
+                    narrativeBrief={pendingDetailedCandidate.candidate.narrativeBrief}
+                  />
+                )}
               </div>
             )}
 

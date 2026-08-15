@@ -29,6 +29,12 @@ import {
   assertAgentSkillExecutionBindingV1,
   createAgentSkillExecutionBindingV1,
 } from '../execution-binding'
+import {
+  creativeArtifactCanAdoptV1,
+  parseCreativeArtifactV1,
+  type CreativeArtifactV1,
+} from '../creative-reliability'
+import { parseNarrativeBriefV1, type NarrativeBriefV1 } from '../narrative-brief'
 
 export const DETAILED_OUTLINE_GENERATION_STEP_ID_V1 = 'detailed-outline.generate'
 export const DETAILED_OUTLINE_GENERATION_CONVERSATION_PURPOSE_V1 = 'detailed-outline-generation'
@@ -54,6 +60,10 @@ export interface DetailedOutlineGenerationCandidateV1 {
   output: string
   outputHash: string
   contextManifestHash: string
+  /** Absent on candidates generated before CREL-8. */
+  creativeArtifact?: CreativeArtifactV1
+  /** Absent on candidates generated before CREL-8. */
+  narrativeBrief?: NarrativeBriefV1
   workspaceScope: WorkspaceScope
   createdAt: number
   durable: {
@@ -86,6 +96,8 @@ export async function hashDetailedOutlineGenerationCandidateV1(
       sourceSummaryHash: candidate.sourceSummaryHash,
       outputHash: candidate.outputHash,
       contextManifestHash: candidate.contextManifestHash,
+      ...(candidate.creativeArtifact ? { creativeArtifact: candidate.creativeArtifact } : {}),
+      ...(candidate.narrativeBrief ? { narrativeBrief: candidate.narrativeBrief } : {}),
       workspaceScope: {
         projectId: candidate.workspaceScope.projectId,
         worldId: candidate.workspaceScope.worldId,
@@ -150,7 +162,7 @@ export function buildDetailedOutlineGenerationRunContractV1(input: {
       ],
     }],
     failurePolicy: {
-      onProtocolError: 'retry' as const,
+      onProtocolError: 'fail' as const,
       onVerificationFailure: 'fail' as const,
       onStaleInput: 'pause-for-author' as const,
     },
@@ -288,7 +300,7 @@ export async function failDetailedOutlineGenerationStepV1(input: {
 function isCandidate(value: unknown): value is DetailedOutlineGenerationCandidateV1 {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const candidate = value as Partial<DetailedOutlineGenerationCandidateV1>
-  return candidate.version === 1
+  const baseValid = candidate.version === 1
     && candidate.type === DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1
     && typeof candidate.projectId === 'number'
     && typeof candidate.outlineNodeId === 'number'
@@ -303,6 +315,17 @@ function isCandidate(value: unknown): value is DetailedOutlineGenerationCandidat
     && candidate.durable.stepId === DETAILED_OUTLINE_GENERATION_STEP_ID_V1
     && typeof candidate.durable.runId === 'number'
     && typeof candidate.durable.candidateHash === 'string'
+  if (!baseValid) return false
+  if ((candidate.creativeArtifact === undefined) !== (candidate.narrativeBrief === undefined)) return false
+  if (candidate.creativeArtifact !== undefined) {
+    try {
+      candidate.creativeArtifact = parseCreativeArtifactV1(candidate.creativeArtifact)
+      candidate.narrativeBrief = parseNarrativeBriefV1(candidate.narrativeBrief)
+    } catch {
+      return false
+    }
+  }
+  return true
 }
 
 export async function persistDetailedOutlineGenerationCandidateV1(input: {
@@ -338,6 +361,10 @@ export async function persistDetailedOutlineGenerationCandidateV1(input: {
     sourceSummaryHash: input.candidate.sourceSummaryHash,
     outputHash: input.candidate.outputHash,
     contextManifestHash: input.candidate.contextManifestHash,
+    ...(input.candidate.creativeArtifact
+      ? { creativeArtifact: input.candidate.creativeArtifact }
+      : {}),
+    ...(input.candidate.narrativeBrief ? { narrativeBrief: input.candidate.narrativeBrief } : {}),
     workspaceScope: input.candidate.workspaceScope,
     candidateHash: input.candidate.durable.candidateHash,
   }
@@ -403,6 +430,8 @@ export async function readLatestDetailedOutlineGenerationCandidateV1(input: {
         output: event.content,
         outputHash: raw.outputHash,
         contextManifestHash: raw.contextManifestHash,
+        creativeArtifact: raw.creativeArtifact,
+        narrativeBrief: raw.narrativeBrief,
         workspaceScope: raw.workspaceScope,
         createdAt: event.createdAt,
         durable: {
@@ -490,6 +519,13 @@ export async function commitDetailedOutlineGenerationAdoptionV1(input: {
     !== input.candidate.durable.candidateHash) {
     throw new Error('细纲候选 hash 校验失败，请重新生成。')
   }
+  if (await hashCanonicalValue(input.candidate.output) !== input.candidate.outputHash) {
+    throw new Error('细纲候选输出 hash 校验失败，请重新生成。')
+  }
+  if (
+    input.candidate.creativeArtifact
+    && !creativeArtifactCanAdoptV1(input.candidate.creativeArtifact)
+  ) throw new Error('细纲候选仍有未修复的结构问题，不能采纳。')
   if (input.output !== input.candidate.output) throw new Error('细纲采纳内容与作者确认候选不一致。')
   let snapshot = await readAgentRunV1(input.scope, input.runId)
   assertDetailedOutlineGenerationExecutionBindingV1(snapshot)

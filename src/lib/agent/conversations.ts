@@ -128,7 +128,7 @@ export async function updateAgentEventCandidate(
   projectId: number,
   content: string,
   scope?: WorkspaceScope,
-  options?: { creativeArtifact?: CreativeArtifactV1 },
+  options?: { creativeArtifact?: CreativeArtifactV1; refreshOutputHash?: boolean },
 ): Promise<string | null> {
   const event = await db.agentEvents.get(eventId)
   const resolved = scope ?? await resolveScope({ projectId })
@@ -149,6 +149,12 @@ export async function updateAgentEventCandidate(
       ...payload,
       creativeArtifact: parseCreativeArtifactV1(options.creativeArtifact),
     }
+  }
+  if (payload && options?.refreshOutputHash) {
+    if (typeof payload.outputHash !== 'string') {
+      throw new Error('该候选不支持刷新 outputHash。')
+    }
+    payload = { ...payload, outputHash: await hashCanonicalValue(content) }
   }
 
   // Legacy conversational candidates have no durable run binding and keep

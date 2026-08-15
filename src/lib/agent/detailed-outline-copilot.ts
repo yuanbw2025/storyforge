@@ -1,5 +1,15 @@
 import type { DetailedOutline, DetailedScene, EmotionArc, ScenePace } from '../types'
 import { normalizeParsedScenes } from '../ai/adapters/detail-scene-adapter'
+import { estimateTokens } from '../ai/context-budget'
+import { computeCostUsd } from '../ai/usage-log'
+import {
+  parseCreativeArtifactV1,
+  type CreativeArtifactV1,
+  type CreativeQualityModeV1,
+} from './creative-reliability'
+import { createCreativeIssueV1 } from './creative-execution'
+import type { NarrativeBriefV1 } from './narrative-brief'
+import { hashCanonicalValue } from './run/hash'
 
 const VALID_PACES: readonly ScenePace[] = ['slow', 'medium', 'fast', 'climax']
 const VALID_EMOTION_ARCS: readonly EmotionArc[] = ['rising', 'falling', 'flat', 'wave', 'climax']
@@ -172,6 +182,104 @@ export function parseDetailedOutlineCopilotDraftV1(
     prohibitions: value.prohibitions === undefined ? [] : stringList(value.prohibitions, 'prohibitions'),
     scenes: parseScenes(value.scenes),
   }
+}
+
+function detailedOutlineArtifactBodyV1(input: {
+  raw: string
+  operation: DetailedOutlineCopilotOperationV1
+  narrativeBrief: NarrativeBriefV1
+}) {
+  try {
+    const output = parseDetailedOutlineCopilotDraftV1(input.raw, input.operation)
+    return {
+      status: 'ready' as const,
+      validFragments: output.scenes.map((scene, index) => ({
+        version: 1 as const,
+        id: `detailed-outline:scene:${index}`,
+        path: `$.scenes[${index}]`,
+        text: JSON.stringify(scene, null, 2),
+        status: 'valid' as const,
+        issueCodes: [],
+      })),
+      rejectedFragments: [],
+      issues: [],
+      assumptions: input.narrativeBrief.assumptions,
+    }
+  } catch (error) {
+    const issue = createCreativeIssueV1({
+      code: 'detailed-outline-response-invalid',
+      path: '$',
+      message: error instanceof Error ? error.message : '场景细纲结构无效。',
+      action: 'edit',
+    })
+    return {
+      status: 'manual-repair' as const,
+      validFragments: [],
+      rejectedFragments: [{
+        version: 1 as const,
+        id: 'detailed-outline:response',
+        path: '$',
+        text: input.raw.slice(0, 40_000),
+        status: 'rejected' as const,
+        issueCodes: [issue.code],
+      }],
+      issues: [issue],
+      assumptions: input.narrativeBrief.assumptions,
+    }
+  }
+}
+
+export async function createDetailedOutlineCreativeArtifactV1(input: {
+  raw: string
+  operation: DetailedOutlineCopilotOperationV1
+  narrativeBrief: NarrativeBriefV1
+  qualityMode: CreativeQualityModeV1
+  modelIdentity: { provider: string; model: string }
+  inputText: string
+  durationMs: number
+  usage?: { inputTokens: number; outputTokens: number; totalTokens: number }
+}): Promise<CreativeArtifactV1> {
+  const body = detailedOutlineArtifactBodyV1(input)
+  const inputTokens = input.usage?.inputTokens ?? estimateTokens(input.inputText)
+  const outputTokens = input.usage?.outputTokens ?? estimateTokens(input.raw)
+  return parseCreativeArtifactV1({
+    version: 1,
+    policyVersion: 'creative-reliability-v1',
+    ...body,
+    qualityMode: input.qualityMode,
+    originalText: input.raw,
+    editableText: input.raw,
+    canonEvidenceRefs: [],
+    callEvidence: [{
+      version: 1,
+      callIndex: 1,
+      purpose: 'generate',
+      status: 'succeeded',
+      provider: input.modelIdentity.provider,
+      model: input.modelIdentity.model,
+      usageSource: input.usage ? 'provider' : 'estimated',
+      inputTokens,
+      outputTokens,
+      totalTokens: input.usage?.totalTokens ?? inputTokens + outputTokens,
+      latencyMs: input.durationMs,
+      estimatedCostUsd: computeCostUsd(input.modelIdentity.model, inputTokens, outputTokens),
+      outputHash: await hashCanonicalValue(input.raw),
+    }],
+    repair: null,
+  })
+}
+
+export function revalidateDetailedOutlineCreativeDraftV1(input: {
+  raw: string
+  operation: DetailedOutlineCopilotOperationV1
+  narrativeBrief: NarrativeBriefV1
+  previousArtifact: CreativeArtifactV1
+}): CreativeArtifactV1 {
+  return parseCreativeArtifactV1({
+    ...input.previousArtifact,
+    ...detailedOutlineArtifactBodyV1(input),
+    editableText: input.raw,
+  })
 }
 
 function filterIds(ids: number[], validIds: ReadonlySet<number>): number[] {

@@ -16,6 +16,7 @@ import type { DetailedScene, Project, ScenePace } from '../../lib/types'
 import ChapterOutlineWorkshop from './ChapterOutlineWorkshop'
 import { adoptChapterOutlineWorkshopResult } from '../../lib/outline/adopt-workshop'
 import { useDetailedOutlineGenerationController } from './useDetailedOutlineGenerationController'
+import CreativeArtifactSummary from '../agent/CreativeArtifactSummary'
 
 const PACE_LABELS: Record<ScenePace, string> = {
   slow:   '🐢 慢',
@@ -227,39 +228,59 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
           )}
           {/* AI 输出 */}
           {(ai.output || ai.isStreaming || ai.error) && (
-            <AIStreamOutput
-              output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
-              onStop={ai.stop}
-              onAccept={async (text) => {
-                try {
-                  if (await acceptCandidate('scenes', text)) toast.success('已采纳场景细纲')
-                } catch (err) {
-                  console.error('[ScenePanel] 采纳失败:', err)
-                  toast.error(err instanceof Error ? err.message : '采纳场景失败，请重试')
-                }
-              }}
-              onDismiss={() => { void dismissCandidate('scenes') }}
-              onRetry={handleAIGenerate}
-            />
+            <div>
+              <AIStreamOutput
+                output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
+                editable
+                onStop={ai.stop}
+                onAccept={async (text) => {
+                  try {
+                    if (await acceptCandidate('scenes', text)) toast.success('已采纳场景细纲')
+                  } catch (err) {
+                    console.error('[ScenePanel] 采纳失败:', err)
+                    toast.error(err instanceof Error ? err.message : '采纳场景失败，请重试')
+                  }
+                }}
+                onDismiss={() => { void dismissCandidate('scenes') }}
+                onRetry={handleAIGenerate}
+              />
+              {pendingCandidate?.candidate.operation === 'scenes'
+                && pendingCandidate.candidate.creativeArtifact && (
+                <CreativeArtifactSummary
+                  artifact={pendingCandidate.candidate.creativeArtifact}
+                  narrativeBrief={pendingCandidate.candidate.narrativeBrief}
+                />
+              )}
+            </div>
           )}
 
           {(enhanceAI.output || enhanceAI.isStreaming || enhanceAI.error) && (
-            <AIStreamOutput
-              output={enhanceAI.output}
-              isStreaming={enhanceAI.isStreaming}
-              error={enhanceAI.error}
-              tokenUsage={enhanceAI.tokenUsage}
-              onStop={enhanceAI.stop}
-              onAccept={async text => {
-                try {
-                  if (await acceptCandidate('enhanced', text)) toast.success('已采纳增强细纲')
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : '采纳增强细纲失败，请重试')
-                }
-              }}
-              onDismiss={() => { void dismissCandidate('enhanced') }}
-              onRetry={handleEnhancedGenerate}
-            />
+            <div>
+              <AIStreamOutput
+                output={enhanceAI.output}
+                isStreaming={enhanceAI.isStreaming}
+                error={enhanceAI.error}
+                tokenUsage={enhanceAI.tokenUsage}
+                editable
+                onStop={enhanceAI.stop}
+                onAccept={async text => {
+                  try {
+                    if (await acceptCandidate('enhanced', text)) toast.success('已采纳增强细纲')
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : '采纳增强细纲失败，请重试')
+                  }
+                }}
+                onDismiss={() => { void dismissCandidate('enhanced') }}
+                onRetry={handleEnhancedGenerate}
+              />
+              {pendingCandidate?.candidate.operation === 'enhanced'
+                && pendingCandidate.candidate.creativeArtifact && (
+                <CreativeArtifactSummary
+                  artifact={pendingCandidate.candidate.creativeArtifact}
+                  narrativeBrief={pendingCandidate.candidate.narrativeBrief}
+                />
+              )}
+            </div>
           )}
 
           {/* 场景列表 */}
