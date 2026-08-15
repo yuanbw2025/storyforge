@@ -62,6 +62,9 @@
 - **没有运行 H85 held-out**，也不启用 fan-out、自动语义审查或生产 hard gate。
 - Doubao 当前配置是纯文本模型 `doubao-1-5-pro-32k-250115`；H84 的真实方舟
   `403 AccountOverdueError` 尚未解除，因此本单元没有重复制造 H85 Doubao 欠费调用。
+- 上述欠费结论只描述 H85 运行时状态。其后账户恢复正常，方舟 DeepSeek V4 Flash/Pro 最小连接均
+  成功；这项后续连接证据单独记录在 `ARK-DEEPSEEK-CONNECTION-EVIDENCE-20260815.md`，尚未产生新的
+  H4 checkpoint、usage 或质量门结果，不能回写 H85 的历史结论。
 - 下一实验若继续提高 precision，只能在 development 上针对 false-positive / wrong-subtype 判定边界做新的
   冻结协议并重新跑完整门；不得查看或运行 held-out 来调参。
 

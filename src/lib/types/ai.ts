@@ -81,6 +81,9 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
   ],
   doubao: [
     { value: 'doubao-1-5-pro-32k-250115', label: 'Doubao 1.5 Pro 32K', desc: '32K 上下文·纯文本生成' },
+    { value: 'deepseek-v4-flash-ga-260731', label: 'DeepSeek V4 Flash 正式版', desc: '火山方舟·快速文本推理' },
+    { value: 'deepseek-v4-pro-260425', label: 'DeepSeek V4 Pro', desc: '火山方舟·高质量文本推理' },
+    { value: 'deepseek-v4-flash-260425', label: 'DeepSeek V4 Flash', desc: '火山方舟·文本推理' },
   ],
   // Gemini 模型列表（2026-05-11 通过 Google API 实际拉取校验）
   gemini: [

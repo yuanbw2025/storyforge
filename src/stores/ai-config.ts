@@ -160,6 +160,13 @@ function getChineseExplanation(status: number, msg: string): string {
     return 'API Key 类型或格式不正确；豆包请使用火山方舟 API Key，不要使用 IAM Access Key、API Key ID 或 Secret'
   if (lower.includes('has not activated the model'))
     return '账号尚未开通该模型，请在火山方舟「开通管理」启用对应模型'
+  if (
+    lower.includes('overdue balance')
+    || lower.includes('account overdue')
+    || lower.includes('accountoverdueerror')
+  ) return '账户存在逾期欠费，本次请求已在账户校验层被阻断；结清欠费后再重试'
+  if (lower.includes('insufficient balance') || lower.includes('insufficient_balance'))
+    return '账户余额不足，请充值后使用'
 
   // 按 HTTP 状态码
   if (status === 401) return 'API Key 无效或已过期'
@@ -172,8 +179,6 @@ function getChineseExplanation(status: number, msg: string): string {
   if (status === 503) return '服务暂时不可用，可能正在维护'
 
   // 按错误信息关键词匹配
-  if (lower.includes('insufficient balance') || lower.includes('insufficient_balance'))
-    return '账户余额不足，请充值'
   if (lower.includes('invalid api key') || lower.includes('invalid_api_key'))
     return 'API Key 无效，请检查是否填写正确'
   if (lower.includes('authentication') || lower.includes('unauthorized'))
@@ -478,14 +483,6 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
 
       // 常见英文错误 → 中文翻译映射
       const cnExplanation = getChineseExplanation(response.status, rawErrorMsg)
-
-      // HTTP 402 = 余额不足，但说明连接和认证都成功了
-      if (response.status === 402) {
-        const msg = `${rawErrorMsg}（${cnExplanation}）`
-        updateLog(log.id, { status: 'success', statusCode: response.status, duration, responseBody: bodyText.slice(0, 200) })
-        const prefix = normalized.warnings.length ? `${normalized.warnings.join(' ')} ` : ''
-        return { ok: true, message: `✅ ${prefix}连接成功 — ${msg}`, statusCode: response.status, duration }
-      }
 
       const urlHint = normalized.warnings.length
         ? `；${normalized.warnings.join(' ')}`

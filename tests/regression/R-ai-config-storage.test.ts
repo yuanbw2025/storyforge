@@ -16,6 +16,7 @@ async function freshStore() {
 afterEach(() => {
   localStorage.clear()
   sessionStorage.clear()
+  vi.unstubAllGlobals()
   vi.resetModules()
 })
 
@@ -230,12 +231,23 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(PROVIDER_PRESETS.doubao?.model).toBe('doubao-1-5-pro-32k-250115')
     expect(PROVIDER_MODELS.doubao?.map(model => model.value)).toEqual([
       'doubao-1-5-pro-32k-250115',
+      'deepseek-v4-flash-ga-260731',
+      'deepseek-v4-pro-260425',
+      'deepseek-v4-flash-260425',
     ])
     expect(getModelPreset('doubao', 'doubao-1-5-pro-32k-250115')).toMatchObject({
       maxContext: 32_000,
       maxOutput: 4_096,
     })
     expect(getModelPreset('doubao', 'doubao-pro-32k').maxContext).toBe(32_000)
+    expect(getModelPreset('doubao', 'deepseek-v4-flash-ga-260731')).toMatchObject({
+      maxContext: 128_000,
+      maxOutput: 8_192,
+    })
+    expect(getModelPreset('doubao', 'deepseek-v4-pro-260425')).toMatchObject({
+      maxContext: 128_000,
+      maxOutput: 16_384,
+    })
 
     localStorage.setItem(CONFIG_KEY, JSON.stringify({
       provider: 'doubao',
@@ -248,5 +260,46 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     const useAIConfigStore = await freshStore()
     expect(useAIConfigStore.getState().config.model).toBe('doubao-1-5-pro-32k-250115')
     expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}').model).toBe('doubao-1-5-pro-32k-250115')
+  })
+})
+
+describe('R-AI-CONFIG · 连接测试错误分类', () => {
+  it('把方舟 403 AccountOverdueError 识别为账户欠费而不是 Key 权限不足', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: async () => JSON.stringify({
+        error: {
+          code: 'AccountOverdueError',
+          message: 'The request failed because your account has an overdue balance.',
+        },
+      }),
+    }))
+    const useAIConfigStore = await freshStore()
+    useAIConfigStore.getState().setConfig({ apiKey: 'ark-test' })
+
+    const result = await useAIConfigStore.getState().testConnection()
+
+    expect(result.ok).toBe(false)
+    expect(result.statusCode).toBe(403)
+    expect(result.message).toContain('账户存在逾期欠费')
+    expect(result.message).not.toContain('API Key 权限不足')
+  })
+
+  it('不把 HTTP 402 余额不足误报为连接成功', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 402,
+      text: async () => JSON.stringify({ error: { message: 'insufficient balance' } }),
+    }))
+    const useAIConfigStore = await freshStore()
+    useAIConfigStore.getState().setConfig({ apiKey: 'ark-test' })
+
+    const result = await useAIConfigStore.getState().testConnection()
+
+    expect(result.ok).toBe(false)
+    expect(result.statusCode).toBe(402)
+    expect(result.message).toContain('账户余额不足')
+    expect(result.message).not.toContain('连接成功')
   })
 })

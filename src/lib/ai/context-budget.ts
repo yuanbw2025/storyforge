@@ -63,6 +63,9 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
   // Doubao
   'doubao': { label: '豆包默认', maxContext: 32_000, maxOutput: 4_096 },
   'doubao:doubao-1-5-pro-32k-250115': { label: 'Doubao 1.5 Pro 32K', maxContext: 32_000, maxOutput: 4_096 },
+  'doubao:deepseek-v4-flash-ga-260731': { label: 'DeepSeek V4 Flash 正式版（火山方舟）', maxContext: 128_000, maxOutput: 8_192 },
+  'doubao:deepseek-v4-pro-260425': { label: 'DeepSeek V4 Pro（火山方舟）', maxContext: 128_000, maxOutput: 16_384 },
+  'doubao:deepseek-v4-flash-260425': { label: 'DeepSeek V4 Flash（火山方舟）', maxContext: 128_000, maxOutput: 8_192 },
 
   // GLM
   'glm': { label: 'GLM 默认', maxContext: 128_000, maxOutput: 4_096 },
