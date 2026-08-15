@@ -1,7 +1,7 @@
 import type { DetailedOutline, DetailedScene, EmotionArc, ScenePace } from '../types'
 import { normalizeParsedScenes } from '../ai/adapters/detail-scene-adapter'
 import { estimateTokens } from '../ai/context-budget'
-import { computeCostUsd } from '../ai/usage-log'
+import { computeKnownCostUsd } from '../ai/usage-log'
 import {
   parseCreativeArtifactV1,
   type CreativeArtifactV1,
@@ -262,7 +262,7 @@ export async function createDetailedOutlineCreativeArtifactV1(input: {
       outputTokens,
       totalTokens: input.usage?.totalTokens ?? inputTokens + outputTokens,
       latencyMs: input.durationMs,
-      estimatedCostUsd: computeCostUsd(input.modelIdentity.model, inputTokens, outputTokens),
+      estimatedCostUsd: computeKnownCostUsd(input.modelIdentity.model, inputTokens, outputTokens),
       outputHash: await hashCanonicalValue(input.raw),
     }],
     repair: null,

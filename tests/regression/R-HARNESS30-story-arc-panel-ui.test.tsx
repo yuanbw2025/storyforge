@@ -141,7 +141,7 @@ function candidate(status: 'ready' | 'manual-repair' = 'ready') {
         entryState: '主角抵达钟塔',
         exitChange: '主角取得进入钟室的资格',
         nextPressure: '守卫将在日出时封死钟室',
-        mustHonor: [],
+        mustHonor: ['潮汐钟会抹除被指定的记忆。'],
         mustNotReveal: [],
         creativeFreedom: [],
         assumptions: [],
@@ -209,6 +209,9 @@ describe('R-HARNESS30 · 故事线面板统一进入主 Agent Harness', () => {
     expect(host.textContent).toContain('可直接采纳')
     expect(host.textContent).toContain('1 次模型调用 · 150 tokens')
     expect(host.textContent).toContain('查看本轮故事推进目标')
+    expect(host.textContent).toContain('要发生的变化：主角取得进入钟室的资格')
+    expect(host.textContent).toContain('本轮采用的项目依据（来自已登记正式数据）')
+    expect(host.textContent).toContain('潮汐钟会抹除被指定的记忆')
     expect(host.textContent).toContain('1 项临时假设（采纳前不是正式设定）')
     expect(host.textContent).toContain('还没有故事线')
 

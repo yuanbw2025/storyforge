@@ -1,5 +1,5 @@
 import { estimateTokens } from '../ai/context-budget'
-import { computeCostUsd } from '../ai/usage-log'
+import { computeKnownCostUsd } from '../ai/usage-log'
 import type { GenerationGateIssue } from '../generation/generation-node'
 import type { ChatMessage } from '../types'
 import {
@@ -90,7 +90,7 @@ async function callEvidence(input: {
     latencyMs: input.result?.durationMs ?? null,
     estimatedCostUsd: inputTokens == null || outputTokens == null
       ? null
-      : computeCostUsd(input.modelIdentity.model, inputTokens, outputTokens),
+      : computeKnownCostUsd(input.modelIdentity.model, inputTokens, outputTokens),
     outputHash: input.result ? await hashCanonicalValue(input.result.output) : null,
   }
 }

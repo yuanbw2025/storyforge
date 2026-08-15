@@ -93,10 +93,29 @@ export function modelPrice(model: string): ModelPrice {
   return MODEL_PRICING.find(p => p.match(model || ''))?.price ?? DEFAULT_PRICE
 }
 
+/**
+ * Returns null when StoryForge has no explicit price entry. Creative evidence
+ * must not present the legacy fallback price as if it were the provider's bill.
+ */
+export function knownModelPrice(model: string): ModelPrice | null {
+  return MODEL_PRICING.find(p => p.match(model || ''))?.price ?? null
+}
+
 /** 按 token 数 + 模型计算美元费用 */
 export function computeCostUsd(model: string, inputTokens: number, outputTokens: number): number {
   const p = modelPrice(model)
   return (inputTokens / 1_000_000) * p.input + (outputTokens / 1_000_000) * p.output
+}
+
+export function computeKnownCostUsd(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+): number | null {
+  const p = knownModelPrice(model)
+  return p
+    ? (inputTokens / 1_000_000) * p.input + (outputTokens / 1_000_000) * p.output
+    : null
 }
 
 // ── 汇率（美元→人民币），可在页面调整，存 localStorage ──

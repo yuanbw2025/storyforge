@@ -77,8 +77,23 @@ export default function CreativeArtifactSummary({
           <summary className="cursor-pointer">查看本轮故事推进目标</summary>
           <div className="mt-1 space-y-0.5">
             <p>目标：{narrativeBrief.creativeGoal}</p>
+            <p>进入时：{narrativeBrief.entryState}</p>
+            <p>人物想要：{narrativeBrief.protagonistDesire}</p>
+            <p>当前阻力：{narrativeBrief.obstacle}</p>
+            <p>必须面对的选择：{narrativeBrief.requiredChoice}</p>
+            <p>失败代价：{narrativeBrief.stakes}</p>
             <p>要发生的变化：{narrativeBrief.exitChange}</p>
             <p>下一步压力：{narrativeBrief.nextPressure}</p>
+            {narrativeBrief.mustHonor.length > 0 && (
+              <div className="pt-0.5">
+                <p>本轮采用的项目依据（来自已登记正式数据）：</p>
+                <ul className="list-disc pl-4">
+                  {narrativeBrief.mustHonor.slice(0, 8).map((item, index) => (
+                    <li key={`${index}:${item}`}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </details>
       )}
