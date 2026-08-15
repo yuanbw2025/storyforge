@@ -1423,9 +1423,12 @@ CHIRON 四类信息可映射到现有结构：
 - 协议失败最多两次且仅使用静态 repair；非重试型 4xx 单次终止。429/瞬时 provider 失败改为一次后
   `provider-blocked`，只有明确继续才新增调用，且不消耗协议 repair 次数；旧版两次 429 失败 checkpoint
   可验签续跑；
-- 真实 Agnes development 从父 v7 的 TP/FP/FN 21/13/11 提升到 26/7/6，precision/recall 从
-  61.8%/65.6% 提升到 78.8%/81.3%，证据 35/35、intent 与 clean 均零误升级；但 precision 未达 90%，
-  两次旧 429 又造成 unmetered usage，故 gate 仍 FAIL，held-out 未运行；
+- 真实同模型 Agnes development 从父 v7 的 21/13/11 提升到 26/7/6、78.8%/81.3%，仍因 precision
+  与两次旧 429 的 unmetered usage FAIL。冻结相同协议、改用独立 DeepSeek V4 Pro 判类后，development
+  达 29/3/3、90.6%/90.6%、80/80 调用完整计量并 PASS；
+- 一次性 sealed held-out 的 H4 Agnes 父结果为 11/7/5、61.1%/68.8%，H85 DeepSeek 后为
+  14/4/2、77.8%/87.5%，证据 19/19，但 precision 与 1/2 intent escalation 令 gate FAIL。生产 gate
+  保持关闭，且不得查看逐例 hidden label 或据此继续调参；
 - 证据见 `docs/evals/HARNESS-85-TWO-STAGE-ADJUDICATION-EVIDENCE-20260815.md`。本单元只改评测
   控制面，不新增表、Context Source、可写字段、业务模型入口或生产 gate。
 

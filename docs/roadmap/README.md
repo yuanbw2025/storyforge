@@ -42,8 +42,8 @@
 | 类型 / 用户故事 | `HARNESS-85` 评测可靠性任务。第一阶段已找到并逐字验证证据时，独立判类调用只能读取证据对与通用 taxonomy，必须物理隔离第一阶段标签/摘要和 hidden labels；每一次真实调用、失败与恢复都要可审计，不能把两阶段折叠成一个 attempt。 |
 | 主归属 / 复用 | 归 H4/H5；复用 H84 Agnes judge v7 完整 checkpoint、H28 artifact/checkpoint/scorer、同一 40+20 fixture 和共享 `chat()`。不新增表、Context Source、可写字段、业务模型入口或生产 gate。 |
 | 协议 / 恢复 | H85 checkpoint 内嵌验签父 checkpoint，逐调用冻结 stage、身份、trace/input/output hash、usage 和 derived issue set。零候选零调用；协议 repair 最多两次。403 等非重试型 4xx 单次终止；429/瞬时失败单次后 `provider-blocked`，仅显式继续才调用，旧两次 429 checkpoint 保持可验可续。设置页支持父 checkpoint 导入、H85 独立恢复、两阶段 aggregate 和只读 JSON 降级导出。 |
-| 真实结果 / 发布门 | Agnes 完成 40/40，TP/FP/FN 从 21/13/11 提升到 26/7/6，precision/recall 从 61.8%/65.6% 提升到 78.8%/81.3%，evidence 35/35，intent/clean 均 0；但 precision 未达 90%，且两次旧 429 无 usage 回执，门禁以 `high-severity-hard-precision + usage-evidence-missing` FAIL。held-out 未运行。 |
-| 验收 / 下一步 | H85 runner 10 项、设置 UI 7 项及相关 H17/H28/H82～H84/双文本模型联合回归 15 files / 121 tests 通过；完整 CI 为 375 files / 1816 tests，coverage 81.95% / 73.73% / 79.68% / 81.95%，3,779 modules 构建、bundle budget 与 0 生产漏洞通过；独立 Chromium E2E 52/52（4.6 分钟）。自包含 artifact、aggregate、hash、用量和本机归档见 `docs/evals/HARNESS-85-TWO-STAGE-ADJUDICATION-EVIDENCE-20260815.md`。下一实验只能继续在 development 收紧 false-positive / wrong-subtype 边界，不得查看 held-out 调参或把相对提升冒充发布 PASS。 |
+| 真实结果 / 发布门 | 同模型 Agnes 历史 development 为 26/7/6、78.8%/81.3% 且 usage 不完整，FAIL。冻结同一 H85 协议、改用独立 `deepseek-v4-pro-260425` 判类后，development 29/3/3、precision/recall 90.6%/90.6%、80/80 调用全部计量，门禁 PASS；随后一次性运行 sealed held-out，H4 父结果 11/7/5，H85 后 14/4/2、precision/recall 77.8%/87.5%、evidence 19/19，但 precision 与 1/2 intent escalation 令门禁 FAIL。生产 gate 继续关闭。 |
+| 验收 / 下一步 | H85 runner 10 项、设置 UI 7 项及相关 H17/H28/H82～H84/双文本模型联合回归 15 files / 121 tests 已通过；父子 development/held-out checkpoint 均由仓库验签器和 sealed scorer 复算，全部真实调用有 usage。自包含 artifact、aggregate、hash、用量和本机归档见 `docs/evals/HARNESS-85-TWO-STAGE-ADJUDICATION-EVIDENCE-20260815.md`。held-out 已消耗，禁止据此调参；真实 generator 主路径 A/B、人工修改量/完成率/p95 与独立人工复核仍须另行完成。 |
 
 ### HARNESS-84 完成卡：verifier taxonomy 校准与失败重试收口
 
@@ -672,7 +672,8 @@
   Wilson 区间及配对 bootstrap 错误密度比较。开发设置页已改走 H4 40+20，逐例验签持久化、刷新恢复、
   development 门禁解锁 held-out、aggregate 展示和 checkpoint 导出均已接入；旧 NS-0/NS-1 模型入口及结果 key
   已删除，H17 保留。当前只有模拟响应/jsdom 的工程证据，sealed 不代表源码标签保密；真实外部模型 40+20
-  artifact、真实浏览器关闭重开、人工 held-out 复核和质量收益仍待后续，因此 H4 和全面 Harness 重构均未完成。
+  artifact 与真实浏览器运行已在 H82～H85 补齐；sealed held-out 门禁 FAIL，人工复核和真实创作 generator
+  质量收益仍待后续，因此不能把 H4 工程完成误报为生产质量通过。
 - HARNESS-29 已把 provider 原生 `tool_calls` 接到现有只读 Agent Runner，但它只是默认关闭的 transport
   优化，不是第二套 Agent 或工具系统。工具 schema 从 `AGENT_READ_TOOLS` 派生，读取仍经
   `CONTEXT_SOURCES + assembleContext()`，执行仍经 `executeAgentTool()` 且没有业务写权限；schema token
