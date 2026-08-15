@@ -6,12 +6,13 @@
 >
 > 远端分支：`origin/feat/harness-rebuild-20260807`
 >
-> 最新功能单元：`HARNESS-86 真实故事线 Generator 主路径 A/B`（具体提交以 `git log -1` 为准）
+> 最新功能单元：`6a303e7 feat(HARNESS-86): add real story arc main-path evaluation`
 >
 > 世界引擎基线：`774a2ae feat(WORLD-2): close executable world foundation through 2F`
 >
-> 当前结论：入口迁移与三注册表治理主体已闭合，H86 完整 CI 与 52/52 Chromium E2E 已通过；真实
-> verifier 与 generator 发布门均以负面证据保持关闭，提交/推送与合并前基线审计完成前仍不能宣称发布。
+> 当前结论：本轮 Agent + Harness 工程目标及完成审计已经闭合，`6a303e7` 已推送且功能分支与远端对齐；
+> 真实 verifier 与 generator 发布门均以负面证据保持关闭。工程完成不等于模型质量发布通过，不得开启
+> 当前生产语义/generator gate。
 
 本文用于把当前开发交给另一个模型或另一台电脑继续。代码、测试和提交历史仍是实现事实源；本文负责说明目标、边界、已完成范围、未完成范围、当前验证状态和下一步入口，避免接手者重新发明体系或偏离用户目标。
 
@@ -359,6 +360,12 @@ found 0 vulnerabilities
 
 H64～H86 在独立 worktree 中完成；原工作树的作者改动及未跟踪 `output/` / `tmp/` 未被读取、修改或提交。H86 的完整 CI 与完整项目 E2E 均已实际重跑通过，以下记录不借用前序单元结果。
 
+最终审计开始时功能分支工作树干净，功能交付 `6a303e79f10232b1a4cf2f329896de829baa7081`
+已经与远端对齐；本段完成状态只作为随后的 docs-only 交接提交推送。原 `main` 工作树仍停在作者自己的
+`0f05cadce133208865b4b3b11d63c4860b396e6f`，没有被本工程切换、提交或推送。H59 AST census 为
+13 files / 26 calls、7 governed / 6 auxiliary / 0 migration；H64 与 H57/H77/H79/H80/H81 当前专项合计
+6 files / 56 tests 通过，三注册表、导入导出和项目生命周期专项 7 files / 45 tests 通过。
+
 ### 8.3 E2E 状态
 
 HARNESS-66 最终 `npm run ci:e2e` 使用项目指定 Playwright Chromium、单 worker 和独立浏览器数据原样运行，43/43 通过，耗时约 3.4 分钟。地图用例冻结实际 OpenAI-compatible API 请求，证明候选可刷新恢复、模型只调一次、确认前正式地图不变、确认后地图生效且人工比例尺刷新持久化。首次全量运行还稳定暴露城池重要地点异步自动保存与立即刷新的竞态（重复 5 次为 4/5）；Codex 同记录写入改为串行并显示真实保存状态后，该用例重复 5/5、最终全量 43/43。没有使用或修改作者当前预览项目。
@@ -683,9 +690,10 @@ H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77/H7
 
 当前交付基线已经更新：
 
+- 功能交付提交 `6a303e7` 已推送至 `origin/feat/harness-rebuild-20260807`，最终完成审计只补充本交接终态；分支工程目标完成，但生产模型质量门仍为 FAIL。
 - 全仓 `npm run lint` 与完整 `npm run ci` 通过；生产依赖审计为 0 漏洞，`nanoid` 公告已通过同主版本 `5.1.16` 修复，未使用强制审计修复。
 - 项目指定 Playwright Chromium 在当前最终代码重跑为 52/52（4.6 分钟）；严格故事线对象传输精确主路径另独立通过 1/1（5.3 秒）。首次旧 fixture 运行的 51/52 已保留为协议回归证据，没有误报为全绿。
 - 最近一次全量 coverage 为 376 files / 1829 tests，全部通过；覆盖率为 82.12% statements / 73.80% branches / 80.45% functions / 82.12% lines；3786 模块生产构建通过，入口 679.8 KiB / gzip 211.0 KiB。
 - 原工作树仍属于作者且保持未触碰；后续继续使用独立 worktree，不得把其未跟踪文件带入提交。
 
-提交前以根 `AGENTS.md` 的最新闸门为准，至少运行当前单元定向回归、H59 census 回归、三注册表/architecture/roadmap/freshness/source reachability/canon 检查、`npx tsc --noEmit`、`npm run build`、bundle 检查和 `git diff --check`。所有文档、生成物和源码必须提交到当前功能分支，工作树除明确属于用户的本地未跟踪文件外不得留下交接改动。
+后续若继续研究发布质量或进入合并流程，仍以根 `AGENTS.md` 的最新闸门为准，并重新核对目标分支基线；不得复用已消耗 held-out 调参，也不得因为工程分支已完成而绕开当前关闭的生产质量门。
