@@ -139,6 +139,8 @@ describe('R-HARNESS17 · 压缩评测面板', () => {
     expect(host.textContent).toContain('20 例')
     expect(host.textContent).toContain('H85 两阶段判类 Development')
     expect(host.textContent).toContain('H85 两阶段判类 Held-out')
+    expect(host.textContent).toContain('H86 真实故事线主路径 A/B')
+    expect(host.querySelector('[data-testid="h86-story-arc-eval"]')).not.toBeNull()
     expect(host.querySelector<HTMLButtonElement>(
       '[data-testid="h85-development-section"] button',
     )?.disabled).toBe(true)

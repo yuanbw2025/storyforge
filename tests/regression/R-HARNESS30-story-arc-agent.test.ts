@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createStoryArcCopilotNode,
   parseStoryArcCandidateDraft,
+  parseStoryArcModelResponseV2,
   prepareStoryArcCopilot,
   type StoryArcCopilotCandidate,
 } from '../../src/lib/agent/story-arc-copilot'
@@ -37,7 +38,24 @@ import {
   adoptGenerationNodeOutput,
   runGenerationNode,
 } from '../../src/lib/generation/generation-node'
-import type { Project, WorkspaceScope } from '../../src/lib/types'
+import type { AIConfig, Project, WorkspaceScope } from '../../src/lib/types'
+import { useAIConfigStore } from '../../src/stores/ai-config'
+
+const STORY_ARC_CONFIG: AIConfig = {
+  provider: 'openai',
+  apiKey: 'test-key',
+  baseUrl: 'https://example.invalid/v1',
+  model: 'story-arc-json-test',
+  temperature: 0.55,
+  maxTokens: 10_000,
+  contextWindow: 128_000,
+}
+
+const ORIGINAL_AI_STATE = {
+  config: structuredClone(useAIConfigStore.getState().config),
+  presets: structuredClone(useAIConfigStore.getState().presets),
+  taskRoutes: structuredClone(useAIConfigStore.getState().taskRoutes),
+}
 
 const directWorkflow = {
   version: 1 as const,
@@ -148,10 +166,12 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
   beforeEach(async () => {
     await db.delete()
     await db.open()
+    useAIConfigStore.setState({ config: STORY_ARC_CONFIG, presets: [], taskRoutes: {} })
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    useAIConfigStore.setState(ORIGINAL_AI_STATE)
     db.close()
   })
 
@@ -164,6 +184,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
     expect(getAgentSkillV1('outline.story-arcs')).toMatchObject({
       agentId: 'outline',
       executionMode: 'story-arcs',
+      promptVersion: 'story-arc-copilot-v4',
       writeTargets: [{
         table: 'storyArcs',
         fields: ['name', 'type', 'stages', 'description'],
@@ -178,8 +199,10 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       const prompt = body.messages.map((message: { content: string }) => message.content).join('\n')
       expect(prompt).toContain('依据现有设定生成一条主线故事线')
       expect(prompt).toContain('盐海每十年退潮一次')
+      expect(prompt).toContain('绝不能放在故事线顶层')
+      expect(body.response_format).toEqual({ type: 'json_object' })
       return new Response(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify([mainArc()]) } }],
+        choices: [{ message: { content: JSON.stringify({ storyArcs: [mainArc()] }) } }],
         usage: { prompt_tokens: 31, completion_tokens: 47, total_tokens: 78 },
       }), { status: 200 })
     })
@@ -208,7 +231,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
 
   it('生成候选后保持零写入，作者确认眼前候选后才写入 storyArcs', async () => {
     const { project, scope } = await createWorkspace()
-    const runAI = vi.fn(async () => JSON.stringify([mainArc()]))
+    const runAI = vi.fn(async () => JSON.stringify({ storyArcs: [mainArc()] }))
     const prepared = await prepareStoryArcCopilot({
       projectId: project.id!,
       scope,
@@ -270,6 +293,33 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
     }]))).toThrow('卷范围')
   })
 
+  it('模型响应必须使用无额外字段的 storyArcs 对象信封，编辑草稿仍保持数组合同', () => {
+    expect(parseStoryArcModelResponseV2(JSON.stringify({ storyArcs: [mainArc()] }))).toEqual([mainArc()])
+    expect(parseStoryArcCandidateDraft(JSON.stringify([mainArc()]))).toEqual([mainArc()])
+    expect(() => parseStoryArcModelResponseV2(JSON.stringify([mainArc()])))
+      .toThrow('必须是 JSON 对象')
+    expect(() => parseStoryArcModelResponseV2(JSON.stringify({ storyArcs: [mainArc()], projectId: 7 })))
+      .toThrow('不允许的字段')
+    expect(() => parseStoryArcModelResponseV2('```json\n{"storyArcs":[]}\n```'))
+      .toThrow('严格 JSON 对象')
+    expect(parseStoryArcModelResponseV2(JSON.stringify({
+      storyArcs: [{
+        ...mainArc(),
+        stages: mainArc().stages.map((stage, index) => index === 0
+          ? { ...stage, turningPoint: '   ' }
+          : stage),
+      }],
+    }))).toEqual([mainArc()])
+    expect(() => parseStoryArcModelResponseV2(JSON.stringify({
+      storyArcs: [{
+        ...mainArc(),
+        stages: mainArc().stages.map((stage, index) => index === 0
+          ? { ...stage, turningPoint: null }
+          : stage),
+      }],
+    }))).toThrow('turningPoint 必须是非空字符串')
+  })
+
   it('作者把候选改成非法结构时重新 gate，且不触发写入', async () => {
     const { project, scope } = await createWorkspace()
     const prepared = await prepareStoryArcCopilot({
@@ -324,7 +374,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
         worldGroupId: null,
         authorRequest: task.instruction,
         skillId: task.skillId,
-      }, { runAI: async () => JSON.stringify([mainArc()]) })
+      }, { runAI: async () => JSON.stringify({ storyArcs: [mainArc()] }) })
       const generated = await runGenerationNode(prepared.node, prepared.prepared)
       const candidate: ExecutedMasterCandidate = {
         payload: {
@@ -399,7 +449,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
         worldGroupId: null,
         authorRequest: task.instruction,
         skillId: task.skillId,
-      }, { runAI: async () => JSON.stringify([mainArc('不可篡改主线')]) })
+      }, { runAI: async () => JSON.stringify({ storyArcs: [mainArc('不可篡改主线')] }) })
       const generated = await runGenerationNode(prepared.node, prepared.prepared)
       await options.executionTrace?.candidateReady?.(task, {
         payload: {

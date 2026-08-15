@@ -13,7 +13,11 @@ import {
 import { createAgentRunV1, readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import type { AgentModelAdapter } from '../../src/lib/agent/runner'
-import { getAIProviderCapabilityProfileV1 } from '../../src/lib/ai/provider-capabilities'
+import {
+  getAIProviderCapabilityProfileV1,
+  getJsonObjectResponseCapabilityV1,
+  supportsVerifiedJsonObjectResponseV1,
+} from '../../src/lib/ai/provider-capabilities'
 import { db } from '../../src/lib/db/schema'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
 import { AGENT_READ_TOOLS } from '../../src/lib/agent/tool-registry'
@@ -139,6 +143,16 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       config: { ...OPENAI_CONFIG, provider: 'custom' },
       preference: 'native-tools-v1',
     })).toThrow('尚无 StoryForge 原生工具调用合同证据')
+  })
+
+  it('keeps verified JSON-object transport independent from native tool-call capability', () => {
+    expect(getJsonObjectResponseCapabilityV1('openai')).toBe('supported')
+    expect(getJsonObjectResponseCapabilityV1('agnes')).toBe('supported')
+    expect(getJsonObjectResponseCapabilityV1('doubao')).toBe('supported')
+    expect(getJsonObjectResponseCapabilityV1('custom')).toBe('unverified')
+    expect(supportsVerifiedJsonObjectResponseV1('agnes')).toBe(true)
+    expect(supportsVerifiedJsonObjectResponseV1('custom')).toBe(false)
+    expect(getAIProviderCapabilityProfileV1('agnes').nativeToolCalls).toBe('unverified')
   })
 
   it('strictly maps native tool calls into the same closed read-only protocol', () => {

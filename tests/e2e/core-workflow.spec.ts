@@ -1934,7 +1934,7 @@ test('故事线面板通过主 Agent 生成 durable 候选，确认后才写入�
                     dependsOn: [],
                   }],
                 })
-              : JSON.stringify(modelCandidate),
+              : JSON.stringify({ storyArcs: modelCandidate }),
           },
         }],
         usage: { prompt_tokens: 240, completion_tokens: 100, total_tokens: 340 },

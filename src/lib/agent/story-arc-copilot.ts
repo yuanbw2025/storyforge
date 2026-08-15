@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig } from '../ai/client'
+import { supportsVerifiedJsonObjectResponseV1 } from '../ai/provider-capabilities'
 import { db } from '../db/schema'
 import type {
   GenerationGateIssue,
@@ -208,6 +209,16 @@ function parseVolumeNumber(value: unknown, label: string): number | undefined {
   return Number(value)
 }
 
+function parseOptionalString(value: unknown, label: string, maxLength: number): string | undefined {
+  if (value === undefined) return undefined
+  // JSON object mode commonly materializes an unfilled optional text control as
+  // an empty string. Its documented semantic meaning is absence, so normalize
+  // only that exact no-information case; non-string and non-empty invalid values
+  // still fail closed.
+  if (typeof value === 'string' && !value.trim()) return undefined
+  return assertString(value, label, maxLength)
+}
+
 function parseStage(value: unknown, arcIndex: number, stageIndex: number): StoryArcCopilotStageCandidate {
   const label = `故事线候选第 ${arcIndex + 1} 项的第 ${stageIndex + 1} 个阶段`
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -239,13 +250,12 @@ function parseStage(value: unknown, arcIndex: number, stageIndex: number): Story
   if (startVolume !== undefined && endVolume !== undefined && startVolume > endVolume) {
     throw new Error(`${label} 的卷范围起点不能晚于终点。`)
   }
+  const turningPoint = parseOptionalString(source.turningPoint, `${label}.turningPoint`, MAX_EVENT_CHARS)
   return {
     title: assertString(source.title, `${label}.title`, MAX_STAGE_TITLE_CHARS),
     description: assertString(source.description, `${label}.description`, MAX_STAGE_DESCRIPTION_CHARS),
     keyEvents,
-    ...(source.turningPoint === undefined
-      ? {}
-      : { turningPoint: assertString(source.turningPoint, `${label}.turningPoint`, MAX_EVENT_CHARS) }),
+    ...(turningPoint === undefined ? {} : { turningPoint }),
     ...(startVolume === undefined ? {} : { startVolume, endVolume }),
   }
 }
@@ -289,6 +299,34 @@ export function parseStoryArcCandidateDraft(draft: string): StoryArcCopilotCandi
   return candidates
 }
 
+/**
+ * Production model transport v2. Editable/persisted candidates intentionally
+ * remain a bare JSON array, while model output uses an exact object envelope so
+ * providers with JSON-object mode can enforce a compatible top-level value.
+ */
+export function parseStoryArcModelResponseV2(raw: string): StoryArcCopilotCandidate[] {
+  const input = raw.trim()
+  if (!input) throw new Error('故事线模型响应为空。')
+  if (input.length > MAX_CANDIDATE_CHARS) {
+    throw new Error(`故事线模型响应超过 ${MAX_CANDIDATE_CHARS} 字符。`)
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(input)
+  } catch {
+    throw new Error('故事线模型响应不是有效的严格 JSON 对象。')
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('故事线模型响应必须是 JSON 对象。')
+  }
+  const source = parsed as Record<string, unknown>
+  assertExactKeys(source, ['storyArcs'], [], '故事线模型响应')
+  if (!Array.isArray(source.storyArcs)) {
+    throw new Error('故事线模型响应.storyArcs 必须是 JSON 数组。')
+  }
+  return parseStoryArcCandidateDraft(JSON.stringify(source.storyArcs))
+}
+
 function candidateIssues(
   output: StoryArcCopilotCandidate[],
   snapshot: StoryArcCopilotSnapshot,
@@ -329,9 +367,9 @@ function candidateIssues(
 
 function buildStoryArcMessages(input: StoryArcCopilotInput): ChatMessage[] {
   const kindInstruction = input.kind === 'main'
-    ? '只规划 main 类型主线。'
+    ? '只规划且只输出 1 条故事线；type 必须严格为 main，禁止输出 sub。'
     : input.kind === 'sub'
-      ? '只规划 sub 类型支线，并说明它如何与现有主线交织。'
+      ? '只规划且只输出 1 条故事线；type 必须严格为 sub，并说明它如何与现有主线交织，禁止输出 main。'
       : '同时规划至少一条 main 主线和一条 sub 支线，并明确它们的交汇关系。'
   const supplemental = input.supplementalContext.trim()
     ? `\n\n【本轮已验证上游候选（尚未采纳，不属于 Canon）】\n${input.supplementalContext.trim()}`
@@ -345,11 +383,12 @@ function buildStoryArcMessages(input: StoryArcCopilotInput): ChatMessage[] {
 硬性要求：
 1. ${kindInstruction}
 2. 每条故事线必须有 3-7 个因果递进阶段；每阶段包含标题、描述和 1-3 个关键事件。
-3. 转折点可用 turningPoint；只有确有卷级依据时才同时填写 startVolume/endVolume，均为从 1 开始的整数。
-4. 已有设定是约束；设定缺失时只做服务于本轮规划的候选补全，不声称它已经成为 Canon。
+3. 每条故事线顶层只能有 name/type/description/stages 四个字段。turningPoint、startVolume、endVolume 只能放在 stages 数组内的阶段对象上，绝不能放在故事线顶层；只有确有卷级依据时才同时填写 startVolume/endVolume，均为从 1 开始的整数。
+4. 已有设定是硬约束；不得改变既定时限、能力、代价、因果或实体身份，也不得为未命名人物擅自命名。设定缺失时只做不与现有事实冲突的候选补全，不声称它已经成为 Canon。
 5. 避免复制已有故事线；支线必须有独立目标，也要说明与主线的因果交汇。
-6. 只输出严格 JSON 数组，不输出 Markdown、解释或额外字段。每项严格使用：
-{"name":"名称","type":"main|sub","description":"整体描述","stages":[{"title":"阶段标题","description":"阶段描述","keyEvents":["事件"],"turningPoint":"可选","startVolume":1,"endVolume":2}]}`,
+6. 只输出一个严格 JSON 对象，不输出 Markdown、解释或额外字段。顶层只能有 storyArcs；最小结构严格使用：
+{"storyArcs":[{"name":"名称","type":"main|sub","description":"整体描述","stages":[{"title":"阶段标题","description":"阶段描述","keyEvents":["事件"]}]}]}
+7. 阶段对象内的 turningPoint、startVolume、endVolume 都是可选字段；没有明确依据就省略，不要输出占位值。`,
   }, {
     role: 'user' as const,
     content: [
@@ -561,13 +600,15 @@ export function createStoryArcCopilotNode(
       temperature: input.generationOverrides?.temperature ?? 0.55,
     },
     contextOverflowPolicy: 'reject',
-  }, input.signal))
+  }, input.signal, undefined, supportsVerifiedJsonObjectResponseV1(input.config.provider)
+    ? { responseFormat: 'json_object' }
+    : undefined))
   return {
     id: `agent.outline.story-arcs:${input.projectId}:${input.worldGroupId ?? 'global'}:${input.kind}:${input.snapshot.serialized.length}`,
     kind: 'outline.story-arcs',
     editableInput: true,
     assembleInput: buildStoryArcMessages,
-    run: async messages => parseStoryArcCandidateDraft(await runAI(messages)),
+    run: async messages => parseStoryArcModelResponseV2(await runAI(messages)),
     gate: output => {
       const issues = candidateIssues(output, input.snapshot, input.kind)
       return { status: issues.length ? 'blocked' : 'pass', issues }

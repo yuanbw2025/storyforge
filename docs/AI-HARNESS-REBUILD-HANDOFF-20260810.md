@@ -1,16 +1,17 @@
 # StoryForge Agent + Harness 全面重构交接文档
 
-> 更新日期：2026-08-14
+> 更新日期：2026-08-15
 >
 > 交接分支：`feat/harness-rebuild-20260807`
 >
 > 远端分支：`origin/feat/harness-rebuild-20260807`
 >
-> 最新功能单元：`HARNESS-80 H57 跨类型下游调度与完成投影`（具体提交以 `git log -1` 为准）
+> 最新功能单元：`HARNESS-86 真实故事线 Generator 主路径 A/B`（具体提交以 `git log -1` 为准）
 >
 > 世界引擎基线：`774a2ae feat(WORLD-2): close executable world foundation through 2F`
 >
-> 当前结论：重构主体约完成 85%～89%。这是工程范围估算，不是质量评分，也不代表可以合并发布。
+> 当前结论：入口迁移与三注册表治理主体已闭合，H86 完整 CI 与 52/52 Chromium E2E 已通过；真实
+> verifier 与 generator 发布门均以负面证据保持关闭，提交/推送与合并前基线审计完成前仍不能宣称发布。
 
 本文用于把当前开发交给另一个模型或另一台电脑继续。代码、测试和提交历史仍是实现事实源；本文负责说明目标、边界、已完成范围、未完成范围、当前验证状态和下一步入口，避免接手者重新发明体系或偏离用户目标。
 
@@ -306,7 +307,7 @@ HARNESS-81 最新代码入口：
 | 反向反馈 | 影响图、受限作者 patch、确定性重建、作者复核、可信人工修正 pre/post receipt、修正后 current plan、确定性余项 child、两个带 proof 的生成式 child、统一 schedule/共享 slot，以及全部当前节点的闭集执行器政策已完成 | 新增生成类型不再是默认待办；正文与耦合/整章集合派生刻意走精确人工链。真实 generator 主路径的质量、人工修改量、完成率、成本/延迟 p95 与人工 held-out 复核仍缺 |
 | 评测/发布 | 大量模块回归、H4 工程基座、配对 gate 和防篡改证据存在；H82～H85 闭合真实调用、凭证隔离、协议恢复、taxonomy、独立判类、逐调用账本、自包含父子 checkpoint 与 429 恢复。Agnes 发现 + DeepSeek V4 Pro 判类的 development 29/3/3、90.6%/90.6%、完整计量并 PASS，20 例 sealed held-out 已真实运行 | held-out 仅 14/4/2、77.8%/87.5%，且 1/2 intent control 被误升级，门禁 FAIL；生产语义 gate 必须保持关闭。不得用已消耗 held-out 调参；真实 generator 主路径 A/B 与独立人工复核仍未完成 |
 
-## 8. 当前停点：HARNESS-85 已完成跨模型 Development + Held-out，质量发布门保持关闭
+## 8. 当前停点：HARNESS-86 已完成真实 Generator 主路径 A/B，生产发布门保持关闭
 
 ### 8.1 已通过
 
@@ -337,13 +338,14 @@ HARNESS-81 最新代码入口：
 - HARNESS-83 相关 report/runner/UI/transport 回归 31/31 通过，闭集 repair reason、无 raw output/label 泄漏、输入 hash、前序失败绑定篡改和 v1/v2/v3 兼容均有反例；真实 Doubao 与 Agnes v4 都完成 40/40，但 precision/recall 分别只有 51.7%/46.9% 与 45.5%/46.9%，所以 held-out 未运行。
 - HARNESS-84 定向 report/runner/UI/transport 7 文件 / 42 项通过；将 v4 错误分解为证据发现与 subtype 分类：Agnes/Doubao 分别找到 30/32、25/32 个正确证据对，但 exact subtype 都只有 15。judge v5～v7 冻结操作定义/边界、8 项与 clean 空根、repair 全约束复核；相同 repair 不再调用，非重试型 4xx 一次终止。Agnes v7 完成 40/40，但 TP/FP/FN 21/13/11、precision/recall 61.8%/65.6% 仍 FAIL；Doubao v7 被 `403 AccountOverdueError` 在 0/40 阻断，当前代码实测只记录一次 unmetered failure。held-out 未运行。
 - HARNESS-85 runner 10 项与设置 UI 7 项定向回归通过：第二阶段物理隔离第一阶段 subtype/summary/severity/intent、hidden label 与完整来源；自包含 checkpoint 内嵌父 v7，并逐调用冻结 stage、身份、trace/input/output hash、usage、失败和 derived set。零候选零调用，403 单次终止，429 单次暂停/显式续跑，现场旧两次 429 checkpoint 可验可续。真实同模型 Agnes development 为 26/7/6、78.8%/81.3% 且 usage 不完整，FAIL；冻结同一协议改用独立 DeepSeek V4 Pro 判类后为 29/3/3、90.6%/90.6%、80/80 调用完整计量，PASS。随后 20 例 sealed held-out 从 H4 父结果 11/7/5 提升到 14/4/2、77.8%/87.5%，但 precision 与 intent escalation 门禁 FAIL。父子 checkpoint 与 sealed score 均由仓库代码复算，完整证据见 `docs/evals/HARNESS-85-TWO-STAGE-ADJUDICATION-EVIDENCE-20260815.md`。
+- HARNESS-86 已冻结 6 个不含作者手稿的中文合成世界，交叉比较 `b6b57f4` 前真实故事线旧 prompt/parser 与生产 `outline.story-arcs` Context/Skill/durable Run；两边共用 Agnes 2.5 Flash，独立 DeepSeek V4 Pro verifier 不参与修复。生产传输收口为 exact-key `{"storyArcs":[...]}`，JSON object capability 在中央 provider registry 中独立于 native tools 登记。最终 v4 两边均只完成 2/6；Agent 成功子集 semantic 0.95、required-fact coverage 29.17%、零未来/错世界泄漏，但 p95/token/cost 为旧入口 1.819x/3.817x/4.773x。旧入口 8/8、Agent 18/18 真实调用均有 usage；机器门因完成率、durable coverage 与预算 FAIL。只有 1 个双方成功配对，hash 绑定盲评被 fail closed 阻止，生产 gate 保持关闭。五份 `0600` checkpoint 的内部 hash、文件 SHA-256 和失败分类见 `docs/evals/HARNESS-86-STORY-ARC-MAIN-PATH-EVIDENCE-20260815.md`。
 - `npx tsc --noEmit`：通过。
 - 改动范围 ESLint 与全仓 `npm run lint`：通过。
 - `git diff --check`：通过。
-- `npm run test:coverage` 独占资源重跑：375 个测试文件、1818 项测试全部通过。
-- 覆盖率：statements 82.09%、branches 73.74%、functions 80.38%、lines 82.09%。
-- `npm run build`：通过，3779 个模块完成生产构建。
-- `npm run check:bundle-size`：通过；入口 679.7 KiB，gzip 211.0 KiB。
+- `npm run test:coverage` 独占资源重跑：376 个测试文件、1829 项测试全部通过。
+- 覆盖率：statements 82.12%、branches 73.80%、functions 80.45%、lines 82.12%。
+- `npm run build`：通过，3786 个模块完成生产构建。
+- `npm run check:bundle-size`：通过；入口 679.8 KiB，gzip 211.0 KiB；最大异步/vendor chunk 490.8 KiB，gzip 128.1 KiB。
 - `npm run ci`：完整通过，包括 required tables、AI manual/entry registry、architecture、source reachability、roadmap、agent context/freshness、Canon coverage、project metrics、生产依赖审计、全仓 lint、TypeScript、全量 coverage、生产构建和 bundle budget。
 
 ### 8.2 CI / 工作树状态
@@ -355,7 +357,7 @@ HARNESS-81 最新代码入口：
 found 0 vulnerabilities
 ```
 
-H64～H81 在独立 worktree 中完成；原工作树的作者改动及未跟踪 `output/` / `tmp/` 未被读取、修改或提交。H81 的完整 CI 与完整项目 E2E 均已实际重跑通过，以下记录不借用前序单元结果。
+H64～H86 在独立 worktree 中完成；原工作树的作者改动及未跟踪 `output/` / `tmp/` 未被读取、修改或提交。H86 的完整 CI 与完整项目 E2E 均已实际重跑通过，以下记录不借用前序单元结果。
 
 ### 8.3 E2E 状态
 
@@ -394,6 +396,8 @@ HARNESS-83 在最终代码上使用项目指定 Playwright Chromium、单 worker
 HARNESS-84 在最终代码上使用项目指定 Playwright Chromium、单 worker 和独立浏览器数据完整重跑 52/52 通过，耗时 4.6 分钟、零失败。该轮不增加业务 E2E；重点证明 taxonomy、三次有界 repair、相同 repair 提前终止和非重试型 4xx 一次终止没有破坏既有 Agent/Harness、候选确认和正式写回主路径。真实 H4 调用全部使用作者当前设置页的 session-only provider 凭证，但没有读取、打印或持久化 Key，评测 checkpoint 以 `0600` 存入 Downloads 且不进入仓库；E2E 没有使用或修改作者当前预览项目。
 
 HARNESS-85 在当前最终代码上用同一项目指定 Chromium、单 worker 和独立浏览器数据再次完整重跑 52/52，耗时 4.7 分钟、零失败。该轮新增的是开发评测控制面而非业务 E2E；重点证明父 checkpoint 导入、两阶段恢复/导出、429 暂停语义和共享 scorer 没有破坏现有 Agent/Harness、候选确认、数据生命周期与正式写回主路径。真实 Agnes/DeepSeek 调用只使用作者当前设置页已保存的本机凭证，没有读取或打印 Key；development/held-out 自包含 checkpoint 均以 `0600` 归档且不进仓库。
+
+HARNESS-86 首次完整项目 Chromium 运行 51/52，准确暴露故事线 E2E 模拟 provider 仍返回旧裸数组；生产 UI 按新的 exact-key 对象协议 fail closed，没有生成候选或写入正式故事线。fixture 改为 `{"storyArcs":[...]}` 后，精确故事线 durable 主路径 1/1 通过（5.3 秒）；最终工作树又用项目指定 Chromium、单 worker、独立浏览器数据整套从头重跑 52/52，耗时 4.6 分钟。该路径证明严格对象传输下仍只调用一次模型、候选可刷新恢复、确认前 `storyArcs` 零写入、作者可编辑裸数组草稿，确认后才经正式采纳入口持久化且再次刷新可见。H86 真实 Agnes/DeepSeek 评测只使用设置页本机凭证，没有读取或打印 Key；五份 checkpoint 均以 `0600` 归档且不进仓库。E2E 没有使用或修改作者当前预览项目。
 
 ### 8.4 测试负载注意事项
 
@@ -572,7 +576,7 @@ git diff --check
 
 当前重构已经从“提示词字段拼接 + 零散质量检查”推进到真正的 Agent/Skill + durable Harness 主体：主要生成入口有明确职责、上下文证据、结构化候选、作者确认、受治理采纳、终态验证、恢复和回放；正文也具备信息隔离、语义评审、章后状态和影响图。
 
-当前最关键的未闭环不是再造 Agent。HARNESS-56～58 的反向反馈确定性后半链、HARNESS-59 census、HARNESS-60～76 的高风险入口与辅助入口风险裁决、HARNESS-77～79 的两个生成式 H57 child、HARNESS-80 的跨类型调度/完成语义，以及 HARNESS-81 的全部当前节点执行器政策均已闭合，census 中已无 migration。H81 明确证明 storylines/state/item 的现有能力是耦合或整章集合流程，不能由单条 H57 item 隐式扩大写入；这些目标已有 H50/H52～57 精确人工完成路径。H85 已取得真实 verifier 的 development + held-out 质量、token、成本与延迟证据，并诚实冻结 held-out FAIL；下一步是独立人工复核和真实创作 generator 主路径的旧入口/Agent+Harness A/B，不是继续查看隐藏集调 verifier。当前代码的定向回归、完整 CI、构建与 52/52 Chromium E2E 均已从头复验通过。
+当前最关键的未闭环不是再造 Agent。HARNESS-56～58 的反向反馈确定性后半链、HARNESS-59 census、HARNESS-60～76 的高风险入口与辅助入口风险裁决、HARNESS-77～79 的两个生成式 H57 child、HARNESS-80 的跨类型调度/完成语义，以及 HARNESS-81 的全部当前节点执行器政策均已闭合，census 中已无 migration。H81 明确证明 storylines/state/item 的现有能力是耦合或整章集合流程，不能由单条 H57 item 隐式扩大写入；这些目标已有 H50/H52～57 精确人工完成路径。H85 已取得真实 verifier 的 development + held-out 证据并诚实冻结 FAIL；H86 又取得真实故事线 generator 旧入口/Agent + Harness 的质量、完成率、token、成本、延迟与 durable 证据，但双方完成率均只有 33.3%，Agent 开销超过预注册预算，完整配对不足使人工盲评 fail closed。入口治理工程与发布质量结论必须分开：当前不存在待迁移 AI 入口，但 verifier 与 generator 生产 gate 都保持关闭，不能用工程完成冒充模型发布通过。H86 定向回归、完整 CI、3,786-module 构建、bundle budget 与 52/52 Chromium E2E 均已从头复验通过。
 
 ## 17. 2026-08-14 跨电脑接续状态（当前权威入口）
 
@@ -668,20 +672,20 @@ tests/regression/R-HARNESS64-story-timeline-extraction-durable.test.ts
 
 H64 专属回归、H59/H63/H64 联合回归通过；`docs/roadmap/README.md`、`docs/roadmap/CAPABILITY-BASELINE.md`、`docs/AI-HARNESS-AUDIT-20260807.md`、本文、`docs/AI-FUNCTIONS-MANUAL.md`、生成版 AI manual、`docs/DATA-FLOW-DIAGRAM.md` 和项目指标均随独立完成提交同步，不 amend `757ce47`。
 
-### 17.5 H85 跨模型 Development + Held-out 后的总路线
+### 17.5 H86 真实 Generator A/B 后的总路线
 
-H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77/H78/H79 已从 fresh H57 current plan 交付带直接依赖 proof 的章纲摘要和单事件年表两个生成目标，H80 已用 canonical schedule 与共享 generation slot 闭合跨类型调度和完成语义，H81 又为全部当前节点冻结 exact executor policy。H82～H85 冻结真实 verifier、协议恢复、taxonomy 与二阶段判类。账户恢复后，`deepseek-v4-pro-260425` 在不修改 H85 协议的前提下把 Agnes 发现的 development 提升到 29/3/3、90.6%/90.6%，80/80 次调用全部取得 usage，完整门 PASS；随后一次性运行 20 例 sealed held-out，H85 得到 14/4/2、77.8%/87.5%，证据 19/19，但 precision 与 1/2 intent escalation 令门禁 FAIL。因此工程控制面与真实成本/延迟证据已取得，生产语义 gate 仍不能开启，也没有证据支持增加更宽自动生成能力。未来若产品要求集合级自动重建，必须另行冻结删除/新增范围、集合 baseline、CAS 和终验，不能复用单记录 item 偷渡。下一阶段只能取得：
+H76 已将 `src/lib/agent/ai-entry-registry.json` 收口为 0 migration；H77/H78/H79 已从 fresh H57 current plan 交付带直接依赖 proof 的章纲摘要和单事件年表两个生成目标，H80 已用 canonical schedule 与共享 generation slot 闭合跨类型调度和完成语义，H81 又为全部当前节点冻结 exact executor policy。H82～H85 冻结真实 verifier、协议恢复、taxonomy 与二阶段判类；一次性 sealed held-out 最终为 14/4/2、77.8%/87.5%，因 precision 与 intent escalation FAIL。H86 随后用 Agnes generator 与 DeepSeek verifier 比较真实旧故事线入口和生产 Agent + Harness：两边均只完成 2/6，Agent 虽在成功子集无质量回归和泄漏，但 p95/token/cost 为旧入口 1.819x/3.817x/4.773x，机器门 FAIL，完整配对不足也不能启动人工盲评。因此工程控制面、真实质量/成本/延迟证据和失败边界都已取得，生产语义与 generator gate 仍不能开启，也没有证据支持增加更宽自动生成能力。未来若产品要求集合级自动重建，必须另行冻结删除/新增范围、集合 baseline、CAS 和终验，不能复用单记录 item 偷渡。后续发布研究边界为：
 
 - 当前 held-out 已消耗，禁止查看逐例标签、针对它修改 prompt 或反复试模型。后续 verifier 研究只能先冻结新的 development 数据/协议与独立终验集，保留 H85 父子 lineage、逐调用账本、usage 与显式恢复。
-- 真实 generator 主路径仍须另做旧入口/Agent+Harness 配对，记录质量、人工修改量、完成率、token、成本、延迟和 p95，并完成独立人工复核；H4 静态合成 generator 与真实 verifier 证据不能替代真实生成收益。
+- 真实故事线 generator A/B 已完成并 FAIL；不得继续对同一 v4 development 抽样追结果。若重开，先冻结新的 generator development/终验协议或更换为已证明稳定遵守结构化输出的 generator，再取得 6/6 完整配对后进行独立人工修改量/偏好复核。
 - 独立浏览器数据中的真实 UI/API E2E，不得修改作者当前预览项目。
 - 根 `AGENTS.md` 要求的全部架构、表、AI manual、TypeScript、相关测试、构建、bundle、`npm run ci` 与适用的 `npm run ci:e2e` 证据。
 
 当前交付基线已经更新：
 
 - 全仓 `npm run lint` 与完整 `npm run ci` 通过；生产依赖审计为 0 漏洞，`nanoid` 公告已通过同主版本 `5.1.16` 修复，未使用强制审计修复。
-- 项目指定 Playwright Chromium 在当前最终代码重跑为 52/52（4.7 分钟）；H81 精确主路径此前另独立通过 1/1（17.5 秒），完整套件中的 H77+H79+H80+H81 组合路径为 20.9 秒。
-- 最近一次全量 coverage 为 375 files / 1818 tests，全部通过；覆盖率为 82.09% statements / 73.74% branches / 80.38% functions / 82.09% lines；3779 模块生产构建通过，入口 679.7 KiB / gzip 211.0 KiB。
+- 项目指定 Playwright Chromium 在当前最终代码重跑为 52/52（4.6 分钟）；严格故事线对象传输精确主路径另独立通过 1/1（5.3 秒）。首次旧 fixture 运行的 51/52 已保留为协议回归证据，没有误报为全绿。
+- 最近一次全量 coverage 为 376 files / 1829 tests，全部通过；覆盖率为 82.12% statements / 73.80% branches / 80.45% functions / 82.12% lines；3786 模块生产构建通过，入口 679.8 KiB / gzip 211.0 KiB。
 - 原工作树仍属于作者且保持未触碰；后续继续使用独立 worktree，不得把其未跟踪文件带入提交。
 
 提交前以根 `AGENTS.md` 的最新闸门为准，至少运行当前单元定向回归、H59 census 回归、三注册表/architecture/roadmap/freshness/source reachability/canon 检查、`npx tsc --noEmit`、`npm run build`、bundle 检查和 `git diff --check`。所有文档、生成物和源码必须提交到当前功能分支，工作树除明确属于用户的本地未跟踪文件外不得留下交接改动。

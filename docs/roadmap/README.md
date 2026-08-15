@@ -35,6 +35,16 @@
 
 默认同一时间只推进一个主体系；最多附带一个无数据红线、不会被主体系重写的小功能。紧急 Bug 可以插队，但修完回到原体系。
 
+### HARNESS-86 完成卡：真实故事线 Generator 主路径 A/B
+
+| 项目 | 冻结边界 |
+|---|---|
+| 类型 / 用户故事 | `HARNESS-86` 真实质量与发布治理任务。必须用同一 generator 身份比较实际旧故事线入口和生产 `outline.story-arcs` Agent + durable Harness，逐调用保留质量、完成率、成本、延迟和恢复证据；协议失败或环境阻断不能被隐藏，开发者也不能代替独立人工盲评。 |
+| 主归属 / 复用 | 归 H4/H5 generator 主路径；复用现有故事线 Context/Skill/Run/候选链、旧 `b6b57f4` prompt/parser、H28 hash/checkpoint 思路、共享 `chat()` 和 DeepSeek V4 Pro 独立 verifier。6 个中文合成世界不含作者手稿。评测只用版本化浏览器存储，不新增项目表、Context Source、可写字段或 Canon 写入。 |
+| 协议 / 恢复 | 两路交叉执行；逐调用冻结 variant/stage、身份、prompt、input/output/trace hash、provider usage、成本与延迟。Agent 同一 Run 只允许一次受控恢复，重复指纹停止。生产响应收口为 exact-key `{"storyArcs":[...]}`，JSON object capability 由中央 provider registry 独立登记。机器门要求 6/6 完成、durable 6/6、零泄漏、全量 usage、质量非劣及 p95/token/cost ≤ 1.5x；之后仍需 6 个完整配对的 hash 绑定 A/B 盲评。 |
+| 真实结果 / 发布门 | 最终 v4 中旧入口和 Agent 都只完成 2/6；Agent 成功子集 semantic 0.95、required-fact coverage 29.17%，无未来/错世界泄漏，但 p95/token/cost 为旧入口 1.819x/3.817x/4.773x。旧入口 8/8、Agent 18/18 调用均完整计量。机器门因完成率、durable coverage 与三项预算 FAIL；只有 1 个双方成功配对，人工盲评 fail closed，`productionReleaseAllowed=false`。 |
+| 验收 / 下一步 | H17/H29/H30/H86 联合定向回归 4 files / 37 tests；完整 CI 为 376 files / 1829 tests，覆盖率 statements/lines 82.12%、branches 73.80%、functions 80.45%，3,786-module 构建与 bundle budget 通过。故事线精确 Chromium 路径 1/1、最终完整套件 52/52（4.6 分钟）通过。五份 `0600` 归档的内部 checkpoint hash、文件 SHA-256、失败分类和 aggregate 见 `docs/evals/HARNESS-86-STORY-ARC-MAIN-PATH-EVIDENCE-20260815.md`。不得继续抽样 v4 追结果；若重开发布研究，须冻结新 generator development/终验协议或使用已证明稳定遵守结构化输出的 generator。 |
+
 ### HARNESS-85 完成卡：已验真证据二阶段 subtype adjudication
 
 | 项目 | 冻结边界 |

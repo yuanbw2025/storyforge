@@ -1432,6 +1432,28 @@ CHIRON 四类信息可映射到现有结构：
 - 证据见 `docs/evals/HARNESS-85-TWO-STAGE-ADJUDICATION-EVIDENCE-20260815.md`。本单元只改评测
   控制面，不新增表、Context Source、可写字段、业务模型入口或生产 gate。
 
+**真实故事线 Generator 主路径 A/B（HARNESS-86，2026-08-15）**
+
+- H86 冻结 6 个不含作者手稿的中文合成世界，以交叉执行顺序比较 `b6b57f4` 前的真实故事线旧
+  prompt/parser 与生产 `outline.story-arcs` Skill + durable Run。两边共用 Agnes 2.5 Flash generator，
+  独立 DeepSeek V4 Pro verifier 只读取单路结果、允许事实和诱饵，不参与修复；
+- checkpoint 逐调用冻结 variant/stage、模型和 prompt 身份、input/output/trace hash、provider usage、成本、
+  延迟、协议失败和 provider 阻断。Agent 受控恢复沿同一 Run 最多一次，重复指纹由 durable 契约停止；
+  缺 usage 不估算补齐，环境阻断不计作质量通过；
+- `story-arc-copilot` 的模型传输收口为 exact-key `{"storyArcs":[...]}`，可编辑/持久候选继续使用裸数组。
+  JSON object response capability 在中央 provider registry 中与 native tool capability 独立登记，仅对已验证
+  provider 开启。v4 prompt 明确单类型数量、顶层四字段、阶段可选字段位置与禁止改写事实边界；
+- 机器门要求双方 6/6 完成与 verifier、Agent durable 6/6、零泄漏、全量 usage、语义/事实非劣和
+  p95/token/cost 不超过 1.5x；通过后仍必须完成 hash 绑定的独立 A/B 盲评。盲评记录包含四项评分、偏好、
+  编辑稿和行级修改比例，少于 6 个完整配对时不允许创建记录；
+- 最终 v4 真实结果中旧入口与 Agent 都只完成 2/6。Agent 成功子集 semantic 0.95、required-fact coverage
+  29.17%，无未来/错世界泄漏，但 p95、token、cost 分别是旧入口 1.819x、3.817x、4.773x；18/18 Agent
+  调用和 8/8 旧入口调用均有 usage。机器门因双方完成率、durable coverage 和三项预算 FAIL，人工盲评
+  因完整配对不足被阻止，生产 gate 保持关闭；
+- 内部 checkpoint hash、文件 SHA-256、五条冻结 development 轨迹和失败分类见
+  `docs/evals/HARNESS-86-STORY-ARC-MAIN-PATH-EVIDENCE-20260815.md`。评测状态只在版本化浏览器存储，
+  不新增 IndexedDB 表、Context Source、可写字段或 Canon 写入。
+
 **范围**
 
 - 建立 40 个 development + 20 个 sealed held-out 的中文长篇用例，目标每例 8,000–12,000 中文字符；

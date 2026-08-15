@@ -209,7 +209,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
 共 49 个 category。
-未分类调用: 0 个。动态 category 调用: 21 个。
+未分类调用: 0 个。动态 category 调用: 22 个。
 
 | category | 触发文件 |
 |---|---|
@@ -231,9 +231,9 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
 | `detail.scene` | `src/lib/ai/batch-detail-runner.ts:193` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
-| `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:118` |
-| `eval.h17.generation` | `src/components/settings/HarnessEvalPanel.tsx:119` |
-| `eval.h4.verifier` | `src/components/settings/HarnessEvalPanel.tsx:148`<br/>`src/components/settings/HarnessEvalPanel.tsx:187` |
+| `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:119` |
+| `eval.h17.generation` | `src/components/settings/HarnessEvalPanel.tsx:120` |
+| `eval.h4.verifier` | `src/components/settings/HarnessEvalPanel.tsx:149`<br/>`src/components/settings/HarnessEvalPanel.tsx:188` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
@@ -279,14 +279,15 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/prose-copilot.ts:649 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
-- `src/lib/agent/story-arc-copilot.ts:556 · chat`
+- `src/lib/agent/story-arc-copilot.ts:595 · chat`
 - `src/lib/agent/story-core-copilot.ts:458 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:376 · chat`
 - `src/lib/agent/world-origin-copilot.ts:255 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:603 · chat`
+- `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:97 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/node-authoring/executor.ts:367 · chat`
 
 ---
 
-生成时间基准:commit `3ae7395`
+生成时间基准:commit `068a0a0`
