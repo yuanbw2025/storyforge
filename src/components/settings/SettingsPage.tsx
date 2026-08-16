@@ -3,6 +3,7 @@ import { BookOpen } from 'lucide-react'
 import AIConfigPanel from './AIConfigPanel'
 import { resetWelcomeGuide } from '../guide/WelcomeGuide'
 import HarnessEvalPanel from './HarnessEvalPanel'
+import CreativeReliabilityCommunityPanel from './CreativeReliabilityCommunityPanel'
 
 /**
  * 设置页（Phase 4 之后）：
@@ -15,6 +16,7 @@ export default function SettingsPage() {
   return (
     <div className="h-full overflow-auto p-6">
       <AIConfigPanel />
+      <CreativeReliabilityCommunityPanel />
       {import.meta.env.DEV && <HarnessEvalPanel />}
 
       {/* 其他设置 */}
