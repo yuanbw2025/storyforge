@@ -378,6 +378,10 @@ interface NarrativeBriefV1 {
 
 完成门：新项目能够从部分设定生成可编辑主线、章纲和场景卡，刷新可继续。
 
+官方领域节点创作链同样属于此完成门：卷纲/章纲共享一次生成＋最多一次定向修复，细纲保持单次生成；
+三者都把 `CreativeArtifactV1` 与候选按版本对齐保存到既有 `nodeRuns`。两次失败或细纲协议失败时，
+运行停止但原稿、问题和调用证据保留；作者按正式领域 parser 本地校验并采纳后，可从下游继续而不重复生成上游。
+
 ### CREL-9：正文有界质量闭环
 
 - 复用现有正文 durable 主路径和 `review -> revise -> review`，改为默认无自动语义循环。
@@ -386,6 +390,9 @@ interface NarrativeBriefV1 {
 - 语义评审与段落修订由作者显式触发。
 
 完成门：部分设定样例不会只写世界观说明；修订只改选中问题/段落。
+
+官方领域节点创作链的正文节点复用同一正文 CREL runner，不再直接绕过产物合同；执行计划同时展示常规
+调用数和包含唯一一次修复的最坏调用数。关闭版本化回滚开关后仍恢复旧式单次候选，不附加新产物证据。
 
 ### CREL-10：作者偏好收口
 
@@ -512,3 +519,4 @@ npm run build
 | 2026-08-16 | CREL-14 社区反馈入口 | 本地交付门完成 | 正式设置页展示实验边界、1+1 费用政策、机器验证边界和回滚位置；新增纯本地闭集反馈、50 条上限、严格导出合同、清空与 GitHub Issues 提交入口，结构上不接收作品文本或密钥；5 个合同/UI 反例、完整 CI 387 files / 1884 tests、生产构建与 bundle budget、Chromium E2E 52/52 全绿；隔离浏览器实测保存 0→1、明确零 AI/零上传、确认清空 1→0。真实 API 质量门仍待授权执行。 |
 | 2026-08-16 | CREL-13 development 第 1 轮 | 机器门失败并完成归因 | 使用 Agnes `agnes-2.5-flash` 生成、方舟 `deepseek-v4-pro-260425` 独立验证，6 组成对共完成 24/24 阶段，run `crel-development-161a9874-e87a-4f1f-9db7-50ae76575e70`，checkpoint `590829223beb090ae4154717fc3e1e21c68107bac1e6d432b981613d4d1784bb`。旧直连可编辑/可采纳均为 67%；CREL 可编辑 100%、可采纳 50%、语义 86%、推进 100%，但 6/6 都触发第二次修复，平均调用 2.0、每可采纳产物 12,882 tokens；3 个高语义稿因布尔 `turningPoint` 或 4～5 个 `keyEvents` 被结构门拒绝，另有 1 个 verifier 响应打满 2,000 tokens 后协议失败。机器门失败项为 `average-artifact-calls`、`token-per-adoptable-artifact`、`verifier-evidence-incomplete`；未填写人工盲评，社区门继续关闭。 |
 | 2026-08-16 | CREL-3/6/13 实测修正 | 本地交付门通过，待 development 复测 | 仅在 CREL 候选层删除无效的布尔 `turningPoint` 元数据并保留阶段正文与事件，生成可见警告但不猜测哪个事件是转折；阶段最多保留 5 个关键事件，并在 prompt 明确 `turningPoint` 必须是字符串；新合同提升为 `story-arc-copilot-v5` / `outline.story-arcs-v5`，历史 H86 `v4` 保持冻结；独立 verifier 复用无损 JSON 围栏归一化、输出上限改为 3,000，截断写入 `finish_reason_length` 而不伪造评分；新 checkpoint 强制保留第二次生成调用对应的 `repairTargetIssueCodes`，旧 v1 仍可读。3 个相关回归文件 27 项、完整 `npm run ci`、生产构建与 bundle budget、隔离 Chromium E2E 52/52 全绿。 |
+| 2026-08-16 | CREL-8/9 官方节点创作链收口 | 本地主路径完成 | 审计发现 FLOW-3 官方“世界→故事→角色→卷纲→章纲→细纲→正文”中的卷/章纲与正文仍直接调用领域 node、细纲协议失败会抛弃原稿。现已让卷/章纲和正文复用正式 1+1 runner，细纲保存单次调用产物；`nodeRuns` 持久化逐候选 `CreativeArtifactV1`、选择索引和作者编辑标记，阻断时保留原稿并停止下游。作者编辑后沿既有领域采纳器本地复验，成功采纳即可恢复下游且不重跑已采纳上游；同图 hash 不一致拒绝复用。无限输出配置不再被节点控制误写为 100 tokens，计划展示常规/最坏调用与最坏输出预算；关闭 CREL 仍为单次旧路径。13 个关联文件 54 项定向回归、完整 CI 387 files / 1889 tests（覆盖率 82.52%）和隔离 Chromium E2E 52/52 全绿。 |

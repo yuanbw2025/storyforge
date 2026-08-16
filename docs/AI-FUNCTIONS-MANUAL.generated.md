@@ -219,7 +219,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:509` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:24` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:451`<br/>`src/lib/node-authoring/domain-execution.ts:515` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:552`<br/>`src/lib/node-authoring/domain-execution.ts:616` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1590` |
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1570` |
 | `chapter.memory` | `src/components/editor/ChapterEditor.tsx:1059` |
@@ -228,7 +228,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `codex.extract` | `src/lib/agent/run/codex-extraction-durable.ts:627` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:307` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:371` |
 | `detail.scene` | `src/lib/ai/batch-detail-runner.ts:193` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `eval.h17.compression` | `src/components/settings/HarnessEvalPanel.tsx:120` |
@@ -239,7 +239,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:319`<br/>`src/lib/node-flow/executor.ts:207` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:362`<br/>`src/lib/node-flow/executor.ts:207` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:188`<br/>`src/lib/outline/generation-node.ts:59` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:652` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:55` |
@@ -288,8 +288,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:97 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:88 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
-- `src/lib/node-authoring/executor.ts:367 · chat`
+- `src/lib/node-authoring/executor.ts:416 · chat`
 
 ---
 
-生成时间基准:commit `130e397`
+生成时间基准:commit `269faa0`

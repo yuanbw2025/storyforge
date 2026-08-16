@@ -110,6 +110,7 @@ describe('FLOW-3E · 大图效率、模板与可恢复执行', () => {
     const graph = buildOfficialAuthoringTemplate('short-novel')
     const plan = buildAuthoringExecutionPlan({ graph })
     expect(plan.estimatedAiCalls).toBeGreaterThan(0)
+    expect(plan.estimatedMaxAiCalls).toBeGreaterThanOrEqual(plan.estimatedAiCalls)
     expect(plan.estimatedMaxOutputTokens).toBeGreaterThan(0)
     expect(JSON.stringify(plan)).not.toContain('apiKey')
     expect(JSON.stringify(plan)).not.toContain('sk-')

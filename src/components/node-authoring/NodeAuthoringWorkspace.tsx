@@ -42,15 +42,17 @@ import {
 } from '../../lib/node-authoring/contracts'
 import { parseAuthoringGraph } from '../../lib/node-authoring/migration'
 import { suggestAuthoringConnections, authoringPortsCompatible } from '../../lib/node-authoring/compatibility'
-import { validateAuthoringGraph } from '../../lib/node-authoring/graph'
+import { topologicalAuthoringOrder, validateAuthoringGraph } from '../../lib/node-authoring/graph'
 import {
   adoptAuthoringCandidate,
   buildAuthoringExecutionPlan,
   parseAuthoringExecutionPlan,
+  persistAdoptedAuthoringCandidate,
   runAuthoringGraph,
   type AuthoringCandidateMap,
   type AuthoringRunSnapshotMap,
 } from '../../lib/node-authoring/executor'
+import CreativeArtifactSummary from '../agent/CreativeArtifactSummary'
 import { buildAuthoringOverviewGraph } from '../../lib/node-authoring/overview'
 import { buildAuthoringCreationChainGraph } from '../../lib/node-authoring/creation-chain'
 import { compareCandidateVariants } from '../../lib/node-authoring/candidate-diff'
@@ -608,11 +610,27 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
     abortRef.current = controller
     setIsRunning(true)
     try {
+      const reusableTargetRun = mode === 'normal' && targetNodeId && run?.id != null
+        ? topologicalAuthoringOrder(graph, targetNodeId).slice(0, -1).every(node => {
+            const candidate = candidates[node.id]
+            const state = freshness[node.id]?.status
+            return Boolean(candidate)
+              && candidate.status !== 'blocked'
+              && candidate.status !== 'stale'
+              && candidate.status !== 'draft'
+              && state !== 'blocked'
+              && state !== 'stale'
+              && state !== 'never-run'
+          })
+        : false
       const result = await runAuthoringGraph({
         flow: saved,
         ...(targetNodeId ? { targetNodeId } : {}),
         ...(mode === 'resume' && run?.id ? { resumeRunId: run.id } : {}),
         ...(mode === 'stale' && run?.id ? { baseRunId: run.id, runNodeIds: staleNodeIds } : {}),
+        ...(reusableTargetRun && run?.id != null && targetNodeId
+          ? { baseRunId: run.id, runNodeIds: new Set([targetNodeId]) }
+          : {}),
         signal: controller.signal,
         onUpdate: update => { setRun(update.run); setSnapshots(update.snapshots); setCandidates(update.candidates) },
       })
@@ -622,6 +640,9 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
       await useNodeFlowStore.getState().loadRuns(projectId, saved.id)
       if (result.run.status === 'completed') toast.success(mode === 'stale' ? '过期下游已批量重跑。' : '节点图运行完成，候选已保存。')
       if (result.run.status === 'paused') toast.success('运行已暂停，可从运行记录继续。')
+      if (result.run.status === 'failed' && Object.values(result.candidates).some(candidate => candidate.status === 'blocked')) {
+        toast.error('自动调用已停止并保留原稿；请编辑阻断候选并确认采纳后再继续。')
+      }
     } catch (error) {
       toast.error(`运行失败：${error instanceof Error ? error.message : String(error)}`)
     } finally {
@@ -654,13 +675,44 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
     if (selectedNodeSet.size < 2) { toast.error('对齐至少需要两个节点。'); return }
     changeGraph(alignAuthoringNodes(graph, selectedNodeSet, axis))
   }
-  const adoptCandidate = async (nodeId: string) => { if (!draft || !candidates[nodeId]) return; try { const result = await adoptAuthoringCandidate({ flow: draft, nodeId, output: candidates[nodeId].output }); setCandidates(current => ({ ...current, [nodeId]: { ...current[nodeId], status: 'adopted' } })); toast.success(`已采纳：写入 ${result.written.length} 条记录。`) } catch (error) { toast.error(`采纳失败：${error instanceof Error ? error.message : String(error)}`) } }
+  const adoptCandidate = async (nodeId: string) => {
+    const candidate = candidates[nodeId]
+    if (!draft || !candidate) return
+    if (candidate.status === 'blocked' && !candidate.authorEditedAfterArtifact) {
+      toast.error('这个候选仍有阻断问题；请先编辑原稿，再进行本地校验和采纳。')
+      return
+    }
+    try {
+      const result = await adoptAuthoringCandidate({ flow: draft, nodeId, output: candidate.output })
+      if (run?.id != null) {
+        const persistedRun = await persistAdoptedAuthoringCandidate({
+          flow: draft,
+          runId: run.id,
+          nodeId,
+          output: candidate.output,
+        })
+        setRun(persistedRun)
+      }
+      setCandidates(current => ({
+        ...current,
+        [nodeId]: { ...current[nodeId], status: 'adopted' },
+      }))
+      toast.success(`已采纳：写入 ${result.written.length} 条记录。`)
+    } catch (error) {
+      toast.error(`采纳失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
 
   if (loading && !flows.length) return <div className="flex min-h-[720px] items-center justify-center text-sm text-text-muted"><Loader2 className="mr-2 h-4 w-4 animate-spin" />加载节点图…</div>
   if (!draft) return <div className="flex min-h-[720px] items-center justify-center overflow-y-auto bg-[#f7f7f5] p-6"><div className="w-full max-w-4xl rounded-lg border border-border bg-bg-surface p-8 text-center shadow-sm"><Workflow className="mx-auto h-10 w-10 text-accent" /><h2 className="mt-3 text-lg font-semibold text-text-primary">领域节点创作</h2><p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-text-secondary">把世界观、故事、角色和执行参数编排成一张可观察、可回放的创作图。每个结果先作为候选保存，确认后才写入项目。</p><div className="mt-5 grid gap-2 sm:grid-cols-3"><button type="button" onClick={() => void createCreationChain()} className="inline-flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"><GitBranch className="h-4 w-4" />创建完整创作链</button><button type="button" onClick={() => void createOverview()} className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-bg-hover"><LayoutTemplate className="h-4 w-4" />从项目生成概览</button><button type="button" onClick={() => void createFlow()} className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-bg-hover"><Plus className="h-4 w-4" />创建空白节点图</button></div><div className="mt-7 border-t border-border pt-5 text-left"><div className="mb-3 flex items-center gap-2"><LayoutTemplate className="h-4 w-4 text-accent" /><h3 className="text-xs font-semibold text-text-primary">官方起始模板</h3><span className="text-[10px] text-text-muted">直接创建后即可编辑</span></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{AUTHORING_OFFICIAL_TEMPLATES.map(template => <button key={template.id} type="button" onClick={() => void createOfficialTemplate(template.id)} className="rounded-md border border-border p-3 text-left transition-colors hover:border-accent/50 hover:bg-bg-hover"><span className="block text-[11px] font-semibold text-text-primary">{template.name}</span><span className="mt-1 block text-[10px] leading-4 text-text-muted">{template.description}</span></button>)}</div></div><p className="mt-4 text-[11px] leading-5 text-text-muted">运行节点后先确认采纳，再继续运行下游节点；模板不会自动写入项目资料。</p></div></div>
 
   const selectedSnapshot = selectedNodeId ? snapshots[selectedNodeId] : undefined
   const selectedCandidate = selectedNodeId ? candidates[selectedNodeId] : undefined
+  const selectedVariantIndex = selectedCandidate
+    ? selectedCandidate.selectedVariantIndex
+      ?? Math.max(0, selectedCandidate.variants?.findIndex(item => item === selectedCandidate.output) ?? 0)
+    : 0
+  const selectedArtifact = selectedCandidate?.creativeArtifacts?.[selectedVariantIndex]
   return <div className="flex h-[760px] min-h-[560px] max-h-[calc(100vh-180px)] flex-col overflow-hidden bg-bg-base">
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-bg-surface px-3"><Workflow className="h-4 w-4 text-accent" /><input aria-label="节点图名称" value={draft.name} onChange={event => { setDraft({ ...draft, name: event.target.value }); setDirty(true) }} className="w-56 rounded border border-transparent bg-transparent px-2 py-1 text-sm font-medium text-text-primary hover:border-border focus:border-accent focus:outline-none" /><span className="text-[10px] text-text-muted">{saving ? '保存中…' : dirty ? '待保存' : '已保存'}</span><div className="ml-auto flex items-center gap-2"><button type="button" onClick={() => void save(true)} className="inline-flex items-center gap-1 rounded px-2 py-1.5 text-xs text-text-secondary hover:bg-bg-hover"><Save className="h-3.5 w-3.5" />保存</button>{isRunning ? <><button type="button" onClick={pauseRun} title="暂停运行" aria-label="暂停运行" className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1.5 text-xs text-amber-800"><Pause className="h-3.5 w-3.5" />暂停</button><button type="button" onClick={cancelRun} title="取消运行" aria-label="取消运行" className="inline-flex items-center gap-1 rounded bg-error/10 px-2 py-1.5 text-xs text-error"><CircleStop className="h-3.5 w-3.5" />取消</button></> : run?.status === 'paused' || run?.status === 'failed' ? <button type="button" onClick={() => void runGraph(undefined, 'resume')} className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"><RotateCcw className="h-3.5 w-3.5" />继续运行</button> : <button type="button" onClick={() => void runGraph()} className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"><Play className="h-3.5 w-3.5" />运行全部</button>}</div></header>
     {legacySourceVersion != null && <div className="flex shrink-0 items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[11px] text-amber-900"><span className="min-w-0 flex-1">这张图来自 FLOW-{legacySourceVersion}。当前画布已按兼容规则读取；转换保存后会升级为领域节点图，原项目 Canon 不会被改写。</span><button type="button" onClick={() => void save(true)} className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-300 bg-white px-2 py-1 font-medium text-amber-900 hover:bg-amber-100"><Save className="h-3 w-3" />转换并保存</button></div>}
@@ -673,7 +725,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
         <span className="text-text-muted">{run ? `${run.status} · ${new Date(run.startedAt).toLocaleString()}` : '尚未运行'}</span>
         <span className="ml-auto">{showRuns ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</span>
       </button>
-      <div className="flex flex-wrap items-center gap-3 border-t border-border px-4 py-2 text-[10px] text-text-muted"><span>本次计划：{selectedPlan?.estimatedAiCalls ?? executionEstimate?.estimatedAiCalls ?? '—'} 次模型调用 · 最多 {(selectedPlan?.estimatedMaxOutputTokens ?? executionEstimate?.estimatedMaxOutputTokens ?? 0).toLocaleString()} 输出 tokens</span>{run && staleNodeIds.size > 0 && !isRunning && <button type="button" onClick={() => void runGraph(undefined, 'stale')} className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-amber-800 hover:bg-amber-200"><RotateCcw className="h-3 w-3" />重跑 {staleNodeIds.size} 个过期节点</button>}<span className="ml-auto">保存差异：+{graphDiff.nodesAdded}/-{graphDiff.nodesRemoved} 节点 · +{graphDiff.edgesAdded}/-{graphDiff.edgesRemoved} 连线</span></div>
+      <div className="flex flex-wrap items-center gap-3 border-t border-border px-4 py-2 text-[10px] text-text-muted"><span>本次计划：常规 {selectedPlan?.estimatedAiCalls ?? executionEstimate?.estimatedAiCalls ?? '—'} 次，最多 {selectedPlan?.estimatedMaxAiCalls ?? executionEstimate?.estimatedMaxAiCalls ?? '—'} 次模型调用 · 最多 {(selectedPlan?.estimatedMaxOutputTokens ?? executionEstimate?.estimatedMaxOutputTokens ?? 0).toLocaleString()} 输出 tokens</span>{run && staleNodeIds.size > 0 && !isRunning && <button type="button" onClick={() => void runGraph(undefined, 'stale')} className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-amber-800 hover:bg-amber-200"><RotateCcw className="h-3 w-3" />重跑 {staleNodeIds.size} 个过期节点</button>}<span className="ml-auto">保存差异：+{graphDiff.nodesAdded}/-{graphDiff.nodesRemoved} 节点 · +{graphDiff.edgesAdded}/-{graphDiff.edgesRemoved} 连线</span></div>
       {showRuns && (
         <div className="grid max-h-72 grid-cols-2 gap-0 overflow-y-auto border-t border-border">
           <div className="border-r border-border p-3">
@@ -689,14 +741,22 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
                     <span>候选</span>
                     <select
                       aria-label="选择候选版本"
-                      value={Math.max(0, selectedCandidate.variants.findIndex(item => item === selectedCandidate.output))}
+                      value={selectedVariantIndex}
                       onChange={event => {
                         const index = Number(event.target.value)
                         const output = selectedCandidate.variants?.[index]
                         if (!output) return
+                        const artifact = selectedCandidate.creativeArtifacts?.[index]
+                        const blocked = artifact?.status === 'manual-repair' || artifact?.status === 'blocked'
                         setCandidates(current => ({
                           ...current,
-                          [selectedCandidate.nodeId]: { ...selectedCandidate, output, status: 'candidate' },
+                          [selectedCandidate.nodeId]: {
+                            ...selectedCandidate,
+                            output,
+                            status: blocked ? 'blocked' : 'candidate',
+                            selectedVariantIndex: index,
+                            authorEditedAfterArtifact: false,
+                          },
                         }))
                       }}
                       className="rounded border border-border bg-bg-base px-1 py-0.5 text-[10px] text-text-secondary"
@@ -705,11 +765,15 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
                     </select>
                   </label>
                 )}
-                {selectedCandidate && !selectedNode?.binding?.ref && <button type="button" onClick={() => void adoptCandidate(selectedNodeId!)} className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-hover"><Check className="h-3 w-3" />{selectedCandidate.status === 'adopted' ? '已采纳' : '确认采纳'}</button>}
+                {selectedCandidate && !selectedNode?.binding?.ref && <button type="button" onClick={() => void adoptCandidate(selectedNodeId!)} disabled={selectedCandidate.status === 'blocked' && !selectedCandidate.authorEditedAfterArtifact} className="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-45"><Check className="h-3 w-3" />{selectedCandidate.status === 'adopted' ? '已采纳' : selectedCandidate.status === 'blocked' && !selectedCandidate.authorEditedAfterArtifact ? '请先编辑' : selectedCandidate.authorEditedAfterArtifact ? '本地校验并采纳' : '确认采纳'}</button>}
               </div>
             </div>
             {selectedCandidate ? <>
-              <textarea aria-label="候选输出" value={selectedCandidate.output} onChange={event => setCandidates(current => ({ ...current, [selectedCandidate.nodeId]: { ...selectedCandidate, output: event.target.value, status: 'candidate' } }))} className="h-40 w-full resize-y rounded border border-border bg-bg-base p-2 text-[10px] leading-4 text-text-primary outline-none focus:border-accent" />
+              <textarea aria-label="候选输出" value={selectedCandidate.output} onChange={event => setCandidates(current => ({ ...current, [selectedCandidate.nodeId]: { ...selectedCandidate, output: event.target.value, status: 'draft', authorEditedAfterArtifact: true } }))} className="h-40 w-full resize-y rounded border border-border bg-bg-base p-2 text-[10px] leading-4 text-text-primary outline-none focus:border-accent" />
+              {selectedArtifact && <>
+                <CreativeArtifactSummary artifact={selectedArtifact} />
+                {selectedCandidate.authorEditedAfterArtifact && <p className="mt-1 text-[9px] text-warning">上方证据对应模型原稿；当前内容已由作者修改，点击“本地校验并采纳”时会按正式领域合同重新验证，不会追加模型调用。</p>}
+              </>}
               {selectedCandidate.variants && selectedCandidate.variants.length > 1 && (
                 <details className="mt-2 rounded border border-border bg-bg-base">
                   <summary className="cursor-pointer px-2 py-1.5 text-[10px] font-medium text-text-secondary">展开原始候选对照（{selectedCandidate.variants.length} 个版本）</summary>

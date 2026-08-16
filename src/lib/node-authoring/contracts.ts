@@ -1,4 +1,5 @@
 import type { PromptModuleKey } from '../types/prompt'
+import type { CreativeArtifactV1 } from '../agent/creative-reliability'
 
 /**
  * FLOW-3 graph contract.
@@ -246,6 +247,12 @@ export interface AuthoringCandidate {
   output: string
   /** Multiple generations remain grouped under one node so the run record is still portable. */
   variants?: string[]
+  /** CREL evidence is aligned with variants by index; legacy candidates omit it. */
+  creativeArtifacts?: CreativeArtifactV1[]
+  /** Stable selection for edited variants whose text no longer exactly matches the original output. */
+  selectedVariantIndex?: number
+  /** The author changed the editable draft after the recorded model artifact was produced. */
+  authorEditedAfterArtifact?: boolean
   semantic: AuthoringSemantic
   signature?: AuthoringRunSignature
   /** 领域候选的结构化目标与快照；只保存稳定语义，正文仍留在 Canon 表。 */

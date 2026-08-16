@@ -6,6 +6,7 @@ vi.mock('../../src/lib/ai/client', async () => {
 })
 
 import { chat } from '../../src/lib/ai/client'
+import { setCreativeReliabilityRuntimeEnabledV1 } from '../../src/lib/agent/creative-reliability'
 import { CHARACTER_DIMENSIONS } from '../../src/lib/character/character-dimensions'
 import { db } from '../../src/lib/db/schema'
 import { adoptDomainCandidate, executeDomainNode } from '../../src/lib/node-authoring/domain-execution'
@@ -13,8 +14,13 @@ import { AUTHORING_NODE_BY_ID, defaultConfigForTemplate } from '../../src/lib/no
 import { buildAuthoringCreationChainGraph } from '../../src/lib/node-authoring/creation-chain'
 import { emptyAuthoringGraph, type AuthoringInputEnvelope, type AuthoringNodeInstance } from '../../src/lib/node-authoring/contracts'
 import { inspectAuthoringGraphFreshness } from '../../src/lib/node-authoring/freshness'
-import { adoptAuthoringCandidate, runAuthoringGraph } from '../../src/lib/node-authoring/executor'
+import {
+  adoptAuthoringCandidate,
+  persistAdoptedAuthoringCandidate,
+  runAuthoringGraph,
+} from '../../src/lib/node-authoring/executor'
 import { buildRagLibrary } from '../../src/lib/retrieval/rag-library'
+import { useAIConfigStore } from '../../src/stores/ai-config'
 import type { AIConfig, NodeFlow, Project } from '../../src/lib/types'
 import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
 
@@ -120,6 +126,13 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
       updatedAt: 1,
     } as any)
     vi.mocked(chat).mockReset()
+    setCreativeReliabilityRuntimeEnabledV1(true)
+    useAIConfigStore.setState({
+      config: aiConfig,
+      creativeReliabilityEnabled: true,
+      creativeQualityMode: 'balanced',
+      agentTeamBudgetProfile: 'balanced',
+    })
   })
 
   afterEach(() => db.close())
@@ -167,6 +180,9 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
       aiConfig,
     })
     expect(result?.domain.kind).toBe('outline')
+    expect(result?.creativeArtifacts).toHaveLength(1)
+    expect(result?.creativeArtifacts?.[0]).toMatchObject({ status: 'ready' })
+    expect(result?.creativeArtifacts?.[0].callEvidence).toHaveLength(1)
     const adopted = await adoptDomainCandidate({
       node: node('outline.volume'),
       domain: result!.domain,
@@ -176,6 +192,105 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
     })
     expect(adopted?.written).toHaveLength(1)
     expect(await db.outlineNodes.where('projectId').equals(project.id!).count()).toBe(1)
+  })
+
+  it('卷纲结构失败只定向修复一次，第二次仍失败时保留原稿并允许作者无额外调用修复采纳', async () => {
+    vi.mocked(chat)
+      .mockResolvedValueOnce('第一次不是 JSON，但包含可编辑的卷纲想法。')
+      .mockResolvedValueOnce('第二次仍不是 JSON，必须交给作者修复。')
+    const graphNode = node('outline.volume', { request: '规划第一卷' })
+    const flowId = await addNodeFlow(
+      '卷纲可靠性失败保留',
+      JSON.stringify({ ...emptyAuthoringGraph(), nodes: [graphNode] }),
+    )
+    const flow = await db.nodeFlows.get(flowId) as NodeFlow
+
+    const failed = await runAuthoringGraph({ flow })
+
+    expect(chat).toHaveBeenCalledTimes(2)
+    expect(failed.run.status).toBe('failed')
+    expect(failed.candidates[graphNode.id]).toMatchObject({
+      status: 'blocked',
+      output: '第二次仍不是 JSON，必须交给作者修复。',
+      selectedVariantIndex: 0,
+    })
+    expect(failed.candidates[graphNode.id].creativeArtifacts?.[0]).toMatchObject({
+      status: 'manual-repair',
+      repair: { result: 'failed', callIndex: 2 },
+    })
+    expect(failed.candidates[graphNode.id].creativeArtifacts?.[0].callEvidence).toHaveLength(2)
+    await expect(runAuthoringGraph({ flow, resumeRunId: failed.run.id! }))
+      .rejects.toThrow('请先编辑并确认采纳')
+    expect(chat).toHaveBeenCalledTimes(2)
+
+    const corrected = JSON.stringify([
+      { title: '第一卷：潮门', summary: '主角发现海床城门并踏入旧文明。' },
+    ])
+    const adopted = await adoptAuthoringCandidate({ flow, nodeId: graphNode.id, output: corrected })
+    expect(adopted.written).toHaveLength(1)
+    const persisted = await persistAdoptedAuthoringCandidate({
+      flow,
+      runId: failed.run.id!,
+      nodeId: graphNode.id,
+      output: corrected,
+    })
+
+    expect(chat).toHaveBeenCalledTimes(2)
+    expect(persisted.status).toBe('completed')
+    expect(JSON.parse(persisted.nodeResultsJson)[graphNode.id]).toMatchObject({
+      status: 'adopted',
+      output: corrected,
+      authorEditedAfterArtifact: true,
+    })
+  })
+
+  it('关闭 CREL 回滚开关后卷纲节点保持旧式单次路径且不附加产物证据', async () => {
+    setCreativeReliabilityRuntimeEnabledV1(false)
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify([
+      { title: '第一卷：潮门', summary: '主角发现海床城门并踏入旧文明。' },
+    ]))
+
+    const result = await executeDomainNode({
+      node: node('outline.volume', { request: '规划第一卷' }),
+      inputs: [],
+      projectId: project.id!,
+      worldGroupId: null,
+      aiConfig,
+    })
+
+    expect(chat).toHaveBeenCalledTimes(1)
+    expect(result?.creativeArtifacts).toBeUndefined()
+  })
+
+  it('细纲协议失败保留原始候选，作者可本地修正后采纳且不会追加调用', async () => {
+    const volumeId = await db.outlineNodes.add({
+      projectId: project.id!, parentId: null, type: 'volume', title: '第一卷：潮门', summary: '卷摘要', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
+    })
+    await db.outlineNodes.add({
+      projectId: project.id!, parentId: volumeId, type: 'chapter', title: '第一章：退潮', summary: '主角在海岸发现城门。', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
+    })
+    vi.mocked(chat).mockResolvedValueOnce('这是一份尚未整理成 JSON 的场景想法。')
+
+    const result = await executeDomainNode({
+      node: node('outline.plan', { chapterTitle: '第一章：退潮' }),
+      inputs: [], projectId: project.id!, worldGroupId: null, aiConfig,
+    })
+
+    expect(chat).toHaveBeenCalledTimes(1)
+    expect(result?.output).toBe('这是一份尚未整理成 JSON 的场景想法。')
+    expect(result?.creativeArtifacts?.[0]).toMatchObject({
+      status: 'manual-repair',
+      editableText: '这是一份尚未整理成 JSON 的场景想法。',
+    })
+    const adopted = await adoptDomainCandidate({
+      node: node('outline.plan'),
+      domain: result!.domain,
+      output: detailDraft,
+      projectId: project.id!,
+      worldGroupId: null,
+    })
+    expect(adopted?.written).toHaveLength(1)
+    expect(chat).toHaveBeenCalledTimes(1)
   })
 
   it('细纲节点过滤无效 FK，正文节点拒绝覆盖已有正文并支持正式采纳', async () => {
@@ -319,13 +434,31 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
     const { graph, nodeIds } = buildAuthoringCreationChainGraph()
     const flowId = await addNodeFlow('完整创作链', JSON.stringify(graph))
     const flow = await db.nodeFlows.get(flowId) as NodeFlow
+    let baseRunId: number | undefined
 
     const runAndAdopt = async (nodeId: string) => {
-      const result = await runAuthoringGraph({ flow, targetNodeId: nodeId })
+      const result = await runAuthoringGraph({
+        flow,
+        targetNodeId: nodeId,
+        ...(baseRunId != null ? { baseRunId, runNodeIds: new Set([nodeId]) } : {}),
+      })
       const failure = Object.values(result.candidates).find(candidate => candidate.status === 'blocked')
       expect(result.run.status, failure?.errors?.join('；')).toBe('completed')
       expect(result.candidates[nodeId]?.status).toBe('candidate')
-      return adoptAuthoringCandidate({ flow, nodeId, output: result.candidates[nodeId].output })
+      if ([nodeIds.volume, nodeIds.chapter, nodeIds.detail, nodeIds.prose].includes(nodeId)) {
+        expect(result.candidates[nodeId]?.creativeArtifacts).toHaveLength(1)
+        expect(result.candidates[nodeId]?.creativeArtifacts?.[0].callEvidence.length).toBeGreaterThanOrEqual(1)
+        expect(result.candidates[nodeId]?.creativeArtifacts?.[0].callEvidence.length).toBeLessThanOrEqual(2)
+      }
+      const adopted = await adoptAuthoringCandidate({ flow, nodeId, output: result.candidates[nodeId].output })
+      await persistAdoptedAuthoringCandidate({
+        flow,
+        runId: result.run.id!,
+        nodeId,
+        output: result.candidates[nodeId].output,
+      })
+      baseRunId = result.run.id!
+      return adopted
     }
 
     await runAndAdopt(nodeIds.world)

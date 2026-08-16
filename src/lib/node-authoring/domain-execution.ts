@@ -1,4 +1,4 @@
-import { chat } from '../ai/client'
+import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import {
   adoptCharacterCopilotCandidate,
   parseCharacterCandidateDraft,
@@ -7,13 +7,22 @@ import {
 import {
   prepareOutlineCopilot,
   adoptRestoredOutlineCandidate,
+  runOutlineCreativeReliabilityV1,
   type OutlineCopilotMode,
 } from '../agent/outline-copilot'
 import {
   prepareProseCopilot,
   adoptRestoredProseCandidate,
+  runProseCreativeReliabilityV1,
 } from '../agent/prose-copilot'
 import { buildEnhancedDetailPrompt, parseEnhancedDetailResult } from '../ai/adapters/detail-scene-adapter'
+import { createDetailedOutlineCreativeArtifactV1 } from '../agent/detailed-outline-copilot'
+import {
+  isCreativeReliabilityRuntimeEnabledV1,
+  type CreativeArtifactV1,
+  type CreativeQualityModeV1,
+} from '../agent/creative-reliability'
+import { buildNarrativeBriefV1, formatNarrativeBriefForPromptV1 } from '../agent/narrative-brief'
 import {
   buildChapterOrganizationPrompt,
   isChapterOrganizationCurrent,
@@ -44,6 +53,7 @@ import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../world-e
 export interface DomainExecutionResult {
   output: string
   variants?: string[]
+  creativeArtifacts?: CreativeArtifactV1[]
   sourceKeys?: string[]
   sourceHash?: string
   sourceEvidence?: {
@@ -63,6 +73,11 @@ export interface DomainExecutionInput {
   scope?: WorkspaceScope
   worldGroupId: number | null
   aiConfig: AIConfig
+  creativeReliability?: {
+    enabled: boolean
+    qualityMode: CreativeQualityModeV1
+    budgetProfile: AgentTeamBudgetProfile
+  }
   signal?: AbortSignal
 }
 
@@ -106,12 +121,22 @@ function organizationBudgetProfile(value: number): AgentTeamBudgetProfile {
   return 'expanded'
 }
 
+function creativeReliabilitySettings(input: DomainExecutionInput) {
+  return input.creativeReliability ?? {
+    enabled: isCreativeReliabilityRuntimeEnabledV1(),
+    qualityMode: 'balanced' as const,
+    budgetProfile: 'balanced' as const,
+  }
+}
+
 function generationOverrides(node: AuthoringNodeInstance, inputs: AuthoringInputEnvelope[]) {
   const temperature = Number(inputControl(inputs, 'control.temperature') || configNumber(node, 'temperature', NaN))
   const maxTokens = Number(inputControl(inputs, 'control.max-tokens') || configNumber(node, 'maxTokens', NaN))
   return {
     ...(Number.isFinite(temperature) ? { temperature } : {}),
-    ...(Number.isFinite(maxTokens) ? { maxTokens: Math.max(100, Math.round(maxTokens)) } : {}),
+    ...(Number.isFinite(maxTokens) && maxTokens > 0
+      ? { maxTokens: Math.max(100, Math.round(maxTokens)) }
+      : {}),
   }
 }
 
@@ -223,6 +248,7 @@ async function executeOutline(input: DomainExecutionInput): Promise<DomainExecut
     generationOverrides: generationOverrides(input.node, input.inputs),
     signal: input.signal,
   })
+  const reliability = creativeReliabilitySettings(input)
   const binding = await readAuthoringCanonBinding({
     node: input.node,
     projectId: input.projectId,
@@ -231,13 +257,25 @@ async function executeOutline(input: DomainExecutionInput): Promise<DomainExecut
     contextBudget: typeof input.node.config.contextBudget === 'number' ? input.node.config.contextBudget : undefined,
   })
   const variants: string[] = []
+  const creativeArtifacts: CreativeArtifactV1[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
-    const candidate = await prepared.node.run(prepared.prepared.messages)
-    variants.push(JSON.stringify(candidate, null, 2))
+    if (reliability.enabled) {
+      const result = await runOutlineCreativeReliabilityV1({
+        prepared,
+        budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
+        qualityMode: reliability.qualityMode,
+      })
+      variants.push(result.draft)
+      creativeArtifacts.push(result.artifact)
+    } else {
+      const candidate = await prepared.node.run(prepared.prepared.messages)
+      variants.push(JSON.stringify(candidate, null, 2))
+    }
   }
   return {
     output: variants[0] ?? '',
     variants,
+    ...(creativeArtifacts.length ? { creativeArtifacts } : {}),
     semantic: mode === 'volumes' ? 'outline.volume' : 'outline.chapter',
     sourceKeys: binding.sourceKeys,
     sourceHash: binding.sourceHash,
@@ -293,7 +331,12 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
     worldGroupId: input.worldGroupId,
     contextBudget: typeof input.node.config.contextBudget === 'number' ? input.node.config.contextBudget : undefined,
   })
-  const messages = buildEnhancedDetailPrompt(
+  const reliability = creativeReliabilitySettings(input)
+  const narrativeBrief = buildNarrativeBriefV1({
+    authorRequest: `完善《${outline.title}》的场景、冲突、情绪变化和结尾压力。`,
+    assembled,
+  })
+  const baseMessages = buildEnhancedDetailPrompt(
     outline.title,
     outline.summary,
     siblings[index - 1]?.summary ?? '',
@@ -302,21 +345,66 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
     segmentText(assembled, 'characters'),
     segmentText(assembled, 'foreshadows'),
   )
+  const messages = reliability.enabled
+    ? [{ role: 'system' as const, content: formatNarrativeBriefForPromptV1(narrativeBrief) }, ...baseMessages]
+    : baseMessages
+  const callMeta = {
+    category: 'detail.chapter-planning',
+    projectId: input.projectId,
+    configOverrides: generationOverrides(input.node, input.inputs),
+    contextOverflowPolicy: 'reject' as const,
+  }
+  const resolved = resolveRequestConfig(input.aiConfig, callMeta)
   const variants: string[] = []
+  const creativeArtifacts: CreativeArtifactV1[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
-    const raw = await chat(messages, input.aiConfig, {
-      category: 'detail.chapter-planning',
-      projectId: input.projectId,
-      configOverrides: generationOverrides(input.node, input.inputs),
-      contextOverflowPolicy: 'reject',
-    }, input.signal)
-    const parsed = parseEnhancedDetailResult(raw)
-    if (!parsed) throw new Error('细纲候选不是有效的 JSON 对象。')
-    variants.push(JSON.stringify(parsed, null, 2))
+    const budget = new AgentTeamBudgetTracker(reliability.budgetProfile)
+    const reservation = budget.reserveCall({
+      label: '细纲领域 Agent',
+      messages,
+      maxOutputTokens: resolved.config.maxTokens > 0 ? resolved.config.maxTokens : 16_000,
+    })
+    const result: ChatResult = {}
+    const startedAt = Date.now()
+    let raw: string
+    try {
+      raw = await chat(messages, input.aiConfig, {
+        category: 'detail.chapter-planning',
+        projectId: input.projectId,
+        configOverrides: generationOverrides(input.node, input.inputs),
+        contextOverflowPolicy: 'reject',
+      }, input.signal, result, undefined, resolved)
+      budget.settleCall(reservation, raw)
+    } catch (error) {
+      budget.settleFailedCall(reservation)
+      throw error
+    }
+    if (reliability.enabled) {
+      const artifact = await createDetailedOutlineCreativeArtifactV1({
+        raw,
+        operation: 'enhanced',
+        narrativeBrief,
+        qualityMode: reliability.qualityMode,
+        modelIdentity: {
+          provider: resolved.config.provider,
+          model: resolved.config.model,
+        },
+        inputText: messages.map(message => message.content).join('\n'),
+        durationMs: Math.max(0, Date.now() - startedAt),
+        ...(result.usage ? { usage: result.usage } : {}),
+      })
+      variants.push(artifact.editableText)
+      creativeArtifacts.push(artifact)
+    } else {
+      const parsed = parseEnhancedDetailResult(raw)
+      if (!parsed) throw new Error('细纲候选不是有效的 JSON 对象。')
+      variants.push(JSON.stringify(parsed, null, 2))
+    }
   }
   return {
     output: variants[0] ?? '',
     variants,
+    ...(creativeArtifacts.length ? { creativeArtifacts } : {}),
     semantic: 'outline.plan',
     sourceKeys: binding.sourceKeys,
     sourceHash: binding.sourceHash,
@@ -346,6 +434,7 @@ async function executeProse(input: DomainExecutionInput): Promise<DomainExecutio
     generationOverrides: generationOverrides(input.node, input.inputs),
     signal: input.signal,
   })
+  const reliability = creativeReliabilitySettings(input)
   const binding = await readAuthoringCanonBinding({
     node: input.node,
     projectId: input.projectId,
@@ -354,12 +443,24 @@ async function executeProse(input: DomainExecutionInput): Promise<DomainExecutio
     contextBudget: typeof input.node.config.contextBudget === 'number' ? input.node.config.contextBudget : undefined,
   })
   const variants: string[] = []
+  const creativeArtifacts: CreativeArtifactV1[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
-    variants.push(await prepared.node.run(prepared.prepared.messages))
+    if (reliability.enabled) {
+      const result = await runProseCreativeReliabilityV1({
+        prepared,
+        budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
+        qualityMode: reliability.qualityMode,
+      })
+      variants.push(result.draft)
+      creativeArtifacts.push(result.artifact)
+    } else {
+      variants.push(await prepared.node.run(prepared.prepared.messages))
+    }
   }
   return {
     output: variants[0] ?? '',
     variants,
+    ...(creativeArtifacts.length ? { creativeArtifacts } : {}),
     semantic: 'chapter.prose',
     sourceKeys: binding.sourceKeys,
     sourceHash: binding.sourceHash,
