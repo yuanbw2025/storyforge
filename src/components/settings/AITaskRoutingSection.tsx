@@ -32,10 +32,12 @@ interface Props {
   routes: AITaskRoutes
   contextProfiles: AgentContextProfiles
   teamBudgetProfile: AgentTeamBudgetProfile
+  creativeReliabilityEnabled: boolean
   creativeQualityMode: CreativeQualityModeV1
   onSetRoute: (taskKind: AITaskKind, presetId: string | null) => void
   onSetContextProfile: (taskKind: AgentContextTaskKind, profile: AgentContextProfile) => void
   onSetTeamBudgetProfile: (profile: AgentTeamBudgetProfile) => void
+  onSetCreativeReliabilityEnabled: (enabled: boolean) => void
   onSetCreativeQualityMode: (mode: CreativeQualityModeV1) => void
 }
 
@@ -66,10 +68,12 @@ export default function AITaskRoutingSection({
   routes,
   contextProfiles,
   teamBudgetProfile,
+  creativeReliabilityEnabled,
   creativeQualityMode,
   onSetRoute,
   onSetContextProfile,
   onSetTeamBudgetProfile,
+  onSetCreativeReliabilityEnabled,
   onSetCreativeQualityMode,
 }: Props) {
   const renderRoutes = (taskKinds: readonly AITaskKind[]) => (
@@ -130,12 +134,30 @@ export default function AITaskRoutingSection({
         </p>
       </div>
       <label className="mb-2 block rounded border border-border bg-bg-base p-2.5">
+        <span className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={creativeReliabilityEnabled}
+            onChange={event => onSetCreativeReliabilityEnabled(event.target.checked)}
+            aria-label="启用创作可靠性工程"
+            className="mt-0.5"
+          />
+          <span>
+            <span className="block text-xs font-medium text-text-primary">启用创作可靠性工程</span>
+            <span className="mt-0.5 block text-[10px] text-text-muted">
+              关闭后，新任务恢复单次旧式候选路径，不生成 CREL 证据；既有候选和已采纳内容不会删除。
+            </span>
+          </span>
+        </span>
+      </label>
+      <label className="mb-2 block rounded border border-border bg-bg-base p-2.5">
         <span className="block text-xs font-medium text-text-primary">创作结果模式</span>
         <span className="mt-0.5 block text-[10px] text-text-muted">
           控制单个创作产物的自动调用；任何模式都禁止隐藏第三次调用和自动切换服务商。
         </span>
         <select
           value={creativeQualityMode}
+          disabled={!creativeReliabilityEnabled}
           onChange={event => onSetCreativeQualityMode(event.target.value as CreativeQualityModeV1)}
           aria-label="创作结果模式"
           className="mt-2 w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"

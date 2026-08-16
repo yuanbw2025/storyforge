@@ -10,6 +10,34 @@ export type CreativeArtifactStatusV1 = typeof CREATIVE_ARTIFACT_STATUSES[number]
 export const CREATIVE_QUALITY_MODES = ['economy', 'balanced', 'refine'] as const
 export type CreativeQualityModeV1 = typeof CREATIVE_QUALITY_MODES[number]
 
+/**
+ * Local kill switch for the production CREL path. Existing artifacts remain
+ * readable when disabled; new production runs use the legacy single-call
+ * candidate path and do not attach CreativeArtifactV1 evidence.
+ */
+export const CREATIVE_RELIABILITY_RUNTIME_STORAGE_KEY_V1 =
+  'storyforge:creative-reliability:runtime-v1'
+
+export function isCreativeReliabilityRuntimeEnabledV1(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(CREATIVE_RELIABILITY_RUNTIME_STORAGE_KEY_V1) !== 'disabled'
+  } catch {
+    return true
+  }
+}
+
+export function setCreativeReliabilityRuntimeEnabledV1(enabled: boolean): void {
+  try {
+    globalThis.localStorage?.setItem(
+      CREATIVE_RELIABILITY_RUNTIME_STORAGE_KEY_V1,
+      enabled ? 'enabled' : 'disabled',
+    )
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts. The
+    // in-memory store still reflects the current session selection.
+  }
+}
+
 export interface CreativeQualityPolicyV1 {
   version: 1
   mode: CreativeQualityModeV1

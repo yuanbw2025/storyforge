@@ -42,8 +42,8 @@ export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean
 export default function AIConfigPanel() {
   const { config, setConfig, switchProvider, testConnection,
     rememberApiKey, setRememberApiKey,
-    presets, taskRoutes, agentContextProfiles, agentTeamBudgetProfile, creativeQualityMode,
-    setTaskRoute, setAgentContextProfile, setAgentTeamBudgetProfile, setCreativeQualityMode,
+    presets, taskRoutes, agentContextProfiles, agentTeamBudgetProfile, creativeReliabilityEnabled, creativeQualityMode,
+    setTaskRoute, setAgentContextProfile, setAgentTeamBudgetProfile, setCreativeReliabilityEnabled, setCreativeQualityMode,
     activePresetId, editingPresetId, saveAsPreset, applyPreset, updatePresetFromCurrent,
     renamePreset, deletePreset } = useAIConfigStore()
   const dialog = useDialog()
@@ -194,10 +194,12 @@ export default function AIConfigPanel() {
           routes={taskRoutes}
           contextProfiles={agentContextProfiles}
           teamBudgetProfile={agentTeamBudgetProfile}
+          creativeReliabilityEnabled={creativeReliabilityEnabled}
           creativeQualityMode={creativeQualityMode}
           onSetRoute={setTaskRoute}
           onSetContextProfile={setAgentContextProfile}
           onSetTeamBudgetProfile={setAgentTeamBudgetProfile}
+          onSetCreativeReliabilityEnabled={setCreativeReliabilityEnabled}
           onSetCreativeQualityMode={setCreativeQualityMode}
         />
 

@@ -451,7 +451,10 @@ npm run build
 ## 13. 回滚与兼容
 
 - 新合同使用版本号，旧候选和旧 Run 按历史合同恢复。
-- 特性开关关闭时不生成新 CreativeArtifact，但仍能读取已存在证据。
+- 设置页“启用创作可靠性工程”是版本化本机回滚开关，存储键为
+  `storyforge:creative-reliability:runtime-v1`。关闭后，故事线、卷/章纲、正文和细纲的新任务
+  使用单次旧式候选路径，不附加 `CreativeArtifactV1` / `NarrativeBriefV1`，也不会触发定向修复；
+  既有新旧候选仍按各自版本读取。CREL 的隔离评测显式固定新路径，不受生产回滚开关污染。
 - 不删除 H86 评测和负面证据。
 - 不修改现有正式表 schema，因此初期回滚不涉及用户数据迁移。
 - 已经通过 `adopt()` 写入的作者确认内容不因关闭功能而回滚。
@@ -486,3 +489,4 @@ npm run build
 | 2026-08-16 | CREL-11 | 结构门完成 | 三种题材各用 12 章夹具验证只携带直接前驱尾部/handoff、最近 5 条已验证摘要和当前正式角色/章纲，中途修改不会被旧摘要覆盖；真实连续生成质量留在 CREL-13 一次性评测 |
 | 2026-08-16 | CREL-12 | 完成 | 主 Agent 在调用前及执行中显示预计产物、常规调用数、质量模式修复规则、团队调用/token 硬上限与规划→正文确认屏障；支持停止和 durable 恢复；章节编辑器明确提示默认无自动语义调用；不虚构跨供应商金额 |
 | 2026-08-16 | CREL-13 | 评测框架完成，真实门待跑 | 冻结全新的 6 development + 6 sealed held-out（不复用 H86）；实现旧直连/生产 CREL 成对执行、逐调用 provider usage、每步 checkpoint、失败保留、同 Run 恢复、held-out 一次性声明、独立 verifier、A/B 作者盲评、记录验签及机器门/社区门分离；浏览器适配器沿 `CONTEXT_SOURCES`/`adopt()`/`PROJECT_TABLES` 创建并清理隔离项目；真实 development、最终 held-out 和人工盲评尚未执行，社区体验门保持关闭 |
+| 2026-08-16 | CREL-0/14 交付审计 | 本地门完成 | 补齐可见的版本化生产回滚开关及单次严格旧路径反例；AI 入口账本收口为 13 files / 24 calls；完整 `npm run ci` 通过，隔离 Chromium `npm run ci:e2e` 52/52 通过。真实 API 与人工门仍未完成，不能据此开放社区门。 |

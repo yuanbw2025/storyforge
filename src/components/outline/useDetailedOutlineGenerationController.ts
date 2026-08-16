@@ -84,6 +84,7 @@ export function useDetailedOutlineGenerationController(
     suspendRecovery,
   } = input
   const aiConfig = useAIConfigStore(state => state.config)
+  const creativeReliabilityEnabled = useAIConfigStore(state => state.creativeReliabilityEnabled)
   const creativeQualityMode = useAIConfigStore(state => state.creativeQualityMode)
   const ai = useAIStream(createAISessionKey(
     projectId,
@@ -220,10 +221,12 @@ export function useDetailedOutlineGenerationController(
         : `完善《${chapterTitle}》的场景、冲突、情绪变化和结尾压力。`,
       assembled: context.assembled,
     })
-    const messages = [{
-      role: 'system' as const,
-      content: formatNarrativeBriefForPromptV1(narrativeBrief),
-    }, ...baseMessages]
+    const messages = creativeReliabilityEnabled
+      ? [{
+          role: 'system' as const,
+          content: formatNarrativeBriefForPromptV1(narrativeBrief),
+        }, ...baseMessages]
+      : baseMessages
     let snapshot = await createDetailedOutlineGenerationDurableRunV1({
       scope,
       worldGroupId,
@@ -268,15 +271,17 @@ export function useDetailedOutlineGenerationController(
     }
     const category = operation === 'scenes' ? 'detail.scene' : 'detail.enhance'
     const modelIdentity = resolveRequestConfig(aiConfig, { category }).config
-    const creativeArtifact = await createDetailedOutlineCreativeArtifactV1({
-      raw: output,
-      operation,
-      narrativeBrief,
-      qualityMode: creativeQualityMode,
-      modelIdentity: { provider: modelIdentity.provider, model: modelIdentity.model },
-      inputText: messages.map(message => message.content).join('\n'),
-      durationMs: Math.max(0, Date.now() - startedAt),
-    })
+    const creativeArtifact = creativeReliabilityEnabled
+      ? await createDetailedOutlineCreativeArtifactV1({
+          raw: output,
+          operation,
+          narrativeBrief,
+          qualityMode: creativeQualityMode,
+          modelIdentity: { provider: modelIdentity.provider, model: modelIdentity.model },
+          inputText: messages.map(message => message.content).join('\n'),
+          durationMs: Math.max(0, Date.now() - startedAt),
+        })
+      : undefined
     const baseCandidate: Omit<DetailedOutlineGenerationCandidateV1, 'durable'> = {
       version: 1,
       type: DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1,
@@ -288,8 +293,7 @@ export function useDetailedOutlineGenerationController(
       output,
       outputHash: await hashCanonicalValue(output),
       contextManifestHash: manifest.manifestHash,
-      creativeArtifact,
-      narrativeBrief,
+      ...(creativeArtifact ? { creativeArtifact, narrativeBrief } : {}),
       workspaceScope: scope,
       createdAt: Date.now(),
     }
@@ -321,6 +325,7 @@ export function useDetailedOutlineGenerationController(
     chapterSummary,
     chapterTitle,
     aiConfig,
+    creativeReliabilityEnabled,
     creativeQualityMode,
     selectedOutlineNodeId,
     projectId,

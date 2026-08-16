@@ -160,6 +160,7 @@ import type {
 } from './master-candidate-semantic-review'
 import {
   creativeArtifactCanAdoptV1,
+  isCreativeReliabilityRuntimeEnabledV1,
   type CreativeAssumptionV1,
   type CreativeArtifactV1,
 } from './creative-reliability'
@@ -794,6 +795,7 @@ async function executeSequentialMasterAgentPlan(
   const candidates: ExecutedMasterCandidate[] = []
   const outputs = new Map<string, string>()
   const runtimeAssumptions = new Map<string, CreativeAssumptionV1[]>()
+  const creativeReliabilityEnabled = isCreativeReliabilityRuntimeEnabledV1()
   const contextProfiles = useAIConfigStore.getState().agentContextProfiles
   const budget = input.budget ?? new AgentTeamBudgetTracker(
     useAIConfigStore.getState().agentTeamBudgetProfile,
@@ -1316,43 +1318,82 @@ async function executeSequentialMasterAgentPlan(
             contextProfile,
             contextCompressionRuntime,
             inheritedAssumptions,
+            creativeReliabilityEnabled,
             signal: input.signal,
           })
-          const result = await runStoryArcCreativeReliabilityV1({
-            prepared,
-            budget,
-            qualityMode: useAIConfigStore.getState().creativeQualityMode,
-            validate: output => validateDomainCandidateCanon({
-              agentId: task.agentId,
-              projectId: input.projectId,
-              worldGroupId: input.worldGroupId,
-              outputText: JSON.stringify(output),
-            }),
-          })
-          const draft = result.draft
-          candidates.push({
-            payload: {
-              version: 1,
-              taskId: task.id,
-              agentId: task.agentId,
-              skillId: skill.id as AgentSkillId,
-              executionBinding,
-              label: prepared.label,
-              contextSources: prepared.contextSources,
-              contextEvidence: prepared.contextEvidence,
-              baseSnapshot: prepared.snapshot,
-              workspaceScope: scope,
-              storyArcKind: prepared.kind,
-              dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
-              creativeArtifact: result.artifact,
-              narrativeBrief: prepared.input.narrativeBrief,
-            },
-            draft,
-            runtimeNode: prepared.node,
-            runtimeOutput: result.output,
-          })
-          outputs.set(task.id, draft)
+          if (creativeReliabilityEnabled) {
+            const result = await runStoryArcCreativeReliabilityV1({
+              prepared,
+              budget,
+              qualityMode: useAIConfigStore.getState().creativeQualityMode,
+              validate: output => validateDomainCandidateCanon({
+                agentId: task.agentId,
+                projectId: input.projectId,
+                worldGroupId: input.worldGroupId,
+                outputText: JSON.stringify(output),
+              }),
+            })
+            const draft = result.draft
+            candidates.push({
+              payload: {
+                version: 1,
+                taskId: task.id,
+                agentId: task.agentId,
+                skillId: skill.id as AgentSkillId,
+                executionBinding,
+                label: prepared.label,
+                contextSources: prepared.contextSources,
+                contextEvidence: prepared.contextEvidence,
+                baseSnapshot: prepared.snapshot,
+                workspaceScope: scope,
+                storyArcKind: prepared.kind,
+                dependsOnTaskIds: task.dependsOn,
+                dependencyBindings,
+                creativeArtifact: result.artifact,
+                narrativeBrief: prepared.input.narrativeBrief,
+              },
+              draft,
+              runtimeNode: prepared.node,
+              runtimeOutput: result.output,
+            })
+            outputs.set(task.id, draft)
+          } else {
+            const result = await runBudgetedGenerationNode({
+              node: prepared.node,
+              prepared: prepared.prepared,
+              budget,
+              callLabel: '故事线编排 Skill',
+              maxOutputTokens: skill.maxOutputTokens,
+              validate: output => validateDomainCandidateCanon({
+                agentId: task.agentId,
+                projectId: input.projectId,
+                worldGroupId: input.worldGroupId,
+                outputText: JSON.stringify(output),
+              }),
+            })
+            const draft = JSON.stringify(result.output, null, 2)
+            candidates.push({
+              payload: {
+                version: 1,
+                taskId: task.id,
+                agentId: task.agentId,
+                skillId: skill.id as AgentSkillId,
+                executionBinding,
+                label: prepared.label,
+                contextSources: prepared.contextSources,
+                contextEvidence: prepared.contextEvidence,
+                baseSnapshot: prepared.snapshot,
+                workspaceScope: scope,
+                storyArcKind: prepared.kind,
+                dependsOnTaskIds: task.dependsOn,
+                dependencyBindings,
+              },
+              draft,
+              runtimeNode: prepared.node,
+              runtimeOutput: result.output,
+            })
+            outputs.set(task.id, draft)
+          }
         } else {
           const prepared = await prepareOutlineCopilot({
             projectId: input.projectId,
@@ -1365,45 +1406,86 @@ async function executeSequentialMasterAgentPlan(
             contextProfile,
             contextCompressionRuntime,
             inheritedAssumptions,
+            creativeReliabilityEnabled,
             signal: input.signal,
           })
-          const result = await runOutlineCreativeReliabilityV1({
-            prepared,
-            budget,
-            qualityMode: useAIConfigStore.getState().creativeQualityMode,
-            validate: output => validateDomainCandidateCanon({
-              agentId: task.agentId,
-              projectId: input.projectId,
-              worldGroupId: input.worldGroupId,
-              outlineNodeId: prepared.parentVolumeId,
-              outputText: JSON.stringify(output),
-            }),
-          })
-          const draft = result.draft
-          candidates.push({
-            payload: {
-              version: 1,
-              taskId: task.id,
-              agentId: task.agentId,
-              skillId: skill.id as AgentSkillId,
-              executionBinding,
-              label: prepared.label,
-              contextSources: prepared.contextSources,
-              contextEvidence: prepared.contextEvidence,
-              baseSnapshot: prepared.snapshot,
-              workspaceScope: scope,
-              outlineMode: prepared.mode,
-              outlineParentId: prepared.parentVolumeId,
-              dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
-              creativeArtifact: result.artifact,
-              narrativeBrief: prepared.input.narrativeBrief,
-            },
-            draft,
-            runtimeNode: prepared.node,
-            runtimeOutput: result.output,
-          })
-          outputs.set(task.id, draft)
+          if (creativeReliabilityEnabled) {
+            const result = await runOutlineCreativeReliabilityV1({
+              prepared,
+              budget,
+              qualityMode: useAIConfigStore.getState().creativeQualityMode,
+              validate: output => validateDomainCandidateCanon({
+                agentId: task.agentId,
+                projectId: input.projectId,
+                worldGroupId: input.worldGroupId,
+                outlineNodeId: prepared.parentVolumeId,
+                outputText: JSON.stringify(output),
+              }),
+            })
+            const draft = result.draft
+            candidates.push({
+              payload: {
+                version: 1,
+                taskId: task.id,
+                agentId: task.agentId,
+                skillId: skill.id as AgentSkillId,
+                executionBinding,
+                label: prepared.label,
+                contextSources: prepared.contextSources,
+                contextEvidence: prepared.contextEvidence,
+                baseSnapshot: prepared.snapshot,
+                workspaceScope: scope,
+                outlineMode: prepared.mode,
+                outlineParentId: prepared.parentVolumeId,
+                dependsOnTaskIds: task.dependsOn,
+                dependencyBindings,
+                creativeArtifact: result.artifact,
+                narrativeBrief: prepared.input.narrativeBrief,
+              },
+              draft,
+              runtimeNode: prepared.node,
+              runtimeOutput: result.output,
+            })
+            outputs.set(task.id, draft)
+          } else {
+            const result = await runBudgetedGenerationNode({
+              node: prepared.node,
+              prepared: prepared.prepared,
+              budget,
+              callLabel: '大纲领域 Agent',
+              maxOutputTokens: skill.maxOutputTokens,
+              validate: output => validateDomainCandidateCanon({
+                agentId: task.agentId,
+                projectId: input.projectId,
+                worldGroupId: input.worldGroupId,
+                outlineNodeId: prepared.parentVolumeId,
+                outputText: JSON.stringify(output),
+              }),
+            })
+            const draft = JSON.stringify(result.output, null, 2)
+            candidates.push({
+              payload: {
+                version: 1,
+                taskId: task.id,
+                agentId: task.agentId,
+                skillId: skill.id as AgentSkillId,
+                executionBinding,
+                label: prepared.label,
+                contextSources: prepared.contextSources,
+                contextEvidence: prepared.contextEvidence,
+                baseSnapshot: prepared.snapshot,
+                workspaceScope: scope,
+                outlineMode: prepared.mode,
+                outlineParentId: prepared.parentVolumeId,
+                dependsOnTaskIds: task.dependsOn,
+                dependencyBindings,
+              },
+              draft,
+              runtimeNode: prepared.node,
+              runtimeOutput: result.output,
+            })
+            outputs.set(task.id, draft)
+          }
         }
       } else {
         const prepared = await prepareProseCopilot({
@@ -1417,48 +1499,91 @@ async function executeSequentialMasterAgentPlan(
           contextProfile,
           contextCompressionRuntime,
           inheritedAssumptions,
+          creativeReliabilityEnabled,
           perspectiveCharacterId: task.perspectiveCharacterId ?? null,
           signal: input.signal,
         })
-        const result = await runProseCreativeReliabilityV1({
-          prepared,
-          budget,
-          qualityMode: useAIConfigStore.getState().creativeQualityMode,
-          validate: output => validateDomainCandidateCanon({
-            agentId: task.agentId,
-            projectId: input.projectId,
-            worldGroupId: input.worldGroupId,
-            outlineNodeId: prepared.outlineNodeId,
-            outputText: output,
-          }),
-        })
-        const draft = result.draft
-        candidates.push({
-          payload: {
-            version: 1,
-            taskId: task.id,
-            agentId: task.agentId,
-            skillId: skill.id as AgentSkillId,
-            executionBinding,
-            label: prepared.label,
-            contextSources: prepared.contextSources,
-            contextEvidence: prepared.contextEvidence,
-            baseSnapshot: prepared.snapshot,
-            workspaceScope: scope,
-            proseOperation: prepared.operation,
-            proseOutlineNodeId: prepared.outlineNodeId,
-            perspectiveCharacterId: prepared.perspectiveCharacterId,
-            dependsOnTaskIds: task.dependsOn,
-            dependencyBindings,
-            creativeArtifact: result.artifact,
-            narrativeBrief: prepared.input.narrativeBrief,
-            informationBoundary: prepared.informationBoundary,
-          },
-          draft,
-          runtimeNode: prepared.node,
-          runtimeOutput: result.output,
-        })
-        outputs.set(task.id, draft)
+        if (creativeReliabilityEnabled) {
+          const result = await runProseCreativeReliabilityV1({
+            prepared,
+            budget,
+            qualityMode: useAIConfigStore.getState().creativeQualityMode,
+            validate: output => validateDomainCandidateCanon({
+              agentId: task.agentId,
+              projectId: input.projectId,
+              worldGroupId: input.worldGroupId,
+              outlineNodeId: prepared.outlineNodeId,
+              outputText: output,
+            }),
+          })
+          const draft = result.draft
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              workspaceScope: scope,
+              proseOperation: prepared.operation,
+              proseOutlineNodeId: prepared.outlineNodeId,
+              perspectiveCharacterId: prepared.perspectiveCharacterId,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+              creativeArtifact: result.artifact,
+              narrativeBrief: prepared.input.narrativeBrief,
+              informationBoundary: prepared.informationBoundary,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        } else {
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '正文领域 Agent',
+            maxOutputTokens: skill.maxOutputTokens,
+            validate: output => validateDomainCandidateCanon({
+              agentId: task.agentId,
+              projectId: input.projectId,
+              worldGroupId: input.worldGroupId,
+              outlineNodeId: prepared.outlineNodeId,
+              outputText: output,
+            }),
+          })
+          const draft = result.output
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              workspaceScope: scope,
+              proseOperation: prepared.operation,
+              proseOutlineNodeId: prepared.outlineNodeId,
+              perspectiveCharacterId: prepared.perspectiveCharacterId,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+              informationBoundary: prepared.informationBoundary,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        }
       }
       const candidate = candidates[candidates.length - 1]
       const candidateAssumptions = candidate.payload.creativeArtifact?.assumptions

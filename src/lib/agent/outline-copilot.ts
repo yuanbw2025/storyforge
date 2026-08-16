@@ -66,7 +66,11 @@ import {
   type CreativeRawModelResultV1,
 } from './creative-execution'
 import type { CreativeAssumptionV1, CreativeQualityModeV1 } from './creative-reliability'
-import { parseCreativeArtifactV1, type CreativeArtifactV1 } from './creative-reliability'
+import {
+  isCreativeReliabilityRuntimeEnabledV1,
+  parseCreativeArtifactV1,
+  type CreativeArtifactV1,
+} from './creative-reliability'
 import type { AgentTeamBudgetTracker } from './team-budget'
 
 export const OUTLINE_COPILOT_SOURCE_KEYS = getDefaultAgentSkillV1('outline').contextSourceKeys
@@ -92,6 +96,7 @@ export interface OutlineCopilotInput {
   volumes: OutlineNode[]
   assembled: Awaited<ReturnType<typeof assembleContext>>
   narrativeBrief: NarrativeBriefV1
+  creativeReliabilityEnabled?: boolean
   snapshot: OutlineCopilotSnapshot
   config: AIConfig
   parameterValues?: Record<string, unknown>
@@ -325,7 +330,9 @@ function buildOutlineMessages(input: OutlineCopilotInput) {
     hint: [
       input.inputGuidance,
       input.authorRequest + supplemental,
-      formatNarrativeBriefForPromptV1(input.narrativeBrief),
+      ...(input.creativeReliabilityEnabled !== false
+        ? [formatNarrativeBriefForPromptV1(input.narrativeBrief)]
+        : []),
     ].join('\n\n'),
     options: { parameterValues: input.parameterValues },
   })
@@ -400,6 +407,7 @@ export async function prepareOutlineCopilot(input: {
   generationOverrides?: { temperature?: number; maxTokens?: number }
   contextCompressionRuntime?: AgentContextCompressionRuntimeV1
   inheritedAssumptions?: readonly CreativeAssumptionV1[]
+  creativeReliabilityEnabled?: boolean
   signal?: AbortSignal
 }, dependencies: OutlineCopilotDependencies = {}): Promise<PreparedOutlineCopilot> {
   const project = await db.projects.get(input.projectId)
@@ -469,6 +477,8 @@ export async function prepareOutlineCopilot(input: {
     assembled,
     inheritedAssumptions: input.inheritedAssumptions,
   })
+  const creativeReliabilityEnabled = input.creativeReliabilityEnabled
+    ?? isCreativeReliabilityRuntimeEnabledV1()
   const nodeInput: OutlineCopilotInput = {
     project,
     scope,
@@ -482,6 +492,7 @@ export async function prepareOutlineCopilot(input: {
     volumes,
     assembled,
     narrativeBrief,
+    creativeReliabilityEnabled,
     snapshot,
     config,
     parameterValues: input.parameterValues,

@@ -72,16 +72,19 @@ describe('AUDIT-6 / HEALTH-4 · AI 设置分区', () => {
     const onSetRoute = vi.fn()
     const onSetContextProfile = vi.fn()
     const onSetTeamBudgetProfile = vi.fn()
+    const onSetCreativeReliabilityEnabled = vi.fn()
     const onSetCreativeQualityMode = vi.fn()
     const host = await mount(AITaskRoutingSection as ComponentType<never>, {
       presets: [preset],
       routes: { creation: 'writer' },
       contextProfiles: DEFAULT_AGENT_CONTEXT_PROFILES,
       teamBudgetProfile: 'balanced',
+      creativeReliabilityEnabled: true,
       creativeQualityMode: 'balanced',
       onSetRoute,
       onSetContextProfile,
       onSetTeamBudgetProfile,
+      onSetCreativeReliabilityEnabled,
       onSetCreativeQualityMode,
     })
     expect(host.querySelectorAll('select')).toHaveLength(17)
@@ -116,6 +119,9 @@ describe('AUDIT-6 / HEALTH-4 · AI 设置分区', () => {
       teamBudget.dispatchEvent(new Event('change', { bubbles: true }))
     })
     expect(onSetTeamBudgetProfile).toHaveBeenCalledWith('economy')
+    const reliabilityToggle = host.querySelector<HTMLInputElement>('input[aria-label="启用创作可靠性工程"]')!
+    await act(async () => reliabilityToggle.click())
+    expect(onSetCreativeReliabilityEnabled).toHaveBeenCalledWith(false)
     const qualityMode = host.querySelector<HTMLSelectElement>('select[aria-label="创作结果模式"]')!
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!

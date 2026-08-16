@@ -383,6 +383,7 @@ async function creativeGeneration(input: {
       worldGroupId: null,
       authorRequest: input.fixture.authorRequest,
       skillId: 'outline.story-arcs',
+      creativeReliabilityEnabled: true,
       configOverride: input.config,
       generationOverrides: {
         temperature: input.parameters.temperature,

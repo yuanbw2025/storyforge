@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createStoryArcCopilotNode,
   parseStoryArcCandidateDraft,
+  parseStoryArcModelResponseLegacyV1,
   parseStoryArcModelResponseV2,
   prepareStoryArcCopilot,
   revalidateStoryArcCreativeDraftV1,
@@ -61,6 +62,7 @@ const ORIGINAL_AI_STATE = {
   config: structuredClone(useAIConfigStore.getState().config),
   presets: structuredClone(useAIConfigStore.getState().presets),
   taskRoutes: structuredClone(useAIConfigStore.getState().taskRoutes),
+  creativeReliabilityEnabled: useAIConfigStore.getState().creativeReliabilityEnabled,
   creativeQualityMode: useAIConfigStore.getState().creativeQualityMode,
 }
 
@@ -177,12 +179,17 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       config: STORY_ARC_CONFIG,
       presets: [],
       taskRoutes: {},
+      creativeReliabilityEnabled: true,
       creativeQualityMode: 'balanced',
     })
+    useAIConfigStore.getState().setCreativeReliabilityEnabled(true)
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    useAIConfigStore.getState().setCreativeReliabilityEnabled(
+      ORIGINAL_AI_STATE.creativeReliabilityEnabled,
+    )
     useAIConfigStore.setState(ORIGINAL_AI_STATE)
     db.close()
   })
@@ -259,6 +266,39 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
     expect(candidates[0].runtimeNode.kind).toBe('outline.story-arcs')
     expect(parseStoryArcCandidateDraft(candidates[0].draft)).toEqual([mainArc()])
     expect(await db.storyArcs.count()).toBe(0)
+  })
+
+  it('本机回滚开关恢复单次严格旧路径，不附加 NarrativeBrief 或 CREL 证据', async () => {
+    const { project, scope } = await createWorkspace()
+    useAIConfigStore.getState().setCreativeReliabilityEnabled(false)
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      const prompt = body.messages.map((message: { content: string }) => message.content).join('\n')
+      expect(prompt).not.toContain('本轮叙事任务（运行时合同，不是新增 Canon）')
+      expect(prompt).not.toContain('assumptions 字符串数组')
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({ storyArcs: [mainArc()] }) } }],
+        usage: { prompt_tokens: 21, completion_tokens: 32, total_tokens: 53 },
+      }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const candidates = await executeMasterAgentPlan({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      plan: plan(),
+      budget: new AgentTeamBudgetTracker('balanced'),
+    })
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0].payload.creativeArtifact).toBeUndefined()
+    expect(candidates[0].payload.narrativeBrief).toBeUndefined()
+    expect(parseStoryArcCandidateDraft(candidates[0].draft)).toEqual([mainArc()])
+    expect(() => parseStoryArcModelResponseLegacyV1(
+      `\`\`\`json\n${JSON.stringify({ storyArcs: [mainArc()] })}\n\`\`\``,
+    )).toThrow('严格 JSON 对象')
   })
 
   it('上游临时假设通过独立元数据进入后续任务且不改变依赖草稿哈希', async () => {
