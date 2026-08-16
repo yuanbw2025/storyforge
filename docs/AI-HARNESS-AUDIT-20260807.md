@@ -4,7 +4,9 @@
 > 审计分支：`feat/harness-audit-20260807`
 > 审计基线：`774a2ae feat(WORLD-2): close executable world foundation through 2F`
 > 范围：仅分步骤创作模式；世界引擎运行时体验不在本轮范围。
-> 状态：第一阶段设计成果；不等同于已实现的目标 Harness。
+> 状态：历史审计基线；目标 Harness 与 CREL 控制面已合入 `main@5021094`，当前事实见
+> [ARCHITECTURE.md](./ARCHITECTURE.md) 与
+> [AI-HARNESS-REBUILD-RELEASE-20260817.md](./AI-HARNESS-REBUILD-RELEASE-20260817.md)。
 > 目标全流程设计：[AI-HARNESS-FULL-FLOW-DESIGN-20260807](./AI-HARNESS-FULL-FLOW-DESIGN-20260807.md)。
 
 ## 0. 任务理解与审计结论

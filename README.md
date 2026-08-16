@@ -1,6 +1,6 @@
 # StoryForge · 故事熔炉
 
-> AI 辅助小说创作工作台。纯前端、本地优先、提示词全透明，让作者掌控从灵感、设定、大纲到正文、审校、导出的一整条创作链路。
+> 本地优先的 AI 长篇创作工作台。统一 Agent + Harness 把上下文、生成、校验、恢复、费用证据与作者确认收进同一条可审计链路，让作者掌控从灵感、设定、大纲到正文、审校、导出的完整创作过程。
 
 **交流与教程**
 
@@ -32,6 +32,7 @@
 - **Bring your own AI**: supports many OpenAI-compatible providers, Anthropic Claude, Gemini, local models, and custom endpoints.
 - **No black box**: prompts are visible, editable, cloneable, parameterized, and reusable.
 - **Built for long stories**: multiworld settings, story arcs, foreshadowing, state cards, item ledger, temporal facts, retrieval memory, chapter review, style learning, and export/backup workflows.
+- **Governed Agent + Harness**: model calls run through registered context, bounded retries, durable checkpoints, editable candidates, explicit author adoption, and auditable usage evidence.
 
 ```bash
 npm install
@@ -70,6 +71,7 @@ StoryForge 不是“一键生成完本小说”的黑箱工具，而是给作者
 | 提示词可见可改 | 每个 AI 功能背后的 System Prompt、User Template、参数和示例都能查看与克隆 |
 | 长篇设定不散 | 世界观、角色、大纲、伏笔、状态、物品、事实、故事线都进入结构化本地数据库 |
 | 资料能反哺写作 | 项目参考、历史资料、文风学习、场景考证可进入后续 AI 上下文 |
+| 失败不再无限重试 | 创作产物默认一次生成，必要时最多一次定向修复；失败也保留草稿、问题和用量证据 |
 | 数据本地优先 | 默认无 StoryForge 后端；项目数据存在用户浏览器 IndexedDB |
 
 ---
@@ -142,11 +144,16 @@ StoryForge 不是“一键生成完本小说”的黑箱工具，而是给作者
 
 ## AI 与提示词系统
 
-StoryForge 的 AI 能力分成三层：
+StoryForge 的生成主路径现在由统一 Agent + Harness 承载：
 
-1. **上下文装配**：根据当前任务读取项目概况、世界观、角色、大纲、伏笔、状态、事实、参考资料等内容。
-2. **提示词渲染**：用模板变量、条件块、参数开关和 few-shot 示例生成最终 prompt。
-3. **结构化采纳**：AI 输出不会直接变成事实，用户确认后才写入字段、集合或章节正文。
+1. **任务与 Skill**：主 Agent 或领域 Skill 明确本轮目标、读写权限、执行版本和完成条件。
+2. **受治理上下文**：只通过 `CONTEXT_SOURCES + assembleContext()` 读取当前 World / Work、Canon、直接前文和任务资料，并按预算分层裁剪。
+3. **有界生成**：提示词、工具与模型身份冻结进 Run；创作产物默认一次生成，只有确定性定位到可修问题时才允许一次定向修复。
+4. **验证与降级交付**：结构、作用域、引用、未来信息和写入权限由代码校验；普通创作质量问题作为可见警告，合法片段和原始草稿不会因单个软问题被整批丢弃。
+5. **作者确认与正式采纳**：候选可预览、编辑、拒绝或接受警告；只有作者确认后才经 `FIELD_REGISTRY + AdoptionSchema + adopt()` 写入正式数据。
+6. **可恢复证据**：Run、checkpoint、父子依赖、终态回执、token、延迟和失败原因进入统一 ledger，刷新或中断后可恢复，不重复已结算调用。
+
+这套架构约束执行方式，不承诺任何模型每次都生成完美文学结果。当前真实评测已经证明工程控制面、可编辑产物交付和成本停止策略成立；独立作者 A/B 与社区质量门仍未完成，因此创作可靠性入口保持实验性。详见 [本次架构更新说明](./docs/AI-HARNESS-REBUILD-RELEASE-20260817.md)。
 
 ### 支持的 AI Provider
 
@@ -199,13 +206,13 @@ StoryForge 是纯前端项目，没有自建应用后端。
 
 ## 技术架构
 
-### 从存储到用户价值的六层架构
+### 从存储到用户价值的七层架构
 
-StoryForge 按“底层能力向上支撑用户价值”的方向分为六层。UI 只表达用户意图和确认；AI 读、AI 写与表生命周期分别收口到三个注册表，不允许面板各自形成平行管线。
+StoryForge 按“底层能力向上支撑用户价值”的方向分为七层：本地数据与作用域、三注册表、上下文与采纳、Agent Skill、durable Harness、产品入口、作者确认。UI 只表达用户意图和确认；模型调用、失败恢复和正式写入不能由面板各自形成平行管线。
 
 [![StoryForge 从存储到用户价值的六层架构](./docs/assets/architecture/storyforge-architecture-overview.png)](./docs/assets/architecture/storyforge-architecture-overview.png)
 
-图中同时展示 `PROJECT_TABLES` 的代码映射、统一 AI 读写主路径和 42 张表的领域分布。对应实现见 [`src/lib/registry`](./src/lib/registry)、[`src/lib/db/schema.ts`](./src/lib/db/schema.ts) 与 [`scripts/check-architecture.mjs`](./scripts/check-architecture.mjs)。
+旧六层图仍用于展示注册表和领域数据分布；当前 Agent + Harness 执行层以 [架构总览](./docs/ARCHITECTURE.md) 和 [本次架构更新说明](./docs/AI-HARNESS-REBUILD-RELEASE-20260817.md) 为准。对应实现见 [`src/lib/registry`](./src/lib/registry)、[`src/lib/agent`](./src/lib/agent)、[`src/lib/agent/run`](./src/lib/agent/run)、[`src/lib/db/schema.ts`](./src/lib/db/schema.ts) 与 [`scripts/check-architecture.mjs`](./scripts/check-architecture.mjs)。
 
 ### 三个注册表
 
@@ -297,6 +304,8 @@ npm run ci
 | [docs/FEATURE-GUIDE.md](./docs/FEATURE-GUIDE.md) | 面向用户的完整功能说明书 |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | 贡献指南 |
 | [CHANGELOG.md](./CHANGELOG.md) | 版本变更记录 |
+| [docs/AI-HARNESS-REBUILD-RELEASE-20260817.md](./docs/AI-HARNESS-REBUILD-RELEASE-20260817.md) | Agent + Harness 大架构更新说明、验证证据与诚实边界 |
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | 当前代码与运行架构总览 |
 | [CLAUDE.md](./CLAUDE.md) | AI/开发者接手项目必须遵守的规则 |
 | [docs/MASTER-BLUEPRINT.md](./docs/MASTER-BLUEPRINT.md) | 重构施工蓝图与架构权威 |
 | [docs/WORLD-ENGINE-COMMUNITY-ARCHITECTURE.md](./docs/WORLD-ENGINE-COMMUNITY-ARCHITECTURE.md) | 世界引擎、作品实例、状态机与社区的目标架构 |

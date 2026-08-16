@@ -1,7 +1,9 @@
 # StoryForge 分步骤创作 Agent + Harness 全流程方案设计
 
 > 设计日期：2026-08-07
-> 状态：`PROPOSED`，是第一阶段目标设计，不代表已经实现。
+> 状态：历史目标设计；分步骤主路径及后续 CREL 控制面已实现并合入 `main@5021094`，当前事实以
+> [ARCHITECTURE.md](./ARCHITECTURE.md) 和
+> [AI-HARNESS-REBUILD-RELEASE-20260817.md](./AI-HARNESS-REBUILD-RELEASE-20260817.md) 为准。
 > 唯一范围：分步骤创作模式。世界引擎、角色聊天、跑团和文字游戏只保留未来迁移边界，不进入本轮实施。
 > 现状证据：[AI-HARNESS-AUDIT-20260807](./AI-HARNESS-AUDIT-20260807.md)。
 > 约束：继续以 `CONTEXT_SOURCES + assembleContext()`、`FIELD_REGISTRY + AdoptionSchema + adopt()`、`PROJECT_TABLES` 为三个单一事实源。

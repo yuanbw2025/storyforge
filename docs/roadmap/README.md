@@ -7,16 +7,20 @@
 > - [当前能力基线](./CAPABILITY-BASELINE.md)：新体系或完整功能读取对应章节，记录代码当前已经具备什么。
 > - [已完成索引](./COMPLETED.md)：按功能体系索引已交付能力、测试证据和历史记录。
 > - [Agent + Harness 重构交接](../AI-HARNESS-REBUILD-HANDOFF-20260810.md)：跨电脑或跨模型接续当前功能分支时先读，包含完成度、验证状态和下一步入口。
+> - [Agent + Harness 大架构更新说明](../AI-HARNESS-REBUILD-RELEASE-20260817.md)：面向项目整体的当前架构、用户价值、验证证据与诚实边界。
 > - [历史完整快照](../ROADMAP-LEGACY.md)：本分支拆分前 `HEAD:docs/ROADMAP.md` 的原始内容，只读保存，不作为新的施工入口。
 > - [项目宪法](../../CLAUDE.md) 与 [施工蓝图](../MASTER-BLUEPRINT.md)：所有功能都必须服从三注册表和 Blueprint 的完成定义；读取范围由 [上下文路由](../CONTEXT-ROUTING.md) 决定。
 
 **迁移安全**：`docs/ROADMAP-LEGACY.md` 与本分支拆分前的 `HEAD:docs/ROADMAP.md` 字节级一致，共 3181 行，SHA-256 为 `e497de7d0f8100489bdcb3a7b3fcb528d07024b9dcb832f7de6e2701d584667d`。任何任务信息丢失或状态不明，先回到历史快照核对，不凭记忆补写。
 
-## 当前主体系：CREL 创作可靠性工程
+## 当前状态：CREL 工程完成，进入独立作者验证阶段
 
 `feat/harness-creative-reliability` 在已完成的 Agent + Harness 基线上补齐有限成本下的可用创作交付，
 不新增平行 Agent、数据库或模型旁路。权威范围、数据合同、CREL-0～14 施工顺序和发布门见
 [创作可靠性工程开发文档](../AI-CREATIVE-RELIABILITY-DEVELOPMENT-20260816.md)。
+
+该工程已通过 PR #63 合入 `main@5021094`。后续工作不再继续修改已消耗 sealed held-out 或为过门调阈值，
+而是使用新的 Development 集做成本优化，并由未参与实现的真实作者完成 A/B 与连续创作体验验证。
 
 `CREL-0～12` 的生产主路径、成本边界和版本化本机回滚开关已经完成；`CREL-14` 的生产可见实验边界、
 费用说明和纯本地结构化反馈入口也已完成。`CREL-13` 已完成三轮真实 Development 和唯一一次 sealed

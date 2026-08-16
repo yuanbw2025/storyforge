@@ -368,7 +368,8 @@
 
 ### 已有能力
 
-- 当前 AI 主要是用户触发的单轮生成、流式输出、确认和采纳；已有模型路由和部分 Agent/工具基础。
+- 当前正式 AI 创作已由统一 Agent + durable Harness 承载：Master Agent/领域 Skill 冻结任务、权限、版本与预算，候选、checkpoint、父子 lineage、终态回执和用量进入统一 ledger；作者确认后才经受治理采纳写入 Canon。
+- CREL 创作可靠性控制面已完成：分级 `CreativeArtifactV1`、1+1 调用上限、免费确定性归一化、一次定向修复、`NarrativeBrief`、部分设定临时假设、统一预览与本地反馈均复用现有 Harness，不建立平行 Runner 或数据库。
 - AGENT-1 Tool Registry 当前提供 14 个只读工具：Phase 27.1-a 首批 13 个与 27.1-d 的
   `read_inspiration_workspace` 全部经 `CONTEXT_SOURCES → assembleContext()` 读取，带
   项目/世界/实体/碎片归属校验、独立预算与裁剪元数据。
@@ -681,7 +682,7 @@
   镜像；删除这些镜像需要后续独立 ADR，不能在普通功能改动中顺手移除。
 - 世界完整度当前只表达领域覆盖，不冒充引用完整、Canon 冲突或发布准备度；后续验证能力必须复用三注册表和已有一致性检查器。
 - 本地世界引擎基座完成不等于社区平台完成；账号、云发布、发现、订阅、fork、协作和治理仍属于 PLATFORM-1B/1C。
-- Harness/Agent 执行体系不在 WORLD-2 中扩张；先在完整保留的分步骤模式完成 HARNESS-2，再评估迁移。
+- Harness/Agent 执行体系已在分步骤主路径完成重构；WORLD-2、游戏与互动功能可以消费稳定的 World/Work、Context 和发布数据出口，但若增加 AI 生成，必须接入同一 Skill/Run/CreativeArtifact/Adoption 链路，不能在各产品内建立直连旁路。
 - WORLD-2F 完成的是本地共享运行时与冻结绑定，不等于四个上层产品的全部体验都已成熟；新增规则系统、长期
   记忆、多人协作或玩法 UI 时必须消费该基座，不能另造平行状态机。
 

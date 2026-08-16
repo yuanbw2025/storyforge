@@ -23,6 +23,10 @@ StoryForge 是纯前端 React + TypeScript + IndexedDB 生产项目。用户手�
 禁止在组件或 service 中手拼上下文、直接散写受治理表、手写表清单、复制一套平行
 AI/DB/导入导出入口。领域扩展只能使用架构守卫认可、带理由与复审边界的显式入口。
 
+正式模型调用还必须进入 Agent Skill / Run Contract / durable Harness 或 AI 入口注册表明确登记的
+只读、内存草稿、评测、模拟边界；候选使用统一 CreativeArtifact/运行证据，作者确认后才可
+`adopt()`。不得在 UI 新增未登记直连、隐藏重试或组件内恢复状态。
+
 ## 任务开始方式
 
 1. 先查看 `git status --short --branch`、相关提交和任务描述，保护用户已有改动。

@@ -35,6 +35,11 @@
 
 不管"上→下生成"（如生成章节正文）、"下→上反推"（如灵感反推）、"下游提取"（如状态卡提取）——**三类全部走同一个机制,只是 reads/writes 方向不同**。
 
+2026-08-17 起，正式模型执行还必须经过统一 Agent + Harness：领域 Skill 声明读写权限和执行版本，
+Run Contract 冻结任务、预算与完成条件，durable ledger/checkpoint/receipt 负责恢复和终态证明，
+`CreativeArtifact` 保存分级候选、问题和用量。三注册表仍是数据单一事实源；Harness 是执行控制面，
+两者不能互相替代。普通 UI 不得以“只是调用一次模型”为由绕过 Skill/Run 或 AI 入口登记。
+
 ---
 
 ## 🚫 动手前的「四问」（必须依次过）
@@ -72,7 +77,7 @@
 | 修灵感反推字段错位（AI 吐 `summary` 写不到 `worldOrigin`） → 在 InspirationPanel 里加 if/else 映射 | 改 `FIELD_REGISTRY` 给 `worldOrigin` 加 `aliases: ['summary']`，`adopt()` 自动处理 |
 | 修章节正文不读 worldRules → 在 ChapterEditor 里加一行 `buildWorldRulesContext()` | 在 `CONTEXT_SOURCES` 注册 `worldRules` 源，所有调用 `assembleContext({need:['worldRules']})` 自动注入 |
 | 加新表 → 直接 schema.ts 加 + 在 deleteProject 加一行 + 在 export 加一行 + 在 import remap 加一行... | `PROJECT_TABLES` 加一行，5 个生命周期 API 自动覆盖 |
-| 加新 AI 动作 → 写新 adapter + 在面板里手拼 `buildXxxContext + ai.start` | 走 `assembleContext + adopt`，仅在 adapter 处定义 prompt 与 reads/writes |
+| 加新 AI 动作 → 写新 adapter + 在面板里手拼 `buildXxxContext + ai.start` | 先登记 Skill/AI 入口与 Run Contract，读取走 `assembleContext`，候选走 CreativeArtifact，确认写入走 `adopt()` |
 
 **任何"先这样吧，等以后再统一"的念头 = 头疼医头 = 必然制造下一个反复出现的 bug**。直接拒绝。
 
@@ -86,6 +91,8 @@
 | **`docs/CONTEXT-ROUTING.md`** | 🟢 上下文索引 | 按任务决定需要读取的章节、源码闭包和测试 |
 | **`CLAUDE.md`（本文件）** | 🔒 详细宪法 | 三注册表、四问、数据与完成定义；命中相关边界时读取 |
 | **`docs/MASTER-BLUEPRINT.md`** | 🔴 施工权威 | 有 Blueprint 任务 ID 或数据结构争议时读取对应章节 |
+| `docs/ARCHITECTURE.md` | 🟢 当前架构总览 | Agent/Harness、三注册表、World/Work、数据流与失败流 |
+| `docs/AI-HARNESS-REBUILD-RELEASE-20260817.md` | 🟢 当前更新说明 | 大架构更新、验证证据和社区发布边界 |
 | `docs/DATA-FLOW-MAP.md` | 🟡 历史审计记录 | 数据流总表 + 已修 bug 清单 |
 | `docs/DATA-FLOW-DIAGRAM.md` | 🟢 可视化辅助 | 15 张 Mermaid 流程图 |
 | `docs/roadmap/README.md` | 🟢 当前任务索引 | 新体系/完整功能读取对应体系、依赖与施工顺序 |

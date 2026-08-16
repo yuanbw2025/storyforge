@@ -1,7 +1,7 @@
 # 可介入的透明生成管线 · 开发设计文档
 
-> 状态:Claude 起草(2026-07-10) → 作者确认 → Codex 完成(2026-07-25)。
-> 定位:这不是一个孤立新功能,而是**把项目现有一切 AI 生成,统一收口到一个"节点链"执行模型**。分阶段生成、提示词发送前可编辑、以及未来 agent 的"每节点可介入",都是这一个抽象的三种形态。
+> 状态:Claude 起草(2026-07-10) → 作者确认 → Codex 完成(2026-07-25) → 统一 Agent + Harness 接管持久化执行(2026-08-17)。
+> 定位:这不是一个孤立新功能,而是**把项目 AI 生成统一收口到可介入节点**。`GenerationNode` 继续负责透明输入/输出和局部 gate；正式长运行、恢复、失败政策、成本证据与终态回执已经由 durable Harness 承载。
 > 前置必读:`CLAUDE.md`(三注册表铁律)、`docs/AI-COPILOT-DESIGN.md`(§2.2 检测环软硬、§2.3 与一致性关系、AgentRunner)、本文件不覆盖数据红线。
 
 ---
@@ -12,9 +12,23 @@
 
 - **一次性生成** = 只有 1 个节点的管线(现状)。
 - **分阶段生成(如章纲工坊)** = N 个节点的管线。
-- **未来 agent** = 动态编排节点顺序的编排器,但每个节点仍暴露同样的介入点。
+- **Agent 编排** = 动态选择已登记节点/Skill,但每个节点仍暴露同样的介入点,并由 durable Harness 保存运行证据。
 
 **一个抽象,三头受益:做出"透明管线节点",分阶段生成 + 提示词可编辑 + agent 每节点可调,全部掉出来。**
+
+### 0.1 2026-08-17 当前架构归属
+
+本文第 1～10 节保留 PIPELINE-1/2/3 的设计动机和实现历史。当前代码中的职责已经收敛为：
+
+| 能力 | 当前权威 |
+|---|---|
+| 单节点/工作坊的透明输入、输出和用户介入 | `src/lib/generation` 的 `GenerationNode` |
+| 任务、Skill、读写权限和版本 | Agent Skill Registry + Run Contract |
+| 长运行、checkpoint、父子依赖、失败恢复和终态回执 | `src/lib/agent/run` durable Harness |
+| 调用上限、分级产物、归一化和一次定向修复 | Creative Reliability 控制面 |
+| 项目上下文与正式写回 | 三注册表：Context / Field + Adoption / Project Tables |
+
+因此，不再按本文早期表述单独建设“未来 Agent 接口”，也不允许组件以 `GenerationNode` 为由绕过 durable Run。完整当前架构见 [ARCHITECTURE.md](./ARCHITECTURE.md)，本次升级见 [AI-HARNESS-REBUILD-RELEASE-20260817.md](./AI-HARNESS-REBUILD-RELEASE-20260817.md)。
 
 ---
 
@@ -235,4 +249,4 @@ Pipeline = GenerationNode[]       // 静态数组(工坊)或由编排器动态�
 
 - 本文件 = `docs/AI-COPILOT-DESIGN.md` 的**执行层补充**(GenerationNode = AgentRunner 执行单元;gate = §2.2 检测环的插点)。
 - 一致性侧:节点 `gate` 复用 `held-items`(CONSISTENCY-1)及后续 `认知账本` / `canon validator`(见收敛路线)。
-- ⚠️ **文档缺口提醒**:软硬结合的**完整收敛路线(问题/现状/思路/方案/可行性)**目前主要在 WPS 文档库《StoryForge_收敛路线_一页纸》+ VISION v3,仓库内只有 ROADMAP 一行北极星 + 指针。Codex 看不到 WPS。建议单独把收敛路线搬进仓库(如 `docs/CONSISTENCY-ENGINEERING-ROUTE.md`),否则接手者拿不到全貌。
+- 创作可靠性与软硬分界已经收口到 [AI-CREATIVE-RELIABILITY-DEVELOPMENT-20260816.md](./AI-CREATIVE-RELIABILITY-DEVELOPMENT-20260816.md)；真实 Development / sealed held-out 证据见 [CREL-13](./evals/CREL-13-DEVELOPMENT-EVIDENCE-20260816.md)。

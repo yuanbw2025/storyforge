@@ -2,7 +2,44 @@
 
 > 配套 `DATA-FLOW-MAP.md`（文字总表）。这里用 Mermaid 把整个项目的功能、上下文注入、读写/提取/反推关系画出来。
 > GitHub / VS Code Markdown Preview Mermaid 等会自动渲染成图。
-> 创建：2026-06-04｜本文档与 DATA-FLOW-MAP 同步更新。
+> 创建：2026-06-04｜Agent + Harness 主路径更新：2026-08-17。
+
+> **阅读提示**：本文后续大图保留领域表、记忆和上下游细节；早期图中的 `build*Context → adapter → AI` 表示领域数据关系，不再代表组件可以直接调用模型。当前所有正式创作入口必须经过下方统一主路径和 AI 入口登记。
+
+---
+
+## 当前统一 Agent + Harness 主路径
+
+```mermaid
+flowchart LR
+    UI["产品入口 / 作者请求"] --> AG["Master Agent / 领域 Skill"]
+    AG --> RC["Run Contract<br/>目标 · 权限 · 版本 · 预算"]
+    RC --> CTX["CONTEXT_SOURCES<br/>assembleContext()"]
+    CTX --> GEN["一次生成<br/>必要时最多一次定向修复"]
+    GEN --> ART["CreativeArtifact<br/>草稿 · 片段 · 问题 · 假设 · 用量"]
+    ART --> AUTHOR{"作者决定"}
+    AUTHOR -->|编辑 / 拒绝| HOLD["保持候选<br/>Canon 不变"]
+    AUTHOR -->|确认| ADOPT["FIELD_REGISTRY<br/>AdoptionSchema + adopt()"]
+    ADOPT --> CANON["正式设定 / 大纲 / 正文"]
+    CANON --> IMPACT["终态回读 / 记忆 / 影响 DAG"]
+
+    RC -.-> LEDGER["agentRuns / events / checkpoints<br/>hash · lineage · receipt"]
+    GEN -.-> LEDGER
+    ART -.-> LEDGER
+    IMPACT -.-> LEDGER
+    LIFE["PROJECT_TABLES<br/>作用域 · 导入导出 · 删除 · 迁移 · remap"] -.-> CTX
+    LIFE -.-> ADOPT
+    LIFE -.-> LEDGER
+```
+
+统一路径的职责边界：
+
+- 领域关系图回答“哪些资料可能影响哪些产物”；`CONTEXT_SOURCES` 决定本次运行实际允许读取什么。
+- Agent/Skill 决定任务与权限；Harness 负责持久化执行、恢复、失败停止和证据，不替代领域创作逻辑。
+- 模型输出只形成候选。正式写入仍需作者确认并经过 Field/Adoption 注册表。
+- 普通创作质量问题允许以警告和可编辑草稿交付；跨作用域、非法引用、stale 和未登记写入继续硬阻断。
+
+完整架构见 [ARCHITECTURE.md](./ARCHITECTURE.md)，本次更新说明见 [AI-HARNESS-REBUILD-RELEASE-20260817.md](./AI-HARNESS-REBUILD-RELEASE-20260817.md)。
 
 ---
 

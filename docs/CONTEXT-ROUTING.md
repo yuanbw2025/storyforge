@@ -25,7 +25,7 @@
 | 局部 UI、交互、样式、明确 Bug | 组件、store/service、调用方、现有回归 | 相关源码与测试的命中片段；触及数据时再转数据路线 | Blueprint、完整路线图、协作日志 |
 | AI 读取、Prompt、上下文预算 | `moduleKey`、`reads`、`CONTEXT_SOURCES`、adapter/runner | `context-sources.ts`、`assemble-context.ts`、对应 Prompt/AI Manual 行与测试 | 其它领域 Prompt、整份 AI Manual |
 | AI 写回、解析、采纳 | `writes`、field key、schema key、adopt 调用方 | `field-registry.ts`、`adoption-schema.ts`、`adopt.ts`、对应 parser/use-case/test | 无关表、无关面板 |
-| Agent Harness、长运行恢复、完成验证 | run/step/attempt、`completed` 来源、context/write scope、checkpoint/receipt | `AI-HARNESS-ARCHITECTURE-20260803.md` 中命中的差距、目标架构或 H0-H5 阶段；再读 Runner、orchestrator、GenerationNode、三注册表和 simulation runtime 对应片段 | 未命中的外部研究、完整 Blueprint、其它阶段实施细节 |
+| Agent Harness、创作可靠性、长运行恢复、完成验证 | run/step/attempt、`completed` 来源、context/write scope、checkpoint/receipt、产物级调用停止与质量分级 | 先读 `AI-HARNESS-REBUILD-RELEASE-20260817.md` 当前总览；实现任务再按命中范围读取 Harness/CREL 设计、Runner、orchestrator、GenerationNode、三注册表和 simulation runtime 对应片段 | 未命中的外部研究、完整 Blueprint、其它阶段实施细节 |
 | schema、迁移、删除、合并、导入导出 | 表名、owner、refs、world scope、迁移版本 | `project-tables.ts`、`schema.ts`、相关 lifecycle 实现、迁移/往返/删除测试；Blueprint 对应数据段 | 其它 Phase、历史完成流水 |
 | 新体系或完整功能 | 稳定 ID、唯一归属、前置依赖 | 路线图中对应体系、能力基线同名章节、关联设计文档；若有 Blueprint ID，仅读该 ID 的“前置/改法/验证/完成判据” | 路线图其它体系、完整 Blueprint |
 | PR、合并、发布、跨模型交接 | branch/commit/PR/check 状态 | `COLLAB-WORKFLOW.md` 相关流程、PR diff、受影响测试 | 全部协作日志 |

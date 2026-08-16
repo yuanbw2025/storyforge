@@ -5,6 +5,12 @@
 > 目标读者：任何接手该项目的开发者或 AI 模型。
 > 创建：2026-06-04 ｜ v2 修订基线：仓库 `main` 分支 HEAD（commit `1d28158` 后）。
 
+> **当前状态补记（2026-08-17）**：本文 Phase 0～3 和三注册表仍是数据与治理施工权威，但 §1 的原始漏洞表、
+> 早期排期和“远期 Agent”描述属于历史审计基线，不能当成当前未完成清单。Agent + Harness + CREL 已合入
+> `main@5021094`；当前运行架构见 [ARCHITECTURE.md](./ARCHITECTURE.md)，本次更新与发布边界见
+> [AI-HARNESS-REBUILD-RELEASE-20260817.md](./AI-HARNESS-REBUILD-RELEASE-20260817.md)，当前待办只以
+> [roadmap/README.md](./roadmap/README.md) 为准。
+
 ---
 
 ## 〇、文档元信息（先读这一节）
@@ -38,17 +44,19 @@
 |---|---|---|
 | **`MASTER-BLUEPRINT.md`（本文档）** | 🔴 施工权威 | 唯一可执行的重构蓝图 |
 | `DATA-FLOW-MAP.md` | 🟡 历史审计记录 | 看本轮审计批次记录、漏洞清单（部分已过期，见 §0.4） |
-| `DATA-FLOW-DIAGRAM.md` | 🟢 可视化辅助 | Mermaid 流程图，看关系全貌（注意：图中"已修"标记部分实为无效修复） |
+| `DATA-FLOW-DIAGRAM.md` | 🟢 可视化辅助 | Mermaid 流程图；顶部为当前 Agent + Harness 主路径，后续保留领域数据关系 |
+| `ARCHITECTURE.md` | 🟢 当前架构总览 | 看当前七层架构、Agent/Harness、三注册表、作用域与失败流 |
+| `AI-HARNESS-REBUILD-RELEASE-20260817.md` | 🟢 当前更新说明 | 看本次大架构更新、用户价值、验证证据与诚实边界 |
 | `AI-FUNCTIONS-MANUAL.md` | ⚠️ 已废弃手写版 | **不可信** — 21 处 prompt key 错、多处读写关系错。重生成机制见 §6 |
 | `ARCHITECTURE-REFACTOR.md` | 🔴 v1 已废弃 | 被本文档取代（§0.4） |
 | `roadmap/README.md` | 🟢 当前任务清单 | 按功能体系组织的待开发组合；Phase 0/1/2/3 仍以本文档为施工权威 |
 | `roadmap/CAPABILITY-BASELINE.md` | 🟢 当前能力基线 | 开工前核对已有代码、注册表、测试与禁止重复建设边界 |
 | `roadmap/COMPLETED.md` | 🟡 完成索引 | 已完成开发单位及历史证据入口 |
-| `CHANGELOG.md` | ⚠️ 不完整 | 仅记录前几批修复；本轮后期修复未补，且有数条"修了实际无效"的（见 §1.3） |
+| `CHANGELOG.md` | 🟢 更新日志 | 当前版本与大架构更新记录；历史早期条目的真实性仍需结合代码和测试判断 |
 | `WORLD-RULES-MULTIWORLD-DESIGN.md` | 🟢 待实施 | Phase 40 多世界化（本蓝图 Phase 2.1 实施） |
 | `CODEX-REDESIGN.md` | 🟢 待实施 | Phase 35 词条化（本蓝图后续） |
 | `CONSISTENCY-CHECK-DESIGN.md` | 🟢 待实施 | Phase 38/39（本蓝图后续） |
-| `AI-COPILOT-DESIGN.md` | 🟢 远期 | Phase 27 Agent 化（不在本蓝图覆盖） |
+| `AI-COPILOT-DESIGN.md` | 🟡 历史设计 | Phase 27 起点；当前 Agent/Harness 事实以架构总览、Skill Registry 和 durable Run 代码为准 |
 
 ### 0.4 v1 → v2 重大变更
 

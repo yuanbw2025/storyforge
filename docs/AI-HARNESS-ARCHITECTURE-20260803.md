@@ -1,6 +1,8 @@
 # StoryForge AI Harness 架构研究与工程改造方案
 
-> 状态：提案（PROPOSED），不是已实现能力
+> 状态：历史研究提案；主体已由 Agent + Harness 重构实现，当前事实以
+> [ARCHITECTURE.md](./ARCHITECTURE.md) 和
+> [AI-HARNESS-REBUILD-RELEASE-20260817.md](./AI-HARNESS-REBUILD-RELEASE-20260817.md) 为准
 >
 > 研究截止：2026-08-03
 >
