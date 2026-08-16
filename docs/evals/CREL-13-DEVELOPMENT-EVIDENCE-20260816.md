@@ -1,7 +1,8 @@
-# CREL-13 Development 真实评测证据
+# CREL-13 真实 Development / Sealed Held-out 评测证据
 
 > 日期：2026-08-16
-> 结论：前两轮机器门均失败；每轮原样留证，第三轮仅在针对性修复和完整工程闸门通过后执行
+> 结论：前两轮机器门失败并原样留证；v6 第三轮 Development 通过。一次性 sealed held-out
+> 保持 100% 可编辑/可采纳和单次生成，但 token 倍率为 1.5144，略高于 1.5 预注册门槛，机器门失败
 > 数据：6 个冻结中文合成样例，不含作者项目、手稿或真实作品文本
 
 ## 1. 冻结身份
@@ -135,3 +136,71 @@ CREL 的 p95 生成延迟为 39.5 秒，旧直连为 43.4 秒；延迟没有回�
 上述 v6 改动已通过 3 个相关回归文件 30 项、完整 CI 387 files / 1892 tests、生产构建、bundle
 budget 和隔离 Chromium E2E 52/52。第三轮必须绑定到该全绿提交；若机器门仍失败，继续保留证据并归因，
 不得以重复抽样掩盖失败，也不得提前消耗 sealed held-out。
+
+## 8. 第 3 轮真实 Development 证据
+
+v6 第三轮在完整 CI/E2E 通过后运行，结果首次通过预注册机器门：
+
+| 项目 | 值 |
+|---|---|
+| run | `crel-development-e9da5968-3fa3-4aa3-999b-96db890362cd` |
+| generator / prompt | `agnes-2.5-flash` / `outline.story-arcs-v6` |
+| verifier | `deepseek-v4-pro-260425` |
+| checkpoint | `0fa5fea93a83d8e9e21738a4e612c21f0c4f907f37b279cf4c4376855c582293` |
+| record | `6e2117c328c3814007718600f0cab3609a8c3d48684646ba49eb779a0a5a8503` |
+
+原始验签 checkpoint：
+`/Users/qinyingying/Downloads/storyforge-crel-development-completed-1786878892732.json`；
+文件 SHA-256：`f16164099e6607f5e3f6a639e95367e47ce472ad7b3b89bf2c969fa74ad78275`。
+
+| 方案 | 可编辑 | 可采纳 | 平均产物调用 | tokens/可采纳 | 语义 | 推进 | p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 旧直连 | 83.3% | 83.3% | 1.00 | 3,425 | 72.5% | 83.3% | 31.0s |
+| CREL v6 | 100% | 100% | 1.00 | 3,125 | 85.8% | 100% | 18.7s |
+
+本轮 12 次生成和 12 次独立 verifier 均成功，生成 input/output 为 11,399/24,477 tokens，verifier
+input/output 为 14,622/11,011 tokens。CREL 相对旧直连的 token/可采纳倍率为 0.9125，p95 延迟倍率
+为 0.6035，安全通过率 100%，无第二次修复调用。机器门 `PASS`；社区门仍因独立作者盲评 0/6 而关闭。
+
+该文件的 `codeRevision` 为 `v3.9.1+3776a1b`，原因是开发服务器在提交 `53442e2` 前启动，Vite 只在
+进程启动时注入 build id。这个字段是已冻结的陈旧启动标识，不做手工改写；同一 checkpoint 的逐调用
+账本明确记录 `outline.story-arcs-v6`，完整 `CreativeArtifactV1` 证据及其 hash 也均存在。为避免封存集
+出现同样歧义，随后重启服务器，sealed held-out 正确绑定 `v3.9.1+53442e2`。
+
+## 9. 一次性 Sealed Held-out 证据
+
+Development 机器门通过后才清除活动 checkpoint；前三轮 Development 证据已下载，前两轮另有浏览器内
+无损归档。sealed held-out 只运行以下一次，完成后不调参、不改门槛、不重跑：
+
+| 项目 | 值 |
+|---|---|
+| run | `crel-held-out-e199d4da-b9bc-4d3a-a5ba-c9622f9f209b` |
+| code revision | `v3.9.1+53442e2` |
+| generator / prompt | `agnes-2.5-flash` / `outline.story-arcs-v6` |
+| verifier | `deepseek-v4-pro-260425` |
+| checkpoint | `c8c903daa09cc6fdfeed277967bfa118223e4a5a495c7b6f24eb8dcd629bab5a` |
+| record | `a4613b59bc184e68cd3e39f018b2dbb742181a050a5537548209755079826632` |
+
+原始验签 checkpoint：
+`/Users/qinyingying/Downloads/storyforge-crel-held-out-completed-1786880467689.json`；
+文件 SHA-256：`59a0a65b278e418297f47ce9bee6a569367d71d9acb82d4434225458c482c2cf`。
+
+| 方案 | 可编辑 | 可采纳 | 平均产物调用 | tokens/可采纳 | 语义 | 推进 | p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 旧直连 | 83.3% | 83.3% | 1.00 | 2,108.2 | 73.3% | 83.3% | 19.8s |
+| CREL v6 | 100% | 100% | 1.00 | 3,192.7 | 83.3% | 100% | 25.8s |
+
+本轮 12 次生成与 12 次 verifier 全部成功，生成 input/output 为 11,364/18,333 tokens，verifier
+input/output 为 13,339/13,303 tokens；已知 verifier 费用为 `$0.01823483`，Agnes 价格仍未登记，
+因此总金额保持未知。安全通过率 100%，无零产出、无第二次修复，CREL 语义比分别在因果一致性和
+具体性上达到 0.90。
+
+唯一失败项是 `token-per-adoptable-artifact`：实际倍率 1.514404，门槛 1.5；门槛对应 3,162.3
+tokens/可采纳产物，实测高约 30.4 tokens/产物（六份合计约 182 tokens）。这个差异不足以否定 v6
+解决了“反复修复仍无产物”的主要工程目标，但按预注册协议必须判定机器门 `FAIL`。sealed held-out
+已经消耗，禁止依据这六例继续修改 prompt、放宽阈值或换模型重跑。后续成本优化只能使用新的
+Development/新冻结终验集。
+
+社区体验门继续关闭：除机器门失败外，6 组候选还需要未参与实现的真实作者完成 A/B 盲评；机器
+verifier 或开发者自评都不能伪装成独立作者结果。因此当前结论是“工程控制面和可用产物交付已完成，
+真实质量显著改善，但尚无证据宣传替作者完成 80%，只能保留实验性入口”。
