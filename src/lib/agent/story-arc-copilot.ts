@@ -145,6 +145,7 @@ const MAX_DESCRIPTION_CHARS = 2_000
 const MAX_STAGE_TITLE_CHARS = 160
 const MAX_STAGE_DESCRIPTION_CHARS = 2_000
 const MAX_EVENT_CHARS = 400
+const MAX_KEY_EVENTS = 5
 
 export class StoryArcCopilotStaleError extends Error {
   constructor() {
@@ -269,8 +270,12 @@ function parseStage(value: unknown, arcIndex: number, stageIndex: number): Story
     ['turningPoint', 'startVolume', 'endVolume'],
     label,
   )
-  if (!Array.isArray(source.keyEvents) || source.keyEvents.length < 1 || source.keyEvents.length > 3) {
-    throw new Error(`${label}.keyEvents 必须包含 1-3 个事件。`)
+  if (
+    !Array.isArray(source.keyEvents)
+    || source.keyEvents.length < 1
+    || source.keyEvents.length > MAX_KEY_EVENTS
+  ) {
+    throw new Error(`${label}.keyEvents 必须包含 1-${MAX_KEY_EVENTS} 个事件。`)
   }
   const keyEvents = source.keyEvents.map((event, eventIndex) => assertString(
     event,
@@ -428,6 +433,43 @@ interface StoryArcCreativeParseOutcomeV1 {
   rejectedFragments: CreativeArtifactFragmentV1[]
   issues: CreativeArtifactIssueV1[]
   assumptions: CreativeAssumptionV1[]
+}
+
+function normalizeStoryArcCreativeItemV1(
+  value: unknown,
+  arcIndex: number,
+): { value: unknown; issues: CreativeArtifactIssueV1[] } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { value, issues: [] }
+  }
+  const source = value as Record<string, unknown>
+  if (!Array.isArray(source.stages)) return { value, issues: [] }
+
+  const issues: CreativeArtifactIssueV1[] = []
+  const stages = source.stages.map((stage, stageIndex) => {
+    if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return stage
+    const normalized = { ...(stage as Record<string, unknown>) }
+    if (typeof normalized.turningPoint !== 'boolean') return normalized
+
+    const booleanValue = normalized.turningPoint
+    const events = Array.isArray(normalized.keyEvents)
+      ? normalized.keyEvents.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+      : []
+    if (booleanValue && events.length) normalized.turningPoint = events[events.length - 1].trim()
+    else delete normalized.turningPoint
+    issues.push(creativeIssue({
+      code: 'story-arc-turning-point-normalized',
+      path: `$.storyArcs[${arcIndex}].stages[${stageIndex}].turningPoint`,
+      message: booleanValue
+        ? '模型把 turningPoint 写成布尔值；已使用本阶段最后一个关键事件作为可编辑转折点。'
+        : '模型把 turningPoint 写成 false；已按未提供转折点处理。',
+      severity: 'warning',
+      disposition: 'advisory',
+      action: 'none',
+    }))
+    return normalized
+  })
+  return { value: { ...source, stages }, issues }
 }
 
 function parseStoryArcAssumptionTextsV1(
@@ -616,8 +658,10 @@ function storyArcCreativeParseOutcomeV1(
   const assumptionResult = parseStoryArcAssumptionTextsV1(envelope.value.assumptions, false)
   issues.push(...assumptionResult.issues)
   envelope.value.storyArcs.forEach((value, index) => {
+    const normalized = normalizeStoryArcCreativeItemV1(value, index)
+    issues.push(...normalized.issues)
     try {
-      const candidate = parseStoryArcCandidateDraft(JSON.stringify([value]))[0]
+      const candidate = parseStoryArcCandidateDraft(JSON.stringify([normalized.value]))[0]
       candidates.push(candidate)
       validFragments.push({
         version: 1,
@@ -638,7 +682,7 @@ function storyArcCreativeParseOutcomeV1(
         version: 1,
         id: `story-arc:${index}`,
         path: itemIssue.path,
-        text: JSON.stringify(value, null, 2).slice(0, 40_000),
+        text: JSON.stringify(normalized.value, null, 2).slice(0, 40_000),
         status: 'rejected',
         issueCodes: [itemIssue.code],
       })
@@ -996,13 +1040,13 @@ function buildStoryArcMessages(input: StoryArcCopilotInput): ChatMessage[] {
 
 硬性要求：
 1. ${kindInstruction}
-2. 每条故事线必须有 3-7 个因果递进阶段；每阶段包含标题、描述和 1-3 个关键事件。
+2. 每条故事线必须有 3-7 个因果递进阶段；每阶段包含标题、描述和 1-${MAX_KEY_EVENTS} 个关键事件。
 3. 每条故事线顶层只能有 name/type/description/stages 四个字段。turningPoint、startVolume、endVolume 只能放在 stages 数组内的阶段对象上，绝不能放在故事线顶层；只有确有卷级依据时才同时填写 startVolume/endVolume，均为从 1 开始的整数。
 4. 已有设定是硬约束；不得改变既定时限、能力、代价、因果或实体身份，也不得为未命名人物擅自命名。设定缺失时只做不与现有事实冲突的候选补全，不声称它已经成为 Canon。
 5. 避免复制已有故事线；支线必须有独立目标，也要说明与主线的因果交汇。
 6. 只输出一个严格 JSON 对象，不输出 Markdown、解释或额外字段。顶层${input.creativeReliabilityEnabled !== false ? '必须有 storyArcs，可选 assumptions' : '只能有 storyArcs'}；最小结构严格使用：
 {"storyArcs":[{"name":"名称","type":"main|sub","description":"整体描述","stages":[{"title":"阶段标题","description":"阶段描述","keyEvents":["事件"]}]}]}
-7. 阶段对象内的 turningPoint、startVolume、endVolume 都是可选字段；没有明确依据就省略，不要输出占位值。
+7. 阶段对象内的 turningPoint、startVolume、endVolume 都是可选字段；turningPoint 如填写必须是描述转折的字符串，绝不能写 true/false；没有明确依据就省略，不要输出占位值。
 ${input.creativeReliabilityEnabled !== false
   ? '8. 若你为“开放创作空间”补充了会被下游依赖、但正式上下文没有确认的事实，可增加 assumptions 字符串数组，最多 7 项；不要把故事线本身重复抄入 assumptions。'
   : ''}`,

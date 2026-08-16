@@ -333,6 +333,19 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
       narrativeProgressed: true,
       infodumpOnly: false,
     }), fixture)).toMatchObject({ narrativeProgressed: true, infodumpOnly: false })
+    expect(parseCreativeReliabilityVerifierAssessmentV1(
+      `\`\`\`json\n${JSON.stringify({
+        semanticScore: 0.8,
+        causalCoherence: 0.75,
+        specificity: 0.7,
+        matchedRequiredFactIds: ['f1', 'f2'],
+        missingRequiredFactIds: ['f3'],
+        safetyPassed: true,
+        narrativeProgressed: true,
+        infodumpOnly: false,
+      })}\n\`\`\``,
+      fixture,
+    )).toMatchObject({ semanticScore: 0.8, narrativeProgressed: true })
     expect(() => parseCreativeReliabilityVerifierAssessmentV1(JSON.stringify({
       semanticScore: 0.8,
       causalCoherence: 0.75,

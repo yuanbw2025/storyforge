@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../../types'
+import { normalizeCreativeJsonEnvelopeV1 } from '../../agent/creative-json-normalizer'
 import type { CreativeReliabilityFixtureV1 } from './fixtures'
 
 export const CREATIVE_RELIABILITY_LEGACY_PROMPT_VERSION_V1 =
@@ -130,7 +131,11 @@ export function parseCreativeReliabilityVerifierAssessmentV1(
   raw: string,
   fixture: CreativeReliabilityFixtureV1,
 ): CreativeReliabilityVerifierAssessmentV1 {
-  const parsed = JSON.parse(raw) as Record<string, unknown>
+  const normalized = normalizeCreativeJsonEnvelopeV1(raw)
+  if (!normalized.value) {
+    throw new Error(normalized.issues[0]?.code ?? 'verifier_json_invalid')
+  }
+  const parsed = normalized.value
   const expectedKeys = [
     'semanticScore',
     'causalCoherence',

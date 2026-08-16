@@ -91,7 +91,9 @@ async function callModel(input: {
     }, controller.signal, result, supportsVerifiedJsonObjectResponseV1(input.config.provider)
       ? { responseFormat: 'json_object' }
       : undefined)
-    const status = result.usage ? 'succeeded' as const : 'protocol-failed' as const
+    const finishReason = result.finishReason?.trim().toLowerCase() ?? ''
+    const truncated = finishReason === 'length' || finishReason === 'max_tokens'
+    const status = result.usage && !truncated ? 'succeeded' as const : 'protocol-failed' as const
     const usage: CreativeReliabilityEvalUsageV1 | null = result.usage ? {
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
@@ -116,7 +118,9 @@ async function callModel(input: {
         outputHash: await hashCanonicalValue(output),
         status,
         usage,
-        ...(usage ? {} : { failureCode: 'provider_usage_missing' }),
+        ...(truncated
+          ? { failureCode: `finish_reason_${finishReason}` }
+          : usage ? {} : { failureCode: 'provider_usage_missing' }),
       },
     }
   } catch (error) {
@@ -483,7 +487,7 @@ async function verification(input: {
   try {
     response = await callModel({
       messages,
-      config: { ...input.config, temperature: 0, maxTokens: 2_000 },
+      config: { ...input.config, temperature: 0, maxTokens: 3_000 },
       identity: input.identity,
       stage: 'verification',
       purpose: 'verify',
@@ -517,7 +521,12 @@ async function verification(input: {
       usage: response.call.usage,
       assessmentHash: await hashCanonicalValue(assessmentBody),
     }
-  } catch {
+  } catch (error) {
+    const failureCode = response.call.failureCode ?? (
+      error instanceof Error && /^[a-z0-9_-]{1,80}$/i.test(error.message)
+        ? error.message
+        : 'verifier-parse-failed'
+    )
     return {
       status: 'protocol-failed',
       semanticScore: null,
@@ -528,7 +537,7 @@ async function verification(input: {
       safetyPassed: null,
       narrativeProgressed: null,
       infodumpOnly: null,
-      calls: [{ ...response.call, status: 'protocol-failed', failureCode: 'verifier-parse-failed' }],
+      calls: [{ ...response.call, status: 'protocol-failed', failureCode }],
       usage: response.call.usage,
       assessmentHash: null,
     }

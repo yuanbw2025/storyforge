@@ -463,6 +463,43 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
     }))).toThrow('turningPoint 必须是非空字符串')
   })
 
+  it('CREL 对布尔 turningPoint 做零 token 归一化，并保留至多五个具体关键事件', async () => {
+    const { project, scope } = await createWorkspace()
+    const loose = {
+      ...mainArc(),
+      stages: mainArc().stages.map((stage, index) => index === 0
+        ? {
+            ...stage,
+            keyEvents: ['发现异常', '核对证据', '遭遇阻力', '改变方案', '承担后果'],
+            turningPoint: true,
+          }
+        : stage),
+    }
+    const runAI = vi.fn(async () => JSON.stringify({ storyArcs: [loose] }))
+    const prepared = await prepareStoryArcCopilot({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      authorRequest: '生成一条主线故事线',
+    }, { runAI })
+
+    const result = await runStoryArcCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker('balanced'),
+      qualityMode: 'balanced',
+    })
+
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(result.artifact.status).toBe('usable-with-warnings')
+    expect(result.artifact.repair).toBeNull()
+    expect(result.artifact.issues.map(issue => issue.code))
+      .toContain('story-arc-turning-point-normalized')
+    expect(result.output[0].stages[0]).toMatchObject({
+      keyEvents: ['发现异常', '核对证据', '遭遇阻力', '改变方案', '承担后果'],
+      turningPoint: '承担后果',
+    })
+  })
+
   it('平衡模式仅用第二次调用定向修复结构错误，并记录真实调用边界', async () => {
     const { project, scope } = await createWorkspace()
     const invalid = {

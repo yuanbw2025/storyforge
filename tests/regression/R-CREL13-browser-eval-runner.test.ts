@@ -119,4 +119,56 @@ describe.sequential('R-CREL13 · 浏览器真实调用适配器', { timeout: 30_
     expect(await db.projects.filter(project => project.name.startsWith('[CREL-EVAL] ')).count()).toBe(0)
     expect(await cleanupStrandedCreativeReliabilityWorkspacesV1()).toBe(0)
   })
+
+  it('独立 verifier 被输出上限截断时保留 finish reason，不伪造成功评分', async () => {
+    const config: AIConfig = {
+      provider: 'doubao',
+      apiKey: 'test-key',
+      baseUrl: 'https://example.invalid/v1',
+      model: 'deepseek-v4-pro-test',
+      temperature: 0,
+      maxTokens: 3_000,
+      contextWindow: 128_000,
+    }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: '{"semanticScore":0.8' }, finish_reason: 'length' }],
+      usage: { prompt_tokens: 200, completion_tokens: 3_000, total_tokens: 3_200 },
+    }), { status: 200 })))
+    const fixture = CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1[0]
+    const dependencies = createCreativeReliabilityBrowserDependenciesV1({
+      generatorConfig: config,
+      verifierConfig: config,
+    })
+    const verified = await dependencies.verify({
+      fixture,
+      variant: 'creative-reliability',
+      generation: {
+        variant: 'creative-reliability',
+        status: 'ready',
+        presentedText: JSON.stringify([storyArc('待验证候选')]),
+        outputHash: '0'.repeat(64),
+        editableArtifact: true,
+        adoptable: true,
+        artifactModelCalls: 1,
+        calls: [],
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+          latencyMs: 0,
+          costUsd: null,
+          usageSource: 'provider',
+        },
+        issueCodes: [],
+      },
+      identity: { provider: 'doubao', model: config.model, promptVersion: 'verifier-v1' },
+    })
+
+    expect(verified.status).toBe('protocol-failed')
+    expect(verified.assessmentHash).toBeNull()
+    expect(verified.calls[0]).toMatchObject({
+      status: 'protocol-failed',
+      failureCode: 'finish_reason_length',
+      usage: { outputTokens: 3_000, usageSource: 'provider' },
+    })
+  })
 })
