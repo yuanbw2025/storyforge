@@ -274,6 +274,8 @@ interface NarrativeBriefV1 {
 - 去除包裹整个响应的单一 Markdown JSON 围栏。
 - 从纯空白前后缀中取得唯一 JSON 对象。
 - 对文档明确表示“缺省”的可选空字符串归一为字段缺失。
+- 对类型错误的可选布尔 `turningPoint` 只删除无效元数据并保留阶段正文与事件，同时生成可见警告；
+  不推断哪个事件是转折点。
 - 对数组逐项校验并保留身份明确的合法项。
 - 生成准确 JSON path、类型、枚举、重复项、引用和作用域问题。
 
@@ -505,8 +507,8 @@ npm run build
 | 2026-08-16 | CREL-10 | 完成 | 复用 style learning durable：只从作者修订/润色/定稿章节和显式改稿对学习；长期画像必须确认，可关闭、删除样本/反馈且受 Work 作用域与 stale 守卫；相关 26 个回归通过 |
 | 2026-08-16 | CREL-11 | 结构门完成 | 三种题材各用 12 章夹具验证只携带直接前驱尾部/handoff、最近 5 条已验证摘要和当前正式角色/章纲，中途修改不会被旧摘要覆盖；真实连续生成质量留在 CREL-13 一次性评测 |
 | 2026-08-16 | CREL-12 | 完成 | 主 Agent 在调用前及执行中显示预计产物、常规调用数、质量模式修复规则、团队调用/token 硬上限与规划→正文确认屏障；支持停止和 durable 恢复；章节编辑器明确提示默认无自动语义调用；不虚构跨供应商金额 |
-| 2026-08-16 | CREL-13 | 评测框架完成，真实门待跑 | 冻结全新的 6 development + 6 sealed held-out（不复用 H86）；实现旧直连/生产 CREL 成对执行、逐调用 provider usage、每步 checkpoint、失败保留、同 Run 恢复、held-out 一次性声明、独立 verifier、A/B 作者盲评、记录验签及机器门/社区门分离；浏览器适配器沿 `CONTEXT_SOURCES`/`adopt()`/`PROJECT_TABLES` 创建并清理隔离项目；真实 development、最终 held-out 和人工盲评尚未执行，社区体验门保持关闭 |
+| 2026-08-16 | CREL-13 | 评测框架完成，第 1 轮 development 失败 | 冻结全新的 6 development + 6 sealed held-out（不复用 H86）；旧直连/生产 CREL 成对执行、逐调用 provider usage、每步 checkpoint、失败保留、同 Run 恢复、held-out 一次性声明、独立 verifier、A/B 作者盲评、记录验签及机器门/社区门分离均已实现；浏览器适配器沿 `CONTEXT_SOURCES`/`adopt()`/`PROJECT_TABLES` 创建并清理隔离项目。第 1 轮结果与原始证据身份见 [CREL-13 development 证据](evals/CREL-13-DEVELOPMENT-EVIDENCE-20260816.md)；v5 修正待经独立费用授权复测，sealed held-out 与人工盲评尚未执行，社区体验门保持关闭 |
 | 2026-08-16 | CREL-0/14 交付审计 | 本地门完成 | 补齐可见的版本化生产回滚开关及单次严格旧路径反例；AI 入口账本收口为 13 files / 24 calls；完整 `npm run ci` 通过，隔离 Chromium `npm run ci:e2e` 52/52 通过。真实 API 与人工门仍未完成，不能据此开放社区门。 |
 | 2026-08-16 | CREL-14 社区反馈入口 | 本地交付门完成 | 正式设置页展示实验边界、1+1 费用政策、机器验证边界和回滚位置；新增纯本地闭集反馈、50 条上限、严格导出合同、清空与 GitHub Issues 提交入口，结构上不接收作品文本或密钥；5 个合同/UI 反例、完整 CI 387 files / 1884 tests、生产构建与 bundle budget、Chromium E2E 52/52 全绿；隔离浏览器实测保存 0→1、明确零 AI/零上传、确认清空 1→0。真实 API 质量门仍待授权执行。 |
 | 2026-08-16 | CREL-13 development 第 1 轮 | 机器门失败并完成归因 | 使用 Agnes `agnes-2.5-flash` 生成、方舟 `deepseek-v4-pro-260425` 独立验证，6 组成对共完成 24/24 阶段，run `crel-development-161a9874-e87a-4f1f-9db7-50ae76575e70`，checkpoint `590829223beb090ae4154717fc3e1e21c68107bac1e6d432b981613d4d1784bb`。旧直连可编辑/可采纳均为 67%；CREL 可编辑 100%、可采纳 50%、语义 86%、推进 100%，但 6/6 都触发第二次修复，平均调用 2.0、每可采纳产物 12,882 tokens；3 个高语义稿因布尔 `turningPoint` 或 4～5 个 `keyEvents` 被结构门拒绝，另有 1 个 verifier 响应打满 2,000 tokens 后协议失败。机器门失败项为 `average-artifact-calls`、`token-per-adoptable-artifact`、`verifier-evidence-incomplete`；未填写人工盲评，社区门继续关闭。 |
-| 2026-08-16 | CREL-3/6/13 实测修正 | 本地交付门通过，待 development 复测 | 仅在 CREL 候选层把布尔 `turningPoint` 零 token 归一成最后一个具体关键事件或省略，阶段最多保留 5 个关键事件，并在 prompt 明确 `turningPoint` 必须是字符串；独立 verifier 复用无损 JSON 围栏归一化、输出上限改为 3,000，截断写入 `finish_reason_length` 而不伪造评分。3 个相关回归文件 27 项、完整 `npm run ci`、生产构建与 bundle budget、隔离 Chromium E2E 52/52 全绿。 |
+| 2026-08-16 | CREL-3/6/13 实测修正 | 本地交付门通过，待 development 复测 | 仅在 CREL 候选层删除无效的布尔 `turningPoint` 元数据并保留阶段正文与事件，生成可见警告但不猜测哪个事件是转折；阶段最多保留 5 个关键事件，并在 prompt 明确 `turningPoint` 必须是字符串；新合同提升为 `story-arc-copilot-v5` / `outline.story-arcs-v5`，历史 H86 `v4` 保持冻结；独立 verifier 复用无损 JSON 围栏归一化、输出上限改为 3,000，截断写入 `finish_reason_length` 而不伪造评分。3 个相关回归文件 27 项、完整 `npm run ci`、生产构建与 bundle budget、隔离 Chromium E2E 52/52 全绿。 |

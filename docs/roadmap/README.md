@@ -19,10 +19,12 @@
 [创作可靠性工程开发文档](../AI-CREATIVE-RELIABILITY-DEVELOPMENT-20260816.md)。
 
 `CREL-0～12` 的生产主路径、成本边界和版本化本机回滚开关已经完成；`CREL-14` 的生产可见实验边界、
-费用说明和纯本地结构化反馈入口也已完成；完整 CI 与隔离 Chromium E2E 52/52 已通过。当前活动单元为
-`CREL-13～14` 的真实发布裁决：运行新的
-development / sealed held-out 成对评测、完成人工 A/B 盲评，并以真实 API、完整 CI/E2E 和隔离浏览器
-证据裁决是否达到社区体验门。未通过前保持实验性，不宣传“替作者完成 80%”。
+费用说明和纯本地结构化反馈入口也已完成。`CREL-13` 第 1 轮真实 development 已完成 30 次调用，
+CREL 可编辑率 100%、语义 86%、推进 100%，但可采纳率 50%、平均 2.0 次生成调用且验证证据不完整，
+因此机器门失败；逐例归因、用量、hash 和本地 checkpoint 位置见
+[CREL-13 第 1 轮真实证据](../evals/CREL-13-DEVELOPMENT-EVIDENCE-20260816.md)。结构误拒与 verifier
+截断已形成 v5 本地修正，当前活动单元是经独立费用授权复测 development；只有复测通过后才可一次性运行
+sealed held-out，随后再完成人工 A/B 盲评。未通过前保持实验性，不宣传“替作者完成 80%”。
 首个纵向验收入口为 `outline.story-arcs`；在新冻结 development 通过前不扩张到其它创作入口。
 
 ## 一、开发单位标准

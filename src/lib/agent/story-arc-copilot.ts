@@ -452,17 +452,13 @@ function normalizeStoryArcCreativeItemV1(
     if (typeof normalized.turningPoint !== 'boolean') return normalized
 
     const booleanValue = normalized.turningPoint
-    const events = Array.isArray(normalized.keyEvents)
-      ? normalized.keyEvents.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
-      : []
-    if (booleanValue && events.length) normalized.turningPoint = events[events.length - 1].trim()
-    else delete normalized.turningPoint
+    delete normalized.turningPoint
     issues.push(creativeIssue({
       code: 'story-arc-turning-point-normalized',
       path: `$.storyArcs[${arcIndex}].stages[${stageIndex}].turningPoint`,
       message: booleanValue
-        ? '模型把 turningPoint 写成布尔值；已使用本阶段最后一个关键事件作为可编辑转折点。'
-        : '模型把 turningPoint 写成 false；已按未提供转折点处理。',
+        ? '模型把 turningPoint 写成布尔值；为避免猜测创作语义，已忽略该可选标记并保留阶段正文与关键事件。'
+        : '模型把 turningPoint 写成 false；已按未提供可选转折描述处理。',
       severity: 'warning',
       disposition: 'advisory',
       action: 'none',
