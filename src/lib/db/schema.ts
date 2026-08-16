@@ -4,6 +4,7 @@ import { migrateCharactersToAxes } from '../migrations/character-axes-upgrade'
 import { migrateStateCardsToTemporalFactCandidates } from '../migrations/state-cards-to-temporal-facts'
 import { migrateItemLedgerToCharacterOwnership } from '../migrations/item-ledger-character-ownership'
 import { migrateWorldHistoryConsolidation } from '../migrations/world-history-consolidation'
+import { migrateWorkspacePortableIdentities } from '../migrations/workspace-identity-upgrade'
 import type {
   Project,
   Worldview,
@@ -69,6 +70,7 @@ import type {
   NarrativeNode,
   WorldRevision,
   WorldRelease,
+  WorkspaceDocumentBindingV1,
 } from '../types'
 import type { AIUsageEntry } from '../ai/usage-log'
 import type { TemporalFact } from '../types/temporal-fact'
@@ -204,6 +206,9 @@ class StoryForgeDB extends Dexie {
   narrativeNodes!: Table<NarrativeNode, number>
   worldRevisions!: Table<WorldRevision, number>
   worldReleases!: Table<WorldRelease, number>
+
+  // MEMORY-1 —— 文件文档身份与三方同步基线；正文仍只存在原领域表。
+  workspaceDocuments!: Table<WorkspaceDocumentBindingV1, number>
 
   constructor() {
     super('storyforge')
@@ -563,6 +568,17 @@ class StoryForgeDB extends Dexie {
     // rows without a durable owner remain unbound and are not inferred.
     this.version(53).stores({
       agentEvents: '++id, projectId, conversationId, durableRunId, [conversationId+sequence], kind, createdAt',
+    })
+
+    // v54 / MEMORY-1: portable workspace/work identity and the document binding
+    // baseline. Existing titles and local numeric ids are deliberately not used
+    // as identity. The new binding table starts empty and stores no manuscript body.
+    this.version(54).stores({
+      projects: '++id, &workspaceUid, name, createdAt, updatedAt',
+      works: '++id, projectId, worldId, code, &[projectId+code], [projectId+worldId], [worldId+updatedAt], status',
+      workspaceDocuments: '++id, projectId, workspaceUid, documentId, &[projectId+documentId], relativePath, &[projectId+relativePath], tableName, recordId, &[projectId+tableName+recordId], worldCode, workCode, lastSyncRunId, updatedAt',
+    }).upgrade(async tx => {
+      await migrateWorkspacePortableIdentities(tx)
     })
   }
 }

@@ -70,6 +70,7 @@ export const REQUIRED_TABLES = [
   'worlds',
   'workCharacterBindings',
   'works',
+  'workspaceDocuments',
 ] as const
 
 export interface EnsureSchemaOptions {

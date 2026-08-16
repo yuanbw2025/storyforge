@@ -92,6 +92,7 @@ const FAST_SOURCES = [
   'chapterContinuityHandoff',
   'previousPlanReconciliation',
   'currentFacts',
+  'consistencyDossier',
   'canonAssertions',
   'characterKnowledge',
   'creativeRules',

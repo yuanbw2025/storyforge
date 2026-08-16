@@ -14,6 +14,8 @@
  *   ⑤ PROJECT_TABLES exportable 表必须接入 JSON 导出/导入
  *   ⑥ components/hooks/pages 不得使用浏览器原生 alert/confirm/prompt
  *   ⑦ 正式 UI 不得出现"正在开发/即将推出/敬请期待"式死入口文案
+ *   ⑩ 绑定文件夹不得恢复页面进入/定时静默写盘；旧 JSON 只能显式保存
+ *   ⑪ PROJECT_TABLES 的工作区记忆分类必须由同一注册表 100% 派生
  *
  * 用法:node scripts/check-architecture.mjs
  */
@@ -300,6 +302,7 @@ function findDbWrites(sourceFile) {
 
 for (const file of walk('src/lib')) {
   if (file === 'src/lib/registry/adopt.ts' || file.startsWith('src/lib/registry/')) continue
+  if (file.startsWith('src/lib/evals/')) continue
   const sourceFile = parseSource(file)
   for (const { target, method, line } of findDbWrites(sourceFile)) {
     if (!governedWriteTargets.has(target)) continue
@@ -355,6 +358,43 @@ if (!selfTestWrites.includes('references.update') || !selfTestWrites.includes('r
 }
 if (!findLegacyContextCalls(selfTestSource).some(call => call.name === 'buildCodexContext')) {
   violations.push('[⑨守卫自测] context builder AST 扫描器未识别基准违规')
+}
+
+// ── ⑩ MEMORY-0 文件写入边界 ──
+const removedFolderAutoBackup = 'src/hooks/useFolderAutoBackup.ts'
+if (fs.existsSync(path.join(root, removedFolderAutoBackup))) {
+  violations.push(`[⑩静默文件写入] ${removedFolderAutoBackup}: 本地文件夹不得在页面进入或定时器中自动覆盖`)
+}
+
+for (const dir of UI_DIRS) {
+  for (const file of walk(dir)) {
+    const src = read(file)
+    if (/\bwriteProjectJSONToFolder\b/.test(src)) {
+      violations.push(`[⑩旧写盘入口] ${file}: 已下线的 writeProjectJSONToFolder 不得恢复`)
+    }
+    if (/\bwriteProjectSnapshotToFolder\b/.test(src) && file !== 'src/components/data/DataManagementPanel.tsx') {
+      violations.push(`[⑩快照旁路] ${file}: 完整 JSON 快照只能由数据管理面板的明确用户操作触发`)
+    }
+  }
+}
+
+const dataManagementSource = read('src/components/data/DataManagementPanel.tsx')
+const snapshotWriteCalls = dataManagementSource.match(/\bwriteProjectSnapshotToFolder\s*\(/g) ?? []
+if (snapshotWriteCalls.length !== 1 || !/const handleSaveToFolder[\s\S]*?writeProjectSnapshotToFolder\s*\(/.test(dataManagementSource)) {
+  violations.push('[⑩快照入口] DataManagementPanel 必须且只能在 handleSaveToFolder 的明确点击路径写一次完整 JSON 快照')
+}
+
+// ── ⑪ MEMORY-10 全表记忆分类 ──
+if (!/const PROJECT_TABLE_REGISTRATIONS:[\s\S]*?export const PROJECT_TABLES:[\s\S]*?PROJECT_TABLE_REGISTRATIONS\.map\(/.test(registrySrc)) {
+  violations.push('[⑪记忆分类] PROJECT_TABLES 必须从唯一注册表登记派生 100% memoryClassification')
+}
+for (const classification of ['editable', 'evidence', 'derived-none', 'not-applicable']) {
+  if (!registrySrc.includes(`classification: '${classification}'`)) {
+    violations.push(`[⑪记忆分类] PROJECT_TABLES 缺少 ${classification} 明确策略`)
+  }
+}
+if (!/memoryClassification:\s*classifyWorkspaceMemory\(spec\)/.test(registrySrc)) {
+  violations.push('[⑪记忆分类] 新表可能绕过 classifyWorkspaceMemory')
 }
 
 // ── 报告 ──

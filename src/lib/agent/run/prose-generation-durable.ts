@@ -74,6 +74,7 @@ export const PROSE_GENERATION_SOURCE_KEYS_V1 = [
   'emotionBeats',
   'stateCards',
   'currentFacts',
+  'consistencyDossier',
   'canonAssertions',
   'characterKnowledge',
   'heldItems',

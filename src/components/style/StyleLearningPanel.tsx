@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Sparkles, Brain, Loader2, Check, AlertCircle, Power, RotateCcw, X } from 'lucide-react'
+import { Sparkles, Brain, Loader2, Check, AlertCircle, Power, RotateCcw, Trash2, X } from 'lucide-react'
 import { useChapterStore } from '../../stores/chapter'
 import { useUserStyleStore } from '../../stores/user-style'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -15,6 +15,7 @@ import {
 import StyleCalibrationPanel from './StyleCalibrationPanel'
 import StyleRevisionPairsPanel from './StyleRevisionPairsPanel'
 import { useStyleLearningAI } from './useStyleLearningAI'
+import { useDialog } from '../shared/Dialog'
 
 interface Props {
   project: Project
@@ -28,12 +29,14 @@ const PER_CHAPTER_CHARS = STYLE_LEARNING_CHAPTER_CHARS_V1
 const MAX_CORPUS_CHAPTERS = STYLE_LEARNING_MAX_CHAPTERS_V1
 
 export default function StyleLearningPanel({ project }: Props) {
+  const dialog = useDialog()
   const { chapters, loadAll } = useChapterStore()
   const {
     profile,
     loadProfile,
     updateProfileText,
     setEnabled,
+    clearLearnedStyle,
     updateRevisionPairNote,
     removeRevisionPair,
   } = useUserStyleStore()
@@ -279,6 +282,20 @@ export default function StyleLearningPanel({ project }: Props) {
               placeholder="文风画像(可手动编辑,失焦自动保存)"
               className="w-full px-3 py-2 bg-bg-base border border-border rounded text-sm text-text-secondary leading-relaxed resize-y focus:outline-none focus:border-accent font-mono"
             />
+            <button
+              type="button"
+              onClick={async () => {
+                if (await dialog.confirm({
+                  title: '删除已学习的文风',
+                  message: '将删除当前作品的文风画像、改稿样本和校准反馈。此操作不可撤销。',
+                  confirmText: '确认删除',
+                  tone: 'danger',
+                })) await clearLearnedStyle()
+              }}
+              className="inline-flex items-center gap-1.5 rounded border border-error/30 px-2.5 py-1.5 text-xs text-error hover:bg-error/10"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> 删除全部已学习内容
+            </button>
           </div>
         )}
 

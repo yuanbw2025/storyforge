@@ -18,6 +18,8 @@ export interface Work {
   id?: number
   projectId: number
   worldId: number
+  /** MEMORY-1: immutable portable identity; titles and local numeric ids may change. */
+  code?: string
   title: string
   description: string
   genres: string[]

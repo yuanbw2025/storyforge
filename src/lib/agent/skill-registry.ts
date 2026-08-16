@@ -455,6 +455,7 @@ const PROSE_CONTEXT_SOURCE_KEYS = [
   'emotionBeats',
   'stateCards',
   'currentFacts',
+  'consistencyDossier',
   'canonAssertions',
   'heldItems',
   'retrievedPassages',
@@ -478,6 +479,7 @@ const PROSE_REVIEW_CONTEXT_SOURCE_KEYS = [
   'storylineProgress',
   'stateCards',
   'currentFacts',
+  'consistencyDossier',
   'canonAssertions',
   'heldItems',
 ] as const

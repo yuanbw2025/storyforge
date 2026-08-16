@@ -190,6 +190,40 @@ export interface ContextManifestV1 {
   manifestHash: string
 }
 
+export interface ContextManifestSourceProvenanceV2 {
+  mirrorDocumentIds: string[]
+  artifactIds: string[]
+  baselineRevision: number | null
+  canonicalHash: string | null
+  freshnessStatus: 'fresh' | 'dirty' | 'unmirrored'
+  authority: 'accepted' | 'author-input' | 'derived' | 'runtime'
+  editPolicy: 'author-editable' | 'candidate-editable' | 'machine-readonly' | 'not-applicable'
+  derivedUpstreamHash?: string
+}
+
+export interface ContextManifestSourceV2 extends ContextManifestSourceV1 {
+  provenance: ContextManifestSourceProvenanceV2
+}
+
+export interface ContextManifestV2 {
+  version: 2
+  runId: number
+  stepId: string
+  attempt: number
+  scope: {
+    projectId: number
+    worldGroupId: number | null
+    workspaceUid: string
+    worldCode: string
+    workCode: string
+  }
+  inputBudget: number
+  totalInputTokens: number
+  sources: ContextManifestSourceV2[]
+  v1ManifestHash: string
+  manifestHash: string
+}
+
 export interface VerificationCriterionReceiptV1 {
   id: string
   status: 'passed' | 'failed'

@@ -15,8 +15,11 @@ vi.mock('../../src/lib/storage/folder-handle-store', () => ({
   LAST_FOLDER_KEY: 'last',
   projFolderKey: (projectId: number) => `proj-${projectId}`,
   loadFolderHandle: vi.fn(async () => null),
+  loadProjectFolderHandle: vi.fn(async () => null),
   saveFolderHandle: vi.fn(async () => undefined),
+  saveProjectFolderHandle: vi.fn(async () => undefined),
   clearFolderHandle: vi.fn(async () => undefined),
+  clearProjectFolderHandle: vi.fn(async () => undefined),
 }))
 
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []

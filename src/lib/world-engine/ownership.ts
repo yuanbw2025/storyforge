@@ -1,6 +1,7 @@
 import Dexie, { type Collection } from 'dexie'
 import { db } from '../db/schema'
 import { generateWorldCode, hasShareableWorldIdentity, withWorldIdentity } from '../product/world-identity'
+import { generateWorkCode } from '../memory/identity'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { transactionTablesFor } from '../registry/lifecycle'
 import type { TableSpec } from '../registry/types'
@@ -573,6 +574,7 @@ async function runOwnershipMigration(plan: OwnershipMigrationPlan, receiptId: nu
       const workId = plan.existingWorkId ?? await db.works.add({
         projectId,
         worldId,
+        code: generateWorkCode(),
         title: normalized.name,
         description: normalized.description,
         genres: normalized.genres,
@@ -589,6 +591,7 @@ async function runOwnershipMigration(plan: OwnershipMigrationPlan, receiptId: nu
 
       await stampLegacyOwners(plan, worldId, workId)
       await db.projects.update(projectId, {
+        workspaceUid: normalized.workspaceUid,
         activeWorldId: worldId,
         activeWorkId: workId,
         ownershipSchemaVersion: WORKSPACE_OWNERSHIP_CONTRACT_VERSION,

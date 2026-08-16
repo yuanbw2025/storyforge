@@ -28,13 +28,24 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(result.ok, result.errors.join('; ')).toBe(true)
     })
 
-    it('登记了全部 69 张表', () => {
-      expect(PROJECT_TABLES.length).toBe(69)   // v51 HARNESS-1 新增三张可恢复运行账本表
+    it('登记了全部 70 张表', () => {
+      expect(PROJECT_TABLES.length).toBe(70)   // v54 MEMORY-1 新增文件文档绑定/基线表
     })
 
     it('每张表名唯一', () => {
       const names = PROJECT_TABLES.map(s => s.name)
       expect(new Set(names).size).toBe(names.length)
+    })
+
+    it('MEMORY-10 为 100% 表登记分配唯一磁盘记忆策略', () => {
+      const allowed = new Set(['editable', 'evidence', 'derived-none', 'not-applicable'])
+      expect(PROJECT_TABLES.every(spec => allowed.has(spec.memoryClassification.classification))).toBe(true)
+      expect(PROJECT_TABLES.filter(spec => spec.memoryClassification.classification === 'editable').map(spec => spec.name).sort())
+        .toEqual(['chapters', 'projects', 'works', 'worlds'])
+      expect(PROJECT_TABLES.find(spec => spec.name === 'agentRunEvents')?.memoryClassification.classification).toBe('evidence')
+      expect(PROJECT_TABLES.find(spec => spec.name === 'retrievalChunks')?.memoryClassification.classification).toBe('derived-none')
+      expect(PROJECT_TABLES.find(spec => spec.name === 'promptTemplates')?.memoryClassification.classification).toBe('not-applicable')
+      expect(PROJECT_TABLES.every(spec => spec.memoryClassification.reason.trim().length > 0)).toBe(true)
     })
 
     it('所有非 global 表都有逻辑 owner，C3 核心表已切换到显式字段 locator', () => {

@@ -55,6 +55,8 @@ interface UserStyleState {
   updateProfileText: (text: string) => Promise<void>
   /** 开/关下游注入 */
   setEnabled: (enabled: boolean) => Promise<void>
+  /** 删除本 Work 的画像、改稿样本和校准反馈。 */
+  clearLearnedStyle: () => Promise<void>
   /** 保存一次有实际差异的改前/改后样本；相同样本会去重，最多保留 8 组 */
   captureRevisionPair: (
     projectId: number,
@@ -135,6 +137,18 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
     const updatedAt = Date.now()
     await db.userStyleProfiles.update(profile.id, { enabled, updatedAt })
     set({ profile: { ...profile, enabled, updatedAt } })
+  },
+
+  clearLearnedStyle: async () => {
+    const { profile } = get()
+    if (profile?.id == null) return
+    const scope = await resolveScopeLike(profile.workId != null && profile.worldId != null
+      ? { projectId: profile.projectId, worldId: profile.worldId, workId: profile.workId }
+      : profile.projectId)
+    const current = await db.userStyleProfiles.get(profile.id)
+    if (!current || !await assertRecordInScope(scope, 'userStyleProfiles', current, { owner: 'work' })) return
+    await db.userStyleProfiles.delete(profile.id)
+    set({ profile: null })
   },
 
   captureRevisionPair: async (projectId, input) => {

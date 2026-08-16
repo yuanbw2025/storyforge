@@ -4,6 +4,7 @@ import type { Work, WorkspaceScope, World } from '../types/world-ownership'
 import type { Project, ProjectStatus } from '../types/project'
 import { ensureWorkspaceOwnership } from './ownership'
 import { assertRecordInScope, resolveScope } from './scope'
+import { generateWorkCode } from '../memory/identity'
 
 export interface CreateWorkInput {
   title: string
@@ -104,6 +105,7 @@ export async function createWorldWork(projectId: number, input: CreateWorkInput)
   const row: Work = {
     projectId,
     worldId: ownership.scope.worldId,
+    code: generateWorkCode(),
     title,
     description: input.description?.trim() ?? '',
     genres: input.genres?.length ? [...input.genres] : [...ownership.work.genres],

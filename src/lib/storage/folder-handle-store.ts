@@ -6,15 +6,19 @@
  * IndexedDB 库**（storyforge-fsa）存句柄,**刻意不进 Dexie 主库 / 三注册表**——
  * 它是基础设施（绑定记忆）,不是项目数据,既不导出也不参与项目生命周期。
  *
- * 这样:页面刷新 / 部署更新后,绑定不丢;配合启动期重新授权 + 自动回读,
- * 实现「连了文件夹就不怕重置」。
+ * 这样页面刷新 / 部署更新后绑定不丢，但绑定本身不授权任何自动写入；
+ * 所有文件写入仍必须来自用户明确触发的快照或记忆自检流程。
  */
+
+import type { Project } from '../types/project'
 
 const DB_NAME = 'storyforge-fsa'
 const STORE = 'handles'
 
 /** 每个项目记住各自绑定的文件夹 */
 export const projFolderKey = (projectId: number) => `proj-${projectId}`
+/** MEMORY-1 stable key; survives numeric project id remapping. */
+export const workspaceFolderKey = (workspaceUid: string) => `workspace-${workspaceUid}`
 /** 最近一次绑定的文件夹（首页「从本地文件夹恢复」用，跨项目/库已空时也能找回） */
 export const LAST_FOLDER_KEY = 'last'
 
@@ -70,4 +74,39 @@ export async function clearFolderHandle(key: string): Promise<void> {
   } finally {
     db.close()
   }
+}
+
+function stableProjectFolderKey(project: Pick<Project, 'id' | 'workspaceUid'>): string {
+  if (project.workspaceUid) return workspaceFolderKey(project.workspaceUid)
+  if (project.id != null) return projFolderKey(project.id)
+  throw new Error('[folder-handle] 项目缺少稳定身份和本地 ID')
+}
+
+export async function saveProjectFolderHandle(
+  project: Pick<Project, 'id' | 'workspaceUid'>,
+  handle: FileSystemDirectoryHandle,
+): Promise<void> {
+  await saveFolderHandle(stableProjectFolderKey(project), handle)
+}
+
+/** Read the stable binding first, then migrate the legacy numeric key once. */
+export async function loadProjectFolderHandle(
+  project: Pick<Project, 'id' | 'workspaceUid'>,
+): Promise<FileSystemDirectoryHandle | null> {
+  const stableKey = stableProjectFolderKey(project)
+  const stable = await loadFolderHandle(stableKey)
+  if (stable || !project.workspaceUid || project.id == null) return stable
+  const legacyKey = projFolderKey(project.id)
+  const legacy = await loadFolderHandle(legacyKey)
+  if (!legacy) return null
+  await saveFolderHandle(stableKey, legacy)
+  await clearFolderHandle(legacyKey)
+  return legacy
+}
+
+export async function clearProjectFolderHandle(
+  project: Pick<Project, 'id' | 'workspaceUid'>,
+): Promise<void> {
+  await clearFolderHandle(stableProjectFolderKey(project))
+  if (project.workspaceUid && project.id != null) await clearFolderHandle(projFolderKey(project.id))
 }

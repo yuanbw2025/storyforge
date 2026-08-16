@@ -1146,6 +1146,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         'emotionBeats',
         'stateCards',
         'currentFacts', // NS-4:当前章生效的已确认事实，回注生成防止前后矛盾
+        'consistencyDossier', // MEMORY-9:结构化事实/依赖/本地关键词的可追溯一致性档案
         'canonAssertions', // CONSISTENCY-3:不依赖章节时点的已确认世界宪法
         ...(perspectiveCharacterId != null
           ? ['characterKnowledge'] as const

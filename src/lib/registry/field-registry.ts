@@ -113,6 +113,27 @@ function enumeration(
 }
 
 export const FIELD_REGISTRY: FieldSpec[] = [
+  // MEMORY-5: author-edited workspace roots. Stable identities, owner IDs,
+  // active pointers and derived counters remain outside the editable surface.
+  text('projects', 'name'),
+  longtext('projects', 'description'),
+  arr('projects', 'genres'),
+  enumeration('projects', 'status', ['drafting', 'ongoing', 'paused', 'completed']),
+  num('projects', 'targetWordCount'),
+  enumeration('projects', 'creativeMode', ['fantasy', 'historical']),
+  bool('projects', 'enableMultiWorld'),
+
+  text('worlds', 'name'),
+  longtext('worlds', 'description'),
+
+  text('works', 'title'),
+  longtext('works', 'description'),
+  arr('works', 'genres'),
+  enumeration('works', 'status', ['drafting', 'ongoing', 'paused', 'completed']),
+  num('works', 'targetWordCount'),
+  text('works', 'writingStyleId'),
+  text('works', 'methodologyId'),
+
   // HARNESS-68: AI may propose new World-owned worldGroups only through the
   // registered collection adoption boundary. Owner IDs and timestamps are stamped.
   text('worldGroups', 'name', ['世界名称']),

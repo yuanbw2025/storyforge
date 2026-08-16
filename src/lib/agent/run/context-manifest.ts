@@ -7,7 +7,12 @@ import type {
   ContextManifestSourceStatus,
   ContextManifestSourceV1,
   ContextManifestV1,
+  ContextManifestV2,
+  ContextManifestSourceV2,
 } from '../../types/agent-run'
+import type { WorkspaceScope } from '../../types'
+import { db } from '../../db/schema'
+import { isWorkspaceUid, isWorkCode } from '../../memory/identity'
 import { hashCanonicalValue } from './hash'
 import {
   assertExactKeys,
@@ -338,4 +343,94 @@ export async function createContextManifestFromAssemblyV1(input: {
 export async function verifyContextManifestIntegrityV1(value: unknown): Promise<boolean> {
   const manifest = parseContextManifestV1(value)
   return await hashCanonicalValue(manifestBody(manifest)) === manifest.manifestHash
+}
+
+function provenanceAuthorityV2(key: string): ContextManifestSourceV2['provenance']['authority'] {
+  if (key === 'manualText' || key === 'ragSelection') return 'author-input'
+  if (key === 'simulationRuntime' || key === 'priorOutlineCandidate') return 'runtime'
+  if (/retrieval|search|summary|Passages|impact/i.test(key)) return 'derived'
+  return 'accepted'
+}
+
+/**
+ * Add stable Workspace/World/Work and mirror provenance without changing the
+ * permanently readable V1 contract. The V1 hash remains embedded and verified.
+ */
+export async function createContextManifestV2FromV1(input: {
+  manifest: ContextManifestV1
+  scope: WorkspaceScope
+}): Promise<ContextManifestV2> {
+  if (!await verifyContextManifestIntegrityV1(input.manifest)) {
+    throw new Error('ContextManifestV1 完整性校验失败，不能升级 V2。')
+  }
+  if (input.manifest.scope.projectId !== input.scope.projectId) {
+    throw new Error('ContextManifestV1 与 WorkspaceScope 项目不一致。')
+  }
+  const [project, world, work, bindings] = await Promise.all([
+    db.projects.get(input.scope.projectId),
+    db.worlds.get(input.scope.worldId),
+    db.works.get(input.scope.workId),
+    db.workspaceDocuments.where('projectId').equals(input.scope.projectId).toArray(),
+  ])
+  if (!project || !isWorkspaceUid(project.workspaceUid)
+    || !world || world.projectId !== input.scope.projectId
+    || !work || work.worldId !== world.id || !isWorkCode(work.code)) {
+    throw new Error('ContextManifestV2 缺少稳定 Workspace/World/Work 身份。')
+  }
+  const recovery = bindings.find(binding => binding.documentKind === 'recovery-capsule')
+  const sources: ContextManifestSourceV2[] = input.manifest.sources.map(source => {
+    const direct = source.boundary?.chapterId == null
+      ? undefined
+      : bindings.find(binding => binding.tableName === 'chapters' && binding.recordId === source.boundary?.chapterId)
+    const mirror = direct ?? recovery
+    const freshnessStatus = !mirror
+      ? 'unmirrored' as const
+      : mirror.baselineCanonicalHash != null
+        && mirror.baselineCanonicalHash === mirror.databaseCanonicalHash
+        ? 'fresh' as const
+        : 'dirty' as const
+    return {
+      ...source,
+      provenance: {
+        mirrorDocumentIds: mirror ? [mirror.documentId] : [],
+        artifactIds: source.contentHash ? [`context-source:${source.key}:${source.contentHash}`] : [],
+        baselineRevision: mirror?.lastSyncRevision ?? null,
+        canonicalHash: source.contentHash ?? null,
+        freshnessStatus,
+        authority: provenanceAuthorityV2(source.key),
+        editPolicy: mirror?.editPolicy ?? 'not-applicable',
+        ...(/retrieval|summary/i.test(source.key) && source.contentHash
+          ? { derivedUpstreamHash: source.contentHash }
+          : {}),
+      },
+    }
+  })
+  const body = {
+    version: 2 as const,
+    runId: input.manifest.runId,
+    stepId: input.manifest.stepId,
+    attempt: input.manifest.attempt,
+    scope: {
+      projectId: input.scope.projectId,
+      worldGroupId: input.manifest.scope.worldGroupId,
+      workspaceUid: project.workspaceUid,
+      worldCode: world.code,
+      workCode: work.code,
+    },
+    inputBudget: input.manifest.inputBudget,
+    totalInputTokens: input.manifest.totalInputTokens,
+    sources,
+    v1ManifestHash: input.manifest.manifestHash,
+  }
+  return { ...body, manifestHash: await hashCanonicalValue(body) }
+}
+
+export async function verifyContextManifestIntegrityV2(value: unknown): Promise<boolean> {
+  if (!value || typeof value !== 'object') return false
+  const manifest = value as ContextManifestV2
+  if (manifest.version !== 2 || !isWorkspaceUid(manifest.scope?.workspaceUid)
+    || !isWorkCode(manifest.scope?.workCode) || !/^[a-f0-9]{64}$/.test(manifest.manifestHash)
+    || !/^[a-f0-9]{64}$/.test(manifest.v1ManifestHash) || !Array.isArray(manifest.sources)) return false
+  const { manifestHash, ...body } = manifest
+  return await hashCanonicalValue(body) === manifestHash
 }

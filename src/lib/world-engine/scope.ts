@@ -140,6 +140,9 @@ function locatorOwner(spec: TableSpec, requested?: ScopeOwner): ScopeOwner | nul
 }
 
 function directOwnerMatches(spec: TableSpec, row: Record<string, unknown>, scope: WorkspaceScope, requested?: ScopeOwner): boolean {
+  // The LocalWorkspace root is the only project-owned row whose physical key
+  // is the project identity instead of a projectId column.
+  if (spec.name === 'projects') return row.id === scope.projectId
   const physicalProjectId = rowProjectId(row)
   if (
     spec.owner !== 'global'

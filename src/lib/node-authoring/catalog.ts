@@ -427,7 +427,7 @@ const CONTINUITY_TEMPLATES: AuthoringNodeTemplate[] = [
         'chapterContent', 'stateCards', 'currentFacts', 'characters', 'itemLedger',
         'characterRelations', 'foreshadows', 'storyTimeline', 'storyArcs',
         'storylineProgress', 'characterKnowledge', 'previousChapterEnding',
-        'chapterContinuityHandoff', 'recentChapterSummaries', 'retrievedPassages',
+        'chapterContinuityHandoff', 'recentChapterSummaries', 'consistencyDossier', 'retrievedPassages',
       ],
       allowExactFields: true,
     },

@@ -8,12 +8,26 @@
 > - [已完成索引](./COMPLETED.md)：按功能体系索引已交付能力、测试证据和历史记录。
 > - [Agent + Harness 重构交接](../AI-HARNESS-REBUILD-HANDOFF-20260810.md)：跨电脑或跨模型接续当前功能分支时先读，包含完成度、验证状态和下一步入口。
 > - [Agent + Harness 大架构更新说明](../AI-HARNESS-REBUILD-RELEASE-20260817.md)：面向项目整体的当前架构、用户价值、验证证据与诚实边界。
+> - [记忆工程完整施工方案](../MEMORY-ENGINEERING-DEVELOPMENT-PLAN-20260817.md)：当前主体系的目标、硬盘可编辑映像、人工自检、双向同步、Harness 沉淀、施工顺序和验收门。
 > - [历史完整快照](../ROADMAP-LEGACY.md)：本分支拆分前 `HEAD:docs/ROADMAP.md` 的原始内容，只读保存，不作为新的施工入口。
 > - [项目宪法](../../CLAUDE.md) 与 [施工蓝图](../MASTER-BLUEPRINT.md)：所有功能都必须服从三注册表和 Blueprint 的完成定义；读取范围由 [上下文路由](../CONTEXT-ROUTING.md) 决定。
 
 **迁移安全**：`docs/ROADMAP-LEGACY.md` 与本分支拆分前的 `HEAD:docs/ROADMAP.md` 字节级一致，共 3181 行，SHA-256 为 `e497de7d0f8100489bdcb3a7b3fcb528d07024b9dcb832f7de6e2701d584667d`。任何任务信息丢失或状态不明，先回到历史快照核对，不凭记忆补写。
 
-## 当前状态：CREL 工程完成，进入独立作者验证阶段
+## 已完成基线：MEMORY 记忆工程
+
+Harness 与 CREL 工程重构已经完成，`MEMORY-0～10` 也已完成施工。它没有新增一个松散“记忆库”，
+而是让 Harness 的候选、作者决定、正式 Canon/正文/状态和完成回执长期沉淀，并在 IndexedDB 与作者
+硬盘之间形成可读、可编辑、人工触发、三方核对、可恢复的双向工作区。权威边界、数据合同、
+`MEMORY-0～10` 施工顺序和完成定义见
+[记忆工程完整施工与验收记录](../MEMORY-ENGINEERING-DEVELOPMENT-PLAN-20260817.md)，作者操作、恢复、
+隐私和费用边界见[本地记忆工作区指南](../MEMORY-WORKSPACE-GUIDE.md)。
+
+旧文件夹绑定后的“进入即覆盖 + 五分钟覆盖”路径已经下线。绑定、重新授权和检查均为零写入；稳定身份、
+共同基线、冲突检测、事务恢复、显式采纳和真实文件系统往返均已通过测试。长期一致性以结构化 Canon、
+状态账本、时间线、来源证据和依赖图为主，embedding 只允许作为可删除、可重建、无裁决权的可选派生索引。
+
+## 已完成基线：CREL 创作可靠性工程
 
 `feat/harness-creative-reliability` 在已完成的 Agent + Harness 基线上补齐有限成本下的可用创作交付，
 不新增平行 Agent、数据库或模型旁路。权威范围、数据合同、CREL-0～14 施工顺序和发布门见

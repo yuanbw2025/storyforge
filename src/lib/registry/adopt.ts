@@ -199,9 +199,13 @@ async function adoptCollectionRecord(
     return result
   }
   if (input.compareAndSet) {
-    return input.compareAndSet.kind === 'record-field-value-hash'
-      ? adoptRegisteredRecordFieldWithCas(input, fieldSpecs, tableSpec, result)
-      : adoptChapterMemoryRecordWithCas(input, fieldSpecs, tableSpec, result)
+    if (input.compareAndSet.kind === 'record-field-value-hash') {
+      return adoptRegisteredRecordFieldWithCas(input, fieldSpecs, tableSpec, result)
+    }
+    if (input.compareAndSet.kind === 'record-fields-value-hash') {
+      return adoptRegisteredRecordFieldsWithCas(input, fieldSpecs, tableSpec, result)
+    }
+    return adoptChapterMemoryRecordWithCas(input, fieldSpecs, tableSpec, result)
   }
   const target = await tableSpec.table.get(input.recordId!)
   if (!target || !await assertRecordInScope(input.scope!, input.target, target, {
@@ -243,6 +247,90 @@ export async function hashAdoptFieldValueV1(value: unknown): Promise<string> {
     present: value !== undefined,
     value: value === undefined ? null : value,
   }))
+}
+
+/**
+ * Stable, order-independent snapshot hash for a closed set of registered fields.
+ * Missing and explicit null remain distinct so a stale author candidate cannot
+ * silently overwrite a field that was added after the self-check.
+ */
+export async function hashAdoptRecordFieldsV1(
+  record: Record<string, unknown>,
+  fields: readonly string[],
+): Promise<string> {
+  const canonicalFields = [...new Set(fields)].sort()
+  return sha256Text(JSON.stringify(canonicalFields.map(field => ({
+    field,
+    present: record[field] !== undefined,
+    value: record[field] === undefined ? null : record[field],
+  }))))
+}
+
+async function adoptRegisteredRecordFieldsWithCas(
+  input: AdoptInput,
+  fieldSpecs: FieldSpec[],
+  tableSpec: TableSpec,
+  result: AdoptResult,
+): Promise<AdoptResult> {
+  const cas = input.compareAndSet!
+  const adoption = ADOPTION_BY_TARGET.get(input.target)
+  if (
+    cas.kind !== 'record-fields-value-hash'
+    || input.mode !== 'replace'
+    || Array.isArray(input.data)
+    || !/^[a-f0-9]{64}$/.test(cas.expectedHash)
+    || cas.fields.length === 0
+    || new Set(cas.fields).size !== cas.fields.length
+    || !adoption
+  ) {
+    result.skipped.push({ reason: '字段集合 compareAndSet 仅支持已登记集合目标的定点 replace', data: input.data })
+    return result
+  }
+  const registered = new Set(fieldSpecs.map(spec => spec.field))
+  const unknownCasField = cas.fields.find(field => !registered.has(field))
+  if (unknownCasField) {
+    result.skipped.push({ reason: `CAS 字段 ${input.target}.${unknownCasField} 未在 FIELD_REGISTRY 登记`, data: input.data })
+    return result
+  }
+  const patch = normalizeAndValidate(input.data, fieldSpecs, result, { preserveEmptyStrings: true })
+  const patchKeys = Object.keys(patch ?? {})
+  if (
+    !patch
+    || patchKeys.length === 0
+    || result.unknown.length > 0
+    || result.typeErrors.length > 0
+    || patchKeys.some(field => !cas.fields.includes(field))
+  ) {
+    result.skipped.push({ reason: '字段集合 compareAndSet 只能写入其声明的已登记字段', data: input.data })
+    return result
+  }
+
+  const transactionTables = input.target === 'chapters'
+    ? scopeTransactionTables(tableSpec.table, db.narrativeSummaryNodes)
+    : scopeTransactionTables(tableSpec.table)
+  await db.transaction('rw', transactionTables, async () => {
+    const target = await tableSpec.table.get(input.recordId!)
+    if (!target || !await assertRecordInScope(input.scope!, input.target, target, { owner: adoption.ownerFrom })) {
+      result.skipped.push({ reason: `record ${input.recordId} 不存在或不属于当前 scope`, data: input.data })
+      return
+    }
+    const currentHash = await Dexie.waitFor(hashAdoptRecordFieldsV1(target, cas.fields))
+    if (currentHash !== cas.expectedHash) {
+      result.skipped.push({ reason: `CAS 失败：${input.target} 的工作区字段已变化`, data: input.data })
+      return
+    }
+    const changedFields = Object.keys(patch)
+    patch.updatedAt = Date.now()
+    await tableSpec.table.update(input.recordId!, patch as any)
+    if (input.target === 'chapters' && Object.prototype.hasOwnProperty.call(patch, 'content')) {
+      await markChapterNarrativeSummariesStale(input.scope!, input.recordId!)
+    }
+    result.written.push({ id: input.recordId!, fields: changedFields })
+  })
+  if (result.written.length) {
+    await refreshCanonSourceAfterWrite(input.target, input.projectId, input.recordId!, result.written[0].fields)
+  }
+  return result
 }
 
 async function adoptRegisteredRecordFieldWithCas(
@@ -518,6 +606,7 @@ function normalizeAndValidate(
   raw: Record<string, unknown>,
   fieldSpecs: FieldSpec[],
   result: AdoptResult,
+  options: { preserveEmptyStrings?: boolean } = {},
 ): Record<string, unknown> | null {
   const out: Record<string, unknown> = {}
   const byName = new Map(fieldSpecs.map(f => [f.field, f] as const))
@@ -528,7 +617,7 @@ function normalizeAndValidate(
     // 空字符串跳过;但 null 必须保留——如 outlineNodes 顶层卷的 parentId:null。
     // 旧实现 `val == null` 一并跳过,导致顶层卷写库时丢了 parentId(存成 undefined),
     // 而大纲面板用 `parentId === null` 严格过滤顶层卷 → 卷被藏起,表现为"采纳没反应"(FB-10b)。
-    if (val === '') continue
+    if (val === '' && !options.preserveEmptyStrings) continue
     let spec = byName.get(key)
     let canonical = key
     if (!spec) {

@@ -79,7 +79,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 62 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 63 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -110,6 +110,7 @@
 | `characterKnowledge` | 角色认知边界(认知账本投影) | chapter | L1 | 1600 |
 | `retrievedPassages` | 相关前文召回(NS-5 混合检索) | chapter | L2 | 2500 |
 | `consistencyReport` | 一致性报告 | chapter | L1 | 1800 |
+| `consistencyDossier` | 长期一致性档案 | chapter | L1 | 6000 |
 | `detailedOutline` | 本章细纲(场景拆解) | node | L1 | 1500 |
 | `previousChapterEnding` | 全局直接前驱原文尾部 | manual | L1 | 1800 |
 | `chapterContinuityHandoff` | 全局直接前驱连续性交接 | chapter | L1 | 1600 |
@@ -173,6 +174,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `itemLedger` | `action` `chapterId` `chapterTitle` `characterId` `heldByName` `itemName` `note` `quantity` |
 | `knowledgeLedger` | `action` `belief` `characterId` `characterName` `factId` `knowledgeKey` `sourceChapterId` `sourceQuote` `sourceType` `statement` `status` `worldGroupId` |
 | `outlineNodes` | `order` `parentId` `summary` `title` `type` `worldGroupId` |
+| `projects` | `creativeMode` `description` `enableMultiWorld` `genres` `name` `status` `targetWordCount` |
 | `referenceAnalysisRuns` | `activatedAt` `analysisSummary` `completedAt` `completedChunks` `depth` `error` `expectedChunks` `fileHash` `mergedCharacters` `progress` `referenceId` `rightsConfirmed` `rightsDeclaredAt` `rightsNote` `sourceFilename` `sourceKind` `status` `totalChars` `usageScope` `version` |
 | `referenceChunkAnalysis` | `analysisRunId` `characterCraft` `chunkIndex` `climaxDesign` `conflictEscalation` `dailyLife` `dialogueTechnique` `emotionalBeats` `endOffset` `foreshadowing` `historicalContext` `label` `languageCustoms` `materialCulture` `narrativeStyle` `openingTechnique` `otherTechniques` `pacingControl` `plotStructure` `proseStyle` `rawExcerpt` `referenceId` `socialInstitutions` `startOffset` `worldBuilding` |
 | `references` | `analysisDepth` `analysisError` `analysisProgress` `analysisStatus` `analysisSummary` `fileHash` `genre` `importSessionId` `mergedCharacters` `totalChars` |
@@ -183,8 +185,10 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `storylineCrossings` | `arcIdA` `arcIdB` `chapterId` `chapterTitle` `evidenceQuote` `note` |
 | `storylineProgress` | `arcId` `currentStageId` `evidenceQuote` `involvedEntities` `lastActiveChapterId` `lastActiveChapterTitle` `progressNote` `status` |
 | `userStyleProfiles` | `enabled` `profile` `sampleCount` `sampleWords` `sourceChapterIds` |
+| `works` | `description` `genres` `methodologyId` `status` `targetWordCount` `title` `writingStyleId` |
 | `worldGroups` | `description` `entryCondition` `icon` `name` `order` `plannedChapterCount` `powerRestriction` `type` |
 | `worldNodes` | `mapConfigJSON` |
+| `worlds` | `description` `name` |
 | `worldviews` | `climateByRegion` `continentLayout` `culture` `cultureOverview` `divineDesign` `economy` `economyOverview` `factionLayout` `geography` `history` `historyLine` `internalConflicts` `itemDesign` `mountainsRivers` `naturalResourceOverview` `naturalResources` `politicsEconomyCulture` `politicsOverview` `powerHierarchy` `races` `regionDimensions` `rules` `society` `worldDimensions` `worldEvents` `worldOrigin` `worldStructure` |
 
 ### 领域写回扩展（不是第二套通用 adopt）
@@ -205,6 +209,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `cultivation-codex-reference-lifecycle` | `codexEntries` | `PROJECT_TABLES refs + cultivation DAG validator` | `src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/location/lifecycle.ts` | 2027-01-01 |
 | `cultivation-progress-lifecycle` | `cultivationProgress` | `ADOPTION_SCHEMAS + PROJECT_TABLES + cultivation DAG validator + canonical chapter sequence` | `src/lib/cultivation/progress.ts`<br/>`src/lib/cultivation/progress-lifecycle.ts` | 2027-01-01 |
 | `codex-category-scope-lifecycle` | `codexCategories` | `PROJECT_TABLES lifecycle` | `src/lib/registry/lifecycle.ts` | 2027-01-01 |
+| `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace identity + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/world-engine/works.ts` | 2027-08-01 |
+| `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts` | 2027-08-01 |
+| `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/works.ts` | 2027-08-01 |
+| `chapter-delete-lifecycle` | `chapters` | `PROJECT_TABLES refs + chapter deletion impact policy` | `src/lib/chapters/lifecycle.ts` | 2027-08-01 |
+| `chapter-emotion-delete-lifecycle` | `emotionBeatCards` | `PROJECT_TABLES chapter refs` | `src/lib/chapters/lifecycle.ts` | 2027-08-01 |
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
@@ -220,11 +229,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:24` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:552`<br/>`src/lib/node-authoring/domain-execution.ts:616` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1590` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1570` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1591` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1571` |
 | `chapter.memory` | `src/components/editor/ChapterEditor.tsx:1059` |
-| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1715`<br/>`src/components/editor/ChapterEditor.tsx:2600` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1562` |
+| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1716`<br/>`src/components/editor/ChapterEditor.tsx:2601` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1563` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `codex.extract` | `src/lib/agent/run/codex-extraction-durable.ts:627` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
@@ -253,7 +262,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:451` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:98` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:115` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:1605` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:1606` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
 | `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:670`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
@@ -292,4 +301,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `3776a1b`
+生成时间基准:commit `d2ecf9f`

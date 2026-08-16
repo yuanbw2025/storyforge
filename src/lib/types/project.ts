@@ -94,6 +94,8 @@ export interface CommunityWorldOrigin {
 /** 项目 */
 export interface Project {
   id?: number
+  /** MEMORY-1: immutable portable identity for this LocalWorkspace. */
+  workspaceUid?: string
   name: string
   /** 兼容旧数据的单选流派（保留此字段避免旧代码报错，值始终有效） */
   genre: string

@@ -3,22 +3,51 @@ import {
   Download, Upload, FileJson, FileText, FileType,
   Loader2, CheckCircle, AlertCircle, FolderOpen, X,
   History, Plus, Trash2, RotateCcw, HardDrive,
-  ShieldAlert, Stethoscope,
+  ShieldAlert, Stethoscope, RefreshCw, GitCompareArrows,
 } from 'lucide-react'
 import { exportProjectJSON, downloadJSON, importProjectJSON, type ProjectExportData } from '../../lib/export/json-export'
 import { exportProjectMarkdown, exportProjectTXT, downloadTextFile } from '../../lib/export/text-export'
 import {
   isFSASupported, pickFolder, ensureFolderPermission, folderPermissionGranted,
-  writeProjectJSONToFolder,
+  writeProjectSnapshotToFolder,
 } from '../../lib/storage/folder-backup'
-import { saveFolderHandle, loadFolderHandle, clearFolderHandle, projFolderKey, LAST_FOLDER_KEY } from '../../lib/storage/folder-handle-store'
+import {
+  clearProjectFolderHandle,
+  LAST_FOLDER_KEY,
+  loadProjectFolderHandle,
+  saveFolderHandle,
+  saveProjectFolderHandle,
+} from '../../lib/storage/folder-handle-store'
 import { useBackupStore } from '../../stores/backup'
 import CloudBackupCard from './CloudBackupCard'
 import { useToast } from '../shared/Toast'
 import { useDialog } from '../shared/Dialog'
-import type { Project, Snapshot } from '../../lib/types'
+import type {
+  Project,
+  Snapshot,
+  WorkspaceFileCandidateSetV1,
+  WorkspaceImpactPlanV1,
+  WorkspaceSelfCheckReportV1,
+} from '../../lib/types'
 import { buildLocalDiagnosticReport } from '../../lib/diagnostics/local-diagnostic-report'
 import { inspectProjectBackup, type BackupTrustReport } from '../../lib/export/backup-trust'
+import {
+  buildWorkspaceSelfCheckReportV1,
+  buildWorkspaceFileAdoptionCandidatesV1,
+  adoptWorkspaceFileChangesV1,
+  confirmMissingChapterFileDeletionsV1,
+  resolveWorkspaceConflictsUsingDatabaseV1,
+  restoreWorkspaceFromFolderV1,
+  exportWorkspacePackageFromProjectV1,
+  importWorkspacePackageV1,
+  synchronizeProjectChangesToFolderV1,
+} from '../../lib/memory/workspace-projection'
+import {
+  isMemoryEngineeringRuntimeEnabledV1,
+  setMemoryEngineeringRuntimeEnabledV1,
+} from '../../lib/memory/runtime'
+import { buildWorkspaceImpactPlanV1 } from '../../lib/memory/workspace-impact'
+import { useProjectStore } from '../../stores/project'
 
 type Tab = 'export' | 'backup'
 type ExportStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -75,26 +104,31 @@ function ExportTab({ project, onImported }: Props) {
   const [status, setStatus] = useState<ExportStatus>('idle')
   const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const workspacePackageInputRef = useRef<HTMLInputElement>(null)
 
-  // ── 本地文件夹（句柄持久化 + 重新授权 + 自动备份，FB-11）──
+  // ── 本地文件夹（句柄持久化 + 显式完整快照，FB-11）──
   const [folderHandle, setFolderHandle] = useState<FileSystemDirectoryHandle | null>(null)
   const [folderName, setFolderName] = useState('')
   const [folderNeedsAuth, setFolderNeedsAuth] = useState(false)
   const [folderBusy, setFolderBusy] = useState(false)
+  const [memoryReport, setMemoryReport] = useState<WorkspaceSelfCheckReportV1 | null>(null)
+  const [memoryCandidates, setMemoryCandidates] = useState<WorkspaceFileCandidateSetV1 | null>(null)
+  const [memoryImpactPlan, setMemoryImpactPlan] = useState<WorkspaceImpactPlanV1 | null>(null)
+  const [memoryEnabled, setMemoryEnabled] = useState(() => isMemoryEngineeringRuntimeEnabledV1())
   const [backupReport, setBackupReport] = useState<BackupTrustReport | null>(null)
 
   // 进面板时把该项目已持久化的绑定读回来；授权仍有效则直接显示已绑定，失效则提示重新授权
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const h = await loadFolderHandle(projFolderKey(project.id!))
+      const h = await loadProjectFolderHandle({ id: project.id, workspaceUid: project.workspaceUid })
       if (!h || cancelled) return
       setFolderHandle(h)
       setFolderName(h.name)
       setFolderNeedsAuth(!(await folderPermissionGranted(h)))
     })()
     return () => { cancelled = true }
-  }, [project.id])
+  }, [project.id, project.workspaceUid])
 
   const show = (s: ExportStatus, msg: string) => {
     setStatus(s); setMessage(msg)
@@ -159,7 +193,38 @@ function ExportTab({ project, onImported }: Props) {
     }
   }
 
-  // 绑定文件夹：选目录 → 请求授权 → 持久化句柄 → 立刻写一次
+  const handleExportWorkspacePackage = async () => {
+    try {
+      show('loading', '正在生成可校验的工作区包...')
+      const pkg = await exportWorkspacePackageFromProjectV1(project.id!)
+      downloadTextFile(
+        JSON.stringify(pkg, null, 2),
+        `${project.name}_${new Date().toISOString().slice(0, 10)}.storyforge.json`,
+        'application/json',
+      )
+      show('success', '工作区包已导出；它包含可读文档和完整恢复胶囊')
+    } catch (e) {
+      show('error', `工作区包导出失败：${(e as Error).message}`)
+    }
+  }
+
+  const handleWorkspacePackageSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      show('loading', '正在校验并恢复工作区包...')
+      const restored = await importWorkspacePackageV1(JSON.parse(await file.text()))
+      await useProjectStore.getState().loadProject(restored.projectId)
+      show('success', '工作区包已完整恢复并通过回读核对')
+      onImported?.(restored.projectId)
+    } catch (e) {
+      show('error', `工作区包导入失败：${(e as Error).message}`)
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  // 绑定只保存句柄。MEMORY-0 起，绑定和重新授权都不得顺带写盘。
   const handleBindFolder = async () => {
     const h = await pickFolder()
     if (!h) return
@@ -167,11 +232,10 @@ function ExportTab({ project, onImported }: Props) {
     try {
       const ok = await ensureFolderPermission(h)
       if (!ok) { show('error', '未授予文件夹写入权限'); return }
-      await saveFolderHandle(projFolderKey(project.id!), h)
+      await saveProjectFolderHandle(project, h)
       await saveFolderHandle(LAST_FOLDER_KEY, h)
       setFolderHandle(h); setFolderName(h.name); setFolderNeedsAuth(false)
-      const wrote = await writeProjectJSONToFolder(h, project.id!)
-      show(wrote ? 'success' : 'error', wrote ? `已绑定并保存到 / ${h.name}` : '绑定成功但写入失败')
+      show('success', `已绑定 / ${h.name}；尚未写入任何文件`)
     } catch (e) { show('error', `绑定失败：${(e as Error).message}`) }
     finally { setFolderBusy(false) }
   }
@@ -184,8 +248,7 @@ function ExportTab({ project, onImported }: Props) {
       const ok = await ensureFolderPermission(folderHandle)
       if (!ok) { show('error', '仍未获授权'); return }
       setFolderNeedsAuth(false)
-      await writeProjectJSONToFolder(folderHandle, project.id!)
-      show('success', '已重新授权，本项目会自动写入该文件夹')
+      show('success', '已重新授权；只有你点击保存时才会写入')
     } catch (e) { show('error', `授权失败：${(e as Error).message}`) }
     finally { setFolderBusy(false) }
   }
@@ -196,14 +259,173 @@ function ExportTab({ project, onImported }: Props) {
     try {
       show('loading', '正在写入本地文件夹...')
       if (!(await ensureFolderPermission(folderHandle))) { show('error', '未获授权，无法写入'); setFolderNeedsAuth(true); return }
-      const ok = await writeProjectJSONToFolder(folderHandle, project.id!)
-      show(ok ? 'success' : 'error', ok ? '已保存到本地文件夹' : '写入失败，请重新绑定文件夹')
+      const ok = await writeProjectSnapshotToFolder(folderHandle, project.id!)
+      show(ok ? 'success' : 'error', ok ? '完整 JSON 快照已保存到本地文件夹' : '写入失败，请重新绑定文件夹')
     } catch (e) { show('error', `写入失败：${(e as Error).message}`) }
     finally { setFolderBusy(false) }
   }
 
+  const handleCheckMemoryWorkspace = async () => {
+    if (!folderHandle) return
+    setFolderBusy(true)
+    try {
+      show('loading', '正在核对项目与本地文件...')
+      if (!(await ensureFolderPermission(folderHandle, false))) {
+        show('error', '未获文件夹读取权限')
+        setFolderNeedsAuth(true)
+        return
+      }
+      const report = await buildWorkspaceSelfCheckReportV1(project.id!, folderHandle)
+      setMemoryReport(report)
+      const candidates = await buildWorkspaceFileAdoptionCandidatesV1({
+        projectId: project.id!,
+        root: folderHandle,
+        expectedPlanHash: report.plan.planHash,
+        includeConflicts: true,
+      })
+      setMemoryCandidates(candidates)
+      setMemoryImpactPlan(candidates.candidates.length
+        ? await buildWorkspaceImpactPlanV1({ projectId: project.id!, candidateSet: candidates })
+        : null)
+      const changed = report.summary.projectChanged + report.summary.fileChanged
+        + report.summary.conflict + report.summary.missing + report.summary.extra + report.summary.invalid
+      show('success', changed === 0 ? '项目与本地文件已经一致' : `核对完成：发现 ${changed} 项需要处理`)
+    } catch (e) {
+      show('error', `核对失败：${(e as Error).message}`)
+    } finally {
+      setFolderBusy(false)
+    }
+  }
+
+  const handleAdoptFileChanges = async () => {
+    if (!folderHandle || !memoryReport) return
+    setFolderBusy(true)
+    try {
+      show('loading', '正在按冻结候选采纳本地改动...')
+      if (!(await ensureFolderPermission(folderHandle))) {
+        show('error', '需要文件夹写入权限才能提交新的同步基线')
+        setFolderNeedsAuth(true)
+        return
+      }
+      await adoptWorkspaceFileChangesV1({
+        projectId: project.id!,
+        root: folderHandle,
+        expectedPlanHash: memoryReport.plan.planHash,
+        conflictResolution: memoryReport.summary.conflict > 0 ? 'file-wins' : 'reject',
+      })
+      await useProjectStore.getState().loadProject(project.id!)
+      const next = await buildWorkspaceSelfCheckReportV1(project.id!, folderHandle)
+      setMemoryReport(next)
+      setMemoryCandidates(null)
+      setMemoryImpactPlan(null)
+      show('success', '本地文件改动已采纳，并完成数据库与文件回读核对')
+    } catch (e) {
+      show('error', `采纳停止：${(e as Error).message}`)
+    } finally {
+      setFolderBusy(false)
+    }
+  }
+
+  const handleResolveConflictsUsingProject = async () => {
+    if (!folderHandle || !memoryReport) return
+    setFolderBusy(true)
+    try {
+      show('loading', '正在保留历史副本并用项目内容解决冲突...')
+      if (!(await ensureFolderPermission(folderHandle))) {
+        show('error', '未获文件夹写入权限')
+        setFolderNeedsAuth(true)
+        return
+      }
+      await resolveWorkspaceConflictsUsingDatabaseV1({
+        projectId: project.id!,
+        root: folderHandle,
+        expectedPlanHash: memoryReport.plan.planHash,
+      })
+      const next = await buildWorkspaceSelfCheckReportV1(project.id!, folderHandle)
+      setMemoryReport(next)
+      setMemoryCandidates(null)
+      setMemoryImpactPlan(null)
+      show('success', '已保留冲突文件历史，并以项目内容完成同步')
+    } catch (e) {
+      show('error', `冲突处理停止：${(e as Error).message}`)
+    } finally {
+      setFolderBusy(false)
+    }
+  }
+
+  const handleConfirmMissingChapterDeletion = async () => {
+    if (!folderHandle || !memoryReport) return
+    setFolderBusy(true)
+    try {
+      show('loading', '正在保存回收副本并执行章节删除生命周期...')
+      if (!(await ensureFolderPermission(folderHandle))) {
+        show('error', '未获文件夹写入权限')
+        setFolderNeedsAuth(true)
+        return
+      }
+      await confirmMissingChapterFileDeletionsV1({
+        projectId: project.id!, root: folderHandle, expectedPlanHash: memoryReport.plan.planHash,
+      })
+      const next = await buildWorkspaceSelfCheckReportV1(project.id!, folderHandle)
+      setMemoryReport(next)
+      setMemoryCandidates(null)
+      setMemoryImpactPlan(null)
+      show('success', '缺失章节已移入工作区回收历史，并完成引用核对')
+    } catch (e) {
+      show('error', `删除停止：${(e as Error).message}`)
+    } finally {
+      setFolderBusy(false)
+    }
+  }
+
+  const handleRestoreWorkspace = async () => {
+    if (!folderHandle) return
+    setFolderBusy(true)
+    try {
+      show('loading', '正在校验恢复胶囊并重建浏览器项目...')
+      if (!(await ensureFolderPermission(folderHandle, false))) {
+        show('error', '未获文件夹读取权限')
+        setFolderNeedsAuth(true)
+        return
+      }
+      const restored = await restoreWorkspaceFromFolderV1(folderHandle)
+      await useProjectStore.getState().loadProject(restored.projectId)
+      show('success', '已从本地工作区完整恢复，并通过逐文档回读核对')
+      onImported?.(restored.projectId)
+    } catch (e) {
+      show('error', `恢复停止：${(e as Error).message}`)
+    } finally {
+      setFolderBusy(false)
+    }
+  }
+
+  const handleSyncProjectChanges = async () => {
+    if (!folderHandle || !memoryReport) return
+    setFolderBusy(true)
+    try {
+      show('loading', '正在按核对计划写入本地文件...')
+      if (!(await ensureFolderPermission(folderHandle))) {
+        show('error', '未获文件夹写入权限')
+        setFolderNeedsAuth(true)
+        return
+      }
+      await synchronizeProjectChangesToFolderV1({
+        projectId: project.id!,
+        root: folderHandle,
+        expectedPlanHash: memoryReport.plan.planHash,
+      })
+      const next = await buildWorkspaceSelfCheckReportV1(project.id!, folderHandle)
+      setMemoryReport(next)
+      show('success', '项目改动已写入本地文件，并完成回读核对')
+    } catch (e) {
+      show('error', `同步停止：${(e as Error).message}`)
+    } finally {
+      setFolderBusy(false)
+    }
+  }
+
   const handleUnbindFolder = async () => {
-    await clearFolderHandle(projFolderKey(project.id!))
+    await clearProjectFolderHandle(project)
     setFolderHandle(null); setFolderName(''); setFolderNeedsAuth(false)
   }
 
@@ -262,22 +484,43 @@ function ExportTab({ project, onImported }: Props) {
       {/* 本地文件夹 */}
       <SectionCard
         icon={<FolderOpen className="w-5 h-5 text-orange-400" />}
-        title="本地文件夹自动备份"
-        desc="绑定后，进入本项目会自动把完整数据写入该文件夹（打开时 + 每 5 分钟）。绑定跨刷新/更新保留；换设备或数据重置后，可在首页「从本地文件夹恢复」。"
+        title="本地记忆工作区"
+        desc="绑定只记住文件夹，不会自动写入。你可以先核对项目与本地文件，再确认同步；完整 JSON 恢复快照仍是独立的手动操作。"
         badge={!isFSASupported() ? '仅 Chrome/Edge 支持' : undefined}
       >
+        <div className="flex items-center justify-between gap-3 rounded bg-bg-base px-3 py-2 text-xs">
+          <span className="text-text-muted">
+            {memoryEnabled ? '记忆工作区已启用；所有读取与写入仍需你手动触发。' : '记忆工作区已停用；现有目录不会被读取或改写。'}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !memoryEnabled
+              setMemoryEngineeringRuntimeEnabledV1(next)
+              setMemoryEnabled(next)
+              if (!next) {
+                setMemoryReport(null)
+                setMemoryCandidates(null)
+                setMemoryImpactPlan(null)
+              }
+            }}
+            className="shrink-0 rounded border border-border px-2 py-1 text-text-secondary hover:border-accent hover:text-accent"
+          >
+            {memoryEnabled ? '停用' : '重新启用'}
+          </button>
+        </div>
         {folderHandle ? (
           <div className="space-y-2">
             {folderNeedsAuth ? (
               <div className="flex items-center gap-2 text-sm text-amber-400 bg-amber-500/10 px-3 py-2 rounded-lg">
                 <ShieldAlert className="w-4 h-4 shrink-0" />
-                <span className="flex-1 truncate">已绑定「{folderName}」，但浏览器需重新授权才能自动写入</span>
+                <span className="flex-1 truncate">已绑定「{folderName}」，保存前需要重新授权</span>
                 <button onClick={handleUnbindFolder} className="text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-green-400 bg-green-500/10 px-3 py-2 rounded-lg">
                 <FolderOpen className="w-4 h-4 shrink-0" />
-                <span className="flex-1 truncate">已绑定：{folderName}（自动写入已生效）</span>
+                <span className="flex-1 truncate">已绑定：{folderName}（不会自动写入）</span>
                 <button onClick={handleUnbindFolder} className="text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
               </div>
             )}
@@ -288,17 +531,79 @@ function ExportTab({ project, onImported }: Props) {
                   重新授权
                 </ActionButton>
               )}
-              <ActionButton onClick={handleSaveToFolder} disabled={folderBusy || status === 'loading'} variant={folderNeedsAuth ? 'default' : 'orange'}>
+              {memoryEnabled && (
+                <ActionButton onClick={handleCheckMemoryWorkspace} disabled={folderBusy || status === 'loading'} variant="orange">
+                  {folderBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitCompareArrows className="w-4 h-4" />}
+                  检查记忆与本地文件
+                </ActionButton>
+              )}
+              {memoryReport && memoryReport.summary.fileChanged + memoryReport.summary.conflict
+                + memoryReport.summary.extra + memoryReport.summary.invalid === 0
+                && memoryReport.summary.projectChanged + memoryReport.summary.missing + memoryReport.summary.sameChange > 0 && (
+                <ActionButton onClick={handleSyncProjectChanges} disabled={folderBusy || status === 'loading'} variant="orange">
+                  <RefreshCw className="w-4 h-4" /> 确认写入项目改动
+                </ActionButton>
+              )}
+              {memoryReport && memoryReport.summary.fileChanged + memoryReport.summary.conflict > 0
+                && memoryReport.summary.extra + memoryReport.summary.invalid === 0 && (
+                <ActionButton onClick={handleAdoptFileChanges} disabled={folderBusy || status === 'loading'} variant="orange">
+                  <Upload className="w-4 h-4" />
+                  {memoryReport.summary.conflict > 0 ? '以本地文件解决并采纳' : '确认采纳本地改动'}
+                </ActionButton>
+              )}
+              {memoryReport && memoryReport.summary.conflict > 0 && memoryReport.summary.fileChanged === 0
+                && memoryReport.summary.extra + memoryReport.summary.invalid === 0 && (
+                <ActionButton onClick={handleResolveConflictsUsingProject} disabled={folderBusy || status === 'loading'} variant="default">
+                  <Download className="w-4 h-4" /> 以项目内容解决冲突
+                </ActionButton>
+              )}
+              {memoryReport && memoryReport.summary.missing > 0
+                && memoryReport.plan.items.filter(item => item.changeKind === 'file-missing')
+                  .every(item => item.identity.documentKind === 'chapter')
+                && memoryReport.summary.fileChanged + memoryReport.summary.conflict
+                  + memoryReport.summary.extra + memoryReport.summary.invalid === 0 && (
+                <ActionButton onClick={handleConfirmMissingChapterDeletion} disabled={folderBusy || status === 'loading'} variant="default">
+                  <Trash2 className="w-4 h-4" /> 确认删除缺失章节
+                </ActionButton>
+              )}
+              {memoryEnabled && (
+                <ActionButton onClick={handleRestoreWorkspace} disabled={folderBusy || status === 'loading'} variant="default">
+                  <RotateCcw className="w-4 h-4" /> 从工作区恢复浏览器数据
+                </ActionButton>
+              )}
+              <ActionButton onClick={handleSaveToFolder} disabled={folderBusy || status === 'loading'} variant="default">
                 {folderBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                {folderBusy ? '写入中...' : '立即保存'}
+                {folderBusy ? '写入中...' : '保存完整 JSON 快照'}
               </ActionButton>
             </div>
+            {memoryEnabled && memoryReport && <MemorySelfCheckSummary
+              report={memoryReport}
+              candidates={memoryCandidates}
+              impactPlan={memoryImpactPlan}
+            />}
           </div>
         ) : (
           <ActionButton onClick={handleBindFolder} disabled={!isFSASupported() || folderBusy || status === 'loading'} variant="orange">
             {folderBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderOpen className="w-4 h-4" />} 选择本地文件夹
           </ActionButton>
         )}
+        <div className="flex gap-2 flex-wrap border-t border-border/60 pt-3">
+          {memoryEnabled && <>
+            <ActionButton onClick={handleExportWorkspacePackage} disabled={status === 'loading'} variant="default">
+              <Download className="w-4 h-4" /> 导出工作区包
+            </ActionButton>
+            <ActionButton onClick={() => workspacePackageInputRef.current?.click()} disabled={status === 'loading'} variant="default">
+              <Upload className="w-4 h-4" /> 导入工作区包
+            </ActionButton>
+          </>}
+          <input
+            ref={workspacePackageInputRef}
+            type="file"
+            accept=".json,.storyforge.json"
+            onChange={handleWorkspacePackageSelected}
+            className="hidden"
+          />
+        </div>
       </SectionCard>
 
       <SectionCard
@@ -310,6 +615,49 @@ function ExportTab({ project, onImported }: Props) {
           <Download className="w-4 h-4" /> 下载诊断信息
         </ActionButton>
       </SectionCard>
+    </div>
+  )
+}
+
+function MemorySelfCheckSummary({
+  report,
+  candidates,
+  impactPlan,
+}: {
+  report: WorkspaceSelfCheckReportV1
+  candidates: WorkspaceFileCandidateSetV1 | null
+  impactPlan: WorkspaceImpactPlanV1 | null
+}) {
+  const { summary } = report
+  const blocked = summary.fileChanged + summary.conflict + summary.extra + summary.invalid
+  return (
+    <div className={`rounded-lg border px-3 py-2 text-xs ${blocked > 0
+      ? 'border-amber-500/30 bg-amber-500/5 text-amber-200'
+      : 'border-teal-500/30 bg-teal-500/5 text-text-secondary'}`}>
+      <div className="font-medium">
+        {blocked > 0 ? '已保护本地改动，尚未写入任何文件' : '三方核对完成'}
+      </div>
+      <p className="mt-1 text-text-muted">
+        已一致 {summary.clean} · 项目内改动 {summary.projectChanged} · 本地改动 {summary.fileChanged}
+        {' '}· 双方冲突 {summary.conflict} · 缺失 {summary.missing} · 异常 {summary.extra + summary.invalid}
+      </p>
+      {blocked > 0 && <p className="mt-1">本地改动、冲突或损坏项不会被“同步项目改动”覆盖。</p>}
+      {candidates && candidates.candidates.length > 0 && (
+        <div className="mt-2 space-y-1 border-t border-border/60 pt-2">
+          <p className="font-medium">待确认的本地候选（未写入项目）</p>
+          {candidates.candidates.map(candidate => (
+            <p key={candidate.candidateId} className="text-text-muted">
+              {candidate.relativePath} · {candidate.changedFields.join('、')}
+            </p>
+          ))}
+        </div>
+      )}
+      {impactPlan && (
+        <p className="mt-2 text-text-muted">
+          影响计划：可确定重建 {impactPlan.counts.deterministic} · 需人工复核 {impactPlan.counts.manualReview}
+          {' '}· 可选生成候选 {impactPlan.counts.generativeCandidate}（本次检查零模型调用）
+        </p>
+      )}
     </div>
   )
 }

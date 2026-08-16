@@ -44,6 +44,10 @@ import { readHistoryAgentBaselineContextV1 } from '../history/agent-baseline'
 import { readReferenceDerivedBaselineContextV1 } from '../reference-analysis/derived-agent-baseline'
 import { buildEditImpactGraphV1 } from '../consistency/impact-analysis'
 import {
+  buildLongTermConsistencyDossierV1,
+  formatLongTermConsistencyDossierV1,
+} from '../memory/consistency-dossier'
+import {
   readCultivationProgressContext,
   readCultivationProgressExtractionBaselineContextV1,
 } from '../cultivation/progress'
@@ -1174,6 +1178,26 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresChapterId: true,
     acceptsOutlineNodeAsChapterBoundary: true,
     read: input => readConsistencyReport(input.projectId, input.chapterId, input.scope),
+  },
+  {
+    // MEMORY-9: authoritative rows are read exactly; local keyword evidence is
+    // supplementary. Embeddings are deliberately disabled in this product.
+    key: 'consistencyDossier',
+    label: '长期一致性档案',
+    scope: 'chapter',
+    layer: 'L1',
+    budgetTokens: 6_000,
+    protectedFromTrim: true,
+    ownerFrom: 'work',
+    requiresChapterId: true,
+    read: async input => formatLongTermConsistencyDossierV1(
+      await buildLongTermConsistencyDossierV1({
+        scope: input.scope!,
+        boundaryChapterId: input.chapterId!,
+        query: input.stateReferenceText,
+        maxTokens: 5_500,
+      }),
+    ),
   },
   {
     key: 'detailedOutline',

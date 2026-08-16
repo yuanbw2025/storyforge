@@ -15,7 +15,6 @@ import { useEmotionBeatStore } from '../stores/emotion-beat'
 import { useWorldRulesStore } from '../stores/world-rules'
 import { useAutoBackup } from '../hooks/useAutoBackup'
 import { useGistAutoBackup } from '../hooks/useGistAutoBackup'
-import { useFolderAutoBackup } from '../hooks/useFolderAutoBackup'
 import { MessageSquare, PanelRight } from 'lucide-react'
 import Sidebar, { type SidebarModule } from '../components/layout/Sidebar'
 import ContentTypeBadge from '../components/layout/ContentTypeBadge'
@@ -124,9 +123,6 @@ export default function WorkspacePage() {
   useAutoBackup(project?.id ?? null)
   // 云自动备份（开关开启时每 10 分钟推 GitHub Gist）
   useGistAutoBackup(project?.id ?? null)
-  // 本地文件夹自动备份（绑过文件夹且授权有效时，进入即写 + 每 5 分钟写 JSON 落盘）
-  useFolderAutoBackup(project?.id ?? null)
-
   // 加载项目 + 所有关联数据
   useEffect(() => {
     if (initialSidebarModule) setActiveModule(initialSidebarModule)

@@ -11,6 +11,10 @@ import type { PreparedContinuityContext } from '../ai/chapter-memory/continuity-
 import type { InspirationResultMode } from '../types/inspiration-workspace'
 import type { RagSelectionTraceCollector } from '../types/rag-library'
 import type { WorkspaceScope } from '../types/world-ownership'
+import type {
+  WorkspaceDocumentCodecV1,
+  WorkspaceDocumentEditPolicyV1,
+} from '../types/memory-engineering'
 
 /**
  * 表的归属方式 —— 决定删项目时如何定位该表的记录。
@@ -59,6 +63,39 @@ export interface DomainOwnershipSpec {
   allowed: readonly DomainOwnerKind[]
   legacyDefault: DomainOwnerKind
   locator: DomainOwnerLocator
+}
+
+export type WorkspaceProjectionClassificationV1 =
+  | 'editable'
+  | 'evidence'
+  | 'derived-none'
+  | 'not-applicable'
+
+export interface WorkspaceMemoryClassificationV1 {
+  version: 1
+  classification: WorkspaceProjectionClassificationV1
+  mirrorPolicy: 'editable-document' | 'recovery-evidence' | 'rebuild-or-local-only' | 'excluded-global'
+  reason: string
+}
+
+/**
+ * MEMORY-2 disk projection metadata. It extends PROJECT_TABLES instead of
+ * introducing a fourth domain registry. Mapper ids resolve to pure codecs.
+ */
+export interface WorkspaceProjectionSpecV1 {
+  version: 1
+  classification: WorkspaceProjectionClassificationV1
+  documentKind: string
+  mapper: 'workspace-root-v1' | 'world-root-v1' | 'work-root-v1' | 'chapter-markdown-v1'
+  codec: WorkspaceDocumentCodecV1
+  editPolicy: WorkspaceDocumentEditPolicyV1
+  scopeOwner: 'workspace' | 'world' | 'work'
+  dependencyEmitter:
+    | 'workspace-root-impact-v1'
+    | 'world-root-impact-v1'
+    | 'work-root-impact-v1'
+    | 'chapter-impact-v1'
+  schemaVersion: 1
 }
 
 /** 简单外键引用(table[field] 形式) */
@@ -206,6 +243,10 @@ export interface TableSpec<T = any> {
   worldDomains?: readonly WorldDomainArea[]
   /** WORLD-2C 逻辑归属；物理删除/导出根仍由 owner 表达。 */
   domainOwner?: DomainOwnershipSpec
+  /** MEMORY-2 人工可编辑工作区投影；未登记即禁止落盘。 */
+  workspaceProjection?: WorkspaceProjectionSpecV1
+  /** MEMORY-10: every table receives one registry-derived disk-memory policy. */
+  memoryClassification: WorkspaceMemoryClassificationV1
   /** 树形(parentId 字段名) */
   tree?: { parentField: string }
   /** 外键/引用关系(删除级联用) */
@@ -326,6 +367,11 @@ export interface AdoptInput {
     /** HARNESS-66: exact CAS for one FIELD_REGISTRY-governed record field. */
     kind: 'record-field-value-hash'
     field: string
+    expectedHash: string
+  } | {
+    /** MEMORY-5: atomic CAS for an author-edited workspace document. */
+    kind: 'record-fields-value-hash'
+    fields: readonly string[]
     expectedHash: string
   }
   target: string

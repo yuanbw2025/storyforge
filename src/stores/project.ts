@@ -11,6 +11,7 @@ import {
 } from '../lib/product/world-identity'
 import { ensureWorkspaceOwnership } from '../lib/world-engine/ownership'
 import { updateProjectAndActiveWork } from '../lib/world-engine/works'
+import { generateWorkspaceUid } from '../lib/memory/identity'
 
 async function ensureWorldIdentity(project: Project): Promise<Project> {
   if (hasShareableWorldIdentity(project)) return project
@@ -78,6 +79,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       ...data,
       genres: data.genres ?? [],
       status: data.status ?? 'drafting',
+      workspaceUid: data.workspaceUid ?? generateWorkspaceUid(),
       worldCode: data.worldCode ?? generateWorldCode(),
       worldVersion: data.worldVersion ?? 1,
       createdAt: now,

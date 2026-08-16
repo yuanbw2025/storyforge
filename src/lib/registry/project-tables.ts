@@ -11,7 +11,7 @@
  * 设计依据:docs/MASTER-BLUEPRINT.md §5.1
  */
 import { db } from '../db/schema'
-import type { DomainOwnershipSpec, TableSpec } from './types'
+import type { DomainOwnershipSpec, TableSpec, WorkspaceMemoryClassificationV1 } from './types'
 
 const WORKSPACE_DOMAIN_OWNER = {
   allowed: ['workspace'], legacyDefault: 'workspace', locator: { kind: 'workspace' },
@@ -31,10 +31,17 @@ const LEGACY_WORLD_OR_WORK_OWNER = {
   },
 } as const satisfies DomainOwnershipSpec
 
-export const PROJECT_TABLES: TableSpec[] = [
+type ProjectTableRegistration = Omit<TableSpec, 'memoryClassification'>
+
+const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   // ───────────────────────── 项目根表 ─────────────────────────
   { table: db.projects, name: 'projects', owner: 'project', exportable: true,
     domainOwner: WORKSPACE_DOMAIN_OWNER,
+    workspaceProjection: {
+      version: 1, classification: 'editable', documentKind: 'workspace', mapper: 'workspace-root-v1',
+      codec: 'json', editPolicy: 'author-editable', scopeOwner: 'workspace',
+      dependencyEmitter: 'workspace-root-impact-v1', schemaVersion: 1,
+    },
     exportRemap: [
       {
         field: 'activeCharacterDrivenPlanId',
@@ -49,6 +56,11 @@ export const PROJECT_TABLES: TableSpec[] = [
   // WORLD-2C C1 added empty roots; C2 now creates/adopts them lazily on workspace entry.
   { table: db.worlds, name: 'worlds', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: WORKSPACE_DOMAIN_OWNER,
+    workspaceProjection: {
+      version: 1, classification: 'editable', documentKind: 'world', mapper: 'world-root-v1',
+      codec: 'yaml', editPolicy: 'author-editable', scopeOwner: 'world',
+      dependencyEmitter: 'world-root-impact-v1', schemaVersion: 1,
+    },
     refs: [
       { kind: 'simple', field: 'id', target: 'works[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldRevisions[worldId]', onDelete: 'cascade' },
@@ -59,6 +71,11 @@ export const PROJECT_TABLES: TableSpec[] = [
 
   { table: db.works, name: 'works', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
+    workspaceProjection: {
+      version: 1, classification: 'editable', documentKind: 'work', mapper: 'work-root-v1',
+      codec: 'yaml', editPolicy: 'author-editable', scopeOwner: 'work',
+      dependencyEmitter: 'work-root-impact-v1', schemaVersion: 1,
+    },
     refs: [
       { kind: 'simple', field: 'id', target: 'workCharacterBindings[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'simulationSessions[workId]', onDelete: 'cascade' },
@@ -85,6 +102,13 @@ export const PROJECT_TABLES: TableSpec[] = [
   { table: db.ownershipMigrations, name: 'ownershipMigrations', owner: 'transient', exportable: false,
     domainOwner: WORKSPACE_DOMAIN_OWNER,
     note: 'WORLD-2C 惰性迁移的紧凑 before-image 和恢复凭证，不保存手稿正文' },
+
+  { table: db.workspaceDocuments, name: 'workspaceDocuments', owner: 'project', exportable: false,
+    domainOwner: WORKSPACE_DOMAIN_OWNER,
+    refs: [
+      { kind: 'simple', field: 'lastSyncRunId', target: 'agentRuns[id]', onDelete: 'setNull' },
+    ],
+    note: 'MEMORY-1 文件文档绑定与三方基线；不复制领域正文，可从正式表与磁盘 manifest 重建' },
 
   { table: db.worldRevisions, name: 'worldRevisions', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
@@ -256,6 +280,11 @@ export const PROJECT_TABLES: TableSpec[] = [
 
   { table: db.chapters, name: 'chapters', owner: 'project', exportable: true,
     domainOwner: LEGACY_WORK_OWNER,
+    workspaceProjection: {
+      version: 1, classification: 'editable', documentKind: 'chapter', mapper: 'chapter-markdown-v1',
+      codec: 'markdown-frontmatter', editPolicy: 'author-editable', scopeOwner: 'work',
+      dependencyEmitter: 'chapter-impact-v1', schemaVersion: 1,
+    },
     selfIdPaths: ['continuityHandoff.chapterId', 'planReconciliation.chapterId'],
     refs: [
       { kind: 'simple', field: 'id', target: 'emotionBeatCards[chapterId]', onDelete: 'cascade' },
@@ -766,6 +795,49 @@ export const PROJECT_TABLES: TableSpec[] = [
     domainOwner: WORKSPACE_DOMAIN_OWNER,
     note: '消耗统计;projectId 可空;体积大不导出' },
 ]
+
+function classifyWorkspaceMemory(spec: ProjectTableRegistration): WorkspaceMemoryClassificationV1 {
+  if (spec.workspaceProjection) {
+    return {
+      version: 1,
+      classification: 'editable',
+      mirrorPolicy: 'editable-document',
+      reason: '已登记严格 codec、稳定 identity、CAS 采纳与依赖影响发射器。',
+    }
+  }
+  if (spec.owner === 'global') {
+    return {
+      version: 1,
+      classification: 'not-applicable',
+      mirrorPolicy: 'excluded-global',
+      reason: '全局本地配置不属于任何项目工作区。',
+    }
+  }
+  if (spec.exportable) {
+    return {
+      version: 1,
+      classification: 'evidence',
+      mirrorPolicy: 'recovery-evidence',
+      reason: '确定内容进入注册表派生 recovery capsule；磁盘副本只读并可完整恢复。',
+    }
+  }
+  return {
+    version: 1,
+    classification: 'derived-none',
+    mirrorPolicy: 'rebuild-or-local-only',
+    reason: '缓存、统计、临时事务或本地句柄不构成可移植项目记忆；由正式来源重建或留在本机。',
+  }
+}
+
+/**
+ * MEMORY-10 keeps classification in PROJECT_TABLES without a parallel table
+ * name list. New registrations cannot reach consumers without receiving one
+ * of the four explicit policies here.
+ */
+export const PROJECT_TABLES: TableSpec[] = PROJECT_TABLE_REGISTRATIONS.map(spec => ({
+  ...spec,
+  memoryClassification: classifyWorkspaceMemory(spec),
+}))
 
 /** 按表名快速查找 */
 export const REGISTRY_BY_NAME: ReadonlyMap<string, TableSpec> = new Map(

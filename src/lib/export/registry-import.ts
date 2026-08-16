@@ -25,6 +25,12 @@ import {
 import { ensureWorkspaceOwnership } from '../world-engine/ownership'
 import { rebindPortableAgentRunContractV1 } from '../agent/run/contract-portability'
 import { finalizeImportedAgentRunLedgersV1 } from '../agent/run/ledger-portability'
+import {
+  generateWorkspaceUid,
+  generateWorkCode,
+  isWorkspaceUid,
+  isWorkCode,
+} from '../memory/identity'
 
 const STRICT_EXPORT_VERSION = 4
 
@@ -214,6 +220,13 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
       // 数据库主键不具备跨项目便携性；旧备份若只有原始 ID，宁可清空也不能误绑定。
       delete projectData[rm.field]
     }
+    const requestedWorkspaceUid = projectData.workspaceUid
+    const workspaceUidCollision = isWorkspaceUid(requestedWorkspaceUid)
+      ? await db.projects.where('workspaceUid').equals(requestedWorkspaceUid).first()
+      : null
+    projectData.workspaceUid = isWorkspaceUid(requestedWorkspaceUid) && !workspaceUidCollision
+      ? requestedWorkspaceUid
+      : generateWorkspaceUid()
     const newProjectId = await db.projects.add({
       ...projectData,
       name: `${data.project.name}（导入）`,
@@ -243,6 +256,7 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
         // 注册表声明的兜底默认值先铺底，再用 row 覆盖：老数据/跨版本导入缺某非可选字段时，
         // 落库仍满足类型不变量（如 outlineNodes.summary 恒为 string，杜绝「导入后大纲崩」）。
         const obj: any = { ...spec.defaults, ...row }
+        if (spec.name === 'works' && !isWorkCode(obj.code)) obj.code = generateWorkCode()
         const exportId = obj._exportId
         delete obj._exportId
 

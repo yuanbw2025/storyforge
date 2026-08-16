@@ -13,7 +13,7 @@ import {
   saveFolderHandle, loadFolderHandle, clearFolderHandle, projFolderKey,
 } from '../../src/lib/storage/folder-handle-store'
 import {
-  writeProjectJSONToFolder, readStoryforgeBackups, backupFilename,
+  writeProjectSnapshotToFolder, readStoryforgeBackups, backupFilename,
 } from '../../src/lib/storage/folder-backup'
 import { importProjectJSON } from '../../src/lib/export/json-export'
 
@@ -76,7 +76,7 @@ describe('R-FOLDER · 本地文件夹持久层', () => {
 
     const dir = makeFakeDir()
     // 写盘:文件名按书名生成
-    const wrote = await writeProjectJSONToFolder(dir as any, pid)
+    const wrote = await writeProjectSnapshotToFolder(dir as any, pid)
     expect(wrote).toBe(true)
     expect(dir._files.has(backupFilename('盘里的书'))).toBe(true)
 
