@@ -77,15 +77,15 @@ async function bootstrap() {
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      <ErrorBoundary>
-        <BrowserRouter basename="/storyforge">
-          <ToastProvider>
-            <DialogProvider>
+      <DialogProvider>
+        <ErrorBoundary>
+          <BrowserRouter basename="/storyforge">
+            <ToastProvider>
               <App />
-            </DialogProvider>
-          </ToastProvider>
-        </BrowserRouter>
-      </ErrorBoundary>
+            </ToastProvider>
+          </BrowserRouter>
+        </ErrorBoundary>
+      </DialogProvider>
     </React.StrictMode>,
   )
 }

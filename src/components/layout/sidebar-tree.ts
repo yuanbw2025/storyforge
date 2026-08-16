@@ -7,6 +7,7 @@ import {
   Map, ClipboardList, GitBranch, Clock, MapPin, Scale,
   Drama, Package, CalendarClock, ScanSearch, Coins, Feather, Database, TrendingUp, Workflow,
   Gamepad2,
+  Replace,
 } from 'lucide-react'
 
 /**
@@ -49,6 +50,7 @@ export type SidebarModule =
   | 'editor'
   | 'foreshadow'
   | 'style-learning'        // FB-5 自适应文风学习
+  | 'global-replace'        // 全局替换
 
   // 作品学习（一级）
   | 'master-studies'
@@ -159,6 +161,7 @@ export const MODULE_CONTENT_TYPES: Record<SidebarModule, ModuleContentType> = {
   editor: 'writing',
   foreshadow: 'upstream',
   'style-learning': 'tool',
+  'global-replace': 'tool',
   'master-studies': 'tool',
   prompts: 'system',
   'version-history': 'system',
@@ -280,6 +283,7 @@ export const NAV_TREE: TreeSection[] = [
       leaf('chapters-list',    '章节',     FilePen),
       leaf('foreshadow',       '伏笔',     Eye),
       leaf('style-learning',   '文风学习', Feather),
+      leaf('global-replace',   '全局替换', Replace),
       leaf('locations',        '重要地点', MapPin),
       leaf('state-table',      '状态表',   ClipboardList),
       leaf('inventory',        '物品栏',   Package),

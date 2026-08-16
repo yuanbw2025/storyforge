@@ -894,7 +894,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       },
       {
         "variable": "subplots",
-        "label": "复线",
+        "label": "副线",
         "sourceKeys": [
           "existingVolumeOutlines",
           "storyArcs",

@@ -50,8 +50,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   loadProjects: async () => {
     set({ loading: true })
     const raw = await db.projects.orderBy('updatedAt').reverse().toArray()
+    // 汇总每个项目的字数（从 chapters 表实时计算）
+    const allChapters = await db.chapters.toArray()
+    const wordCountByProject = new Map<number, number>()
+    for (const ch of allChapters) {
+      wordCountByProject.set(
+        ch.projectId,
+        (wordCountByProject.get(ch.projectId) ?? 0) + (ch.wordCount ?? 0),
+      )
+    }
     // 兼容旧数据：确保每条记录都有 genres[] 和 status
-    const projects = await Promise.all(raw.map(rawProject => ensureWorldIdentity(migrateGenre(rawProject))))
+    const projects = await Promise.all(raw.map(async rawProject => {
+      const migrated = migrateGenre(rawProject)
+      migrated.currentWordCount = wordCountByProject.get(rawProject.id!) ?? 0
+      return ensureWorldIdentity(migrated)
+    }))
     set({ projects, loading: false })
   },
 

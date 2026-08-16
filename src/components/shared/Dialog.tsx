@@ -31,7 +31,13 @@ interface DialogState extends DialogOptions {
   resolve: (value: boolean | string | null) => void
 }
 
-const DialogContext = createContext<DialogContextValue | null>(null)
+const noopDialog: DialogContextValue = {
+  alert: async () => {},
+  confirm: async () => false,
+  prompt: async () => null,
+}
+
+const DialogContext = createContext<DialogContextValue>(noopDialog)
 
 function normalizeOptions(options: DialogOptions | string): DialogOptions {
   return typeof options === 'string' ? { title: options } : options
@@ -163,7 +169,5 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useDialog(): DialogContextValue {
-  const ctx = useContext(DialogContext)
-  if (!ctx) throw new Error('useDialog must be used within DialogProvider')
-  return ctx
+  return useContext(DialogContext)
 }

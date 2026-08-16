@@ -65,6 +65,7 @@ const StoryTimelinePanel = lazy(() => import('../components/timeline/StoryTimeli
 const CultivationProgressPanel = lazy(() => import('../components/cultivation/CultivationProgressPanel'))
 const SceneVerifyPanel = lazy(() => import('../components/scene/SceneVerifyPanel'))
 const WorldGroupOverview = lazy(() => import('../components/world-group/WorldGroupOverview'))
+const GlobalReplacePanel = lazy(() => import('../components/tools/GlobalReplacePanel'))
 const ChatCopilotPanel = lazy(() => import('../components/agent/ChatCopilotPanel'))
 import { useLocationStore } from '../stores/location'
 import { useWorldGroupStore } from '../stores/world-group'
@@ -291,6 +292,8 @@ export default function WorkspacePage() {
         return <CultivationProgressPanel project={project} />
       case 'scene-verify':
         return <SceneVerifyPanel project={project} />
+      case 'global-replace':
+        return <GlobalReplacePanel project={project} />
 
       // 作品学习已整合进项目参考 → 深度分析 tab（Phase 20）
       case 'master-studies':

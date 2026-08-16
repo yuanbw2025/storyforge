@@ -21,6 +21,7 @@ import {
   type OutlineGenerationRequest,
   type PreparedGenerationContext,
 } from '../../lib/outline/generation-request'
+import type { GenerationMode, ChunkedGenerationConfig } from '../../lib/outline/generation-modes'
 import type { AssembleContextResult } from '../../lib/registry/types'
 import type { ChatMessage, OutlineNode, Project } from '../../lib/types'
 
@@ -189,7 +190,7 @@ export function useOutlineGenerationController({
     setPromptReviewOpen(false)
   }, [])
 
-  const confirm = useCallback(async () => {
+  const confirm = useCallback(async (mode?: GenerationMode, chunkedConfig?: ChunkedGenerationConfig) => {
     if (!pendingRequest || contextLoading || contextError || preparedNodeResult.error) return
     const operation = encodeGenerationOperation(pendingRequest)
     const contextSnapshot = preparedContext?.operation === operation
@@ -200,7 +201,9 @@ export function useOutlineGenerationController({
       setPromptReviewOpen(true)
       return
     }
-    const request = pendingRequest
+    const request = pendingRequest.kind === 'chapters'
+      ? { ...pendingRequest, mode, chunkedConfig }
+      : pendingRequest
     setPendingRequest(null)
     setPreparedContext(null)
     await execute(request, contextSnapshot, preparedNodeResult.prepared)

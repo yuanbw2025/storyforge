@@ -58,9 +58,18 @@ export async function isPlanReconciliationCurrent(
 ): Promise<boolean> {
   const reconciliation = chapter.planReconciliation
   if (!chapter.id || !reconciliation) return false
+  
+  // 如果正文内容变了，对账就不是当前的
   if (reconciliation.sourceTextHash !== await hashChapterText(chapter.content)) return false
-  if (reconciliation.reviewStatus === 'confirmed-constraint') return true
-  if (reconciliation.reviewStatus === 'applied-outline' || reconciliation.reviewStatus === 'dismissed') return false
+  
+  // 对于已处理的对账（已确认或已应用），只要正文没变就保持为当前
+  if (reconciliation.reviewStatus === 'confirmed-constraint' || 
+      reconciliation.reviewStatus === 'applied-outline' ||
+      reconciliation.reviewStatus === 'dismissed') {
+    return true
+  }
+  
+  // 对于待处理的对账，需要检查计划是否变了
   const plan = await loadChapterPlanSnapshot(projectId, chapter.id)
   return reconciliation.planSourceHash === plan.planSourceHash
 }

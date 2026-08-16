@@ -31,7 +31,7 @@ const FIELDS: FieldDef[] = [
   { key: 'centralConflict', emoji: '⚔️', label: '核心冲突',     description: '主角面对的最大矛盾（外在 + 内在）。',                  dimension: '核心冲突',                    saveKey: 'centralConflict' },
   { key: 'plotPattern',     emoji: '📊', label: '故事模式',     description: '线性 / 莲花地图 / 多线并行 / 蒙太奇 等。',            dimension: '故事模式',                    saveKey: 'plotPattern' },
   { key: 'mainPlot',        emoji: '🛤', label: '故事主线',     description: '核心情节线 — 主角的目标与阻碍。',                      dimension: '故事主线',                    saveKey: 'mainPlot' },
-  { key: 'subPlots',        emoji: '🎼', label: '故事复线',     description: '副线情节（情感线 / 配角线 / 暗线 / 悬念线）。',        dimension: '故事复线',                    saveKey: 'subPlots' },
+  { key: 'subPlots',        emoji: '🎼', label: '故事副线',     description: '副线情节（情感线 / 配角线 / 暗线 / 悬念线）。',        dimension: '故事副线',                    saveKey: 'subPlots' },
 ]
 
 // ── 主面板 ─────────────────────────────────────────────────────

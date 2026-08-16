@@ -88,6 +88,11 @@ export function buildOutlineGenerationPlan(input: {
     const targetVolume = request.kind === 'single-volume'
       ? volumes.find(volume => volume.id === request.volumeId) ?? null
       : null
+    const hasAnyContent = volumes.some(v => v.summary && v.summary.trim().length > 0)
+    const existingVolumesContext = hasAnyContent
+      ? contextPart(assembled, 'existingVolumeOutlines')
+      : ''
+    const effectiveExistingCount = hasAnyContent ? volumes.length : 0
     return {
       status: 'ready',
       category: 'outline.volume',
@@ -102,8 +107,8 @@ export function buildOutlineGenerationPlan(input: {
         contextPart(assembled, 'characters'),
         contextPart(assembled, 'worldRules'),
         {
-          existingVolumesContext: contextPart(assembled, 'existingVolumeOutlines'),
-          existingVolumeCount: volumes.length,
+          existingVolumesContext,
+          existingVolumeCount: effectiveExistingCount,
           targetVolumeTitle: targetVolume?.title,
         },
       ),

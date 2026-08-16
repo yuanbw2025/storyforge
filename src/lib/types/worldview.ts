@@ -80,7 +80,7 @@ export interface StoryCore extends RagDocumentMetadata {
   logline?: string             // 一句话故事
   concept?: string             // 故事概念
   mainPlot?: string            // 故事主线（替代 storyLines 的语义）
-  subPlots?: string            // 故事复线
+  subPlots?: string            // 故事副线
   createdAt: number
   updatedAt: number
 }

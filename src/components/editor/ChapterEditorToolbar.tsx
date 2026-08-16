@@ -1,4 +1,4 @@
-import { BookOpenCheck, ClipboardList, Loader2, ShieldCheck, StickyNote } from 'lucide-react'
+import { BookOpenCheck, ClipboardList, Loader2, ShieldCheck, StickyNote, Search } from 'lucide-react'
 import { CInput } from '../shared/CompositionInput'
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
   showReviewPanel: boolean
   consistencyAlertCount: number
   showNotePanel: boolean
+  showSettingsLookup: boolean
   customInstruction: string
   onGenerate: () => void
   onContinue: () => void
@@ -25,6 +26,7 @@ interface Props {
   onToggleOutlinePreview: () => void
   onToggleReviewPanel: () => void
   onToggleNotePanel: () => void
+  onToggleSettingsLookup: () => void
   onCustomInstructionChange: (value: string) => void
 }
 
@@ -40,6 +42,7 @@ export default function ChapterEditorToolbar({
   showReviewPanel,
   consistencyAlertCount,
   showNotePanel,
+  showSettingsLookup,
   customInstruction,
   onGenerate,
   onContinue,
@@ -52,6 +55,7 @@ export default function ChapterEditorToolbar({
   onToggleOutlinePreview,
   onToggleReviewPanel,
   onToggleNotePanel,
+  onToggleSettingsLookup,
   onCustomInstructionChange,
 }: Props) {
   return (
@@ -136,6 +140,17 @@ export default function ChapterEditorToolbar({
         }`}>
         <StickyNote className="w-3 h-3" />
         便签
+      </button>
+      <button onClick={onToggleSettingsLookup}
+        title="设定查询"
+        aria-pressed={showSettingsLookup}
+        className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md transition-colors ${
+          showSettingsLookup
+            ? 'bg-purple-500/10 text-purple-400'
+            : 'bg-bg-elevated text-text-secondary hover:text-text-primary'
+        }`}>
+        <Search className="w-3 h-3" />
+        设定查询
       </button>
       <CInput value={customInstruction} onChange={event => onCustomInstructionChange(event.target.value)}
         placeholder="自定义指令..."

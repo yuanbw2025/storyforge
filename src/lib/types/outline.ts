@@ -83,11 +83,16 @@ export interface ChapterPlanReconciliation {
   deviations: ChapterPlanReconciliationItem[]
   newConstraints: ChapterPlanReconciliationItem[]
   nextChapterImpacts: ChapterPlanReconciliationItem[]
+  // 跨章节对账 - 检测与后续章节计划的冲突
+  foreshadowingRevealed?: ChapterPlanReconciliationItem[]  // 伏笔提前暴露
+  delayedPlot?: ChapterPlanReconciliationItem[]           // 情节推迟
   proposedOutlineSummary?: string
   reviewStatus: 'pending' | 'confirmed-constraint' | 'applied-outline' | 'dismissed'
   confirmedActualProgress?: string
   reviewedAt?: number
   generatedAt: number
+  // 用户的对账操作记录
+  actions?: Record<string, { action: string; indices: number[] }>
 }
 
 /** 章节 */

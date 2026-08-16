@@ -10,7 +10,7 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildEmotionBeatPrompt, parseEmotionBeats } from '../../lib/ai/adapters/emotion-beat-adapter'
 import type { EmotionBeat } from '../../lib/types'
-import { useDialog } from '../shared/Dialog'
+import { DialogProvider, useDialog } from '../shared/Dialog'
 
 interface Props {
   projectId: number
@@ -41,7 +41,7 @@ function getToneColor(tone: string): string {
   return 'bg-bg-elevated text-text-muted'
 }
 
-export default function EmotionBeatCard({
+function EmotionBeatCardContent({
   projectId, chapterId, chapterTitle, chapterSummary,
   worldContext, characterContext, prevChapterEnding,
 }: Props) {
@@ -292,5 +292,13 @@ export default function EmotionBeatCard({
         </div>
       )}
     </div>
+  )
+}
+
+export default function EmotionBeatCard(props: Props) {
+  return (
+    <DialogProvider>
+      <EmotionBeatCardContent {...props} />
+    </DialogProvider>
   )
 }

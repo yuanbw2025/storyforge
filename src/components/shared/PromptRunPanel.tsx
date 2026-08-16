@@ -4,7 +4,7 @@ import { usePromptStore } from '../../stores/prompt'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { getModelPreset } from '../../lib/ai/context-budget'
 import type { PromptModuleKey, PromptParameter, PromptTemplate } from '../../lib/types/prompt'
-import { useDialog } from './Dialog'
+import { DialogProvider, useDialog } from './Dialog'
 import { useToast } from './Toast'
 
 interface Props {
@@ -32,7 +32,7 @@ interface Props {
  * 用法：父组件管理 parameterValues/systemOverride/userOverride 状态，
  * 调 AI 时把它们一起传给 renderPrompt 的 options。
  */
-export default function PromptRunPanel({
+function PromptRunPanelContent({
   moduleKey, parameterValues, onParamChange,
   systemOverride, onSystemOverrideChange,
   userOverride, onUserOverrideChange,
@@ -206,6 +206,14 @@ export default function PromptRunPanel({
   )
 }
 
+export default function PromptRunPanel(props: Props) {
+  return (
+    <DialogProvider>
+      <PromptRunPanelContent {...props} />
+    </DialogProvider>
+  )
+}
+
 // ── 单个参数的 UI 控件 ─────────────────────────────────────────────────
 
 function ParamControl({
@@ -216,7 +224,10 @@ function ParamControl({
   onChange: (v: unknown) => void
 }) {
   const aiConfig = useAIConfigStore(s => s.config)
-  const enabled = !param.optional || (value !== undefined && value !== '')
+  // Optional params with defaults are auto-enabled on first load (value === undefined)
+  // Empty string '' means explicitly disabled by the user
+  const isAutoEnabled = param.optional && value === undefined && param.default !== undefined
+  const enabled = !param.optional || isAutoEnabled || (value !== undefined && value !== '')
   // 显示用值（用户值或默认值）
   const shown = value !== undefined && value !== '' ? value : param.default
 
@@ -234,7 +245,7 @@ function ParamControl({
           checked={enabled}
           onChange={e => onChange(e.target.checked ? param.default : '')}
           className="accent-accent flex-shrink-0"
-          title="启用本参数"
+          title={enabled ? '点击禁用' : '点击启用（使用默认值）'}
         />
       )}
       <label className={`w-20 flex-shrink-0 ${enabled ? 'text-text-secondary' : 'text-text-muted line-through'}`}>

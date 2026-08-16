@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Plus, Sparkles, Trash2, Search, RefreshCw } from 'lucide-react'
 import type { OutlineNode, StoryStructure, WorldGroup } from '../../lib/types'
 import AutoResizeTextarea from '../shared/AutoResizeTextarea'
 import { CInput } from '../shared/CompositionInput'
@@ -30,6 +30,8 @@ interface Props {
   onOpenChapter?: (chapterId: number) => void
   onReorderNodes: (orderedIds: number[]) => void
   onMoveChapter: (chapterId: number, targetParentId: number, index: number) => Promise<void>
+  onReviewChapters: () => void
+  onClearChapters: () => void
 }
 
 export default function OutlineVolumeDetail({
@@ -54,6 +56,8 @@ export default function OutlineVolumeDetail({
   onOpenChapter,
   onReorderNodes,
   onMoveChapter,
+  onReviewChapters,
+  onClearChapters,
 }: Props) {
   const storyBlocks = useMemo(() => (
     volume
@@ -106,6 +110,14 @@ export default function OutlineVolumeDetail({
             <Sparkles className="w-3.5 h-3.5" /> 生成本卷所有章节
           </button>
           <button
+            onClick={onClearChapters}
+            disabled={aiStreaming}
+            title="清空当前卷的所有章节"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-warning/10 text-warning rounded-md hover:bg-warning/20 border border-warning/30 disabled:opacity-50 transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> 清空章节
+          </button>
+          <button
             onClick={() => onAddChapter()}
             className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-bg-elevated text-text-secondary rounded-md hover:text-text-primary border border-border transition-colors"
           >
@@ -151,7 +163,19 @@ export default function OutlineVolumeDetail({
             {hasBlocks ? '故事结构' : '章节列表'}
             <span className="text-text-muted font-normal ml-1">（{directChapters.length + blockChapterCount} 章）</span>
           </h3>
-          {!hasBlocks && <OutlineStructureMenu onSelect={onAddStructure} />}
+          <div className="flex items-center gap-2">
+            {!hasBlocks && directChapters.length > 0 && (
+              <button
+                onClick={onReviewChapters}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] text-accent border border-accent/30 rounded hover:bg-accent/10 transition-colors"
+                title="让 AI 审校全卷章纲，检查逻辑一致性和设定合理性"
+              >
+                <Search className="w-3 h-3" />
+                AI 审校
+              </button>
+            )}
+            {!hasBlocks && <OutlineStructureMenu onSelect={onAddStructure} />}
+          </div>
         </div>
 
         {hasBlocks && (
