@@ -61,6 +61,11 @@ export interface CreativeReliabilityEvalGenerationV1 {
   calls: CreativeReliabilityEvalCallV1[]
   usage: CreativeReliabilityEvalUsageV1
   issueCodes: string[]
+  /**
+   * Present on newly generated records. Older v1 checkpoints did not export
+   * the production artifact's repair targets, so absence remains readable.
+   */
+  repairTargetIssueCodes?: string[]
 }
 
 export interface CreativeReliabilityEvalVerificationV1 {

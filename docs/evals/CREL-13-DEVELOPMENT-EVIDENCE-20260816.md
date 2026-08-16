@@ -78,6 +78,8 @@ CREL 的 p95 生成延迟为 39.5 秒，旧直连为 43.4 秒；延迟没有回�
 3. 新 Prompt 身份提升为 `story-arc-copilot-v5` / `outline.story-arcs-v5`；H86 `v4` 历史证据保持冻结。
 4. verifier 复用单一 JSON 围栏的无损归一化，输出上限从 2,000 调整为 3,000；若仍截断，逐调用证据
    明确记录 `finish_reason_length`，不伪造评分成功，也不自动追加验证调用。
+5. 新 checkpoint 逐产物导出 `repairTargetIssueCodes`：只要发生第二次生成调用，就必须保留首次调用触发
+   修复的稳定错误码；旧 v1 checkpoint 继续可读，但不能再让“已修复”抹掉为什么花费第二次调用。
 
 本地修正已经通过 3 个相关回归文件 27 项、完整 `npm run ci`、生产构建与 bundle budget，以及
 隔离 Chromium E2E 52/52。新的 development 复测属于新的最多 30 次外部调用，必须获得独立费用授权；

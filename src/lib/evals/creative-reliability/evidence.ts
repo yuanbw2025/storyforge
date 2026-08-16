@@ -191,6 +191,23 @@ async function validateCase(
     if (new Set(generation.issueCodes).size !== generation.issueCodes.length) {
       throw new Error('generation issueCodes 重复')
     }
+    const repairTargetIssueCodes = generation.repairTargetIssueCodes
+    if (repairTargetIssueCodes != null) {
+      if (
+        !Array.isArray(repairTargetIssueCodes)
+        || repairTargetIssueCodes.some(code => typeof code !== 'string' || !code.trim())
+        || new Set(repairTargetIssueCodes).size !== repairTargetIssueCodes.length
+      ) throw new Error('generation repairTargetIssueCodes 无效')
+      if (variant === 'legacy-direct' && repairTargetIssueCodes.length) {
+        throw new Error('旧直连基线不得伪造修复目标')
+      }
+      if (generation.calls.length === 1 && repairTargetIssueCodes.length) {
+        throw new Error('单次产物不得伪造修复目标')
+      }
+      if (generation.calls.length === 2 && !repairTargetIssueCodes.length) {
+        throw new Error('第二次产物调用缺少修复目标证据')
+      }
+    }
     assertFinite(generation.usage.inputTokens, 'generation inputTokens')
     assertFinite(generation.usage.outputTokens, 'generation outputTokens')
     assertFinite(generation.usage.latencyMs, 'generation latencyMs')

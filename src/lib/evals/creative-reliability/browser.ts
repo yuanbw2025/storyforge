@@ -338,6 +338,7 @@ async function legacyGeneration(input: {
       calls,
       usage: aggregateUsage(calls),
       issueCodes: [error.call.failureCode ?? 'legacy_provider_failed'],
+      repairTargetIssueCodes: [],
     }
   }
   try {
@@ -354,6 +355,7 @@ async function legacyGeneration(input: {
       calls,
       usage: aggregateUsage(calls),
       issueCodes: response.call.usage ? [] : ['provider-usage-missing'],
+      repairTargetIssueCodes: [],
     }
   } catch {
     const calls = [response.call]
@@ -368,6 +370,7 @@ async function legacyGeneration(input: {
       calls,
       usage: aggregateUsage(calls),
       issueCodes: ['legacy-parse-failed'],
+      repairTargetIssueCodes: [],
     }
   }
 }
@@ -449,6 +452,7 @@ async function creativeGeneration(input: {
       calls,
       usage: aggregateUsage(calls),
       issueCodes: [...new Set(result.artifact.issues.map(issue => issue.code))],
+      repairTargetIssueCodes: result.artifact.repair?.targetIssueCodes ?? [],
     }
   } catch (error) {
     if (
@@ -468,6 +472,7 @@ async function creativeGeneration(input: {
       calls,
       usage: aggregateUsage(calls),
       issueCodes: [providerFailed ? 'provider-error' : 'creative-run-failed'],
+      repairTargetIssueCodes: [],
     }
   }
 }

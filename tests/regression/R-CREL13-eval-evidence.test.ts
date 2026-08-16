@@ -98,6 +98,9 @@ async function generation(
       usageSource: 'provider',
     },
     issueCodes: current && index === 1 ? ['story-progression-weak'] : [],
+    repairTargetIssueCodes: artifactModelCalls === 2
+      ? ['story-arc-invalid-structure']
+      : [],
   }
 }
 
@@ -294,6 +297,31 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
       parameters: { temperature: 0.55, maxOutputTokens: 6_000 },
       cases: invalidCases,
     })).rejects.toThrow('隐藏第三次调用')
+
+    const missingRepairEvidence = await cases(CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1)
+    missingRepairEvidence[1].generations['creative-reliability'].repairTargetIssueCodes = []
+    await expect(createCreativeReliabilityEvalRecordV1({
+      suiteVersion: CREATIVE_RELIABILITY_FIXTURE_SET_VERSION_V1,
+      runId: 'missing-repair-target-evidence',
+      createdAt: 1,
+      codeRevision: 'test',
+      fixtures: CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1,
+      generator,
+      verifier,
+      parameters: { temperature: 0.55, maxOutputTokens: 6_000 },
+      cases: missingRepairEvidence,
+    })).rejects.toThrow('缺少修复目标证据')
+
+    const oldRecord = structuredClone(created)
+    for (const item of oldRecord.cases) {
+      delete item.generations['legacy-direct'].repairTargetIssueCodes
+      delete item.generations['creative-reliability'].repairTargetIssueCodes
+    }
+    oldRecord.recordHash = await hashCanonicalValue((({ recordHash: _hash, ...body }) => body)(oldRecord))
+    expect(await verifyCreativeReliabilityEvalRecordV1(
+      oldRecord,
+      CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1,
+    )).toBe(true)
   })
 
   it('sealed heldout 只允许同一 run 恢复，不允许换 run 重跑', async () => {
@@ -398,6 +426,7 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
               usageSource: 'estimated' as const,
             },
             issueCodes: ['provider-error'],
+            repairTargetIssueCodes: [],
           }
         }
         return await generation(variant, fixtures.indexOf(fixture))

@@ -53,6 +53,7 @@ describe.sequential('R-CREL13 · 浏览器真实调用适配器', { timeout: 30_
       const body = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> }
       const prompt = body.messages.map(message => message.content).join('\n')
       const verifierCall = prompt.includes('中文故事策划评测员')
+      const repairCall = prompt.includes('你是结构修复器')
       const creativeCall = prompt.includes('当前执行 story-arcs Skill')
       let content: string
       if (verifierCall) {
@@ -66,9 +67,14 @@ describe.sequential('R-CREL13 · 浏览器真实调用适配器', { timeout: 30_
           narrativeProgressed: true,
           infodumpOnly: false,
         })
+      } else if (repairCall) {
+        generationCalls += 1
+        content = JSON.stringify({ storyArcs: [storyArc('CREL 修复候选')] })
       } else if (creativeCall) {
         generationCalls += 1
-        content = JSON.stringify({ storyArcs: [storyArc('CREL 候选')] })
+        const invalid = storyArc('CREL 初稿')
+        invalid.stages[0].keyEvents = ['一', '二', '三', '四', '五', '六']
+        content = JSON.stringify({ storyArcs: [invalid] })
       } else {
         generationCalls += 1
         const { type: _type, ...legacy } = storyArc('旧入口候选')
@@ -107,15 +113,24 @@ describe.sequential('R-CREL13 · 浏览器真实调用适配器', { timeout: 30_
     })
 
     expect(legacy).toMatchObject({ status: 'legacy-ready', artifactModelCalls: 1, adoptable: true })
-    expect(current).toMatchObject({ status: 'ready', artifactModelCalls: 1, adoptable: true })
+    expect(current).toMatchObject({
+      status: 'ready',
+      artifactModelCalls: 2,
+      adoptable: true,
+      repairTargetIssueCodes: [
+        'story-arc-item-invalid',
+        'story-arc-invalid-structure',
+      ],
+    })
     expect(current.calls[0]).toMatchObject({ purpose: 'generate', usage: { usageSource: 'provider' } })
+    expect(current.calls[1]).toMatchObject({ purpose: 'repair', usage: { usageSource: 'provider' } })
     expect(verified).toMatchObject({
       status: 'succeeded',
       safetyPassed: true,
       narrativeProgressed: true,
       infodumpOnly: false,
     })
-    expect(generationCalls).toBe(2)
+    expect(generationCalls).toBe(3)
     expect(await db.projects.filter(project => project.name.startsWith('[CREL-EVAL] ')).count()).toBe(0)
     expect(await cleanupStrandedCreativeReliabilityWorkspacesV1()).toBe(0)
   })
