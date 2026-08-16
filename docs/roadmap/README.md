@@ -19,12 +19,13 @@
 [创作可靠性工程开发文档](../AI-CREATIVE-RELIABILITY-DEVELOPMENT-20260816.md)。
 
 `CREL-0～12` 的生产主路径、成本边界和版本化本机回滚开关已经完成；`CREL-14` 的生产可见实验边界、
-费用说明和纯本地结构化反馈入口也已完成。`CREL-13` 第 1 轮真实 development 已完成 30 次调用，
-CREL 可编辑率 100%、语义 86%、推进 100%，但可采纳率 50%、平均 2.0 次生成调用且验证证据不完整，
-因此机器门失败；逐例归因、用量、hash 和本地 checkpoint 位置见
-[CREL-13 第 1 轮真实证据](../evals/CREL-13-DEVELOPMENT-EVIDENCE-20260816.md)。结构误拒与 verifier
-截断已形成 v5 本地修正，当前活动单元是经独立费用授权复测 development；只有复测通过后才可一次性运行
-sealed held-out，随后再完成人工 A/B 盲评。未通过前保持实验性，不宣传“替作者完成 80%”。
+费用说明和纯本地结构化反馈入口也已完成。`CREL-13` 已原样保留两轮真实 development：第一轮暴露
+布尔 `turningPoint`、事件上限和 verifier 截断；v5 第二轮完成 24/24 阶段且 verifier 12/12 成功，
+但 4/6 核心故事仍被损坏的可选卷范围误杀，修复重写还造成语义劣化与 10.57 倍 token/可采纳产物。
+逐例归因、用量、hash 和本地 checkpoint 位置见
+[CREL-13 真实 development 证据](../evals/CREL-13-DEVELOPMENT-EVIDENCE-20260816.md)。v6 已把可选元数据
+从整稿失败中隔离、收紧默认输出密度并保存完整产物证据，正在通过完整 CI/E2E 后执行第三轮；sealed
+held-out 与独立作者 A/B 盲评均未执行。未通过前保持实验性，不宣传“替作者完成 80%”。
 首个冻结质量评测入口仍为 `outline.story-arcs`，不能用其它入口的本地测试代替该 development/held-out 门。
 生产路径审计同时发现并已收口官方领域节点创作链的直接调用旁路：卷/章纲、细纲和正文现在都保存
 `CreativeArtifactV1` 与成本证据，阻断原稿可编辑，采纳后复用已完成上游而不重复付费；该收口不改变

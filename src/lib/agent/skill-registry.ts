@@ -1568,7 +1568,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '主线与支线编排',
     owner: 'outline-agent',
-    promptVersion: 'story-arc-copilot-v5',
+    promptVersion: 'story-arc-copilot-v6',
     executionMode: 'story-arcs',
     contextTaskKind: 'agent-outline',
     readToolNames: [],

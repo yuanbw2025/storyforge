@@ -449,20 +449,46 @@ function normalizeStoryArcCreativeItemV1(
   const stages = source.stages.map((stage, stageIndex) => {
     if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return stage
     const normalized = { ...(stage as Record<string, unknown>) }
-    if (typeof normalized.turningPoint !== 'boolean') return normalized
+    if (typeof normalized.turningPoint === 'boolean') {
+      const booleanValue = normalized.turningPoint
+      delete normalized.turningPoint
+      issues.push(creativeIssue({
+        code: 'story-arc-turning-point-normalized',
+        path: `$.storyArcs[${arcIndex}].stages[${stageIndex}].turningPoint`,
+        message: booleanValue
+          ? '模型把 turningPoint 写成布尔值；为避免猜测创作语义，已忽略该可选标记并保留阶段正文与关键事件。'
+          : '模型把 turningPoint 写成 false；已按未提供可选转折描述处理。',
+        severity: 'warning',
+        disposition: 'advisory',
+        action: 'none',
+      }))
+    }
 
-    const booleanValue = normalized.turningPoint
-    delete normalized.turningPoint
-    issues.push(creativeIssue({
-      code: 'story-arc-turning-point-normalized',
-      path: `$.storyArcs[${arcIndex}].stages[${stageIndex}].turningPoint`,
-      message: booleanValue
-        ? '模型把 turningPoint 写成布尔值；为避免猜测创作语义，已忽略该可选标记并保留阶段正文与关键事件。'
-        : '模型把 turningPoint 写成 false；已按未提供可选转折描述处理。',
-      severity: 'warning',
-      disposition: 'advisory',
-      action: 'none',
-    }))
+    const hasStartVolume = Object.prototype.hasOwnProperty.call(normalized, 'startVolume')
+    const hasEndVolume = Object.prototype.hasOwnProperty.call(normalized, 'endVolume')
+    const startVolume = normalized.startVolume
+    const endVolume = normalized.endVolume
+    const validRange = hasStartVolume
+      && hasEndVolume
+      && Number.isInteger(startVolume)
+      && Number.isInteger(endVolume)
+      && Number(startVolume) >= 1
+      && Number(startVolume) <= 10_000
+      && Number(endVolume) >= 1
+      && Number(endVolume) <= 10_000
+      && Number(startVolume) <= Number(endVolume)
+    if ((hasStartVolume || hasEndVolume) && !validRange) {
+      delete normalized.startVolume
+      delete normalized.endVolume
+      issues.push(creativeIssue({
+        code: 'story-arc-volume-range-normalized',
+        path: `$.storyArcs[${arcIndex}].stages[${stageIndex}]`,
+        message: '模型提供了不完整或无效的可选卷范围；已同时忽略 startVolume/endVolume，并保留阶段正文与关键事件。',
+        severity: 'warning',
+        disposition: 'advisory',
+        action: 'remove',
+      }))
+    }
     return normalized
   })
   return { value: { ...source, stages }, issues }
@@ -1036,13 +1062,13 @@ function buildStoryArcMessages(input: StoryArcCopilotInput): ChatMessage[] {
 
 硬性要求：
 1. ${kindInstruction}
-2. 每条故事线必须有 3-7 个因果递进阶段；每阶段包含标题、描述和 1-${MAX_KEY_EVENTS} 个关键事件。
+2. 默认生成紧凑但完整的 3-5 个因果递进阶段；每阶段包含标题、一到两句描述和 1-3 个关键事件，每个事件用一句话表达。不要为了填满上限重复、拆碎或扩写同一事件。
 3. 每条故事线顶层只能有 name/type/description/stages 四个字段。turningPoint、startVolume、endVolume 只能放在 stages 数组内的阶段对象上，绝不能放在故事线顶层；只有确有卷级依据时才同时填写 startVolume/endVolume，均为从 1 开始的整数。
 4. 已有设定是硬约束；不得改变既定时限、能力、代价、因果或实体身份，也不得为未命名人物擅自命名。设定缺失时只做不与现有事实冲突的候选补全，不声称它已经成为 Canon。
 5. 避免复制已有故事线；支线必须有独立目标，也要说明与主线的因果交汇。
 6. 只输出一个严格 JSON 对象，不输出 Markdown、解释或额外字段。顶层${input.creativeReliabilityEnabled !== false ? '必须有 storyArcs，可选 assumptions' : '只能有 storyArcs'}；最小结构严格使用：
 {"storyArcs":[{"name":"名称","type":"main|sub","description":"整体描述","stages":[{"title":"阶段标题","description":"阶段描述","keyEvents":["事件"]}]}]}
-7. 阶段对象内的 turningPoint、startVolume、endVolume 都是可选字段；turningPoint 如填写必须是描述转折的字符串，绝不能写 true/false；没有明确依据就省略，不要输出占位值。
+7. 阶段对象内的 turningPoint、startVolume、endVolume 都是可选字段；turningPoint 如填写必须是描述转折的字符串，绝不能写 true/false；startVolume/endVolume 只有在两者都有明确卷级依据时才成对填写整数。没有明确依据就省略，不要输出占位值。
 ${input.creativeReliabilityEnabled !== false
   ? '8. 若你为“开放创作空间”补充了会被下游依赖、但正式上下文没有确认的事实，可增加 assumptions 字符串数组，最多 7 项；不要把故事线本身重复抄入 assumptions。'
   : ''}`,

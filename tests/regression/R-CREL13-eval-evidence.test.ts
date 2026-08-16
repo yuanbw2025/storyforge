@@ -20,9 +20,15 @@ import {
   parseCreativeReliabilityVerifierAssessmentV1,
 } from '../../src/lib/evals/creative-reliability/protocol'
 import {
+  archiveCreativeReliabilityEvalCheckpointV1,
+  CREATIVE_RELIABILITY_CHECKPOINT_ARCHIVE_STORAGE_KEY_V1,
+  loadCreativeReliabilityEvalCheckpointArchivesV1,
   runCreativeReliabilityEvalV1,
   verifyCreativeReliabilityEvalCheckpointV1,
 } from '../../src/lib/evals/creative-reliability/runner'
+import type {
+  CreativeArtifactV1,
+} from '../../src/lib/agent/creative-reliability'
 import type {
   CreativeReliabilityEvalCaseV1,
   CreativeReliabilityEvalGenerationV1,
@@ -81,6 +87,55 @@ async function generation(
     }
   }))
   const latencyMs = calls.reduce((sum, call) => sum + call.usage.latencyMs, 0)
+  const issueCodes = current && index === 1 ? ['story-progression-weak'] : []
+  const repairTargetIssueCodes = artifactModelCalls === 2
+    ? ['story-arc-invalid-structure']
+    : []
+  const creativeArtifact: CreativeArtifactV1 | undefined = current ? {
+    version: 1,
+    policyVersion: 'creative-reliability-v1',
+    status: index === 1 ? 'usable-with-warnings' : 'ready',
+    qualityMode: 'balanced',
+    originalText: `${presentedText}:1`,
+    editableText: presentedText,
+    validFragments: [],
+    rejectedFragments: [],
+    issues: issueCodes.map(code => ({
+      version: 1,
+      code,
+      severity: 'warning',
+      disposition: 'advisory',
+      path: '$.storyArcs',
+      message: '测试问题证据',
+      suggestedAction: 'edit',
+      evidenceRefs: [],
+      deterministic: true,
+    })),
+    assumptions: [],
+    canonEvidenceRefs: [],
+    callEvidence: calls.map(call => ({
+      version: 1,
+      callIndex: call.callIndex as 1 | 2,
+      purpose: call.purpose,
+      status: 'succeeded',
+      provider: call.provider,
+      model: call.model,
+      usageSource: call.usage.usageSource,
+      inputTokens: call.usage.inputTokens,
+      outputTokens: call.usage.outputTokens,
+      totalTokens: call.usage.inputTokens + call.usage.outputTokens,
+      latencyMs: call.usage.latencyMs,
+      estimatedCostUsd: call.usage.costUsd,
+      outputHash: call.outputHash,
+    })),
+    repair: artifactModelCalls === 2 ? {
+      version: 1,
+      sourceTextHash: calls[0].outputHash!,
+      targetIssueCodes: repairTargetIssueCodes,
+      callIndex: 2,
+      result: index === 1 ? 'partial' : 'repaired',
+    } : null,
+  } : undefined
   return {
     variant,
     status: current ? index === 1 ? 'usable-with-warnings' : 'ready' : 'legacy-ready',
@@ -97,10 +152,9 @@ async function generation(
       costUsd: null,
       usageSource: 'provider',
     },
-    issueCodes: current && index === 1 ? ['story-progression-weak'] : [],
-    repairTargetIssueCodes: artifactModelCalls === 2
-      ? ['story-arc-invalid-structure']
-      : [],
+    issueCodes,
+    repairTargetIssueCodes,
+    ...(creativeArtifact ? { creativeArtifact } : {}),
   }
 }
 
@@ -275,6 +329,39 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
     expect(imported.recordHash).toBe(reviewed.recordHash)
   })
 
+  it('新 development 运行前无损归档已验签 checkpoint，拒绝归档篡改证据', async () => {
+    const fixtures = CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1
+    const completed = await runCreativeReliabilityEvalV1({
+      suiteVersion: CREATIVE_RELIABILITY_FIXTURE_SET_VERSION_V1,
+      runId: 'crel-development-archive-source',
+      createdAt: 1,
+      codeRevision: 'archive-test',
+      fixtures,
+      generator,
+      verifier,
+      parameters: { temperature: 0.55, maxOutputTokens: 6_000 },
+      dependencies: {
+        generate: async ({ fixture, variant }) => generation(variant, fixtures.indexOf(fixture)),
+        verify: async ({ fixture, variant }) => verification(fixture, variant),
+      },
+    })
+
+    const archives = await archiveCreativeReliabilityEvalCheckpointV1(completed, fixtures)
+    expect(archives).toHaveLength(1)
+    expect(loadCreativeReliabilityEvalCheckpointArchivesV1()[0]).toMatchObject({
+      runId: completed.runId,
+      checkpointHash: completed.checkpointHash,
+    })
+    expect(localStorage.getItem(CREATIVE_RELIABILITY_CHECKPOINT_ARCHIVE_STORAGE_KEY_V1))
+      .toContain(completed.checkpointHash)
+
+    const tampered = structuredClone(completed)
+    tampered.codeRevision = 'tampered'
+    await expect(archiveCreativeReliabilityEvalCheckpointV1(tampered, fixtures))
+      .rejects.toThrow('验签失败')
+    expect(loadCreativeReliabilityEvalCheckpointArchivesV1()).toHaveLength(1)
+  })
+
   it('篡改输出、评分或调用上限都会验签失败或在创建时被拒绝', async () => {
     const created = await record()
     const tampered = structuredClone(created)
@@ -298,6 +385,20 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
       cases: invalidCases,
     })).rejects.toThrow('隐藏第三次调用')
 
+    const inconsistentArtifactCases = await cases(CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1)
+    inconsistentArtifactCases[0].generations['creative-reliability'].creativeArtifact!.originalText = '替换首次响应'
+    await expect(createCreativeReliabilityEvalRecordV1({
+      suiteVersion: CREATIVE_RELIABILITY_FIXTURE_SET_VERSION_V1,
+      runId: 'invalid-artifact-evidence',
+      createdAt: 1,
+      codeRevision: 'test',
+      fixtures: CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1,
+      generator,
+      verifier,
+      parameters: { temperature: 0.55, maxOutputTokens: 6_000 },
+      cases: inconsistentArtifactCases,
+    })).rejects.toThrow('首次原始响应')
+
     const missingRepairEvidence = await cases(CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1)
     missingRepairEvidence[1].generations['creative-reliability'].repairTargetIssueCodes = []
     await expect(createCreativeReliabilityEvalRecordV1({
@@ -316,6 +417,7 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
     for (const item of oldRecord.cases) {
       delete item.generations['legacy-direct'].repairTargetIssueCodes
       delete item.generations['creative-reliability'].repairTargetIssueCodes
+      delete item.generations['creative-reliability'].creativeArtifact
     }
     oldRecord.recordHash = await hashCanonicalValue((({ recordHash: _hash, ...body }) => body)(oldRecord))
     expect(await verifyCreativeReliabilityEvalRecordV1(

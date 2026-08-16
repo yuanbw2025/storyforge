@@ -4,7 +4,7 @@ import type { CreativeReliabilityFixtureV1 } from './fixtures'
 
 export const CREATIVE_RELIABILITY_LEGACY_PROMPT_VERSION_V1 =
   'crel-story-arc-legacy-direct-v1'
-export const CREATIVE_RELIABILITY_GENERATOR_PROMPT_VERSION_V1 = 'outline.story-arcs-v5'
+export const CREATIVE_RELIABILITY_GENERATOR_PROMPT_VERSION_V1 = 'outline.story-arcs-v6'
 export const CREATIVE_RELIABILITY_REPAIR_PROMPT_VERSION_V1 =
   'crel-story-arc-targeted-repair-v1'
 export const CREATIVE_RELIABILITY_VERIFIER_PROMPT_VERSION_V1 =

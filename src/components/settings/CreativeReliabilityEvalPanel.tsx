@@ -18,9 +18,11 @@ import {
 } from '../../lib/evals/creative-reliability/protocol'
 import {
   applyCreativeReliabilityReviewsToCheckpointV1,
+  archiveCreativeReliabilityEvalCheckpointV1,
   clearCreativeReliabilityEvalCheckpointV1,
   exportCreativeReliabilityEvalCheckpointV1,
   importCreativeReliabilityEvalCheckpointV1,
+  loadCreativeReliabilityEvalCheckpointArchivesV1,
   loadCreativeReliabilityEvalCheckpointV1,
   persistCreativeReliabilityEvalCheckpointV1,
   runCreativeReliabilityEvalV1,
@@ -155,6 +157,9 @@ export default function CreativeReliabilityEvalPanel() {
   const [verifierPresetId, setVerifierPresetId] = useState('')
   const [split, setSplit] = useState<CreativeReliabilityEvalSplitV1>('development')
   const [checkpoint, setCheckpoint] = useState<CreativeReliabilityEvalCheckpointV1 | null>(null)
+  const [archives, setArchives] = useState<CreativeReliabilityEvalCheckpointV1[]>(() => (
+    loadCreativeReliabilityEvalCheckpointArchivesV1()
+  ))
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const [reviewer, setReviewer] = useState('')
@@ -223,6 +228,17 @@ export default function CreativeReliabilityEvalPanel() {
     setError('')
     stopRequested.current = false
     try {
+      const completedDevelopment = checkpoint?.status === 'completed' && checkpoint.split === 'development'
+      if (checkpoint?.status === 'completed' && checkpoint.split === 'held-out') {
+        throw new Error('sealed held-out 已完成，禁止创建第二次运行')
+      }
+      const resumeCheckpoint = completedDevelopment ? null : checkpoint
+      if (completedDevelopment) {
+        setArchives(await archiveCreativeReliabilityEvalCheckpointV1(
+          checkpoint,
+          getCreativeReliabilityFixturesV1(checkpoint.split),
+        ))
+      }
       if (!generatorConfig || !verifierConfig) throw new Error('请先选择 generator 与独立 verifier 预设')
       if (!isAIConfigReady(generatorConfig) || !isAIConfigReady(verifierConfig)) {
         throw new Error('所选预设缺少可用 API Key、Base URL 或模型')
@@ -230,8 +246,8 @@ export default function CreativeReliabilityEvalPanel() {
       if (generatorConfig.provider === verifierConfig.provider && generatorConfig.model === verifierConfig.model) {
         throw new Error('generator 与 verifier 必须使用不同 provider/model 身份')
       }
-      const selectedFixtures = getCreativeReliabilityFixturesV1(checkpoint?.split ?? split)
-      if (!checkpoint && split === 'held-out') {
+      const selectedFixtures = getCreativeReliabilityFixturesV1(resumeCheckpoint?.split ?? split)
+      if (!resumeCheckpoint && split === 'held-out') {
         const confirmed = await dialog.confirm({
           title: '运行一次性封存集？',
           message: '这 6 例结果只允许保留原样并运行一次，失败也不能清除后调参重跑。上限 30 次 API 调用。',
@@ -241,31 +257,31 @@ export default function CreativeReliabilityEvalPanel() {
         })
         if (!confirmed) return
       }
-      const runId = checkpoint?.runId ?? `crel-${split}-${crypto.randomUUID()}`
-      if ((checkpoint?.split ?? split) === 'held-out') {
+      const runId = resumeCheckpoint?.runId ?? `crel-${split}-${crypto.randomUUID()}`
+      if ((resumeCheckpoint?.split ?? split) === 'held-out') {
         claimCreativeReliabilityHeldoutRunV1({
           runId,
           fixtureSetHash: await hashCanonicalValue(selectedFixtures),
         })
       }
-      if (checkpoint && (
-        checkpoint.generator.provider !== generatorConfig.provider
-        || checkpoint.generator.model !== generatorConfig.model
-        || checkpoint.verifier.provider !== verifierConfig.provider
-        || checkpoint.verifier.model !== verifierConfig.model
+      if (resumeCheckpoint && (
+        resumeCheckpoint.generator.provider !== generatorConfig.provider
+        || resumeCheckpoint.generator.model !== generatorConfig.model
+        || resumeCheckpoint.verifier.provider !== verifierConfig.provider
+        || resumeCheckpoint.verifier.model !== verifierConfig.model
       )) throw new Error('当前预设与 checkpoint 冻结模型身份不一致')
       await cleanupStrandedCreativeReliabilityWorkspacesV1()
       const next = await runCreativeReliabilityEvalV1({
         suiteVersion: CREATIVE_RELIABILITY_FIXTURE_SET_VERSION_V1,
         runId,
-        codeRevision: checkpoint?.codeRevision ?? APP_BUILD_ID,
+        codeRevision: resumeCheckpoint?.codeRevision ?? APP_BUILD_ID,
         fixtures: selectedFixtures,
-        generator: checkpoint?.generator ?? {
+        generator: resumeCheckpoint?.generator ?? {
           provider: generatorConfig.provider,
           model: generatorConfig.model,
           promptVersion: GENERATOR_PAIR_VERSION,
         },
-        verifier: checkpoint?.verifier ?? {
+        verifier: resumeCheckpoint?.verifier ?? {
           provider: verifierConfig.provider,
           model: verifierConfig.model,
           promptVersion: CREATIVE_RELIABILITY_VERIFIER_PROMPT_VERSION_V1,
@@ -275,7 +291,7 @@ export default function CreativeReliabilityEvalPanel() {
           generatorConfig,
           verifierConfig,
         }),
-        ...(checkpoint ? { resumeFrom: checkpoint } : {}),
+        ...(resumeCheckpoint ? { resumeFrom: resumeCheckpoint } : {}),
         onCheckpoint: async value => {
           await persistCreativeReliabilityEvalCheckpointV1(value)
           setCheckpoint(value)
@@ -317,6 +333,22 @@ export default function CreativeReliabilityEvalPanel() {
       downloadJson(
         await exportCreativeReliabilityEvalCheckpointV1(checkpoint, fixtures),
         `storyforge-crel-${checkpoint.split}-${checkpoint.status}-${Date.now()}.json`,
+      )
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+
+  const exportLatestArchive = async () => {
+    const archived = archives[0]
+    if (!archived) return
+    try {
+      downloadJson(
+        await exportCreativeReliabilityEvalCheckpointV1(
+          archived,
+          getCreativeReliabilityFixturesV1(archived.split),
+        ),
+        `storyforge-crel-${archived.split}-archived-${archived.runId}.json`,
       )
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -402,11 +434,15 @@ export default function CreativeReliabilityEvalPanel() {
             type="button"
             data-testid="crel-run"
             onClick={() => { void run() }}
-            disabled={running}
+            disabled={running || checkpoint?.split === 'held-out' && checkpoint.status === 'completed'}
             className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-400 disabled:opacity-40"
           >
             {running ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-            {running ? `${attemptedSteps(checkpoint)}/24` : checkpoint && checkpoint.status !== 'completed' ? '继续' : '运行'}
+            {running
+              ? `${attemptedSteps(checkpoint)}/24`
+              : checkpoint?.status === 'completed' && checkpoint.split === 'development'
+                ? '归档并重跑 Development'
+                : checkpoint && checkpoint.status !== 'completed' ? '继续' : '运行'}
           </button>
         </div>
       </div>
@@ -506,6 +542,11 @@ export default function CreativeReliabilityEvalPanel() {
             <button type="button" onClick={() => { void reset() }} className="inline-flex items-center gap-1 text-error">
               <RotateCcw className="h-3 w-3" />清除
             </button>
+            {archives.length > 0 && (
+              <button type="button" onClick={() => { void exportLatestArchive() }} className="inline-flex items-center gap-1 text-text-muted">
+                <Download className="h-3 w-3" />下载上一轮归档（共 {archives.length} 轮）
+              </button>
+            )}
           </div>
         </div>
       )}

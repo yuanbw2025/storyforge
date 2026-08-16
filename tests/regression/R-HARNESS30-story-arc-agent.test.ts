@@ -203,7 +203,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
     expect(getAgentSkillV1('outline.story-arcs')).toMatchObject({
       agentId: 'outline',
       executionMode: 'story-arcs',
-      promptVersion: 'story-arc-copilot-v5',
+      promptVersion: 'story-arc-copilot-v6',
       writeTargets: [{
         table: 'storyArcs',
         fields: ['name', 'type', 'stages', 'description'],
@@ -219,6 +219,8 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       expect(prompt).toContain('依据现有设定生成一条主线故事线')
       expect(prompt).toContain('盐海每十年退潮一次')
       expect(prompt).toContain('绝不能放在故事线顶层')
+      expect(prompt).toContain('3-5 个因果递进阶段')
+      expect(prompt).toContain('1-3 个关键事件')
       expect(prompt).toContain('本轮叙事任务（运行时合同，不是新增 Canon）')
       expect(prompt).toContain('退出变化')
       expect(prompt).toContain('不要用世界观介绍代替故事推进')
@@ -498,6 +500,74 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       keyEvents: ['发现异常', '核对证据', '遭遇阻力', '改变方案', '承担后果'],
     })
     expect(result.output[0].stages[0]).not.toHaveProperty('turningPoint')
+  })
+
+  it('CREL 只剥离损坏的可选卷范围，不为可用故事触发第二次模型调用', async () => {
+    const { project, scope } = await createWorkspace()
+    const loose = {
+      ...mainArc(),
+      stages: mainArc().stages.map((stage, index) => index === 0
+        ? { ...stage, startVolume: 1 }
+        : index === 1
+          ? { ...stage, startVolume: 5, endVolume: true }
+          : stage),
+    }
+    const runAI = vi.fn(async () => JSON.stringify({ storyArcs: [loose] }))
+    const prepared = await prepareStoryArcCopilot({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      authorRequest: '生成一条主线故事线',
+    }, { runAI })
+
+    const result = await runStoryArcCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker('balanced'),
+      qualityMode: 'balanced',
+    })
+
+    expect(runAI).toHaveBeenCalledOnce()
+    expect(result.artifact.status).toBe('usable-with-warnings')
+    expect(result.artifact.repair).toBeNull()
+    expect(result.artifact.issues.filter(issue => issue.code === 'story-arc-volume-range-normalized'))
+      .toHaveLength(2)
+    expect(result.output[0].stages[0]).toMatchObject(mainArc().stages[0])
+    expect(result.output[0].stages[0]).not.toHaveProperty('startVolume')
+    expect(result.output[0].stages[0]).not.toHaveProperty('endVolume')
+    expect(result.output[0].stages[1]).not.toHaveProperty('startVolume')
+    expect(result.output[0].stages[1]).not.toHaveProperty('endVolume')
+  })
+
+  it('CREL 保留合法成对卷范围，严格编辑合同仍拒绝损坏范围', async () => {
+    const { project, scope } = await createWorkspace()
+    const ranged = {
+      ...mainArc(),
+      stages: mainArc().stages.map((stage, index) => index === 0
+        ? { ...stage, startVolume: 1, endVolume: 2 }
+        : stage),
+    }
+    const runAI = vi.fn(async () => JSON.stringify({ storyArcs: [ranged] }))
+    const prepared = await prepareStoryArcCopilot({
+      projectId: project.id!,
+      scope,
+      worldGroupId: null,
+      authorRequest: '生成一条主线故事线',
+    }, { runAI })
+
+    const result = await runStoryArcCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker('balanced'),
+      qualityMode: 'balanced',
+    })
+
+    expect(result.artifact.status).toBe('ready')
+    expect(result.output[0].stages[0]).toMatchObject({ startVolume: 1, endVolume: 2 })
+    expect(() => parseStoryArcCandidateDraft(JSON.stringify([{
+      ...mainArc(),
+      stages: mainArc().stages.map((stage, index) => index === 0
+        ? { ...stage, startVolume: 1 }
+        : stage),
+    }]))).toThrow('同时提供')
   })
 
   it('平衡模式仅用第二次调用定向修复结构错误，并记录真实调用边界', async () => {

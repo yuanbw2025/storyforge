@@ -453,6 +453,7 @@ async function creativeGeneration(input: {
       usage: aggregateUsage(calls),
       issueCodes: [...new Set(result.artifact.issues.map(issue => issue.code))],
       repairTargetIssueCodes: result.artifact.repair?.targetIssueCodes ?? [],
+      creativeArtifact: result.artifact,
     }
   } catch (error) {
     if (

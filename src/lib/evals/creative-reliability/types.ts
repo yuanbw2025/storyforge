@@ -1,4 +1,7 @@
-import type { CreativeArtifactStatusV1 } from '../../agent/creative-reliability'
+import type {
+  CreativeArtifactStatusV1,
+  CreativeArtifactV1,
+} from '../../agent/creative-reliability'
 
 export const CREATIVE_RELIABILITY_EVAL_VARIANTS_V1 = [
   'legacy-direct',
@@ -66,6 +69,12 @@ export interface CreativeReliabilityEvalGenerationV1 {
    * the production artifact's repair targets, so absence remains readable.
    */
   repairTargetIssueCodes?: string[]
+  /**
+   * Present on newly generated CREL records so protocol failures, normalized
+   * fragments and the original first response remain independently auditable.
+   * Older v1 checkpoints remain readable without this field.
+   */
+  creativeArtifact?: CreativeArtifactV1
 }
 
 export interface CreativeReliabilityEvalVerificationV1 {

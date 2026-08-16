@@ -19,6 +19,11 @@ import type {
 export const CREATIVE_RELIABILITY_CHECKPOINT_STORAGE_KEY_V1 =
   'storyforge:crel-eval-checkpoint-v1'
 
+export const CREATIVE_RELIABILITY_CHECKPOINT_ARCHIVE_STORAGE_KEY_V1 =
+  'storyforge:crel-eval-checkpoint-archive-v1'
+
+const MAX_CREATIVE_RELIABILITY_CHECKPOINT_ARCHIVES_V1 = 10
+
 export interface CreativeReliabilityEvalCheckpointCaseV1 {
   fixtureId: string
   executionOrder: [CreativeReliabilityEvalVariantV1, CreativeReliabilityEvalVariantV1]
@@ -307,6 +312,44 @@ export function loadCreativeReliabilityEvalCheckpointV1(): CreativeReliabilityEv
 
 export function clearCreativeReliabilityEvalCheckpointV1(): void {
   localStorage.removeItem(CREATIVE_RELIABILITY_CHECKPOINT_STORAGE_KEY_V1)
+}
+
+export function loadCreativeReliabilityEvalCheckpointArchivesV1(): CreativeReliabilityEvalCheckpointV1[] {
+  const raw = localStorage.getItem(CREATIVE_RELIABILITY_CHECKPOINT_ARCHIVE_STORAGE_KEY_V1)
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is CreativeReliabilityEvalCheckpointV1 => (
+      typeof item === 'object'
+      && item != null
+      && !Array.isArray(item)
+      && (item as { version?: unknown }).version === 1
+      && typeof (item as { runId?: unknown }).runId === 'string'
+      && isHash((item as { checkpointHash?: unknown }).checkpointHash)
+    )).slice(0, MAX_CREATIVE_RELIABILITY_CHECKPOINT_ARCHIVES_V1)
+  } catch {
+    return []
+  }
+}
+
+export async function archiveCreativeReliabilityEvalCheckpointV1(
+  checkpoint: CreativeReliabilityEvalCheckpointV1,
+  fixtures: readonly CreativeReliabilityFixtureV1[],
+): Promise<CreativeReliabilityEvalCheckpointV1[]> {
+  if (!await verifyCreativeReliabilityEvalCheckpointV1(checkpoint, fixtures)) {
+    throw new Error('CREL checkpoint 验签失败，拒绝归档或覆盖')
+  }
+  const archives = [
+    structuredClone(checkpoint),
+    ...loadCreativeReliabilityEvalCheckpointArchivesV1()
+      .filter(item => item.runId !== checkpoint.runId),
+  ].slice(0, MAX_CREATIVE_RELIABILITY_CHECKPOINT_ARCHIVES_V1)
+  localStorage.setItem(
+    CREATIVE_RELIABILITY_CHECKPOINT_ARCHIVE_STORAGE_KEY_V1,
+    JSON.stringify(archives),
+  )
+  return archives
 }
 
 export async function applyCreativeReliabilityReviewsToCheckpointV1(input: {

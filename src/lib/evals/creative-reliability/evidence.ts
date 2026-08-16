@@ -1,4 +1,5 @@
 import { hashCanonicalValue } from '../../agent/run/hash'
+import { parseCreativeArtifactV1 } from '../../agent/creative-reliability'
 import type { CreativeReliabilityFixtureV1 } from './fixtures'
 import {
   CREATIVE_RELIABILITY_EVAL_VARIANTS_V1,
@@ -207,6 +208,42 @@ async function validateCase(
       if (generation.calls.length === 2 && !repairTargetIssueCodes.length) {
         throw new Error('第二次产物调用缺少修复目标证据')
       }
+    }
+    if (generation.creativeArtifact != null) {
+      if (variant !== 'creative-reliability') {
+        throw new Error('旧直连基线不得附加 CREL 产物证据')
+      }
+      const artifact = parseCreativeArtifactV1(generation.creativeArtifact)
+      if (artifact.status !== generation.status) {
+        throw new Error('CREL 产物状态与 generation 不一致')
+      }
+      if (artifact.editableText !== generation.presentedText) {
+        throw new Error('CREL 可编辑正文与 generation 不一致')
+      }
+      if (await hashCanonicalValue(artifact.originalText) !== generation.calls[0]?.outputHash) {
+        throw new Error('CREL 首次原始响应与评测账本哈希不一致')
+      }
+      const artifactIssueCodes = [...new Set(artifact.issues.map(issue => issue.code))]
+      if (JSON.stringify(artifactIssueCodes) !== JSON.stringify(generation.issueCodes)) {
+        throw new Error('CREL 问题证据与 generation issueCodes 不一致')
+      }
+      const artifactRepairTargets = artifact.repair?.targetIssueCodes ?? []
+      if (JSON.stringify(artifactRepairTargets) !== JSON.stringify(repairTargetIssueCodes ?? [])) {
+        throw new Error('CREL 修复目标与 generation 不一致')
+      }
+      if (artifact.callEvidence.length !== generation.calls.length) {
+        throw new Error('CREL 产物调用证据与评测账本数量不一致')
+      }
+      artifact.callEvidence.forEach((call, index) => {
+        const ledger = generation.calls[index]
+        if (
+          call.callIndex !== ledger.callIndex
+          || call.purpose !== ledger.purpose
+          || call.provider !== ledger.provider
+          || call.model !== ledger.model
+          || call.outputHash !== ledger.outputHash
+        ) throw new Error('CREL 产物调用证据与评测账本不一致')
+      })
     }
     assertFinite(generation.usage.inputTokens, 'generation inputTokens')
     assertFinite(generation.usage.outputTokens, 'generation outputTokens')
