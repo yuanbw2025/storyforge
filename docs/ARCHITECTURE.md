@@ -184,8 +184,8 @@ npm run build
 ## 12. 当前诚实边界
 
 - Harness 能保证权限、状态、成本停止、恢复和证据，不能保证随机模型每次达到文学质量目标。
-- CREL 工程控制面已完成，但 sealed held-out 的 token 倍率 `1.514404` 略超 `1.5` 门槛，独立作者 A/B 为 0/6；社区体验门保持关闭。
+- CREL 工程控制面与本轮开发任务已完成，现进入实验性社区观察。sealed held-out 的 token 倍率 `1.514404` 略超 `1.5`、独立作者 A/B 为 0/6 的历史结论保持不变；2026-08-17 产品决策只关闭它们作为交付阻塞项，不等于评测通过。
 - 有限 fan-out、自动语义审查和更宽的多 Agent 能力必须经过独立真实模型成本/质量证据后才能默认开放。
 - 账号、云同步、社区发现、协作和治理不属于当前纯前端运行架构。
 
-本次更新的完整说明与验证证据见 [AI-HARNESS-REBUILD-RELEASE-20260817.md](./AI-HARNESS-REBUILD-RELEASE-20260817.md)。
+本次更新的完整说明、验证证据和社区观察边界见 [AI-HARNESS-REBUILD-RELEASE-20260817.md](./AI-HARNESS-REBUILD-RELEASE-20260817.md) 与 [HARNESS-COMMUNITY-VALIDATION.md](./adr/HARNESS-COMMUNITY-VALIDATION.md)。

@@ -2310,3 +2310,20 @@ gzip 207.1 KiB。完整 Chromium E2E 扩展为 51/51，耗时 4.3 分钟；新�
 
 👉 球在 Codex：继续按 census 清理剩余 3 个 migration；下一优先审计 `PromptExamplesEditor` 的示例生成
 是设置辅助还是需要 durable 证据，按真实语义归类并收口，不为追求清零机械建立业务写入合同。
+
+### [2026-08-17] Codex · REPORT · CREL 转入社区观察 / `feat/harness-community-validation-status`
+
+作者决定将 Harness/CREL 本轮工程正式收口并转入社区观察。独立作者 A/B 与原预注册社区质量门不再
+作为开发、合并或社区预览的阻塞项；该状态明确写为“由产品决策关闭/取代”，没有把 sealed held-out
+成本门 `FAIL` 或作者 A/B `0/6` 改写成通过，也继续禁止“替作者完成 80%”等无证据宣传。
+
+本分支新增正式产品决策记录，同步更新 Changelog、README、中英文说明、当前架构、功能/社区指南、
+Harness 发布与交接文档、CREL 开发与冻结评测证据、路线图、能力基线和已完成索引。设置页反馈入口
+改为“实验性社区观察期”，继续使用纯本地闭集反馈；路线图不再保留旧 A/B/质量门施工项，社区出现
+集中问题后再建立有范围、预算和停止条件的新任务。
+
+验证已通过：CREL-14 设置页定向回归 2/2；完整 `npm run ci` 为 394 files / 1928 tests，全套架构、
+三注册表、路线图、依赖审计、lint、TypeScript、覆盖率、生产构建与 bundle budget 全绿；隔离端口的
+Chromium `npm run ci:e2e` 为 53/53；`git diff --check` 通过。未改 schema、三注册表或用户作品数据。
+
+👉 球在 Codex：rebase 最新 `origin/main` 后提交、开 PR；GitHub CI 全绿后串行合并。

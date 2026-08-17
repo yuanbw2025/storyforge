@@ -106,8 +106,8 @@ export default function CreativeReliabilityCommunityPanel() {
         <div>
           <h3 className="text-sm font-semibold text-text-primary">创作可靠性体验反馈</h3>
           <p className="mt-1 text-xs leading-5 text-text-muted">
-            当前是实验性社区体验，不代表已经证明“替作者完成 80%”。真实开发集、封存集和作者盲评
-            全部达到门槛前，结果只按实验性能力发布。
+            当前进入实验性社区观察期，不代表已经证明“替作者完成 80%”。独立作者 A/B 与原质量门
+            不再作为本轮开发阻塞项；历史结果没有因此变成通过，后续按作者主动提交的真实反馈评估。
           </p>
         </div>
       </div>

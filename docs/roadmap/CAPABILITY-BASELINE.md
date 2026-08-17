@@ -369,7 +369,7 @@
 ### 已有能力
 
 - 当前正式 AI 创作已由统一 Agent + durable Harness 承载：Master Agent/领域 Skill 冻结任务、权限、版本与预算，候选、checkpoint、父子 lineage、终态回执和用量进入统一 ledger；作者确认后才经受治理采纳写入 Canon。
-- CREL 创作可靠性控制面已完成：分级 `CreativeArtifactV1`、1+1 调用上限、免费确定性归一化、一次定向修复、`NarrativeBrief`、部分设定临时假设、统一预览与本地反馈均复用现有 Harness，不建立平行 Runner 或数据库。
+- CREL 创作可靠性控制面与本轮开发任务已完成并进入实验性社区观察：分级 `CreativeArtifactV1`、1+1 调用上限、免费确定性归一化、一次定向修复、`NarrativeBrief`、部分设定临时假设、统一预览与本地反馈均复用现有 Harness，不建立平行 Runner 或数据库。历史 held-out FAIL 与作者 A/B 0/6 不变；旧 A/B/质量门已由产品决策关闭为阻塞项，不视为通过。
 - AGENT-1 Tool Registry 当前提供 14 个只读工具：Phase 27.1-a 首批 13 个与 27.1-d 的
   `read_inspiration_workspace` 全部经 `CONTEXT_SOURCES → assembleContext()` 读取，带
   项目/世界/实体/碎片归属校验、独立预算与裁剪元数据。

@@ -50,7 +50,10 @@ describe('R-CREL14 · 正式设置页社区反馈入口', () => {
   it('设置页直接挂载入口，并诚实展示实验边界、费用、回滚和隐私说明', async () => {
     const host = await mount(createElement(SettingsPage))
     expect(host.querySelector('[data-testid="creative-reliability-community"]')).not.toBeNull()
+    expect(host.textContent).toContain('实验性社区观察期')
     expect(host.textContent).toContain('不代表已经证明“替作者完成 80%”')
+    expect(host.textContent).toContain('不再作为本轮开发阻塞项')
+    expect(host.textContent).toContain('历史结果没有因此变成通过')
     expect(host.textContent).toContain('1 次生成 + 1 次定向修复')
     expect(host.textContent).toContain('费用由你的服务商和模型决定')
     expect(host.textContent).toContain('启用创作可靠性工程')

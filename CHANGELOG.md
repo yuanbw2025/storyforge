@@ -33,10 +33,10 @@
 #### 诚实边界
 
 - 本次完成的是统一执行架构、数据安全、恢复、费用停止和可用候选交付闭环，不等于模型文学能力被工程“保证”。
-- 独立作者 A/B 盲评仍为 0/6，社区体验门保持关闭；目前不能宣传“已经替作者完成 80% 工作”或“新路径质量已全面优于旧路径”。
-- sealed held-out 已消耗，不能为过门而重跑、调阈值或挑样本。后续成本优化和社区质量结论必须使用新的 Development 与新冻结终验集。
+- 2026-08-17 产品决策将本轮 Harness/CREL 工程标记为开发完成并转入社区观察；独立作者 A/B 与原预注册社区质量门关闭，不再作为本轮交付阻塞项。关闭不等于通过：历史 A/B 仍为 0/6，sealed held-out 成本门仍为 FAIL。
+- 当前入口继续标注实验性/预览，不宣传“已经替作者完成 80% 工作”或“新路径质量已全面优于旧路径”。sealed held-out 已消耗，不能为过门而重跑、调阈值或挑样本；后续先按作者主动提交的采用结果、修改时间和问题类型观察真实使用。
 
-完整说明见 [docs/AI-HARNESS-REBUILD-RELEASE-20260817.md](./docs/AI-HARNESS-REBUILD-RELEASE-20260817.md)。
+完整说明见 [docs/AI-HARNESS-REBUILD-RELEASE-20260817.md](./docs/AI-HARNESS-REBUILD-RELEASE-20260817.md) 和 [社区观察产品决策](./docs/adr/HARNESS-COMMUNITY-VALIDATION.md)。
 
 ## v3.9.1 — 2026-08-04 · 分步骤模式最终稳定版
 
