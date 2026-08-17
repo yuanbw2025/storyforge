@@ -40,8 +40,10 @@ Harness 与 CREL 工程重构已经完成，`MEMORY-0～10` 也已完成施工�
 项目内“设置 → 项目存储工作区”统一显示、重新授权、更换或解除位置；数据管理不再保留第二个位置选择入口，
 只负责人工核对、同步和恢复。选择或迁移位置仍为零写入，旧目录不删除，恢复出的新项目继承恢复目录。
 
-## 已完成基线：CREL 创作可靠性工程
+## 已完成基线：Agent + Harness / CREL 创作可靠性工程
 
+**阶段状态：✅ 本轮阶段性开发完成。** `AGENT-1`、`HARNESS-0～86`、`CREL-0～14` 已全部移入
+[已完成索引](./COMPLETED.md)，当前待开发清单不再保留旧 A/B、旧质量门或继续扩充 HARNESS 编号的项目。
 `feat/harness-creative-reliability` 在已完成的 Agent + Harness 基线上补齐有限成本下的可用创作交付，
 不新增平行 Agent、数据库或模型旁路。权威范围、数据合同、CREL-0～14 施工顺序和发布门见
 [创作可靠性工程开发文档](../AI-CREATIVE-RELIABILITY-DEVELOPMENT-20260816.md)。
