@@ -173,13 +173,16 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `detailedOutlines` | `appearingCharacterIds` `emotionArc` `endingCliffhanger` `foreshadowIds` `lastUsedSummary` `openingHook` `outlineNodeId` `prohibitions` `sceneLocation` `scenes` |
 | `emotionBeatCards` | `beats` `chapterId` `chapterTitle` `overallArc` `source` |
 | `foreshadows` | `description` `echoChapterIds` `expectedResolveChapterId` `importance` `name` `notes` `plantChapterId` `resolveChapterId` `status` `timelinePosition` `type` `urgency` |
+| `geographies` | `locations` `overview` `worldMapData` |
 | `historicalKeywords` | `aiBrainstorm` `aiConsult` |
 | `historicalTimelineEvents` | `aiBrainstorm` `aiConsult` |
+| `histories` | `eraSystem` `events` `overview` |
 | `importantLocations` | `description` `name` `parentId` `significance` `sortOrder` `tags` |
 | `inspirationWorkspaces` | `fragments` `versions` |
 | `itemLedger` | `action` `chapterId` `chapterTitle` `characterId` `heldByName` `itemName` `note` `quantity` |
 | `knowledgeLedger` | `action` `belief` `characterId` `characterName` `factId` `knowledgeKey` `sourceChapterId` `sourceQuote` `sourceType` `statement` `status` `worldGroupId` |
 | `outlineNodes` | `order` `parentId` `summary` `title` `type` `worldGroupId` |
+| `powerSystems` | `description` `levels` `name` `rules` |
 | `projects` | `creativeMode` `description` `enableMultiWorld` `genres` `name` `status` `targetWordCount` |
 | `referenceAnalysisRuns` | `activatedAt` `analysisSummary` `completedAt` `completedChunks` `depth` `error` `expectedChunks` `fileHash` `mergedCharacters` `progress` `referenceId` `rightsConfirmed` `rightsDeclaredAt` `rightsNote` `sourceFilename` `sourceKind` `status` `totalChars` `usageScope` `version` |
 | `referenceChunkAnalysis` | `analysisRunId` `characterCraft` `chunkIndex` `climaxDesign` `conflictEscalation` `dailyLife` `dialogueTechnique` `emotionalBeats` `endOffset` `foreshadowing` `historicalContext` `label` `languageCustoms` `materialCulture` `narrativeStyle` `openingTechnique` `otherTechniques` `pacingControl` `plotStructure` `proseStyle` `rawExcerpt` `referenceId` `socialInstitutions` `startOffset` `worldBuilding` |
@@ -194,6 +197,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `works` | `description` `genres` `methodologyId` `status` `targetWordCount` `title` `writingStyleId` |
 | `worldGroups` | `description` `entryCondition` `icon` `name` `order` `plannedChapterCount` `powerRestriction` `type` |
 | `worldNodes` | `mapConfigJSON` |
+| `worldRulesProfiles` | `customNodes` `entries` `globalNote` |
 | `worlds` | `description` `name` |
 | `worldviews` | `climateByRegion` `continentLayout` `culture` `cultureOverview` `divineDesign` `economy` `economyOverview` `factionLayout` `geography` `history` `historyLine` `internalConflicts` `itemDesign` `mountainsRivers` `naturalResourceOverview` `naturalResources` `politicsEconomyCulture` `politicsOverview` `powerHierarchy` `races` `regionDimensions` `rules` `society` `worldDimensions` `worldEvents` `worldOrigin` `worldStructure` |
 
@@ -311,4 +315,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `f7195eb`
+生成时间基准:commit `a023cf3`

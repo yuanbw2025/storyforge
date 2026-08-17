@@ -8,6 +8,7 @@ import {
   MIST_HARBOR_ROADSHOW_CHOICES,
   MIST_HARBOR_ROADSHOW_NODES,
 } from './mist-harbor-roadshow-story'
+import { ensureMistHarborAuthoringWorld } from './mist-harbor-roadshow-authoring'
 import type {
   Character,
   CharacterRelation,
@@ -30,6 +31,14 @@ export interface MistHarborDemoSummary {
   artifactCount: number
   loreEntryCount: number
   mediaAssetCount: number
+  worldRuleEntryCount: number
+  historicalEventCount: number
+  historicalKeywordCount: number
+  storyCoreCount: number
+  outlineNodeCount: number
+  chapterCount: number
+  detailedOutlineCount: number
+  foreshadowCount: number
 }
 
 const CHARACTER_ROWS = [
@@ -37,22 +46,65 @@ const CHARACTER_ROWS = [
     name: '林澈', role: 'protagonist', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral',
     shortDescription: '雾港最年轻的守灯人，也是唯一能听懂潮汐钟异响的人。', appearance: '深蓝长风衣、银灰短发，随身提着旧铜灯。',
     personality: '冷静、克制，危急时会选择保护他人。', background: '父亲在十年前的黑潮事故中失踪，她继承了北塔灯室。',
-    motivation: '查清失潮真相，让港口在黎明前恢复潮声。', abilities: '辨认潮声、灯塔机械、近岸航行', relationships: '[]',
-    arc: '从独自背负守灯职责，到相信同伴并公开港议会隐瞒的真相。', speechStyle: '短句，语气平静；谈及父亲时会停顿。',
+    motivation: '查清失潮真相，让港口在黎明前恢复潮声，同时证明父亲的失踪不是一场无意义的事故。', abilities: '辨认潮声中的相位差；维护灯塔机械；熟悉近岸航道；能在压力下迅速判断公共安全风险。', relationships: '余砚是她父亲旧日同事与证据同盟；顾潮生既是制度阻拦者，也是唯一能交出议会权限的人；守钟人曾教她辨认第七码。',
+    arc: '从把守灯视为自己必须独自承担的家族债务，到相信同伴、接受父亲无法被简单找回，并把真相与选择权交还全城。',
+    identity: '北塔守灯人；旧守灯人林泊川之女；失潮调查的行动发起者。', profile: '23岁，女性，人类，雾港本地人。',
+    values: '相信被记录的姓名和公开承担比表面稳定更重要；守护不是替别人决定，而是让人有选择的资格。', strengths: '听觉敏锐、机械直觉强、临危不乱、愿意保护陌生人。', weaknesses: '习惯独自承担，不愿承认自己仍在寻找父亲；面对无辜者风险时容易把责任全部揽到自己身上。',
+    fears: '最怕父亲主动参与了事故，也怕自己最终会像议会一样以保护为名替全城隐瞒。', goals: '短期在黑潮抵达前取得主钟控制权；长期重建公开、可追责的守灯制度。',
+    innerConflict: '她需要父亲留下的技术与情感支撑，却必须接受公共真相不能只服务于自己的寻亲愿望。', keyEvents: '十年前在北塔最后一次见到父亲；继承旧铜灯与守灯徽章；失潮之夜第一次听见钟声中重复的第七码。',
+    powerLevel: '设施持权人：可进入北塔和钟楼外环，但不能单独接管主钟。', speechStyle: '短句，语气平静；下判断前会先复述自己听见或确认的事实，谈及父亲时会有短暂停顿。',
+    habits: '思考时用拇指摩挲铜灯提梁；进入陌生机械室先数振动节律。', signatureItem: '旧铜灯与守灯人徽章',
+    location: '北塔灯室', firstAppearance: '第一章　潮声迟到十三分钟', storyRole: '玩家主要视角与最终价值选择的承担者；连接守灯传统、事故家庭与全城公共责任。', ending: '根据选择成为公开事故的守灯见证人、七日修复的制度监督者，或率船队驶向黑潮源头。',
   },
   {
     name: '余砚', role: 'supporting', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'lawful',
     shortDescription: '旧档案馆管理员，保存着被港议会封存的潮位记录。', appearance: '灰色长衣、铜制单片护目镜，指尖常沾蓝墨。',
     personality: '谨慎、博学，以证据为先。', background: '曾是潮汐钟校准师，黑潮事故后被调离钟楼。',
-    motivation: '让真实记录重新被人看见。', abilities: '古档解读、钟机校准、密码学', relationships: '[]',
-    arc: '从守秘者转为真相的公开证人。', speechStyle: '精确、简短，只说自己能够证实的事。',
+    motivation: '让原始记录重新进入公共档案，并承认自己十年前只保存证据、没有及时作证的责任。', abilities: '档案修复、潮位曲线解读、钟机相位校准、蓝灯密码、议会文书流程。', relationships: '林澈是他选择重新行动的理由；顾潮生曾依据封缄令监视档案馆，两人彼此不信任却都知道对方没有伪造事故伤亡。',
+    arc: '从相信“把证据藏好就是尽责”的守秘者，转为愿意带着证据走到广场、接受质询并公开作证的人。',
+    identity: '旧档案馆管理员；前潮汐钟校准师；黑潮事故原始记录的保管人。', profile: '36岁，男性，人类，雾港本地人。',
+    values: '事实必须可复核，记录不能只为权力服务；但证据在公开前也必须避免被再次销毁。', strengths: '记忆准确、耐心、掌握档案与钟机双重专业、能识别伪造和删改。', weaknesses: '行动迟缓，常用“证据还不够”推迟承担；面对人群时缺乏表达情绪的能力。',
+    fears: '害怕公开失败会让唯一原件被毁，也害怕林澈发现他十年前曾有机会警告她父亲。', goals: '短期恢复黑潮记录页并取得校准码；长期建立任何议会都不能单独删除的分布式公共档案。',
+    innerConflict: '他以谨慎保护真相，却逐渐发现没有见证人的真相仍可能等同于被删除。', keyEvents: '参与潮汐钟第六次校准；在事故前夜发现异常曲线；事故后被迫签署封缄令；用蓝墨暗号保存缺页索引。',
+    powerLevel: '校准师：能读取和修改支线相位，但无行政通行权。', speechStyle: '精确、简短，只说自己能够证实的事；纠正数字时会摘下单片护目镜。',
+    habits: '把关键句抄写两份并分别存放；紧张时检查墨水是否干透。', signatureItem: '铜制单片护目镜与蓝墨索引卡',
+    location: '旧档案馆', firstAppearance: '第一章　潮声迟到十三分钟', storyRole: '证据链、世界机制解释和公开真相路线的核心推动者。', ending: '在真相路线成为公共听证的首位证人；在七日路线负责开放校准记录；在远航路线把档案副本交给留港者。',
   },
   {
     name: '顾潮生', role: 'antagonist', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'lawful',
     shortDescription: '港议会巡潮官，奉命阻止任何人接近失声钟楼。', appearance: '黑色防潮制服，肩章像两枚闭合的潮眼。',
     personality: '强硬、务实，并非不在意港民。', background: '亲历黑潮事故，坚信公开真相会引发更大的灾难。',
-    motivation: '维持港口秩序，即使必须继续隐瞒。', abilities: '巡潮队指挥、近战、港区通行权', relationships: '[]',
-    arc: '根据玩家选择，成为阻拦者、代价承担者或共同守港者。', speechStyle: '命令式语气，很少解释；动摇时会直呼林澈全名。',
+    motivation: '在黑潮抵达前保持撤离、泵站与堤岸秩序，即使继续背负隐瞒；同时不愿让哥哥和四十六名死者再次被当成可以利用的数字。', abilities: '巡潮队指挥、堤岸应急、近战与救援、港区通行权、紧急状态法规。', relationships: '林澈让他看见守护可以不等于封锁；余砚掌握他无法反驳的记录；已故哥哥顾远舟是四十七名遇难钟机工之一。',
+    arc: '从把秩序理解为压制信息与服从命令，到承认真正稳定必须容纳证据、责任和公开选择；也可能在玩家拒绝合作时成为最后阻拦者。',
+    identity: '港议会巡潮官；巡潮队第三队指挥；封缄印的现场持有人。', profile: '31岁，男性，人类，雾港本地人。',
+    values: '生命安全和可执行的秩序高于姿态；承诺一旦公开就必须有人负责落实。', strengths: '决断、组织能力强、熟悉全城应急系统、敢于亲自承担危险。', weaknesses: '习惯以命令替代解释，把公众想象成需要被管理的风险；对哥哥之死高度防御。',
+    fears: '最怕真相在错误时刻造成踩踏和设施瘫痪，也怕承认自己十年来守护的是一份谎言。', goals: '短期完成封港与撤离、阻止钟机失控；长期让巡潮队不再成为议会删改历史的执行工具。',
+    innerConflict: '他相信隐瞒曾救过更多人，却亲眼看到同一隐瞒正在让哥哥的姓名和全城记忆第二次死亡。', keyEvents: '黑潮事故中负责外堤救援；从遇难名单中认出哥哥；接受巡潮官任命；十年间执行封缄令；失潮之夜第一次违背议会口头命令。',
+    powerLevel: '行政持权人：可调动巡潮队和开放钟楼通道，持有封缄印，但不懂完整校准。', speechStyle: '命令式语气，很少解释；动摇时会直呼林澈全名，谈到伤亡则改用完整姓名。',
+    habits: '每到一处先确认出口和人数；做出困难决定后会重新扣紧右手手套。', signatureItem: '巡潮官封缄印',
+    location: '潮灯集市与失声钟楼封锁线', firstAppearance: '第二章　潮灯下的失名者', storyRole: '秩序立场的主要对手与必要盟友；提供制度权限、撤离压力和非脸谱化冲突。', ending: '可在公开路线解除封锁并承担听证，在七日路线签署可追责契约，或在远航路线留守雾港执行撤离。',
+  },
+  {
+    name: '潮汐商人', role: 'supporting', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
+    shortDescription: '在潮灯集市经营零件与航线消息的行商，是普通港民利益和海上世界的窗口。', appearance: '穿多口袋防水斗篷，腰间挂着不同港口的潮票夹和一串会随水位变色的玻璃珠。',
+    personality: '圆滑、敏锐、嘴上先谈价钱，真正危急时愿意帮人保留退路。', background: '常年往返黑礁群与南方航线，黑潮事故当夜曾把一船伤员送回雾港。',
+    motivation: '保住集市居民的姓名、潮票和撤离资格，同时查明外海航线为何再次出现黑潮回声。', abilities: '航线情报、物资调度、识别潮石与船具、与多方谈判。', relationships: '与林澈交换近岸消息；欠顾潮生一次救援人情；为余砚秘密转运过档案副本。',
+    arc: '从把所有风险都折算成价格的旁观者，转为用自己的船位和信用为失名者提供公开见证。', identity: '潮灯集市行商；商港行会外海联络人。', profile: '29岁，女性，人类，南方航线移居者。',
+    values: '交易必须留有凭据，任何人都不该因为名字从账本消失就失去食物和船位。', strengths: '信息广、临场周旋强、熟悉物资与航线。', weaknesses: '过度回避明确站队，容易先保护自己的网络。', fears: '自己的流动身份会在封港中被视为无名者，所有积累一夜归零。',
+    goals: '短期为失名者保住船位；长期建立不由议会单方控制的跨港信用记录。', innerConflict: '她依靠模糊立场生存，却必须在集市邻居被删除时决定什么不能拿来议价。', keyEvents: '参与黑潮事故救援；见过外海回声鲸异常迁徙；替余砚运出一份记录副本。',
+    powerLevel: '资深航线经营者：无关键设施权限，但掌握船只、物资和外海信息。', speechStyle: '先用价格或航线打比方，再给出真正消息；紧急时会省去所有客套。', habits: '谈话时转动变色玻璃珠；记账从不只写编号，一定补上姓名。', signatureItem: '变色潮珠与多港潮票夹',
+    location: '潮灯集市', firstAppearance: '第二章　潮灯下的失名者', storyRole: '补足普通港民、经济后果和远航可能性；可作为文字冒险中的交易与情报角色。', ending: '组织民船撤离、为公共档案提供跨港备份，或加入驶向黑潮的先遣船队。',
+  },
+  {
+    name: '守钟人', role: 'npc', roleWeight: 'npc', moralAxis: 'good', orderAxis: 'lawful',
+    shortDescription: '负责失声钟楼日常保养的老机械师，十年来用维修暗记保存被删去的遇难者姓名。', appearance: '身材瘦高，穿旧皮围裙，左耳因事故失聪，手腕缠着四十七圈细铜线。',
+    personality: '寡言、固执，对机器和姓名同样尊重。', background: '黑潮事故的幸存钟机工之一，官方记录称他当夜休假，实际是林澈父亲把他推出主机室。',
+    motivation: '确保主钟不会再次由单一命令过载，并让四十七名同伴以完整姓名被城市记住。', abilities: '主钟结构、维修暗记、应急停机、唇读与手势沟通。', relationships: '受林澈父亲救命并教过年幼林澈辨认钟律；拒绝为余砚伪造证据；对顾潮生既愤怒又理解。',
+    arc: '从躲在维修暗记中保存姓名，到在公共广场亲自敲响见证钟。', identity: '失声钟楼守钟人；黑潮事故幸存钟机工。', profile: '58岁，男性，人类，雾港本地人。',
+    values: '机器可以维修，删去的人名不能用新零件替代；任何接管命令都必须留下可追责记录。', strengths: '经验深、原则稳定、熟悉主钟全部机械旁路。', weaknesses: '长期拒绝离开钟楼，不相信议会程序，也不善于寻求帮助。', fears: '主钟再次响起时，同伴只被当成燃料或英雄口号。',
+    goals: '短期验证三枚权限并守住停机闸；长期建立由工匠和市民共同监督的钟机制度。', innerConflict: '他恨这台机器，却知道彻底毁掉它会让港民失去淡水、航线与家园。', keyEvents: '参与主钟建造；黑潮事故中被林泊川救出；用四十七种维修符号保存同伴姓名。',
+    powerLevel: '主钟机械专家：能执行停机与旁路，但依法不能决定城市采用哪种运行方案。', speechStyle: '句子很短，常配合敲击和手势；称呼死者时一定说全名。', habits: '每天检查四十七个润滑点；说谎者靠近主轴时，他会把扳手横放在控制台上。', signatureItem: '缠有四十七圈铜线的停机扳手',
+    location: '失声钟楼', firstAppearance: '第八章　失声钟楼', storyRole: '主钟规则的可信见证者、事故幸存者与最终操作执行者，防止技术解法凭空出现。', ending: '执行玩家选择的主钟方案，并把完整维修日志交给公共档案或远航队。',
   },
 ] as const
 
@@ -190,6 +242,8 @@ async function ensureWorldAssets(scope: WorkspaceScope, characters: Map<string, 
   const relationRows = [
     ['林澈', '余砚', 'ally', '真相同盟', '余砚掌握记录，林澈拥有进入钟楼的资格；两人需要彼此才能完成调查。', true],
     ['林澈', '顾潮生', 'rival', '守港理念冲突', '两人都想保护雾港，却对公开真相与维持秩序有相反判断。', true],
+    ['余砚', '守钟人', 'ally', '事故见证人与记录保管人', '余砚保存纸面证据，守钟人保存机械暗记；两人十年来各自守住同一真相的不同部分。', true],
+    ['潮汐商人', '顾潮生', 'other', '救援旧债', '黑潮事故当夜顾潮生为商船开放外堤，潮汐商人因此欠他一次救援人情，却反对他继续封锁失名者。', true],
   ] as const
   await adopt({
     projectId: scope.projectId,
@@ -386,6 +440,7 @@ export async function installMistHarborDemoWorld(input: { scope: WorkspaceScope 
   const scope = await resolveScope({ scope: input.scope })
   const characters = await ensureCharacters(scope)
   await ensureWorldAssets(scope, characters)
+  const authoring = await ensureMistHarborAuthoringWorld(scope, characters)
   const narrativeModuleId = await ensureNarrative(scope, characters)
   await ensureMedia(scope)
   const [relations, locations, categories, entries, mediaAssets] = await Promise.all([
@@ -398,7 +453,7 @@ export async function installMistHarborDemoWorld(input: { scope: WorkspaceScope 
   const demoCharacterIds = new Set(characters.values())
   const relationCount = relations.filter(item => demoCharacterIds.has(item.fromCharacterId)
     && demoCharacterIds.has(item.toCharacterId)
-    && ['真相同盟', '守港理念冲突'].includes(item.label)).length
+    && ['真相同盟', '守港理念冲突', '事故见证人与记录保管人', '救援旧债'].includes(item.label)).length
   const locationNames = new Set<string>(LOCATION_ROWS.map(item => item[0]))
   const locationCount = locations.filter(item => locationNames.has(item.name)).length
   const artifactCategory = categories.find(item => item.builtInKey === 'artifact')
@@ -416,5 +471,6 @@ export async function installMistHarborDemoWorld(input: { scope: WorkspaceScope 
     artifactCount,
     loreEntryCount,
     mediaAssetCount,
+    ...authoring,
   }
 }

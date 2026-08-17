@@ -176,6 +176,26 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   longtext('worldviews', 'internalConflicts', ['conflicts', '内部矛盾']),
   longtext('worldviews', 'itemDesign', ['items', 'artifactDesign', '道具设计']),
 
+  // 世界引擎人工/确定性初始化共用的正式世界基础字段。
+  // 这些表已经由 PROJECT_TABLES 管理生命周期；登记后，演示安装器也必须经 adopt() 写入，
+  // 不能为了预置内容另开直接写库旁路。
+  object('worldRulesProfiles', 'entries', ['世界规则条目']),
+  arr('worldRulesProfiles', 'customNodes', ['自定义世界规则节点']),
+  longtext('worldRulesProfiles', 'globalNote', ['世界规则总则']),
+
+  longtext('geographies', 'overview', ['地理总述']),
+  json('geographies', 'locations', ['地理地点']),
+  json('geographies', 'worldMapData', ['世界地图数据']),
+
+  longtext('histories', 'overview', ['历史总述']),
+  longtext('histories', 'eraSystem', ['纪年体系']),
+  json('histories', 'events', ['历史事件']),
+
+  text('powerSystems', 'name', ['力量体系名称']),
+  longtext('powerSystems', 'description', ['力量体系描述']),
+  json('powerSystems', 'levels', ['力量层级']),
+  longtext('powerSystems', 'rules', ['力量体系规则']),
+
   // storyCores: storyLines 作为旧字段别名归一到 mainPlot。
   longtext('storyCores', 'theme', ['主题']),
   longtext('storyCores', 'centralConflict', ['conflict', '核心冲突']),

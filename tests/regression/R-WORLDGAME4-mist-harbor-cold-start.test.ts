@@ -27,6 +27,21 @@ import { installMistHarborDemoWorld } from '../../src/lib/world-engine/mist-harb
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { adopt } from '../../src/lib/registry/adopt'
+import { groupOutlineChaptersByTopLevelVolume } from '../../src/lib/outline/canonical-outline-walk'
+import { WORLD_RULE_TREE } from '../../src/lib/types/world-rules'
+
+const CHAPTER_TITLES = [
+  '第一章　潮声迟到十三分钟',
+  '第二章　潮灯下的失名者',
+  '第三章　被抽走的记录页',
+  '第四章　退潮石脊之下',
+  '第五章　泵轮与四十七个名字',
+  '第六章　北塔的三枚权限',
+  '第七章　父亲第七码与封缄令',
+  '第八章　失声钟楼',
+  '第九章　把名字还给全城',
+  '第十章　雾散以前',
+] as const
 
 async function blankWorkspace() {
   const now = Date.now()
@@ -46,16 +61,42 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
     const first = await installMistHarborDemoWorld({ scope: owned.scope })
     const second = await installMistHarborDemoWorld({ scope: owned.scope })
     expect(second).toEqual(first)
-    expect(first).toMatchObject({ characterCount: 3, relationCount: 2, locationCount: 5, artifactCount: 3, loreEntryCount: 2, mediaAssetCount: 17 })
+    expect(first).toMatchObject({
+      characterCount: 5,
+      relationCount: 4,
+      locationCount: 5,
+      artifactCount: 3,
+      loreEntryCount: 2,
+      mediaAssetCount: 17,
+      worldRuleEntryCount: 16,
+      historicalEventCount: 5,
+      historicalKeywordCount: 5,
+      storyCoreCount: 1,
+      outlineNodeCount: 14,
+      chapterCount: 10,
+      detailedOutlineCount: 10,
+      foreshadowCount: 4,
+    })
     expect(await validateStoryGameContent(owned.scope, first.narrativeModuleId)).toMatchObject({
       valid: true,
       reachableEndingKeys: ['home', 'sea', 'truth'],
     })
-    const [nodes, beats, choices, arc] = await Promise.all([
+    const [nodes, beats, choices, arc, worldview, worldRules, geography, history, powerSystem, storyCore, characters, outlines, chapters, detailedOutlines, foreshadows] = await Promise.all([
       db.narrativeNodes.where('moduleId').equals(first.narrativeModuleId).toArray(),
       db.narrativeBeats.where('moduleId').equals(first.narrativeModuleId).toArray(),
       db.narrativeChoices.where('moduleId').equals(first.narrativeModuleId).toArray(),
       db.storyArcs.where('projectId').equals(owned.scope.projectId).filter(item => item.name === '失潮钟声主线').first(),
+      db.worldviews.where('projectId').equals(owned.scope.projectId).first(),
+      db.worldRulesProfiles.where('projectId').equals(owned.scope.projectId).first(),
+      db.geographies.where('projectId').equals(owned.scope.projectId).first(),
+      db.histories.where('projectId').equals(owned.scope.projectId).first(),
+      db.powerSystems.where('projectId').equals(owned.scope.projectId).first(),
+      db.storyCores.where('projectId').equals(owned.scope.projectId).first(),
+      db.characters.where('projectId').equals(owned.scope.projectId).toArray(),
+      db.outlineNodes.where('projectId').equals(owned.scope.projectId).toArray(),
+      db.chapters.where('projectId').equals(owned.scope.projectId).toArray(),
+      db.detailedOutlines.where('projectId').equals(owned.scope.projectId).toArray(),
+      db.foreshadows.where('projectId').equals(owned.scope.projectId).toArray(),
     ])
     expect(nodes).toHaveLength(18)
     expect(beats).toHaveLength(158)
@@ -64,7 +105,57 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
     expect(beats.filter(item => item.kind === 'dialogue')).toHaveLength(76)
     expect(JSON.parse(arc!.stages as unknown as string)).toHaveLength(3)
     expect(arc?.description).toContain('集体记忆')
+    expect(worldview).toMatchObject({
+      worldOrigin: expect.stringContaining('潮汐钟'),
+      internalConflicts: expect.stringContaining('公开真相'),
+      itemDesign: expect.stringContaining('黄铜潮汐钥匙'),
+    })
+    expect(Object.keys(worldRules!.entries)).toHaveLength(16)
+    const registeredRuleNodeIds = new Set(WORLD_RULE_TREE.flatMap(node => [node.id, ...(node.children ?? []).map(child => child.id)]))
+    expect(Object.keys(worldRules!.entries).every(key => registeredRuleNodeIds.has(key))).toBe(true)
+    expect(worldRules?.globalNote).toContain('载体、权限、代价')
+    expect(JSON.parse(geography!.locations)).toHaveLength(8)
+    expect(JSON.parse(history!.events)).toHaveLength(5)
+    expect(powerSystem).toMatchObject({ name: '潮汐共振工学', rules: expect.stringContaining('单人不能接管主钟') })
+    expect(storyCore).toMatchObject({
+      logline: expect.stringContaining('全城姓名消失'),
+      mainPlot: expect.stringContaining('失声钟楼'),
+      subPlots: expect.stringContaining('四十七名遇难者'),
+    })
+    expect(characters).toHaveLength(5)
+    for (const character of characters) {
+      expect(character).toMatchObject({
+        identity: expect.any(String),
+        profile: expect.any(String),
+        goals: expect.any(String),
+        innerConflict: expect.any(String),
+        storyRole: expect.any(String),
+        ending: expect.any(String),
+      })
+      expect(character.identity!.length).toBeGreaterThan(10)
+      expect(character.storyRole!.length).toBeGreaterThan(20)
+    }
+    expect(outlines.filter(item => item.title === '第一卷　失潮钟声' || item.title.startsWith('第一幕') || item.title.startsWith('第二幕') || item.title.startsWith('第三幕') || item.type === 'chapter')).toHaveLength(14)
+    expect(groupOutlineChaptersByTopLevelVolume(outlines)).toEqual([
+      expect.objectContaining({
+        volume: expect.objectContaining({ title: '第一卷　失潮钟声' }),
+        chapters: expect.arrayContaining(CHAPTER_TITLES.map(title => expect.objectContaining({ title }))),
+      }),
+    ])
+    expect(chapters).toHaveLength(10)
+    expect(chapters.every(item => item.content.includes('data-mist-harbor-roadshow="v1"'))).toBe(true)
+    expect(chapters.reduce((sum, item) => sum + item.content.replace(/<[^>]+>/g, '').length, 0)).toBeGreaterThanOrEqual(5_000)
+    expect(detailedOutlines).toHaveLength(10)
+    expect(detailedOutlines.every(item => Array.isArray(item.scenes) && item.scenes.length > 0)).toBe(true)
+    expect(foreshadows).toHaveLength(4)
+    expect(await db.historicalTimelineEvents.where('projectId').equals(owned.scope.projectId).count()).toBe(5)
+    expect(await db.historicalKeywords.where('projectId').equals(owned.scope.projectId).count()).toBe(5)
     expect(await db.itemLedger.where('projectId').equals(owned.scope.projectId).count()).toBe(0)
+
+    await db.chapters.update(chapters[0].id!, { content: '<p>作者现场修改的正文</p>', wordCount: 10 })
+    await installMistHarborDemoWorld({ scope: owned.scope })
+    expect((await db.chapters.get(chapters[0].id!))?.content).toBe('<p>作者现场修改的正文</p>')
+    expect(await db.chapters.where('projectId').equals(owned.scope.projectId).count()).toBe(10)
   })
 
   it('完整走通建立世界、选择主线、冻结 WorldRelease、生成三种游戏、冻结 GameRelease 和立即试玩', async () => {
@@ -96,7 +187,7 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
     expect(catalog.mediaAssets.filter(item => item.kind === 'background')).toHaveLength(5)
     expect(catalog.mediaAssets.filter(item => item.kind === 'character-expression')).toHaveLength(6)
     expect(catalog.loreEntries.map(item => item.name)).toEqual(['黑潮事故', '守灯人旧誓'])
-    expect(catalog.relationships).toHaveLength(2)
+    expect(catalog.relationships).toHaveLength(4)
     expect(catalog.storyArcs).toEqual([expect.objectContaining({ name: '失潮钟声主线', type: 'main' })])
     const narrativeModuleExportId = catalog.narrativeModules[0].exportId
 
@@ -225,7 +316,7 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
     expect(await db.avgMediaBlobs.where('workId').equals(imported.scope.workId).count()).toBe(17)
     expect(await db.gameReleases.where('workId').equals(imported.scope.workId).count()).toBe(3)
     const importedProfiles = await db.interactionCharacterProfiles.where('workId').equals(imported.scope.workId).toArray()
-    expect(importedProfiles).toHaveLength(4)
+    expect(importedProfiles).toHaveLength(5)
     expect(importedProfiles.every(item => item.characterId == null)).toBe(true)
     expect(importedProfiles.every(item => JSON.parse(item.sourceSnapshotJson ?? '{}').worldContentHash === sourceRelease.contentHash)).toBe(true)
 

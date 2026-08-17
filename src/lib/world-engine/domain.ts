@@ -59,37 +59,37 @@ const DOMAIN_DEFINITIONS: ReadonlyArray<{
   key: WorldDomainArea
   label: string
   description: string
-  requiredActiveTables: number
+  requiredTables: readonly string[]
 }> = [
   {
     key: 'foundation',
     label: '世界基础 Canon',
     description: '规则、起源、自然、人文、空间、历史与能力体系。',
-    requiredActiveTables: 2,
+    requiredTables: ['worldviews', 'worldRulesProfiles'],
   },
   {
     key: 'assets',
     label: '世界资产',
     description: '角色、关系、地点、物品、词条和可复用实体。',
-    requiredActiveTables: 1,
+    requiredTables: ['characters'],
   },
   {
     key: 'narrative',
     label: '叙事设计',
     description: '故事核心、主线、支线、故事弧、大纲、细纲和伏笔。',
-    requiredActiveTables: 1,
+    requiredTables: ['storyCores', 'outlineNodes'],
   },
   {
     key: 'structure',
     label: '世界结构',
     description: '单世界区域、多位面、多世界和通道关系。',
-    requiredActiveTables: 1,
+    requiredTables: ['worldGroups'],
   },
   {
     key: 'runtime',
     label: '状态与实例',
     description: '事件、状态机、检查点和独立运行实例。',
-    requiredActiveTables: 1,
+    requiredTables: ['simulationSessions'],
   },
 ]
 
@@ -119,9 +119,11 @@ function summarizeDomain(
   const tables = specs.map(spec => ({ name: spec.name, rowCount: projectCounts?.get(spec.name) ?? 0 }))
   const activeTableCount = tables.filter(table => table.rowCount > 0).length
   const coverage = specs.length === 0 ? 0 : clampPercent((activeTableCount / specs.length) * 100)
+  const activeTableNames = new Set(tables.filter(table => table.rowCount > 0).map(table => table.name))
+  const hasRequiredContent = definition.requiredTables.every(table => activeTableNames.has(table))
   const status = activeTableCount === 0
     ? 'empty'
-    : activeTableCount >= definition.requiredActiveTables
+    : hasRequiredContent
       ? 'ready'
       : 'partial'
   return {

@@ -107,12 +107,39 @@ const TABLE_LABELS: Record<string, string> = {
   simulationSessions: '运行实例',
   simulationEvents: '状态事件',
   simulationCheckpoints: '检查点',
+  worldRevisions: '世界修订',
+  worldReleases: '世界发布',
+  narrativeModules: '叙事模块',
+  narrativeNodes: '叙事节点',
+  narrativeBeats: '叙事节拍',
+  narrativeChoices: '叙事选择',
+  gameDefinitions: '游戏定义',
+  gameReleases: '游戏发布',
+  avgMediaAssets: '视觉媒资',
+  avgMediaBlobs: '媒资文件',
+  interactionModules: '互动模块',
+  interactionCharacterProfiles: '互动角色档案',
+}
+
+const TABLE_DISPLAY_PRIORITY: Record<WorldDomainSummary['key'], readonly string[]> = {
+  foundation: ['worldviews', 'worldRulesProfiles', 'geographies', 'histories', 'powerSystems', 'historicalTimelineEvents', 'historicalKeywords', 'importantLocations', 'worldReleases', 'worldRevisions'],
+  assets: ['characters', 'characterRelations', 'importantLocations', 'codexEntries', 'avgMediaAssets', 'avgMediaBlobs'],
+  narrative: ['storyCores', 'storyArcs', 'outlineNodes', 'detailedOutlines', 'foreshadows', 'narrativeModules', 'narrativeNodes', 'narrativeBeats', 'narrativeChoices', 'gameDefinitions', 'gameReleases'],
+  structure: ['worldGroups', 'worldGroupLinks', 'worldNodes'],
+  runtime: ['simulationSessions', 'simulationEvents', 'simulationCheckpoints'],
 }
 
 function DomainCard({ summary, onOpenModule }: { summary: WorldDomainSummary; onOpenModule: Props['onOpenModule'] }) {
   const meta = DOMAIN_META[summary.key]
   const Icon = meta.icon
-  const activeTables = summary.tables.filter(table => table.rowCount > 0)
+  const priority = TABLE_DISPLAY_PRIORITY[summary.key]
+  const activeTables = summary.tables
+    .filter(table => table.rowCount > 0)
+    .sort((left, right) => {
+      const leftIndex = priority.indexOf(left.name)
+      const rightIndex = priority.indexOf(right.name)
+      return (leftIndex < 0 ? Number.MAX_SAFE_INTEGER : leftIndex) - (rightIndex < 0 ? Number.MAX_SAFE_INTEGER : rightIndex)
+    })
   return (
     <article className="sf-feature-card sf-world-domain-card">
       <span className={`sf-feature-icon sf-feature-${summary.key === 'foundation' ? 'ochre' : summary.key === 'assets' ? 'teal' : summary.key === 'narrative' ? 'rust' : summary.key === 'structure' ? 'blue' : 'violet'}`}>
@@ -127,7 +154,7 @@ function DomainCard({ summary, onOpenModule }: { summary: WorldDomainSummary; on
         </div>
         <p>{summary.description}</p>
       </div>
-      <div className="sf-world-domain-progress" aria-label={`${summary.label}覆盖度 ${summary.coverage}%`}>
+      <div className="sf-world-domain-progress" aria-label={`${summary.label}数据表覆盖度 ${summary.coverage}%`}>
         <span style={{ width: `${summary.coverage}%` }} />
       </div>
       <div className="sf-world-domain-meta">
