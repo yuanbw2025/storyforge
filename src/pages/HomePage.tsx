@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router'
 import { Flame, Github, X, ChevronDown, ChevronRight, FolderOpen, Loader2 } from 'lucide-react'
 import { useProjectStore } from '../stores/project'
 import WelcomeGuide from '../components/guide/WelcomeGuide'
+import ProjectStorageFolderField from '../components/shared/ProjectStorageFolderField'
 import {
   isFSASupported, pickFolder, ensureFolderPermission, readStoryforgeBackups,
 } from '../lib/storage/folder-backup'
 import { importProjectJSON } from '../lib/export/json-export'
 import { APP_BUILD_ID } from '../lib/version'
+import { bindCreatedProjectStorageWorkspace } from '../lib/storage/project-storage-workspace'
 import {
   GENRE_OPTIONS, PROJECT_STATUS_LABELS,
   type ProjectStatus, type CreateProjectInput,
@@ -58,6 +60,9 @@ export default function HomePage() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
   const [restoring, setRestoring] = useState(false)
   const [restoreMsg, setRestoreMsg] = useState<string | null>(null)
+  const [projectFolder, setProjectFolder] = useState<FileSystemDirectoryHandle | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
 
   useEffect(() => { loadProjects() }, [loadProjects])
 
@@ -85,19 +90,43 @@ export default function HomePage() {
   }
 
   const handleCreate = async () => {
-    if (!form.name.trim()) return
-    const selectedGenres = form.genres.length > 0 ? form.genres : ['other']
-    const id = await createProject({
-      name: form.name,
-      genre: selectedGenres[0],
-      genres: selectedGenres,
-      status: form.status,
-      description: form.description,
-      targetWordCount: form.targetWordCount,
-    } as CreateProjectInput)
-    setShowCreate(false)
-    setForm({ ...EMPTY_FORM })
-    navigate(`/workspace/${id}`)
+    if (!form.name.trim() || creating) return
+    setCreating(true)
+    setCreateError('')
+    try {
+      const selectedGenres = form.genres.length > 0 ? form.genres : ['other']
+      const id = await createProject({
+        name: form.name,
+        genre: selectedGenres[0],
+        genres: selectedGenres,
+        status: form.status,
+        description: form.description,
+        targetWordCount: form.targetWordCount,
+      } as CreateProjectInput)
+      let storageBound = true
+      if (projectFolder) {
+        try {
+          await bindCreatedProjectStorageWorkspace(id, projectFolder)
+        } catch (error) {
+          storageBound = false
+          console.error('[project-storage] 新项目存储位置保存失败', error)
+        }
+      }
+      setShowCreate(false)
+      setForm({ ...EMPTY_FORM })
+      setProjectFolder(null)
+      navigate(storageBound ? `/workspace/${id}` : `/workspace/${id}?module=settings`)
+    } catch (error) {
+      setCreateError(`创建失败：${(error as Error).message}`)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const openCreateDialog = () => {
+    setProjectFolder(null)
+    setCreateError('')
+    setShowCreate(true)
   }
 
   const handleDelete = async (e: React.MouseEvent, id: number) => {
@@ -216,7 +245,7 @@ export default function HomePage() {
                 </button>
               )}
               <button
-                onClick={() => setShowCreate(true)}
+                onClick={openCreateDialog}
                 className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors text-sm font-medium flex items-center gap-1.5"
               >
                 + 新建项目
@@ -235,7 +264,7 @@ export default function HomePage() {
           ) : projects.length === 0 ? (
             <div
               className="py-16 text-center border border-dashed border-border rounded-xl cursor-pointer hover:border-accent/50 transition-colors group"
-              onClick={() => setShowCreate(true)}
+              onClick={openCreateDialog}
             >
               <div className="text-text-muted group-hover:text-accent transition-colors"
                    style={{ fontFamily: 'var(--font-serif)', fontSize: 40, fontWeight: 400, marginBottom: 8 }}>
@@ -319,7 +348,7 @@ export default function HomePage() {
               {/* 新建行 */}
               <div
                 className="flex items-center gap-5 py-4 text-text-muted cursor-pointer group hover:text-accent transition-colors"
-                onClick={() => setShowCreate(true)}
+                onClick={openCreateDialog}
               >
                 <div className="w-11 h-8 flex items-center justify-center border border-dashed border-border rounded group-hover:border-accent transition-colors" style={{ fontSize: 18 }}>
                   +
@@ -367,6 +396,12 @@ export default function HomePage() {
                   autoFocus
                 />
               </div>
+
+              <ProjectStorageFolderField
+                value={projectFolder}
+                onChange={setProjectFolder}
+                disabled={creating}
+              />
 
               {/* 流派（多选） */}
               <div>
@@ -474,6 +509,8 @@ export default function HomePage() {
               </div>
             </div>
 
+            {createError && <p className="mt-3 text-xs text-error">{createError}</p>}
+
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => setShowCreate(false)}
@@ -483,10 +520,10 @@ export default function HomePage() {
               </button>
               <button
                 onClick={handleCreate}
-                disabled={!form.name.trim()}
+                disabled={!form.name.trim() || creating}
                 className="px-5 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium text-sm"
               >
-                创建
+                {creating ? '创建中…' : '创建'}
               </button>
             </div>
           </div>

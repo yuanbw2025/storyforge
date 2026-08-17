@@ -1,23 +1,18 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Download, Upload, FileJson, FileText, FileType,
-  Loader2, CheckCircle, AlertCircle, FolderOpen, X,
+  Loader2, CheckCircle, AlertCircle, FolderOpen,
   History, Plus, Trash2, RotateCcw, HardDrive,
   ShieldAlert, Stethoscope, RefreshCw, GitCompareArrows,
 } from 'lucide-react'
 import { exportProjectJSON, downloadJSON, importProjectJSON, type ProjectExportData } from '../../lib/export/json-export'
 import { exportProjectMarkdown, exportProjectTXT, downloadTextFile } from '../../lib/export/text-export'
 import {
-  isFSASupported, pickFolder, ensureFolderPermission, folderPermissionGranted,
+  isFSASupported, ensureFolderPermission, folderPermissionGranted,
   writeProjectSnapshotToFolder,
 } from '../../lib/storage/folder-backup'
-import {
-  clearProjectFolderHandle,
-  LAST_FOLDER_KEY,
-  loadProjectFolderHandle,
-  saveFolderHandle,
-  saveProjectFolderHandle,
-} from '../../lib/storage/folder-handle-store'
+import { loadProjectFolderHandle } from '../../lib/storage/folder-handle-store'
+import { bindCreatedProjectStorageWorkspace } from '../../lib/storage/project-storage-workspace'
 import { useBackupStore } from '../../stores/backup'
 import CloudBackupCard from './CloudBackupCard'
 import { useToast } from '../shared/Toast'
@@ -55,9 +50,10 @@ type ExportStatus = 'idle' | 'loading' | 'success' | 'error'
 interface Props {
   project: Project
   onImported?: (newProjectId: number) => void
+  onOpenStorageSettings?: () => void
 }
 
-export default function DataManagementPanel({ project, onImported }: Props) {
+export default function DataManagementPanel({ project, onImported, onOpenStorageSettings }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('export')
 
   const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -93,14 +89,14 @@ export default function DataManagementPanel({ project, onImported }: Props) {
         })}
       </div>
 
-      {activeTab === 'export'    && <ExportTab    project={project} onImported={onImported} />}
+      {activeTab === 'export'    && <ExportTab project={project} onImported={onImported} onOpenStorageSettings={onOpenStorageSettings} />}
       {activeTab === 'backup'    && <BackupTab    project={project} onImported={onImported} />}
     </div>
   )
 }
 
 // ── 导出/导入 Tab ────────────────────────────────────────────
-function ExportTab({ project, onImported }: Props) {
+function ExportTab({ project, onImported, onOpenStorageSettings }: Props) {
   const [status, setStatus] = useState<ExportStatus>('idle')
   const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -224,22 +220,6 @@ function ExportTab({ project, onImported }: Props) {
     } finally {
       event.target.value = ''
     }
-  }
-
-  // 绑定只保存句柄。MEMORY-0 起，绑定和重新授权都不得顺带写盘。
-  const handleBindFolder = async () => {
-    const h = await pickFolder()
-    if (!h) return
-    setFolderBusy(true)
-    try {
-      const ok = await ensureFolderPermission(h)
-      if (!ok) { show('error', '未授予文件夹写入权限'); return }
-      await saveProjectFolderHandle(project, h)
-      await saveFolderHandle(LAST_FOLDER_KEY, h)
-      setFolderHandle(h); setFolderName(h.name); setFolderNeedsAuth(false)
-      show('success', `已绑定 / ${h.name}；尚未写入任何文件`)
-    } catch (e) { show('error', `绑定失败：${(e as Error).message}`) }
-    finally { setFolderBusy(false) }
   }
 
   // 重新授权（更新/刷新后浏览器把权限降回 prompt 时，一次手势恢复）
@@ -391,6 +371,9 @@ function ExportTab({ project, onImported }: Props) {
         return
       }
       const restored = await restoreWorkspaceFromFolderV1(folderHandle)
+      // The directory used to restore the project becomes that new project's
+      // storage workspace. This persists only the handle and writes no files.
+      await bindCreatedProjectStorageWorkspace(restored.projectId, folderHandle)
       await useProjectStore.getState().loadProject(restored.projectId)
       show('success', restored.reboundHarnessRunCount > 0
         ? `已完整恢复并通过回读核对；${restored.reboundHarnessRunCount} 个 Harness 终态凭据因本地主键重绑定已安全标为待复核，历史证据仍保留`
@@ -426,11 +409,6 @@ function ExportTab({ project, onImported }: Props) {
     } finally {
       setFolderBusy(false)
     }
-  }
-
-  const handleUnbindFolder = async () => {
-    await clearProjectFolderHandle(project)
-    setFolderHandle(null); setFolderName(''); setFolderNeedsAuth(false)
   }
 
   return (
@@ -489,7 +467,7 @@ function ExportTab({ project, onImported }: Props) {
       <SectionCard
         icon={<FolderOpen className="w-5 h-5 text-orange-400" />}
         title="本地记忆工作区"
-        desc="绑定只记住文件夹，不会自动写入。你可以先核对项目与本地文件，再确认同步；完整 JSON 恢复快照仍是独立的手动操作。"
+        desc="存储位置统一在“设置 → 项目存储工作区”管理。这里负责人工核对、同步和恢复；完整 JSON 恢复快照仍是独立操作。"
         badge={!isFSASupported() ? '仅 Chrome/Edge 支持' : undefined}
       >
         <div className="flex items-center justify-between gap-3 rounded bg-bg-base px-3 py-2 text-xs">
@@ -519,13 +497,11 @@ function ExportTab({ project, onImported }: Props) {
               <div className="flex items-center gap-2 text-sm text-amber-400 bg-amber-500/10 px-3 py-2 rounded-lg">
                 <ShieldAlert className="w-4 h-4 shrink-0" />
                 <span className="flex-1 truncate">已绑定「{folderName}」，保存前需要重新授权</span>
-                <button onClick={handleUnbindFolder} className="text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-green-400 bg-green-500/10 px-3 py-2 rounded-lg">
                 <FolderOpen className="w-4 h-4 shrink-0" />
-                <span className="flex-1 truncate">已绑定：{folderName}（不会自动写入）</span>
-                <button onClick={handleUnbindFolder} className="text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
+                <span className="flex-1 truncate">项目存储工作区：{folderName}（不会自动写入）</span>
               </div>
             )}
             <div className="flex gap-2 flex-wrap">
@@ -587,9 +563,17 @@ function ExportTab({ project, onImported }: Props) {
             />}
           </div>
         ) : (
-          <ActionButton onClick={handleBindFolder} disabled={!isFSASupported() || folderBusy || status === 'loading'} variant="orange">
-            {folderBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderOpen className="w-4 h-4" />} 选择本地文件夹
-          </ActionButton>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-border px-3 py-3">
+            <div>
+              <p className="text-sm text-text-secondary">尚未设置项目存储工作区</p>
+              <p className="mt-0.5 text-xs text-text-muted">先在设置中选择项目文件夹，再回到这里核对并确认首次写入。</p>
+            </div>
+            {onOpenStorageSettings && (
+              <ActionButton onClick={onOpenStorageSettings} disabled={!isFSASupported()} variant="orange">
+                <FolderOpen className="w-4 h-4" /> 前往设置
+              </ActionButton>
+            )}
+          </div>
         )}
         <div className="flex gap-2 flex-wrap border-t border-border/60 pt-3">
           {memoryEnabled && <>

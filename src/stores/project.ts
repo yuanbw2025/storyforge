@@ -12,6 +12,7 @@ import {
 import { ensureWorkspaceOwnership } from '../lib/world-engine/ownership'
 import { updateProjectAndActiveWork } from '../lib/world-engine/works'
 import { generateWorkspaceUid } from '../lib/memory/identity'
+import { clearProjectFolderHandle } from '../lib/storage/folder-handle-store'
 
 async function ensureWorldIdentity(project: Project): Promise<Project> {
   if (hasShareableWorldIdentity(project)) return project
@@ -104,9 +105,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     })
     if (!proceed) return  // 用户取消
 
+    const project = await db.projects.get(id)
+
     // Phase 1.1b: 级联删除全部从 PROJECT_TABLES 注册表派生(不再手写表清单)。
     // 加新表 = 注册表加一行,这里自动覆盖。行为与 Phase 0.6 手写版等价(R-05 保证)。
     await cascadeDeleteProject(id)
+    if (project) {
+      try {
+        await clearProjectFolderHandle(project)
+      } catch (error) {
+        // The project is already deleted. A stale browser handle grants no
+        // automatic access, so cleanup failure must not leave the UI stuck.
+        console.warn('[project-storage] 删除项目后清理文件夹关联失败', error)
+      }
+    }
 
     if (get().currentProjectId === id) {
       set({ currentProjectId: null })

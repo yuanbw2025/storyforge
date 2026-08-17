@@ -12,7 +12,18 @@ import { exportProjectJSON, type ProjectExportData } from '../export/json-export
 import { db } from '../db/schema'
 
 interface WindowWithFSA extends Window {
-  showDirectoryPicker?: (opts?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>
+  showDirectoryPicker?: (opts?: {
+    mode?: 'read' | 'readwrite'
+    id?: string
+    startIn?: FileSystemDirectoryHandle
+  }) => Promise<FileSystemDirectoryHandle>
+}
+
+export interface PickFolderOptions {
+  /** Lets the browser remember the last picker location for this purpose. */
+  id?: string
+  /** Opens a relocation picker at the currently bound project folder when supported. */
+  startIn?: FileSystemDirectoryHandle
 }
 
 /** 浏览器是否支持 File System Access API（仅 Chrome/Edge 等） */
@@ -21,11 +32,11 @@ export function isFSASupported(): boolean {
 }
 
 /** 弹出系统选择框让用户挑一个文件夹（readwrite）。取消返回 null。 */
-export async function pickFolder(): Promise<FileSystemDirectoryHandle | null> {
+export async function pickFolder(options: PickFolderOptions = {}): Promise<FileSystemDirectoryHandle | null> {
   const picker = (window as WindowWithFSA).showDirectoryPicker
   if (!picker) return null
   try {
-    return await picker({ mode: 'readwrite' })
+    return await picker({ mode: 'readwrite', ...options })
   } catch (err) {
     const e = err as { name?: string }
     if (e?.name !== 'AbortError') console.error('[folder] 选择目录失败:', err)

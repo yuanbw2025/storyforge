@@ -3,7 +3,12 @@ import { expect, test, type Page } from '@playwright/test'
 async function openCleanHome(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'memory-e2e')
-    window.showDirectoryPicker = async () => navigator.storage.getDirectory()
+    let pickerCalls = 0
+    window.showDirectoryPicker = async () => {
+      const root = await navigator.storage.getDirectory()
+      if (pickerCalls++ === 0) return root
+      return root.getDirectoryHandle('custom-location', { create: true })
+    }
   })
   await page.goto('./projects', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: /开始.*第一部.*小说/ })).toBeVisible({ timeout: 15_000 })
@@ -12,6 +17,8 @@ async function openCleanHome(page: Page) {
 async function createProject(page: Page, name: string) {
   await page.getByRole('button', { name: '+ 新建项目', exact: true }).click()
   await page.getByPlaceholder('如：《剑出山门》').fill(name)
+  await page.getByRole('button', { name: '选择项目文件夹', exact: true }).click()
+  await expect(page.getByText(/已选择：/)).toBeVisible()
   await page.getByRole('button', { name: '创建', exact: true }).click()
   await expect(page).toHaveURL(/\/storyforge\/workspace\/\d+$/)
 }
@@ -34,6 +41,12 @@ test('本地记忆工作区以真实浏览器文件系统完成手动双向核�
   await openCleanHome(page)
   await createProject(page, 'OPFS 记忆验收')
 
+  await sidebarButton(page, '设置').click()
+  const storageSettings = page.getByTestId('project-storage-workspace-settings')
+  await expect(storageSettings.getByRole('heading', { name: '项目存储工作区', exact: true })).toBeVisible()
+  await expect(storageSettings.getByText(/已关联/)).toBeVisible()
+  await expect(storageSettings.getByRole('button', { name: '更换位置', exact: true })).toBeVisible()
+
   // Seed high-value author semantics through the real UI before the first disk baseline.
   await sidebarButton(page, '故事设计').click()
   await page.getByText('点击填写一句话故事…', { exact: true }).click()
@@ -50,8 +63,8 @@ test('本地记忆工作区以真实浏览器文件系统完成手动双向核�
   await sidebarButton(page, '数据管理').click()
   await expect(page.getByRole('heading', { name: '数据管理', exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: '选择本地文件夹', exact: true }).click()
-  await expect(page.getByText(/已绑定.*尚未写入任何文件/)).toBeVisible()
+  await expect(page.getByRole('button', { name: '选择本地文件夹', exact: true })).toHaveCount(0)
+  await expect(page.getByText(/项目存储工作区：/)).toBeVisible()
   expect(await page.evaluate(async () => {
     const names: string[] = []
     for await (const name of (await navigator.storage.getDirectory()).keys()) names.push(name)
@@ -134,4 +147,23 @@ test('本地记忆工作区以真实浏览器文件系统完成手动双向核�
   await expect(page.getByText('本地文件改动已采纳，并完成数据库与文件回读核对', { exact: true })).toBeVisible({ timeout: 15_000 })
   await expect(page.getByTitle('硬盘修改后的项目名')).toBeVisible()
   await expect(page.getByText(/已一致 \d+ · 项目内改动 0 · 本地改动 0/)).toBeVisible()
+
+  // The storage location can be changed from Settings. Rebinding alone is
+  // still zero-write; the new location is initialized only after self-check
+  // and explicit confirmation.
+  await sidebarButton(page, '设置').click()
+  await storageSettings.getByRole('button', { name: '更换位置', exact: true }).click()
+  await expect(storageSettings.getByText(/存储位置已改为“custom-location”/)).toBeVisible()
+  expect(await page.evaluate(async () => {
+    const custom = await (await navigator.storage.getDirectory()).getDirectoryHandle('custom-location')
+    const names: string[] = []
+    for await (const name of custom.keys()) names.push(name)
+    return names
+  })).toEqual([])
+  await storageSettings.getByRole('button', { name: '核对与同步', exact: true }).click()
+  await page.getByRole('button', { name: '检查记忆与本地文件', exact: true }).click()
+  await expect(page.getByText(/核对完成：发现 \d+ 项需要处理/)).toBeVisible()
+  await page.getByRole('button', { name: '确认写入项目改动', exact: true }).click()
+  await expect(page.getByText('项目改动已写入本地文件，并完成回读核对', { exact: true })).toBeVisible({ timeout: 15_000 })
+  expect(await opfsFileText(page, 'custom-location/storyforge.workspace.json')).toContain('硬盘修改后的项目名')
 })

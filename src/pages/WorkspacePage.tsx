@@ -505,13 +505,20 @@ export default function WorkspacePage() {
       case 'import-doc':
         return <ImportDocPanel project={project} onNavigate={(m) => { setActiveModule(m); setEditorNodeId(null) }} />
       case 'settings':
-        return <SettingsPage />
+        return <SettingsPage
+          project={project}
+          onOpenDataManagement={() => { setActiveModule('data-management'); setEditorNodeId(null) }}
+        />
       case 'usage-stats':
         return <UsageStatsPage project={project} />
       case 'data-management':
       case 'backup':
       case 'export':
-        return <DataManagementPanel project={project} onImported={(newId) => navigate(`/workspace/${newId}`)} />
+        return <DataManagementPanel
+          project={project}
+          onImported={(newId) => navigate(`/workspace/${newId}`)}
+          onOpenStorageSettings={() => { setActiveModule('settings'); setEditorNodeId(null) }}
+        />
       default:
         return null
     }

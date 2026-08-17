@@ -31,6 +31,8 @@ import { loadWorldProjections } from '../lib/world-engine/domain'
 import WorldEngineWorkspace from '../components/world-engine/WorldEngineWorkspace'
 import type { SidebarModule } from '../components/layout/sidebar-tree'
 import WorldSharingPanel from '../components/product/WorldSharingPanel'
+import ProjectStorageFolderField from '../components/shared/ProjectStorageFolderField'
+import { bindCreatedProjectStorageWorkspace } from '../lib/storage/project-storage-workspace'
 import './product-hub.css'
 
 const NodeAuthoringWorkspace = lazy(() => import('../components/node-authoring/NodeAuthoringWorkspace'))
@@ -301,17 +303,45 @@ function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [kind, setKind] = useState<'choose' | 'worlds' | 'novel'>('choose')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [projectFolder, setProjectFolder] = useState<FileSystemDirectoryHandle | null>(null)
   const [busy, setBusy] = useState(false)
   const create = async () => {
     if (!name.trim()) return
     setBusy(true)
     try {
       const id = await createProject({ name: name.trim(), genre: 'other', genres: ['other'], status: 'drafting', description: description.trim(), targetWordCount: 500000, enableMultiWorld: false })
+      if (projectFolder) {
+        try {
+          await bindCreatedProjectStorageWorkspace(id, projectFolder)
+        } catch (error) {
+          console.error('[project-storage] 新项目存储位置保存失败', error)
+        }
+      }
       onCreated(kind === 'worlds' ? 'worlds' : 'novel', id)
     } finally { setBusy(false) }
   }
   const label = kind === 'worlds' ? '创建世界引擎' : '创建分步骤作品'
-  return <div className="sf-modal-backdrop" onMouseDown={onClose}><aside className="sf-create-panel" onMouseDown={event => event.stopPropagation()}><div className="sf-modal-header"><div><div className="sf-eyebrow">CREATE SOMETHING</div><h2>{kind === 'choose' ? '你想从哪里开始？' : label}</h2><p>{kind === 'choose' ? '两种入口最终都可以共享同一个世界基座。' : '内容会保存在本地工作区，可随时继续编辑。'}</p></div><button className="sf-icon-button" onClick={onClose} title="关闭" aria-label="关闭"><X className="h-4 w-4" /></button></div>{kind === 'choose' ? <div className="sf-create-options"><button onClick={() => setKind('worlds')}><span className="sf-create-option-icon"><Globe2 className="h-5 w-5" /></span><span><strong>世界引擎</strong><small>从零创建可被其他功能引用的世界</small></span><ArrowRight className="h-4 w-4" /></button><button onClick={() => setKind('novel')}><span className="sf-create-option-icon"><BookOpenText className="h-5 w-5" /></span><span><strong>分步骤作品</strong><small>继续熟悉的卷纲、章纲和正文工作流</small></span><ArrowRight className="h-4 w-4" /></button></div> : <div className="sf-create-form"><label>名称<input value={name} onChange={event => setName(event.target.value)} placeholder={kind === 'worlds' ? '例如：潮汐之后' : '例如：《幽都遗闻》'} autoFocus /></label><label>简介<textarea value={description} onChange={event => setDescription(event.target.value)} rows={4} placeholder="一句话描述这个世界或作品" /></label><div className="sf-create-form-actions"><Button onClick={() => setKind('choose')}>返回</Button><Button variant="primary" icon={Check} onClick={() => void create()} disabled={busy || !name.trim()}>{busy ? '创建中…' : label}</Button></div></div>}</aside></div>
+  return <div className="sf-modal-backdrop" onMouseDown={onClose}>
+    <aside className="sf-create-panel" onMouseDown={event => event.stopPropagation()}>
+      <div className="sf-modal-header">
+        <div>
+          <div className="sf-eyebrow">CREATE SOMETHING</div>
+          <h2>{kind === 'choose' ? '你想从哪里开始？' : label}</h2>
+          <p>{kind === 'choose' ? '两种入口最终都可以共享同一个世界基座。' : '选择的项目文件夹会成为内容与记忆的本地工作区。'}</p>
+        </div>
+        <button className="sf-icon-button" onClick={onClose} title="关闭" aria-label="关闭"><X className="h-4 w-4" /></button>
+      </div>
+      {kind === 'choose' ? <div className="sf-create-options">
+        <button onClick={() => setKind('worlds')}><span className="sf-create-option-icon"><Globe2 className="h-5 w-5" /></span><span><strong>世界引擎</strong><small>从零创建可被其他功能引用的世界</small></span><ArrowRight className="h-4 w-4" /></button>
+        <button onClick={() => setKind('novel')}><span className="sf-create-option-icon"><BookOpenText className="h-5 w-5" /></span><span><strong>分步骤作品</strong><small>继续熟悉的卷纲、章纲和正文工作流</small></span><ArrowRight className="h-4 w-4" /></button>
+      </div> : <div className="sf-create-form">
+        <label>名称<input value={name} onChange={event => setName(event.target.value)} placeholder={kind === 'worlds' ? '例如：潮汐之后' : '例如：《幽都遗闻》'} autoFocus /></label>
+        <label>简介<textarea value={description} onChange={event => setDescription(event.target.value)} rows={4} placeholder="一句话描述这个世界或作品" /></label>
+        <ProjectStorageFolderField value={projectFolder} onChange={setProjectFolder} disabled={busy} />
+        <div className="sf-create-form-actions"><Button onClick={() => setKind('choose')}>返回</Button><Button variant="primary" icon={Check} onClick={() => void create()} disabled={busy || !name.trim()}>{busy ? '创建中…' : label}</Button></div>
+      </div>}
+    </aside>
+  </div>
 }
 
 function WorldPicker({ worlds, onClose, onChoose }: { worlds: ProductWorld[]; onClose: () => void; onChoose: (world: ProductWorld) => void }) {
