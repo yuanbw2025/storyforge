@@ -118,11 +118,28 @@ describe('TEXTADV-1 · author and player UI', () => {
     expect(host.textContent).toContain('4 个任务')
     await click(host, '开始新冒险')
     await waitFor(() => expect(host.textContent).toContain('雾港码头'))
-    expect(host.querySelector('.adventure-map-rail')).not.toBeNull()
-    expect(host.querySelector('.adventure-status-rail')).not.toBeNull()
-    expect(host.textContent).toContain('旅行者')
-    expect(host.textContent).toContain('能力')
-    expect(host.textContent).toContain('任务追踪')
+    expect(host.querySelector('.adventure-console')).not.toBeNull()
+    expect(host.querySelector('.adventure-map-rail')).toBeNull()
+    expect(host.querySelector('.adventure-status-rail')).toBeNull()
+    expect(host.querySelector<HTMLInputElement>('input[aria-label="输入冒险指令"]')).not.toBeNull()
+    expect(host.textContent).toContain('故事从这里开始')
+    expect(host.textContent).toContain('离线确定性模式')
+    const command = host.querySelector<HTMLInputElement>('input[aria-label="输入冒险指令"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(command, '状态')
+      command.dispatchEvent(new Event('input', { bubbles: true }))
+      command.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(host.textContent).toContain('当前位置：雾港码头')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(command, '查看告示')
+      command.dispatchEvent(new Event('input', { bubbles: true }))
+      command.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    await waitFor(() => expect(useAdventureGamePlayerStore.getState().runtimeState.adventure?.actionHistory).toHaveLength(1))
+    expect(useAdventureGamePlayerStore.getState().runtimeState.adventure?.actionHistory[0]?.actionKey).toBe('inspect.notice')
     await click(host, '背包', true)
     expect(host.textContent).toContain('背包与物品')
     await act(async () => {
@@ -131,16 +148,16 @@ describe('TEXTADV-1 · author and player UI', () => {
     })
     expect(buttonContaining(host, '进入圆满结局').disabled).toBe(true)
 
-    for (const label of ['查看告示', '前往集市', '询问商人', '前往档案馆', '进入水渠', '前往钟楼', '取回钟片']) {
+    for (const label of ['前往集市', '询问商人', '前往档案馆', '进入水渠', '前往钟楼', '取回钟片']) {
       await click(host, label, true)
       await waitFor(() => expect(useAdventureGamePlayerStore.getState().busy).toBe(false))
     }
-    expect(host.textContent).toContain('人物关系')
-    expect(host.textContent).toContain('merchant · trust')
+    expect(host.textContent).toContain('潮汐商人信任 +1')
+    expect(host.textContent).toContain('目标完成')
     await waitFor(() => expect(buttonContaining(host, '进入圆满结局').disabled).toBe(false))
     expect(buttonContaining(host, '进入代价结局').disabled).toBe(true)
     await click(host, '进入圆满结局', true)
-    await waitFor(() => expect(host.textContent).toContain('已抵达结局：圆满结局'))
+    await waitFor(() => expect(host.textContent).toContain('冒险结束圆满结局'))
     const sessionId = useAdventureGamePlayerStore.getState().selectedSessionId!
     const state = await readSimulationState(sessionId)
     expect(state.narrative?.endingKey).toBe('victory')

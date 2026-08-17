@@ -166,6 +166,7 @@ describe('WORLDGAME-2 · WorldRelease 到文字冒险', () => {
     await act(`move.location-${catalog.locations[0].exportId}.location-${catalog.locations[1].exportId}`)
     await act(`take.artifact-${catalog.artifacts[0].exportId}`)
     await act(`move.location-${catalog.locations[1].exportId}.location-${catalog.locations[2].exportId}`)
+    await act('use.attune-evidence')
     await act('resolve.main')
     expect((await readSimulationState(session.id!)).narrative?.availableChoiceKeys).toContain('entry.to.ending')
     await commitAdventureNarrativeChoice({
@@ -173,10 +174,11 @@ describe('WORLDGAME-2 · WorldRelease 到文字冒险', () => {
       choiceKey: 'entry.to.ending',
       commandId: 'world.choice.ending',
     })
-    expect(await readSimulationState(session.id!)).toMatchObject({
-      adventure: { quests: [expect.objectContaining({ questKey: 'main.bell', status: 'completed' })] },
-      narrative: { completed: true, endingKey: 'ending' },
+    const completedState = await readSimulationState(session.id!)
+    expect(completedState.adventure?.quests.find(quest => quest.questKey === 'main.bell')).toMatchObject({
+      status: 'completed',
     })
+    expect(completedState.narrative).toMatchObject({ completed: true, endingKey: 'ending' })
   }, 30_000)
 
   it('缺少正式地点或 artifact 道具时拒绝生成，实时角色变化也不会污染冻结角色投影', async () => {

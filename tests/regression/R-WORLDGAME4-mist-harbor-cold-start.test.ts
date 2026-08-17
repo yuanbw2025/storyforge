@@ -245,7 +245,12 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
     expect(adventureManifest.adventure.objects.length).toBeGreaterThanOrEqual(20)
     expect(adventureManifest.adventure.actions.length).toBeGreaterThanOrEqual(40)
     expect(adventureManifest.adventure.abilities.map(item => item.title)).toEqual(['观察', '推理', '灵巧', '共情'])
-    expect(adventureManifest.adventure.conditions).toHaveLength(3)
+    expect(adventureManifest.adventure.conditions).toHaveLength(4)
+    expect(adventureManifest.adventure.quests.map(item => item.key)).toEqual(expect.arrayContaining([
+      'main.bell', 'side.survey', 'side.archive', 'side.reconstruction', 'side.voices',
+    ]))
+    expect(adventureManifest.adventure.actions.filter(item => item.kind === 'move').every(item => item.rule.kind === 'resource-payment')).toBe(true)
+    expect(adventureManifest.adventure.actions.map(item => item.key)).toContain('use.attune-evidence')
     expect(adventureManifest.adventure.actions.filter(item => item.key.startsWith('investigate.story-'))).toHaveLength(14)
     expect(adventureManifest.adventure.actions.reduce((sum, item) => sum + item.successText.length, 0)).toBeGreaterThanOrEqual(5_000)
     expect(adventureManifest.adventure.actions.map(item => item.label)).toEqual(expect.arrayContaining([
@@ -271,17 +276,18 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
     await act(`take.artifact-${catalog.artifacts[0].exportId}`)
     await act(`move.${locationKeys[1]}.${locationKeys[2]}`)
     await act(`move.${locationKeys[2]}.${locationKeys[3]}`)
-    await act('investigate.story-bell')
+    await act('use.attune-evidence')
     await act('resolve.truth')
     const adventureState = await readSimulationState(adventureSession.id!)
-    expect(adventureState.adventure).toMatchObject({
-      currentLocationKey: locationKeys[3],
-      quests: [expect.objectContaining({ questKey: 'main.bell', status: 'completed' })],
-      actionHistory: expect.arrayContaining([
-        expect.objectContaining({ actionKey: 'investigate.story-bell', narrative: expect.stringContaining('第三幕') }),
-        expect.objectContaining({ actionKey: 'resolve.truth', narrative: expect.stringContaining('真相之钟') }),
-      ]),
-    })
+    expect(adventureState.adventure?.currentLocationKey).toBe(locationKeys[3])
+    expect(adventureState.adventure?.quests.find(quest => quest.questKey === 'main.bell')).toMatchObject({ status: 'completed' })
+    expect(adventureState.adventure?.actionHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ actionKey: 'use.attune-evidence', narrative: expect.stringContaining('黄铜潮汐钥匙') }),
+      expect.objectContaining({ actionKey: 'resolve.truth', narrative: expect.stringContaining('真相之钟') }),
+    ]))
+    expect(adventureState.adventure?.conditions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ conditionKey: 'calibrated' }),
+    ]))
 
     const avg = await generateAvgGameFromWorldRelease({
       scope: owned.scope, worldReleaseId: sourceRelease.id!, narrativeModuleExportId,
