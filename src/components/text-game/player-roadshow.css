@@ -250,7 +250,7 @@
 .storygame-player-v2 .storygame-beat strong { color: #876236; font-size: .66em; }
 .storygame-player-v2 .storygame-beat p { color: #342f29; font-family: var(--font-serif); }
 .storygame-player-v2 .storygame-beat.is-dialogue { width: min(84%,650px); align-items: flex-start; padding: 12px 15px; border: 1px solid rgba(86,68,44,.12); border-radius: 12px 12px 12px 3px; background: rgba(245,241,233,.88); }
-.storygame-player-v2 .storygame-beat.is-dialogue.side-right { align-self: flex-end; flex-direction: row-reverse; border-radius: 12px 12px 3px; text-align: right; }
+.storygame-player-v2 .storygame-beat.is-dialogue.side-right { align-self: flex-end; flex-direction: row-reverse; border-radius: 12px 12px 3px; text-align: left; }
 .storygame-player-v2 .storygame-beat.is-dialogue.is-player { border-color: rgba(63,102,94,.28); background: rgba(229,237,231,.9); }
 .storygame-player-v2 .storygame-beat.is-dialogue.is-npc { align-self: flex-start; }
 .storygame-speaker-mark { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 50%; background: #425e5b; color: #fff6e8; font-family: var(--font-serif); font-size: .8em; }
@@ -261,7 +261,7 @@
 .storygame-reading-controls>button:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); }
 .storygame-reading-controls>button:disabled { opacity: .45; cursor: not-allowed; }
 .storygame-reading-controls span { font-family: var(--font-serif); font-size: .72em; }
-.storygame-reading-controls small { color: rgba(255,255,255,.72); font-family: var(--font-mono); font-size: .48em; }
+.storygame-typewriter-caret { display: inline-block; width: 2px; height: .9em; margin-left: 3px; background: currentColor; vertical-align: -.05em; animation: storygame-caret-blink .75s step-end infinite; }
 .storygame-player-v2 .storygame-choices { position: relative; gap: 9px; margin-top: 34px; border-color: rgba(91,72,47,.18); }
 .storygame-player-v2 .storygame-choices>small { margin-bottom: 2px; color: #967340; font-family: var(--font-mono); font-size: .56em; letter-spacing: .12em; text-transform: uppercase; }
 .storygame-player-v2 .storygame-choices>div>button { border-color: rgba(83,65,42,.18); background: rgba(255,253,248,.9); box-shadow: 0 5px 16px rgba(67,51,32,.05); transition: transform .18s ease,border-color .18s ease,box-shadow .18s ease; }
@@ -282,7 +282,8 @@
 .storygame-theme-night.storygame-player-v2 .storygame-main { background: #10191d; }.storygame-theme-night .storygame-story-stage { border-color: rgba(216,188,141,.16); background: rgba(20,29,32,.96); color: #f2eadf; }.storygame-theme-night .storygame-story-stage .storygame-beat p { color: #e7e0d5; }.storygame-theme-night .storygame-story-stage .storygame-beat.is-dialogue,.storygame-theme-night .storygame-cast>span { background: rgba(255,255,255,.045); }.storygame-theme-night .storygame-player-identity { border-color: rgba(152,191,179,.22); background: rgba(84,122,114,.12); }.storygame-theme-night .storygame-player-identity strong { color: #dfece8; }.storygame-theme-night .storygame-player-identity small,.storygame-theme-night .storygame-player-identity>span { color: #aab8b2; }.storygame-theme-night .storygame-story-stage>header,.storygame-theme-night .storygame-player-v2 .storygame-choices,.storygame-theme-night .storygame-reading-controls { border-color: rgba(255,255,255,.12); }.storygame-theme-night .storygame-player-v2 .storygame-choices button { background: rgba(255,255,255,.05); color: #f2eade; }
 
 @keyframes storygame-scene-enter { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
-@media (prefers-reduced-motion: reduce) { .storygame-story-stage { animation: none; } }
+@keyframes storygame-caret-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .storygame-story-stage,.storygame-typewriter-caret { animation: none; } }
 
 @media (max-width: 820px) {
   .storygame-gamebar { grid-template-columns: 36px 1fr auto; padding: 0 10px; }.storygame-progress { display: none; }.storygame-gamebar nav button { width: 34px; padding: 0; }.storygame-gamebar nav button:not(:nth-child(4)):not(:nth-child(5)) { width: auto; padding: 0 8px; }.storygame-story-stage { width: min(100% - 22px,900px); margin-top: 12px; padding: 25px 18px 40px; }.storygame-player-v2 .storygame-beat.is-dialogue { width: 92%; }.storygame-launcher-content { width: min(100% - 30px,920px); padding-top: 38px; }.storygame-launcher-library .storygame-release-card { grid-template-columns: 1fr; }.storygame-launcher-library .storygame-release-card>button { justify-self: start; }.storygame-launcher-saves { grid-template-columns: 1fr; }.storygame-panel-backdrop { padding: 10px; }

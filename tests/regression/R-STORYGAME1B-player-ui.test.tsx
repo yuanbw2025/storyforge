@@ -48,9 +48,9 @@ async function clickAria(host: HTMLElement, label: string) {
 }
 
 async function revealCurrentScene(host: HTMLElement) {
-  await viWaitFor(() => expect(host.querySelector('.storygame-choices,button[aria-label="继续阅读"],button[aria-label="进入选择"]')).not.toBeNull())
-  for (let index = 0; index < 20; index += 1) {
-    const next = host.querySelector<HTMLButtonElement>('button[aria-label="继续阅读"],button[aria-label="进入选择"]')
+  await viWaitFor(() => expect(host.querySelector('.storygame-choices,button[aria-label="显示全文"],button[aria-label="继续阅读"],button[aria-label="进入选择"]')).not.toBeNull())
+  for (let index = 0; index < 40; index += 1) {
+    const next = host.querySelector<HTMLButtonElement>('button[aria-label="显示全文"],button[aria-label="继续阅读"],button[aria-label="进入选择"]')
     if (!next) return
     await act(async () => {
       next.click()
@@ -160,18 +160,24 @@ describe('STORYGAME-1B · player loop', () => {
     expect(host.textContent).toContain('林澈')
     expect(await db.simulationSessions.count()).toBe(0)
     await click(host, '开始新游戏')
-    await viWaitFor(() => expect(host.textContent).toContain('雨水拍打着灯塔。'))
+    await viWaitFor(() => expect(host.querySelector('button[aria-label="显示全文"]')).not.toBeNull())
+    expect(host.textContent).not.toContain('雨水拍打着灯塔。')
+    await clickAria(host, '显示全文')
+    expect(host.textContent).toContain('雨水拍打着灯塔。')
     expect(host.textContent).toContain('你扮演')
     expect(host.textContent).not.toContain('我会守住今晚的灯。')
     expect(host.textContent).not.toContain('你来得正是时候。')
     expect(host.textContent).not.toContain('点亮灯火')
+    expect(host.querySelector('.storygame-reading-controls small')).toBeNull()
     expect(host.querySelector('.storygame-story-stage')).not.toBeNull()
     expect(host.querySelector('.storygame-cast')).not.toBeNull()
     await clickAria(host, '继续阅读')
+    await clickAria(host, '显示全文')
     expect(host.textContent).toContain('我会守住今晚的灯。')
     expect(host.querySelector('[data-speaker-role="player"]')?.classList.contains('side-right')).toBe(true)
     expect(host.textContent).not.toContain('你来得正是时候。')
     await clickAria(host, '继续阅读')
+    await clickAria(host, '显示全文')
     expect(host.textContent).toContain('你来得正是时候。')
     expect(host.querySelector('[data-speaker-role="npc"]')?.classList.contains('side-left')).toBe(true)
     expect(host.textContent).not.toContain('点亮灯火')
@@ -185,7 +191,9 @@ describe('STORYGAME-1B · player loop', () => {
     expect(useSimulationRuntimeStore.getState().sessions).toHaveLength(0)
 
     await click(host, '1点亮灯火与守灯人并肩工作。')
-    await viWaitFor(() => expect(host.textContent).toContain('你守住了雾港的灯。'))
+    await viWaitFor(() => expect(host.querySelector('button[aria-label="显示全文"]')).not.toBeNull())
+    await clickAria(host, '显示全文')
+    expect(host.textContent).toContain('你守住了雾港的灯。')
     expect(host.textContent).not.toContain('ENDING REACHED')
     await clickAria(host, '查看结局')
     await viWaitFor(() => expect(host.textContent).toContain('ENDING REACHED'))
@@ -261,6 +269,8 @@ describe('STORYGAME-1B · player loop', () => {
     await revealCurrentScene(host)
     await click(host, '1点亮灯火与守灯人并肩工作。')
     await viWaitFor(() => expect(host.textContent).toContain('灯火未熄'))
+    await viWaitFor(() => expect(host.querySelector('button[aria-label="显示全文"]')).not.toBeNull())
+    await clickAria(host, '显示全文')
     await clickAria(host, '查看结局')
     const originalId = useStoryGamePlayerStore.getState().selectedSessionId!
     await click(host, '从检查点改选')

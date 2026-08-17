@@ -37,6 +37,11 @@ interface ReaderCursor {
   revealedStep: number
 }
 
+interface TypewriterState {
+  beatKey: string
+  visibleCharacters: number
+}
+
 interface DisplayBeat {
   label: string
   text: string
@@ -124,6 +129,7 @@ export default function StoryGamePlayer(props: {
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
   const [preferences, setPreferences] = useState(() => loadPreferences(props.project.id!))
   const [readerCursor, setReaderCursor] = useState<ReaderCursor>({ sceneKey: '', revealedStep: 1 })
+  const [typewriter, setTypewriter] = useState<TypewriterState>({ beatKey: '', visibleCharacters: 0 })
 
   useEffect(() => {
     setCatalogReleaseId(null)
@@ -162,6 +168,13 @@ export default function StoryGamePlayer(props: {
   const revealedBeatCount = beats.length === 0 ? 0 : Math.min(beats.length, revealedStep)
   const revealedBeats = useMemo(() => beats.slice(0, revealedBeatCount), [beats, revealedBeatCount])
   const nodeContentComplete = beats.length === 0 || revealedStep > beats.length
+  const activeBeat = nodeContentComplete ? null : revealedBeats[revealedBeats.length - 1] ?? null
+  const activeBeatText = activeBeat ? displayBeat(activeBeat, speakerNames).text : ''
+  const activeTypewriterKey = activeBeat ? `${readerSceneKey}:${activeBeat.beatKey}` : ''
+  const visibleCharacters = typewriter.beatKey === activeTypewriterKey
+    ? Math.min(activeBeatText.length, typewriter.visibleCharacters)
+    : 0
+  const typewriterComplete = !activeBeat || visibleCharacters >= activeBeatText.length
   const visibleChoices = useMemo(() => (narrative?.visibleChoiceKeys ?? [])
     .map(key => choiceForKey(narrative?.choices ?? [], key))
     .filter((choice): choice is FrozenNarrativeChoice => choice != null), [narrative])
@@ -186,12 +199,33 @@ export default function StoryGamePlayer(props: {
       : loadCursor(selected.id!, readerSceneKey, maximumReadingStep))
   }, [maximumReadingStep, readerSceneKey, selected?.id])
 
+  useEffect(() => {
+    if (!activeTypewriterKey) return
+    setTypewriter(current => current.beatKey === activeTypewriterKey
+      ? current
+      : { beatKey: activeTypewriterKey, visibleCharacters: 0 })
+  }, [activeTypewriterKey])
+
+  useEffect(() => {
+    if (!activeTypewriterKey || typewriterComplete) return
+    const timeout = window.setTimeout(() => {
+      setTypewriter(current => current.beatKey === activeTypewriterKey
+        ? { ...current, visibleCharacters: Math.min(activeBeatText.length, current.visibleCharacters + 1) }
+        : current)
+    }, 24)
+    return () => window.clearTimeout(timeout)
+  }, [activeBeatText.length, activeTypewriterKey, typewriterComplete, visibleCharacters])
+
   const run = async (action: () => Promise<unknown>) => {
     try { await action() } catch { /* store exposes the actionable error */ }
   }
 
   const advanceReader = () => {
     if (!selected?.id || !readerSceneKey || nodeContentComplete) return
+    if (!typewriterComplete) {
+      setTypewriter({ beatKey: activeTypewriterKey, visibleCharacters: activeBeatText.length })
+      return
+    }
     const next = {
       sceneKey: readerSceneKey,
       revealedStep: Math.min(maximumReadingStep, revealedStep + 1),
@@ -312,14 +346,16 @@ export default function StoryGamePlayer(props: {
             {revealedBeats.map(beat => {
               const shown = displayBeat(beat, speakerNames)
               const playerBeat = beatBelongsToPlayer(beat, shown)
+              const typing = beat.beatKey === activeBeat?.beatKey && !typewriterComplete
+              const text = beat.beatKey === activeBeat?.beatKey ? shown.text.slice(0, visibleCharacters) : shown.text
               return <article className={`storygame-beat storygame-beat-${beat.kind} ${shown.dialogue ? `is-dialogue ${playerBeat ? 'is-player side-right' : 'is-npc side-left'}` : ''}`} data-speaker-role={shown.dialogue ? playerBeat ? 'player' : 'npc' : undefined} key={beat.beatKey} aria-label={`${shown.label}：${shown.text}`}>
                 {shown.dialogue && <span className="storygame-speaker-mark" aria-hidden="true">{shown.label.slice(0, 1)}</span>}
-                <div><strong>{shown.label}</strong><p>{shown.text}</p></div>
+                <div><strong>{shown.label}</strong><p>{text}{typing && <span className="storygame-typewriter-caret" aria-hidden="true" />}</p></div>
               </article>
             })}
             {!beats.length && <p className="storygame-node-summary">继续选择，推进这段故事。</p>}
           </div>
-          {!nodeContentComplete && <div className="storygame-reading-controls"><button type="button" onClick={advanceReader} disabled={store.busy} aria-label={revealedBeatCount < beats.length ? '继续阅读' : '进入选择'}><span>{revealedBeatCount < beats.length ? '继续' : '作出选择'}</span><small>{revealedBeatCount} / {beats.length}</small><ChevronRight className="h-4 w-4" /></button></div>}
+          {!nodeContentComplete && <div className="storygame-reading-controls"><button type="button" onClick={advanceReader} disabled={store.busy} aria-label={!typewriterComplete ? '显示全文' : revealedBeatCount < beats.length ? '继续阅读' : '进入选择'}><span>{typewriterComplete && revealedBeatCount >= beats.length ? '作出选择' : '继续'}</span><ChevronRight className="h-4 w-4" /></button></div>}
           {nodeContentComplete && <div className="storygame-choices" aria-label="剧情选择">
             <small>你的选择</small>
             {isLegacy ? legacyChoices.map((node, index) => <div key={node.key}><button type="button" onClick={() => void run(() => store.advanceLegacy(node.key))} disabled={store.busy}><span>{index + 1}</span><span><strong>{node.title}</strong>{node.summary && <small>{node.summary}</small>}</span><ChevronRight className="h-4 w-4" /></button></div>) : visibleChoices.map((choice, index) => {
@@ -330,7 +366,7 @@ export default function StoryGamePlayer(props: {
           </div>}
         </section>}
 
-        {view === 'story' && narrative.completed && <section key={readerSceneKey} className="storygame-ending" aria-labelledby="storygame-ending-title"><CheckCircle2 className="h-10 w-10" /><small>{nodeContentComplete ? 'ENDING REACHED' : 'FINAL SCENE'}</small><h2 id="storygame-ending-title">{currentNode.title}</h2>{revealedBeats.map(beat => { const shown = displayBeat(beat, speakerNames); const playerBeat = beatBelongsToPlayer(beat, shown); return <div className={`storygame-beat storygame-beat-${beat.kind} ${shown.dialogue ? `is-dialogue ${playerBeat ? 'is-player side-right' : 'is-npc side-left'}` : ''}`} data-speaker-role={shown.dialogue ? playerBeat ? 'player' : 'npc' : undefined} key={beat.beatKey}><strong>{shown.label}</strong><p>{shown.text}</p></div> })}{!nodeContentComplete ? <div className="storygame-reading-controls"><button type="button" onClick={advanceReader} disabled={store.busy} aria-label={revealedBeatCount < beats.length ? '继续阅读' : '查看结局'}><span>{revealedBeatCount < beats.length ? '继续' : '查看结局'}</span><small>{revealedBeatCount} / {beats.length}</small><ChevronRight className="h-4 w-4" /></button></div> : <><div className="storygame-ending-stats"><span><strong>{narrative.visitedNodeKeys.length}</strong>到访节点</span><span><strong>{narrative.choiceHistory?.length ?? 0}</strong>关键选择</span><span><strong>{store.runtimeState.lastSequence}</strong>回放事件</span></div><div className="storygame-ending-actions"><button type="button" onClick={() => setView('history')}><History className="h-4 w-4" />回看选择</button><button type="button" onClick={() => setView('saves')}><GitBranch className="h-4 w-4" />从检查点改选</button></div></>}</section>}
+        {view === 'story' && narrative.completed && <section key={readerSceneKey} className="storygame-ending" aria-labelledby="storygame-ending-title"><CheckCircle2 className="h-10 w-10" /><small>{nodeContentComplete ? 'ENDING REACHED' : 'FINAL SCENE'}</small><h2 id="storygame-ending-title">{currentNode.title}</h2>{revealedBeats.map(beat => { const shown = displayBeat(beat, speakerNames); const playerBeat = beatBelongsToPlayer(beat, shown); const typing = beat.beatKey === activeBeat?.beatKey && !typewriterComplete; const text = beat.beatKey === activeBeat?.beatKey ? shown.text.slice(0, visibleCharacters) : shown.text; return <div className={`storygame-beat storygame-beat-${beat.kind} ${shown.dialogue ? `is-dialogue ${playerBeat ? 'is-player side-right' : 'is-npc side-left'}` : ''}`} data-speaker-role={shown.dialogue ? playerBeat ? 'player' : 'npc' : undefined} key={beat.beatKey}><strong>{shown.label}</strong><p>{text}{typing && <span className="storygame-typewriter-caret" aria-hidden="true" />}</p></div> })}{!nodeContentComplete ? <div className="storygame-reading-controls"><button type="button" onClick={advanceReader} disabled={store.busy} aria-label={!typewriterComplete ? '显示全文' : revealedBeatCount < beats.length ? '继续阅读' : '查看结局'}><span>{typewriterComplete && revealedBeatCount >= beats.length ? '查看结局' : '继续'}</span><ChevronRight className="h-4 w-4" /></button></div> : <><div className="storygame-ending-stats"><span><strong>{narrative.visitedNodeKeys.length}</strong>到访节点</span><span><strong>{narrative.choiceHistory?.length ?? 0}</strong>关键选择</span><span><strong>{store.runtimeState.lastSequence}</strong>回放事件</span></div><div className="storygame-ending-actions"><button type="button" onClick={() => setView('history')}><History className="h-4 w-4" />回看选择</button><button type="button" onClick={() => setView('saves')}><GitBranch className="h-4 w-4" />从检查点改选</button></div></>}</section>}
 
         {view !== 'story' && <div className="storygame-panel-backdrop" role="presentation"><section className="storygame-panel" aria-label={view === 'history' ? '选择历史' : '检查点与分支'}><header><div><small>{view === 'history' ? 'READING HISTORY' : 'SAVE & FORK'}</small><h2>{view === 'history' ? '这条时间线的阅读记录' : '检查点与时间线'}</h2></div><button type="button" aria-label="关闭面板" onClick={() => setView('story')}><X className="h-4 w-4" /></button></header>{view === 'history' ? <div className="storygame-history">{narrative.visitedNodeKeys.map((nodeKey, index) => { const node = narrative.nodes.find(candidate => candidate.key === nodeKey); const allNodeBeats = (narrative.beats ?? []).filter(beat => beat.nodeKey === nodeKey).sort((left, right) => left.order - right.order); const nodeBeats = nodeKey === currentNode.key && index === narrative.visitedNodeKeys.length - 1 ? allNodeBeats.slice(0, revealedBeatCount) : allNodeBeats; const historyItem = narrative.choiceHistory?.[index]; const choice = historyItem ? choiceForKey(narrative.choices ?? [], historyItem.choiceKey) : null; return <article key={`${nodeKey}-${index}`}><span>{index + 1}</span><div><small>{node?.kind === 'ending' ? '结局' : '场景'}</small><strong>{node?.title ?? nodeKey}</strong>{nodeBeats.map(beat => { const shown = displayBeat(beat, speakerNames); return <p key={beat.beatKey}><b>{shown.label}</b>：{shown.text}</p> })}{choice && <p className="storygame-history-choice">选择：{choice.text} · 事件 #{historyItem?.eventSequence}</p>}</div></article>})}</div> : <div className="storygame-saves"><button type="button" className="storygame-primary-save" onClick={() => void saveCheckpoint()} disabled={store.busy}><Save className="h-4 w-4" />保存当前检查点</button><div className="storygame-save-list">{store.checkpoints.map(checkpoint => <article key={checkpoint.id}><div><strong>{checkpoint.name}</strong><span>事件 #{checkpoint.throughSequence} · {formatTime(checkpoint.createdAt)}</span></div><button type="button" onClick={() => void forkCheckpoint(checkpoint.id!, checkpoint.name)} disabled={store.busy}><GitBranch className="h-4 w-4" />从这里分支</button></article>)}</div><button type="button" className="storygame-secondary-action" onClick={() => void run(() => store.forkCurrent())} disabled={store.busy}><GitBranch className="h-4 w-4" />从当前位置建立新时间线</button></div>}</section></div>}
 
