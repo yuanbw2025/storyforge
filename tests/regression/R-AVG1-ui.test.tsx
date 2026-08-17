@@ -31,7 +31,7 @@ describe('AVG-1 · author and player UI', () => {
 
   it('玩家以真实媒资推进 Beat，关闭图片和减少动态后仍可走到三个选择', async () => {
     const owned = await fixture('AVG 玩家 UI'); const definition = await seedAvgAcceptanceGame({ scope: owned.scope }); await publishAvgGame({ scope: owned.scope, gameDefinitionId: definition.id! }); await act(async () => { root.render(createElement(DialogProvider, null, createElement(AvgGamePlayer, { project: owned.project, scope: owned.scope, worldGroupId: null }))); await new Promise(resolve => setTimeout(resolve, 0)) })
-    await waitFor(() => expect(host.textContent).toContain('潮港守灯录 · 演出版')); await click(host, '新游戏'); await waitFor(() => expect(host.textContent).toContain('第一章 · 失潮之夜'))
+    await waitFor(() => expect(host.textContent).toContain('潮港守灯录 · 演出版')); expect(host.textContent).toContain('AVG 游戏库'); expect(await db.simulationSessions.where('projectId').equals(owned.scope.projectId).count()).toBe(0); await act(async () => { host.querySelector<HTMLButtonElement>('button[aria-label="查看游戏：潮港守灯录 · 演出版"]')!.click(); await new Promise(resolve => setTimeout(resolve, 0)) }); expect(host.textContent).toContain('项美术'); await click(host, '开始新游戏'); await waitFor(() => expect(host.textContent).toContain('第一章 · 失潮之夜'))
     expect(host.querySelector('.avg-library')).toBeNull()
     expect(host.querySelector('.avg-dialogue')?.textContent).not.toContain('第一章 · 失潮之夜')
     expect(host.querySelector('.avg-scene-title')?.textContent).toContain('第一章 · 失潮之夜')
