@@ -733,10 +733,11 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
 
     const snapshot = await readAgentRunV1(fixture.scope, trace.durable!.runId)
     expect(snapshot.projection.state).toBe('failed')
-    expect(snapshot.events.slice(-3).map(event => event.type)).toEqual([
+    expect(snapshot.events.slice(-4).map(event => event.type)).toEqual([
       'model.responded',
       'step.failed',
       'run.failed',
+      'memory.settlement.recorded',
     ])
   })
 

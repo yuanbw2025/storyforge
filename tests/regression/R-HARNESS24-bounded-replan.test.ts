@@ -323,9 +323,13 @@ describe.sequential('R-HARNESS24 · 有限重规划与局部 stale', { timeout: 
     const exhausted = await readAgentRunV1(fixture.scope, runId)
     expect(exhausted.projection).toMatchObject({ generation: 2, state: 'failed' })
     expect(exhausted.events.filter(event => event.type === 'plan.replanned')).toHaveLength(1)
-    expect(exhausted.events.at(-1)).toMatchObject({
+    expect(exhausted.events.at(-2)).toMatchObject({
       type: 'budget.exhausted',
       payload: { resource: 'replans' },
+    })
+    expect(exhausted.events.at(-1)).toMatchObject({
+      type: 'memory.settlement.recorded',
+      payload: { state: 'incomplete', terminalReceiptHash: null, workspaceDirty: true },
     })
   })
 })

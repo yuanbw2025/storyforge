@@ -332,8 +332,8 @@ describe.sequential('R-HARNESS20 · 正文采纳后的统一章后处理屏障',
     const completed = await verifyChapterPostAdoptionRunV1({ scope: pending.fixture.scope, runId: snapshot.run.id })
     expect(completed.snapshot.projection.state).toBe('completed')
     expect(completed.receiptHash).toMatch(/^[a-f0-9]{64}$/)
-    expect(completed.snapshot.events.map(event => event.type).slice(-2)).toEqual([
-      'verification.started', 'verification.accepted',
+    expect(completed.snapshot.events.map(event => event.type).slice(-3)).toEqual([
+      'verification.started', 'verification.accepted', 'memory.settlement.recorded',
     ])
   })
 

@@ -65,6 +65,49 @@ describe('R-HARNESS0-event-projection · 严格事件回放', () => {
     expect(isAgentRunCompletedV1(projection)).toBe(true)
   })
 
+  it('终态记忆结算只能跟随匹配的 Harness 终态，且 receipt 失效时一并清除', () => {
+    const settlement = {
+      receiptHash: 'e'.repeat(64),
+      terminalReceiptHash: RECEIPT_HASH,
+      state: 'settled',
+      contextManifestHashes: [],
+      adoptionHashes: [],
+      artifactIndexHash: 'f'.repeat(64),
+      workspaceDirty: true,
+    }
+    const completed = replayAgentRunEventsV1([
+      ...successfulStepEvents(),
+      event(7, 'verification.started', { verifierSetVersion: 'terminal-v1' }),
+      event(8, 'verification.accepted', { receiptHash: RECEIPT_HASH }),
+      event(9, 'memory.settlement.recorded', settlement),
+    ])
+    expect(completed.state).toBe('completed')
+    expect(completed.memorySettlement).toMatchObject({
+      receiptHash: settlement.receiptHash,
+      terminalReceiptHash: RECEIPT_HASH,
+      state: 'settled',
+      workspaceDirty: true,
+    })
+
+    const staled = replayAgentRunEventsV1([
+      ...successfulStepEvents(),
+      event(7, 'verification.started', { verifierSetVersion: 'terminal-v1' }),
+      event(8, 'verification.accepted', { receiptHash: RECEIPT_HASH }),
+      event(9, 'memory.settlement.recorded', settlement),
+      event(10, 'verification.staled', {
+        previousReceiptHash: RECEIPT_HASH,
+        reason: '正式内容变化',
+      }),
+    ])
+    expect(staled.state).toBe('running')
+    expect(staled.memorySettlement).toBeUndefined()
+
+    expect(() => parseAgentRunEventV1(event(9, 'memory.settlement.recorded', {
+      ...settlement,
+      workspaceDirty: false,
+    }))).toThrow('必须记录为 true')
+  })
+
   it('完成凭证失效后退出 completed，必须重新运行终态验证', () => {
     const projection = replayAgentRunEventsV1([
       ...successfulStepEvents(),

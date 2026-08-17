@@ -198,10 +198,11 @@ describe.sequential('R-HARNESS11 · 批量章纲 durable 主路径', () => {
     const completed = await readAgentRunV1(fixture.scope, candidates[1].runId)
     expect(completed.projection.state).toBe('completed')
     expect(completed.projection.terminalReceiptHash).toMatch(/^[a-f0-9]{64}$/)
-    expect(completed.events.slice(-3).map(event => event.type)).toEqual([
+    expect(completed.events.slice(-4).map(event => event.type)).toEqual([
       'step.succeeded',
       'verification.started',
       'verification.accepted',
+      'memory.settlement.recorded',
     ])
     expect(await restoreLatestOutlineGenerationBatchV1(fixture.scope.projectId)).toBeNull()
   })
@@ -266,7 +267,15 @@ describe.sequential('R-HARNESS11 · 批量章纲 durable 主路径', () => {
     const candidate = [...result.candidatesByVolume.values()][0]
     const snapshot = await readAgentRunV1(fixture.scope, candidate.runId)
     expect(snapshot.projection.state).toBe('cancelled')
-    expect(snapshot.events.at(-1)?.type).toBe('run.cancelled')
+    expect(snapshot.events.slice(-2).map(event => event.type)).toEqual([
+      'run.cancelled',
+      'memory.settlement.recorded',
+    ])
+    expect(snapshot.projection.memorySettlement).toMatchObject({
+      state: 'incomplete',
+      terminalReceiptHash: null,
+      workspaceDirty: true,
+    })
     expect(await restoreLatestOutlineGenerationBatchV1(fixture.scope.projectId)).toBeNull()
   })
 

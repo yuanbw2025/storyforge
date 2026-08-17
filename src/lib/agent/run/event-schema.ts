@@ -42,6 +42,7 @@ export const AGENT_RUN_EVENT_TYPES_V1: readonly AgentRunEventTypeV1[] = [
   'adoption.rejected',
   'verification.started',
   'verification.accepted',
+  'memory.settlement.recorded',
   'verification.rejected',
   'verification.staled',
   'checkpoint.created',
@@ -425,6 +426,71 @@ function parsePayload<T extends AgentRunEventTypeV1>(
     case 'verification.accepted': {
       const record = payloadRecord(value, type, ['receiptHash'])
       payload = { receiptHash: readHash(record.receiptHash, 'event.payload(verification.accepted).receiptHash') }
+      break
+    }
+    case 'memory.settlement.recorded': {
+      const record = payloadRecord(value, type, [
+        'receiptHash',
+        'terminalReceiptHash',
+        'state',
+        'contextManifestHashes',
+        'adoptionHashes',
+        'artifactIndexHash',
+        'workspaceDirty',
+      ])
+      const readHashes = (key: 'contextManifestHashes' | 'adoptionHashes'): string[] => {
+        const values = readArray(record[key], `event.payload(memory.settlement.recorded).${key}`)
+        if (values.length > 512) {
+          failSchema('too_many_items', `event.payload(memory.settlement.recorded).${key}`, '最多允许 512 项')
+        }
+        return values.map((item, index) => readHash(
+          item,
+          `event.payload(memory.settlement.recorded).${key}[${index}]`,
+        ))
+      }
+      const terminalReceiptHash = record.terminalReceiptHash === null
+        ? null
+        : readHash(
+          record.terminalReceiptHash,
+          'event.payload(memory.settlement.recorded).terminalReceiptHash',
+        )
+      const settlementPayload: AgentRunEventPayloadByTypeV1['memory.settlement.recorded'] = {
+        receiptHash: readHash(
+          record.receiptHash,
+          'event.payload(memory.settlement.recorded).receiptHash',
+        ),
+        terminalReceiptHash,
+        state: readEnum(
+          record.state,
+          ['settled', 'incomplete'] as const,
+          'event.payload(memory.settlement.recorded).state',
+        ),
+        contextManifestHashes: readHashes('contextManifestHashes'),
+        adoptionHashes: readHashes('adoptionHashes'),
+        artifactIndexHash: readHash(
+          record.artifactIndexHash,
+          'event.payload(memory.settlement.recorded).artifactIndexHash',
+        ),
+        workspaceDirty: readBoolean(
+          record.workspaceDirty,
+          'event.payload(memory.settlement.recorded).workspaceDirty',
+        ) as true,
+      }
+      if (settlementPayload.workspaceDirty !== true) {
+        failSchema(
+          'invalid_value',
+          'event.payload(memory.settlement.recorded).workspaceDirty',
+          'Harness 终态不会自动写盘，必须记录为 true',
+        )
+      }
+      if (settlementPayload.state === 'settled' && settlementPayload.terminalReceiptHash == null) {
+        failSchema(
+          'invalid_value',
+          'event.payload(memory.settlement.recorded).terminalReceiptHash',
+          'settled 必须带 terminal receipt',
+        )
+      }
+      payload = settlementPayload
       break
     }
     case 'verification.rejected': {

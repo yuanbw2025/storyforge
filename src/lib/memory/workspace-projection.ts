@@ -535,7 +535,10 @@ async function createMemoryIndexProjectionDocumentV1(
   projectId: number,
   workspaceUid: string,
 ): Promise<ProjectionDocumentV1> {
-  const index = await buildMemoryArtifactIndexV1(projectId)
+  // The projected file describes the state after this manual sync commits.
+  // Persisting the pre-sync dirty bit would make the index invalidate itself
+  // forever, so the transaction's intended postcondition is explicitly clean.
+  const index = await buildMemoryArtifactIndexV1(projectId, { projectedWorkspaceDirty: false })
   const binding = await ensureBinding({
     projectId,
     workspaceUid,
@@ -646,9 +649,11 @@ async function parseProjectionDocument(
     assertDocumentIdentity(decoded.storyforge, expected)
     if (!decoded.index || decoded.index.version !== 1
       || decoded.index.workspaceUid !== expected.identity.workspaceUid
+      || typeof decoded.index.workspaceDirty !== 'boolean'
       || await hashCanonicalValue({
         version: decoded.index.version,
         workspaceUid: decoded.index.workspaceUid,
+        workspaceDirty: decoded.index.workspaceDirty,
         runs: decoded.index.runs,
       }) !== decoded.index.indexHash) {
       throw new Error('记忆产物索引格式或 hash 无效')

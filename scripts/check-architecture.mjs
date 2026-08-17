@@ -397,6 +397,22 @@ if (!/memoryClassification:\s*classifyWorkspaceMemory\(spec\)/.test(registrySrc)
   violations.push('[⑪记忆分类] 新表可能绕过 classifyWorkspaceMemory')
 }
 
+// ── ⑫ Harness 终态必须在公共事件事务内结算为记忆 ──
+const eventStoreSource = read('src/lib/agent/run/event-store.ts')
+if (!/RESERVED_EVENT_TYPES[\s\S]*?'memory\.settlement\.recorded'/.test(eventStoreSource)) {
+  violations.push('[⑫记忆结算权限] memory.settlement.recorded 必须是 event-store 专用保留事件')
+}
+if (!/const next = await appendPrivilegedAgentRunEventInTransactionV1\(snapshot, event\)[\s\S]*?const settlementEvent = parseAgentRunEventV1\([\s\S]*?return appendPrivilegedAgentRunEventInTransactionV1\(next, settlementEvent\)/.test(eventStoreSource)) {
+  violations.push('[⑫记忆结算原子性] Harness 终态与 memory settlement 必须在 appendAgentRunEventV1 同一事务追加')
+}
+for (const file of walk('src/lib')) {
+  if (file === 'src/lib/agent/run/event-store.ts') continue
+  const src = read(file)
+  if (/type:\s*['"]memory\.settlement\.recorded['"]/.test(src)) {
+    violations.push(`[⑫记忆结算旁路] ${file}: memory settlement 只能由公共 event-store 发出`)
+  }
+}
+
 // ── 报告 ──
 if (violations.length) {
   console.error('[architecture] ❌ 发现反模式违规(违反 CLAUDE.md 三注册表铁律):\n')

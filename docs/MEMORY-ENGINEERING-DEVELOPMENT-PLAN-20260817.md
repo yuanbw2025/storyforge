@@ -762,10 +762,13 @@ V2 仍由 `assembleContext()` 产生，文件目录不能成为第四条上下�
 
 **实现**：
 
-- 抽取通用 Memory Settlement Barrier，逐个接入正式 generator 入口。
+- 抽取通用 Memory Settlement Barrier，接入所有正式 generator 共用的 event-store 终态入口。
 - 建立 `MemoryArtifactRefV1` 派生目录，不复制正文。
 - 实现 ContextManifestV2，并保持 V1 完整读取和验证。
-- 只有 settlement、影响失效和 workspace dirty 完成后才签 terminal receipt。
+- 所有 generator 的公共终态事务在 `verification.accepted`、失败或取消后原子追加
+  `memory.settlement.recorded`；成功结算与失败证据都不能落入崩溃窗口。
+- Harness 终态只记录 `workspaceDirty=true`，不自动写盘；作者完成手动同步后，工作区索引再记录当前
+  `workspaceDirty=false`，避免把文件同步变成模型运行的隐藏副作用。
 
 **完成门**：任一正式生成入口都能从结果追到输入版本、候选、作者决定、正式记录、下游记忆和磁盘状态。
 
@@ -910,6 +913,7 @@ git diff --check
 - IndexedDB 写入经 `FIELD_REGISTRY + AdoptionSchema + adopt()` 治理，文件写入经 staging、回读、
   manifest-last、history/trash 和 pending 恢复治理；
 - Harness Run、候选、作者决定、采纳、正式内容和验证回执通过引用式记忆索引串联，未确认候选不会成为 Canon；
+- 新 Harness Run 在公共终态事务内即时签发显式记忆结算事件；旧 Run 继续只读派生，不做破坏性回填；
 - 一致性档案以结构化事实、认知、状态、物品、时间线和来源为核心，不依赖 embedding 裁决；
 - 完整恢复胶囊覆盖全部可导出项目表，浏览器数据丢失时可验证并重建新项目；
 - 增量扫描复用未变化文件的已提交 hash，单文件 64 MiB、单次 256 MiB 的上限在读取正文前执行。
@@ -917,7 +921,7 @@ git diff --check
 ### 18.2 验收证据
 
 - `npm run ci`：架构、注册表、AI 手册、上下文可达性、路线图、类型检查、lint、依赖审计、构建和
-  394 个测试文件 / 1924 个测试全部通过；生产依赖漏洞为 0；
+  394 个测试文件 / 1928 个测试全部通过；生产依赖漏洞为 0；
 - 覆盖率：statement 82.78%、branch 73.96%、function 81.17%、line 82.78%；
 - `npm run ci:e2e`：Chromium 53/53 通过，其中真实 Origin Private File System 用例证明绑定不写、检查不写、
   显式同步写盘、外部手改被发现、人工确认后回写 IndexedDB，并验证 manifest、恢复胶囊和记忆索引；
@@ -925,3 +929,16 @@ git diff --check
 
 用户操作和故障恢复不以本施工文档为入口，统一见
 [本地记忆工作区指南](./MEMORY-WORKSPACE-GUIDE.md)。
+
+### 18.3 Harness 即时记忆结算收口
+
+合并发布前的 P0 复核发现，首版 `MemorySettlementBarrier` 只在构建硬盘记忆索引时统一求值，Run ledger
+本身完整但没有独立的终态结算事件。现已将该边界收口到唯一公共事件存储：
+
+- `completed`、`failed`、`cancelled` 都在原终态事件的同一 IndexedDB 事务内追加结算；
+- 结算失败会整体回滚，不能出现“Run 已完成但记忆回执缺失”的半状态；
+- 成功且满足所需采纳的 Run 为 `settled`，失败、取消或缺少所需采纳的 Run 为 `incomplete`；
+- 只读作者复核没有业务写目标，合法 terminal receipt 可正常结算，不被误判为缺少 adoption；
+- receipt 失效时同步清除当前结算投影，重新终验后签发新的结算，历史事件保持不可变；
+- 终态结算只标记磁盘待同步，绝不调用文件句柄；工作区同步完成后，机器索引显示当前 clean 后置状态；
+- 没有显式结算事件的旧版 completed Run 仍可验证、读取并以 `derived-current` 进入索引。

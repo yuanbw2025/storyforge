@@ -385,6 +385,7 @@ export type AgentRunEventTypeV1 =
   | 'adoption.rejected'
   | 'verification.started'
   | 'verification.accepted'
+  | 'memory.settlement.recorded'
   | 'verification.rejected'
   | 'verification.staled'
   | 'checkpoint.created'
@@ -461,6 +462,20 @@ export interface AgentRunEventPayloadByTypeV1 {
   'adoption.rejected': { stepId: string; candidateHash: string; code: string }
   'verification.started': { verifierSetVersion: string }
   'verification.accepted': { receiptHash: string }
+  /**
+   * Immutable Harness-to-memory boundary. The complete receipt remains
+   * reproducible from the event ledger; this compact payload freezes its hash
+   * and index coverage without copying candidate or manuscript bodies.
+   */
+  'memory.settlement.recorded': {
+    receiptHash: string
+    terminalReceiptHash: string | null
+    state: 'settled' | 'incomplete'
+    contextManifestHashes: string[]
+    adoptionHashes: string[]
+    artifactIndexHash: string
+    workspaceDirty: true
+  }
   'verification.rejected': { codes: string[]; retryable: boolean }
   'verification.staled': { previousReceiptHash: string; reason: string }
   'checkpoint.created': { throughSequence: number; checkpointHash: string }
@@ -536,6 +551,14 @@ export interface AgentRunProjectionV1 {
   lastSequence: number
   steps: Record<string, AgentRunStepProjectionV1>
   terminalReceiptHash?: string
+  memorySettlement?: {
+    receiptHash: string
+    terminalReceiptHash: string | null
+    state: 'settled' | 'incomplete'
+    artifactIndexHash: string
+    workspaceDirty: true
+    recordedAt: number
+  }
   lastCheckpointHash?: string
   errors: string[]
 }

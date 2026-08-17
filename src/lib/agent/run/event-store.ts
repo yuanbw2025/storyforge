@@ -25,6 +25,10 @@ import {
   replayAgentRunEventsV1,
   toAgentRunProjectionBodyV1,
 } from './projection'
+import {
+  buildMemorySettlementReceiptFromSnapshotV1,
+  hashMemoryArtifactIndexV1,
+} from '../../memory/settlement-core'
 
 export class AgentRunStoreError extends Error {
   constructor(public readonly code: string, message: string) {
@@ -62,6 +66,7 @@ const RESERVED_EVENT_TYPES = new Set<AgentRunEventTypeV1>([
   'contract.accepted',
   'contract.revised',
   'verification.staled',
+  'memory.settlement.recorded',
   'checkpoint.created',
   'recovery.started',
   'recovery.completed',
@@ -544,7 +549,7 @@ export async function appendAgentRunEventV1<T extends AgentRunEventTypeV1>(
   }
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
-    scopeTransactionTables(db.agentRuns, db.agentRunEvents),
+    scopeTransactionTables(db.agentRuns, db.agentRunEvents, db.worlds, db.works),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
       if (
@@ -563,7 +568,46 @@ export async function appendAgentRunEventV1<T extends AgentRunEventTypeV1>(
         createdAt: input.now ?? Date.now(),
         payload: input.payload,
       })
-      return appendPrivilegedAgentRunEventInTransactionV1(snapshot, event)
+      const next = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, event)
+      const enteredMemoryTerminal = !['completed', 'failed', 'cancelled'].includes(snapshot.projection.state)
+        && ['completed', 'failed', 'cancelled'].includes(next.projection.state)
+      if (!enteredMemoryTerminal) return next
+
+      // The Harness terminal event and memory settlement are one IndexedDB
+      // transaction. A crash can expose neither or both, never a completed Run
+      // without its explicit memory receipt. Disk remains dirty by design: only
+      // the author's later workspace sync may clear that separate postcondition.
+      const receipt = await Dexie.waitFor(buildMemorySettlementReceiptFromSnapshotV1({
+        snapshot: next,
+        scope: input.scope,
+        workspaceDirty: true,
+        evaluatedAt: event.createdAt,
+      }))
+      if (receipt.state === 'awaiting-confirmation') {
+        fail('memory_settlement_state', 'Harness 终态不能结算为 awaiting-confirmation')
+      }
+      const artifactIndexHash = await Dexie.waitFor(hashMemoryArtifactIndexV1(receipt.artifactRefs))
+      const settlementEvent = parseAgentRunEventV1({
+        version: 1,
+        runId: input.runId,
+        sequence: next.projection.lastSequence + 1,
+        generation: next.projection.generation,
+        projectId: next.run.projectId,
+        worldGroupId: next.run.worldGroupId ?? null,
+        contractHash: next.run.contractHash,
+        type: 'memory.settlement.recorded',
+        createdAt: event.createdAt,
+        payload: {
+          receiptHash: receipt.receiptHash,
+          terminalReceiptHash: receipt.terminalReceiptHash,
+          state: receipt.state,
+          contextManifestHashes: [...receipt.contextManifestHashes],
+          adoptionHashes: [...receipt.adoptionHashes],
+          artifactIndexHash,
+          workspaceDirty: true,
+        },
+      })
+      return appendPrivilegedAgentRunEventInTransactionV1(next, settlementEvent)
     },
   ))
 }

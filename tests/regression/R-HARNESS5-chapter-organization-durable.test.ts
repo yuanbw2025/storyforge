@@ -206,12 +206,13 @@ describe.sequential('R-HARNESS5 · 整理本章 durable run', { timeout: 15_000 
     })
     expect(completed.snapshot.projection.state).toBe('completed')
     expect(completed.receiptHash).toMatch(/^[a-f0-9]{64}$/)
-    expect(completed.snapshot.events.map(event => event.type).slice(-5)).toEqual([
+    expect(completed.snapshot.events.map(event => event.type).slice(-6)).toEqual([
       'adoption.started',
       'adoption.committed',
       'step.succeeded',
       'verification.started',
       'verification.accepted',
+      'memory.settlement.recorded',
     ])
     const restored = await readLatestChapterOrganizationRun({
       projectId: pending.fixture.scope.projectId,

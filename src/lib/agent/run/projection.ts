@@ -61,7 +61,11 @@ function refreshRunningState(projection: AgentRunProjectionV1): void {
 }
 
 function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1): void {
-  if (TERMINAL_STATES.includes(projection.state) && event.type !== 'verification.staled') {
+  if (
+    TERMINAL_STATES.includes(projection.state)
+    && event.type !== 'verification.staled'
+    && event.type !== 'memory.settlement.recorded'
+  ) {
     throw new ProjectionError(`终态 ${projection.state} 后不得追加 ${event.type}`)
   }
   switch (event.type) {
@@ -242,6 +246,26 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       projection.terminalReceiptHash = event.payload.receiptHash
       projection.state = 'completed'
       break
+    case 'memory.settlement.recorded':
+      expectState(projection, event.type, ['completed', 'failed', 'cancelled'])
+      if (projection.memorySettlement) {
+        throw new ProjectionError('当前终态已经存在记忆结算，不得重复签发')
+      }
+      if ((projection.terminalReceiptHash ?? null) !== event.payload.terminalReceiptHash) {
+        throw new ProjectionError('记忆结算引用的 terminal receipt 与运行投影不匹配')
+      }
+      if (event.payload.state === 'settled' && projection.state !== 'completed') {
+        throw new ProjectionError('未完成的 Harness 终态不得伪造 settled 记忆结算')
+      }
+      projection.memorySettlement = {
+        receiptHash: event.payload.receiptHash,
+        terminalReceiptHash: event.payload.terminalReceiptHash,
+        state: event.payload.state,
+        artifactIndexHash: event.payload.artifactIndexHash,
+        workspaceDirty: event.payload.workspaceDirty,
+        recordedAt: event.createdAt,
+      }
+      break
     case 'verification.rejected':
       expectState(projection, event.type, ['verifying'])
       projection.state = event.payload.retryable ? 'running' : 'failed'
@@ -252,6 +276,7 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
         throw new ProjectionError('verification.staled 的 previousReceiptHash 不匹配')
       }
       projection.terminalReceiptHash = undefined
+      projection.memorySettlement = undefined
       projection.state = 'running'
       break
     case 'checkpoint.created':
@@ -369,6 +394,7 @@ export function toAgentRunProjectionBodyV1(
     lastSequence: projection.lastSequence,
     steps: projection.steps,
     terminalReceiptHash: projection.terminalReceiptHash,
+    memorySettlement: projection.memorySettlement,
     lastCheckpointHash: projection.lastCheckpointHash,
     errors: projection.errors,
   }

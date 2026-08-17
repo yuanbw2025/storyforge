@@ -249,6 +249,8 @@ export interface MemoryArtifactRefV1 {
 
 export interface MemorySettlementReceiptV1 {
   version: 1
+  /** Portable identity derived from run.created objective hash + creation time. */
+  runExportId: string
   runId: number
   contractHash: string
   state: 'settled' | 'awaiting-confirmation' | 'incomplete'
@@ -264,14 +266,20 @@ export interface MemorySettlementReceiptV1 {
 export interface MemoryArtifactIndexV1 {
   version: 1
   workspaceUid: string
+  /** Current project-wide disk postcondition, evaluated when the index is built. */
+  workspaceDirty: boolean
   runs: readonly {
     runExportId: string
     contractHash: string
     state: MemorySettlementReceiptV1['state']
     terminalReceiptHash: string | null
+    settlementReceiptHash: string | null
+    settlementSource: 'terminal-event' | 'derived-current'
+    settlementRecordedAt: number | null
     contextManifestHashes: readonly string[]
     adoptionHashes: readonly string[]
     artifactRefs: readonly MemoryArtifactRefV1[]
+    artifactIndexHash: string
   }[]
   indexHash: string
 }

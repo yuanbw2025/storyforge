@@ -249,12 +249,13 @@ describe.sequential('R-HARNESS7 · 正文生成 durable run', { timeout: 15_000 
     expect((await db.chapters.get(pending.fixture.chapterId))?.content)
       .toBe('<p>潮门在暮色中缓缓开启。</p>')
     expect((await db.narrativeSummaryNodes.get(summaryId))?.status).toBe('stale')
-    expect(completed.snapshot.events.map(event => event.type).slice(-5)).toEqual([
+    expect(completed.snapshot.events.map(event => event.type).slice(-6)).toEqual([
       'adoption.started',
       'adoption.committed',
       'step.succeeded',
       'verification.started',
       'verification.accepted',
+      'memory.settlement.recorded',
     ])
   })
 

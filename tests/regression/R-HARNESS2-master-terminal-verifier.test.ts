@@ -152,8 +152,14 @@ describe.sequential('R-HARNESS2-master-terminal-verifier · 主 Agent 完成判�
     expect(verified.receipt?.contextManifestHashes).toHaveLength(1)
     expect(verified.receipt?.adoptionEventIds).toHaveLength(1)
     expect(verified.snapshot.projection.state).toBe('completed')
-    expect((await readAgentRunV1(run.fixture.scope, run.result.runId)).events.map(event => event.type).slice(-2))
-      .toEqual(['verification.started', 'verification.accepted'])
+    const completed = await readAgentRunV1(run.fixture.scope, run.result.runId)
+    expect(completed.events.map(event => event.type).slice(-3))
+      .toEqual(['verification.started', 'verification.accepted', 'memory.settlement.recorded'])
+    expect(completed.projection.memorySettlement).toMatchObject({
+      state: 'settled',
+      terminalReceiptHash: verified.receipt?.receiptHash,
+      workspaceDirty: true,
+    })
   })
 
   it('缺少上下文装配证据或正式状态不匹配时拒绝伪完成', async () => {
