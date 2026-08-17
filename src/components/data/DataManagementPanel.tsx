@@ -215,7 +215,9 @@ function ExportTab({ project, onImported }: Props) {
       show('loading', '正在校验并恢复工作区包...')
       const restored = await importWorkspacePackageV1(JSON.parse(await file.text()))
       await useProjectStore.getState().loadProject(restored.projectId)
-      show('success', '工作区包已完整恢复并通过回读核对')
+      show('success', restored.reboundHarnessRunCount > 0
+        ? `工作区包已恢复；${restored.reboundHarnessRunCount} 个 Harness 终态凭据因本地主键重绑定已安全标为待复核，历史证据仍保留`
+        : '工作区包已完整恢复并通过回读核对')
       onImported?.(restored.projectId)
     } catch (e) {
       show('error', `工作区包导入失败：${(e as Error).message}`)
@@ -390,7 +392,9 @@ function ExportTab({ project, onImported }: Props) {
       }
       const restored = await restoreWorkspaceFromFolderV1(folderHandle)
       await useProjectStore.getState().loadProject(restored.projectId)
-      show('success', '已从本地工作区完整恢复，并通过逐文档回读核对')
+      show('success', restored.reboundHarnessRunCount > 0
+        ? `已完整恢复并通过回读核对；${restored.reboundHarnessRunCount} 个 Harness 终态凭据因本地主键重绑定已安全标为待复核，历史证据仍保留`
+        : '已从本地工作区完整恢复，并通过逐文档回读核对')
       onImported?.(restored.projectId)
     } catch (e) {
       show('error', `恢复停止：${(e as Error).message}`)

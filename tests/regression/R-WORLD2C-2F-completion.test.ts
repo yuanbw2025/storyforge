@@ -105,7 +105,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
 
     const missing = structuredClone(backup) as any
     delete missing.storyCores[0]._workOwnerExportId
-    await expect(importProjectJSON(missing)).rejects.toThrow('owner 必须且只能有一个')
+    await expect(importProjectJSON(missing)).rejects.toThrow('owner 缺失或越界')
     expect(await db.projects.count()).toBe(beforeProjects)
   })
 

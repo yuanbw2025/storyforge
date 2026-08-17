@@ -64,7 +64,7 @@ export function aggregateInventory(entries: ItemLedgerEntry[], characterId?: num
     const itemName = e.itemName.trim()
     if (!itemName) continue
     // “全部角色”视图也必须保留归属边界，不能把不同角色的同名物品合成一份。
-    const ownerKey = e.characterId != null ? `id:${e.characterId}` : `name:${e.heldByName.trim()}`
+    const ownerKey = e.characterId != null ? `id:${e.characterId}` : `name:${(e.heldByName ?? '').trim()}`
     const key = JSON.stringify([ownerKey, itemName])
     const bucket = map.get(key) ?? { itemName, entries: [] }
     bucket.entries.push(e)

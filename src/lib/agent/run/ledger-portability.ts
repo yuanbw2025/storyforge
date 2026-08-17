@@ -331,6 +331,7 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
     if (projection.errors.length > 0 || projection.state === 'recovery_required') {
       fail(`导入 run ${runId} 无法重放：${projection.errors.join('；')}`)
     }
+    let appendedImportTerminalEvent = false
     if (projection.state === 'completed' && projection.terminalReceiptHash) {
       const staled = parseAgentRunEventV1({
         version: 1,
@@ -360,6 +361,7 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
       })
       domainEvents = [...domainEvents, staled]
       projection = replayAgentRunEventsV1(domainEvents)
+      appendedImportTerminalEvent = true
     } else if (hasNonPortableCheckpoint(checkpoints) && !['failed', 'cancelled'].includes(projection.state)) {
       const cancelled = parseAgentRunEventV1({
         version: 1,
@@ -386,6 +388,7 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
       })
       domainEvents = [...domainEvents, cancelled]
       projection = replayAgentRunEventsV1(domainEvents)
+      appendedImportTerminalEvent = true
     }
     const projectionBody = toAgentRunProjectionBodyV1(projection)
     await db.agentRuns.update(runId, {
@@ -395,7 +398,10 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
       projectionJson: canonicalStringify(projectionBody),
       projectionHash: await Dexie.waitFor(hashCanonicalValue(projectionBody)),
       terminalReceiptHash: projection.terminalReceiptHash ?? null,
-      updatedAt: Date.now(),
+      // Pure ID/hash rebinding is transport work, not a new Harness action.
+      // Preserve the original timestamp unless import appended a real stale or
+      // cancellation event that changes the durable run lifecycle.
+      updatedAt: appendedImportTerminalEvent ? Date.now() : run.updatedAt,
     })
   }
 }

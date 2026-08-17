@@ -24,9 +24,11 @@ Harness 与 CREL 工程重构已经完成，`MEMORY-0～10` 也已完成施工�
 [记忆工程完整施工与验收记录](../MEMORY-ENGINEERING-DEVELOPMENT-PLAN-20260817.md)，作者操作、恢复、
 隐私和费用边界见[本地记忆工作区指南](../MEMORY-WORKSPACE-GUIDE.md)。
 
-后续不重开 MEMORY-0～10，也不以“全表可编辑”为目标。Deep Audit durable Harness 收口、作者高价值
-语义内容的选择性投影和真实长篇作品验收，统一以
-[记忆工程收口纲领](../MEMORY-ENGINEERING-CLOSURE-CHARTER-20260817.md)为唯一施工边界。
+`MEMORY-CLOSE-1～3` 已完成：Fast Guard / Deep Audit 已进入 durable Harness 与统一记忆结算；首批
+`storyCores`、`creativeRules` 已按 Work 输出可双向编辑的中文 YAML；隔离的十万字级代表性长篇、
+多 World/Work、冲突、中断、清库恢复、历史 Run 重绑定和恢复后继续创作已形成回归证据。完成边界与
+诚实样本说明见[记忆工程收口纲领](../MEMORY-ENGINEERING-CLOSURE-CHARTER-20260817.md)。后续不重开本轮，
+也不以“全表可编辑”为目标；新增语义投影仍须逐表通过准入门。
 
 旧文件夹绑定后的“进入即覆盖 + 五分钟覆盖”路径已经下线。绑定、重新授权和检查均为零写入；稳定身份、
 共同基线、冲突检测、事务恢复、显式采纳和真实文件系统往返均已通过测试。长期一致性以结构化 Canon、

@@ -592,6 +592,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.itemLedger, name: 'itemLedger', owner: 'project', exportable: true,
     domainOwner: LEGACY_WORK_OWNER,
+    defaults: { heldByName: '' },
     refs: [
       { kind: 'simple', field: 'characterId', target: 'characters[id]', onDelete: 'setNull' },
     ],

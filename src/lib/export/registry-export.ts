@@ -78,6 +78,9 @@ function toExportRow(
       const map = idMaps.get(rr.remapVia)
       const raw = parseIdArray(obj[rr.field])
       obj[rr.exportAs] = raw.map(id => map?.get(id)).filter((id): id is number => id != null)
+      // v4 is a portable contract: the shadow indexes are authoritative and
+      // local numeric IDs must not leak into or destabilize a later restore.
+      if (strictOwners) delete obj[rr.field]
     } else if (rr.kind === 'scene-character-ids') {
       const map = idMaps.get(rr.remapVia)
       obj[rr.exportAs] = Array.isArray(obj[rr.field])

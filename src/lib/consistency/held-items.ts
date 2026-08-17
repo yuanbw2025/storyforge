@@ -72,7 +72,10 @@ export function projectHeldItems(input: ProjectHeldItemsInput): HeldItemProjecti
     if (input.characterId != null && (entry.characterId ?? null) !== (input.characterId ?? null)) continue
     const itemKey = normalizeItemName(entry.itemName)
     if (!itemKey) continue
-    const ownerKey = entry.characterId != null ? `id:${entry.characterId}` : `name:${entry.heldByName.trim()}`
+    // v1-v3 backups predate heldByName. Registry import now fills it, while
+    // this fallback also keeps already-imported legacy rows readable.
+    const heldByName = (entry.heldByName ?? '').trim()
+    const ownerKey = entry.characterId != null ? `id:${entry.characterId}` : `name:${heldByName}`
     const key = JSON.stringify([ownerKey, itemKey])
     const entryChapterId = entry.chapterId ?? null
     if (entryChapterId != null) {
@@ -82,7 +85,7 @@ export function projectHeldItems(input: ProjectHeldItemsInput): HeldItemProjecti
     if (!includesInWorld(entry, chapterWorld, input.worldGroupId)) continue
     const bucket = grouped.get(key) ?? {
       displayName: entry.itemName.trim(),
-      heldByName: entry.heldByName.trim(),
+      heldByName,
       characterId: entry.characterId ?? null,
       quantity: 0,
       evidence: [],

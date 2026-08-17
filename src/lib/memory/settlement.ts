@@ -1,5 +1,6 @@
 import { db } from '../db/schema'
 import { exportProjectJSON } from '../export/json-export'
+import { deriveStrictExportProjectSnapshot } from '../export/registry-export'
 import type {
   MemoryArtifactIndexV1,
   MemorySettlementReceiptV1,
@@ -53,6 +54,27 @@ export async function buildMemoryArtifactIndexV1(
   const project = await db.projects.get(projectId)
   if (!project || !isWorkspaceUid(project.workspaceUid)) throw new Error('[memory-settlement] Workspace identity 缺失')
   const runs = await db.agentRuns.where('projectId').equals(projectId).sortBy('createdAt')
+  // The readable disk index must survive numeric-ID rebinding. AgentRun's
+  // stored contractHash is local because the contract contains local scope
+  // IDs; use the registry export boundary's portable contract hash instead.
+  const portableSnapshot = runs.length > 0
+    ? await deriveStrictExportProjectSnapshot(projectId)
+    : null
+  const portableRunRows = (portableSnapshot?.data.agentRuns ?? []) as Array<{
+    _exportId?: number
+    contractHash?: string
+  }>
+  const runExportIds = portableSnapshot?.exportIds.get('agentRuns')
+  const portableContractHashByRunId = new Map<number, string>()
+  for (const run of runs) {
+    if (run.id == null) continue
+    const exportId = runExportIds?.get(run.id)
+    const portableHash = exportId == null
+      ? undefined
+      : portableRunRows.find(row => row._exportId === exportId)?.contractHash
+    if (!portableHash) throw new Error(`[memory-settlement] Run ${run.id} 缺少便携契约 hash`)
+    portableContractHashByRunId.set(run.id, portableHash)
+  }
   const workspaceDirty = options.projectedWorkspaceDirty
     ?? await workspaceDirtyForSettlement(projectId)
   const entries: MemoryArtifactIndexV1['runs'][number][] = []
@@ -95,7 +117,8 @@ export async function buildMemoryArtifactIndexV1(
     }
     entries.push({
       runExportId: memoryRunExportIdV1(snapshot),
-      contractHash: receipt.contractHash,
+      contractHash: portableContractHashByRunId.get(run.id)
+        ?? (() => { throw new Error(`[memory-settlement] Run ${run.id} 缺少便携契约 hash`) })(),
       state: receipt.state,
       terminalReceiptHash: receipt.terminalReceiptHash,
       settlementReceiptHash: settlementEvent?.type === 'memory.settlement.recorded'

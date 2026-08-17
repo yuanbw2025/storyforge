@@ -184,7 +184,8 @@ describe('WORLD-2C C2 · lazy workspace ownership migration', () => {
     expect(project?.worldCode).toBe(result.world.code)
     expect(await db.worldviews.get(1)).toMatchObject({ worldId: result.world.id })
     expect(await db.characters.get(seeded.char1)).toMatchObject({ worldId: result.world.id })
-    expect(await db.storyCores.get(1)).toMatchObject({ workId: result.work.id, worldId: null })
+    expect(await db.storyCores.get(1)).toMatchObject({ workId: result.work.id })
+    expect(await db.storyCores.get(1)).not.toHaveProperty('worldId')
     expect(await db.chapters.get(seeded.chapter)).toMatchObject({
       id: seeded.chapter,
       workId: result.work.id,

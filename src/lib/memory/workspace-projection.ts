@@ -1565,7 +1565,7 @@ async function restoredRecordIdForBindingV1(input: {
  */
 export async function restoreWorkspaceFromFolderV1(
   root: FileSystemDirectoryHandle,
-): Promise<{ projectId: number; report: WorkspaceSelfCheckReportV1 }> {
+): Promise<{ projectId: number; report: WorkspaceSelfCheckReportV1; reboundHarnessRunCount: number }> {
   const [recoveryRaw, bindingsRaw] = await Promise.all([
     readTextAt(root, '.storyforge/recovery/project.json'),
     readTextAt(root, '.storyforge/bindings.json'),
@@ -1653,18 +1653,71 @@ export async function restoreWorkspaceFromFolderV1(
       const recoveryBackup = recovery.backup as unknown as Record<string, unknown>
       const currentRecord = currentBackup as unknown as Record<string, unknown>
       const changedSections: string[] = []
+      const changedSectionNames: string[] = []
       for (const key of Object.keys(currentRecord)) {
         if (await hashCanonicalValue(currentRecord[key]) !== await hashCanonicalValue(recoveryBackup[key])) {
-          changedSections.push(key)
+          changedSectionNames.push(key)
+          const currentSection = currentRecord[key]
+          const recoverySection = recoveryBackup[key]
+          if (Array.isArray(currentSection) && Array.isArray(recoverySection)) {
+            const changedIndexes: string[] = []
+            const length = Math.max(currentSection.length, recoverySection.length)
+            for (let index = 0; index < length && changedIndexes.length < 3; index += 1) {
+              if (await hashCanonicalValue(currentSection[index]) === await hashCanonicalValue(recoverySection[index])) continue
+              const currentRow = currentSection[index] as Record<string, unknown> | undefined
+              const recoveryRow = recoverySection[index] as Record<string, unknown> | undefined
+              const fields = [...new Set([
+                ...Object.keys(currentRow ?? {}),
+                ...Object.keys(recoveryRow ?? {}),
+              ])].filter(field => JSON.stringify(currentRow?.[field]) !== JSON.stringify(recoveryRow?.[field]))
+              changedIndexes.push(`${index}${fields.length ? `:${fields.slice(0, 5).join('|')}` : ''}`)
+            }
+            changedSections.push(`${key}[${currentSection.length}/${recoverySection.length};${changedIndexes.join(',')}]`)
+          } else {
+            changedSections.push(key)
+          }
           if (changedSections.length === 8) break
         }
+      }
+      const importReboundOnly = divergent.every(item => (
+        item.changeKind === 'project-changed'
+        && ['.storyforge/recovery/project.json', '.storyforge/runs/memory-index.json'].includes(item.relativePath)
+      )) && changedSectionNames.length > 0
+        && changedSectionNames.every(section => ['agentRuns', 'agentRunEvents'].includes(section))
+      if (importReboundOnly) {
+        // A general project import cannot trust a completed receipt whose
+        // contract was rebound to new local IDs. The ledger finalizer appends
+        // an explicit stale/cancel event. Workspace restore is already an
+        // author-confirmed disk mutation, so commit that explainable security
+        // transition and retain the previous capsule/index in file history.
+        await synchronizeProjectChangesToFolderV1({
+          projectId,
+          root,
+          expectedPlanHash: report.plan.planHash,
+        })
+        const cleanReport = await buildWorkspaceSelfCheckReportV1(projectId, root)
+        const reboundHarnessRunCount = (await db.agentRunEvents.where('projectId').equals(projectId).toArray())
+          .filter(event => {
+            if (event.type !== 'verification.staled' && event.type !== 'run.cancelled') return false
+            try {
+              const payload = JSON.parse(event.payloadJson) as { reason?: unknown }
+              return payload.reason === 'project-import-scope-rebound'
+                || payload.reason === 'project-import-nonportable-checkpoint'
+            } catch {
+              return false
+            }
+          }).length
+        if (!cleanReport.plan.items.every(item => item.changeKind === 'clean')) {
+          throw new Error('[memory-workspace] Harness 重绑定证据写回后仍未收敛')
+        }
+        return { projectId, report: cleanReport, reboundHarnessRunCount }
       }
       const sectionDetails = changedSections.length
         ? `；差异分区:${changedSections.join(',')}`
         : ''
       throw new Error(`[memory-workspace] 恢复后回读核对未收敛，已撤销新项目${details ? `（${details}${sectionDetails}）` : ''}`)
     }
-    return { projectId, report }
+    return { projectId, report, reboundHarnessRunCount: 0 }
   } catch (error) {
     if (projectId != null) await cascadeDeleteProject(projectId)
     throw error
@@ -1856,7 +1909,7 @@ function packageDirectoryHandleV1(pkg: WorkspacePackageV1): FileSystemDirectoryH
 /** Validate and restore an explicit package without requiring FSA support. */
 export async function importWorkspacePackageV1(
   input: unknown,
-): Promise<{ projectId: number; report: WorkspaceSelfCheckReportV1 }> {
+): Promise<{ projectId: number; report: WorkspaceSelfCheckReportV1; reboundHarnessRunCount: number }> {
   const pkg = await validateWorkspacePackageV1(input)
   return restoreWorkspaceFromFolderV1(packageDirectoryHandleV1(pkg))
 }

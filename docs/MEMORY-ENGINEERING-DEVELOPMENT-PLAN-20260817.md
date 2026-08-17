@@ -948,3 +948,26 @@ git diff --check
 `MEMORY-0～10` 的完成记录保持不变。后续只处理显式 Fast / Deep 审计的 durable Harness 收口、
 作者高价值语义内容的选择性硬盘投影和真实长篇作品验收；不以全表可编辑或自动语义改稿为目标。
 唯一施工边界见[记忆工程收口纲领](./MEMORY-ENGINEERING-CLOSURE-CHARTER-20260817.md)。
+
+### 18.5 MEMORY-CLOSE-1～3 收口结果
+
+后续收口已于 2026-08-17 完成，原 `MEMORY-0～10` 完成事实不变：
+
+- 作者显式 Fast Guard / Deep Audit 现在创建正式 durable Run，冻结上下文和预算，报告、终态验证、
+  stale 生命周期与记忆结算可从同一事件账本追溯；审计不自动改稿；
+- `storyCores`、`creativeRules` 成为首批新增 Work 级可编辑中文 YAML，反向写入继续经过
+  `FIELD_REGISTRY + AdoptionSchema + adopt()`、CAS 和影响计划；其它 evidence 不因本轮批量开放；
+- 基于现有全表 v3 兼容 fixture 扩充的隔离代表性长篇达到 42 章、十万字以上，并加入第二个
+  World/Work，完成双向修改、冲突、损坏、引用删除、中断续写、清库恢复、Harness 历史和继续创作验收；
+- 长链验收修复了旧 item ledger 缺 `heldByName`、v4 可移植数组泄露本地主键、Harness 传输重绑误改
+  时间戳、磁盘记忆索引使用本地 contract hash，以及 completed 历史 Run 恢复不能收敛等真实缺口；
+- 真实 Chromium OPFS 用例已覆盖从 UI 创建故事核心/创作规则、首次人工写盘、外部修改两份 YAML、
+  字段级核对、确认采纳和回读 clean。
+
+本轮没有取得或复制作者当前生产预览手稿，因此“真实长篇”工程门以隔离的全表真实结构 fixture 加长篇
+规模扩充完成，不虚称已做独立作者内容质量验收。该差异不影响协议、数据安全和浏览器文件系统验收，
+但若未来需要作品体验研究，应作为独立产品验收，不重开记忆工程协议施工。
+
+最终交付树已通过完整 `npm run ci`（397 个测试文件 / 1942 个测试，以及架构、必需表、AI 人工门、
+类型、覆盖率、生产构建和包体积检查）与 `npm run ci:e2e`（Chromium 53/53）。本轮施工因此在
+`MEMORY-CLOSE-1～3` 的既定停止边界结束。
