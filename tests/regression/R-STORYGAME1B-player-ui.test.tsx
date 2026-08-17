@@ -29,6 +29,24 @@ async function click(host: HTMLElement, text: string) {
   })
 }
 
+async function clickContaining(host: HTMLElement, text: string) {
+  await act(async () => {
+    const result = Array.from(host.querySelectorAll('button')).find(item => item.textContent?.includes(text))
+    if (!result) throw new Error(`找不到包含文本的按钮:${text}`)
+    result.click()
+    await new Promise(resolve => setTimeout(resolve, 0))
+  })
+}
+
+async function openGameDetails(host: HTMLElement, title: string) {
+  await act(async () => {
+    const result = host.querySelector<HTMLButtonElement>(`button[aria-label="查看游戏：${title}"]`)
+    if (!result) throw new Error(`找不到游戏:${title}`)
+    result.click()
+    await new Promise(resolve => setTimeout(resolve, 0))
+  })
+}
+
 describe('STORYGAME-1B · player loop', () => {
   let host: HTMLDivElement
   let root: ReturnType<typeof createRoot>
@@ -105,7 +123,12 @@ describe('STORYGAME-1B · player loop', () => {
   it('从正式发布新建游戏，键盘可达的选择自动保存并刷新恢复到通关页', async () => {
     await renderPlayer()
     await viWaitFor(() => expect(host.textContent).toContain('灯塔之夜'))
-    await click(host, '新游戏')
+    expect(host.textContent).toContain('分支叙事游戏库')
+    expect(await db.simulationSessions.count()).toBe(0)
+    await openGameDetails(host, '灯塔之夜')
+    expect(host.textContent).toContain('3 个场景')
+    expect(await db.simulationSessions.count()).toBe(0)
+    await click(host, '开始新游戏')
     await viWaitFor(() => expect(host.textContent).toContain('雨水拍打着灯塔。'))
     expect(host.textContent).toContain('守灯人')
     expect(host.textContent).toContain('你来得正是时候。')
@@ -150,17 +173,26 @@ describe('STORYGAME-1B · player loop', () => {
       contentHash: 'f'.repeat(64),
       createdAt: Date.now() + 1,
     })
+    const { id: _storyId, ...sameStory } = storyRelease!
+    await db.gameReleases.add({
+      ...sameStory,
+      version: storyRelease!.version + 1,
+      label: '同一故事的较新不可变版本',
+      createdAt: Date.now() + 2,
+    })
 
     await renderPlayer()
     await viWaitFor(() => expect(host.textContent).toContain('灯塔之夜'))
     expect(host.textContent).not.toContain('AVG 不应出现在分支叙事书架')
-    expect(Array.from(host.querySelectorAll('article.storygame-release-card'))).toHaveLength(1)
+    expect(Array.from(host.querySelectorAll('.textgame-catalog-list>article'))).toHaveLength(1)
+    expect(useStoryGamePlayerStore.getState().releases).toHaveLength(2)
   })
 
   it('从中段检查点 fork 后改选另一结局且原存档保持不变', async () => {
     await renderPlayer()
-    await viWaitFor(() => expect(host.textContent).toContain('新游戏'))
-    await click(host, '新游戏')
+    await viWaitFor(() => expect(host.textContent).toContain('灯塔之夜'))
+    await openGameDetails(host, '灯塔之夜')
+    await click(host, '开始新游戏')
     await viWaitFor(() => expect(host.textContent).toContain('风暴将至'))
     await click(host, '存档')
     await click(host, '保存当前检查点')
@@ -242,13 +274,16 @@ describe('STORYGAME-1B · player loop', () => {
     })
 
     await renderPlayer()
+    await viWaitFor(() => expect(host.textContent).toContain('旧版灯塔存档'))
+    expect(host.textContent).toContain('分支叙事游戏库')
+    await clickContaining(host, '旧版灯塔存档')
     await viWaitFor(() => expect(host.textContent).toContain('旧版兼容模式'))
     expect(host.textContent).toContain('旧 WORLD-2F 兼容存档')
     await click(host, '1旧结局')
     await viWaitFor(() => expect(host.textContent).toContain('ENDING REACHED'))
     expect(host.textContent).toContain('旧结局')
     expect(useStoryGamePlayerStore.getState().releases).toHaveLength(1)
-    expect(host.querySelectorAll('article.storygame-release-card')).toHaveLength(0)
+    expect(host.querySelectorAll('.textgame-catalog-list>article')).toHaveLength(0)
   })
 })
 

@@ -11,7 +11,7 @@ interface AvgGamePlayerState {
   scope: WorkspaceScope | null; worldGroupId: number | null; releases: AvgLibraryItem[]; sessions: SimulationSession[]
   selectedSessionId: number | null; events: SimulationEvent[]; checkpoints: SimulationCheckpoint[]; runtimeState: SimulationRuntimeState
   selectedManifest: AvgGameReleaseManifestV1 | null; speakerNames: Record<string, string>; loading: boolean; busy: boolean; error: string
-  load(scope: WorkspaceScope, worldGroupId: number | null): Promise<void>; select(id: number | null): Promise<void>
+  load(scope: WorkspaceScope, worldGroupId: number | null, openLibrary?: boolean): Promise<void>; select(id: number | null): Promise<void>
   start(releaseId: number, title?: string): Promise<number>; reachBeat(beatKey: string): Promise<void>; choose(choiceKey: string): Promise<void>
   recordMediaFailures(failures: Array<{ assetKey: string; reason: string }>): Promise<void>
   saveCheckpoint(name: string): Promise<void>; forkCheckpoint(id: number, title?: string): Promise<number>; remove(id: number): Promise<void>
@@ -55,15 +55,18 @@ export const useAvgGamePlayerStore = create<AvgGamePlayerState>((set, get) => {
   const reload = async (selected?: number | null) => {
     const scope = get().scope!; const worldGroupId = get().worldGroupId
     const [releases, sessions] = await Promise.all([library(scope), readBoundInstances(scope).then(rows => rows.filter(row => row.kind === 'avg' && (row.worldGroupId ?? null) === worldGroupId))])
-    const wanted = selected === undefined ? get().selectedSessionId : selected
-    const id = wanted != null && sessions.some(row => row.id === wanted) ? wanted : sessions[0]?.id ?? null
+    const explicitlySelected = selected !== undefined
+    const wanted = explicitlySelected ? selected : get().selectedSessionId
+    const id = wanted != null && sessions.some(row => row.id === wanted)
+      ? wanted
+      : explicitlySelected ? null : sessions[0]?.id ?? null
     set({ releases, sessions: sessions.sort((a, b) => b.updatedAt - a.updatedAt), selectedSessionId: id })
     if (id != null) await details(id); else set({ events: [], checkpoints: [], runtimeState: structuredClone(EMPTY_SIMULATION_STATE), selectedManifest: null, speakerNames: {} })
   }
   const act = async (fn: () => Promise<unknown>) => { set({ busy: true, error: '' }); try { await fn() } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }); throw error } finally { set({ busy: false }) } }
   return {
     scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null, events: [], checkpoints: [], runtimeState: structuredClone(EMPTY_SIMULATION_STATE), selectedManifest: null, speakerNames: {}, loading: false, busy: false, error: '',
-    load: async (scope, worldGroupId) => { set({ scope, worldGroupId, loading: true, error: '' }); try { await reload() } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) } finally { set({ loading: false }) } },
+    load: async (scope, worldGroupId, openLibrary = false) => { set({ scope, worldGroupId, loading: true, error: '' }); try { await reload(openLibrary ? null : undefined) } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) } finally { set({ loading: false }) } },
     select: async id => { set({ selectedSessionId: id, loading: true }); try { if (id == null) set({ runtimeState: structuredClone(EMPTY_SIMULATION_STATE), selectedManifest: null, speakerNames: {} }); else await details(id) } finally { set({ loading: false }) } },
     start: async (releaseId, title) => { let id = 0; await act(async () => { const item = get().releases.find(row => row.release.id === releaseId); if (!item?.manifest || !get().scope) throw new Error('[avg] 请选择有效发布'); const session = await createAvgGameInstance({ scope: get().scope!, gameReleaseId: releaseId, title: title || `${item.manifest.definition.title} · 新游戏`, worldGroupId: get().worldGroupId }); id = session.id!; await ensureAutomaticCheckpoint(id); await reload(id) }); return id },
     reachBeat: async beatKey => act(async () => { const id = get().selectedSessionId; if (id == null || !get().scope) throw new Error('[avg] 请先开始游戏'); await assertSession(get().scope!, id); const base = await readSimulationStateVersion(id); const nodeKey = get().runtimeState.narrative?.currentNodeKey ?? 'unknown'; const visit = get().runtimeState.narrative?.visitedNodeKeys.filter(key => key === nodeKey).length ?? 0; await reachAvgPresentationBeat({ sessionId: id, beatKey, commandId: `avg:beat:${id}:${nodeKey}:${visit}:${beatKey}`, baseSequence: base.sequence, baseStateHash: base.stateHash, snapshotKey: `node:${nodeKey}:visit:${visit}` }); await details(id) }),

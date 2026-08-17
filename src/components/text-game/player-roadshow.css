@@ -17,6 +17,42 @@
 .avg-title-sessions button { display: grid; gap: 4px; border-color: rgba(255,255,255,.14); border-radius: 8px; background: rgba(255,255,255,.04); text-align: left; }
 .avg-title-sessions button small { color: #91a1ac; }
 
+/* Shared player catalog: library -> title page -> runtime. Immutable release history stays out of the player chrome. */
+.textgame-catalog-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 2px 0 12px; padding: 0 2px 10px; border-bottom: 1px solid rgba(255,255,255,.12); }
+.textgame-catalog-heading>span { color: #f1e8da; font-family: var(--font-serif); font-size: 18px; }
+.textgame-catalog-heading>small { color: #89999e; font-size: 9px; letter-spacing: .06em; }
+.textgame-catalog-list { display: grid; gap: 9px; }
+.textgame-catalog-list>article { overflow: hidden; border: 1px solid rgba(222,194,145,.2); border-radius: 11px; background: rgba(7,14,19,.68); box-shadow: 0 16px 42px rgba(0,0,0,.16); backdrop-filter: blur(12px); transition: border-color .18s ease,transform .18s ease,background .18s ease; }
+.textgame-catalog-list>article:hover { border-color: rgba(219,181,118,.5); background: rgba(14,24,29,.82); transform: translateY(-1px); }
+.textgame-catalog-list>article>button { display: grid; width: 100%; grid-template-columns: 76px minmax(0,1fr) auto; align-items: center; gap: 18px; padding: 14px 18px 14px 14px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.textgame-catalog-icon { display: grid; width: 76px; height: 76px; place-items: center; border: 1px solid rgba(227,199,149,.2); border-radius: 9px; background: radial-gradient(circle at 38% 27%,rgba(216,174,104,.24),transparent 26%),linear-gradient(145deg,#37504d,#14262c 62%,#0e181e); color: #ddb878; }
+.textgame-catalog-icon svg { width: 27px; height: 27px; }
+.textgame-catalog-copy { display: grid; min-width: 0; gap: 3px; }
+.textgame-catalog-copy>small,.textgame-title-copy>small { color: #c6a46c; font-family: var(--font-mono); font-size: 8px; letter-spacing: .11em; text-transform: uppercase; }
+.textgame-catalog-copy>strong { overflow: hidden; color: #f7efe3; font-family: var(--font-serif); font-size: 19px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.textgame-catalog-copy>p { overflow: hidden; margin: 0; color: #9eadb0; font-size: 10px; line-height: 1.55; text-overflow: ellipsis; white-space: nowrap; }
+.textgame-catalog-copy>i { margin-top: 3px; color: #788c90; font-size: 8px; font-style: normal; }
+.textgame-catalog-open { display: inline-flex; align-items: center; gap: 5px; color: #d8bc8b; font-size: 9px; white-space: nowrap; }
+.textgame-catalog-open svg { width: 14px; height: 14px; }
+.textgame-title-page { display: grid; grid-template-columns: minmax(230px,.72fr) minmax(0,1.28fr); overflow: hidden; border: 1px solid rgba(224,193,139,.28); border-radius: 15px; background: rgba(7,14,19,.78); box-shadow: 0 28px 75px rgba(0,0,0,.3); backdrop-filter: blur(14px); }
+.textgame-catalog-back { display: inline-flex; grid-column: 1/-1; align-items: center; justify-self: start; gap: 6px; margin: 13px 15px 0; padding: 7px 10px; border: 0; background: transparent; color: #a9b5b6; font-size: 9px; cursor: pointer; }
+.textgame-catalog-back svg { width: 14px; height: 14px; }
+.textgame-title-art { position: relative; display: grid; min-height: 310px; place-items: center; align-content: center; gap: 14px; overflow: hidden; margin: 10px 0 18px 18px; border: 1px solid rgba(224,192,136,.2); border-radius: 11px; background: radial-gradient(circle at 36% 22%,rgba(228,185,111,.3),transparent 22%),radial-gradient(circle at 78% 82%,rgba(63,119,112,.35),transparent 34%),linear-gradient(145deg,#2c4848,#13272e 58%,#0d171d); color: #e5c88f; text-align: center; }
+.textgame-title-art::after { position: absolute; inset: 0; opacity: .18; background: repeating-linear-gradient(118deg,transparent 0 46px,rgba(255,255,255,.12) 47px 48px); content: ''; }
+.textgame-title-art svg { z-index: 1; width: 48px; height: 48px; stroke-width: 1.3; }
+.textgame-title-art span { z-index: 1; font-family: var(--font-mono); font-size: 10px; line-height: 1.7; letter-spacing: .2em; }
+.textgame-title-copy { display: grid; align-content: center; gap: 9px; padding: 28px 34px 34px; }
+.textgame-title-copy>h3 { margin: 0; color: #fbf3e7; font-family: var(--font-serif); font-size: clamp(27px,3vw,39px); font-weight: 500; line-height: 1.18; }
+.textgame-title-copy>p { max-width: 590px; margin: 0; color: #aab7b9; font-family: var(--font-serif); font-size: 12px; line-height: 1.75; }
+.textgame-title-stats { display: flex; flex-wrap: wrap; gap: 6px; margin: 5px 0 11px; }
+.textgame-title-stats>span { padding: 5px 8px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; color: #c2cecc; font-size: 8px; }
+.textgame-title-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.textgame-title-actions>button { display: inline-flex; align-items: center; gap: 6px; padding: 10px 15px; border: 1px solid rgba(213,177,116,.34); border-radius: 999px; background: rgba(255,255,255,.035); color: #e3d4ba; font-size: 9px; cursor: pointer; }
+.textgame-title-actions>button.textgame-start { border-color: #c8a05f; background: linear-gradient(135deg,#9a6c34,#6f4c29); color: #fff2dc; box-shadow: 0 10px 26px rgba(81,51,23,.34); }
+.textgame-title-actions>button:disabled { opacity: .42; cursor: not-allowed; }
+.adventure-title-page .textgame-title-art { background: radial-gradient(circle at 31% 23%,rgba(226,181,106,.3),transparent 22%),radial-gradient(circle at 76% 82%,rgba(49,109,104,.45),transparent 38%),linear-gradient(145deg,#31534e,#132b31 58%,#0d181e); }
+.avg-game-title-page .textgame-title-art { background: radial-gradient(circle at 35% 23%,rgba(221,173,103,.3),transparent 23%),radial-gradient(circle at 75% 83%,rgba(72,102,126,.42),transparent 36%),linear-gradient(145deg,#344653,#172733 60%,#0b141c); }
+
 .avg-playing { position: fixed; z-index: 80; inset: 0; display: block; min-height: 0; background: #05090d; color: #f6efe4; }
 .avg-playing .avg-main { position: relative; display: block; width: 100%; height: 100%; }
 .avg-playing .avg-toolbar { position: absolute; z-index: 34; top: 0; right: 0; left: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 18px 22px 52px; background: linear-gradient(180deg,rgba(4,8,12,.88),rgba(4,8,12,.38) 56%,transparent); pointer-events: none; }
@@ -304,5 +340,6 @@
   .adventure-layout { grid-template-columns: 180px minmax(420px,1fr); }.adventure-status-rail { display: none; }
 }
 @media (max-width: 780px) {
+  .textgame-catalog-list>article>button { grid-template-columns: 54px minmax(0,1fr); gap: 11px; padding: 11px; }.textgame-catalog-icon { width: 54px; height: 54px; }.textgame-catalog-open { display: none; }.textgame-catalog-copy>p { white-space: normal; }.textgame-title-page { grid-template-columns: 1fr; }.textgame-title-art { min-height: 155px; margin: 8px 14px 0; }.textgame-title-copy { padding: 22px 19px 27px; }
   .adventure-launcher-content { width: min(100% - 28px,1000px); padding-top: 36px; }.adventure-release-grid>article { grid-template-columns: 1fr; }.adventure-release-cover { min-height: 140px; }.adventure-launcher-saves { grid-template-columns: 1fr; }.adventure-gamebar { grid-template-columns: 36px 1fr auto; padding: 0 10px; }.adventure-autosave,.adventure-gamebar nav { display: none; }.adventure-layout { display: block; padding-bottom: 60px; }.adventure-map-rail { display: none; }.adventure-scene-column { padding: 10px; }.adventure-scene { min-height: 330px; padding: 22px 17px; }.adventure-scene-characters article { min-width: min(100%,180px); }.adventure-actions>div { grid-template-columns: 1fr; }.adventure-mobile-dock { position: sticky; z-index: 28; bottom: 0; display: grid; grid-template-columns: repeat(5,1fr); border-top: 1px solid rgba(255,255,255,.1); background: rgba(8,16,22,.95); backdrop-filter: blur(12px); }.adventure-mobile-dock button { display: grid; place-items: center; gap: 3px; padding: 9px 2px; border: 0; background: transparent; color: #9ba9ab; font-size: 7px; }.adventure-panel-backdrop { inset: 64px 0 0; padding: 8px; }.adventure-panel { max-height: 91vh; }.adventure-inventory-grid { grid-template-columns: 1fr; }
 }

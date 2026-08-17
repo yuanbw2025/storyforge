@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import type { FrozenNarrativeBeat, FrozenNarrativeChoice, Project, WorkspaceScope } from '../../lib/types'
+import { currentPlayerReleases } from '../../lib/text-game/player-library'
 import { useStoryGamePlayerStore } from '../../stores/story-game-player'
 import { useDialog } from '../shared/Dialog'
 import './player-roadshow.css'
@@ -94,10 +95,12 @@ export default function StoryGamePlayer(props: {
   const dialog = useDialog()
   const [view, setView] = useState<PlayerView>('story')
   const [showSettings, setShowSettings] = useState(false)
+  const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
   const [preferences, setPreferences] = useState(() => loadPreferences(props.project.id!))
 
   useEffect(() => {
-    void store.load(props.scope, props.worldGroupId)
+    setCatalogReleaseId(null)
+    void store.load(props.scope, props.worldGroupId, true)
   // Zustand actions are stable; the explicit scope is the reload boundary.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId])
@@ -107,6 +110,8 @@ export default function StoryGamePlayer(props: {
   }, [preferences, props.project.id])
 
   const selected = store.sessions.find(session => session.id === store.selectedSessionId) ?? null
+  const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
+  const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
   const selectedRelease = store.releases.find(item => item.release.id === selected?.gameReleaseId) ?? null
   const speakerNames = useMemo(() => ({
     ...(selectedRelease?.speakerNames ?? {}),
@@ -185,17 +190,27 @@ export default function StoryGamePlayer(props: {
       <div className="storygame-launcher-atmosphere" />
       <div className="storygame-launcher-content">
         <span className="storygame-launcher-kicker"><Library className="h-4 w-4" /> BRANCHING STORIES</span>
-        <h2>选择一段命运</h2>
-        <p>每次选择都会改变抵达终点的道路。进度自动保存，也可以从任何检查点改写结局。</p>
+        <h2>{catalogRelease ? '游戏详情' : '分支叙事游戏库'}</h2>
+        <p>{catalogRelease ? '确认故事规模与结局结构，然后开始一条全新的时间线。' : '先从游戏库选择作品，再进入标题页开始或继续；进入前不会自动创建存档。'}</p>
         {store.error && <div className="storygame-alert" role="alert"><span>{store.error}</span><button type="button" onClick={() => void store.load(props.scope, props.worldGroupId)}>重新同步</button></div>}
-        <section className="storygame-launcher-library" aria-label="正式游戏库">
-          {store.releases.map(item => <article className="storygame-release-card" key={item.release.id}>
-            <div><small>正式发布 · v{item.release.version}</small><strong>{item.manifest?.definition.title ?? item.release.label}</strong><p>{item.manifest?.definition.description || '一段等待你作出选择的故事。'}</p></div>
-            {item.error ? <span className="storygame-error-text">{item.error}</span> : <button type="button" onClick={() => void startGame(item.release.id!, item.manifest!.definition.title)} disabled={store.busy}><Plus className="h-4 w-4" />新游戏</button>}
-          </article>)}
-          {!store.releases.length && <div className="storygame-empty-small">还没有正式发布的分支叙事，请先在作者工作台完成发布。</div>}
-        </section>
-        {!!store.sessions.length && <section className="storygame-launcher-saves"><h3><Clock3 className="h-4 w-4" />继续故事</h3>{store.sessions.map(session => <div key={session.id}><button type="button" onClick={() => void store.select(session.id!)}><strong>{session.title}</strong><small>{formatTime(session.updatedAt)}{session.gameReleaseId == null ? ' · 旧版兼容' : session.parentSessionId ? ' · 分支' : ' · 自动保存'}</small></button><button type="button" aria-label={`删除存档 ${session.title}`} onClick={() => void removeSession(session.id!, session.title)}><Trash2 className="h-4 w-4" /></button></div>)}</section>}
+        {catalogRelease ? <section className="textgame-title-page storygame-title-page" aria-label="分支叙事游戏详情">
+          <button type="button" className="textgame-catalog-back" onClick={() => setCatalogReleaseId(null)}><ArrowLeft className="h-4 w-4" />返回全部游戏</button>
+          <div className="textgame-title-art" aria-hidden="true"><BookOpen /><span>BRANCHING<br />NARRATIVE</span></div>
+          <div className="textgame-title-copy">
+            <small>分支叙事 · 当前可玩版本</small>
+            <h3>{catalogRelease.manifest?.definition.title ?? catalogRelease.release.label}</h3>
+            <p>{catalogRelease.manifest?.definition.description || '一段等待你作出选择的故事。'}</p>
+            {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.narrative.nodes.length} 个场景</span><span>{catalogRelease.manifest.narrative.choices.length} 个选择</span><span>{catalogRelease.manifest.narrative.nodes.filter(node => node.kind === 'ending').length} 个结局</span></div>}
+            {catalogRelease.error ? <span className="storygame-error-text">{catalogRelease.error}</span> : <div className="textgame-title-actions"><button type="button" className="textgame-start" onClick={() => void startGame(catalogRelease.release.id!, catalogRelease.manifest!.definition.title)} disabled={store.busy}><Plus className="h-4 w-4" />开始新游戏</button>{store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id)!.id!)}><Clock3 className="h-4 w-4" />继续上次进度</button>}</div>}
+          </div>
+        </section> : <>
+          <div className="textgame-catalog-heading"><span>全部游戏</span><small>{catalog.length} 部可游玩作品</small></div>
+          <section className="textgame-catalog-list" aria-label="分支叙事游戏列表">
+            {catalog.map(item => <article key={item.release.id}><button type="button" aria-label={`查看游戏：${item.manifest?.definition.title ?? item.release.label}`} onClick={() => setCatalogReleaseId(item.release.id!)}><span className="textgame-catalog-icon"><GitBranch /></span><span className="textgame-catalog-copy"><small>分支叙事</small><strong>{item.manifest?.definition.title ?? item.release.label}</strong><p>{item.manifest?.definition.description || '一段等待你作出选择的故事。'}</p>{item.manifest && <i>{item.manifest.narrative.nodes.length} 场景 · {item.manifest.narrative.choices.length} 选择 · {item.manifest.narrative.nodes.filter(node => node.kind === 'ending').length} 结局</i>}</span><span className="textgame-catalog-open">查看详情<ChevronRight /></span></button></article>)}
+            {!catalog.length && <div className="storygame-empty-small">还没有可游玩的分支叙事，请先在作者工作台完成发布。</div>}
+          </section>
+          {!!store.sessions.length && <section className="storygame-launcher-saves"><h3><Clock3 className="h-4 w-4" />继续故事</h3>{store.sessions.map(session => <div key={session.id}><button type="button" onClick={() => void store.select(session.id!)}><strong>{session.title}</strong><small>{formatTime(session.updatedAt)}{session.gameReleaseId == null ? ' · 旧版兼容' : session.parentSessionId ? ' · 分支' : ' · 自动保存'}</small></button><button type="button" aria-label={`删除存档 ${session.title}`} onClick={() => void removeSession(session.id!, session.title)}><Trash2 className="h-4 w-4" /></button></div>)}</section>}
+        </>}
       </div>
     </div>
   )

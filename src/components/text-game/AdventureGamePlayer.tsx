@@ -35,6 +35,7 @@ import {
 } from 'lucide-react'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { resolveRequestConfig } from '../../lib/ai/client'
+import { currentPlayerReleases } from '../../lib/text-game/player-library'
 import type { AdventureActionKind, Project, WorkspaceScope } from '../../lib/types'
 import { useAdventureGamePlayerStore, selectAdventureActions } from '../../stores/adventure-game-player'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -119,13 +120,17 @@ export default function AdventureGamePlayer(props: {
   const [checkpointName, setCheckpointName] = useState('')
   const [branchTitle, setBranchTitle] = useState('')
   const [localError, setLocalError] = useState('')
+  const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
 
   useEffect(() => {
-    void store.load(props.scope, props.worldGroupId)
+    setCatalogReleaseId(null)
+    void store.load(props.scope, props.worldGroupId, true)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId])
 
   const selected = store.sessions.find(item => item.id === store.selectedSessionId) ?? null
+  const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
+  const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
   const adventure = store.runtimeState.adventure
   const manifest = store.selectedManifest
   const location = manifest?.adventure.locations.find(item => item.key === adventure?.currentLocationKey) ?? null
@@ -171,17 +176,27 @@ export default function AdventureGamePlayer(props: {
     <div className="adventure-launcher-atmosphere" />
     <div className="adventure-launcher-content">
       <span className="adventure-kicker"><Compass /> TEXT ADVENTURE</span>
-      <h2>踏入故事世界</h2>
-      <p>探索地点、结识人物、收集物品并运用能力推进任务。所有行动都会自动保存。</p>
+      <h2>{catalogRelease ? '冒险详情' : '文字冒险游戏库'}</h2>
+      <p>{catalogRelease ? '确认地图、角色、物品、技能与任务规模，然后开始新的旅程。' : '先选择一部冒险，再从独立标题页开始旅程；角色、地图、物品、技能与任务会在进入游戏后展开。'}</p>
       {error && <div role="alert" className="adventure-alert">{error}</div>}
-      <section className="adventure-release-grid" aria-label="文字冒险发布">
-        {store.releases.map(item => <article key={item.release.id}>
-          <div className="adventure-release-cover"><MapPin /><span>{item.manifest?.adventure.locations.length ?? 0} 个可探索地点</span></div>
-          <div><small>正式发布 · v{item.release.version}</small><h3>{item.manifest?.definition.title ?? item.release.label}</h3><p>{item.manifest?.definition.description || '一场由选择、探索和任务共同推进的冒险。'}</p><div className="adventure-release-stats"><span>{item.manifest?.interaction.profiles.length ?? 0} 角色</span><span>{item.manifest?.adventure.items.length ?? 0} 物品</span><span>{item.manifest?.adventure.abilities.length ?? 0} 技能</span><span>{item.manifest?.adventure.quests.length ?? 0} 任务</span></div>{item.error && <p className="adventure-error">{item.error}</p>}<button disabled={!item.manifest || !!item.error || store.busy} onClick={() => void run(() => store.start(item.release.id!))}><Plus />新建冒险</button></div>
-        </article>)}
-        {!store.releases.length && <div className="adventure-empty">尚无文字冒险发布。请先在作者工作台完成发布。</div>}
-      </section>
-      {!!store.sessions.length && <section className="adventure-launcher-saves"><h3><Save />继续冒险</h3>{store.sessions.map(session => <div key={session.id}><button onClick={() => void store.select(session.id!)}><strong>{session.title}</strong><small>{formatTime(session.updatedAt)} · 可继续</small></button><button aria-label="删除冒险存档" onClick={() => void removeSession(session.id!, session.title)}><Trash2 /></button></div>)}</section>}
+      {catalogRelease ? <section className="textgame-title-page adventure-title-page" aria-label="文字冒险游戏详情">
+        <button type="button" className="textgame-catalog-back" onClick={() => setCatalogReleaseId(null)}><ArrowLeft />返回全部游戏</button>
+        <div className="textgame-title-art" aria-hidden="true"><Compass /><span>EXPLORE<br />THE UNKNOWN</span></div>
+        <div className="textgame-title-copy">
+          <small>文字冒险 · 当前可玩版本</small>
+          <h3>{catalogRelease.manifest?.definition.title ?? catalogRelease.release.label}</h3>
+          <p>{catalogRelease.manifest?.definition.description || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>
+          {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.adventure.locations.length} 个地点</span><span>{catalogRelease.manifest.interaction.profiles.length} 名角色</span><span>{catalogRelease.manifest.adventure.items.length} 件物品</span><span>{catalogRelease.manifest.adventure.abilities.length} 项技能</span><span>{catalogRelease.manifest.adventure.quests.length} 个任务</span></div>}
+          {catalogRelease.error ? <p className="adventure-error">{catalogRelease.error}</p> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新冒险</button>{store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id)!.id!)}><Save />继续上次进度</button>}</div>}
+        </div>
+      </section> : <>
+        <div className="textgame-catalog-heading"><span>全部游戏</span><small>{catalog.length} 部可游玩作品</small></div>
+        <section className="textgame-catalog-list" aria-label="文字冒险游戏列表">
+          {catalog.map(item => <article key={item.release.id}><button type="button" aria-label={`查看游戏：${item.manifest?.definition.title ?? item.release.label}`} onClick={() => setCatalogReleaseId(item.release.id!)}><span className="textgame-catalog-icon"><Map /></span><span className="textgame-catalog-copy"><small>文字冒险</small><strong>{item.manifest?.definition.title ?? item.release.label}</strong><p>{item.manifest?.definition.description || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>{item.manifest && <i>{item.manifest.adventure.locations.length} 地点 · {item.manifest.interaction.profiles.length} 角色 · {item.manifest.adventure.items.length} 物品 · {item.manifest.adventure.quests.length} 任务</i>}</span><span className="textgame-catalog-open">查看详情<ChevronRight /></span></button></article>)}
+          {!catalog.length && <div className="adventure-empty">尚无可游玩的文字冒险。请先在作者工作台完成发布。</div>}
+        </section>
+        {!!store.sessions.length && <section className="adventure-launcher-saves"><h3><Save />继续冒险</h3>{store.sessions.map(session => <div key={session.id}><button onClick={() => void store.select(session.id!)}><strong>{session.title}</strong><small>{formatTime(session.updatedAt)} · 可继续</small></button><button aria-label="删除冒险存档" onClick={() => void removeSession(session.id!, session.title)}><Trash2 /></button></div>)}</section>}
+      </>}
     </div>
   </div>
 

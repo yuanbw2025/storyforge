@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, Eye, EyeOff, FastForward, Gauge, GitBranch, History, ImageOff, Maximize2, Play, RotateCcw, Save, Settings2, SkipForward, Trash2, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, ChevronRight, Eye, EyeOff, FastForward, Gauge, GitBranch, History, ImageOff, Maximize2, Play, Plus, RotateCcw, Save, Settings2, SkipForward, Trash2, Volume2, VolumeX, X } from 'lucide-react'
 import type { FrozenNarrativeChoice, Project, WorkspaceScope } from '../../lib/types'
 import { useAvgGamePlayerStore } from '../../stores/avg-game-player'
 import { preloadAvgReleaseMedia } from '../../lib/avg/media'
 import { applyAvgCue } from '../../lib/avg/runtime'
+import { currentPlayerReleases } from '../../lib/text-game/player-library'
 import { useDialog } from '../shared/Dialog'
 import './player-roadshow.css'
 
@@ -28,8 +29,11 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   const [visibleCharacters, setVisibleCharacters] = useState(0)
   const [sceneTitleVisible, setSceneTitleVisible] = useState(false)
   const [notice, setNotice] = useState('')
+  const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
 
-  useEffect(() => { void store.load(props.scope, props.worldGroupId) }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setCatalogReleaseId(null); void store.load(props.scope, props.worldGroupId, true) }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
+  const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
   const mediaCacheKey = `${store.selectedSessionId ?? 'title'}:${store.selectedManifest?.presentation.assets.map(asset => `${asset.assetKey}@${asset.version}:${asset.contentHash}`).join('|') ?? ''}`
   useEffect(() => {
     let cancelled = false
@@ -141,18 +145,27 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
     <div className="avg-title-atmosphere" aria-hidden="true" />
     <main className="avg-title-content">
       <span className="avg-title-kicker">STORYFORGE VISUAL NOVEL</span>
-      <h2>选择一段故事</h2>
-      <p>从不可变发布开始新游戏，或继续已有时间线。</p>
+      <h2>{catalogRelease ? '作品详情' : 'AVG 游戏库'}</h2>
+      <p>{catalogRelease ? '确认故事、美术与演出规模，然后从标题页正式开演。' : '先选择作品，再进入独立标题页开始或继续；舞台、立绘和对白不会提前挤进游戏目录。'}</p>
       {store.error && <div role="alert" className="avg-alert">{store.error}</div>}
-      <section className="avg-title-library" aria-label="视觉小说发布">
-        {store.releases.map(item => <article key={item.release.id}>
-          <div><small>GAME RELEASE · v{item.release.version}</small><strong>{item.manifest?.definition.title ?? item.release.label}</strong><p>{item.manifest?.definition.description}</p></div>
-          <button disabled={!item.manifest || store.busy} onClick={() => void run(() => store.start(item.release.id!))}>新游戏</button>
-          {item.error && <small>{item.error}</small>}
-        </article>)}
-        {store.releases.length === 0 && <div className="avg-title-empty"><BookOpen /><span>还没有可游玩的 AVG 发布</span></div>}
-      </section>
-      {store.sessions.length > 0 && <section className="avg-title-sessions" aria-label="已有存档"><h3>继续游戏</h3>{store.sessions.map(session => <button onClick={() => void store.select(session.id!)} key={session.id}><span>{session.title}</span><small>继续时间线</small></button>)}</section>}
+      {catalogRelease ? <section className="textgame-title-page avg-game-title-page" aria-label="AVG 游戏详情">
+        <button type="button" className="textgame-catalog-back" onClick={() => setCatalogReleaseId(null)}><ArrowLeft />返回全部游戏</button>
+        <div className="textgame-title-art" aria-hidden="true"><BookOpen /><span>VISUAL<br />NOVEL</span></div>
+        <div className="textgame-title-copy">
+          <small>AVG / 视觉小说 · 当前可玩版本</small>
+          <h3>{catalogRelease.manifest?.definition.title ?? catalogRelease.release.label}</h3>
+          <p>{catalogRelease.manifest?.definition.description || '一部等待开演的视觉小说。'}</p>
+          {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.narrative.nodes.length} 个场景</span><span>{catalogRelease.manifest.narrative.beats.length} 段对白</span><span>{catalogRelease.manifest.presentation.assets.length} 项美术</span><span>{catalogRelease.manifest.presentation.cues.length} 个演出指令</span></div>}
+          {catalogRelease.error ? <small>{catalogRelease.error}</small> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新游戏</button>{store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id)!.id!)}><Save />继续上次进度</button>}</div>}
+        </div>
+      </section> : <>
+        <div className="textgame-catalog-heading"><span>全部游戏</span><small>{catalog.length} 部可游玩作品</small></div>
+        <section className="textgame-catalog-list" aria-label="AVG 游戏列表">
+          {catalog.map(item => <article key={item.release.id}><button type="button" aria-label={`查看游戏：${item.manifest?.definition.title ?? item.release.label}`} onClick={() => setCatalogReleaseId(item.release.id!)}><span className="textgame-catalog-icon"><BookOpen /></span><span className="textgame-catalog-copy"><small>AVG / 视觉小说</small><strong>{item.manifest?.definition.title ?? item.release.label}</strong><p>{item.manifest?.definition.description || '一部等待开演的视觉小说。'}</p>{item.manifest && <i>{item.manifest.narrative.nodes.length} 场景 · {item.manifest.narrative.beats.length} 对白 · {item.manifest.presentation.assets.length} 美术 · {item.manifest.presentation.cues.length} 演出</i>}</span><span className="textgame-catalog-open">查看详情<ChevronRight /></span></button></article>)}
+          {!catalog.length && <div className="avg-title-empty"><BookOpen /><span>还没有可游玩的 AVG</span></div>}
+        </section>
+        {store.sessions.length > 0 && <section className="avg-title-sessions" aria-label="已有存档"><h3>继续游戏</h3>{store.sessions.map(session => <button onClick={() => void store.select(session.id!)} key={session.id}><span>{session.title}</span><small>继续时间线</small></button>)}</section>}
+      </>}
     </main>
   </div>
 

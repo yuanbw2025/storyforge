@@ -55,7 +55,7 @@ interface AdventurePlayerState {
   loading: boolean
   busy: boolean
   error: string
-  load(scope: WorkspaceScope, worldGroupId: number | null): Promise<void>
+  load(scope: WorkspaceScope, worldGroupId: number | null, openLibrary?: boolean): Promise<void>
   select(sessionId: number | null): Promise<void>
   start(gameReleaseId: number, title?: string): Promise<number>
   act(actionKey: string, commandId?: string): Promise<void>
@@ -150,8 +150,11 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     const sessions = (await readBoundInstances(scope))
       .filter(item => item.kind === 'textadventure' && (item.worldGroupId ?? null) === get().worldGroupId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
-    const desired = requested === undefined ? get().selectedSessionId : requested
-    const selectedSessionId = desired != null && sessions.some(item => item.id === desired) ? desired : sessions[0]?.id ?? null
+    const explicitlySelected = requested !== undefined
+    const desired = explicitlySelected ? requested : get().selectedSessionId
+    const selectedSessionId = desired != null && sessions.some(item => item.id === desired)
+      ? desired
+      : explicitlySelected ? null : sessions[0]?.id ?? null
     set({ releases, sessions, selectedSessionId })
     if (selectedSessionId != null) await refresh()
     else set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_SIMULATION_STATE), selectedManifest: null })
@@ -167,12 +170,12 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_SIMULATION_STATE), selectedManifest: null,
     pendingIntent: null, generatedNarrative: null, generatingRunId: null,
     loading: false, busy: false, error: '',
-    load: async (scope, worldGroupId) => {
+    load: async (scope, worldGroupId, openLibrary = false) => {
       const changed = get().scope?.workId !== scope.workId || get().worldGroupId !== worldGroupId
       set({ scope, worldGroupId, loading: true, error: '', ...(changed ? {
         selectedSessionId: null, pendingIntent: null, generatedNarrative: null,
       } : {}) })
-      try { await reload() } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
+      try { await reload(openLibrary ? null : undefined) } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
       finally { set({ loading: false }) }
     },
     select: async sessionId => {
