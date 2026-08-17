@@ -17,7 +17,9 @@ import { buildWorkspaceImpactPlanV1 } from './workspace-impact'
 import { buildMemoryArtifactIndexV1 } from './settlement'
 import type {
   Chapter,
+  CreativeRules,
   Project,
+  StoryCore,
   Work,
   WorkspaceDocumentBindingV1,
   WorkspaceDocumentChangeKindV1,
@@ -330,6 +332,41 @@ const WORK_WORKSPACE_FIELDS = [
   'title', 'description', 'genres', 'status', 'targetWordCount', 'writingStyleId', 'methodologyId',
 ] as const
 const CHAPTER_WORKSPACE_FIELDS = ['title', 'status', 'order', 'notes', 'content'] as const
+const STORY_CORE_DISK_FIELDS = [
+  '一句话故事', '故事概念', '主题', '核心冲突', '情节模式', '故事主线', '故事复线',
+] as const
+const STORY_CORE_FIELD_MAP = {
+  一句话故事: 'logline',
+  故事概念: 'concept',
+  主题: 'theme',
+  核心冲突: 'centralConflict',
+  情节模式: 'plotPattern',
+  故事主线: 'mainPlot',
+  故事复线: 'subPlots',
+} as const
+const CREATIVE_RULES_DISK_FIELDS = [
+  '写作风格', '叙事视角', '基调与氛围', '禁止事项', '一致性规则', '特殊要求',
+] as const
+const CREATIVE_RULES_FIELD_MAP = {
+  写作风格: 'writingStyle',
+  叙事视角: 'narrativePOV',
+  基调与氛围: 'atmosphere',
+  禁止事项: 'prohibitions',
+  一致性规则: 'consistencyRules',
+  特殊要求: 'specialRequirements',
+} as const
+const POV_FROM_DISK: Readonly<Record<string, CreativeRules['narrativePOV']>> = {
+  第一人称: 'first-person',
+  第三人称有限: 'third-limited',
+  第三人称全知: 'third-omniscient',
+  多视角: 'multi-pov',
+}
+const POV_TO_DISK: Readonly<Record<CreativeRules['narrativePOV'], string>> = {
+  'first-person': '第一人称',
+  'third-limited': '第三人称有限',
+  'third-omniscient': '第三人称全知',
+  'multi-pov': '多视角',
+}
 const PROJECT_STATUSES = new Set(['drafting', 'ongoing', 'paused', 'completed'])
 const CHAPTER_STATUSES = new Set(['outline', 'draft', 'revised', 'polished', 'final'])
 
@@ -362,6 +399,21 @@ function strictGenres(value: unknown, field: string): string[] {
     throw new Error(`${field} 必须是字符串数组`)
   }
   return [...value]
+}
+
+function strictStringList(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
+    throw new Error(`${field} 必须是字符串列表`)
+  }
+  return value.map(item => item.trim()).filter(Boolean)
+}
+
+function parseStoredStringList(value: string | undefined, field: string): string[] {
+  try {
+    return strictStringList(JSON.parse(value || '[]'), field)
+  } catch (error) {
+    throw new Error(`[memory-workspace] ${field} 不是有效字符串列表：${(error as Error).message}`)
+  }
 }
 
 function strictNumber(value: unknown, field: string, integer = false): number {
@@ -448,6 +500,47 @@ function normalizeWorkspaceSemanticV1(
       compareAndSetFields: [...CHAPTER_WORKSPACE_FIELDS, 'wordCount'],
     }
   }
+  if (tableName === 'storyCores') {
+    assertExactObjectKeys(semanticValue, STORY_CORE_DISK_FIELDS, '故事核心')
+    const normalized = Object.fromEntries(STORY_CORE_DISK_FIELDS.map(field => [
+      field,
+      strictString(semanticValue[field], field),
+    ]))
+    return {
+      semanticValue: normalized,
+      patch: Object.fromEntries(STORY_CORE_DISK_FIELDS.map(field => [
+        STORY_CORE_FIELD_MAP[field],
+        normalized[field],
+      ])),
+      compareAndSetFields: Object.values(STORY_CORE_FIELD_MAP),
+    }
+  }
+  if (tableName === 'creativeRules') {
+    assertExactObjectKeys(semanticValue, CREATIVE_RULES_DISK_FIELDS, '创作规则')
+    const povLabel = strictString(semanticValue.叙事视角, '叙事视角', true)
+    const narrativePOV = POV_FROM_DISK[povLabel]
+    if (!narrativePOV) throw new Error('叙事视角必须是第一人称、第三人称有限、第三人称全知或多视角')
+    const normalized = {
+      写作风格: strictString(semanticValue.写作风格, '写作风格'),
+      叙事视角: povLabel,
+      基调与氛围: strictString(semanticValue.基调与氛围, '基调与氛围'),
+      禁止事项: strictStringList(semanticValue.禁止事项, '禁止事项'),
+      一致性规则: strictStringList(semanticValue.一致性规则, '一致性规则'),
+      特殊要求: strictString(semanticValue.特殊要求, '特殊要求'),
+    }
+    return {
+      semanticValue: normalized,
+      patch: {
+        writingStyle: normalized.写作风格,
+        narrativePOV,
+        atmosphere: normalized.基调与氛围,
+        prohibitions: JSON.stringify(normalized.禁止事项),
+        consistencyRules: JSON.stringify(normalized.一致性规则),
+        specialRequirements: normalized.特殊要求,
+      },
+      compareAndSetFields: Object.values(CREATIVE_RULES_FIELD_MAP),
+    }
+  }
   throw new Error(`[memory-workspace] ${tableName} 没有登记反向字段映射`)
 }
 
@@ -461,10 +554,35 @@ function chapterSemantic(chapter: Chapter): Record<string, unknown> {
   }
 }
 
+function storyCoreSemantic(row: StoryCore): Record<string, unknown> {
+  return {
+    一句话故事: row.logline ?? '',
+    故事概念: row.concept ?? '',
+    主题: row.theme ?? '',
+    核心冲突: row.centralConflict ?? '',
+    情节模式: row.plotPattern ?? '',
+    故事主线: row.mainPlot ?? row.storyLines ?? '',
+    故事复线: row.subPlots ?? '',
+  }
+}
+
+function creativeRulesSemantic(row: CreativeRules): Record<string, unknown> {
+  const pov = POV_TO_DISK[row.narrativePOV]
+  if (!pov) throw new Error(`[memory-workspace] creativeRules#${row.id ?? '?'} 叙事视角无效`)
+  return {
+    写作风格: row.writingStyle ?? '',
+    叙事视角: pov,
+    基调与氛围: row.atmosphere ?? row.toneAndMood ?? '',
+    禁止事项: parseStoredStringList(row.prohibitions, '禁止事项'),
+    一致性规则: parseStoredStringList(row.consistencyRules, '一致性规则'),
+    特殊要求: row.specialRequirements ?? '',
+  }
+}
+
 async function createProjectionDocument(input: {
   projectId: number
   workspaceUid: string
-  tableName: 'projects' | 'worlds' | 'works' | 'chapters'
+  tableName: 'projects' | 'worlds' | 'works' | 'chapters' | 'storyCores' | 'creativeRules'
   recordId: number
   semanticValue: Record<string, unknown>
   worldCode?: string
@@ -597,6 +715,44 @@ export async function buildWorkspaceProjectionV1(projectId: number): Promise<Pro
       semanticValue: workSemantic(work, world),
       pathFor: () => `works/${portableSegment(work.code!)}/work.yaml`,
     }))
+  }
+
+  const [storyCores, creativeRules] = await Promise.all([
+    db.storyCores.where('projectId').equals(projectId).toArray(),
+    db.creativeRules.where('projectId').equals(projectId).toArray(),
+  ])
+  for (const [tableName, rows] of [
+    ['storyCores', storyCores],
+    ['creativeRules', creativeRules],
+  ] as const) {
+    const seenWorkIds = new Set<number>()
+    for (const row of [...rows].sort((left, right) => (left.id ?? 0) - (right.id ?? 0))) {
+      const workId = (row as typeof row & { workId?: number }).workId
+      const work = workId == null ? undefined : workById.get(workId)
+      if (!row.id || !work) {
+        throw new Error(`[memory-workspace] ${tableName}#${row.id ?? '?'} 缺少明确 Work owner`)
+      }
+      if (seenWorkIds.has(work.id!)) {
+        throw new Error(`[memory-workspace] Work ${work.id} 存在多份 ${tableName} 单例，拒绝生成歧义文件`)
+      }
+      seenWorkIds.add(work.id!)
+      const world = worldById.get(work.worldId)
+      if (!world) throw new Error(`[memory-workspace] ${tableName}#${row.id} 的 World owner 无效`)
+      documents.push(await createProjectionDocument({
+        projectId,
+        workspaceUid,
+        tableName,
+        recordId: row.id,
+        worldCode: world.code,
+        workCode: work.code,
+        semanticValue: tableName === 'storyCores'
+          ? storyCoreSemantic(row as StoryCore)
+          : creativeRulesSemantic(row as CreativeRules),
+        pathFor: () => `works/${portableSegment(work.code!)}/memory/${
+          tableName === 'storyCores' ? 'story-core.yaml' : 'creative-rules.yaml'
+        }`,
+      }))
+    }
   }
 
   const chapters = await db.chapters.where('projectId').equals(projectId).toArray()
@@ -893,6 +1049,16 @@ function candidatePatchForSemanticChanges(
     }
     return patch
   }
+  if (tableName === 'storyCores' || tableName === 'creativeRules') {
+    const fieldMap: Readonly<Record<string, string>> = tableName === 'storyCores'
+      ? STORY_CORE_FIELD_MAP
+      : CREATIVE_RULES_FIELD_MAP
+    return Object.fromEntries(changed.map(key => {
+      const internalField = fieldMap[key]
+      if (!internalField) throw new Error(`[memory-workspace] ${tableName} 磁盘字段 ${key} 没有 FIELD_REGISTRY 映射`)
+      return [internalField, fullPatch[internalField]]
+    }))
+  }
   return Object.fromEntries(changed.map(key => [key, fullPatch[key]]))
 }
 
@@ -994,6 +1160,15 @@ async function scopeForWorkspaceCandidateV1(
     const work = workId == null ? undefined : await db.works.get(workId)
     if (!chapter || !work) throw new Error(`[memory-workspace] Chapter ${candidate.recordId} 缺少有效 Work owner`)
     return { projectId, worldId: work.worldId, workId: workId! }
+  }
+  if (candidate.tableName === 'storyCores' || candidate.tableName === 'creativeRules') {
+    const table = candidate.tableName === 'storyCores' ? db.storyCores : db.creativeRules
+    const record = await table.get(candidate.recordId) as ({ workId?: number } & Record<string, unknown>) | undefined
+    const work = record?.workId == null ? undefined : await db.works.get(record.workId)
+    if (!record || !work || work.projectId !== projectId) {
+      throw new Error(`[memory-workspace] ${candidate.tableName}#${candidate.recordId} 缺少有效 Work owner`)
+    }
+    return { projectId, worldId: work.worldId, workId: work.id! }
   }
   return fallback
 }
@@ -1257,7 +1432,7 @@ export async function confirmMissingChapterFileDeletionsV1(input: {
   const byId = new Map(documents.map(document => [document.identity.documentId, document]))
   const chapterDocuments = missing.map(item => byId.get(item.identity.documentId))
   if (chapterDocuments.some(document => document?.binding.tableName !== 'chapters')) {
-    throw new Error('[memory-workspace] Workspace/World/Work/恢复证据缺失只能恢复，不允许按文件删除根记录')
+    throw new Error('[memory-workspace] Workspace/World/Work、语义单例和恢复证据缺失只能恢复，不允许按文件删除根记录或语义正式记录')
   }
   const otherDiskRisks = report.plan.items.filter(item => (
     ['file-changed', 'conflict', 'file-extra', 'invalid'].includes(item.changeKind)
@@ -1369,6 +1544,17 @@ async function restoredRecordIdForBindingV1(input: {
     }
     return candidates[0].id
   }
+  if (binding.tableName === 'storyCores' || binding.tableName === 'creativeRules') {
+    const work = binding.workCode == null ? undefined : input.worksByCode.get(binding.workCode)
+    if (!work?.id) throw new Error(`[memory-workspace] ${binding.tableName} ${binding.documentId} 缺少 Work owner`)
+    const table = binding.tableName === 'storyCores' ? db.storyCores : db.creativeRules
+    const candidates = (await table.where('projectId').equals(input.projectId).toArray())
+      .filter(row => (row as typeof row & { workId?: number }).workId === work.id)
+    if (candidates.length !== 1 || candidates[0].id == null) {
+      throw new Error(`[memory-workspace] ${binding.tableName} ${binding.documentId} 无法唯一重绑`)
+    }
+    return candidates[0].id
+  }
   throw new Error(`[memory-workspace] 不支持恢复 binding 目标 ${binding.tableName}`)
 }
 
@@ -1459,9 +1645,24 @@ export async function restoreWorkspaceFromFolderV1(
     }
     await db.workspaceDocuments.bulkAdd(restoredBindings)
     const report = await buildWorkspaceSelfCheckReportV1(projectId, root)
-    if (report.summary.clean !== restoredBindings.length
-      || report.plan.items.some(item => item.changeKind !== 'clean')) {
-      throw new Error('[memory-workspace] 恢复后回读核对未收敛，已撤销新项目')
+    const divergent = report.plan.items.filter(item => item.changeKind !== 'clean')
+    if (report.summary.clean !== restoredBindings.length || divergent.length) {
+      const details = divergent.slice(0, 5).map(item => `${item.relativePath}:${item.changeKind}`).join('；')
+      const currentBackup = await exportProjectJSON(projectId)
+      currentBackup.exportedAt = 0
+      const recoveryBackup = recovery.backup as unknown as Record<string, unknown>
+      const currentRecord = currentBackup as unknown as Record<string, unknown>
+      const changedSections: string[] = []
+      for (const key of Object.keys(currentRecord)) {
+        if (await hashCanonicalValue(currentRecord[key]) !== await hashCanonicalValue(recoveryBackup[key])) {
+          changedSections.push(key)
+          if (changedSections.length === 8) break
+        }
+      }
+      const sectionDetails = changedSections.length
+        ? `；差异分区:${changedSections.join(',')}`
+        : ''
+      throw new Error(`[memory-workspace] 恢复后回读核对未收敛，已撤销新项目${details ? `（${details}${sectionDetails}）` : ''}`)
     }
     return { projectId, report }
   } catch (error) {

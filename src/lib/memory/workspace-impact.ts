@@ -50,6 +50,15 @@ async function chapterIdsForRootCandidate(
     return chapters.filter(chapter => chapter.workId != null && workIds.has(chapter.workId))
       .map(chapter => chapter.id!).filter(Number.isInteger)
   }
+  if (candidate.tableName === 'storyCores' || candidate.tableName === 'creativeRules') {
+    const table = candidate.tableName === 'storyCores' ? db.storyCores : db.creativeRules
+    const record = await table.get(candidate.recordId) as ({ workId?: number } & Record<string, unknown>) | undefined
+    if (!record?.workId) throw new Error(`[memory-impact] ${candidate.tableName}#${candidate.recordId} 缺少 Work owner`)
+    return chapters
+      .filter(chapter => chapter.workId === record.workId)
+      .map(chapter => chapter.id!)
+      .filter(Number.isInteger)
+  }
   return []
 }
 
@@ -122,8 +131,15 @@ export async function buildWorkspaceImpactPlanV1(input: {
       const emitted = await chapterCandidateItems({ projectId: input.projectId, candidate })
       items.push(...emitted.items)
       graphHashes.push(emitted.graphHash)
-    } else {
+    } else if ([
+      'workspace-root-impact-v1',
+      'world-root-impact-v1',
+      'work-root-impact-v1',
+      'work-semantic-impact-v1',
+    ].includes(projection.dependencyEmitter)) {
       items.push(...await rootCandidateItems(input.projectId, candidate))
+    } else {
+      throw new Error(`[memory-impact] ${candidate.tableName} 的 dependencyEmitter 未实现`)
     }
     items.push({
       id: `workspace-impact:${candidate.candidateId}:recovery-capsule`,

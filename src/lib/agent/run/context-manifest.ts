@@ -382,7 +382,13 @@ export async function createContextManifestV2FromV1(input: {
     const direct = source.boundary?.chapterId == null
       ? undefined
       : bindings.find(binding => binding.tableName === 'chapters' && binding.recordId === source.boundary?.chapterId)
-    const mirror = direct ?? recovery
+    const semanticTable = source.key === 'storyCore'
+      ? 'storyCores'
+      : source.key === 'creativeRules' ? 'creativeRules' : null
+    const semantic = semanticTable == null
+      ? undefined
+      : bindings.find(binding => binding.tableName === semanticTable && binding.workCode === work.code)
+    const mirror = direct ?? semantic ?? recovery
     const freshnessStatus = !mirror
       ? 'unmirrored' as const
       : mirror.baselineCanonicalHash != null

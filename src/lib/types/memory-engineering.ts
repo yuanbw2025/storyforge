@@ -124,7 +124,7 @@ export interface WorkspaceFileAdoptionCandidateV1 extends WorkspaceDocumentHashT
   candidateHash: string
   planHash: string
   identity: WorkspaceDocumentIdentityV1
-  tableName: 'projects' | 'worlds' | 'works' | 'chapters'
+  tableName: 'projects' | 'worlds' | 'works' | 'chapters' | 'storyCores' | 'creativeRules'
   recordId: number
   relativePath: string
   changedFields: readonly string[]

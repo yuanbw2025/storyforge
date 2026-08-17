@@ -630,6 +630,32 @@ function MemorySelfCheckSummary({
 }) {
   const { summary } = report
   const blocked = summary.fileChanged + summary.conflict + summary.extra + summary.invalid
+  const fieldLabels: Readonly<Record<string, string>> = {
+    logline: '一句话故事',
+    concept: '故事概念',
+    theme: '主题',
+    centralConflict: '核心冲突',
+    plotPattern: '情节模式',
+    mainPlot: '故事主线',
+    subPlots: '故事复线',
+    writingStyle: '写作风格',
+    narrativePOV: '叙事视角',
+    atmosphere: '基调与氛围',
+    prohibitions: '禁止事项',
+    consistencyRules: '一致性规则',
+    specialRequirements: '特殊要求',
+  }
+  const changeLabels = {
+    'project-changed': '项目内已修改，等待写入本地',
+    'file-changed': '本地文件已修改，等待确认采纳',
+    conflict: '项目与本地均有修改，需要选边',
+    'file-missing': '本地文件缺失，可恢复或按规则处理',
+    'file-extra': '本地存在未登记文件，需要人工处理',
+    invalid: '文件身份、格式或只读证据异常',
+    'same-change': '两侧改动一致，等待提交新基线',
+    clean: '已一致',
+  } as const
+  const changedItems = report.plan.items.filter(item => item.changeKind !== 'clean')
   return (
     <div className={`rounded-lg border px-3 py-2 text-xs ${blocked > 0
       ? 'border-amber-500/30 bg-amber-500/5 text-amber-200'
@@ -642,12 +668,24 @@ function MemorySelfCheckSummary({
         {' '}· 双方冲突 {summary.conflict} · 缺失 {summary.missing} · 异常 {summary.extra + summary.invalid}
       </p>
       {blocked > 0 && <p className="mt-1">本地改动、冲突或损坏项不会被“同步项目改动”覆盖。</p>}
+      {changedItems.length > 0 && (
+        <div className="mt-2 space-y-1 border-t border-border/60 pt-2">
+          <p className="font-medium">需要处理的文件</p>
+          {changedItems.slice(0, 12).map(item => (
+            <div key={item.identity.documentId} className="text-text-muted">
+              <p>{item.relativePath} · {changeLabels[item.changeKind]}</p>
+              {item.issues.map(issue => <p key={issue} className="pl-2 text-amber-300">{issue}</p>)}
+            </div>
+          ))}
+          {changedItems.length > 12 && <p className="text-text-muted">另有 {changedItems.length - 12} 项未展开</p>}
+        </div>
+      )}
       {candidates && candidates.candidates.length > 0 && (
         <div className="mt-2 space-y-1 border-t border-border/60 pt-2">
           <p className="font-medium">待确认的本地候选（未写入项目）</p>
           {candidates.candidates.map(candidate => (
             <p key={candidate.candidateId} className="text-text-muted">
-              {candidate.relativePath} · {candidate.changedFields.join('、')}
+              {candidate.relativePath} · {candidate.changedFields.map(field => fieldLabels[field] ?? field).join('、')}
             </p>
           ))}
         </div>

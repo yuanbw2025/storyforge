@@ -417,7 +417,9 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
           const refMap = rr.remapVia === spec.name ? newIdMap : (newIdMaps.get(rr.remapVia) ?? newIdMap)
           for (const p of pendingRefRemap) {
             const remapped = remapWorldPortalTargets(p.stashed[rr.field], (exportId: number) => refMap.get(exportId))
-            if (remapped) await (db as any)[spec.name].update(p.newId, { [rr.field]: remapped, updatedAt: now })
+            // Import reconstructs the same formal record under new local IDs;
+            // reference remapping must not manufacture a new author edit time.
+            if (remapped) await (db as any)[spec.name].update(p.newId, { [rr.field]: remapped })
           }
         } else {
           const refMap = newIdMaps.get(rr.remapVia)
@@ -437,7 +439,7 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
                   refMap,
                 )
             if (patch !== undefined) {
-              await (db as any)[spec.name].update(pending.newId, { [rr.field]: patch, updatedAt: now })
+              await (db as any)[spec.name].update(pending.newId, { [rr.field]: patch })
             }
           }
         }
@@ -448,7 +450,7 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
 
     for (const deferred of deferredForeignKeys) {
       const mapped = newIdMaps.get(deferred.target)?.get(deferred.exportId)
-      if (mapped != null) await deferred.table.update(deferred.id, { [deferred.field]: mapped, updatedAt: now })
+      if (mapped != null) await deferred.table.update(deferred.id, { [deferred.field]: mapped })
     }
 
     const projectPatch: Record<string, number | null> = {}

@@ -93,7 +93,12 @@ export interface WorkspaceProjectionSpecV1 {
   version: 1
   classification: WorkspaceProjectionClassificationV1
   documentKind: string
-  mapper: 'workspace-root-v1' | 'world-root-v1' | 'work-root-v1' | 'chapter-markdown-v1'
+  mapper:
+    | 'workspace-root-v1'
+    | 'world-root-v1'
+    | 'work-root-v1'
+    | 'chapter-markdown-v1'
+    | 'work-semantic-v1'
   codec: WorkspaceDocumentCodecV1
   editPolicy: WorkspaceDocumentEditPolicyV1
   scopeOwner: 'workspace' | 'world' | 'work'
@@ -102,6 +107,7 @@ export interface WorkspaceProjectionSpecV1 {
     | 'world-root-impact-v1'
     | 'work-root-impact-v1'
     | 'chapter-impact-v1'
+    | 'work-semantic-impact-v1'
   schemaVersion: 1
 }
 

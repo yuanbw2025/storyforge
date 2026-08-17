@@ -144,9 +144,14 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.storyCores, name: 'storyCores', owner: 'project', exportable: true,
     communityShare: 'world', releaseSection: 'narrative',
-    domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
+    domainOwner: LEGACY_WORK_OWNER,
+    workspaceProjection: {
+      version: 1, classification: 'editable', documentKind: 'story-core', mapper: 'work-semantic-v1',
+      codec: 'yaml', editPolicy: 'author-editable', scopeOwner: 'work',
+      dependencyEmitter: 'work-semantic-impact-v1', schemaVersion: 1,
+    },
     worldDomains: ['narrative'],
-    note: '项目级,跨世界共享主线' },
+    note: '每个 Work 一份故事核心；旧 project/world 兼容行在所有权迁移时归入明确 Work' },
 
   { table: db.powerSystems, name: 'powerSystems', owner: 'project', worldScoped: true, communityShare: 'world', releaseSection: 'foundation',
     domainOwner: LEGACY_WORLD_OWNER,
@@ -605,6 +610,11 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.creativeRules, name: 'creativeRules', owner: 'project', exportable: true,
     domainOwner: LEGACY_WORK_OWNER,
+    workspaceProjection: {
+      version: 1, classification: 'editable', documentKind: 'creative-rules', mapper: 'work-semantic-v1',
+      codec: 'yaml', editPolicy: 'author-editable', scopeOwner: 'work',
+      dependencyEmitter: 'work-semantic-impact-v1', schemaVersion: 1,
+    },
     refs: [
       { kind: 'array', field: 'citedReferenceIds', itemTarget: 'references', onDelete: 'removeItem' },
     ],
