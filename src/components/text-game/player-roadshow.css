@@ -249,10 +249,10 @@
 .storygame-player-v2 .storygame-beat>div { flex: 1; }
 .storygame-player-v2 .storygame-beat strong { color: #876236; font-size: .66em; }
 .storygame-player-v2 .storygame-beat p { color: #342f29; font-family: var(--font-serif); }
-.storygame-player-v2 .storygame-beat.is-dialogue { width: min(84%,650px); align-items: flex-start; padding: 12px 15px; border: 1px solid rgba(86,68,44,.12); border-radius: 12px 12px 12px 3px; background: rgba(245,241,233,.88); }
-.storygame-player-v2 .storygame-beat.is-dialogue.side-right { align-self: flex-end; flex-direction: row-reverse; border-radius: 12px 12px 3px; text-align: left; }
+.storygame-player-v2 .storygame-beat.is-dialogue { width: min(80%,520px); align-items: flex-start; padding: 12px 15px; border: 1px solid rgba(86,68,44,.12); border-radius: 12px 12px 12px 3px; background: rgba(245,241,233,.88); }
+.storygame-player-v2 .storygame-beat.is-dialogue.side-right { justify-self: end; margin-left: auto; flex-direction: row-reverse; border-radius: 12px 12px 3px; text-align: left; }
 .storygame-player-v2 .storygame-beat.is-dialogue.is-player { border-color: rgba(63,102,94,.28); background: rgba(229,237,231,.9); }
-.storygame-player-v2 .storygame-beat.is-dialogue.is-npc { align-self: flex-start; }
+.storygame-player-v2 .storygame-beat.is-dialogue.is-npc { justify-self: start; margin-right: auto; }
 .storygame-speaker-mark { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 50%; background: #425e5b; color: #fff6e8; font-family: var(--font-serif); font-size: .8em; }
 .storygame-player-v2 .storygame-beat-action { padding: 10px 14px; border-left: 2px solid #a9895b; color: #766b5d; font-style: italic; }
 .storygame-player-v2 .storygame-beat-system { justify-content: center; padding: 8px 12px; border: 1px dashed rgba(116,88,50,.3); border-radius: 7px; text-align: center; }
