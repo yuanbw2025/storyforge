@@ -1,21 +1,24 @@
 # StoryForge 记忆工程完整施工方案
 
 > 日期：2026-08-17
-> 状态：`MEMORY-0～10` 已完成施工与验收
+> 状态：✅ `MEMORY-0～10` 已完成施工与验收；本方案已封版，不再作为待开工计划
 > 主体系：Memory Engineering / Durable Authoring Memory
 > 基线分支：`feat/harness-creative-reliability`
 > 基线提交：`d2ecf9f docs(CREL-13): freeze real evaluation outcome`
+> 主干落点：PR #66（`bc77d12`）完成主体工程；PR #71（`ad3d25b`）完成收口与项目自有存储位置
+> 后续权威：[记忆工程收口纲领](./MEMORY-ENGINEERING-CLOSURE-CHARTER-20260817.md) 与 [本地记忆工作区指南](./MEMORY-WORKSPACE-GUIDE.md)
 > 施工原则：不建立平行 Agent、平行数据库、平行采纳入口或独立向量事实源。
 
-## 一、结论
+## 一、最终结论
 
-记忆工程现在可以正式展开。
+记忆工程已经按本方案完成施工、真实文件系统验收和主干合并。后续任务应复用现有能力，不得再以本方案
+“可以开工”的历史判断重建第二套记忆库、同步器或 Harness 结算入口。
 
-当前代码已经具备统一 Agent + Harness、版本化 RunContract、事件账本、候选与采纳、完成回执、
+施工基线已经具备统一 Agent + Harness、版本化 RunContract、事件账本、候选与采纳、完成回执、
 World/Work 作用域、三注册表、章节采纳后记忆沉淀、确定性影响图、项目全量导入导出和本地文件夹授权。
-这些能力足以作为记忆工程的基础，不需要再等待 Harness 重构。
+最终实现继续以这些能力为唯一基础，没有等待或复制 Harness 重构。
 
-但不能直接把现有“每五分钟覆盖一个完整 JSON 备份”扩成双向同步。正式施工必须先完成三个前置收口：
+施工没有把原有“每五分钟覆盖一个完整 JSON 备份”直接扩成双向同步，而是先完成了三个前置收口：
 
 1. 关闭绑定文件夹后的静默覆盖，改为作者手动触发核对与同步。
 2. 为 LocalWorkspace 和 Work 增加不随本机自增 ID、标题或导入重映射改变的稳定身份。
