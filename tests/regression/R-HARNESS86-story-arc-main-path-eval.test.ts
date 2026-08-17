@@ -43,6 +43,23 @@ import type { AIConfig } from '../../src/lib/types'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
+async function waitForUi(assertion: () => void, timeoutMs = 5_000): Promise<void> {
+  const startedAt = Date.now()
+  let lastError: unknown
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      assertion()
+      return
+    } catch (cause) {
+      lastError = cause
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10))
+      })
+    }
+  }
+  throw lastError
+}
+
 const generator: H86ModelIdentityV1 = {
   provider: 'agnes',
   model: 'agnes-2.5-flash',
@@ -481,7 +498,9 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
     try {
       await act(async () => {
         root.render(createElement(DialogProvider, null, createElement(H86HumanReviewPanel, { checkpoint })))
-        await new Promise(resolve => setTimeout(resolve, 10))
+      })
+      await waitForUi(() => {
+        expect(host.querySelector('[data-testid="h86-human-current-case"]')).not.toBeNull()
       })
       const section = host.querySelector('[data-testid="h86-human-review"]')
       expect(section?.textContent).toContain('候选 A')
@@ -492,7 +511,9 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
 
       await act(async () => {
         section?.querySelector<HTMLButtonElement>('[data-testid="h86-save-human-case"]')?.click()
-        await new Promise(resolve => setTimeout(resolve, 10))
+      })
+      await waitForUi(() => {
+        expect(host.querySelector('[data-testid="h86-human-progress"]')?.textContent).toBe('1/6')
       })
       expect(host.querySelector('[data-testid="h86-human-progress"]')?.textContent).toBe('1/6')
       expect((await loadH86HumanReviewV1())?.items.filter(item => item.reviewA != null)).toHaveLength(1)
