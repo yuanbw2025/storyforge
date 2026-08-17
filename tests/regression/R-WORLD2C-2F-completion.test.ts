@@ -130,8 +130,8 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     } as any)
     await createWorldInstance({
       scope: scopeA,
-      kind: 'storygame',
-      title: 'A 的文字游戏',
+      kind: 'chatgame',
+      title: 'A 的角色聊天',
       draftSnapshotHash: 'draft-a',
       narrativeModuleId: moduleA.id,
     })
@@ -238,7 +238,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
 
     await expect(createWorldInstance({
       scope: forged,
-      kind: 'storygame',
+      kind: 'chatgame',
       title: '不得创建',
       draftSnapshotHash: 'forged-draft',
     })).rejects.toThrow('有效 World/Work')
@@ -483,11 +483,11 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
     expect((await listWorldReleases(seeded.ownership.scope)).map(item => item.id)).toEqual([release2.id, seeded.release.id])
   })
 
-  it('同一 Release 建立四类隔离实例，事件确定回放且分支继承冻结绑定', async () => {
+  it('同一 Release 建立三类 legacy 隔离实例，事件确定回放且分支继承冻结绑定', async () => {
     const seeded = await seedRelease()
     const manifest = JSON.parse(seeded.release.manifestJson) as WorldReleaseManifestV2
     const narrativeModuleExportId = manifest.selectedNarrativeModules[0].exportId
-    const kinds: SimulationSessionKind[] = ['ttrpg', 'chatgame', 'storygame', 'npc-evolution']
+    const kinds: SimulationSessionKind[] = ['ttrpg', 'chatgame', 'npc-evolution']
     const sessions = []
     for (const kind of kinds) {
       sessions.push(await createWorldInstance({
@@ -503,9 +503,9 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
       await appendSimulationEvent({ sessionId: sessions[index].id!, type: 'time.advanced', payload: { amount: index + 1 } })
     }
     const states = await Promise.all(sessions.map(session => readSimulationState(session.id!)))
-    expect(states.map(state => state.clock)).toEqual([1, 2, 3, 4])
+    expect(states.map(state => state.clock)).toEqual([1, 2, 3])
     expect(await readSimulationState(sessions[0].id!)).toEqual(await readSimulationState(sessions[0].id!))
-    expect(await readBoundInstances(seeded.ownership.scope)).toHaveLength(4)
+    expect(await readBoundInstances(seeded.ownership.scope)).toHaveLength(3)
 
     const child = await branchSimulationSession({
       parentSessionId: sessions[0].id!,

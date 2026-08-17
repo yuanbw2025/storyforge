@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import {
+  Bot,
   Check,
   GitBranch,
+  Gamepad2,
   Loader2,
   Play,
   Plus,
   RefreshCw,
   Rocket,
   ShieldCheck,
+  WandSparkles,
 } from 'lucide-react'
 import type {
   NarrativeModule,
+  Project,
   SimulationSessionKind,
   WorldRelease,
   WorldReleaseManifestV2,
@@ -34,10 +39,27 @@ import {
   WORLD_RELEASE_SECTIONS,
   worldReleaseSectionTables,
 } from '../../lib/world-engine/releases'
+import { publishStoryGameDraft } from '../../lib/text-game/authoring'
+import { publishAdventureGameDraft } from '../../lib/adventure/authoring'
+import { publishAvgGame } from '../../lib/avg/authoring'
+import {
+  generateAdventureGameFromWorldRelease,
+  generateAvgGameFromWorldRelease,
+  generateStoryGameFromWorldRelease,
+  loadWorldGameSourceCatalog,
+} from '../../lib/text-game/world-generation'
+import type { WorldGameSourceCatalog } from '../../lib/text-game/world-generation'
 import { createWorldInstance } from '../../lib/world-engine/instances'
+import { installMistHarborDemoWorld } from '../../lib/world-engine/mist-harbor-demo'
 import { changeRecordScope } from '../../lib/world-engine/scope-conversion'
 import { db } from '../../lib/db/schema'
 import { useDialog } from '../shared/Dialog'
+import { useMasterCopilot } from '../agent/useMasterCopilot'
+import {
+  createWorldGameTargetInstructionV1,
+} from '../../lib/agent/world-game-copilot'
+import type { WorldGameCopilotSnapshotV1 } from '../../lib/agent/world-game-copilot'
+import type { WorldGameAuthoringProductV1 } from '../../lib/text-game/agent-contract'
 
 const KIND_LABELS: Record<NarrativeModule['kind'], string> = {
   main: '主线',
@@ -50,19 +72,21 @@ const KIND_LABELS: Record<NarrativeModule['kind'], string> = {
 const INSTANCE_KINDS: Array<{ value: SimulationSessionKind; label: string }> = [
   { value: 'ttrpg', label: '跑团' },
   { value: 'chatgame', label: '角色聊天' },
-  { value: 'storygame', label: '文字游戏' },
   { value: 'npc-evolution', label: 'NPC 演进' },
 ]
 
 interface Props {
+  project: Project
   projectId: number
   activeWorkId?: number | null
   onChanged: () => Promise<void> | void
   onOpenRuntime: () => void
+  onOpenGame: (product: 'storygame' | 'text-adventure' | 'avg') => void
 }
 
-export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, onChanged, onOpenRuntime }: Props) {
+export default function WorldNarrativeReleasePanel({ project, projectId, activeWorkId, onChanged, onOpenRuntime, onOpenGame }: Props) {
   const dialog = useDialog()
+  const gameCopilot = useMasterCopilot({ project, worldGroupId: null })
   const [scope, setScope] = useState<WorkspaceScope | null>(null)
   const [modules, setModules] = useState<NarrativeModule[]>([])
   const [validity, setValidity] = useState<Record<number, boolean>>({})
@@ -71,7 +95,7 @@ export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, on
   const [revisions, setRevisions] = useState<WorldRevision[]>([])
   const [releases, setReleases] = useState<WorldRelease[]>([])
   const [revisionLabel, setRevisionLabel] = useState('')
-  const [instanceKind, setInstanceKind] = useState<SimulationSessionKind>('storygame')
+  const [instanceKind, setInstanceKind] = useState<SimulationSessionKind>('ttrpg')
   const [instanceTitle, setInstanceTitle] = useState('')
   const [releaseId, setReleaseId] = useState<number | null>(null)
   const [releaseNarrativeExportId, setReleaseNarrativeExportId] = useState<number | null>(null)
@@ -87,6 +111,16 @@ export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, on
   } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [generatedStoryTitle, setGeneratedStoryTitle] = useState('')
+  const [generatedProduct, setGeneratedProduct] = useState<'storygame' | 'text-adventure' | 'avg'>('storygame')
+  const [sourceCatalog, setSourceCatalog] = useState<WorldGameSourceCatalog | null>(null)
+  const [selectedCharacterExportIds, setSelectedCharacterExportIds] = useState<Set<number>>(new Set())
+  const [selectedLocationExportIds, setSelectedLocationExportIds] = useState<Set<number>>(new Set())
+  const [selectedArtifactExportIds, setSelectedArtifactExportIds] = useState<Set<number>>(new Set())
+  const [selectedLoreExportIds, setSelectedLoreExportIds] = useState<Set<number>>(new Set())
+  const [selectedMediaExportIds, setSelectedMediaExportIds] = useState<Set<number>>(new Set())
+  const [aiProduct, setAiProduct] = useState<WorldGameAuthoringProductV1>('storygame')
+  const [creativeBrief, setCreativeBrief] = useState('请沿用所选世界资产，但设计一个新的当下危机，让玩家通过有后果的选择推进剧情，并产生至少两个明显不同的结局。')
 
   const load = useCallback(async () => {
     const resolved = await resolveScopeLike(projectId)
@@ -140,6 +174,23 @@ export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, on
       ? previous
       : releaseNarrativeModules[0]?.exportId ?? null)
   }, [releaseNarrativeModules])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!scope || !releaseId) { setSourceCatalog(null); return () => { cancelled = true } }
+    void loadWorldGameSourceCatalog({ scope, worldReleaseId: releaseId }).then(catalog => {
+      if (cancelled) return
+      setSourceCatalog(catalog)
+      setSelectedCharacterExportIds(new Set(catalog.characters.map(item => item.exportId)))
+      setSelectedLocationExportIds(new Set(catalog.locations.map(item => item.exportId)))
+      setSelectedArtifactExportIds(new Set(catalog.artifacts.map(item => item.exportId)))
+      setSelectedLoreExportIds(new Set(catalog.loreEntries.map(item => item.exportId)))
+      setSelectedMediaExportIds(new Set(catalog.mediaAssets.map(item => item.exportId)))
+    }).catch(cause => {
+      if (!cancelled) { setSourceCatalog(null); setMessage(cause instanceof Error ? cause.message : '读取冻结世界资产失败') }
+    })
+    return () => { cancelled = true }
+  }, [scope, releaseId])
 
   const run = async (action: () => Promise<void>) => {
     if (busy) return
@@ -211,6 +262,158 @@ export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, on
     setInstanceTitle('')
     await onChanged()
   })
+
+  const generateStoryGame = () => run(async () => {
+    if (!scope || !releaseId || releaseNarrativeExportId == null || !selectedReleaseModule) return
+    const generated = await generateStoryGameFromWorldRelease({
+      scope,
+      worldReleaseId: releaseId,
+      narrativeModuleExportId: releaseNarrativeExportId,
+      title: selectedReleaseModule.title,
+    })
+    const publication = await publishStoryGameDraft({
+      scope,
+      gameDefinitionId: generated.definition.id!,
+      label: `${generated.definition.title} · 世界投影`,
+    })
+    setGeneratedStoryTitle(generated.definition.title)
+    setGeneratedProduct('storygame')
+    setMessage(`已从冻结世界生成、校验并发布“${generated.definition.title}” v${publication.gameRelease.version}。`)
+    await load()
+    await onChanged()
+  })
+
+  const generateAdventureGame = () => run(async () => {
+    if (!scope || !releaseId || releaseNarrativeExportId == null || !selectedReleaseModule) return
+    const generated = await generateAdventureGameFromWorldRelease({
+      scope,
+      worldReleaseId: releaseId,
+      narrativeModuleExportId: releaseNarrativeExportId,
+      characterExportIds: [...selectedCharacterExportIds],
+      locationExportIds: [...selectedLocationExportIds],
+      artifactExportIds: [...selectedArtifactExportIds],
+      codexEntryExportIds: [...selectedLoreExportIds],
+    })
+    const publication = await publishAdventureGameDraft({
+      scope,
+      gameDefinitionId: generated.definition.id!,
+      label: `${generated.definition.title} · 世界投影`,
+    })
+    setGeneratedStoryTitle(generated.definition.title)
+    setGeneratedProduct('text-adventure')
+    setMessage(`已从冻结角色、地点与 artifact 道具生成并发布“${generated.definition.title}” v${publication.gameRelease.version}。`)
+    await load()
+    await onChanged()
+  })
+
+  const generateAvgGame = () => run(async () => {
+    if (!scope || !releaseId || releaseNarrativeExportId == null || !selectedReleaseModule) return
+    const generated = await generateAvgGameFromWorldRelease({
+      scope,
+      worldReleaseId: releaseId,
+      narrativeModuleExportId: releaseNarrativeExportId,
+      characterExportIds: [...selectedCharacterExportIds],
+      mediaAssetExportIds: [...selectedMediaExportIds],
+    })
+    const publication = await publishAvgGame({
+      scope,
+      gameDefinitionId: generated.definition.id!,
+      label: `${generated.definition.title} · 世界投影`,
+    })
+    setGeneratedStoryTitle(generated.definition.title)
+    setGeneratedProduct('avg')
+    setMessage(`已从冻结叙事与媒资生成并发布“${generated.definition.title}” v${publication.gameRelease.version}。${generated.warnings[0] ?? ''}`)
+    await load()
+    await onChanged()
+  })
+
+  const startAiGameAuthoring = () => run(async () => {
+    if (!scope || !selectedRelease?.id || releaseNarrativeExportId == null || !sourceCatalog) return
+    const selectedCharacters = new Set(selectedCharacterExportIds)
+    const request = {
+      schema: 'storyforge.world-game-authoring-request',
+      version: 1,
+      productType: aiProduct,
+      worldReleaseId: selectedRelease.id,
+      worldContentHash: selectedRelease.contentHash,
+      narrativeModuleExportId: releaseNarrativeExportId,
+      characterExportIds: [...selectedCharacterExportIds].sort((a, b) => a - b),
+      characterRelationExportIds: sourceCatalog.relationships
+        .filter(item => selectedCharacters.has(item.fromCharacterExportId) && selectedCharacters.has(item.toCharacterExportId))
+        .map(item => item.exportId)
+        .sort((a, b) => a - b),
+      importantLocationExportIds: [...selectedLocationExportIds].sort((a, b) => a - b),
+      artifactExportIds: [...selectedArtifactExportIds].sort((a, b) => a - b),
+      codexEntryExportIds: [...selectedLoreExportIds].sort((a, b) => a - b),
+      storyArcExportIds: sourceCatalog.storyArcs.map(item => item.exportId).sort((a, b) => a - b),
+      avgMediaAssetExportIds: [...selectedMediaExportIds].sort((a, b) => a - b),
+      creativeBrief: creativeBrief.trim(),
+    } as const
+    const instruction = createWorldGameTargetInstructionV1(request)
+    await gameCopilot.submitTargetedRequest(instruction, {
+      agentId: 'outline',
+      skillId: 'outline.world-game',
+      instruction,
+      id: `world-game-${aiProduct}`,
+    })
+    setMessage('主 Agent 已接收冻结世界创作包；生成完成后请检查候选，再采纳发布。')
+  })
+
+  const aiCandidates = gameCopilot.pendingCandidates.filter(candidate => (
+    candidate.payload.skillId === 'outline.world-game'
+  ))
+
+  const adoptAndPublishAiGame = (candidate: typeof aiCandidates[number]) => run(async () => {
+    if (!scope || !selectedRelease) return
+    const candidateRequest = (candidate.payload.baseSnapshot as WorldGameCopilotSnapshotV1).request
+    if (candidateRequest.worldReleaseId !== selectedRelease.id
+      || candidateRequest.worldContentHash !== selectedRelease.contentHash) {
+      throw new Error('当前选择的世界版本与这个 AI 候选不一致，请切回原版本或重新生成。')
+    }
+    const candidateProduct = candidateRequest.productType
+    const adopted = await gameCopilot.adoptCandidate(candidate)
+    if (!adopted) throw new Error(gameCopilot.error || '主 Agent 游戏候选采纳失败。')
+    const definitions = await db.gameDefinitions.where('workId').equals(scope.workId).toArray()
+    const definition = definitions
+      .filter(item => item.productType === candidateProduct && item.sourceWorldContentHash === selectedRelease.contentHash)
+      .sort((left, right) => right.updatedAt - left.updatedAt)[0]
+    if (!definition?.id) throw new Error('AI 游戏候选已采纳，但没有找到对应游戏草稿。')
+    if (candidateProduct === 'storygame') {
+      await publishStoryGameDraft({ scope, gameDefinitionId: definition.id, label: `${definition.title} · AI 演化发布` })
+    } else if (candidateProduct === 'text-adventure') {
+      await publishAdventureGameDraft({ scope, gameDefinitionId: definition.id, label: `${definition.title} · AI 演化发布` })
+    } else {
+      await publishAvgGame({ scope, gameDefinitionId: definition.id, label: `${definition.title} · AI 演化发布` })
+    }
+    setGeneratedStoryTitle(definition.title)
+    setGeneratedProduct(candidateProduct)
+    setMessage(`主 Agent 创作的“${definition.title}”已经校验、冻结并发布，可立即试玩。`)
+    await load()
+    await onChanged()
+  })
+
+  const installMistHarbor = () => run(async () => {
+    if (!scope) return
+    const confirmed = await dialog.confirm({
+      title: '建立雾港演示世界？',
+      message: '会在当前世界中新增正式角色、关系、地点、artifact 道具、主线和本地视觉媒资；不会覆盖已有同名内容，也不会绕过发布流程。',
+      confirmText: '建立演示世界',
+    })
+    if (!confirmed) return
+    const result = await installMistHarborDemoWorld({ scope })
+    setSelectedIds(previous => new Set([...previous, result.narrativeModuleId]))
+    setMessage(`雾港世界已就绪：${result.characterCount} 名角色、${result.locationCount} 个地点、${result.artifactCount} 件道具、${result.loreEntryCount} 条世界词条、${result.mediaAssetCount} 项视觉媒资。下一步冻结并发布 WorldRelease。`)
+    await load()
+    await onChanged()
+  })
+
+  const toggleExportId = (setter: Dispatch<SetStateAction<Set<number>>>, exportId: number) => {
+    setter(previous => {
+      const next = new Set(previous)
+      if (next.has(exportId)) next.delete(exportId); else next.add(exportId)
+      return next
+    })
+  }
 
   return (
     <section className="sf-world-pipeline" aria-label="叙事蓝图与世界发布">
@@ -314,8 +517,9 @@ export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, on
 
         <div className="sf-world-pipeline-stage">
           <div className="sf-world-pipeline-stage-head"><span>3</span><div><strong>启动独立实例</strong><small>每个实例单独记录事件、分支和检查点</small></div></div>
+          <p className="sf-world-pipeline-note">文字游戏需先在作者工作台生成 GameRelease，再从文字游戏产品页开始；这里仅保留其他互动实例。</p>
           <div className="sf-world-pipeline-selects">
-            <select value={instanceKind} onChange={event => setInstanceKind(event.target.value as SimulationSessionKind)}>{INSTANCE_KINDS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+            <select aria-label="互动实例类型" value={instanceKind} onChange={event => setInstanceKind(event.target.value as SimulationSessionKind)}>{INSTANCE_KINDS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
             <select value={releaseId ?? ''} onChange={event => setReleaseId(Number(event.target.value) || null)}><option value="">选择发布版本</option>{releases.map(release => <option key={release.id} value={release.id}>v{release.version} · {release.label}</option>)}</select>
           </div>
           <label className="sf-world-pipeline-field">冻结叙事<select value={releaseNarrativeExportId ?? ''} onChange={event => setReleaseNarrativeExportId(event.target.value === '' ? null : Number(event.target.value))}><option value="">选择发布版本中的叙事</option>{releaseNarrativeModules.map(module => <option key={module.exportId} value={module.exportId}>{KIND_LABELS[module.kind]} · {module.title}</option>)}</select></label>
@@ -326,6 +530,85 @@ export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, on
           </div>
         </div>
       </div>
+      <section className="sf-world-game-bridge" aria-label="世界到文字游戏">
+        <div>
+          <span className="sf-card-kicker"><Gamepad2 className="h-4 w-4" /> WORLD → STORYGAME</span>
+          <h3>从冻结世界生成文字游戏</h3>
+          <p>主 Agent 会读取所选 WorldRelease 的便携创作包，在世界事实之上继续创作新的危机、推进、分支和结局；作者确认后才生成并发布游戏。</p>
+          <button className="sf-button sf-button-secondary" onClick={installMistHarbor} disabled={busy}>
+            <WandSparkles className="h-4 w-4" />建立雾港演示世界
+          </button>
+        </div>
+        <div className="sf-world-game-bridge-source">
+          <strong>{selectedRelease ? `v${selectedRelease.version} · ${selectedRelease.label}` : '先发布一个世界版本'}</strong>
+          <span>{selectedReleaseModule ? `${KIND_LABELS[selectedReleaseModule.kind]} · ${selectedReleaseModule.title}` : '选择冻结叙事'}</span>
+          {selectedRelease && <code>{selectedRelease.contentHash.slice(0, 16)}…</code>}
+        </div>
+        {sourceCatalog && (
+          <div className="sf-world-game-selection" aria-label="选择冻结世界资产">
+            <fieldset>
+              <legend>角色 · {selectedCharacterExportIds.size}/{sourceCatalog.characters.length}</legend>
+              {sourceCatalog.characters.map(item => <label key={item.exportId}><input type="checkbox" checked={selectedCharacterExportIds.has(item.exportId)} onChange={() => toggleExportId(setSelectedCharacterExportIds, item.exportId)} /><span>{item.name}</span></label>)}
+            </fieldset>
+            <fieldset>
+              <legend>地点 · {selectedLocationExportIds.size}/{sourceCatalog.locations.length}</legend>
+              {sourceCatalog.locations.map(item => <label key={item.exportId}><input type="checkbox" checked={selectedLocationExportIds.has(item.exportId)} onChange={() => toggleExportId(setSelectedLocationExportIds, item.exportId)} /><span>{item.name}</span></label>)}
+            </fieldset>
+            <fieldset>
+              <legend>artifact 道具 · {selectedArtifactExportIds.size}/{sourceCatalog.artifacts.length}</legend>
+              {sourceCatalog.artifacts.map(item => <label key={item.exportId}><input type="checkbox" checked={selectedArtifactExportIds.has(item.exportId)} onChange={() => toggleExportId(setSelectedArtifactExportIds, item.exportId)} /><span>{item.name}</span></label>)}
+            </fieldset>
+            <fieldset>
+              <legend>世界词条 · {selectedLoreExportIds.size}/{sourceCatalog.loreEntries.length}</legend>
+              {sourceCatalog.loreEntries.map(item => <label key={item.exportId}><input type="checkbox" checked={selectedLoreExportIds.has(item.exportId)} onChange={() => toggleExportId(setSelectedLoreExportIds, item.exportId)} /><span>{item.name}</span></label>)}
+            </fieldset>
+            <fieldset>
+              <legend>AVG 媒资 · {selectedMediaExportIds.size}/{sourceCatalog.mediaAssets.length}</legend>
+              {sourceCatalog.mediaAssets.map(item => <label key={item.exportId}><input type="checkbox" checked={selectedMediaExportIds.has(item.exportId)} onChange={() => toggleExportId(setSelectedMediaExportIds, item.exportId)} /><span>{item.name}</span></label>)}
+            </fieldset>
+          </div>
+        )}
+        <div className="sf-world-pipeline-stage">
+          <div className="sf-world-pipeline-stage-head"><span><Bot className="h-4 w-4" /></span><div><strong>交给主 Agent 演化</strong><small>同一对话、Harness、候选确认和正式采纳链路</small></div></div>
+          <div className="sf-world-pipeline-selects">
+            <select aria-label="AI 游戏类型" value={aiProduct} disabled={aiCandidates.length > 0} onChange={event => setAiProduct(event.target.value as WorldGameAuthoringProductV1)}>
+              <option value="storygame">分支互动叙事</option>
+              <option value="text-adventure">文字冒险</option>
+              <option value="avg">AVG</option>
+            </select>
+          </div>
+          <label className="sf-world-pipeline-field">希望游戏怎样演化
+            <textarea aria-label="游戏演化要求" rows={4} maxLength={2000} value={creativeBrief} onChange={event => setCreativeBrief(event.target.value)} />
+          </label>
+          <div className="sf-world-pipeline-actions">
+            <button className="sf-button sf-button-primary" onClick={startAiGameAuthoring} disabled={busy || gameCopilot.busy || gameCopilot.loading || !releaseId || !selectedReleaseModule || !creativeBrief.trim() || gameCopilot.pendingCandidates.length > 0}>
+              {gameCopilot.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}主 Agent 生成游戏候选
+            </button>
+            <button className="sf-button sf-button-secondary" onClick={() => onOpenGame(generatedProduct)} disabled={busy || gameCopilot.busy || !generatedStoryTitle}><Play className="h-4 w-4" />立即试玩</button>
+          </div>
+          {gameCopilot.error && <p className="sf-product-message" role="alert">{gameCopilot.error}</p>}
+          {aiCandidates.map(candidate => (
+            <div key={candidate.event.id} className="sf-world-game-ai-candidate">
+              <strong>待确认 · {candidate.payload.label}</strong>
+              <small>这是真实 AI 输出；可直接编辑 JSON，确认后才会写入游戏数据。</small>
+              <textarea aria-label="AI 游戏候选内容" rows={16} value={candidate.event.content} disabled={busy || gameCopilot.busy} onChange={event => { void gameCopilot.updateCandidate(candidate.event.id!, event.target.value) }} />
+              <div className="sf-world-pipeline-actions">
+                <button className="sf-button sf-button-secondary" disabled={busy || gameCopilot.busy} onClick={() => { void gameCopilot.rejectCandidate(candidate) }}>拒绝候选</button>
+                <button className="sf-button sf-button-primary" disabled={busy || gameCopilot.busy} onClick={() => adoptAndPublishAiGame(candidate)}><Rocket className="h-4 w-4" />采纳、发布并准备试玩</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <details className="sf-world-game-fallback">
+          <summary>无需 AI 的快速映射（演示备用）</summary>
+          <p>只把冻结叙事和资产确定性映射为游戏，不会继续创作新剧情。</p>
+          <div className="sf-world-pipeline-actions">
+            <button className="sf-button sf-button-secondary" onClick={generateStoryGame} disabled={busy || !releaseId || !selectedReleaseModule}><GitBranch className="h-4 w-4" />快速映射分支叙事</button>
+            <button className="sf-button sf-button-secondary" onClick={generateAdventureGame} disabled={busy || !releaseId || !selectedReleaseModule}><Gamepad2 className="h-4 w-4" />快速映射文字冒险</button>
+            <button className="sf-button sf-button-secondary" onClick={generateAvgGame} disabled={busy || !releaseId || !selectedReleaseModule}><Play className="h-4 w-4" />快速映射 AVG</button>
+          </div>
+        </details>
+      </section>
       {message && <p className="sf-product-message" role="status">{message}</p>}
     </section>
   )

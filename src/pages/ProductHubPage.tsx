@@ -1,15 +1,19 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import {
+  Activity,
   ArrowRight,
   BookOpenText,
   Check,
   ChevronRight,
   Gamepad2,
+  GitBranch,
   Globe2,
   Hash,
   LayoutDashboard,
   Menu,
+  Map,
+  MonitorPlay,
   MessageCircle,
   Plus,
   Search,
@@ -32,6 +36,17 @@ import './product-hub.css'
 const NodeAuthoringWorkspace = lazy(() => import('../components/node-authoring/NodeAuthoringWorkspace'))
 const SimulationRuntimePanel = lazy(() => import('../components/simulation/SimulationRuntimePanel'))
 const ChatGamePanel = lazy(() => import('../components/simulation/ChatGamePanel'))
+const InteractionGameWorkbench = lazy(() => import('../components/character-interaction/InteractionGameWorkbench'))
+const StoryGamePlayer = lazy(() => import('../components/text-game/StoryGamePlayer'))
+const StoryGameWorkbench = lazy(() => import('../components/text-game/StoryGameWorkbench'))
+const AdventureGamePlayer = lazy(() => import('../components/text-game/AdventureGamePlayer'))
+const AdventureGameWorkbench = lazy(() => import('../components/text-game/AdventureGameWorkbench'))
+const AvgGamePlayer = lazy(() => import('../components/text-game/AvgGamePlayer'))
+const AvgGameWorkbench = lazy(() => import('../components/text-game/AvgGameWorkbench'))
+const NarrativeSimulationPlayer = lazy(() => import('../components/text-game/NarrativeSimulationPlayer'))
+const NarrativeSimulationWorkbench = lazy(() => import('../components/text-game/NarrativeSimulationWorkbench'))
+const TextOpenWorldPlayer = lazy(() => import('../components/text-game/TextOpenWorldPlayer'))
+const TextOpenWorldWorkbench = lazy(() => import('../components/text-game/TextOpenWorldWorkbench'))
 const OutlinePanel = lazy(() => import('../components/outline/OutlinePanel'))
 const ChaptersListPanel = lazy(() => import('../components/editor/ChaptersListPanel'))
 
@@ -207,14 +222,14 @@ function WorldCard({ world, onOpen }: { world: ProductWorld; onOpen: () => void 
   return <button className="sf-world-card" onClick={onOpen}><WorldGlyph accent={world.accent} /><div className="sf-world-card-body"><div className="sf-card-topline"><span className="sf-overline"><Hash className="h-3 w-3" /> {world.code}</span><span className="sf-version">v{world.version}</span></div><h3>{world.name}</h3><p>{world.description}</p><div className="sf-tag-row">{world.tags.map(tag => <span className="sf-tag" key={tag}>{tag}</span>)}</div><div className="sf-world-card-footer"><span className="sf-source"><StatusDot tone={world.project.communityOrigin ? 'neutral' : 'success'} />{world.source}</span><span className="sf-completeness">{world.completeness}%</span></div></div></button>
 }
 
-function WorldEnginePage({ worlds, activeWorld, onSelectWorld, onOpenCreate, onOpenWorldPicker, onImported, onOpenModule }: { worlds: ProductWorld[]; activeWorld?: ProductWorld; onSelectWorld: (world: ProductWorld) => void; onOpenCreate: () => void; onOpenWorldPicker: () => void; onImported: (projectId: number) => void; onOpenModule: (module: SidebarModule) => void }) {
+function WorldEnginePage({ worlds, activeWorld, onSelectWorld, onOpenCreate, onOpenWorldPicker, onImported, onOpenModule, onOpenGame }: { worlds: ProductWorld[]; activeWorld?: ProductWorld; onSelectWorld: (world: ProductWorld) => void; onOpenCreate: () => void; onOpenWorldPicker: () => void; onImported: (projectId: number) => void; onOpenModule: (module: SidebarModule) => void; onOpenGame: (product: 'storygame' | 'text-adventure' | 'avg') => void }) {
   if (!activeWorld) return <><PageHeading eyebrow="FOUNDATION / WORLD ENGINE" title="世界引擎" description="独立创建、版本化并复用世界设定。" action={<Button variant="primary" icon={Plus} onClick={onOpenCreate}>从零创建世界</Button>} /><EmptyProjectState onCreate={onOpenCreate} /><WorldSharingPanel onImported={onImported} /></>
   const projection = activeWorld.projection
   return <>
     <PageHeading eyebrow="FOUNDATION / WORLD ENGINE" title="世界引擎" description="世界是所有写作、节点和互动功能的共同基座。每个世界都有独立编号和版本。" action={<><Button icon={Hash} onClick={onOpenWorldPicker}>使用世界编号</Button><Button variant="primary" icon={Plus} onClick={onOpenCreate}>从零创建世界</Button></>} />
     <div className="sf-subnav">{worlds.map(world => <button key={world.code} className={world.code === activeWorld.code ? 'active' : ''} onClick={() => onSelectWorld(world)}><WorldGlyph accent={world.accent} small /><span>{world.name}</span><span>{world.code}</span></button>)}<span className="sf-subnav-spacer" /></div>
     <section className="sf-worlds-featured"><div className="sf-worlds-featured-visual"><WorldGlyph accent={activeWorld.accent} /></div><div className="sf-worlds-featured-copy"><span className="sf-overline">WORLD ENGINE · {activeWorld.source}</span><h2>{activeWorld.name}</h2><p>{activeWorld.description}</p><span className="sf-world-code-large"><Hash className="h-4 w-4" /> {activeWorld.code} · v{activeWorld.version}</span><div className="sf-worlds-featured-actions"><Button variant="primary" icon={ArrowRight} onClick={() => document.getElementById('world-engine-editor')?.scrollIntoView({ behavior: 'smooth' })}>管理世界设定</Button><Button icon={BookOpenText} onClick={() => onOpenModule('outline')}>继续分步骤创作</Button></div></div><div className="sf-worlds-featured-stats"><div><strong>{activeWorld.completeness}%</strong><span>世界内容覆盖</span></div><div><strong>v{activeWorld.version}</strong><span>当前草稿版本</span></div><div><strong>{projection?.readiness === 'usable' ? '可创作' : projection?.readiness === 'building' ? '建设中' : '待建立'}</strong><span>世界状态</span></div></div></section>
-    <section id="world-engine-editor" className="sf-product-panel"><WorldEngineWorkspace projection={projection} activeWorkId={activeWorld.project.activeWorkId} onWorkChanged={onImported ? async () => { await onImported(activeWorld.projectId) } : undefined} onOpenModule={onOpenModule} /></section>
+    <section id="world-engine-editor" className="sf-product-panel"><WorldEngineWorkspace project={activeWorld.project} projection={projection} activeWorkId={activeWorld.project.activeWorkId} onWorkChanged={onImported ? async () => { await onImported(activeWorld.projectId) } : undefined} onOpenModule={onOpenModule} onOpenGame={onOpenGame} /></section>
     <WorldSharingPanel project={activeWorld.project} onImported={onImported} />
   </>
 }
@@ -239,15 +254,46 @@ function TtrpgPage({ project, world, onOpenWorldPicker, onCreate }: { project?: 
 }
 
 function ChatGamePage({ project, world, onOpenWorldPicker, onCreate }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void }) {
+  const [mode, setMode] = useState<'play' | 'author'>('play')
   const worldGroupId = useSelectedWorldGroupId(project)
   if (!project || !world) return <><PageHeading eyebrow="PLAY / CHATGAME" title="角色聊天" description="选择世界和角色，开始独立的可分支互动会话。" /><EmptyProjectState onCreate={onCreate} /></>
-  return <><PageHeading eyebrow="PLAY / CHATGAME" title="角色聊天" description="选择一个世界版本，与冻结快照中的角色聊天；会话可重生成、保存和分支。" action={<Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}><ChatGamePanel project={project} worldGroupId={worldGroupId} workspaceScope={scopeForProject(project)} /></Suspense></section></>
+  const scope = scopeForProject(project)
+  if (!scope) return <><PageHeading eyebrow="PLAY / CHATGAME" title="角色互动" description="从正式发布开始可回放的长期关系叙事。" /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-empty"><ShieldCheck className="h-8 w-8" /><h2>工作区归属尚未就绪</h2><p>请先在世界引擎完成 World/Work 初始化。</p></section></>
+  return <><PageHeading eyebrow={mode === 'play' ? 'PLAY / CHATGAME-2' : 'AUTHOR / CHATGAME-2'} title="角色互动" description={mode === 'play' ? '从不可变发布启动单人或多人场景；关系、知识与记忆都有事件证据。' : '配置互动角色、秘密边界、关系规则、场景与 Narrative 连接，然后发布 GameRelease。'} action={<div className="storygame-mode-actions"><Button variant={mode === 'play' ? 'primary' : 'secondary'} icon={Gamepad2} onClick={() => setMode('play')}>玩家模式</Button><Button variant={mode === 'author' ? 'primary' : 'secondary'} icon={BookOpenText} onClick={() => setMode('author')}>作者工作台</Button><Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button></div>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}>{mode === 'play' ? <ChatGamePanel project={project} worldGroupId={worldGroupId} workspaceScope={scope} /> : <InteractionGameWorkbench scope={scope} />}</Suspense></section></>
 }
 
-function TextGamePage({ project, world, onOpenWorldPicker, onCreate }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void }) {
+function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProduct = 'storygame' }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void; initialProduct?: 'storygame' | 'text-adventure' | 'avg' }) {
+  const [mode, setMode] = useState<'play' | 'author'>('play')
+  const [product, setProduct] = useState<'storygame' | 'text-adventure' | 'avg' | 'narrative-simulation' | 'text-open-world'>(initialProduct)
   const worldGroupId = useSelectedWorldGroupId(project)
   if (!project || !world) return <><PageHeading eyebrow="PLAY / STORYGAME" title="文字游戏" description="选择世界与叙事蓝图，开始独立的可回放故事。" /><EmptyProjectState onCreate={onCreate} /></>
-  return <><PageHeading eyebrow="PLAY / STORYGAME" title="文字游戏" description="从当前主线或支线建立冻结快照，事件、分支和检查点与其他实例完全隔离。" action={<Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}><SimulationRuntimePanel project={project} worldGroupId={worldGroupId} workspaceScope={scopeForProject(project)} sessionKind={'storygame' satisfies SimulationSessionKind} /></Suspense></section></>
+  const scope = scopeForProject(project)
+  if (!scope) return <><PageHeading eyebrow="PLAY / STORYGAME" title="文字游戏" description="从正式发布开始独立、可回放的分支叙事。" /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-empty"><ShieldCheck className="h-8 w-8" /><h2>工作区归属尚未就绪</h2><p>请先进入世界引擎完成 World/Work 初始化，再读取正式游戏发布。</p></section></>
+  const isAdventure = product === 'text-adventure'
+  const isAvg = product === 'avg'
+  const isSimulation = product === 'narrative-simulation'
+  const isOpenWorld = product === 'text-open-world'
+  const productCode = isAdventure ? 'TEXTADV-1' : isAvg ? 'AVG-1' : isSimulation ? 'TEXTSIM-1' : isOpenWorld ? 'TEXTWORLD-1' : 'STORYGAME'
+  const productTitle = isAdventure ? '文字冒险' : isAvg ? 'AVG / Galgame' : isSimulation ? '叙事模拟' : isOpenWorld ? '文字开放世界' : '分支叙事'
+  const description = isAdventure
+    ? (mode === 'play' ? '在有限地点中通过物品、资源、能力与任务行动推进，并从正式状态解锁 Narrative 结局。' : '编辑地点、交互物、物品、能力、任务和判定，校验后冻结为可离线游玩的发布。')
+    : isAvg
+      ? (mode === 'play' ? '用背景、立绘、CG、音频和可恢复舞台演出同一份分支故事，也可纯文字通关。' : '导入版本化媒资，为 Narrative Beat 配置声明式 Cue 并发布不可变演出。')
+      : isSimulation
+        ? (mode === 'play' ? '在封闭系统中安排有限决策，让资源、主体、问题与延迟后果按确定性规则演化。' : '编辑资源、主体、政策、危机和结局规则，批量验证后冻结为可离线运行的发布。')
+        : isOpenWorld
+          ? (mode === 'play' ? '在多个区域之间旅行，让人物、组织、问题和动态任务在同一可回放世界时间线上持续演进。' : '组合区域目录、交通、发现渠道、固定任务、模板、日程和传播规则，并冻结全部共享能力。')
+        : (mode === 'play' ? '选择正式发布，新建或继续存档；所有选择自动保存，并可从检查点建立独立时间线。' : '编辑游戏、节点、Beat 与 Choice，试玩草稿并发布不可变版本。')
+  const content = isAdventure
+    ? (mode === 'play' ? <AdventureGamePlayer project={project} scope={scope} worldGroupId={worldGroupId} /> : <AdventureGameWorkbench scope={scope} />)
+    : isAvg
+      ? (mode === 'play' ? <AvgGamePlayer project={project} scope={scope} worldGroupId={worldGroupId} /> : <AvgGameWorkbench scope={scope} />)
+      : isSimulation
+        ? (mode === 'play' ? <NarrativeSimulationPlayer project={project} scope={scope} worldGroupId={worldGroupId} /> : <NarrativeSimulationWorkbench scope={scope} />)
+        : isOpenWorld
+          ? (mode === 'play' ? <TextOpenWorldPlayer project={project} scope={scope} worldGroupId={worldGroupId} /> : <TextOpenWorldWorkbench scope={scope} />)
+        : (mode === 'play' ? <StoryGamePlayer project={project} scope={scope} worldGroupId={worldGroupId} /> : <StoryGameWorkbench scope={scope} />)
+  return <><PageHeading eyebrow={`${mode === 'play' ? 'PLAY' : 'AUTHOR'} / ${productCode}`} title={productTitle} description={description} action={<div className="storygame-mode-actions"><Button variant={product === 'storygame' ? 'primary' : 'secondary'} icon={GitBranch} onClick={() => setProduct('storygame')}>分支叙事</Button><Button variant={isAdventure ? 'primary' : 'secondary'} icon={Map} onClick={() => setProduct('text-adventure')}>文字冒险</Button><Button variant={isAvg ? 'primary' : 'secondary'} icon={MonitorPlay} onClick={() => setProduct('avg')}>AVG</Button><Button variant={isSimulation ? 'primary' : 'secondary'} icon={Activity} onClick={() => setProduct('narrative-simulation')}>叙事模拟</Button><Button variant={isOpenWorld ? 'primary' : 'secondary'} icon={Globe2} onClick={() => setProduct('text-open-world')}>开放世界</Button><Button variant={mode === 'play' ? 'primary' : 'secondary'} icon={Gamepad2} onClick={() => setMode('play')}>玩家</Button><Button variant={mode === 'author' ? 'primary' : 'secondary'} icon={BookOpenText} onClick={() => setMode('author')}>作者</Button><Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button></div>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}>{content}</Suspense></section></>
 }
 
 function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (kind: 'worlds' | 'novel', id: number) => void }) {
@@ -286,6 +332,7 @@ export default function ProductHubPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [showWorldPicker, setShowWorldPicker] = useState(false)
   const [showMobileNav, setShowMobileNav] = useState(false)
+  const [gameProduct, setGameProduct] = useState<'storygame' | 'text-adventure' | 'avg'>('storygame')
   const [projections, setProjections] = useState<Record<number, WorldProjection>>({})
 
   useEffect(() => { void loadProjects() }, [loadProjects])
@@ -317,12 +364,12 @@ export default function ProductHubPage() {
 
   const renderPage = () => {
     switch (activeTab) {
-      case 'worlds': return <WorldEnginePage worlds={worlds} activeWorld={activeWorld} onSelectWorld={selectWorld} onOpenCreate={() => setShowCreate(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} onImported={async projectId => { await loadProjects(); setActiveProjectId(projectId); setActiveTab('worlds') }} onOpenModule={module => { if (activeProject?.id) navigate(`/workspace/${activeProject.id}?module=${module}`) }} />
+      case 'worlds': return <WorldEnginePage worlds={worlds} activeWorld={activeWorld} onSelectWorld={selectWorld} onOpenCreate={() => setShowCreate(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} onImported={async projectId => { await loadProjects(); setActiveProjectId(projectId); setActiveTab('worlds') }} onOpenModule={module => { if (activeProject?.id) navigate(`/workspace/${activeProject.id}?module=${module}`) }} onOpenGame={product => { setGameProduct(product); setActiveTab('game') }} />
       case 'novel': return <NovelPage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
       case 'nodes': return <NodesPage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
       case 'ttrpg': return <TtrpgPage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
       case 'chat': return <ChatGamePage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
-      case 'game': return <TextGamePage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
+      case 'game': return <TextGamePage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} initialProduct={gameProduct} />
       default: return <HomePage worlds={worlds} activeProject={activeWorld} onSelect={selectTab} onSelectWorld={selectWorld} onOpenCreate={() => setShowCreate(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} />
     }
   }

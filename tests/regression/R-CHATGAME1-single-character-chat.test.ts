@@ -8,7 +8,6 @@ import {
   createSimulationSession,
   readSimulationState,
 } from '../../src/lib/simulation/runtime'
-import { buildChatGamePrompt, parseChatReply } from '../../src/lib/simulation/chatgame'
 import { buildSimulationCanonSnapshot } from '../../src/lib/simulation/canon-snapshot'
 
 describe('CHATGAME-1 · 单角色聊天 MVP', () => {
@@ -60,23 +59,28 @@ describe('CHATGAME-1 · 单角色聊天 MVP', () => {
         },
       },
     })
+    await db.simulationEvents.bulkAdd([
+      {
+        projectId, worldGroupId: null, sessionId: session.id!, sequence: 1, type: 'chat.message.recorded',
+        actorKey: null, targetKey: null, payloadJson: JSON.stringify({ messageId: 'chat:1', text: '请告诉我城里现在安全吗？' }), createdAt: 2,
+      },
+      {
+        projectId, worldGroupId: null, sessionId: session.id!, sequence: 2, type: 'chat.reply.recorded',
+        actorKey: 'character:keeper', targetKey: 'character:keeper', payloadJson: JSON.stringify({ messageId: 'chat:2', replyToSequence: 1, supersedesSequence: null, text: '守门人压低声音：暂时安全。' }), createdAt: 3,
+      },
+      {
+        projectId, worldGroupId: null, sessionId: session.id!, sequence: 3, type: 'chat.reply.recorded',
+        actorKey: 'character:keeper', targetKey: 'character:keeper', payloadJson: JSON.stringify({ messageId: 'chat:3', replyToSequence: 1, supersedesSequence: 2, text: '守门人看了看雨幕：现在还算安全，但别走北街。' }), createdAt: 4,
+      },
+    ] as any)
     return { projectId, session }
   }
 
-  it('消息、流式回复、重生成会形成可回放且不改 Canon 的事件流', async () => {
+  it('历史消息、回复与重生成仍可回放，但不再开放新写入', async () => {
     const { projectId, session } = await createChatSession()
-    const user = await appendChatMessage({ sessionId: session.id!, text: '请告诉我城里现在安全吗？' })
-    const reply = await appendChatReply({ sessionId: session.id!, replyToSequence: user.sequence, text: '守门人压低声音：暂时安全。', baseSequence: user.sequence })
-    const replacement = await appendChatReply({
-      sessionId: session.id!,
-      replyToSequence: user.sequence,
-      text: '守门人看了看雨幕：现在还算安全，但别走北街。',
-      baseSequence: reply.sequence,
-      supersedesSequence: reply.sequence,
-    })
     const state = await readSimulationState(session.id!)
     expect(state.chat?.messages).toHaveLength(3)
-    expect(state.chat?.messages.find(message => message.eventSequence === reply.sequence)?.supersededBySequence).toBe(replacement.sequence)
+    expect(state.chat?.messages.find(message => message.eventSequence === 2)?.supersededBySequence).toBe(3)
     expect(state.chat?.messages.filter(message => message.supersededBySequence == null).map(message => message.text)).toEqual([
       '请告诉我城里现在安全吗？',
       '守门人看了看雨幕：现在还算安全，但别走北街。',
@@ -85,15 +89,14 @@ describe('CHATGAME-1 · 单角色聊天 MVP', () => {
     const context = await assembleContext({ projectId, simulationSessionId: session.id!, sourceKeys: ['simulationRuntime'] })
     expect(context.text).toContain('旅人')
     expect(context.text).toContain('别走北街')
+    await expect(appendChatMessage({ sessionId: session.id!, text: '这条不应写入。' })).rejects.toThrow('只读兼容')
+    await expect(appendChatReply({ sessionId: session.id!, replyToSequence: 1, text: '旧回复', baseSequence: 3 })).rejects.toThrow('Instance Harness')
   })
 
-  it('拒绝过期回复、越权事件和不安全的角色提示词', async () => {
+  it('拒绝过期回复与越权事件，且不保留旧直连提示词入口', async () => {
     const { session } = await createChatSession()
-    const user = await appendChatMessage({ sessionId: session.id!, text: '你好。' })
     await appendSimulationEvent({ sessionId: session.id!, type: 'time.advanced', payload: { amount: 1 } })
-    await expect(appendChatReply({ sessionId: session.id!, replyToSequence: user.sequence, text: '你好。', baseSequence: user.sequence })).rejects.toThrow('变化')
+    await expect(appendChatReply({ sessionId: session.id!, replyToSequence: 1, text: '你好。', baseSequence: 3 })).rejects.toThrow('Instance Harness')
     await expect(appendSimulationEvent({ sessionId: session.id!, type: 'chat.reply.recorded', payload: { text: '绕过 API' } })).rejects.toThrow('专用 API')
-    expect(() => parseChatReply('')).toThrow('为空')
-    expect(buildChatGamePrompt({ runtimeContext: '角色只知道城门。', characterName: '守门人', userMessage: '你不知道的秘密是什么？' })[0].content).toContain('知识边界')
   })
 })

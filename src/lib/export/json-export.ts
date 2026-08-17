@@ -50,6 +50,18 @@ import type {
   NarrativeNode,
   WorldRevision,
   WorldRelease,
+  GameDefinition,
+  GameRelease,
+  NarrativeBeat,
+  NarrativeChoice,
+  InteractionCharacterProfile,
+  InteractionSceneTemplate,
+  AdventureModule,
+  AvgMediaAsset,
+  AvgMediaBlob,
+  AvgPresentationModule,
+  NarrativeSimulationModule,
+  OpenWorldModule,
 } from '../types'
 import type { TemporalFact } from '../types/temporal-fact'
 
@@ -116,6 +128,66 @@ export interface ProjectExportData {
     Omit<WorldRelease, 'id' | 'projectId' | 'worldId' | 'revisionId'>
     & { _exportId: number; _worldExportId: number; _revisionExportId: number }
   )[]
+  gameDefinitions?: (Omit<GameDefinition, 'id' | 'projectId' | 'worldId' | 'workId' | 'narrativeModuleId'> & {
+    _exportId: number
+    _worldExportId: number
+    _workExportId: number
+    _narrativeModuleExportId: number
+  })[]
+  gameReleases?: (Omit<GameRelease, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId' | 'worldReleaseId'> & {
+    _exportId: number
+    _worldExportId: number
+    _workExportId: number
+    _gameDefinitionExportId?: number | null
+    _worldReleaseExportId: number
+  })[]
+  narrativeBeats?: (Omit<NarrativeBeat, 'id' | 'projectId' | 'moduleId' | 'speakerCharacterId'> & {
+    _exportId: number
+    _moduleExportId: number
+    _speakerCharacterExportId?: number | null
+  })[]
+  narrativeChoices?: (Omit<NarrativeChoice, 'id' | 'projectId' | 'moduleId'> & {
+    _exportId: number
+    _moduleExportId: number
+  })[]
+  interactionCharacterProfiles?: (
+    Omit<InteractionCharacterProfile, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId' | 'characterId'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _workExportId: number
+      _gameDefinitionExportId: number
+      _characterExportId: number
+    }
+  )[]
+  interactionSceneTemplates?: (
+    Omit<InteractionSceneTemplate, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId'>
+    & { _exportId: number; _worldExportId: number; _workExportId: number; _gameDefinitionExportId: number }
+  )[]
+  adventureModules?: (
+    Omit<AdventureModule, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId'>
+    & { _exportId: number; _worldExportId: number; _workExportId: number; _gameDefinitionExportId: number }
+  )[]
+  avgMediaAssets?: (
+    Omit<AvgMediaAsset, 'id' | 'projectId' | 'worldId' | 'workId'>
+    & { _exportId: number; _worldExportId: number; _workExportId: number }
+  )[]
+  avgMediaBlobs?: (
+    Omit<AvgMediaBlob, 'id' | 'projectId' | 'worldId' | 'workId' | 'mediaAssetId' | 'data'>
+    & { _exportId: number; _worldExportId: number; _workExportId: number; _mediaAssetExportId: number; data: string }
+  )[]
+  avgPresentationModules?: (
+    Omit<AvgPresentationModule, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId'>
+    & { _exportId: number; _worldExportId: number; _workExportId: number; _gameDefinitionExportId: number }
+  )[]
+  narrativeSimulationModules?: (
+    Omit<NarrativeSimulationModule, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId'>
+    & { _exportId: number; _worldExportId: number; _workExportId: number; _gameDefinitionExportId: number }
+  )[]
+  openWorldModules?: (
+    Omit<OpenWorldModule, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId'>
+    & { _exportId: number; _worldExportId: number; _workExportId: number; _gameDefinitionExportId: number }
+  )[]
 
   // ── 原有（v1）──
   worldviews: (Omit<Worldview, 'id' | 'projectId' | 'worldGroupId'> & WorldGroupExportRef)[]
@@ -153,12 +225,14 @@ export interface ProjectExportData {
   )[]
   /** HARNESS-1 可恢复运行账本；事件/检查点只通过便携 run ID 关联。 */
   agentRuns?: (
-    Omit<AgentRunRecord, 'id' | 'projectId' | 'workId' | 'worldGroupId' | 'conversationId' | 'parentRunId'>
+    Omit<AgentRunRecord, 'id' | 'projectId' | 'workId' | 'simulationSessionId' | 'worldGroupId' | 'conversationId' | 'parentRunId'>
     & WorldGroupExportRef
     & {
       _exportId: number
       _parentExportId?: number | null
       _workOwnerExportId?: number
+      _instanceOwnerExportId?: number
+      _simulationSessionExportId?: number | null
       _conversationExportId?: number | null
     }
   )[]

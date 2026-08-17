@@ -39,7 +39,8 @@ function parseJson(value: string, label: string): unknown {
 function assertPath(value: unknown, label: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`[narrative] ${label}.path 不能为空`)
   const parts = value.split('.')
-  if (parts.some(part => !/^[a-zA-Z0-9_-]+$/.test(part) || ['__proto__', 'prototype', 'constructor'].includes(part))) {
+  if (parts.some(part => !/^[a-zA-Z0-9_-]+$/.test(part)
+    || part.startsWith('__') || ['prototype', 'constructor'].includes(part))) {
     throw new Error(`[narrative] ${label}.path 无效`)
   }
   return value
@@ -60,6 +61,20 @@ function parseConditionValue(value: unknown, label: string): NarrativeCondition 
   if ('not' in value) {
     if (keys.length !== 1) throw new Error(`[narrative] ${label}.not 必须是唯一条件`)
     return { not: parseConditionValue(value.not, `${label}.not`) }
+  }
+  if ('visited' in value) {
+    if (keys.length !== 1 || typeof value.visited !== 'string'
+      || !/^[a-zA-Z0-9._:-]+$/.test(value.visited.trim())) {
+      throw new Error(`[narrative] ${label}.visited 必须是唯一的非空节点 key`)
+    }
+    return { visited: value.visited.trim() }
+  }
+  if ('selected' in value) {
+    if (keys.length !== 1 || typeof value.selected !== 'string'
+      || !/^[a-zA-Z0-9._:-]+$/.test(value.selected.trim())) {
+      throw new Error(`[narrative] ${label}.selected 必须是唯一的非空 Choice key`)
+    }
+    return { selected: value.selected.trim() }
   }
   const path = assertPath(value.path, label)
   const operators = ['exists', 'eq', 'in'].filter(key => key in value)
@@ -122,6 +137,12 @@ export function evaluateNarrativeCondition(
   if ('all' in condition) return condition.all.every(child => evaluateNarrativeCondition(child, state))
   if ('any' in condition) return condition.any.some(child => evaluateNarrativeCondition(child, state))
   if ('not' in condition) return !evaluateNarrativeCondition(condition.not, state)
+  if ('visited' in condition) {
+    return Array.isArray(state.__visitedNodeKeys) && state.__visitedNodeKeys.includes(condition.visited)
+  }
+  if ('selected' in condition) {
+    return Array.isArray(state.__selectedChoiceKeys) && state.__selectedChoiceKeys.includes(condition.selected)
+  }
   if (!('path' in condition)) return true
   const current = valueAtPath(state, condition.path)
   if ('exists' in condition) return current.exists === condition.exists
@@ -317,6 +338,7 @@ export async function validateNarrativeModule(scope: WorkspaceScope, moduleId: n
   const module = await db.narrativeModules.get(moduleId)
   if (!module || !await assertRecordInScope(scope, 'narrativeModules', module)) throw new Error('[narrative] 模块不属于当前 scope')
   const nodes = (await db.narrativeNodes.where('moduleId').equals(moduleId).toArray()).sort((a, b) => a.order - b.order)
+  const choices = await db.narrativeChoices.where('moduleId').equals(moduleId).toArray()
   const errors: string[] = []
   const keys = new Set(nodes.map(node => node.key))
   if (keys.size !== nodes.length) errors.push('[narrative] 模块包含重复节点 key')
@@ -330,13 +352,32 @@ export async function validateNarrativeModule(scope: WorkspaceScope, moduleId: n
   else if (!keys.has(module.entryNodeKey)) errors.push('[narrative] 模块登记的入口节点不存在')
   const edges = new Map<string, string[]>()
   const danglingSuccessors: Array<{ nodeKey: string; successorKey: string }> = []
+  const usesFormalChoices = choices.length > 0
   for (const node of nodes) {
     try {
       const successors = parseStringArray(node.successorKeysJson, `${node.key}.successorKeysJson`)
-      edges.set(node.key, successors)
-      for (const successorKey of successors) if (!keys.has(successorKey)) danglingSuccessors.push({ nodeKey: node.key, successorKey })
+      edges.set(node.key, usesFormalChoices ? [] : successors)
+      if (!usesFormalChoices) {
+        for (const successorKey of successors) if (!keys.has(successorKey)) danglingSuccessors.push({ nodeKey: node.key, successorKey })
+      }
       parseConditionValue(parseJson(node.conditionJson, `${node.key}.conditionJson`), `${node.key}.conditionJson`)
       parseEffectsValue(parseJson(node.effectsJson, `${node.key}.effectsJson`), `${node.key}.effectsJson`)
+    } catch (cause) { errors.push(cause instanceof Error ? cause.message : String(cause)) }
+  }
+  const choiceKeys = new Set<string>()
+  for (const choice of choices) {
+    if (choiceKeys.has(choice.choiceKey)) errors.push(`[narrative] Choice key 重复:${choice.choiceKey}`)
+    choiceKeys.add(choice.choiceKey)
+    if (!keys.has(choice.sourceNodeKey)) errors.push(`[narrative] Choice 来源节点不存在:${choice.choiceKey}`)
+    if (!keys.has(choice.targetNodeKey)) {
+      danglingSuccessors.push({ nodeKey: choice.sourceNodeKey, successorKey: choice.targetNodeKey })
+    } else if (edges.has(choice.sourceNodeKey)) {
+      edges.get(choice.sourceNodeKey)!.push(choice.targetNodeKey)
+    }
+    try {
+      parseConditionValue(parseJson(choice.displayConditionJson, `${choice.choiceKey}.displayConditionJson`), `${choice.choiceKey}.displayConditionJson`)
+      parseConditionValue(parseJson(choice.availableConditionJson, `${choice.choiceKey}.availableConditionJson`), `${choice.choiceKey}.availableConditionJson`)
+      parseEffectsValue(parseJson(choice.effectsJson, `${choice.choiceKey}.effectsJson`), `${choice.choiceKey}.effectsJson`)
     } catch (cause) { errors.push(cause instanceof Error ? cause.message : String(cause)) }
   }
   const reachable = new Set<string>()

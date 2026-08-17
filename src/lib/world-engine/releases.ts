@@ -125,7 +125,9 @@ async function buildPortableReleaseProject(input: {
     const rows = Array.isArray(source[tableName]) ? clone(source[tableName] as Record<string, unknown>[]) : []
     if (tableName === 'narrativeModules') {
       portable[tableName] = rows.filter(row => selectedModuleExportIds.has(row._exportId as number))
-    } else if (tableName === 'narrativeNodes') {
+    } else if (tableName === 'narrativeNodes'
+      || tableName === 'narrativeBeats'
+      || tableName === 'narrativeChoices') {
       portable[tableName] = rows.filter(row => selectedModuleExportIds.has(row._moduleExportId as number))
     } else {
       portable[tableName] = rows.filter(row => rowMatchesScope(row, portableWorldId, portableWorkId))
@@ -165,7 +167,13 @@ export async function buildWorldReleaseManifest(input: {
     }
     modules.push(module)
   }
-  const selectedTables = [...new Set([...requested, 'narrativeModules', 'narrativeNodes'])]
+  const selectedTables = [...new Set([
+    ...requested,
+    'narrativeModules',
+    'narrativeNodes',
+    'narrativeBeats',
+    'narrativeChoices',
+  ])]
   const { portableProject, selectedNarrativeModules } = await buildPortableReleaseProject({
     scope,
     requestedTables: selectedTables,

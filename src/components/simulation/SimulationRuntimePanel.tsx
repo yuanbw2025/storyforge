@@ -53,6 +53,10 @@ const KIND_LABELS: Record<SimulationSessionKind, string> = {
   ttrpg: '跑团',
   chatgame: '角色聊天',
   storygame: '文字游戏',
+  textadventure: '文字冒险',
+  avg: '视觉小说',
+  textsimulation: '复杂叙事模拟',
+  textworld: '文字开放世界',
 }
 
 const SOURCE_KIND_LABELS: Record<SimulationCanonSourceKind, string> = {
@@ -499,7 +503,7 @@ export default function SimulationRuntimePanel(props: {
               aria-label="运行时类型"
               className="w-full rounded border border-border bg-bg-surface px-2 py-1.5 text-sm text-text-primary"
             >
-              {Object.entries(KIND_LABELS).map(([value, label]) => (
+              {Object.entries(KIND_LABELS).filter(([value]) => value !== 'storygame').map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>

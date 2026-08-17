@@ -28,7 +28,7 @@ function parseSimpleTarget(target: string): { tableName: string; field: string }
   return match ? { tableName: match[1], field: match[2] } : null
 }
 
-async function cascadeRegisteredReferences(
+export async function cascadeRegisteredReferences(
   sourceTableName: string,
   sourceId: number,
   visited = new Set<string>(),
@@ -71,6 +71,13 @@ async function deleteOwnerRows(owner: 'world' | 'work', ownerId: number): Promis
     } else if (locator?.kind === 'exclusive-fields') {
       const field = owner === 'world' ? locator.worldField : locator.workField
       const rows = (await spec.table.toArray()).filter(row => (row as any)[field] === ownerId)
+      for (const row of rows) {
+        if (row.id == null) continue
+        await cascadeRegisteredReferences(spec.name, row.id)
+        await spec.table.delete(row.id)
+      }
+    } else if (locator?.kind === 'exclusive-work-instance' && owner === 'work') {
+      const rows = (await spec.table.toArray()).filter(row => (row as any)[locator.workField] === ownerId)
       for (const row of rows) {
         if (row.id == null) continue
         await cascadeRegisteredReferences(spec.name, row.id)

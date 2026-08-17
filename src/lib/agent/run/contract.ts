@@ -199,13 +199,30 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
   const scopeRecord = readRecord(record.scope, 'contract.scope')
   assertExactKeys(
     scopeRecord,
-    ['projectId', 'worldGroupId', 'chapterIds', 'outlineNodeIds'],
+    ['projectId', 'worldGroupId', 'chapterIds', 'outlineNodeIds', 'runtime'],
     ['projectId', 'worldGroupId'],
     'contract.scope',
   )
   const worldGroupId = scopeRecord.worldGroupId === null
     ? null
     : readInteger(scopeRecord.worldGroupId, 'contract.scope.worldGroupId', { min: 1 })
+  let runtime: AgentRunContractV1['scope']['runtime']
+  if (scopeRecord.runtime !== undefined) {
+    const runtimeRecord = readRecord(scopeRecord.runtime, 'contract.scope.runtime')
+    assertExactKeys(
+      runtimeRecord,
+      ['simulationSessionId', 'baseSequence', 'stateHash', 'visibilityHash', 'releaseHash'],
+      ['simulationSessionId', 'baseSequence', 'stateHash', 'visibilityHash', 'releaseHash'],
+      'contract.scope.runtime',
+    )
+    runtime = {
+      simulationSessionId: readInteger(runtimeRecord.simulationSessionId, 'contract.scope.runtime.simulationSessionId', { min: 1 }),
+      baseSequence: readInteger(runtimeRecord.baseSequence, 'contract.scope.runtime.baseSequence', { min: 0 }),
+      stateHash: readHash(runtimeRecord.stateHash, 'contract.scope.runtime.stateHash'),
+      visibilityHash: readHash(runtimeRecord.visibilityHash, 'contract.scope.runtime.visibilityHash'),
+      releaseHash: readHash(runtimeRecord.releaseHash, 'contract.scope.runtime.releaseHash'),
+    }
+  }
 
   const permissionsRecord = readRecord(record.permissions, 'contract.permissions')
   assertExactKeys(
@@ -370,6 +387,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
       worldGroupId,
       chapterIds: readIdArray(scopeRecord.chapterIds, 'contract.scope.chapterIds'),
       outlineNodeIds: readIdArray(scopeRecord.outlineNodeIds, 'contract.scope.outlineNodeIds'),
+      ...(runtime ? { runtime } : {}),
     },
     permissions: { contextSourceKeys, writeTargets },
     ...(record.runtimeBindingHash === undefined ? {} : {

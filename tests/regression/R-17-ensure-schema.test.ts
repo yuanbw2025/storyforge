@@ -32,7 +32,7 @@ describe('R-17: ensureSchema 生产环境不自动删库', () => {
     const schemaTables = db.tables.map(table => table.name).sort()
     const requiredTables = [...REQUIRED_TABLES].sort()
 
-    expect(requiredTables).toHaveLength(70)   // v54 MEMORY-1 workspace document bindings
+    expect(requiredTables).toHaveLength(82)   // v62 MEMORY-1 + text-game authoring/runtime tables
     expect(requiredTables).toEqual(schemaTables)
   })
 

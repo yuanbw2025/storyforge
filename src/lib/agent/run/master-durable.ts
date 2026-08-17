@@ -133,7 +133,7 @@ export function isMasterCandidateSemanticReviewEnabledV1(): boolean {
 const MAX_PLAN_TASKS = 5
 const MAX_PLAN_SUMMARY_CHARS = 500
 const MAX_TASK_ID_CHARS = 80
-const MAX_TASK_INSTRUCTION_CHARS = 1_000
+const MAX_TASK_INSTRUCTION_CHARS = 8_000
 const MAX_CANDIDATE_CHARS = 120_000
 
 export interface MasterAgentPlanCheckpointV1 {
@@ -408,7 +408,7 @@ function readOptionalSkillId(
     'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules']),
     character: new Set(['create', 'supplement']),
     inspiration: new Set(['reverse']),
-    outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'world-game', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue']),
   }
   if (!allowedModes[agentId].has(skill.executionMode)) {

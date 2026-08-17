@@ -76,6 +76,16 @@ export async function portableizeAgentRunContractV1(input: {
         : portableId(source.scope.worldGroupId, 'worldGroups', input.idMaps),
       chapterIds: source.scope.chapterIds?.map(id => portableId(id, 'chapters', input.idMaps)),
       outlineNodeIds: source.scope.outlineNodeIds?.map(id => portableId(id, 'outlineNodes', input.idMaps)),
+      ...(source.scope.runtime ? {
+        runtime: {
+          ...source.scope.runtime,
+          simulationSessionId: portableId(
+            source.scope.runtime.simulationSessionId,
+            'simulationSessions',
+            input.idMaps,
+          ),
+        },
+      } : {}),
     },
   })
   const contractHash = await hashCanonicalValue(contract)
@@ -109,6 +119,16 @@ export async function rebindPortableAgentRunContractV1(input: {
         : reboundId(portable.scope.worldGroupId, 'worldGroups', input.idMaps),
       chapterIds: portable.scope.chapterIds?.map(id => reboundId(id, 'chapters', input.idMaps)),
       outlineNodeIds: portable.scope.outlineNodeIds?.map(id => reboundId(id, 'outlineNodes', input.idMaps)),
+      ...(portable.scope.runtime ? {
+        runtime: {
+          ...portable.scope.runtime,
+          simulationSessionId: reboundId(
+            portable.scope.runtime.simulationSessionId,
+            'simulationSessions',
+            input.idMaps,
+          ),
+        },
+      } : {}),
     },
   })
   const contractHash = await hashCanonicalValue(contract)

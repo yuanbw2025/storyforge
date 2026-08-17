@@ -84,6 +84,28 @@ export function transactionTablesForReferences(sourceTableName: string): Table[]
   })
 }
 
+/** Recursive transaction closure for a lifecycle that follows registered
+ * cascade refs beyond one level (for example Instance -> Run -> Event). */
+export function transactionTablesForReferenceCascade(sourceTableName: string): Table[] {
+  const source = REGISTRY_BY_NAME.get(sourceTableName)
+  if (!source) throw new Error(`未知 PROJECT_TABLES 表: ${sourceTableName}`)
+  const names = new Set([sourceTableName])
+  const pending = [source]
+  while (pending.length > 0) {
+    const current = pending.shift()!
+    for (const ref of current.refs ?? []) {
+      if (ref.kind !== 'simple' && ref.kind !== 'json') continue
+      const targetName = ref.target.match(/^([^[]+)\[/)?.[1]
+      if (!targetName || names.has(targetName)) continue
+      const target = REGISTRY_BY_NAME.get(targetName)
+      if (!target) throw new Error(`PROJECT_TABLES 引用目标未登记: ${current.name} → ${targetName}`)
+      names.add(targetName)
+      pending.push(target)
+    }
+  }
+  return [...names].map(name => REGISTRY_BY_NAME.get(name)!.table)
+}
+
 // ─────────────────────────────────────────────────────────────
 // cascadeDeleteProject - 删项目级联清理(派生自注册表)
 // ─────────────────────────────────────────────────────────────

@@ -45,6 +45,7 @@ export type AgentSkillExecutionModeV1 =
   | 'storyline-progress'
   | 'character-driven'
   | 'character-revision'
+  | 'world-game'
   | 'impact-summary-regenerate'
   | 'volumes'
   | 'chapters'
@@ -63,6 +64,17 @@ export type AgentSkillExecutionModeV1 =
   | 'organize'
   | 'memory'
   | 'consistency'
+  | 'character-reply'
+  | 'scene-director'
+  | 'memory-curator'
+  | 'adventure-intent'
+  | 'adventure-narrator'
+  | 'simulation-briefing'
+  | 'simulation-advisor'
+  | 'simulation-narrator'
+  | 'simulation-actor-suggestion'
+  | 'open-world-expression'
+  | 'open-world-narration'
 
 export interface AgentSkillWriteTargetV1 {
   table: string
@@ -136,6 +148,8 @@ const OUTLINE_CONTEXT_SOURCE_KEYS = [
   'existingVolumeOutlines',
   'writtenChapterProgress',
 ] as const
+
+const WORLD_GAME_CONTEXT_SOURCE_KEYS = ['worldGameAuthoring'] as const
 
 const STORY_CORE_CONTEXT_SOURCE_KEYS = [
   'projectStatus',
@@ -667,6 +681,24 @@ const OUTLINE_VOLUME_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
+const WORLD_GAME_INPUT_POLICY = {
+  sourceKeys: ['worldGameAuthoring'],
+  states: {
+    empty: {
+      handling: 'require-upstream',
+      instruction: '缺少已发布的冻结世界或叙事时停止生成，先完成 WorldRelease。',
+    },
+    partial: {
+      handling: 'grounded-transform',
+      instruction: '把已选择的冻结世界资产作为创作地基，补足新的危机、行动、分支后果和结局；不要逐字复刻来源剧情。',
+    },
+    complete: {
+      handling: 'grounded-transform',
+      instruction: '使用完整冻结创作包演化新的可玩剧情；保留便携身份引用，同时让冲突、推进、选择和结局形成独立游戏体验。',
+    },
+  },
+} as const satisfies AgentSkillInputPolicyV1
+
 const OUTLINE_STORY_ARC_INPUT_POLICY = {
   sourceKeys: ['worldview', 'storyCore', 'characters'],
   states: {
@@ -938,6 +970,7 @@ const OUTLINE_COMPRESSION_POLICY = compressionPolicy([
   'storyArcs',
   'existingVolumeOutlines',
 ])
+const WORLD_GAME_COMPRESSION_POLICY = compressionPolicy(['worldGameAuthoring'])
 const OUTLINE_STORY_ARC_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'storyCore',
@@ -1039,6 +1072,51 @@ const PROSE_MEMORY_COMPRESSION_POLICY = compressionPolicy([
   'previousPlanReconciliation',
 ])
 const PROSE_CONSISTENCY_COMPRESSION_POLICY = compressionPolicy(['chapterContent'])
+const INTERACTION_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['interactionRuntime'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '缺少角色可见运行时上下文时停止，不得臆造场景、知识或记忆。' },
+    partial: { handling: 'require-upstream', instruction: '角色运行时上下文不完整时停止，等待重新装配。' },
+    complete: { handling: 'grounded-transform', instruction: '只能依据该角色可见的运行时上下文生成候选，不得读取其他角色私有视角。' },
+  },
+}
+const INTERACTION_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['interactionRuntime'])
+const ADVENTURE_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['adventureRuntime'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '缺少文字冒险运行时上下文时停止，不得臆造行动或结果。' },
+    partial: { handling: 'require-upstream', instruction: '文字冒险运行时上下文不完整时停止，等待重新装配。' },
+    complete: { handling: 'grounded-transform', instruction: '自由输入只能映射到登记的当前可执行行动；结果叙述只能改写已提交事件证据。' },
+  },
+}
+const ADVENTURE_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['adventureRuntime'])
+const NARRATIVE_SIMULATION_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['narrativeSimulationRuntime'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '缺少叙事模拟运行时上下文时停止，不得臆造局势、行动或结果。' },
+    partial: { handling: 'require-upstream', instruction: '叙事模拟运行时上下文不完整时停止，等待重新装配。' },
+    complete: { handling: 'grounded-transform', instruction: '只能依据玩家可见状态与正式事件证据生成表现候选，不得改写确定性结算。' },
+  },
+}
+const NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['narrativeSimulationRuntime'])
+const OPEN_WORLD_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['openWorldRuntime'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '缺少开放世界玩家视角时停止，不得臆造区域、人物、任务或事件。' },
+    partial: { handling: 'require-upstream', instruction: '开放世界运行时上下文不完整时停止，等待重新装配。' },
+    complete: { handling: 'grounded-transform', instruction: '只能润色已公开任务或叙述正式事件证据，不得改变确定性世界状态。' },
+  },
+}
+const OPEN_WORLD_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['openWorldRuntime'])
+const AVG_AUTHORING_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['avgAuthoring'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '缺少 AVG 媒资与演出上下文时停止，不得臆造媒资 key。' },
+    partial: { handling: 'grounded-transform', instruction: '只指出缺失项和可用改进，不得把建议直接写入演出模块。' },
+    complete: { handling: 'grounded-transform', instruction: '基于已登记媒资与 Beat 给出只读演出审阅建议。' },
+  },
+}
+const AVG_AUTHORING_COMPRESSION_POLICY = compressionPolicy(['avgAuthoring'])
 const PROSE_STYLE_LEARNING_INPUT_POLICY = {
   sourceKeys: ['styleLearningBaseline'],
   states: {
@@ -1681,6 +1759,38 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'outline.world-game',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '冻结世界演化为文字游戏',
+    owner: 'outline-agent',
+    promptVersion: 'world-game-copilot-v1',
+    executionMode: 'world-game',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: WORLD_GAME_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: WORLD_GAME_INPUT_POLICY,
+    contextCompression: WORLD_GAME_COMPRESSION_POLICY,
+    maxOutputTokens: 12_000,
+    writeTargets: [
+      { table: 'narrativeModules', fields: [], adoptionExtension: 'world-game-narrative-modules' },
+      { table: 'narrativeNodes', fields: [], adoptionExtension: 'world-game-narrative-nodes' },
+      { table: 'narrativeBeats', fields: [], adoptionExtension: 'world-game-narrative-beats' },
+      { table: 'narrativeChoices', fields: [], adoptionExtension: 'world-game-narrative-choices' },
+      { table: 'gameDefinitions', fields: [], adoptionExtension: 'world-game-definitions' },
+      { table: 'adventureModules', fields: [], adoptionExtension: 'world-game-adventure-modules' },
+      { table: 'interactionCharacterProfiles', fields: [], adoptionExtension: 'world-game-interaction-profiles' },
+      { table: 'interactionSceneTemplates', fields: [], adoptionExtension: 'world-game-interaction-scenes' },
+      { table: 'avgPresentationModules', fields: [], adoptionExtension: 'world-game-avg-presentations' },
+      { table: 'avgMediaAssets', fields: [], adoptionExtension: 'world-game-avg-media-assets' },
+      { table: 'avgMediaBlobs', fields: [], adoptionExtension: 'world-game-avg-media-blobs' },
+    ],
+    lastVerifiedAt: '2026-08-15',
+    regressionTests: ['R-WORLDGAME5-main-agent-authoring'],
+  },
+  {
+    version: 1,
     id: 'outline.compose',
     agentId: 'outline',
     defaultForAgent: true,
@@ -2139,6 +2249,246 @@ export const AGENT_SKILLS = [
     lastVerifiedAt: '2026-08-10',
     regressionTests: ['R-HARNESS41-consistency-post-adoption'],
   },
+  {
+    version: 1,
+    id: 'character.interaction-reply',
+    agentId: 'character',
+    defaultForAgent: false,
+    label: '角色互动回复候选',
+    owner: 'character-agent',
+    promptVersion: 'character-interaction-reply-v1',
+    executionMode: 'character-reply',
+    contextTaskKind: 'agent-character',
+    readToolNames: [],
+    contextSourceKeys: ['interactionRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: INTERACTION_RUNTIME_INPUT_POLICY,
+    contextCompression: INTERACTION_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS-RUNTIME1-instance-ledger'],
+  },
+  {
+    version: 1,
+    id: 'prose.interaction-scene-director',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '互动场景导演候选',
+    owner: 'prose-agent',
+    promptVersion: 'character-interaction-scene-director-v1',
+    executionMode: 'scene-director',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['interactionRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: INTERACTION_RUNTIME_INPUT_POLICY,
+    contextCompression: INTERACTION_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS-RUNTIME1-instance-ledger'],
+  },
+  {
+    version: 1,
+    id: 'character.interaction-memory-curator',
+    agentId: 'character',
+    defaultForAgent: false,
+    label: '角色互动记忆整理候选',
+    owner: 'character-agent',
+    promptVersion: 'character-interaction-memory-curator-v1',
+    executionMode: 'memory-curator',
+    contextTaskKind: 'agent-character',
+    readToolNames: [],
+    contextSourceKeys: ['interactionRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: INTERACTION_RUNTIME_INPUT_POLICY,
+    contextCompression: INTERACTION_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-HARNESS-RUNTIME1-instance-ledger'],
+  },
+  {
+    version: 1,
+    id: 'prose.adventure-intent-parser',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '文字冒险自由输入映射',
+    owner: 'prose-agent',
+    promptVersion: 'text-adventure-intent-v1',
+    executionMode: 'adventure-intent',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['adventureRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: ADVENTURE_RUNTIME_INPUT_POLICY,
+    contextCompression: ADVENTURE_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 1_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-TEXTADV1-harness'],
+  },
+  {
+    version: 1,
+    id: 'prose.avg-presentation-review',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: 'AVG 演出只读审阅',
+    owner: 'prose-agent',
+    promptVersion: 'avg-presentation-review-v1',
+    executionMode: 'review',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['avgAuthoring'],
+    optionalContextSourceKeys: [],
+    inputPolicy: AVG_AUTHORING_INPUT_POLICY,
+    contextCompression: AVG_AUTHORING_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-AVG1-core'],
+  },
+  {
+    version: 1,
+    id: 'prose.adventure-result-narrator',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '文字冒险结果叙述候选',
+    owner: 'prose-agent',
+    promptVersion: 'text-adventure-result-narrator-v1',
+    executionMode: 'adventure-narrator',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['adventureRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: ADVENTURE_RUNTIME_INPUT_POLICY,
+    contextCompression: ADVENTURE_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-TEXTADV1-harness'],
+  },
+  {
+    version: 1,
+    id: 'prose.simulation-turn-briefing',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '叙事模拟回合简报候选',
+    owner: 'prose-agent',
+    promptVersion: 'narrative-simulation-briefing-v1',
+    executionMode: 'simulation-briefing',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['narrativeSimulationRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: NARRATIVE_SIMULATION_RUNTIME_INPUT_POLICY,
+    contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-TEXTSIM1-harness'],
+  },
+  {
+    version: 1,
+    id: 'prose.simulation-advisor-performance',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '叙事模拟顾问表演候选',
+    owner: 'prose-agent',
+    promptVersion: 'narrative-simulation-advisor-v1',
+    executionMode: 'simulation-advisor',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['narrativeSimulationRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: NARRATIVE_SIMULATION_RUNTIME_INPUT_POLICY,
+    contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-TEXTSIM1-harness'],
+  },
+  {
+    version: 1,
+    id: 'prose.simulation-outcome-narrator',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '叙事模拟结果叙述候选',
+    owner: 'prose-agent',
+    promptVersion: 'narrative-simulation-outcome-v1',
+    executionMode: 'simulation-narrator',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['narrativeSimulationRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: NARRATIVE_SIMULATION_RUNTIME_INPUT_POLICY,
+    contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-TEXTSIM1-harness'],
+  },
+  {
+    version: 1,
+    id: 'prose.simulation-actor-action-suggestion',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '叙事模拟主体行动建议候选',
+    owner: 'prose-agent',
+    promptVersion: 'narrative-simulation-actor-suggestion-v1',
+    executionMode: 'simulation-actor-suggestion',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['narrativeSimulationRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: NARRATIVE_SIMULATION_RUNTIME_INPUT_POLICY,
+    contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-TEXTSIM1-harness'],
+  },
+  {
+    version: 1,
+    id: 'prose.open-world-quest-expression',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '开放世界任务表现候选',
+    owner: 'prose-agent',
+    promptVersion: 'text-open-world-quest-expression-v1',
+    executionMode: 'open-world-expression',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['openWorldRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: OPEN_WORLD_RUNTIME_INPUT_POLICY,
+    contextCompression: OPEN_WORLD_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-TEXTWORLD1-harness'],
+  },
+  {
+    version: 1,
+    id: 'prose.open-world-scene-narration',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '开放世界场景叙述候选',
+    owner: 'prose-agent',
+    promptVersion: 'text-open-world-scene-narration-v1',
+    executionMode: 'open-world-narration',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['openWorldRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: OPEN_WORLD_RUNTIME_INPUT_POLICY,
+    contextCompression: OPEN_WORLD_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-14',
+    regressionTests: ['R-TEXTWORLD1-harness'],
+  },
 ] as const satisfies readonly AgentSkillDefinitionV1[]
 
 export type AgentSkillId = typeof AGENT_SKILLS[number]['id']
@@ -2338,10 +2688,10 @@ export function validateAgentSkillDefinitionsV1(
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
     'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'constitution-extract', 'codex-extract', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
-    character: new Set(['create', 'supplement', 'relationships']),
+    character: new Set(['create', 'supplement', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency']),
+    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'world-game', 'impact-summary-regenerate', 'volumes', 'chapters', 'details']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'simulation-briefing', 'simulation-advisor', 'simulation-narrator', 'simulation-actor-suggestion', 'open-world-expression', 'open-world-narration']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

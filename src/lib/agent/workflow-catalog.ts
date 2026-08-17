@@ -140,6 +140,7 @@ export function isMasterFanOutEnabledV1(): boolean {
 }
 
 export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId> {
+  const hasWorldGame = /(?:生成|创建|制作|演化|改编|开发|做成).{0,24}(?:文字游戏|分支互动叙事|分支叙事|文字冒险|AVG|视觉小说)|(?:文字游戏|分支互动叙事|分支叙事|文字冒险|AVG|视觉小说).{0,24}(?:生成|创建|制作|演化|改编|开发|做成)/i.test(request)
   const hasInspiration = /灵感|反推|碎片|脑洞/.test(request)
   const hasProse = /正文|续写|接着写|继续写|写(?:作|出|完)?第\s*[零〇一二两三四五六七八九十\d]+\s*章/.test(request)
   const outlineMention = /大纲|卷纲|章纲|章节规划|剧情结构|情节结构|故事线|主线|支线|复线/.test(request)
@@ -153,6 +154,8 @@ export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId
   const pinnedCreativeRulesTask = /^生成创作规则字段。目标字段\s*=\s*(?:writingStyle|atmosphere|specialRequirements)\b/i.test(request)
   const hasOutline = pinnedStoryCoreTask || pinnedCreativeRulesTask
     ? false
+    : hasWorldGame
+      ? true
     : hasProse
       ? outlineAction
       : storyCoreMention
@@ -170,7 +173,7 @@ export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId
     || /(?:角色|人物|主角|配角|反派|npc).{0,12}(?:创建|生成|设计|新增|塑造|补充|完善|修改|重做)/i.test(request)
   )
   const downstreamWriting = hasOutline || hasProse
-  const hasWorld = downstreamWriting ? worldAction : worldMention
+  const hasWorld = hasWorldGame ? false : downstreamWriting ? worldAction : worldMention
   const hasCharacter = downstreamWriting ? characterAction : characterMention
   return new Set<DomainAgentId>([
     ...(hasWorld ? ['world-origin' as const] : []),
@@ -183,6 +186,9 @@ export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId
 
 export function selectAgentSkillIdV1(agentId: DomainAgentId, request: string): AgentSkillId {
   if (agentId === 'outline') {
+    if (/(?:文字游戏|分支互动叙事|分支叙事|文字冒险|AVG|视觉小说)/i.test(request)) {
+      return 'outline.world-game'
+    }
     if (/(?:映射|分析|更新).{0,10}(?:本章|章节).{0,10}(?:故事线|进度|交汇)|(?:动态进度|故事线进度)/.test(request)) {
       return 'outline.storyline-progress'
     }

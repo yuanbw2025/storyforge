@@ -175,6 +175,18 @@ function applyEvent(projection: AgentRunProjectionV1, event: AnyAgentRunEventV1)
       refreshRunningState(projection)
       break
     }
+    case 'runtime.candidate.adopted': {
+      expectState(projection, event.type, ['running', 'awaiting_confirmation'])
+      const step = stepFor(projection, event.payload.stepId)
+      assertCandidate(step, event.payload.candidateHash)
+      if (step.status !== 'awaiting_confirmation' && step.status !== 'running') {
+        throw new ProjectionError(`步骤 ${step.stepId} 不在可采用状态`)
+      }
+      step.status = 'running'
+      step.adoptionHash = event.payload.adoptionHash
+      refreshRunningState(projection)
+      break
+    }
     case 'step.verification.accepted': {
       expectState(projection, event.type, ['running', 'awaiting_confirmation'])
       const receipt = event.payload.receipt

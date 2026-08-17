@@ -79,10 +79,16 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 63 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 69 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
+| `worldGameAuthoring` | 冻结世界游戏创作包 | project | L1 | 12000 |
+| `avgAuthoring` | AVG 作者演出素材 | project | L2 | 4000 |
+| `adventureRuntime` | 文字冒险玩家视角 | runtime | L0 | 8000 |
+| `narrativeSimulationRuntime` | 叙事模拟玩家视角 | runtime | L0 | 8000 |
+| `openWorldRuntime` | 文字开放世界玩家视角 | runtime | L0 | 8000 |
+| `interactionRuntime` | 角色互动单一视角 | runtime | L0 | 8000 |
 | `simulationRuntime` | 冻结运行时状态 | runtime | L0 | 8000 |
 | `projectStatus` | 项目概况 | project | L2 | 1200 |
 | `worldGroups` | 世界组目录 | project | L2 | 1500 |
@@ -211,19 +217,19 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `codex-category-scope-lifecycle` | `codexCategories` | `PROJECT_TABLES lifecycle` | `src/lib/registry/lifecycle.ts` | 2027-01-01 |
 | `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace identity + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/world-engine/works.ts` | 2027-08-01 |
 | `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts` | 2027-08-01 |
-| `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/works.ts` | 2027-08-01 |
+| `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/text-game/authoring.ts`<br/>`src/lib/avg/authoring.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/works.ts` | 2027-08-01 |
 | `chapter-delete-lifecycle` | `chapters` | `PROJECT_TABLES refs + chapter deletion impact policy` | `src/lib/chapters/lifecycle.ts` | 2027-08-01 |
 | `chapter-emotion-delete-lifecycle` | `emotionBeatCards` | `PROJECT_TABLES chapter refs` | `src/lib/chapters/lifecycle.ts` | 2027-08-01 |
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 48 个 category。
-未分类调用: 0 个。动态 category 调用: 25 个。
+共 47 个 category。
+未分类调用: 0 个。动态 category 调用: 30 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:611` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:698` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:617` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:704` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:116` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:509` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
@@ -264,7 +270,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:115` |
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:1606` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
-| `simulation.chatgame` | `src/components/simulation/ChatGamePanel.tsx:194`<br/>`src/components/simulation/ChatGamePanel.tsx:210` |
 | `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:670`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
 | `style.calibrate` | `src/components/style/StyleCalibrationPanel.tsx:63` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
@@ -274,6 +279,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 ### 动态 category 调用
 
 - `src/components/editor/ReviewPanel.tsx:139 · ai.start`
+- `src/lib/adventure/harness.ts:245 · chat`
 - `src/lib/agent/character-copilot.ts:475 · chat`
 - `src/lib/agent/character-driven-copilot.ts:507 · chat`
 - `src/lib/agent/character-revision-copilot.ts:704 · chat`
@@ -292,13 +298,17 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/story-arc-copilot.ts:1319 · chat`
 - `src/lib/agent/story-core-copilot.ts:458 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:376 · chat`
+- `src/lib/agent/world-game-copilot.ts:295 · chat`
 - `src/lib/agent/world-origin-copilot.ts:255 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:603 · chat`
+- `src/lib/character-interaction/harness.ts:396 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:97 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:88 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
+- `src/lib/narrative-simulation/harness.ts:246 · chat`
 - `src/lib/node-authoring/executor.ts:416 · chat`
+- `src/lib/open-world/harness.ts:139 · chat`
 
 ---
 
-生成时间基准:commit `d2ecf9f`
+生成时间基准:commit `d58f921`

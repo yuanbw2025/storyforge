@@ -28,8 +28,8 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(result.ok, result.errors.join('; ')).toBe(true)
     })
 
-    it('登记了全部 70 张表', () => {
-      expect(PROJECT_TABLES.length).toBe(70)   // v54 MEMORY-1 新增文件文档绑定/基线表
+    it('登记了全部 82 张表', () => {
+      expect(PROJECT_TABLES.length).toBe(82)   // v62 MEMORY-1 + 六类文字游戏内容与媒资表
     })
 
     it('每张表名唯一', () => {

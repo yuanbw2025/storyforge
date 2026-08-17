@@ -14,6 +14,14 @@ export interface AgentRunScopeV1 {
   worldGroupId: number | null
   chapterIds?: number[]
   outlineNodeIds?: number[]
+  /** HARNESS-RUNTIME-1 immutable instance input boundary. */
+  runtime?: {
+    simulationSessionId: number
+    baseSequence: number
+    stateHash: string
+    visibilityHash: string
+    releaseHash: string
+  }
 }
 
 export interface AgentSkillExecutionBindingV1 {
@@ -310,6 +318,8 @@ export interface AgentRunRecord {
   id?: number
   projectId: number
   workId?: number | null
+  /** Exactly one of workId / simulationSessionId owns every non-legacy run. */
+  simulationSessionId?: number | null
   worldGroupId?: number | null
   conversationId?: number | null
   /** Materialized index for querying child runs; mirrors contract.lineage.parent. */
@@ -377,6 +387,7 @@ export type AgentRunEventTypeV1 =
   | 'candidate.revised'
   | 'candidate.staled'
   | 'candidate.carried-forward'
+  | 'runtime.candidate.adopted'
   | 'step.verification.accepted'
   | 'step.verification.staled'
   | 'confirmation.recorded'
@@ -445,6 +456,14 @@ export interface AgentRunEventPayloadByTypeV1 {
     sourceGeneration: number
     sourceAttempt: number
     candidateHash: string
+  }
+  'runtime.candidate.adopted': {
+    stepId: string
+    candidateHash: string
+    adoptionHash: string
+    commandIds: string[]
+    baseSequence: number
+    resultingSequence: number
   }
   'step.verification.accepted': { receipt: AgentRunStepVerificationReceiptV1 }
   'step.verification.staled': { stepId: string; previousReceiptHash: string; reason: string }

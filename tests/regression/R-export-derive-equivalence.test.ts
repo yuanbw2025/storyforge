@@ -23,6 +23,18 @@ const legacyFixturePath = path.resolve(__dirname, '../fixtures/legacy-export-v3.
  */
 function normalize(data: any) {
   data.exportedAt = 0
+  delete data.project?.ownershipSchemaVersion
+  delete data.project?.worldCode
+  delete data.project?.worldVersion
+  const stripOwners = (value: unknown) => {
+    if (Array.isArray(value)) for (const row of value) stripOwners(row)
+    else if (value && typeof value === 'object') {
+      delete (value as any).worldId
+      delete (value as any).workId
+      for (const child of Object.values(value as Record<string, unknown>)) stripOwners(child)
+    }
+  }
+  stripOwners(data)
   for (const t of ['outlineNodes', 'worldNodes']) {
     for (const row of (data as any)[t] ?? []) delete row.parentId
   }
@@ -99,8 +111,20 @@ function normalize(data: any) {
   // owner/FK contracts are covered by strict v4 full-coverage and WORLD-2E tests.
   delete data.narrativeModules
   delete data.narrativeNodes
+  delete data.narrativeBeats
+  delete data.narrativeChoices
   delete data.worldRevisions
   delete data.worldReleases
+  delete data.gameDefinitions
+  delete data.gameReleases
+  delete data.interactionCharacterProfiles
+  delete data.interactionSceneTemplates
+  delete data.adventureModules
+  delete data.avgMediaAssets
+  delete data.avgMediaBlobs
+  delete data.avgPresentationModules
+  delete data.narrativeSimulationModules
+  delete data.openWorldModules
   delete data.project?._activeWorldExportId
   delete data.project?._activeWorkExportId
   for (const row of data.characters ?? []) {

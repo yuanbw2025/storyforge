@@ -8,9 +8,10 @@ import { AUTHORING_NODE_BY_ID, defaultConfigForTemplate } from '../../src/lib/no
 import { emptyAuthoringGraph, type AuthoringNodeInstance } from '../../src/lib/node-authoring/contracts'
 import { adoptAuthoringCandidate } from '../../src/lib/node-authoring/executor'
 import { buildRagLibrary } from '../../src/lib/retrieval/rag-library'
-import { loadSimulationCanonCandidates, parseSimulationCanonSnapshot } from '../../src/lib/simulation/canon-snapshot'
+import { buildSimulationCanonSnapshot, loadSimulationCanonCandidates, parseSimulationCanonSnapshot } from '../../src/lib/simulation/canon-snapshot'
 import type { NodeFlow, WorkspaceScope } from '../../src/lib/types'
 import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { createWorldInstance } from '../../src/lib/world-engine/instances'
 import { useChapterStore } from '../../src/stores/chapter'
 import { useSimulationRuntimeStore } from '../../src/stores/simulation-runtime'
 
@@ -231,18 +232,30 @@ describe('WORLD-2C · 双 Work 下游边界反例', () => {
       .filter(candidate => candidate.name === 'B徽记')
       .map(candidate => candidate.sourceKey)
 
-    const sessionId = await useSimulationRuntimeStore.getState().createSession({
+    await expect(useSimulationRuntimeStore.getState().createSession({
       projectId: b.projectId,
       scope: b,
       worldGroupId: null,
-      kind: 'storygame',
+      kind: 'chatgame',
       title: 'B 的冻结实例',
       sourceKeys,
-    })
+    })).rejects.toThrow('正式 GameRelease')
 
-    const session = await db.simulationSessions.get(sessionId)
-    const snapshot = parseSimulationCanonSnapshot(session!.canonSnapshotJson)
-    expect(session).toMatchObject({ worldId: b.worldId, workId: b.workId })
+    const frozen = await buildSimulationCanonSnapshot({ projectId: b.projectId, scope: b, worldGroupId: null, sourceKeys })
+    const session = await createWorldInstance({
+      scope: b,
+      worldGroupId: null,
+      kind: 'sandbox',
+      title: 'B 的冻结实例',
+      draftSnapshotHash: frozen.snapshot.snapshotHash,
+      canonSnapshot: frozen.snapshot,
+      initialState: frozen.initialState,
+    })
+    const sessionId = session.id!
+
+    const savedSession = await db.simulationSessions.get(sessionId)
+    const snapshot = parseSimulationCanonSnapshot(savedSession!.canonSnapshotJson)
+    expect(savedSession).toMatchObject({ worldId: b.worldId, workId: b.workId })
     expect(snapshot?.sources.map(source => source.name)).toEqual(['B徽记'])
     expect(snapshot?.sources.map(source => source.name)).not.toContain('A密钥')
   })

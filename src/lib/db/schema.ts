@@ -71,6 +71,18 @@ import type {
   WorldRevision,
   WorldRelease,
   WorkspaceDocumentBindingV1,
+  GameDefinition,
+  GameRelease,
+  NarrativeBeat,
+  NarrativeChoice,
+  InteractionCharacterProfile,
+  InteractionSceneTemplate,
+  AdventureModule,
+  AvgMediaAsset,
+  AvgMediaBlob,
+  AvgPresentationModule,
+  NarrativeSimulationModule,
+  OpenWorldModule,
 } from '../types'
 import type { AIUsageEntry } from '../ai/usage-log'
 import type { TemporalFact } from '../types/temporal-fact'
@@ -209,6 +221,20 @@ class StoryForgeDB extends Dexie {
 
   // MEMORY-1 —— 文件文档身份与三方同步基线；正文仍只存在原领域表。
   workspaceDocuments!: Table<WorkspaceDocumentBindingV1, number>
+
+  // STORYGAME / CHATGAME / TEXTADV / AVG / TEXTSIM / TEXTWORLD
+  gameDefinitions!: Table<GameDefinition, number>
+  gameReleases!: Table<GameRelease, number>
+  narrativeBeats!: Table<NarrativeBeat, number>
+  narrativeChoices!: Table<NarrativeChoice, number>
+  interactionCharacterProfiles!: Table<InteractionCharacterProfile, number>
+  interactionSceneTemplates!: Table<InteractionSceneTemplate, number>
+  adventureModules!: Table<AdventureModule, number>
+  avgMediaAssets!: Table<AvgMediaAsset, number>
+  avgMediaBlobs!: Table<AvgMediaBlob, number>
+  avgPresentationModules!: Table<AvgPresentationModule, number>
+  narrativeSimulationModules!: Table<NarrativeSimulationModule, number>
+  openWorldModules!: Table<OpenWorldModule, number>
 
   constructor() {
     super('storyforge')
@@ -579,6 +605,38 @@ class StoryForgeDB extends Dexie {
       workspaceDocuments: '++id, projectId, workspaceUid, documentId, &[projectId+documentId], relativePath, &[projectId+relativePath], tableName, recordId, &[projectId+tableName+recordId], worldCode, workCode, lastSyncRunId, updatedAt',
     }).upgrade(async tx => {
       await migrateWorkspacePortableIdentities(tx)
+    })
+
+    // v62 / MAIN + TEXTGAME integration: v54 was independently allocated on
+    // main and the text-game branch. Declare the union at a strictly newer
+    // version so both existing v54 main databases and v61 text-game databases
+    // migrate forward without replaying or renumbering either historical path.
+    this.version(62).stores({
+      projects: '++id, &workspaceUid, name, createdAt, updatedAt',
+      works: '++id, projectId, worldId, code, &[projectId+code], [projectId+worldId], [worldId+updatedAt], status, activeNarrativeModuleId',
+      workspaceDocuments: '++id, projectId, workspaceUid, documentId, &[projectId+documentId], relativePath, &[projectId+relativePath], tableName, recordId, &[projectId+tableName+recordId], worldCode, workCode, lastSyncRunId, updatedAt',
+      gameDefinitions: '++id, projectId, worldId, workId, &[workId+gameKey], productType, status, narrativeModuleId, updatedAt',
+      gameReleases: '++id, projectId, worldId, workId, gameDefinitionId, worldReleaseId, &[gameDefinitionId+version], contentHash, createdAt',
+      narrativeBeats: '++id, projectId, moduleId, nodeKey, &[moduleId+beatKey], [moduleId+nodeKey], speakerCharacterId, order',
+      narrativeChoices: '++id, projectId, moduleId, sourceNodeKey, &[moduleId+choiceKey], [moduleId+sourceNodeKey], targetNodeKey, order',
+      interactionCharacterProfiles: '++id, projectId, worldId, workId, gameDefinitionId, characterId, &[gameDefinitionId+participantKey], [workId+gameDefinitionId], updatedAt',
+      interactionSceneTemplates: '++id, projectId, worldId, workId, gameDefinitionId, &[gameDefinitionId+sceneKey], [workId+gameDefinitionId], order, updatedAt',
+      adventureModules: '++id, projectId, worldId, workId, &gameDefinitionId, [workId+gameDefinitionId], updatedAt',
+      avgMediaAssets: '++id, projectId, worldId, workId, &[workId+assetKey+version], [workId+kind], contentHash, updatedAt',
+      avgMediaBlobs: '++id, projectId, worldId, workId, &mediaAssetId',
+      avgPresentationModules: '++id, projectId, worldId, workId, &gameDefinitionId, [workId+gameDefinitionId], updatedAt',
+      narrativeSimulationModules: '++id, projectId, worldId, workId, &gameDefinitionId, [workId+gameDefinitionId], updatedAt',
+      openWorldModules: '++id, projectId, worldId, workId, &gameDefinitionId, [workId+gameDefinitionId], updatedAt',
+      simulationSessions: '++id, projectId, worldGroupId, worldId, workId, worldReleaseId, gameReleaseId, narrativeModuleId, kind, status, parentSessionId, updatedAt',
+      simulationEvents: '++id, projectId, worldGroupId, sessionId, &[sessionId+sequence], &[sessionId+commandId], type, createdAt',
+      agentRuns: '++id, projectId, workId, simulationSessionId, worldGroupId, conversationId, parentRunId, &[parentRunId+parentRelation], status, updatedAt',
+    }).upgrade(async tx => {
+      await migrateWorkspacePortableIdentities(tx)
+      await tx.table('agentRuns').toCollection().modify(run => {
+        if (!Object.prototype.hasOwnProperty.call(run, 'simulationSessionId')) {
+          run.simulationSessionId = null
+        }
+      })
     })
   }
 }

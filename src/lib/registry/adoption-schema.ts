@@ -480,12 +480,14 @@ export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.free
     target: 'works',
     entrypoints: [
       'src/lib/memory/workspace-projection.ts',
+      'src/lib/text-game/authoring.ts',
+      'src/lib/avg/authoring.ts',
       'src/lib/world-engine/lifecycle.ts',
       'src/lib/world-engine/ownership.ts',
       'src/lib/world-engine/works.ts',
     ],
-    policyRegistry: 'PROJECT_TABLES refs + WorkspaceScope + stable work code',
-    reason: 'Work 根创建、稳定 code 补齐和级联是受信生命周期；标题等作者内容仍经 adopt()。',
+    policyRegistry: 'PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle',
+    reason: 'Work 根创建、稳定 code 补齐和级联是受信生命周期；删除最后一个独占游戏草稿时还必须原子清空 activeNarrativeModuleId。标题等作者内容仍经 adopt()。',
     reviewAfter: '2027-08-01',
   },
   {
@@ -504,6 +506,29 @@ export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.free
     reason: '章节删除时必须同步清除章节专属情感节拍，不能遗留孤儿记录。',
     reviewAfter: '2027-08-01',
   },
+  ...([
+    ['world-game-narrative-modules', 'narrativeModules'],
+    ['world-game-narrative-nodes', 'narrativeNodes'],
+    ['world-game-narrative-beats', 'narrativeBeats'],
+    ['world-game-narrative-choices', 'narrativeChoices'],
+    ['world-game-definitions', 'gameDefinitions'],
+    ['world-game-adventure-modules', 'adventureModules'],
+    ['world-game-interaction-profiles', 'interactionCharacterProfiles'],
+    ['world-game-interaction-scenes', 'interactionSceneTemplates'],
+    ['world-game-avg-presentations', 'avgPresentationModules'],
+    ['world-game-avg-media-assets', 'avgMediaAssets'],
+    ['world-game-avg-media-blobs', 'avgMediaBlobs'],
+  ] as const).map(([id, target]) => ({
+    id,
+    target,
+    entrypoints: [
+      'src/lib/agent/world-game-copilot.ts',
+      'src/lib/text-game/world-generation.ts',
+    ],
+    policyRegistry: 'WORLD_GAME_AUTHORING_POLICY + PROJECT_TABLES + Narrative/Adventure/AVG validators',
+    reason: '主 Agent 只产出严格便携剧情候选；作者确认后由统一世界游戏落库器原子校验来源、图结构和产品模块，不能拆成通用字段 adopt。',
+    reviewAfter: '2027-02-15',
+  })),
 ])
 
 /** C3: owner policy is derived from the same PROJECT_TABLES domainOwner metadata. */

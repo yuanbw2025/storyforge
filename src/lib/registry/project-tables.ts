@@ -65,6 +65,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'works[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldRevisions[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldReleases[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'gameDefinitions[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'gameReleases[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'simulationSessions[worldId]', onDelete: 'cascade' },
     ],
     note: 'WORLD-2C 显式世界根；公开身份和世界版本的未来权威' },
@@ -78,6 +80,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     },
     refs: [
       { kind: 'simple', field: 'id', target: 'workCharacterBindings[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'gameDefinitions[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'gameReleases[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'simulationSessions[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'agentRuns[workId]', onDelete: 'cascade' },
     ],
@@ -124,6 +128,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.worldReleases, name: 'worldReleases', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
     worldDomains: ['foundation', 'narrative'], communityShare: 'world', releaseSection: 'foundation',
+    refs: [{ kind: 'simple', field: 'id', target: 'gameReleases[worldReleaseId]', onDelete: 'cascade' }],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'revisionId', remapVia: 'worldRevisions', exportAs: '_revisionExportId', onUnmapped: 'require' },
@@ -242,6 +247,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'characterRelations[fromCharacterId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'characterRelations[toCharacterId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'chapters[perspectiveCharacterId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'narrativeBeats[speakerCharacterId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'interactionCharacterProfiles[characterId]', onDelete: 'cascade' },
       { kind: 'array', field: 'appearingCharacterIds', itemTarget: 'detailedOutlines', onDelete: 'removeItem' },
     ],
     exportRemap: [
@@ -335,7 +342,14 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.narrativeModules, name: 'narrativeModules', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
     worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
-    refs: [{ kind: 'simple', field: 'id', target: 'narrativeNodes[moduleId]', onDelete: 'cascade' }],
+    refs: [
+      { kind: 'simple', field: 'id', target: 'narrativeNodes[moduleId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'narrativeBeats[moduleId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'narrativeChoices[moduleId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'gameDefinitions[narrativeModuleId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'works[activeNarrativeModuleId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'simulationSessions[narrativeModuleId]', onDelete: 'setNull' },
+    ],
     defaults: { description: '', status: 'draft', sourceProjection: 'custom', entryNodeKey: null },
     note: 'WORLD-2D 主线/支线/任务/开局的单一可执行叙事来源' },
 
@@ -348,6 +362,175 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     ],
     defaults: { summary: '', conditionJson: '{}', effectsJson: '[]', successorKeysJson: '[]', order: 0 },
     note: 'WORLD-2D 条件、选择、效果、后继和结局节点' },
+
+  { table: db.narrativeBeats, name: 'narrativeBeats', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
+    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    exportRemap: [
+      { field: 'moduleId', remapVia: 'narrativeModules', exportAs: '_moduleExportId', onUnmapped: 'require' },
+      { field: 'speakerCharacterId', remapVia: 'characters', exportAs: '_speakerCharacterExportId' },
+    ],
+    defaults: { speakerCharacterId: null, order: 0 },
+    note: 'STORYGAME-1A 节点内有序旁白、对话、动作和系统提示；不保存玩家进度' },
+
+  { table: db.narrativeChoices, name: 'narrativeChoices', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
+    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    exportRemap: [
+      { field: 'moduleId', remapVia: 'narrativeModules', exportAs: '_moduleExportId', onUnmapped: 'require' },
+    ],
+    defaults: {
+      description: '', unavailableReason: '', displayConditionJson: '{}',
+      availableConditionJson: '{}', effectsJson: '[]', tagsJson: '[]', order: 0,
+    },
+    note: 'STORYGAME-1A 正式内容选择；目标使用节点稳定 key，运行选择由 SIM 事件记录' },
+
+  { table: db.gameDefinitions, name: 'gameDefinitions', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    refs: [
+      { kind: 'simple', field: 'id', target: 'gameReleases[gameDefinitionId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'interactionCharacterProfiles[gameDefinitionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'interactionSceneTemplates[gameDefinitionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'adventureModules[gameDefinitionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'avgPresentationModules[gameDefinitionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'narrativeSimulationModules[gameDefinitionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'openWorldModules[gameDefinitionId]', onDelete: 'cascade' },
+    ],
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'narrativeModuleId', remapVia: 'narrativeModules', exportAs: '_narrativeModuleExportId', onUnmapped: 'require' },
+    ],
+    defaults: {
+      productType: 'storygame', description: '', status: 'draft',
+      enabledCapabilitiesJson: '["narrative"]', initialVariablesJson: '{}', rulesetVersion: 1,
+      sourceWorldContentHash: '', sourceSelectionJson: '', sourceMappingVersion: 0,
+    },
+    note: '文字游戏产品族统一可编辑定义；产品能力由各专项发布器校验' },
+
+  { table: db.interactionCharacterProfiles, name: 'interactionCharacterProfiles', owner: 'project',
+    exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'gameDefinitionId', remapVia: 'gameDefinitions', exportAs: '_gameDefinitionExportId', onUnmapped: 'require' },
+      { field: 'characterId', remapVia: 'characters', exportAs: '_characterExportId', onUnmapped: 'require' },
+    ],
+    defaults: {
+      roleLabel: '', voiceRules: '', initialKnowledgeJson: '[]',
+      relationshipDimensionsJson: '[]', maxMemoryEntries: 24, sourceSnapshotJson: '{}',
+    },
+    note: 'CHATGAME-2 作者配置：发布角色引用、角色视角知识、口吻和关系维度；不保存玩家记忆' },
+
+  { table: db.interactionSceneTemplates, name: 'interactionSceneTemplates', owner: 'project',
+    exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'gameDefinitionId', remapVia: 'gameDefinitions', exportAs: '_gameDefinitionExportId', onUnmapped: 'require' },
+    ],
+    defaults: {
+      purpose: '', location: '', timeLabel: '', participantKeysJson: '[]',
+      publicKnowledgeKeysJson: '[]', goalsJson: '[]', endingConditionsJson: '[]',
+      safetyBoundariesJson: '[]', relationshipRulesJson: '[]', openingNodeKey: null,
+      endingNodeKey: null, maxTurns: 20, directorBudget: 1, order: 0,
+    },
+    note: 'CHATGAME-2 作者场景模板、目标、边界、可回放关系规则和导演预算；固定剧情复用 NarrativeChoice，运行场景由 SIM 事件拥有' },
+
+  { table: db.adventureModules, name: 'adventureModules', owner: 'project',
+    exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'gameDefinitionId', remapVia: 'gameDefinitions', exportAs: '_gameDefinitionExportId', onUnmapped: 'require' },
+    ],
+    defaults: { contentJson: '{"version":1,"initialLocationKey":"","playerKey":"player","locations":[],"objects":[],"items":[],"abilities":[],"conditions":[],"resources":[],"quests":[],"actions":[],"initialInventory":[]}' },
+    note: 'TEXTADV-1 作者内容模块；内部引用仅用稳定 key，运行进度由 SIM 事件拥有' },
+
+  { table: db.avgMediaAssets, name: 'avgMediaAssets', owner: 'project',
+    exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    worldDomains: ['assets'], communityShare: 'world', releaseSection: 'narrative',
+    refs: [{ kind: 'simple', field: 'id', target: 'avgMediaBlobs[mediaAssetId]', onDelete: 'cascade' }],
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+    ],
+    defaults: {
+      width: null, height: null, durationMs: null, source: '', license: '', altText: '',
+      characterTag: '', sceneTag: '',
+    },
+    note: 'AVG-1 稳定 key + 版本媒资元数据；旧发布冻结实际版本，不跟随草稿替换' },
+
+  { table: db.avgMediaBlobs, name: 'avgMediaBlobs', owner: 'project',
+    exportable: true, exportIdField: true,
+    portableData: {
+      kind: 'binary-blob', field: 'data',
+      integrity: { metadataTable: 'avgMediaAssets', referenceField: 'mediaAssetId', hashField: 'contentHash', sizeField: 'byteSize' },
+    },
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    worldDomains: ['assets'], communityShare: 'world', releaseSection: 'narrative',
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'mediaAssetId', remapVia: 'avgMediaAssets', exportAs: '_mediaAssetExportId', onUnmapped: 'require' },
+    ],
+    note: 'AVG-1 项目备份携带的本地二进制；库内用 structured-clone-safe ArrayBuffer，导出层编码为便携 data URL' },
+
+  { table: db.avgPresentationModules, name: 'avgPresentationModules', owner: 'project',
+    exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'gameDefinitionId', remapVia: 'gameDefinitions', exportAs: '_gameDefinitionExportId', onUnmapped: 'require' },
+    ],
+    defaults: { contentJson: '{"version":1,"cues":[]}' },
+    note: 'AVG-1 声明式演出模块；只控制显示和播放，不拥有剧情规则状态' },
+
+  { table: db.narrativeSimulationModules, name: 'narrativeSimulationModules', owner: 'project',
+    exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'gameDefinitionId', remapVia: 'gameDefinitions', exportAs: '_gameDefinitionExportId', onUnmapped: 'require' },
+    ],
+    defaults: { contentJson: '{"version":1,"turnLimit":30,"actionBudget":1,"resources":[],"metrics":[],"actors":[],"actions":[],"modifiers":[],"issues":[],"endings":[],"themes":[]}' },
+    note: 'TEXTSIM-1 作者规则模块；运行投影与长期后果只由共享 SIM 事件拥有' },
+
+  { table: db.openWorldModules, name: 'openWorldModules', owner: 'project',
+    exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'gameDefinitionId', remapVia: 'gameDefinitions', exportAs: '_gameDefinitionExportId', onUnmapped: 'require' },
+    ],
+    defaults: { contentJson: '{"version":1,"initialRegionKey":"","tickLimit":200,"simulationCadenceTicks":5,"maxPropagationEdgesPerTick":4,"regions":[],"travelEdges":[],"discoveryChannels":[],"fixedTaskCards":[],"taskTemplates":[],"decks":[],"actorSchedules":[],"regionalIssueRules":[],"mainline":{"questKeys":[],"protectedParticipantKeys":[],"protectedEdgeKeys":[],"latestRevealTick":1,"endingNodeKey":""},"director":{"globalMaxRevealed":3,"globalMaxActive":5,"maxQuestInstances":100,"randomJitter":5,"criticalGuaranteeBonus":100,"backlogPenalty":10,"freshnessPenalty":20}}' },
+    note: 'TEXTWORLD-1 作者区域、交通、传播与任务导演规则；任务实例和世界演化只由共享 SIM 事件拥有' },
+
+  { table: db.gameReleases, name: 'gameReleases', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    worldDomains: ['narrative'],
+    refs: [{ kind: 'simple', field: 'id', target: 'simulationSessions[gameReleaseId]', onDelete: 'setNull' }],
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'gameDefinitionId', remapVia: 'gameDefinitions', exportAs: '_gameDefinitionExportId' },
+      { field: 'worldReleaseId', remapVia: 'worldReleases', exportAs: '_worldReleaseExportId', onUnmapped: 'require' },
+    ],
+    note: '文字游戏产品族统一不可变发布；冻结 WorldRelease、叙事及产品模块与内容哈希' },
 
   { table: db.characterDrivenPlans, name: 'characterDrivenPlans', owner: 'project',
     domainOwner: LEGACY_WORK_OWNER,
@@ -492,7 +675,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'Agent 追加事件流：消息/计划/任务/候选/确认/错误；durableRunId 由 PROJECT_TABLES 统一重映射，未确认候选不属于 Canon' },
 
   { table: db.agentRuns, name: 'agentRuns', owner: 'project',
-    domainOwner: LEGACY_WORK_OWNER,
+    domainOwner: {
+      allowed: ['work', 'instance'], legacyDefault: 'work',
+      locator: { kind: 'exclusive-work-instance', workField: 'workId', instanceField: 'simulationSessionId' },
+    },
     worldScoped: true, exportable: true, exportIdField: true,
     tree: { parentField: 'parentRunId' },
     refs: [
@@ -505,12 +691,14 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'parentRunId', remapVia: 'agentRuns', selfTree: true, exportAs: '_parentExportId' },
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
       { field: 'conversationId', remapVia: 'agentConversations', exportAs: '_conversationExportId' },
+      { field: 'simulationSessionId', remapVia: 'simulationSessions',
+        exportAs: '_simulationSessionExportId' },
     ],
     portableData: {
       kind: 'agent-run-root',
       contractField: 'contractJson',
       contractHashField: 'contractHash',
-      dependencies: ['worldGroups', 'chapters', 'outlineNodes'],
+      dependencies: ['worldGroups', 'chapters', 'outlineNodes', 'simulationSessions'],
     },
     defaults: {
       status: 'planned',
@@ -523,11 +711,12 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       parentRelation: null,
       parentReceiptHash: null,
       parentArtifactHash: null,
+      simulationSessionId: null,
     },
-    note: 'HARNESS-1/21 durable run 根与父子 lineage；contract 与严格事件投影的物化状态，不保存正文或隐藏推理' },
+    note: 'HARNESS-1/21/RUNTIME-1 durable run 根；Work/Instance owner 恰好二选一，复用严格事件投影与恢复，不保存隐藏推理' },
 
   { table: db.agentRunEvents, name: 'agentRunEvents', owner: 'project',
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'agentRuns', field: 'runId' } },
+    domainOwner: { allowed: ['work', 'instance'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'inherit', table: 'agentRuns', field: 'runId' } },
     worldScoped: true, exportable: true,
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
@@ -538,7 +727,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'HARNESS-1 严格追加事件；(runId,sequence) 唯一，非法版本/断序/scope 污染 fail-closed' },
 
   { table: db.agentRunCheckpoints, name: 'agentRunCheckpoints', owner: 'project',
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'agentRuns', field: 'runId' } },
+    domainOwner: { allowed: ['work', 'instance'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'inherit', table: 'agentRuns', field: 'runId' } },
     worldScoped: true, exportable: true,
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
@@ -588,6 +777,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'simulationSessions[parentSessionId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'simulationEvents[sessionId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'simulationCheckpoints[sessionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'agentRuns[simulationSessionId]', onDelete: 'cascade' },
     ],
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
@@ -596,6 +786,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId' },
       { field: 'worldReleaseId', remapVia: 'worldReleases', exportAs: '_worldReleaseExportId' },
+      { field: 'gameReleaseId', remapVia: 'gameReleases', exportAs: '_gameReleaseExportId' },
       { field: 'narrativeModuleId', remapVia: 'narrativeModules', exportAs: '_narrativeModuleExportId' },
     ],
     defaults: {
@@ -604,6 +795,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       rulesetVersion: 1,
       canonSnapshotJson: '{"version":1,"sources":[]}',
       initialStateJson: '{"version":1,"clock":0,"entities":{},"memories":[],"narratives":[],"ttrpg":null,"lastSequence":0}',
+      gameReleaseId: null,
     },
     note: 'SIM-1 独立互动世界实例；冻结创作来源，不反写 Canon；分支拥有独立事件流' },
 
@@ -616,7 +808,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'sessionId', remapVia: 'simulationSessions',
         exportAs: '_simulationSessionExportId', onUnmapped: 'require' },
     ],
-    defaults: { actorKey: null, targetKey: null, payloadJson: '{}' },
+    defaults: {
+      actorKey: null, targetKey: null, commandId: null,
+      baseSequence: null, baseStateHash: null, payloadJson: '{}',
+    },
     note: 'SIM-1 严格追加事件；(sessionId,sequence) 唯一，状态、骰子、记忆和叙事均从事件回放' },
 
   { table: db.simulationCheckpoints, name: 'simulationCheckpoints', owner: 'project',

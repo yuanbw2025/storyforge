@@ -327,15 +327,15 @@ describe('WORLD-2D..2F · executable product closure', () => {
       title: '不得猜测草稿模块',
       releaseId: release.id,
       narrativeModuleId: module.id,
-    })).rejects.toThrow('不能绑定可变草稿模块')
+    })).rejects.toThrow('必须绑定不可变 GameRelease')
     await expect(createWorldInstance({
       scope: ownership.scope,
       kind: 'storygame',
       title: '不得省略冻结叙事',
       releaseId: release.id,
-    })).rejects.toThrow('必须选择发布清单中的便携叙事 ID')
+    })).rejects.toThrow('必须绑定不可变 GameRelease')
 
-    const kinds: SimulationSessionKind[] = ['ttrpg', 'chatgame', 'storygame', 'npc-evolution']
+    const kinds: SimulationSessionKind[] = ['ttrpg', 'chatgame', 'npc-evolution']
     const sessions = await Promise.all(kinds.map(kind => createWorldInstance({
       scope: ownership.scope,
       kind,

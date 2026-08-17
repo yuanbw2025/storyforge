@@ -8,6 +8,7 @@
  * 产物与旧手写版**逐字段等价**(R-export-derive-equivalence 锁死),故旧备份格式、Gist
  * 云存档全部兼容。
  */
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from '../registry/project-tables'
 import { remapWorldPortalTargets } from '../utils/world-portals'
@@ -112,6 +113,21 @@ function toExportRow(
       obj[kind === 'world' ? '_worldOwnerExportId' : '_workOwnerExportId'] = portableId
       delete obj.worldId
       delete obj.workId
+    } else if (locator?.kind === 'exclusive-work-instance') {
+      const hasWork = row[locator.workField] != null
+      const hasInstance = row[locator.instanceField] != null
+      if (hasWork === hasInstance) throw new Error(`[strictExport] ${spec.name} 必须且只能有一个 Work/Instance owner`)
+      if (hasWork) {
+        const portableId = idMaps.get('works')?.get(row[locator.workField])
+        if (portableId == null) throw new Error(`[strictExport] ${spec.name} Work owner 缺失或越界`)
+        obj._workOwnerExportId = portableId
+      } else if (!Number.isInteger(obj._simulationSessionExportId)) {
+        throw new Error(`[strictExport] ${spec.name} Instance owner 缺失或越界`)
+      } else {
+        obj._instanceOwnerExportId = obj._simulationSessionExportId
+      }
+      delete obj[locator.workField]
+      delete obj[locator.instanceField]
     }
   }
 
@@ -198,6 +214,30 @@ async function deriveProjectExport(projectId: number, version: number, strictOwn
 async function portableizeSnapshot(snapshot: StrictProjectExportSnapshot): Promise<StrictProjectExportSnapshot> {
   if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'agent-run-root')) {
     await portableizeAgentRunLedgerExportV1(snapshot.data, snapshot.exportIds)
+  }
+  const portable = snapshot.data as unknown as Record<string, unknown>
+  for (const spec of PROJECT_TABLES) {
+    if (spec.portableData?.kind !== 'binary-blob') continue
+    const rows = portable[spec.name]
+    if (!Array.isArray(rows)) continue
+    for (const row of rows as Array<Record<string, unknown>>) {
+      const value = row[spec.portableData.field]
+      const blobLike = value as { arrayBuffer?: () => Promise<ArrayBuffer>; type?: string } | null
+      const buffer = value instanceof ArrayBuffer
+        ? value
+        : ArrayBuffer.isView(value)
+          ? value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
+          : blobLike && typeof blobLike.arrayBuffer === 'function'
+            ? (Dexie.currentTransaction ? await Dexie.waitFor(blobLike.arrayBuffer()) : await blobLike.arrayBuffer())
+            : null
+      if (!buffer) throw new Error(`[deriveExport] ${spec.name}.${spec.portableData.field} 不是便携二进制`)
+      const bytes = new Uint8Array(buffer)
+      let binary = ''
+      for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+      }
+      row[spec.portableData.field] = `data:${blobLike?.type || 'application/octet-stream'};base64,${btoa(binary)}`
+    }
   }
   return snapshot
 }

@@ -118,6 +118,12 @@ import {
   prepareStorylineProgressCopilotV1,
   type StorylineProgressCopilotSnapshotV1,
 } from './storyline-progress-copilot'
+import {
+  adoptRestoredWorldGameCandidateV1,
+  prepareWorldGameCopilotV1,
+  type WorldGameCopilotSnapshotV1,
+} from './world-game-copilot'
+import { parseWorldGameNarrativeCandidateV1 } from '../text-game/agent-contract'
 import type {
   AgentContextEvidence,
 } from './context-policy'
@@ -537,7 +543,7 @@ export async function createMasterAgentPlan(input: {
         id: pinned.id ?? `${pinned.agentId}-targeted`,
         agentId: pinned.agentId,
         ...(pinned.skillId ? { skillId: pinned.skillId } : {}),
-        instruction: pinned.instruction.trim().slice(0, 1_000),
+        instruction: pinned.instruction.trim().slice(0, 8_000),
         dependsOn: [...new Set(pinned.dependsOn ?? [])].slice(0, 5),
         ...(pinned.perspectiveCharacterId !== undefined
           ? { perspectiveCharacterId: pinned.perspectiveCharacterId }
@@ -1210,7 +1216,46 @@ async function executeSequentialMasterAgentPlan(
         })
         outputs.set(task.id, draft)
       } else if (task.agentId === 'outline') {
-        if (skill.executionMode === 'character-revision') {
+        if (skill.executionMode === 'world-game') {
+          const prepared = await prepareWorldGameCopilotV1({
+            projectId: input.projectId,
+            scope,
+            authorRequest: task.instruction,
+            skillId: skill.id as AgentSkillId,
+            routingCategory: `${AGENT_ROLE_CATEGORIES.outline}.world-game`,
+            contextProfile,
+            signal: input.signal,
+          })
+          const result = await runBudgetedGenerationNode({
+            node: prepared.node,
+            prepared: prepared.prepared,
+            budget,
+            callLabel: '冻结世界游戏创作 Skill',
+            maxOutputTokens: skill.maxOutputTokens,
+          })
+          const draft = JSON.stringify(result.output, null, 2)
+          candidates.push({
+            payload: {
+              version: 1,
+              taskId: task.id,
+              agentId: task.agentId,
+              skillId: skill.id as AgentSkillId,
+              executionBinding,
+              label: prepared.label,
+              contextSources: prepared.contextSources,
+              contextEvidence: prepared.contextEvidence,
+              baseSnapshot: prepared.snapshot,
+              workspaceScope: scope,
+              dependsOnTaskIds: task.dependsOn,
+              dependencyBindings,
+              generator: prepared.modelIdentity,
+            },
+            draft,
+            runtimeNode: prepared.node,
+            runtimeOutput: result.output,
+          })
+          outputs.set(task.id, draft)
+        } else if (skill.executionMode === 'character-revision') {
           if (!task.characterRevisionRequest) {
             throw new Error('角色中途重规划任务缺少固定变更请求。')
           }
@@ -1911,6 +1956,11 @@ export async function adoptMasterCandidate(input: {
           input.draft,
           input.payload.baseSnapshot as CharacterRevisionCopilotSnapshotV1,
         )
+      : input.payload.skillId === 'outline.world-game'
+      ? parseWorldGameNarrativeCandidateV1(
+          input.draft,
+          (input.payload.baseSnapshot as WorldGameCopilotSnapshotV1).request,
+        )
       : input.payload.agentId === 'world-origin'
       ? input.draft
       : input.payload.agentId === 'character'
@@ -2020,7 +2070,13 @@ export async function adoptMasterCandidate(input: {
       result: result as InspirationCopilotResult,
     })
   } else if (input.payload.agentId === 'outline') {
-    if (input.payload.skillId === 'outline.character-revision') {
+    if (input.payload.skillId === 'outline.world-game') {
+      await adoptRestoredWorldGameCandidateV1({
+        scope,
+        snapshot: input.payload.baseSnapshot as WorldGameCopilotSnapshotV1,
+        draft: input.draft,
+      })
+    } else if (input.payload.skillId === 'outline.character-revision') {
       if (!input.payload.characterRevisionRequest) {
         throw new Error('角色中途重规划候选缺少固定变更请求，请重新生成。')
       }
@@ -2111,7 +2167,9 @@ export async function adoptMasterCandidate(input: {
       : input.payload.agentId === 'inspiration'
         ? `已保存新的${input.payload.mode === 'multiworld' ? '多世界' : '单世界'}灵感版本。`
         : input.payload.agentId === 'outline'
-          ? input.payload.skillId === 'outline.character-revision'
+          ? input.payload.skillId === 'outline.world-game'
+            ? 'AI 演化游戏草稿已写入项目；可继续冻结 GameRelease 并立即试玩。'
+            : input.payload.skillId === 'outline.character-revision'
             ? '选中的未来大纲 patch 已写入项目；已写正文、故事主线和只读影响建议均未修改。'
             : input.payload.skillId === 'outline.character-driven'
             ? '角色驱动卷章方案已保存到当前版本。'

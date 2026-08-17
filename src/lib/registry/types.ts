@@ -49,8 +49,15 @@ export type DomainOwnerLocator =
       workField: string
     }
   | {
+      /** A durable record is owned by exactly one Work or one runtime instance. */
+      kind: 'exclusive-work-instance'
+      workField: string
+      instanceField: string
+    }
+  | {
       kind: 'parent'
-      owner: DomainOwnerKind
+      /** `inherit` means the child follows whichever owner the parent resolves to. */
+      owner: DomainOwnerKind | 'inherit'
       table: string
       field: string
     }
@@ -214,6 +221,17 @@ export type PortableDataSpec = {
   kind: 'agent-run-child'
   parentField: string
   contractHashField: string
+} | {
+  /** Binary field encoded as a data URL after the IndexedDB snapshot transaction. */
+  kind: 'binary-blob'
+  field: string
+  /** Optional metadata contract checked before an imported binary row is committed. */
+  integrity?: {
+    metadataTable: string
+    referenceField: string
+    hashField: string
+    sizeField: string
+  }
 }
 
 /**
@@ -478,6 +496,8 @@ export interface AssembleContextInput {
   characterId?: number | null
   /** SIM-1C: 冻结运行时会话，供 NPC 演进候选只读上下文使用。 */
   simulationSessionId?: number
+  /** CHATGAME-2: exactly one character viewpoint for the registered interaction reader. */
+  interactionParticipantKey?: string
   /** CM-1: 本次明确参与增量融合的碎片；由 inspirationWorkspace source 读取。 */
   inspirationFragmentIds?: string[]
   /** CM-1: 单世界与多世界各自维护最近确认版本。 */

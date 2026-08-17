@@ -133,7 +133,11 @@ function locatorOwner(spec: TableSpec, requested?: ScopeOwner): ScopeOwner | nul
     return locator.owner === 'instance' ? null : locator.owner
   }
   if (locator.kind === 'exclusive-fields') return requested ?? (spec.domainOwner?.legacyDefault as ScopeOwner)
-  if (locator.kind === 'parent') return locator.owner === 'instance' ? null : locator.owner
+  if (locator.kind === 'exclusive-work-instance') return 'work'
+  if (locator.kind === 'parent') {
+    if (locator.owner === 'inherit') return requested ?? (spec.domainOwner?.legacyDefault as ScopeOwner)
+    return locator.owner === 'instance' ? null : locator.owner
+  }
   // compat-project is retained only for transition diagnostics. C3 callers must not
   // silently treat a whole project as one Work.
   return requested ?? null
@@ -160,6 +164,9 @@ function directOwnerMatches(spec: TableSpec, row: Record<string, unknown>, scope
     if (locator.kind === 'exclusive-fields') {
       return row[locator.worldField] == null && row[locator.workField] == null
     }
+    if (locator.kind === 'exclusive-work-instance') {
+      return row[locator.workField] == null && row[locator.instanceField] == null
+    }
     if (locator.kind === 'field') return row[locator.field] == null
     if (locator.kind === 'compat-project') return row.worldId == null && row.workId == null
     // Parent locators are validated recursively by assertRecordInScope().
@@ -184,6 +191,14 @@ function directOwnerMatches(spec: TableSpec, row: Record<string, unknown>, scope
     return owner === 'world'
       ? hasWorld && row[locator.worldField] === scope.worldId
       : hasWork && row[locator.workField] === scope.workId
+  }
+  if (locator.kind === 'exclusive-work-instance') {
+    const hasWork = row[locator.workField] != null
+    const hasInstance = row[locator.instanceField] != null
+    return hasWork !== hasInstance
+      && hasWork
+      && row[locator.workField] === scope.workId
+      && (requested == null || requested === 'work')
   }
   // Parent locators are validated by assertRecordInScope, after loading the parent.
   return rowProjectId(row) === scope.projectId
@@ -258,6 +273,14 @@ export function stampNewRecord<T>(
     if (result[other] != null) fail(`${tableName} 不能同时绑定 World 和 Work`)
     result[selected] = scopeValue(scope, owner)
     result[other] = null
+  } else if (locator.kind === 'exclusive-work-instance') {
+    if (owner !== 'work') fail(`${tableName} 通用 scope 只能创建 Work-owned 记录`)
+    if (result[locator.workField] != null && result[locator.workField] !== scope.workId) {
+      fail(`${tableName}.${locator.workField} 越过当前 scope`)
+    }
+    if (result[locator.instanceField] != null) fail(`${tableName} 不能同时绑定 Work 和运行实例`)
+    result[locator.workField] = scope.workId
+    result[locator.instanceField] = null
   } else if (locator.kind === 'field' || locator.kind === 'compat-project') {
     const field = locator.kind === 'field' ? locator.field : owner === 'world' ? 'worldId' : 'workId'
     const expected = scopeValue(scope, owner)

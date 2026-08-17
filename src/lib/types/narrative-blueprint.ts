@@ -63,6 +63,10 @@ export type NarrativeCondition = Record<string, never> | {
 } | {
   path: string
   in: NarrativeScalar[]
+} | {
+  visited: string
+} | {
+  selected: string
 }
 
 export type NarrativeEffect = {

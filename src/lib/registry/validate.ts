@@ -69,11 +69,14 @@ export function checkRegistry(): RegistryValidationResult {
       } else if (locator.kind === 'exclusive-fields'
         && (!allowed.includes('world') || !allowed.includes('work'))) {
         errors.push(`${spec.name}.domainOwner exclusive-fields 必须同时允许 world/work`)
+      } else if (locator.kind === 'exclusive-work-instance'
+        && (!allowed.includes('work') || !allowed.includes('instance'))) {
+        errors.push(`${spec.name}.domainOwner exclusive-work-instance 必须同时允许 work/instance`)
       } else if (locator.kind === 'parent') {
         if (!REGISTRY_BY_NAME.has(locator.table)) {
           errors.push(`${spec.name}.domainOwner parent 指向不存在的表: ${locator.table}`)
         }
-        if (!allowed.includes(locator.owner)) {
+        if (locator.owner !== 'inherit' && !allowed.includes(locator.owner)) {
           errors.push(`${spec.name}.domainOwner parent owner 未在 allowed 中: ${locator.owner}`)
         }
       }

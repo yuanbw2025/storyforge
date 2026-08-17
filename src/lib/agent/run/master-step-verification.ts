@@ -12,6 +12,8 @@ import { parseStoryCoreCandidateDraft } from '../story-core-copilot'
 import { parseCreativeRulesCandidateDraftV1 } from '../creative-rules-copilot'
 import { parseStorylineProgressCandidateDraftV1 } from '../storyline-progress-copilot'
 import { parseWorldviewFieldCandidateDraft } from '../worldview-field-copilot'
+import { parseWorldGameNarrativeCandidateV1 } from '../../text-game/agent-contract'
+import type { WorldGameCopilotSnapshotV1 } from '../world-game-copilot'
 import type { AgentRunSnapshotV1 } from './event-store'
 import { hashCanonicalValue } from './hash'
 import {
@@ -66,6 +68,13 @@ function validateCandidateDraft(payload: MasterCandidatePayload, draft: string):
     return
   }
   if (payload.agentId === 'outline') {
+    if (payload.skillId === 'outline.world-game') {
+      parseWorldGameNarrativeCandidateV1(
+        draft,
+        (payload.baseSnapshot as WorldGameCopilotSnapshotV1).request,
+      )
+      return
+    }
     if (payload.skillId === 'outline.storyline-progress') {
       parseStorylineProgressCandidateDraftV1(draft)
       return

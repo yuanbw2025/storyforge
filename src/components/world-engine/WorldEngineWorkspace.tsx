@@ -14,14 +14,17 @@ import {
 import type { SidebarModule } from '../layout/sidebar-tree'
 import type { WorldDomainArea } from '../../lib/registry/types'
 import type { WorldDomainSummary, WorldProjection } from '../../lib/world-engine/domain'
+import type { Project } from '../../lib/types'
 import WorldWorkManager from './WorldWorkManager'
 import WorldNarrativeReleasePanel from './WorldNarrativeReleasePanel'
 
 interface Props {
   projection?: WorldProjection
+  project: Project
   onOpenModule: (module: SidebarModule) => void
   activeWorkId?: number | null
   onWorkChanged?: () => Promise<void> | void
+  onOpenGame?: (product: 'storygame' | 'text-adventure' | 'avg') => void
 }
 
 interface DomainModuleLink {
@@ -148,7 +151,7 @@ function DomainCard({ summary, onOpenModule }: { summary: WorldDomainSummary; on
   )
 }
 
-export default function WorldEngineWorkspace({ projection, onOpenModule, activeWorkId, onWorkChanged }: Props) {
+export default function WorldEngineWorkspace({ projection, project, onOpenModule, activeWorkId, onWorkChanged, onOpenGame }: Props) {
   if (!projection) {
     return <div className="flex min-h-[20rem] items-center justify-center text-sm text-text-muted">正在读取世界内容…</div>
   }
@@ -170,10 +173,12 @@ export default function WorldEngineWorkspace({ projection, onOpenModule, activeW
       </div>
       <WorldWorkManager projectId={projection.projectId} activeWorkId={activeWorkId} onChanged={onWorkChanged ?? (() => {})} />
       <WorldNarrativeReleasePanel
+        project={project}
         projectId={projection.projectId}
         activeWorkId={activeWorkId}
         onChanged={onWorkChanged ?? (() => {})}
         onOpenRuntime={() => onOpenModule('simulation-runtime')}
+        onOpenGame={onOpenGame ?? (() => {})}
       />
       <div className="sf-world-engine-lower-grid">
         <section className="sf-world-engine-bridge">

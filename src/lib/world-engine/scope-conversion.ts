@@ -71,6 +71,19 @@ async function rowLogicalScope(
     const work = workId == null ? undefined : await db.works.get(workId)
     return { worldId: worldId ?? work?.worldId, workId }
   }
+  if (locator.kind === 'exclusive-work-instance') {
+    const workId = row[locator.workField] as number | undefined
+    if (workId != null) {
+      const work = await db.works.get(workId)
+      return { worldId: work?.worldId, workId }
+    }
+    const instanceId = row[locator.instanceField] as number | undefined
+    const instance = instanceId == null ? undefined : await db.simulationSessions.get(instanceId)
+    return {
+      worldId: instance?.worldId ?? undefined,
+      workId: instance?.workId ?? undefined,
+    }
+  }
   const parentId = row[locator.field]
   const parentSpec = getTableSpec(locator.table)
   const parent = parentId == null ? undefined : await parentSpec.table.get(parentId as number)

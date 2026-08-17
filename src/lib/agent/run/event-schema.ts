@@ -34,6 +34,7 @@ export const AGENT_RUN_EVENT_TYPES_V1: readonly AgentRunEventTypeV1[] = [
   'candidate.revised',
   'candidate.staled',
   'candidate.carried-forward',
+  'runtime.candidate.adopted',
   'step.verification.accepted',
   'step.verification.staled',
   'confirmation.recorded',
@@ -310,6 +311,30 @@ function parsePayload<T extends AgentRunEventTypeV1>(
           { min: 1 },
         ),
         candidateHash: readHash(record.candidateHash, 'event.payload(candidate.carried-forward).candidateHash'),
+      }
+      break
+    }
+    case 'runtime.candidate.adopted': {
+      const record = payloadRecord(value, type, [
+        'stepId', 'candidateHash', 'adoptionHash', 'commandIds', 'baseSequence', 'resultingSequence',
+      ])
+      const commandIds = readArray(record.commandIds, 'event.payload(runtime.candidate.adopted).commandIds')
+        .map((item, index) => readString(item, `event.payload(runtime.candidate.adopted).commandIds[${index}]`, { max: 200 }))
+      if (new Set(commandIds).size !== commandIds.length) {
+        failSchema('duplicate_value', 'event.payload(runtime.candidate.adopted).commandIds', '不得重复')
+      }
+      const baseSequence = readInteger(record.baseSequence, 'event.payload(runtime.candidate.adopted).baseSequence', { min: 0 })
+      const resultingSequence = readInteger(record.resultingSequence, 'event.payload(runtime.candidate.adopted).resultingSequence', { min: 0 })
+      if (resultingSequence < baseSequence) {
+        failSchema('invalid_value', 'event.payload(runtime.candidate.adopted).resultingSequence', '不得早于 baseSequence')
+      }
+      payload = {
+        stepId: readString(record.stepId, 'event.payload(runtime.candidate.adopted).stepId', { max: 160 }),
+        candidateHash: readHash(record.candidateHash, 'event.payload(runtime.candidate.adopted).candidateHash'),
+        adoptionHash: readHash(record.adoptionHash, 'event.payload(runtime.candidate.adopted).adoptionHash'),
+        commandIds,
+        baseSequence,
+        resultingSequence,
       }
       break
     }

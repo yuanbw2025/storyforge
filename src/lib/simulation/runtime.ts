@@ -1,8 +1,11 @@
+import Dexie from 'dexie'
 import { db } from '../db/schema'
-import { transactionTablesForReferences } from '../registry/lifecycle'
+import { transactionTablesForReferenceCascade } from '../registry/lifecycle'
+import { cascadeRegisteredReferences } from '../world-engine/lifecycle'
 import {
   EMPTY_SIMULATION_STATE,
   NARRATIVE_MODULE_KINDS,
+  NARRATIVE_BEAT_KINDS,
   NARRATIVE_NODE_KINDS,
   RUNTIME_ENTITY_KINDS,
   RUNTIME_LIFECYCLE_STATUSES,
@@ -11,6 +14,10 @@ import {
   type RuntimeAttributes,
   type RuntimeEntityState,
   type RuntimeMemory,
+  type AnyGameReleaseManifestV1,
+  type FrozenNarrativeBeat,
+  type FrozenNarrativeChoice,
+  type NarrativeChoiceHistoryEntry,
   type SimulationCheckpoint,
   type SimulationEvent,
   type SimulationEventType,
@@ -32,6 +39,7 @@ import {
   type SimulationChatScene,
   type SimulationChatState,
   type SimulationChatMessage,
+  type InteractionMemoryKind,
   type SimulationTtrpgEncounter,
   type SimulationTtrpgEncounterCandidate,
   type SimulationTtrpgNpcSchedule,
@@ -44,13 +52,63 @@ import {
   type SimulationTtrpgTurnCandidate,
 } from '../types'
 import {
+  applyInteractionEvent,
+  createInitialInteractionState,
+  parseInteractionState,
+  rebaseInteractionStateForBranch,
+} from '../character-interaction/runtime'
+import {
+  applyAdventureEffects,
+  applyAdventureEvent,
+  adventureNarrativeProjection,
+  availableAdventureActions,
+  createInitialAdventureState,
+  parseAdventureState,
+} from '../adventure/runtime'
+import {
   applyNarrativeEffects,
   evaluateNarrativeCondition,
   parseNarrativeCondition,
   parseNarrativeEffects,
 } from '../narrative/blueprint'
+import {
+  applyNarrativeChoiceEffects,
+  evaluateNarrativeChoices,
+} from '../text-game/content'
+import { assertGameReleaseUnchanged, parseAnyGameReleaseManifest } from '../text-game/releases'
+import { applyAvgPresentationEvent, createInitialAvgPresentationState, parseAvgPresentationState } from '../avg/runtime'
+import {
+  applyNarrativeSimulationEvent,
+  createInitialNarrativeSimulationState,
+  narrativeSimulationProjection,
+  parseNarrativeSimulationState,
+  planNarrativeSimulationTurn,
+  rebaseNarrativeSimulationStateForBranch,
+} from '../narrative-simulation/runtime'
+import {
+  applyOpenWorldEvent,
+  createInitialOpenWorldState,
+  openWorldMainlineProjection,
+  parseOpenWorldState,
+  planOpenWorldDraw,
+  planOpenWorldQuestDecision,
+  planOpenWorldTick,
+  planOpenWorldTravel,
+  rebaseOpenWorldStateForBranch,
+} from '../open-world/runtime'
 
 type JsonObject = Record<string, unknown>
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, child]) => child !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+    return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
 
 export interface CreateSimulationSessionInput {
   projectId: number
@@ -60,6 +118,16 @@ export interface CreateSimulationSessionInput {
   seed?: string
   canonSnapshot?: unknown
   initialState?: SimulationRuntimeState
+}
+
+export interface CreateReleasedGameSessionInput extends CreateSimulationSessionInput {
+  worldId: number
+  workId: number
+  worldReleaseId: number
+  gameReleaseId: number
+  narrativeModuleExportId: number
+  /** New games must match the release entry state; validated branches preserve a replayed mid-game state. */
+  origin: 'release' | 'branch'
 }
 
 export interface DiceResolution {
@@ -102,14 +170,81 @@ function optionalPortableInteger(value: unknown, label: string): number | null {
   return assertFiniteInteger(value, label, 0, Number.MAX_SAFE_INTEGER)
 }
 
-function narrativeKeyArray(value: unknown, label: string, keys?: Set<string>): string[] {
+function narrativeKeyArray(value: unknown, label: string, keys?: Set<string>, allowDuplicates = false): string[] {
   if (!Array.isArray(value)) throw new Error(`${label} 必须是数组。`)
   const result = value.map(item => String(item).trim())
-  if (result.some(item => !item || item.length > 200) || new Set(result).size !== result.length) {
+  if (result.some(item => !item || item.length > 200)
+    || (!allowDuplicates && new Set(result).size !== result.length)) {
     throw new Error(`${label} 包含空值、超长值或重复值。`)
   }
   if (keys && result.some(item => !keys.has(item))) throw new Error(`${label} 引用了不存在的叙事节点。`)
   return result
+}
+
+function narrativeTextArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`${label} 必须是数组。`)
+  const result = value.map(item => String(item).trim())
+  if (result.some(item => !item || item.length > 100) || new Set(result).size !== result.length) {
+    throw new Error(`${label} 包含空值、超长值或重复值。`)
+  }
+  return result
+}
+
+function parseFrozenNarrativeBeat(value: unknown, nodeKeys: Set<string>): FrozenNarrativeBeat {
+  if (!isObject(value)) throw new Error('冻结 Beat 必须是对象。')
+  const beatKey = String(value.beatKey ?? '').trim()
+  const nodeKey = String(value.nodeKey ?? '').trim()
+  const kind = String(value.kind ?? '')
+  const speakerKey = value.speakerKey == null ? null : String(value.speakerKey).trim()
+  const text = String(value.text ?? '')
+  if (!beatKey || beatKey.length > 200 || !/^[a-zA-Z0-9._:-]+$/.test(beatKey)) throw new Error('冻结 Beat key 无效。')
+  if (!nodeKeys.has(nodeKey)) throw new Error(`冻结 Beat 节点不存在: ${beatKey}`)
+  if (!NARRATIVE_BEAT_KINDS.includes(kind as FrozenNarrativeBeat['kind'])) throw new Error(`冻结 Beat 类型无效: ${beatKey}`)
+  if (kind === 'dialogue' && !speakerKey) throw new Error(`冻结对话 Beat 缺少 speaker: ${beatKey}`)
+  if (!text.trim() || text.length > 40_000) throw new Error(`冻结 Beat 文本无效: ${beatKey}`)
+  return {
+    beatKey,
+    nodeKey,
+    kind: kind as FrozenNarrativeBeat['kind'],
+    speakerKey,
+    text,
+    order: assertFiniteInteger(value.order, `${beatKey}.order`, -1_000_000, 1_000_000),
+  }
+}
+
+function parseFrozenNarrativeChoice(value: unknown, nodeKeys: Set<string>): FrozenNarrativeChoice {
+  if (!isObject(value)) throw new Error('冻结 Choice 必须是对象。')
+  const choiceKey = String(value.choiceKey ?? '').trim()
+  const sourceNodeKey = String(value.sourceNodeKey ?? '').trim()
+  const targetNodeKey = String(value.targetNodeKey ?? '').trim()
+  const text = String(value.text ?? '')
+  const description = String(value.description ?? '')
+  const unavailableReason = String(value.unavailableReason ?? '')
+  const displayConditionJson = String(value.displayConditionJson ?? '{}')
+  const availableConditionJson = String(value.availableConditionJson ?? '{}')
+  const effectsJson = String(value.effectsJson ?? '[]')
+  if (!choiceKey || choiceKey.length > 200 || !/^[a-zA-Z0-9._:-]+$/.test(choiceKey)) throw new Error('冻结 Choice key 无效。')
+  if (!nodeKeys.has(sourceNodeKey) || !nodeKeys.has(targetNodeKey)) throw new Error(`冻结 Choice 节点不存在: ${choiceKey}`)
+  if (!text.trim() || text.length > 4_000 || description.length > 20_000 || unavailableReason.length > 4_000) {
+    throw new Error(`冻结 Choice 内容无效: ${choiceKey}`)
+  }
+  parseNarrativeCondition(displayConditionJson)
+  parseNarrativeCondition(availableConditionJson)
+  parseNarrativeEffects(effectsJson)
+  const tags = narrativeTextArray(value.tags, `${choiceKey}.tags`)
+  return {
+    choiceKey,
+    sourceNodeKey,
+    text,
+    description,
+    unavailableReason,
+    targetNodeKey,
+    displayConditionJson,
+    availableConditionJson,
+    effectsJson,
+    tags,
+    order: assertFiniteInteger(value.order, `${choiceKey}.order`, -1_000_000, 1_000_000),
+  }
 }
 
 function parseSimulationNarrativeNode(value: unknown): SimulationNarrativeNodeSnapshot {
@@ -138,7 +273,8 @@ function parseSimulationNarrativeNode(value: unknown): SimulationNarrativeNodeSn
 
 function parseSimulationNarrativeState(value: unknown): SimulationNarrativeState | null {
   if (value == null) return null
-  if (!isObject(value) || value.schema !== 'storyforge.simulation-narrative' || value.version !== 1) {
+  if (!isObject(value) || value.schema !== 'storyforge.simulation-narrative'
+    || (value.version !== 1 && value.version !== 2)) {
     throw new Error('不支持的冻结叙事状态。')
   }
   if (!Array.isArray(value.nodes) || value.nodes.length === 0 || value.nodes.length > 5_000) {
@@ -159,9 +295,9 @@ function parseSimulationNarrativeState(value: unknown): SimulationNarrativeState
   if (currentNodeKey != null && !keys.has(currentNodeKey)) throw new Error('冻结叙事当前节点不存在。')
   if (!isObject(value.variables)) throw new Error('冻结叙事变量必须是对象。')
   if (typeof value.completed !== 'boolean') throw new Error('冻结叙事完成状态无效。')
-  return {
+  const common: SimulationNarrativeState = {
     schema: 'storyforge.simulation-narrative',
-    version: 1,
+    version: value.version,
     sourceModuleId: optionalPositiveInteger(value.sourceModuleId, '叙事来源模块 ID'),
     sourceModuleExportId: optionalPortableInteger(value.sourceModuleExportId, '叙事来源便携 ID'),
     moduleKind: moduleKind as SimulationNarrativeState['moduleKind'],
@@ -169,34 +305,164 @@ function parseSimulationNarrativeState(value: unknown): SimulationNarrativeState
     sourceHash,
     nodes,
     currentNodeKey,
-    visitedNodeKeys: narrativeKeyArray(value.visitedNodeKeys, '叙事已访问节点', keys),
+    visitedNodeKeys: narrativeKeyArray(value.visitedNodeKeys, '叙事已访问节点', keys, true),
     availableNodeKeys: narrativeKeyArray(value.availableNodeKeys, '叙事可选节点', keys),
     variables: structuredClone(value.variables),
     completed: value.completed,
   }
+  if (value.version === 1) return common
+  const contentHash = String(value.contentHash ?? '').trim()
+  if (!/^[a-f0-9]{64}$/.test(contentHash)) throw new Error('冻结游戏发布身份无效。')
+  if (!Array.isArray(value.beats) || value.beats.length > 50_000) throw new Error('冻结 Beat 列表无效。')
+  if (!Array.isArray(value.choices) || value.choices.length > 50_000) throw new Error('冻结 Choice 列表无效。')
+  const beats = value.beats.map(beat => parseFrozenNarrativeBeat(beat, keys))
+  const choices = value.choices.map(choice => parseFrozenNarrativeChoice(choice, keys))
+  const choiceKeys = new Set(choices.map(choice => choice.choiceKey))
+  if (choiceKeys.size !== choices.length) throw new Error('冻结 Choice key 不能重复。')
+  const visibleChoiceKeys = narrativeKeyArray(value.visibleChoiceKeys, '可见 Choice')
+  const availableChoiceKeys = narrativeKeyArray(value.availableChoiceKeys, '可用 Choice')
+  if (visibleChoiceKeys.some(key => !choiceKeys.has(key)) || availableChoiceKeys.some(key => !choiceKeys.has(key))) {
+    throw new Error('冻结叙事 Choice 状态引用不存在。')
+  }
+  if (availableChoiceKeys.some(key => !visibleChoiceKeys.includes(key))) throw new Error('可用 Choice 必须可见。')
+  if (!Array.isArray(value.choiceHistory)) throw new Error('冻结叙事选择历史必须是数组。')
+  const choiceHistory: NarrativeChoiceHistoryEntry[] = value.choiceHistory.map(raw => {
+    if (!isObject(raw)) throw new Error('冻结叙事选择历史记录无效。')
+    const choiceKey = String(raw.choiceKey ?? '').trim()
+    const fromNodeKey = String(raw.fromNodeKey ?? '').trim()
+    const toNodeKey = String(raw.toNodeKey ?? '').trim()
+    if (!choiceKeys.has(choiceKey) || !keys.has(fromNodeKey) || !keys.has(toNodeKey)) {
+      throw new Error('冻结叙事选择历史引用不存在。')
+    }
+    return {
+      eventSequence: assertFiniteInteger(raw.eventSequence, '选择事件序号', 1, Number.MAX_SAFE_INTEGER),
+      choiceKey,
+      fromNodeKey,
+      toNodeKey,
+    }
+  })
+  const endingKey = value.endingKey == null ? null : String(value.endingKey).trim()
+  if (endingKey != null && !keys.has(endingKey)) throw new Error('冻结叙事结局节点不存在。')
+  const completedAtSequence = value.completedAtSequence == null
+    ? null
+    : assertFiniteInteger(value.completedAtSequence, '叙事完成事件序号', 0, Number.MAX_SAFE_INTEGER)
+  if (value.completed !== (endingKey != null) || (value.completed && completedAtSequence == null)) {
+    throw new Error('冻结叙事完成状态不一致。')
+  }
+  const lastEnteredNodeSequence = value.lastEnteredNodeSequence == null
+    ? null
+    : assertFiniteInteger(value.lastEnteredNodeSequence, '最后节点进入序号', 1, Number.MAX_SAFE_INTEGER)
+  const evaluations = currentNodeKey == null || value.completed
+    ? []
+    : evaluateNarrativeChoices({
+      ...common.variables,
+      __visitedNodeKeys: common.visitedNodeKeys,
+      __selectedChoiceKeys: choiceHistory.map(item => item.choiceKey),
+    }, currentNodeKey, choices)
+  const expectedVisible = evaluations.filter(choice => choice.visible).map(choice => choice.choiceKey)
+  const expectedAvailable = evaluations.filter(choice => choice.available).map(choice => choice.choiceKey)
+  if (JSON.stringify(visibleChoiceKeys) !== JSON.stringify(expectedVisible)
+    || JSON.stringify(availableChoiceKeys) !== JSON.stringify(expectedAvailable)) {
+    throw new Error('冻结叙事 Choice 投影与变量状态不一致。')
+  }
+  return {
+    ...common,
+    contentHash,
+    beats,
+    choices,
+    visibleChoiceKeys,
+    availableChoiceKeys,
+    choiceHistory,
+    endingKey,
+    completedAtSequence,
+    lastEnteredNodeSequence,
+  }
 }
 
-function enterFrozenNarrativeNode(
+export function enterFrozenNarrativeNode(
   narrative: SimulationNarrativeState,
   targetKey: string,
+  options: {
+    variables?: Record<string, unknown>
+    eventSequence?: number
+    selectedChoiceKey?: string
+  } = {},
 ): SimulationNarrativeState {
   const target = narrative.nodes.find(node => node.key === targetKey)
   if (!target) throw new Error(`冻结叙事节点不存在: ${targetKey}`)
-  if (!evaluateNarrativeCondition(parseNarrativeCondition(target.conditionJson), narrative.variables)) {
+  const sourceVariables = options.variables ?? narrative.variables
+  const predicateVariables = {
+    ...sourceVariables,
+    __visitedNodeKeys: narrative.visitedNodeKeys,
+    __selectedChoiceKeys: [
+      ...(narrative.choiceHistory ?? []).map(item => item.choiceKey),
+      ...(options.selectedChoiceKey ? [options.selectedChoiceKey] : []),
+    ],
+  }
+  if (!evaluateNarrativeCondition(parseNarrativeCondition(target.conditionJson), predicateVariables)) {
     throw new Error(`冻结叙事节点条件未满足: ${targetKey}`)
   }
-  const variables = applyNarrativeEffects(parseNarrativeEffects(target.effectsJson), narrative.variables)
-  const availableNodeKeys = target.successorKeys.filter(key => {
-    const node = narrative.nodes.find(candidate => candidate.key === key)!
-    return evaluateNarrativeCondition(parseNarrativeCondition(node.conditionJson), variables)
-  })
+  const variables = applyNarrativeEffects(parseNarrativeEffects(target.effectsJson), sourceVariables)
+  const choiceVariables = {
+    ...variables,
+    __visitedNodeKeys: [...narrative.visitedNodeKeys, targetKey],
+    __selectedChoiceKeys: predicateVariables.__selectedChoiceKeys,
+  }
+  const completed = target.kind === 'ending'
+  const choiceEvaluations = narrative.version === 2 && !completed
+    ? evaluateNarrativeChoices(choiceVariables, targetKey, narrative.choices ?? [])
+    : []
+  const availableNodeKeys = narrative.version === 2
+    ? [...new Set(choiceEvaluations.filter(choice => choice.available).map(choice => choice.targetNodeKey))]
+    : target.successorKeys.filter(key => {
+      const node = narrative.nodes.find(candidate => candidate.key === key)!
+      return evaluateNarrativeCondition(parseNarrativeCondition(node.conditionJson), variables)
+    })
   return {
     ...narrative,
     currentNodeKey: targetKey,
     visitedNodeKeys: [...narrative.visitedNodeKeys, targetKey],
     availableNodeKeys,
     variables,
-    completed: target.kind === 'ending',
+    completed,
+    ...(narrative.version === 2 ? {
+      visibleChoiceKeys: choiceEvaluations.filter(choice => choice.visible).map(choice => choice.choiceKey),
+      availableChoiceKeys: choiceEvaluations.filter(choice => choice.available).map(choice => choice.choiceKey),
+      endingKey: completed ? targetKey : null,
+      completedAtSequence: completed ? options.eventSequence ?? null : null,
+    } : {}),
+  }
+}
+
+/**
+ * Apply one choice with the exact same deterministic semantics used by the
+ * persisted event reducer. Authoring preview reuses this helper but never
+ * writes a session or an event.
+ */
+export function advanceFrozenNarrativeChoice(
+  narrative: SimulationNarrativeState,
+  choiceKey: string,
+  eventSequence: number,
+): SimulationNarrativeState {
+  if (narrative.version !== 2 || narrative.completed || !narrative.currentNodeKey) {
+    throw new Error('当前叙事没有可提交选择的内容。')
+  }
+  if (!narrative.availableChoiceKeys?.includes(choiceKey)) throw new Error('所选 Choice 当前不可用。')
+  const choice = narrative.choices?.find(item => item.choiceKey === choiceKey)
+  if (!choice || choice.sourceNodeKey !== narrative.currentNodeKey) throw new Error('所选 Choice 不属于当前节点。')
+  const fromNodeKey = narrative.currentNodeKey
+  const variables = applyNarrativeChoiceEffects(choice, narrative.variables)
+  const entered = enterFrozenNarrativeNode(narrative, choice.targetNodeKey, {
+    variables,
+    eventSequence,
+    selectedChoiceKey: choiceKey,
+  })
+  return {
+    ...entered,
+    choiceHistory: [
+      ...(narrative.choiceHistory ?? []),
+      { eventSequence, choiceKey, fromNodeKey, toNodeKey: choice.targetNodeKey },
+    ],
   }
 }
 
@@ -824,7 +1090,12 @@ export function parseSimulationState(value: string | SimulationRuntimeState): Si
     narratives,
     ttrpg: parseTtrpgState(parsed.ttrpg),
     chat: parseChatState(parsed.chat),
+    interaction: parseInteractionState(parsed.interaction),
     narrative: parseSimulationNarrativeState(parsed.narrative),
+    adventure: parseAdventureState(parsed.adventure),
+    presentation: parseAvgPresentationState(parsed.presentation),
+    narrativeSimulation: parseNarrativeSimulationState(parsed.narrativeSimulation),
+    openWorld: parseOpenWorldState(parsed.openWorld),
     lastSequence,
   }
 }
@@ -849,6 +1120,108 @@ export function applySimulationEvent(
     throw new Error(`模拟事件序号不连续: 期望 ${state.lastSequence + 1}，收到 ${event.sequence}`)
   }
   const payload = parseEventPayload(event)
+  if (event.type.startsWith('world.')) {
+    state.openWorld = applyOpenWorldEvent(state.openWorld ?? null, event)
+    if (event.type === 'world.narrative.synced') {
+      if (!state.openWorld || !state.narrative || state.narrative.version !== 2 || !isObject(payload.projection)) {
+        throw new Error('[textworld] Narrative 同步需要正式开放世界与冻结叙事状态。')
+      }
+      const expected = openWorldMainlineProjection(state.openWorld, state.openWorld.mainlineQuestKeys)
+      if (stableJson(payload.projection) !== stableJson(expected)) {
+        throw new Error('[textworld] Narrative 投影与开放世界状态不一致。')
+      }
+      state.narrative.variables = { ...state.narrative.variables, openWorld: structuredClone(expected) }
+      if (!state.narrative.completed && state.narrative.currentNodeKey) {
+        const evaluations = evaluateNarrativeChoices({
+          ...state.narrative.variables,
+          __visitedNodeKeys: state.narrative.visitedNodeKeys,
+          __selectedChoiceKeys: (state.narrative.choiceHistory ?? []).map(item => item.choiceKey),
+        }, state.narrative.currentNodeKey, state.narrative.choices ?? [])
+        state.narrative.visibleChoiceKeys = evaluations.filter(item => item.visible).map(item => item.choiceKey)
+        state.narrative.availableChoiceKeys = evaluations.filter(item => item.available).map(item => item.choiceKey)
+        state.narrative.availableNodeKeys = [...new Set(evaluations.filter(item => item.available).map(item => item.targetNodeKey))]
+      }
+    }
+    state.lastSequence = event.sequence
+    return state
+  }
+  if (event.type.startsWith('simulation.')) {
+    state.narrativeSimulation = applyNarrativeSimulationEvent(state.narrativeSimulation ?? null, event)
+    if (event.type === 'simulation.narrative.synced') {
+      if (!state.narrative || state.narrative.version !== 2 || !isObject(payload.projection)) {
+        throw new Error('[textsim] Narrative 同步需要正式模拟与冻结叙事状态。')
+      }
+      const expected = narrativeSimulationProjection(state.narrativeSimulation)
+      if (stableJson(payload.projection) !== stableJson(expected)) {
+        throw new Error('[textsim] Narrative 投影与模拟状态不一致。')
+      }
+      state.narrative.variables = { ...state.narrative.variables, simulation: structuredClone(expected) }
+      if (!state.narrative.completed && state.narrative.currentNodeKey) {
+        const evaluations = evaluateNarrativeChoices({
+          ...state.narrative.variables,
+          __visitedNodeKeys: state.narrative.visitedNodeKeys,
+          __selectedChoiceKeys: (state.narrative.choiceHistory ?? []).map(item => item.choiceKey),
+        }, state.narrative.currentNodeKey, state.narrative.choices ?? [])
+        state.narrative.visibleChoiceKeys = evaluations.filter(item => item.visible).map(item => item.choiceKey)
+        state.narrative.availableChoiceKeys = evaluations.filter(item => item.available).map(item => item.choiceKey)
+        state.narrative.availableNodeKeys = [...new Set(evaluations.filter(item => item.available).map(item => item.targetNodeKey))]
+      }
+    }
+    state.lastSequence = event.sequence
+    return state
+  }
+  if (event.type.startsWith('presentation.')) {
+    state.presentation = applyAvgPresentationEvent(
+      state.presentation ?? null,
+      event,
+      state.narrative?.currentNodeKey ?? null,
+      state.narrative?.beats ?? [],
+    )
+    state.lastSequence = event.sequence
+    return state
+  }
+  if (event.type.startsWith('interaction.')) {
+    state.interaction = applyInteractionEvent(state.interaction ?? null, event)
+    state.lastSequence = event.sequence
+    return state
+  }
+  if (event.type === 'adventure.narrative.synced') {
+    if (!state.adventure || !state.narrative || state.narrative.version !== 2) {
+      throw new Error('[adventure] Narrative 同步需要正式冒险与冻结叙事状态。')
+    }
+    if (!isObject(payload.projection)) throw new Error('[adventure] Narrative 投影无效。')
+    const expected = adventureNarrativeProjection(state.adventure)
+    if (stableJson(payload.projection) !== stableJson(expected)) {
+      throw new Error('[adventure] Narrative 投影与冒险状态不一致。')
+    }
+    state.narrative.variables = {
+      ...state.narrative.variables,
+      adventure: structuredClone(expected),
+      ...(state.openWorld ? {
+        openWorld: openWorldMainlineProjection(state.openWorld, state.openWorld.mainlineQuestKeys),
+      } : {}),
+    }
+    if (!state.narrative.completed && state.narrative.currentNodeKey) {
+      const evaluations = evaluateNarrativeChoices({
+        ...state.narrative.variables,
+        __visitedNodeKeys: state.narrative.visitedNodeKeys,
+        __selectedChoiceKeys: (state.narrative.choiceHistory ?? []).map(item => item.choiceKey),
+      }, state.narrative.currentNodeKey, state.narrative.choices ?? [])
+      state.narrative.visibleChoiceKeys = evaluations.filter(item => item.visible).map(item => item.choiceKey)
+      state.narrative.availableChoiceKeys = evaluations.filter(item => item.available).map(item => item.choiceKey)
+      state.narrative.availableNodeKeys = [...new Set(
+        evaluations.filter(item => item.available).map(item => item.targetNodeKey),
+      )]
+    }
+    state.lastSequence = event.sequence
+    return state
+  }
+  if (event.type.startsWith('adventure.')) {
+    state.adventure = applyAdventureEvent(state.adventure ?? null, event)
+    if (state.openWorld) state.openWorld = applyOpenWorldEvent(state.openWorld, event)
+    state.lastSequence = event.sequence
+    return state
+  }
   switch (event.type) {
     case 'time.advanced': {
       const amount = assertFiniteInteger(payload.amount, '时间推进量', 1, 1_000_000_000)
@@ -908,15 +1281,79 @@ export function applySimulationEvent(
       state.narratives.push({ eventSequence: event.sequence, text })
       break
     }
+    case 'narrative.started': {
+      const narrative = state.narrative
+      if (!narrative || narrative.version !== 2 || !narrative.currentNodeKey || event.sequence !== 1) {
+        throw new Error('GameRelease 叙事启动事件无效。')
+      }
+      if (String(payload.entryNodeKey ?? '').trim() !== narrative.currentNodeKey
+        || String(payload.contentHash ?? '').trim() !== narrative.contentHash) {
+        throw new Error('叙事启动事件与冻结发布不一致。')
+      }
+      break
+    }
+    case 'narrative.node.entered': {
+      const narrative = state.narrative
+      if (!narrative || narrative.version !== 2 || !narrative.currentNodeKey) {
+        throw new Error('GameRelease 节点进入事件无效。')
+      }
+      const nodeKey = String(payload.nodeKey ?? '').trim()
+      const causeSequence = assertFiniteInteger(payload.causeSequence, '节点进入原因序号', 1, event.sequence - 1)
+      if (nodeKey !== narrative.currentNodeKey) throw new Error('节点进入事件与当前冻结节点不一致。')
+      if (event.sequence !== causeSequence + 1) throw new Error('节点进入事件没有紧随其状态变更。')
+      if (causeSequence > 1
+        && narrative.choiceHistory?.[narrative.choiceHistory.length - 1]?.eventSequence !== causeSequence) {
+        throw new Error('节点进入事件缺少对应的 Choice。')
+      }
+      narrative.lastEnteredNodeSequence = event.sequence
+      break
+    }
     case 'narrative.node.advanced': {
       if (!state.narrative || state.narrative.completed || !state.narrative.currentNodeKey) {
         throw new Error('当前会话没有可推进的冻结叙事。')
       }
+      if (state.narrative.version !== 1) throw new Error('GameRelease 叙事必须通过正式 Choice 提交。')
       const fromNodeKey = String(payload.fromNodeKey ?? '').trim()
       const toNodeKey = String(payload.toNodeKey ?? '').trim()
       if (fromNodeKey !== state.narrative.currentNodeKey) throw new Error('冻结叙事推进来源节点已变化。')
       if (!state.narrative.availableNodeKeys.includes(toNodeKey)) throw new Error('冻结叙事目标不是当前可选后继。')
       state.narrative = enterFrozenNarrativeNode(state.narrative, toNodeKey)
+      break
+    }
+    case 'narrative.choice.committed': {
+      const narrative = state.narrative
+      if (!narrative || narrative.version !== 2 || narrative.completed || !narrative.currentNodeKey) {
+        throw new Error('当前会话没有可提交选择的 GameRelease 叙事。')
+      }
+      const commandId = String(payload.commandId ?? '').trim()
+      const baseSequence = assertFiniteInteger(payload.baseSequence, '选择基准序号', 0, Number.MAX_SAFE_INTEGER)
+      const baseStateHash = String(payload.baseStateHash ?? '').trim()
+      const fromNodeKey = String(payload.fromNodeKey ?? '').trim()
+      const choiceKey = String(payload.choiceKey ?? '').trim()
+      const toNodeKey = String(payload.toNodeKey ?? '').trim()
+      if (!commandId || commandId.length > 200 || !/^[a-zA-Z0-9._:-]+$/.test(commandId)) throw new Error('选择 commandId 无效。')
+      if (!/^[a-f0-9]{64}$/.test(baseStateHash)) throw new Error('选择 baseStateHash 无效。')
+      if (baseSequence !== event.sequence - 1) throw new Error('选择基准序号与事件位置不一致。')
+      if (fromNodeKey !== narrative.currentNodeKey) throw new Error('选择来源节点已变化。')
+      if (!narrative.availableChoiceKeys?.includes(choiceKey)) throw new Error('所选 Choice 当前不可用。')
+      const choice = narrative.choices?.find(item => item.choiceKey === choiceKey)
+      if (!choice || choice.sourceNodeKey !== fromNodeKey || choice.targetNodeKey !== toNodeKey) {
+        throw new Error('选择与冻结内容不一致。')
+      }
+      state.narrative = advanceFrozenNarrativeChoice(narrative, choiceKey, event.sequence)
+      break
+    }
+    case 'narrative.ending.reached': {
+      const narrative = state.narrative
+      const endingKey = String(payload.endingKey ?? '').trim()
+      const enteredSequence = assertFiniteInteger(payload.enteredSequence, '结局进入序号', 1, event.sequence - 1)
+      if (!narrative || narrative.version !== 2 || !narrative.completed
+        || narrative.currentNodeKey !== endingKey || narrative.endingKey !== endingKey) {
+        throw new Error('结局事件与冻结叙事状态不一致。')
+      }
+      if (event.sequence !== enteredSequence + 1) throw new Error('结局事件没有紧随节点进入。')
+      if (narrative.lastEnteredNodeSequence !== enteredSequence) throw new Error('结局事件引用的节点尚未正式进入。')
+      narrative.completedAtSequence = event.sequence
       break
     }
     case 'chat.session.configured': {
@@ -1265,6 +1702,77 @@ export function applySimulationEvent(
   return state
 }
 
+/** Prepare a release entry state with the same projection later persisted by
+ * adventure.narrative.synced. No event is fabricated at sequence zero. */
+export function withAdventureNarrativeProjection(
+  current: SimulationRuntimeState,
+): SimulationRuntimeState {
+  const state = cloneState(parseSimulationState(current))
+  if (!state.adventure || !state.narrative || state.narrative.version !== 2) return state
+  const projection = adventureNarrativeProjection(state.adventure)
+  state.narrative.variables = { ...state.narrative.variables, adventure: projection }
+  if (!state.narrative.completed && state.narrative.currentNodeKey) {
+    const evaluations = evaluateNarrativeChoices({
+      ...state.narrative.variables,
+      __visitedNodeKeys: state.narrative.visitedNodeKeys,
+      __selectedChoiceKeys: (state.narrative.choiceHistory ?? []).map(item => item.choiceKey),
+    }, state.narrative.currentNodeKey, state.narrative.choices ?? [])
+    state.narrative.visibleChoiceKeys = evaluations.filter(item => item.visible).map(item => item.choiceKey)
+    state.narrative.availableChoiceKeys = evaluations.filter(item => item.available).map(item => item.choiceKey)
+    state.narrative.availableNodeKeys = [...new Set(
+      evaluations.filter(item => item.available).map(item => item.targetNodeKey),
+    )]
+  }
+  return parseSimulationState(state)
+}
+
+/** Prepare the release entry state with the same projection later persisted by
+ * simulation.narrative.synced. Narrative conditions consume this read-only
+ * projection; the deterministic simulation remains the source of truth. */
+export function withNarrativeSimulationProjection(
+  current: SimulationRuntimeState,
+): SimulationRuntimeState {
+  const state = cloneState(parseSimulationState(current))
+  if (!state.narrativeSimulation || !state.narrative || state.narrative.version !== 2) return state
+  const projection = narrativeSimulationProjection(state.narrativeSimulation)
+  state.narrative.variables = { ...state.narrative.variables, simulation: projection }
+  if (!state.narrative.completed && state.narrative.currentNodeKey) {
+    const evaluations = evaluateNarrativeChoices({
+      ...state.narrative.variables,
+      __visitedNodeKeys: state.narrative.visitedNodeKeys,
+      __selectedChoiceKeys: (state.narrative.choiceHistory ?? []).map(item => item.choiceKey),
+    }, state.narrative.currentNodeKey, state.narrative.choices ?? [])
+    state.narrative.visibleChoiceKeys = evaluations.filter(item => item.visible).map(item => item.choiceKey)
+    state.narrative.availableChoiceKeys = evaluations.filter(item => item.available).map(item => item.choiceKey)
+    state.narrative.availableNodeKeys = [...new Set(
+      evaluations.filter(item => item.available).map(item => item.targetNodeKey),
+    )]
+  }
+  return parseSimulationState(state)
+}
+
+/** Prepare a TEXTWORLD release entry with the same read-only projection that
+ * later world.narrative.synced events verify during replay. */
+export function withOpenWorldNarrativeProjection(
+  current: SimulationRuntimeState,
+): SimulationRuntimeState {
+  const state = cloneState(parseSimulationState(current))
+  if (!state.openWorld || !state.narrative || state.narrative.version !== 2) return state
+  const projection = openWorldMainlineProjection(state.openWorld, state.openWorld.mainlineQuestKeys)
+  state.narrative.variables = { ...state.narrative.variables, openWorld: projection }
+  if (!state.narrative.completed && state.narrative.currentNodeKey) {
+    const evaluations = evaluateNarrativeChoices({
+      ...state.narrative.variables,
+      __visitedNodeKeys: state.narrative.visitedNodeKeys,
+      __selectedChoiceKeys: (state.narrative.choiceHistory ?? []).map(item => item.choiceKey),
+    }, state.narrative.currentNodeKey, state.narrative.choices ?? [])
+    state.narrative.visibleChoiceKeys = evaluations.filter(item => item.visible).map(item => item.choiceKey)
+    state.narrative.availableChoiceKeys = evaluations.filter(item => item.available).map(item => item.choiceKey)
+    state.narrative.availableNodeKeys = [...new Set(evaluations.filter(item => item.available).map(item => item.targetNodeKey))]
+  }
+  return parseSimulationState(state)
+}
+
 export function replaySimulationEvents(
   initialState: SimulationRuntimeState,
   events: readonly SimulationEvent[],
@@ -1295,8 +1803,10 @@ function defaultSeed(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
 }
 
-export async function createSimulationSession(
+async function insertSimulationSession(
   input: CreateSimulationSessionInput,
+  binding?: Pick<SimulationSession,
+    'worldId' | 'workId' | 'worldReleaseId' | 'gameReleaseId' | 'narrativeModuleExportId'>,
 ): Promise<SimulationSession> {
   await assertSessionScope(input)
   if (!SIMULATION_SESSION_KINDS.includes(input.kind)) throw new Error('未知模拟会话类型。')
@@ -1321,9 +1831,169 @@ export async function createSimulationSession(
     parentThroughSequence: null,
     createdAt: now,
     updatedAt: now,
+    ...binding,
   }
   session.id = await db.simulationSessions.add(session) as number
   return session
+}
+
+export async function createSimulationSession(
+  input: CreateSimulationSessionInput,
+): Promise<SimulationSession> {
+  if (input.kind === 'storygame' || input.kind === 'textadventure' || input.kind === 'avg'
+    || input.kind === 'textsimulation' || input.kind === 'textworld') {
+    throw new Error('新建正式文字游戏必须通过不可变 GameRelease；createSimulationSession 仅保留内核和 legacy 运行时入口。')
+  }
+  return insertSimulationSession(input)
+}
+
+/**
+ * 正式文字游戏的唯一底层建档入口。调用者仍需先完成 GameRelease 不可变校验；
+ * 此处再次核对绑定与冻结状态，避免通用 SIM API 形成 legacy 写旁路。
+ */
+export async function createReleasedGameSession(
+  input: CreateReleasedGameSessionInput,
+): Promise<SimulationSession> {
+  const [gameRelease, worldRelease] = await Promise.all([
+    assertGameReleaseUnchanged(input.gameReleaseId),
+    db.worldReleases.get(input.worldReleaseId),
+  ])
+  if (!gameRelease || gameRelease.projectId !== input.projectId
+    || gameRelease.worldId !== input.worldId || gameRelease.workId !== input.workId
+    || gameRelease.worldReleaseId !== input.worldReleaseId) {
+    throw new Error('文字游戏的 GameRelease 绑定无效。')
+  }
+  if (!worldRelease || worldRelease.projectId !== input.projectId || worldRelease.worldId !== input.worldId) {
+    throw new Error('文字游戏的 WorldRelease 绑定无效。')
+  }
+  const manifest = parseAnyGameReleaseManifest(gameRelease.manifestJson)
+  const expectedKind: SimulationSessionKind = manifest.productType === 'storygame'
+    ? 'storygame' : manifest.productType === 'character-interaction' ? 'chatgame'
+      : manifest.productType === 'text-adventure' ? 'textadventure'
+        : manifest.productType === 'avg' ? 'avg'
+          : manifest.productType === 'narrative-simulation' ? 'textsimulation' : 'textworld'
+  if (input.kind !== expectedKind) throw new Error(`GameRelease ${manifest.productType} 与会话类型不匹配。`)
+  if (manifest.worldRelease.narrativeModuleExportId !== input.narrativeModuleExportId) {
+    throw new Error('文字游戏的冻结叙事绑定无效。')
+  }
+  const narrative = parseSimulationState(input.initialState ?? EMPTY_SIMULATION_STATE).narrative
+  const releaseContentMismatch = narrative?.version !== 2 || narrative.contentHash !== gameRelease.contentHash
+    || narrative.sourceHash !== gameRelease.contentHash
+    || narrative.sourceModuleId != null
+    || narrative.sourceModuleExportId !== input.narrativeModuleExportId
+    || narrative.moduleKind !== manifest.narrative.moduleKind
+    || narrative.moduleTitle !== manifest.narrative.moduleTitle
+    || stableJson(narrative.nodes) !== stableJson(manifest.narrative.nodes)
+    || stableJson(narrative.beats) !== stableJson(manifest.narrative.beats)
+    || stableJson(narrative.choices) !== stableJson(manifest.narrative.choices)
+  const releaseEntryMismatch = input.origin === 'release' && narrative?.version === 2 && (
+    narrative.currentNodeKey !== manifest.narrative.entryNodeKey
+    || narrative.choiceHistory?.length !== 0
+    || narrative.visitedNodeKeys.length !== 1
+    || narrative.visitedNodeKeys[0] !== manifest.narrative.entryNodeKey
+  )
+  if (releaseContentMismatch || releaseEntryMismatch) {
+    throw new Error('文字游戏初始叙事必须来自绑定 GameRelease 的冻结内容。')
+  }
+  if (manifest.productType === 'character-interaction') {
+    const interaction = parseSimulationState(input.initialState ?? EMPTY_SIMULATION_STATE).interaction
+    const releaseInitial = createInitialInteractionState({
+      playerKey: manifest.interaction.playerKey,
+      profiles: manifest.interaction.profiles,
+      sceneTemplates: manifest.interaction.sceneTemplates,
+    })
+    const frozenMismatch = !interaction
+      || interaction.playerKey !== releaseInitial.playerKey
+      || stableJson(interaction.profiles) !== stableJson(releaseInitial.profiles)
+      || stableJson(interaction.sceneTemplates) !== stableJson(releaseInitial.sceneTemplates)
+    const releaseStateMismatch = input.origin === 'release'
+      && stableJson(interaction) !== stableJson(releaseInitial)
+    if (frozenMismatch || releaseStateMismatch) {
+      throw new Error('chatgame 初始状态必须来自绑定 GameRelease 的冻结互动内容。')
+    }
+  }
+  if (manifest.productType === 'text-adventure') {
+    const adventure = parseSimulationState(input.initialState ?? EMPTY_SIMULATION_STATE).adventure
+    const releaseInitial = createInitialAdventureState(manifest.adventure, gameRelease.contentHash)
+    const frozenMismatch = !adventure || adventure.contentHash !== gameRelease.contentHash
+      || stableJson(adventure.abilities) !== stableJson(releaseInitial.abilities)
+      || Object.keys(adventure.resources).some(key => !Object.prototype.hasOwnProperty.call(releaseInitial.resources, key))
+    const releaseStateMismatch = input.origin === 'release' && stableJson(adventure) !== stableJson(releaseInitial)
+    if (frozenMismatch || releaseStateMismatch) {
+      throw new Error('textadventure 初始状态必须来自绑定 GameRelease 的冻结冒险内容。')
+    }
+  }
+  if (manifest.productType === 'avg') {
+    const presentation = parseSimulationState(input.initialState ?? EMPTY_SIMULATION_STATE).presentation
+    const releaseInitial = createInitialAvgPresentationState({
+      contentHash: gameRelease.contentHash,
+      assets: manifest.presentation.assets,
+      content: manifest.presentation,
+      entryNodeKey: manifest.narrative.entryNodeKey,
+    })
+    const frozenMismatch = !presentation || presentation.contentHash !== gameRelease.contentHash
+      || stableJson(presentation.assets) !== stableJson(releaseInitial.assets)
+      || stableJson(presentation.cues) !== stableJson(releaseInitial.cues)
+    const releaseStateMismatch = input.origin === 'release' && stableJson(presentation) !== stableJson(releaseInitial)
+    if (frozenMismatch || releaseStateMismatch) throw new Error('avg 初始演出必须来自绑定 GameRelease 的冻结内容。')
+  }
+  if (manifest.productType === 'narrative-simulation') {
+    const simulation = parseSimulationState(input.initialState ?? EMPTY_SIMULATION_STATE).narrativeSimulation
+    const releaseInitial = createInitialNarrativeSimulationState(manifest.simulation, gameRelease.contentHash)
+    const frozenMismatch = !simulation || simulation.contentHash !== gameRelease.contentHash
+      || simulation.turnLimit !== releaseInitial.turnLimit
+      || simulation.actionBudget !== releaseInitial.actionBudget
+      || Object.keys(simulation.resources).sort().join(',') !== Object.keys(releaseInitial.resources).sort().join(',')
+      || Object.keys(simulation.metrics).sort().join(',') !== Object.keys(releaseInitial.metrics).sort().join(',')
+      || Object.keys(simulation.actorStances).sort().join(',') !== Object.keys(releaseInitial.actorStances).sort().join(',')
+      || simulation.issues.map(item => item.issueKey).sort().join(',') !== releaseInitial.issues.map(item => item.issueKey).sort().join(',')
+    const releaseStateMismatch = input.origin === 'release' && stableJson(simulation) !== stableJson(releaseInitial)
+    if (frozenMismatch || releaseStateMismatch) {
+      throw new Error('textsimulation 初始状态必须来自绑定 GameRelease 的冻结内容。')
+    }
+  }
+  if (manifest.productType === 'text-open-world') {
+    const initial = parseSimulationState(input.initialState ?? EMPTY_SIMULATION_STATE)
+    const expectedInteraction = createInitialInteractionState({
+      playerKey: manifest.interaction.playerKey,
+      profiles: manifest.interaction.profiles,
+      sceneTemplates: manifest.interaction.sceneTemplates,
+    })
+    const expectedAdventure = createInitialAdventureState(manifest.adventure, gameRelease.contentHash)
+    const expectedSimulation = createInitialNarrativeSimulationState(manifest.simulation, gameRelease.contentHash)
+    const expectedOpenWorld = createInitialOpenWorldState(manifest.openWorld, gameRelease.contentHash)
+    const frozenMismatch = !initial.interaction || !initial.adventure || !initial.narrativeSimulation || !initial.openWorld
+      || initial.adventure.contentHash !== gameRelease.contentHash
+      || initial.narrativeSimulation.contentHash !== gameRelease.contentHash
+      || initial.openWorld.contentHash !== gameRelease.contentHash
+      || stableJson(initial.interaction.profiles) !== stableJson(expectedInteraction.profiles)
+      || stableJson(initial.interaction.sceneTemplates) !== stableJson(expectedInteraction.sceneTemplates)
+      || stableJson(initial.openWorld.mainlineQuestKeys) !== stableJson(expectedOpenWorld.mainlineQuestKeys)
+    const releaseStateMismatch = input.origin === 'release' && (
+      stableJson(initial.interaction) !== stableJson(expectedInteraction)
+      || stableJson(initial.adventure) !== stableJson(expectedAdventure)
+      || stableJson(initial.narrativeSimulation) !== stableJson(expectedSimulation)
+      || stableJson(initial.openWorld) !== stableJson(expectedOpenWorld)
+    )
+    if (frozenMismatch || releaseStateMismatch) {
+      throw new Error('textworld 初始状态必须来自绑定 GameRelease 的全部冻结内容。')
+    }
+  }
+  return insertSimulationSession(input, {
+    worldId: input.worldId,
+    workId: input.workId,
+    worldReleaseId: input.worldReleaseId,
+    gameReleaseId: input.gameReleaseId,
+    narrativeModuleExportId: input.narrativeModuleExportId,
+  })
+}
+
+/** @deprecated STORYGAME compatibility wrapper; new product code uses createReleasedGameSession. */
+export async function createReleasedStoryGameSession(
+  input: CreateReleasedGameSessionInput,
+): Promise<SimulationSession> {
+  if (input.kind !== 'storygame') throw new Error('storygame 兼容入口只接受 storygame。')
+  return createReleasedGameSession(input)
 }
 
 async function readSessionEvents(
@@ -1399,6 +2069,21 @@ export async function appendSimulationEvent(input: {
   if (input.type === 'random.resolved') {
     throw new Error('随机判定只能通过 resolveSimulationDice() 生成。')
   }
+  if (input.type.startsWith('interaction.')) {
+    throw new Error('受治理的角色互动事件只能通过对应的专用命令 API 生成。')
+  }
+  if (input.type.startsWith('adventure.')) {
+    throw new Error('受治理的文字冒险事件只能通过 commitAdventureAction() 生成。')
+  }
+  if (input.type.startsWith('presentation.')) {
+    throw new Error('受治理的 AVG 演出事件只能通过对应的专用命令 API 生成。')
+  }
+  if (input.type.startsWith('simulation.')) {
+    throw new Error('受治理的复杂模拟事件只能通过对应的专用回合命令生成。')
+  }
+  if (input.type.startsWith('world.')) {
+    throw new Error('受治理的开放世界事件只能通过对应的专用命令生成。')
+  }
   if (
     input.type === 'npc.evolution.proposed'
     || input.type === 'npc.evolution.accepted'
@@ -1421,7 +2106,11 @@ export async function appendSimulationEvent(input: {
     || input.type === 'chat.session.configured'
     || input.type === 'chat.message.recorded'
     || input.type === 'chat.reply.recorded'
+    || input.type === 'narrative.started'
+    || input.type === 'narrative.node.entered'
     || input.type === 'narrative.node.advanced'
+    || input.type === 'narrative.choice.committed'
+    || input.type === 'narrative.ending.reached'
   ) {
     throw new Error('受治理的互动事件只能通过对应的专用 API 生成。')
   }
@@ -1449,6 +2138,91 @@ export async function appendSimulationEvent(input: {
   })
 }
 
+export async function reachAvgPresentationBeat(input: {
+  sessionId: number
+  beatKey: string
+  commandId: string
+  baseSequence: number
+  baseStateHash: string
+  snapshotKey?: string | null
+}): Promise<SimulationEvent> {
+  const commandId = normalizeCommandId(input.commandId)
+  const beatKey = input.beatKey.trim()
+  const baseStateHash = input.baseStateHash.trim()
+  if (!beatKey || beatKey.length > 200) throw new Error('[avg] beatKey 无效')
+  if (!Number.isInteger(input.baseSequence) || input.baseSequence < 0 || !/^[a-f0-9]{64}$/.test(baseStateHash)) {
+    throw new Error('[avg] 演出命令基线无效')
+  }
+  const previewSession = await db.simulationSessions.get(input.sessionId)
+  if (!previewSession || previewSession.kind !== 'avg' || previewSession.gameReleaseId == null) throw new Error('[avg] 正式 AVG 实例不存在')
+  const previewEvents = await readSessionEvents(previewSession)
+  const previewState = replaySimulationEvents(parseSimulationState(previewSession.initialStateJson), previewEvents)
+  const previewHash = await hashStateJson(JSON.stringify(previewState))
+  return db.transaction('rw', db.simulationSessions, db.simulationEvents, async () => {
+    const session = await db.simulationSessions.get(input.sessionId)
+    if (!session || session.kind !== 'avg' || session.gameReleaseId == null) throw new Error('[avg] 正式 AVG 实例不存在')
+    const events = await readSessionEvents(session)
+    const prior = events.find(event => event.commandId === commandId)
+    if (prior) {
+      const payload = parseEventPayload(prior)
+      if (prior.type !== 'presentation.beat.reached' || payload.beatKey !== beatKey) throw new Error('[avg] commandId 已被不同命令使用')
+      return prior
+    }
+    if (session.status !== 'active') throw new Error('[avg] 只有 active 会话可以推进演出')
+    const state = replaySimulationEvents(parseSimulationState(session.initialStateJson), events)
+    if (state.lastSequence !== input.baseSequence || previewState.lastSequence !== state.lastSequence || previewHash !== baseStateHash) {
+      throw new Error('[avg] 演出状态已变化，请刷新后重试')
+    }
+    if (!state.presentation || !state.narrative) throw new Error('[avg] 当前没有可推进的演出 Beat')
+    const event: SimulationEvent = {
+      projectId: session.projectId, worldGroupId: session.worldGroupId ?? null, sessionId: session.id!,
+      sequence: state.lastSequence + 1, type: 'presentation.beat.reached', actorKey: null, targetKey: beatKey,
+      commandId, baseSequence: input.baseSequence, baseStateHash,
+      payloadJson: JSON.stringify({ beatKey, snapshotKey: input.snapshotKey?.trim() || null }), createdAt: Date.now(),
+    }
+    applySimulationEvent(state, event)
+    event.id = await db.simulationEvents.add(event) as number
+    await db.simulationSessions.update(session.id!, { updatedAt: event.createdAt })
+    return event
+  })
+}
+
+export async function recordAvgMediaFailure(input: {
+  sessionId: number
+  assetKey: string
+  reason: string
+  commandId: string
+}): Promise<SimulationEvent> {
+  const commandId = normalizeCommandId(input.commandId)
+  const assetKey = input.assetKey.trim()
+  const reason = input.reason.trim() || '资源不可用'
+  if (!/^[a-zA-Z0-9._:-]{1,200}$/.test(assetKey)) throw new Error('[avg] 失败媒资 key 无效')
+  if (reason.length > 2_000) throw new Error('[avg] 媒资失败原因过长')
+  return db.transaction('rw', db.simulationSessions, db.simulationEvents, async () => {
+    const session = await db.simulationSessions.get(input.sessionId)
+    if (!session || session.kind !== 'avg' || session.gameReleaseId == null) throw new Error('[avg] 正式 AVG 实例不存在')
+    const events = await readSessionEvents(session)
+    const prior = events.find(event => event.commandId === commandId)
+    if (prior) {
+      const payload = parseEventPayload(prior)
+      if (prior.type !== 'presentation.media.failed' || payload.assetKey !== assetKey || payload.reason !== reason) {
+        throw new Error('[avg] commandId 已被不同媒资诊断使用')
+      }
+      return prior
+    }
+    const state = replaySimulationEvents(parseSimulationState(session.initialStateJson), events)
+    const event: SimulationEvent = {
+      projectId: session.projectId, worldGroupId: session.worldGroupId ?? null, sessionId: session.id!,
+      sequence: state.lastSequence + 1, type: 'presentation.media.failed', actorKey: null, targetKey: assetKey,
+      commandId, payloadJson: JSON.stringify({ assetKey, reason }), createdAt: Date.now(),
+    }
+    applySimulationEvent(state, event)
+    event.id = await db.simulationEvents.add(event) as number
+    await db.simulationSessions.update(session.id!, { updatedAt: event.createdAt })
+    return event
+  })
+}
+
 export async function advanceSimulationNarrative(input: {
   sessionId: number
   targetNodeKey: string
@@ -1461,6 +2235,7 @@ export async function advanceSimulationNarrative(input: {
     if (!narrative || narrative.completed || !narrative.currentNodeKey) {
       throw new Error('当前会话没有可推进的冻结叙事。')
     }
+    if (narrative.version !== 1) throw new Error('GameRelease 叙事必须提交正式 Choice。')
     const baseSequence = input.baseSequence ?? state.lastSequence
     if (baseSequence !== state.lastSequence) throw new Error('叙事分支已变化，请刷新后重试。')
     if (!narrative.availableNodeKeys.includes(targetNodeKey)) {
@@ -1479,6 +2254,533 @@ export async function advanceSimulationNarrative(input: {
   })
 }
 
+function normalizeCommandId(value: string): string {
+  const commandId = value.trim()
+  if (!commandId || commandId.length > 200 || !/^[a-zA-Z0-9._:-]+$/.test(commandId)) {
+    throw new Error('命令 commandId 无效。')
+  }
+  return commandId
+}
+
+export async function readSimulationStateVersion(sessionId: number): Promise<{
+  sequence: number
+  stateHash: string
+}> {
+  const state = await readSimulationState(sessionId)
+  return { sequence: state.lastSequence, stateHash: await hashStateJson(JSON.stringify(state)) }
+}
+
+interface InteractionCommandEnvelope {
+  sessionId: number
+  commandId: string
+  baseSequence: number
+  baseStateHash: string
+}
+
+async function appendInteractionCommand(input: InteractionCommandEnvelope & {
+  type: Extract<SimulationEventType, `interaction.${string}`>
+  actorKey?: string | null
+  targetKey?: string | null
+  payload: JsonObject
+}): Promise<SimulationEvent> {
+  const commandId = normalizeCommandId(input.commandId)
+  const baseStateHash = input.baseStateHash.trim()
+  if (!Number.isInteger(input.baseSequence) || input.baseSequence < 0) {
+    throw new Error('互动命令 baseSequence 无效。')
+  }
+  if (!/^[a-f0-9]{64}$/.test(baseStateHash)) throw new Error('互动命令 baseStateHash 无效。')
+  const previewSession = await db.simulationSessions.get(input.sessionId)
+  if (!previewSession) throw new Error('模拟会话不存在。')
+  const previewEvents = await readSessionEvents(previewSession)
+  const previewState = replaySimulationEvents(parseSimulationState(previewSession.initialStateJson), previewEvents)
+  const previewStateHash = await hashStateJson(JSON.stringify(previewState))
+  return db.transaction('rw', db.simulationSessions, db.simulationEvents, async () => {
+    const session = await db.simulationSessions.get(input.sessionId)
+    if (!session) throw new Error('模拟会话不存在。')
+    if (session.kind !== 'chatgame' && session.kind !== 'textadventure' && session.kind !== 'textworld') {
+      throw new Error('角色互动命令只能写入带冻结互动状态的正式会话。')
+    }
+    const events = await readSessionEvents(session)
+    const prior = events.find(event => event.commandId === commandId)
+    const commandPayload = {
+      ...input.payload,
+      commandId,
+      baseSequence: input.baseSequence,
+      baseStateHash,
+    }
+    if (prior) {
+      if (prior.type !== input.type || prior.baseSequence !== input.baseSequence
+        || prior.baseStateHash !== baseStateHash
+        || stableJson(parseEventPayload(prior)) !== stableJson(commandPayload)) {
+        throw new Error('互动命令 commandId 已被不同命令使用。')
+      }
+      return prior
+    }
+    if (session.status !== 'active') throw new Error('只有 active 会话可以提交互动命令。')
+    const state = replaySimulationEvents(parseSimulationState(session.initialStateJson), events)
+    if (!state.interaction) throw new Error('当前会话不是 CHATGAME-2 角色互动存档。')
+    if (state.lastSequence !== input.baseSequence) throw new Error('互动状态已变化，请刷新后重试。')
+    if (previewState.lastSequence !== state.lastSequence || previewStateHash !== baseStateHash) {
+      throw new Error('互动状态哈希已变化，请刷新后重试。')
+    }
+    const event: SimulationEvent = {
+      projectId: session.projectId,
+      worldGroupId: session.worldGroupId ?? null,
+      sessionId: input.sessionId,
+      sequence: state.lastSequence + 1,
+      type: input.type,
+      actorKey: input.actorKey ?? null,
+      targetKey: input.targetKey ?? null,
+      commandId,
+      baseSequence: input.baseSequence,
+      baseStateHash,
+      payloadJson: JSON.stringify(commandPayload),
+      createdAt: Date.now(),
+    }
+    applySimulationEvent(state, event)
+    event.id = await db.simulationEvents.add(event) as number
+    await db.simulationSessions.update(input.sessionId, { updatedAt: event.createdAt })
+    return event
+  })
+}
+
+export async function startInteractionScene(input: InteractionCommandEnvelope & {
+  sceneId: string
+  sceneKey: string
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.scene.started',
+    targetKey: input.sceneKey.trim(),
+    payload: { sceneId: input.sceneId.trim(), sceneKey: input.sceneKey.trim() },
+  })
+}
+
+export async function endInteractionScene(input: InteractionCommandEnvelope & {
+  sceneId: string
+  reason: string
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.scene.ended',
+    targetKey: input.sceneId.trim(),
+    payload: { sceneId: input.sceneId.trim(), reason: input.reason.trim() },
+  })
+}
+
+export async function joinInteractionParticipant(input: InteractionCommandEnvelope & {
+  participantKey: string
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.participant.joined',
+    actorKey: input.participantKey.trim(),
+    targetKey: input.participantKey.trim(),
+    payload: { participantKey: input.participantKey.trim() },
+  })
+}
+
+export async function leaveInteractionParticipant(input: InteractionCommandEnvelope & {
+  participantKey: string
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.participant.left',
+    actorKey: input.participantKey.trim(),
+    targetKey: input.participantKey.trim(),
+    payload: { participantKey: input.participantKey.trim() },
+  })
+}
+
+export async function commitInteractionPlayerMessage(input: InteractionCommandEnvelope & {
+  messageId: string
+  text: string
+  audienceKeys?: string[] | null
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.player.message.committed',
+    actorKey: 'player',
+    payload: {
+      messageId: input.messageId.trim(),
+      text: input.text.trim(),
+      audienceKeys: input.audienceKeys ?? null,
+    },
+  })
+}
+
+export async function commitInteractionCharacterReply(input: InteractionCommandEnvelope & {
+  messageId: string
+  speakerKey: string
+  text: string
+  replyToSequence: number
+  audienceKeys?: string[] | null
+  supersedesSequence?: number | null
+  budgetCost?: number
+  disclosures?: Array<{
+    knowledgeKey: string
+    toParticipantKeys: string[]
+    evidenceExcerpt: string
+  }>
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.character.reply.committed',
+    actorKey: input.speakerKey.trim(),
+    targetKey: input.speakerKey.trim(),
+    payload: {
+      messageId: input.messageId.trim(),
+      speakerKey: input.speakerKey.trim(),
+      text: input.text.trim(),
+      replyToSequence: input.replyToSequence,
+      audienceKeys: input.audienceKeys ?? null,
+      supersedesSequence: input.supersedesSequence ?? null,
+      budgetCost: input.budgetCost ?? 0,
+      disclosures: input.disclosures ?? [],
+    },
+  })
+}
+
+export async function proposeInteractionMemory(input: InteractionCommandEnvelope & {
+  memoryId: string
+  participantKey: string
+  kind: InteractionMemoryKind
+  content: string
+  importance: number
+  sourceEventSequences: number[]
+  evidenceExcerpt: string
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.memory.proposed',
+    actorKey: input.participantKey.trim(),
+    targetKey: input.participantKey.trim(),
+    payload: {
+      memoryId: input.memoryId.trim(),
+      participantKey: input.participantKey.trim(),
+      kind: input.kind,
+      content: input.content.trim(),
+      importance: input.importance,
+      sourceEventSequences: input.sourceEventSequences,
+      evidenceExcerpt: input.evidenceExcerpt.trim(),
+    },
+  })
+}
+
+export async function resolveInteractionMemory(input: InteractionCommandEnvelope & {
+  memoryId: string
+  resolution: 'accepted' | 'rejected'
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: input.resolution === 'accepted'
+      ? 'interaction.memory.accepted'
+      : 'interaction.memory.rejected',
+    targetKey: input.memoryId.trim(),
+    payload: { memoryId: input.memoryId.trim() },
+  })
+}
+
+export async function supersedeInteractionMemory(input: InteractionCommandEnvelope & {
+  memoryId: string
+  supersededByMemoryId: string
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.memory.superseded',
+    targetKey: input.memoryId.trim(),
+    payload: {
+      memoryId: input.memoryId.trim(),
+      supersededByMemoryId: input.supersededByMemoryId.trim(),
+    },
+  })
+}
+
+export async function shareInteractionKnowledge(input: InteractionCommandEnvelope & {
+  knowledgeKey: string
+  fromParticipantKey: string
+  toParticipantKeys: string[]
+  sourceEventSequence: number
+  evidenceExcerpt: string
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.knowledge.shared',
+    actorKey: input.fromParticipantKey.trim(),
+    payload: {
+      knowledgeKey: input.knowledgeKey.trim(),
+      fromParticipantKey: input.fromParticipantKey.trim(),
+      toParticipantKeys: input.toParticipantKeys,
+      sourceEventSequence: input.sourceEventSequence,
+      evidenceExcerpt: input.evidenceExcerpt.trim(),
+    },
+  })
+}
+
+export async function changeInteractionRelationship(input: InteractionCommandEnvelope & {
+  fromParticipantKey: string
+  toParticipantKey: string
+  dimensionKey: string
+  delta: number
+  reason: string
+  ruleKey: string
+  sourceEventSequence: number
+  significantEventKey?: string | null
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.relationship.changed',
+    actorKey: input.fromParticipantKey.trim(),
+    targetKey: input.toParticipantKey.trim(),
+    payload: {
+      fromParticipantKey: input.fromParticipantKey.trim(),
+      toParticipantKey: input.toParticipantKey.trim(),
+      dimensionKey: input.dimensionKey.trim(),
+      delta: input.delta,
+      reason: input.reason.trim(),
+      ruleKey: input.ruleKey.trim(),
+      sourceEventSequence: input.sourceEventSequence,
+      significantEventKey: input.significantEventKey?.trim() || null,
+    },
+  })
+}
+
+export async function openInteractionThread(input: InteractionCommandEnvelope & {
+  threadKey: string
+  title: string
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.thread.opened',
+    targetKey: input.threadKey.trim(),
+    payload: { threadKey: input.threadKey.trim(), title: input.title.trim() },
+  })
+}
+
+export async function resolveInteractionThread(input: InteractionCommandEnvelope & {
+  threadKey: string
+  resolution: string
+}): Promise<SimulationEvent> {
+  return appendInteractionCommand({
+    ...input,
+    type: 'interaction.thread.resolved',
+    targetKey: input.threadKey.trim(),
+    payload: { threadKey: input.threadKey.trim(), resolution: input.resolution.trim() },
+  })
+}
+
+export async function commitNarrativeChoice(input: {
+  sessionId: number
+  choiceKey: string
+  commandId: string
+  baseSequence: number
+  baseStateHash: string
+}): Promise<SimulationEvent> {
+  const commandId = normalizeCommandId(input.commandId)
+  const choiceKey = input.choiceKey.trim()
+  const baseStateHash = input.baseStateHash.trim()
+  if (!choiceKey || choiceKey.length > 200) throw new Error('请选择有效的 Choice。')
+  if (!Number.isInteger(input.baseSequence) || input.baseSequence < 0) throw new Error('选择 baseSequence 无效。')
+  if (!/^[a-f0-9]{64}$/.test(baseStateHash)) throw new Error('选择 baseStateHash 无效。')
+  // Hashing a long replayed state is external async work. Resolve it before
+  // entering the write transaction; Dexie transaction zones must not span
+  // browser crypto promises or they can become inactive/intermittently hang.
+  const previewSession = await db.simulationSessions.get(input.sessionId)
+  if (!previewSession) throw new Error('模拟会话不存在。')
+  const previewEvents = await readSessionEvents(previewSession)
+  const previewState = replaySimulationEvents(parseSimulationState(previewSession.initialStateJson), previewEvents)
+  const previewStateHash = await hashStateJson(JSON.stringify(previewState))
+  return db.transaction('rw', db.simulationSessions, db.simulationEvents, async () => {
+    const session = await db.simulationSessions.get(input.sessionId)
+    if (!session) throw new Error('模拟会话不存在。')
+    const events = await readSessionEvents(session)
+    const prior = events.find(event => event.commandId === commandId)
+    if (prior) {
+      const payload = parseEventPayload(prior)
+      if (prior.type !== 'narrative.choice.committed' || payload.choiceKey !== choiceKey
+        || prior.baseSequence !== input.baseSequence || prior.baseStateHash !== baseStateHash) {
+        throw new Error('选择 commandId 已被不同命令使用。')
+      }
+      return prior
+    }
+    if (session.status !== 'active') throw new Error('只有 active 会话可以提交选择。')
+    const state = replaySimulationEvents(parseSimulationState(session.initialStateJson), events)
+    if (state.lastSequence !== input.baseSequence) throw new Error('叙事分支已变化，请刷新后重试。')
+    if (previewSession.id !== session.id || previewState.lastSequence !== state.lastSequence
+      || previewStateHash !== baseStateHash) throw new Error('叙事状态已变化，请刷新后重试。')
+    const narrative = state.narrative
+    if (!narrative || narrative.version !== 2 || narrative.completed || !narrative.currentNodeKey) {
+      throw new Error('当前会话没有可提交选择的 GameRelease 叙事。')
+    }
+    if (!narrative.availableChoiceKeys?.includes(choiceKey)) throw new Error('所选 Choice 当前不可用。')
+    const choice = narrative.choices?.find(item => item.choiceKey === choiceKey)
+    if (!choice || choice.sourceNodeKey !== narrative.currentNodeKey) throw new Error('所选 Choice 不属于当前节点。')
+    if (session.kind === 'avg') {
+      const nodeBeats = (narrative.beats ?? []).filter(beat => beat.nodeKey === narrative.currentNodeKey)
+        .sort((a, b) => a.order - b.order || a.beatKey.localeCompare(b.beatKey))
+      const reachedIndex = state.presentation?.currentNodeKey === narrative.currentNodeKey && state.presentation.currentBeatKey
+        ? nodeBeats.findIndex(beat => beat.beatKey === state.presentation!.currentBeatKey)
+        : -1
+      const unread = nodeBeats.slice(reachedIndex + 1)
+      if (unread.length) throw new Error('[avg] 必须先读完当前节点的全部 Beat 才能选择。')
+    }
+    const adventureActionTags = choice.tags.filter(tag => tag.startsWith('adventure-action:'))
+    if ((session.kind === 'textadventure' || session.kind === 'textworld') && adventureActionTags.length) {
+      if (adventureActionTags.length !== 1 || !state.adventure) {
+        throw new Error('[adventure] Narrative Choice 公共行动绑定无效。')
+      }
+      const actionKey = adventureActionTags[0].slice('adventure-action:'.length)
+      const requiredCommandId = adventureNarrativeActionCommandId(session.id!, choiceKey)
+      if (!state.adventure.actionHistory.some(item => (
+        item.actionKey === actionKey && item.commandId === requiredCommandId
+      ))) {
+        throw new Error('[adventure] Narrative Choice 必须先通过公共 Adventure 行动桥接。')
+      }
+    }
+    const event: SimulationEvent = {
+      projectId: session.projectId,
+      worldGroupId: session.worldGroupId ?? null,
+      sessionId: input.sessionId,
+      sequence: state.lastSequence + 1,
+      type: 'narrative.choice.committed',
+      actorKey: null,
+      targetKey: choice.targetNodeKey,
+      commandId,
+      baseSequence: input.baseSequence,
+      baseStateHash,
+      payloadJson: JSON.stringify({
+        commandId,
+        baseSequence: input.baseSequence,
+        baseStateHash,
+        fromNodeKey: narrative.currentNodeKey,
+        choiceKey,
+        toNodeKey: choice.targetNodeKey,
+      }),
+      createdAt: Date.now(),
+    }
+    let projected = applySimulationEvent(state, event)
+    event.id = await db.simulationEvents.add(event) as number
+    const enteredEvent: SimulationEvent = {
+      projectId: session.projectId,
+      worldGroupId: session.worldGroupId ?? null,
+      sessionId: input.sessionId,
+      sequence: event.sequence + 1,
+      type: 'narrative.node.entered',
+      actorKey: null,
+      targetKey: choice.targetNodeKey,
+      payloadJson: JSON.stringify({ nodeKey: choice.targetNodeKey, causeSequence: event.sequence }),
+      createdAt: event.createdAt,
+    }
+    projected = applySimulationEvent(projected, enteredEvent)
+    enteredEvent.id = await db.simulationEvents.add(enteredEvent) as number
+    let lastEvent = enteredEvent
+    if (projected.narrative?.completed) {
+      const endingEvent: SimulationEvent = {
+        projectId: session.projectId,
+        worldGroupId: session.worldGroupId ?? null,
+        sessionId: input.sessionId,
+        sequence: enteredEvent.sequence + 1,
+        type: 'narrative.ending.reached',
+        actorKey: null,
+        targetKey: choice.targetNodeKey,
+        payloadJson: JSON.stringify({ endingKey: choice.targetNodeKey, enteredSequence: enteredEvent.sequence }),
+        createdAt: event.createdAt,
+      }
+      applySimulationEvent(projected, endingEvent)
+      endingEvent.id = await db.simulationEvents.add(endingEvent) as number
+      lastEvent = endingEvent
+    }
+    await db.simulationSessions.update(input.sessionId, { updatedAt: lastEvent.createdAt })
+    return event
+  })
+}
+
+function adventureNarrativeActionCommandId(sessionId: number, choiceKey: string): string {
+  return normalizeCommandId(`choice-action:${sessionId}:${choiceKey}`)
+}
+
+function adventureNarrativeChoiceCommandId(sessionId: number, choiceKey: string): string {
+  return normalizeCommandId(`choice-commit:${sessionId}:${choiceKey}`)
+}
+
+/**
+ * Executes the deliberately small Narrative -> Adventure public-action bridge.
+ * Both phases use stable command ids, so a crash between the action and the
+ * choice is recoverable by calling this function again without duplicating an
+ * item, quest effect, or ending transition.
+ */
+export async function commitAdventureNarrativeChoice(input: {
+  sessionId: number
+  choiceKey: string
+  commandId?: string
+}): Promise<SimulationEvent> {
+  const choiceKey = input.choiceKey.trim()
+  if (!choiceKey) throw new Error('[adventure] Narrative Choice key 不能为空。')
+  const session = await db.simulationSessions.get(input.sessionId)
+  if (!session || (session.kind !== 'textadventure' && session.kind !== 'textworld') || session.gameReleaseId == null) {
+    throw new Error('[adventure] 正式文字冒险实例不存在。')
+  }
+  const bridgeChoiceCommandId = adventureNarrativeChoiceCommandId(session.id!, choiceKey)
+  const existingEvents = await readSessionEvents(session)
+  let state = replaySimulationEvents(parseSimulationState(session.initialStateJson), existingEvents)
+  const choice = state.narrative?.choices?.find(item => item.choiceKey === choiceKey)
+  if (!choice || choice.sourceNodeKey !== state.narrative?.currentNodeKey) {
+    const prior = existingEvents.find(event => {
+      if (event.type !== 'narrative.choice.committed') return false
+      const payload = parseEventPayload(event)
+      return payload.choiceKey === choiceKey && (event.commandId === bridgeChoiceCommandId
+        || (input.commandId != null && event.commandId === normalizeCommandId(input.commandId)))
+    })
+    if (prior) return prior
+    throw new Error('[adventure] Narrative Choice 不属于当前节点。')
+  }
+  const actionTags = choice.tags.filter(tag => tag.startsWith('adventure-action:'))
+  if (actionTags.length > 1) throw new Error('[adventure] Narrative Choice 只能绑定一个公共行动。')
+  const choiceCommandId = actionTags.length === 1
+    ? bridgeChoiceCommandId
+    : normalizeCommandId(input.commandId ?? '')
+  const priorChoice = existingEvents.find(event => event.commandId === choiceCommandId)
+  if (priorChoice) {
+    const payload = parseEventPayload(priorChoice)
+    if (priorChoice.type !== 'narrative.choice.committed' || payload.choiceKey !== choiceKey) {
+      throw new Error('[adventure] Narrative Choice commandId 已被不同命令使用。')
+    }
+    return priorChoice
+  }
+  if (actionTags.length === 1) {
+    const actionKey = actionTags[0].slice('adventure-action:'.length)
+    const release = await assertGameReleaseUnchanged(session.gameReleaseId)
+    const manifest = parseAnyGameReleaseManifest(release.manifestJson)
+    if (manifest.productType !== 'text-adventure' && manifest.productType !== 'text-open-world') throw new Error('[adventure] 实例发布绑定无效。')
+    const action = manifest.adventure.actions.find(item => item.key === actionKey)
+    if (!action || action.narrativeChoiceKey !== choiceKey) {
+      throw new Error('[adventure] Narrative Choice 没有有效的冻结公共行动绑定。')
+    }
+    const actionCommandId = adventureNarrativeActionCommandId(session.id!, choiceKey)
+    if (!state.adventure?.actionHistory.some(item => (
+      item.actionKey === actionKey && item.commandId === actionCommandId
+    ))) {
+      const baseStateHash = await hashStateJson(JSON.stringify(state))
+      await commitAdventureAction({
+        sessionId: session.id!,
+        actionKey,
+        commandId: actionCommandId,
+        baseSequence: state.lastSequence,
+        baseStateHash,
+      })
+      state = await readSimulationState(session.id!)
+    }
+  }
+  const baseStateHash = await hashStateJson(JSON.stringify(state))
+  return commitNarrativeChoice({
+    sessionId: session.id!,
+    choiceKey,
+    commandId: choiceCommandId,
+    baseSequence: state.lastSequence,
+    baseStateHash,
+  })
+}
+
 export async function configureChatSession(input: {
   sessionId: number
   characterKey: string
@@ -1486,45 +2788,16 @@ export async function configureChatSession(input: {
   scene: SimulationChatScene
   baseSequence?: number
 }): Promise<SimulationEvent> {
-  const characterKey = input.characterKey.trim()
-  const identity = assertChatIdentity(input.identity)
-  const scene = assertChatScene(input.scene)
-  return appendBuiltEvent(input.sessionId, ({ session, state }) => {
-    if (session.kind !== 'chatgame') throw new Error('角色聊天配置只能写入角色聊天会话。')
-    if (input.baseSequence != null && input.baseSequence !== state.lastSequence) {
-      throw new Error('聊天场景配置生成期间会话已变化，请刷新后重试。')
-    }
-    const character = state.entities[characterKey]
-    if (!character || !['character', 'npc'].includes(character.kind)) {
-      throw new Error('角色聊天必须绑定当前会话中的角色或 NPC。')
-    }
-    return {
-      type: 'chat.session.configured',
-      actorKey: characterKey,
-      targetKey: characterKey,
-      payloadJson: JSON.stringify({ characterKey, identity, scene }),
-    }
-  })
+  void input
+  throw new Error('CHATGAME-1 已进入只读兼容；新配置必须从 character-interaction GameRelease 启动。')
 }
 
 export async function appendChatMessage(input: {
   sessionId: number
   text: string
 }): Promise<SimulationEvent> {
-  const text = input.text.trim()
-  if (!text || text.length > 12_000) throw new Error('用户聊天消息无效。')
-  return appendBuiltEvent(input.sessionId, ({ session, state, sequence }) => {
-    if (session.kind !== 'chatgame') throw new Error('聊天消息只能写入角色聊天会话。')
-    const chat = requireChatState(state)
-    const last = chat.messages[chat.messages.length - 1]
-    if (last?.role === 'user' && last.supersededBySequence == null) {
-      throw new Error('上一条用户消息尚未得到角色回复。')
-    }
-    return {
-      type: 'chat.message.recorded',
-      payloadJson: JSON.stringify({ messageId: `chat:${sequence}`, text }),
-    }
-  })
+  void input
+  throw new Error('CHATGAME-1 已进入只读兼容；新消息必须使用 CHATGAME-2 互动命令。')
 }
 
 export async function appendChatReply(input: {
@@ -1534,36 +2807,8 @@ export async function appendChatReply(input: {
   baseSequence: number
   supersedesSequence?: number | null
 }): Promise<SimulationEvent> {
-  const text = input.text.trim()
-  if (!text || text.length > 20_000) throw new Error('角色回复无效。')
-  return appendBuiltEvent(input.sessionId, ({ session, state, sequence }) => {
-    if (session.kind !== 'chatgame') throw new Error('角色回复只能写入角色聊天会话。')
-    const chat = requireChatState(state)
-    if (input.baseSequence !== state.lastSequence) throw new Error('角色回复生成期间会话已变化，请重新生成。')
-    const target = chat.messages.find(message => message.eventSequence === input.replyToSequence)
-    if (!target || target.role !== 'user') throw new Error('角色回复目标已不存在，请重新发送。')
-    const activeReply = chat.messages.find(message => (
-      message.role === 'character'
-      && message.replyToSequence === input.replyToSequence
-      && message.supersededBySequence == null
-    ))
-    const supersedesSequence = input.supersedesSequence ?? null
-    if (activeReply && supersedesSequence !== activeReply.eventSequence) {
-      throw new Error('该消息已有当前回复；重生成必须替代原回复。')
-    }
-    if (!activeReply && supersedesSequence != null) throw new Error('没有可替代的角色回复。')
-    return {
-      type: 'chat.reply.recorded',
-      actorKey: chat.characterKey,
-      targetKey: chat.characterKey,
-      payloadJson: JSON.stringify({
-        messageId: `chat:${sequence}`,
-        replyToSequence: input.replyToSequence,
-        supersedesSequence,
-        text,
-      }),
-    }
-  })
+  void input
+  throw new Error('CHATGAME-1 已进入只读兼容；新回复必须由 Instance Harness 候选经 CHATGAME-2 命令采用。')
 }
 
 function proposalSequenceFromResolution(event: SimulationEvent): number | null {
@@ -1761,6 +3006,344 @@ export async function resolveSimulationDice(input: {
       targetKey: input.targetKey ?? null,
       payloadJson: JSON.stringify(resolution),
     }
+  })
+}
+
+export interface AdventureCommandEnvelope {
+  sessionId: number
+  commandId: string
+  baseSequence: number
+  baseStateHash: string
+  actionKey: string
+}
+
+function adventureEvent(
+  session: SimulationSession,
+  sequence: number,
+  type: SimulationEventType,
+  payload: Record<string, unknown>,
+  envelope?: Pick<AdventureCommandEnvelope, 'commandId' | 'baseSequence' | 'baseStateHash'>,
+): SimulationEvent {
+  return {
+    projectId: session.projectId,
+    worldGroupId: session.worldGroupId ?? null,
+    sessionId: session.id!,
+    sequence,
+    type,
+    actorKey: 'player',
+    targetKey: null,
+    commandId: envelope?.commandId ?? null,
+    baseSequence: envelope?.baseSequence ?? null,
+    baseStateHash: envelope?.baseStateHash ?? null,
+    payloadJson: JSON.stringify(payload),
+    createdAt: Date.now(),
+  }
+}
+
+function adventureEffectsForOutcome(
+  action: import('../types').AdventureActionDefinition,
+  outcome: import('../types').AdventureCheckOutcome,
+) {
+  return outcome === 'success' ? action.successEffects
+    : outcome === 'costly-success' ? action.costlySuccessEffects : action.failureEffects
+}
+
+function adventureTextForOutcome(
+  action: import('../types').AdventureActionDefinition,
+  outcome: import('../types').AdventureCheckOutcome,
+): string {
+  return outcome === 'success' ? action.successText
+    : outcome === 'costly-success' ? action.costlySuccessText : action.failureText
+}
+
+async function buildAdventureInteractionStateHashes(input: {
+  state: SimulationRuntimeState
+  session: SimulationSession
+  action: import('../types').AdventureActionDefinition
+  commandId: string
+}): Promise<string[]> {
+  if (input.action.kind !== 'talk') return []
+  const binding = input.action.interaction
+  const interaction = input.state.interaction
+  if (!binding || !interaction) throw new Error('[adventure] talk 行动缺少共享角色互动状态。')
+  const scene = interaction.sceneTemplates.find(item => item.sceneKey === binding.sceneKey)
+  const rule = scene?.relationshipRules.find(item => item.ruleKey === binding.ruleKey)
+  if (!scene || !rule) throw new Error('[adventure] talk 行动的冻结互动绑定无效。')
+  let projected = structuredClone(input.state)
+  const sceneId = `scene:${binding.sceneKey}:${projected.lastSequence + 1}`
+  const descriptors: Array<{ type: SimulationEventType; payload: Record<string, unknown> }> = [
+    { type: 'interaction.scene.started', payload: { sceneId, sceneKey: binding.sceneKey } },
+    {
+      type: 'interaction.player.message.committed',
+      payload: {
+        messageId: `message:${binding.ruleKey}:${projected.lastSequence + 2}`,
+        text: rule.playerText,
+        audienceKeys: null,
+      },
+    },
+    {
+      type: 'interaction.relationship.changed',
+      payload: {
+        fromParticipantKey: rule.fromParticipantKey,
+        toParticipantKey: rule.toParticipantKey,
+        dimensionKey: rule.dimensionKey,
+        delta: rule.delta,
+        reason: rule.reason,
+        ruleKey: rule.ruleKey,
+        sourceEventSequence: projected.lastSequence + 2,
+        significantEventKey: rule.significantEventKey,
+      },
+    },
+    { type: 'interaction.scene.ended', payload: { sceneId, reason: `adventure-action:${input.action.key}` } },
+  ]
+  const hashes: string[] = []
+  for (const descriptor of descriptors) {
+    const baseStateHash = await hashStateJson(JSON.stringify(projected))
+    hashes.push(baseStateHash)
+    const sequence = projected.lastSequence + 1
+    const envelope = {
+      commandId: `${input.commandId.slice(0, 150)}:interaction:${sequence}`,
+      baseSequence: projected.lastSequence,
+      baseStateHash,
+    }
+    projected = applySimulationEvent(projected, adventureEvent(
+      input.session,
+      sequence,
+      descriptor.type,
+      { ...descriptor.payload, ...envelope },
+      envelope,
+    ))
+  }
+  return hashes
+}
+
+/**
+ * TEXTADV-1 authoritative write path. A command expands into small domain
+ * events inside one Dexie transaction; no UI or Harness candidate may submit
+ * those events directly.
+ */
+export async function commitAdventureAction(input: AdventureCommandEnvelope): Promise<SimulationEvent> {
+  const commandId = normalizeCommandId(input.commandId)
+  const actionKey = input.actionKey.trim()
+  if (!actionKey || actionKey.length > 160) throw new Error('[adventure] 行动 key 无效。')
+  if (!Number.isInteger(input.baseSequence) || input.baseSequence < 0) throw new Error('[adventure] baseSequence 无效。')
+  if (!/^[a-f0-9]{64}$/.test(input.baseStateHash)) throw new Error('[adventure] baseStateHash 无效。')
+  const previewSession = await db.simulationSessions.get(input.sessionId)
+  if (!previewSession || (previewSession.kind !== 'textadventure' && previewSession.kind !== 'textworld') || previewSession.gameReleaseId == null) {
+    throw new Error('[adventure] 正式文字冒险实例不存在。')
+  }
+  const [previewEvents, release] = await Promise.all([
+    readSessionEvents(previewSession),
+    assertGameReleaseUnchanged(previewSession.gameReleaseId),
+  ])
+  const previewPrior = previewEvents.find(event => event.commandId === commandId)
+  if (previewPrior) {
+    const body = parseEventPayload(previewPrior)
+    if (previewPrior.type !== 'adventure.action.committed' || body.actionKey !== actionKey
+      || previewPrior.baseSequence !== input.baseSequence || previewPrior.baseStateHash !== input.baseStateHash) {
+      throw new Error('[adventure] commandId 已被不同命令使用。')
+    }
+    return previewPrior
+  }
+  const previewState = replaySimulationEvents(parseSimulationState(previewSession.initialStateJson), previewEvents)
+  const previewStateHash = await hashStateJson(JSON.stringify(previewState))
+  const manifest = parseAnyGameReleaseManifest(release.manifestJson)
+  if ((manifest.productType !== 'text-adventure' && manifest.productType !== 'text-open-world') || !previewState.adventure
+    || previewState.adventure.contentHash !== release.contentHash) {
+    throw new Error('[adventure] 实例发布绑定无效。')
+  }
+  const previewAvailable = availableAdventureActions(
+    manifest.adventure,
+    previewState.adventure,
+    previewState.narrative?.variables,
+  ).find(item => item.action.key === actionKey)
+  if (!previewAvailable?.available) {
+    throw new Error(previewAvailable?.reason || '[adventure] 行动不在当前位置或前置条件未满足。')
+  }
+  if (previewSession.kind === 'textworld' && previewAvailable.action.kind === 'move') {
+    throw new Error('[textworld] 区域移动只能通过开放世界交通命令提交。')
+  }
+  const interactionStateHashes = await buildAdventureInteractionStateHashes({
+    state: previewState,
+    session: previewSession,
+    action: previewAvailable.action,
+    commandId,
+  })
+  return db.transaction('rw', db.simulationSessions, db.simulationEvents, db.gameReleases, db.worldReleases, async () => {
+    const session = await db.simulationSessions.get(input.sessionId)
+    if (!session || (session.kind !== 'textadventure' && session.kind !== 'textworld') || session.gameReleaseId == null) throw new Error('[adventure] 正式文字冒险实例不存在。')
+    const events = await readSessionEvents(session)
+    const prior = events.find(event => event.commandId === commandId)
+    if (prior) {
+      const body = parseEventPayload(prior)
+      if (prior.type !== 'adventure.action.committed' || body.actionKey !== actionKey
+        || prior.baseSequence !== input.baseSequence || prior.baseStateHash !== input.baseStateHash) {
+        throw new Error('[adventure] commandId 已被不同命令使用。')
+      }
+      return prior
+    }
+    if (session.status !== 'active') throw new Error('[adventure] 只有 active 实例可以行动。')
+    let projected = replaySimulationEvents(parseSimulationState(session.initialStateJson), events)
+    if (projected.lastSequence !== input.baseSequence) throw new Error('[adventure] 冒险状态已变化，请刷新后重试。')
+    if (previewSession.gameReleaseId !== session.gameReleaseId || previewState.lastSequence !== projected.lastSequence
+      || previewStateHash !== input.baseStateHash) throw new Error('[adventure] 冒险状态哈希已变化。')
+    if ((manifest.productType !== 'text-adventure' && manifest.productType !== 'text-open-world') || !projected.adventure || projected.adventure.contentHash !== release.contentHash) {
+      throw new Error('[adventure] 实例发布绑定无效。')
+    }
+    const available = availableAdventureActions(manifest.adventure, projected.adventure, projected.narrative?.variables)
+      .find(item => item.action.key === actionKey)
+    if (!available?.available) throw new Error(available?.reason || '[adventure] 行动不在当前位置或前置条件未满足。')
+    const action = available.action
+    if (session.kind === 'textworld' && action.kind === 'move') {
+      throw new Error('[textworld] 区域移动只能通过开放世界交通命令提交。')
+    }
+    if (action.kind === 'talk') {
+      const binding = action.interaction
+      if (!binding || !projected.interaction) throw new Error('[adventure] talk 行动缺少共享角色互动状态。')
+      const scene = projected.interaction.sceneTemplates.find(item => item.sceneKey === binding.sceneKey)
+      const rule = scene?.relationshipRules.find(item => item.ruleKey === binding.ruleKey)
+      if (!scene || !scene.participantKeys.includes(binding.participantKey) || !rule
+        || rule.fromParticipantKey !== binding.participantKey) {
+        throw new Error('[adventure] talk 行动的冻结互动绑定无效。')
+      }
+      if (projected.interaction.activeScene) throw new Error('[adventure] 请先结束当前角色互动场景。')
+    }
+    let outcome: import('../types').AdventureCheckOutcome = 'success'
+    let evidence: import('../types').AdventureCheckEvidence | null = null
+    const remainingInteractionStateHashes = [...interactionStateHashes]
+    const nextSequence = () => projected.lastSequence + 1
+    const append = async (type: SimulationEventType, payload: Record<string, unknown>, envelope?: boolean) => {
+      const interactionEnvelope = type.startsWith('interaction.') ? {
+        commandId: `${commandId.slice(0, 150)}:interaction:${nextSequence()}`,
+        baseSequence: projected.lastSequence,
+        baseStateHash: remainingInteractionStateHashes.shift() ?? (() => { throw new Error('[adventure] 互动状态哈希预算不足。') })(),
+      } : null
+      const selectedEnvelope = interactionEnvelope ?? (envelope ? {
+        commandId, baseSequence: input.baseSequence, baseStateHash: input.baseStateHash,
+      } : undefined)
+      const event = adventureEvent(
+        session,
+        nextSequence(),
+        type,
+        interactionEnvelope ? { ...payload, ...interactionEnvelope } : payload,
+        selectedEnvelope,
+      )
+      projected = applySimulationEvent(projected, event)
+      event.id = await db.simulationEvents.add(event) as number
+      return event
+    }
+    if (action.kind === 'talk') {
+      const binding = action.interaction!
+      const scene = projected.interaction!.sceneTemplates.find(item => item.sceneKey === binding.sceneKey)!
+      const rule = scene.relationshipRules.find(item => item.ruleKey === binding.ruleKey)!
+      const sceneId = `scene:${binding.sceneKey}:${nextSequence()}`
+      await append('interaction.scene.started', { sceneId, sceneKey: binding.sceneKey })
+      const message = await append('interaction.player.message.committed', {
+        messageId: `message:${binding.ruleKey}:${nextSequence()}`,
+        text: rule.playerText,
+        audienceKeys: null,
+      })
+      await append('interaction.relationship.changed', {
+        fromParticipantKey: rule.fromParticipantKey,
+        toParticipantKey: rule.toParticipantKey,
+        dimensionKey: rule.dimensionKey,
+        delta: rule.delta,
+        reason: rule.reason,
+        ruleKey: rule.ruleKey,
+        sourceEventSequence: message.sequence,
+        significantEventKey: rule.significantEventKey,
+      })
+      await append('interaction.scene.ended', { sceneId, reason: `adventure-action:${action.key}` })
+    }
+    if (action.rule.kind === 'threshold') {
+      const total = projected.adventure.abilities[action.rule.abilityKey]
+      outcome = total >= action.rule.difficulty ? 'success' : 'failure'
+      evidence = { eventSequence: nextSequence(), actionKey, abilityKey: action.rule.abilityKey, mode: 'threshold', expression: null, dice: [], modifier: total, total, difficulty: action.rule.difficulty, outcome }
+    } else if (action.rule.kind === 'random') {
+      const expression = parseDiceExpression(action.rule.expression)
+      const ability = projected.adventure.abilities[action.rule.abilityKey]
+      if (ability == null) throw new Error(`[adventure] 能力不存在:${action.rule.abilityKey}`)
+      const dice = buildDiceResolution({ seed: session.seed, sequence: nextSequence(), expression, nonce: `adventure:${commandId}:${actionKey}` })
+      const total = dice.total + ability
+      outcome = total >= action.rule.difficulty ? 'success'
+        : action.rule.costlySuccessFloor != null && total >= action.rule.costlySuccessFloor ? 'costly-success' : 'failure'
+      evidence = { eventSequence: nextSequence(), actionKey, abilityKey: action.rule.abilityKey, mode: 'random', expression: dice.expression, dice: dice.dice, modifier: dice.modifier + ability, total, difficulty: action.rule.difficulty, outcome }
+    } else if (action.rule.kind === 'resource-payment') {
+      const total = projected.adventure.resources[action.rule.resourceKey]
+      outcome = total >= action.rule.amount ? 'success' : 'not-attempted'
+      evidence = { eventSequence: nextSequence(), actionKey, abilityKey: null, mode: 'resource-payment', expression: null, dice: [], modifier: 0, total, difficulty: action.rule.amount, outcome }
+    }
+    if (evidence) await append('adventure.check.resolved', { evidence })
+    const effects = outcome === 'not-attempted' ? [] : [
+      ...(action.rule.kind === 'resource-payment'
+        ? [{ op: 'change-resource' as const, resourceKey: action.rule.resourceKey, delta: -action.rule.amount }]
+        : []),
+      ...adventureEffectsForOutcome(action, outcome),
+    ]
+    // Preflight all effects against a pure clone before the first mutating event.
+    applyAdventureEffects(manifest.adventure, projected.adventure, effects, nextSequence())
+    for (const effect of effects) {
+      if (effect.op === 'enter-location') {
+        await append('adventure.location.left', { locationKey: projected.adventure!.currentLocationKey })
+        await append('adventure.location.entered', { locationKey: effect.locationKey })
+      } else if (effect.op === 'gain-item') await append('adventure.item.gained', effect)
+      else if (effect.op === 'remove-item') await append('adventure.item.used', effect)
+      else if (effect.op === 'transfer-item') await append('adventure.item.transferred', effect)
+      else if (effect.op === 'change-item-state') await append('adventure.item.state-changed', effect)
+      else if (effect.op === 'change-resource') {
+        const definition = manifest.adventure.resources.find(item => item.key === effect.resourceKey)!
+        const before = projected.adventure!.resources[effect.resourceKey]
+        const after = Math.max(definition.minimum, Math.min(definition.maximum, before + effect.delta))
+        if (after !== before + effect.delta) throw new Error(`[adventure] 资源越界:${effect.resourceKey}`)
+        await append('adventure.resource.changed', { resourceKey: effect.resourceKey, before, after, delta: effect.delta })
+      } else if (effect.op === 'change-ability') {
+        const definition = manifest.adventure.abilities.find(item => item.key === effect.abilityKey)!
+        const before = projected.adventure!.abilities[effect.abilityKey]
+        const after = before + effect.delta
+        if (after < definition.minimum || after > definition.maximum) throw new Error(`[adventure] 能力越界:${effect.abilityKey}`)
+        await append('adventure.ability.changed', { abilityKey: effect.abilityKey, before, after, delta: effect.delta })
+      } else if (effect.op === 'apply-condition') await append('adventure.condition.applied', effect)
+      else if (effect.op === 'remove-condition') await append('adventure.condition.removed', effect)
+      else if (effect.op === 'accept-quest') await append('adventure.quest.accepted', effect)
+      else if (effect.op === 'fail-quest') await append('adventure.quest.failed', effect)
+      else {
+        await append('adventure.quest.objective-updated', effect)
+        const quest = projected.adventure!.quests.find(item => item.questKey === effect.questKey)!
+        if (quest.status === 'active' && quest.objectives.filter(item => !item.optional).every(item => item.completed)) {
+          await append('adventure.quest.completed', { questKey: effect.questKey })
+          const reward = manifest.adventure.quests.find(item => item.key === effect.questKey)!.rewardEffects
+          for (const rewardEffect of reward) {
+            if (rewardEffect.op !== 'gain-item' && rewardEffect.op !== 'change-resource'
+              && rewardEffect.op !== 'change-ability' && rewardEffect.op !== 'apply-condition') {
+              throw new Error('[adventure] 首期任务奖励只支持物品、资源、能力或状态。')
+            }
+            if (rewardEffect.op === 'gain-item') await append('adventure.item.gained', rewardEffect)
+            else if (rewardEffect.op === 'apply-condition') await append('adventure.condition.applied', rewardEffect)
+            else if (rewardEffect.op === 'change-ability') {
+              const definition = manifest.adventure.abilities.find(item => item.key === rewardEffect.abilityKey)!
+              const before = projected.adventure!.abilities[rewardEffect.abilityKey]
+              const after = before + rewardEffect.delta
+              if (after < definition.minimum || after > definition.maximum) throw new Error(`[adventure] 奖励能力越界:${rewardEffect.abilityKey}`)
+              await append('adventure.ability.changed', { abilityKey: rewardEffect.abilityKey, before, after, delta: rewardEffect.delta })
+            }
+            else {
+              const definition = manifest.adventure.resources.find(item => item.key === rewardEffect.resourceKey)!
+              const before = projected.adventure!.resources[rewardEffect.resourceKey]
+              const after = before + rewardEffect.delta
+              if (after < definition.minimum || after > definition.maximum) throw new Error(`[adventure] 奖励资源越界:${rewardEffect.resourceKey}`)
+              await append('adventure.resource.changed', { resourceKey: rewardEffect.resourceKey, before, after, delta: rewardEffect.delta })
+            }
+          }
+        }
+      }
+    }
+    await append('adventure.narrative.synced', {
+      projection: adventureNarrativeProjection(projected.adventure!),
+    })
+    const narrative = outcome === 'not-attempted' ? action.unavailableText : adventureTextForOutcome(action, outcome)
+    const committed = await append('adventure.action.committed', { commandId, actionKey, kind: action.kind, outcome, narrative, repeatable: action.repeatable }, true)
+    await db.simulationSessions.update(session.id!, { updatedAt: Date.now() })
+    return committed
   })
 }
 
@@ -2323,9 +3906,371 @@ export async function appendTtrpgTurn(input: {
   })
 }
 
+export async function commitNarrativeSimulationTurn(input: {
+  sessionId: number
+  decisionKeys: string[]
+  commandId: string
+  baseSequence: number
+  baseStateHash: string
+}): Promise<{
+  events: SimulationEvent[]
+  checkpoint: SimulationCheckpoint
+  state: SimulationRuntimeState
+}> {
+  const commandId = normalizeCommandId(input.commandId)
+  const baseStateHash = input.baseStateHash.trim()
+  if (!Number.isInteger(input.baseSequence) || input.baseSequence < 0
+    || !/^[a-f0-9]{64}$/.test(baseStateHash)) {
+    throw new Error('[textsim] 回合命令基线无效。')
+  }
+  const previewSession = await db.simulationSessions.get(input.sessionId)
+  if (!previewSession || (previewSession.kind !== 'textsimulation' && previewSession.kind !== 'textworld') || previewSession.gameReleaseId == null) {
+    throw new Error('[textsim] 正式叙事模拟实例不存在。')
+  }
+  const previewRelease = await assertGameReleaseUnchanged(previewSession.gameReleaseId)
+  const previewManifest = parseAnyGameReleaseManifest(previewRelease.manifestJson)
+  if (previewManifest.productType !== 'narrative-simulation' && previewManifest.productType !== 'text-open-world') throw new Error('[textsim] 实例发布绑定无效。')
+  const previewEvents = await readSessionEvents(previewSession)
+  const previewState = replaySimulationEvents(parseSimulationState(previewSession.initialStateJson), previewEvents)
+  const previewPrior = previewEvents.find(event => event.commandId === commandId)
+  if (!previewState.narrativeSimulation
+    || previewState.narrativeSimulation.contentHash !== previewRelease.contentHash) {
+    throw new Error('[textsim] 实例冻结状态与 GameRelease 不一致。')
+  }
+  if (!previewPrior && (previewState.lastSequence !== input.baseSequence
+    || await hashStateJson(JSON.stringify(previewState)) !== baseStateHash)) {
+    throw new Error('[textsim] 模拟状态已变化，请刷新后重试。')
+  }
+  if (!previewPrior) {
+    planNarrativeSimulationTurn({
+      content: previewManifest.simulation,
+      state: previewState.narrativeSimulation,
+      decisionKeys: input.decisionKeys,
+      seed: previewSession.seed,
+      startingSequence: previewState.lastSequence,
+    })
+  }
+
+  return db.transaction(
+    'rw',
+    db.simulationSessions,
+    db.simulationEvents,
+    db.simulationCheckpoints,
+    db.gameReleases,
+    async () => {
+      const session = await db.simulationSessions.get(input.sessionId)
+      if (!session || (session.kind !== 'textsimulation' && session.kind !== 'textworld') || session.gameReleaseId == null) {
+        throw new Error('[textsim] 正式叙事模拟实例不存在。')
+      }
+      const release = await db.gameReleases.get(session.gameReleaseId)
+      if (!release || release.manifestJson !== previewRelease.manifestJson
+        || release.contentHash !== previewRelease.contentHash) {
+        throw new Error('[textsim] GameRelease 在回合提交期间发生变化。')
+      }
+      const manifest = parseAnyGameReleaseManifest(release.manifestJson)
+      if (manifest.productType !== 'narrative-simulation' && manifest.productType !== 'text-open-world') throw new Error('[textsim] 实例发布绑定无效。')
+      const events = await readSessionEvents(session)
+      const prior = events.find(event => event.commandId === commandId)
+      if (prior) {
+        const priorPayload = parseEventPayload(prior)
+        if (prior.type !== 'simulation.turn.started'
+          || prior.baseSequence !== input.baseSequence
+          || prior.baseStateHash !== baseStateHash
+          || stableJson(priorPayload.decisionKeys) !== stableJson(input.decisionKeys)) {
+          throw new Error('[textsim] commandId 已被不同回合命令使用。')
+        }
+        const turn = Number(priorPayload.turn)
+        const ended = events.find(event => event.sequence >= prior.sequence
+          && event.type === 'simulation.turn.ended'
+          && Number(parseEventPayload(event).turn) === turn)
+        if (!ended) throw new Error('[textsim] 已提交回合缺少结束事件。')
+        const commandEvents = events.filter(event => event.sequence >= prior.sequence && event.sequence <= ended.sequence)
+        const checkpoint = await db.simulationCheckpoints.where('sessionId').equals(session.id!)
+          .filter(item => item.throughSequence === ended.sequence).first()
+        if (!checkpoint) throw new Error('[textsim] 已提交回合缺少检查点。')
+        const state = parseSimulationState(checkpoint.stateJson)
+        return { events: commandEvents, checkpoint, state }
+      }
+      if (session.status !== 'active') throw new Error('[textsim] 只有 active 会话可以提交回合。')
+      let state = replaySimulationEvents(parseSimulationState(session.initialStateJson), events)
+      const stateHash = await hashStateJson(JSON.stringify(state))
+      if (state.lastSequence !== input.baseSequence || stateHash !== baseStateHash
+        || state.lastSequence !== previewState.lastSequence) {
+        throw new Error('[textsim] 模拟状态已变化，请刷新后重试。')
+      }
+      if (!state.narrativeSimulation || state.narrativeSimulation.contentHash !== release.contentHash) {
+        throw new Error('[textsim] 实例冻结状态与 GameRelease 不一致。')
+      }
+      const settledTurn = state.narrativeSimulation.turn
+      const plan = planNarrativeSimulationTurn({
+        content: manifest.simulation,
+        state: state.narrativeSimulation,
+        decisionKeys: input.decisionKeys,
+        seed: session.seed,
+        startingSequence: state.lastSequence,
+      })
+      const appended: SimulationEvent[] = []
+      const createdAt = Date.now()
+      for (const [index, descriptor] of plan.descriptors.entries()) {
+        const envelope = descriptor.commandEnvelope
+          ? { commandId, baseSequence: input.baseSequence, baseStateHash }
+          : {}
+        const event: SimulationEvent = {
+          projectId: session.projectId,
+          worldGroupId: session.worldGroupId ?? null,
+          sessionId: session.id!,
+          sequence: input.baseSequence + index + 1,
+          type: descriptor.type,
+          actorKey: descriptor.actorKey,
+          targetKey: descriptor.targetKey,
+          ...envelope,
+          payloadJson: JSON.stringify({ ...descriptor.payload, ...envelope }),
+          createdAt,
+        }
+        state = applySimulationEvent(state, event)
+        appended.push(event)
+      }
+      for (const event of appended) event.id = await db.simulationEvents.add(event) as number
+      const stateJson = JSON.stringify(state)
+      const throughSequence = appended[appended.length - 1].sequence
+      const checkpoint: SimulationCheckpoint = {
+        projectId: session.projectId,
+        worldGroupId: session.worldGroupId ?? null,
+        sessionId: session.id!,
+        throughSequence,
+        name: `第 ${settledTurn} 回合自动检查点`,
+        stateJson,
+        stateHash: await hashStateJson(stateJson),
+        createdAt,
+      }
+      checkpoint.id = await db.simulationCheckpoints.add(checkpoint) as number
+      await db.simulationSessions.update(session.id!, { updatedAt: createdAt })
+      return { events: appended, checkpoint, state }
+    },
+  )
+}
+
+export type OpenWorldCommand = {
+  kind: 'draw'
+  trigger: import('../types').OpenWorldDiscoveryTrigger
+} | {
+  kind: 'travel'
+  edgeKey: string
+} | {
+  kind: 'quest-decision'
+  instanceKey: string
+  decision: 'accept' | 'decline'
+} | {
+  kind: 'tick'
+}
+
+interface OpenWorldEventPlan {
+  descriptors: Array<{
+    type: SimulationEventType
+    actorKey?: string | null
+    targetKey?: string | null
+    payload: Record<string, unknown>
+  }>
+}
+
+function normalizeOpenWorldCommand(command: OpenWorldCommand): OpenWorldCommand {
+  if (command.kind === 'draw') {
+    if (!['observe', 'social', 'explore', 'rest', 'travel', 'combat'].includes(command.trigger)) {
+      throw new Error('[textworld] 发现触发类型无效。')
+    }
+    return { kind: 'draw', trigger: command.trigger }
+  }
+  if (command.kind === 'travel') {
+    const edgeKey = command.edgeKey.trim()
+    if (!edgeKey || edgeKey.length > 160) throw new Error('[textworld] 交通边 key 无效。')
+    return { kind: 'travel', edgeKey }
+  }
+  if (command.kind === 'quest-decision') {
+    const instanceKey = command.instanceKey.trim()
+    if (!instanceKey || instanceKey.length > 200 || !['accept', 'decline'].includes(command.decision)) {
+      throw new Error('[textworld] 任务决策无效。')
+    }
+    return { kind: 'quest-decision', instanceKey, decision: command.decision }
+  }
+  if (command.kind === 'tick') return { kind: 'tick' }
+  throw new Error('[textworld] 未知开放世界命令。')
+}
+
+function planOpenWorldCommand(input: {
+  manifest: Extract<AnyGameReleaseManifestV1, { productType: 'text-open-world' }>
+  state: SimulationRuntimeState
+  seed: string
+  command: OpenWorldCommand
+}): OpenWorldEventPlan {
+  if (!input.state.openWorld || !input.state.adventure || !input.state.narrativeSimulation) {
+    throw new Error('[textworld] 实例缺少开放世界、冒险或模拟冻结状态。')
+  }
+  const common = {
+    content: input.manifest.openWorld,
+    state: input.state.openWorld,
+    startingSequence: input.state.lastSequence,
+  }
+  if (input.command.kind === 'draw') {
+    return planOpenWorldDraw({
+      ...common,
+      simulation: input.manifest.simulation,
+      adventure: input.state.adventure,
+      trigger: input.command.trigger,
+      seed: input.seed,
+    })
+  }
+  if (input.command.kind === 'travel') {
+    return planOpenWorldTravel({ ...common, edgeKey: input.command.edgeKey })
+  }
+  if (input.command.kind === 'quest-decision') {
+    return planOpenWorldQuestDecision({
+      ...common,
+      simulation: input.manifest.simulation,
+      instanceKey: input.command.instanceKey,
+      decision: input.command.decision,
+    })
+  }
+  return planOpenWorldTick({
+    ...common,
+    simulation: input.manifest.simulation,
+    seed: input.seed,
+  })
+}
+
+/** TEXTWORLD-1 authoritative command path. Every command expands to replayable
+ * shared adventure/world events, a verified narrative projection, and one
+ * atomic checkpoint. */
+export async function commitOpenWorldCommand(input: {
+  sessionId: number
+  command: OpenWorldCommand
+  commandId: string
+  baseSequence: number
+  baseStateHash: string
+}): Promise<{ events: SimulationEvent[]; checkpoint: SimulationCheckpoint; state: SimulationRuntimeState }> {
+  const commandId = normalizeCommandId(input.commandId)
+  const command = normalizeOpenWorldCommand(input.command)
+  const baseStateHash = input.baseStateHash.trim()
+  if (!Number.isInteger(input.baseSequence) || input.baseSequence < 0 || !/^[a-f0-9]{64}$/.test(baseStateHash)) {
+    throw new Error('[textworld] 命令基线无效。')
+  }
+  const previewSession = await db.simulationSessions.get(input.sessionId)
+  if (!previewSession || previewSession.kind !== 'textworld' || previewSession.gameReleaseId == null) {
+    throw new Error('[textworld] 正式文字开放世界实例不存在。')
+  }
+  const [previewRelease, previewEvents] = await Promise.all([
+    assertGameReleaseUnchanged(previewSession.gameReleaseId),
+    readSessionEvents(previewSession),
+  ])
+  const previewManifest = parseAnyGameReleaseManifest(previewRelease.manifestJson)
+  if (previewManifest.productType !== 'text-open-world') throw new Error('[textworld] 实例发布绑定无效。')
+  const previewState = replaySimulationEvents(parseSimulationState(previewSession.initialStateJson), previewEvents)
+  const prior = previewEvents.find(event => event.commandId === commandId)
+  if (!prior && (previewState.lastSequence !== input.baseSequence
+    || await hashStateJson(JSON.stringify(previewState)) !== baseStateHash)) {
+    throw new Error('[textworld] 世界状态已变化，请刷新后重试。')
+  }
+  if (!prior) planOpenWorldCommand({ manifest: previewManifest, state: previewState, seed: previewSession.seed, command })
+  const checkpointName = commandId.length <= 190
+    ? `TEXTWORLD:${commandId}`
+    : `TEXTWORLD:${commandId.slice(0, 120)}:${(await hashStateJson(JSON.stringify(commandId))).slice(0, 64)}`
+
+  return db.transaction(
+    'rw',
+    db.simulationSessions,
+    db.simulationEvents,
+    db.simulationCheckpoints,
+    db.gameReleases,
+    async () => {
+      const session = await db.simulationSessions.get(input.sessionId)
+      if (!session || session.kind !== 'textworld' || session.gameReleaseId == null) {
+        throw new Error('[textworld] 正式文字开放世界实例不存在。')
+      }
+      const release = await db.gameReleases.get(session.gameReleaseId)
+      if (!release || release.contentHash !== previewRelease.contentHash
+        || release.manifestJson !== previewRelease.manifestJson) {
+        throw new Error('[textworld] GameRelease 在命令提交期间发生变化。')
+      }
+      const manifest = parseAnyGameReleaseManifest(release.manifestJson)
+      if (manifest.productType !== 'text-open-world') throw new Error('[textworld] 实例发布绑定无效。')
+      const events = await readSessionEvents(session)
+      const existing = events.find(event => event.commandId === commandId)
+      if (existing) {
+        const payload = parseEventPayload(existing)
+        if (existing.baseSequence !== input.baseSequence || existing.baseStateHash !== baseStateHash
+          || stableJson(payload.worldCommand) !== stableJson(command)) {
+          throw new Error('[textworld] commandId 已被不同命令使用。')
+        }
+        const checkpoint = await db.simulationCheckpoints.where('sessionId').equals(session.id!)
+          .filter(item => item.name === checkpointName).first()
+        if (!checkpoint || checkpoint.throughSequence < existing.sequence) {
+          throw new Error('[textworld] 已提交命令缺少检查点。')
+        }
+        return {
+          events: events.filter(event => event.sequence >= existing.sequence && event.sequence <= checkpoint.throughSequence),
+          checkpoint,
+          state: parseSimulationState(checkpoint.stateJson),
+        }
+      }
+      if (session.status !== 'active') throw new Error('[textworld] 只有 active 实例可以提交命令。')
+      let state = replaySimulationEvents(parseSimulationState(session.initialStateJson), events)
+      if (state.lastSequence !== input.baseSequence || state.lastSequence !== previewState.lastSequence
+        || await hashStateJson(JSON.stringify(state)) !== baseStateHash) {
+        throw new Error('[textworld] 世界状态已变化，请刷新后重试。')
+      }
+      if (!state.openWorld || !state.adventure || !state.narrativeSimulation
+        || state.openWorld.contentHash !== release.contentHash
+        || state.adventure.contentHash !== release.contentHash
+        || state.narrativeSimulation.contentHash !== release.contentHash) {
+        throw new Error('[textworld] 实例冻结状态与 GameRelease 不一致。')
+      }
+      const plan = planOpenWorldCommand({ manifest, state, seed: session.seed, command })
+      const appended: SimulationEvent[] = []
+      const createdAt = Date.now()
+      const append = (descriptor: OpenWorldEventPlan['descriptors'][number], envelope = false) => {
+        const commandEnvelope = envelope ? { commandId, baseSequence: input.baseSequence, baseStateHash } : {}
+        const event: SimulationEvent = {
+          projectId: session.projectId,
+          worldGroupId: session.worldGroupId ?? null,
+          sessionId: session.id!,
+          sequence: state.lastSequence + 1,
+          type: descriptor.type,
+          actorKey: descriptor.actorKey ?? null,
+          targetKey: descriptor.targetKey ?? null,
+          ...commandEnvelope,
+          payloadJson: JSON.stringify({ ...descriptor.payload, ...(envelope ? { worldCommand: command } : {}) }),
+          createdAt,
+        }
+        state = applySimulationEvent(state, event)
+        appended.push(event)
+      }
+      for (const [index, descriptor] of plan.descriptors.entries()) append(descriptor, index === 0)
+      append({
+        type: 'world.narrative.synced',
+        payload: { projection: openWorldMainlineProjection(state.openWorld!, state.openWorld!.mainlineQuestKeys) },
+      })
+      for (const event of appended) event.id = await db.simulationEvents.add(event) as number
+      const stateJson = JSON.stringify(state)
+      const checkpoint: SimulationCheckpoint = {
+        projectId: session.projectId,
+        worldGroupId: session.worldGroupId ?? null,
+        sessionId: session.id!,
+        throughSequence: state.lastSequence,
+        name: checkpointName,
+        stateJson,
+        stateHash: await hashStateJson(stateJson),
+        createdAt,
+      }
+      checkpoint.id = await db.simulationCheckpoints.add(checkpoint) as number
+      await db.simulationSessions.update(session.id!, { updatedAt: createdAt })
+      return { events: appended, checkpoint, state }
+    },
+  )
+}
+
 async function hashStateJson(stateJson: string): Promise<string> {
   const data = new TextEncoder().encode(stateJson)
-  const digest = await crypto.subtle.digest('SHA-256', data)
+  const digestPromise = crypto.subtle.digest('SHA-256', data)
+  const digest = Dexie.currentTransaction ? await Dexie.waitFor(digestPromise) : await digestPromise
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
@@ -2399,8 +4344,17 @@ export async function branchSimulationSession(input: {
     events,
     input.throughSequence,
   )
+  if (state.interaction) {
+    state.interaction = rebaseInteractionStateForBranch(state.interaction, input.throughSequence)
+  }
+  if (state.narrativeSimulation) {
+    state.narrativeSimulation = rebaseNarrativeSimulationStateForBranch(state.narrativeSimulation)
+  }
+  if (state.openWorld) {
+    state.openWorld = rebaseOpenWorldStateForBranch(state.openWorld)
+  }
   state.lastSequence = 0
-  const child = await createSimulationSession({
+  const childInput: CreateSimulationSessionInput = {
     projectId: parent.projectId,
     worldGroupId: parent.worldGroupId ?? null,
     kind: parent.kind,
@@ -2408,13 +4362,30 @@ export async function branchSimulationSession(input: {
     seed: input.seed,
     canonSnapshot: parseJsonObject(parent.canonSnapshotJson, 'Canon 冻结快照'),
     initialState: state,
-  })
+  }
+  const child = (parent.kind === 'storygame' || parent.kind === 'chatgame' || parent.kind === 'textadventure'
+    || parent.kind === 'avg' || parent.kind === 'textsimulation' || parent.kind === 'textworld') && parent.gameReleaseId != null
+    && parent.worldId != null && parent.workId != null && parent.worldReleaseId != null
+    && parent.narrativeModuleExportId != null
+    ? await createReleasedGameSession({
+      ...childInput,
+      worldId: parent.worldId,
+      workId: parent.workId,
+      worldReleaseId: parent.worldReleaseId,
+      gameReleaseId: parent.gameReleaseId,
+      narrativeModuleExportId: parent.narrativeModuleExportId,
+      origin: 'branch',
+    })
+    : parent.kind === 'storygame' && state.narrative?.version === 1
+      ? await insertSimulationSession(childInput)
+    : await createSimulationSession(childInput)
   await db.simulationSessions.update(child.id!, {
     parentSessionId: parent.id!,
     parentThroughSequence: input.throughSequence,
     worldId: parent.worldId ?? null,
     workId: parent.workId ?? null,
     worldReleaseId: parent.worldReleaseId ?? null,
+    gameReleaseId: parent.gameReleaseId ?? null,
     narrativeModuleId: parent.narrativeModuleId ?? null,
     narrativeModuleExportId: parent.narrativeModuleExportId ?? null,
     draftSnapshotHash: parent.draftSnapshotHash ?? null,
@@ -2426,6 +4397,7 @@ export async function branchSimulationSession(input: {
     worldId: parent.worldId ?? null,
     workId: parent.workId ?? null,
     worldReleaseId: parent.worldReleaseId ?? null,
+    gameReleaseId: parent.gameReleaseId ?? null,
     narrativeModuleId: parent.narrativeModuleId ?? null,
     narrativeModuleExportId: parent.narrativeModuleExportId ?? null,
     draftSnapshotHash: parent.draftSnapshotHash ?? null,
@@ -2433,10 +4405,17 @@ export async function branchSimulationSession(input: {
 }
 
 export async function deleteSimulationSession(sessionId: number): Promise<void> {
-  await db.transaction('rw', transactionTablesForReferences('simulationSessions'), async () => {
+  await db.transaction('rw', transactionTablesForReferenceCascade('simulationSessions'), async () => {
+    // Preserve child ids before the registered parentSessionId setNull runs;
+    // parentThroughSequence is the companion provenance field and must be
+    // cleared in the same lifecycle operation.
+    const children = await db.simulationSessions.where('parentSessionId').equals(sessionId).toArray()
+    // PROJECT_TABLES is authoritative for runtime-owned extensions such as the
+    // unified Harness ledger. Cascading the registered references keeps this
+    // lifecycle complete without a second hand-written run/event table list.
+    await cascadeRegisteredReferences('simulationSessions', sessionId)
     await db.simulationEvents.where('sessionId').equals(sessionId).delete()
     await db.simulationCheckpoints.where('sessionId').equals(sessionId).delete()
-    const children = await db.simulationSessions.where('parentSessionId').equals(sessionId).toArray()
     for (const child of children) {
       if (child.id != null) {
         await db.simulationSessions.update(child.id, {

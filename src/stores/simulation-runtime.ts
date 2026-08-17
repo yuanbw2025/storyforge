@@ -146,7 +146,8 @@ export const useSimulationRuntimeStore = create<SimulationRuntimeStore>((set, ge
       set({ loading: true, error: '' })
       try {
         const sessions = (await db.simulationSessions.where('projectId').equals(projectId).toArray())
-          .filter(session => (session.worldGroupId ?? null) === worldGroupId)
+          .filter(session => session.kind !== 'storygame'
+            && (session.worldGroupId ?? null) === worldGroupId)
         sessions.sort((left, right) => right.updatedAt - left.updatedAt)
         const current = get().projectId === projectId && get().worldGroupId === worldGroupId
           ? get().selectedSessionId
@@ -186,6 +187,9 @@ export const useSimulationRuntimeStore = create<SimulationRuntimeStore>((set, ge
     },
 
     createSession: async input => {
+      if (input.kind === 'storygame' || input.kind === 'chatgame') {
+        throw new Error('新建文字游戏或角色互动必须从正式 GameRelease 进入专用产品界面。')
+      }
       const frozen = await buildSimulationCanonSnapshot({
         projectId: input.projectId,
         scope: input.scope,

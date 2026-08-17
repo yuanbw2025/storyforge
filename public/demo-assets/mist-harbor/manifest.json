@@ -1,0 +1,28 @@
+{
+  "packId": "storyforge.mist-harbor.roadshow.v1",
+  "title": "雾港路演美术包",
+  "version": 1,
+  "createdAt": "2026-08-16",
+  "source": "项目作者提供的人物参考图，以及为 StoryForge 雾港演示生成的场景和结局插画",
+  "license": "StoryForge 项目内演示与产品使用",
+  "notes": "人物原始下载文件保持不变；生产文件统一转换为 WebP。所有资源必须经 avgMediaAssets/avgMediaBlobs、WorldRelease 和 GameRelease 冻结链路使用。",
+  "assets": [
+    { "assetKey": "mist.bg.harbor", "file": "mist-bg-harbor.webp", "kind": "background", "name": "雾港码头", "width": 1672, "height": 941, "sceneTag": "entry", "altText": "暴雨将至的雾港码头与远方灯塔" },
+    { "assetKey": "mist.bg.archive", "file": "mist-bg-archive.webp", "kind": "background", "name": "旧档案馆", "width": 1672, "height": 941, "sceneTag": "archive", "altText": "堆满航海档案与潮汐机械的旧档案馆" },
+    { "assetKey": "mist.bg.market", "file": "mist-bg-market.webp", "kind": "background", "name": "潮灯集市", "width": 1672, "height": 941, "sceneTag": "market", "altText": "蓝金灯火照亮的雾港潮灯集市" },
+    { "assetKey": "mist.bg.bell", "file": "mist-bg-bell.webp", "kind": "background", "name": "失声钟楼", "width": 1672, "height": 941, "sceneTag": "bell", "altText": "悬挂巨大黄铜海钟的失声钟楼内部" },
+    { "assetKey": "mist.bg.lighthouse", "file": "mist-bg-lighthouse.webp", "kind": "background", "name": "北塔灯室", "width": 1672, "height": 941, "sceneTag": "lighthouse", "altText": "俯瞰雾港海面的北塔灯室" },
+    { "assetKey": "mist.actor.lin", "file": "mist-actor-lin-neutral.webp", "kind": "character-pose", "name": "林澈·冷静观察", "width": 1024, "height": 1536, "characterTag": "林澈", "sceneTag": "entry", "altText": "林澈冷静观察的透明全身立绘" },
+    { "assetKey": "mist.actor.lin.tense", "file": "mist-actor-lin-tense.webp", "kind": "character-expression", "name": "林澈·警觉紧张", "width": 1024, "height": 1536, "characterTag": "林澈", "sceneTag": "scene", "altText": "林澈警觉紧张的透明全身立绘" },
+    { "assetKey": "mist.actor.lin.resolve", "file": "mist-actor-lin-resolve.webp", "kind": "character-expression", "name": "林澈·下定决心", "width": 1024, "height": 1536, "characterTag": "林澈", "sceneTag": "choice", "altText": "林澈下定决心的透明全身立绘" },
+    { "assetKey": "mist.actor.yu", "file": "mist-actor-yu-neutral.webp", "kind": "character-pose", "name": "余砚·谨慎陈述", "width": 1024, "height": 1536, "characterTag": "余砚", "sceneTag": "entry", "altText": "余砚谨慎陈述的透明全身立绘" },
+    { "assetKey": "mist.actor.yu.alarm", "file": "mist-actor-yu-alarm.webp", "kind": "character-expression", "name": "余砚·发现真相", "width": 1024, "height": 1536, "characterTag": "余砚", "sceneTag": "scene", "altText": "余砚发现真相时的透明立绘" },
+    { "assetKey": "mist.actor.yu.resolve", "file": "mist-actor-yu-resolve.webp", "kind": "character-expression", "name": "余砚·决定公开", "width": 1024, "height": 1536, "characterTag": "余砚", "sceneTag": "ending", "altText": "余砚决定公开真相的透明全身立绘" },
+    { "assetKey": "mist.actor.gu", "file": "mist-actor-gu-neutral.webp", "kind": "character-pose", "name": "顾潮生·威严阻拦", "width": 1024, "height": 1536, "characterTag": "顾潮生", "sceneTag": "scene", "altText": "顾潮生威严阻拦的透明全身立绘" },
+    { "assetKey": "mist.actor.gu.anger", "file": "mist-actor-gu-anger.webp", "kind": "character-expression", "name": "顾潮生·强硬命令", "width": 1024, "height": 1536, "characterTag": "顾潮生", "sceneTag": "choice", "altText": "顾潮生强硬命令的透明全身立绘" },
+    { "assetKey": "mist.actor.gu.conflict", "file": "mist-actor-gu-conflict.webp", "kind": "character-expression", "name": "顾潮生·内心动摇", "width": 1024, "height": 1536, "characterTag": "顾潮生", "sceneTag": "ending", "altText": "顾潮生内心动摇的透明立绘" },
+    { "assetKey": "mist.cg.truth", "file": "mist-cg-truth.webp", "kind": "cg", "name": "真相之钟", "width": 1672, "height": 941, "sceneTag": "truth", "altText": "三人在失声钟楼敲响真相之钟" },
+    { "assetKey": "mist.cg.home", "file": "mist-cg-home.webp", "kind": "cg", "name": "守灯人的黎明", "width": 1672, "height": 941, "sceneTag": "home", "altText": "三人在黎明中共同修复守灯机械" },
+    { "assetKey": "mist.cg.sea", "file": "mist-cg-sea.webp", "kind": "cg", "name": "向黑潮航行", "width": 1672, "height": 941, "sceneTag": "sea", "altText": "林澈独自驾船驶向黑潮与灯塔" }
+  ]
+}

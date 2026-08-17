@@ -46,6 +46,8 @@ export interface AgentRunSnapshotV1 {
 
 export interface CreateAgentRunV1Input {
   scope: WorkspaceScope
+  /** Runtime runs are Instance-owned; omitted runs remain Work-owned. */
+  simulationSessionId?: number | null
   worldGroupId?: number | null
   conversationId?: number | null
   contract: unknown
@@ -55,6 +57,8 @@ export interface CreateAgentRunV1Input {
 export interface AppendAgentRunEventV1Input<T extends AgentRunEventTypeV1> {
   scope: WorkspaceScope
   runId: number
+  /** Only the runtime Harness supplies this owner; Work callers omit it. */
+  simulationSessionId?: number
   type: T
   payload: AgentRunEventPayloadByTypeV1[T]
   expectedLastSequence?: number
@@ -70,6 +74,7 @@ const RESERVED_EVENT_TYPES = new Set<AgentRunEventTypeV1>([
   'checkpoint.created',
   'recovery.started',
   'recovery.completed',
+  'runtime.candidate.adopted',
 ])
 
 const RUN_MUTATION_TAILS = new Map<number, Promise<void>>()
@@ -109,12 +114,23 @@ async function assertContractScope(
   scope: WorkspaceScope,
   contract: AgentRunContractV1,
   expectedWorldGroupId: number | null,
+  expectedSimulationSessionId: number | null,
 ): Promise<void> {
   if (contract.scope.projectId !== scope.projectId) {
     fail('contract_scope', 'RunContract.projectId 与 WorkspaceScope 不一致')
   }
   if (!sameNullableId(contract.scope.worldGroupId, expectedWorldGroupId)) {
     fail('contract_scope', 'RunContract.worldGroupId 与运行作用域不一致')
+  }
+  if (!sameNullableId(contract.scope.runtime?.simulationSessionId, expectedSimulationSessionId)) {
+    fail('contract_scope', 'RunContract.runtime 与运行 owner 不一致')
+  }
+
+  if (expectedSimulationSessionId != null) {
+    if ((contract.scope.chapterIds?.length ?? 0) > 0 || (contract.scope.outlineNodeIds?.length ?? 0) > 0) {
+      fail('runtime_authoring_scope', 'Instance-owned 运行不得混入作者章节或大纲作用域')
+    }
+    await assertSimulationSessionScope(scope, expectedSimulationSessionId, expectedWorldGroupId)
   }
 
   if (expectedWorldGroupId != null) {
@@ -147,6 +163,56 @@ async function assertContractScope(
       fail('chapter_world_scope', `章节 ${chapterId} 不属于 RunContract 世界组`)
     }
   }
+}
+
+async function assertSimulationSessionScope(
+  scope: WorkspaceScope,
+  simulationSessionId: number,
+  expectedWorldGroupId: number | null,
+): Promise<void> {
+  const session = await db.simulationSessions.get(simulationSessionId)
+  if (
+    !session
+    || session.projectId !== scope.projectId
+    || session.worldId !== scope.worldId
+    || session.workId !== scope.workId
+    || !sameNullableId(session.worldGroupId, expectedWorldGroupId)
+  ) {
+    fail('instance_scope', `运行实例 ${simulationSessionId} 不属于当前 World/Work`)
+  }
+}
+
+/** Agent runs use the same WorkspaceScope boundary while resolving their
+ * exclusive Work/Instance owner from PROJECT_TABLES. */
+export async function assertAgentRunOwnerInScopeV1(
+  scope: WorkspaceScope,
+  run: AgentRunRecord,
+): Promise<void> {
+  const hasWork = run.workId != null
+  const hasInstance = run.simulationSessionId != null
+  if (hasWork === hasInstance) fail('owner', '运行必须且只能绑定 Work 或运行实例')
+  if (hasWork) {
+    if (!await assertRecordInScope(scope, 'agentRuns', run, { owner: 'work' })) {
+      fail('scope', `运行 ${run.id ?? '?'} 不属于当前 Work`)
+    }
+    return
+  }
+  await assertSimulationSessionScope(scope, run.simulationSessionId!, run.worldGroupId ?? null)
+}
+
+/** Preserve the established Work-run transaction shape; only Instance runs
+ * enlist the SIM root table needed for owner validation. */
+export function agentRunScopeTransactionTablesV1(
+  _runId: number,
+  ...tables: Parameters<typeof scopeTransactionTables>
+) {
+  return scopeTransactionTables(...tables)
+}
+
+function instanceAgentRunScopeTransactionTablesV1(
+  ...tables: Parameters<typeof scopeTransactionTables>
+) {
+  return scopeTransactionTables(db.simulationSessions, ...tables)
 }
 
 async function assertOptionalConversationScope(
@@ -205,6 +271,7 @@ async function verifyContractRecord(run: AgentRunRecord & { id: number }): Promi
   if (
     contract.scope.projectId !== run.projectId
     || !sameNullableId(contract.scope.worldGroupId, run.worldGroupId)
+    || !sameNullableId(contract.scope.runtime?.simulationSessionId, run.simulationSessionId)
   ) {
     fail('contract_scope', '运行契约内嵌作用域与运行行不一致')
   }
@@ -223,6 +290,7 @@ async function verifyContractRecord(run: AgentRunRecord & { id: number }): Promi
 async function assertParentLineageForCreationV1(
   scope: WorkspaceScope,
   contract: AgentRunContractV1,
+  simulationSessionId: number | null,
 ): Promise<void> {
   const lineage = contract.lineage?.parent
   if (!lineage) return
@@ -237,8 +305,9 @@ async function assertParentLineageForCreationV1(
   if (
     parent.contract.scope.projectId !== contract.scope.projectId
     || !sameNullableId(parent.contract.scope.worldGroupId, contract.scope.worldGroupId)
+    || !sameNullableId(parent.run.simulationSessionId, simulationSessionId)
   ) {
-    fail('parent_scope', '父运行与子运行不属于同一项目/世界作用域')
+    fail('parent_scope', '父运行与子运行不属于同一项目/世界/owner 作用域')
   }
   const existing = await db.agentRuns
     .where('[parentRunId+parentRelation]')
@@ -288,8 +357,14 @@ export async function readVerifiedAgentRunInTransactionV1(
   await resolveScope({ scope })
   const run = await db.agentRuns.get(runId)
   if (!run || run.id == null) fail('not_found', `运行 ${runId} 不存在`)
-  if (!await assertRecordInScope(scope, 'agentRuns', run, { owner: 'work' })) {
-    fail('scope', `运行 ${runId} 不属于当前 Work`)
+  if (run.workId != null) {
+    if (run.simulationSessionId != null) fail('owner', '运行必须且只能绑定 Work 或运行实例')
+    if (!await assertRecordInScope(scope, 'agentRuns', run, { owner: 'work' })) {
+      fail('scope', `运行 ${runId} 不属于当前 Work`)
+    }
+  } else {
+    if (run.simulationSessionId == null) fail('owner', '运行必须且只能绑定 Work 或运行实例')
+    await assertSimulationSessionScope(scope, run.simulationSessionId, run.worldGroupId ?? null)
   }
   const contract = await verifyContractRecord(run as AgentRunRecord & { id: number })
   const events = await readRunEvents(run as AgentRunRecord & { id: number })
@@ -380,6 +455,10 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
     fail('contract_scope', '创建参数 worldGroupId 与 RunContract 不一致')
   }
   const conversationId = input.conversationId ?? null
+  const simulationSessionId = input.simulationSessionId ?? null
+  if (simulationSessionId != null && conversationId != null) {
+    fail('runtime_conversation', 'Instance-owned 运行不得绑定作者对话')
+  }
   const now = input.now ?? Date.now()
 
   const create = () => db.transaction(
@@ -389,19 +468,21 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
       db.outlineNodes,
       db.chapters,
       db.agentConversations,
+      ...(simulationSessionId == null ? [] : [db.simulationSessions]),
       db.agentRuns,
       db.agentRunEvents,
     ),
     async () => {
-      await assertContractScope(input.scope, accepted.contract, worldGroupId)
+      await assertContractScope(input.scope, accepted.contract, worldGroupId, simulationSessionId)
       await assertOptionalConversationScope(input.scope, conversationId, worldGroupId)
-      await assertParentLineageForCreationV1(input.scope, accepted.contract)
+      await assertParentLineageForCreationV1(input.scope, accepted.contract, simulationSessionId)
 
       const parent = accepted.contract.lineage?.parent
 
-      const root = stampNewRecord(input.scope, 'agentRuns', {
+      const rootInput: AgentRunRecord = {
         projectId: input.scope.projectId,
-        workId: input.scope.workId,
+        workId: simulationSessionId == null ? input.scope.workId : null,
+        simulationSessionId,
         worldGroupId,
         conversationId,
         parentRunId: parent?.runId ?? null,
@@ -419,7 +500,10 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
         terminalReceiptHash: null,
         createdAt: now,
         updatedAt: now,
-      }, { owner: 'work' })
+      }
+      const root = simulationSessionId == null
+        ? stampNewRecord(input.scope, 'agentRuns', rootInput, { owner: 'work' })
+        : rootInput
       const runId = await db.agentRuns.add(root) as number
       const objectiveHash = await waitForHash(accepted.contract.objective)
       const created = parseAgentRunEventV1({
@@ -469,7 +553,21 @@ export async function readAgentRunV1(
 ): Promise<AgentRunSnapshotV1> {
   return db.transaction(
     'r',
-    scopeTransactionTables(db.agentRuns, db.agentRunEvents),
+    agentRunScopeTransactionTablesV1(runId, db.agentRuns, db.agentRunEvents),
+    () => readVerifiedAgentRunInTransactionV1(scope, runId),
+  )
+}
+
+/** Instance counterpart kept explicit so existing Work subtransactions retain
+ * their historical table set. The row/session equality is verified inside the
+ * transaction by readVerifiedAgentRunInTransactionV1(). */
+export async function readInstanceAgentRunV1(
+  scope: WorkspaceScope,
+  runId: number,
+): Promise<AgentRunSnapshotV1> {
+  return db.transaction(
+    'r',
+    instanceAgentRunScopeTransactionTablesV1(db.agentRuns, db.agentRunEvents),
     () => readVerifiedAgentRunInTransactionV1(scope, runId),
   )
 }
@@ -516,7 +614,7 @@ export async function staleAgentRunVerificationV1(input: {
 }): Promise<AgentRunSnapshotV1> {
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
-    scopeTransactionTables(db.agentRuns, db.agentRunEvents),
+    agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
       const previousReceiptHash = snapshot.projection.terminalReceiptHash
@@ -549,9 +647,26 @@ export async function appendAgentRunEventV1<T extends AgentRunEventTypeV1>(
   }
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
-    scopeTransactionTables(db.agentRuns, db.agentRunEvents, db.worlds, db.works),
+    input.simulationSessionId == null
+      ? agentRunScopeTransactionTablesV1(
+          input.runId,
+          db.agentRuns,
+          db.agentRunEvents,
+          db.worlds,
+          db.works,
+        )
+      : instanceAgentRunScopeTransactionTablesV1(
+          db.agentRuns,
+          db.agentRunEvents,
+          db.worlds,
+          db.works,
+        ),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      if (
+        input.simulationSessionId != null
+        && snapshot.run.simulationSessionId !== input.simulationSessionId
+      ) fail('runtime_owner', '运行实例 owner 与追加参数不一致')
       if (
         input.expectedLastSequence != null
         && input.expectedLastSequence !== snapshot.projection.lastSequence
@@ -569,14 +684,15 @@ export async function appendAgentRunEventV1<T extends AgentRunEventTypeV1>(
         payload: input.payload,
       })
       const next = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, event)
-      const enteredMemoryTerminal = !['completed', 'failed', 'cancelled'].includes(snapshot.projection.state)
-        && ['completed', 'failed', 'cancelled'].includes(next.projection.state)
+      const terminalStates = ['completed', 'failed', 'cancelled'] as const
+      const enteredMemoryTerminal = !terminalStates.includes(
+        snapshot.projection.state as (typeof terminalStates)[number],
+      ) && terminalStates.includes(next.projection.state as (typeof terminalStates)[number])
       if (!enteredMemoryTerminal) return next
 
-      // The Harness terminal event and memory settlement are one IndexedDB
-      // transaction. A crash can expose neither or both, never a completed Run
-      // without its explicit memory receipt. Disk remains dirty by design: only
-      // the author's later workspace sync may clear that separate postcondition.
+      // Harness terminal state and the memory receipt are committed together.
+      // This preserves main's durable-memory invariant for both Work-owned and
+      // Instance-owned game runs.
       const receipt = await Dexie.waitFor(buildMemorySettlementReceiptFromSnapshotV1({
         snapshot: next,
         scope: input.scope,
@@ -612,6 +728,45 @@ export async function appendAgentRunEventV1<T extends AgentRunEventTypeV1>(
   ))
 }
 
+/** Record a runtime adoption only through the Instance-scoped Harness path.
+ * Keeping this event reserved prevents generic callers from manufacturing
+ * adoption evidence without a corresponding SIM command/result. */
+export async function appendRuntimeCandidateAdoptedV1(input: {
+  scope: WorkspaceScope
+  runId: number
+  payload: AgentRunEventPayloadByTypeV1['runtime.candidate.adopted']
+  expectedLastSequence?: number
+  now?: number
+}): Promise<AgentRunSnapshotV1> {
+  return withAgentRunMutationLockV1(input.runId, () => db.transaction(
+    'rw',
+    instanceAgentRunScopeTransactionTablesV1(db.agentRuns, db.agentRunEvents),
+    async () => {
+      const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      if (snapshot.run.simulationSessionId == null || snapshot.run.workId != null) {
+        fail('runtime_owner', 'runtime.candidate.adopted 只允许写入 Instance-owned 运行')
+      }
+      if (
+        input.expectedLastSequence != null
+        && input.expectedLastSequence !== snapshot.projection.lastSequence
+      ) fail('sequence_conflict', '运行已被其它执行者推进，请刷新后重试')
+      const event = parseAgentRunEventV1({
+        version: 1,
+        runId: input.runId,
+        sequence: snapshot.projection.lastSequence + 1,
+        generation: snapshot.projection.generation,
+        projectId: snapshot.run.projectId,
+        worldGroupId: snapshot.run.worldGroupId ?? null,
+        contractHash: snapshot.run.contractHash,
+        type: 'runtime.candidate.adopted',
+        createdAt: input.now ?? Date.now(),
+        payload: input.payload,
+      })
+      return appendPrivilegedAgentRunEventInTransactionV1(snapshot, event)
+    },
+  ))
+}
+
 export async function reviseAgentRunContractV1(input: {
   scope: WorkspaceScope
   runId: number
@@ -622,7 +777,8 @@ export async function reviseAgentRunContractV1(input: {
   const accepted = await acceptAgentRunContractV1(input.contract)
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
-    scopeTransactionTables(
+    agentRunScopeTransactionTablesV1(
+      input.runId,
       db.worldGroups,
       db.outlineNodes,
       db.chapters,
@@ -638,7 +794,15 @@ export async function reviseAgentRunContractV1(input: {
       if (canonicalStringify(snapshot.contract.lineage ?? null) !== canonicalStringify(accepted.contract.lineage ?? null)) {
         fail('lineage_immutable', '运行创建后不得修改父子来源关系')
       }
-      await assertContractScope(input.scope, accepted.contract, snapshot.run.worldGroupId ?? null)
+      if (canonicalStringify(snapshot.contract.scope.runtime ?? null) !== canonicalStringify(accepted.contract.scope.runtime ?? null)) {
+        fail('runtime_scope_immutable', '运行创建后不得修改 runtime 输入边界')
+      }
+      await assertContractScope(
+        input.scope,
+        accepted.contract,
+        snapshot.run.worldGroupId ?? null,
+        snapshot.run.simulationSessionId ?? null,
+      )
       const event = parseAgentRunEventV1({
         version: 1,
         runId: input.runId,
@@ -665,14 +829,12 @@ export async function deleteAgentRunV1(
 ): Promise<boolean> {
   return withAgentRunMutationLockV1(runId, () => db.transaction(
     'rw',
-    scopeTransactionTables(db.agentEvents, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+    agentRunScopeTransactionTablesV1(runId, db.agentEvents, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
     async () => {
       const run = await db.agentRuns.get(runId)
       if (!run) return false
       await resolveScope({ scope })
-      if (!await assertRecordInScope(scope, 'agentRuns', run, { owner: 'work' })) {
-        fail('scope', `运行 ${runId} 不属于当前 Work`)
-      }
+      await assertAgentRunOwnerInScopeV1(scope, run)
       const runIds: number[] = []
       const pending = [runId]
       while (pending.length > 0) {

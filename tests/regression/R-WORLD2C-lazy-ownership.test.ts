@@ -54,14 +54,49 @@ async function createLegacyProject(name = '旧分步骤项目') {
 }
 
 async function stripC1Roots(projectId: number) {
+  // 模拟真实的 pre-C1 项目：正式游戏发布及其 World/Work 内容不可能早于根存在。
+  await db.gameReleases.where('projectId').equals(projectId).delete()
+  await db.interactionCharacterProfiles.where('projectId').equals(projectId).delete()
+  await db.interactionSceneTemplates.where('projectId').equals(projectId).delete()
+  await db.adventureModules.where('projectId').equals(projectId).delete()
+  await db.avgPresentationModules.where('projectId').equals(projectId).delete()
+  await db.avgMediaBlobs.where('projectId').equals(projectId).delete()
+  await db.avgMediaAssets.where('projectId').equals(projectId).delete()
+  await db.narrativeSimulationModules.where('projectId').equals(projectId).delete()
+  await db.openWorldModules.where('projectId').equals(projectId).delete()
+  await db.gameDefinitions.where('projectId').equals(projectId).delete()
+  await db.narrativeChoices.where('projectId').equals(projectId).delete()
+  await db.narrativeBeats.where('projectId').equals(projectId).delete()
   await db.narrativeNodes.where('projectId').equals(projectId).delete()
   await db.narrativeModules.where('projectId').equals(projectId).delete()
   await db.worldReleases.where('projectId').equals(projectId).delete()
   await db.worldRevisions.where('projectId').equals(projectId).delete()
+  for (const spec of PROJECT_TABLES) {
+    const locator = spec.domainOwner?.locator
+    const isLegacyStamped = locator?.kind !== 'parent'
+      && (spec.domainOwner?.legacyDefault === 'world' || spec.domainOwner?.legacyDefault === 'work')
+    if (!isLegacyStamped || ['worlds', 'works', 'workCharacterBindings'].includes(spec.name)) continue
+    let rows: any[] = []
+    if (spec.owner === 'project' || spec.owner === 'transient') {
+      rows = await spec.table.where('projectId').equals(projectId).toArray()
+    } else if (spec.projectResolver) {
+      const parentIds = await spec.projectResolver(projectId)
+      const link = (spec.exportRemap ?? []).find(remap => (
+        PROJECT_TABLES.find(candidate => candidate.name === remap.remapVia)?.owner === 'project'
+      ))
+      if (parentIds.length && link) rows = await spec.table.where(link.field).anyOf(parentIds).toArray()
+    }
+    for (const row of rows) {
+      delete row.worldId
+      delete row.workId
+      await spec.table.put(row)
+    }
+  }
   await db.simulationSessions.where('projectId').equals(projectId).modify(session => {
     delete session.worldId
     delete session.workId
     delete session.worldReleaseId
+    delete session.gameReleaseId
     delete session.narrativeModuleId
     delete session.draftSnapshotHash
   })

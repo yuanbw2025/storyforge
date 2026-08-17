@@ -6,10 +6,11 @@ import type {
   AnyAgentRunEventV1,
   WorkspaceScope,
 } from '../../types'
-import { assertRecordInScope, scopeTransactionTables } from '../../world-engine/scope'
+import { scopeTransactionTables } from '../../world-engine/scope'
 import { parseAgentRunEventV1 } from './event-schema'
 import {
   AgentRunStoreError,
+  agentRunScopeTransactionTablesV1,
   appendPrivilegedAgentRunEventInTransactionV1,
   readVerifiedAgentRunInTransactionV1,
   withAgentRunMutationLockV1,
@@ -107,13 +108,9 @@ function recordToEvent(record: {
 }
 
 async function verifyCheckpointAgainstSnapshot(
-  scope: WorkspaceScope,
   checkpoint: AgentRunCheckpointRecord & { id: number },
   snapshot: AgentRunSnapshotV1,
 ): Promise<AgentRunProjectionV1> {
-  if (!await assertRecordInScope(scope, 'agentRunCheckpoints', checkpoint, { owner: 'work' })) {
-    fail('checkpoint_scope', '检查点不属于当前 Work')
-  }
   if (
     checkpoint.runId !== snapshot.run.id
     || checkpoint.projectId !== snapshot.run.projectId
@@ -255,15 +252,22 @@ export async function createAgentRunCheckpointInTransactionV1(input: {
 export async function createAgentRunCheckpointV1(input: {
   scope: WorkspaceScope
   runId: number
+  simulationSessionId?: number
   resumePayload?: unknown
   expectedLastSequence?: number
   now?: number
 }): Promise<{ checkpoint: AgentRunCheckpointRecord & { id: number }; snapshot: AgentRunSnapshotV1 }> {
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
-    scopeTransactionTables(db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+    input.simulationSessionId == null
+      ? agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
+      : scopeTransactionTables(db.simulationSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      if (
+        input.simulationSessionId != null
+        && snapshot.run.simulationSessionId !== input.simulationSessionId
+      ) fail('checkpoint_scope', '运行实例 owner 与检查点参数不一致')
       if (
         input.expectedLastSequence != null
         && input.expectedLastSequence !== snapshot.projection.lastSequence
@@ -282,15 +286,16 @@ export async function verifyAgentRunCheckpointV1(
   checkpointId: number,
 ): Promise<boolean> {
   try {
+    const run = await db.agentRunCheckpoints.get(checkpointId)
+    if (!run) fail('checkpoint_not_found', '检查点不存在')
     return await db.transaction(
       'r',
-      scopeTransactionTables(db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+      agentRunScopeTransactionTablesV1(run.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
       async () => {
         const checkpoint = await db.agentRunCheckpoints.get(checkpointId)
         if (!checkpoint || checkpoint.id == null) fail('checkpoint_not_found', '检查点不存在')
         const snapshot = await readVerifiedAgentRunInTransactionV1(scope, checkpoint.runId)
         await verifyCheckpointAgainstSnapshot(
-          scope,
           checkpoint as AgentRunCheckpointRecord & { id: number },
           snapshot,
         )
@@ -307,15 +312,18 @@ export async function verifyAgentRunCheckpointV1(
 export async function readLatestVerifiedAgentRunCheckpointV1(
   scope: WorkspaceScope,
   runId: number,
+  options: { owner?: 'work' | 'instance' } = {},
 ): Promise<VerifiedAgentRunCheckpointV1 | null> {
   return db.transaction(
     'r',
-    scopeTransactionTables(db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+    options.owner === 'instance'
+      ? scopeTransactionTables(db.simulationSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
+      : agentRunScopeTransactionTablesV1(runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(scope, runId)
       const checkpoint = await latestCheckpoint(runId)
       if (!checkpoint) return null
-      const projection = await verifyCheckpointAgainstSnapshot(scope, checkpoint, snapshot)
+      const projection = await verifyCheckpointAgainstSnapshot(checkpoint, snapshot)
       return {
         checkpoint,
         projection,
@@ -334,12 +342,12 @@ export async function beginAgentRunRecoveryV1(input: {
 }): Promise<AgentRunRecoveryPlanV1> {
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
-    scopeTransactionTables(db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+    agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
       const checkpoint = await latestCheckpoint(input.runId)
       if (!checkpoint) fail('checkpoint_missing', '运行没有可用检查点')
-      const checkpointProjection = await verifyCheckpointAgainstSnapshot(input.scope, checkpoint, snapshot)
+      const checkpointProjection = await verifyCheckpointAgainstSnapshot(checkpoint, snapshot)
 
       if (snapshot.projection.state === 'recovering') {
         const last = snapshot.events[snapshot.events.length - 1]
@@ -382,7 +390,7 @@ export async function completeAgentRunRecoveryV1(input: {
 }): Promise<AgentRunSnapshotV1> {
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
-    scopeTransactionTables(db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+    agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
       if (snapshot.projection.state !== 'recovering') {
@@ -396,7 +404,7 @@ export async function completeAgentRunRecoveryV1(input: {
       if (!checkpoint || checkpoint.checkpointHash !== input.checkpointHash) {
         fail('checkpoint_stale', '恢复完成引用的不是最新检查点')
       }
-      await verifyCheckpointAgainstSnapshot(input.scope, checkpoint, snapshot)
+      await verifyCheckpointAgainstSnapshot(checkpoint, snapshot)
       const event = parseAgentRunEventV1({
         version: 1,
         runId: snapshot.run.id,

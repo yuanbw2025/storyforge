@@ -35,7 +35,7 @@ import {
 const STRICT_EXPORT_VERSION = 4
 
 function strictOwnerShadow(spec: TableSpec, row: Record<string, any>): {
-  kind: 'world' | 'work'
+  kind: 'world' | 'work' | 'instance'
   exportId: number
   field: string
 } | null {
@@ -59,6 +59,14 @@ function strictOwnerShadow(spec: TableSpec, row: Record<string, any>): {
       ? { kind: 'world', exportId: row._worldOwnerExportId, field: locator.worldField }
       : { kind: 'work', exportId: row._workOwnerExportId, field: locator.workField }
   }
+  if (locator.kind === 'exclusive-work-instance') {
+    const hasWork = Number.isInteger(row._workOwnerExportId)
+    const hasInstance = Number.isInteger(row._instanceOwnerExportId)
+    if (hasWork === hasInstance) throw new Error(`[deriveImport] v4 Work/Instance owner 必须且只能有一个:${spec.name}`)
+    return hasWork
+      ? { kind: 'work', exportId: row._workOwnerExportId, field: locator.workField }
+      : { kind: 'instance', exportId: row._instanceOwnerExportId, field: locator.instanceField }
+  }
   return null
 }
 
@@ -70,6 +78,7 @@ function validateStrictOwnership(data: ProjectExportData): void {
   }
   const worldIds = new Set(value.worlds.map((row: any) => row?._exportId))
   const workIds = new Set(value.works.map((row: any) => row?._exportId))
+  const instanceIds = new Set((value.simulationSessions ?? []).map((row: any) => row?._exportId))
   if (worldIds.size !== value.worlds.length || workIds.size !== value.works.length
     || [...worldIds].some(id => !Number.isInteger(id)) || [...workIds].some(id => !Number.isInteger(id))) {
     throw new Error('[deriveImport] v4 World/Work 便携 ID 重复或无效')
@@ -87,7 +96,7 @@ function validateStrictOwnership(data: ProjectExportData): void {
       if ('worldId' in row || 'workId' in row) throw new Error(`[deriveImport] v4 ${spec.name} 泄露本地主键 owner`)
       const shadow = strictOwnerShadow(spec, row)
       if (!shadow) continue
-      const validIds = shadow.kind === 'world' ? worldIds : workIds
+      const validIds = shadow.kind === 'world' ? worldIds : shadow.kind === 'work' ? workIds : instanceIds
       if (!validIds.has(shadow.exportId)) throw new Error(`[deriveImport] v4 owner 越界:${spec.name}`)
     }
   }
@@ -103,8 +112,9 @@ function restoreStrictOwner(
   const shadow = strictOwnerShadow(spec, obj)
   delete obj._worldOwnerExportId
   delete obj._workOwnerExportId
+  delete obj._instanceOwnerExportId
   if (!shadow) return
-  const ownerMap = newIdMaps.get(shadow.kind === 'world' ? 'worlds' : 'works')
+  const ownerMap = newIdMaps.get(shadow.kind === 'world' ? 'worlds' : shadow.kind === 'work' ? 'works' : 'simulationSessions')
   const mapped = ownerMap?.get(shadow.exportId)
   if (mapped == null) throw new Error(`[deriveImport] v4 owner 无法重映射:${spec.name}`)
   if (obj[shadow.field] != null && obj[shadow.field] !== mapped) {
@@ -114,6 +124,8 @@ function restoreStrictOwner(
   const locator = spec.domainOwner?.locator
   if (locator?.kind === 'exclusive-fields') {
     obj[shadow.kind === 'world' ? locator.workField : locator.worldField] = null
+  } else if (locator?.kind === 'exclusive-work-instance') {
+    obj[shadow.kind === 'work' ? locator.instanceField : locator.workField] = null
   }
 }
 
@@ -144,7 +156,8 @@ function deriveImportOrder(specs: TableSpec[]): TableSpec[] {
         .map(ref => ref.remapVia)
       const ownerDeps = spec.domainOwner?.locator?.kind === 'field'
         ? [spec.domainOwner.locator.owner === 'world' ? 'worlds' : spec.domainOwner.locator.owner === 'work' ? 'works' : null]
-        : spec.domainOwner?.locator?.kind === 'exclusive-fields' ? ['worlds', 'works'] : []
+        : spec.domainOwner?.locator?.kind === 'exclusive-fields' ? ['worlds', 'works']
+          : spec.domainOwner?.locator?.kind === 'exclusive-work-instance' ? ['works', 'simulationSessions'] : []
       const portableDeps = spec.portableData?.kind === 'agent-run-root'
         ? spec.portableData.dependencies
         : []
@@ -195,6 +208,35 @@ function patchSelfIdPaths(obj: Record<string, any>, paths: string[], newId: numb
     patch[root] = rootCopy
   }
   return patch
+}
+
+function restorePortableBinaryBlob(value: unknown, label: string): ArrayBuffer {
+  if (value instanceof ArrayBuffer) return value
+  if (typeof value !== 'string') throw new Error(`[deriveImport] ${label} 缺少便携二进制`)
+  const match = /^data:([^;,]+)?;base64,([A-Za-z0-9+/=]*)$/.exec(value)
+  if (!match) throw new Error(`[deriveImport] ${label} 不是合法 data URL`)
+  let binary: string
+  try { binary = atob(match[2]) } catch { throw new Error(`[deriveImport] ${label} base64 无效`) }
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return bytes.buffer
+}
+
+async function assertPortableBinaryIntegrity(
+  spec: TableSpec,
+  row: Record<string, any>,
+  data: ArrayBuffer,
+): Promise<void> {
+  const integrity = spec.portableData?.kind === 'binary-blob' ? spec.portableData.integrity : null
+  if (!integrity) return
+  const referenceId = row[integrity.referenceField]
+  const metadataTable = (db as any)[integrity.metadataTable]
+  const metadata = Number.isInteger(referenceId) && metadataTable ? await metadataTable.get(referenceId) : null
+  if (!metadata) throw new Error(`[deriveImport] ${spec.name} 缺少二进制元数据引用`)
+  if (metadata[integrity.sizeField] !== data.byteLength) throw new Error(`[deriveImport] ${spec.name} 二进制大小与元数据不一致`)
+  const digest = await Dexie.waitFor(crypto.subtle.digest('SHA-256', data))
+  const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+  if (metadata[integrity.hashField] !== hash) throw new Error(`[deriveImport] ${spec.name} 二进制哈希与元数据不一致`)
 }
 
 /**
@@ -312,6 +354,14 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
         }
 
         if (spec.owner === 'project') obj.projectId = newProjectId
+        if (spec.portableData?.kind === 'binary-blob') {
+          const binary = restorePortableBinaryBlob(
+            obj[spec.portableData.field],
+            `${spec.name}.${spec.portableData.field}`,
+          )
+          await assertPortableBinaryIntegrity(spec, obj, binary)
+          obj[spec.portableData.field] = binary
+        }
         if (spec.portableData?.kind === 'agent-run-root') {
           const contractIdMaps = new Map(newIdMaps)
           // Agent runs are a lineage tree. A child contract may reference the

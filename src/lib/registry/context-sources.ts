@@ -90,10 +90,74 @@ import {
 } from '../agent/read-sources'
 import { readRagSelectionContext } from '../retrieval/rag-library'
 import { parseSimulationCanonSnapshot, verifySimulationCanonSnapshot } from '../simulation/canon-snapshot'
-import { readSimulationState } from '../simulation/runtime'
+import { buildInteractionContextWindow } from '../character-interaction/runtime'
 import type { AssembleContextInput } from './types'
 import { readOwnedRows, resolveScope, assertRecordInScope } from '../world-engine/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
+import { parseWorldGameAuthoringRequestV1 } from '../text-game/agent-contract'
+
+async function readSimulationStateForContext(sessionId: number) {
+  const { readSimulationState } = await import('../simulation/runtime')
+  return readSimulationState(sessionId)
+}
+
+async function readWorldGameAuthoringContext(input: AssembleContextInput): Promise<string> {
+  if (!input.manualSourceText?.trim()) return ''
+  let raw: unknown
+  try { raw = JSON.parse(input.manualSourceText) } catch { throw new Error('世界游戏创作选择不是合法 JSON。') }
+  const request = parseWorldGameAuthoringRequestV1(raw)
+  const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
+  const { loadWorldGameSourceCatalog } = await import('../text-game/world-generation')
+  const catalog = await loadWorldGameSourceCatalog({ scope, worldReleaseId: request.worldReleaseId })
+  if (catalog.release.contentHash !== request.worldContentHash) {
+    throw new Error('世界游戏创作所选 WorldRelease 已变化。')
+  }
+  const narrative = catalog.narrativeModules.find(item => item.exportId === request.narrativeModuleExportId)
+  if (!narrative) throw new Error('世界游戏创作所选叙事不在冻结版本中。')
+
+  const selected = <T extends { exportId: number }>(rows: T[], ids: number[], label: string): T[] => {
+    const byId = new Map(rows.map(item => [item.exportId, item]))
+    const missing = ids.filter(id => !byId.has(id))
+    if (missing.length) throw new Error(`世界游戏创作的${label}便携引用不存在：${missing.join('、')}`)
+    const selectedIds = new Set(ids)
+    return rows.filter(item => selectedIds.has(item.exportId))
+  }
+  const records = catalog.manifest.records
+  const portableRows = (tableName: string): Array<Record<string, unknown>> => (
+    (records[tableName] ?? []).filter((row): row is Record<string, unknown> => (
+      typeof row === 'object' && row !== null && !Array.isArray(row)
+    ))
+  )
+  const sourceGraph = {
+    module: portableRows('narrativeModules').find(row => row._exportId === narrative.exportId) ?? narrative,
+    nodes: portableRows('narrativeNodes').filter(row => row._moduleExportId === narrative.exportId),
+    beats: portableRows('narrativeBeats').filter(row => row._moduleExportId === narrative.exportId),
+    choices: portableRows('narrativeChoices').filter(row => row._moduleExportId === narrative.exportId),
+  }
+  return [
+    '【冻结世界 → 文字游戏创作包】',
+    `世界：${catalog.manifest.worldName}`,
+    `WorldRelease：v${catalog.release.version} / ${catalog.release.contentHash}`,
+    `目标产品：${request.productType}`,
+    `作者创作要求：${request.creativeBrief}`,
+    '以下内容是创作起点和素材，不是要求逐字复刻。请在不改动这些冻结身份的前提下，新增危机、行动、转折、分支后果和至少两个不同结局。',
+    `来源叙事：${JSON.stringify(sourceGraph)}`,
+    `角色：${JSON.stringify(selected(catalog.characters, request.characterExportIds, '角色'))}`,
+    `角色关系：${JSON.stringify(selected(catalog.relationships, request.characterRelationExportIds, '关系'))}`,
+    `地点：${JSON.stringify(selected(catalog.locations, request.importantLocationExportIds, '地点'))}`,
+    `artifact 道具：${JSON.stringify(selected(catalog.artifacts, request.artifactExportIds, '道具'))}`,
+    `世界词条：${JSON.stringify(selected(catalog.loreEntries, request.codexEntryExportIds, '词条'))}`,
+    `故事线：${JSON.stringify(selected(catalog.storyArcs, request.storyArcExportIds, '故事线'))}`,
+    `AVG 媒资目录：${JSON.stringify(selected(catalog.mediaAssets, request.avgMediaAssetExportIds, '媒资').map(asset => ({
+      exportId: asset.exportId,
+      assetKey: asset.assetKey,
+      kind: asset.kind,
+      name: asset.name,
+      characterTag: asset.characterTag,
+      sceneTag: asset.sceneTag,
+    })))}`,
+  ].join('\n')
+}
 
 async function readActiveNarrativeBlueprint(input: AssembleContextInput): Promise<string> {
   const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
@@ -134,7 +198,7 @@ async function readSimulationRuntimeContext(input: AssembleContextInput): Promis
   if (!snapshot || !(await verifySimulationCanonSnapshot(snapshot))) {
     throw new Error('冻结运行时 Canon 快照校验失败。')
   }
-  const state = await readSimulationState(session.id!)
+  const state = await readSimulationStateForContext(session.id!)
   const sourceLines = snapshot.sources.slice(0, 120).map(source => (
     `- ${source.sourceKey}｜${source.kind}｜${source.name}${source.summary ? `｜${source.summary}` : ''}`
   ))
@@ -189,6 +253,10 @@ async function readSimulationRuntimeContext(input: AssembleContextInput): Promis
       .slice(-24)
       .map(message => `- ${message.role === 'user' ? chat.identity.name : (state.entities[message.speakerKey ?? '']?.name ?? message.speakerKey ?? '角色')}｜${message.text}`),
   ] : []
+  const interactionLines = state.interaction ? [
+    `- 场景=${state.interaction.activeScene?.title ?? '未开始'}｜玩家回合=${state.interaction.totalPlayerTurns}｜导演剩余预算=${state.interaction.remainingDirectorBudget}`,
+    `- 当前参与者=${state.interaction.activeScene?.activeParticipantKeys.join('、') || '无'}｜开放线索=${state.interaction.threads.filter(item => item.status === 'open').map(item => item.threadKey).join('、') || '无'}`,
+  ] : []
   return [
     `【冻结运行时会话】${session.title}｜类型=${session.kind}｜逻辑时间=${state.clock}｜事件序号=${state.lastSequence}`,
     `【冻结世界】${snapshot.worldLabel}｜worldGroupId=${snapshot.worldGroupId ?? 'null'}｜快照=${snapshot.snapshotHash.slice(0, 16)}`,
@@ -202,6 +270,187 @@ async function readSimulationRuntimeContext(input: AssembleContextInput): Promis
     ...(narrativeLines.length ? narrativeLines : ['- 暂无叙事']),
     ...(ttrpgLines.length ? ['【跑团场景与回合（只读）】', ...ttrpgLines] : []),
     ...(chatLines.length ? ['【角色聊天状态（只读）】', ...chatLines] : []),
+    ...(interactionLines.length ? ['【角色互动状态（逐角色知识边界，只读）】', ...interactionLines] : []),
+  ].join('\n')
+}
+
+async function readInteractionRuntimeContext(input: AssembleContextInput): Promise<string> {
+  if (input.simulationSessionId == null) return ''
+  const participantKey = input.interactionParticipantKey?.trim()
+  if (!participantKey) return ''
+  const session = await db.simulationSessions.get(input.simulationSessionId)
+  if (!session || session.projectId !== input.projectId
+    || !['chatgame', 'textadventure', 'textworld'].includes(session.kind)) return ''
+  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  const snapshot = parseSimulationCanonSnapshot(session.canonSnapshotJson)
+  if (!snapshot || !(await verifySimulationCanonSnapshot(snapshot))) {
+    throw new Error('冻结运行时 Canon 快照校验失败。')
+  }
+  const state = await readSimulationStateForContext(session.id!)
+  if (!state.interaction) return ''
+  const profile = state.interaction.profiles.find(item => item.participantKey === participantKey)
+  if (!profile) return ''
+  const view = buildInteractionContextWindow(state.interaction, participantKey, {
+    maxCharacters: 24_000,
+    maxRecentMessages: 32,
+  })
+  return [
+    `【角色互动视角】${profile.name}｜key=${profile.participantKey}｜身份=${profile.roleLabel}`,
+    `【说话约束】${profile.voiceRules}`,
+    `【当前场景】${view.activeScene?.title ?? '未开始'}｜${view.activeScene?.purpose ?? ''}`,
+    '【该角色已知事实】',
+    ...(view.knowledge.length ? view.knowledge.map(item => `- ${item.knowledgeKey}｜${item.status}｜${item.content}`) : ['- 无']),
+    '【该角色持久记忆】',
+    ...(view.memories.length ? view.memories.map(item => `- ${item.kind}｜重要度=${item.importance}｜${item.content}`) : ['- 无']),
+    '【该角色关系视图】',
+    ...(view.relationships.length ? view.relationships.map(item => `- ${item.toParticipantKey}｜${item.label}=${item.value}`) : ['- 无']),
+    '【该角色可见对话】',
+    ...(view.messages.length ? view.messages.map(message => `- #${message.eventSequence}｜${message.speakerKey}｜${message.text}`) : ['- 无']),
+    `【预算证据】省略早期消息=${view.omittedMessageCount}｜字符=${view.characterCount}`,
+  ].join('\n')
+}
+
+async function readAdventureRuntimeContext(input: AssembleContextInput): Promise<string> {
+  if (input.simulationSessionId == null) return ''
+  const session = await db.simulationSessions.get(input.simulationSessionId)
+  if (!session || session.projectId !== input.projectId
+    || (session.kind !== 'textadventure' && session.kind !== 'textworld')
+    || session.gameReleaseId == null) return ''
+  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  const [{ assertGameReleaseUnchanged, parseAnyGameReleaseManifest }, { availableAdventureActions }] = await Promise.all([
+    import('../text-game/releases'),
+    import('../adventure/runtime'),
+  ])
+  const release = await assertGameReleaseUnchanged(session.gameReleaseId)
+  const parsedManifest = parseAnyGameReleaseManifest(release.manifestJson)
+  if (parsedManifest.productType !== 'text-adventure' && parsedManifest.productType !== 'text-open-world') return ''
+  const state = await readSimulationStateForContext(session.id!)
+  if (!state.adventure) return ''
+  const location = parsedManifest.adventure.locations.find(item => item.key === state.adventure!.currentLocationKey)
+  if (!location) throw new Error('文字冒险当前位置不在冻结发布中。')
+  const actions = availableAdventureActions(parsedManifest.adventure, state.adventure, state.narrative?.variables)
+  const inventory = state.adventure.inventory
+    .filter(item => item.ownerKey === 'player' && item.state !== 'transferred')
+    .map(item => `${item.itemKey}×${item.quantity}`)
+  const quests = state.adventure.quests.map(quest => {
+    const definition = parsedManifest.adventure.quests.find(item => item.key === quest.questKey)
+    const objectives = quest.objectives.map(objective => {
+      const title = definition?.objectives.find(item => item.key === objective.objectiveKey)?.title ?? objective.objectiveKey
+      return `${objective.completed ? '已完成' : '未完成'}:${title}`
+    })
+    return `- ${quest.questKey}｜${quest.status}｜${objectives.join('；') || '无目标'}`
+  })
+  const actionLines = actions.map(item => `- ${item.action.key}｜${item.action.kind}｜${item.action.label}｜${item.available ? '可执行' : `不可执行:${item.reason}`}`)
+  const recent = state.adventure.actionHistory.slice(-12).map(item => `- #${item.eventSequence} ${item.actionKey}｜${item.outcome}｜${item.narrative}`)
+  return [
+    `【文字冒险运行时】${session.title}｜事件序号=${state.lastSequence}｜发布=${release.contentHash.slice(0, 16)}`,
+    `【当前位置】${location.title}｜key=${location.key}｜${location.description}`,
+    `【在场交互物】${parsedManifest.adventure.objects.filter(item => item.locationKey === location.key).map(item => `${item.key}:${item.title}`).join('、') || '无'}`,
+    `【背包】${inventory.join('、') || '空'}`,
+    `【资源】${Object.entries(state.adventure.resources).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
+    `【能力】${Object.entries(state.adventure.abilities).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
+    `【状态】${state.adventure.conditions.map(item => `${item.conditionKey}${item.duration == null ? '' : `(${item.duration})`}`).join('、') || '无'}`,
+    '【任务】', ...(quests.length ? quests : ['- 无']),
+    '【当前位置行动闭集】', ...(actionLines.length ? actionLines : ['- 无']),
+    `【Narrative】节点=${state.narrative?.currentNodeKey ?? '无'}｜可用选择=${state.narrative?.availableChoiceKeys?.join('、') || '无'}`,
+    '【最近行动结果】', ...(recent.length ? recent : ['- 无']),
+    '自由输入只能映射到“可执行”的 action key；不得创造新地点、物品、任务、判定结果或状态变化。',
+  ].join('\n')
+}
+
+async function readNarrativeSimulationRuntimeContext(input: AssembleContextInput): Promise<string> {
+  if (input.simulationSessionId == null) return ''
+  const session = await db.simulationSessions.get(input.simulationSessionId)
+  if (!session || session.projectId !== input.projectId
+    || (session.kind !== 'textsimulation' && session.kind !== 'textworld')
+    || session.gameReleaseId == null) return ''
+  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  const [releaseModule, runtimeModule] = await Promise.all([
+    import('../text-game/releases'),
+    import('../narrative-simulation/runtime'),
+  ])
+  const release = await releaseModule.assertGameReleaseUnchanged(session.gameReleaseId)
+  const parsedManifest = releaseModule.parseAnyGameReleaseManifest(release.manifestJson)
+  if (parsedManifest.productType !== 'narrative-simulation' && parsedManifest.productType !== 'text-open-world') return ''
+  const state = await readSimulationStateForContext(session.id!)
+  if (!state.narrativeSimulation) return ''
+  const simulation = state.narrativeSimulation
+  const actions = runtimeModule.availableNarrativeSimulationActions(parsedManifest.simulation, simulation)
+  const reports = runtimeModule.visibleNarrativeSimulationReports(simulation, 'player')
+  const issueByKey = new Map(parsedManifest.simulation.issues.map(issue => [issue.key, issue]))
+  return [
+    `【叙事模拟玩家视角】${session.title}｜回合=${simulation.turn}/${simulation.turnLimit}｜阶段=${simulation.phase}｜事件序号=${state.lastSequence}`,
+    `【冻结发布】${release.contentHash.slice(0, 16)}｜行动预算=${simulation.actionBudget}`,
+    `【资源】${Object.entries(simulation.resources).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
+    `【指标】${Object.entries(simulation.metrics).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
+    '【问题与危机】',
+    ...simulation.issues.map(issue => {
+      const definition = issueByKey.get(issue.issueKey)
+      return `- ${issue.issueKey}｜阶段=${issue.stageKey}｜压力=${issue.pressure}｜${definition?.crisis ? '危机' : '问题'}｜${issue.resolved ? '已解决' : '进行中'}`
+    }),
+    '【当前行动闭集】',
+    ...actions.map(item => `- ${item.action.key}｜${item.action.category}｜${item.action.title}｜${item.available ? '可执行' : `不可执行:${item.reason}`}`),
+    '【玩家可见报告】',
+    ...(reports.length ? reports.slice(-24).map(report => `- ${report.reportId}｜回合=${report.turn}｜置信度=${report.confidence}｜证据=${report.sourceEventSequences.join(',') || '父分支快照'}｜${report.text}`) : ['- 暂无']),
+    `【Narrative】节点=${state.narrative?.currentNodeKey ?? '无'}｜可用选择=${state.narrative?.availableChoiceKeys?.join('、') || '无'}｜模拟结局=${simulation.qualifiedEndingKey ?? '未确定'}`,
+    '模型只能输出有事件证据的报告、建议或表演候选；不得改变资源、指标、问题、行动、回合或结局，也不得读取 actor/debug 私有报告。',
+  ].join('\n')
+}
+
+async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise<string> {
+  if (input.simulationSessionId == null) return ''
+  const session = await db.simulationSessions.get(input.simulationSessionId)
+  if (!session || session.projectId !== input.projectId || session.kind !== 'textworld' || session.gameReleaseId == null) return ''
+  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  const releaseModule = await import('../text-game/releases')
+  const release = await releaseModule.assertGameReleaseUnchanged(session.gameReleaseId)
+  const manifest = releaseModule.parseTextOpenWorldGameReleaseManifest(release.manifestJson)
+  const state = await readSimulationStateForContext(session.id!)
+  if (!state.openWorld) return ''
+  const world = state.openWorld
+  const region = manifest.openWorld.regions.find(item => item.key === world.currentRegionKey)
+  const projection = world.regionalProjections.find(item => item.regionKey === world.currentRegionKey)
+  if (!region || !projection) return ''
+  const recentEvents = (await db.simulationEvents.where('sessionId').equals(session.id!).toArray())
+    .filter(event => event.type.startsWith('world.') || event.type.startsWith('adventure.quest.'))
+    .sort((left, right) => left.sequence - right.sequence).slice(-32)
+  const visibleQuests = world.questInstances.filter(item => ['revealed', 'active', 'resolved', 'failed'].includes(item.status))
+  return [
+    `【文字开放世界玩家视角】${session.title}｜tick=${world.tick}/${world.tickLimit}｜事件序号=${state.lastSequence}`,
+    `【冻结发布】${release.contentHash.slice(0, 16)}｜当前区域=${region.key}:${region.title}｜旅行=${world.travel ? `${world.travel.toRegionKey}(${world.travel.remainingTicks})` : '无'}`,
+    `【区域认知】${Object.entries(world.regionKnowledge).map(([key, value]) => `${key}=${value}`).join('、')}`,
+    `【关注级别】${Object.entries(world.attentionLevels).map(([key, value]) => `${key}=${value}`).join('、')}`,
+    `【当前区域资源】${Object.entries(projection.resources).map(([key, value]) => `${key}=${value}`).join('、')}`,
+    `【当前区域指标】${Object.entries(projection.metrics).map(([key, value]) => `${key}=${value}`).join('、')}`,
+    `【当前区域问题】${Object.entries(projection.issuePressures).map(([key, value]) => `${key}=${value}`).join('、')}`,
+    `【在地人物】${region.residentParticipantKeys.join('、') || '无'}｜【组织】${region.organizationKeys.join('、') || '无'}`,
+    '【已公开任务实例】',
+    ...(visibleQuests.length ? visibleQuests.map(quest => `- ${quest.instanceKey}｜${quest.status}｜${quest.questKey}｜${quest.title}｜区域=${quest.regionKey}｜渠道=${quest.channelKey}｜${quest.description}`) : ['- 无']),
+    '【可引用正式事件】',
+    ...(recentEvents.length ? recentEvents.map(event => `- #${event.sequence}｜${event.type}｜actor=${event.actorKey ?? '无'}｜target=${event.targetKey ?? '无'}`) : ['- 无']),
+    `【Narrative】节点=${state.narrative?.currentNodeKey ?? '无'}｜可用选择=${state.narrative?.availableChoiceKeys?.join('、') || '无'}`,
+    '模型只能润色已公开任务或叙述有正式事件证据的场景；不得创造新任务、人物、组织、地点、资源变化、旅行结果或世界事实。',
+  ].join('\n')
+}
+
+async function readAvgAuthoringContext(input: AssembleContextInput): Promise<string> {
+  const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
+  const definitions = (await db.gameDefinitions.where('workId').equals(scope.workId).toArray())
+    .filter(row => row.productType === 'avg' && row.worldId === scope.worldId)
+  if (!definitions.length) return ''
+  const modules = await db.avgPresentationModules.where('gameDefinitionId').anyOf(definitions.map(row => row.id!)).toArray()
+  const assets = await db.avgMediaAssets.where('workId').equals(scope.workId).toArray()
+  return [
+    '【AVG 作者演出上下文（只读）】',
+    ...definitions.map(definition => `- 游戏=${definition.gameKey}｜${definition.title}｜NarrativeModule=${definition.narrativeModuleId}`),
+    `【媒资版本】${assets.map(asset => `${asset.assetKey}@${asset.version}:${asset.kind}:${asset.contentHash.slice(0, 12)}`).join('、') || '无'}`,
+    `【声明式 Cue】${modules.reduce((total, module) => {
+      try {
+        const cues = (JSON.parse(module.contentJson) as { cues?: unknown[] }).cues
+        return total + (Array.isArray(cues) ? cues.length : 0)
+      } catch { return total }
+    }, 0)} 个`,
+    '演出建议只能引用已登记媒资与 Narrative Beat；不得改变剧情变量、关系、物品、任务或结局规则。',
   ].join('\n')
 }
 
@@ -861,6 +1110,66 @@ async function readCharacterPassages(projectId: number, name?: string, worldGrou
 }
 
 export const CONTEXT_SOURCES: ContextSource[] = [
+  {
+    key: 'worldGameAuthoring',
+    label: '冻结世界游戏创作包',
+    scope: 'project',
+    layer: 'L1',
+    ownerFrom: 'work',
+    budgetTokens: 12_000,
+    protectedFromTrim: true,
+    enabled: input => !!input.manualSourceText?.trim(),
+    read: readWorldGameAuthoringContext,
+  },
+  {
+    key: 'avgAuthoring',
+    label: 'AVG 作者演出素材',
+    scope: 'project',
+    layer: 'L2',
+    budgetTokens: 4000,
+    read: readAvgAuthoringContext,
+  },
+  {
+    key: 'adventureRuntime',
+    label: '文字冒险玩家视角',
+    scope: 'runtime',
+    layer: 'L0',
+    budgetTokens: 8000,
+    protectedFromTrim: true,
+    requiresSimulationSessionId: true,
+    read: readAdventureRuntimeContext,
+  },
+  {
+    key: 'narrativeSimulationRuntime',
+    label: '叙事模拟玩家视角',
+    scope: 'runtime',
+    layer: 'L0',
+    budgetTokens: 8000,
+    protectedFromTrim: true,
+    requiresSimulationSessionId: true,
+    read: readNarrativeSimulationRuntimeContext,
+  },
+  {
+    key: 'openWorldRuntime',
+    label: '文字开放世界玩家视角',
+    scope: 'runtime',
+    layer: 'L0',
+    budgetTokens: 8000,
+    protectedFromTrim: true,
+    requiresSimulationSessionId: true,
+    read: readOpenWorldRuntimeContext,
+  },
+  {
+    key: 'interactionRuntime',
+    label: '角色互动单一视角',
+    scope: 'runtime',
+    layer: 'L0',
+    budgetTokens: 8000,
+    protectedFromTrim: true,
+    requiresSimulationSessionId: true,
+    enabled: input => !!input.interactionParticipantKey?.trim(),
+    read: readInteractionRuntimeContext,
+  },
   {
     // SIM-1C: NPC 演进只读冻结快照与事件回放，不读取可变 Canon 表。
     key: 'simulationRuntime',
