@@ -63,7 +63,7 @@ describe('CONSISTENCY-4 · ReviewPanel 存亡 finding 出口', () => {
     } as any) as number
     const currentChapterId = await db.chapters.add({
       projectId, outlineNodeId: currentNodeId, title: '第五章',
-      content: '', wordCount: 0, status: 'draft', order: 1,
+      content: '林飞推门走进议事厅，亲手展开了地图。', wordCount: 19, status: 'draft', order: 1,
       notes: '', createdAt: now, updatedAt: now,
     } as any) as number
     const characterId = await db.characters.add({

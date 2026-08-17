@@ -43,6 +43,7 @@ import {
 } from '../world-engine/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import { hashCanonicalValue } from './run/hash'
+import { readAgentRunV1 } from './run/event-store'
 
 export const CONSISTENCY_AGENT_VERSION = 1
 export const CONSISTENCY_AGENT_PAYLOAD_TYPE = 'consistency-agent'
@@ -88,7 +89,7 @@ export interface ConsistencyAgentRun {
   candidate: ConsistencyAgentCandidate
 }
 
-const FAST_SOURCES = [
+export const CONSISTENCY_AGENT_FAST_SOURCES_V1 = [
   'chapterContinuityHandoff',
   'previousPlanReconciliation',
   'currentFacts',
@@ -101,8 +102,8 @@ const FAST_SOURCES = [
   'heldItems',
 ] as const
 
-const DEEP_SOURCES = [
-  ...FAST_SOURCES,
+export const CONSISTENCY_AGENT_DEEP_SOURCES_V1 = [
+  ...CONSISTENCY_AGENT_FAST_SOURCES_V1,
   'recentChapterSummaries',
   'retrievedPassages',
   'itemLedger',
@@ -112,6 +113,26 @@ const DEEP_SOURCES = [
   'storyArcs',
   'storylineProgress',
 ] as const
+
+export const CONSISTENCY_AGENT_INPUT_BUDGET_V1 = {
+  fast: 16_000,
+  deep: 32_000,
+} as const
+
+export const CONSISTENCY_AGENT_OUTPUT_BUDGET_V1 = {
+  fast: 4_000,
+  deep: 6_000,
+} as const
+
+export interface ConsistencyAgentExecutionTraceV1 {
+  contextAssembled?: (input: {
+    assembled: Awaited<ReturnType<typeof assembleContext>>
+    messages: ChatMessage[]
+    sourceTextHash: string
+  }) => void | Promise<void>
+  modelRequested?: (input: { messages: ChatMessage[] }) => void | Promise<void>
+  modelResponded?: (input: { raw: string }) => void | Promise<void>
+}
 
 function emptyContext(): ConsistencyAgentContextEvidence {
   return {
@@ -243,6 +264,7 @@ export async function runConsistencyAgent(input: {
   model?: string
   budget: AgentTeamBudgetTracker
   call: (messages: ChatMessage[]) => Promise<string>
+  trace?: ConsistencyAgentExecutionTraceV1
 }): Promise<ConsistencyAgentCandidate> {
   const scope = await resolveReadScopeLike(input.projectId)
   const chapter = await db.chapters.get(input.chapterId)
@@ -258,10 +280,12 @@ export async function runConsistencyAgent(input: {
       chapterId: input.chapterId,
       outlineNodeId: input.outlineNodeId,
       worldGroupId: input.worldGroupId,
-      sourceKeys: [...(input.mode === 'fast' ? FAST_SOURCES : DEEP_SOURCES)],
+      sourceKeys: [...(input.mode === 'fast'
+        ? CONSISTENCY_AGENT_FAST_SOURCES_V1
+        : CONSISTENCY_AGENT_DEEP_SOURCES_V1)],
       provider: input.provider,
       model: input.model,
-      inputBudgetMaxTokens: input.mode === 'fast' ? 16_000 : 32_000,
+      inputBudgetMaxTokens: CONSISTENCY_AGENT_INPUT_BUDGET_V1[input.mode],
       sourceBudgetScale: input.mode === 'fast' ? 0.55 : 1,
     }),
     readCognitionAuditSnapshot(input.projectId, input.chapterId, input.worldGroupId, input.outlineNodeId, scope),
@@ -282,10 +306,12 @@ export async function runConsistencyAgent(input: {
     cognitionCatalog: formatCognitionCatalog(cognition.catalog),
     lifecycleCatalog: formatLifecycleCatalog(lifecycle.catalog),
   })
+  await input.trace?.contextAssembled?.({ assembled: evidence, messages, sourceTextHash })
+  await input.trace?.modelRequested?.({ messages })
   const reservation = input.budget.reserveCall({
     label: input.mode === 'fast' ? '一致性 Fast Guard' : '一致性 Deep Audit',
     messages,
-    maxOutputTokens: input.mode === 'fast' ? 4_000 : 6_000,
+    maxOutputTokens: CONSISTENCY_AGENT_OUTPUT_BUDGET_V1[input.mode],
   })
   let raw: string
   try {
@@ -295,6 +321,7 @@ export async function runConsistencyAgent(input: {
     input.budget.settleFailedCall(reservation)
     throw error
   }
+  await input.trace?.modelResponded?.({ raw })
   const parsed = parseConsistencyAuditResult({
     raw,
     mode: input.mode,
@@ -465,12 +492,37 @@ export async function readLatestConsistencyAgentRun(input: {
       && row.candidate.chapterId === input.chapterId
     ))
     .sort((left, right) => right.event.createdAt - left.event.createdAt)
-  const latest = matches[0]
-  if (!latest) return null
-  const conversation = await db.agentConversations.get(latest.event.conversationId)
-  return conversation && await assertRecordInScope(scope, 'agentConversations', conversation, { owner: 'work' })
-    ? { conversation, event: latest.event, candidate: latest.candidate }
-    : null
+  for (const latest of matches) {
+    const durable = latest.candidate.durable
+    if (durable?.stepId === 'chapter:consistency-audit') {
+      try {
+        const snapshot = await readAgentRunV1(scope, durable.runId)
+        const step = snapshot.projection.steps[durable.stepId]
+        const hasTerminalAuthority = snapshot.projection.state === 'completed'
+          && (snapshot.projection.memorySettlement?.state === 'settled'
+            || snapshot.events.some(event => event.type === 'verification.staled'))
+        const hasContextAuthority = snapshot.events.some(event => (
+          event.type === 'context.assembled'
+          && event.payload.stepId === durable.stepId
+          && event.payload.manifestHash === durable.contextManifestHash
+        ))
+        if (
+          latest.event.durableRunId !== durable.runId
+          || step?.candidateHash !== durable.candidateHash
+          || durable.candidateHash !== await hashConsistencyAgentCandidateV1(latest.candidate)
+          || !hasTerminalAuthority
+          || !hasContextAuthority
+        ) continue
+      } catch {
+        continue
+      }
+    }
+    const conversation = await db.agentConversations.get(latest.event.conversationId)
+    if (conversation && await assertRecordInScope(scope, 'agentConversations', conversation, { owner: 'work' })) {
+      return { conversation, event: latest.event, candidate: latest.candidate }
+    }
+  }
+  return null
 }
 
 export async function isConsistencyAgentCurrent(

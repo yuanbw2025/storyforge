@@ -199,6 +199,10 @@ import {
   type ConsistencyAgentRun,
 } from '../../lib/agent/consistency-agent'
 import {
+  CONSISTENCY_AUDIT_DURABLE_STEP_ID_V1,
+  refreshDurableConsistencyAuditFreshnessV1,
+} from '../../lib/agent/run/consistency-audit-durable'
+import {
   buildChapterInformationBoundaryV1,
   buildInformationBoundaryInstructionV1,
   validateProseInformationBoundaryV1,
@@ -722,7 +726,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           setPostAdoptionChainState(chapterPostAdoptionChainStateV1(currentSnapshot))
         }
       }
-      const current = run ? await isConsistencyAgentCurrent(run.candidate) : false
+      const current = !run
+        ? false
+        : run.candidate.durable?.stepId === CONSISTENCY_AUDIT_DURABLE_STEP_ID_V1
+          ? (await refreshDurableConsistencyAuditFreshnessV1({
+            scope: await resolveScopeLike(project.id!),
+            candidate: run.candidate,
+          })).current
+          : await isConsistencyAgentCurrent(run.candidate)
       if (!active) return
       setConsistencyRun(run)
       setConsistencyCurrent(current)
@@ -925,7 +936,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     const timer = setTimeout(() => {
       void (async () => {
         if (consistencyRunRef.current) {
-          const current = await isConsistencyAgentCurrent(consistencyRunRef.current.candidate)
+          const candidate = consistencyRunRef.current.candidate
+          const current = candidate.durable?.stepId === CONSISTENCY_AUDIT_DURABLE_STEP_ID_V1
+            ? (await refreshDurableConsistencyAuditFreshnessV1({
+              scope: await resolveScopeLike(project.id!),
+              candidate,
+            })).current
+            : await isConsistencyAgentCurrent(candidate)
           if (active) setConsistencyCurrent(current)
           if (current) return
         }

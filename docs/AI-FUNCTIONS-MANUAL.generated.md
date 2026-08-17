@@ -235,11 +235,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:24` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:552`<br/>`src/lib/node-authoring/domain-execution.ts:616` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1591` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1571` |
-| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:1059` |
-| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1716`<br/>`src/components/editor/ChapterEditor.tsx:2601` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1563` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1608` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1588` |
+| `chapter.memory` | `src/components/editor/ChapterEditor.tsx:1076` |
+| `chapter.organize` | `src/components/editor/ChapterEditor.tsx:1733`<br/>`src/components/editor/ChapterEditor.tsx:2618` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1580` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `codex.extract` | `src/lib/agent/run/codex-extraction-durable.ts:627` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
@@ -264,11 +264,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `outline.workshop.scenes` | `src/lib/outline/workshop.ts:453` |
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:286` |
-| `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:106` |
+| `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:107` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:451` |
-| `review.quality` | `src/components/editor/ReviewPanel.tsx:98` |
-| `review.readability` | `src/components/editor/ReviewPanel.tsx:115` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:1606` |
+| `review.quality` | `src/components/editor/ReviewPanel.tsx:99` |
+| `review.readability` | `src/components/editor/ReviewPanel.tsx:116` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:1623` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:670`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
 | `style.calibrate` | `src/components/style/StyleCalibrationPanel.tsx:63` |
@@ -278,7 +278,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ### 动态 category 调用
 
-- `src/components/editor/ReviewPanel.tsx:139 · ai.start`
+- `src/components/editor/ReviewPanel.tsx:141 · ai.start`
 - `src/lib/adventure/harness.ts:245 · chat`
 - `src/lib/agent/character-copilot.ts:475 · chat`
 - `src/lib/agent/character-driven-copilot.ts:507 · chat`
@@ -311,4 +311,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `d58f921`
+生成时间基准:commit `f7195eb`
