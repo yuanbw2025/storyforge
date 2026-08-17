@@ -6,7 +6,7 @@ import { DialogProvider } from '../../src/components/shared/Dialog'
 import { db } from '../../src/lib/db/schema'
 import { addNarrativeNode, createNarrativeModule } from '../../src/lib/narrative/blueprint'
 import { addNarrativeBeat, addNarrativeChoice, createGameDefinition } from '../../src/lib/text-game/content'
-import { publishGameDefinition } from '../../src/lib/text-game/releases'
+import { parseWorldReleasePlayerCharacter, publishGameDefinition } from '../../src/lib/text-game/releases'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { EMPTY_SIMULATION_STATE, type Project } from '../../src/lib/types'
@@ -36,6 +36,28 @@ async function clickContaining(host: HTMLElement, text: string) {
     result.click()
     await new Promise(resolve => setTimeout(resolve, 0))
   })
+}
+
+async function clickAria(host: HTMLElement, label: string) {
+  await act(async () => {
+    const result = host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+    if (!result) throw new Error(`找不到按钮:${label}`)
+    result.click()
+    await new Promise(resolve => setTimeout(resolve, 0))
+  })
+}
+
+async function revealCurrentScene(host: HTMLElement) {
+  await viWaitFor(() => expect(host.querySelector('.storygame-choices,button[aria-label="继续阅读"],button[aria-label="进入选择"]')).not.toBeNull())
+  for (let index = 0; index < 20; index += 1) {
+    const next = host.querySelector<HTMLButtonElement>('button[aria-label="继续阅读"],button[aria-label="进入选择"]')
+    if (!next) return
+    await act(async () => {
+      next.click()
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+  }
+  throw new Error('场景阅读没有在预期步数内结束')
 }
 
 async function openGameDetails(host: HTMLElement, title: string) {
@@ -79,8 +101,14 @@ describe('STORYGAME-1B · player loop', () => {
     const ownership = await ensureWorkspaceOwnership(projectId)
     scope = ownership.scope
     project = ownership.project
+    const playerId = await db.characters.add({
+      projectId, worldId: scope.worldId, name: '林澈', role: 'protagonist', roleWeight: 'main',
+      moralAxis: 'good', orderAxis: 'neutral', shortDescription: '雾港守灯人，也是玩家在本故事中扮演的固定主角。',
+      appearance: '', personality: '', background: '', motivation: '', abilities: '', relationships: '', arc: '', createdAt: now, updatedAt: now,
+    } as any) as number
     const speakerId = await db.characters.add({
       projectId, worldId: scope.worldId, name: '守灯人', role: 'supporting',
+      roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'lawful',
       shortDescription: '', appearance: '', personality: '', background: '', motivation: '',
       abilities: '', relationships: '', arc: '', createdAt: now, updatedAt: now,
     } as any) as number
@@ -89,6 +117,7 @@ describe('STORYGAME-1B · player loop', () => {
     await addNarrativeNode({ scope, moduleId: module.id!, key: 'safe', kind: 'ending', title: '灯火未熄' })
     await addNarrativeNode({ scope, moduleId: module.id!, key: 'dark', kind: 'ending', title: '长夜无灯' })
     await addNarrativeBeat({ scope, moduleId: module.id!, nodeKey: 'entry', beatKey: 'rain', kind: 'narration', text: '雨水拍打着灯塔。' })
+    await addNarrativeBeat({ scope, moduleId: module.id!, nodeKey: 'entry', beatKey: 'player', kind: 'dialogue', speakerCharacterId: playerId, text: '我会守住今晚的灯。' })
     await addNarrativeBeat({ scope, moduleId: module.id!, nodeKey: 'entry', beatKey: 'keeper', kind: 'dialogue', speakerCharacterId: speakerId, text: '你来得正是时候。' })
     await addNarrativeBeat({ scope, moduleId: module.id!, nodeKey: 'safe', beatKey: 'safe-end', kind: 'system', text: '你守住了雾港的灯。' })
     await addNarrativeBeat({ scope, moduleId: module.id!, nodeKey: 'dark', beatKey: 'dark-end', kind: 'system', text: '海雾吞没了最后一束光。' })
@@ -127,14 +156,26 @@ describe('STORYGAME-1B · player loop', () => {
     expect(await db.simulationSessions.count()).toBe(0)
     await openGameDetails(host, '灯塔之夜')
     expect(host.textContent).toContain('3 个场景')
+    expect(host.textContent).toContain('你将扮演')
+    expect(host.textContent).toContain('林澈')
     expect(await db.simulationSessions.count()).toBe(0)
     await click(host, '开始新游戏')
     await viWaitFor(() => expect(host.textContent).toContain('雨水拍打着灯塔。'))
-    expect(host.textContent).toContain('守灯人')
-    expect(host.textContent).toContain('你来得正是时候。')
+    expect(host.textContent).toContain('你扮演')
+    expect(host.textContent).not.toContain('我会守住今晚的灯。')
+    expect(host.textContent).not.toContain('你来得正是时候。')
+    expect(host.textContent).not.toContain('点亮灯火')
     expect(host.querySelector('.storygame-story-stage')).not.toBeNull()
     expect(host.querySelector('.storygame-cast')).not.toBeNull()
-    expect(host.querySelector('.storygame-speaker-mark')?.textContent).toBe('守')
+    await clickAria(host, '继续阅读')
+    expect(host.textContent).toContain('我会守住今晚的灯。')
+    expect(host.querySelector('[data-speaker-role="player"]')?.classList.contains('side-right')).toBe(true)
+    expect(host.textContent).not.toContain('你来得正是时候。')
+    await clickAria(host, '继续阅读')
+    expect(host.textContent).toContain('你来得正是时候。')
+    expect(host.querySelector('[data-speaker-role="npc"]')?.classList.contains('side-left')).toBe(true)
+    expect(host.textContent).not.toContain('点亮灯火')
+    await clickAria(host, '进入选择')
     const locked = button(host, '3打开密室')
     expect(locked.disabled).toBe(true)
     expect(locked.getAttribute('aria-describedby')).toMatch(/^choice-reason-/)
@@ -144,6 +185,9 @@ describe('STORYGAME-1B · player loop', () => {
     expect(useSimulationRuntimeStore.getState().sessions).toHaveLength(0)
 
     await click(host, '1点亮灯火与守灯人并肩工作。')
+    await viWaitFor(() => expect(host.textContent).toContain('你守住了雾港的灯。'))
+    expect(host.textContent).not.toContain('ENDING REACHED')
+    await clickAria(host, '查看结局')
     await viWaitFor(() => expect(host.textContent).toContain('ENDING REACHED'))
     expect(host.textContent).toContain('灯火未熄')
     expect(host.textContent).toContain('你守住了雾港的灯。')
@@ -188,6 +232,14 @@ describe('STORYGAME-1B · player loop', () => {
     expect(useStoryGamePlayerStore.getState().releases).toHaveLength(2)
   })
 
+  it('冻结世界出现两个同级主角时不任意指定玩家身份', async () => {
+    const release = await db.worldReleases.where('projectId').equals(scope.projectId).first()
+    const manifest = JSON.parse(release!.manifestJson) as { records: { characters: Array<Record<string, unknown>> } }
+    const protagonist = manifest.records.characters.find(character => character.role === 'protagonist')!
+    manifest.records.characters.push({ ...protagonist, name: '另一位主角' })
+    expect(parseWorldReleasePlayerCharacter(JSON.stringify(manifest))).toBeNull()
+  })
+
   it('从中段检查点 fork 后改选另一结局且原存档保持不变', async () => {
     await renderPlayer()
     await viWaitFor(() => expect(host.textContent).toContain('灯塔之夜'))
@@ -206,8 +258,10 @@ describe('STORYGAME-1B · player loop', () => {
     })
     await viWaitFor(() => expect(host.textContent).toContain('风暴前'))
     await click(host, '故事')
+    await revealCurrentScene(host)
     await click(host, '1点亮灯火与守灯人并肩工作。')
     await viWaitFor(() => expect(host.textContent).toContain('灯火未熄'))
+    await clickAria(host, '查看结局')
     const originalId = useStoryGamePlayerStore.getState().selectedSessionId!
     await click(host, '从检查点改选')
     await click(host, '从这里分支')
@@ -217,6 +271,7 @@ describe('STORYGAME-1B · player loop', () => {
       await new Promise(resolve => setTimeout(resolve, 0))
     })
     await click(host, '故事')
+    await revealCurrentScene(host)
     await viWaitFor(() => expect(button(host, '2转身离开').disabled).toBe(false))
     await click(host, '2转身离开')
     await viWaitFor(() => expect(host.textContent).toContain('长夜无灯'))

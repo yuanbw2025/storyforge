@@ -32,6 +32,11 @@ interface ReaderPreferences {
   theme: ReaderTheme
 }
 
+interface ReaderCursor {
+  sceneKey: string
+  revealedStep: number
+}
+
 interface DisplayBeat {
   label: string
   text: string
@@ -42,6 +47,27 @@ const DEFAULT_PREFERENCES: ReaderPreferences = { fontScale: 1, lineHeight: 1.85,
 
 function preferenceKey(projectId: number): string {
   return `storyforge.storygame.reader.${projectId}`
+}
+
+function cursorKey(sessionId: number): string {
+  return `storyforge.storygame.cursor.${sessionId}`
+}
+
+function loadCursor(sessionId: number, sceneKey: string, maximumStep: number): ReaderCursor {
+  try {
+    const value = JSON.parse(localStorage.getItem(cursorKey(sessionId)) ?? '{}') as Partial<ReaderCursor>
+    if (value.sceneKey === sceneKey && Number.isInteger(value.revealedStep)) {
+      return {
+        sceneKey,
+        revealedStep: Math.min(maximumStep, Math.max(1, Number(value.revealedStep))),
+      }
+    }
+  } catch { /* restart the current scene when a local cursor is invalid */ }
+  return { sceneKey, revealedStep: 1 }
+}
+
+function saveCursor(sessionId: number, cursor: ReaderCursor): void {
+  try { localStorage.setItem(cursorKey(sessionId), JSON.stringify(cursor)) } catch { /* reading can continue in memory */ }
 }
 
 function loadPreferences(projectId: number): ReaderPreferences {
@@ -97,6 +123,7 @@ export default function StoryGamePlayer(props: {
   const [showSettings, setShowSettings] = useState(false)
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
   const [preferences, setPreferences] = useState(() => loadPreferences(props.project.id!))
+  const [readerCursor, setReaderCursor] = useState<ReaderCursor>({ sceneKey: '', revealedStep: 1 })
 
   useEffect(() => {
     setCatalogReleaseId(null)
@@ -113,6 +140,7 @@ export default function StoryGamePlayer(props: {
   const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
   const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
   const selectedRelease = store.releases.find(item => item.release.id === selected?.gameReleaseId) ?? null
+  const playerCharacter = selectedRelease?.playerCharacter ?? null
   const speakerNames = useMemo(() => ({
     ...(selectedRelease?.speakerNames ?? {}),
     ...store.speakerNames,
@@ -123,23 +151,60 @@ export default function StoryGamePlayer(props: {
   const beats = useMemo(() => (narrative?.beats ?? [])
     .filter(beat => beat.nodeKey === currentNode?.key)
     .sort((left, right) => left.order - right.order), [currentNode?.key, narrative?.beats])
+  const currentNodeVisit = narrative && currentNode
+    ? narrative.visitedNodeKeys.filter(key => key === currentNode.key).length
+    : 0
+  const readerSceneKey = selected && currentNode ? `${selected.id}:${currentNode.key}:${currentNodeVisit}` : ''
+  const maximumReadingStep = Math.max(1, beats.length + 1)
+  const revealedStep = readerCursor.sceneKey === readerSceneKey
+    ? Math.min(maximumReadingStep, Math.max(1, readerCursor.revealedStep))
+    : 1
+  const revealedBeatCount = beats.length === 0 ? 0 : Math.min(beats.length, revealedStep)
+  const revealedBeats = useMemo(() => beats.slice(0, revealedBeatCount), [beats, revealedBeatCount])
+  const nodeContentComplete = beats.length === 0 || revealedStep > beats.length
   const visibleChoices = useMemo(() => (narrative?.visibleChoiceKeys ?? [])
     .map(key => choiceForKey(narrative?.choices ?? [], key))
     .filter((choice): choice is FrozenNarrativeChoice => choice != null), [narrative])
   const legacyChoices = useMemo(() => (narrative?.version === 1 ? narrative.availableNodeKeys : [])
     .map(key => narrative?.nodes.find(node => node.key === key))
     .filter((node): node is NonNullable<typeof node> => node != null), [narrative])
-  const speakers = useMemo(() => Array.from(new Set(beats
+  const speakers = useMemo(() => Array.from(new Set([
+    ...(playerCharacter ? [playerCharacter.name] : []),
+    ...revealedBeats
     .map(beat => displayBeat(beat, speakerNames))
     .filter(beat => beat.dialogue)
-    .map(beat => beat.label))), [beats, speakerNames])
+    .map(beat => beat.label),
+  ])), [playerCharacter, revealedBeats, speakerNames])
   const progress = narrative ? Math.min(100, Math.max(8, Math.round(
     narrative.visitedNodeKeys.length / Math.max(narrative.nodes.length, 1) * 100,
   ))) : 0
 
+  useEffect(() => {
+    if (!selected?.id || !readerSceneKey) return
+    setReaderCursor(current => current.sceneKey === readerSceneKey
+      ? current
+      : loadCursor(selected.id!, readerSceneKey, maximumReadingStep))
+  }, [maximumReadingStep, readerSceneKey, selected?.id])
+
   const run = async (action: () => Promise<unknown>) => {
     try { await action() } catch { /* store exposes the actionable error */ }
   }
+
+  const advanceReader = () => {
+    if (!selected?.id || !readerSceneKey || nodeContentComplete) return
+    const next = {
+      sceneKey: readerSceneKey,
+      revealedStep: Math.min(maximumReadingStep, revealedStep + 1),
+    }
+    saveCursor(selected.id, next)
+    setReaderCursor(next)
+  }
+
+  const beatBelongsToPlayer = (beat: FrozenNarrativeBeat, shown: DisplayBeat): boolean => (
+    shown.dialogue
+    && playerCharacter != null
+    && (beat.speakerKey === playerCharacter.speakerKey || shown.label === playerCharacter.name)
+  )
 
   const startGame = async (releaseId: number, title: string) => {
     await run(async () => {
@@ -180,7 +245,10 @@ export default function StoryGamePlayer(props: {
       confirmText: '删除',
       tone: 'danger',
     })
-    if (confirmed) await run(() => store.remove(sessionId))
+    if (confirmed) await run(async () => {
+      await store.remove(sessionId)
+      try { localStorage.removeItem(cursorKey(sessionId)) } catch { /* stale local cursor is harmless */ }
+    })
   }
 
   if (store.loading && !selected) return <div className="storygame-launcher storygame-player-v2"><div className="storygame-empty"><Loader2 className="h-6 w-6 animate-spin" /><span>正在恢复本地存档…</span></div></div>
@@ -200,6 +268,7 @@ export default function StoryGamePlayer(props: {
             <small>分支叙事 · 当前可玩版本</small>
             <h3>{catalogRelease.manifest?.definition.title ?? catalogRelease.release.label}</h3>
             <p>{catalogRelease.manifest?.definition.description || '一段等待你作出选择的故事。'}</p>
+            {catalogRelease.playerCharacter && <div className="textgame-player-role" aria-label={`你将扮演 ${catalogRelease.playerCharacter.name}`}><i>{catalogRelease.playerCharacter.name.slice(0, 1)}</i><span><small>你将扮演</small><strong>{catalogRelease.playerCharacter.name}</strong>{catalogRelease.playerCharacter.description && <p>{catalogRelease.playerCharacter.description}</p>}</span></div>}
             {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.narrative.nodes.length} 个场景</span><span>{catalogRelease.manifest.narrative.choices.length} 个选择</span><span>{catalogRelease.manifest.narrative.nodes.filter(node => node.kind === 'ending').length} 个结局</span></div>}
             {catalogRelease.error ? <span className="storygame-error-text">{catalogRelease.error}</span> : <div className="textgame-title-actions"><button type="button" className="textgame-start" onClick={() => void startGame(catalogRelease.release.id!, catalogRelease.manifest!.definition.title)} disabled={store.busy}><Plus className="h-4 w-4" />开始新游戏</button>{store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id)!.id!)}><Clock3 className="h-4 w-4" />继续上次进度</button>}</div>}
           </div>
@@ -220,7 +289,7 @@ export default function StoryGamePlayer(props: {
       <section className="storygame-main" aria-label="分支叙事播放器">
         <header className="storygame-gamebar">
           <button type="button" aria-label="返回游戏库" onClick={() => void store.select(null)}><ArrowLeft className="h-4 w-4" /></button>
-          <div className="storygame-game-title"><small>{narrative.moduleTitle}{isLegacy ? ' · 旧版兼容模式' : ''}</small><strong>{selectedRelease?.manifest?.definition.title ?? selected.title}</strong></div>
+          <div className="storygame-game-title"><small>{narrative.moduleTitle}{playerCharacter ? ` · 你是 ${playerCharacter.name}` : ''}{isLegacy ? ' · 旧版兼容模式' : ''}</small><strong>{selectedRelease?.manifest?.definition.title ?? selected.title}</strong></div>
           <div className="storygame-progress" aria-label={`故事进度 ${progress}%`}><span style={{ width: `${progress}%` }} /></div>
           <nav aria-label="播放器功能">
             <button type="button" className={view === 'story' ? 'active' : ''} onClick={() => setView('story')}><BookOpen className="h-4 w-4" />故事</button>
@@ -232,35 +301,38 @@ export default function StoryGamePlayer(props: {
         </header>
 
         {store.error && <div className="storygame-alert" role="alert"><span>{store.error}</span><button type="button" onClick={() => void store.load(props.scope, props.worldGroupId)}>重新同步</button></div>}
-        {view === 'story' && !narrative.completed && <section className="storygame-story-stage" aria-labelledby="storygame-node-title" style={{ fontSize: `${preferences.fontScale}rem`, lineHeight: preferences.lineHeight }}>
+        {view === 'story' && !narrative.completed && <section key={readerSceneKey} className="storygame-story-stage" aria-labelledby="storygame-node-title" style={{ fontSize: `${preferences.fontScale}rem`, lineHeight: preferences.lineHeight }}>
           <div className="storygame-stage-atmosphere"><span /><span /><span /></div>
           <div className="storygame-scene-meta"><span>场景 {narrative.visitedNodeKeys.length} / {narrative.nodes.length}</span><span>已自动保存 · 事件 #{store.runtimeState.lastSequence}</span></div>
           <header><small>当前场景</small><h2 id="storygame-node-title">{currentNode.title}</h2>{currentNode.summary && <p>{currentNode.summary}</p>}</header>
           {isLegacy && <div className="storygame-legacy-note">旧 WORLD-2F 兼容存档：可以继续阅读和分支，但不会覆盖为新发布。</div>}
-          {!!speakers.length && <div className="storygame-cast" aria-label="本场角色">{speakers.map((speaker, index) => <span key={speaker}><i>{speaker.slice(0, 1)}</i><b>{speaker}</b><small>{index === 0 ? '当前场景' : '同行角色'}</small></span>)}</div>}
+          {playerCharacter && <div className="storygame-player-identity" aria-label={`你扮演 ${playerCharacter.name}`}><span>你扮演</span><i>{playerCharacter.name.slice(0, 1)}</i><div><strong>{playerCharacter.name}</strong>{playerCharacter.description && <small>{playerCharacter.description}</small>}</div></div>}
+          {!!speakers.length && <div className="storygame-cast" aria-label="本场角色">{speakers.map(speaker => <span className={speaker === playerCharacter?.name ? 'is-player' : ''} key={speaker}><i>{speaker.slice(0, 1)}</i><b>{speaker}</b><small>{speaker === playerCharacter?.name ? '玩家角色' : '场景角色'}</small></span>)}</div>}
           <div className="storygame-beats" aria-live="polite">
-            {beats.map((beat, index) => {
+            {revealedBeats.map(beat => {
               const shown = displayBeat(beat, speakerNames)
-              return <article className={`storygame-beat storygame-beat-${beat.kind} ${shown.dialogue ? `is-dialogue side-${index % 2 ? 'right' : 'left'}` : ''}`} key={beat.beatKey} aria-label={`${shown.label}：${shown.text}`}>
+              const playerBeat = beatBelongsToPlayer(beat, shown)
+              return <article className={`storygame-beat storygame-beat-${beat.kind} ${shown.dialogue ? `is-dialogue ${playerBeat ? 'is-player side-right' : 'is-npc side-left'}` : ''}`} data-speaker-role={shown.dialogue ? playerBeat ? 'player' : 'npc' : undefined} key={beat.beatKey} aria-label={`${shown.label}：${shown.text}`}>
                 {shown.dialogue && <span className="storygame-speaker-mark" aria-hidden="true">{shown.label.slice(0, 1)}</span>}
                 <div><strong>{shown.label}</strong><p>{shown.text}</p></div>
               </article>
             })}
             {!beats.length && <p className="storygame-node-summary">继续选择，推进这段故事。</p>}
           </div>
-          <div className="storygame-choices" aria-label="剧情选择">
+          {!nodeContentComplete && <div className="storygame-reading-controls"><button type="button" onClick={advanceReader} disabled={store.busy} aria-label={revealedBeatCount < beats.length ? '继续阅读' : '进入选择'}><span>{revealedBeatCount < beats.length ? '继续' : '作出选择'}</span><small>{revealedBeatCount} / {beats.length}</small><ChevronRight className="h-4 w-4" /></button></div>}
+          {nodeContentComplete && <div className="storygame-choices" aria-label="剧情选择">
             <small>你的选择</small>
             {isLegacy ? legacyChoices.map((node, index) => <div key={node.key}><button type="button" onClick={() => void run(() => store.advanceLegacy(node.key))} disabled={store.busy}><span>{index + 1}</span><span><strong>{node.title}</strong>{node.summary && <small>{node.summary}</small>}</span><ChevronRight className="h-4 w-4" /></button></div>) : visibleChoices.map((choice, index) => {
               const available = narrative.availableChoiceKeys?.includes(choice.choiceKey) ?? false
               const reasonId = `choice-reason-${choice.choiceKey.replace(/[^a-zA-Z0-9_-]/g, '-')}`
               return <div key={choice.choiceKey}><button type="button" onClick={() => void run(() => store.choose(choice.choiceKey))} disabled={!available || store.busy} aria-describedby={!available && choice.unavailableReason ? reasonId : undefined}><span>{index + 1}</span><span><strong>{choice.text}</strong>{choice.description && <small>{choice.description}</small>}</span><ChevronRight className="h-4 w-4" /></button>{!available && <p id={reasonId}>{choice.unavailableReason || '当前条件未满足。'}</p>}</div>
             })}
-          </div>
+          </div>}
         </section>}
 
-        {view === 'story' && narrative.completed && <section className="storygame-ending" aria-labelledby="storygame-ending-title"><CheckCircle2 className="h-10 w-10" /><small>ENDING REACHED</small><h2 id="storygame-ending-title">{currentNode.title}</h2>{beats.map(beat => { const shown = displayBeat(beat, speakerNames); return <div className={`storygame-beat storygame-beat-${beat.kind}`} key={beat.beatKey}><strong>{shown.label}</strong><p>{shown.text}</p></div> })}<div className="storygame-ending-stats"><span><strong>{narrative.visitedNodeKeys.length}</strong>到访节点</span><span><strong>{narrative.choiceHistory?.length ?? 0}</strong>关键选择</span><span><strong>{store.runtimeState.lastSequence}</strong>回放事件</span></div><div className="storygame-ending-actions"><button type="button" onClick={() => setView('history')}><History className="h-4 w-4" />回看选择</button><button type="button" onClick={() => setView('saves')}><GitBranch className="h-4 w-4" />从检查点改选</button></div></section>}
+        {view === 'story' && narrative.completed && <section key={readerSceneKey} className="storygame-ending" aria-labelledby="storygame-ending-title"><CheckCircle2 className="h-10 w-10" /><small>{nodeContentComplete ? 'ENDING REACHED' : 'FINAL SCENE'}</small><h2 id="storygame-ending-title">{currentNode.title}</h2>{revealedBeats.map(beat => { const shown = displayBeat(beat, speakerNames); const playerBeat = beatBelongsToPlayer(beat, shown); return <div className={`storygame-beat storygame-beat-${beat.kind} ${shown.dialogue ? `is-dialogue ${playerBeat ? 'is-player side-right' : 'is-npc side-left'}` : ''}`} data-speaker-role={shown.dialogue ? playerBeat ? 'player' : 'npc' : undefined} key={beat.beatKey}><strong>{shown.label}</strong><p>{shown.text}</p></div> })}{!nodeContentComplete ? <div className="storygame-reading-controls"><button type="button" onClick={advanceReader} disabled={store.busy} aria-label={revealedBeatCount < beats.length ? '继续阅读' : '查看结局'}><span>{revealedBeatCount < beats.length ? '继续' : '查看结局'}</span><small>{revealedBeatCount} / {beats.length}</small><ChevronRight className="h-4 w-4" /></button></div> : <><div className="storygame-ending-stats"><span><strong>{narrative.visitedNodeKeys.length}</strong>到访节点</span><span><strong>{narrative.choiceHistory?.length ?? 0}</strong>关键选择</span><span><strong>{store.runtimeState.lastSequence}</strong>回放事件</span></div><div className="storygame-ending-actions"><button type="button" onClick={() => setView('history')}><History className="h-4 w-4" />回看选择</button><button type="button" onClick={() => setView('saves')}><GitBranch className="h-4 w-4" />从检查点改选</button></div></>}</section>}
 
-        {view !== 'story' && <div className="storygame-panel-backdrop" role="presentation"><section className="storygame-panel" aria-label={view === 'history' ? '选择历史' : '检查点与分支'}><header><div><small>{view === 'history' ? 'READING HISTORY' : 'SAVE & FORK'}</small><h2>{view === 'history' ? '这条时间线的阅读记录' : '检查点与时间线'}</h2></div><button type="button" aria-label="关闭面板" onClick={() => setView('story')}><X className="h-4 w-4" /></button></header>{view === 'history' ? <div className="storygame-history">{narrative.visitedNodeKeys.map((nodeKey, index) => { const node = narrative.nodes.find(candidate => candidate.key === nodeKey); const nodeBeats = (narrative.beats ?? []).filter(beat => beat.nodeKey === nodeKey).sort((left, right) => left.order - right.order); const historyItem = narrative.choiceHistory?.[index]; const choice = historyItem ? choiceForKey(narrative.choices ?? [], historyItem.choiceKey) : null; return <article key={`${nodeKey}-${index}`}><span>{index + 1}</span><div><small>{node?.kind === 'ending' ? '结局' : '场景'}</small><strong>{node?.title ?? nodeKey}</strong>{nodeBeats.map(beat => { const shown = displayBeat(beat, speakerNames); return <p key={beat.beatKey}><b>{shown.label}</b>：{shown.text}</p> })}{choice && <p className="storygame-history-choice">选择：{choice.text} · 事件 #{historyItem?.eventSequence}</p>}</div></article>})}</div> : <div className="storygame-saves"><button type="button" className="storygame-primary-save" onClick={() => void saveCheckpoint()} disabled={store.busy}><Save className="h-4 w-4" />保存当前检查点</button><div className="storygame-save-list">{store.checkpoints.map(checkpoint => <article key={checkpoint.id}><div><strong>{checkpoint.name}</strong><span>事件 #{checkpoint.throughSequence} · {formatTime(checkpoint.createdAt)}</span></div><button type="button" onClick={() => void forkCheckpoint(checkpoint.id!, checkpoint.name)} disabled={store.busy}><GitBranch className="h-4 w-4" />从这里分支</button></article>)}</div><button type="button" className="storygame-secondary-action" onClick={() => void run(() => store.forkCurrent())} disabled={store.busy}><GitBranch className="h-4 w-4" />从当前位置建立新时间线</button></div>}</section></div>}
+        {view !== 'story' && <div className="storygame-panel-backdrop" role="presentation"><section className="storygame-panel" aria-label={view === 'history' ? '选择历史' : '检查点与分支'}><header><div><small>{view === 'history' ? 'READING HISTORY' : 'SAVE & FORK'}</small><h2>{view === 'history' ? '这条时间线的阅读记录' : '检查点与时间线'}</h2></div><button type="button" aria-label="关闭面板" onClick={() => setView('story')}><X className="h-4 w-4" /></button></header>{view === 'history' ? <div className="storygame-history">{narrative.visitedNodeKeys.map((nodeKey, index) => { const node = narrative.nodes.find(candidate => candidate.key === nodeKey); const allNodeBeats = (narrative.beats ?? []).filter(beat => beat.nodeKey === nodeKey).sort((left, right) => left.order - right.order); const nodeBeats = nodeKey === currentNode.key && index === narrative.visitedNodeKeys.length - 1 ? allNodeBeats.slice(0, revealedBeatCount) : allNodeBeats; const historyItem = narrative.choiceHistory?.[index]; const choice = historyItem ? choiceForKey(narrative.choices ?? [], historyItem.choiceKey) : null; return <article key={`${nodeKey}-${index}`}><span>{index + 1}</span><div><small>{node?.kind === 'ending' ? '结局' : '场景'}</small><strong>{node?.title ?? nodeKey}</strong>{nodeBeats.map(beat => { const shown = displayBeat(beat, speakerNames); return <p key={beat.beatKey}><b>{shown.label}</b>：{shown.text}</p> })}{choice && <p className="storygame-history-choice">选择：{choice.text} · 事件 #{historyItem?.eventSequence}</p>}</div></article>})}</div> : <div className="storygame-saves"><button type="button" className="storygame-primary-save" onClick={() => void saveCheckpoint()} disabled={store.busy}><Save className="h-4 w-4" />保存当前检查点</button><div className="storygame-save-list">{store.checkpoints.map(checkpoint => <article key={checkpoint.id}><div><strong>{checkpoint.name}</strong><span>事件 #{checkpoint.throughSequence} · {formatTime(checkpoint.createdAt)}</span></div><button type="button" onClick={() => void forkCheckpoint(checkpoint.id!, checkpoint.name)} disabled={store.busy}><GitBranch className="h-4 w-4" />从这里分支</button></article>)}</div><button type="button" className="storygame-secondary-action" onClick={() => void run(() => store.forkCurrent())} disabled={store.busy}><GitBranch className="h-4 w-4" />从当前位置建立新时间线</button></div>}</section></div>}
 
         {showSettings && <div className="storygame-settings-popover"><div><UserRound className="h-4 w-4" /><strong>阅读设置</strong></div><label>字号<select value={preferences.fontScale} onChange={event => setPreferences(value => ({ ...value, fontScale: Number(event.target.value) }))}><option value={0.9}>较小</option><option value={1}>标准</option><option value={1.15}>较大</option><option value={1.3}>特大</option></select></label><label>行距<select value={preferences.lineHeight} onChange={event => setPreferences(value => ({ ...value, lineHeight: Number(event.target.value) }))}><option value={1.6}>紧凑</option><option value={1.85}>舒适</option><option value={2.1}>宽松</option></select></label><label>主题<select value={preferences.theme} onChange={event => setPreferences(value => ({ ...value, theme: event.target.value as ReaderTheme }))}><option value="paper">纸张</option><option value="night">夜间</option></select></label></div>}
       </section>
