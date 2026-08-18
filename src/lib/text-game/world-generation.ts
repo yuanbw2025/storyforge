@@ -29,6 +29,7 @@ import {
 } from './content'
 
 export const WORLD_GAME_MAPPING_VERSION = 1
+export const WORLD_ADVENTURE_PLAYER_VERSION = 2
 
 export interface WorldGameSourceCatalog {
   release: WorldRelease
@@ -479,9 +480,35 @@ function adventureStoryExcerpt(
     .slice(0, limit)
     .map(beat => {
       const speaker = beat.speakerCharacterExportId == null ? '' : characterById.get(beat.speakerCharacterExportId)
-      return speaker ? `${speaker}：“${beat.text}”` : beat.text
+      if (speaker) return `【${speaker}】${beat.text}`
+      if (beat.kind === 'system') return `【系统】${beat.text}`
+      if (beat.kind === 'action') return `【行动】${beat.text}`
+      return beat.text
     })
-    .join(' ')
+    .join('\n\n')
+}
+
+function adventureConversationExcerpt(
+  story: PortableStoryGameDraftV1,
+  catalog: WorldGameSourceCatalog,
+  characterExportId: number,
+): string {
+  const firstDialogue = story.beats.find(beat => (
+    beat.kind === 'dialogue' && beat.speakerCharacterExportId === characterExportId
+  ))
+  if (!firstDialogue) return ''
+  const sceneBeats = story.beats.filter(beat => beat.nodeKey === firstDialogue.nodeKey)
+  const dialogueIndex = sceneBeats.findIndex(beat => beat.beatKey === firstDialogue.beatKey)
+  const start = Math.max(0, dialogueIndex - 1)
+  const selected = sceneBeats.slice(start, Math.min(sceneBeats.length, dialogueIndex + 4))
+  const characterById = new Map(catalog.characters.map(item => [item.exportId, item.name]))
+  return selected.map(beat => {
+    const speaker = beat.speakerCharacterExportId == null ? '' : characterById.get(beat.speakerCharacterExportId)
+    if (speaker) return `【${speaker}】${beat.text}`
+    if (beat.kind === 'system') return `【系统】${beat.text}`
+    if (beat.kind === 'action') return `【行动】${beat.text}`
+    return beat.text
+  }).join('\n\n')
 }
 
 export function buildAdventureContent(input: {
@@ -528,6 +555,21 @@ export function buildAdventureContent(input: {
     node.key,
     adventureSceneLocationIndex(node, locations, index),
   ]))
+  const playerCharacterExportId = story.beats.find(beat => (
+    beat.nodeKey === story.entryNodeKey
+      && beat.kind === 'dialogue'
+      && beat.speakerCharacterExportId != null
+  ))?.speakerCharacterExportId ?? null
+  const playerCharacter = playerCharacterExportId == null
+    ? null
+    : selectedCharacters.find(character => character.exportId === playerCharacterExportId) ?? null
+  const entryExcerpt = adventureStoryExcerpt(story, input.catalog, story.entryNodeKey, 10)
+  const arrivalExcerpt = (locationIndex: number) => {
+    const node = storySceneNodes.find(item => (
+      item.key !== story.entryNodeKey && sceneAssignments.get(item.key) === locationIndex
+    ))
+    return node ? adventureStoryExcerpt(story, input.catalog, node.key, 3) : ''
+  }
   const objects = selectedLocations.map(item => ({
     key: `landmark-${item.exportId}`,
     locationKey: `location-${item.exportId}`,
@@ -584,7 +626,7 @@ export function buildAdventureContent(input: {
       costlySuccessEffects: [],
       failureEffects: [],
       successText: index === 0
-        ? `${location.description}\n\n你把潮位、道路和仍记得自己姓名的人写进调查簿，正式开始追查“${narrative.title}”。`
+        ? `${entryExcerpt || location.description}\n\n【行动】你把潮位、道路和仍记得自己姓名的人写进调查簿，正式开始追查“${narrative.title}”。`
         : `${location.description}\n\n你没有只把这里当作途经点，而是核对道路、潮痕与居民证词，把${location.title}补进可回溯的调查路线。`,
       costlySuccessText: `你费力辨认出${location.title}的线索。`,
       failureText: '当前没有发现新的线索。',
@@ -599,14 +641,14 @@ export function buildAdventureContent(input: {
         kind: 'move', label: `前往${next.title}`, description: `从${location.title}前往${next.title}。`,
         locationKey: location.key, targetKey: next.key, requirements: [], rule: { kind: 'resource-payment', resourceKey: 'time', amount: 1 },
         successEffects: [{ op: 'enter-location', locationKey: next.key }], costlySuccessEffects: [], failureEffects: [],
-        successText: `你沿着潮灯与旧路标穿过雾气，抵达${next.title}。身后的路仍在，但黑潮也向港内推进了一刻。`, costlySuccessText: `你付出代价后抵达${next.title}。`, failureText: '道路暂时无法通过。', unavailableText: '剩余时间已经不足以继续移动。', repeatable: true, narrativeChoiceKey: null,
+        successText: `你沿着潮灯与旧路标穿过雾气，抵达${next.title}。身后的路仍在，但黑潮也向港内推进了一刻。${arrivalExcerpt(index + 1) ? `\n\n${arrivalExcerpt(index + 1)}` : ''}`, costlySuccessText: `你付出代价后抵达${next.title}。`, failureText: '道路暂时无法通过。', unavailableText: '剩余时间已经不足以继续移动。', repeatable: true, narrativeChoiceKey: null,
       })
       actions.push({
         key: `move.${next.key}.${location.key}`,
         kind: 'move', label: `返回${location.title}`, description: `从${next.title}返回${location.title}。`,
         locationKey: next.key, targetKey: location.key, requirements: [], rule: { kind: 'resource-payment', resourceKey: 'time', amount: 1 },
         successEffects: [{ op: 'enter-location', locationKey: location.key }], costlySuccessEffects: [], failureEffects: [],
-        successText: `你循着自己留下的标记返回${location.title}。往返消耗了时间，也让沿途的异常变得更加清楚。`, costlySuccessText: `你付出代价后返回${location.title}。`, failureText: '道路暂时无法通过。', unavailableText: '剩余时间已经不足以返回。', repeatable: true, narrativeChoiceKey: null,
+        successText: `你循着自己留下的标记返回${location.title}。往返消耗了时间，也让沿途的异常变得更加清楚。${arrivalExcerpt(index) ? `\n\n${arrivalExcerpt(index)}` : ''}`, costlySuccessText: `你付出代价后返回${location.title}。`, failureText: '道路暂时无法通过。', unavailableText: '剩余时间已经不足以返回。', repeatable: true, narrativeChoiceKey: null,
       })
     }
   }
@@ -621,7 +663,7 @@ export function buildAdventureContent(input: {
         { op: 'gain-item', itemKey: item.key, quantity: 1, claimKey: `claim.${item.key}` },
         ...(index === 0 ? [{ op: 'complete-objective' as const, questKey: 'main.bell', objectiveKey: 'find-evidence' }] : []),
       ],
-      costlySuccessEffects: [], failureEffects: [], successText: `你取得了${item.title}。`, costlySuccessText: `你付出代价取得了${item.title}。`, failureText: `${item.title}暂时无法取得。`, unavailableText: '先开始主线调查，或该道具已经取得。', repeatable: false, narrativeChoiceKey: null,
+      costlySuccessEffects: [], failureEffects: [], successText: `${item.description}\n\n【行动】你把${item.title}收进行囊。它不只是一个收藏品：从这一刻起，新的调查与校准行动会读取这件正式物品。${arrivalExcerpt((index + 1) % locations.length) ? `\n\n${arrivalExcerpt((index + 1) % locations.length)}` : ''}`, costlySuccessText: `你付出代价取得了${item.title}。`, failureText: `${item.title}暂时无法取得。`, unavailableText: '先开始主线调查，或该道具已经取得。', repeatable: false, narrativeChoiceKey: null,
     })
   }
   for (const [index, lore] of selectedLore.entries()) {
@@ -675,7 +717,8 @@ export function buildAdventureContent(input: {
       narrativeChoiceKey: null,
     })
   }
-  const participants = selectedCharacters.map(item => {
+  const participantCharacters = selectedCharacters.filter(item => item.exportId !== playerCharacterExportId)
+  const participants = participantCharacters.map(item => {
     const relationships = selectedRelations.filter(relation => relation.fromCharacterExportId === item.exportId
       || relation.toCharacterExportId === item.exportId)
     const relationSummary = relationships.map(relation => {
@@ -688,9 +731,10 @@ export function buildAdventureContent(input: {
     return { exportId: item.exportId, participantKey: `character-${item.exportId}`, relationSummary }
   })
   for (const [index, participant] of participants.entries()) {
-    const character = selectedCharacters[index]
+    const character = participantCharacters[index]
     const location = locations[index % locations.length]
     const objectiveKey = `voice.${index}`
+    const conversation = adventureConversationExcerpt(story, input.catalog, character.exportId)
     actions.push({
       key: `talk.${participant.participantKey}`,
       kind: 'talk', label: `询问${character.name}`,
@@ -708,7 +752,7 @@ export function buildAdventureContent(input: {
         ] : []),
         { op: 'complete-objective', questKey: voicesQuestKey, objectiveKey },
       ], costlySuccessEffects: [], failureEffects: [],
-      successText: `${character.name}先确认四周没有巡潮队，才把与“${narrative.title}”有关的证言逐句说清。${participant.relationSummary ? ` 这份证言也暴露了关系：${participant.relationSummary}` : ''}\n\n你没有替${character.name}作决定，只把可验证的姓名、地点与时间记进档案。`,
+      successText: `${conversation || `【${character.name}】我会把与“${narrative.title}”有关、能够确认的部分告诉你。`}${participant.relationSummary ? `\n\n这份证言也暴露了关系：${participant.relationSummary}` : ''}\n\n【行动】你没有替${character.name}作决定，只把可验证的姓名、地点与时间记进档案。`,
       costlySuccessText: `${character.name}在迟疑后给出证言。`, failureText: `${character.name}暂时不愿回答。`, unavailableText: '需要先开始失潮调查，并按顺序建立证人名单。', repeatable: false, narrativeChoiceKey: null,
       interaction: { participantKey: participant.participantKey, sceneKey: `scene.${participant.participantKey}`, ruleKey: `rule.${participant.participantKey}.testimony` },
     })
@@ -819,7 +863,7 @@ export function buildAdventureContent(input: {
   })
   if (participants.length) quests.push({
     key: voicesQuestKey, title: '保存仍在说话的人', description: '取得角色证言并建立关系，让人物成为会改变进程的参与者。', initialStatus: 'available', prerequisites: [],
-    objectives: participants.map((participant, index) => ({ key: `voice.${index}`, title: `询问${selectedCharacters[index].name}`, optional: false, alternativeActionKeys: [`talk.${participant.participantKey}`] })),
+    objectives: participants.map((participant, index) => ({ key: `voice.${index}`, title: `询问${participantCharacters[index].name}`, optional: false, alternativeActionKeys: [`talk.${participant.participantKey}`] })),
     rewardEffects: [{ op: 'change-ability', abilityKey: 'empathy', delta: 1 }], completionNodeKey: null, failureNodeKey: null,
   })
   const source: WorldGameSourceSelectionV1 = {
@@ -841,6 +885,12 @@ export function buildAdventureContent(input: {
       version: 1,
       initialLocationKey: locations[0].key,
       playerKey: 'player',
+      ...(playerCharacter ? {
+        playerIdentity: {
+          name: playerCharacter.name,
+          description: playerCharacter.description || `你以${playerCharacter.name}的身份追查“${narrative.title}”。`,
+        },
+      } : {}),
       locations,
       objects,
       items,
@@ -868,7 +918,7 @@ export function buildAdventureContent(input: {
 }
 
 function defaultAdventureGameKey(contentHash: string, moduleExportId: number): string {
-  return `world-adventure-${contentHash.slice(0, 10)}-${moduleExportId}`
+  return `world-adventure-${contentHash.slice(0, 10)}-${moduleExportId}-player-v${WORLD_ADVENTURE_PLAYER_VERSION}`
 }
 
 export async function generateAdventureGameFromWorldRelease(input: {

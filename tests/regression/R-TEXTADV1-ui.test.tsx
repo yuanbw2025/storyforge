@@ -146,7 +146,7 @@ describe('TEXTADV-1 · author and player UI', () => {
       host.querySelector<HTMLButtonElement>('button[aria-label="关闭面板"]')!.click()
       await new Promise(resolve => setTimeout(resolve, 0))
     })
-    expect(buttonContaining(host, '进入圆满结局').disabled).toBe(true)
+    expect(host.textContent).not.toContain('进入圆满结局')
 
     for (const label of ['前往集市', '询问商人', '前往档案馆', '进入水渠', '前往钟楼', '取回钟片']) {
       await click(host, label, true)
@@ -155,7 +155,7 @@ describe('TEXTADV-1 · author and player UI', () => {
     expect(host.textContent).toContain('潮汐商人信任 +1')
     expect(host.textContent).toContain('目标完成')
     await waitFor(() => expect(buttonContaining(host, '进入圆满结局').disabled).toBe(false))
-    expect(buttonContaining(host, '进入代价结局').disabled).toBe(true)
+    expect(host.textContent).not.toContain('进入代价结局')
     await click(host, '进入圆满结局', true)
     await waitFor(() => expect(host.textContent).toContain('冒险结束圆满结局'))
     const sessionId = useAdventureGamePlayerStore.getState().selectedSessionId!

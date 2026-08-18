@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createAdventureAcceptanceContent } from '../../src/lib/adventure/authoring'
 import {
+  parseAdventureNarrativeBlocks,
   parseAdventurePlayerCommand,
   projectAdventureTranscript,
 } from '../../src/lib/adventure/player-experience'
@@ -61,5 +62,19 @@ describe('TEXTADV-1 · pure-text player experience', () => {
       '体力 -1（5）',
       '潮汐商人信任 +1',
     ]))
+  })
+
+  it('把冻结结果中的旁白、行动与多角色对白投影成可读段落', () => {
+    expect(parseAdventureNarrativeBlocks([
+      '雾从防波堤外翻进港湾。',
+      '【余砚】十年前也晚了十三分钟。',
+      '【林澈】你在密信里写的是少了四十七个人。',
+      '【行动】登记册上的墨迹开始褪色。',
+    ].join('\n\n'))).toEqual([
+      { kind: 'narration', speaker: null, text: '雾从防波堤外翻进港湾。' },
+      { kind: 'dialogue', speaker: '余砚', text: '十年前也晚了十三分钟。' },
+      { kind: 'dialogue', speaker: '林澈', text: '你在密信里写的是少了四十七个人。' },
+      { kind: 'action', speaker: null, text: '登记册上的墨迹开始褪色。' },
+    ])
   })
 })

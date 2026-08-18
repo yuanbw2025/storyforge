@@ -27,6 +27,7 @@ import {
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { resolveRequestConfig } from '../../lib/ai/client'
 import {
+  parseAdventureNarrativeBlocks,
   parseAdventurePlayerCommand,
   projectAdventureTranscript,
   type AdventureSystemCommand,
@@ -110,7 +111,8 @@ export default function AdventureGamePlayer(props: {
   const [branchTitle, setBranchTitle] = useState('')
   const [localError, setLocalError] = useState('')
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
-  const transcriptEndRef = useRef<HTMLDivElement | null>(null)
+  const latestEntryRef = useRef<HTMLElement | null>(null)
+  const logEndRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     setCatalogReleaseId(null)
@@ -127,7 +129,12 @@ export default function AdventureGamePlayer(props: {
   const objects = useMemo(() => manifest?.adventure.objects.filter(item => item.locationKey === location?.key) ?? [], [manifest, location?.key])
   const actions = selectAdventureActions(store)
   const availableActions = actions.filter(item => item.available)
-  const visibleChoices = (store.runtimeState.narrative?.choices ?? []).filter(choice => store.runtimeState.narrative?.visibleChoiceKeys?.includes(choice.choiceKey))
+  const endingKeys = new Set((store.runtimeState.narrative?.nodes ?? []).filter(node => node.kind === 'ending').map(node => node.key))
+  const endingChoices = (store.runtimeState.narrative?.choices ?? []).filter(choice => (
+    endingKeys.has(choice.targetNodeKey)
+      && store.runtimeState.narrative?.visibleChoiceKeys?.includes(choice.choiceKey)
+      && store.runtimeState.narrative?.availableChoiceKeys?.includes(choice.choiceKey)
+  ))
   const resolved = resolveRequestConfig(config, { category: 'runtime.prose.adventure-intent-parser' })
   const aiReady = isAIConfigReady(resolved.config)
   const generating = store.generatingRunId != null
@@ -147,8 +154,14 @@ export default function AdventureGamePlayer(props: {
     : [], [adventure, manifest, store.events])
 
   useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' })
-  }, [consoleResponse, store.pendingIntent, transcript.length])
+    if (transcript.length) latestEntryRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [transcript.length])
+
+  useEffect(() => {
+    if (consoleResponse || store.pendingIntent || generating) {
+      logEndRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' })
+    }
+  }, [consoleResponse, generating, store.pendingIntent])
 
   const run = async (action: () => Promise<unknown>) => {
     setLocalError('')
@@ -280,7 +293,7 @@ export default function AdventureGamePlayer(props: {
     <main className="adventure-console-shell">
       <div className="adventure-console">
         <section className="adventure-console-prologue">
-          <small>玩家身份 · 你（唯一行动主角） · {selected.title}</small>
+          <small>玩家身份 · {manifest.adventure.playerIdentity ? `${manifest.adventure.playerIdentity.name}（由你扮演）` : '你（唯一行动主角）'} · {selected.title}</small>
           <h1>{location.title}</h1>
           <p>{location.description}</p>
           <dl>
@@ -292,19 +305,26 @@ export default function AdventureGamePlayer(props: {
 
         <section className="adventure-console-log" role="log" aria-label="冒险文字记录" aria-live="polite">
           {!transcript.length && <article className="adventure-console-system"><small>系统</small><p>故事从这里开始。输入“帮助”查看命令，也可以直接描述你想做的事。</p></article>}
-          {transcript.map(entry => <article className={`adventure-console-entry outcome-${entry.outcome}`} key={entry.eventSequence}>
-            <header><span>&gt;</span><strong>{entry.actionLabel}</strong><small>{ACTION_KIND[manifest.adventure.actions.find(item => item.key === entry.actionKey)?.kind ?? 'look']}</small></header>
-            <div className="adventure-console-prose">{(entry.eventSequence === lastAction?.eventSequence && store.generatedNarrative?.narrative ? store.generatedNarrative.narrative : entry.narrative).split(/\n+/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
-            {!!entry.changes.length && <ul>{entry.changes.map((change, index) => <li key={`${entry.eventSequence}:${index}`}>{change}</li>)}</ul>}
-            {entry.eventSequence === lastAction?.eventSequence && aiReady && <button className="adventure-console-polish" disabled={store.busy || generating} onClick={() => void run(() => store.narrateLastResult(resolved.config))}><Sparkles />让主 Agent 润色本次结果</button>}
-          </article>)}
+          {transcript.map((entry, entryIndex) => {
+            const generatedText = entry.eventSequence === lastAction?.eventSequence ? store.generatedNarrative?.narrative : ''
+            const blocks = generatedText ? parseAdventureNarrativeBlocks(generatedText) : entry.blocks
+            return <article ref={entryIndex === transcript.length - 1 ? latestEntryRef : undefined} className={`adventure-console-entry outcome-${entry.outcome}`} key={entry.eventSequence}>
+              <header><span>&gt;</span><strong>{entry.actionLabel}</strong><small>{ACTION_KIND[manifest.adventure.actions.find(item => item.key === entry.actionKey)?.kind ?? 'look']}</small></header>
+              <div className="adventure-console-prose">{blocks.map((block, index) => block.kind === 'dialogue'
+                ? <blockquote className={block.speaker === manifest.adventure.playerIdentity?.name ? 'player-dialogue' : ''} key={index}><small>{block.speaker}</small><p>{block.text}</p></blockquote>
+                : <p className={`adventure-${block.kind}`} key={index}>{block.kind === 'action' && <small>行动</small>}{block.kind === 'system' && <small>系统</small>}{block.text}</p>)}</div>
+              {!!entry.changes.length && <ul>{entry.changes.map((change, index) => <li key={`${entry.eventSequence}:${index}`}>{change}</li>)}</ul>}
+              {entry.eventSequence === lastAction?.eventSequence && aiReady && <button className="adventure-console-polish" disabled={store.busy || generating} onClick={() => void run(() => store.narrateLastResult(resolved.config))}><Sparkles />让主 Agent 润色本次结果</button>}
+            </article>
+          })}
           {consoleResponse && <article className="adventure-console-entry adventure-console-response"><header><span>&gt;</span><strong>{consoleResponse.command}</strong><small>指令</small></header><div className="adventure-console-prose"><p>{consoleResponse.text}</p></div></article>}
           {generating && <article className="adventure-console-system"><Loader2 /><p>主 Agent 正在理解你的行动……</p><button onClick={() => void store.cancelGeneration()}><Square />取消</button></article>}
           {store.pendingIntent && <article className="adventure-console-intent"><small>请确认行动</small><strong>{manifest.adventure.actions.find(item => item.key === store.pendingIntent?.actionKey)?.label ?? store.pendingIntent.actionKey}</strong><p>{store.pendingIntent.rationale}</p><div><button onClick={() => void run(async () => { await store.adoptPendingIntent(); setConsoleResponse(null) })}><Check />执行</button><button onClick={() => void run(() => store.rejectPendingIntent())}>取消</button></div></article>}
           {!!store.recoverableRunIds.length && <details className="adventure-console-recovery"><summary>恢复未完成的主 Agent 行动</summary><p>候选已经保存在统一 Harness 中，可以从原检查点继续，不会重复调用模型。</p>{store.recoverableRunIds.map(runId => <button key={runId} disabled={store.busy || generating} onClick={() => void run(() => store.resumeRun(runId))}>恢复行动 #{runId}</button>)}</details>}
+          <div ref={logEndRef} />
         </section>
 
-        {!!visibleChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>结局已经可以决定</small>{visibleChoices.map(choice => <button key={choice.choiceKey} disabled={!store.runtimeState.narrative?.availableChoiceKeys?.includes(choice.choiceKey) || store.busy} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}<ChevronRight /></button>)}</section>}
+        {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>最终抉择已经解锁</small>{endingChoices.map(choice => <button key={choice.choiceKey} disabled={store.busy} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}<ChevronRight /></button>)}</section>}
         {store.runtimeState.narrative?.completed && <section className="adventure-console-ending"><BookOpenCheck /><div><small>冒险结束</small><h2>{store.runtimeState.narrative.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title}</h2><p>这条时间线已经完整保存。你可以从检查点探索另一种结果。</p></div><button onClick={() => setPanel('saves')}><GitBranch />查看时间线</button></section>}
 
         {!store.runtimeState.narrative?.completed && <section className="adventure-command-center" aria-label="冒险指令台">
@@ -316,7 +336,6 @@ export default function AdventureGamePlayer(props: {
             <button type="submit" disabled={!commandText.trim() || store.busy || generating}><Send />执行</button>
           </form>
         </section>}
-        <div ref={transcriptEndRef} />
       </div>
     </main>
 

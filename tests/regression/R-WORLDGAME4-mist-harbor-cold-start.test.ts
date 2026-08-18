@@ -243,7 +243,15 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
     })
     expect(adventureManifest.adventure.objects.map(item => item.title)).toEqual(expect.arrayContaining(['黑潮事故', '守灯人旧誓']))
     expect(adventureManifest.adventure.objects.length).toBeGreaterThanOrEqual(20)
+    expect(adventureManifest.adventure.playerIdentity).toMatchObject({ name: '林澈' })
+    expect(adventureManifest.interaction.profiles.map(item => item.name)).not.toContain('林澈')
     expect(adventureManifest.adventure.actions.length).toBeGreaterThanOrEqual(40)
+    const openingAction = adventureManifest.adventure.actions.find(item => item.key === `look.${adventureManifest.adventure.initialLocationKey}`)!
+    expect(openingAction.successText).toContain('【林澈】')
+    expect(openingAction.successText).toContain('【余砚】')
+    const talkActions = adventureManifest.adventure.actions.filter(item => item.kind === 'talk')
+    expect(talkActions.map(item => item.label)).not.toContain('询问林澈')
+    expect(talkActions.every(item => (item.successText.match(/【[^】]+】/g) ?? []).length >= 2)).toBe(true)
     expect(adventureManifest.adventure.abilities.map(item => item.title)).toEqual(['观察', '推理', '灵巧', '共情'])
     expect(adventureManifest.adventure.conditions).toHaveLength(4)
     expect(adventureManifest.adventure.quests.map(item => item.key)).toEqual(expect.arrayContaining([
@@ -322,7 +330,7 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
     expect(await db.avgMediaBlobs.where('workId').equals(imported.scope.workId).count()).toBe(17)
     expect(await db.gameReleases.where('workId').equals(imported.scope.workId).count()).toBe(3)
     const importedProfiles = await db.interactionCharacterProfiles.where('workId').equals(imported.scope.workId).toArray()
-    expect(importedProfiles).toHaveLength(5)
+    expect(importedProfiles).toHaveLength(4)
     expect(importedProfiles.every(item => item.characterId == null)).toBe(true)
     expect(importedProfiles.every(item => JSON.parse(item.sourceSnapshotJson ?? '{}').worldContentHash === sourceRelease.contentHash)).toBe(true)
 

@@ -24,7 +24,14 @@ export interface AdventureTranscriptEntry {
   actionLabel: string
   outcome: AdventureActionHistoryEntry['outcome']
   narrative: string
+  blocks: AdventureNarrativeBlock[]
   changes: string[]
+}
+
+export interface AdventureNarrativeBlock {
+  kind: 'narration' | 'dialogue' | 'action' | 'system'
+  speaker: string | null
+  text: string
 }
 
 const SYSTEM_COMMANDS: Record<AdventureSystemCommand, string[]> = {
@@ -116,6 +123,22 @@ function signed(value: unknown): string {
   return Number.isFinite(amount) && amount > 0 ? `+${amount}` : String(value)
 }
 
+export function parseAdventureNarrativeBlocks(value: string): AdventureNarrativeBlock[] {
+  return value.split(/\n+/).map(line => line.trim()).filter(Boolean).map(line => {
+    const marked = line.match(/^【([^】]+)】\s*(.+)$/)
+    if (marked) {
+      const label = marked[1].trim()
+      const text = marked[2].trim()
+      if (label === '系统') return { kind: 'system' as const, speaker: null, text }
+      if (label === '行动') return { kind: 'action' as const, speaker: null, text }
+      return { kind: 'dialogue' as const, speaker: label, text }
+    }
+    const quoted = line.match(/^([^：:]{1,16})[：:]\s*[“"](.+)[”"]$/)
+    if (quoted) return { kind: 'dialogue' as const, speaker: quoted[1].trim(), text: quoted[2].trim() }
+    return { kind: 'narration' as const, speaker: null, text: line }
+  })
+}
+
 function eventChange(event: SimulationEvent, manifest: AdventureGameReleaseManifestV1): string | null {
   const body = payload(event)
   const adventure = manifest.adventure
@@ -194,6 +217,7 @@ export function projectAdventureTranscript(
       actionLabel: manifest.adventure.actions.find(item => item.key === action.actionKey)?.label ?? action.actionKey,
       outcome: action.outcome,
       narrative: action.narrative,
+      blocks: parseAdventureNarrativeBlocks(action.narrative),
       changes,
     }
   })

@@ -204,6 +204,13 @@ export function parseAdventureContent(value: string | AdventureContentV1): Adven
   const source: unknown = typeof value === 'string' ? (() => { try { return JSON.parse(value) } catch { fail('内容不是合法 JSON') } })() : value
   const row = record(source, '冒险内容')
   if (row.version !== 1 || row.playerKey !== 'player') fail('内容版本或玩家 key 无效')
+  const playerIdentity = row.playerIdentity == null ? null : (() => {
+    const identity = record(row.playerIdentity, '玩家身份')
+    return {
+      name: text(identity.name, '玩家姓名', 240),
+      description: text(identity.description, '玩家身份说明', 4_000),
+    }
+  })()
   const locations = (Array.isArray(row.locations) ? row.locations : fail('地点必须是数组')).map(raw => {
     const item = record(raw, '地点'); return { key: key(item.key, '地点 key'), title: text(item.title, '地点标题', 240), description: text(item.description, '地点说明', 8_000), tags: strings(item.tags, '地点标签') }
   })
@@ -237,7 +244,21 @@ export function parseAdventureContent(value: string | AdventureContentV1): Adven
   const initialInventory = (Array.isArray(row.initialInventory) ? row.initialInventory : fail('初始背包必须是数组')).map(raw => {
     const item = record(raw, '初始背包'); return { itemKey: key(item.itemKey, '初始物品 key'), quantity: integer(item.quantity, '初始物品数量', 1, 1_000_000) }
   })
-  const result: AdventureContentV1 = { version: 1, initialLocationKey: key(row.initialLocationKey, '初始地点 key'), playerKey: 'player', locations, objects, items, abilities, conditions, resources, quests, actions, initialInventory }
+  const result: AdventureContentV1 = {
+    version: 1,
+    initialLocationKey: key(row.initialLocationKey, '初始地点 key'),
+    playerKey: 'player',
+    ...(playerIdentity ? { playerIdentity } : {}),
+    locations,
+    objects,
+    items,
+    abilities,
+    conditions,
+    resources,
+    quests,
+    actions,
+    initialInventory,
+  }
   const report = validateAdventureContent(result)
   if (!report.valid) fail(report.errors.join('；'))
   return structuredClone(result)

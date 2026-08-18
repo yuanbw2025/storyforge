@@ -372,9 +372,17 @@
 .adventure-console-prologue dl { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 23px 0 0; }
 .adventure-console-prologue dl>div { display: flex; gap: 8px; }.adventure-console-prologue dt { color: #778b8d; font-size: 12px; }.adventure-console-prologue dd { margin: 0; color: #d6dcda; font-size: 12px; }
 .adventure-console-log { display: grid; }
-.adventure-console-entry { padding: 28px 0 30px; border-bottom: 1px solid rgba(255,255,255,.085); }
+.adventure-console-entry { padding: 28px 0 30px; border-bottom: 1px solid rgba(255,255,255,.085); scroll-margin-top: 110px; }
 .adventure-console-entry>header { display: flex; align-items: baseline; gap: 9px; margin-bottom: 13px; color: #d0ad74; }.adventure-console-entry>header>span { font-family: var(--font-mono); font-size: 16px; }.adventure-console-entry>header>strong { color: #e5cda7; font-size: 14px; font-weight: 600; }.adventure-console-entry>header>small { color: #697d80; font-size: 10px; }
 .adventure-console-prose { color: #e2e5df; font-family: var(--font-serif); font-size: 18px; line-height: 1.9; }.adventure-console-prose p { margin: 0 0 10px; }.adventure-console-prose p:last-child { margin-bottom: 0; }
+.adventure-console-prose blockquote { max-width: 760px; margin: 18px 0; padding: 13px 18px 14px; border: 0; border-left: 2px solid rgba(198,159,98,.58); background: rgba(195,155,91,.055); }
+.adventure-console-prose blockquote>small { display: block; margin-bottom: 3px; color: #d1ad73; font-family: var(--font-sans); font-size: 11px; font-weight: 700; letter-spacing: .05em; }
+.adventure-console-prose blockquote>p { margin: 0; color: #f0ece3; }
+.adventure-console-prose blockquote.player-dialogue { border-left-color: rgba(105,157,142,.58); background: rgba(78,130,116,.075); }
+.adventure-console-prose blockquote.player-dialogue>small { color: #91b9ac; }
+.adventure-console-prose .adventure-action { padding-left: 17px; border-left: 2px solid rgba(112,148,146,.5); color: #c8d3d0; font-style: italic; }
+.adventure-console-prose .adventure-action>small,.adventure-console-prose .adventure-system>small { margin-right: 8px; color: #789496; font-family: var(--font-sans); font-size: 10px; font-style: normal; letter-spacing: .08em; }
+.adventure-console-prose .adventure-system { color: #b9a987; font-size: 15px; }
 .adventure-console-entry>ul { display: flex; flex-wrap: wrap; gap: 7px 16px; margin: 18px 0 0; padding: 13px 15px; border-left: 2px solid #6f9d85; background: rgba(92,137,113,.08); list-style: none; }.adventure-console-entry>ul li { color: #9bc4ad; font-size: 12px; }.adventure-console-entry>ul li::before { margin-right: 6px; content: '＋'; opacity: .65; }
 .adventure-console-entry.outcome-failure>ul,.adventure-console-entry.outcome-not-attempted>ul { border-left-color: #b77365; background: rgba(146,76,62,.08); }.adventure-console-entry.outcome-failure>ul li,.adventure-console-entry.outcome-not-attempted>ul li { color: #d4a298; }
 .adventure-console-polish { display: inline-flex; align-items: center; gap: 6px; margin-top: 15px; padding: 0; border: 0; background: transparent; color: #84999a; font-size: 11px; cursor: pointer; }.adventure-console-polish:hover { color: #c9aa78; }
