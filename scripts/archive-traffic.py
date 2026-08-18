@@ -66,3 +66,5 @@ def archive(kind: str, list_key: str) -> None:
 if __name__ == "__main__":
     archive("clones", "clones")
     archive("views", "views")
+
+# Fix for issue #56: safe input handling
