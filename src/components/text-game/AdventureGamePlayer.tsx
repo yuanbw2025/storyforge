@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import {
   ArrowLeft,
   Backpack,
@@ -31,6 +31,7 @@ import {
   parseAdventurePlayerCommand,
   projectAdventureTranscript,
   resolveAdventurePlayerIdentity,
+  type AdventureNarrativeBlock,
   type AdventureSystemCommand,
 } from '../../lib/adventure/player-experience'
 import { currentPlayerReleases } from '../../lib/text-game/player-library'
@@ -41,6 +42,12 @@ import { useDialog } from '../shared/Dialog'
 import './player-roadshow.css'
 
 type AdventurePanel = 'inventory' | 'skills' | 'quests' | 'journal' | 'saves' | null
+
+interface AdventureNarrativePlayback {
+  eventSequence: number
+  unitIndex: number
+  visibleCharacters: number
+}
 
 const QUEST_STATUS: Record<string, string> = {
   locked: '未解锁', available: '可接取', active: '进行中', completed: '已完成', failed: '已失败',
@@ -100,6 +107,28 @@ function adventureNpcCount(manifest: AdventureGameReleaseManifestV1): number {
   return manifest.interaction.profiles.filter(profile => profile.participantKey !== player?.participantKey).length
 }
 
+function splitNarrativeSentences(value: string): string[] {
+  const result: string[] = []
+  const closingMarks = '”’」』】》）)]'
+  let sentence = ''
+  for (let index = 0; index < value.length; index += 1) {
+    sentence += value[index]
+    if (!'。！？!?;；…'.includes(value[index])) continue
+    while (index + 1 < value.length && closingMarks.includes(value[index + 1])) {
+      index += 1
+      sentence += value[index]
+    }
+    if (sentence.trim()) result.push(sentence.trim())
+    sentence = ''
+  }
+  if (sentence.trim()) result.push(sentence.trim())
+  return result.length ? result : [value]
+}
+
+function sequenceNarrativeBlocks(blocks: AdventureNarrativeBlock[]): AdventureNarrativeBlock[] {
+  return blocks.flatMap(block => splitNarrativeSentences(block.text).map(text => ({ ...block, text })))
+}
+
 export default function AdventureGamePlayer(props: {
   project: Project
   scope: WorkspaceScope
@@ -111,14 +140,17 @@ export default function AdventureGamePlayer(props: {
   const [panel, setPanel] = useState<AdventurePanel>(null)
   const [commandText, setCommandText] = useState('')
   const [consoleResponse, setConsoleResponse] = useState<{ command: string; text: string } | null>(null)
+  const [narrativePlayback, setNarrativePlayback] = useState<AdventureNarrativePlayback | null>(null)
   const [commandHistory, setCommandHistory] = useState<string[]>([])
   const [historyCursor, setHistoryCursor] = useState(-1)
   const [checkpointName, setCheckpointName] = useState('')
   const [branchTitle, setBranchTitle] = useState('')
   const [localError, setLocalError] = useState('')
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
-  const latestEntryRef = useRef<HTMLElement | null>(null)
-  const logEndRef = useRef<HTMLDivElement | null>(null)
+  const playbackSessionRef = useRef<number | null>(null)
+  const transcriptHydratedRef = useRef(false)
+  const knownTranscriptSequencesRef = useRef<Set<number>>(new Set())
+  const generatedNarrativeRef = useRef('')
 
   useEffect(() => {
     setCatalogReleaseId(null)
@@ -163,15 +195,65 @@ export default function AdventureGamePlayer(props: {
     ? projectAdventureTranscript(manifest, adventure.actionHistory, store.events)
     : [], [adventure, manifest, store.events])
 
-  useEffect(() => {
-    if (transcript.length) latestEntryRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-  }, [transcript.length])
+  useLayoutEffect(() => {
+    if (playbackSessionRef.current === store.selectedSessionId) return
+    playbackSessionRef.current = store.selectedSessionId
+    transcriptHydratedRef.current = false
+    knownTranscriptSequencesRef.current = new Set()
+    generatedNarrativeRef.current = ''
+    setNarrativePlayback(null)
+  }, [store.selectedSessionId])
+
+  useLayoutEffect(() => {
+    if (store.loading) return
+    const sequences = new Set(transcript.map(entry => entry.eventSequence))
+    if (!transcriptHydratedRef.current) {
+      transcriptHydratedRef.current = true
+      knownTranscriptSequencesRef.current = sequences
+      return
+    }
+    const added = transcript.filter(entry => !knownTranscriptSequencesRef.current.has(entry.eventSequence))
+    knownTranscriptSequencesRef.current = sequences
+    const latestAdded = added[added.length - 1]
+    if (latestAdded) setNarrativePlayback({ eventSequence: latestAdded.eventSequence, unitIndex: 0, visibleCharacters: 0 })
+  }, [store.loading, store.selectedSessionId, transcript])
+
+  useLayoutEffect(() => {
+    const candidate = store.generatedNarrative
+    const identity = candidate ? `${candidate.runId}:${candidate.narrative}` : ''
+    if (!identity || identity === generatedNarrativeRef.current) {
+      generatedNarrativeRef.current = identity
+      return
+    }
+    generatedNarrativeRef.current = identity
+    if (candidate && lastAction && candidate.evidenceEventSequences.includes(lastAction.eventSequence)) {
+      setNarrativePlayback({ eventSequence: lastAction.eventSequence, unitIndex: 0, visibleCharacters: 0 })
+    }
+  }, [lastAction, store.generatedNarrative])
+
+  const playbackEventSequence = narrativePlayback?.eventSequence ?? null
+  const activeNarrativeUnits = useMemo(() => {
+    if (playbackEventSequence == null) return []
+    const entry = transcript.find(item => item.eventSequence === playbackEventSequence)
+    if (!entry) return []
+    const generatedText = store.generatedNarrative?.evidenceEventSequences.includes(entry.eventSequence)
+      ? store.generatedNarrative.narrative
+      : ''
+    return sequenceNarrativeBlocks(generatedText ? parseAdventureNarrativeBlocks(generatedText) : entry.blocks)
+  }, [playbackEventSequence, store.generatedNarrative, transcript])
+  const activeNarrativeUnit = narrativePlayback ? activeNarrativeUnits[narrativePlayback.unitIndex] : null
+  const narrativeReading = narrativePlayback != null && activeNarrativeUnit != null
 
   useEffect(() => {
-    if (consoleResponse || store.pendingIntent || generating) {
-      logEndRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' })
-    }
-  }, [consoleResponse, generating, store.pendingIntent])
+    if (!narrativePlayback || !activeNarrativeUnit || narrativePlayback.visibleCharacters >= activeNarrativeUnit.text.length) return
+    const timer = window.setTimeout(() => setNarrativePlayback(current => {
+      if (!current
+        || current.eventSequence !== narrativePlayback.eventSequence
+        || current.unitIndex !== narrativePlayback.unitIndex) return current
+      return { ...current, visibleCharacters: Math.min(activeNarrativeUnit.text.length, current.visibleCharacters + 1) }
+    }), 22)
+    return () => window.clearTimeout(timer)
+  }, [activeNarrativeUnit, narrativePlayback])
 
   const run = async (action: () => Promise<unknown>) => {
     setLocalError('')
@@ -201,6 +283,7 @@ export default function AdventureGamePlayer(props: {
   }
 
   const executeAction = async (actionKey: string) => {
+    if (narrativeReading) return
     setConsoleResponse(null)
     await run(() => store.act(actionKey))
   }
@@ -208,7 +291,7 @@ export default function AdventureGamePlayer(props: {
   const submitCommand = async (event?: FormEvent) => {
     event?.preventDefault()
     const value = commandText.trim()
-    if (!value || store.busy || generating) return
+    if (!value || store.busy || generating || narrativeReading) return
     setCommandHistory(current => [...current.filter(item => item !== value), value].slice(-30))
     setHistoryCursor(-1)
     setCommandText('')
@@ -246,6 +329,19 @@ export default function AdventureGamePlayer(props: {
       : Math.max(-1, historyCursor - 1)
     setHistoryCursor(next)
     setCommandText(next < 0 ? '' : commandHistory[commandHistory.length - 1 - next])
+  }
+
+  const advanceNarrative = () => {
+    setNarrativePlayback(current => {
+      if (!current) return current
+      const unit = activeNarrativeUnits[current.unitIndex]
+      if (!unit) return null
+      if (current.visibleCharacters < unit.text.length) return { ...current, visibleCharacters: unit.text.length }
+      if (current.unitIndex < activeNarrativeUnits.length - 1) {
+        return { ...current, unitIndex: current.unitIndex + 1, visibleCharacters: 0 }
+      }
+      return null
+    })
   }
 
   const removeSession = async (sessionId: number, title: string) => {
@@ -287,7 +383,7 @@ export default function AdventureGamePlayer(props: {
 
   return <div className="adventure-game adventure-player-v2" data-testid="adventure-game-player">
     <header className="adventure-gamebar adventure-console-bar">
-      <button aria-label="返回冒险列表" onClick={() => void store.select(null)}><ArrowLeft /></button>
+      <button className="textgame-player-exit" aria-label="退出游戏" onClick={() => void store.select(null)}><ArrowLeft /><span>退出游戏</span></button>
       <div><small>{manifest.definition.title}</small><strong>{location.title}</strong></div>
       <span className="adventure-autosave"><CircleDot />自动保存已开启</span>
       <nav aria-label="冒险功能">
@@ -314,36 +410,59 @@ export default function AdventureGamePlayer(props: {
         </section>
 
         <section className="adventure-console-log" role="log" aria-label="冒险文字记录" aria-live="polite">
-          {!transcript.length && <article className="adventure-console-system"><small>系统</small><p>故事从这里开始。输入“帮助”查看命令，也可以直接描述你想做的事。</p></article>}
-          {transcript.map((entry, entryIndex) => {
-            const generatedText = entry.eventSequence === lastAction?.eventSequence ? store.generatedNarrative?.narrative : ''
+          {!transcript.length && <article className="adventure-console-system"><p>故事从这里开始。输入“帮助”查看命令，也可以直接描述你想做的事。</p></article>}
+          {transcript.map(entry => {
+            const generatedText = store.generatedNarrative?.evidenceEventSequences.includes(entry.eventSequence)
+              ? store.generatedNarrative.narrative
+              : ''
             const blocks = generatedText ? parseAdventureNarrativeBlocks(generatedText) : entry.blocks
-            return <article ref={entryIndex === transcript.length - 1 ? latestEntryRef : undefined} className={`adventure-console-entry outcome-${entry.outcome}`} key={entry.eventSequence}>
-              <header><span>&gt;</span><strong>{entry.actionLabel}</strong><small>{ACTION_KIND[manifest.adventure.actions.find(item => item.key === entry.actionKey)?.kind ?? 'look']}</small></header>
-              <div className="adventure-console-prose">{blocks.map((block, index) => block.kind === 'dialogue'
-                ? <blockquote className={block.speaker === playerIdentity?.name ? 'player-dialogue' : ''} key={index}><small>{block.speaker}</small><p>{block.text}</p></blockquote>
-                : <p className={`adventure-${block.kind}`} key={index}>{block.kind === 'action' && <small>行动</small>}{block.kind === 'system' && <small>系统</small>}{block.text}</p>)}</div>
-              {!!entry.changes.length && <ul>{entry.changes.map((change, index) => <li key={`${entry.eventSequence}:${index}`}>{change}</li>)}</ul>}
-              {entry.eventSequence === lastAction?.eventSequence && aiReady && <button className="adventure-console-polish" disabled={store.busy || generating} onClick={() => void run(() => store.narrateLastResult(resolved.config))}><Sparkles />让主 Agent 润色本次结果</button>}
+            const playback = narrativePlayback?.eventSequence === entry.eventSequence ? narrativePlayback : null
+            const sequencedBlocks = playback ? sequenceNarrativeBlocks(blocks) : blocks
+            const visibleBlocks = playback
+              ? sequencedBlocks.slice(0, playback.unitIndex + 1).map((block, index) => (
+                index === playback.unitIndex
+                  ? { ...block, text: block.text.slice(0, playback.visibleCharacters) }
+                  : block
+              ))
+              : sequencedBlocks
+            const currentUnitComplete = playback != null
+              && activeNarrativeUnit != null
+              && playback.visibleCharacters >= activeNarrativeUnit.text.length
+            return <article className={`adventure-console-entry outcome-${entry.outcome}${playback ? ' is-playing' : ''}`} key={entry.eventSequence}>
+              <header className="adventure-player-command"><span>&gt;</span><strong>{entry.actionLabel}</strong><small>你 · {ACTION_KIND[manifest.adventure.actions.find(item => item.key === entry.actionKey)?.kind ?? 'look']}</small></header>
+              <div className="adventure-console-prose" aria-live={playback ? 'off' : undefined}>{visibleBlocks.map((block, index) => block.kind === 'dialogue'
+                ? <blockquote className={block.speaker === playerIdentity?.name ? 'player-dialogue' : ''} key={index}><small>{block.speaker}</small><p>{block.text}{playback && index === playback.unitIndex && <span className="adventure-typewriter-caret" aria-hidden="true" />}</p></blockquote>
+                : <p className={`adventure-${block.kind}`} key={index}>{block.text}{playback && index === playback.unitIndex && <span className="adventure-typewriter-caret" aria-hidden="true" />}</p>)}</div>
+              {playback && <button
+                type="button"
+                className="adventure-narrative-continue"
+                aria-label={currentUnitComplete
+                  ? playback.unitIndex < sequencedBlocks.length - 1 ? '继续叙述' : '完成叙述'
+                  : '显示完整句子'}
+                onClick={advanceNarrative}
+              >{currentUnitComplete
+                  ? playback.unitIndex < sequencedBlocks.length - 1 ? '继续' : '读完本段'
+                  : '跳过打字'}<ChevronRight /></button>}
+              {!playback && !!entry.changes.length && <ul>{entry.changes.map((change, index) => <li key={`${entry.eventSequence}:${index}`}>{change}</li>)}</ul>}
+              {!playback && entry.eventSequence === lastAction?.eventSequence && aiReady && <button className="adventure-console-polish" disabled={store.busy || generating} onClick={() => void run(() => store.narrateLastResult(resolved.config))}><Sparkles />让主 Agent 润色本次结果</button>}
             </article>
           })}
-          {consoleResponse && <article className="adventure-console-entry adventure-console-response"><header><span>&gt;</span><strong>{consoleResponse.command}</strong><small>指令</small></header><div className="adventure-console-prose"><p>{consoleResponse.text}</p></div></article>}
+          {consoleResponse && <article className="adventure-console-entry adventure-console-response"><header className="adventure-player-command"><span>&gt;</span><strong>{consoleResponse.command}</strong><small>你 · 指令</small></header><div className="adventure-console-prose"><p className="adventure-system-response">{consoleResponse.text}</p></div></article>}
           {generating && <article className="adventure-console-system"><Loader2 /><p>主 Agent 正在理解你的行动……</p><button onClick={() => void store.cancelGeneration()}><Square />取消</button></article>}
           {store.pendingIntent && <article className="adventure-console-intent"><small>请确认行动</small><strong>{manifest.adventure.actions.find(item => item.key === store.pendingIntent?.actionKey)?.label ?? store.pendingIntent.actionKey}</strong><p>{store.pendingIntent.rationale}</p><div><button onClick={() => void run(async () => { await store.adoptPendingIntent(); setConsoleResponse(null) })}><Check />执行</button><button onClick={() => void run(() => store.rejectPendingIntent())}>取消</button></div></article>}
           {!!store.recoverableRunIds.length && <details className="adventure-console-recovery"><summary>恢复未完成的主 Agent 行动</summary><p>候选已经保存在统一 Harness 中，可以从原检查点继续，不会重复调用模型。</p>{store.recoverableRunIds.map(runId => <button key={runId} disabled={store.busy || generating} onClick={() => void run(() => store.resumeRun(runId))}>恢复行动 #{runId}</button>)}</details>}
-          <div ref={logEndRef} />
         </section>
 
-        {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>最终抉择已经解锁</small>{endingChoices.map(choice => <button key={choice.choiceKey} disabled={store.busy} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}<ChevronRight /></button>)}</section>}
+        {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>最终抉择已经解锁</small>{endingChoices.map(choice => <button key={choice.choiceKey} disabled={store.busy || narrativeReading} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}<ChevronRight /></button>)}</section>}
         {store.runtimeState.narrative?.completed && <section className="adventure-console-ending"><BookOpenCheck /><div><small>冒险结束</small><h2>{store.runtimeState.narrative.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title}</h2><p>这条时间线已经完整保存。你可以从检查点探索另一种结果。</p></div><button onClick={() => setPanel('saves')}><GitBranch />查看时间线</button></section>}
 
-        {!store.runtimeState.narrative?.completed && <section className="adventure-command-center" aria-label="冒险指令台">
-          <header><div><small>你要做什么？</small><p>输入自然语言命令，或选择当前可执行的文字指令。</p></div><span>{aiReady ? '自由表达已连接主 Agent' : '离线确定性模式'}</span></header>
-          <div className="adventure-command-suggestions">{availableActions.slice(0, 8).map((item, index) => <button key={item.action.key} disabled={store.busy || generating} title={item.action.description} onClick={() => void executeAction(item.action.key)}><kbd>{index + 1}</kbd>{item.action.label}</button>)}</div>
+        {!store.runtimeState.narrative?.completed && <section className={`adventure-command-center${narrativeReading ? ' is-reading' : ''}`} aria-label="冒险指令台" aria-busy={narrativeReading}>
+          <header><div><small>{narrativeReading ? '故事正在继续…' : '你要做什么？'}</small><p>{narrativeReading ? '读完当前行动结果后，下一轮指令会重新开放。' : '输入自然语言命令，或选择当前可执行的文字指令。'}</p></div><span>{narrativeReading ? '正在逐句呈现' : aiReady ? '自由表达已连接主 Agent' : '离线确定性模式'}</span></header>
+          <div className="adventure-command-suggestions">{availableActions.slice(0, 8).map((item, index) => <button key={item.action.key} disabled={store.busy || generating || narrativeReading} title={item.action.description} onClick={() => void executeAction(item.action.key)}><kbd>{index + 1}</kbd>{item.action.label}</button>)}</div>
           <form onSubmit={(event) => void submitCommand(event)}>
             <span>&gt;</span>
-            <input aria-label="输入冒险指令" value={commandText} onChange={event => setCommandText(event.target.value)} onKeyDown={navigateCommandHistory} disabled={store.busy || generating} autoComplete="off" placeholder={`例如：观察${location.title}，或输入“帮助”`} />
-            <button type="submit" disabled={!commandText.trim() || store.busy || generating}><Send />执行</button>
+            <input aria-label="输入冒险指令" value={commandText} onChange={event => setCommandText(event.target.value)} onKeyDown={navigateCommandHistory} disabled={store.busy || generating || narrativeReading} autoComplete="off" placeholder={narrativeReading ? '请先读完当前行动结果' : `例如：观察${location.title}，或输入“帮助”`} />
+            <button type="submit" disabled={!commandText.trim() || store.busy || generating || narrativeReading}><Send />执行</button>
           </form>
         </section>}
       </div>

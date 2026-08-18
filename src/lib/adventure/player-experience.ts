@@ -169,6 +169,17 @@ function entryDialogueSpeakerKey(manifest: AdventureGameReleaseManifestV1): stri
     .sort((left, right) => left.order - right.order)[0]?.speakerKey ?? null
 }
 
+function entryMarkedDialogueSpeaker(manifest: AdventureGameReleaseManifestV1): string | null {
+  const beats = [...manifest.narrative.beats]
+    .filter(beat => beat.nodeKey === manifest.narrative.entryNodeKey)
+    .sort((left, right) => left.order - right.order)
+  for (const beat of beats) {
+    const dialogue = parseAdventureNarrativeBlocks(beat.text).find(block => block.kind === 'dialogue')
+    if (dialogue?.speaker) return dialogue.speaker
+  }
+  return null
+}
+
 /**
  * Releases published before the explicit playerIdentity field remain playable.
  * Their entry scene's first speaking character is the single player role used
@@ -189,7 +200,10 @@ export function resolveAdventurePlayerIdentity(
   }
   if (!manifest.definition.source) return null
   const speakerKey = entryDialogueSpeakerKey(manifest)
-  const profile = speakerKey ? profileForSpeaker(manifest, speakerKey) : null
+  const markedSpeaker = speakerKey ? null : entryMarkedDialogueSpeaker(manifest)
+  const profile = speakerKey
+    ? profileForSpeaker(manifest, speakerKey)
+    : manifest.interaction.profiles.find(item => item.name === markedSpeaker) ?? null
   return profile ? {
     name: profile.name,
     description: profile.roleLabel,
@@ -202,6 +216,8 @@ function narrativeBlockForBeat(
   manifest: AdventureGameReleaseManifestV1,
   beat: AdventureGameReleaseManifestV1['narrative']['beats'][number],
 ): AdventureNarrativeBlock {
+  const embedded = parseAdventureNarrativeBlocks(beat.text)
+  if (embedded.length === 1 && embedded[0].kind !== 'narration') return embedded[0]
   if (beat.kind !== 'dialogue') return { kind: beat.kind, speaker: null, text: beat.text }
   const player = resolveAdventurePlayerIdentity(manifest)
   const entrySpeakerKey = entryDialogueSpeakerKey(manifest)

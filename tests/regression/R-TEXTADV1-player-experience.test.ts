@@ -95,8 +95,8 @@ describe('TEXTADV-1 · pure-text player experience', () => {
         choices: [],
         beats: [
           { beatKey: 'entry.1', nodeKey: 'entry', kind: 'narration', speakerKey: null, text: '雾从防波堤外翻进港湾。', order: 1 },
-          { beatKey: 'entry.2', nodeKey: 'entry', kind: 'dialogue', speakerKey: 'character:0', text: '潮没来，钟也没响。', order: 2 },
-          { beatKey: 'entry.3', nodeKey: 'entry', kind: 'dialogue', speakerKey: 'character:1', text: '十年前也晚了十三分钟。', order: 3 },
+          { beatKey: 'entry.2', nodeKey: 'entry', kind: 'narration', speakerKey: null, text: '【林澈】潮没来，钟也没响。', order: 2 },
+          { beatKey: 'entry.3', nodeKey: 'entry', kind: 'narration', speakerKey: null, text: '【余砚】十年前也晚了十三分钟。', order: 3 },
         ],
       },
       interaction: {

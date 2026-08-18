@@ -322,7 +322,7 @@ export default function StoryGamePlayer(props: {
     <div className={`storygame-shell storygame-player-v2 storygame-playing storygame-theme-${preferences.theme}`} data-testid="storygame-player">
       <section className="storygame-main" aria-label="分支叙事播放器">
         <header className="storygame-gamebar">
-          <button type="button" aria-label="返回游戏库" onClick={() => void store.select(null)}><ArrowLeft className="h-4 w-4" /></button>
+          <button type="button" className="textgame-player-exit" aria-label="退出游戏" onClick={() => void store.select(null)}><ArrowLeft className="h-4 w-4" /><span>退出游戏</span></button>
           <div className="storygame-game-title"><small>{narrative.moduleTitle}{playerCharacter ? ` · 你是 ${playerCharacter.name}` : ''}{isLegacy ? ' · 旧版兼容模式' : ''}</small><strong>{selectedRelease?.manifest?.definition.title ?? selected.title}</strong></div>
           <div className="storygame-progress" aria-label={`故事进度 ${progress}%`}><span style={{ width: `${progress}%` }} /></div>
           <nav aria-label="播放器功能">

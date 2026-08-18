@@ -110,5 +110,8 @@ describe('TEXTSIM-1 · author and player UI', () => {
     const state = await readSimulationState(sessionId)
     expect(state.narrative?.completed).toBe(true)
     expect(state.narrativeSimulation?.phase).toBe('ended')
+    await click(host, '退出游戏')
+    await waitFor(() => expect(useNarrativeSimulationPlayerStore.getState().selectedSessionId).toBeNull())
+    expect(host.textContent).toContain('选择正式发布开始模拟')
   }, 60_000)
 })

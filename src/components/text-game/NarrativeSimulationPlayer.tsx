@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Activity,
+  ArrowLeft,
   Bot,
   Check,
   GitBranch,
@@ -102,7 +103,7 @@ export default function NarrativeSimulationPlayer(props: {
       {error && <div role="alert" className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       {!selected && <div className="storygame-empty"><Activity className="h-8 w-8" /><h2>选择正式发布开始模拟</h2><p>资源、主体、问题、延迟效果、Narrative 与事件回放保存在同一个正式实例中。</p></div>}
       {selected && simulation && manifest && <>
-        <header className="flex flex-wrap items-start justify-between gap-3"><div><span className="text-[10px] text-accent">TEXTSIM-1 · CLOSED SYSTEM</span><h1 className="mt-1 text-xl font-semibold">{manifest.definition.title}</h1><p className="mt-1 text-xs text-text-muted">第 {simulation.turn} / {simulation.turnLimit} 回合 · {simulation.phase} · 决策预算 {simulation.actionBudget}</p></div><div className="rounded border border-border bg-bg-surface px-3 py-2 text-right text-[10px] text-text-muted"><strong className="block text-xs text-text-primary">{selected.title}</strong>事件 #{store.runtimeState.lastSequence} · 发布 {simulation.contentHash.slice(0, 12)}</div></header>
+        <header className="flex flex-wrap items-start justify-between gap-3"><div><span className="text-[10px] text-accent">TEXTSIM-1 · CLOSED SYSTEM</span><h1 className="mt-1 text-xl font-semibold">{manifest.definition.title}</h1><p className="mt-1 text-xs text-text-muted">第 {simulation.turn} / {simulation.turnLimit} 回合 · {simulation.phase} · 决策预算 {simulation.actionBudget}</p></div><div className="flex flex-wrap items-center justify-end gap-2"><div className="rounded border border-border bg-bg-surface px-3 py-2 text-right text-[10px] text-text-muted"><strong className="block text-xs text-text-primary">{selected.title}</strong>事件 #{store.runtimeState.lastSequence} · 发布 {simulation.contentHash.slice(0, 12)}</div><button type="button" aria-label="退出游戏" onClick={() => { setQueue([]); void store.select(null) }} className="flex items-center gap-1 rounded border border-border bg-bg-surface px-3 py-2 text-xs"><ArrowLeft className="h-3.5 w-3.5" />退出游戏</button></div></header>
 
         <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">{Object.entries(simulation.resources).map(([key, value]) => <article key={`resource:${key}`} className="rounded border border-border bg-bg-surface p-3"><small className="text-[9px] text-text-muted">RESOURCE</small><strong className="mt-1 block text-lg">{value}</strong><span className="text-xs text-text-muted">{labels.resource.get(key) ?? key}</span></article>)}{Object.entries(simulation.metrics).map(([key, value]) => <article key={`metric:${key}`} className="rounded border border-accent/20 bg-accent/5 p-3"><small className="text-[9px] text-accent">METRIC</small><strong className="mt-1 block text-lg">{value}</strong><span className="text-xs text-text-muted">{labels.metric.get(key) ?? key}</span></article>)}</section>
 

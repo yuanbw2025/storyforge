@@ -163,5 +163,8 @@ describe('TEXTWORLD-1 · author and player UI', () => {
     const state = await readSimulationState(branchedSessionId)
     expect(state.openWorld?.currentRegionKey).not.toBe(startRegion)
     expect(await db.simulationSessions.get(branchedSessionId)).toMatchObject({ parentSessionId: originalSessionId })
+    await click(host, '退出游戏')
+    await waitFor(() => expect(useTextOpenWorldPlayerStore.getState().selectedSessionId).toBeNull())
+    expect(host.textContent).toContain('从正式发布开始开放世界旅程')
   }, 35_000)
 })

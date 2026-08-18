@@ -1,6 +1,6 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import AdventureGamePlayer from '../../src/components/text-game/AdventureGamePlayer'
 import AdventureGameWorkbench from '../../src/components/text-game/AdventureGameWorkbench'
 import { DialogProvider } from '../../src/components/shared/Dialog'
@@ -43,6 +43,18 @@ async function waitFor(assertion: () => void | Promise<void>) {
   throw last
 }
 
+async function finishNarrative(host: ParentNode) {
+  for (let step = 0; step < 100; step += 1) {
+    const control = host.querySelector<HTMLButtonElement>('.adventure-narrative-continue')
+    if (!control) return
+    await act(async () => {
+      control.click()
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+  }
+  throw new Error('逐句叙述未能在 100 步内结束')
+}
+
 async function fixture(): Promise<{ project: Project; scope: WorkspaceScope }> {
   const now = Date.now()
   const projectId = await db.projects.add({
@@ -56,8 +68,11 @@ async function fixture(): Promise<{ project: Project; scope: WorkspaceScope }> {
 describe('TEXTADV-1 · author and player UI', () => {
   let host: HTMLDivElement
   let root: ReturnType<typeof createRoot>
+  let scrollIntoView: ReturnType<typeof vi.fn>
   beforeAll(async () => { await db.delete(); await db.open() })
   beforeEach(() => {
+    scrollIntoView = vi.fn()
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView })
     localStorage.clear()
     useAdventureGamePlayerStore.setState({
       scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null,
@@ -67,7 +82,11 @@ describe('TEXTADV-1 · author and player UI', () => {
     })
     host = document.createElement('div'); document.body.append(host); root = createRoot(host)
   })
-  afterEach(async () => { await act(async () => root.unmount()); host.remove() })
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+    delete (Element.prototype as { scrollIntoView?: Element['scrollIntoView'] }).scrollIntoView
+  })
   afterAll(() => db.close())
 
   it('作者从验收模板检查有限地点内容并发布不可变版本', async () => {
@@ -118,11 +137,18 @@ describe('TEXTADV-1 · author and player UI', () => {
     expect(host.textContent).toContain('4 个任务')
     await click(host, '开始新冒险')
     await waitFor(() => expect(host.textContent).toContain('雾港码头'))
+    await click(host, '退出游戏')
+    await waitFor(() => expect(useAdventureGamePlayerStore.getState().selectedSessionId).toBeNull())
+    expect(host.textContent).toContain('冒险详情')
+    expect(await db.simulationSessions.where('projectId').equals(owned.scope.projectId).count()).toBe(1)
+    await click(host, '继续上次进度')
+    await waitFor(() => expect(host.textContent).toContain('雾港码头'))
     expect(host.querySelector('.adventure-console')).not.toBeNull()
     expect(host.querySelector('.adventure-map-rail')).toBeNull()
     expect(host.querySelector('.adventure-status-rail')).toBeNull()
     expect(host.querySelector<HTMLInputElement>('input[aria-label="输入冒险指令"]')).not.toBeNull()
     expect(host.textContent).toContain('故事从这里开始')
+    expect(host.querySelector('.adventure-console-system > small')).toBeNull()
     expect(host.textContent).toContain('离线确定性模式')
     const command = host.querySelector<HTMLInputElement>('input[aria-label="输入冒险指令"]')!
     await act(async () => {
@@ -132,6 +158,9 @@ describe('TEXTADV-1 · author and player UI', () => {
       await new Promise(resolve => setTimeout(resolve, 0))
     })
     expect(host.textContent).toContain('当前位置：雾港码头')
+    expect(host.querySelector('.adventure-console-response .adventure-player-command')).not.toBeNull()
+    expect(host.querySelector('.adventure-console-response .adventure-system-response')).not.toBeNull()
+    expect(host.querySelector('.adventure-console-response .adventure-system-response > small')).toBeNull()
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(command, '查看告示')
       command.dispatchEvent(new Event('input', { bubbles: true }))
@@ -140,6 +169,12 @@ describe('TEXTADV-1 · author and player UI', () => {
     })
     await waitFor(() => expect(useAdventureGamePlayerStore.getState().runtimeState.adventure?.actionHistory).toHaveLength(1))
     expect(useAdventureGamePlayerStore.getState().runtimeState.adventure?.actionHistory[0]?.actionKey).toBe('inspect.notice')
+    expect(host.querySelector('.adventure-narrative-continue')).not.toBeNull()
+    expect(host.querySelector('.adventure-console-entry.is-playing > .adventure-player-command')).not.toBeNull()
+    expect(host.querySelector<HTMLInputElement>('input[aria-label="输入冒险指令"]')?.disabled).toBe(true)
+    expect(host.textContent).toContain('故事正在继续')
+    await finishNarrative(host)
+    expect(host.querySelector<HTMLInputElement>('input[aria-label="输入冒险指令"]')?.disabled).toBe(false)
     await click(host, '背包', true)
     expect(host.textContent).toContain('背包与物品')
     await act(async () => {
@@ -151,6 +186,7 @@ describe('TEXTADV-1 · author and player UI', () => {
     for (const label of ['前往集市', '询问商人', '前往档案馆', '进入水渠', '前往钟楼', '取回钟片']) {
       await click(host, label, true)
       await waitFor(() => expect(useAdventureGamePlayerStore.getState().busy).toBe(false))
+      await finishNarrative(host)
     }
     expect(host.textContent).toContain('潮汐商人信任 +1')
     expect(host.textContent).toContain('目标完成')
@@ -163,5 +199,6 @@ describe('TEXTADV-1 · author and player UI', () => {
     expect(state.narrative?.endingKey).toBe('victory')
     expect(state.adventure?.quests.find(item => item.questKey === 'main.bell')?.status).toBe('completed')
     expect(state.adventure?.actionHistory).toHaveLength(7)
+    expect(scrollIntoView).not.toHaveBeenCalled()
   }, 20_000)
 })

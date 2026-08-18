@@ -139,7 +139,13 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
       window.setTimeout(() => setNotice(''), 1500)
     } catch { /* store exposes error */ }
   }
-  const leaveToTitle = () => { setPanel(null); setUiHidden(false); void store.select(null) }
+  const leaveToTitle = () => {
+    setPanel(null)
+    setUiHidden(false)
+    setPrefs(value => ({ ...value, auto: false, fast: false }))
+    if (document.fullscreenElement) void document.exitFullscreen()
+    void store.select(null)
+  }
 
   if (!store.selectedSessionId) return <div className="avg-player avg-title-screen" data-testid="avg-player">
     <div className="avg-title-atmosphere" aria-hidden="true" />
@@ -174,6 +180,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
       <header className="avg-toolbar">
         <div className="avg-game-title"><small>VISUAL NOVEL</small><strong>{store.selectedManifest?.definition.title ?? 'AVG / Galgame'}</strong></div>
         <nav aria-label="游玩控制">
+          <button className="avg-exit-game" title="退出游戏" aria-label="退出游戏" onClick={leaveToTitle}><ArrowLeft /><span>退出游戏</span></button>
           <button title="历史" aria-label="历史" onClick={() => setPanel(panel === 'history' ? null : 'history')}><History /><span>历史</span></button>
           <button title="存读档" aria-label="存读档" onClick={() => setPanel(panel === 'saves' ? null : 'saves')}><Save /><span>存读档</span></button>
           <button title="快速存档" aria-label="快速存档" disabled={store.busy} onClick={() => void quickSave()}><Save /><span>快速存档</span></button>
