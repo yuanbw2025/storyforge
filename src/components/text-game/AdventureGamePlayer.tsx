@@ -30,10 +30,11 @@ import {
   parseAdventureNarrativeBlocks,
   parseAdventurePlayerCommand,
   projectAdventureTranscript,
+  resolveAdventurePlayerIdentity,
   type AdventureSystemCommand,
 } from '../../lib/adventure/player-experience'
 import { currentPlayerReleases } from '../../lib/text-game/player-library'
-import type { Project, WorkspaceScope } from '../../lib/types'
+import type { AdventureGameReleaseManifestV1, Project, WorkspaceScope } from '../../lib/types'
 import { useAdventureGamePlayerStore, selectAdventureActions } from '../../stores/adventure-game-player'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useDialog } from '../shared/Dialog'
@@ -94,6 +95,11 @@ function formatTime(value: number): string {
   return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(value)
 }
 
+function adventureNpcCount(manifest: AdventureGameReleaseManifestV1): number {
+  const player = resolveAdventurePlayerIdentity(manifest)
+  return manifest.interaction.profiles.filter(profile => profile.participantKey !== player?.participantKey).length
+}
+
 export default function AdventureGamePlayer(props: {
   project: Project
   scope: WorkspaceScope
@@ -125,9 +131,12 @@ export default function AdventureGamePlayer(props: {
   const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
   const adventure = store.runtimeState.adventure
   const manifest = store.selectedManifest
+  const playerIdentity = useMemo(() => manifest ? resolveAdventurePlayerIdentity(manifest) : null, [manifest])
   const location = manifest?.adventure.locations.find(item => item.key === adventure?.currentLocationKey) ?? null
   const objects = useMemo(() => manifest?.adventure.objects.filter(item => item.locationKey === location?.key) ?? [], [manifest, location?.key])
-  const actions = selectAdventureActions(store)
+  const actions = selectAdventureActions(store).filter(item => (
+    !playerIdentity?.participantKey || item.action.interaction?.participantKey !== playerIdentity.participantKey
+  ))
   const availableActions = actions.filter(item => item.available)
   const endingKeys = new Set((store.runtimeState.narrative?.nodes ?? []).filter(node => node.kind === 'ending').map(node => node.key))
   const endingChoices = (store.runtimeState.narrative?.choices ?? []).filter(choice => (
@@ -146,9 +155,10 @@ export default function AdventureGamePlayer(props: {
     .map(item => item.action.interaction!.participantKey)), [actions, location?.key])
   const currentProfiles = useMemo(() => {
     const profiles = manifest?.interaction.profiles ?? []
-    const present = profiles.filter(profile => currentParticipantKeys.has(profile.participantKey))
-    return present.length ? present : profiles
-  }, [currentParticipantKeys, manifest?.interaction.profiles])
+    const nonPlayers = profiles.filter(profile => profile.participantKey !== playerIdentity?.participantKey)
+    const present = nonPlayers.filter(profile => currentParticipantKeys.has(profile.participantKey))
+    return present.length ? present : nonPlayers
+  }, [currentParticipantKeys, manifest?.interaction.profiles, playerIdentity?.participantKey])
   const transcript = useMemo(() => manifest && adventure
     ? projectAdventureTranscript(manifest, adventure.actionHistory, store.events)
     : [], [adventure, manifest, store.events])
@@ -261,13 +271,13 @@ export default function AdventureGamePlayer(props: {
           <small>文字冒险 · 当前可玩版本</small>
           <h3>{catalogRelease.manifest?.definition.title ?? catalogRelease.release.label}</h3>
           <p>{catalogRelease.manifest?.definition.description || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>
-          {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.adventure.locations.length} 个地点</span><span>{catalogRelease.manifest.interaction.profiles.length} 名角色</span><span>{catalogRelease.manifest.adventure.items.length} 件物品</span><span>{catalogRelease.manifest.adventure.abilities.length} 项技能</span><span>{catalogRelease.manifest.adventure.quests.length} 个任务</span></div>}
+          {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.adventure.locations.length} 个地点</span><span>{adventureNpcCount(catalogRelease.manifest)} 名可交谈角色</span><span>{catalogRelease.manifest.adventure.items.length} 件物品</span><span>{catalogRelease.manifest.adventure.abilities.length} 项技能</span><span>{catalogRelease.manifest.adventure.quests.length} 个任务</span></div>}
           {catalogRelease.error ? <p className="adventure-error">{catalogRelease.error}</p> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新冒险</button>{store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id)!.id!)}><Save />继续上次进度</button>}</div>}
         </div>
       </section> : <>
         <div className="textgame-catalog-heading"><span>全部游戏</span><small>{catalog.length} 部可游玩作品</small></div>
         <section className="textgame-catalog-list" aria-label="文字冒险游戏列表">
-          {catalog.map(item => <article key={item.release.id}><button type="button" aria-label={`查看游戏：${item.manifest?.definition.title ?? item.release.label}`} onClick={() => setCatalogReleaseId(item.release.id!)}><span className="textgame-catalog-icon"><Map /></span><span className="textgame-catalog-copy"><small>文字冒险</small><strong>{item.manifest?.definition.title ?? item.release.label}</strong><p>{item.manifest?.definition.description || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>{item.manifest && <i>{item.manifest.adventure.locations.length} 地点 · {item.manifest.interaction.profiles.length} 角色 · {item.manifest.adventure.items.length} 物品 · {item.manifest.adventure.quests.length} 任务</i>}</span><span className="textgame-catalog-open">查看详情<ChevronRight /></span></button></article>)}
+          {catalog.map(item => <article key={item.release.id}><button type="button" aria-label={`查看游戏：${item.manifest?.definition.title ?? item.release.label}`} onClick={() => setCatalogReleaseId(item.release.id!)}><span className="textgame-catalog-icon"><Map /></span><span className="textgame-catalog-copy"><small>文字冒险</small><strong>{item.manifest?.definition.title ?? item.release.label}</strong><p>{item.manifest?.definition.description || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>{item.manifest && <i>{item.manifest.adventure.locations.length} 地点 · {adventureNpcCount(item.manifest)} 可交谈角色 · {item.manifest.adventure.items.length} 物品 · {item.manifest.adventure.quests.length} 任务</i>}</span><span className="textgame-catalog-open">查看详情<ChevronRight /></span></button></article>)}
           {!catalog.length && <div className="adventure-empty">尚无可游玩的文字冒险。请先在作者工作台完成发布。</div>}
         </section>
         {!!store.sessions.length && <section className="adventure-launcher-saves"><h3><Save />继续冒险</h3>{store.sessions.map(session => <div key={session.id}><button onClick={() => void store.select(session.id!)}><strong>{session.title}</strong><small>{formatTime(session.updatedAt)} · 可继续</small></button><button aria-label="删除冒险存档" onClick={() => void removeSession(session.id!, session.title)}><Trash2 /></button></div>)}</section>}
@@ -293,7 +303,7 @@ export default function AdventureGamePlayer(props: {
     <main className="adventure-console-shell">
       <div className="adventure-console">
         <section className="adventure-console-prologue">
-          <small>玩家身份 · {manifest.adventure.playerIdentity ? `${manifest.adventure.playerIdentity.name}（由你扮演）` : '你（唯一行动主角）'} · {selected.title}</small>
+          <small>玩家身份 · {playerIdentity ? `${playerIdentity.name}（由你扮演）` : '你（唯一行动主角）'} · {selected.title}</small>
           <h1>{location.title}</h1>
           <p>{location.description}</p>
           <dl>
@@ -311,7 +321,7 @@ export default function AdventureGamePlayer(props: {
             return <article ref={entryIndex === transcript.length - 1 ? latestEntryRef : undefined} className={`adventure-console-entry outcome-${entry.outcome}`} key={entry.eventSequence}>
               <header><span>&gt;</span><strong>{entry.actionLabel}</strong><small>{ACTION_KIND[manifest.adventure.actions.find(item => item.key === entry.actionKey)?.kind ?? 'look']}</small></header>
               <div className="adventure-console-prose">{blocks.map((block, index) => block.kind === 'dialogue'
-                ? <blockquote className={block.speaker === manifest.adventure.playerIdentity?.name ? 'player-dialogue' : ''} key={index}><small>{block.speaker}</small><p>{block.text}</p></blockquote>
+                ? <blockquote className={block.speaker === playerIdentity?.name ? 'player-dialogue' : ''} key={index}><small>{block.speaker}</small><p>{block.text}</p></blockquote>
                 : <p className={`adventure-${block.kind}`} key={index}>{block.kind === 'action' && <small>行动</small>}{block.kind === 'system' && <small>系统</small>}{block.text}</p>)}</div>
               {!!entry.changes.length && <ul>{entry.changes.map((change, index) => <li key={`${entry.eventSequence}:${index}`}>{change}</li>)}</ul>}
               {entry.eventSequence === lastAction?.eventSequence && aiReady && <button className="adventure-console-polish" disabled={store.busy || generating} onClick={() => void run(() => store.narrateLastResult(resolved.config))}><Sparkles />让主 Agent 润色本次结果</button>}

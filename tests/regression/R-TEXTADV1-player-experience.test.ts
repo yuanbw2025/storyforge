@@ -4,6 +4,7 @@ import {
   parseAdventureNarrativeBlocks,
   parseAdventurePlayerCommand,
   projectAdventureTranscript,
+  resolveAdventurePlayerIdentity,
 } from '../../src/lib/adventure/player-experience'
 import type {
   AdventureActionHistoryEntry,
@@ -76,5 +77,48 @@ describe('TEXTADV-1 · pure-text player experience', () => {
       { kind: 'dialogue', speaker: '林澈', text: '你在密信里写的是少了四十七个人。' },
       { kind: 'action', speaker: null, text: '登记册上的墨迹开始褪色。' },
     ])
+  })
+
+  it('旧发布无需重写即可推断玩家身份，并在首次观察后补出真实剧情对白', () => {
+    const look = content.actions.find(item => item.kind === 'look')!
+    const legacyManifest = {
+      schema: 'storyforge.game-release', version: 1, productType: 'text-adventure',
+      definition: {
+        source: {
+          worldContentHash: 'a'.repeat(64), mappingVersion: 1,
+          selection: {},
+        },
+      }, worldRelease: {}, adventure: content,
+      narrative: {
+        entryNodeKey: 'entry',
+        nodes: [{ key: 'entry', title: '失潮之夜' }],
+        choices: [],
+        beats: [
+          { beatKey: 'entry.1', nodeKey: 'entry', kind: 'narration', speakerKey: null, text: '雾从防波堤外翻进港湾。', order: 1 },
+          { beatKey: 'entry.2', nodeKey: 'entry', kind: 'dialogue', speakerKey: 'character:0', text: '潮没来，钟也没响。', order: 2 },
+          { beatKey: 'entry.3', nodeKey: 'entry', kind: 'dialogue', speakerKey: 'character:1', text: '十年前也晚了十三分钟。', order: 3 },
+        ],
+      },
+      interaction: {
+        playerKey: 'player',
+        profiles: [
+          { participantKey: 'character-0', characterKey: 'world-release:abc:character:0', name: '林澈', roleLabel: '巡潮员', voiceRules: '', initialKnowledge: [], relationshipDimensions: [], maxMemoryEntries: 10 },
+          { participantKey: 'character-1', characterKey: 'world-release:abc:character:1', name: '余砚', roleLabel: '档案管理员', voiceRules: '', initialKnowledge: [], relationshipDimensions: [], maxMemoryEntries: 10 },
+        ],
+        sceneTemplates: [],
+      },
+    } as unknown as AdventureGameReleaseManifestV1
+    expect(resolveAdventurePlayerIdentity(legacyManifest)).toMatchObject({
+      name: '林澈', participantKey: 'character-0', inferred: true,
+    })
+    const history: AdventureActionHistoryEntry[] = [{
+      eventSequence: 1, resultingSequence: 1, commandId: 'legacy-look', actionKey: look.key,
+      kind: look.kind, outcome: 'success', narrative: '你观察了雾港码头。',
+    }]
+    const transcript = projectAdventureTranscript(legacyManifest, history, [])
+    expect(transcript[0].blocks).toEqual(expect.arrayContaining([
+      { kind: 'dialogue', speaker: '林澈', text: '潮没来，钟也没响。' },
+      { kind: 'dialogue', speaker: '余砚', text: '十年前也晚了十三分钟。' },
+    ]))
   })
 })

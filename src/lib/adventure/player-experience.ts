@@ -34,6 +34,13 @@ export interface AdventureNarrativeBlock {
   text: string
 }
 
+export interface AdventurePlayerIdentityResolution {
+  name: string
+  description: string
+  participantKey: string | null
+  inferred: boolean
+}
+
 const SYSTEM_COMMANDS: Record<AdventureSystemCommand, string[]> = {
   help: ['帮助', '命令', 'help', '?'],
   status: ['状态', '属性', '人物', 'status'],
@@ -139,6 +146,124 @@ export function parseAdventureNarrativeBlocks(value: string): AdventureNarrative
   })
 }
 
+function speakerExportId(value: string): number | null {
+  const match = value.match(/(?:^|:)character:(\d+)$/)
+  return match ? Number(match[1]) : null
+}
+
+function profileForSpeaker(manifest: AdventureGameReleaseManifestV1, speakerKey: string) {
+  const exportId = speakerExportId(speakerKey)
+  return manifest.interaction.profiles.find(profile => (
+    profile.characterKey === speakerKey
+    || profile.participantKey === speakerKey
+    || (exportId != null && (
+      profile.participantKey === `character-${exportId}`
+      || profile.characterKey.endsWith(`:character:${exportId}`)
+    ))
+  )) ?? null
+}
+
+function entryDialogueSpeakerKey(manifest: AdventureGameReleaseManifestV1): string | null {
+  return [...manifest.narrative.beats]
+    .filter(beat => beat.nodeKey === manifest.narrative.entryNodeKey && beat.kind === 'dialogue' && beat.speakerKey)
+    .sort((left, right) => left.order - right.order)[0]?.speakerKey ?? null
+}
+
+/**
+ * Releases published before the explicit playerIdentity field remain playable.
+ * Their entry scene's first speaking character is the single player role used
+ * by the original world-to-adventure projection.
+ */
+export function resolveAdventurePlayerIdentity(
+  manifest: AdventureGameReleaseManifestV1,
+): AdventurePlayerIdentityResolution | null {
+  const explicit = manifest.adventure.playerIdentity
+  if (explicit) {
+    const profile = manifest.interaction.profiles.find(item => item.name === explicit.name) ?? null
+    return {
+      name: explicit.name,
+      description: explicit.description,
+      participantKey: profile?.participantKey ?? null,
+      inferred: false,
+    }
+  }
+  if (!manifest.definition.source) return null
+  const speakerKey = entryDialogueSpeakerKey(manifest)
+  const profile = speakerKey ? profileForSpeaker(manifest, speakerKey) : null
+  return profile ? {
+    name: profile.name,
+    description: profile.roleLabel,
+    participantKey: profile.participantKey,
+    inferred: true,
+  } : null
+}
+
+function narrativeBlockForBeat(
+  manifest: AdventureGameReleaseManifestV1,
+  beat: AdventureGameReleaseManifestV1['narrative']['beats'][number],
+): AdventureNarrativeBlock {
+  if (beat.kind !== 'dialogue') return { kind: beat.kind, speaker: null, text: beat.text }
+  const player = resolveAdventurePlayerIdentity(manifest)
+  const entrySpeakerKey = entryDialogueSpeakerKey(manifest)
+  const profile = beat.speakerKey ? profileForSpeaker(manifest, beat.speakerKey) : null
+  const speaker = profile?.name
+    ?? (beat.speakerKey === entrySpeakerKey ? player?.name : null)
+    ?? '人物'
+  return { kind: 'dialogue', speaker, text: beat.text }
+}
+
+function actionStoryNodeKey(
+  manifest: AdventureGameReleaseManifestV1,
+  action: AdventureGameReleaseManifestV1['adventure']['actions'][number],
+): string | null {
+  if (action.narrativeChoiceKey) {
+    const choice = manifest.narrative.choices.find(item => item.choiceKey === action.narrativeChoiceKey)
+    if (choice) return choice.targetNodeKey
+  }
+  if (action.kind === 'look' && action.locationKey === manifest.adventure.initialLocationKey) {
+    return manifest.narrative.entryNodeKey
+  }
+  if (action.interaction) {
+    const profile = manifest.interaction.profiles.find(item => item.participantKey === action.interaction?.participantKey)
+    if (profile) {
+      const dialogue = manifest.narrative.beats.find(beat => beat.kind === 'dialogue'
+        && beat.speakerKey != null && profileForSpeaker(manifest, beat.speakerKey)?.participantKey === profile.participantKey)
+      if (dialogue) return dialogue.nodeKey
+    }
+  }
+  const enteredLocationKey = action.successEffects.find(effect => effect.op === 'enter-location')?.locationKey
+  const targetTitle = manifest.adventure.locations.find(item => item.key === enteredLocationKey || item.key === action.targetKey)?.title
+    ?? manifest.adventure.objects.find(item => item.key === action.targetKey)?.title
+    ?? manifest.adventure.items.find(item => item.key === action.targetKey)?.title
+  if (!targetTitle) return null
+  return manifest.narrative.nodes.find(node => node.title.includes(targetTitle))?.key
+    ?? manifest.narrative.beats.find(beat => beat.text.includes(targetTitle))?.nodeKey
+    ?? null
+}
+
+function projectActionNarrativeBlocks(
+  manifest: AdventureGameReleaseManifestV1,
+  action: AdventureActionHistoryEntry,
+): AdventureNarrativeBlock[] {
+  const base = parseAdventureNarrativeBlocks(action.narrative)
+  if (base.some(block => block.kind === 'dialogue') || action.narrative.length >= 260) return base
+  const definition = manifest.adventure.actions.find(item => item.key === action.actionKey)
+  if (!definition) return base
+  const nodeKey = actionStoryNodeKey(manifest, definition)
+  if (!nodeKey) return base
+  const beats = manifest.narrative.beats
+    .filter(beat => beat.nodeKey === nodeKey)
+    .sort((left, right) => left.order - right.order)
+  if (!beats.length) return base
+  const focus = definition.interaction
+    ? beats.findIndex(beat => beat.kind === 'dialogue' && beat.speakerKey
+      && profileForSpeaker(manifest, beat.speakerKey)?.participantKey === definition.interaction?.participantKey)
+    : 0
+  const start = focus > 1 ? focus - 1 : 0
+  const story = beats.slice(start, start + 8).map(beat => narrativeBlockForBeat(manifest, beat))
+  return [...base, ...story.filter(block => !base.some(item => item.kind === block.kind && item.text === block.text))]
+}
+
 function eventChange(event: SimulationEvent, manifest: AdventureGameReleaseManifestV1): string | null {
   const body = payload(event)
   const adventure = manifest.adventure
@@ -217,7 +342,7 @@ export function projectAdventureTranscript(
       actionLabel: manifest.adventure.actions.find(item => item.key === action.actionKey)?.label ?? action.actionKey,
       outcome: action.outcome,
       narrative: action.narrative,
-      blocks: parseAdventureNarrativeBlocks(action.narrative),
+      blocks: projectActionNarrativeBlocks(manifest, action),
       changes,
     }
   })
