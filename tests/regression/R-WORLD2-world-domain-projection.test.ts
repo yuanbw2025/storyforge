@@ -84,4 +84,20 @@ describe('WORLD-2 · 世界领域投影', () => {
     expect(first.completeness).toBe(second.completeness)
     expect(worldviewsScan).toHaveBeenCalledTimes(1)
   })
+
+  it('版本记录和空规则壳不能冒充可创作的世界基础', async () => {
+    const now = Date.now()
+    const id = await db.projects.add(project('只有技术记录的世界', now)) as number
+    await db.worldRulesProfiles.add({ projectId: id, worldGroupId: null, entries: {}, customNodes: [], globalNote: '', createdAt: now, updatedAt: now } as any)
+    await db.worldRevisions.add({ projectId: id, label: '空修订', manifestJson: '{}', createdAt: now, updatedAt: now } as any)
+    await db.characters.add({ projectId: id, name: '占位角色', role: 'npc', createdAt: now, updatedAt: now } as any)
+    await db.storyArcs.add({ projectId: id, name: '占位故事线', type: 'main', stages: '[]', createdAt: now, updatedAt: now } as any)
+
+    const projection = await loadWorldProjection({ ...project('只有技术记录的世界', now), id })
+
+    expect(projection.domains.foundation.activeTableCount).toBe(2)
+    expect(projection.domains.foundation.status).toBe('partial')
+    expect(projection.domains.narrative.status).toBe('partial')
+    expect(projection.readiness).toBe('building')
+  })
 })

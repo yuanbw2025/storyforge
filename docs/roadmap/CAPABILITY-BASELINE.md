@@ -130,6 +130,32 @@
 - `tests/canon/storyline-progress.test.ts`
 - `scripts/check-canon-coverage.mjs`
 
+## MEMORY-1 可编辑长期记忆工作区
+
+### 已有能力
+
+- 浏览器 IndexedDB、共同基线和本地硬盘文件形成三方核对；绑定、重新授权和检查本身均为零写入，任一方向同步都要求作者明确确认。
+- Workspace、World、Work、章节 Markdown，以及 Work 级故事核心/创作规则中文 YAML 具有稳定文档身份和受治理反向采纳；外部修改先成为字段候选，再经过作用域、CAS 和影响计划进入 `adopt()`。
+- 所有可导出正式表和 Harness 证据进入只读恢复胶囊；不可变账本、回执和高风险结构不会因外部文件改动被直接重写，派生索引不冒充长期事实。
+- Harness 的成功、失败和取消终态与 `memory.settlement.recorded` 原子提交；候选、作者决定、采纳、验证和结算可由工作区恢复并保持来源链。
+- Fast Guard / Deep Audit 已进入 durable Run：作者显式触发、一次点击最多一次模型调用、报告只作为证据候选；正文变化后旧报告保留并 stale，不自动改稿。
+- 项目创建和“设置 → 项目存储工作区”可选择、显示、重新授权或更换任意硬盘目录；位置选择不写文件，旧目录不删除，恢复项目继承恢复目录。
+- 隔离的十万字级、42 章、多 World/Work 长链覆盖双向修改、冲突、中断、清库恢复、Run 重绑定和恢复后继续创作；真实 Chromium/OPFS 路径覆盖 UI 写盘、外部修改和人工采纳。
+- 文件检查、hash、解析、影响、同步和恢复模型调用为 0；结构化 Canon、角色认知、状态、物品、时间线和来源证据优先，embedding 仅为可删除、可重建、无裁决权的可选索引。
+
+### 当前边界 / 尚未包含
+
+- 当前直接可编辑语义面有意停在低歧义内容；角色、故事线、世界设定、纲要和账本若要开放，仍须逐表通过稳定身份、引用、作用域、冲突、采纳、影响与恢复反例，不能按“全表覆盖”批量放开。
+- 本地工作区不包含云同步、多人协作、Git 自动提交或服务端托管；更换目录不会删除或后台迁移旧目录。
+- 工程保证的是可恢复、可解释、由作者裁决的连续性，不保证模型不会漏报语义矛盾，也不承诺作品永远没有前后冲突。
+
+### 新功能必须复用
+
+- 工作区投影与核对：`src/lib/memory/workspace-projection.ts`、`workspace-impact.ts`、`src/lib/storage/project-storage-workspace.ts`。
+- Harness 结算与恢复：`src/lib/memory/settlement.ts`、`settlement-core.ts`、`consistency-dossier.ts`。
+- 用户入口与操作说明：`src/components/settings/ProjectStorageWorkspacePanel.tsx`、`src/components/data/DataManagementPanel.tsx`、`docs/MEMORY-WORKSPACE-GUIDE.md`。
+- 数据与 AI 治理仍必须经过 `PROJECT_TABLES`、`CONTEXT_SOURCES + assembleContext()`、`FIELD_REGISTRY + AdoptionSchema + adopt()`，不得建立平行同步或写回入口。
+
 ## PIPE-1 透明生成与质量工作坊
 
 ### 已有能力
@@ -369,7 +395,7 @@
 ### 已有能力
 
 - 当前正式 AI 创作已由统一 Agent + durable Harness 承载：Master Agent/领域 Skill 冻结任务、权限、版本与预算，候选、checkpoint、父子 lineage、终态回执和用量进入统一 ledger；作者确认后才经受治理采纳写入 Canon。
-- CREL 创作可靠性控制面与本轮开发任务已完成并进入实验性社区观察：分级 `CreativeArtifactV1`、1+1 调用上限、免费确定性归一化、一次定向修复、`NarrativeBrief`、部分设定临时假设、统一预览与本地反馈均复用现有 Harness，不建立平行 Runner 或数据库。历史 held-out FAIL 与作者 A/B 0/6 不变；旧 A/B/质量门已由产品决策关闭为阻塞项，不视为通过。
+- Agent + Harness / CREL 本轮已阶段性开发完成并进入实验性社区观察：`HARNESS-0～86`、`CREL-0～14` 已进入已完成索引，不再保留旧 A/B、旧质量门或无边界扩充 Harness 的待开发项。分级 `CreativeArtifactV1`、1+1 调用上限、免费确定性归一化、一次定向修复、`NarrativeBrief`、部分设定临时假设、统一预览与本地反馈均复用现有 Harness，不建立平行 Runner 或数据库。历史 held-out FAIL 与作者 A/B 0/6 不变；旧 A/B/质量门已由产品决策关闭为阻塞项，不视为通过。
 - AGENT-1 Tool Registry 当前提供 14 个只读工具：Phase 27.1-a 首批 13 个与 27.1-d 的
   `read_inspiration_workspace` 全部经 `CONTEXT_SOURCES → assembleContext()` 读取，带
   项目/世界/实体/碎片归属校验、独立预算与裁剪元数据。

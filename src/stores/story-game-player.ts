@@ -10,7 +10,13 @@ import {
   readSimulationStateVersion,
   verifySimulationCheckpoint,
 } from '../lib/simulation/runtime'
-import { assertGameReleaseUnchanged, parseGameReleaseManifest, parseWorldReleaseSpeakerNames } from '../lib/text-game/releases'
+import {
+  assertGameReleaseUnchanged,
+  parseGameReleaseManifest,
+  parseWorldReleasePlayerCharacter,
+  parseWorldReleaseSpeakerNames,
+  type WorldReleasePlayerCharacter,
+} from '../lib/text-game/releases'
 import { assertInstanceBinding, createStoryGameInstance, readBoundInstances } from '../lib/world-engine/instances'
 import type {
   GameRelease,
@@ -27,6 +33,7 @@ export interface StoryGameLibraryItem {
   release: GameRelease
   manifest: GameReleaseManifestV1 | null
   speakerNames: Record<string, string>
+  playerCharacter: WorldReleasePlayerCharacter | null
   error: string
 }
 
@@ -73,6 +80,7 @@ async function readLibrary(scope: WorkspaceScope): Promise<StoryGameLibraryItem[
         release,
         manifest: parseGameReleaseManifest(release.manifestJson),
         speakerNames: worldRelease ? parseWorldReleaseSpeakerNames(worldRelease.manifestJson) : {},
+        playerCharacter: worldRelease ? parseWorldReleasePlayerCharacter(worldRelease.manifestJson) : null,
         error: '',
       }
     } catch (error) {
@@ -80,6 +88,7 @@ async function readLibrary(scope: WorkspaceScope): Promise<StoryGameLibraryItem[
         release,
         manifest: null,
         speakerNames: {},
+        playerCharacter: null,
         error: error instanceof Error ? error.message : String(error),
       }
     }

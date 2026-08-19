@@ -29,6 +29,7 @@ import {
 } from './content'
 
 export const WORLD_GAME_MAPPING_VERSION = 1
+export const WORLD_ADVENTURE_PLAYER_VERSION = 2
 
 export interface WorldGameSourceCatalog {
   release: WorldRelease
@@ -479,9 +480,35 @@ function adventureStoryExcerpt(
     .slice(0, limit)
     .map(beat => {
       const speaker = beat.speakerCharacterExportId == null ? '' : characterById.get(beat.speakerCharacterExportId)
-      return speaker ? `${speaker}：“${beat.text}”` : beat.text
+      if (speaker) return `【${speaker}】${beat.text}`
+      if (beat.kind === 'system') return `【系统】${beat.text}`
+      if (beat.kind === 'action') return `【行动】${beat.text}`
+      return beat.text
     })
-    .join(' ')
+    .join('\n\n')
+}
+
+function adventureConversationExcerpt(
+  story: PortableStoryGameDraftV1,
+  catalog: WorldGameSourceCatalog,
+  characterExportId: number,
+): string {
+  const firstDialogue = story.beats.find(beat => (
+    beat.kind === 'dialogue' && beat.speakerCharacterExportId === characterExportId
+  ))
+  if (!firstDialogue) return ''
+  const sceneBeats = story.beats.filter(beat => beat.nodeKey === firstDialogue.nodeKey)
+  const dialogueIndex = sceneBeats.findIndex(beat => beat.beatKey === firstDialogue.beatKey)
+  const start = Math.max(0, dialogueIndex - 1)
+  const selected = sceneBeats.slice(start, Math.min(sceneBeats.length, dialogueIndex + 4))
+  const characterById = new Map(catalog.characters.map(item => [item.exportId, item.name]))
+  return selected.map(beat => {
+    const speaker = beat.speakerCharacterExportId == null ? '' : characterById.get(beat.speakerCharacterExportId)
+    if (speaker) return `【${speaker}】${beat.text}`
+    if (beat.kind === 'system') return `【系统】${beat.text}`
+    if (beat.kind === 'action') return `【行动】${beat.text}`
+    return beat.text
+  }).join('\n\n')
 }
 
 export function buildAdventureContent(input: {
@@ -528,6 +555,21 @@ export function buildAdventureContent(input: {
     node.key,
     adventureSceneLocationIndex(node, locations, index),
   ]))
+  const playerCharacterExportId = story.beats.find(beat => (
+    beat.nodeKey === story.entryNodeKey
+      && beat.kind === 'dialogue'
+      && beat.speakerCharacterExportId != null
+  ))?.speakerCharacterExportId ?? null
+  const playerCharacter = playerCharacterExportId == null
+    ? null
+    : selectedCharacters.find(character => character.exportId === playerCharacterExportId) ?? null
+  const entryExcerpt = adventureStoryExcerpt(story, input.catalog, story.entryNodeKey, 10)
+  const arrivalExcerpt = (locationIndex: number) => {
+    const node = storySceneNodes.find(item => (
+      item.key !== story.entryNodeKey && sceneAssignments.get(item.key) === locationIndex
+    ))
+    return node ? adventureStoryExcerpt(story, input.catalog, node.key, 3) : ''
+  }
   const objects = selectedLocations.map(item => ({
     key: `landmark-${item.exportId}`,
     locationKey: `location-${item.exportId}`,
@@ -555,8 +597,16 @@ export function buildAdventureContent(input: {
     stackable: false,
     consumable: false,
   }))
+  const finalLocation = locations.find(item => /钟楼|bell|tower/i.test(item.title)) ?? locations[locations.length - 1]
+  const evidence = items[0]
+  const storyInvestigationNodes = storySceneNodes.filter(item => item.kind !== 'entry')
+  const surveyQuestKey = 'side.survey'
+  const archiveQuestKey = 'side.archive'
+  const reconstructionQuestKey = 'side.reconstruction'
+  const voicesQuestKey = 'side.voices'
   const actions: AdventureActionDefinition[] = []
   for (const [index, location] of locations.entries()) {
+    const surveyObjectiveKey = `survey.${index}`
     actions.push({
       key: `look.${location.key}`,
       kind: 'look',
@@ -564,16 +614,24 @@ export function buildAdventureContent(input: {
       description: location.description,
       locationKey: location.key,
       targetKey: `landmark-${selectedLocations[index].exportId}`,
-      requirements: [],
+      requirements: index === 0 ? [] : [{ questKey: surveyQuestKey, questStatus: 'active' }],
       rule: { kind: 'automatic' },
-      successEffects: index === 0 ? [{ op: 'accept-quest', questKey: 'main.bell' }] : [],
+      successEffects: [
+        ...(index === 0 ? [
+          { op: 'accept-quest' as const, questKey: 'main.bell' },
+          { op: 'accept-quest' as const, questKey: surveyQuestKey },
+        ] : []),
+        { op: 'complete-objective', questKey: surveyQuestKey, objectiveKey: surveyObjectiveKey },
+      ],
       costlySuccessEffects: [],
       failureEffects: [],
-      successText: index === 0 ? `你从${location.title}开始追查“${narrative.title}”。` : `你记下了${location.title}的线索。`,
+      successText: index === 0
+        ? `${entryExcerpt || location.description}\n\n【行动】你把潮位、道路和仍记得自己姓名的人写进调查簿，正式开始追查“${narrative.title}”。`
+        : `${location.description}\n\n你没有只把这里当作途经点，而是核对道路、潮痕与居民证词，把${location.title}补进可回溯的调查路线。`,
       costlySuccessText: `你费力辨认出${location.title}的线索。`,
       failureText: '当前没有发现新的线索。',
       unavailableText: '当前无法观察。',
-      repeatable: index !== 0,
+      repeatable: false,
       narrativeChoiceKey: null,
     })
     const next = locations[index + 1]
@@ -581,16 +639,16 @@ export function buildAdventureContent(input: {
       actions.push({
         key: `move.${location.key}.${next.key}`,
         kind: 'move', label: `前往${next.title}`, description: `从${location.title}前往${next.title}。`,
-        locationKey: location.key, targetKey: next.key, requirements: [], rule: { kind: 'automatic' },
+        locationKey: location.key, targetKey: next.key, requirements: [], rule: { kind: 'resource-payment', resourceKey: 'time', amount: 1 },
         successEffects: [{ op: 'enter-location', locationKey: next.key }], costlySuccessEffects: [], failureEffects: [],
-        successText: `你抵达${next.title}。`, costlySuccessText: `你付出代价后抵达${next.title}。`, failureText: '道路暂时无法通过。', unavailableText: '当前不能移动。', repeatable: true, narrativeChoiceKey: null,
+        successText: `你沿着潮灯与旧路标穿过雾气，抵达${next.title}。身后的路仍在，但黑潮也向港内推进了一刻。${arrivalExcerpt(index + 1) ? `\n\n${arrivalExcerpt(index + 1)}` : ''}`, costlySuccessText: `你付出代价后抵达${next.title}。`, failureText: '道路暂时无法通过。', unavailableText: '剩余时间已经不足以继续移动。', repeatable: true, narrativeChoiceKey: null,
       })
       actions.push({
         key: `move.${next.key}.${location.key}`,
         kind: 'move', label: `返回${location.title}`, description: `从${next.title}返回${location.title}。`,
-        locationKey: next.key, targetKey: location.key, requirements: [], rule: { kind: 'automatic' },
+        locationKey: next.key, targetKey: location.key, requirements: [], rule: { kind: 'resource-payment', resourceKey: 'time', amount: 1 },
         successEffects: [{ op: 'enter-location', locationKey: location.key }], costlySuccessEffects: [], failureEffects: [],
-        successText: `你返回${location.title}。`, costlySuccessText: `你付出代价后返回${location.title}。`, failureText: '道路暂时无法通过。', unavailableText: '当前不能移动。', repeatable: true, narrativeChoiceKey: null,
+        successText: `你循着自己留下的标记返回${location.title}。往返消耗了时间，也让沿途的异常变得更加清楚。${arrivalExcerpt(index) ? `\n\n${arrivalExcerpt(index)}` : ''}`, costlySuccessText: `你付出代价后返回${location.title}。`, failureText: '道路暂时无法通过。', unavailableText: '剩余时间已经不足以返回。', repeatable: true, narrativeChoiceKey: null,
       })
     }
   }
@@ -603,26 +661,32 @@ export function buildAdventureContent(input: {
       requirements: [{ questKey: 'main.bell', questStatus: 'active' }], rule: { kind: 'automatic' },
       successEffects: [
         { op: 'gain-item', itemKey: item.key, quantity: 1, claimKey: `claim.${item.key}` },
-        { op: 'complete-objective', questKey: 'main.bell', objectiveKey: 'find-evidence' },
+        ...(index === 0 ? [{ op: 'complete-objective' as const, questKey: 'main.bell', objectiveKey: 'find-evidence' }] : []),
       ],
-      costlySuccessEffects: [], failureEffects: [], successText: `你取得了${item.title}。`, costlySuccessText: `你付出代价取得了${item.title}。`, failureText: `${item.title}暂时无法取得。`, unavailableText: '先开始主线调查，或该道具已经取得。', repeatable: false, narrativeChoiceKey: null,
+      costlySuccessEffects: [], failureEffects: [], successText: `${item.description}\n\n【行动】你把${item.title}收进行囊。它不只是一个收藏品：从这一刻起，新的调查与校准行动会读取这件正式物品。${arrivalExcerpt((index + 1) % locations.length) ? `\n\n${arrivalExcerpt((index + 1) % locations.length)}` : ''}`, costlySuccessText: `你付出代价取得了${item.title}。`, failureText: `${item.title}暂时无法取得。`, unavailableText: '先开始主线调查，或该道具已经取得。', repeatable: false, narrativeChoiceKey: null,
     })
   }
   for (const [index, lore] of selectedLore.entries()) {
     const location = locations[index % locations.length]
+    const objectiveKey = `archive.${index}`
     actions.push({
       key: `inspect.lore-${lore.exportId}`,
       kind: 'inspect', label: `查阅${lore.name}`, description: lore.description || `了解${lore.name}。`,
       locationKey: location.key, targetKey: `lore-${lore.exportId}`,
-      requirements: [], rule: { kind: 'automatic' }, successEffects: [], costlySuccessEffects: [], failureEffects: [],
-      successText: lore.description || `你了解了${lore.name}。`, costlySuccessText: `你费力还原了${lore.name}的记录。`,
-      failureText: '记录暂时无法辨认。', unavailableText: '当前无法查阅。', repeatable: true, narrativeChoiceKey: null,
+      requirements: index === 0 ? [] : [{ questKey: archiveQuestKey, questStatus: 'active' }], rule: { kind: 'automatic' },
+      successEffects: [
+        ...(index === 0 ? [{ op: 'accept-quest' as const, questKey: archiveQuestKey }] : []),
+        { op: 'complete-objective', questKey: archiveQuestKey, objectiveKey },
+      ], costlySuccessEffects: [], failureEffects: [],
+      successText: `${lore.description || `你了解了${lore.name}。`}\n\n你把这段知识同现场证据交叉标注；它不再只是世界设定，而成为能够影响判断的档案。`, costlySuccessText: `你费力还原了${lore.name}的记录。`,
+      failureText: '记录暂时无法辨认。', unavailableText: '需要先从第一份可辨认档案建立索引。', repeatable: false, narrativeChoiceKey: null,
     })
   }
-  for (const node of storySceneNodes.filter(item => item.kind !== 'entry')) {
+  for (const [index, node] of storyInvestigationNodes.entries()) {
     const location = locations[sceneAssignments.get(node.key) ?? 0]
     const actionKey = `investigate.story-${node.key}`
     const excerpt = adventureStoryExcerpt(story, input.catalog, node.key)
+    const objectiveKey = `reconstruction.${index}`
     actions.push({
       key: actionKey,
       kind: 'inspect',
@@ -630,20 +694,31 @@ export function buildAdventureContent(input: {
       description: node.summary || `还原“${node.title}”的现场与人物证言。`,
       locationKey: location.key,
       targetKey: `story-${node.key}`,
-      requirements: [{ questKey: 'main.bell', questStatus: 'active' }],
+      requirements: [
+        { questKey: 'main.bell', questStatus: 'active' },
+        ...(index === 0 ? [] : [{ questKey: reconstructionQuestKey, questStatus: 'active' as const }]),
+      ],
       rule: { kind: 'automatic' },
-      successEffects: [],
+      successEffects: [
+        ...(index === 0 ? [
+          { op: 'accept-quest' as const, questKey: reconstructionQuestKey },
+          { op: 'complete-objective' as const, questKey: 'main.bell', objectiveKey: 'reconstruct' },
+          { op: 'change-ability' as const, abilityKey: 'reason', delta: 1 },
+        ] : []),
+        { op: 'complete-objective', questKey: reconstructionQuestKey, objectiveKey },
+      ],
       costlySuccessEffects: [],
       failureEffects: [],
-      successText: excerpt || node.summary || `你还原了“${node.title}”的关键经过。`,
+      successText: `${excerpt || node.summary || `你还原了“${node.title}”的关键经过。`}\n\n新的因果关系被写进调查记录，后续地点与人物不再只是并列线索。`,
       costlySuccessText: `你付出时间与体力，终于还原“${node.title}”的关键经过。${excerpt ? ` ${excerpt}` : ''}`,
       failureText: `现场仍缺少能够解释“${node.title}”的证据。`,
-      unavailableText: '先从起点接受失潮调查。',
+      unavailableText: '需要先开始失潮调查，并从第一处主线现场建立可回溯的调查顺序。',
       repeatable: false,
       narrativeChoiceKey: null,
     })
   }
-  const participants = selectedCharacters.map(item => {
+  const participantCharacters = selectedCharacters.filter(item => item.exportId !== playerCharacterExportId)
+  const participants = participantCharacters.map(item => {
     const relationships = selectedRelations.filter(relation => relation.fromCharacterExportId === item.exportId
       || relation.toCharacterExportId === item.exportId)
     const relationSummary = relationships.map(relation => {
@@ -656,23 +731,54 @@ export function buildAdventureContent(input: {
     return { exportId: item.exportId, participantKey: `character-${item.exportId}`, relationSummary }
   })
   for (const [index, participant] of participants.entries()) {
-    const character = selectedCharacters[index]
+    const character = participantCharacters[index]
     const location = locations[index % locations.length]
+    const objectiveKey = `voice.${index}`
+    const conversation = adventureConversationExcerpt(story, input.catalog, character.exportId)
     actions.push({
       key: `talk.${participant.participantKey}`,
       kind: 'talk', label: `询问${character.name}`,
       description: [character.description || `向${character.name}询问世界线索。`, participant.relationSummary]
         .filter(Boolean).join(' 关系：'),
       locationKey: location.key, targetKey: `character:${participant.participantKey}`,
-      requirements: [], rule: { kind: 'automatic' }, successEffects: [], costlySuccessEffects: [], failureEffects: [],
-      successText: `${character.name}提供了与“${narrative.title}”有关的证言。${participant.relationSummary ? ` 你也确认了关系：${participant.relationSummary}` : ''}`,
-      costlySuccessText: `${character.name}在迟疑后给出证言。`, failureText: `${character.name}暂时不愿回答。`, unavailableText: '当前无法交谈。', repeatable: true, narrativeChoiceKey: null,
+      requirements: [
+        { questKey: 'main.bell', questStatus: 'active' },
+        ...(index === 0 ? [] : [{ questKey: voicesQuestKey, questStatus: 'active' as const }]),
+      ], rule: { kind: 'automatic' },
+      successEffects: [
+        ...(index === 0 ? [
+          { op: 'accept-quest' as const, questKey: voicesQuestKey },
+          { op: 'complete-objective' as const, questKey: 'main.bell', objectiveKey: 'testimony' },
+        ] : []),
+        { op: 'complete-objective', questKey: voicesQuestKey, objectiveKey },
+      ], costlySuccessEffects: [], failureEffects: [],
+      successText: `${conversation || `【${character.name}】我会把与“${narrative.title}”有关、能够确认的部分告诉你。`}${participant.relationSummary ? `\n\n这份证言也暴露了关系：${participant.relationSummary}` : ''}\n\n【行动】你没有替${character.name}作决定，只把可验证的姓名、地点与时间记进档案。`,
+      costlySuccessText: `${character.name}在迟疑后给出证言。`, failureText: `${character.name}暂时不愿回答。`, unavailableText: '需要先开始失潮调查，并按顺序建立证人名单。', repeatable: false, narrativeChoiceKey: null,
       interaction: { participantKey: participant.participantKey, sceneKey: `scene.${participant.participantKey}`, ruleKey: `rule.${participant.participantKey}.testimony` },
     })
   }
-  const finalLocation = locations.find(item => /钟楼|bell|tower/i.test(item.title)) ?? locations[locations.length - 1]
-  const evidence = items[0]
-  const finalRequirement = [{ questKey: 'main.bell', questStatus: 'active' as const }, { itemKey: evidence.key, itemQuantity: 1 }]
+  actions.push({
+    key: 'use.attune-evidence', kind: 'use', label: `用${evidence.title}校准钟机`, description: `把${evidence.title}接入钟机，验证它是否足以稳定潮汐共振。`,
+    locationKey: finalLocation.key, targetKey: evidence.key,
+    requirements: [
+      { questKey: 'main.bell', questStatus: 'active' },
+      { itemKey: evidence.key, itemQuantity: 1 },
+      { conditionKey: 'calibrated', conditionPresent: false },
+    ],
+    rule: { kind: 'threshold', abilityKey: 'reason', difficulty: 2 },
+    successEffects: [
+      { op: 'change-item-state', itemKey: evidence.key, state: 'equipped' },
+      { op: 'apply-condition', conditionKey: 'calibrated', duration: null },
+      { op: 'complete-objective', questKey: 'main.bell', objectiveKey: 'attune' },
+    ], costlySuccessEffects: [], failureEffects: [{ op: 'change-resource', resourceKey: 'time', delta: -1 }],
+    successText: `${evidence.title}与钟机的缺口严丝合缝。你依据一路收集的档案重新排列齿轮，潮汐刻度终于停止倒转。`,
+    costlySuccessText: `钟机恢复了响应，但代价已经写在过热的齿轮上。`, failureText: `你找到了正确接口，却无法解释两组相反的校准数值。强行尝试消耗了一刻时间；更多档案或推理经验会提高成功机会。`, unavailableText: `需要携带${evidence.title}抵达${finalLocation.title}，并保持主线调查进行中。`, repeatable: true, narrativeChoiceKey: null,
+  })
+  const finalRequirement = [
+    { questKey: 'main.bell', questStatus: 'active' as const },
+    { itemKey: evidence.key, itemQuantity: 1 },
+    { conditionKey: 'calibrated', conditionPresent: true },
+  ]
   const endingNodes = story.nodes.filter(item => item.kind === 'ending')
   const endingExcerpt = (preferredKey: string, fallbackIndex: number) => {
     const node = endingNodes.find(item => item.key === preferredKey) ?? endingNodes[fallbackIndex] ?? endingNodes[0]
@@ -700,11 +806,24 @@ export function buildAdventureContent(input: {
     {
       key: 'attempt.resolve-risky', kind: 'attempt', label: '冒险强行推进', description: '以风险判定完成主线，并可能留下被追捕的代价。',
       locationKey: finalLocation.key, targetKey: `landmark-${selectedLocations[selectedLocations.length - 1].exportId}`,
-      requirements: finalRequirement, rule: { kind: 'random', abilityKey: 'reason', expression: '1d6', difficulty: 7, costlySuccessFloor: 5 },
-      successEffects: [{ op: 'complete-objective', questKey: 'main.bell', objectiveKey: 'resolve' }],
-      costlySuccessEffects: [{ op: 'apply-condition', conditionKey: 'wanted', duration: 3 }, { op: 'complete-objective', questKey: 'main.bell', objectiveKey: 'resolve' }],
+      requirements: [
+        { questKey: 'main.bell', questStatus: 'active' },
+        { itemKey: evidence.key, itemQuantity: 1 },
+        { conditionKey: 'calibrated', conditionPresent: false },
+      ], rule: { kind: 'random', abilityKey: 'reason', expression: '1d6', difficulty: 7, costlySuccessFloor: 5 },
+      successEffects: [
+        { op: 'apply-condition', conditionKey: 'calibrated', duration: null },
+        { op: 'complete-objective', questKey: 'main.bell', objectiveKey: 'attune' },
+        { op: 'complete-objective', questKey: 'main.bell', objectiveKey: 'resolve' },
+      ],
+      costlySuccessEffects: [
+        { op: 'apply-condition', conditionKey: 'wanted', duration: 3 },
+        { op: 'apply-condition', conditionKey: 'calibrated', duration: null },
+        { op: 'complete-objective', questKey: 'main.bell', objectiveKey: 'attune' },
+        { op: 'complete-objective', questKey: 'main.bell', objectiveKey: 'resolve' },
+      ],
       failureEffects: [{ op: 'change-resource', resourceKey: 'time', delta: -1 }],
-      successText: `你在钟机彻底过载前抓住了唯一的校准窗口。${endingExcerpt('truth', 0)}`, costlySuccessText: `你强行完成校准，却让巡潮队锁定了自己的位置。${endingExcerpt('truth', 0)}`, failureText: '齿轮从指间滑脱，黑潮又逼近了一层；剩余时间正在减少。', unavailableText: `需要先取得${evidence.title}。`, repeatable: false, narrativeChoiceKey: null,
+      successText: `你在钟机彻底过载前抓住了唯一的校准窗口。${endingExcerpt('truth', 0)}`, costlySuccessText: `你强行完成校准，却让巡潮队锁定了自己的位置。${endingExcerpt('truth', 0)}`, failureText: '齿轮从指间滑脱，黑潮又逼近了一层；剩余时间正在减少。', unavailableText: `需要先取得${evidence.title}，且尚未完成安全校准。`, repeatable: true, narrativeChoiceKey: null,
     },
     {
       key: 'quest.abandon', kind: 'quest-action', label: '终止调查并组织紧急撤离', description: '承认当前证据不足以安全启动钟机，把剩余时间全部用于撤离港民。',
@@ -713,6 +832,40 @@ export function buildAdventureContent(input: {
       successText: '你关闭钟楼入口，把所有仍能行动的人编入撤离队。雾港没有等来钟声，但至少没有人再因一条被删除的命令留在错误地点。', costlySuccessText: '你带着未能公开的证据离开钟楼，把每一页记录分给不同船只保管。', failureText: '人群拒绝在没有解释的情况下离开，你必须先给出一个能让他们相信的方案。', unavailableText: '主线尚未开始或已经结束。', repeatable: false, narrativeChoiceKey: null,
     },
   )
+  const quests: AdventureContentV1['quests'] = [{
+    key: 'main.bell', title: narrative.title, description: `午夜潮汐没有到来，港民姓名开始消失。沿冻结世界中的地点、角色、道具与旧案证词追查钟机真相，并在黑潮抵达前决定雾港的未来。`, initialStatus: 'available', prerequisites: [],
+    objectives: [
+      { key: 'find-evidence', title: `取得${evidence.title}`, optional: false, alternativeActionKeys: [`take.${evidence.key}`] },
+      ...(participants.length ? [{ key: 'testimony', title: `取得${selectedCharacters[0].name}的可验证证言`, optional: true, alternativeActionKeys: [`talk.${participants[0].participantKey}`] }] : []),
+      ...(storyInvestigationNodes.length ? [{ key: 'reconstruct', title: `还原“${storyInvestigationNodes[0].title}”的关键经过`, optional: true, alternativeActionKeys: [`investigate.story-${storyInvestigationNodes[0].key}`] }] : []),
+      { key: 'attune', title: `使用${evidence.title}完成钟机校准`, optional: false, alternativeActionKeys: ['use.attune-evidence', 'attempt.resolve-risky'] },
+      { key: 'resolve', title: '在钟楼选择公开真相、七日之约或驶向黑潮', optional: false, alternativeActionKeys: ['resolve.main', 'resolve.truth', 'resolve.sea', 'attempt.resolve-risky'] },
+    ],
+    rewardEffects: [{ op: 'change-ability', abilityKey: 'reason', delta: 1 }, { op: 'apply-condition', conditionKey: 'inspired', duration: null }],
+    completionNodeKey: story.nodes.find(item => item.kind === 'ending')?.key ?? null,
+    failureNodeKey: story.nodes.filter(item => item.kind === 'ending').length > 1
+      ? [...story.nodes].reverse().find(item => item.kind === 'ending')?.key ?? null
+      : null,
+  }, {
+    key: surveyQuestKey, title: '绘制失潮路线', description: '逐一观察冻结世界中的重要地点，确认黑潮推进与失名现象的空间顺序。', initialStatus: 'available', prerequisites: [],
+    objectives: locations.map((location, index) => ({ key: `survey.${index}`, title: `观察${location.title}`, optional: false, alternativeActionKeys: [`look.${location.key}`] })),
+    rewardEffects: [{ op: 'change-ability', abilityKey: 'observe', delta: 1 }], completionNodeKey: null, failureNodeKey: null,
+  }]
+  if (selectedLore.length) quests.push({
+    key: archiveQuestKey, title: '重建雾港档案索引', description: '把分散的世界词条与现场证据重新建立关联。', initialStatus: 'available', prerequisites: [],
+    objectives: selectedLore.map((lore, index) => ({ key: `archive.${index}`, title: `查阅${lore.name}`, optional: false, alternativeActionKeys: [`inspect.lore-${lore.exportId}`] })),
+    rewardEffects: [{ op: 'change-ability', abilityKey: 'reason', delta: 1 }], completionNodeKey: null, failureNodeKey: null,
+  })
+  if (storyInvestigationNodes.length) quests.push({
+    key: reconstructionQuestKey, title: '复原被删除的经过', description: '逐幕调查主线现场，让世界引擎中的故事因果在冒险里真正推进。', initialStatus: 'available', prerequisites: [],
+    objectives: storyInvestigationNodes.map((node, index) => ({ key: `reconstruction.${index}`, title: `调查${node.title}`, optional: false, alternativeActionKeys: [`investigate.story-${node.key}`] })),
+    rewardEffects: [{ op: 'change-ability', abilityKey: 'empathy', delta: 1 }], completionNodeKey: null, failureNodeKey: null,
+  })
+  if (participants.length) quests.push({
+    key: voicesQuestKey, title: '保存仍在说话的人', description: '取得角色证言并建立关系，让人物成为会改变进程的参与者。', initialStatus: 'available', prerequisites: [],
+    objectives: participants.map((participant, index) => ({ key: `voice.${index}`, title: `询问${participantCharacters[index].name}`, optional: false, alternativeActionKeys: [`talk.${participant.participantKey}`] })),
+    rewardEffects: [{ op: 'change-ability', abilityKey: 'empathy', delta: 1 }], completionNodeKey: null, failureNodeKey: null,
+  })
   const source: WorldGameSourceSelectionV1 = {
     schema: 'storyforge.world-game-source', version: 1, productType: 'text-adventure',
     worldContentHash: input.catalog.release.contentHash,
@@ -732,6 +885,12 @@ export function buildAdventureContent(input: {
       version: 1,
       initialLocationKey: locations[0].key,
       playerKey: 'player',
+      ...(playerCharacter ? {
+        playerIdentity: {
+          name: playerCharacter.name,
+          description: playerCharacter.description || `你以${playerCharacter.name}的身份追查“${narrative.title}”。`,
+        },
+      } : {}),
       locations,
       objects,
       items,
@@ -744,24 +903,14 @@ export function buildAdventureContent(input: {
       conditions: [
         { key: 'wanted', title: '被追踪', description: '冒险行动惊动了仍在执行封锁令的人。' },
         { key: 'shaken', title: '记忆震荡', description: '钟机共振让熟悉的姓名与道路短暂变得陌生。' },
+        { key: 'calibrated', title: '钟机已校准', description: '关键道具已经接入钟机，安全结局路线正式解锁。' },
         { key: 'inspired', title: '守灯誓言', description: '你已不再独自守灯，并愿意为选择承担可见的代价。' },
       ],
       resources: [
         { key: 'stamina', title: '体力', initial: 6, minimum: 0, maximum: 10 },
-        { key: 'time', title: '剩余时间', initial: 8, minimum: 0, maximum: 12 },
+        { key: 'time', title: '剩余时间', initial: Math.max(8, locations.length + 4), minimum: 0, maximum: Math.max(12, locations.length + 6) },
       ],
-      quests: [{
-        key: 'main.bell', title: narrative.title, description: `午夜潮汐没有到来，港民姓名开始消失。沿冻结世界中的地点、角色、道具与旧案证词追查钟机真相，并在黑潮抵达前决定雾港的未来。`, initialStatus: 'available', prerequisites: [],
-        objectives: [
-          { key: 'find-evidence', title: `取得${evidence.title}`, optional: false, alternativeActionKeys: items.map(item => `take.${item.key}`) },
-          { key: 'resolve', title: '在钟楼选择公开真相、七日之约或驶向黑潮', optional: false, alternativeActionKeys: ['resolve.main', 'resolve.truth', 'resolve.sea', 'attempt.resolve-risky'] },
-        ],
-        rewardEffects: [{ op: 'change-ability', abilityKey: 'reason', delta: 1 }, { op: 'apply-condition', conditionKey: 'inspired', duration: null }],
-        completionNodeKey: story.nodes.find(item => item.kind === 'ending')?.key ?? null,
-        failureNodeKey: story.nodes.filter(item => item.kind === 'ending').length > 1
-          ? [...story.nodes].reverse().find(item => item.kind === 'ending')?.key ?? null
-          : null,
-      }],
+      quests,
       actions,
       initialInventory: [],
     },
@@ -769,7 +918,7 @@ export function buildAdventureContent(input: {
 }
 
 function defaultAdventureGameKey(contentHash: string, moduleExportId: number): string {
-  return `world-adventure-${contentHash.slice(0, 10)}-${moduleExportId}`
+  return `world-adventure-${contentHash.slice(0, 10)}-${moduleExportId}-player-v${WORLD_ADVENTURE_PLAYER_VERSION}`
 }
 
 export async function generateAdventureGameFromWorldRelease(input: {

@@ -1,11 +1,14 @@
 # StoryForge Agent + Harness 全面重构交接文档
 
-> **归档状态（2026-08-17）**：本交接对应的 Harness 历史和后续 CREL 工程已通过 PR #63 合入
+> **归档状态（2026-08-17）**：✅ 本轮阶段性开发完成。本交接对应的 Harness 历史和后续 CREL 工程已通过 PR #63 合入
 > `main@5021094`。以下分支、提交和接续命令只用于追溯完整施工历史，不再是当前开工入口。
 > 当前总览请读 [AI-HARNESS-REBUILD-RELEASE-20260817.md](./AI-HARNESS-REBUILD-RELEASE-20260817.md)，
 > 当前代码架构请读 [ARCHITECTURE.md](./ARCHITECTURE.md)。2026-08-17 已决定结束独立 A/B 与原质量门的
 > 阻塞状态并转入社区观察，见 [HARNESS-COMMUNITY-VALIDATION.md](./adr/HARNESS-COMMUNITY-VALIDATION.md)；
 > 以下历史门槛与 FAIL 证据仍按原样保留，不代表后来通过。
+
+> 本文后续出现的“下一步”“未完成”和旧发布门，均是施工期间的历史快照，不再进入当前待开发清单；
+> 当前后续只按社区反馈另立新任务，不在本归档文档中继续追加 HARNESS/CREL 编号。
 
 > 更新日期：2026-08-15
 >

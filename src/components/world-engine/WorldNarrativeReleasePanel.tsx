@@ -396,13 +396,13 @@ export default function WorldNarrativeReleasePanel({ project, projectId, activeW
     if (!scope) return
     const confirmed = await dialog.confirm({
       title: '建立雾港演示世界？',
-      message: '会在当前世界中新增正式角色、关系、地点、artifact 道具、主线和本地视觉媒资；不会覆盖已有同名内容，也不会绕过发布流程。',
+      message: '会在当前世界中补齐正式世界设定、规则、地理、历史、角色、关系、故事核心、十章大纲/细纲/正文、伏笔、artifact 道具、主线和本地视觉媒资；不会覆盖你后来手写的章节正文，也不会绕过发布流程。',
       confirmText: '建立演示世界',
     })
     if (!confirmed) return
     const result = await installMistHarborDemoWorld({ scope })
     setSelectedIds(previous => new Set([...previous, result.narrativeModuleId]))
-    setMessage(`雾港世界已就绪：${result.characterCount} 名角色、${result.locationCount} 个地点、${result.artifactCount} 件道具、${result.loreEntryCount} 条世界词条、${result.mediaAssetCount} 项视觉媒资。下一步冻结并发布 WorldRelease。`)
+    setMessage(`雾港世界已就绪：${result.characterCount} 名完整角色、${result.locationCount} 个重要地点、${result.worldRuleEntryCount} 条世界规则、${result.chapterCount} 章正文、${result.detailedOutlineCount} 章细纲、${result.foreshadowCount} 条伏笔、${result.artifactCount} 件道具和 ${result.mediaAssetCount} 项视觉媒资。下一步冻结并发布 WorldRelease。`)
     await load()
     await onChanged()
   })

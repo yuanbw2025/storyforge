@@ -155,6 +155,11 @@ export interface AdventureContentV1 {
   version: 1
   initialLocationKey: string
   playerKey: 'player'
+  /** Frozen display identity for the single player-controlled protagonist. */
+  playerIdentity?: {
+    name: string
+    description: string
+  }
   locations: AdventureLocationDefinition[]
   objects: AdventureObjectDefinition[]
   items: AdventureItemDefinition[]

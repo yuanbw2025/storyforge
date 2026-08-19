@@ -49,6 +49,49 @@ export function parseWorldReleaseSpeakerNames(manifestJson: string): Record<stri
   }))
 }
 
+export interface WorldReleasePlayerCharacter {
+  speakerKey: string
+  name: string
+  description: string
+}
+
+/**
+ * Resolve the single authored protagonist from the frozen WorldRelease.
+ * Ambiguous casts fail closed so the player UI never assigns ownership to an
+ * arbitrary speaker merely because their dialogue happens to render first.
+ */
+export function parseWorldReleasePlayerCharacter(manifestJson: string): WorldReleasePlayerCharacter | null {
+  const manifest = JSON.parse(manifestJson) as WorldReleaseManifestV2
+  if (manifest.schema !== 'storyforge.world-package' || manifest.version !== 2) return null
+  const characters = (manifest.records.characters ?? []) as Array<Record<string, unknown>>
+  const ranked = characters.flatMap((row, index) => {
+    if (typeof row.name !== 'string' || !row.name.trim()) return []
+    const role = String(row.role ?? '')
+    const roleWeight = String(row.roleWeight ?? '')
+    const rank = role === 'protagonist' && roleWeight === 'main'
+      ? 0
+      : role === 'protagonist'
+        ? 1
+        : roleWeight === 'main'
+          ? 2
+          : null
+    if (rank == null) return []
+    const exportId = Number.isInteger(row._exportId) ? Number(row._exportId) : index
+    return [{
+      rank,
+      speakerKey: `character:${exportId}`,
+      name: row.name.trim(),
+      description: String(row.shortDescription ?? row.identity ?? '').trim(),
+    }]
+  })
+  if (!ranked.length) return null
+  const bestRank = Math.min(...ranked.map(item => item.rank))
+  const candidates = ranked.filter(item => item.rank === bestRank)
+  if (candidates.length !== 1) return null
+  const { rank: _rank, ...player } = candidates[0]
+  return player
+}
+
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
   if (value && typeof value === 'object') {

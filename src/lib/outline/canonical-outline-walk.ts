@@ -22,6 +22,11 @@ export interface CanonicalOutlineWalk {
   nodeById: Map<number, OutlineNode>
 }
 
+export interface CanonicalVolumeChapterGroup {
+  volume: OutlineNode
+  chapters: OutlineNode[]
+}
+
 export function byOutlineOrderThenId(a: OutlineNode, b: OutlineNode): number {
   return a.order - b.order || (a.id ?? Number.MAX_SAFE_INTEGER) - (b.id ?? Number.MAX_SAFE_INTEGER)
 }
@@ -89,4 +94,39 @@ export function walkOutlineChaptersInCanonicalOrder(outlineNodes: OutlineNode[])
   for (const node of nodes) if (node.id != null && !visited.has(node.id)) visit(node, node.worldGroupId ?? null)
 
   return { chapters, anomalies, nodeById }
+}
+
+/**
+ * Group canonical chapters under their top-level volume, even when chapters
+ * are nested through story blocks or arcs. Authoring UIs must not assume the
+ * legacy two-level `volume -> chapter` shape.
+ */
+export function groupOutlineChaptersByTopLevelVolume(
+  outlineNodes: OutlineNode[],
+): CanonicalVolumeChapterGroup[] {
+  const walk = walkOutlineChaptersInCanonicalOrder(outlineNodes)
+  const volumes = outlineNodes
+    .filter(node => node.type === 'volume' && node.parentId == null)
+    .sort(byOutlineOrderThenId)
+  const groupByVolumeId = new Map(volumes.flatMap(volume => volume.id == null ? [] : [[volume.id, [] as OutlineNode[]]]))
+
+  for (const chapter of walk.chapters.map(item => item.outlineNode)) {
+    let parentId = chapter.parentId
+    const visited = new Set<number>()
+    while (parentId != null && !visited.has(parentId)) {
+      visited.add(parentId)
+      const parent = walk.nodeById.get(parentId)
+      if (!parent) break
+      if (parent.type === 'volume' && parent.parentId == null) {
+        groupByVolumeId.get(parent.id!)?.push(chapter)
+        break
+      }
+      parentId = parent.parentId
+    }
+  }
+
+  return volumes.map(volume => ({
+    volume,
+    chapters: volume.id == null ? [] : groupByVolumeId.get(volume.id) ?? [],
+  }))
 }

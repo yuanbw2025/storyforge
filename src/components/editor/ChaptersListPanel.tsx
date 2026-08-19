@@ -14,6 +14,7 @@ import ScenePanel from '../outline/ScenePanel'
 import ChapterEditor from './ChapterEditor'
 import FindReplacePanel from './FindReplacePanel'
 import { buildBestChapterByOutlineMap } from '../../lib/chapters/selectors'
+import { groupOutlineChaptersByTopLevelVolume } from '../../lib/outline/canonical-outline-walk'
 import type { Project, ChapterStatus } from '../../lib/types'
 import {
   INITIAL_RECORD_TARGET_CLASS,
@@ -74,15 +75,7 @@ export default function ChaptersListPanel({ project, initialNodeId }: Props) {
   }, [initialNodeId])
 
   // 按卷分组的章节列表（从 outlineNodes 读取）
-  const volumeGroups = useMemo(() => {
-    const volumes = nodes.filter(n => n.type === 'volume' && n.parentId === null).sort((a, b) => a.order - b.order)
-    return volumes.map(vol => ({
-      volume: vol,
-      chapters: nodes
-        .filter(n => n.parentId === vol.id && n.type === 'chapter')
-        .sort((a, b) => a.order - b.order),
-    }))
-  }, [nodes])
+  const volumeGroups = useMemo(() => groupOutlineChaptersByTopLevelVolume(nodes), [nodes])
   const chapterByOutline = useMemo(() => buildBestChapterByOutlineMap(chapters), [chapters])
 
   // 自动展开包含选中章节的卷
