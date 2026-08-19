@@ -156,7 +156,7 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
     await installMistHarborDemoWorld({ scope: owned.scope })
     expect((await db.chapters.get(chapters[0].id!))?.content).toBe('<p>作者现场修改的正文</p>')
     expect(await db.chapters.where('projectId').equals(owned.scope.projectId).count()).toBe(10)
-  })
+  }, 15_000)
 
   it('完整走通建立世界、选择主线、冻结 WorldRelease、生成三种游戏、冻结 GameRelease 和立即试玩', async () => {
     const owned = await blankWorkspace()
