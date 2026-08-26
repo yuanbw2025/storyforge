@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：1.0.0 · 基线：2026-08-26 整合树 · 权威层级：L2
+> 版本：1.1.0 · 基线：2026-08-27 架构复审 · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。状态不从旧完成卡继承。
 
 ## 状态定义
@@ -14,8 +14,8 @@
 
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
-| A-GOV-01 | partial | 新总纲、分支整合台账、WPS 完整归档和现行文档体系已建立 | 完整 CI/E2E、main push、PR/分支清场完成后转 implemented |
-| A-GOV-02 | partial | 总纲对齐审计建立纠偏入口 | 尚需逐项转为后续任务并实施 |
+| A-GOV-01 | implemented | 总纲、分支整合台账、WPS 完整归档、现行文档体系和 main 同步检查点已建立 | 后续正常功能分支按协作流程短期存在，不重新解释为长期架构分叉 |
+| A-GOV-02 | partial | 架构治理审计 2.0 已把产品边界、三阶段、交接物、中立世界协议和七项纠偏包分离清楚 | 文档规则已生效；七项代码/迁移/自动门尚待实施 |
 | BASE-DATA-01 | implemented | Dexie schema v79；`npm run check:required-tables` 验证 115 张 required/project tables | 产品 owner 语义仍有总纲偏差 |
 | BASE-REG-01 | implemented | Context、Field/Adoption、Project Tables 三注册表与架构检查器存在 | 个别产品读取仍可能借兼容层耦合 Project/World |
 | BASE-AI-01 | implemented | AI 入口扫描当前报告 39 bindings / 43 calls，区分 formal/auxiliary/evaluation/experimental | 登记证明边界，不证明所有 formal UI 纵切面完成 |
@@ -50,7 +50,7 @@
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
 | D-WORLD-01 | partial | world code/version、projection/completeness、release/packaging 与分享基础存在 | 当前每个 Project 被综合页投影为世界；草稿/独立作品/封存世界边界不完整 |
-| D-WORLD-02 | partial | Context Gateway 和 product source selection 可复用 | 缺面向所有上层产品的统一 describe/search/read WorldRelease 出口；仍有产品专用来源 |
+| D-WORLD-02 | partial | Context Gateway、resource descriptor 和多种 product source selection 可复用 | 缺中立 describe/search/read WorldRelease provider、产品 requirement adapter、冻结 SourcePlan、per-run Context Manifests 与发布 SourceManifest；现有产品仍直接解析 manifest/table selection |
 | D-WORLD-03 | partial | World/Work、多世界、world link/context 和引用重映射基础存在 | 独立长篇显式发布、世界引用、通道语义和跨世界版本契约需收口 |
 | D-WORLD-04 | partial | 上层媒资拥有独立表与共享 blob owner，运行表有 product/session owner | 需 schema/代码审计证明世界投影/导出从不携带上层媒资和状态 |
 
@@ -58,7 +58,7 @@
 
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
-| E-TTRPG-01 | partial | 产品 authoring、campaign、production、AI GM runtime、事件/存档、在线 handoff 和大量测试存在 | 统一世界出口、完整媒资、权限隔离、真实多人体验和产品级 E2E 尚未封板 |
+| E-TTRPG-01 | partial | 产品 authoring、campaign、production、AI GM runtime、事件/存档、在线 handoff 和大量测试存在 | 中立世界协议适配、完整媒资、权限隔离、真实多人体验和产品级 E2E 尚未封板 |
 | E-CHAT-01 | partial | 单/多角色互动、production step/artifact/media/release 与 runtime Skill 存在 | 主 Agent 会谈、多人导演、长期记忆/可见性和完整发布运行体验需验收 |
 | E-TOWN-01 | missing | 有 simulation/角色交互和研究性基础代码可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
 | E-TEXTADV-01 | partial | authoring/workbench/player、intent/result Skill、runtime 与 production handoff 存在 | 可玩内容/规则/媒资/结局的统一 build/release E2E 不完整 |

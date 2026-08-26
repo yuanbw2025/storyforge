@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.0.0 · 生效：2026-08-26
+> 版本：1.1.0 · 生效：2026-08-27
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -47,7 +47,7 @@
 - `docs/AI-FUNCTIONS-MANUAL.semantic.md`：生成清单的人工语义注解。
 - `docs/CONSISTENCY-COVERAGE-MAP.md`：Canon 一致性反例状态。
 - `docs/audits/BRANCH-CONSOLIDATION-LEDGER-20260825.md`：本次分支整合证据。
-- `docs/audits/PROJECT-CHARTER-ALIGNMENT-AUDIT-20260826.md`：当前主干与总纲偏差。
+- `docs/audits/PROJECT-CHARTER-ALIGNMENT-AUDIT-20260826.md`：当前主干的项目级架构治理偏差；不替代具体产品方案和质量认证。
 
 ### 2.4 用户、维护与法律资料
 

@@ -1,6 +1,6 @@
 # 世界引擎产品契约
 
-> 版本：1.0.0 · 生效：2026-08-26 · 对应总纲：§5、阶段 D
+> 版本：1.1.0 · 生效：2026-08-27 · 对应总纲：§5、阶段 D
 
 ## 1. 定义
 
@@ -45,17 +45,33 @@
 
 “完整度 80%”只能作展示摘要；上层产品必须读取具体能力项，不能用单一百分比代替数据契约。
 
-## 5. 统一数据出口
+## 5. 中立世界资源协议
 
-上层产品不直接手写查询 `worldviews`、`characters` 等表清单。统一出口分三层：
+### 5.1 统一什么
 
-1. `describeWorldRelease`：元数据、能力画像、目录、版本和 hash；
-2. `searchWorldRelease`：按实体、关系、时间、故事线、文本和产品需求检索资源描述符；
-3. `readWorldResource`：按稳定 resource ID 读取详情、结构化事实与原文证据。
+上层产品不得直接手写查询 `worldviews`、`characters` 等底层表清单。世界引擎提供三类稳定能力：
 
-所有返回包含 source release、resource version/hash、owner、引用和可见性。预算不足时返回 `insufficient`/`omitted`，不返回“内容不存在”的错误结论。
+1. `describeWorldRelease`：返回版本身份、hash、能力画像和可导航资源目录；
+2. `searchWorldRelease`：接收产品需求或查询条件，返回资源描述符和匹配状态；
+3. `readWorldResource`：按 release + 稳定 resource ID + detail level 读取详情、结构化事实与原文证据。
 
-产品可先提交 `SourceRequirement`，世界出口返回匹配、缺口与补充建议。补充内容若由上层 Agent 创建，默认属于该产品；只有作者明确选择并采纳后才能成为世界新版本候选。
+统一协议必须携带 source release、resource version/hash、owner、引用、可见性、provenance，并区分 `matched`、`missing`、`conflict`、`omitted` 和 `insufficient`。预算未允许读取某项资源时，不得把它报告为“不存在”。
+
+### 5.2 不统一什么
+
+世界出口不定义一份让所有上层产品照单全收的通用 payload，也不预设某类产品的角色卡、规则、游戏时长、结局或运行字段。不同产品需要的数据广度、细节层级和证据类型可以完全不同。
+
+每个上层产品在自己的阶段二契约中提供 `WorldRequirementAdapter`（名称可按实现调整），把当前用户目标和产品配置转换成资源需求。网关只负责在指定不可变 release 内解释和满足这些需求。产品侧可对结果继续排序、组合或请求补充读取，但不得绕过协议查询世界底表。
+
+### 5.3 先锁定读取计划，再记录实际来源
+
+用户确认开始后，产品先把 WorldReference、需求适配器版本、需求、允许范围、缺失/补充策略以及咨询阶段 Context Manifest refs 冻结为 `ProductSourcePlan`。生产尚未执行时不能假装已经知道全部会用到的资源。
+
+阶段三中的 Agent 可在该 plan 允许的同一不可变 WorldRelease 内继续 `describe/search/read`；每个 durable run 保存自己的不可变 Context Manifest，ProductRelease 聚合生产证据为 `ProductSourceManifest` 快照并冻结 hash。开放式运行若需要继续查询世界，也必须经 ProductRelease 继承的 source plan 执行，读取证据归 session/run manifest，不能改读最新草稿或追写旧 ProductRelease。
+
+同一 WorldRelease 因产品和任务不同，可以产生不同 plan 和 manifest；这正是协议统一而 payload 不统一的设计目的。
+
+上层 Agent 因来源缺失而创作的补充内容默认属于该产品实例。只有世界作者另行发起显式候选/采纳流程，才可能成为新的世界版本；正常生产和运行不回写世界。
 
 ## 6. 与独立长篇的关系
 
@@ -76,7 +92,8 @@
 
 - 空白、部分和完整世界均可创建、编辑、封存；
 - world code 稳定，release 不可变、hash 可验证；
-- 上层产品只通过统一出口读取，不维护字段清单；
+- 上层产品只通过中立协议和自己的需求适配器读取，不维护世界底层字段清单；
+- 两种需求明显不同的产品可以从同一 release 得到不同 source manifest，且来源/遗漏均可追溯；
 - 草稿更新不改变已有产品 build/session；
 - 导入导出、复制、删除、重映射和多世界引用完整；
 - 世界表无上层媒资/运行记录；

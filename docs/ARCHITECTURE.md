@@ -1,6 +1,6 @@
 # StoryForge 当前架构总览
 
-> 版本：2.0.0 · 更新：2026-08-26 · 权威层级：L1
+> 版本：2.1.0 · 更新：2026-08-27 · 权威层级：L1
 > 本文描述当前主干代码事实与目标架构接缝。产品边界以项目总纲为准；代码偏差见对齐审计。
 
 ## 1. 运行形态
@@ -122,21 +122,24 @@ Field Registry 决定 AI 可写字段；Adoption Schema/Extension 决定集合�
 
 游戏生产使用 consultation、brief、command、build、artifact、media、release 与质量证据；角色互动和跑团有各自 production/runtime 数据。`SimulationSession` 及事件/checkpoint 保存私域运行。媒资通过共享设施存储，归具体 build/product release，不归 WorldRelease。
 
+这些数据逻辑上分成两个产品阶段：用户引用世界、配置并确认方向形成 product draft/Brief；用户明确开始后进入 production/build/release/runtime。两阶段都属于上层产品，不属于世界引擎。当前不同产品已经拥有部分对应结构，但顶层 handoff 和共同阶段闸门尚未完全收口。
+
 ## 8. 世界到产品的单向流
 
 ```mermaid
 flowchart LR
-  D["世界草稿"] -->|"作者封存"| R["不可变 WorldRelease"]
-  R -->|"SourceSelection / manifest / hash"| P["产品 Production"]
+  D["阶段一\n世界语义草稿"] -->|"作者封存"| R["WorldReference\n不可变 WorldRelease"]
+  R --> I["阶段二\n产品入口引用世界、填写专用设置、与主 Agent 定向"]
+  I -->|"用户明确开始\nBrief + SourcePlan"| P["阶段三\n产品 Production"]
   P --> M["产品媒资"]
   P --> B["Build + 验证"]
   M --> B
-  B --> G["不可变 Product Release"]
+  B --> G["不可变 ProductRelease\n冻结 SourceManifest 与父版本谱系"]
   G --> S["Runtime Session / 私域演化"]
   S -. "不得自动回写" .-> D
 ```
 
-运行时只读绑定 release。若未来把衍生内容转成世界新版本，应走另一个显式创作/采纳流程。
+世界读取统一的是 `describe/search/read` 的版本、资源、来源和遗漏协议；每个产品用自己的 requirement adapter 生成 SourcePlan。production 的每个 run 只在 plan 锁定的 WorldRelease 内渐进读取并保存 Context Manifest，ProductRelease 聚合为不可变 SourceManifest 快照；不同产品不共享固定 payload。运行时绑定 ProductRelease，任何继续读取世界的权限也从该 release 的 SourcePlan 继承，新证据归 session/run manifest，不追写 release。若未来把衍生内容转成世界新版本，应走另一个显式创作/采纳流程。
 
 ## 9. 失败与恢复
 
@@ -169,7 +172,8 @@ src/
 - 代码中已存在大量上层产品、市场和托管能力，但存在“实现领先于总纲发展顺序”和实验入口可见的问题；不等于这些产品已完整交付。
 - Product/World/Work 的兼容关系仍会把独立作品与世界引擎混在同一 Project 表达，需要按对齐审计渐进纠正，不能再扩大耦合。
 - Harness、Context Gateway 和规模夹具证明了重要工程基础，不等于百万字真实小说的一致性已经完成验证。
-- 世界 Release、上层 Production/Release 与媒资 owner 已有基础，但“稳定世界数据出口供所有上层产品统一读取”仍需收口。
+- 世界 Release、上层 Production/Release 与媒资 owner 已有基础，但“中立世界资源协议 + 产品需求适配器 + SourcePlan/run manifests/发布 SourceManifest”仍需收口；不能用统一固定 payload 解决差异。
+- 部分深层 production 已绑定 WorldRelease ID/hash，但顶层入口仍可能展示可变 Project worldVersion；三阶段 handoff 和 ProductRelease 谱系尚未成为所有上层产品共同闸门。
 - 账户、云端社区、支付和商业平台不是当前核心运行前提；相关代码必须 capability gate / experimental，不能掩盖主产品未完成。
 
 当前能力与缺口以 [`roadmap/CAPABILITY-BASELINE.md`](./roadmap/CAPABILITY-BASELINE.md) 和

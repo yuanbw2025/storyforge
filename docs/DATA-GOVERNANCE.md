@@ -1,6 +1,6 @@
 # StoryForge 数据与三注册表治理标准
 
-> 版本：1.0.0 · 生效：2026-08-26 · 权威层级：L1
+> 版本：1.1.0 · 生效：2026-08-27 · 权威层级：L1
 > 本标准规定 AI 读写、表生命周期、数据所有权、世界版本与跨产品流动。实现细节以注册表和 schema 为事实源。
 
 ## 1. 三个单一事实源
@@ -75,6 +75,37 @@
 
 从衍生内容创建新世界版本是另一个显式创作产品动作，必须由世界作者选择内容、审查冲突、生成候选并采纳；不是运行时同步。
 
+### 5.5 三阶段所有权与交接
+
+世界衍生产品的数据按三阶段隔离。阶段是所有权边界，不要求拆成三个页面：
+
+| 阶段 | 可读取 | 新数据 owner | 必须形成的交接证据 | 禁止 |
+|---|---|---|---|---|
+| 世界引擎 | 世界草稿及其来源 | 世界 draft/release | `WorldReference`：code、不可变 release ID/hash、能力画像 | 产品设置、媒资、session 或私域演化进入世界 |
+| 用户交互与发指令 | `WorldReference` 和按需世界资源 | product draft/intent | 产品专用 Brief、`ProductSourcePlan`、用户开始授权及其 revision | 未授权即正式生产；修改或补写来源世界 |
+| 产品执行与交付 | 已冻结 Brief/source plan、旧 ProductRelease（增量时） | production/build/ProductRelease/session | 每 run Context Manifest、发布时 `ProductSourceManifest` 快照、构建证据、不可变 ProductRelease、父版本/兼容谱系 | 超出 plan 或改读可变世界草稿；追写旧 release manifest；自动回写世界 |
+
+阶段二的配置必须归具体产品，不能落入一个全产品通用设置表。产品可以用时长、章节、回合、分支、参与者或其他专用字段，也可以没有其中任何一项；数据治理只要求 schema 有 owner、版本、来源、用户确认和迁移规则。
+
+### 5.6 中立世界资源协议
+
+世界出口统一以下协议语义：
+
+```text
+describe(release ref) → capability/resource catalog
+search(release ref, product requirement) → matched/missing/conflict/omitted descriptors
+read(release ref, resource id, detail level) → versioned resource + provenance/evidence
+```
+
+具体产品拥有自己的 `WorldRequirementAdapter`（或等价契约），把产品任务转换为资源需求；世界网关不拥有产品配置，也不返回一份面向所有产品的固定 payload。用户开始生产时冻结 WorldReference、适配器版本、需求、权限、缺失策略和咨询 Context Manifest refs 为 `ProductSourcePlan`。生产中的每个 durable run 可继续在该 plan 允许的不可变 release 中渐进式读取，并保存不可变 Context Manifest；ProductRelease 聚合这些证据为 `ProductSourceManifest` 快照并冻结 hash。后续 runtime 的读取归 session/run manifest，不得修改 release 快照。新增产品通过登记适配器和资源需求接入，不得复制世界底层表查询。
+
+### 5.7 ProductRelease 谱系
+
+- `ProductRelease` 必须不可变，并记录 product instance、父 ProductRelease（如有）、来源 Brief revision、source plan/manifest hash、build/quality evidence 和兼容策略。
+- 用户改变产品设置、选择新世界 release，或一次增量演化改变资源需求/权限时，应创建新的 Brief/SourcePlan 和 production/候选版本，不覆盖旧 plan/release。
+- 已存在 runtime 默认继续绑定启动时的 ProductRelease；升级必须显式执行兼容检查和迁移，失败时旧存档仍可继续使用旧 release。
+- 仅世界来源改变不代表产品必须自动升级；同一世界 release 也可被多个相互隔离的产品实例引用。
+
 ## 6. `PROJECT_TABLES` 生命周期
 
 当前 schema/required table 数量由代码和 `npm run check:required-tables` 决定，不在手写文档中复制清单。每个表登记应覆盖：
@@ -108,7 +139,7 @@
 
 - 所有查询必须带足够 owner/作用域条件；只按主键读取后仍需校验 owner。
 - 世界切换、多世界切换和作品切换必须使缓存、Context Gateway 和候选失效。
-- immutable release 按 content hash 读取；不得读取“最新草稿”替代锁定版本。
+- immutable release 按 content hash 读取；不得读取“最新草稿”替代锁定版本。世界衍生产品还必须核对 `WorldReference`、`ProductSourcePlan`、`ProductSourceManifest` 与 ProductRelease 谱系一致。
 - 事务内不能等待可能导致 Dexie 提前提交的外部异步工作；先准备数据，再开启最小事务。
 - 导入不信任外部 JSON；先解析、校验、规划映射，再原子提交。
 

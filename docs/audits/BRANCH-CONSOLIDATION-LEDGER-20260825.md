@@ -115,7 +115,7 @@
 - 新总纲：`docs/PROJECT-MASTER-CHARTER.md`，提交 `345aebe8`。
 - 分支证据基线：本台账，提交 `e2abc188`。
 - 新权威体系：AGENTS、开发宪法、文档权威、架构、三注册表治理、Harness/工程质量、产品边界、路线图和协作流程共 26 份受治理文档。
-- 纠偏报告：`docs/audits/PROJECT-CHARTER-ALIGNMENT-AUDIT-20260826.md`，共 14 项 `ALIGN-01`～`ALIGN-14`，逐项包含证据、根因、修复任务、反例与完成标准。
+- 纠偏报告：`docs/audits/PROJECT-CHARTER-ALIGNMENT-AUDIT-20260826.md`。初版曾记录 14 项 `ALIGN-01`～`ALIGN-14`；2026-08-27 的 2.0.0 复审把它们重新裁决为 7 项项目级架构偏差，并将具体产品完成度与质量认证转交相应路线图。
 - 401 个旧文档、历史报告和过期素材已从现行文档库移除；删除前已形成可恢复 Git 提交，并完成 WPS 上传与回读哈希核验。
 
 WPS 归档位置：`storyforge故事熔炉 / 已过时-v3.9.1-2026-08-26`。

@@ -1,518 +1,353 @@
-# StoryForge 项目总纲对齐审计
+# StoryForge 项目架构治理对齐审计
 
-> 审计版本：1.0.0<br>
-> 审计日期：2026-08-26<br>
-> 对照权威：[StoryForge 项目总纲](../PROJECT-MASTER-CHARTER.md) 1.0.0<br>
-> 审计对象：已整合全部已知本地分支、远程分支及开放 PR 独有提交后的统一主干候选<br>
-> 状态：现状裁决与后续纠偏施工依据；不是“当前全部已经完成”的宣称
+> 审计版本：2.0.0<br>
+> 复审日期：2026-08-27<br>
+> 对照权威：[StoryForge 项目总纲](../PROJECT-MASTER-CHARTER.md) 1.1.0<br>
+> 审计对象：统一主干 `59eea419` 的产品边界、所有权、阶段流转、版本与共享协议<br>
+> 状态：取代本文件 1.0.0 的审计口径；只作为架构治理与纠偏依据，不作为任何具体产品已经设计完成或已经可交付的证明
 
-## 1. 结论先行
+## 1. 为什么重做审计
 
-StoryForge **没有丢失核心技术积累，也不需要推倒重写**。当前主干已经形成了很有价值的共享底座：三注册表、受治理采纳、durable Harness、渐进式 Context Gateway、长程事实与记忆、节点 DAG、不可变 release/hash、上层产品 production/build/runtime 雏形，以及小说转剧本、漫画等数据基础。
+1.0.0 审计发现的代码证据仍然有效，但把三种不同层次混在了一份“项目问题”清单里：
 
-但项目此前多条分支齐头并进，造成了一个明确的产品架构问题：**共享技术底座正在成熟，产品所有权与数据边界却被“一个项目就是一个世界、所有功能都从世界出发”的旧实现重新混在一起。** 这正是当前“感觉项目可能跑偏”的来源。
+1. 项目级架构冲突，例如独立作品被自动世界化、WorldRelease 混入上层内容、世界入口绕过产品阶段直接运行；
+2. 具体产品尚未完成，例如短篇独立体验、剧本/漫画闭环、跑团或聊天纵切面；
+3. 产品质量认证，例如真实百万字长篇验证、某类游戏的体验规模与结局设计。
 
-本次审计给出的总裁决是：
+这种混合会让后两类工作被误认为 StoryForge 必须先统一实现的“总架构”，进而诱发万能表、万能 Agent 和万能 Product Contract。复审后的原则是：
 
-- 分步骤长篇的 Harness 主干可以继续保留和加固，不需要再做一次全盘 Harness 重构；
-- 节点模式已经具备同源的关键基础，但世界观/故事等节点仍有通用直连生成旁路，尚未完整复用分步骤 Skill/Harness；
-- “百万级”工程门已经证明大规模内容下的有界检索与关键事实召回机制，但它是 **100 万字符合成夹具**，不能等价为真实模型已经写完并维护了一部百万字小说；
-- 世界引擎已有编号、revision、release、hash 和分享基础，但当前 release 仍以一个 `Work` 为根，并混入 AVG 媒资、叙事运行模块和诊断 runtime；这与“纯语义、只读出口、不拥有上层媒资和运行数据”的总纲冲突；
-- 上层产品已有不少纵向生产设施，但部分入口仍从可变 Project/World 草稿取数，且世界引擎界面能够直接创建运行实例；产品边界还没有真正锁死；
-- 短篇仍主要是长篇的 workflow profile；剧本和漫画拥有较扎实的数据与 UI 基础，但还没有达到各自端到端主 Agent 产品的完成标准；
-- 社区市场、托管和平台能力已经出现在产品面，但按总纲应在核心产品成熟前默认隐藏或明确实验性，避免继续横向扩张。
+> 总架构只规定各产品怎样进入共同框架、数据怎样流转以及哪些边界不能跨越；具体产品怎样做，等该产品开工时专项分析。
 
-因此，后续不是“再造一套新架构”，而是按本报告的依赖顺序完成 **产品身份拆分、世界 release 纠偏、统一世界出口、节点同源收口和真实长篇验收**。数据库修改应以增量迁移和兼容读取完成，不得删除用户已有数据。
+因此，本审计保留架构冲突，转交产品实现与质量事项，不再用总体审计替代产品设计。
 
-## 2. 审计范围与证据规则
+## 2. 审计边界
 
-### 2.1 审计范围
+### 2.1 本次审计负责
 
-本报告检查了以下关联闭包：
+- 独立产品、世界引擎、上层产品和共享底座的身份边界；
+- 世界引擎衍生产品的“三阶段主链”；
+- `Project / World / Work / Product draft / Production / ProductRelease / Runtime` 所有权；
+- 跨阶段交接物、显式授权、不可变引用、版本谱系与禁止回写；
+- 中立世界资源协议与产品专用需求适配器；
+- 长篇分步骤与节点模式必须同源；
+- 实验能力、平台能力和正式产品入口的阶段门控；
+- 三注册表、schema、迁移、导入导出、删除与架构回归如何承载上述规则。
 
-1. 产品入口与用户可见关系；
-2. `Project / World / Work / ProductRelease / Runtime` 所有权；
-3. 三注册表和导入、导出、删除、迁移、重映射；
-4. 分步骤长篇的 Skill、Context、candidate、stale、adopt、memory 和规模门；
-5. 节点模式模板、执行器、领域执行、采纳和恢复；
-6. 世界 release 的内容范围、不可变性和下游读取；
-7. 跑团、角色交互、文字游戏的 production/build/release/runtime；
-8. 短篇、剧本、漫画的产品身份与生产闭环；
-9. 当前 UI 中平台、社区和商业化相关能力的暴露情况。
+### 2.2 本次审计不负责
 
-### 2.2 证据等级
+- 跑团的车卡、规则、KP、分队或信息隔离具体如何实现；
+- 角色聊天、AI 小镇或某类文字游戏的 Agent 组织与玩法设计；
+- 产品应使用小时、章节、回合还是其他规模单位；
+- 某产品是否必须有结局以及怎样形成结局；
+- 剧本、漫画、短篇和长篇的产品级完整功能方案；
+- 文学质量、游戏好玩程度或真实百万字创作是否已经通过认证。
 
-- **已实现**：代码、注册表和回归测试形成闭环。
-- **部分实现**：已有可信基础，但仍有旁路、缺少产品阶段或只有局部测试。
-- **未对齐**：当前行为与总纲明确冲突。
-- **未实现**：总纲要求存在，但当前未找到可交付入口和完整闭环。
-- **实验性可保留**：技术成果有价值，但不应作为当前正式产品能力暴露。
+这些事项继续存在，但必须进入对应产品契约、路线图和专项验收，不能被列为通用架构缺陷。
 
-本报告不把旧蓝图、旧完成卡或页面文案当作实现证据。行号只用于本次快照定位；长期施工应以文件中的符号、契约和测试 ID 为准。
+## 3. 目标架构
 
-## 3. 已对齐且应保留的核心能力
+### 3.1 产品全景边界
 
-| 编号 | 能力 | 当前裁决 | 证据与意义 |
-| --- | --- | --- | --- |
-| BASE-01 | 三注册表治理 | 已实现、继续作为最高代码事实源 | `CONTEXT_SOURCES`、`FIELD_REGISTRY`、`PROJECT_TABLES` 已覆盖 AI 读取、正式写入和表生命周期；架构检查器可阻止常见旁路。 |
-| BASE-02 | 候选与正式数据分离 | 已实现 | 统一 artifact/candidate、stale 检查、作者采纳和 `adopt()` 已进入长篇与节点关键路径，刷新后候选恢复也已有持久化基础。 |
-| BASE-03 | durable Harness | 已实现可信主干 | 正式 Skill/Run Contract、步骤证据、有限修复和 durable run/checkpoint 已建立；后续应收口缺口，不另建第二套 runner。 |
-| BASE-04 | 渐进式上下文 | 已实现基础 | Context Gateway 已把目录、资源描述符、检索、原文/结构化详情和预算证据分层；这就是用户提出的“像 Skill 一样按需披露项目内容”的正确工程落点。 |
-| BASE-05 | 长程事实与记忆 | 已实现基础 | 事实、实体、关系、时间、叙事蓝图、原文证据、磁盘记忆和多层检索已具备；长程夹具能够验证早期、中段、近期事实。 |
-| BASE-06 | 节点图治理 | 已实现基础 | 官方模板、类型化 DAG、依赖、stale、领域采纳、持久运行与恢复已经存在；不是纯视觉占位。 |
-| BASE-07 | 不可变发布基础 | 已实现基础 | World revision/release 和多个 ProductRelease 使用内容 hash、来源 release 和不可变版本，为后续正确分界提供可迁移基础。 |
-| BASE-08 | 上层生产设施 | 部分实现但值得保留 | 游戏 production brief、内容/规则/媒资要求、build、质量门、release、runtime 已有横向共享设施；跑团和角色交互有较完整的专用增量。 |
-| BASE-09 | 改编数据谱系 | 已实现基础 | `adaptationProjects`、source units、剧本场次、漫画页/格、视觉主体和媒资表已经登记并带来源作品关系，适合继续做独立产品。 |
-| BASE-10 | 运行私域隔离 | 基本对齐 | 上层 runtime/session/checkpoint 有自己的 owner、source release/hash，未发现运行结果自动写回共享世界 Canon 的正式路径。 |
-
-这些能力解释了为什么本次不建议大重构：问题主要位于“谁拥有这些能力、在哪个产品阶段使用、从哪个不可变出口读取”，而不是基础设施完全不可用。
-
-## 4. 关键不一致清单
-
-### 严重度定义
-
-- **P0**：继续开发会扩大错误产品/数据边界，应在下一批功能前处理。
-- **P1**：不立即导致数据污染，但会阻止总纲中的产品真正成立。
-- **P2**：命名、展示或完整度表达不准确，会持续误导开发和用户。
-
-### 总览
-
-| ID | 严重度 | 现状 | 总纲目标 | 所属阶段 |
-| --- | --- | --- | --- | --- |
-| ALIGN-01 | P0 | 所有 Project 自动获得世界身份并在产品中心投影为世界 | 长篇、短篇、剧本、漫画可独立存在；仅显式发布才成为世界 | B/D |
-| ALIGN-02 | P0 | WorldRelease 可包含上层游戏内容、AVG 媒资和运行模块 | 世界 release 仅包含版本化叙事语义与证据 | D |
-| ALIGN-03 | P0 | 世界引擎页面可直接创建诊断 runtime | 上层产品必须先完成独立 production/build/release 再运行 | D/E |
-| ALIGN-04 | P1 | 跑团、角色交互、游戏各自手写 WorldRelease 读取清单 | 统一 `describe/search/readWorldResource` 出口，注册表驱动 | D |
-| ALIGN-05 | P1 | WorldRelease 固定以一个 Work 为根且无能力画像/正文出口 | 世界可部分或完整封存，含能力画像、主支线、正文与原文证据 | D |
-| ALIGN-06 | P1 | 节点中世界观/故事等生成仍走通用 `chat()` 路径 | 节点与分步骤逐能力共用同一 Skill/Harness/Context/adopt | B |
-| ALIGN-07 | P1 | 百万规模门是合成字符夹具和有界检索证明 | 真实模型、真实长篇工作负载的百万字产品验收 | B |
-| ALIGN-08 | P1 | 短篇是长篇 workflow profile 和同一 Project 创建入口 | 独立轻量产品、owner、入口、状态与验收 | C |
-| ALIGN-09 | P1 | 剧本/漫画有表和工作台，但主 Agent 生产闭环仍不完整 | 两个独立端到端 Agent 产品 | C |
-| ALIGN-10 | P1 | 市场/托管/平台页已进入主产品导航 | 阶段 F 前默认隐藏或严格实验性授权 | A/B |
-| ALIGN-11 | P1 | 上层产品横向铺开，AI 小镇等纵切面不完整 | 先做一个标准纵切面，再按产品契约复制设施 | E |
-| ALIGN-12 | P2 | 世界完整度由单一百分比、`assets/runtime` 域共同表达 | 明确能力画像；语义实体不称媒资；runtime 不属于世界 | D |
-| ALIGN-13 | P2 | 部分上层入口绑定可变 Project 的 `worldVersion` | 必须绑定不可变 WorldRelease ID/hash | D/E |
-| ALIGN-14 | P2 | 有界/持续体验契约尚未贯穿全部上层产品 | 每个产品都有规模、结束或有限持续循环契约 | E |
-
-## 5. 逐项证据、原因与修复
-
-### ALIGN-01 · 独立产品被自动世界化
-
-**现状与证据**
-
-- [`projectToWorld()`](../../src/pages/ProductHubPage.tsx#L171) 将每个 `Project` 都转换为 `ProductWorld`；产品中心最终对全部项目执行该转换。
-- [`ensureProjectWorldIdentity()`](../../src/lib/product/world-identity.ts#L9) 和项目加载逻辑会为任何项目补 `worldCode/worldVersion`。
-- [`createLocalWorkspace()`](../../src/lib/world-engine/create-workspace.ts#L99) 在创建工作区时原子创建 `Project + World + Work`；该内部 scope 结构本身可以保留，但它目前又被直接解释成可共享世界产品身份。
-- 新建世界、短篇、长篇最终共用同一 `createProject` 入口；界面文字明确称“分步骤作品直接进入同一个世界工作台”。
-
-**为什么发生**
-
-旧架构用 `Project` 作为本地导入导出和 scope 根，又为了给所有功能快速提供 world/work 外键而统一创建了 `World + Work`。这是合理的内部兼容策略，但后续产品 UI 和分享身份把“内部 scope root”误当成“用户已经创建了一个世界引擎”。
-
-**目标状态**
-
-- `WorkspaceRoot`/内部 scope 可以继续存在；它不自动拥有可分享 `worldCode`。
-- 长篇、短篇、剧本、漫画分别有明确 `productKind` 与 owner。
-- 只有用户执行“创建世界引擎”或“从作品发布到世界草稿/封存”时，才创建公共世界身份。
-- 作品可引用世界，但作品修改不回写世界；作品也可完全不引用世界。
-
-**施工任务**
-
-1. `BOUNDARY-01A`：新增显式根类型与迁移标记，区分内部 workspace world scope、独立作品和 shareable world；先兼容读，禁止用是否存在 `World` 行推断产品类型。
-2. `BOUNDARY-01B`：拆分创建命令：`createLongformProject`、`createShortFictionProject`、`createAdaptationProject`、`createWorldEngineDraft`。
-3. `BOUNDARY-01C`：删除 `Project → ProductWorld` 全量投影；世界库只查询显式世界身份。
-4. `BOUNDARY-01D`：为旧数据提供无损分类向导。无法确定的旧 Project 默认为独立长篇，不自动公开为世界；原有 world code 作为兼容别名保留，直到用户确认。
-5. `BOUNDARY-01E`：补创建、导入导出、删除、复制、重映射和旧库升级反例。
-
-**验收**：创建长篇后世界库不新增世界；长篇完整可用；显式“发布为世界”后才出现稳定编号；删除任一方不误删另一方；旧项目升级不丢数据。
-
-### ALIGN-02 · WorldRelease 混入上层媒资和运行内容
-
-**现状与证据**
-
-- [`PROJECT_TABLES`](../../src/lib/registry/project-tables.ts#L592) 将 `gameDefinitions`、角色交互场景/冒险模块、AVG 演出与媒资等多张 Work-owned 表登记为 `communityShare: 'world'`。
-- [`buildWorldReleaseManifest()`](../../src/lib/world-engine/releases.ts#L162) 直接把所有 `communityShare === 'world'` 的表作为可发布集合。
-- [`buildPortableReleaseProject()`](../../src/lib/world-engine/releases.ts#L133) 特别把共享 blob 冻结到 `avgMediaBlobs`，错误信息也直接称“AVG 共享媒资无法冻结到 WorldRelease”。
-- 当前 manifest 仍包含 `workTitle`、任意 selected tables 和整个 portable project，而没有总纲要求的语义能力画像。
-
-**影响**
-
-世界版本会随某个 AVG/聊天/游戏产品的媒资和演出变化而变化；多个用户引用同一世界时也难以区分“世界事实”与“某个衍生产品版本”。这会放大包体、泄漏私域生产物，并让上层产品无法独立演化。
-
-**目标状态**
-
-- `WorldReleaseV3` 仅保存世界语义目录、能力画像、结构化记录、原文证据引用和完整来源 manifest。
-- 产品媒资只进入 `ProductBuild/ProductRelease`；公共 media/blob 层只负责存储，owner 仍是产品。
-- `communityShare` 不能继续同时表示“世界语义可发布”和“某类产品可分发”。
-
-**施工任务**
-
-1. `WORLD-REL-01`：拆分注册表发布策略为 `worldSemanticShare`、`productDistribution` 和 `neverPackage`（准确命名由实施时类型设计确定）。
-2. `WORLD-REL-02`：定义 `WorldReleaseManifestV3`、能力画像和稳定 resource ID；仅从注册表语义域派生。
-3. `WORLD-REL-03`：新增 V2 兼容读；停止创建含媒资的新 V2 release。
-4. `WORLD-REL-04`：迁移旧 V2：语义内容进入 V3；AVG/聊天/游戏记录与媒资重建为对应 ProductRelease 候选，不能静默丢弃。
-5. `WORLD-REL-05`：加入包内容白名单/反名单、大小预算、hash、导入往返和恶意跨 owner 反例。
-
-**验收**：任意 WorldRelease 包中不出现产品媒资、session、checkpoint、玩家状态或产品 build；旧 release 仍可读取与迁移；迁移前后语义 hash/来源可验证。
-
-### ALIGN-03 · 世界引擎能够绕过上层产品直接运行
-
-**现状与证据**
-
-- [`WorldNarrativeReleasePanel`](../../src/components/world-engine/WorldNarrativeReleasePanel.tsx#L203) 可以从 WorldRelease 直接创建 `chatgame/NPC` 诊断实例。
-- 同一面板一边提供统一 game production bridge，一边又保留“封存世界后直接运行”的旧路径。
-- [`WorldEngineWorkspace`](../../src/components/world-engine/WorldEngineWorkspace.tsx#L179) 同时展示世界内容、Work 管理、release、runtime 统计和运行状态机。
-
-**目标状态**
-
-世界引擎只负责编辑、能力诊断、封存、版本比较和提供出口。诊断可以验证包结构，但不得产生正式上层 session。所有正式运行必须属于一个产品实例并经历 brief → production → build → ProductRelease。
-
-**施工任务**
-
-1. `WORLD-UI-01`：移除/隐藏世界页面中的正式 runtime 创建；将结构诊断改为纯内存或测试命名空间。
-2. `WORLD-UI-02`：从 World Projection/Workspace 中移除 runtime 域、产品媒资和上层状态卡片。
-3. `WORLD-UI-03`：保留“用该版本创建跑团/聊天/游戏”的显式 handoff，只传 WorldRelease ID/hash。
-4. `WORLD-UI-04`：测试世界封存不会产生任何 Product/Session 行；handoff 未确认前零写入。
-
-### ALIGN-04 · 缺少统一不可变世界数据出口
-
-**现状与证据**
-
-- 跑团 [`world-source.ts`](../../src/lib/ttrpg/world-source.ts#L28)、角色交互 [`world-source.ts`](../../src/lib/character-interaction/world-source.ts#L16)、游戏生产 [`context.ts`](../../src/lib/game-production/context.ts#L18) 和文字游戏 [`world-generation.ts`](../../src/lib/text-game/world-generation.ts#L34) 分别维护自己的 release 表名、selection key、manifest 解析和摘要规则。
-- 有些读取器会主动解析 `avgMediaAssets`，进一步固化 ALIGN-02。
-- 当前 Context Gateway 对活动工作区的目录/搜索/读取已经很强，但没有同等契约的 immutable WorldRelease provider。
-
-**目标状态**
-
-实现总纲定义的三层出口：
-
-```text
-describeWorldRelease(releaseId/hash)
-→ searchWorldRelease(query / SourceRequirement)
-→ readWorldResource(resourceId, detailLevel)
+```mermaid
+flowchart TB
+    B["共享工程底座\n数据库 / 三注册表 / Harness / Context / 模型 / 媒资设施 / 版本与质量门"]
+    L["独立分步骤长篇"]
+    N["同源节点模式"]
+    S["独立短篇"]
+    A["独立小说转剧本"]
+    C["独立小说转漫画"]
+    W["世界引擎\n版本化叙事语义"]
+    U["上层产品族\n跑团 / 角色聊天 / AI小镇 / 文字游戏"]
+    B --> L
+    B --> N
+    B --> S
+    B --> A
+    B --> C
+    B --> W
+    B --> U
+    L <-->|"同一能力与 Canon"| N
+    W -->|"只读不可变世界来源"| U
 ```
 
-产品只声明需求，不声明底层表；出口返回匹配、缺失、冲突、omitted/insufficient、来源和原文证据。
-
-**施工任务**
-
-1. `WORLD-OUT-01`：复用 Context Gateway 的 resource descriptor/provider 模型，为 WorldReleaseV3 建只读 provider；不要新造无关的第四套上下文系统。
-2. `WORLD-OUT-02`：目录和 resource ID 从 `PROJECT_TABLES + CONTEXT_SOURCES` 的世界语义声明派生。
-3. `WORLD-OUT-03`：定义产品侧 `SourceRequirement`；先迁移跑团作为参考实现。
-4. `WORLD-OUT-04`：逐个删除四套手写 reader 清单，保留薄 adapter 兼容旧 release。
-5. `WORLD-OUT-05`：以早期/中期/晚期事实、低频伏笔、冲突、原文回读、预算不足和错误世界隔离做规模测试。
-
-### ALIGN-05 · 世界 release 仍是单 Work 快照，能力画像不足
-
-**现状与证据**
-
-- [`WorldReleaseManifestV2`](../../src/lib/types/world-release.ts#L29) 必须有一个 `workTitle`，只有 tables/modules/dependencies/portableProject，没有能力画像、资源目录或 omission 语义。
-- [`buildPortableReleaseProject()`](../../src/lib/world-engine/releases.ts#L71) 要求一个具体 `WorkspaceScope` 和 `Work`，并把 portable project 的名称、描述、体裁等改写为该 Work。
-- release 面板当前主要按 foundation/characters/narrative/outline 选择，无法明确表达“仅世界观”“含主支线”“含细纲”“含正文及证据”等能力。
-
-**目标状态**
-
-世界可以从部分设定到完整小说级语义包；它可以引用多个来源作品/片段，但不被某一个 Work 身份取代。能力画像逐项说明可用域、覆盖、revision、确认/候选/冲突、原文证据和索引。
-
-**施工任务**
-
-- 与 `WORLD-REL-02` 同步定义 source contribution、capability profile 和 resource catalog。
-- 正文不必复制为一个超大字符串；可由不可变 chunk/resource + hash + 原文证据索引封存。
-- 多世界加入子世界 release、关系、通道和允许引用范围，而不是仅打包更多表。
-- 上层产品不能只看“80% 完整”；必须验证自己的最低 capability requirements。
-
-### ALIGN-06 · 节点模式尚未对所有长篇能力同源
-
-**已经对齐的部分**
-
-- [`creation-chain.ts`](../../src/lib/node-authoring/creation-chain.ts#L71) 定义了世界 → 故事 → 角色 → 卷 → 章 → 细纲 → 正文的真实 DAG。
-- [`executor.ts`](../../src/lib/node-authoring/executor.ts#L471) 在采纳前执行 stale 检查，并对受治理字段使用领域采纳或统一 `adopt()`。
-- durable graph run、恢复、同源/跨模式 stale 回归已经存在。
-
-**缺口证据**
-
-- [`domain-execution.ts`](../../src/lib/node-authoring/domain-execution.ts#L634) 只为角色、大纲、细纲、正文、章节组织和事实等一部分节点提供领域执行。
-- [`executor.ts`](../../src/lib/node-authoring/executor.ts#L378) 对其余 `generate-field/generate-collection` 节点回退到通用 `chat()`，使用节点描述拼 Prompt。官方长篇模板中的世界观和故事节点因此并未完整复用分步骤对应 Agent Skill/Run Contract。
-
-这就是过去“明明重构了 Harness，为什么编辑器/节点还会有手写来源或直连”的结构性原因：Harness 主干存在，但不是所有入口都已完成注册和迁移。当前分步骤正文对 `activeNarrativeBlueprint` 的登记缺失已经由注册表和回归测试修复；剩余问题是把同类旁路系统性清零，而不是再次只补一处清单。
-
-**施工任务**
-
-1. `NODE-SAME-01`：建立“分步骤动作 ↔ Skill ID ↔ Context contract ↔ Adoption target ↔ Node type”的机器可校验矩阵。
-2. `NODE-SAME-02`：为世界、故事、关系、主支线及官方模板全部节点接入相同领域 Skill/Harness；禁止正式节点落入通用 `chat()`。
-3. `NODE-SAME-03`：通用模型节点只保留为用户明确创建的实验节点，输出只能是内存草稿或显式 artifact，默认不得写 Canon。
-4. `NODE-SAME-04`：标准分步骤流程导出/导入官方节点模板；同一数据在两个入口修改后 stale、刷新、采纳和下游 Prompt 一致。
-5. `NODE-SAME-05`：架构检查器扫描未登记 AI call 和正式节点 fallback。
-
-**验收**：每个官方节点都能指向唯一正式 Skill/Run Contract；删除通用 fallback 后官方模板仍全部通过；同一个“种族与民族”场景矩阵在分步骤和节点两种入口得到相同读写证据。
-
-### ALIGN-07 · 百万规模工程门不等于百万字产品认证
-
-**现有真实能力**
-
-- [`long-form-scale-gate.ts`](../../src/lib/evals/long-form-scale-gate.ts#L4) 定义 10 万、30 万、100 万字符级别，并验证固定预算下的上下文包、来源选择、遗漏证据和事实召回。
-- [`R-PHASE4-long-form-scale-gate.test.ts`](../../tests/regression/R-PHASE4-long-form-scale-gate.test.ts#L204) 使用 500 章、100 万字符合成夹具，检查早期、中段、近期事实以及错误世界/未来事实隔离。
-- 该 gate 自己明确声明：它证明的是有界上下文和精确证据，不评价文学质量。
-- 真实长篇 acceptance 目前覆盖十万级内容与磁盘记忆同步，但没有让真实模型连续创作、修改、刷新、恢复并验收一部百万字作品。
-
-**准确结论**
-
-当前架构在理论与工程机制上 **具备向百万字级长篇扩展的可信基础**，但项目尚未获得“百万字真实可用”的产品证书。尤其不能把 100 万字符直接宣传成 100 万中文词，也不能用一次检索成功代表数千次创作循环中的累计一致性。
-
-**施工任务**
-
-1. `LONG-EVAL-01`：把指标明确区分字符、中文词/字、token、章节数和实际原文体积。
-2. `LONG-EVAL-02`：建立 10 万 → 30 万 → 100 万字分层真实语料与真实模型 durable run；允许分批运行和断点恢复，不能一次塞入上下文。
-3. `LONG-EVAL-03`：每层覆盖生成、扩写/润色前后版本、人工编辑、stale、采纳、刷新、导出导入和后续章读取。
-4. `LONG-EVAL-04`：建立隐藏金标准：事实、关系、时间线、伏笔、角色声音、主支线进度、禁写信息和原文定位；按严重度评估遗漏/矛盾。
-5. `LONG-EVAL-05`：记录 provider/model/prompt/Skill/version/成本/耗时/重试，禁止用单一模型偶然成功作为架构完成。
-6. `LONG-EVAL-06`：加入长时间运行的数据库体积、索引、恢复、浏览器内存和交互性能门。
-
-**完成判据**：三档真实闭环达到预设召回、冲突、恢复和人工质量阈值；失败能定位到 context selection、memory extraction、Skill、model 或 adoption，而不是只得到“生成质量不好”。
-
-### ALIGN-08 · 短篇仍不是独立产品
-
-**现状与证据**
-
-- 产品中心把短篇和长篇放在同一个 Novel 页面；短篇主要通过 `NovelWorkflowProfile` 切换。
-- 新建短篇和长篇共用相同 Project/World/Work 创建入口。
-- `WorkKind` 主要区分 `novel/screenplay/comic`，没有独立短篇 owner 和完整产品状态。
-
-**目标与施工**
-
-- `SHORT-01`：定义独立 `ShortFictionProject` 或等价明确 owner；可复用长篇 Skill，但有自己的 brief、规模、结构、candidate、revision、export 和完成状态。
-- `SHORT-02`：独立创建/列表/打开/删除/导入导出；不产生世界身份。
-- `SHORT-03`：将 profile 作为内部策略而不是产品身份；旧 profile 数据无损迁移。
-- `SHORT-04`：真实 E2E 覆盖从意图到完整短篇、修改、恢复和导出。
-
-### ALIGN-09 · 小说转剧本和漫画尚未形成完整 Agent 产品
-
-**已有基础**
-
-- 改编项目、source units、场次、漫画页/格、视觉主体、媒资和来源作品字段已进入注册表和生命周期。
-- 已有 Screenplay/Comic 工作台、部分生成、QA 和导出能力。
-
-**缺口**
-
-目前更接近“有数据模型和编辑工作台的功能集合”，尚未证明用户只需确认改编目标后，主 Agent 能完成源文解析、计划、生产、有限修复、组装、质量审校和最终交付。漫画的人物/服装一致性、表情动作、漫画语言、文字排版、镜头连续性和媒资选择仍需专用验证，而不能依赖通用图片生成。
-
-**施工任务**
-
-- `ADAPT-01`：分别定义 screenplay/comic brief、状态机、Skill 集、source evidence、quality report、immutable release。
-- `ADAPT-02`：源作品可 linked 或 detached；锁定 revision/hash，源文修改触发显式影响分析而非静默变化。
-- `ADAPT-03`：剧本先完成一个端到端标准纵切面，再做漫画；不要同时扩展两个半成品。
-- `ADAPT-04`：漫画建立视觉 subject bible、reference set、镜头/气泡/拟声/字体布局约束和分页渲染验收。
-- `ADAPT-05`：媒资 owner 是漫画产品，不进入世界引擎。
-
-### ALIGN-10 · 平台与市场能力过早成为正式产品入口
-
-**现状与证据**
-
-- [`ProductHubPage`](../../src/pages/ProductHubPage.tsx#L99) 的一级导航包含“社区市场”，首页也把它作为正式功能卡。
-- 仓库已经合入 marketplace、托管、能力授权等代码。部分能力有显式 consent gate 和“未开启在线服务/支付”的保护，这是值得保留的安全基础。
-
-**裁决**
-
-代码成果可以保留，不能继续占据当前正式路线。阶段 F 前应默认隐藏在实验/开发开关后，测试和安全维护继续执行；不得让平台页面数量掩盖长篇、世界出口或上层纵切面未完成。
-
-**施工任务**：`STAGE-GATE-01` 建立产品 capability flag；production 默认只展示当前已通过正式验收的产品。社区/托管/支付/市场需要阶段 F 决策记录和独立安全审查才能解除。
-
-### ALIGN-11 · 上层产品横向铺开，标准纵切面尚未完成
-
-**现状**
-
-跑团、角色聊天、文字冒险、AVG、复杂模拟、开放世界均已有不同深度的页面、表和服务；跑团 production、统一 game production、角色交互 release 的完成度相对最高。AI 小镇尚未形成独立 production/release/session 产品。
-
-**风险**
-
-如果继续同时补所有页面，会让它们各自复制世界读取、记忆、体验规模、媒资、build 和 runtime 约定，重复此前分支间不一致的问题。
-
-**施工顺序**
-
-1. `UPPER-REF-01`：在世界 V3 出口完成后，选择跑团作为第一个标准纵切面。
-2. 贯通锁定 release → 配置/会谈 → brief → 内容/规则/媒资 → build → quality repair → ProductRelease → session → 私域演化。
-3. 抽取只有被跑团真实证明可共享的 production/runtime 契约。
-4. 再完成单/多角色聊天；AI 小镇单独立项。
-5. 文字冒险 → AVG → 文字开放世界依次验收；复杂模拟能力作为开放世界内部设施，不先单独扩成营销产品。
-
-### ALIGN-12 · 世界能力域和完整度表达误导
-
-[`WorldProjection`](../../src/lib/world-engine/domain.ts#L11) 同时包含 `work` 和 `runtime`；域定义把语义角色/地点/物品称为 `assets`，并把 simulation session 称为世界 runtime。readiness 又以基础、assets、narrative 的固定比例和单一百分比判断。
-
-修复时应：
-
-- 将语义对象命名为 entities/characters/relations 等，避免与媒体资产混淆；
-- runtime 从世界投影移除；
-- 单一百分比只做摘要，产品决策读取 capability profile；
-- “可用”按请求产品的 requirements 判断，不存在一个对所有产品通用的固定完成阈值。
-
-### ALIGN-13 · 上层绑定的是可变 Project 版本，不一定是 release
-
-[`BindingBanner`](../../src/pages/ProductHubPage.tsx#L229) 显示来自 Project 的 `worldCode@worldVersion`；产品中心选择器的世界集合也来自全部 Project 投影。部分深入的 production 路径已经使用 release ID/hash，但入口级语义仍会让用户误以为草稿版本就是锁定快照。
-
-修复应把选择分成：选择世界 → 选择不可变 release（默认最新已封存）→ 展示 hash/能力/缺口 → 创建产品草稿。没有 release 时只允许先去封存，或显式复制语义为该产品私有输入，不得悄悄读取变化中的草稿。
-
-### ALIGN-14 · 体验规模与结束契约未统一落地
-
-统一 game production contract 已出现目标规模、预算和结束相关字段，但跑团、聊天、各文字游戏 UI/状态机并未全部按照“有界体验/有限持续循环”验收。
-
-每个上层产品要明确：
-
-- 有界模式的时长、场景/章节、分支、结局、完成条件和预算；
-- 持续模式每轮的有限目标、checkpoint、暂停、总结、继续和请求结局；
-- 规模调整对内容、媒资、成本、兼容和旧存档的影响；
-- 绝不以一个无限 Agent run 实现“无限演绎”。
-
-## 6. “种族与民族”切片对全流程的代表性裁决
-
-用户此前选定的“世界观 → 人文环境 → 种族与民族”切片，仍应作为阶段 B 的第一条跨模式验收基准。它不是只测试一个按钮，而是检验全架构是否闭环：
-
-```text
-空项目/项目名称
-→ 用户输入与其他世界观内容
-→ Context Gateway 目录与按需资源
-→ races Skill + Run Contract
-→ 模型调用/结构修复
-→ durable candidate + 来源证据
-→ 刷新恢复
-→ stale 判断
-→ 采纳到 worldviews.races
-→ 人工编辑 revision
-→ 角色/故事/大纲/细纲/正文下游读取
-→ 节点模式读取与生成同一事实
-→ 导出导入/世界切换隔离
+独立长篇等产品不经过世界引擎也必须完整可用。上层产品可以引用世界，但世界不成为它们的 production、媒资或 runtime 容器。
+
+### 3.2 世界衍生产品的三阶段主链
+
+```mermaid
+flowchart LR
+    S1["阶段一 · 世界引擎\n编辑并封存语义版本"]
+    S2["阶段二 · 用户交互与发指令\n引用版本、填写产品专用设置、与主 Agent 定向"]
+    S3["阶段三 · 产品执行与交付\n生产、媒资、发布、运行、私域演化"]
+    S1 -->|"WorldReference"| S2
+    S2 -->|"明确开始 + ConfirmedProductBrief + ProductSourcePlan"| S3
+    S3 -. "禁止自动反馈" .-> S1
 ```
 
-本轮对该切片的裁决：
+阶段二不是世界引擎的一部分，也不是可以省略的过渡页面。用户在那里配置的是某一个具体产品；阶段三何时迭代、怎样结束，则由该产品内部设计决定。
 
-- 候选、采纳、stale、上下文与 durable 证据已有 Harness 基础；
-- 用户人工修改必须立即形成新 revision，系统自动识别旧候选 stale；不应要求用户另点一个容易忘记的“更新”按钮才能让数据生效；
-- “扩写/润色事实保留验证器”暂不作为阻断门，按用户决定先做清晰的原版/新版对照和人工选择；但不得把未经采纳候选当 Canon；
-- 项目名称只能是低权重创作提示，不得主导空项目生成或诱导模型解释标题概念；该权重需进入可评测 Prompt 合同；
-- 世界观、故事、角色之间的联动应通过注册的资源需求和渐进披露实现，不在组件手拼字段；
-- 采纳正文与 Codex 词条提取是两个可追踪动作，词条补全不能反向改写正文；
-- 分步骤与节点必须运行同一个 `races` Skill/Context/Adoption contract；这项验收将直接验证 ALIGN-06 是否关闭。
+### 3.3 架构交接契约
 
-## 7. 数据迁移与兼容策略
+| 逻辑契约 | 必须表达 | 所有者 | 不允许 |
+|---|---|---|---|
+| `WorldReference` | world code、不可变 release ID/hash、能力身份 | 世界引擎 | 用可变 Project/草稿版本代替 |
+| `ProductSourcePlan` | 锁定世界版本、需求适配器/版本、需求、权限、缺失策略与咨询 Context Manifest refs | 产品草稿/production | 未开始就假装预知全部实际来源；每个产品手写世界底表清单 |
+| `ConfirmedProductBrief` | 产品类型、用户意图、产品专用配置、限制、revision、确认 | 产品实例 | 用一个全产品万能 `ExperienceContract`；未确认先生产 |
+| `ProductSourceManifest` | production 各 run 实际读取/采用/缺失/冲突/遗漏的世界资源聚合快照 | product build/release | 超出 SourcePlan；追写旧 release；发布时未冻结 hash |
+| `ProductReleaseLineage` | release/hash、父 release、source plan/manifest、brief/build/quality、兼容结论 | 产品实例 | 覆盖旧 release；运行随世界草稿漂移 |
 
-上述纠偏涉及真实用户本地数据，必须遵守“增量、可回退、先读后写、先影子验证”的原则。
+这些是逻辑语义，不强制所有产品共用相同物理表。架构验收的是每个产品都能映射和追溯，而不是它们的数据内容完全相同。
 
-### 7.1 禁止事项
+### 3.4 世界资源统一协议
 
-- 不通过删除旧表“解决”产品边界；
-- 不把每个旧 Project 自动公开为可分享世界；
-- 不丢弃旧 V2 WorldRelease 中的媒资或产品记录；
-- 不在组件 mount 时执行不可恢复的批量重分类；
-- 不让新旧 reader 同时长期写两套 Canon；
-- 不用 `worldCode` 是否存在作为唯一迁移判据。
+统一世界出口的正确含义是 **协议统一、需求与结果按产品变化**：
 
-### 7.2 推荐迁移波次
+```text
+产品目标与专用配置
+→ 产品自己的 WorldRequirementAdapter
+→ describe/search/read 指定 WorldRelease
+→ matched / missing / conflict / omitted / insufficient
+→ 用户开始时冻结 ProductSourcePlan
+→ production 每个 run 渐进读取并保存 Context Manifest
+→ ProductRelease 聚合并冻结 ProductSourceManifest
+```
 
-1. **标识层**：新增明确 product/world identity 和来源字段；旧数据只读分类报告。
-2. **双读层**：新查询优先新身份，缺失时使用旧兼容映射，并记录迁移证据。
-3. **影子构建**：从旧 V2 release 构建 V3 世界包和 ProductRelease 候选，比较 row/hash/source。
-4. **作者确认**：有歧义的旧项目让作者选择“独立作品、世界、或两者有显式来源关系”。
-5. **单写层**：新入口只写新契约；旧 reader 保留有期限的兼容读取。
-6. **收口层**：所有导入导出、删除、复制、世界/产品切换和回滚测试通过后，才移除旧写入路径。
+网关统一版本、寻址、resource ID、来源、权限、充分性、渐进披露和遗漏语义。它不返回一份覆盖所有产品的固定 payload。用户开始时只能冻结世界版本、需求与读取规则；Agent 在该不可变版本内继续发现和读取资源，每个 run 保存不可变 Context Manifest，发布时才形成聚合 source manifest。runtime 后续读取归 session/run，不改写旧 release。新产品接入时增加产品需求适配器和必要资源登记，不修改一个不断扩张的中心清单。
 
-### 7.3 必须保留的恢复证据
+### 3.5 不可破坏的架构不变量
 
-- 迁移前完整备份与 schema 版本；
-- 每个 owner 的旧 ID → 新 ID 映射；
-- release/content/media hash；
-- 未分类、冲突、跳过和失败记录；
-- 可重复 dry-run 报告；
-- 在隔离浏览器库中的 round-trip 与 downgrade/恢复说明。
+1. 独立作品不会仅因存在内部 `World/Work` scope 就自动成为可分享世界。
+2. `WorldRelease` 只包含世界叙事语义、目录、能力画像和证据，不包含产品媒资、production、build、session 或运行状态。
+3. 正式上层运行必须经过产品阶段二和阶段三，世界页面不能直接创建 runtime。
+4. 正式生产绑定不可变 WorldRelease 和 SourcePlan；正式运行绑定不可变 ProductRelease。运行若仍需查询世界，只能沿 ProductRelease 继承的 SourcePlan 读取同一不可变 release，并把证据写入 session/run manifest，不能修改 release manifest。
+5. 上层产品拥有自己的设置、补充内容、媒资、运行和演化；任何自动回写世界均禁止。
+6. 世界资源协议不暴露底表，也不要求不同产品读取相同 payload。
+7. ProductRelease 的升级和演化创建新版本，有父版本与兼容证据；旧版本和旧存档可继续定位。
+   产品目标、配置、世界版本、资源需求或读取权限变化时，同时创建新 Brief/SourcePlan，不能改写旧 plan。
+8. 节点模式和分步骤长篇共享 Canon、Skill/Harness、Context、Adoption 与生命周期。
+9. 未完成或发展顺序后置的能力默认实验性门控，不以页面存在宣称正式产品。
 
-## 8. 后续施工顺序
+## 4. 已有能力与保留裁决
 
-本报告把总纲阶段转换为可执行依赖图：
+| 能力 | 当前裁决 | 架构意义 |
+|---|---|---|
+| 三注册表 | 保留并继续作为代码单一事实源 | 能承载世界资源、产品 Brief/候选和表生命周期治理 |
+| durable Harness | 保留，不重造 runner | 已有 contract、checkpoint、stale、repair、receipt 基础 |
+| Context Gateway | 保留并扩展 immutable WorldRelease provider | 已具备目录、检索、详情/原文和遗漏证据模型 |
+| Canon/事实/关系/时间与长程记忆 | 保留 | 独立长篇与世界语义资源均可复用，但 owner 必须分开 |
+| 节点 DAG、运行与采纳 | 保留 | 需要消除官方节点通用生成 fallback，而不是重建节点系统 |
+| World code/release/hash | 保留并升级语义边界 | 已有版本基础，可兼容迁移为纯世界 release |
+| product production/build/runtime 设施 | 保留为产品侧基础 | 不迁回世界；是否足够由各产品专项验收 |
+| 改编、媒资和上层产品表 | 保留且按 owner 整理 | “代码已存在”不等于具体产品完成，也不构成架构删除理由 |
+
+StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到稳定边界，并为旧数据建立增量迁移。
+
+## 5. 架构偏差总览
+
+### 5.1 严重度
+
+- **P0**：继续开发会扩大错误 owner、release 或阶段边界；新功能前必须处理。
+- **P1**：不立即污染数据，但会持续产生平行协议、入口绕行或架构漂移。
+
+### 5.2 清单
+
+| ID | 严重度 | 当前偏差 | 目标不变量 |
+|---|---|---|---|
+| ARCH-01 | P0 | 每个 Project 被自动赋予并投影为世界身份 | 独立作品与可分享世界显式分离 |
+| ARCH-02 | P0 | WorldRelease 打包策略允许产品内容、AVG 媒资和运行模块进入世界 | WorldRelease 纯语义、产品数据完全外置 |
+| ARCH-03 | P0 | 世界页面可以绕过产品交互/生产阶段直接创建诊断 runtime | 所有正式运行经过三阶段交接 |
+| ARCH-04 | P1 | 顶层入口仍可能用可变 `Project.worldVersion` 表达绑定；跨产品 release 谱系没有共同治理闸门 | WorldReference 与 ProductReleaseLineage 可验证 |
+| ARCH-05 | P1 | 跑团、角色互动、游戏生产和文字游戏各自解析 WorldRelease/table selection | 中立网关 + 产品需求适配器 + source plan/run/release manifests |
+| ARCH-06 | P1 | 部分官方节点仍回退通用 `chat()`，没有逐能力复用分步骤正式路径 | 节点与分步骤同源 |
+| ARCH-07 | P1 | 世界能力画像混入 runtime/assets 语义，未完成产品/平台入口仍可能作为正式功能暴露 | 能力域与发展阶段均有机器门控 |
+
+## 6. 偏差证据与架构修复包
+
+### ARCH-01 · 产品身份与世界身份混合
+
+**证据**
+
+- `src/pages/ProductHubPage.tsx` 的 `projectToWorld()` 把 Project 投影为产品世界。
+- `src/lib/product/world-identity.ts` 的 `ensureProjectWorldIdentity()` 为 Project 补 world code/version。
+- `src/lib/world-engine/create-workspace.ts` 同时创建 Project、World、Work；内部 scope 结构随后被 UI 当作可分享世界身份。
+
+**架构修复包 `GOV-IDENTITY`**
+
+1. 定义内部 workspace scope、独立作品、世界草稿、可分享世界四类身份，禁止用“存在 World 行”推断产品身份。
+2. 创建命令按产品 owner 分开；只有显式创建/发布世界才生成公共 world code。
+3. 世界列表只读取显式世界身份，不再对全部 Project 做投影。
+4. 旧 Project 先生成只读分类报告；歧义项由用户确认，默认保留为独立作品。
+5. 通过 `PROJECT_TABLES` 派生导出、导入、删除、复制和 ID 重映射，并验证两个 owner 互不误删。
+
+**关闭条件**：创建任一独立作品不新增共享世界；显式发布才得到 world code/release；旧数据无损且来源关系可追溯。
+
+### ARCH-02 · WorldRelease 边界污染
+
+**证据**
+
+- `src/lib/registry/project-tables.ts` 的多张产品/AVG/运行相关表使用 `communityShare: 'world'`。
+- `src/lib/world-engine/releases.ts` 的 `buildWorldReleaseManifest()` 以该标记筛选发布集合。
+- 同文件的 portable release 构建包含 AVG blob 特例，说明产品媒资已经进入世界包语义。
+
+**架构修复包 `GOV-WORLD-RELEASE`**
+
+1. 把“世界语义可封存”“产品可分发”“绝不打包”拆成不同注册元数据，不能继续复用一个含混标志。
+2. 新一代 WorldRelease 仅从世界语义资源注册表派生，包含能力画像、资源目录、稳定 ID、来源与 hash。
+3. 对旧 release 兼容读取并执行影子分类：世界语义进入新 release 候选；产品数据/媒资进入相应产品迁移候选，任何一侧都不得静默丢弃。
+4. 建立包内容白名单、owner 反例、体积预算、hash 和导入往返门。
+
+**关闭条件**：任何新 WorldRelease 不含 product production/build/media/session/runtime；旧包可读取、分类、迁移和恢复。
+
+### ARCH-03 · 三阶段可以被绕过
+
+**证据**
+
+- `src/components/world-engine/WorldNarrativeReleasePanel.tsx` 可从 WorldRelease 直接创建 `chatgame/NPC` 诊断实例。
+- `src/components/world-engine/WorldEngineWorkspace.tsx` 同时承载世界 release 与上层 runtime/状态展示。
+
+**架构修复包 `GOV-STAGE-GATE`**
+
+1. 世界页面只保留编辑、诊断、封存、比较和“转到某产品”的 handoff；handoff 只传 WorldReference。
+2. 结构诊断必须是只读/内存/测试命名空间，不能产生正式 product/session 行。
+3. 所有正式 product production 入口验证 ConfirmedProductBrief、ProductSourcePlan 和用户开始授权 revision。
+4. 所有 runtime 启动验证不可变 ProductRelease；世界 release 不能直接充当运行包。
+5. 用架构扫描和 E2E 阻止新的跨阶段快捷入口。
+
+**关闭条件**：世界封存和诊断零写入产品表；未经产品设置与用户开始不能生产；没有 ProductRelease 不能启动正式 runtime。
+
+### ARCH-04 · 不可变来源与产品谱系未形成共同闸门
+
+**证据**
+
+- `src/pages/ProductHubPage.tsx` 的顶层 `BindingBanner` 来自 `Project.worldCode/worldVersion`，可能让可变草稿版本冒充锁定来源。
+- 深层跑团、角色互动和游戏生产已经大量使用 `worldReleaseId/contentHash`，证明无需推倒重建；缺口在顶层 handoff 和跨产品共同不变量。
+- 不同产品各自表达 parent build/release 或升级候选，尚无项目级检查保证每个正式 ProductRelease 都保存完整 lineage。
+
+**架构修复包 `GOV-LINEAGE`**
+
+1. 统一逻辑 `WorldReference` 校验：release ID/hash 必须同时匹配；UI 不能用草稿 version 替代。
+2. 统一逻辑 `ProductReleaseLineage` 最低字段和检查器；物理 schema 可产品专用。
+3. 变更 Brief、来源世界、资源需求/权限或旧 ProductRelease 时创建新 Brief/SourcePlan/production/release，不原地覆盖。
+4. runtime 升级必须显式兼容检查；未升级实例继续读取旧 ProductRelease。
+
+**关闭条件**：从入口到 runtime 可追溯 WorldReference → source plan → Brief → run Context Manifests → release SourceManifest → build → ProductRelease → parent/compatibility，且世界草稿变化不改变已有链。
+
+### ARCH-05 · 世界读取是多套产品专用解析器
+
+**证据**
+
+- `src/lib/ttrpg/world-source.ts`、`src/lib/character-interaction/world-source.ts`、`src/lib/game-production/context.ts`、`src/lib/text-game/world-generation.ts` 分别解析 `WorldReleaseManifestV2`、selected tables 和产品摘要。
+- 部分读取器还读取 AVG 媒资，进一步固化 ARCH-02。
+- 当前 Context Gateway 已有 provider、resource descriptor、目录/检索/详情和遗漏语义，可复用为不可变世界 provider。
+
+**架构修复包 `GOV-WORLD-PROTOCOL`**
+
+1. 为不可变 WorldRelease 实现中立 `describe/search/read` provider，复用 Context Gateway，不新建第四套上下文系统。
+2. 定义产品需求适配器接口；跑团、聊天和游戏保留自己的需求语义，但删除对世界底表与 manifest 内部结构的直接依赖。
+3. 网关返回 matched/missing/conflict/omitted/insufficient 和 provenance；用户开始时产品冻结 ProductSourcePlan，production 每个 run 保存 Context Manifest，ProductRelease 聚合并冻结 ProductSourceManifest；runtime 新证据归 session/run。
+4. 先让至少两个需求明显不同的现有产品适配同一协议，以证明协议没有偷偷固化某一产品 payload；这不要求两个产品本身完成。
+5. 新旧 reader 双读对照、hash/资源等价后停止旧写入/读取，并由扫描器禁止新增直接解析。
+
+**关闭条件**：产品新增需求只修改自己的 adapter/契约；网关无需新增万能字段；两个产品可从同一 release 得到不同且可追溯的 plan/run/release manifests；后续渐进读取不越过锁定版本和权限，也不改写旧 release。
+
+### ARCH-06 · 节点与分步骤尚未完全同源
+
+**证据**
+
+- `src/lib/node-authoring/creation-chain.ts`、`executor.ts` 已有真实 DAG、stale 和受治理采纳基础。
+- `src/lib/node-authoring/domain-execution.ts` 只覆盖部分领域动作；其余官方 `generate-field/generate-collection` 可回退通用 `chat()`。
+
+**架构修复包 `GOV-NODE-SAME-SOURCE`**
+
+1. 建立机器可校验的“分步骤 action ↔ Skill/Run Contract ↔ Context ↔ Adoption ↔ node type”映射。
+2. 所有官方节点必须调用对应正式领域 action；通用节点只允许作为显式实验草稿且不能直接写 Canon。
+3. 架构检查器禁止官方模板落入通用 AI fallback。
+4. 同一数据在两种入口的 revision、stale、刷新、采纳、导入导出和下游读取一致。
+
+**关闭条件**：官方分步骤模板全部可由节点表达，删除通用 fallback 后仍可运行；不存在第二套 Prompt/DB/记忆体系。
+
+### ARCH-07 · 能力域和发展阶段缺少统一门控
+
+**证据**
+
+- `src/lib/world-engine/domain.ts` 的世界投影包含 `runtime`，并用 `assets` 表达部分语义实体，容易与真实媒体资产混淆。
+- `src/pages/ProductHubPage.tsx` 暴露多个成熟度不同的产品和社区/市场入口；代码存在与正式可用状态没有统一机器边界。
+
+**架构修复包 `GOV-CAPABILITY-GATE`**
+
+1. 世界能力画像只表达语义域、覆盖、证据和冲突；移除 runtime，把语义 entity 与 media asset 分开命名。
+2. 产品目录登记 `experimental/internal/preview/released` 等发布状态及进入条件；生产默认不展示未通过正式验收的入口。
+3. 平台、托管、社区和商业能力继续保留代码与安全维护，但阶段 F 前不得成为核心路径依赖。
+4. 文档、导航、路由与 capability gate 由同一登记派生或检查，避免只改文案。
+
+**关闭条件**：世界能力画像不包含上层 runtime/media；未完成入口默认不可见或明确实验性；页面存在不再等于产品已发布。
+
+## 7. 从架构审计转交出去的事项
+
+下表不是删除问题，而是把它们交给正确 owner：
+
+| 1.0.0 原事项 | 新归属 | 继续保留的架构部分 |
+|---|---|---|
+| ALIGN-07 真实百万字验证 | `B-LF-06` 长篇产品质量与认证 | 长篇/节点 owner、三注册表与同源 Harness 仍受架构治理 |
+| ALIGN-08 短篇完整独立产品 | `C-SHORT-01` 专项产品设计与交付 | 独立作品不能自动世界化，归 ARCH-01 |
+| ALIGN-09 剧本/漫画端到端闭环 | `C-SCREENPLAY-01`、`C-COMIC-01` | 独立 owner、来源 manifest、媒资归属受总架构治理 |
+| ALIGN-11 上层产品纵切面完成 | 阶段 E 各产品专项路线 | 三阶段、接入槽位、不可变引用与不回写受本审计治理 |
+| ALIGN-14 规模、结束与持续体验 | 各产品的阶段二设置和阶段三运行设计 | 用户明确开始、Brief 版本、ProductRelease 谱系由总架构治理 |
+| “种族与民族”全场景矩阵 | `B-LF-02` 长篇/Harness 产品验收 | 它仍可验证三注册表与分步骤/节点同源，但不是全项目架构修复包 |
+
+转交后，这些工作不得再被实现成跨产品万能表或万能 Agent。每个产品开工时以总架构的扩展槽位为外框，另写自己的需求、数据、Agent、运行和质量方案。
+
+## 8. 施工依赖与顺序
 
 ```mermaid
 flowchart TD
-    A["A0 文档与主干权威完成"] --> B1["B1 产品身份与创建边界 ALIGN-01"]
-    B1 --> B2["B2 分步骤种族切片真实闭环"]
-    B2 --> B3["B3 节点同源收口 ALIGN-06"]
-    B2 --> B4["B4 长篇真实规模验收 ALIGN-07"]
-    B3 --> B5["B5 分步骤全字段矩阵"]
-    B4 --> B5
-    B5 --> C1["C1 独立短篇"]
-    C1 --> C2["C2 小说转剧本"]
-    C2 --> C3["C3 小说转漫画"]
-    B1 --> D1["D1 WorldRelease V3 纯语义包"]
-    D1 --> D2["D2 统一 describe/search/read 出口"]
-    D2 --> D3["D3 世界 UI 与 runtime 解耦"]
-    D3 --> E1["E1 跑团标准纵切面"]
-    E1 --> E2["E2 角色聊天"]
-    E2 --> E3["E3 AI 小镇"]
-    E1 --> E4["E4 文字冒险 → AVG → 开放世界"]
-    C3 --> F["F 平台/社区/商业化解锁审查"]
-    E3 --> F
-    E4 --> F
+    D["文档治理：三阶段与所有权生效"] --> I["GOV-IDENTITY"]
+    I --> R["GOV-WORLD-RELEASE"]
+    R --> G["GOV-WORLD-PROTOCOL"]
+    G --> S["GOV-STAGE-GATE"]
+    S --> L["GOV-LINEAGE"]
+    I --> N["GOV-NODE-SAME-SOURCE"]
+    D --> C["GOV-CAPABILITY-GATE"]
+    L --> P["具体上层产品按各自方案开工"]
+    G --> P
 ```
 
-### 第一批：必须先做
+推荐施工批次：
 
-1. `BOUNDARY-01A~E`：停止独立作品自动世界化；建立无损迁移。
-2. 以“种族与民族”完成真实 UI/API 场景矩阵并修复发现的问题。
-3. `NODE-SAME-01~05`：消除官方节点的通用 AI 旁路。
-4. `LONG-EVAL-01~06`：把百万字符工程门升级为分层真实产品验收。
-5. `STAGE-GATE-01`：把阶段 F 和未完成上层产品从正式导航降为实验能力。
+1. **身份与迁移基础**：先区分独立作品、世界和产品 owner，所有后续迁移才有可靠目标。
+2. **纯世界 release**：先建立兼容的新语义包，再让网关读取；不能先删除旧 reader。
+3. **中立世界协议**：用两个不同需求适配器验证协议，形成 source plan、per-run Context Manifests 和发布 source manifest。
+4. **阶段与谱系闸门**：收口顶层 handoff、显式开始、ProductRelease/runtime 绑定。
+5. **同源与入口门控**：节点旁路、世界能力命名、实验产品可见性并行收口。
+6. **产品专项开发**：框架稳定后，各具体产品独立设计和验收；总架构不替它们决定功能。
 
-### 第二批：独立创作产品
+## 9. 迁移与兼容原则
 
-短篇 → 剧本 → 漫画逐个达到完整产品验收；每个完成后再开下一个，不再以同时出现三个工作台为完成。
+- 不删除旧表解决 owner 问题；先登记新身份与关系，再双读、影子构建、用户确认、单写和最终收口。
+- 不把所有旧 Project 自动公开为世界；歧义项默认保留为独立作品。
+- 不丢弃旧 WorldRelease 中的产品数据或媒资；按来源建立产品迁移候选。
+- 不让新旧路径长期双写 Canon；双读阶段必须有对照证据和退出条件。
+- 迁移记录保留 schema、old→new ID、owner、source/release/media hash、冲突、跳过、失败和 dry-run 报告。
+- 在隔离数据库验证新建、旧库升级、导出导入、删除、复制、引用重映射、失败回滚和恢复；不得使用作者当前浏览器项目做迁移试验。
 
-### 第三批：世界引擎纠偏
+## 10. 架构完成门
 
-`WORLD-REL` → `WORLD-OUT` → `WORLD-UI`。先建立可迁移的新 release 和统一出口，再删除旧 reader/运行入口；顺序不可反过来。
+七项偏差只有同时满足以下证据才可关闭：
 
-### 第四批：上层产品
+1. 总纲、开发宪法、数据治理、产品契约和路线图口径一致；
+2. 三注册表完整表达新增 source、AI 候选写入和表生命周期；
+3. 静态检查阻止世界包污染、世界直达 runtime、产品直读世界底表、官方节点 fallback 和未门控入口；
+4. schema/迁移/导入导出/删除/复制/重映射正反例通过；
+5. WorldReference、source plan、Brief、per-run Context Manifests、发布 source manifest、ProductRelease lineage 和 runtime binding 可从持久记录重放；
+6. 至少两个不同产品需求适配器证明“同协议、不同 payload”，并证明生产期渐进读取仍受锁定 plan 约束，而无需完成这两个产品的全部功能；
+7. 多用户/多产品引用同一世界时 owner 隔离，运行不回写，世界升级不静默改变旧产品；
+8. 定向测试、`check:architecture`、`check:required-tables`、TypeScript、完整 CI、适用的隔离 E2E 和 `git diff --check` 通过。
 
-跑团作为标准纵切面。它证明世界只读引用、产品媒资、信息隔离、build/release、可运行和私域演化后，才提炼共享设施给角色聊天、AI 小镇和文字游戏。
-
-## 9. 每批共同质量门
-
-每个纠偏批次至少通过：
-
-1. 三注册表关联闭包和架构检查；
-2. schema/迁移/导入导出/删除/复制/重映射正反例；
-3. stale、刷新、中断、重试、非法 JSON、超长输出和预算不足；
-4. project/world/work/product/session 多作用域隔离；
-5. release/hash 不可变和来源重现；
-6. 定向单测、完整 Vitest、TypeScript、lint、build、CI；
-7. 独立浏览器数据中的真实 UI/API E2E；
-8. 用户任务完成度与人工体验验收，不用“所有测试通过”替代内容质量。
-
-任何迁移若无法证明不丢数据，应停止扩大修改、保留隔离备份和失败证据，再做专项裁决。
-
-## 10. 当前项目状态地图
-
-| 产品/体系 | 当前成熟度 | 下一可验证里程碑 |
-| --- | --- | --- |
-| 共享工程底座 | 较强 | 收口产品身份与 release 语义，不复制新底座 |
-| 分步骤长篇 | 主路径基础较强，真实全量验收不足 | 种族切片 → 全字段矩阵 → 真实百万字分层验收 |
-| 节点模式 | DAG/运行/采纳强，生成同源不完整 | 官方模板 100% 映射正式长篇 Skill/Harness |
-| 短篇 | 部分实现 | 独立 owner、入口、完整创作与导出 E2E |
-| 小说转剧本 | 数据/工作台基础 | 独立主 Agent 端到端交付一个真实剧本 |
-| 小说转漫画 | 数据/工作台/媒资基础 | 视觉一致性与漫画语言驱动的完整成品闭环 |
-| 世界引擎 | release/分享基础存在，边界未对齐 | V3 纯语义 release + 统一渐进式数据出口 |
-| 跑团 | 上层中最接近标准纵切面 | 绑定 V3 release 后真实多人信息隔离 E2E |
-| 角色聊天 | 多角色/生产/运行基础 | 单/多角色正式产品闭环，再独立 AI 小镇 |
-| AI 小镇 | 未形成独立产品 | 在角色聊天稳定后单独立项 |
-| 文字冒险/AVG/开放世界 | 多种实验基础，完成度不一 | 依次完成，不共用一个 type 开关冒充产品 |
-| 平台/市场/商业化 | 提前存在实验代码 | 默认隐藏，阶段 F 再解锁 |
+这里的“完成”只表示 StoryForge 的大框架稳定：后续功能能够在正确阶段、正确 owner、正确版本和正确协议内开发。它不表示某个具体产品已经好用，也不替代产品自己的真实体验验收。
 
 ## 11. 最终裁决
 
-StoryForge 当前不是“完全跑不通”，也不是“已经能够稳定交付所有愿景”。更准确地说：
+StoryForge 当前没有必要再做一次大重构。已有 Harness、Context Gateway、三注册表、版本和产品设施可以继续使用。真正需要一次做稳的是以下骨架：
 
-> 项目已经拥有一套相当扎实、甚至超前于当前产品完成度的共享叙事工程底座；真正需要纠正的是各产品对这套底座的所有权、发布边界和完成顺序。
+> 独立产品保持独立；世界只封存语义；世界衍生产品严格经过“世界来源 → 用户定向与发指令 → 产品执行与交付”；统一的是协议和治理，不是每个产品的数据内容与功能实现。
 
-后续最重要的纪律有三条：
-
-1. 不再以新增页面、表或 Agent 数量衡量完成，而以一个用户任务的生产—采纳—发布—运行闭环衡量；
-2. 不再因共用数据库根对象而把独立作品误称为世界，也不因世界可被引用而让它拥有上层媒资和运行；
-3. 不再重写已经成立的 Harness/Context/registry 基础，只消除旁路、补真实验收，并通过迁移把产品边界变成代码事实。
-
-按本报告顺序完成后，项目会从“能力很多但边界模糊”进入“产品独立、底座共享、世界可复用、上层可持续演化”的目标形态。以后继续迭代的主要原因才会逐步转向模型能力、检索技术、媒资技术和真实用户体验，而不是重复修补本应一次明确的架构关系。
+这套治理完成后，跑团、角色聊天、AI 小镇和各类文字游戏可以按各自需求分头开发，但必须把自己接入相同的身份、交接、来源、版本、媒资 owner、运行隔离和演化谱系。这样才能做到“齐头并进而不互相污染”，同时避免为了追求表面统一再次制造一个庞大而僵硬的单体系统。
