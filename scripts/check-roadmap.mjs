@@ -28,7 +28,7 @@ const docs = Object.fromEntries(Object.entries(files).map(([name, file]) => [nam
 
 const stageHeadings = [
   '阶段 A · 权威与主干',
-  '阶段 B · 分步骤长篇与节点同源',
+  '阶段 B · 保持分步骤长篇基线并完成节点同源',
   '阶段 C · 独立创作产品',
   '阶段 D · 世界引擎',
   '阶段 E · 上层垂直产品',
@@ -42,7 +42,7 @@ for (const heading of stageHeadings) {
   priorIndex = Math.max(priorIndex, index)
 }
 
-const requiredIds = [
+const capabilityIds = [
   'A-GOV-01', 'A-GOV-02',
   'B-LF-01', 'B-LF-02', 'B-LF-03', 'B-LF-04', 'B-LF-05', 'B-LF-06',
   'B-NODE-01', 'B-NODE-02',
@@ -51,9 +51,33 @@ const requiredIds = [
   'E-TTRPG-01', 'E-CHAT-01', 'E-TOWN-01', 'E-TEXTADV-01', 'E-AVG-01', 'E-OPENWORLD-01',
   'F-PLATFORM-01', 'F-COMMERCIAL-01',
 ]
-for (const id of requiredIds) {
-  if (!docs.current.includes(id)) failures.push(`current roadmap missing task: ${id}`)
+const activeTaskIds = [
+  'A-GOV-02',
+  'B-NODE-01', 'B-NODE-02',
+  'C-SHORT-01', 'C-SCREENPLAY-01', 'C-COMIC-01',
+  'D-WORLD-01', 'D-WORLD-02', 'D-WORLD-03', 'D-WORLD-04',
+  'E-TTRPG-01', 'E-CHAT-01', 'E-TOWN-01', 'E-TEXTADV-01', 'E-AVG-01', 'E-OPENWORLD-01',
+  'F-PLATFORM-01', 'F-COMMERCIAL-01',
+]
+const completedCapabilityIds = [
+  'A-GOV-01',
+  'B-LF-01', 'B-LF-02', 'B-LF-03', 'B-LF-04', 'B-LF-05', 'B-LF-06',
+]
+for (const id of capabilityIds) {
   if (!docs.baseline.includes(id)) failures.push(`capability baseline missing task: ${id}`)
+}
+for (const id of activeTaskIds) {
+  if (!docs.current.includes(id)) failures.push(`current roadmap missing active task: ${id}`)
+}
+for (const id of completedCapabilityIds) {
+  if (!docs.completed.includes(id)) failures.push(`completed index missing capability: ${id}`)
+}
+
+const currentTaskRows = docs.current.split('\n').filter(line => /^\| [A-Z]/.test(line))
+for (const id of completedCapabilityIds) {
+  if (currentTaskRows.some(line => line.includes(`| ${id} |`))) {
+    failures.push(`completed capability returned to active roadmap: ${id}`)
+  }
 }
 
 for (const status of ['implemented', 'partial', 'missing', 'experimental']) {
@@ -68,7 +92,12 @@ for (const [id, status] of [
   ['BASE-AI-01', 'implemented'],
   ['BASE-HARNESS-01', 'implemented'],
   ['BASE-CTX-01', 'implemented'],
+  ['B-LF-01', 'implemented'],
+  ['B-LF-02', 'implemented'],
+  ['B-LF-03', 'implemented'],
+  ['B-LF-04', 'implemented'],
   ['B-LF-05', 'implemented'],
+  ['B-LF-06', 'implemented'],
 ]) {
   const row = docs.baseline.split('\n').find(line => line.includes(`| ${id} |`)) ?? ''
   if (!row.includes(`| ${status} |`)) failures.push(`${id} must be ${status} in capability baseline`)
@@ -103,7 +132,7 @@ for (const [name, file] of Object.entries(files)) {
   }
 }
 
-if (!docs.charter.includes('阶段 B：完成分步骤长篇与节点同源')) {
+if (!docs.charter.includes('阶段 B：保持分步骤长篇基线并完成节点同源')) {
   failures.push('master charter no longer contains the stage B dependency')
 }
 if (!docs.authority.includes('docs/roadmap/CAPABILITY-BASELINE.md')) {
@@ -116,4 +145,4 @@ if (failures.length) {
   process.exit(1)
 }
 
-console.log(`roadmap check passed: ${requiredIds.length} charter-aligned tasks across stages A-F`)
+console.log(`roadmap check passed: ${activeTaskIds.length} active tasks and ${completedCapabilityIds.length} completed capabilities across stages A-F`)

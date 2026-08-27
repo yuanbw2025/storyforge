@@ -1,10 +1,10 @@
 # StoryForge 项目架构治理对齐审计
 
-> 审计版本：2.0.0<br>
+> 审计版本：2.1.0<br>
 > 复审日期：2026-08-27<br>
-> 对照权威：[StoryForge 项目总纲](../PROJECT-MASTER-CHARTER.md) 1.1.0<br>
+> 对照权威：[StoryForge 项目总纲](../PROJECT-MASTER-CHARTER.md) 1.2.0<br>
 > 审计对象：统一主干 `59eea419` 的产品边界、所有权、阶段流转、版本与共享协议<br>
-> 状态：取代本文件 1.0.0 的审计口径；只作为架构治理与纠偏依据，不作为任何具体产品已经设计完成或已经可交付的证明
+> 状态：取代本文件 1.0.0 的审计口径；只作为架构治理与纠偏依据。除当前代码已复证的 Phase 5 分步骤长篇基线外，不作为其它具体产品已经设计完成或可交付的证明
 
 ## 1. 为什么重做审计
 
@@ -19,6 +19,8 @@
 > 总架构只规定各产品怎样进入共同框架、数据怎样流转以及哪些边界不能跨越；具体产品怎样做，等该产品开工时专项分析。
 
 因此，本审计保留架构冲突，转交产品实现与质量事项，不再用总体审计替代产品设计。
+
+2.1.0 进一步纠正了另一类口径错误：Phase 5 已经完成分步骤长篇主体、真实 API 纵切面和百万字符工程规模门，不能因长期作者质量研究尚在继续，就把种族字段推广、完整 Harness、持续演化和长程记忆重新列为待施工功能。产品质量可持续提升，不使已验收的工程主链倒退为“未完成”。
 
 ## 2. 审计边界
 
@@ -66,10 +68,12 @@ flowchart TB
     B --> W
     B --> U
     L <-->|"同一能力与 Canon"| N
+    L -->|"作者显式派生"| W
+    S -->|"作者显式派生"| W
     W -->|"只读不可变世界来源"| U
 ```
 
-独立长篇等产品不经过世界引擎也必须完整可用。上层产品可以引用世界，但世界不成为它们的 production、媒资或 runtime 容器。
+独立长篇等产品不经过世界引擎也必须完整可用。作者可以把长篇或短篇已确认内容显式、一键派生为世界草稿/版本而无需复制粘贴；该动作保存来源快照，不改变源作品 owner，也不建立自动同步。小说转剧本、小说转漫画当前不提供这条派生路径。上层产品可以引用世界，但世界不成为它们的 production、媒资或 runtime 容器。
 
 ### 3.2 世界衍生产品的三阶段主链
 
@@ -95,7 +99,7 @@ flowchart LR
 | `ProductSourceManifest` | production 各 run 实际读取/采用/缺失/冲突/遗漏的世界资源聚合快照 | product build/release | 超出 SourcePlan；追写旧 release；发布时未冻结 hash |
 | `ProductReleaseLineage` | release/hash、父 release、source plan/manifest、brief/build/quality、兼容结论 | 产品实例 | 覆盖旧 release；运行随世界草稿漂移 |
 
-这些是逻辑语义，不强制所有产品共用相同物理表。架构验收的是每个产品都能映射和追溯，而不是它们的数据内容完全相同。
+这些是逻辑语义，不强制所有产品共用相同物理表。架构验收的是每个产品都能映射和追溯，而不是它们的数据内容完全相同。它们也不是五份都由主 Agent 自由撰写的文本：系统生成/校验 WorldReference；主 Agent 可起草 Brief/SourcePlan，用户确认 Brief、系统校验 plan；SourceManifest 从真实 run manifests 聚合；lineage 由发布系统按父版本、build、quality 和兼容证据生成并冻结。
 
 ### 3.4 世界资源统一协议
 
@@ -111,11 +115,11 @@ flowchart LR
 → ProductRelease 聚合并冻结 ProductSourceManifest
 ```
 
-网关统一版本、寻址、resource ID、来源、权限、充分性、渐进披露和遗漏语义。它不返回一份覆盖所有产品的固定 payload。用户开始时只能冻结世界版本、需求与读取规则；Agent 在该不可变版本内继续发现和读取资源，每个 run 保存不可变 Context Manifest，发布时才形成聚合 source manifest。runtime 后续读取归 session/run，不改写旧 release。新产品接入时增加产品需求适配器和必要资源登记，不修改一个不断扩张的中心清单。
+网关统一版本、寻址、resource ID、来源、权限、充分性、渐进披露和遗漏语义。它不返回一份覆盖所有产品的固定 payload。每个产品适配器可以确定稳定必读、建议/选读、条件读取和禁止读取；类型化代码/schema 约束版本、权限和硬边界，Skill/Prompt 可辅助把开放式用户目标转成语义查询。用户开始时只能冻结世界版本、需求与读取规则；Agent 在该不可变版本内继续发现和读取资源，每个 run 保存不可变 Context Manifest，发布时才形成聚合 source manifest。runtime 后续读取归 session/run，不改写旧 release。新产品接入时增加产品需求适配器和必要资源登记，不修改一个不断扩张的中心清单。
 
 ### 3.5 不可破坏的架构不变量
 
-1. 独立作品不会仅因存在内部 `World/Work` scope 就自动成为可分享世界。
+1. 独立作品不会仅因存在内部 `World/Work` scope 就自动成为可分享世界；长篇/短篇只有在作者显式派生时才产生世界草稿/版本，且源作品保持独立。
 2. `WorldRelease` 只包含世界叙事语义、目录、能力画像和证据，不包含产品媒资、production、build、session 或运行状态。
 3. 正式上层运行必须经过产品阶段二和阶段三，世界页面不能直接创建 runtime。
 4. 正式生产绑定不可变 WorldRelease 和 SourcePlan；正式运行绑定不可变 ProductRelease。运行若仍需查询世界，只能沿 ProductRelease 继承的 SourcePlan 读取同一不可变 release，并把证据写入 session/run manifest，不能修改 release manifest。
@@ -123,7 +127,7 @@ flowchart LR
 6. 世界资源协议不暴露底表，也不要求不同产品读取相同 payload。
 7. ProductRelease 的升级和演化创建新版本，有父版本与兼容证据；旧版本和旧存档可继续定位。
    产品目标、配置、世界版本、资源需求或读取权限变化时，同时创建新 Brief/SourcePlan，不能改写旧 plan。
-8. 节点模式和分步骤长篇共享 Canon、Skill/Harness、Context、Adoption 与生命周期。
+8. 节点模式和分步骤长篇共享 Canon、Skill/Harness、Context、Adoption 与生命周期；节点可以更自由、更细粒度、更可视和可组合，但不能以自由度为由建立平行后端。
 9. 未完成或发展顺序后置的能力默认实验性门控，不以页面存在宣称正式产品。
 
 ## 4. 已有能力与保留裁决
@@ -134,6 +138,7 @@ flowchart LR
 | durable Harness | 保留，不重造 runner | 已有 contract、checkpoint、stale、repair、receipt 基础 |
 | Context Gateway | 保留并扩展 immutable WorldRelease provider | 已具备目录、检索、详情/原文和遗漏证据模型 |
 | Canon/事实/关系/时间与长程记忆 | 保留 | 独立长篇与世界语义资源均可复用，但 owner 必须分开 |
+| 分步骤长篇 Phase 5 主链 | 已完成并保留，不重复施工 | 世界观/故事/角色/主支线/大纲/细纲/正文/持续演化、真实 API 纵切面与百万字符工程规模门已有证据 |
 | 节点 DAG、运行与采纳 | 保留 | 需要消除官方节点通用生成 fallback，而不是重建节点系统 |
 | World code/release/hash | 保留并升级语义边界 | 已有版本基础，可兼容迁移为纯世界 release |
 | product production/build/runtime 设施 | 保留为产品侧基础 | 不迁回世界；是否足够由各产品专项验收 |
@@ -152,13 +157,13 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 
 | ID | 严重度 | 当前偏差 | 目标不变量 |
 |---|---|---|---|
-| ARCH-01 | P0 | 每个 Project 被自动赋予并投影为世界身份 | 独立作品与可分享世界显式分离 |
+| ARCH-01 | P0 | 每个 Project 被自动赋予并投影为世界身份 | 独立作品与可分享世界显式分离；长篇/短篇可显式一键派生世界 |
 | ARCH-02 | P0 | WorldRelease 打包策略允许产品内容、AVG 媒资和运行模块进入世界 | WorldRelease 纯语义、产品数据完全外置 |
 | ARCH-03 | P0 | 世界页面可以绕过产品交互/生产阶段直接创建诊断 runtime | 所有正式运行经过三阶段交接 |
 | ARCH-04 | P1 | 顶层入口仍可能用可变 `Project.worldVersion` 表达绑定；跨产品 release 谱系没有共同治理闸门 | WorldReference 与 ProductReleaseLineage 可验证 |
-| ARCH-05 | P1 | 跑团、角色互动、游戏生产和文字游戏各自解析 WorldRelease/table selection | 中立网关 + 产品需求适配器 + source plan/run/release manifests |
-| ARCH-06 | P1 | 部分官方节点仍回退通用 `chat()`，没有逐能力复用分步骤正式路径 | 节点与分步骤同源 |
-| ARCH-07 | P1 | 世界能力画像混入 runtime/assets 语义，未完成产品/平台入口仍可能作为正式功能暴露 | 能力域与发展阶段均有机器门控 |
+| ARCH-05 | P1 | 各产品拥有不同需求是正确的，但当前还各自解析 WorldRelease/table selection | 产品专用必读/选读/条件规则 + 中立可靠读取网关 + source plan/run/release manifests |
+| ARCH-06 | P1 | 部分官方节点仍回退通用 `chat()`，没有逐能力复用分步骤正式路径 | 节点作为更自由的可视编排超集，同时与分步骤后端同源 |
+| ARCH-07 | P1 | 世界能力画像混入 runtime/assets；产品成熟度又缺少统一入口门控 | 07A 世界语义能力边界与 07B 产品发布状态门分别治理 |
 
 ## 6. 偏差证据与架构修复包
 
@@ -174,11 +179,13 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 
 1. 定义内部 workspace scope、独立作品、世界草稿、可分享世界四类身份，禁止用“存在 World 行”推断产品身份。
 2. 创建命令按产品 owner 分开；只有显式创建/发布世界才生成公共 world code。
-3. 世界列表只读取显式世界身份，不再对全部 Project 做投影。
-4. 旧 Project 先生成只读分类报告；歧义项由用户确认，默认保留为独立作品。
-5. 通过 `PROJECT_TABLES` 派生导出、导入、删除、复制和 ID 重映射，并验证两个 owner 互不误删。
+3. 为长篇、短篇提供“基于作品创建世界草稿”和“封存为世界版本”的一键入口，自动选取/投影已确认内容并保存 source work、revision、范围和 hash；不移动源作品、不自动同步。
+4. 小说转剧本、小说转漫画继续保持独立，不获得隐式世界身份或封装入口。
+5. 世界列表只读取显式世界身份，不再对全部 Project 做投影。
+6. 旧 Project 先生成只读分类报告；歧义项由用户确认，默认保留为独立作品。
+7. 通过 `PROJECT_TABLES` 派生导出、导入、删除、复制和 ID 重映射，并验证两个 owner 互不误删。
 
-**关闭条件**：创建任一独立作品不新增共享世界；显式发布才得到 world code/release；旧数据无损且来源关系可追溯。
+**关闭条件**：创建任一独立作品不新增共享世界；长篇/短篇显式派生无需复制粘贴且得到可追溯草稿/release；源作品后续修改不改变旧世界；剧本/漫画保持独立；旧数据无损且来源关系可追溯。
 
 ### ARCH-02 · WorldRelease 边界污染
 
@@ -231,7 +238,7 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 
 **关闭条件**：从入口到 runtime 可追溯 WorldReference → source plan → Brief → run Context Manifests → release SourceManifest → build → ProductRelease → parent/compatibility，且世界草稿变化不改变已有链。
 
-### ARCH-05 · 世界读取是多套产品专用解析器
+### ARCH-05 · 产品需求应独立，但底层世界解析不应复制
 
 **证据**
 
@@ -242,10 +249,11 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 **架构修复包 `GOV-WORLD-PROTOCOL`**
 
 1. 为不可变 WorldRelease 实现中立 `describe/search/read` provider，复用 Context Gateway，不新建第四套上下文系统。
-2. 定义产品需求适配器接口；跑团、聊天和游戏保留自己的需求语义，但删除对世界底表与 manifest 内部结构的直接依赖。
-3. 网关返回 matched/missing/conflict/omitted/insufficient 和 provenance；用户开始时产品冻结 ProductSourcePlan，production 每个 run 保存 Context Manifest，ProductRelease 聚合并冻结 ProductSourceManifest；runtime 新证据归 session/run。
-4. 先让至少两个需求明显不同的现有产品适配同一协议，以证明协议没有偷偷固化某一产品 payload；这不要求两个产品本身完成。
-5. 新旧 reader 双读对照、hash/资源等价后停止旧写入/读取，并由扫描器禁止新增直接解析。
+2. 定义产品需求适配器接口；跑团、聊天和游戏分别声明自己的稳定必读、建议/选读、条件读取和禁止读取，删除对世界底表与 manifest 内部结构的直接依赖。
+3. 允许适配器由类型化代码/配置与产品 Skill 协作，但版本、权限、必读、禁止和条件边界必须机器可校验，不能只靠提示词。
+4. 网关返回 matched/missing/conflict/omitted/insufficient 和 provenance；用户开始时产品冻结 ProductSourcePlan，production 每个 run 保存 Context Manifest，ProductRelease 聚合并冻结 ProductSourceManifest；runtime 新证据归 session/run。
+5. 先让至少两个需求明显不同的现有产品适配同一协议，以证明协议没有偷偷固化某一产品 payload；这不要求两个产品本身完成。
+6. 新旧 reader 双读对照、hash/资源等价后停止旧写入/读取，并由扫描器禁止新增直接解析。
 
 **关闭条件**：产品新增需求只修改自己的 adapter/契约；网关无需新增万能字段；两个产品可从同一 release 得到不同且可追溯的 plan/run/release manifests；后续渐进读取不越过锁定版本和权限，也不改写旧 release。
 
@@ -260,12 +268,13 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 
 1. 建立机器可校验的“分步骤 action ↔ Skill/Run Contract ↔ Context ↔ Adoption ↔ node type”映射。
 2. 所有官方节点必须调用对应正式领域 action；通用节点只允许作为显式实验草稿且不能直接写 Canon。
-3. 架构检查器禁止官方模板落入通用 AI fallback。
-4. 同一数据在两种入口的 revision、stale、刷新、采纳、导入导出和下游读取一致。
+3. 允许节点把一个标准步骤拆成检索、生成、验证、比较、采纳等更细节点，并允许用户替换、组合、分支和检查中间产物；自由度属于图层，不复制领域后端。
+4. 架构检查器禁止官方模板落入通用 AI fallback。
+5. 同一数据在两种入口的 revision、stale、刷新、采纳、导入导出和下游读取一致。
 
-**关闭条件**：官方分步骤模板全部可由节点表达，删除通用 fallback 后仍可运行；不存在第二套 Prompt/DB/记忆体系。
+**关闭条件**：官方分步骤模板全部可由节点表达，删除通用 fallback 后仍可运行；用户可以安全地细拆和重组流程；不存在第二套 Prompt/DB/记忆体系。
 
-### ARCH-07 · 能力域和发展阶段缺少统一门控
+### ARCH-07 · 世界能力边界与产品入口成熟度需要分别门控
 
 **证据**
 
@@ -274,8 +283,8 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 
 **架构修复包 `GOV-CAPABILITY-GATE`**
 
-1. 世界能力画像只表达语义域、覆盖、证据和冲突；移除 runtime，把语义 entity 与 media asset 分开命名。
-2. 产品目录登记 `experimental/internal/preview/released` 等发布状态及进入条件；生产默认不展示未通过正式验收的入口。
+1. **ARCH-07A · 世界能力边界**：世界能力画像只表达世界观、故事、角色、关系、物品、主支线、大纲、细纲、正文等语义域的覆盖、证据和冲突；移除 runtime，把语义 entity 与 media asset 分开命名。它不定义任何上层产品玩法。
+2. **ARCH-07B · 产品入口成熟度**：项目级目录登记 `experimental/internal/preview/released` 等发布状态及进入条件；生产默认不展示未通过正式验收的入口。具体产品用什么标准升级状态，由该产品专项契约决定。
 3. 平台、托管、社区和商业能力继续保留代码与安全维护，但阶段 F 前不得成为核心路径依赖。
 4. 文档、导航、路由与 capability gate 由同一登记派生或检查，避免只改文案。
 
@@ -283,16 +292,17 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 
 ## 7. 从架构审计转交出去的事项
 
-下表不是删除问题，而是把它们交给正确 owner：
+下表区分“已经完成但继续观察”和“未来由具体产品负责”，不得再次把它们塞回总体架构施工：
 
-| 1.0.0 原事项 | 新归属 | 继续保留的架构部分 |
+| 1.0.0 原事项 | 当前裁决/归属 | 继续保留的架构部分 |
 |---|---|---|
-| ALIGN-07 真实百万字验证 | `B-LF-06` 长篇产品质量与认证 | 长篇/节点 owner、三注册表与同源 Harness 仍受架构治理 |
+| ALIGN-07 真实百万字验证 | 10万/30万/100万字符工程规模门与真实模型纵切面已完成；真实作者长期文学一致性归持续质量研究，不是功能 backlog | 长篇/节点 owner、三注册表与同源 Harness 仍受架构治理 |
 | ALIGN-08 短篇完整独立产品 | `C-SHORT-01` 专项产品设计与交付 | 独立作品不能自动世界化，归 ARCH-01 |
 | ALIGN-09 剧本/漫画端到端闭环 | `C-SCREENPLAY-01`、`C-COMIC-01` | 独立 owner、来源 manifest、媒资归属受总架构治理 |
 | ALIGN-11 上层产品纵切面完成 | 阶段 E 各产品专项路线 | 三阶段、接入槽位、不可变引用与不回写受本审计治理 |
 | ALIGN-14 规模、结束与持续体验 | 各产品的阶段二设置和阶段三运行设计 | 用户明确开始、Brief 版本、ProductRelease 谱系由总架构治理 |
-| “种族与民族”全场景矩阵 | `B-LF-02` 长篇/Harness 产品验收 | 它仍可验证三注册表与分步骤/节点同源，但不是全项目架构修复包 |
+| “种族与民族”及全字段推广 | races sealed 金切片、全部现有可生成世界观字段合同、故事/角色治理与 Phase 5 主链均已完成；未来仅按反馈补质量样本 | 节点入口复用同一 races/字段合同仍由 ARCH-06 验证 |
+| 分步骤完整 Harness、持续演化与长程记忆 | Phase 5 已完成，不再进入本审计或路线图的待施工队列 | 未来新增字段/入口继续遵守三注册表与 Harness |
 
 转交后，这些工作不得再被实现成跨产品万能表或万能 Agent。每个产品开工时以总架构的扩展槽位为外框，另写自己的需求、数据、Agent、运行和质量方案。
 
@@ -319,6 +329,8 @@ flowchart TD
 4. **阶段与谱系闸门**：收口顶层 handoff、显式开始、ProductRelease/runtime 绑定。
 5. **同源与入口门控**：节点旁路、世界能力命名、实验产品可见性并行收口。
 6. **产品专项开发**：框架稳定后，各具体产品独立设计和验收；总架构不替它们决定功能。
+
+该顺序不包含“重新完成分步骤长篇”。长篇主链已经完成；这里只修身份派生边界和节点同源。真实作者长期研究可以持续进行，但不阻塞七项架构纠偏或后续产品专项开发。
 
 ## 9. 迁移与兼容原则
 

@@ -1,6 +1,6 @@
 # StoryForge 数据与三注册表治理标准
 
-> 版本：1.1.0 · 生效：2026-08-27 · 权威层级：L1
+> 版本：1.2.0 · 生效：2026-08-27 · 权威层级：L1
 > 本标准规定 AI 读写、表生命周期、数据所有权、世界版本与跨产品流动。实现细节以注册表和 schema 为事实源。
 
 ## 1. 三个单一事实源
@@ -57,17 +57,19 @@
 
 ### 5.1 分步骤长篇与节点
 
-长篇数据属于长篇作品。节点图可引用同一领域数据，节点定义与运行记录另有 owner；节点不得复制长篇 Canon、记忆或采纳表。
+长篇数据属于长篇作品。节点图可引用同一领域数据，节点定义与运行记录另有 owner；节点不得复制长篇 Canon、记忆或采纳表。节点可以把标准步骤拆得更细并自由组合，但正式采纳仍回到同一长篇 owner。
 
 ### 5.2 独立短篇、剧本与漫画
 
-三者分别拥有项目/作品、计划、产物和版本。转换必须保存来源 manifest、源版本与证据。漫画媒资归漫画产品，不归源小说或世界引擎。
+三者分别拥有项目/作品、计划、产物和版本。转换必须保存来源 manifest、源版本与证据。短篇可显式派生世界；剧本和漫画当前不作为世界派生来源。漫画媒资归漫画产品，不归源小说或世界引擎。
 
 ### 5.3 世界引擎
 
 世界引擎只拥有可版本化语义内容、目录、能力画像、来源和封存快照。对外引用必须使用稳定世界编号与不可变版本。草稿修改不得静默改变已引用的 release。
 
 世界引擎不得拥有上层产品的媒体资产、build、session、玩家状态、聊天记忆或私域演化。
+
+世界草稿/版本可以从长篇或短篇已确认内容显式派生。派生自动形成来源 manifest/快照，保留 source work、revision、范围和 hash；不移动源作品、不要求用户复制粘贴，也不建立双向自动同步。
 
 ### 5.4 上层产品
 
@@ -87,6 +89,8 @@
 
 阶段二的配置必须归具体产品，不能落入一个全产品通用设置表。产品可以用时长、章节、回合、分支、参与者或其他专用字段，也可以没有其中任何一项；数据治理只要求 schema 有 owner、版本、来源、用户确认和迁移规则。
 
+五种交接物是逻辑契约，不要求五张万能表。系统负责产生/校验 WorldReference；主 Agent 可起草 Brief/SourcePlan，用户确认 Brief、系统冻结 plan；ProductSourceManifest 只能由真实 run manifests 聚合；ProductReleaseLineage 只能由发布系统按真实父版本、build、quality 和兼容证据生成。
+
 ### 5.6 中立世界资源协议
 
 世界出口统一以下协议语义：
@@ -97,7 +101,7 @@ search(release ref, product requirement) → matched/missing/conflict/omitted de
 read(release ref, resource id, detail level) → versioned resource + provenance/evidence
 ```
 
-具体产品拥有自己的 `WorldRequirementAdapter`（或等价契约），把产品任务转换为资源需求；世界网关不拥有产品配置，也不返回一份面向所有产品的固定 payload。用户开始生产时冻结 WorldReference、适配器版本、需求、权限、缺失策略和咨询 Context Manifest refs 为 `ProductSourcePlan`。生产中的每个 durable run 可继续在该 plan 允许的不可变 release 中渐进式读取，并保存不可变 Context Manifest；ProductRelease 聚合这些证据为 `ProductSourceManifest` 快照并冻结 hash。后续 runtime 的读取归 session/run manifest，不得修改 release 快照。新增产品通过登记适配器和资源需求接入，不得复制世界底层表查询。
+具体产品拥有自己的 `WorldRequirementAdapter`（或等价契约），把产品任务转换为稳定必读、建议/选读、条件读取和禁止读取；世界网关不拥有产品配置，也不返回一份面向所有产品的固定 payload。适配器可以使用类型化代码/配置和产品 Skill，但版本、权限、必读、禁止与条件边界必须机器可校验，不能只写在提示词里。用户开始生产时冻结 WorldReference、适配器版本、需求、权限、缺失策略和咨询 Context Manifest refs 为 `ProductSourcePlan`。生产中的每个 durable run 可继续在该 plan 允许的不可变 release 中渐进式读取，并保存不可变 Context Manifest；ProductRelease 聚合这些证据为 `ProductSourceManifest` 快照并冻结 hash。后续 runtime 的读取归 session/run manifest，不得修改 release 快照。新增产品通过登记适配器和资源需求接入，不得复制世界底层表查询。
 
 ### 5.7 ProductRelease 谱系
 
