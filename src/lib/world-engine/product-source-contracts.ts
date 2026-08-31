@@ -58,7 +58,7 @@ function uniqueSorted<T extends string>(values: readonly T[]): T[] {
 }
 
 function assertHash(value: string, label: string): void {
-  if (!HASH.test(value)) fail('hash', `${label} 必须是 SHA-256`) 
+  if (!HASH.test(value)) fail('hash', `${label} 必须是 SHA-256`)
 }
 
 function assertStableKey(value: string, label: string): void {

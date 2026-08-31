@@ -113,4 +113,3 @@ export async function rebindWorldReferenceV1(input: {
   const rebound = { ...input.reference, localReleaseRecordId: input.localReleaseRecordId }
   return validateWorldReferenceV1(rebound)
 }
-
