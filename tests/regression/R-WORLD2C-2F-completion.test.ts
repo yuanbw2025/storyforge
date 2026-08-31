@@ -14,7 +14,8 @@ import {
   inspectWorldPackage,
 } from '../../src/lib/product/world-package'
 import { appendSimulationEvent, branchSimulationSession, readSimulationState } from '../../src/lib/simulation/runtime'
-import type { SimulationSessionKind, WorldReleaseManifestV2, WorkspaceScope } from '../../src/lib/types'
+import type { WorldReleaseManifestV2, WorkspaceScope } from '../../src/lib/types'
+import { createWorkspace as createWorkspaceRoot } from '../../src/lib/world-engine/create-workspace'
 import { createWorldInstance, readBoundInstances } from '../../src/lib/world-engine/instances'
 import { deleteWork, deleteWorld } from '../../src/lib/world-engine/lifecycle'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
@@ -41,18 +42,15 @@ const PACKAGE_OPTIONS = {
 }
 
 async function createWorkspace(name = 'WORLD-2 完成项目') {
-  const now = Date.now()
-  const projectId = await db.projects.add({
+  return createWorkspaceRoot({
     name,
     genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: '世界引擎完成判据',
-    targetWordCount: 100000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  return ensureWorkspaceOwnership(projectId)
+    targetWordCount: 100_000,
+    enableMultiWorld: true,
+  }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
 }
 
 function stages(prefix: string) {
@@ -130,8 +128,8 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     } as any)
     await createWorldInstance({
       scope: scopeA,
-      kind: 'chatgame',
-      title: 'A 的角色聊天',
+      kind: 'npc-evolution',
+      title: 'A 的私域演化沙箱',
       draftSnapshotHash: 'draft-a',
       narrativeModuleId: moduleA.id,
     })
@@ -385,14 +383,27 @@ describe('WORLD-2D · executable narrative blueprint completion', () => {
     const ownership = await createWorkspace('活动作品 A')
     const workB = await createWorldWork(ownership.scope.projectId, { title: '非活动作品 B' })
     const scopeB = { ...ownership.scope, workId: workB.id! }
-    await createNarrativeModule({ scope: ownership.scope, owner: 'work', kind: 'main', title: 'A 主线' })
-    const moduleB = await createNarrativeModule({ scope: scopeB, owner: 'work', kind: 'main', title: 'B 主线' })
-    await addNarrativeNode({ scope: scopeB, moduleId: moduleB.id!, key: 'entry', kind: 'entry', title: 'B 入口', successorKeys: ['end'] })
-    await addNarrativeNode({ scope: scopeB, moduleId: moduleB.id!, key: 'end', kind: 'ending', title: 'B 结局' })
+    await db.storyCores.add({
+      projectId: ownership.scope.projectId,
+      worldId: null,
+      workId: ownership.scope.workId,
+      theme: 'A 的故事',
+      premise: '只属于 A',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any)
+    await db.storyCores.add({
+      projectId: scopeB.projectId,
+      worldId: null,
+      workId: scopeB.workId,
+      theme: 'B 的故事',
+      premise: '只属于 B',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any)
     const revision = await createWorldRevision({
       scope: scopeB,
       label: 'B 的修订',
-      selectedNarrativeModuleIds: [moduleB.id!],
     })
     const manifest = JSON.parse(revision.manifestJson) as WorldReleaseManifestV2
     const portableProject = manifest.portableProject as any
@@ -400,12 +411,14 @@ describe('WORLD-2D · executable narrative blueprint completion', () => {
     expect((await db.projects.get(scopeB.projectId))?.activeWorkId).toBe(ownership.scope.workId)
     expect(manifest.workTitle).toBe('非活动作品 B')
     expect(portableProject.project).toMatchObject({
-      name: '非活动作品 B',
+      name: '活动作品 A',
       _activeWorkExportId: portableProject.ownership.workExportId,
     })
     expect(portableProject.works).toHaveLength(1)
     expect(portableProject.works[0].title).toBe('非活动作品 B')
-    expect((manifest.records.narrativeModules as any[]).map(row => row.title)).toEqual(['B 主线'])
+    expect((manifest.records.storyCores as any[]).map(row => row.theme)).toEqual(['B 的故事'])
+    expect(manifest.records.narrativeModules).toBeUndefined()
+    expect(manifest.selectedNarrativeModules).toEqual([])
   })
 })
 
@@ -427,7 +440,6 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
     const revision = await createWorldRevision({
       scope: ownership.scope,
       label: '世界修订一',
-      selectedNarrativeModuleIds: modules.map(module => module.id!),
     })
     const release = await publishWorldRevision(revision.id!, '世界发布一')
     return { ownership, modules, worldviewId, revision, release }
@@ -445,18 +457,18 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
       scope: seeded.ownership.scope,
       label: '世界修订二',
       parentRevisionId: seeded.revision.id,
-      selectedNarrativeModuleIds: seeded.modules.map(module => module.id!),
     })
     const diff = await diffWorldRevisions(seeded.revision.id!, revision2.id!)
-    expect(diff.changed).toEqual(expect.arrayContaining(['worldviews', 'narrativeModules']))
+    expect(diff.changed).toContain('worldviews')
+    expect(diff.changed).not.toContain('narrativeModules')
 
     const pkg = await createWorldPackageV2(seeded.release.id!, PACKAGE_OPTIONS)
     const report = await inspectWorldPackage(pkg)
     expect(report.valid, report.errors.join('；')).toBe(true)
     const importedProjectId = await importWorldPackage(pkg)
     const importedScope = await ensureWorkspaceOwnership(importedProjectId)
-    expect(await db.narrativeModules.where('projectId').equals(importedProjectId).count()).toBe(3)
-    expect((await db.works.get(importedScope.scope.workId))?.activeNarrativeModuleId).toBeTypeOf('number')
+    expect(await db.narrativeModules.where('projectId').equals(importedProjectId).count()).toBe(0)
+    expect((await db.works.get(importedScope.scope.workId))?.activeNarrativeModuleId ?? null).toBeNull()
     expect(await db.worldReleases.where('projectId').equals(importedProjectId).count()).toBe(1)
     expect((await db.projects.get(importedProjectId))?.communityOrigin?.sourceWorldCode)
       .toBe(seeded.release.sourceWorldCode)
@@ -476,48 +488,46 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
       scope: seeded.ownership.scope,
       label: '世界修订二',
       parentRevisionId: seeded.revision.id,
-      selectedNarrativeModuleIds: seeded.modules.map(module => module.id!),
     })
     const release2 = await publishWorldRevision(revision2.id!)
     expect((await listWorldRevisions(seeded.ownership.scope)).map(item => item.revision)).toEqual([2, 1])
     expect((await listWorldReleases(seeded.ownership.scope)).map(item => item.id)).toEqual([release2.id, seeded.release.id])
   })
 
-  it('同一 Release 建立三类 legacy 隔离实例，事件确定回放且分支继承冻结绑定', async () => {
+  it('WorldRelease 只能进入产品制作；正式产品拒绝直跑，私域演化内核可确定回放和分支', async () => {
     const seeded = await seedRelease()
-    const manifest = JSON.parse(seeded.release.manifestJson) as WorldReleaseManifestV2
-    const narrativeModuleExportId = manifest.selectedNarrativeModules[0].exportId
-    const kinds: SimulationSessionKind[] = ['ttrpg', 'chatgame', 'npc-evolution']
-    const sessions = []
-    for (const kind of kinds) {
-      sessions.push(await createWorldInstance({
+    for (const kind of ['ttrpg', 'chatgame'] as const) {
+      await expect(createWorldInstance({
         scope: seeded.ownership.scope,
         kind,
-        title: `${kind} 实例`,
+        title: `${kind} 不得直跑`,
         releaseId: seeded.release.id,
-        releaseNarrativeModuleExportId: narrativeModuleExportId,
         seed: `seed-${kind}`,
-      }))
+      })).rejects.toThrow('必须绑定不可变 GameRelease')
     }
-    for (let index = 0; index < sessions.length; index++) {
-      await appendSimulationEvent({ sessionId: sessions[index].id!, type: 'time.advanced', payload: { amount: index + 1 } })
-    }
-    const states = await Promise.all(sessions.map(session => readSimulationState(session.id!)))
-    expect(states.map(state => state.clock)).toEqual([1, 2, 3])
-    expect(await readSimulationState(sessions[0].id!)).toEqual(await readSimulationState(sessions[0].id!))
-    expect(await readBoundInstances(seeded.ownership.scope)).toHaveLength(3)
+    const session = await createWorldInstance({
+      scope: seeded.ownership.scope,
+      kind: 'npc-evolution',
+      title: '世界私域演化沙箱',
+      draftSnapshotHash: 'private-evolution-draft',
+      seed: 'seed-evolution',
+    })
+    await appendSimulationEvent({ sessionId: session.id!, type: 'time.advanced', payload: { amount: 3 } })
+    expect((await readSimulationState(session.id!)).clock).toBe(3)
+    expect(await readSimulationState(session.id!)).toEqual(await readSimulationState(session.id!))
+    expect(await readBoundInstances(seeded.ownership.scope)).toHaveLength(1)
 
     const child = await branchSimulationSession({
-      parentSessionId: sessions[0].id!,
+      parentSessionId: session.id!,
       throughSequence: 1,
-      title: '跑团分支',
+      title: '私域演化分支',
     })
     expect(child).toMatchObject({
       worldId: seeded.ownership.scope.worldId,
       workId: seeded.ownership.scope.workId,
-      worldReleaseId: seeded.release.id,
+      worldReleaseId: null,
       narrativeModuleId: null,
-      narrativeModuleExportId,
+      narrativeModuleExportId: null,
     })
     expect((await db.worldReleases.get(seeded.release.id!))?.manifestJson).toBe(seeded.release.manifestJson)
   })

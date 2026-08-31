@@ -55,7 +55,7 @@ describe('TEXTSIM-1 · author and player UI', () => {
   afterEach(async () => { await act(async () => root.unmount()); host.remove() })
   afterAll(() => db.close())
 
-  it('作者创建验收模拟、运行 100 回合批量预览、诊断并发布', async () => {
+  it('作者创建验收模拟、运行批量预览并诊断，但正式发布交给制作中心', async () => {
     const owned = await fixture('TEXTSIM 作者 UI')
     await act(async () => {
       root.render(createElement(DialogProvider, null, createElement(NarrativeSimulationWorkbench, { scope: owned.scope })))
@@ -74,10 +74,12 @@ describe('TEXTSIM-1 · author and player UI', () => {
     await click(host, '运行校验')
     await waitFor(() => expect(host.textContent).toContain('所有发布闸门通过'))
     await click(host, '发布版本')
-    await click(host, '校验并发布')
-    await waitFor(() => expect(host.textContent).toContain('已冻结 GameRelease v1'))
+    expect(host.textContent).toContain('制作中心冻结世界来源、用户目标、模拟规则和产品内容')
+    await click(host, '交由制作中心发布')
+    await waitFor(() => expect(host.textContent).toContain('正式发布必须进入制作中心'))
     expect(await db.narrativeSimulationModules.count()).toBe(1)
-    expect(await db.gameReleases.count()).toBe(1)
+    expect(await db.gameReleases.count()).toBe(0)
+    expect(await db.worldReleases.count()).toBe(0)
   }, 30_000)
 
   it('玩家完全离线结算回合、查看报告、自动检查点并进入规则结局', async () => {

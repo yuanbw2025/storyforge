@@ -32,6 +32,7 @@ import {
 } from '../lib/simulation/runtime'
 import { buildSimulationCanonSnapshot } from '../lib/simulation/canon-snapshot'
 import { createWorldInstance } from '../lib/world-engine/instances'
+import { isFormalProductSessionKindV1 } from '../lib/product/runtime-boundary'
 import {
   EMPTY_SIMULATION_STATE,
   type SimulationCheckpoint,
@@ -187,8 +188,8 @@ export const useSimulationRuntimeStore = create<SimulationRuntimeStore>((set, ge
     },
 
     createSession: async input => {
-      if (input.kind === 'storygame' || input.kind === 'chatgame') {
-        throw new Error('新建文字游戏或角色互动必须从正式 GameRelease 进入专用产品界面。')
+      if (isFormalProductSessionKindV1(input.kind)) {
+        throw new Error('新建正式上层产品必须先完成产品制作，并从不可变 GameRelease 或 Build Preview 进入专用产品界面。')
       }
       const frozen = await buildSimulationCanonSnapshot({
         projectId: input.projectId,

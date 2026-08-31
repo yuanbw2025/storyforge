@@ -89,7 +89,7 @@ describe('TEXTADV-1 · author and player UI', () => {
   })
   afterAll(() => db.close())
 
-  it('作者从验收模板检查有限地点内容并发布不可变版本', async () => {
+  it('作者可检查旧有限地点草稿，但正式发布必须交给制作中心', async () => {
     const owned = await fixture()
     await act(async () => {
       root.render(createElement(DialogProvider, null, createElement(AdventureGameWorkbench, { scope: owned.scope })))
@@ -110,10 +110,11 @@ describe('TEXTADV-1 · author and player UI', () => {
     await click(host, '运行校验')
     await waitFor(() => expect(host.textContent).toContain('所有发布闸门通过'))
     await click(host, '发布版本')
-    await click(host, '校验并发布')
-    await waitFor(() => expect(host.textContent).toContain('已冻结 GameRelease v1'))
-    expect(await db.gameReleases.count()).toBe(1)
-    expect(await db.worldReleases.count()).toBe(1)
+    expect(host.textContent).toContain('制作中心冻结世界来源、用户目标、产品内容和媒资')
+    await click(host, '交由制作中心发布')
+    await waitFor(() => expect(host.textContent).toContain('正式发布必须进入制作中心'))
+    expect(await db.gameReleases.count()).toBe(0)
+    expect(await db.worldReleases.count()).toBe(0)
   }, 20_000)
 
   it('玩家用离线正式行动完成主线后才解锁圆满结局', async () => {

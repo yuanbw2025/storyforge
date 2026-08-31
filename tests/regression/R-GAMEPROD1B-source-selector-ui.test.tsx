@@ -5,7 +5,8 @@ import GameProductionStudio from '../../src/components/text-game/GameProductionS
 import { db } from '../../src/lib/db/schema'
 import { seedStoryGameAcceptanceSample } from '../../src/lib/text-game/authoring'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -34,6 +35,7 @@ async function waitFor(assertion: () => void | Promise<void>): Promise<void> {
 async function fixture() {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name: '素材选择 UI', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
     targetWordCount: 10_000, createdAt: now, updatedAt: now,
   } as never) as number
@@ -56,7 +58,7 @@ async function fixture() {
     createdAt: now, updatedAt: now,
   } as never)
   const story = await seedStoryGameAcceptanceSample({ scope: owned.scope })
-  const revision = await createWorldRevision({
+  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
     scope: owned.scope, label: 'UI 冻结来源', selectedNarrativeModuleIds: [story.narrativeModuleId],
   })
   await publishWorldRevision(revision.id!)

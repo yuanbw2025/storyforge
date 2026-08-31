@@ -16,12 +16,14 @@ import {
 } from '../../src/lib/text-game/world-generation'
 import { createTextAdventureInstance } from '../../src/lib/world-engine/instances'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
 import { stampNewRecord } from '../../src/lib/world-engine/scope'
 
 async function worldFixture() {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name: '雾港世界资产', genre: 'mystery', genres: ['mystery'], status: 'drafting',
     description: '用于世界到文字冒险投影', targetWordCount: 50_000, createdAt: now, updatedAt: now,
   } as any) as number
@@ -63,7 +65,7 @@ async function worldFixture() {
   })
   await addNarrativeNode({ scope: owned.scope, moduleId: module.id!, key: 'entry', kind: 'entry', title: '失潮委托', summary: '从码头告示开始调查。', successorKeys: ['ending'], order: 0 })
   await addNarrativeNode({ scope: owned.scope, moduleId: module.id!, key: 'ending', kind: 'ending', title: '钟声归来', summary: '潮汐钟重新响起。', order: 1 })
-  const revision = await createWorldRevision({ scope: owned.scope, label: '雾港冒险源版本', selectedNarrativeModuleIds: [module.id!] })
+  const revision = await createLegacyExecutableWorldRevisionFixtureV1({ scope: owned.scope, label: '雾港冒险源版本', selectedNarrativeModuleIds: [module.id!] })
   const release = await publishWorldRevision(revision.id!)
   return { ...owned, release, characterId }
 }

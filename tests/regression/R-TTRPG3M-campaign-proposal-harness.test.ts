@@ -14,6 +14,7 @@ import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-e
 async function workspace() {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name: 'TTRPG 提案 Harness', genre: 'mystery', genres: ['mystery'], status: 'drafting',
     description: '', targetWordCount: 50_000, createdAt: now, updatedAt: now,
   } as never) as number

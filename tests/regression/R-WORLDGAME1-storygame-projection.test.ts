@@ -12,11 +12,13 @@ import {
 } from '../../src/lib/text-game/world-generation'
 import { createStoryGameInstance } from '../../src/lib/world-engine/instances'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
 
 async function createWorkspace(name: string) {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name,
     genre: 'mystery',
     genres: ['mystery'],
@@ -67,7 +69,7 @@ async function createFrozenWorldStory(name = '雾港主线') {
     summary: '潮声重新越过防波堤。',
     order: 2,
   })
-  const revision = await createWorldRevision({
+  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
     scope: owned.scope,
     label: '雾港世界源版本',
     selectedNarrativeModuleIds: [module.id!],

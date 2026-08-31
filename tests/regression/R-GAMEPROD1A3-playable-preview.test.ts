@@ -19,6 +19,7 @@ const HASH_B = 'b'.repeat(64)
 async function workspace(name: string) {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
     description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
   } as never) as number

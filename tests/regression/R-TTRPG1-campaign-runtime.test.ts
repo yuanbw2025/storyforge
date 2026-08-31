@@ -4,7 +4,7 @@ import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-
 import {
   appendSimulationEvent,
   appendTtrpgTurn,
-  createSimulationSession,
+  createSimulationSessionFixtureV1,
   openTtrpgScene,
   readSimulationState,
   resolveTtrpgCheck,
@@ -27,7 +27,7 @@ async function seedSession() {
     updatedAt: now,
   }
   await db.projects.put(project)
-  const session = await createSimulationSession({
+  const session = await createSimulationSessionFixtureV1({
     projectId: project.id!,
     kind: 'ttrpg',
     title: '潮汐钟楼战役',

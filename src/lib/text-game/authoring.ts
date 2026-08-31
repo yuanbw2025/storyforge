@@ -30,9 +30,7 @@ import type {
 import { NARRATIVE_BEAT_KINDS, NARRATIVE_NODE_KINDS } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables } from '../world-engine/scope'
 import {
-  createWorldRevision,
-  listWorldRevisions,
-  publishWorldRevision,
+  createInternalProductWorldReleaseFixtureV1,
 } from '../world-engine/releases'
 import {
   addNarrativeBeat,
@@ -679,7 +677,7 @@ export async function publishStoryGameDraft(input: {
   label?: string
   fixtureOnly?: true
 }): Promise<StoryGamePublication> {
-  if (input.fixtureOnly !== true) throw new Error('[storygame] 旧草稿发布只允许隔离测试夹具；正式发布必须进入产品制作中心')
+  if (import.meta.env.MODE !== 'test') throw new Error('[storygame] 旧草稿发布只允许隔离测试夹具；正式发布必须进入产品制作中心')
   const scope = await resolveScope({ scope: input.scope })
   const definition = await scopedDefinition(scope, input.gameDefinitionId)
   parseGameDefinitionWorldSource(definition)
@@ -692,14 +690,8 @@ export async function publishStoryGameDraft(input: {
       ...report.unreachableNodeKeys.map(key => `不可达:${key}`),
     ].join('；')}`)
   }
-  const latest = (await listWorldRevisions(scope))[0]
   const label = input.label?.trim() || `${definition.title} · 发布候选`
-  const revision = await createWorldRevision({
-    scope,
-    label,
-    parentRevisionId: latest?.id ?? null,
-  })
-  const worldRelease = await publishWorldRevision(revision.id!, label)
+  const { revision, release: worldRelease } = await createInternalProductWorldReleaseFixtureV1({ scope, label })
   const gameRelease = await publishGameDefinition({
     scope,
     gameDefinitionId: definition.id!,

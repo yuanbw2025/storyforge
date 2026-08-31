@@ -40,6 +40,7 @@ import type {
 import { compileTtrpgCampaignDraftV1 } from '../../src/lib/ttrpg/campaign'
 import { buildTtrpgRuntimePackageV1 } from '../../src/lib/ttrpg/release'
 import { createStoryForgeRulePackV1 } from '../../src/lib/ttrpg/storyforge-rule-pack'
+import { WORLD_CAPABILITY_AREAS } from '../../src/lib/registry/types'
 import type {
   PlayableWorldBundleV1,
   WorldReleaseManifestV2,
@@ -147,10 +148,39 @@ async function ttrpgBundle(): Promise<{
   openingSceneKey: string
   releaseHash: string
 }> {
+  const sourceManifestBase = {
+    sourceKind: 'world-draft' as const,
+    sourceWorkspaceUid: 'workspace.hosted-mist',
+    sourceWorldCode: 'hosted-mist',
+    sourceWorkCode: 'work.hosted-platform-acceptance',
+    selectedResourceIds: [],
+    omittedResourceIds: [],
+  }
   const worldManifest: WorldReleaseManifestV2 = {
-    schema: 'storyforge.world-package', version: 2,
+    schema: 'storyforge.world-package', version: 2, semanticContract: 3,
     worldCode: 'hosted-mist', worldName: '托管雾港', workTitle: '托管平台验收战役',
     selectedTables: [], selectedNarrativeModules: [], dependencies: [], records: {}, portableProject: {},
+    capabilityProfile: WORLD_CAPABILITY_AREAS.map(area => ({
+      area,
+      resourceCount: 0,
+      rowCount: 0,
+      status: 'missing',
+      selectionStatus: 'omitted',
+      selectedResourceCount: 0,
+      omittedResourceCount: 0,
+      confirmedRowCount: 0,
+      candidateRowCount: 0,
+      conflictRowCount: 0,
+      omittedRowCount: 0,
+      latestRevision: null,
+      originalEvidenceAvailable: false,
+      queryableIndexAvailable: false,
+    })),
+    resourceCatalog: [],
+    sourceManifest: {
+      ...sourceManifestBase,
+      contentHash: await legacyHash(sourceManifestBase),
+    },
   }
   const worldContentHash = await legacyHash(worldManifest)
   const rulePack = createStoryForgeRulePackV1()

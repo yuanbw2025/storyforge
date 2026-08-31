@@ -30,7 +30,6 @@ const ImportDocPanel = lazy(() => import('../components/system/ImportDocPanel'))
 const PromptManagerPanel = lazy(() => import('../components/settings/prompt/PromptManagerPanel'))
 const NodeAuthoringWorkspace = lazy(() => import('../components/node-authoring/NodeAuthoringWorkspace'))
 const RagLibraryPanel = lazy(() => import('../components/retrieval/RagLibraryPanel'))
-const SimulationRuntimePanel = lazy(() => import('../components/simulation/SimulationRuntimePanel'))
 const DataManagementPanel = lazy(() => import('../components/data/DataManagementPanel'))
 const WorldRulesPanel = lazy(() => import('../components/worldview/WorldRulesPanel'))
 const StoryCorePanel = lazy(() => import('../components/worldview/StoryCorePanel'))
@@ -307,7 +306,6 @@ export default function WorkspacePage() {
     'editor',
     'foreshadow',
     'visual-workflows',
-    'simulation-runtime',
   ])
   const isImmersiveModule = immersiveModules.has(activeModule)
   const copilotWorldGroupId = project.enableMultiWorld ? activeWorldGroupId : null
@@ -483,13 +481,21 @@ export default function WorkspacePage() {
       case 'rag-library':
         return <RagLibraryPanel project={project} />
       case 'simulation-runtime':
-        return <SimulationRuntimePanel
-          project={project}
-          worldGroupId={copilotWorldGroupId}
-          workspaceScope={project.id != null && project.activeWorldId != null && project.activeWorkId != null
-            ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
-            : undefined}
-        />
+        return <section className="mx-auto mt-12 max-w-2xl rounded-xl border border-border bg-bg-surface p-8">
+          <p className="text-xs font-semibold uppercase tracking-wider text-accent">ARCH-03 · LEGACY ROUTE</p>
+          <h2 className="mt-2 text-xl font-semibold text-text-primary">互动运行已移至独立上层产品</h2>
+          <p className="mt-3 text-sm leading-6 text-text-secondary">
+            分步骤工作区只维护小说 Canon，不再从当前作品、世界草稿或 WorldRelease 直接创建跑团、角色聊天和文字游戏。
+            请先在产品中心完成世界引用、用户定向与产品生产，再从冻结的 Product Release 启动运行实例。
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="mt-6 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+          >
+            前往产品中心
+          </button>
+        </section>
       case 'detailed-outline':
         return <DetailedOutlinePanel
           project={project}

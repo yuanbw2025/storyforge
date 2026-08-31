@@ -10,7 +10,7 @@ import type {
   NarrativeBeat, NarrativeChoice, NarrativeModule, NarrativeNode, WorkspaceScope, WorldRelease, WorldRevision,
 } from '../types'
 import { AVG_MEDIA_KINDS } from '../types'
-import { createWorldRevision, listWorldRevisions, publishWorldRevision } from '../world-engine/releases'
+import { createInternalProductWorldReleaseFixtureV1 } from '../world-engine/releases'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
 import { putMediaBlobObject, readAvgMediaBlobData } from '../game-production/media-blob-store'
 import { sanitizeSvg } from '../utils/sanitize-svg'
@@ -275,7 +275,7 @@ export async function deleteAvgMediaAsset(input: { scope: WorkspaceScope; mediaA
 }
 
 export async function publishAvgGame(input: { scope: WorkspaceScope; gameDefinitionId: number; label?: string; fixtureOnly?: true }): Promise<AvgPublication> {
-  if (input.fixtureOnly !== true) throw new Error('[avg] 旧草稿发布只允许隔离测试夹具；正式发布必须进入产品制作中心')
+  if (import.meta.env.MODE !== 'test') throw new Error('[avg] 旧草稿发布只允许隔离测试夹具；正式发布必须进入产品制作中心')
   const scope = await resolveScope({ scope: input.scope })
   const definition = await definitionInScope(scope, input.gameDefinitionId)
   parseGameDefinitionWorldSource(definition)
@@ -283,10 +283,8 @@ export async function publishAvgGame(input: { scope: WorkspaceScope; gameDefinit
   if (!graph.valid) throw new Error(`[avg] 叙事内容不可发布:${graph.errors.join('；')}`)
   const report = await validateAvgGame(scope, definition.id!)
   if (!report.valid) throw new Error(`[avg] 演出内容不可发布:${report.errors.join('；')}`)
-  const latest = (await listWorldRevisions(scope))[0]
   const label = input.label?.trim() || `${definition.title} · AVG 发布`
-  const revision = await createWorldRevision({ scope, label, parentRevisionId: latest?.id ?? null })
-  const worldRelease = await publishWorldRevision(revision.id!, label)
+  const { revision, release: worldRelease } = await createInternalProductWorldReleaseFixtureV1({ scope, label })
   const gameRelease = await publishGameDefinition({ scope, gameDefinitionId: definition.id!, worldReleaseId: worldRelease.id!, label, fixtureOnly: true })
   return { report, revision, worldRelease, gameRelease }
 }

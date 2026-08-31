@@ -35,6 +35,16 @@ const NORMALIZATION_VERSION = WORLD_RELEASE_NORMALIZATION_VERSION_V1
 const HASH = /^[a-f0-9]{64}$/
 const MAX_PAGE = 100
 const MAX_READ_TOKENS = 100_000
+const RELEASE_CACHE_LIMIT = 24
+
+const validatedReleaseCache = new Map<number, LoadedReleaseV1>()
+const projectedReleaseCache = new Map<string, Promise<ProjectedReleaseResourceV1[]>>()
+
+function rememberBounded<K, V>(map: Map<K, V>, key: K, value: V): void {
+  map.delete(key)
+  map.set(key, value)
+  while (map.size > RELEASE_CACHE_LIMIT) map.delete(map.keys().next().value!)
+}
 
 interface LoadedReleaseV1 {
   release: WorldRelease & { id: number }
@@ -51,6 +61,9 @@ interface ProjectedReleaseResourceV1 {
   descriptor: ContextResourceDescriptorV1
   original: string
   focused: string
+  table: string
+  coordinate: string
+  row: unknown
 }
 
 interface CursorV1 {
@@ -65,12 +78,7 @@ export interface WorldReleaseDescriptionV1 {
   version: 1
   worldReference: Awaited<ReturnType<typeof createWorldReferenceV1>>
   sourceManifestHash: string
-  capabilities: Array<{
-    area: WorldCapabilityArea
-    resourceCount: number
-    rowCount: number
-    status: 'available' | 'partial' | 'missing'
-  }>
+  capabilities: Array<NonNullable<WorldReleaseManifestV2['capabilityProfile']>[number]>
   resources: Array<{
     resourceId: string
     area: WorldCapabilityArea
@@ -125,6 +133,18 @@ async function load(scope: FrozenResourceScopeV1): Promise<LoadedReleaseV1> {
   if (scope.projectId !== release.projectId || (scope.worldId != null && scope.worldId !== release.worldId)) {
     fail('scope', 'WorldRelease 不属于冻结来源 scope')
   }
+  const cached = validatedReleaseCache.get(frozen.releaseId)
+  if (cached
+    && cached.release.projectId === release.projectId
+    && cached.release.worldId === release.worldId
+    && cached.release.sourceWorldCode === release.sourceWorldCode
+    && cached.release.version === release.version
+    && cached.release.manifestJson === release.manifestJson
+    && cached.release.contentHash === release.contentHash
+    && (release.releaseUid == null || cached.releaseUid === release.releaseUid)) {
+    rememberBounded(validatedReleaseCache, frozen.releaseId, cached)
+    return cached
+  }
   await assertReleaseUnchanged(release.id)
   const manifest = parseManifest(release)
   if (manifest.worldCode !== release.sourceWorldCode) fail('identity', 'manifest worldCode 与 release 不一致')
@@ -136,16 +156,23 @@ async function load(scope: FrozenResourceScopeV1): Promise<LoadedReleaseV1> {
     }
   }
   const releaseUid = await ensureWorldReleaseUidV1(release as WorldRelease & { id: number })
-  return {
-    release: release as WorldRelease & { id: number },
+  const loaded: LoadedReleaseV1 = {
+    release: { ...release, releaseUid } as WorldRelease & { id: number },
     releaseUid,
     manifest,
     fingerprint: await hashCanonicalValue({
       provider: PROVIDER_VERSION,
       releaseUid,
       releaseHash: release.contentHash,
+      localScope: {
+        projectId: release.projectId,
+        worldId: release.worldId,
+        worldReleaseId: release.id,
+      },
     }),
   }
+  rememberBounded(validatedReleaseCache, release.id, loaded)
+  return loaded
 }
 
 function contextKind(area: WorldCapabilityArea, resourceKind: string): ContextResourceKind {
@@ -204,12 +231,46 @@ function focusedFor(row: unknown): string {
       && value != null && value !== '' && value !== '[]' && value !== '{}')))
 }
 
-async function projections(loaded: LoadedReleaseV1): Promise<ProjectedReleaseResourceV1[]> {
-  const result: ProjectedReleaseResourceV1[] = []
-  for (const catalog of [...loaded.manifest.resourceCatalog]
-    .sort((left, right) => left.area.localeCompare(right.area) || left.resourceKind.localeCompare(right.resourceKind))) {
+function addWorldRelation(
+  source: ContextResourceDescriptorV1,
+  targetResourceKey: string,
+  direction: 'outgoing' | 'incoming',
+): void {
+  if (source.relations.some(item => item.kind === 'world-link'
+    && item.targetResourceKey === targetResourceKey && item.direction === direction)) return
+  source.relations.push({ kind: 'world-link', targetResourceKey, direction })
+}
+
+async function mapWithConcurrencyV1<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  project: (value: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length)
+  let nextIndex = 0
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex
+      nextIndex += 1
+      results[index] = await project(values[index]!, index)
+    }
+  })
+  await Promise.all(workers)
+  return results
+}
+
+async function buildProjections(loaded: LoadedReleaseV1): Promise<ProjectedReleaseResourceV1[]> {
+  const catalogs = [...loaded.manifest.resourceCatalog]
+    .sort((left, right) => left.area.localeCompare(right.area) || left.resourceKind.localeCompare(right.resourceKind))
+  const grouped = await Promise.all(catalogs.map(async catalog => {
     const rows = loaded.manifest.records[catalog.table] ?? []
-    for (const [index, row] of rows.entries()) {
+    const policyHash = await hashCanonicalValue({
+      provider: PROVIDER_VERSION,
+      normalization: NORMALIZATION_VERSION,
+      area: catalog.area,
+      resourceKind: catalog.resourceKind,
+    })
+    return mapWithConcurrencyV1(rows, 32, async (row, index) => {
       const original = canonicalStringify(row)
       const rowHash = await sha256Text(original)
       const coord = coordinate(row, index)
@@ -218,6 +279,10 @@ async function projections(loaded: LoadedReleaseV1): Promise<ProjectedReleaseRes
       const summary = summaryFor(row)
       const focused = focusedFor(row)
       const kind = contextKind(catalog.area, catalog.resourceKind)
+      const indexTokens = estimateTokens(`${title}\n${summary}`)
+      const summaryTokens = estimateTokens(summary)
+      const focusedTokens = estimateTokens(focused)
+      const originalTokens = estimateTokens(original)
       const sourceRef: ContextSourceRefV1 = {
         table: 'worldReleases',
         recordId: loaded.release.id,
@@ -236,12 +301,7 @@ async function projections(loaded: LoadedReleaseV1): Promise<ProjectedReleaseRes
         contentRevision: loaded.releaseUid,
         contentHash: rowHash,
         policyRevision: 1,
-        policyHash: await hashCanonicalValue({
-          provider: PROVIDER_VERSION,
-          normalization: NORMALIZATION_VERSION,
-          area: catalog.area,
-          resourceKind: catalog.resourceKind,
-        }),
+        policyHash,
         scope: {
           projectId: loaded.release.projectId,
           worldId: loaded.release.worldId,
@@ -252,21 +312,52 @@ async function projections(loaded: LoadedReleaseV1): Promise<ProjectedReleaseRes
         relations: [],
         sourceRefs: [sourceRef],
         tokenEstimate: {
-          index: estimateTokens(`${title}\n${summary}`),
-          summary: estimateTokens(summary),
-          focused: estimateTokens(focused),
-          full: estimateTokens(original),
-          original: estimateTokens(original),
+          index: indexTokens,
+          summary: summaryTokens,
+          focused: focusedTokens,
+          full: originalTokens,
+          original: originalTokens,
         },
         availableDepths: ['index', 'summary', 'focused', 'full', 'original'],
         priority: 'normal',
         retrievalWeight: 1,
-        tokenCap: Math.min(50_000, Math.max(100, estimateTokens(original))),
+        tokenCap: Math.min(50_000, Math.max(100, originalTokens)),
       }
-      result.push({ descriptor, original, focused })
+      return { descriptor, original, focused, table: catalog.table, coordinate: coord, row }
+    })
+  }))
+  const result = grouped.flat()
+  const byTableCoordinate = new Map(result.map(item => [`${item.table}:${item.coordinate}`, item] as const))
+  for (const link of result.filter(item => item.table === 'worldGroupLinks')) {
+    if (!link.row || typeof link.row !== 'object' || Array.isArray(link.row)) continue
+    const record = link.row as Record<string, unknown>
+    for (const rawEndpoint of [record._fromGroupExportId, record._toGroupExportId]) {
+      if (typeof rawEndpoint !== 'number' && typeof rawEndpoint !== 'string') continue
+      const endpoint = byTableCoordinate.get(`worldGroups:${String(rawEndpoint)}`)
+      if (!endpoint) continue
+      addWorldRelation(link.descriptor, endpoint.descriptor.resourceKey, 'outgoing')
+      addWorldRelation(endpoint.descriptor, link.descriptor.resourceKey, 'incoming')
     }
   }
+  for (const item of result) {
+    item.descriptor.relations.sort((left, right) => left.targetResourceKey.localeCompare(right.targetResourceKey)
+      || left.direction.localeCompare(right.direction))
+  }
   return result.sort((left, right) => left.descriptor.resourceKey.localeCompare(right.descriptor.resourceKey))
+}
+
+async function projections(loaded: LoadedReleaseV1): Promise<ProjectedReleaseResourceV1[]> {
+  const existing = projectedReleaseCache.get(loaded.fingerprint)
+  if (existing) {
+    rememberBounded(projectedReleaseCache, loaded.fingerprint, existing)
+    return existing
+  }
+  const created = buildProjections(loaded)
+  rememberBounded(projectedReleaseCache, loaded.fingerprint, created)
+  try { return await created } catch (reason) {
+    projectedReleaseCache.delete(loaded.fingerprint)
+    throw reason
+  }
 }
 
 async function requestHash(input: ResourceListInputV1 | ResourceSearchInputV1, fingerprint: string): Promise<string> {
@@ -318,7 +409,7 @@ async function page(input: ResourceListInputV1 | ResourceSearchInputV1): Promise
     return searchable.includes(query)
   })
   const offset = cursor?.offset ?? 0
-  const items = all.slice(offset, offset + input.limit).map(item => item.descriptor)
+  const items = all.slice(offset, offset + input.limit).map(item => structuredClone(item.descriptor))
   const nextOffset = offset + items.length
   return {
     version: 1,
@@ -361,7 +452,7 @@ async function read(input: ResourceReadInputV1): Promise<ContextResourceReadV1> 
   const content = capped(source, input.maxTokens)
   return {
     version: 1,
-    descriptor: projected.descriptor,
+    descriptor: structuredClone(projected.descriptor),
     depth: input.depth,
     content,
     contentHash: await sha256Text(content),
@@ -384,8 +475,8 @@ async function readOriginal(input: OriginalEvidenceReadInputV1): Promise<Origina
   }
   return {
     version: 1,
-    descriptor: projected.descriptor,
-    sourceRef,
+    descriptor: structuredClone(projected.descriptor),
+    sourceRef: structuredClone(sourceRef),
     content: projected.original,
     contentHash: sourceRef.contentHash,
     tokenCount: estimateTokens(projected.original),
@@ -403,6 +494,19 @@ export const WORLD_RELEASE_RESOURCE_PROVIDER_V1: ContextResourceProviderV1 = {
   read,
   readOriginal,
   fingerprint: async scope => (await load(scope)).fingerprint,
+}
+
+/** Stable neutral protocol names used by product adapters and non-Agent tools. */
+export async function searchWorldReleaseV1(input: ResourceSearchInputV1): Promise<ResourcePageV1> {
+  return WORLD_RELEASE_RESOURCE_PROVIDER_V1.searchMetadata(input)
+}
+
+export async function readWorldResourceV1(input: ResourceReadInputV1): Promise<ContextResourceReadV1> {
+  return WORLD_RELEASE_RESOURCE_PROVIDER_V1.read(input)
+}
+
+export async function readWorldOriginalEvidenceV1(input: OriginalEvidenceReadInputV1): Promise<OriginalEvidenceReadV1> {
+  return WORLD_RELEASE_RESOURCE_PROVIDER_V1.readOriginal(input)
 }
 
 export async function listAllWorldReleaseResourceDescriptorsV1(

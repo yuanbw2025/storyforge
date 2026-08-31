@@ -59,7 +59,7 @@ describe('STORYGAME-1C · workbench UI', () => {
     host.remove(); db.close()
   })
 
-  it('载入样例后可检查路径、从任意节点试玩并发布不可变版本', async () => {
+  it('载入样例后可检查路径和试玩，但正式发布必须交给制作中心', async () => {
     await waitFor(() => expect(host.textContent).toContain('创建第一个分支故事'))
     await click(host, '载入验收样例')
     await waitFor(() => expect(host.textContent).toContain('25 节点 · 45 Beat · 30 Choice'))
@@ -80,17 +80,12 @@ describe('STORYGAME-1C · workbench UI', () => {
     expect(await db.simulationEvents.count()).toBe(0)
 
     await click(host, '发布')
-    await click(host, '发布新版本')
-    await waitFor(() => expect(document.body.textContent).toContain('检查并发布'))
-    await act(async () => {
-      button(document.body, '检查并发布').click()
-      await new Promise(resolve => setTimeout(resolve, 0))
-    })
-    await waitFor(() => expect(host.textContent).toContain('已发布 GameRelease v1'))
-    expect(await db.worldRevisions.count()).toBe(1)
-    expect(await db.worldReleases.count()).toBe(1)
-    expect(await db.gameReleases.count()).toBe(1)
-    expect(host.textContent).toContain('v1 · 潮港守灯录 v1')
+    expect(host.textContent).toContain('来源与目标冻结')
+    await click(host, '交由制作中心发布')
+    await waitFor(() => expect(host.textContent).toContain('正式发布必须进入制作中心'))
+    expect(await db.worldRevisions.count()).toBe(0)
+    expect(await db.worldReleases.count()).toBe(0)
+    expect(await db.gameReleases.count()).toBe(0)
   }, 20_000)
 
   it('空白模板可进入内容编辑并保留稳定 key', async () => {

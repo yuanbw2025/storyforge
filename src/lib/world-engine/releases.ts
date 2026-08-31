@@ -7,7 +7,7 @@ import type {
   WorldRevision,
   WorkspaceScope,
 } from '../types'
-import type { TableSpec, WorldReleaseSection } from '../registry/types'
+import { WORLD_CAPABILITY_AREAS, type TableSpec, type WorldReleaseSection } from '../registry/types'
 import { resolveScope, scopeTransactionTables } from './scope'
 import type { ProjectExportData } from '../export/json-export'
 import {
@@ -57,12 +57,28 @@ export function stableJson(value: unknown): string {
   return JSON.stringify(value) ?? 'null'
 }
 
+function strictSnapshotContentJson(snapshot: StrictProjectExportSnapshot): string {
+  // exportedAt is backup transport metadata, not source content. Normalizing
+  // it lets the transaction compare two exact registry snapshots without
+  // invoking WebCrypto while IndexedDB must remain live. `ownership` is also
+  // transport metadata: an explicit non-active Work release legitimately uses
+  // a different export root while the stored project/World/Work rows remain
+  // identical and are still compared below.
+  const { ownership: _transportOwnership, ...content } = snapshot.data
+  return stableJson({ ...content, exportedAt: 0 })
+}
+
 async function sha256(value: unknown): Promise<string> {
   const digestPromise = crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableJson(value)))
   const digest = Dexie.currentTransaction
     ? await Dexie.waitFor(digestPromise)
     : await digestPromise
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/** Canonical content hash used by WorldRevision and WorldRelease integrity checks. */
+export async function hashWorldReleaseManifestV1(value: unknown): Promise<string> {
+  return sha256(value)
 }
 
 /** Portable, content-bound identity. The local numeric row id is deliberately
@@ -91,6 +107,34 @@ function isSemanticCanonRow(spec: TableSpec, row: Record<string, unknown>): bool
   return typeof status === 'string' && Boolean(policy.confirmedStatusValues?.includes(status))
 }
 
+interface SemanticSelectionStatsV1 {
+  table: string
+  selected: boolean
+  confirmedRowCount: number
+  candidateRowCount: number
+  conflictRowCount: number
+  omittedRowCount: number
+  latestRevision: number | null
+}
+
+function semanticExcludedState(
+  spec: TableSpec,
+  row: Record<string, unknown>,
+): 'candidate' | 'conflict' | 'omitted' {
+  const status = spec.worldSemantic?.statusField
+    ? String(row[spec.worldSemantic.statusField] ?? '').trim().toLocaleLowerCase('en-US')
+    : ''
+  if (['conflict', 'conflicted', 'contradicted', 'disputed', 'stale', 'source-missing', 'invalid-range'].includes(status)) return 'conflict'
+  if (['candidate', 'proposed', 'proposal', 'pending', 'draft', 'suggested'].includes(status)) return 'candidate'
+  return 'omitted'
+}
+
+function latestSemanticRevision(rows: readonly Record<string, unknown>[]): number | null {
+  const values = rows.flatMap(row => [row.updatedAt, row.createdAt, row.revision, row.version])
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  return values.length ? Math.max(...values) : null
+}
+
 async function buildPortableReleaseProject(input: {
   scope: WorkspaceScope
   requestedTables: string[]
@@ -98,6 +142,7 @@ async function buildPortableReleaseProject(input: {
 }): Promise<{
   portableProject: ProjectExportData
   selectedNarrativeModules: WorldReleaseManifestV2['selectedNarrativeModules']
+  semanticSelectionStats: SemanticSelectionStatsV1[]
 }> {
   const snapshot = input.strictSnapshot
     ?? await deriveStrictExportProjectSnapshot(input.scope.projectId)
@@ -146,6 +191,36 @@ async function buildPortableReleaseProject(input: {
     works: [{ ...clone(workRoot), _activeCharacterDrivenPlanExportId: null }],
   }
   const source = backup as unknown as Record<string, unknown>
+  const requestedTableSet = new Set(input.requestedTables)
+  const semanticSelectionStats = PROJECT_TABLES.filter(spec => spec.worldSemantic).map(spec => {
+    const rows = Array.isArray(source[spec.name])
+      ? clone(source[spec.name] as Record<string, unknown>[])
+        .filter(row => rowMatchesScope(row, portableWorldId, portableWorkId))
+      : []
+    const selected = requestedTableSet.has(spec.name)
+    if (!selected) {
+      return {
+        table: spec.name,
+        selected,
+        confirmedRowCount: 0,
+        candidateRowCount: 0,
+        conflictRowCount: 0,
+        omittedRowCount: rows.length,
+        latestRevision: latestSemanticRevision(rows),
+      }
+    }
+    const confirmed = rows.filter(row => isSemanticCanonRow(spec, row))
+    const excluded = rows.filter(row => !isSemanticCanonRow(spec, row)).map(row => semanticExcludedState(spec, row))
+    return {
+      table: spec.name,
+      selected,
+      confirmedRowCount: confirmed.length,
+      candidateRowCount: excluded.filter(state => state === 'candidate').length,
+      conflictRowCount: excluded.filter(state => state === 'conflict').length,
+      omittedRowCount: excluded.filter(state => state === 'omitted').length,
+      latestRevision: latestSemanticRevision(rows),
+    }
+  })
   for (const tableName of input.requestedTables) {
     if (tableName === 'worlds' || tableName === 'works' || tableName === 'worldReleases') continue
     const rows = Array.isArray(source[tableName]) ? clone(source[tableName] as Record<string, unknown>[]) : []
@@ -168,7 +243,11 @@ async function buildPortableReleaseProject(input: {
   portableWorks[0].novelProfile = 'long'
   portableWorks[0].targetWordCount = 0
   portableWorks[0].currentWordCount = 0
-  return { portableProject: portable as unknown as ProjectExportData, selectedNarrativeModules: [] }
+  return {
+    portableProject: portable as unknown as ProjectExportData,
+    selectedNarrativeModules: [],
+    semanticSelectionStats,
+  }
 }
 
 async function buildWorldReleaseManifestInternal(input: {
@@ -193,7 +272,7 @@ async function buildWorldReleaseManifestInternal(input: {
     throw new Error('[release] 可执行叙事模块属于上层产品，不能封存进语义 WorldRelease')
   }
   const selectedTables = [...new Set(requested)]
-  const { portableProject, selectedNarrativeModules } = await buildPortableReleaseProject({
+  const { portableProject, selectedNarrativeModules, semanticSelectionStats } = await buildPortableReleaseProject({
     scope,
     requestedTables: selectedTables,
     strictSnapshot,
@@ -210,6 +289,7 @@ async function buildWorldReleaseManifestInternal(input: {
   })))
   const resourceCatalog = dependencies.map(dependency => {
     const semantic = PROJECT_TABLES.find(spec => spec.name === dependency.table)!.worldSemantic!
+    const stats = semanticSelectionStats.find(item => item.table === dependency.table)!
     return {
       // Public release coordinates describe semantic capabilities. The
       // physical table remains an internal import locator and must never leak
@@ -220,22 +300,52 @@ async function buildWorldReleaseManifestInternal(input: {
       table: dependency.table,
       rowCount: dependency.rowCount,
       contentHash: dependency.contentHash,
+      confirmedRowCount: stats.confirmedRowCount,
+      candidateRowCount: stats.candidateRowCount,
+      conflictRowCount: stats.conflictRowCount,
+      omittedRowCount: stats.omittedRowCount,
+      latestRevision: stats.latestRevision,
     }
   })
-  const capabilityProfile = [...new Set(resourceCatalog.map(resource => resource.area))].map(area => {
+  const capabilityProfile = WORLD_CAPABILITY_AREAS.map(area => {
+    const areaSpecs = PROJECT_TABLES.filter(spec => spec.worldSemantic?.area === area)
+    const areaStats = semanticSelectionStats.filter(item => areaSpecs.some(spec => spec.name === item.table))
     const resources = resourceCatalog.filter(resource => resource.area === area)
     const rowCount = resources.reduce((sum, resource) => sum + resource.rowCount, 0)
+    const selectedResourceCount = areaStats.filter(item => item.selected).length
+    const omittedResourceCount = areaStats.length - selectedResourceCount
+    const latestRevisions = areaStats.map(item => item.latestRevision).filter((value): value is number => value != null)
     return {
       area,
-      resourceCount: resources.length,
+      resourceCount: areaStats.length,
       rowCount,
-      status: rowCount === 0 ? 'missing' as const : resources.every(resource => resource.rowCount > 0) ? 'available' as const : 'partial' as const,
+      status: rowCount === 0
+        ? 'missing' as const
+        : omittedResourceCount === 0 && resources.every(resource => resource.rowCount > 0)
+          ? 'available' as const
+          : 'partial' as const,
+      selectionStatus: selectedResourceCount === 0
+        ? 'omitted' as const
+        : omittedResourceCount === 0
+          ? 'selected' as const
+          : 'partial-selection' as const,
+      selectedResourceCount,
+      omittedResourceCount,
+      confirmedRowCount: areaStats.reduce((sum, item) => sum + item.confirmedRowCount, 0),
+      candidateRowCount: areaStats.reduce((sum, item) => sum + item.candidateRowCount, 0),
+      conflictRowCount: areaStats.reduce((sum, item) => sum + item.conflictRowCount, 0),
+      omittedRowCount: areaStats.reduce((sum, item) => sum + item.omittedRowCount, 0),
+      latestRevision: latestRevisions.length ? Math.max(...latestRevisions) : null,
+      originalEvidenceAvailable: rowCount > 0,
+      queryableIndexAvailable: rowCount > 0,
     }
   })
   const work = await db.works.get(scope.workId)
   const project = await db.projects.get(scope.projectId)
-  const selectedResourceIds = resourceCatalog.filter(resource => resource.rowCount > 0).map(resource => resource.resourceId)
-  const omittedResourceIds = resourceCatalog.filter(resource => resource.rowCount === 0).map(resource => resource.resourceId)
+  const semanticResourceId = (spec: TableSpec) =>
+    `world:${world.code}:semantic:${spec.worldSemantic!.area}:${spec.worldSemantic!.resourceKind}`
+  const selectedResourceIds = publishable.filter(spec => selectedTables.includes(spec.name)).map(semanticResourceId)
+  const omittedResourceIds = publishable.filter(spec => !selectedTables.includes(spec.name)).map(semanticResourceId)
   const sourceManifestBase = {
     sourceKind: options?.sourceKind ?? 'world-draft' as const,
     sourceWorkspaceUid: project?.workspaceUid ?? `legacy:${scope.projectId}`,
@@ -317,9 +427,11 @@ export async function createWorldRevision(input: {
       throw new Error('[release] 父修订不属于当前 World')
     }
   }
-  const manifest = await buildWorldReleaseManifest({ ...input, scope })
+  const sourceSnapshot = await deriveStrictExportProjectSnapshot(scope.projectId)
+  const sourceSnapshotJson = strictSnapshotContentJson(sourceSnapshot)
+  const manifest = await buildWorldReleaseManifest({ ...input, scope }, sourceSnapshot)
   const manifestJson = stableJson(manifest)
-  const contentHash = await sha256(manifest)
+  const contentHash = await hashWorldReleaseManifestV1(manifest)
   return db.transaction('rw', scopeTransactionTables(
     ...PROJECT_TABLES.map(spec => spec.table),
   ), async () => {
@@ -334,11 +446,7 @@ export async function createWorldRevision(input: {
       currentScope.projectId,
       currentScope,
     )
-    const currentManifest = await buildWorldReleaseManifest(
-      { ...input, scope: currentScope },
-      strictSnapshot,
-    )
-    if (stableJson(currentManifest) !== manifestJson) {
+    if (strictSnapshotContentJson(strictSnapshot) !== sourceSnapshotJson) {
       throw new Error('[release] 世界内容在修订冻结过程中发生变化，请重试')
     }
     const revisions = await db.worldRevisions.where('worldId').equals(currentScope.worldId).toArray()
@@ -362,7 +470,7 @@ export async function createWorldRevision(input: {
 export async function publishWorldRevision(revisionId: number, label?: string): Promise<WorldRelease> {
   const revision = await db.worldRevisions.get(revisionId)
   if (!revision) throw new Error('[release] 修订不存在')
-  const recalculated = await sha256(JSON.parse(revision.manifestJson))
+  const recalculated = await hashWorldReleaseManifestV1(JSON.parse(revision.manifestJson))
   if (recalculated !== revision.contentHash) throw new Error('[release] 修订内容哈希不匹配')
   return db.transaction('rw', db.worldRevisions, db.worldReleases, db.worlds, db.projects, async () => {
     const currentRevision = await db.worldRevisions.get(revisionId)
@@ -403,6 +511,134 @@ export async function publishWorldRevision(revisionId: number, label?: string): 
   })
 }
 
+/**
+ * Regression-only semantic release for historical product-kernel fixtures.
+ *
+ * Legacy AVG/adventure/chat/etc. unit tests keep their product draft in an
+ * independent workspace, while the current production architecture requires a
+ * product release to bind an immutable semantic WorldRelease.  Creating a
+ * second derived project in every kernel test would obscure the algorithm
+ * under test, so this helper freezes the same pure-semantic manifest in the
+ * fixture's internal scope without promoting that scope to a public world.
+ *
+ * Production code can never use this path: the environment guard is
+ * unconditional, and architecture checks forbid UI/service imports.  Formal
+ * products must use an explicit WorldReference and the stage-two/three
+ * production flow.
+ */
+export async function createInternalProductWorldReleaseFixtureV1(input: {
+  scope: WorkspaceScope
+  label: string
+  parentRevisionId?: number | null
+  selectedTables?: string[]
+}): Promise<{ revision: WorldRevision; release: WorldRelease }> {
+  if (import.meta.env.MODE !== 'test') {
+    throw new Error('createInternalProductWorldReleaseFixtureV1 仅允许隔离测试环境使用')
+  }
+  const scope = await resolveScope({ scope: input.scope })
+  const world = await db.worlds.get(scope.worldId)
+  if (!world || world.projectId !== scope.projectId) throw new Error('[fixture] World 不属于当前工作区')
+
+  // A real world-engine fixture should exercise the real public boundary.
+  if (isShareableWorld(world)) {
+    const revisions = await listWorldRevisions(scope)
+    const revision = await createWorldRevision({
+      scope,
+      label: input.label,
+      parentRevisionId: input.parentRevisionId === undefined
+        ? revisions[0]?.id ?? null
+        : input.parentRevisionId,
+      selectedTables: input.selectedTables,
+    })
+    return { revision, release: await publishWorldRevision(revision.id!, input.label) }
+  }
+
+  const revisions = await db.worldRevisions.where('worldId').equals(scope.worldId).toArray()
+  const parentRevisionId = input.parentRevisionId === undefined
+    ? revisions.sort((left, right) => right.revision - left.revision)[0]?.id ?? null
+    : input.parentRevisionId
+  if (parentRevisionId != null) {
+    const parent = await db.worldRevisions.get(parentRevisionId)
+    if (!parent || parent.projectId !== scope.projectId || parent.worldId !== scope.worldId) {
+      throw new Error('[fixture] 父修订不属于当前内部作用域')
+    }
+  }
+  const sourceSnapshot = await deriveStrictExportProjectSnapshot(scope.projectId)
+  const sourceSnapshotJson = strictSnapshotContentJson(sourceSnapshot)
+  const manifest = await buildWorldReleaseManifestInternal({
+    scope,
+    selectedTables: input.selectedTables,
+  }, sourceSnapshot, {
+    allowInternalSource: true,
+    sourceKind: 'independent-work-derivation',
+  })
+  const manifestJson = stableJson(manifest)
+  const contentHash = await hashWorldReleaseManifestV1(manifest)
+
+  return db.transaction('rw', scopeTransactionTables(
+    ...PROJECT_TABLES.map(spec => spec.table),
+  ), async () => {
+    const currentScope = await resolveScope({ scope })
+    const currentWorld = await db.worlds.get(currentScope.worldId)
+    if (!currentWorld || currentWorld.projectId !== currentScope.projectId || isShareableWorld(currentWorld)) {
+      throw new Error('[fixture] 内部作用域身份在冻结期间发生变化')
+    }
+    if (parentRevisionId != null) {
+      const parent = await db.worldRevisions.get(parentRevisionId)
+      if (!parent || parent.projectId !== currentScope.projectId || parent.worldId !== currentScope.worldId) {
+        throw new Error('[fixture] 父修订在冻结期间发生变化')
+      }
+    }
+    const strictSnapshot = await deriveStrictExportProjectSnapshotInCurrentTransaction(
+      currentScope.projectId,
+      currentScope,
+    )
+    if (strictSnapshotContentJson(strictSnapshot) !== sourceSnapshotJson) {
+      throw new Error('[fixture] 内部语义内容在冻结期间发生变化')
+    }
+
+    const [currentRevisions, currentReleases] = await Promise.all([
+      db.worldRevisions.where('worldId').equals(currentScope.worldId).toArray(),
+      db.worldReleases.where('worldId').equals(currentScope.worldId).toArray(),
+    ])
+    const timestamp = Date.now()
+    const revisionRow: WorldRevision = {
+      projectId: currentScope.projectId,
+      worldId: currentScope.worldId,
+      parentRevisionId,
+      revision: Math.max(0, ...currentRevisions.map(item => item.revision)) + 1,
+      label: input.label.trim() || `fixture revision ${currentRevisions.length + 1}`,
+      manifestJson,
+      contentHash,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    const revisionId = await db.worldRevisions.add(revisionRow) as number
+    const version = Math.max(0, ...currentReleases.map(item => item.version)) + 1
+    const releaseRow: WorldRelease = {
+      releaseUid: worldReleaseUidV1({
+        worldCode: currentWorld.code,
+        version,
+        contentHash,
+      }),
+      projectId: currentScope.projectId,
+      worldId: currentScope.worldId,
+      revisionId,
+      version,
+      label: revisionRow.label,
+      manifestJson,
+      contentHash,
+      sourceWorldCode: currentWorld.code,
+      createdAt: timestamp,
+    }
+    const releaseId = await db.worldReleases.add(releaseRow) as number
+    return {
+      revision: { ...revisionRow, id: revisionId },
+      release: { ...releaseRow, id: releaseId },
+    }
+  })
+}
+
 export async function diffWorldRevisions(leftId: number, rightId: number): Promise<{
   added: string[]
   removed: string[]
@@ -425,7 +661,7 @@ export async function diffWorldRevisions(leftId: number, rightId: number): Promi
 export async function assertReleaseUnchanged(releaseId: number): Promise<void> {
   const release = await db.worldReleases.get(releaseId)
   if (!release) throw new Error('[release] 发布版本不存在')
-  if (await sha256(JSON.parse(release.manifestJson)) !== release.contentHash) {
+  if (await hashWorldReleaseManifestV1(JSON.parse(release.manifestJson)) !== release.contentHash) {
     throw new Error('[release] 发布版本已被篡改')
   }
 }

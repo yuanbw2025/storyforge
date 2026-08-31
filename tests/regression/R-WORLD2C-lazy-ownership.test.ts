@@ -99,6 +99,8 @@ async function stripC1Roots(projectId: number) {
   await db.narrativeBeats.where('projectId').equals(projectId).delete()
   await db.narrativeNodes.where('projectId').equals(projectId).delete()
   await db.narrativeModules.where('projectId').equals(projectId).delete()
+  await db.worldReleaseMigrations.where('projectId').equals(projectId).delete()
+  await db.worldDerivations.where('projectId').equals(projectId).delete()
   await db.worldReleases.where('projectId').equals(projectId).delete()
   await db.worldRevisions.where('projectId').equals(projectId).delete()
   await db.ttrpgRuntimeAssetRequests.where('projectId').equals(projectId).delete()
@@ -202,7 +204,12 @@ describe('WORLD-2C C2 · lazy workspace ownership migration', () => {
       worldId: result.world.id,
       workId: result.work.id,
     })
-    expect(result.world).toMatchObject({ name: '全量作品', description: '全表往返', currentVersion: 1 })
+    expect(result.world).toMatchObject({
+      name: '全量作品',
+      description: '全表往返',
+      currentVersion: 0,
+      identityKind: 'workspace-scope',
+    })
     expect(result.work).toMatchObject({
       worldId: result.world.id,
       title: '全量作品',
@@ -215,7 +222,8 @@ describe('WORLD-2C C2 · lazy workspace ownership migration', () => {
       activeWorkId: result.work.id,
       ownershipSchemaVersion: WORKSPACE_OWNERSHIP_CONTRACT_VERSION,
     })
-    expect(project?.worldCode).toBe(result.world.code)
+    expect(project?.worldCode).toBeUndefined()
+    expect(project?.worldVersion).toBeUndefined()
     expect(await db.worldviews.get(1)).toMatchObject({ worldId: result.world.id })
     expect(await db.characters.get(seeded.char1)).toMatchObject({ worldId: result.world.id })
     expect(await db.storyCores.get(1)).toMatchObject({ workId: result.work.id })
@@ -299,10 +307,13 @@ describe('WORLD-2C C2 · lazy workspace ownership migration', () => {
     const migrated = await ensureWorkspaceOwnership(projectId)
     const receipt = await db.ownershipMigrations.where('projectId').equals(projectId).first()
     expect(migrated.scope).toEqual({ projectId, worldId, workId })
-    expect(migrated.project).toMatchObject({
-      worldCode: 'world-c1-authoritative',
-      worldVersion: 7,
-      ownershipSchemaVersion: 1,
+    expect(migrated.project).toMatchObject({ ownershipSchemaVersion: 1 })
+    expect(migrated.project.worldCode).toBeUndefined()
+    expect(migrated.project.worldVersion).toBeUndefined()
+    expect(migrated.world).toMatchObject({
+      code: 'world-c1-authoritative',
+      currentVersion: 7,
+      identityKind: 'workspace-scope',
     })
     expect(await db.worldviews.get(worldviewId)).toMatchObject({ worldId })
     expect(receipt).toMatchObject({

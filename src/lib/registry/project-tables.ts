@@ -1077,6 +1077,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       gameBuildId: null,
       ttrpgBuildId: null,
       runtimeSourceHash: null,
+      productReleaseUid: null,
+      productReleaseLineageHash: null,
     },
     note: 'SIM-1 独立互动世界实例；冻结创作来源，不反写 Canon；分支拥有独立事件流' },
 
@@ -2030,7 +2032,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     ],
     exportRefRemap: [{
       field: "manifestJson", remapVia: "worldReleases", kind: "json-id-paths",
-      paths: ["source.worldReleaseId", "source.selection.worldReleaseId"],
+      // TtrpgProductionSourceSelectionV1 is deliberately portable and never
+      // contains a local Dexie id. Only the ProductRelease source envelope owns
+      // the local WorldRelease reference that must be remapped on export/import.
+      paths: ["source.worldReleaseId"],
       exportAs: "_portableManifestJson", onUnmapped: "require",
     }],
     memoryClassification: {

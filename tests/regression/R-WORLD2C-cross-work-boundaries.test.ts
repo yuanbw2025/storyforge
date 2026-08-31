@@ -241,7 +241,7 @@ describe('WORLD-2C · 双 Work 下游边界反例', () => {
       kind: 'chatgame',
       title: 'B 的冻结实例',
       sourceKeys,
-    })).rejects.toThrow('正式 GameRelease')
+    })).rejects.toThrow('不可变 GameRelease')
 
     const frozen = await buildSimulationCanonSnapshot({ projectId: b.projectId, scope: b, worldGroupId: null, sourceKeys })
     const session = await createWorldInstance({

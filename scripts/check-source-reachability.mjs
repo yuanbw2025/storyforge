@@ -44,6 +44,15 @@ const entrypoints = [
   // ProductHub routes new work through the frozen-source production studio. Delete this explicit
   // entrypoint after legacy migration coverage no longer imports the old workbench directly.
   'src/components/character-interaction/InteractionGameWorkbench.tsx',
+  // Legacy game-release policy is a headless migration classifier only. No routed UI may import it;
+  // check:architecture enforces that boundary until v1 release migration support is retired.
+  'src/lib/game-production/legacy-entry-governance.ts',
+  // Mist Harbor is a deterministic regression/roadshow fixture. It intentionally exercises a large
+  // world authoring surface without becoming a product or WorldRelease entrypoint.
+  'src/lib/world-engine/mist-harbor-demo.ts',
+  // Scope conversion is a headless ownership-administration service. It remains independently tested
+  // while no author UI exposes arbitrary record-owner conversion.
+  'src/lib/world-engine/scope-conversion.ts',
 ].map(file => path.resolve(root, file))
 
 const graph = new Map()

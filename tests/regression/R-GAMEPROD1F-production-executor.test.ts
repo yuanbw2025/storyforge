@@ -45,17 +45,19 @@ import {
 import type { ProductionProductTypeV1 } from '../../src/lib/game-production/product-adapters'
 import { seedStoryGameAcceptanceSample } from '../../src/lib/text-game/authoring'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
 
 async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'prototype') {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name: 'formal-executor', genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
     description: '', targetWordCount: 10_000, createdAt: now, updatedAt: now,
   } as never) as number
   const owned = await ensureWorkspaceOwnership(projectId)
   const definition = await seedStoryGameAcceptanceSample({ scope: owned.scope })
-  const revision = await createWorldRevision({
+  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
     scope: owned.scope, label: 'formal source', selectedNarrativeModuleIds: [definition.narrativeModuleId],
   })
   const release = await publishWorldRevision(revision.id!)
@@ -92,6 +94,7 @@ async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'p
 async function fixtureForProduct(productType: ProductionProductTypeV1) {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name: `formal-${productType}`, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
     description: '', targetWordCount: 10_000, createdAt: now, updatedAt: now,
   } as never) as number
@@ -116,7 +119,7 @@ async function fixtureForProduct(productType: ProductionProductTypeV1) {
     } as never)
   }
   const definition = await seedStoryGameAcceptanceSample({ scope: owned.scope })
-  const revision = await createWorldRevision({
+  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
     scope: owned.scope, label: `${productType} source`, selectedNarrativeModuleIds: [definition.narrativeModuleId],
   })
   const release = await publishWorldRevision(revision.id!)

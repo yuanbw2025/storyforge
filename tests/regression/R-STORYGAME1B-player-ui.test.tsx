@@ -96,6 +96,7 @@ describe('STORYGAME-1B · player loop', () => {
     })
     const now = Date.now()
     const projectId = await db.projects.add({
+      workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
       name: '雾港故事', genre: 'fantasy', genres: ['fantasy'], description: '',
       targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as Project) as number
@@ -126,7 +127,7 @@ describe('STORYGAME-1B · player loop', () => {
     await addNarrativeChoice({ scope, moduleId: module.id!, sourceNodeKey: 'entry', choiceKey: 'leave', text: '转身离开', targetNodeKey: 'dark', order: 1 })
     await addNarrativeChoice({ scope, moduleId: module.id!, sourceNodeKey: 'entry', choiceKey: 'locked', text: '打开密室', unavailableReason: '你还没有密室钥匙。', targetNodeKey: 'dark', availableConditionJson: '{"path":"hasKey","eq":true}', order: 2 })
     const definition = await createGameDefinition({ scope, gameKey: 'lighthouse', title: '灯塔之夜', description: '一场风暴中的短篇选择故事。', narrativeModuleId: module.id! })
-    const revision = await createWorldRevision({ scope, label: '玩家测试发布', selectedNarrativeModuleIds: [module.id!] })
+    const revision = await createWorldRevision({ scope, label: '玩家测试发布' })
     const worldRelease = await publishWorldRevision(revision.id!)
     await publishGameDefinition({ scope, gameDefinitionId: definition.id!, worldReleaseId: worldRelease.id! })
 
@@ -263,7 +264,7 @@ describe('STORYGAME-1B · player loop', () => {
     await addNarrativeChoice({ scope, moduleId: loopModule.id!, sourceNodeKey: 'loop', choiceKey: 'loop.repeat', text: '继续检查', targetNodeKey: 'loop' })
     await addNarrativeChoice({ scope, moduleId: loopModule.id!, sourceNodeKey: 'loop', choiceKey: 'loop.finish', text: '公开记录', targetNodeKey: 'ending', order: 1 })
     const definition = await createGameDefinition({ scope, gameKey: 'bounded-loop', title: '有界长循环', narrativeModuleId: loopModule.id! })
-    const revision = await createWorldRevision({ scope, label: '长循环性能来源', selectedNarrativeModuleIds: [loopModule.id!] })
+    const revision = await createWorldRevision({ scope, label: '长循环性能来源' })
     const worldRelease = await publishWorldRevision(revision.id!)
     const release = await publishGameDefinition({ scope, gameDefinitionId: definition.id!, worldReleaseId: worldRelease.id! })
     const session = await createStoryGameInstance({ scope, gameReleaseId: release.id!, title: '长循环存档' })

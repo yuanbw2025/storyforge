@@ -462,10 +462,12 @@ async function buildGameReleaseManifest(input: {
     const report = validateAvgPresentation({ content, beats: frozenBeats, assets })
     if (!report.valid) throw new Error(`[avg] 演出内容不可发布:${report.errors.join('；')}`)
     const blobRows = rows('avgMediaBlobs')
+    const blobObjectRows = rows('mediaBlobObjects')
     for (const asset of assets) {
       const source = allAssetRows.find(row => row.assetKey === asset.assetKey && row.version === asset.version)
-      const blob = blobRows.find(row => row._mediaAssetExportId === source?._exportId)
-      if (!blob || typeof blob.data !== 'string' || !blob.data.startsWith('data:')) {
+      const binding = blobRows.find(row => row._mediaAssetExportId === source?._exportId)
+      const blob = blobObjectRows.find(row => row._exportId === binding?._blobObjectExportId)
+      if (!binding || !blob || typeof blob.data !== 'string' || !blob.data.startsWith('data:')) {
         throw new Error(`[avg] 产品快照缺少媒资二进制:${asset.assetKey}`)
       }
       const binary = decodePortableDataUrl(blob.data)
@@ -640,7 +642,7 @@ export async function publishGameDefinition(input: {
   /** Legacy runtime fixture only; formal products publish through production. */
   fixtureOnly?: true
 }): Promise<GameRelease> {
-  if (input.fixtureOnly !== true) {
+  if (import.meta.env.MODE !== 'test') {
     throw new Error('[storygame] 旧 GameDefinition 发布只允许隔离测试夹具；正式发布必须进入产品生产流程')
   }
   const scope = await resolveScope({ scope: input.scope })

@@ -116,6 +116,8 @@ function normalize(data: any) {
   delete data.narrativeChoices
   delete data.worldRevisions
   delete data.worldReleases
+  delete data.worldDerivations
+  delete data.worldReleaseMigrations
   delete data.gameDefinitions
   delete data.gameReleases
   delete data.interactionCharacterProfiles

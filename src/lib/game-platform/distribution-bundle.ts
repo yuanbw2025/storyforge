@@ -11,6 +11,7 @@ import {
 import { verifyGameReleaseManifestV2 } from '../game-production/runtime-package'
 import { readAvgReleaseMediaBytes } from '../avg/media'
 import { NARRATIVE_MODULE_KINDS } from '../types'
+import { WORLD_CAPABILITY_AREAS } from '../registry/types'
 import type {
   FrozenRuntimeMediaAssetV2,
   GameRelease,
@@ -115,13 +116,16 @@ function boundedText(value: unknown, label: string, maximum = 2_000): string {
 async function verifyWorldManifest(value: unknown, expectedContentHash: string): Promise<WorldReleaseManifestV2> {
   const raw = record(value, 'worldRelease.manifest')
   exactKeys(raw, [
-    'schema', 'version', 'worldCode', 'worldName', 'workTitle', 'selectedTables',
-    'selectedNarrativeModules', 'dependencies', 'records', 'portableProject',
+    'schema', 'version', 'semanticContract', 'worldCode', 'worldName', 'workTitle',
+    'selectedTables', 'selectedNarrativeModules', 'dependencies', 'records',
+    'portableProject', 'capabilityProfile', 'resourceCatalog', 'sourceManifest',
   ], 'worldRelease.manifest')
-  if (raw.schema !== 'storyforge.world-package' || raw.version !== 2
+  if (raw.schema !== 'storyforge.world-package' || raw.version !== 2 || raw.semanticContract !== 3
     || !Array.isArray(raw.selectedTables) || raw.selectedTables.length > 300
-    || !Array.isArray(raw.selectedNarrativeModules) || raw.selectedNarrativeModules.length > 10_000
-    || !Array.isArray(raw.dependencies) || raw.dependencies.length > 300) {
+    || !Array.isArray(raw.selectedNarrativeModules) || raw.selectedNarrativeModules.length !== 0
+    || !Array.isArray(raw.dependencies) || raw.dependencies.length > 300
+    || !Array.isArray(raw.capabilityProfile)
+    || !Array.isArray(raw.resourceCatalog) || raw.resourceCatalog.length > 300) {
     throw new Error('[distribution] WorldRelease manifest 结构无效')
   }
   boundedText(raw.worldCode, 'worldCode', 500)
@@ -158,16 +162,107 @@ async function verifyWorldManifest(value: unknown, expectedContentHash: string):
   if (dependencyNames.size !== selectedTables.length) {
     throw new Error('[distribution] WorldRelease dependencies 不完整')
   }
-  const moduleIds = new Set<number>()
-  for (let index = 0; index < raw.selectedNarrativeModules.length; index += 1) {
-    const module = record(raw.selectedNarrativeModules[index], `selectedNarrativeModules[${index}]`)
-    exactKeys(module, ['exportId', 'kind', 'title'], `selectedNarrativeModules[${index}]`)
-    if (!Number.isInteger(module.exportId) || Number(module.exportId) < 0 || moduleIds.has(Number(module.exportId))
-      || !NARRATIVE_MODULE_KINDS.includes(module.kind as typeof NARRATIVE_MODULE_KINDS[number])) {
-      throw new Error('[distribution] selectedNarrativeModules 无效')
+  // semanticContract=3 never carries executable narrative modules. Keep the
+  // kind import exercised as an explicit legacy-schema guard rather than
+  // silently accepting a future product graph here.
+  if (raw.selectedNarrativeModules.some(item => (
+    !NARRATIVE_MODULE_KINDS.includes(record(item, 'selectedNarrativeModules').kind as typeof NARRATIVE_MODULE_KINDS[number])
+  ))) {
+    throw new Error('[distribution] selectedNarrativeModules 无效')
+  }
+
+  const capabilityAreas = new Set<string>()
+  for (let index = 0; index < raw.capabilityProfile.length; index += 1) {
+    const item = record(raw.capabilityProfile[index], `capabilityProfile[${index}]`)
+    exactKeys(item, [
+      'area', 'resourceCount', 'rowCount', 'status', 'selectionStatus',
+      'selectedResourceCount', 'omittedResourceCount', 'confirmedRowCount',
+      'candidateRowCount', 'conflictRowCount', 'omittedRowCount', 'latestRevision',
+      'originalEvidenceAvailable', 'queryableIndexAvailable',
+    ], `capabilityProfile[${index}]`)
+    const area = boundedText(item.area, `capabilityProfile[${index}].area`, 100)
+    const numericFields = [
+      'resourceCount', 'rowCount', 'selectedResourceCount', 'omittedResourceCount',
+      'confirmedRowCount', 'candidateRowCount', 'conflictRowCount', 'omittedRowCount',
+    ]
+    if (!WORLD_CAPABILITY_AREAS.includes(area as typeof WORLD_CAPABILITY_AREAS[number])
+      || capabilityAreas.has(area)
+      || numericFields.some(field => !Number.isInteger(item[field]) || Number(item[field]) < 0)
+      || !['missing', 'partial', 'available'].includes(String(item.status))
+      || !['selected', 'partial-selection', 'omitted'].includes(String(item.selectionStatus))
+      || (item.latestRevision != null && (!Number.isFinite(item.latestRevision) || Number(item.latestRevision) < 0))
+      || typeof item.originalEvidenceAvailable !== 'boolean'
+      || typeof item.queryableIndexAvailable !== 'boolean') {
+      throw new Error('[distribution] capabilityProfile 无效')
     }
-    boundedText(module.title, `selectedNarrativeModules[${index}].title`)
-    moduleIds.add(Number(module.exportId))
+    capabilityAreas.add(area)
+  }
+  if (capabilityAreas.size !== WORLD_CAPABILITY_AREAS.length) {
+    throw new Error('[distribution] capabilityProfile 不完整')
+  }
+
+  const resourceIds = new Set<string>()
+  const resourceTables = new Set<string>()
+  for (let index = 0; index < raw.resourceCatalog.length; index += 1) {
+    const item = record(raw.resourceCatalog[index], `resourceCatalog[${index}]`)
+    exactKeys(item, [
+      'resourceId', 'resourceKind', 'area', 'table', 'rowCount', 'contentHash',
+      'confirmedRowCount', 'candidateRowCount', 'conflictRowCount',
+      'omittedRowCount', 'latestRevision',
+    ], `resourceCatalog[${index}]`)
+    const resourceId = boundedText(item.resourceId, `resourceCatalog[${index}].resourceId`, 1_000)
+    const table = boundedText(item.table, `resourceCatalog[${index}].table`, 200)
+    const area = boundedText(item.area, `resourceCatalog[${index}].area`, 100)
+    boundedText(item.resourceKind, `resourceCatalog[${index}].resourceKind`, 200)
+    const dependency = raw.dependencies.find(candidate => (
+      record(candidate, 'dependency').table === table
+    )) as Record<string, unknown> | undefined
+    const countFields = ['rowCount', 'confirmedRowCount', 'candidateRowCount', 'conflictRowCount', 'omittedRowCount']
+    if (resourceIds.has(resourceId) || resourceTables.has(table) || !selectedTables.includes(table)
+      || !WORLD_CAPABILITY_AREAS.includes(area as typeof WORLD_CAPABILITY_AREAS[number])
+      || countFields.some(field => !Number.isInteger(item[field]) || Number(item[field]) < 0)
+      || !isSha256Hash(item.contentHash)
+      || dependency?.contentHash !== item.contentHash || dependency?.rowCount !== item.rowCount
+      || (item.latestRevision != null && (!Number.isFinite(item.latestRevision) || Number(item.latestRevision) < 0))) {
+      throw new Error('[distribution] resourceCatalog 无效')
+    }
+    resourceIds.add(resourceId)
+    resourceTables.add(table)
+  }
+  if (resourceTables.size !== selectedTables.length) {
+    throw new Error('[distribution] resourceCatalog 与 selectedTables 不闭合')
+  }
+
+  const sourceManifest = record(raw.sourceManifest, 'sourceManifest')
+  exactKeys(sourceManifest, [
+    'sourceKind', 'sourceWorkspaceUid', 'sourceWorldCode', 'sourceWorkCode',
+    'selectedResourceIds', 'omittedResourceIds', 'contentHash',
+  ], 'sourceManifest')
+  if (!['world-draft', 'independent-work-derivation'].includes(String(sourceManifest.sourceKind))
+    || boundedText(sourceManifest.sourceWorldCode, 'sourceManifest.sourceWorldCode', 500) !== raw.worldCode
+    || !Array.isArray(sourceManifest.selectedResourceIds)
+    || !Array.isArray(sourceManifest.omittedResourceIds)
+    || !isSha256Hash(sourceManifest.contentHash)) {
+    throw new Error('[distribution] sourceManifest 无效')
+  }
+  boundedText(sourceManifest.sourceWorkspaceUid, 'sourceManifest.sourceWorkspaceUid', 1_000)
+  boundedText(sourceManifest.sourceWorkCode, 'sourceManifest.sourceWorkCode', 1_000)
+  const selectedResourceIds = sourceManifest.selectedResourceIds.map((item, index) => (
+    boundedText(item, `sourceManifest.selectedResourceIds[${index}]`, 1_000)
+  ))
+  const omittedResourceIds = sourceManifest.omittedResourceIds.map((item, index) => (
+    boundedText(item, `sourceManifest.omittedResourceIds[${index}]`, 1_000)
+  ))
+  if (new Set(selectedResourceIds).size !== selectedResourceIds.length
+    || new Set(omittedResourceIds).size !== omittedResourceIds.length
+    || selectedResourceIds.some(item => omittedResourceIds.includes(item))
+    || resourceIds.size !== selectedResourceIds.length
+    || selectedResourceIds.some(item => !resourceIds.has(item))) {
+    throw new Error('[distribution] sourceManifest 资源集合不闭合')
+  }
+  const { contentHash: _sourceHash, ...sourceManifestBody } = sourceManifest
+  if (await legacyHash(sourceManifestBody) !== sourceManifest.contentHash) {
+    throw new Error('[distribution] sourceManifest contentHash 不一致')
   }
   record(raw.portableProject, 'portableProject')
   // Reject non-JSON numbers, undefined, cycles, sparse arrays and ambiguous Unicode keys

@@ -176,8 +176,12 @@ function captureRow(spec: TableSpec, value: unknown): CapturedRow {
 }
 
 async function captureCollection(spec: TableSpec, collection: Collection): Promise<CapturedRow[]> {
-  const rows: CapturedRow[] = []
-  await collection.each(value => rows.push(captureRow(spec, value)))
+  // Ownership already materializes the complete project snapshot to fingerprint it.
+  // `Collection.each()` advances one IndexedDB cursor request per row and becomes
+  // pathologically slow for thousand-scale semantic catalogs (notably in Safari
+  // and fake-indexeddb). One bulk read preserves identical snapshot semantics while
+  // avoiding an unbounded request chain.
+  const rows = (await collection.toArray()).map(value => captureRow(spec, value))
   rows.sort((left, right) => left.key - right.key)
   return rows
 }

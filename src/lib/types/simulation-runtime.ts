@@ -1188,6 +1188,10 @@ export interface SimulationSession {
   ttrpgBuildId?: number | null;
   /** Hash of the exact preview or release runtime source used to create this session. */
   runtimeSourceHash?: string | null;
+  /** ARCH-04 portable logical ProductRelease identity; product tables keep the local FK. */
+  productReleaseUid?: string | null;
+  /** Hash of the ProductRelease lineage verified at formal runtime creation. */
+  productReleaseLineageHash?: string | null;
   narrativeModuleId?: number | null;
   /** Portable NarrativeModule identity inside an immutable release manifest. */
   narrativeModuleExportId?: number | null;

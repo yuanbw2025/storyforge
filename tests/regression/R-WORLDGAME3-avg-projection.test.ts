@@ -12,7 +12,8 @@ import {
 } from '../../src/lib/text-game/world-generation'
 import { createAvgGameInstance } from '../../src/lib/world-engine/instances'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
 import { stampNewRecord } from '../../src/lib/world-engine/scope'
 
 function svg(name: string, color: string): Blob {
@@ -24,6 +25,7 @@ function svg(name: string, color: string): Blob {
 async function avgWorldFixture(withMedia = true) {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name: withMedia ? '雾港 AVG 世界' : '无媒资 AVG 世界', genre: 'mystery', genres: ['mystery'], status: 'drafting',
     description: '世界到 AVG 确定性投影测试', targetWordCount: 30_000, createdAt: now, updatedAt: now,
   } as any) as number
@@ -58,7 +60,7 @@ async function avgWorldFixture(withMedia = true) {
       blob: svg('潮声归来', '#ca8750'), altText: '晨光照亮潮汐钟与防波堤', source: 'StoryForge 雾港演示资产', license: 'CC0', sceneTag: 'ending', width: 1280, height: 720,
     })
   }
-  const revision = await createWorldRevision({ scope: owned.scope, label: '雾港 AVG 来源', selectedNarrativeModuleIds: [module.id!] })
+  const revision = await createLegacyExecutableWorldRevisionFixtureV1({ scope: owned.scope, label: '雾港 AVG 来源', selectedNarrativeModuleIds: [module.id!] })
   const release = await publishWorldRevision(revision.id!)
   return { ...owned, module, release }
 }
@@ -67,16 +69,16 @@ describe('WORLDGAME-3 · WorldRelease 到 AVG', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
 
-  it('复用分支叙事投影，并从冻结场景、立绘和 CG 生成声明式演出', async () => {
+  it('复用历史叙事投影，但世界工作区中的旧媒资不会进入语义 WorldRelease', async () => {
     const fixture = await avgWorldFixture(true)
     const catalog = await loadWorldGameSourceCatalog({ scope: fixture.scope, worldReleaseId: fixture.release.id! })
-    expect(catalog.mediaAssets.map(item => item.kind)).toEqual(['character-pose', 'background', 'cg'])
+    expect(catalog.mediaAssets).toEqual([])
     const narrativeModuleExportId = catalog.narrativeModules[0].exportId
     const pure = buildAvgPresentationFromWorldRelease({ catalog, narrativeModuleExportId })
-    expect(pure.content.cues.map(cue => cue.type)).toEqual(expect.arrayContaining(['set-background', 'show-actor', 'show-cg']))
+    expect(pure.content.cues).toEqual([])
     expect(pure.source).toMatchObject({
       productType: 'avg', worldContentHash: fixture.release.contentHash,
-      avgMediaAssetExportIds: expect.arrayContaining(catalog.mediaAssets.map(item => item.exportId)),
+      avgMediaAssetExportIds: [],
     })
 
     const generated = await generateAvgGameFromWorldRelease({
@@ -88,7 +90,7 @@ describe('WORLDGAME-3 · WorldRelease 到 AVG', () => {
     expect(await validateAvgGame(fixture.scope, generated.definition.id!)).toMatchObject({ valid: true })
   })
 
-  it('完成 AVG 发布和立即试玩，GameRelease 冻结来源与实际媒资版本', async () => {
+  it('完成纯文字 AVG 发布和立即试玩，GameRelease 不伪造世界媒资', async () => {
     const fixture = await avgWorldFixture(true)
     const catalog = await loadWorldGameSourceCatalog({ scope: fixture.scope, worldReleaseId: fixture.release.id! })
     const generated = await generateAvgGameFromWorldRelease({
@@ -101,40 +103,40 @@ describe('WORLDGAME-3 · WorldRelease 到 AVG', () => {
       mappingVersion: 1,
       selection: { productType: 'avg', avgMediaAssetExportIds: expect.any(Array) },
     })
-    expect(manifest.presentation.assets).toHaveLength(3)
-    expect(manifest.presentation.cues.some(cue => cue.type === 'show-actor')).toBe(true)
+    expect(manifest.presentation.assets).toEqual([])
+    expect(manifest.presentation.cues).toEqual([])
     const session = await createAvgGameInstance({ scope: fixture.scope, gameReleaseId: publication.gameRelease.id!, title: '评审现场 AVG' })
     expect(await readSimulationState(session.id!)).toMatchObject({
       narrative: { currentNodeKey: 'entry' },
-      presentation: { currentNodeKey: 'entry', assets: expect.any(Array) },
+      presentation: { currentNodeKey: 'entry', assets: [] },
     })
   }, 60_000)
 
-  it('实时媒资已有新版本时仍恢复并发布来源 WorldRelease 的冻结二进制', async () => {
+  it('语义版本封存后新增产品媒资也不会追写或污染旧 WorldRelease', async () => {
     const fixture = await avgWorldFixture(true)
     const catalog = await loadWorldGameSourceCatalog({ scope: fixture.scope, worldReleaseId: fixture.release.id! })
-    const frozenBackground = catalog.mediaAssets.find(item => item.assetKey === 'world.bg.harbor')!
+    expect(catalog.mediaAssets).toEqual([])
     await importAvgMediaAsset({
       scope: fixture.scope,
-      assetKey: frozenBackground.assetKey,
+      assetKey: 'product.bg.after-release',
       kind: 'background',
-      name: '发布后替换背景',
-      blob: svg('不得进入旧来源投影', '#ff00ff'),
-      altText: '发布后替换背景',
+      name: '产品阶段新增背景',
+      blob: svg('不得追写世界版本', '#ff00ff'),
+      altText: '产品阶段新增背景',
     })
     const generated = await generateAvgGameFromWorldRelease({
       scope: fixture.scope,
       worldReleaseId: fixture.release.id!,
       narrativeModuleExportId: catalog.narrativeModules[0].exportId,
     })
-    const restored = await db.avgMediaAssets.where('workId').equals(fixture.scope.workId)
-      .filter(item => item.assetKey === frozenBackground.assetKey).sortBy('version')
-    expect(restored.map(item => item.version)).toEqual([1, 2, 3])
-    expect(restored[2].contentHash).toBe(frozenBackground.contentHash)
+    expect(generated.warnings.join('')).toContain('纯文字 AVG')
+    expect((await loadWorldGameSourceCatalog({
+      scope: fixture.scope,
+      worldReleaseId: fixture.release.id!,
+    })).mediaAssets).toEqual([])
     const publication = await publishAvgGame({ scope: fixture.scope, gameDefinitionId: generated.definition.id! })
     const manifest = parseAvgGameReleaseManifest(publication.gameRelease.manifestJson)
-    expect(manifest.presentation.assets.find(item => item.assetKey === frozenBackground.assetKey)?.contentHash)
-      .toBe(frozenBackground.contentHash)
+    expect(manifest.presentation.assets).toEqual([])
   })
 
   it('没有冻结媒资时明确降级为仍可发布试玩的纯文字 AVG', async () => {

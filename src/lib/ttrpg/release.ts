@@ -217,6 +217,9 @@ export async function publishTtrpgCampaignReleaseV1(input: {
   /** Isolated tests may publish the deterministic fixture to exercise runtime lifecycle. */
   testOnlyAllowFixtureCampaign?: true
 }): Promise<GameRelease> {
+  if (import.meta.env.MODE !== 'test') {
+    throw new Error('[ttrpg-release] 旧 CampaignPack 发布仅允许隔离测试；正式发布必须进入跑团产品生产流程')
+  }
   const scope = await resolveScope({ scope: input.scope })
   const campaignRow = await db.ttrpgCampaignModules.get(input.campaignModuleId)
   if (!campaignRow || !await assertRecordInScope(scope, 'ttrpgCampaignModules', campaignRow, { owner: 'work' })) {

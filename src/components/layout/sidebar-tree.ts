@@ -6,7 +6,6 @@ import {
   FileCog, History, Upload, Download, Settings,
   Map, ClipboardList, GitBranch, Clock, MapPin, Scale,
   Drama, Package, CalendarClock, ScanSearch, Coins, Feather, Database, TrendingUp, Workflow,
-  Gamepad2,
   Replace,
 } from 'lucide-react'
 
@@ -44,7 +43,7 @@ export type SidebarModule =
   | 'character-driven-plot'  // Phase 26.3 — 角色驱动剧情
   | 'visual-workflows'       // FLOW-1 — 可视化节点创作工作流
   | 'rag-library'            // RAG-1 — 可见资料与检索管理
-  | 'simulation-runtime'     // SIM-1 — NPC/跑团/角色聊天共享运行时
+  | 'simulation-runtime'     // legacy route only; formal products live in ProductHub
   | 'detailed-outline'      // 占位 (P8)
   | 'chapters-list'         // 占位 (P8)
   | 'editor'
@@ -291,13 +290,6 @@ export const NAV_TREE: TreeSection[] = [
       leaf('story-timeline',   '故事年表', CalendarClock),
       leaf('cultivation-progress', '修炼进度', TrendingUp),
       leaf('scene-verify',     '场景考证', ScanSearch),
-    ],
-  },
-  {
-    sectionId: 'experience',
-    label: '体验中心',
-    children: [
-      leaf('simulation-runtime', '互动运行时', Gamepad2),
     ],
   },
   // 作品学习已整合进「项目参考 → 深度分析」tab（Phase 20）

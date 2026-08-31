@@ -776,7 +776,9 @@ export function compileTtrpgCampaignDraftV1(input: {
   title?: string
   confirmDefaultMappings?: boolean
 }): TtrpgCampaignContentV1 {
-  if (input.fixtureOnly !== true) fail('固定战役编译器仅允许生成测试 fixture')
+  if (import.meta.env.MODE !== 'test' || input.fixtureOnly !== true) {
+    fail('固定战役编译器仅允许隔离测试 fixture')
+  }
   const rulePack = parseRulePackV1(input.rulePack)
   if (input.playableWorld.source.worldContentHash !== input.playableWorld.canonSnapshot.snapshotHash
     && !isSha256Hash(input.playableWorld.source.worldContentHash)) fail('PlayableWorld 来源 hash 无效')

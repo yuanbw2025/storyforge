@@ -152,6 +152,17 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
     const reboundPlan = { ...plan, worldReference: reboundReference }
     await expect(validateProductSourcePlanV1(reboundPlan)).resolves.toEqual(reboundPlan)
     expect(reboundPlan.planHash).toBe(plan.planHash)
+
+    const originalDescription = await describeWorldReleaseV1(owned.resourceScope)
+    const originalDescriptors = await listAllWorldReleaseResourceDescriptorsV1(owned.resourceScope)
+    const reboundScope = await worldReferenceResourceScopeV1(reboundReference)
+    const reboundDescription = await describeWorldReleaseV1(reboundScope)
+    const reboundDescriptors = await listAllWorldReleaseResourceDescriptorsV1(reboundScope)
+    expect(reboundDescription.scopeFingerprint).not.toBe(originalDescription.scopeFingerprint)
+    expect(reboundDescriptors.map(item => item.resourceKey))
+      .toEqual(originalDescriptors.map(item => item.resourceKey))
+    expect(originalDescriptors.every(item => item.scope.worldReleaseId === owned.release.id)).toBe(true)
+    expect(reboundDescriptors.every(item => item.scope.worldReleaseId === reboundId)).toBe(true)
   })
 
   it('拒绝可变草稿冒充冻结来源以及 release ID/hash 任一侧漂移', async () => {

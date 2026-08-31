@@ -6,6 +6,10 @@ import {
   generateInteractionRuntimeCandidateV1,
 } from '../lib/character-interaction/harness'
 import {
+  assertCharacterInteractionProductReleaseUnchangedV1,
+  createCharacterInteractionProductInstanceV1,
+} from '../lib/character-interaction/production-pipeline'
+import {
   branchSimulationSession,
   changeInteractionRelationship,
   commitInteractionPlayerMessage,
@@ -24,10 +28,10 @@ import {
 } from '../lib/text-game/releases'
 import {
   assertInstanceBinding,
-  createInteractionGameInstance,
 } from '../lib/world-engine/instances'
 import type {
   AIConfig,
+  CharacterInteractionProductReleaseRecordV1,
   GameRelease,
   InteractionGameReleaseManifestV1,
   SimulationCheckpoint,
@@ -39,7 +43,8 @@ import type {
 import { EMPTY_SIMULATION_STATE } from '../lib/types'
 
 export interface InteractionGameLibraryItem {
-  release: GameRelease
+  productRelease: CharacterInteractionProductReleaseRecordV1
+  release: GameRelease | null
   manifest: InteractionGameReleaseManifestV1 | null
   error: string
 }
@@ -60,7 +65,7 @@ interface InteractionGamePlayerState {
   error: string
   load(scope: WorkspaceScope, worldGroupId: number | null): Promise<void>
   select(sessionId: number | null): Promise<void>
-  start(gameReleaseId: number, title?: string): Promise<number>
+  start(productReleaseId: number, title?: string): Promise<number>
   startScene(sceneKey: string): Promise<void>
   sendPlayerMessage(text: string, audienceKeys?: string[] | null): Promise<number>
   applyFixedAction(ruleKey: string): Promise<void>
@@ -80,21 +85,28 @@ interface InteractionGamePlayerState {
 let generationAbortController: AbortController | null = null
 
 async function readLibrary(scope: WorkspaceScope): Promise<InteractionGameLibraryItem[]> {
-  const rows = (await db.gameReleases.where('projectId').equals(scope.projectId).toArray())
+  const rows = (await db.characterInteractionProductReleases.where('projectId').equals(scope.projectId).toArray())
     .filter(row => row.worldId === scope.worldId && row.workId === scope.workId)
     .sort((a, b) => b.createdAt - a.createdAt)
   const items: InteractionGameLibraryItem[] = []
-  for (const release of rows) {
+  for (const productRelease of rows) {
+    const release = await db.gameReleases.get(productRelease.gameReleaseId) ?? null
     try {
+      await assertCharacterInteractionProductReleaseUnchangedV1({
+        scope,
+        productReleaseId: productRelease.id!,
+      })
+      if (!release) throw new Error('Product Release 指向的 GameRelease 不存在。')
       await assertGameReleaseUnchanged(release.id!)
       const manifest = parseInteractionGameReleaseManifest(release.manifestJson)
-      items.push({ release, manifest, error: '' })
+      items.push({ productRelease, release, manifest, error: '' })
     } catch (reason) {
-      try {
-        const raw = JSON.parse(release.manifestJson) as { productType?: string }
-        if (raw.productType !== 'character-interaction') continue
-      } catch { continue }
-      items.push({ release, manifest: null, error: reason instanceof Error ? reason.message : String(reason) })
+      items.push({
+        productRelease,
+        release,
+        manifest: null,
+        error: reason instanceof Error ? reason.message : String(reason),
+      })
     }
   }
   return items
@@ -229,13 +241,13 @@ export const useInteractionGamePlayerStore = create<InteractionGamePlayerState>(
       finally { set({ loading: false }) }
     },
 
-    start: async (gameReleaseId, title) => withBusy(async () => {
+    start: async (productReleaseId, title) => withBusy(async () => {
       const scope = get().scope
-      const item = get().releases.find(row => row.release.id === gameReleaseId)
+      const item = get().releases.find(row => row.productRelease.id === productReleaseId)
       if (!scope || !item?.manifest || item.error) throw new Error('请选择可用的角色互动发布。')
-      const session = await createInteractionGameInstance({
+      const session = await createCharacterInteractionProductInstanceV1({
         scope,
-        gameReleaseId,
+        productReleaseId,
         title: title?.trim() || `${item.manifest.definition.title} · 新会话`,
         worldGroupId: get().worldGroupId,
       })

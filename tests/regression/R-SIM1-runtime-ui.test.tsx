@@ -92,6 +92,12 @@ describe('SIM-1B · 互动运行时 UI', () => {
     root = createRoot(host)
   })
 
+  async function seedLegacyTtrpgSession(input: Parameters<typeof createSimulationSession>[0]) {
+    const session = await createSimulationSession({ ...input, kind: 'sandbox' })
+    await db.simulationSessions.update(session.id!, { kind: 'ttrpg' })
+    return { ...session, kind: 'ttrpg' as const }
+  }
+
   afterEach(async () => {
     await act(async () => root.unmount())
     host.remove()
@@ -215,9 +221,9 @@ describe('SIM-1B · 互动运行时 UI', () => {
   })
 
   it('跑团会话可从可见入口开始场景并执行确定性技能检定', async () => {
-    const session = await createSimulationSession({
+    const session = await seedLegacyTtrpgSession({
       projectId: project.id!,
-      kind: 'ttrpg',
+      kind: 'sandbox',
       title: '钟楼战役',
       seed: 'ui-ttrpg',
       initialState: {
@@ -265,9 +271,9 @@ describe('SIM-1B · 互动运行时 UI', () => {
   })
 
   it('跑团面板可创建战斗遭遇并执行攻击、资源与状态操作', async () => {
-    const session = await createSimulationSession({
+    const session = await seedLegacyTtrpgSession({
       projectId: project.id!,
-      kind: 'ttrpg',
+      kind: 'sandbox',
       title: '战斗遭遇 UI',
       seed: 'ui-ttrpg-1b',
       initialState: {
@@ -318,9 +324,9 @@ describe('SIM-1B · 互动运行时 UI', () => {
   })
 
   it('产品跑团入口只显示跑团存档，不会自动打开已有沙盒会话', async () => {
-    const ttrpg = await createSimulationSession({
+    const ttrpg = await seedLegacyTtrpgSession({
       projectId: project.id!,
-      kind: 'ttrpg',
+      kind: 'sandbox',
       title: '产品跑团战役',
       seed: 'product-ttrpg',
       initialState: structuredClone(EMPTY_SIMULATION_STATE),

@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../src/lib/ai/client', () => ({
-  chat: vi.fn(async () => '潮汐退去后，第一座城从海床升起。'),
+  chat: vi.fn(async () => JSON.stringify({
+    field: 'worldOrigin',
+    value: '潮汐退去后，第一座城从海床升起。',
+  })),
 }))
 
 import { chat } from '../../src/lib/ai/client'
@@ -113,7 +116,7 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
     const flow = (await db.nodeFlows.get(flowId)) as NodeFlow
 
     const outcome = await runAuthoringGraph({ flow })
-    expect(outcome.run.status).toBe('completed')
+    expect(outcome.run.status, JSON.stringify(outcome.candidates)).toBe('completed')
     expect(outcome.candidates.origin.output).toContain('第一座城')
     expect(outcome.candidates.origin.variants).toHaveLength(2)
     expect(outcome.snapshots.origin.inputs[0]).toMatchObject({

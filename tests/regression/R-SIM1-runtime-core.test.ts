@@ -168,13 +168,13 @@ describe('SIM-1A · 共享互动运行时核心', () => {
     const { project } = await seedProject()
     const first = await createSimulationSession({
       projectId: project.id!,
-      kind: 'ttrpg',
+      kind: 'sandbox',
       title: '判定 A',
       seed: 'fixed-seed',
     })
     const second = await createSimulationSession({
       projectId: project.id!,
-      kind: 'ttrpg',
+      kind: 'sandbox',
       title: '判定 B',
       seed: 'fixed-seed',
     })
@@ -221,7 +221,7 @@ describe('SIM-1A · 共享互动运行时核心', () => {
     const { project } = await seedProject()
     const session = await createSimulationSession({
       projectId: project.id!,
-      kind: 'chatgame',
+      kind: 'sandbox',
       title: '并发会话',
       seed: 'concurrent',
     })
@@ -313,7 +313,7 @@ describe('SIM-1A · 共享互动运行时核心', () => {
     const parent = await createSimulationSession({
       projectId: project.id!,
       worldGroupId,
-      kind: 'ttrpg',
+      kind: 'sandbox',
       title: '原战役',
       seed: 'portable',
     })

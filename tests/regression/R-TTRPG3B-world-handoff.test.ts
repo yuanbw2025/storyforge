@@ -17,9 +17,10 @@ describe('TTRPG-3B · WorldRelease to TTRPG production handoff', () => {
   it('世界引擎正式按钮进入跑团制作页，不再跳到 storygame 或丢失 release', () => {
     const source = (relative: string) => readFileSync(path.resolve(process.cwd(), relative), 'utf8')
     const releasePanel = source('src/components/world-engine/WorldNarrativeReleasePanel.tsx')
-    expect(releasePanel).toContain('用此世界制作跑团')
-    expect(releasePanel).toContain("productType: 'ttrpg'")
-    expect(releasePanel).toContain('worldReleaseId: selectedRelease.id!')
+    expect(releasePanel).toContain('交给跑团')
+    expect(releasePanel).toContain("onClick={() => handoff('ttrpg')}")
+    expect(releasePanel).toContain('productType,')
+    expect(releasePanel).toContain('worldReleaseId: selectedRelease.id')
     expect(releasePanel).toContain('worldContentHash: selectedRelease.contentHash')
     const productHub = source('src/pages/ProductHubPage.tsx')
     expect(productHub).toContain('const parsed = parseWorldGameProductionHandoffV2(handoff)')

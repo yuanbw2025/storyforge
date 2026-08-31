@@ -183,6 +183,7 @@ import {
   earnedTtrpgCharacterCurrencyV2,
 } from "../ttrpg/advancement";
 import { evaluateTtrpgActionRequirementsV2 } from "../ttrpg/action-requirement";
+import { isFormalProductSessionKindV1 } from "../product/runtime-boundary";
 
 type JsonObject = Record<string, unknown>;
 
@@ -6988,16 +6989,24 @@ async function insertSimulationSession(
 export async function createSimulationSession(
   input: CreateSimulationSessionInput,
 ): Promise<SimulationSession> {
-  if (
-    input.kind === "storygame" ||
-    input.kind === "textadventure" ||
-    input.kind === "avg" ||
-    input.kind === "textsimulation" ||
-    input.kind === "textworld"
-  ) {
+  if (isFormalProductSessionKindV1(input.kind)) {
     throw new Error(
-      "新建正式文字游戏必须通过不可变 GameRelease；createSimulationSession 仅保留内核和 legacy 运行时入口。",
+      "新建正式上层产品必须通过不可变 GameRelease 或受治理的 Build Preview；createSimulationSession 只允许 sandbox 与 NPC 演进内核。",
     );
+  }
+  return insertSimulationSession(input);
+}
+
+/**
+ * Regression-only constructor for exercising deterministic product kernels without
+ * fabricating a full ProductRelease in every unit test. Production builds always
+ * reject this boundary; formal UI and services must use release/build launchers.
+ */
+export async function createSimulationSessionFixtureV1(
+  input: CreateSimulationSessionInput,
+): Promise<SimulationSession> {
+  if (import.meta.env.MODE !== "test") {
+    throw new Error("createSimulationSessionFixtureV1 仅允许隔离测试环境使用。");
   }
   return insertSimulationSession(input);
 }
@@ -15298,12 +15307,17 @@ async function cloneTtrpgRuntimeMediaRequestsForBranchV1(input: {
   await db.ttrpgRuntimeAssetRequests.bulkAdd(rows);
 }
 
-export async function branchSimulationSession(input: {
+export interface BranchSimulationSessionInputV1 {
   parentSessionId: number;
   throughSequence: number;
   title: string;
   seed?: string;
-}): Promise<SimulationSession> {
+}
+
+async function branchSimulationSessionInternal(
+  input: BranchSimulationSessionInputV1,
+  options: { allowFormalFixture: boolean },
+): Promise<SimulationSession> {
   const parent = await db.simulationSessions.get(input.parentSessionId);
   if (!parent) throw new Error("父模拟会话不存在。");
   const events = await readSessionEvents(parent);
@@ -15417,6 +15431,8 @@ export async function branchSimulationSession(input: {
                 parent.narrativeModuleExportId ?? null,
               origin: "branch",
             })
+        : options.allowFormalFixture && isFormalProductSessionKindV1(parent.kind)
+          ? await insertSimulationSession(childInput)
         : parent.kind === "storygame" && state.narrative?.version === 1
           ? await insertSimulationSession(childInput)
           : await createSimulationSession(childInput);
@@ -15475,6 +15491,24 @@ export async function branchSimulationSession(input: {
     }
   }
   return boundChild;
+}
+
+export async function branchSimulationSession(
+  input: BranchSimulationSessionInputV1,
+): Promise<SimulationSession> {
+  return branchSimulationSessionInternal(input, { allowFormalFixture: false });
+}
+
+/** Regression-only companion for sessions created by
+ * createSimulationSessionFixtureV1. Formal release/build branches still take
+ * the normal immutable launch paths before this fallback is considered. */
+export async function branchSimulationSessionFixtureV1(
+  input: BranchSimulationSessionInputV1,
+): Promise<SimulationSession> {
+  if (import.meta.env.MODE !== "test") {
+    throw new Error("branchSimulationSessionFixtureV1 仅允许隔离测试环境使用。");
+  }
+  return branchSimulationSessionInternal(input, { allowFormalFixture: true });
 }
 
 export async function deleteSimulationSession(

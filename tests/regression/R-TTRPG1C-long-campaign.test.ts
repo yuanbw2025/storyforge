@@ -3,8 +3,8 @@ import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import {
   appendSimulationEvent,
-  branchSimulationSession,
-  createSimulationSession,
+  branchSimulationSessionFixtureV1,
+  createSimulationSessionFixtureV1,
   readSimulationState,
   updateTtrpgCampaignSummary,
   upsertTtrpgNpcSchedule,
@@ -28,7 +28,7 @@ async function seedCampaignSession() {
     updatedAt: now,
   }
   await db.projects.put(project)
-  const session = await createSimulationSession({
+  const session = await createSimulationSessionFixtureV1({
     projectId: project.id!,
     kind: 'ttrpg',
     title: '潮汐钟楼长期战役',
@@ -139,7 +139,7 @@ describe('TTRPG-1C · 长期战役状态与跨会话续接', () => {
       description: '分支前必须完成。',
       status: 'active',
     })
-    const child = await branchSimulationSession({
+    const child = await branchSimulationSessionFixtureV1({
       parentSessionId: session.id!,
       throughSequence: 2,
       title: '北门路线分支',

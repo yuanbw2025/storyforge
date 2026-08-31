@@ -97,9 +97,8 @@ describe('Phase 36 · 页面上游/下游内容标记', () => {
 
     const runtimeButton = Array.from(host.querySelectorAll('button')).find(button =>
       button.textContent?.includes('互动运行时'),
-    )!
-    expect(runtimeButton.textContent).toContain('体验')
-    await act(async () => runtimeButton.click())
-    expect(onSelect).toHaveBeenCalledWith('simulation-runtime')
+    )
+    expect(runtimeButton).toBeUndefined()
+    expect(onSelect).not.toHaveBeenCalledWith('simulation-runtime')
   })
 })

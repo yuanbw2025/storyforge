@@ -10,5 +10,5 @@ export const WORLD_RELEASE_RESOURCE_KINDS_V1: readonly ContextResourceKind[] = [
 ]
 
 export const WORLD_RELEASE_PROVIDER_ID_V1 = 'storyforge.world-release' as const
-export const WORLD_RELEASE_PROVIDER_VERSION_V1 = 'world-release-resource-provider-v1' as const
+export const WORLD_RELEASE_PROVIDER_VERSION_V1 = 'world-release-resource-provider-v2' as const
 export const WORLD_RELEASE_NORMALIZATION_VERSION_V1 = 'world-release-semantic-row-v1' as const

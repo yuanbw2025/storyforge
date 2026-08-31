@@ -45,6 +45,8 @@ const entryRequirements = [
   ['世界引擎', 'world-engine product boundary'],
   ['IndexedDB', 'production data warning'],
   ['main', 'production branch warning'],
+  ['同一个已验证治理提交', 'parallel product branch baseline'],
+  ['共享热点', 'shared-core serialization rule'],
   ['npm run ci', 'delivery verification'],
 ]
 for (const [needle, label] of entryRequirements) {
@@ -80,6 +82,7 @@ const routingRequirements = [
   ['世界引擎', 'world-engine route'],
   ['上层产品', 'upper-product route'],
   ['PR', 'collaboration route'],
+  ['并行产品开发', 'parallel product route'],
   ['历史追溯', 'history route'],
   ['rg', 'targeted search guidance'],
 ]

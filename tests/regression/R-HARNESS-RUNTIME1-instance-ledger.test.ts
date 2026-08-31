@@ -10,7 +10,7 @@ import { deriveImportProjectJSON } from '../../src/lib/export/registry-import'
 import { buildSimulationCanonSnapshot } from '../../src/lib/simulation/canon-snapshot'
 import {
   commitInteractionPlayerMessage,
-  createSimulationSession,
+  createSimulationSessionFixtureV1,
   deleteSimulationSession,
   readSimulationState,
   readSimulationStateVersion,
@@ -71,7 +71,7 @@ async function fixture(): Promise<{ scope: WorkspaceScope; sessionId: number; pl
     projectId, scope, worldGroupId: null, sourceKeys: [`project-world:${projectId}`],
   })
   const draftSnapshotHash = await hashCanonicalValue({ kind: 'chatgame-draft', projectId, worldId, workId })
-  const created = await createSimulationSession({
+  const created = await createSimulationSessionFixtureV1({
     projectId, kind: 'chatgame', title: '雨夜钟楼', canonSnapshot: canon.snapshot, initialState: initialState(),
   })
   await db.simulationSessions.update(created.id!, { worldId, workId, draftSnapshotHash })

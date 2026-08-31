@@ -42,9 +42,7 @@ import {
   stampNewRecord,
 } from '../world-engine/scope'
 import {
-  createWorldRevision,
-  listWorldRevisions,
-  publishWorldRevision,
+  createInternalProductWorldReleaseFixtureV1,
 } from '../world-engine/releases'
 import {
   createInteractionGuestCharacterSnapshot,
@@ -855,7 +853,7 @@ export async function publishInteractionGameDraft(input: {
    */
   fixtureOnly: true
 }): Promise<InteractionGamePublication> {
-  if (input.fixtureOnly !== true) {
+  if (import.meta.env.MODE !== 'test') {
     throw new Error('[chatgame] 旧草稿发布只允许隔离测试夹具；正式发布必须进入角色互动制作流程')
   }
   const scope = await resolveScope({ scope: input.scope })
@@ -864,14 +862,8 @@ export async function publishInteractionGameDraft(input: {
   if (!report.valid) {
     throw new Error(`[chatgame] 发布检查未通过:${report.diagnostics.filter(item => item.severity === 'error').map(item => item.message).join('；')}`)
   }
-  const latest = (await listWorldRevisions(scope))[0]
   const label = input.label?.trim() || `${definition.title} · 发布候选`
-  const revision = await createWorldRevision({
-    scope,
-    label,
-    parentRevisionId: latest?.id ?? null,
-  })
-  const worldRelease = await publishWorldRevision(revision.id!, label)
+  const { revision, release: worldRelease } = await createInternalProductWorldReleaseFixtureV1({ scope, label })
   const gameRelease = await publishGameDefinition({
     scope,
     gameDefinitionId: definition.id!,

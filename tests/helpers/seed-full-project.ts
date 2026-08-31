@@ -459,6 +459,63 @@ export async function seedFullProject() {
     sourceWorldCode: 'world-full-fixture',
     createdAt: now,
   } as any) as number
+  const worldDerivation = await db.worldDerivations.add({
+    projectId,
+    worldId,
+    sourceWorkspaceUid: 'fixture:independent-long-novel',
+    sourceWorkCode: 'work-full-fixture',
+    sourceWorkRevision: now,
+    sourceRevisionVectorJson: canonicalStringify({
+      schema: 'fixture.workspace-content-revision',
+      version: 1,
+      capturedAt: now,
+      tables: [],
+    }),
+    sourceKind: 'long-novel',
+    sourceRangeJson: canonicalStringify({ kind: 'all-confirmed-canon' }),
+    selectedResourceIdsJson: canonicalStringify(['story-core', 'narrative']),
+    sourceContentHash: await hashCanonicalValue({
+      sourceWorkspaceUid: 'fixture:independent-long-novel',
+      sourceWorkCode: 'work-full-fixture',
+      sourceWorkRevision: now,
+    }),
+    targetRevisionId: worldRevision,
+    targetReleaseId: worldRelease,
+    createdAt: now,
+  }) as number
+  const worldReleaseMigrationClassification = {
+    version: 1,
+    contract: 'legacy-mixed',
+    migrationRequired: true,
+    tables: [{
+      table: 'gameDefinitions',
+      role: 'product-content',
+      rowCount: 1,
+      byteSize: 128,
+      contentHash: await hashCanonicalValue([{ gameKey: 'legacy-full-fixture' }]),
+    }],
+    totals: {
+      'world-semantic': { tableCount: 0, rowCount: 0, byteSize: 0 },
+      'product-content': { tableCount: 1, rowCount: 1, byteSize: 128 },
+      'product-media': { tableCount: 0, rowCount: 0, byteSize: 0 },
+      runtime: { tableCount: 0, rowCount: 0, byteSize: 0 },
+      infrastructure: { tableCount: 0, rowCount: 0, byteSize: 0 },
+      unknown: { tableCount: 0, rowCount: 0, byteSize: 0 },
+    },
+  }
+  const worldReleaseMigration = await db.worldReleaseMigrations.add({
+    projectId,
+    worldId,
+    sourcePackageId: 'fixture:legacy-mixed-world-package',
+    sourceWorldCode: 'world-full-fixture',
+    sourceWorldVersion: 0,
+    classificationJson: canonicalStringify(worldReleaseMigrationClassification),
+    semanticReleaseId: worldRelease,
+    semanticContentHash: 'fixture-release-hash',
+    productRecoveryWorkspaceUid: 'fixture:legacy-product-recovery',
+    productRecoveryContentHash: await hashCanonicalValue({ fixture: 'legacy-product-recovery' }),
+    createdAt: now,
+  }) as number
   const gameDefinition = await db.gameDefinitions.add({
     projectId, worldId, workId, gameKey: 'full-fixture-story', productType: 'storygame',
     title: '青云山门', description: '全表往返游戏定义', status: 'draft',
@@ -1354,6 +1411,12 @@ export async function seedFullProject() {
   })
   const ttrpgReleaseManifest = {
     schema: 'fixture.ttrpg-product-release', version: 1,
+    source: {
+      worldReleaseId: worldRelease,
+      sourceContentHash: 'fixture-release-hash',
+      sourceCatalogHash: await hashGameProductionValueV2(ttrpgSourceCatalog),
+      selection: ttrpgSelection,
+    },
     buildHash: await hashGameProductionValueV2(ttrpgBuildValue),
   }
   const ttrpgProductRelease = await db.ttrpgProductReleases.add({
@@ -1424,7 +1487,7 @@ export async function seedFullProject() {
     projectId, wgA, wgB, char1, char2, vol, chapNode, chapter, temporalFact, ref1,
     cat, subCat, rootWorld, mirrorWorld, locParent, cultivationSystem, codexEntry,
     characterDrivenPlan, simulationParent, simulationChild, worldId, workId,
-    narrativeModule, worldRevision, worldRelease, gameDefinition, gameRelease,
+    narrativeModule, worldRevision, worldRelease, worldDerivation, worldReleaseMigration, gameDefinition, gameRelease,
     adventureGameDefinition, avgGameDefinition, narrativeSimulationDefinition, openWorldGameDefinition, avgMediaAsset,
     interactionCharacterProfile, interactionSceneTemplate, agentRun, agentRunCheckpoint,
     characterInteractionProduction, characterInteractionSourceSelection, characterInteractionBrief,

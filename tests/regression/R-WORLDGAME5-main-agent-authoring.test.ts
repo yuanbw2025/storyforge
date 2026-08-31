@@ -23,11 +23,13 @@ import type { Project } from '../../src/lib/types'
 import { createStoryGameInstance } from '../../src/lib/world-engine/instances'
 import { installMistHarborDemoWorld } from '../../src/lib/world-engine/mist-harbor-demo'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
 
 async function fixture() {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name: '雾港 AI 游戏链路',
     genre: 'mystery',
     genres: ['mystery'],
@@ -39,7 +41,7 @@ async function fixture() {
   } as Project) as number
   const owned = await ensureWorkspaceOwnership(projectId)
   const demo = await installMistHarborDemoWorld({ scope: owned.scope })
-  const revision = await createWorldRevision({
+  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
     scope: owned.scope,
     label: '雾港 AI 创作源',
     selectedNarrativeModuleIds: [demo.narrativeModuleId],

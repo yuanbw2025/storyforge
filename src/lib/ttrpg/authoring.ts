@@ -249,7 +249,7 @@ export async function compileWorldReleaseToTtrpgCampaignDraftV1(input: {
   campaignKey?: string;
   confirmDefaultMappings?: boolean;
 }): Promise<TtrpgCampaignModuleRecordV1> {
-  if (input.fixtureOnly !== true) {
+  if (import.meta.env.MODE !== "test" || input.fixtureOnly !== true) {
     throw new Error(
       "[ttrpg-authoring] 固定四场景编译器已退出正式产品；请通过跑团制作流程生成并审阅 CampaignPack",
     );

@@ -33,6 +33,7 @@ import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-e
 async function createWorkspace(name: string) {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name,
     genre: 'mystery',
     genres: ['mystery'],
@@ -145,7 +146,6 @@ describe('STORYGAME-1A · content and execution kernel', () => {
     const revision = await createWorldRevision({
       scope: ownership.scope,
       label: '游戏内容冻结',
-      selectedNarrativeModuleIds: [module.id!],
     })
     const worldRelease = await publishWorldRevision(revision.id!)
 
@@ -157,8 +157,14 @@ describe('STORYGAME-1A · content and execution kernel', () => {
       worldReleaseId: worldRelease.id!,
     })
     const manifest = parseGameReleaseManifest(gameRelease.manifestJson)
-    expect(manifest.narrative.beats[0].text).toBe('雨敲着窗。')
-    expect(manifest.narrative.choices[0].text).toBe('打开门')
+    // WorldRelease freezes only semantic world input. The product draft stays
+    // editable until Product/Game Release publication, which freezes its own
+    // executable graph at the then-current revision.
+    expect(manifest.narrative.beats[0].text).toBe('草稿已改写。')
+    expect(manifest.narrative.choices[0].text).toBe('草稿选择已改写')
+    await db.narrativeBeats.where('moduleId').equals(module.id!).modify({ text: '发布后再次改写。' })
+    expect(parseGameReleaseManifest((await db.gameReleases.get(gameRelease.id!))!.manifestJson)
+      .narrative.beats[0].text).toBe('草稿已改写。')
     await assertGameReleaseUnchanged(gameRelease.id!)
 
     const session = await createStoryGameInstance({
@@ -302,7 +308,7 @@ describe('STORYGAME-1A · content and execution kernel', () => {
     await addNarrativeNode({ scope: ownership.scope, moduleId: module.id!, key: 'end', kind: 'ending', title: '结局' })
     await addNarrativeChoice({ scope: ownership.scope, moduleId: module.id!, sourceNodeKey: 'entry', choiceKey: 'finish', text: '结束', targetNodeKey: 'end' })
     const definition = await createGameDefinition({ scope: ownership.scope, gameKey: 'short', title: '短篇', narrativeModuleId: module.id! })
-    const revision = await createWorldRevision({ scope: ownership.scope, label: '短篇冻结', selectedNarrativeModuleIds: [module.id!] })
+    const revision = await createWorldRevision({ scope: ownership.scope, label: '短篇冻结' })
     const worldRelease = await publishWorldRevision(revision.id!)
     const gameRelease = await publishGameDefinition({ scope: ownership.scope, gameDefinitionId: definition.id!, worldReleaseId: worldRelease.id! })
     const session = await createStoryGameInstance({ scope: ownership.scope, gameReleaseId: gameRelease.id!, title: '存档' })

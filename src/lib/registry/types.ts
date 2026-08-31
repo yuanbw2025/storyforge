@@ -37,17 +37,20 @@ export type TableOwner =
 export type WorldReleaseSection = 'foundation' | 'characters' | 'narrative' | 'outline'
 
 /** ARCH-02/07A: semantic capabilities a frozen world may actually own. */
-export type WorldCapabilityArea =
-  | 'foundation'
-  | 'story'
-  | 'characters'
-  | 'relations'
-  | 'entities'
-  | 'storylines'
-  | 'outline'
-  | 'detailed-outline'
-  | 'manuscript'
-  | 'multi-world'
+export const WORLD_CAPABILITY_AREAS = [
+  'foundation',
+  'story',
+  'characters',
+  'relations',
+  'entities',
+  'storylines',
+  'outline',
+  'detailed-outline',
+  'manuscript',
+  'multi-world',
+] as const
+
+export type WorldCapabilityArea = typeof WORLD_CAPABILITY_AREAS[number]
 
 export interface WorldSemanticResourceSpec {
   version: 1

@@ -1,6 +1,6 @@
 # StoryForge 当前架构总览
 
-> 版本：2.2.0 · 更新：2026-08-27 · 权威层级：L1
+> 版本：2.3.0 · 更新：2026-08-31 · 权威层级：L1
 > 本文描述当前主干代码事实与目标架构接缝。产品边界以项目总纲为准；代码偏差见对齐审计。
 
 ## 1. 运行形态
@@ -14,7 +14,7 @@ StoryForge 当前是 React + TypeScript + Vite 的本地优先单页应用，核
 - `/settings`：模型与应用设置；
 - `/workspace/:projectId`：分步骤长篇工作区。
 
-综合页承载世界引擎、作品、节点、跑团、角色聊天、文字游戏与市场实验入口；分步骤工作区仍是当前主要、最完整的作者路径，其 Phase 5 工程主链已经验收完成。
+综合页从 `PRODUCT_CATALOG_V1` 派生世界引擎、作品、节点与上层产品入口；生产环境只显示 `released`，本地/测试才按状态显示 preview/internal，experimental 还需显式 opt-in。分步骤工作区仍是当前主要、最完整的作者路径，其 Phase 5 工程主链已经验收完成。
 
 ## 2. 产品与共享底座
 
@@ -49,11 +49,11 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 993 个文件 / 356456 行 | `tsconfig.json` |
-| IndexedDB schema | v79 / 115 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
-| PROJECT_TABLES | 115 张表 | `project-tables.ts` |
+| TypeScript 生产源码 | 1007 个文件 / 360867 行 | `tsconfig.json` |
+| IndexedDB schema | v85 / 117 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
+| PROJECT_TABLES | 117 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
-| CONTEXT_SOURCES | 86 个上下文源 | `context-sources.ts` |
+| CONTEXT_SOURCES | 87 个上下文源 | `context-sources.ts` |
 | 写回治理 | 39 个通用 adopt target / 44 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 
@@ -106,7 +106,7 @@ Field Registry 决定 AI 可写字段；Adoption Schema/Extension 决定集合�
 
 ### 7.1 `Project` / `World` / `Work`
 
-`Project` 目前仍是本地物理容器和大量旧功能的兼容根；`World` 与 `Work` 提供显式语义 owner，`Work.worldId` 绑定来源世界。该兼容结构尚未完全表达总纲中的“独立长篇不等于世界引擎”，因此新增代码不能继续默认每个 Project 都是可发布世界。目标入口允许长篇/短篇显式一键派生世界快照，同时保持源作品 owner 和后续版本独立。
+`Project` 是本地物理容器和兼容镜像；`World` 与 `Work` 提供显式语义 owner，`Work.worldId` 绑定内部来源 scope。`workspacePurpose` 与 `World.identityKind` 将独立作品的内部 scope 和可分享 `world-draft` 分开；只有后者拥有公共 world code、进入世界目录并可封存。长篇/短篇通过显式派生动作形成独立世界草稿/release，保存 source work/revision/range/hash，源作品 owner 与后续版本保持独立；剧本/漫画被确定性拒绝。
 
 ### 7.2 长篇与节点
 
@@ -118,13 +118,15 @@ Field Registry 决定 AI 可写字段；Adoption Schema/Extension 决定集合�
 
 ### 7.4 世界引擎
 
-世界领域提供投影、完整度、world code、release、source selection 和可运行世界包设施。目标出口是稳定世界编号与不可变版本，而不是直接暴露可变 Project 表。
+世界领域提供显式 world-draft、按 `World/Work` scope 隔离的语义能力投影、稳定 world code、revision/release、显式作品派生、多世界关系以及不可变资源目录。`WorldRelease` 只从 `PROJECT_TABLES.worldSemantic` 派生确认 Canon，并记录选入/遗漏、候选、冲突、证据和 hash；不含媒资、production、build、可执行蓝图或 runtime。
+
+中立出口由 `describeWorldReleaseV1`、`searchWorldReleaseV1`、`readWorldResourceV1` 和 `readWorldOriginalEvidenceV1` 构成。目录按稳定 resource UID、release/hash 和关系导航；有界缓存只缓存已校验 release 投影，千级资源规模回归阻止逐行 IndexedDB 游标退化。跑团与角色互动已有不同 requirement adapter，证明统一协议不等于统一 payload。
 
 ### 7.5 上层产品
 
 游戏生产使用 consultation、brief、command、build、artifact、media、release 与质量证据；角色互动和跑团有各自 production/runtime 数据。`SimulationSession` 及事件/checkpoint 保存私域运行。媒资通过共享设施存储，归具体 build/product release，不归 WorldRelease。
 
-这些数据逻辑上分成两个产品阶段：用户引用世界、配置并确认方向形成 product draft/Brief；用户明确开始后进入 production/build/release/runtime。两阶段都属于上层产品，不属于世界引擎。当前不同产品已经拥有部分对应结构，但顶层 handoff 和共同阶段闸门尚未完全收口。
+这些数据逻辑上分成两个产品阶段：用户引用世界、配置并确认方向形成 product draft/Brief；用户明确开始后进入 production/build/release/runtime。两阶段都属于上层产品，不属于世界引擎。通用 runtime 内核拒绝所有正式上层产品 kind；正式运行必须从产品自己的不可变 ProductRelease 启动，并在 session 中持久化 ProductRelease UID 与 lineage hash。角色互动已形成可重放的参考纵切面，其余产品按各自专项开发，不以共享内核的 preview API 冒充产品完成。
 
 ## 8. 世界到产品的单向流
 
@@ -171,11 +173,12 @@ src/
 
 ## 11. 当前诚实边界
 
-- 代码中已存在大量上层产品、市场和托管能力，但存在“实现领先于总纲发展顺序”和实验入口可见的问题；不等于这些产品已完整交付。
-- Product/World/Work 的兼容关系仍会把独立作品与世界引擎混在同一 Project 表达，需要按对齐审计渐进纠正，不能再扩大耦合。
+- 代码中已存在大量上层产品、市场和托管能力，但除产品目录标为 `released` 的条目外均不等于已经完整交付；preview/internal/experimental 的可见性由机器门控。
+- Project/World/Work 仍共享本地物理工作区以兼容历史数据，但产品身份已由显式 purpose/identity 和派生凭证裁决；存在内部 World 行不再等于共享世界。
 - 分步骤长篇 Phase 5 工程主链和 10万/30万/100万字符规模门已经完成；真实作者长期文学一致性仍需持续研究，但不是尚未完成的功能施工项。
-- 世界 Release、上层 Production/Release 与媒资 owner 已有基础，但“中立世界资源协议 + 产品需求适配器 + SourcePlan/run manifests/发布 SourceManifest”仍需收口；不能用统一固定 payload 解决差异。
-- 部分深层 production 已绑定 WorldRelease ID/hash，但顶层入口仍可能展示可变 Project worldVersion；三阶段 handoff 和 ProductRelease 谱系尚未成为所有上层产品共同闸门。
+- 世界 Release、中立资源协议、两种产品需求适配器、五项逻辑契约校验、三阶段 runtime 闸门和产品成熟度门已经形成共享架构基线；它们规定接入方式，不替代各上层产品的 Brief/production/media/runtime 专项实现。
+- ProductRelease 谱系已经有跨产品逻辑 validator，并在角色互动参考纵切面落地；其它上层产品在转为 released 前仍需按自己的物理 schema 接入同一逻辑闸门。
+- 节点官方模板已绑定正式长篇领域 action，通用生成仅限显式 experimental draft 且不能采纳 Canon；完整跨模式真实 UI 体验仍是节点产品维护事项。
 - 账户、云端社区、支付和商业平台不是当前核心运行前提；相关代码必须 capability gate / experimental，不能掩盖主产品未完成。
 
 当前能力与缺口以 [`roadmap/CAPABILITY-BASELINE.md`](./roadmap/CAPABILITY-BASELINE.md) 和

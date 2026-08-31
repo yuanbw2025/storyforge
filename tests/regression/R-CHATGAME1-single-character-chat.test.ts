@@ -5,7 +5,7 @@ import {
   appendChatMessage,
   appendChatReply,
   appendSimulationEvent,
-  createSimulationSession,
+  createSimulationSessionFixtureV1,
   readSimulationState,
 } from '../../src/lib/simulation/runtime'
 import { buildSimulationCanonSnapshot } from '../../src/lib/simulation/canon-snapshot'
@@ -33,7 +33,7 @@ describe('CHATGAME-1 · 单角色聊天 MVP', () => {
       updatedAt: 1,
     } as any)
     const catalog = await buildSimulationCanonSnapshot({ projectId, worldGroupId: null, sourceKeys: ['project-world:98001'] })
-    const session = await createSimulationSession({
+    const session = await createSimulationSessionFixtureV1({
       projectId,
       kind: 'chatgame',
       title: '城门初遇',

@@ -79,11 +79,11 @@ export default function ChatGamePanel(props: {
       <div className="mb-3 flex items-center gap-2"><MessageCircle className="h-4 w-4 text-accent" /><strong className="text-sm">角色互动发布</strong></div>
       <p className="mb-4 text-xs leading-relaxed text-text-muted">新会话只从不可变 GameRelease 启动。CHATGAME-1 旧存档会在下方只读显示，但不再追加旧式 AI 消息。
       </p>
-      <div className="space-y-2">{store.releases.map(item => <article key={item.release.id} className="rounded border border-border bg-bg-base p-3">
-        <strong className="block text-sm">{item.manifest?.definition.title ?? item.release.label}</strong>
-        <span className="mt-1 block text-[10px] text-text-muted">v{item.release.version} · {item.manifest?.interaction.profiles.length ?? 0} 角色 · {item.manifest?.interaction.sceneTemplates.length ?? 0} 场景</span>
+      <div className="space-y-2">{store.releases.map(item => <article key={item.productRelease.id} className="rounded border border-border bg-bg-base p-3">
+        <strong className="block text-sm">{item.manifest?.definition.title ?? item.productRelease.label}</strong>
+        <span className="mt-1 block text-[10px] text-text-muted">Product Release v{item.productRelease.version} · {item.manifest?.interaction.profiles.length ?? 0} 角色 · {item.manifest?.interaction.sceneTemplates.length ?? 0} 场景</span>
         {item.error && <p className="mt-2 text-[10px] text-danger">{item.error}</p>}
-        <button disabled={!item.manifest || !!item.error || store.busy} onClick={() => void run(async () => { await store.start(item.release.id!) })} className="mt-3 flex w-full items-center justify-center gap-1 rounded bg-accent px-2 py-1.5 text-xs text-white disabled:opacity-40"><Plus className="h-3 w-3" />新建会话</button>
+        <button disabled={!item.release || !item.manifest || !!item.error || store.busy} onClick={() => void run(async () => { await store.start(item.productRelease.id!) })} className="mt-3 flex w-full items-center justify-center gap-1 rounded bg-accent px-2 py-1.5 text-xs text-white disabled:opacity-40"><Plus className="h-3 w-3" />新建会话</button>
       </article>)}</div>
       {!store.releases.length && !store.loading && <div className="rounded border border-dashed border-border p-4 text-center text-xs text-text-muted">尚无角色互动发布。切换到作者工作台创建并发布。</div>}
       <div className="mb-2 mt-6 text-xs font-semibold">互动存档</div>

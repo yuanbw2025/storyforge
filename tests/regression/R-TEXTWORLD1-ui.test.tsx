@@ -88,7 +88,7 @@ describe('TEXTWORLD-1 · author and player UI', () => {
   afterEach(async () => { await act(async () => root.unmount()); host.remove() })
   afterAll(() => db.close())
 
-  it.sequential('作者原子维护三个共享模块，检查后冻结发布', async () => {
+  it.sequential('作者原子维护三个共享模块并检查，但正式发布交给制作中心', async () => {
     const owned = await fixture('TEXTWORLD 作者 UI')
     await act(async () => {
       root.render(createElement(DialogProvider, null, createElement(TextOpenWorldWorkbench, { scope: owned.scope })))
@@ -107,10 +107,11 @@ describe('TEXTWORLD-1 · author and player UI', () => {
     await click(host, '检查')
     await waitFor(() => expect(host.textContent).toContain('全部发布校验通过'))
     expect(host.textContent).toContain('发布就绪')
-    await click(host, '发布')
-    await waitFor(() => expect(host.textContent).toContain('已发布 GameRelease v1'))
+    await click(host, '交由制作中心发布')
+    await waitFor(() => expect(host.textContent).toContain('正式发布必须进入制作中心'))
     expect(await db.openWorldModules.where('projectId').equals(owned.scope.projectId).count()).toBe(1)
-    expect(await db.gameReleases.where('projectId').equals(owned.scope.projectId).count()).toBe(1)
+    expect(await db.gameReleases.where('projectId').equals(owned.scope.projectId).count()).toBe(0)
+    expect(await db.worldReleases.where('projectId').equals(owned.scope.projectId).count()).toBe(0)
   }, 30_000)
 
   it.sequential('玩家离线发现、接受并解决任务，旅行和检查点分支均写入正式实例', async () => {

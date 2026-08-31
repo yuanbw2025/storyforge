@@ -11,6 +11,7 @@ import {
   degradeCharacterInteractionMediaAssetV1,
   generateCharacterInteractionStepCandidateV1,
   confirmCharacterInteractionStepCandidateV1,
+  createCharacterInteractionProductInstanceV1,
   publishCharacterInteractionProductReleaseV1,
   prepareCharacterInteractionStepDraftV1,
   readCharacterInteractionProductionDetailsV1,
@@ -27,7 +28,6 @@ import { CHARACTER_INTERACTION_PRODUCTION_STEPS_V1, type WorkspaceScope } from '
 import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { stampNewRecord } from '../../src/lib/world-engine/scope'
-import { createInteractionGameInstance } from '../../src/lib/world-engine/instances'
 import { collectUnreferencedMediaBlobObjects } from '../../src/lib/game-production/media-blob-store'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
@@ -160,8 +160,16 @@ describe('CHATGAME-3D · CI-3..5 产品生产、发布与运行候选闭环', ()
     expect(manifest.sourceContracts.sourceManifestHash).toBe(published.productRelease.sourceManifestHash)
     expect(JSON.stringify(manifest)).not.toContain('characterId')
 
-    const session = await createInteractionGameInstance({
-      scope: owned.scope, gameReleaseId: published.gameRelease.id!, title: '旧港余生 · 新会话',
+    const session = await createCharacterInteractionProductInstanceV1({
+      scope: owned.scope, productReleaseId: published.productRelease.id!, title: '旧港余生 · 新会话',
+    })
+    expect(session).toMatchObject({
+      productReleaseUid: published.productRelease.releaseUid,
+      productReleaseLineageHash: published.productRelease.lineageHash,
+    })
+    expect(await db.simulationSessions.get(session.id!)).toMatchObject({
+      productReleaseUid: published.productRelease.releaseUid,
+      productReleaseLineageHash: published.productRelease.lineageHash,
     })
     const state = JSON.parse(session.initialStateJson)
     expect(state.interaction.profiles).toHaveLength(2)

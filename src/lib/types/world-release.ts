@@ -96,6 +96,17 @@ export interface WorldReleaseManifestV2 {
     resourceCount: number
     rowCount: number
     status: 'missing' | 'partial' | 'available'
+    /** D-WORLD-01: selection and content sufficiency are separate facts. */
+    selectionStatus?: 'selected' | 'partial-selection' | 'omitted'
+    selectedResourceCount?: number
+    omittedResourceCount?: number
+    confirmedRowCount?: number
+    candidateRowCount?: number
+    conflictRowCount?: number
+    omittedRowCount?: number
+    latestRevision?: number | null
+    originalEvidenceAvailable?: boolean
+    queryableIndexAvailable?: boolean
   }>
   resourceCatalog?: Array<{
     resourceId: string
@@ -104,6 +115,11 @@ export interface WorldReleaseManifestV2 {
     table: string
     rowCount: number
     contentHash: string
+    confirmedRowCount?: number
+    candidateRowCount?: number
+    conflictRowCount?: number
+    omittedRowCount?: number
+    latestRevision?: number | null
   }>
   sourceManifest?: {
     sourceKind: 'world-draft' | 'independent-work-derivation'

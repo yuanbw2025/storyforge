@@ -1,17 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
-import { addNarrativeNode, createNarrativeModule } from '../../src/lib/narrative/blueprint'
 import {
   assertPlayableWorldBundleRunnable,
   buildPlayableWorldBundleFromRelease,
   parseSimulationCanonSnapshot,
   verifyPlayableWorldBundle,
 } from '../../src/lib/simulation/canon-snapshot'
-import { branchSimulationSession, readSimulationState } from '../../src/lib/simulation/runtime'
 import type { WorldReleaseManifestV2 } from '../../src/lib/types'
+import { createWorkspace as createWorkspaceRoot } from '../../src/lib/world-engine/create-workspace'
 import { createWorldInstance } from '../../src/lib/world-engine/instances'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 import {
   createWorldRevision,
   publishWorldRevision,
@@ -102,17 +99,15 @@ function manifestFixture(): WorldReleaseManifestV2 {
 }
 
 async function createWorkspace(name: string) {
-  const projectId = await db.projects.add({
+  return createWorkspaceRoot({
     name,
     genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: 'OUTLET-1 集成测试',
     targetWordCount: 100_000,
-    createdAt,
-    updatedAt: createdAt,
-  } as any) as number
-  return ensureWorkspaceOwnership(projectId)
+    enableMultiWorld: true,
+  }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
 }
 
 describe('OUTLET-1 · WorldRelease 到可运行世界', () => {
@@ -197,7 +192,7 @@ describe('OUTLET-1 · WorldRelease 到可运行世界', () => {
     expect(() => assertPlayableWorldBundleRunnable(bundle)).toThrow('CHARACTER_LOCATION_AMBIGUOUS')
   })
 
-  it('真实 WorldRelease 创建的新跑团实例包含冻结实体，删除草稿后仍可运行', async () => {
+  it('真实 WorldRelease 在草稿删除后仍能提供冻结产品输入，但不能绕过生产阶段直接开跑团', async () => {
     const ownership = await createWorkspace('真实发布实体注入')
     const scope = ownership.scope
     const locationId = await db.importantLocations.add({
@@ -260,24 +255,6 @@ describe('OUTLET-1 · WorldRelease 到可运行世界', () => {
       createdAt,
       updatedAt: createdAt,
     } as any)
-    const module = await createNarrativeModule({ scope, owner: 'work', kind: 'main', title: '冻结主线' })
-    await addNarrativeNode({
-      scope,
-      moduleId: module.id!,
-      key: 'entry',
-      kind: 'entry',
-      title: '雾港入口',
-      successorKeys: ['ending'],
-      order: 0,
-    })
-    await addNarrativeNode({
-      scope,
-      moduleId: module.id!,
-      key: 'ending',
-      kind: 'ending',
-      title: '潮路尽头',
-      order: 1,
-    })
     const selectedTables = [
       ...worldReleaseSectionTables('foundation'),
       ...worldReleaseSectionTables('characters'),
@@ -286,7 +263,6 @@ describe('OUTLET-1 · WorldRelease 到可运行世界', () => {
       scope,
       label: 'OUTLET-1 完整实体修订',
       selectedTables,
-      selectedNarrativeModuleIds: [module.id!],
     })
     const release = await publishWorldRevision(revision.id!)
     const manifest = JSON.parse(release.manifestJson) as WorldReleaseManifestV2
@@ -294,43 +270,28 @@ describe('OUTLET-1 · WorldRelease 到可运行世界', () => {
     await db.characters.delete(characterId)
     await db.importantLocations.delete(locationId)
     await db.codexEntries.clear()
-    const session = await createWorldInstance({
-      scope,
-      kind: 'ttrpg',
-      title: '冻结世界跑团',
-      releaseId: release.id!,
-      releaseNarrativeModuleExportId: manifest.selectedNarrativeModules[0].exportId,
-      seed: 'outlet-fixed',
+    const bundle = await buildPlayableWorldBundleFromRelease({
+      manifest,
+      worldContentHash: release.contentHash,
+      createdAt: release.createdAt,
     })
-    const state = await readSimulationState(session.id!)
 
-    expect(Object.values(state.entities)).toEqual(expect.arrayContaining([
+    expect(Object.values(bundle.initialState.entities)).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: '林舟', kind: 'character', locationKey: 'release-location:0' }),
       expect.objectContaining({ name: '雾港', kind: 'location' }),
       expect.objectContaining({ name: '潮汐钥匙', kind: 'item' }),
     ]))
-    expect(state.narrative).toMatchObject({ currentNodeKey: 'entry', sourceModuleId: null })
-    expect(parseSimulationCanonSnapshot(session.canonSnapshotJson)?.sources.map(source => source.sourceKey))
+    expect(bundle.initialState.narrative).toBeNull()
+    expect(bundle.canonSnapshot.sources.map(source => source.sourceKey))
       .toEqual(expect.arrayContaining(['release-character:0', 'release-location:0', 'release-item:0']))
+    expect(await verifyPlayableWorldBundle(bundle)).toBe(true)
 
-    const branch = await branchSimulationSession({
-      parentSessionId: session.id!,
-      throughSequence: 0,
-      title: '冻结世界跑团分支',
-      seed: 'outlet-branch',
-    })
-    expect((await readSimulationState(branch.id!)).entities).toEqual(state.entities)
-    expect(branch.canonSnapshotJson).toBe(session.canonSnapshotJson)
-
-    const exported = await exportProjectJSON(scope.projectId)
-    const importedProjectId = await importProjectJSON(exported)
-    const imported = await db.simulationSessions.where('projectId').equals(importedProjectId)
-      .filter(item => item.title === '冻结世界跑团')
-      .first()
-    expect(imported).toBeTruthy()
-    expect(parseSimulationCanonSnapshot(imported!.canonSnapshotJson)?.snapshotHash)
-      .toBe(parseSimulationCanonSnapshot(session.canonSnapshotJson)?.snapshotHash)
-    expect(Object.values((await readSimulationState(imported!.id!)).entities).map(entity => entity.name))
-      .toEqual(expect.arrayContaining(['林舟', '雾港', '潮汐钥匙']))
+    await expect(createWorldInstance({
+      scope,
+      kind: 'ttrpg',
+      title: '不得直接运行的跑团',
+      releaseId: release.id!,
+      seed: 'outlet-fixed',
+    })).rejects.toThrow('必须绑定不可变 GameRelease')
   })
 })

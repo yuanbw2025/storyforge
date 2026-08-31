@@ -10,7 +10,8 @@ import { resolvePlayableGameSource } from '../../src/lib/game-production/preview
 import { runLocalGameProductionVerticalSlice } from '../../src/lib/game-production/vertical-slice'
 import { createPlayableGameInstance } from '../../src/lib/world-engine/instances'
 import { seedStoryGameAcceptanceSample } from '../../src/lib/text-game/authoring'
-import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 
 async function authorizedProduction(input: {
@@ -20,12 +21,13 @@ async function authorizedProduction(input: {
 }) {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name: input.name, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
     description: '', targetWordCount: 10_000, createdAt: now, updatedAt: now,
   } as never) as number
   const owned = await ensureWorkspaceOwnership(projectId)
   const definition = await seedStoryGameAcceptanceSample({ scope: owned.scope })
-  const revision = await createWorldRevision({
+  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
     scope: owned.scope, label: 'GAMEPROD 纵切冻结来源',
     selectedNarrativeModuleIds: [definition.narrativeModuleId],
   })

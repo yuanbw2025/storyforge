@@ -226,8 +226,10 @@ describe('MASTER-0 · game platform status dictionary', () => {
     expect(productStudio).not.toContain('compileWorldReleaseToTtrpgCampaignDraftV1')
     expect(productStudio).toContain('固定模板已停用')
     expect(productHub).toContain('冻结来源制作与试玩')
-    expect(productHub).toContain('formalPublicationLocked')
-    expect(productHub).toContain('最终世界适配完成前不开放正式发布')
+    expect(productHub).toContain('TtrpgProductionWorkspace')
+    expect(productHub).toContain('ttrpg-production-contract-boundary')
+    expect(productHub).toContain('制作中心负责冻结世界来源和用户目标')
+    expect(productHub).not.toContain('formalPublicationLocked')
     expect(productHub).not.toContain('单机战役已可用')
   })
 

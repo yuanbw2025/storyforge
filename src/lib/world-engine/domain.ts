@@ -2,7 +2,8 @@ import { db } from '../db/schema'
 import { isShareableWorld } from '../product/world-identity'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type { WorldCapabilityArea } from '../registry/types'
-import type { Project, World } from '../types'
+import type { Project, Work, World, WorkspaceScope } from '../types'
+import { assertRecordInScope } from './scope'
 
 /** ARCH-07A: semantic-only capability projection for one explicit world draft. */
 export interface WorldProjection {
@@ -87,14 +88,18 @@ function getProjectId(row: unknown): number | undefined {
   return typeof projectId === 'number' ? projectId : undefined
 }
 
+function scopeKey(scope: WorkspaceScope): string {
+  return `${scope.projectId}:${scope.worldId}:${scope.workId}`
+}
+
 function summarizeDomain(
-  projectId: number,
+  scope: WorkspaceScope,
   definition: (typeof DOMAIN_DEFINITIONS)[number],
-  countsByProject: ReadonlyMap<number, ReadonlyMap<string, number>>,
+  countsByScope: ReadonlyMap<string, ReadonlyMap<string, number>>,
 ): WorldDomainSummary {
   const specs = PROJECT_TABLES.filter(spec => spec.worldSemantic?.area === definition.key)
-  const projectCounts = countsByProject.get(projectId)
-  const tables = specs.map(spec => ({ name: spec.name, rowCount: projectCounts?.get(spec.name) ?? 0 }))
+  const scopeCounts = countsByScope.get(scopeKey(scope))
+  const tables = specs.map(spec => ({ name: spec.name, rowCount: scopeCounts?.get(spec.name) ?? 0 }))
   const activeTableCount = tables.filter(table => table.rowCount > 0).length
   const coverage = specs.length === 0 ? 0 : clampPercent((activeTableCount / specs.length) * 100)
   const activeTableNames = new Set(tables.filter(table => table.rowCount > 0).map(table => table.name))
@@ -114,21 +119,32 @@ function summarizeDomain(
   }
 }
 
-async function loadWorldDomainCounts(projectIds: ReadonlySet<number>): Promise<Map<number, Map<string, number>>> {
-  const countsByProject = new Map<number, Map<string, number>>()
-  for (const projectId of projectIds) countsByProject.set(projectId, new Map())
-  if (projectIds.size === 0) return countsByProject
+async function loadWorldDomainCounts(scopes: readonly WorkspaceScope[]): Promise<Map<string, Map<string, number>>> {
+  const countsByScope = new Map<string, Map<string, number>>()
+  const scopesByProject = new Map<number, WorkspaceScope[]>()
+  for (const scope of scopes) {
+    countsByScope.set(scopeKey(scope), new Map())
+    const projectScopes = scopesByProject.get(scope.projectId) ?? []
+    projectScopes.push(scope)
+    scopesByProject.set(scope.projectId, projectScopes)
+  }
+  if (scopes.length === 0) return countsByScope
   const specs = PROJECT_TABLES.filter(spec => spec.worldSemantic)
-  const rowsByTable = await Promise.all(specs.map(async spec => ({ name: spec.name, rows: await spec.table.toArray() })))
-  for (const { name, rows } of rowsByTable) {
+  const rowsByTable = await Promise.all(specs.map(async spec => ({ spec, rows: await spec.table.toArray() })))
+  for (const { spec, rows } of rowsByTable) {
     for (const row of rows) {
       const projectId = getProjectId(row)
-      if (projectId == null || !projectIds.has(projectId)) continue
-      const counts = countsByProject.get(projectId)!
-      counts.set(name, (counts.get(name) ?? 0) + 1)
+      const candidateScopes = projectId == null ? undefined : scopesByProject.get(projectId)
+      if (!candidateScopes?.length) continue
+      const matches = await Promise.all(candidateScopes.map(scope => assertRecordInScope(scope, spec.name, row)))
+      for (let index = 0; index < candidateScopes.length; index += 1) {
+        if (!matches[index]) continue
+        const counts = countsByScope.get(scopeKey(candidateScopes[index]))!
+        counts.set(spec.name, (counts.get(spec.name) ?? 0) + 1)
+      }
     }
   }
-  return countsByProject
+  return countsByScope
 }
 
 function calculateCompleteness(domains: Record<WorldCapabilityArea, WorldDomainSummary>): number {
@@ -150,9 +166,11 @@ function calculateReadiness(domains: Record<WorldCapabilityArea, WorldDomainSumm
 function createWorldProjection(
   project: Project & { id: number },
   world: World & { id: number },
-  countsByProject: ReadonlyMap<number, ReadonlyMap<string, number>>,
+  work: Work & { id: number },
+  countsByScope: ReadonlyMap<string, ReadonlyMap<string, number>>,
 ): WorldProjection {
-  const summaries = DOMAIN_DEFINITIONS.map(definition => summarizeDomain(project.id, definition, countsByProject))
+  const scope = { projectId: project.id, worldId: world.id, workId: work.id }
+  const summaries = DOMAIN_DEFINITIONS.map(definition => summarizeDomain(scope, definition, countsByScope))
   const domains = Object.fromEntries(summaries.map(summary => [summary.key, summary])) as Record<WorldCapabilityArea, WorldDomainSummary>
   return {
     kind: 'world',
@@ -168,11 +186,11 @@ function createWorldProjection(
     domains,
     work: {
       kind: 'work',
-      id: `project:${project.id}:work:${project.activeWorkId ?? 'none'}`,
+      id: `project:${project.id}:work:${work.id}`,
       projectId: project.id,
-      title: project.name,
+      title: work.title,
       sourceWorldId: `world:${world.id}`,
-      currentWordCount: project.currentWordCount ?? 0,
+      currentWordCount: work.currentWordCount ?? project.currentWordCount ?? 0,
     },
   }
 }
@@ -184,15 +202,30 @@ export async function loadWorldProjections(projects: readonly Project[]): Promis
     return project as Project & { id: number }
   })
   const roots = await Promise.all(persisted.map(async project => {
-    if (project.activeWorldId == null) return null
-    const world = await db.worlds.get(project.activeWorldId)
-    return world && world.projectId === project.id && isShareableWorld(world)
-      ? { project, world: world as World & { id: number } }
+    if (project.activeWorldId == null || project.activeWorkId == null) return null
+    const [world, work] = await Promise.all([
+      db.worlds.get(project.activeWorldId),
+      db.works.get(project.activeWorkId),
+    ])
+    return world && work
+      && world.projectId === project.id
+      && work.projectId === project.id
+      && work.worldId === world.id
+      && isShareableWorld(world)
+      ? {
+          project,
+          world: world as World & { id: number },
+          work: work as Work & { id: number },
+        }
       : null
   }))
   const visible = roots.filter((row): row is NonNullable<typeof row> => row != null)
-  const counts = await loadWorldDomainCounts(new Set(visible.map(row => row.project.id)))
-  return visible.map(({ project, world }) => createWorldProjection(project, world, counts))
+  const counts = await loadWorldDomainCounts(visible.map(({ project, world, work }) => ({
+    projectId: project.id,
+    worldId: world.id,
+    workId: work.id,
+  })))
+  return visible.map(({ project, world, work }) => createWorldProjection(project, world, work, counts))
 }
 
 export async function loadWorldProjection(project: Project): Promise<WorldProjection> {

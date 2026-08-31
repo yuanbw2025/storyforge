@@ -1,6 +1,6 @@
 # StoryForge 数据与三注册表治理标准
 
-> 版本：1.2.0 · 生效：2026-08-27 · 权威层级：L1
+> 版本：1.3.0 · 生效：2026-08-31 · 权威层级：L1
 > 本标准规定 AI 读写、表生命周期、数据所有权、世界版本与跨产品流动。实现细节以注册表和 schema 为事实源。
 
 ## 1. 三个单一事实源
@@ -25,7 +25,7 @@
 4. 按需读取详细条目和原文证据；
 5. 最终 token 预算保护。
 
-裁剪必须留下 `omitted`/`insufficient` 证据。调用方不得把未读取内容当作不存在，也不得让固定前缀或“前 N 条”成为主要检索算法。
+裁剪必须留下 `omitted`/`insufficient` 证据。`missing` 表示冻结世界中不存在满足要求的资源；`omitted` 表示资源存在但没有选入某个 release/plan/run；`partial-selection` 表示该语义域仅选入部分资源。调用方不得混淆三者，不得把未读取内容当作不存在，也不得让固定前缀或“前 N 条”成为主要检索算法。
 
 ## 3. 候选与正式写入
 
@@ -69,6 +69,8 @@
 
 世界引擎不得拥有上层产品的媒体资产、build、session、玩家状态、聊天记忆或私域演化。
 
+世界能力画像必须诚实记录每个语义域的 `selected/partial-selection/omitted`、选入/遗漏资源数、confirmed/candidate/conflict/omitted 记录数、最新 revision，以及原文证据和可检索索引是否可用。能力画像描述冻结 release 实际含有什么，不能用“底库曾经有过”冒充“本 release 可读”。
+
 世界草稿/版本可以从长篇或短篇已确认内容显式派生。派生自动形成来源 manifest/快照，保留 source work、revision、范围和 hash；不移动源作品、不要求用户复制粘贴，也不建立双向自动同步。
 
 ### 5.4 上层产品
@@ -99,9 +101,12 @@
 describe(release ref) → capability/resource catalog
 search(release ref, product requirement) → matched/missing/conflict/omitted descriptors
 read(release ref, resource id, detail level) → versioned resource + provenance/evidence
+readOriginalEvidence(release ref, resource id) → immutable original text + hash/provenance
 ```
 
 具体产品拥有自己的 `WorldRequirementAdapter`（或等价契约），把产品任务转换为稳定必读、建议/选读、条件读取和禁止读取；世界网关不拥有产品配置，也不返回一份面向所有产品的固定 payload。适配器可以使用类型化代码/配置和产品 Skill，但版本、权限、必读、禁止与条件边界必须机器可校验，不能只写在提示词里。用户开始生产时冻结 WorldReference、适配器版本、需求、权限、缺失策略和咨询 Context Manifest refs 为 `ProductSourcePlan`。生产中的每个 durable run 可继续在该 plan 允许的不可变 release 中渐进式读取，并保存不可变 Context Manifest；ProductRelease 聚合这些证据为 `ProductSourceManifest` 快照并冻结 hash。后续 runtime 的读取归 session/run manifest，不得修改 release 快照。新增产品通过登记适配器和资源需求接入，不得复制世界底层表查询。
+
+Provider 的缓存必须同时绑定 release UID、content hash 与投影版本，并设置明确容量上限；世界切换或 hash 不符时不得复用。多世界目录通过冻结的稳定关系导航，不得退回读取可变底表。规模门应覆盖千级目录检索和单项详情/原文读取，避免逐行 IndexedDB cursor/事务链形成二次方退化。
 
 ### 5.7 ProductRelease 谱系
 
@@ -109,6 +114,7 @@ read(release ref, resource id, detail level) → versioned resource + provenance
 - 用户改变产品设置、选择新世界 release，或一次增量演化改变资源需求/权限时，应创建新的 Brief/SourcePlan 和 production/候选版本，不覆盖旧 plan/release。
 - 已存在 runtime 默认继续绑定启动时的 ProductRelease；升级必须显式执行兼容检查和迁移，失败时旧存档仍可继续使用旧 release。
 - 仅世界来源改变不代表产品必须自动升级；同一世界 release 也可被多个相互隔离的产品实例引用。
+- 正式 runtime 只能绑定该产品自己的不可变 ProductRelease。WorldRelease、产品 draft、通用 preview 或诊断实例均不能代替 ProductRelease；所有正式产品 kind 由同一运行边界登记并拒绝旁路。
 
 ## 6. `PROJECT_TABLES` 生命周期
 

@@ -1,10 +1,10 @@
 # StoryForge 项目架构治理对齐审计
 
-> 审计版本：2.1.0<br>
-> 复审日期：2026-08-27<br>
-> 对照权威：[StoryForge 项目总纲](../PROJECT-MASTER-CHARTER.md) 1.2.0<br>
-> 审计对象：统一主干 `59eea419` 的产品边界、所有权、阶段流转、版本与共享协议<br>
-> 状态：取代本文件 1.0.0 的审计口径；只作为架构治理与纠偏依据。除当前代码已复证的 Phase 5 分步骤长篇基线外，不作为其它具体产品已经设计完成或可交付的证明
+> 审计版本：3.0.0<br>
+> 复审日期：2026-08-31<br>
+> 对照权威：[StoryForge 项目总纲](../PROJECT-MASTER-CHARTER.md) 1.3.0<br>
+> 审计对象：当前架构治理交付树的产品边界、所有权、阶段流转、版本与共享协议<br>
+> 状态：ARCH-01～07 的项目级纠偏已关闭并进入代码、检查器与回归；本文件不把短篇、剧本、漫画、跑团、聊天或文字游戏的专项功能误报为已经完成
 
 ## 1. 为什么重做审计
 
@@ -20,7 +20,7 @@
 
 因此，本审计保留架构冲突，转交产品实现与质量事项，不再用总体审计替代产品设计。
 
-2.1.0 进一步纠正了另一类口径错误：Phase 5 已经完成分步骤长篇主体、真实 API 纵切面和百万字符工程规模门，不能因长期作者质量研究尚在继续，就把种族字段推广、完整 Harness、持续演化和长程记忆重新列为待施工功能。产品质量可持续提升，不使已验收的工程主链倒退为“未完成”。
+2.1.0 进一步纠正了另一类口径错误：Phase 5 已经完成分步骤长篇主体、真实 API 纵切面和百万字符工程规模门，不能因长期作者质量研究尚在继续，就把种族字段推广、完整 Harness、持续演化和长程记忆重新列为待施工功能。3.0.0 则记录七项架构纠偏与世界引擎基础闭环的实际关闭证据，使后续产品分支可以从同一稳定基线开工。
 
 ## 2. 审计边界
 
@@ -146,7 +146,7 @@ flowchart LR
 
 StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到稳定边界，并为旧数据建立增量迁移。
 
-## 5. 架构偏差总览
+## 5. 修复前架构偏差总览（现均已关闭）
 
 ### 5.1 严重度
 
@@ -155,17 +155,17 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 
 ### 5.2 清单
 
-| ID | 严重度 | 当前偏差 | 目标不变量 |
-|---|---|---|---|
-| ARCH-01 | P0 | 每个 Project 被自动赋予并投影为世界身份 | 独立作品与可分享世界显式分离；长篇/短篇可显式一键派生世界 |
-| ARCH-02 | P0 | WorldRelease 打包策略允许产品内容、AVG 媒资和运行模块进入世界 | WorldRelease 纯语义、产品数据完全外置 |
-| ARCH-03 | P0 | 世界页面可以绕过产品交互/生产阶段直接创建诊断 runtime | 所有正式运行经过三阶段交接 |
-| ARCH-04 | P1 | 顶层入口仍可能用可变 `Project.worldVersion` 表达绑定；跨产品 release 谱系没有共同治理闸门 | WorldReference 与 ProductReleaseLineage 可验证 |
-| ARCH-05 | P1 | 各产品拥有不同需求是正确的，但当前还各自解析 WorldRelease/table selection | 产品专用必读/选读/条件规则 + 中立可靠读取网关 + source plan/run/release manifests |
-| ARCH-06 | P1 | 部分官方节点仍回退通用 `chat()`，没有逐能力复用分步骤正式路径 | 节点作为更自由的可视编排超集，同时与分步骤后端同源 |
-| ARCH-07 | P1 | 世界能力画像混入 runtime/assets；产品成熟度又缺少统一入口门控 | 07A 世界语义能力边界与 07B 产品发布状态门分别治理 |
+| ID | 严重度 | 修复前偏差 | 目标不变量 | 当前状态 |
+|---|---|---|---|---|
+| ARCH-01 | P0 | 每个 Project 被自动赋予并投影为世界身份 | 独立作品与可分享世界显式分离；长篇/短篇可显式一键派生世界 | 已关闭 |
+| ARCH-02 | P0 | WorldRelease 打包策略允许产品内容、AVG 媒资和运行模块进入世界 | WorldRelease 纯语义、产品数据完全外置 | 已关闭 |
+| ARCH-03 | P0 | 世界页面可以绕过产品交互/生产阶段直接创建诊断 runtime | 所有正式运行经过三阶段交接 | 已关闭 |
+| ARCH-04 | P1 | 顶层入口仍可能用可变 `Project.worldVersion` 表达绑定；跨产品 release 谱系没有共同治理闸门 | WorldReference 与 ProductReleaseLineage 可验证 | 已关闭 |
+| ARCH-05 | P1 | 各产品拥有不同需求是正确的，但当前还各自解析 WorldRelease/table selection | 产品专用必读/选读/条件规则 + 中立可靠读取网关 + source plan/run/release manifests | 已关闭 |
+| ARCH-06 | P1 | 部分官方节点仍回退通用 `chat()`，没有逐能力复用分步骤正式路径 | 节点作为更自由的可视编排超集，同时与分步骤后端同源 | 已关闭 |
+| ARCH-07 | P1 | 世界能力画像混入 runtime/assets；产品成熟度又缺少统一入口门控 | 07A 世界语义能力边界与 07B 产品发布状态门分别治理 | 已关闭 |
 
-## 6. 偏差证据与架构修复包
+## 6. 修复前证据与已实施架构包
 
 ### ARCH-01 · 产品身份与世界身份混合
 
@@ -249,11 +249,11 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 **架构修复包 `GOV-WORLD-PROTOCOL`**
 
 1. 为不可变 WorldRelease 实现中立 `describe/search/read` provider，复用 Context Gateway，不新建第四套上下文系统。
-2. 定义产品需求适配器接口；跑团、聊天和游戏分别声明自己的稳定必读、建议/选读、条件读取和禁止读取，删除对世界底表与 manifest 内部结构的直接依赖。
+2. 定义产品需求适配器接口；先以跑团和角色互动两种不同需求建立参考适配器，后续产品分别声明自己的稳定必读、建议/选读、条件读取和禁止读取，不再新增对世界底表与 manifest 内部结构的直接依赖。
 3. 允许适配器由类型化代码/配置与产品 Skill 协作，但版本、权限、必读、禁止和条件边界必须机器可校验，不能只靠提示词。
 4. 网关返回 matched/missing/conflict/omitted/insufficient 和 provenance；用户开始时产品冻结 ProductSourcePlan，production 每个 run 保存 Context Manifest，ProductRelease 聚合并冻结 ProductSourceManifest；runtime 新证据归 session/run。
 5. 先让至少两个需求明显不同的现有产品适配同一协议，以证明协议没有偷偷固化某一产品 payload；这不要求两个产品本身完成。
-6. 新旧 reader 双读对照、hash/资源等价后停止旧写入/读取，并由扫描器禁止新增直接解析。
+6. 现存产品 reader 进入显式兼容白名单；产品专项迁移时双读对照、hash/资源等价后逐个停止旧读取。扫描器立即禁止白名单外新增直接解析，避免并行分支继续复制旧模式。
 
 **关闭条件**：产品新增需求只修改自己的 adapter/契约；网关无需新增万能字段；两个产品可从同一 release 得到不同且可追溯的 plan/run/release manifests；后续渐进读取不越过锁定版本和权限，也不改写旧 release。
 
@@ -290,6 +290,20 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 
 **关闭条件**：世界能力画像不包含上层 runtime/media；未完成入口默认不可见或明确实验性；页面存在不再等于产品已发布。
 
+### 6.8 关闭台账
+
+| ID | 已实施结果 | 主要机器证据 |
+|---|---|---|
+| ARCH-01 | `Project` 仅作物理容器；内部 scope、独立 `Work` 与显式 `world-draft` 分开。长篇/短篇可基于确认内容派生世界并冻结来源，剧本/漫画被确定性拒绝 | `world-engine/derivation.ts`、`ownership.ts`、`R-ARCH01-world-derivation.test.ts`、schema v85 迁移与生命周期登记 |
+| ARCH-02 | WorldRelease 只从 `PROJECT_TABLES.worldSemantic` 派生确认语义资源，排除产品 production、媒资、build、可执行蓝图、session 和 runtime | `releases.ts`、`R-ARCH02-world-release-boundary.test.ts`、`R-WORLD2C-2F-completion.test.ts`、`R-WORLD2D-2F-runtime-closure.test.ts` |
+| ARCH-03 | 世界 UI 不再提供正式运行快捷入口；所有正式上层 kind 被统一 runtime boundary 拒绝从 WorldRelease/通用 preview 启动 | `product/runtime-boundary.ts`、`world-engine/instances.ts`、`simulation/runtime.ts`、`R-ARCH03-stage-gate.test.ts` |
+| ARCH-04 | 五项逻辑契约有确定性创建、hash 与验证；角色互动参考纵切面从冻结来源生产 ProductRelease，并把 release UID 与 lineage hash 固化到 session 后再启动 runtime | `world-reference.ts`、`product-source-contracts.ts`、`character-interaction/production-pipeline.ts`、`R-CHATGAME3D-production-pipeline.test.ts` |
+| ARCH-05 | 中立 WorldRelease provider 支持 describe/search/read/original evidence；跑团与角色互动用不同 requirement adapter 生成不同 plan，网关不包含万能产品 payload；旧 reader 被兼容白名单隔离，检查器禁止新产品复制物理 manifest 解析 | `context-gateway/world-release-provider.ts`、`world-engine/product-requirement-adapters.ts`、`check:architecture`、`R-ARCH05-world-protocol.test.ts` |
+| ARCH-06 | 官方节点 action 由机器登记映射至正式长篇领域后端；通用生成只允许实验草稿且不能采纳 Canon | `node-authoring/domain-action-registry.ts`、`domain-execution.ts`、`R-ARCH06-node-same-source.test.ts` |
+| ARCH-07 | 世界能力画像限定十类语义域；产品目录登记成熟度、世界引用、媒资/runtime owner，生产只展示 `released` | `world-engine/domain.ts`、`product/product-catalog.ts`、`R-ARCH07-product-maturity-gate.test.ts` |
+
+阶段 D 另由 `R-WORLD-D-phase-d-closure.test.ts` 验证诚实能力画像、missing/omitted 区分、多世界稳定关系，以及千级资源目录的检索、详情、原文、hash 与不可变性。`check:architecture` 将上述边界转为静态拒绝规则；新增产品不能绕开它们。
+
 ## 7. 从架构审计转交出去的事项
 
 下表区分“已经完成但继续观察”和“未来由具体产品负责”，不得再次把它们塞回总体架构施工：
@@ -321,16 +335,16 @@ flowchart TD
     G --> P
 ```
 
-推荐施工批次：
+以下施工批次已经按依赖顺序完成；保留它们是为了说明迁移为何没有被改成一次破坏性重构：
 
 1. **身份与迁移基础**：先区分独立作品、世界和产品 owner，所有后续迁移才有可靠目标。
 2. **纯世界 release**：先建立兼容的新语义包，再让网关读取；不能先删除旧 reader。
 3. **中立世界协议**：用两个不同需求适配器验证协议，形成 source plan、per-run Context Manifests 和发布 source manifest。
 4. **阶段与谱系闸门**：收口顶层 handoff、显式开始、ProductRelease/runtime 绑定。
 5. **同源与入口门控**：节点旁路、世界能力命名、实验产品可见性并行收口。
-6. **产品专项开发**：框架稳定后，各具体产品独立设计和验收；总架构不替它们决定功能。
+6. **产品专项开发**：框架稳定后，各具体产品独立设计和验收；这是后续产品工作，不属于本审计的完成范围。
 
-该顺序不包含“重新完成分步骤长篇”。长篇主链已经完成；这里只修身份派生边界和节点同源。真实作者长期研究可以持续进行，但不阻塞七项架构纠偏或后续产品专项开发。
+该顺序不包含“重新完成分步骤长篇”。长篇主链已经完成；本次只修身份派生边界和节点同源。真实作者长期研究可以持续进行，但不使已关闭的七项架构纠偏倒退。
 
 ## 9. 迁移与兼容原则
 

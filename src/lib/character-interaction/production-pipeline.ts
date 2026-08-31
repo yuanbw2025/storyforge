@@ -13,7 +13,7 @@ import {
 } from '../game-production/runtime-package'
 import { hashGameProductionValueV2 } from '../game-production/hash'
 import { detectGameImageDimensionsV1, detectGameMediaMimeTypeV1 } from '../game-production/media-adapters'
-import { readSimulationState } from '../simulation/runtime'
+import { deleteSimulationSession, readSimulationState } from '../simulation/runtime'
 import type {
   CharacterInteractionArtifactKindV1,
   CharacterInteractionArtifactRecordV1,
@@ -38,6 +38,7 @@ import type {
   ProductSourcePlanV1,
   ConfirmedProductBriefV1,
   SimulationEvent,
+  SimulationSession,
   WorkspaceScope,
   WorldGameSourceSelectionV2,
 } from '../types'
@@ -51,6 +52,7 @@ import {
   validateProductReleaseLineageV1,
   validateProductSourceManifestV1,
 } from '../world-engine/product-source-contracts'
+import { createInteractionGameInstance } from '../world-engine/instances'
 import {
   assertCharacterInteractionFormalProductionReadyV1,
   createCharacterInteractionProductionV1,
@@ -1160,7 +1162,12 @@ export async function publishCharacterInteractionProductReleaseV1(input: {
       if (!current || current.status !== 'confirmed' || current.payloadHash !== artifact.payloadHash
         || current.producerRunId !== artifact.producerRunId) fail(`发布提交前产物已变化:${artifact.artifactKey}`)
     }
-    const existingGame = await db.gameReleases.where('contentHash').equals(gameReleaseHash).first()
+    const existingGame = await db.gameReleases.where('contentHash').equals(gameReleaseHash)
+      .and(row => row.projectId === scope.projectId
+        && row.worldId === scope.worldId
+        && row.workId === scope.workId
+        && row.worldReleaseId === bundle.selection.worldReleaseId)
+      .first()
     let gameRelease: GameRelease
     if (existingGame) gameRelease = existingGame
     else {
@@ -1235,6 +1242,80 @@ export async function assertCharacterInteractionProductReleaseUnchangedV1(input:
   }
   for (const artifact of manifest.artifacts) if (await hashCanonicalValue(artifact.payload) !== artifact.payloadHash) fail(`Product Release 产物损坏:${artifact.artifactKey}`)
   return structuredClone(manifest)
+}
+
+/**
+ * ARCH-04 · Formal runtime entry for character interaction.
+ *
+ * A raw GameRelease is an internal executable artifact, not sufficient proof
+ * that the three-stage product contract completed. The public product player
+ * must enter through this function so the complete ProductRelease lineage is
+ * verified immediately before the immutable runtime session is created.
+ */
+export async function createCharacterInteractionProductInstanceV1(input: {
+  scope: WorkspaceScope
+  productReleaseId: number
+  title: string
+  worldGroupId?: number | null
+  seed?: string
+}): Promise<SimulationSession> {
+  const scope = await resolveScope({ scope: input.scope })
+  const manifest = await assertCharacterInteractionProductReleaseUnchangedV1({
+    scope,
+    productReleaseId: input.productReleaseId,
+  })
+  const productRelease = await db.characterInteractionProductReleases.get(input.productReleaseId)
+  if (!productRelease || !productRelease.releaseUid || !productRelease.lineageHash) {
+    fail('Product Release 运行绑定不完整')
+  }
+  const frozenBinding = {
+    gameReleaseId: productRelease.gameReleaseId,
+    contentHash: productRelease.contentHash,
+    releaseUid: productRelease.releaseUid,
+    lineageHash: productRelease.lineageHash,
+  }
+  const session = await createInteractionGameInstance({
+    scope,
+    gameReleaseId: frozenBinding.gameReleaseId,
+    title: input.title.trim() || `${manifest.brief.content.title} · 新会话`,
+    worldGroupId: input.worldGroupId ?? null,
+    seed: input.seed,
+  })
+  try {
+    const updated = await db.simulationSessions.update(session.id!, {
+      productReleaseUid: frozenBinding.releaseUid,
+      productReleaseLineageHash: frozenBinding.lineageHash,
+      updatedAt: Date.now(),
+    })
+    if (updated !== 1) fail('运行实例无法绑定 ProductRelease 谱系')
+    await assertCharacterInteractionProductReleaseUnchangedV1({
+      scope,
+      productReleaseId: input.productReleaseId,
+    })
+    const [current, currentSession] = await Promise.all([
+      db.characterInteractionProductReleases.get(input.productReleaseId),
+      db.simulationSessions.get(session.id!),
+    ])
+    if (!current
+      || !currentSession
+      || current.gameReleaseId !== frozenBinding.gameReleaseId
+      || current.contentHash !== frozenBinding.contentHash
+      || current.releaseUid !== frozenBinding.releaseUid
+      || current.lineageHash !== frozenBinding.lineageHash
+      || currentSession.gameReleaseId !== frozenBinding.gameReleaseId
+      || currentSession.productReleaseUid !== frozenBinding.releaseUid
+      || currentSession.productReleaseLineageHash !== frozenBinding.lineageHash) {
+      fail('Product Release 在运行实例创建期间发生变化')
+    }
+  } catch (reason) {
+    await deleteSimulationSession(session.id!)
+    throw reason
+  }
+  return {
+    ...session,
+    productReleaseUid: frozenBinding.releaseUid,
+    productReleaseLineageHash: frozenBinding.lineageHash,
+  }
 }
 
 /** New WorldRelease never mutates the old binding; this only prepares an explicit fork plan. */

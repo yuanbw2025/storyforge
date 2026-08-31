@@ -44,9 +44,9 @@ describe('AVG-1 · author and player UI', () => {
     expect(cancelledCalls).toEqual(['load'])
   })
 
-  it('作者载入演出样例、检查并发布不可变版本', async () => {
+  it('作者可维护并检查旧演出草稿，但正式发布必须交给制作中心', async () => {
     const owned = await fixture('AVG 作者 UI'); await act(async () => { root.render(createElement(DialogProvider, null, createElement(AvgGameWorkbench, { scope: owned.scope }))); await new Promise(resolve => setTimeout(resolve, 0)) })
-    await waitFor(() => expect(host.textContent).toContain('AVG 作者工作台')); await click(host, '载入演出样例'); await waitFor(() => expect(host.textContent).toContain('潮港守灯录 · 演出版')); expect(host.textContent).toContain('bg.harbor-night@1'); await click(host, '检查'); await waitFor(() => expect(host.textContent).toContain('检查通过')); await click(host, '发布'); await waitFor(() => expect(host.textContent).toContain('已发布 GameRelease v1'))
+    await waitFor(() => expect(host.textContent).toContain('AVG 作者工作台')); await click(host, '载入演出样例'); await waitFor(() => expect(host.textContent).toContain('潮港守灯录 · 演出版')); expect(host.textContent).toContain('bg.harbor-night@1'); await click(host, '检查'); await waitFor(() => expect(host.textContent).toContain('检查通过')); await click(host, '交由制作中心发布'); await waitFor(() => expect(host.textContent).toContain('正式发布必须进入制作中心')); expect(await db.gameReleases.count()).toBe(0); expect(await db.worldReleases.count()).toBe(0)
   }, 45_000)
 
   it('玩家以真实媒资推进 Beat，关闭图片和减少动态后仍可走到三个选择', async () => {

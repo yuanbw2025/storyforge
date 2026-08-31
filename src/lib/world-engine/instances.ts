@@ -67,6 +67,7 @@ import {
   type TtrpgContinuationRequestV2,
 } from "../ttrpg/continuity-state";
 import { createTtrpgProductionBuildBootstrapV1 } from "../ttrpg/production-service";
+import { isFormalProductSessionKindV1 } from "../product/runtime-boundary";
 
 export interface CreateWorldInstanceInput {
   scope: WorkspaceScope;
@@ -224,17 +225,6 @@ function sessionKindForProduct(
             : productType === "ttrpg"
               ? "ttrpg"
               : "textworld";
-}
-
-function isFormalGameKind(kind: SimulationSessionKind): boolean {
-  return (
-    kind === "storygame" ||
-    kind === "chatgame" ||
-    kind === "textadventure" ||
-    kind === "avg" ||
-    kind === "textsimulation" ||
-    kind === "textworld"
-  );
 }
 
 async function liveNarrativeDefinition(
@@ -497,17 +487,9 @@ export async function createWorldInstance(
   ) {
     throw new Error("[instance] 跨发布续团父 GameRelease 不是 TTRPG");
   }
-  const explicitLegacyBinding =
-    !gameSource &&
-    input.kind === "chatgame" &&
-    Boolean(
-      (input.releaseId != null &&
-        input.releaseNarrativeModuleExportId != null) ||
-      (input.draftSnapshotHash && input.narrativeModuleId != null),
-    );
-  if (isFormalGameKind(input.kind) && !playable && !explicitLegacyBinding) {
+  if (isFormalProductSessionKindV1(input.kind) && !playable) {
     throw new Error(
-      "[instance] 新建正式文字游戏必须绑定不可变 GameRelease 或 Build Preview；旧版显式绑定仅保留兼容",
+      "[instance] 新建正式上层产品必须绑定不可变 GameRelease 或 Build Preview；WorldRelease 与作者草稿只能进入产品制作阶段",
     );
   }
   if (playable && gamePackage) {
@@ -1148,7 +1130,7 @@ export async function assertInstanceBinding(
     hasBuildSource,
     hasTtrpgBuildSource,
   ].filter(Boolean).length;
-  if (isFormalGameKind(session.kind) && initialState.narrative?.version === 2) {
+  if (isFormalProductSessionKindV1(session.kind) && initialState.narrative?.version === 2) {
     if (playableSourceCount === 0) {
       throw new Error(
         "[instance] 可玩来源绑定缺失；请从完整项目备份恢复 Release 或 Build 后再启动存档",

@@ -28,7 +28,7 @@ import { validateInteractionGameDraft, type InteractionDraftReport } from '../ch
 import { createInteractionSourceCharacterSnapshot } from '../character-interaction/source-character'
 import { adopt } from '../registry/adopt'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
-import { createWorldRevision, listWorldRevisions, publishWorldRevision } from '../world-engine/releases'
+import { createInternalProductWorldReleaseFixtureV1 } from '../world-engine/releases'
 import { parseAdventureContent, validateAdventureContent, type AdventureContentReport } from './runtime'
 
 export interface AdventureAuthoringSnapshot {
@@ -457,16 +457,14 @@ export async function publishAdventureGameDraft(input: {
   label?: string
   fixtureOnly?: true
 }): Promise<AdventurePublication> {
-  if (input.fixtureOnly !== true) throw new Error('[adventure] 旧草稿发布只允许隔离测试夹具；正式发布必须进入产品制作中心')
+  if (import.meta.env.MODE !== 'test') throw new Error('[adventure] 旧草稿发布只允许隔离测试夹具；正式发布必须进入产品制作中心')
   const scope = await resolveScope({ scope: input.scope })
   const definition = await definitionInScope(scope, input.gameDefinitionId)
   parseGameDefinitionWorldSource(definition)
   const report = await validateAdventureGameDraft(scope, definition.id!)
   if (!report.valid) throw new Error(`[adventure] 发布检查未通过:${report.errors.join('；')}`)
-  const latest = (await listWorldRevisions(scope))[0]
   const label = input.label?.trim() || `${definition.title} · 发布候选`
-  const revision = await createWorldRevision({ scope, label, parentRevisionId: latest?.id ?? null })
-  const worldRelease = await publishWorldRevision(revision.id!, label)
+  const { revision, release: worldRelease } = await createInternalProductWorldReleaseFixtureV1({ scope, label })
   const gameRelease = await publishGameDefinition({ scope, gameDefinitionId: definition.id!, worldReleaseId: worldRelease.id!, label, fixtureOnly: true })
   return { report, revision, worldRelease, gameRelease }
 }

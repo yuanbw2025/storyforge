@@ -10,7 +10,6 @@ import {
   saveInteractionSceneTemplate,
 } from '../../src/lib/character-interaction/authoring'
 import { db } from '../../src/lib/db/schema'
-import { readSimulationState } from '../../src/lib/simulation/runtime'
 import type { Project } from '../../src/lib/types'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 
@@ -121,7 +120,7 @@ describe('CHATGAME-2B/2C · author and player UI', () => {
     expect(await db.gameReleases.count()).toBe(0)
   }, 20_000)
 
-  it('玩家可从 GameRelease 建档并用无 AI 固定行动产生可解释关系变化', async () => {
+  it('玩家入口拒绝没有 ProductRelease 谱系的裸 GameRelease', async () => {
     const seeded = await fixture()
     const definition = await createStarterInteractionGame({ scope: seeded.scope, title: '港口之约', characterIds: seeded.characterIds })
     const profiles = await db.interactionCharacterProfiles.where('gameDefinitionId').equals(definition.id!).toArray()
@@ -140,16 +139,12 @@ describe('CHATGAME-2B/2C · author and player UI', () => {
       root.render(createElement(ChatGamePanel, { project: seeded.project, worldGroupId: null, workspaceScope: seeded.scope }))
       await new Promise(resolve => setTimeout(resolve, 0))
     })
-    await waitFor(() => expect(host.textContent).toContain('港口之约'))
-    await click(host, '新建会话')
-    await waitFor(() => expect(host.textContent).toContain('承认失约'))
-    await click(host, '承认失约')
-    await waitFor(() => expect(host.textContent).toContain('0 → -2'))
-    const session = await db.simulationSessions.where('projectId').equals(seeded.scope.projectId).first()
-    expect((await readSimulationState(session!.id!)).interaction?.relationshipHistory[0]).toMatchObject({ ruleKey: 'promise.broken', after: -2 })
-    expect(host.textContent).toContain('未配置 AI')
-    expect(host.textContent).toContain('形成世界回流候选')
-    expect(host.textContent).toContain('不会自动修改世界引擎')
+    await waitFor(() => expect(host.textContent).toContain('尚无角色互动发布'))
+    expect(host.textContent).not.toContain('港口之约')
+    expect(Array.from(host.querySelectorAll('button')).some(item => item.textContent?.trim() === '新建会话')).toBe(false)
+    expect(await db.gameReleases.count()).toBe(1)
+    expect(await db.characterInteractionProductReleases.count()).toBe(0)
+    expect(await db.simulationSessions.count()).toBe(0)
   }, 20_000)
 
   it('在产品页列出并只读回放无 World/Work 归属的 CHATGAME-1 存档', async () => {

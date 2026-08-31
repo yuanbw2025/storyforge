@@ -5,7 +5,7 @@ import {
   appendSimulationEvent,
   applyTtrpgCondition,
   changeTtrpgResource,
-  createSimulationSession,
+  createSimulationSessionFixtureV1,
   openTtrpgScene,
   readSimulationState,
   removeTtrpgCondition,
@@ -31,7 +31,7 @@ async function seedCombatSession() {
     updatedAt: now,
   }
   await db.projects.put(project)
-  const session = await createSimulationSession({
+  const session = await createSimulationSessionFixtureV1({
     projectId: project.id!,
     kind: 'ttrpg',
     title: '潮汐钟楼遭遇',

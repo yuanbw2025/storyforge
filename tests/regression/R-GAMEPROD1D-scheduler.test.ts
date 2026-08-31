@@ -13,17 +13,19 @@ import {
 import type { GameBuildArtifactKindV1, GameRuntimePackageV2 } from '../../src/lib/types'
 import { seedStoryGameAcceptanceSample } from '../../src/lib/text-game/authoring'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
 
 async function fixture(name: string) {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
     description: '', targetWordCount: 10_000, createdAt: now, updatedAt: now,
   } as never) as number
   const owned = await ensureWorkspaceOwnership(projectId)
   const definition = await seedStoryGameAcceptanceSample({ scope: owned.scope })
-  const revision = await createWorldRevision({
+  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
     scope: owned.scope, label: `${name} source`, selectedNarrativeModuleIds: [definition.narrativeModuleId],
   })
   const release = await publishWorldRevision(revision.id!)

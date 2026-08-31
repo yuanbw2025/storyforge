@@ -7,12 +7,12 @@ import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { buildSimulationCanonSnapshot } from '../../src/lib/simulation/canon-snapshot'
 import {
-  branchSimulationSession,
+  branchSimulationSessionFixtureV1,
   changeInteractionRelationship,
   commitInteractionCharacterReply,
   commitInteractionPlayerMessage,
   createSimulationCheckpoint,
-  createSimulationSession,
+  createSimulationSessionFixtureV1,
   proposeInteractionMemory,
   readSimulationState,
   readSimulationStateVersion,
@@ -119,7 +119,7 @@ describe('CHATGAME-2A · 确定性角色互动内核', () => {
       worldGroupId: null,
       sourceKeys: ['project-world:99201'],
     })
-    return createSimulationSession({
+    return createSimulationSessionFixtureV1({
       projectId: 99201,
       kind: 'chatgame',
       title: '钟楼会面',
@@ -298,7 +298,7 @@ describe('CHATGAME-2A · 确定性角色互动内核', () => {
     const checkpoint = await createSimulationCheckpoint({ sessionId: created.id!, name: '钟楼检查点' })
     expect(await verifySimulationCheckpoint(checkpoint.id!)).toBe(true)
     const beforeBranch = await readSimulationState(created.id!, reply.sequence)
-    const child = await branchSimulationSession({
+    const child = await branchSimulationSessionFixtureV1({
       parentSessionId: created.id!,
       throughSequence: reply.sequence,
       title: '另一种回答',

@@ -25,7 +25,8 @@ import {
 } from '../../src/lib/world-engine/instances'
 import { installMistHarborDemoWorld } from '../../src/lib/world-engine/mist-harbor-demo'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
 import { adopt } from '../../src/lib/registry/adopt'
 import { groupOutlineChaptersByTopLevelVolume } from '../../src/lib/outline/canonical-outline-walk'
 import { WORLD_RULE_TREE } from '../../src/lib/types/world-rules'
@@ -46,6 +47,7 @@ const CHAPTER_TITLES = [
 async function blankWorkspace() {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     name: '路演冷启动项目', genre: 'mystery', genres: ['mystery'], status: 'drafting',
     description: '', targetWordCount: 80_000, createdAt: now, updatedAt: now,
   } as any) as number
@@ -171,7 +173,7 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
         relationships: '[]',
       },
     })
-    const revision = await createWorldRevision({
+    const revision = await createLegacyExecutableWorldRevisionFixtureV1({
       scope: owned.scope,
       label: '路演现场 · 雾港世界 v1',
       selectedNarrativeModuleIds: [demo.narrativeModuleId],
@@ -183,9 +185,9 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
       locations: expect.arrayContaining([expect.objectContaining({ name: '失声钟楼' })]),
       artifacts: expect.arrayContaining([expect.objectContaining({ name: '黄铜潮汐钥匙' })]),
     })
-    expect(catalog.mediaAssets).toHaveLength(17)
-    expect(catalog.mediaAssets.filter(item => item.kind === 'background')).toHaveLength(5)
-    expect(catalog.mediaAssets.filter(item => item.kind === 'character-expression')).toHaveLength(6)
+    // The roadshow fixture still owns historical product media in its full
+    // workspace backup, but the semantic WorldRelease must expose none of it.
+    expect(catalog.mediaAssets).toEqual([])
     expect(catalog.loreEntries.map(item => item.name)).toEqual(['黑潮事故', '守灯人旧誓'])
     expect(catalog.relationships).toHaveLength(4)
     expect(catalog.storyArcs).toEqual([expect.objectContaining({ name: '失潮钟声主线', type: 'main' })])
@@ -302,19 +304,14 @@ describe('WORLDGAME-4 · 雾港全新项目演示闭环', () => {
       characterExportIds: catalog.characters.map(item => item.exportId),
       mediaAssetExportIds: catalog.mediaAssets.map(item => item.exportId),
     })
+    expect(avg.warnings.join('')).toContain('纯文字 AVG')
     const avgPresentation = await db.avgPresentationModules.where('gameDefinitionId').equals(avg.definition.id!).first()
     const avgCues = JSON.parse(avgPresentation!.contentJson).cues as Array<{ type: string; assetKey?: string }>
-    expect(avgCues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'show-actor', assetKey: 'mist.actor.lin.resolve' }),
-    ]))
-    expect(avgCues).toHaveLength(94)
-    expect(avgCues.filter(item => item.type === 'show-actor')).toHaveLength(76)
-    expect(avgCues.filter(item => item.type === 'set-background')).toHaveLength(15)
-    expect(avgCues.filter(item => item.type === 'show-cg')).toHaveLength(3)
+    expect(avgCues).toEqual([])
     const avgPublication = await publishAvgGame({ scope: owned.scope, gameDefinitionId: avg.definition.id! })
     const avgSession = await createAvgGameInstance({ scope: owned.scope, gameReleaseId: avgPublication.gameRelease.id!, title: '雾港 AVG 试玩' })
     expect(await readSimulationState(avgSession.id!)).toMatchObject({
-      presentation: { assets: expect.arrayContaining([expect.objectContaining({ kind: 'background' }), expect.objectContaining({ kind: 'character-pose' })]) },
+      presentation: { assets: [] },
     })
 
     expect(await db.gameDefinitions.where('workId').equals(owned.scope.workId).count()).toBe(3)

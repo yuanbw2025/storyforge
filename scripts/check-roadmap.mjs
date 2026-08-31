@@ -27,10 +27,10 @@ const read = (name, file) => {
 const docs = Object.fromEntries(Object.entries(files).map(([name, file]) => [name, read(name, file)]))
 
 const stageHeadings = [
-  '阶段 A · 权威与主干',
+  '阶段 A · 权威与大架构治理（已完成）',
   '阶段 B · 保持分步骤长篇基线并完成节点同源',
   '阶段 C · 独立创作产品',
-  '阶段 D · 世界引擎',
+  '阶段 D · 世界引擎（已完成架构基线）',
   '阶段 E · 上层垂直产品',
   '阶段 F · 网站、社区、平台与商业化',
 ]
@@ -52,16 +52,16 @@ const capabilityIds = [
   'F-PLATFORM-01', 'F-COMMERCIAL-01',
 ]
 const activeTaskIds = [
-  'A-GOV-02',
-  'B-NODE-01', 'B-NODE-02',
+  'B-NODE-02',
   'C-SHORT-01', 'C-SCREENPLAY-01', 'C-COMIC-01',
-  'D-WORLD-01', 'D-WORLD-02', 'D-WORLD-03', 'D-WORLD-04',
   'E-TTRPG-01', 'E-CHAT-01', 'E-TOWN-01', 'E-TEXTADV-01', 'E-AVG-01', 'E-OPENWORLD-01',
   'F-PLATFORM-01', 'F-COMMERCIAL-01',
 ]
 const completedCapabilityIds = [
-  'A-GOV-01',
+  'A-GOV-01', 'A-GOV-02',
   'B-LF-01', 'B-LF-02', 'B-LF-03', 'B-LF-04', 'B-LF-05', 'B-LF-06',
+  'B-NODE-01',
+  'D-WORLD-01', 'D-WORLD-02', 'D-WORLD-03', 'D-WORLD-04',
 ]
 for (const id of capabilityIds) {
   if (!docs.baseline.includes(id)) failures.push(`capability baseline missing task: ${id}`)
@@ -92,12 +92,18 @@ for (const [id, status] of [
   ['BASE-AI-01', 'implemented'],
   ['BASE-HARNESS-01', 'implemented'],
   ['BASE-CTX-01', 'implemented'],
+  ['A-GOV-02', 'implemented'],
   ['B-LF-01', 'implemented'],
   ['B-LF-02', 'implemented'],
   ['B-LF-03', 'implemented'],
   ['B-LF-04', 'implemented'],
   ['B-LF-05', 'implemented'],
   ['B-LF-06', 'implemented'],
+  ['B-NODE-01', 'implemented'],
+  ['D-WORLD-01', 'implemented'],
+  ['D-WORLD-02', 'implemented'],
+  ['D-WORLD-03', 'implemented'],
+  ['D-WORLD-04', 'implemented'],
 ]) {
   const row = docs.baseline.split('\n').find(line => line.includes(`| ${id} |`)) ?? ''
   if (!row.includes(`| ${status} |`)) failures.push(`${id} must be ${status} in capability baseline`)
