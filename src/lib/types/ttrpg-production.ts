@@ -60,6 +60,11 @@ export interface TtrpgSourceSelectionRecordV1 {
   sourceCatalogHash: string
   selectionJson: string
   selectionHash: string
+  /** ARCH-04/05 logical cross-product contracts; null only for development fixtures or legacy rows. */
+  worldReferenceJson?: string | null
+  worldReferenceHash?: string | null
+  sourcePlanJson?: string | null
+  sourcePlanHash?: string | null
   status: 'frozen' | 'superseded'
   createdAt: number
 }
@@ -75,6 +80,9 @@ export interface TtrpgProductionBriefRecordV1 {
   revision: number
   briefJson: string
   briefHash: string
+  confirmedContractJson?: string | null
+  confirmedContractHash?: string | null
+  authorStartRevision?: number | null
   status: 'confirmed' | 'superseded'
   createdAt: number
 }
@@ -179,6 +187,11 @@ export interface TtrpgProductReleaseRecordV1 {
   label: string
   manifestJson: string
   contentHash: string
+  releaseUid?: string | null
+  sourceManifestJson?: string | null
+  sourceManifestHash?: string | null
+  lineageJson?: string | null
+  lineageHash?: string | null
   createdAt: number
 }
 
@@ -194,6 +207,12 @@ export interface TtrpgProductReleaseManifestV1 {
     selection: TtrpgProductionSourceSelectionV1
   }
   brief: { content: TtrpgProductionBriefV2; contentHash: string }
+  sourceContracts?: {
+    worldReferenceHash: string
+    sourcePlanHash: string
+    sourceManifestHash: string
+    confirmedBriefHash: string
+  }
   rulePack: { content: RulePackV1; contentHash: string }
   campaign: { content: TtrpgCampaignContentV1; contentHash: string }
   media: {

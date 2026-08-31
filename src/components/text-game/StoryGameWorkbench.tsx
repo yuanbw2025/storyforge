@@ -37,7 +37,6 @@ import {
   deleteNarrativeChoice,
   deleteNarrativeNode,
   loadStoryGameAuthoringSnapshot,
-  publishStoryGameDraft,
   seedStoryGameAcceptanceSample,
   updateGameDefinition,
   updateNarrativeBeat,
@@ -53,7 +52,6 @@ import {
   validateStoryGameContent,
 } from '../../lib/text-game/content'
 import { useDialog } from '../shared/Dialog'
-import { resolveLegacyManualPublicationPolicyV1 } from '../../lib/game-production/legacy-entry-governance'
 
 type WorkbenchView = 'game' | 'content' | 'graph' | 'preview' | 'release' | 'help'
 
@@ -222,12 +220,6 @@ export default function StoryGameWorkbench(props: { scope: WorkspaceScope; onOpe
   const beats = useMemo(() => snapshot.beats.filter(item => item.moduleId === module?.id && item.nodeKey === selectedNode?.key).sort((a, b) => a.order - b.order), [module?.id, selectedNode?.key, snapshot.beats])
   const choices = useMemo(() => snapshot.choices.filter(item => item.moduleId === module?.id && item.sourceNodeKey === selectedNode?.key).sort((a, b) => a.order - b.order), [module?.id, selectedNode?.key, snapshot.choices])
   const releases = useMemo(() => snapshot.releases.filter(item => item.gameDefinitionId === definition?.id), [definition?.id, snapshot.releases])
-  const manualPublicationPolicy = resolveLegacyManualPublicationPolicyV1({
-    releases,
-    productionRouteAvailable: props.onOpenProduction != null,
-    legacyDraftPresent: definition != null,
-  })
-
   useEffect(() => {
     if (!definition || !module) return
     setGameTitle(definition.title); setGameDescription(definition.description); setInitialVariables(definition.initialVariablesJson)
@@ -328,17 +320,13 @@ export default function StoryGameWorkbench(props: { scope: WorkspaceScope; onOpe
   const choosePreview = (choiceKey: string) => {
     try { if (preview) setPreview(advanceStoryGameDraftPreview(preview, choiceKey)) } catch (cause) { setError(cause instanceof Error ? cause.message : '试玩推进失败') }
   }
-  const publish = () => run(async () => {
-    if (!definition) return
-    if (!manualPublicationPolicy.directPublicationAllowed && props.onOpenProduction) {
+  const publish = () => {
+    if (props.onOpenProduction) {
       props.onOpenProduction()
       return
     }
-    const confirmed = await dialog.confirm({ title: `发布“${definition.title}”？`, message: '将依次冻结新的 WorldRevision、WorldRelease 与不可变 GameRelease；旧版本和存档不会被覆盖。', confirmText: '检查并发布' })
-    if (!confirmed) return
-    const published = await publishStoryGameDraft({ scope: props.scope, gameDefinitionId: definition.id!, label: `${definition.title} v${releases.length + 1}` })
-    setReport(published.report); await load(); setMessage(`已发布 GameRelease v${published.gameRelease.version}。`)
-  })
+    setError('正式发布必须进入制作中心，由已确认目标、世界来源计划、Build 校验和原子发布共同完成。')
+  }
 
   const previewNode = preview?.state.nodes.find(node => node.key === preview.state.currentNodeKey) ?? null
   const previewBeats = (preview?.state.beats ?? []).filter(beat => beat.nodeKey === previewNode?.key).sort((a, b) => a.order - b.order)
@@ -384,12 +372,12 @@ export default function StoryGameWorkbench(props: { scope: WorkspaceScope; onOpe
         <div className="storygame-preview-note"><ShieldCheck className="h-4 w-4" />试玩直接复用正式事件回放的条件、效果和进入节点语义，但不创建 SIM 存档、不写事件，也不伪装成发布版本。</div>
         {preview && previewNode ? <section className="storygame-draft-player"><div className="storygame-draft-meta"><span>{preview.state.moduleTitle}</span><span>{preview.state.visitedNodeKeys.length} 个节点 · {(preview.state.choiceHistory ?? []).length} 次选择</span></div><small>{NODE_LABELS[previewNode.kind]} · {previewNode.key}</small><h2>{previewNode.title}</h2>{previewNode.summary && <p className="summary">{previewNode.summary}</p>}<div className="storygame-draft-beats">{previewBeats.map(beat => <article key={beat.beatKey}><strong>{beat.kind === 'dialogue' ? preview.speakerNames[beat.speakerKey ?? ''] ?? '未知角色' : BEAT_LABELS[beat.kind]}</strong><p>{beat.text}</p></article>)}</div>{preview.state.completed ? <div className="storygame-draft-ending"><CheckCircle2 className="h-6 w-6" /><strong>已抵达结局</strong><button type="button" onClick={() => void startPreview()}>重新试玩</button></div> : <div className="storygame-draft-choices">{previewChoices.map(choice => { const available = preview.state.availableChoiceKeys?.includes(choice.choiceKey) ?? false; return <div key={choice.choiceKey}><button type="button" onClick={() => choosePreview(choice.choiceKey)} disabled={!available}><strong>{choice.text}</strong><span>{choice.description}</span></button>{!available && <small>{choice.unavailableReason || '当前条件未满足。'}</small>}</div> })}</div>}</section> : <div className="storygame-author-empty compact"><Eye className="h-7 w-7" /><h2>选择起点开始草稿试玩</h2><p>可以从模块入口完整走一遍，也可以从中段节点快速检查内容。</p></div>}
       </div> : view === 'release' && definition && module ? <div className="storygame-author-pane">
-        <div className="storygame-author-heading"><div><small>IMMUTABLE RELEASE</small><h2>检查、冻结与版本</h2></div><div className="storygame-author-actions"><button type="button" onClick={checkGraph} disabled={busy}><ShieldCheck className="h-4 w-4" />发布检查</button><button type="button" onClick={publish} disabled={busy || report?.valid !== true}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}{manualPublicationPolicy.mode === 'production-required' ? '交由制作中心发布' : props.onOpenProduction ? '发布维护版本' : '发布新版本'}</button></div></div>
-        <div className="storygame-release-pipeline"><article><span>1</span><div><strong>内容图检查</strong><p>入口、断链、目标、可达性、结局、死路、循环与 JSON 语法。</p></div></article><article><span>2</span><div><strong>WorldRevision / WorldRelease</strong><p>调用现有世界发布系统冻结注册表派生的便携快照。</p></div></article><article><span>3</span><div><strong>GameRelease</strong><p>绑定世界哈希并冻结 GameDefinition、节点、Beat 与 Choice。</p></div></article></div>
+        <div className="storygame-author-heading"><div><small>IMMUTABLE RELEASE</small><h2>检查、冻结与版本</h2></div><div className="storygame-author-actions"><button type="button" onClick={checkGraph} disabled={busy}><ShieldCheck className="h-4 w-4" />发布检查</button><button type="button" onClick={publish} disabled={busy || report?.valid !== true}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}交由制作中心发布</button></div></div>
+        <div className="storygame-release-pipeline"><article><span>1</span><div><strong>内容图检查</strong><p>入口、断链、目标、可达性、结局、死路、循环与 JSON 语法。</p></div></article><article><span>2</span><div><strong>来源与目标冻结</strong><p>制作中心冻结 WorldReference、ProductSourcePlan 与 ConfirmedProductBrief。</p></div></article><article><span>3</span><div><strong>Build / ProductRelease</strong><p>产品内容与媒资完成校验后原子发布，并记录实际世界读取与版本谱系。</p></div></article></div>
         <div className="storygame-version-list"><div className="storygame-author-section-head"><div><h3>不可变版本</h3><small>旧版本始终保留，现有玩家存档继续绑定原内容哈希</small></div><span>{releases.length}</span></div>{releases.map(release => <article key={release.id}><div><strong>v{release.version} · {release.label}</strong><span>{new Date(release.createdAt).toLocaleString('zh-CN')}</span></div><code>{release.contentHash.slice(0, 16)}…</code><span>WorldRelease #{release.worldReleaseId}</span></article>)}{releases.length === 0 && <div className="storygame-author-empty compact"><Rocket className="h-7 w-7" /><h2>尚未正式发布</h2><p>先运行检查，再发布第一个不可变版本。</p></div>}</div>
       </div> : view === 'help' ? <div className="storygame-author-pane storygame-author-help">
         <div className="storygame-author-heading"><div><small>AUTHOR GUIDE</small><h2>制作一个可发布的分支故事</h2></div><CircleHelp className="h-6 w-6" /></div>
-        <div className="storygame-help-grid"><article><span>1</span><div><strong>先定义入口与结局</strong><p>每个游戏绑定一个 NarrativeModule。先保留唯一入口和至少一个可达 ending，再扩展中间场景。</p></div></article><article><span>2</span><div><strong>用 Beat 写节点内容</strong><p>旁白、动作和系统提示无需角色；对话必须选择当前 World 的角色。order 决定展示顺序。</p></div></article><article><span>3</span><div><strong>用 Choice 连接路径</strong><p>Choice 是新发布唯一执行边，可设置显示条件、可用条件、不可用原因与 set / increment / unset 效果。</p></div></article><article><span>4</span><div><strong>先试玩再诊断</strong><p>从任意节点快速检查局部语义；正式发布前仍须保证所有内容从入口可达且非结局节点没有死路。</p></div></article><article><span>5</span><div><strong>发布生成新版本</strong><p>每次内容变化都进入新的世界修订和 GameRelease。旧发布、旧存档和分支不会被覆盖。</p></div></article><article><span>6</span><div><strong>AI 仍遵守统一 Harness</strong><p>本阶段不需要 AI。未来作者辅助只能通过 CONTEXT_SOURCES、FIELD_REGISTRY / Adoption 和统一 Harness 接入。</p></div></article></div>
+        <div className="storygame-help-grid"><article><span>1</span><div><strong>先定义入口与结局</strong><p>每个游戏绑定一个 NarrativeModule。先保留唯一入口和至少一个可达 ending，再扩展中间场景。</p></div></article><article><span>2</span><div><strong>用 Beat 写节点内容</strong><p>旁白、动作和系统提示无需角色；对话必须选择当前产品角色。order 决定展示顺序。</p></div></article><article><span>3</span><div><strong>用 Choice 连接路径</strong><p>Choice 是新发布唯一执行边，可设置显示条件、可用条件、不可用原因与 set / increment / unset 效果。</p></div></article><article><span>4</span><div><strong>先试玩再诊断</strong><p>从任意节点快速检查局部语义；正式发布前仍须保证所有内容从入口可达且非结局节点没有死路。</p></div></article><article><span>5</span><div><strong>制作中心生成新版本</strong><p>维护完成后交由制作中心冻结来源、构建产品并原子发布；旧发布、旧存档和分支不会被覆盖。</p></div></article><article><span>6</span><div><strong>AI 仍遵守统一 Harness</strong><p>作者辅助只能通过 CONTEXT_SOURCES、FIELD_REGISTRY / Adoption 和统一 Harness 接入。</p></div></article></div>
         <div className="storygame-author-contract"><GitBranch className="h-5 w-5" /><div><strong>推荐路径</strong><p>载入验收样例 → 内容页查看 Beat/Choice → 路径页运行检查 → 试玩不同路线 → 发布 → 切换到玩家模式新建存档。</p></div></div>
       </div> : null}
     </div>

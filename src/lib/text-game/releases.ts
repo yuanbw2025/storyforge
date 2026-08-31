@@ -41,6 +41,12 @@ import {
   parseNarrativeEffects,
 } from '../narrative/blueprint'
 import { parseInteractionSourceCharacterSnapshot } from '../character-interaction/source-character'
+import {
+  deriveStrictExportProjectSnapshot,
+  deriveStrictExportProjectSnapshotInCurrentTransaction,
+  type StrictProjectExportSnapshot,
+} from '../export/registry-export'
+import { PROJECT_TABLES } from '../registry/project-tables'
 
 export function parseWorldReleaseSpeakerNames(manifestJson: string): Record<string, string> {
   const manifest = JSON.parse(manifestJson) as WorldReleaseManifestV2
@@ -138,22 +144,6 @@ function parseWorldManifest(value: string): WorldReleaseManifestV2 {
     throw new Error('[storygame] GameRelease 必须绑定 WorldRelease v2')
   }
   return manifest
-}
-
-function releaseModuleExportId(
-  manifest: WorldReleaseManifestV2,
-  module: { kind: string; title: string },
-): number {
-  const modules = (manifest.records.narrativeModules ?? []) as Array<Record<string, unknown>>
-  const selected = manifest.selectedNarrativeModules.filter(item => (
-    item.kind === module.kind && item.title === module.title
-  ))
-  if (selected.length !== 1) throw new Error('[storygame] WorldRelease 中叙事模块身份缺失或不唯一')
-  const candidate = modules.find(row => row._exportId === selected[0].exportId
-    && row.kind === module.kind && row.title === module.title)
-  const exportId = typeof candidate?._exportId === 'number' ? candidate._exportId : null
-  if (exportId == null) throw new Error('[storygame] WorldRelease 不包含游戏定义的叙事模块')
-  return exportId
 }
 
 function freezeNodes(rows: Array<Record<string, unknown>>): FrozenGameNarrativeNode[] {
@@ -307,6 +297,7 @@ async function buildGameReleaseManifest(input: {
   scope: WorkspaceScope
   definition: GameDefinition
   worldReleaseId: number
+  productSnapshot?: StrictProjectExportSnapshot
 }): Promise<AnyGameReleaseManifestV1> {
   const scope = await resolveScope({ scope: input.scope })
   const worldRelease = await db.worldReleases.get(input.worldReleaseId)
@@ -315,27 +306,32 @@ async function buildGameReleaseManifest(input: {
   }
   await assertReleaseUnchanged(worldRelease.id!)
   const worldManifest = parseWorldManifest(worldRelease.manifestJson)
+  if (worldManifest.semanticContract !== 3) {
+    throw new Error('[storygame] 新产品发布只接受纯语义 WorldRelease；旧混合世界包只允许历史回放')
+  }
   const liveModule = await db.narrativeModules.get(input.definition.narrativeModuleId)
   if (!liveModule || !await assertRecordInScope(scope, 'narrativeModules', liveModule)) {
     throw new Error('[storygame] 游戏定义的叙事模块不属于当前 scope')
   }
-  const moduleExportId = releaseModuleExportId(worldManifest, liveModule)
+  const productSnapshot = input.productSnapshot
+    ?? await deriveStrictExportProjectSnapshot(scope.projectId)
+  const productRecords = productSnapshot.data as unknown as Record<string, unknown>
+  const rows = (table: string): Array<Record<string, unknown>> => (
+    Array.isArray(productRecords[table])
+      ? productRecords[table] as Array<Record<string, unknown>>
+      : []
+  )
+  const moduleExportId = productSnapshot.exportIds.get('narrativeModules')?.get(liveModule.id!)
+  if (moduleExportId == null) throw new Error('[storygame] 产品快照缺少叙事模块便携身份')
   const source = parseGameDefinitionWorldSource(input.definition)
-  const moduleRow = (worldManifest.records.narrativeModules ?? []).find(raw => (
-    !!raw && typeof raw === 'object' && (raw as Record<string, unknown>)._exportId === moduleExportId
-  )) as Record<string, unknown> | undefined
-  if (!moduleRow) throw new Error('[storygame] WorldRelease 缺少冻结叙事模块')
-  const nodeRows = (worldManifest.records.narrativeNodes ?? []).filter(raw => (
-    !!raw && typeof raw === 'object' && (raw as Record<string, unknown>)._moduleExportId === moduleExportId
-  )) as Array<Record<string, unknown>>
-  const beatRows = (worldManifest.records.narrativeBeats ?? []).filter(raw => (
-    !!raw && typeof raw === 'object' && (raw as Record<string, unknown>)._moduleExportId === moduleExportId
-  )) as Array<Record<string, unknown>>
-  const choiceRows = (worldManifest.records.narrativeChoices ?? []).filter(raw => (
-    !!raw && typeof raw === 'object' && (raw as Record<string, unknown>)._moduleExportId === moduleExportId
-  )) as Array<Record<string, unknown>>
+  const moduleRow = rows('narrativeModules').find(row => row._exportId === moduleExportId)
+  if (!moduleRow) throw new Error('[storygame] 产品快照缺少冻结叙事模块')
+  const nodeRows = rows('narrativeNodes').filter(row => row._moduleExportId === moduleExportId)
+  const beatRows = rows('narrativeBeats').filter(row => row._moduleExportId === moduleExportId)
+  const choiceRows = rows('narrativeChoices').filter(row => row._moduleExportId === moduleExportId)
   const nodes = freezeNodes(nodeRows)
-  const characterCount = (worldManifest.records.characters ?? []).length
+  const frozenCharacters = rows('characters')
+  const characterCount = frozenCharacters.length
   const frozenBeats = beatRows.map(row => freezeBeat(row, characterCount))
   const frozenChoices = choiceRows.map(freezeChoice)
   const entryNodeKey = String(moduleRow.entryNodeKey ?? '').trim()
@@ -374,17 +370,17 @@ async function buildGameReleaseManifest(input: {
   if (input.definition.productType === 'storygame') {
     gameManifest = { ...common, productType: 'storygame' }
   } else if (input.definition.productType === 'character-interaction') {
-    const definitionRows = (worldManifest.records.gameDefinitions ?? []) as Array<Record<string, unknown>>
+    const definitionRows = rows('gameDefinitions')
     const definitionRow = definitionRows.find(row => row.gameKey === input.definition.gameKey
       && row.productType === 'character-interaction')
     if (!definitionRow || !Number.isInteger(definitionRow._exportId)) {
-      throw new Error('[chatgame] WorldRelease 缺少当前互动游戏定义')
+      throw new Error('[chatgame] 产品快照缺少当前互动游戏定义')
     }
     const definitionExportId = Number(definitionRow._exportId)
-    const profileRows = (worldManifest.records.interactionCharacterProfiles ?? [])
+    const profileRows = rows('interactionCharacterProfiles')
       .filter(raw => !!raw && typeof raw === 'object'
         && (raw as Record<string, unknown>)._gameDefinitionExportId === definitionExportId) as Array<Record<string, unknown>>
-    const sceneRows = (worldManifest.records.interactionSceneTemplates ?? [])
+    const sceneRows = rows('interactionSceneTemplates')
       .filter(raw => !!raw && typeof raw === 'object'
         && (raw as Record<string, unknown>)._gameDefinitionExportId === definitionExportId) as Array<Record<string, unknown>>
     gameManifest = {
@@ -394,29 +390,29 @@ async function buildGameReleaseManifest(input: {
         playerKey: 'player',
         profiles: profileRows.map(row => freezeInteractionProfile(
           row,
-          (worldManifest.records.characters ?? []) as Array<Record<string, unknown>>,
+          frozenCharacters,
         )).sort((left, right) => left.participantKey.localeCompare(right.participantKey)),
         sceneTemplates: sceneRows.map(freezeInteractionScene)
           .sort((left, right) => left.order - right.order || left.sceneKey.localeCompare(right.sceneKey)),
       },
     }
   } else if (input.definition.productType === 'text-adventure') {
-    const definitionRows = (worldManifest.records.gameDefinitions ?? []) as Array<Record<string, unknown>>
+    const definitionRows = rows('gameDefinitions')
     const definitionRow = definitionRows.find(row => row.gameKey === input.definition.gameKey
       && row.productType === 'text-adventure')
     if (!definitionRow || !Number.isInteger(definitionRow._exportId)) {
-      throw new Error('[adventure] WorldRelease 缺少当前文字冒险定义')
+      throw new Error('[adventure] 产品快照缺少当前文字冒险定义')
     }
-    const moduleRows = (worldManifest.records.adventureModules ?? []) as Array<Record<string, unknown>>
+    const moduleRows = rows('adventureModules')
     const moduleRow = moduleRows.find(row => row._gameDefinitionExportId === Number(definitionRow._exportId))
     if (!moduleRow || typeof moduleRow.contentJson !== 'string') {
-      throw new Error('[adventure] WorldRelease 缺少当前冒险内容模块')
+      throw new Error('[adventure] 产品快照缺少当前冒险内容模块')
     }
     const definitionExportId = Number(definitionRow._exportId)
-    const profileRows = (worldManifest.records.interactionCharacterProfiles ?? [])
+    const profileRows = rows('interactionCharacterProfiles')
       .filter(raw => !!raw && typeof raw === 'object'
         && (raw as Record<string, unknown>)._gameDefinitionExportId === definitionExportId) as Array<Record<string, unknown>>
-    const sceneRows = (worldManifest.records.interactionSceneTemplates ?? [])
+    const sceneRows = rows('interactionSceneTemplates')
       .filter(raw => !!raw && typeof raw === 'object'
         && (raw as Record<string, unknown>)._gameDefinitionExportId === definitionExportId) as Array<Record<string, unknown>>
     const adventure = parseAdventureContent(moduleRow.contentJson)
@@ -435,7 +431,7 @@ async function buildGameReleaseManifest(input: {
         playerKey: 'player',
         profiles: profileRows.map(row => freezeInteractionProfile(
           row,
-          (worldManifest.records.characters ?? []) as Array<Record<string, unknown>>,
+          frozenCharacters,
         )).sort((left, right) => left.participantKey.localeCompare(right.participantKey)),
         sceneTemplates: sceneRows.map(freezeInteractionScene)
           .sort((left, right) => left.order - right.order || left.sceneKey.localeCompare(right.sceneKey)),
@@ -443,15 +439,15 @@ async function buildGameReleaseManifest(input: {
       adventure,
     }
   } else if (input.definition.productType === 'avg') {
-    const definitionRows = (worldManifest.records.gameDefinitions ?? []) as Array<Record<string, unknown>>
+    const definitionRows = rows('gameDefinitions')
     const definitionRow = definitionRows.find(row => row.gameKey === input.definition.gameKey && row.productType === 'avg')
-    if (!definitionRow || !Number.isInteger(definitionRow._exportId)) throw new Error('[avg] WorldRelease 缺少当前 AVG 定义')
-    const presentationRow = ((worldManifest.records.avgPresentationModules ?? []) as Array<Record<string, unknown>>)
+    if (!definitionRow || !Number.isInteger(definitionRow._exportId)) throw new Error('[avg] 产品快照缺少当前 AVG 定义')
+    const presentationRow = rows('avgPresentationModules')
       .find(row => row._gameDefinitionExportId === Number(definitionRow._exportId))
-    if (!presentationRow || typeof presentationRow.contentJson !== 'string') throw new Error('[avg] WorldRelease 缺少演出模块')
+    if (!presentationRow || typeof presentationRow.contentJson !== 'string') throw new Error('[avg] 产品快照缺少演出模块')
     const content = parseAvgPresentationContent(presentationRow.contentJson)
     const referencedAssetKeys = new Set(content.cues.flatMap(cue => cue.assetKey ? [cue.assetKey] : []))
-    const allAssetRows = (worldManifest.records.avgMediaAssets ?? []) as Array<Record<string, unknown>>
+    const allAssetRows = rows('avgMediaAssets')
     const latestByKey = new Map<string, Record<string, unknown>>()
     for (const row of allAssetRows) {
       const key = String(row.assetKey ?? '')
@@ -465,30 +461,30 @@ async function buildGameReleaseManifest(input: {
     }).sort((left, right) => left.assetKey.localeCompare(right.assetKey))
     const report = validateAvgPresentation({ content, beats: frozenBeats, assets })
     if (!report.valid) throw new Error(`[avg] 演出内容不可发布:${report.errors.join('；')}`)
-    const blobRows = (worldManifest.records.avgMediaBlobs ?? []) as Array<Record<string, unknown>>
+    const blobRows = rows('avgMediaBlobs')
     for (const asset of assets) {
       const source = allAssetRows.find(row => row.assetKey === asset.assetKey && row.version === asset.version)
       const blob = blobRows.find(row => row._mediaAssetExportId === source?._exportId)
       if (!blob || typeof blob.data !== 'string' || !blob.data.startsWith('data:')) {
-        throw new Error(`[avg] 媒资二进制未随 WorldRelease 冻结:${asset.assetKey}`)
+        throw new Error(`[avg] 产品快照缺少媒资二进制:${asset.assetKey}`)
       }
       const binary = decodePortableDataUrl(blob.data)
       if (binary.byteLength !== asset.byteSize || await sha256Binary(binary) !== asset.contentHash) {
-        throw new Error(`[avg] WorldRelease 媒资二进制完整性失败:${asset.assetKey}@${asset.version}`)
+        throw new Error(`[avg] 产品媒资二进制完整性失败:${asset.assetKey}@${asset.version}`)
       }
     }
     gameManifest = { ...common, productType: 'avg', presentation: { ...content, assets } }
   } else if (input.definition.productType === 'narrative-simulation') {
-    const definitionRows = (worldManifest.records.gameDefinitions ?? []) as Array<Record<string, unknown>>
+    const definitionRows = rows('gameDefinitions')
     const definitionRow = definitionRows.find(row => row.gameKey === input.definition.gameKey
       && row.productType === 'narrative-simulation')
     if (!definitionRow || !Number.isInteger(definitionRow._exportId)) {
-      throw new Error('[textsim] WorldRelease 缺少当前叙事模拟定义')
+      throw new Error('[textsim] 产品快照缺少当前叙事模拟定义')
     }
-    const simulationRow = ((worldManifest.records.narrativeSimulationModules ?? []) as Array<Record<string, unknown>>)
+    const simulationRow = rows('narrativeSimulationModules')
       .find(row => row._gameDefinitionExportId === Number(definitionRow._exportId))
     if (!simulationRow || typeof simulationRow.contentJson !== 'string') {
-      throw new Error('[textsim] WorldRelease 缺少叙事模拟内容模块')
+      throw new Error('[textsim] 产品快照缺少叙事模拟内容模块')
     }
     const simulation = parseNarrativeSimulationContent(simulationRow.contentJson)
     const simulationReport = validateNarrativeSimulationContent({
@@ -500,34 +496,34 @@ async function buildGameReleaseManifest(input: {
     }
     gameManifest = { ...common, productType: 'narrative-simulation', simulation }
   } else if (input.definition.productType === 'text-open-world') {
-    const definitionRows = (worldManifest.records.gameDefinitions ?? []) as Array<Record<string, unknown>>
+    const definitionRows = rows('gameDefinitions')
     const definitionRow = definitionRows.find(row => row.gameKey === input.definition.gameKey
       && row.productType === 'text-open-world')
     if (!definitionRow || !Number.isInteger(definitionRow._exportId)) {
-      throw new Error('[textworld] WorldRelease 缺少当前开放世界定义')
+      throw new Error('[textworld] 产品快照缺少当前开放世界定义')
     }
     const definitionExportId = Number(definitionRow._exportId)
-    const adventureRow = ((worldManifest.records.adventureModules ?? []) as Array<Record<string, unknown>>)
+    const adventureRow = rows('adventureModules')
       .find(row => row._gameDefinitionExportId === definitionExportId)
-    const simulationRow = ((worldManifest.records.narrativeSimulationModules ?? []) as Array<Record<string, unknown>>)
+    const simulationRow = rows('narrativeSimulationModules')
       .find(row => row._gameDefinitionExportId === definitionExportId)
-    const openWorldRow = ((worldManifest.records.openWorldModules ?? []) as Array<Record<string, unknown>>)
+    const openWorldRow = rows('openWorldModules')
       .find(row => row._gameDefinitionExportId === definitionExportId)
     if (typeof adventureRow?.contentJson !== 'string' || typeof simulationRow?.contentJson !== 'string'
       || typeof openWorldRow?.contentJson !== 'string') {
-      throw new Error('[textworld] WorldRelease 缺少冒险、模拟或区域内容模块')
+      throw new Error('[textworld] 产品快照缺少冒险、模拟或区域内容模块')
     }
-    const profileRows = (worldManifest.records.interactionCharacterProfiles ?? [])
+    const profileRows = rows('interactionCharacterProfiles')
       .filter(raw => !!raw && typeof raw === 'object'
         && (raw as Record<string, unknown>)._gameDefinitionExportId === definitionExportId) as Array<Record<string, unknown>>
-    const sceneRows = (worldManifest.records.interactionSceneTemplates ?? [])
+    const sceneRows = rows('interactionSceneTemplates')
       .filter(raw => !!raw && typeof raw === 'object'
         && (raw as Record<string, unknown>)._gameDefinitionExportId === definitionExportId) as Array<Record<string, unknown>>
     const interaction = {
       playerKey: 'player' as const,
       profiles: profileRows.map(row => freezeInteractionProfile(
         row,
-        (worldManifest.records.characters ?? []) as Array<Record<string, unknown>>,
+        frozenCharacters,
       )).sort((left, right) => left.participantKey.localeCompare(right.participantKey)),
       sceneTemplates: sceneRows.map(freezeInteractionScene)
         .sort((left, right) => left.order - right.order || left.sceneKey.localeCompare(right.sceneKey)),
@@ -565,7 +561,7 @@ async function buildGameReleaseManifest(input: {
     knownSpeakerKeys,
   })
   if (!graph.valid) {
-    throw new Error(`[storygame] WorldRelease 中的冻结内容图不可发布:${[
+    throw new Error(`[storygame] 产品快照中的冻结内容图不可发布:${[
       ...graph.errors,
       ...graph.danglingSuccessors.map(item => `${item.nodeKey}->${item.successorKey}`),
       ...graph.invalidChoiceTargets.map(item => `${item.choiceKey}->${item.targetNodeKey}`),
@@ -641,7 +637,12 @@ export async function publishGameDefinition(input: {
   gameDefinitionId: number
   worldReleaseId: number
   label?: string
+  /** Legacy runtime fixture only; formal products publish through production. */
+  fixtureOnly?: true
 }): Promise<GameRelease> {
+  if (input.fixtureOnly !== true) {
+    throw new Error('[storygame] 旧 GameDefinition 发布只允许隔离测试夹具；正式发布必须进入产品生产流程')
+  }
   const scope = await resolveScope({ scope: input.scope })
   const definition = await db.gameDefinitions.get(input.gameDefinitionId)
   if (!definition || !await assertRecordInScope(scope, 'gameDefinitions', definition, { owner: 'work' })) {
@@ -652,40 +653,32 @@ export async function publishGameDefinition(input: {
     && definition.productType !== 'narrative-simulation' && definition.productType !== 'text-open-world') {
     throw new Error(`[game-release] 尚未实现产品发布:${definition.productType}`)
   }
+  const productSnapshot = await deriveStrictExportProjectSnapshot(scope.projectId)
   const manifest = await buildGameReleaseManifest({
     scope,
     definition,
     worldReleaseId: input.worldReleaseId,
+    productSnapshot,
   })
   const manifestJson = stableJson(manifest)
   const contentHash = await sha256(manifest)
   return db.transaction('rw', scopeTransactionTables(
-    db.gameDefinitions,
-    db.gameReleases,
-    db.worldReleases,
-    db.narrativeModules,
-    db.narrativeNodes,
-    db.narrativeBeats,
-    db.narrativeChoices,
-    db.characters,
-    db.interactionCharacterProfiles,
-    db.interactionSceneTemplates,
-    db.adventureModules,
-    db.avgPresentationModules,
-    db.avgMediaAssets,
-    db.avgMediaBlobs,
-    db.narrativeSimulationModules,
-    db.openWorldModules,
+    ...PROJECT_TABLES.map(spec => spec.table),
   ), async () => {
     const currentScope = await resolveScope({ scope })
     const current = await db.gameDefinitions.get(definition.id!)
     if (!current || !await assertRecordInScope(currentScope, 'gameDefinitions', current, { owner: 'work' })) {
       throw new Error('[storygame] 游戏定义在发布过程中丢失')
     }
+    const currentProductSnapshot = await deriveStrictExportProjectSnapshotInCurrentTransaction(
+      scope.projectId,
+      { worldId: currentScope.worldId, workId: currentScope.workId },
+    )
     const currentManifest = await buildGameReleaseManifest({
       scope: currentScope,
       definition: current,
       worldReleaseId: input.worldReleaseId,
+      productSnapshot: currentProductSnapshot,
     })
     if (stableJson(currentManifest) !== manifestJson) throw new Error('[storygame] 游戏内容在发布冻结期间发生变化')
     const existing = await db.gameReleases

@@ -1312,6 +1312,112 @@ if (!registryTypesSource.includes('@deprecated PLATFORM-1 v1 read/migration clas
   violations.push('[㉜旧元数据降权] 旧分享字段必须明确重命名为 legacy 专用，不能继续冒充发布协议')
 }
 
+// ── ㉝ ARCH-03 上层产品不得绕过制作阶段从作者 UI 直接发布 ──
+const LEGACY_FIXTURE_PUBLISHERS = [
+  'publishGameDefinition',
+  'publishStoryGameDraft',
+  'publishAdventureGameDraft',
+  'publishAvgGame',
+  'publishNarrativeSimulationGame',
+  'publishTextOpenWorldGame',
+  'publishInteractionGameDraft',
+  'publishTtrpgCampaignReleaseV1',
+]
+for (const dir of UI_DIRS) {
+  for (const file of walk(dir)) {
+    const source = read(file)
+    for (const publisher of LEGACY_FIXTURE_PUBLISHERS) {
+      if (new RegExp(`\\b${publisher}\\b`).test(source)) {
+        violations.push(`[㉝三阶段旁路] ${file}: UI 不得调用 ${publisher}；正式发布必须进入产品制作中心`)
+      }
+    }
+  }
+}
+for (const [file, publisher] of [
+  ['src/lib/text-game/releases.ts', 'publishGameDefinition'],
+  ['src/lib/text-game/authoring.ts', 'publishStoryGameDraft'],
+  ['src/lib/adventure/authoring.ts', 'publishAdventureGameDraft'],
+  ['src/lib/avg/authoring.ts', 'publishAvgGame'],
+  ['src/lib/narrative-simulation/authoring.ts', 'publishNarrativeSimulationGame'],
+  ['src/lib/open-world/authoring.ts', 'publishTextOpenWorldGame'],
+  ['src/lib/character-interaction/authoring.ts', 'publishInteractionGameDraft'],
+]) {
+  const source = read(file)
+  const start = source.indexOf(`function ${publisher}`)
+  const body = start >= 0 ? source.slice(start, start + 1_200) : ''
+  if (!body.includes('fixtureOnly') || !body.includes('!== true')) {
+    violations.push(`[㉝fixture 闸门] ${file}: ${publisher} 必须显式拒绝非 fixture 调用`)
+  }
+}
+
+// ── ㉞ ARCH-06 节点模式只能编排分步骤领域动作，不得复制第二套生成/写回后端 ──
+const nodeDomainActionSource = read('src/lib/node-authoring/domain-action-registry.ts')
+const nodeDomainExecutionSource = read('src/lib/node-authoring/domain-execution.ts')
+const nodeExecutorSource = read('src/lib/node-authoring/executor.ts')
+const nodeTemplatesSource = read('src/lib/node-authoring/templates.ts')
+for (const token of [
+  'worldview-field-copilot', 'story-core-field-copilot', 'character-profile-copilot',
+  'character-supplement-copilot', 'character-relationship-durable', 'story-arc-copilot',
+  'outline-copilot', 'detailed-outline-copilot', 'prose-copilot',
+  'chapter-organization-durable', 'candidate-only',
+]) {
+  if (!nodeDomainActionSource.includes(token)) violations.push(`[㉞节点动作注册] 缺少 ${token}`)
+}
+for (const token of [
+  'prepareWorldviewFieldCopilot', 'prepareStoryCoreCopilot', 'prepareCharacterCopilot',
+  'prepareCharacterSupplementCopilotV1', 'generateCharacterRelationshipCandidateV1',
+  'prepareStoryArcCopilot', 'prepareOutlineCopilot', 'prepareProseCopilot',
+  'adoptRestoredWorldviewFieldCandidate', 'adoptRestoredStoryCoreCandidate',
+  'adoptRestoredCharacterSupplementCandidateV1', 'adoptCharacterRelationshipCandidateV1',
+]) {
+  if (!nodeDomainExecutionSource.includes(token)) violations.push(`[㉞节点领域同源] 缺少 ${token}`)
+}
+if (!nodeExecutorSource.includes("actionBinding?.mode === 'formal-domain-action'")
+  || !nodeExecutorSource.includes('已阻止回退到通用生成')
+  || !nodeExecutorSource.includes("actionBinding?.mode === 'experimental-draft'")
+  || !nodeExecutorSource.includes('不能直接写入 Canon')) {
+  violations.push('[㉞节点回退闸门] 正式动作必须拒绝通用生成回退，实验草稿必须拒绝直接采纳')
+}
+if (!nodeTemplatesSource.includes('assertOfficialAuthoringGraphUsesFormalActionsV1')) {
+  violations.push('[㉞官方模板闸门] 官方节点模板必须在构建时验证所有生成节点均已同源')
+}
+
+// ── ㉟ ARCH-07 世界能力只表达语义；未验收产品必须经过成熟度入口 ──
+const worldDomainSource = read('src/lib/world-engine/domain.ts')
+const productCatalogSource = read('src/lib/product/product-catalog.ts')
+const productHubSource = read('src/pages/ProductHubPage.tsx')
+for (const capability of [
+  'foundation', 'story', 'characters', 'relations', 'entities', 'storylines',
+  'outline', 'detailed-outline', 'manuscript', 'multi-world',
+]) {
+  if (!worldDomainSource.includes(`key: '${capability}'`)) {
+    violations.push(`[㉟世界语义能力] domain.ts 缺少 ${capability}`)
+  }
+}
+if (/key:\s*['"](?:runtime|media|assets|gameplay|sessions?)['"]/.test(worldDomainSource)) {
+  violations.push('[㉟世界边界] 世界能力投影不得拥有 runtime、media、assets、gameplay 或 session')
+}
+for (const token of [
+  'PRODUCT_CATALOG_V1', "status: 'released'", "status: 'preview'",
+  "status: 'experimental'", "status: 'internal'", 'requiresWorldReference',
+  'ownsRuntime', 'ownsMedia', 'experimentalOptIn',
+]) {
+  if (!productCatalogSource.includes(token)) violations.push(`[㉟产品目录] 缺少 ${token}`)
+}
+if (!productCatalogSource.includes("input.channel === 'local-development' || input.channel === 'test'")
+  || !productCatalogSource.includes("entry.status === 'released'")) {
+  violations.push('[㉟生产入口] 产品目录必须以 released 为生产可见基线，并把预览/内部限制在本地或测试环境')
+}
+if (!productCatalogSource.includes("item.family === 'world-engine' && (item.ownsRuntime || item.ownsMedia)")) {
+  violations.push('[㉟世界产品所有权] 产品目录必须拒绝世界引擎拥有运行态或产品媒资')
+}
+for (const token of [
+  'evaluateProductEntryV1', 'visibleNavTabs()', 'MaturityBadge',
+  'currentProductCatalogChannelV1', 'currentExperimentalProductOptInV1',
+]) {
+  if (!productHubSource.includes(token)) violations.push(`[㉟入口成熟度闸门] ProductHub 缺少 ${token}`)
+}
+
 // ── 报告 ──
 if (violations.length) {
   console.error('[architecture] ❌ 发现反模式违规(违反 CLAUDE.md 三注册表铁律):\n')

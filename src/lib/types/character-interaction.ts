@@ -207,6 +207,10 @@ export interface CharacterInteractionSourceSelectionRecordV1 {
   selectionJson: string
   selectionHash: string
   worldContentHash: string
+  worldReferenceJson?: string | null
+  worldReferenceHash?: string | null
+  sourcePlanJson?: string | null
+  sourcePlanHash?: string | null
   createdAt: number
 }
 
@@ -334,6 +338,9 @@ export interface CharacterInteractionBriefRecordV1 {
   runContractJson: string | null
   runContractHash: string | null
   confirmedAt: number | null
+  confirmedContractJson?: string | null
+  confirmedContractHash?: string | null
+  authorStartRevision?: number | null
   createdAt: number
 }
 
@@ -439,6 +446,11 @@ export interface CharacterInteractionProductReleaseRecordV1 {
   label: string
   manifestJson: string
   contentHash: string
+  releaseUid?: string | null
+  sourceManifestJson?: string | null
+  sourceManifestHash?: string | null
+  lineageJson?: string | null
+  lineageHash?: string | null
   createdAt: number
 }
 
@@ -454,6 +466,12 @@ export interface CharacterInteractionProductReleaseManifestV1 {
     selection: CharacterInteractionWorldSourceSelectionV1
   }
   brief: { content: CharacterInteractionBriefV1; contentHash: string }
+  sourceContracts: {
+    worldReferenceHash: string
+    sourcePlanHash: string
+    sourceManifestHash: string
+    confirmedBriefHash: string
+  }
   artifacts: Array<{
     artifactKey: string
     kind: CharacterInteractionArtifactKindV1

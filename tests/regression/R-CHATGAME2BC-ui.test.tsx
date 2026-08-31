@@ -54,6 +54,7 @@ async function fixture() {
   const projectId = await db.projects.add({
     name: '互动 UI', genre: 'drama', genres: ['drama'], status: 'drafting', description: '',
     targetWordCount: 20_000, createdAt: now, updatedAt: now,
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
   } as any) as number
   const ownership = await ensureWorkspaceOwnership(projectId)
   const ids: number[] = []
@@ -82,7 +83,7 @@ describe('CHATGAME-2B/2C · author and player UI', () => {
   })
   afterEach(async () => { await act(async () => root.unmount()); host.remove(); db.close() })
 
-  it('作者可从世界角色建立游戏，检查可见上下文并发布', async () => {
+  it('旧作者工作台可维护与检查草稿，但不能绕过正式制作直接发布', async () => {
     const seeded = await fixture()
     await act(async () => {
       root.render(createElement(DialogProvider, null, createElement(InteractionGameWorkbench, { scope: seeded.scope })))
@@ -114,10 +115,10 @@ describe('CHATGAME-2B/2C · author and player UI', () => {
     await waitFor(() => expect(host.textContent).toContain('统一上下文源：interactionRuntime'))
     await click(host, '校验与发布')
     await click(host, '运行检查')
-    await waitFor(() => expect(host.textContent).toContain('可发布'))
-    await click(host, '发布新版本')
-    await waitFor(() => expect(host.textContent).toContain('已发布 GameRelease v1'))
-    expect(await db.gameReleases.count()).toBe(1)
+    await waitFor(() => expect(host.textContent).toContain('草稿检查通过'))
+    expect(host.textContent).toContain('正式发布请进入“正式制作”')
+    expect(Array.from(host.querySelectorAll('button')).some(item => item.textContent?.includes('发布新版本'))).toBe(false)
+    expect(await db.gameReleases.count()).toBe(0)
   }, 20_000)
 
   it('玩家可从 GameRelease 建档并用无 AI 固定行动产生可解释关系变化', async () => {
@@ -134,7 +135,7 @@ describe('CHATGAME-2B/2C · author and player UI', () => {
       openingNodeKey: scene!.openingNodeKey, endingNodeKey: scene!.endingNodeKey,
       maxTurns: scene!.maxTurns, directorBudget: scene!.directorBudget, order: scene!.order,
     })
-    await publishInteractionGameDraft({ scope: seeded.scope, gameDefinitionId: definition.id! })
+    await publishInteractionGameDraft({ scope: seeded.scope, gameDefinitionId: definition.id!, fixtureOnly: true })
     await act(async () => {
       root.render(createElement(ChatGamePanel, { project: seeded.project, worldGroupId: null, workspaceScope: seeded.scope }))
       await new Promise(resolve => setTimeout(resolve, 0))

@@ -1,5 +1,7 @@
 import Dexie from 'dexie'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
+import { readAgentRunV1 } from '../agent/run/event-store'
+import { verifyContextGatewayCandidateEvidenceV1 } from '../context-gateway/attempt-evidence'
 import { db } from '../db/schema'
 import {
   putMediaBlobObject,
@@ -30,12 +32,25 @@ import type {
   GameRuntimePackageV2,
   InteractionKnowledgeSeed,
   InteractionRelationshipDimension,
+  LocalContextManifestAttemptV1,
+  ProductReleaseLineageV1,
+  ProductSourceManifestV1,
+  ProductSourcePlanV1,
+  ConfirmedProductBriefV1,
   SimulationEvent,
   WorkspaceScope,
   WorldGameSourceSelectionV2,
 } from '../types'
 import { CHARACTER_INTERACTION_PRODUCTION_STEPS_V1 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables } from '../world-engine/scope'
+import {
+  aggregateProductSourceManifestFromExactRunsV1,
+  createProductReleaseLineageV1,
+  productReleaseUidV1,
+  validateConfirmedProductBriefV1,
+  validateProductReleaseLineageV1,
+  validateProductSourceManifestV1,
+} from '../world-engine/product-source-contracts'
 import {
   assertCharacterInteractionFormalProductionReadyV1,
   createCharacterInteractionProductionV1,
@@ -933,6 +948,69 @@ function runtimeNarrative(
   return { moduleKind: 'main', moduleTitle: title, entryNodeKey: sceneNodes[0].key, nodes, beats, choices }
 }
 
+const FORMAL_AI_STEP_KEYS_V1 = [
+  'character-capsules',
+  'scene-plan',
+  'media-bible',
+] as const satisfies readonly CharacterInteractionProductionStepKeyV1[]
+const FORMAL_PRODUCTION_AGENT_STEP_ID_V1 = 'character-interaction:production-candidate'
+
+async function exactProductionContextAttemptsV1(input: {
+  scope: WorkspaceScope
+  confirmed: Map<CharacterInteractionProductionStepKeyV1, CharacterInteractionArtifactRecordV1>
+}): Promise<LocalContextManifestAttemptV1[]> {
+  const attempts: LocalContextManifestAttemptV1[] = []
+  for (const stepKey of FORMAL_AI_STEP_KEYS_V1) {
+    const artifact = input.confirmed.get(stepKey) ?? fail(`缺少正式 AI 生产产物:${stepKey}`)
+    if (artifact.producerRunId == null) fail(`${stepKey} 没有 durable producerRun，不能正式发布`)
+    const snapshot = await readAgentRunV1(input.scope, artifact.producerRunId)
+    const run = snapshot.run
+    if (run.projectId !== input.scope.projectId) fail(`${stepKey} producerRun 不属于当前项目`)
+    const events = snapshot.events
+    const candidate = events.find(event => event.type === 'candidate.persisted'
+      && event.payload.stepId === FORMAL_PRODUCTION_AGENT_STEP_ID_V1
+      && event.payload.candidateHash === artifact.payloadHash)
+    if (!candidate || candidate.type !== 'candidate.persisted') fail(`${stepKey} 缺少与已确认产物一致的 candidate.persisted`)
+    await verifyContextGatewayCandidateEvidenceV1({
+      scope: input.scope,
+      runId: run.id!,
+      stepId: FORMAL_PRODUCTION_AGENT_STEP_ID_V1,
+      attempt: candidate.payload.attempt,
+      candidateHash: artifact.payloadHash,
+    })
+    const contexts = events.filter((event): event is Extract<typeof event, { type: 'context.assembled' }> => (
+      event.type === 'context.assembled'
+        && event.payload.stepId === FORMAL_PRODUCTION_AGENT_STEP_ID_V1
+    ))
+    if (!contexts.length) fail(`${stepKey} 缺少 ContextManifestV3`)
+    attempts.push(...contexts.map(event => ({
+      runId: run.id!,
+      stepId: event.payload.stepId,
+      attempt: event.payload.attempt,
+      manifestHash: event.payload.manifestHash,
+    })))
+  }
+  const unique = new Set(attempts.map(item => `${item.runId}:${item.stepId}:${item.attempt}`))
+  if (unique.size !== attempts.length) fail('生产 ContextManifest attempt 重复')
+  return attempts
+}
+
+async function parentCharacterProductLineageV1(
+  prior: CharacterInteractionProductReleaseRecordV1[],
+): Promise<ProductReleaseLineageV1 | null> {
+  if (!prior.length) return null
+  const latest = [...prior].sort((left, right) => right.version - left.version)[0]!
+  if (!latest.lineageJson || !latest.lineageHash || !latest.releaseUid) {
+    fail('上一 ProductRelease 是无 lineage 的旧版；必须先显式迁移，不能静默继承')
+  }
+  const lineage = await validateProductReleaseLineageV1(
+    parseJson(latest.lineageJson, 'parent ProductRelease lineage') as ProductReleaseLineageV1,
+  )
+  if (lineage.lineageHash !== latest.lineageHash || lineage.releaseUid !== latest.releaseUid
+    || lineage.releaseHash !== latest.contentHash) fail('上一 ProductRelease lineage 与记录不一致')
+  return lineage
+}
+
 export async function publishCharacterInteractionProductReleaseV1(input: {
   scope: WorkspaceScope
   productionId: number
@@ -962,23 +1040,100 @@ export async function publishCharacterInteractionProductReleaseV1(input: {
     narrative: runtimeNarrative(bundle.production.title, integrated),
     interaction: { playerKey: 'player', profiles: integrated.profiles, sceneTemplates: integrated.sceneTemplates },
   } satisfies GameRuntimePackageV2)
+  if (!bundle.worldReference || !bundle.sourcePlan || !bundle.confirmedBriefContract) {
+    fail('正式发布缺少 WorldReference/SourcePlan/ConfirmedBrief')
+  }
+  const worldReference = bundle.worldReference
+  const sourcePlan = bundle.sourcePlan
+  const confirmedBriefContract = bundle.confirmedBriefContract
   const artifacts = [...confirmed.values()].sort((a, b) => (STEP_INDEX.get(a.stepKey!) ?? 0) - (STEP_INDEX.get(b.stepKey!) ?? 0))
   const artifactManifestHash = await hashCanonicalValue(artifacts.map(item => ({ artifactKey: item.artifactKey, kind: item.kind, payloadHash: item.payloadHash })))
+  const sourceManifest = await aggregateProductSourceManifestFromExactRunsV1({
+    scope,
+    sourcePlan,
+    runContextManifests: await exactProductionContextAttemptsV1({ scope, confirmed }),
+  })
   const releaseInputHash = await hashCanonicalValue({
     sourceSelectionHash: bundle.selection.selectionHash, briefHash: bundle.briefRecord.briefHash,
+    sourceManifestHash: sourceManifest.manifestHash,
     artifactManifestHash, mediaManifestHash: media.manifestHash,
   })
+  const priorReleases = await db.characterInteractionProductReleases.where('productionId').equals(input.productionId).toArray()
+  const parentLineage = await parentCharacterProductLineageV1(priorReleases)
+  const version = Math.max(0, ...priorReleases.map(item => item.version)) + 1
   const releaseManifestV2 = await createGameReleaseManifestV2({
     runtimePackage,
     productionProvenance: {
       productionKey: bundle.production.productionKey,
-      buildNumber: (await db.characterInteractionProductReleases.where('productionId').equals(input.productionId).count()) + 1,
+      buildNumber: version,
       buildManifestHash: releaseInputHash,
       rootTerminalReceiptHash: confirmed.get('counterexample-validation')!.payloadHash,
     },
   })
   const gameReleaseHash = await hashGameProductionValueV2(releaseManifestV2)
   const createdAt = Date.now()
+  const manifest: CharacterInteractionProductReleaseManifestV1 = {
+    schema: 'storyforge.character-interaction-product-release', version: 1,
+    productType: 'character-interaction', releaseVersion: version,
+    source: {
+      worldReleaseId: bundle.selection.worldReleaseId, worldContentHash: bundle.selection.worldContentHash,
+      selectionHash: bundle.selection.selectionHash, selection: bundle.selection,
+    },
+    brief: { content: bundle.brief, contentHash: bundle.briefRecord.briefHash },
+    sourceContracts: {
+      worldReferenceHash: worldReference.referenceHash,
+      sourcePlanHash: sourcePlan.planHash,
+      sourceManifestHash: sourceManifest.manifestHash,
+      confirmedBriefHash: confirmedBriefContract.confirmationHash,
+    },
+    artifacts: artifacts.map(item => ({
+      artifactKey: item.artifactKey, kind: item.kind,
+      payload: parseJson(item.payloadJson, item.artifactKey), payloadHash: item.payloadHash,
+    })),
+    media: media.assets.filter(item => item.status === 'available' || item.status === 'degraded').map(item => ({
+      slotKey: item.slotKey, assetKey: item.assetKey, kind: item.kind,
+      status: item.status as 'available' | 'degraded', required: item.productionRequired,
+      specHash: item.specHash, fallbackText: item.fallbackText, contentHash: item.contentHash,
+      mimeType: item.mimeType, byteSize: item.byteSize,
+    })),
+    gameRelease: { contentHash: gameReleaseHash },
+    integrity: { artifactManifestHash, mediaManifestHash: media.manifestHash, releaseInputHash },
+    compatibility: { productionContract: 1, runtimeProtocol: 1, minimumPlayerVersion: 1 },
+    createdAt,
+  }
+  const contentHash = await hashCharacterInteractionProductReleaseManifestV1(manifest)
+  const releaseUid = productReleaseUidV1({
+    productType: 'character-interaction',
+    productInstanceKey: bundle.production.productionKey,
+    releaseVersion: version,
+    releaseHash: contentHash,
+  })
+  const lineage = await createProductReleaseLineageV1({
+    productType: 'character-interaction',
+    productInstanceKey: bundle.production.productionKey,
+    releaseUid,
+    releaseVersion: version,
+    releaseHash: contentHash,
+    parentRelease: parentLineage == null ? null : {
+      releaseUid: parentLineage.releaseUid,
+      releaseHash: parentLineage.releaseHash,
+    },
+    worldReference,
+    sourcePlan,
+    sourceManifest,
+    confirmedBrief: confirmedBriefContract,
+    build: { buildUid: `character-interaction-build:${releaseInputHash}`, buildHash: releaseInputHash },
+    quality: {
+      passed: true,
+      receiptHashes: [confirmed.get('counterexample-validation')!.payloadHash, media.manifestHash],
+    },
+    compatibility: {
+      status: version === 1 ? 'initial' : 'compatible',
+      protocolVersion: 1,
+      evidenceHashes: [releaseInputHash, gameReleaseHash],
+    },
+    createdAt,
+  })
   return db.transaction('rw', scopeTransactionTables(
     db.characterInteractionProductions, db.characterInteractionSourceSelections,
     db.characterInteractionBriefs, db.characterInteractionProductionSteps,
@@ -993,10 +1148,18 @@ export async function publishCharacterInteractionProductReleaseV1(input: {
       || currentProduction.activeSourceSelectionId !== bundle.sourceRecord.id
       || currentProduction.activeBriefId !== bundle.briefRecord.id
       || currentSource?.selectionHash !== bundle.selection.selectionHash
+      || currentSource?.sourcePlanHash !== sourcePlan.planHash
       || currentBrief?.briefHash !== bundle.briefRecord.briefHash
+      || currentBrief?.confirmedContractHash !== confirmedBriefContract.confirmationHash
       || worldRelease?.contentHash !== bundle.selection.worldContentHash) fail('发布提交前来源、Brief 或 WorldRelease 已变化')
     const prior = await db.characterInteractionProductReleases.where('productionId').equals(input.productionId).toArray()
-    const version = Math.max(0, ...prior.map(item => item.version)) + 1
+    if (Math.max(0, ...prior.map(item => item.version)) + 1 !== version) fail('发布提交前 ProductRelease version 已变化')
+    const currentArtifacts = await db.characterInteractionArtifacts.where('productionId').equals(input.productionId).toArray()
+    for (const artifact of artifacts) {
+      const current = currentArtifacts.find(item => item.id === artifact.id)
+      if (!current || current.status !== 'confirmed' || current.payloadHash !== artifact.payloadHash
+        || current.producerRunId !== artifact.producerRunId) fail(`发布提交前产物已变化:${artifact.artifactKey}`)
+    }
     const existingGame = await db.gameReleases.where('contentHash').equals(gameReleaseHash).first()
     let gameRelease: GameRelease
     if (existingGame) gameRelease = existingGame
@@ -1010,37 +1173,17 @@ export async function publishCharacterInteractionProductReleaseV1(input: {
       const id = await db.gameReleases.add(row) as number
       gameRelease = { ...row, id }
     }
-    const manifest: CharacterInteractionProductReleaseManifestV1 = {
-      schema: 'storyforge.character-interaction-product-release', version: 1,
-      productType: 'character-interaction', releaseVersion: version,
-      source: {
-        worldReleaseId: bundle.selection.worldReleaseId, worldContentHash: bundle.selection.worldContentHash,
-        selectionHash: bundle.selection.selectionHash, selection: bundle.selection,
-      },
-      brief: { content: bundle.brief, contentHash: bundle.briefRecord.briefHash },
-      artifacts: artifacts.map(item => ({
-        artifactKey: item.artifactKey, kind: item.kind,
-        payload: parseJson(item.payloadJson, item.artifactKey), payloadHash: item.payloadHash,
-      })),
-      media: media.assets.filter(item => item.status === 'available' || item.status === 'degraded').map(item => ({
-        slotKey: item.slotKey, assetKey: item.assetKey, kind: item.kind,
-        status: item.status as 'available' | 'degraded', required: item.productionRequired,
-        specHash: item.specHash, fallbackText: item.fallbackText, contentHash: item.contentHash,
-        mimeType: item.mimeType, byteSize: item.byteSize,
-      })),
-      gameRelease: { contentHash: gameRelease.contentHash },
-      integrity: { artifactManifestHash, mediaManifestHash: media.manifestHash, releaseInputHash },
-      compatibility: { productionContract: 1, runtimeProtocol: 1, minimumPlayerVersion: 1 },
-      createdAt,
-    }
-    const contentHash = await Dexie.waitFor(hashCharacterInteractionProductReleaseManifestV1(manifest))
     const row: CharacterInteractionProductReleaseRecordV1 = {
       projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
       productionId: input.productionId, sourceSelectionId: bundle.sourceRecord.id,
       sourceWorldReleaseId: bundle.selection.worldReleaseId, briefId: bundle.briefRecord.id,
       gameReleaseId: gameRelease.id!, version,
       label: input.label?.trim() || `${bundle.production.title} v${version}`,
-      manifestJson: canonicalStringify(manifest), contentHash, createdAt,
+      manifestJson: canonicalStringify(manifest), contentHash, releaseUid,
+      sourceManifestJson: canonicalStringify(sourceManifest),
+      sourceManifestHash: sourceManifest.manifestHash,
+      lineageJson: canonicalStringify(lineage), lineageHash: lineage.lineageHash,
+      createdAt,
     }
     const id = await db.characterInteractionProductReleases.add(row) as number
     await db.characterInteractionProductions.update(input.productionId, {
@@ -1060,10 +1203,36 @@ export async function assertCharacterInteractionProductReleaseUnchangedV1(input:
   const manifest = parseJson(row.manifestJson, 'ProductRelease') as CharacterInteractionProductReleaseManifestV1
   if (manifest.schema !== 'storyforge.character-interaction-product-release' || manifest.version !== 1
     || manifest.productType !== 'character-interaction' || await hashCharacterInteractionProductReleaseManifestV1(manifest) !== row.contentHash) fail('Product Release 已损坏')
-  const gameRelease = await db.gameReleases.get(row.gameReleaseId)
-  const worldRelease = await db.worldReleases.get(row.sourceWorldReleaseId)
+  if (!row.releaseUid || !row.sourceManifestJson || !row.sourceManifestHash || !row.lineageJson || !row.lineageHash) {
+    fail('Product Release 缺少 SourceManifest/Lineage；旧版必须先显式迁移')
+  }
+  const [gameRelease, worldRelease, sourceRecord, briefRecord] = await Promise.all([
+    db.gameReleases.get(row.gameReleaseId),
+    db.worldReleases.get(row.sourceWorldReleaseId),
+    db.characterInteractionSourceSelections.get(row.sourceSelectionId),
+    db.characterInteractionBriefs.get(row.briefId),
+  ])
   if (!gameRelease || gameRelease.contentHash !== manifest.gameRelease.contentHash
     || !worldRelease || worldRelease.contentHash !== manifest.source.worldContentHash) fail('Product Release 来源引用已损坏')
+  if (!sourceRecord?.sourcePlanJson || !briefRecord?.confirmedContractJson) fail('Product Release 上游契约已丢失')
+  const sourcePlan = parseJson(sourceRecord.sourcePlanJson, 'ProductSourcePlan') as ProductSourcePlanV1
+  const confirmedBrief = parseJson(briefRecord.confirmedContractJson, 'ConfirmedProductBrief') as ConfirmedProductBriefV1
+  await validateConfirmedProductBriefV1({ brief: confirmedBrief, sourcePlan })
+  const sourceManifest = await validateProductSourceManifestV1({
+    sourceManifest: parseJson(row.sourceManifestJson, 'ProductSourceManifest') as ProductSourceManifestV1,
+    sourcePlan,
+  })
+  const lineage = await validateProductReleaseLineageV1(
+    parseJson(row.lineageJson, 'ProductReleaseLineage') as ProductReleaseLineageV1,
+  )
+  if (row.releaseUid !== lineage.releaseUid || row.contentHash !== lineage.releaseHash
+    || row.sourceManifestHash !== sourceManifest.manifestHash || row.lineageHash !== lineage.lineageHash
+    || manifest.sourceContracts.sourcePlanHash !== sourcePlan.planHash
+    || manifest.sourceContracts.sourceManifestHash !== sourceManifest.manifestHash
+    || manifest.sourceContracts.confirmedBriefHash !== confirmedBrief.confirmationHash
+    || manifest.sourceContracts.worldReferenceHash !== sourcePlan.worldReference.referenceHash) {
+    fail('Product Release 五项契约链已损坏')
+  }
   for (const artifact of manifest.artifacts) if (await hashCanonicalValue(artifact.payload) !== artifact.payloadHash) fail(`Product Release 产物损坏:${artifact.artifactKey}`)
   return structuredClone(manifest)
 }

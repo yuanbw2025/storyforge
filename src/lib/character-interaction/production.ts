@@ -14,17 +14,30 @@ import type {
   CharacterInteractionWorldSourceTableV1,
   InteractionRelationshipDimensionKey,
   WorkspaceScope,
+  WorldReferenceV1,
+  ProductSourcePlanV1,
+  ConfirmedProductBriefV1,
 } from '../types'
 import {
   CHARACTER_INTERACTION_PRODUCTION_STEPS_V1,
   INTERACTION_RELATIONSHIP_DIMENSIONS,
 } from '../types'
 import { resolveScope } from '../world-engine/scope'
+import { createWorldReferenceV1, validateWorldReferenceV1 } from '../world-engine/world-reference'
+import {
+  assertFormalProductProductionStartV1,
+  createConfirmedProductBriefV1,
+  freezeProductSourcePlanV1,
+  validateConfirmedProductBriefV1,
+  validateProductSourcePlanV1,
+  worldReferenceResourceScopeV1,
+} from '../world-engine/product-source-contracts'
+import { CHARACTER_INTERACTION_WORLD_REQUIREMENT_ADAPTER_V1 } from '../world-engine/product-requirement-adapters'
+import { listAllWorldReleaseResourceDescriptorsV1 } from '../context-gateway/world-release-provider'
 import {
   freezeCharacterInteractionWorldSourceSelectionV1,
   loadCharacterInteractionWorldSourceCatalogV1,
   parseCharacterInteractionWorldSourceSelectionV1,
-  readCharacterInteractionSelectedWorldRowsV1,
   validateCharacterInteractionWorldSourceSelectionV1,
 } from './world-source'
 
@@ -437,6 +450,9 @@ export interface CharacterInteractionProductionBundleV1 {
   briefRecord: CharacterInteractionBriefRecordV1 & { id: number }
   brief: CharacterInteractionBriefV1
   runContract: CharacterInteractionProductionRunContractV1 | null
+  worldReference: WorldReferenceV1 | null
+  sourcePlan: ProductSourcePlanV1 | null
+  confirmedBriefContract: ConfirmedProductBriefV1 | null
 }
 
 async function requireScope(input: WorkspaceScope): Promise<WorkspaceScope> {
@@ -485,6 +501,26 @@ export async function loadCharacterInteractionProductionV1(input: {
     fail('Brief hash 或来源身份已漂移')
   }
   let runContract: CharacterInteractionProductionRunContractV1 | null = null
+  let worldReference: WorldReferenceV1 | null = null
+  let sourcePlan: ProductSourcePlanV1 | null = null
+  let confirmedBriefContract: ConfirmedProductBriefV1 | null = null
+  const hasSourceContracts = sourceRecord.worldReferenceJson != null || sourceRecord.worldReferenceHash != null
+    || sourceRecord.sourcePlanJson != null || sourceRecord.sourcePlanHash != null
+  if (hasSourceContracts) {
+    if (!sourceRecord.worldReferenceJson || !sourceRecord.worldReferenceHash
+      || !sourceRecord.sourcePlanJson || !sourceRecord.sourcePlanHash) {
+      fail('来源行的 WorldReference/SourcePlan 合同不完整')
+    }
+    worldReference = await validateWorldReferenceV1(JSON.parse(sourceRecord.worldReferenceJson) as WorldReferenceV1)
+    sourcePlan = await validateProductSourcePlanV1(JSON.parse(sourceRecord.sourcePlanJson) as ProductSourcePlanV1)
+    if (worldReference.referenceHash !== sourceRecord.worldReferenceHash
+      || sourcePlan.planHash !== sourceRecord.sourcePlanHash
+      || sourcePlan.worldReference.referenceHash !== worldReference.referenceHash
+      || sourcePlan.productType !== 'character-interaction'
+      || sourcePlan.productInstanceKey !== production.productionKey) {
+      fail('来源行的 WorldReference/SourcePlan owner 或 hash 不一致')
+    }
+  }
   if (briefRecord.status === 'confirmed') {
     if (!briefRecord.runContractJson || !briefRecord.runContractHash || !briefRecord.confirmedAt) {
       fail('已确认 Brief 缺少 Run Contract')
@@ -494,6 +530,19 @@ export async function loadCharacterInteractionProductionV1(input: {
       || runContract.briefHash !== briefRecord.briefHash
       || runContract.sourceSelectionHash !== selection.selectionHash) {
       fail('Run Contract hash 或来源身份已漂移')
+    }
+    if (briefRecord.confirmedContractJson || briefRecord.confirmedContractHash || briefRecord.authorStartRevision != null) {
+      if (!sourcePlan || !briefRecord.confirmedContractJson || !briefRecord.confirmedContractHash
+        || briefRecord.authorStartRevision == null) fail('确认 Brief 的跨阶段合同不完整')
+      confirmedBriefContract = await validateConfirmedProductBriefV1({
+        brief: JSON.parse(briefRecord.confirmedContractJson) as ConfirmedProductBriefV1,
+        sourcePlan,
+      })
+      if (confirmedBriefContract.confirmationHash !== briefRecord.confirmedContractHash
+        || confirmedBriefContract.authorStartRevision !== briefRecord.authorStartRevision
+        || confirmedBriefContract.briefContentHash !== briefRecord.briefHash) {
+        fail('ConfirmedProductBrief 与产品 Brief 行不一致')
+      }
     }
   } else if (briefRecord.runContractJson != null || briefRecord.runContractHash != null || briefRecord.confirmedAt != null) {
     fail('草稿 Brief 不得持有正式 Run Contract')
@@ -506,6 +555,9 @@ export async function loadCharacterInteractionProductionV1(input: {
     briefRecord: briefRecord as CharacterInteractionBriefRecordV1 & { id: number },
     brief,
     runContract,
+    worldReference,
+    sourcePlan,
+    confirmedBriefContract,
   }
 }
 
@@ -544,6 +596,30 @@ export async function createCharacterInteractionProductionV1(input: {
   const brief = buildCharacterInteractionBriefV1({ catalog, selection, brief: input.brief })
   const briefHash = await hashCharacterInteractionBriefV1(brief)
   await validateCharacterInteractionWorldSourceSelectionV1({ scope, selection })
+  const worldReference = await createWorldReferenceV1(input.worldReleaseId)
+  const releaseScope = await worldReferenceResourceScopeV1(worldReference)
+  const descriptors = await listAllWorldReleaseResourceDescriptorsV1(releaseScope)
+  const selectedCharacterCoordinates = new Set(input.participantCharacterExportIds.map(String))
+  const initialResourceKeys = descriptors.filter(descriptor => (
+    descriptor.worldSemantic?.resourceKind === 'character'
+      && selectedCharacterCoordinates.has(descriptor.worldSemantic.resourceCoordinate)
+  )).map(descriptor => descriptor.resourceKey)
+  const sourcePlan = await freezeProductSourcePlanV1({
+    productInstanceKey: productionKey,
+    worldReference,
+    adapter: CHARACTER_INTERACTION_WORLD_REQUIREMENT_ADAPTER_V1,
+    goal: {
+      // Guest characters are product-private Brief data, not WorldRelease
+      // resources. Requiring a world character for every guest makes a valid
+      // mixed/guest production permanently impossible to publish.
+      participantCount: input.participantCharacterExportIds.length,
+      inheritStoryContinuity: input.brief.storyMode === 'inherit-ending',
+      allowCrossWorld: false,
+    },
+    missingStrategy: 'product-private-supplement',
+    initialResourceKeys,
+    createdAt: Date.now(),
+  })
   const now = Date.now()
   let productionId = 0
   await db.transaction('rw', [
@@ -582,6 +658,10 @@ export async function createCharacterInteractionProductionV1(input: {
       selectionJson: stableJson(selection),
       selectionHash: selection.selectionHash,
       worldContentHash: selection.worldContentHash,
+      worldReferenceJson: stableJson(worldReference),
+      worldReferenceHash: worldReference.referenceHash,
+      sourcePlanJson: stableJson(sourcePlan),
+      sourcePlanHash: sourcePlan.planHash,
       createdAt: now,
     }) as number
     const briefId = await db.characterInteractionBriefs.add({
@@ -597,6 +677,9 @@ export async function createCharacterInteractionProductionV1(input: {
       runContractJson: null,
       runContractHash: null,
       confirmedAt: null,
+      confirmedContractJson: null,
+      confirmedContractHash: null,
+      authorStartRevision: null,
       createdAt: now,
     }) as number
     const updated = await db.characterInteractionProductions.update(productionId, {
@@ -630,9 +713,31 @@ export async function confirmCharacterInteractionBriefV1(input: {
   await validateCharacterInteractionWorldSourceSelectionV1({ scope, selection: current.selection })
   const briefHash = await hashCharacterInteractionBriefV1(brief)
   const run = await buildRunContract({ selection: current.selection, briefHash })
+  if (!current.sourcePlan) fail('新正式生产必须先冻结 ProductSourcePlan')
   const now = Date.now()
+  const existingBriefs = await db.characterInteractionBriefs.where('productionId')
+    .equals(current.production.id).toArray()
+  const revision = Math.max(0, ...existingBriefs.map(item => item.revision)) + 1
+  // Contract validation reads and hashes the immutable WorldRelease. Do it
+  // before entering the write transaction, then re-check the exact release
+  // identity and next revision inside the transaction. Nested Dexie.waitFor
+  // around WebCrypto + IndexedDB reads can otherwise keep the transaction
+  // alive indefinitely in browsers/fake-indexeddb.
+  const confirmedContract = await createConfirmedProductBriefV1({
+    productType: 'character-interaction',
+    productInstanceKey: current.production.productionKey,
+    sourcePlan: current.sourcePlan,
+    briefRevision: revision,
+    briefContentHash: briefHash,
+    authorStartRevision: revision,
+    confirmedAt: now,
+  })
   let briefId = 0
-  await db.transaction('rw', [db.characterInteractionProductions, db.characterInteractionBriefs], async () => {
+  await db.transaction('rw', [
+    db.worldReleases,
+    db.characterInteractionProductions,
+    db.characterInteractionBriefs,
+  ], async () => {
     const production = await db.characterInteractionProductions.get(current.production.id)
     if (!production || production.status !== 'brief-draft'
       || production.activeSourceSelectionId !== current.sourceRecord.id
@@ -640,7 +745,11 @@ export async function confirmCharacterInteractionBriefV1(input: {
       fail('确认前生产根已变化')
     }
     const latest = await db.characterInteractionBriefs.where('productionId').equals(production.id!).toArray()
-    const revision = Math.max(0, ...latest.map(item => item.revision)) + 1
+    if (Math.max(0, ...latest.map(item => item.revision)) + 1 !== revision) fail('确认前 Brief revision 已变化')
+    const release = await db.worldReleases.get(current.sourcePlan!.worldReference.localReleaseRecordId)
+    if (!release || release.contentHash !== current.sourcePlan!.worldReference.releaseHash) {
+      fail('确认前 WorldReference 已变化')
+    }
     briefId = await db.characterInteractionBriefs.add({
       projectId: scope.projectId,
       worldId: scope.worldId,
@@ -654,6 +763,9 @@ export async function confirmCharacterInteractionBriefV1(input: {
       runContractJson: stableJson(run.contract),
       runContractHash: run.hash,
       confirmedAt: now,
+      confirmedContractJson: stableJson(confirmedContract),
+      confirmedContractHash: confirmedContract.confirmationHash,
+      authorStartRevision: revision,
       createdAt: now,
     }) as number
     const updated = await db.characterInteractionProductions.update(production.id!, {
@@ -675,6 +787,15 @@ export async function assertCharacterInteractionFormalProductionReadyV1(input: {
   const bundle = await loadCharacterInteractionProductionV1(input)
   if (bundle.production.status === 'brief-draft' || bundle.briefRecord.status !== 'confirmed'
     || !bundle.runContract) fail('正式生产要求 frozen Selection + confirmed Brief + verified Run Contract')
+  if (!bundle.worldReference || !bundle.sourcePlan || !bundle.confirmedBriefContract
+    || bundle.briefRecord.authorStartRevision == null) {
+    fail('正式生产要求 WorldReference + ProductSourcePlan + ConfirmedProductBrief + 用户开始授权')
+  }
+  await assertFormalProductProductionStartV1({
+    sourcePlan: bundle.sourcePlan,
+    confirmedBrief: bundle.confirmedBriefContract,
+    authorStartRevision: bundle.briefRecord.authorStartRevision,
+  })
   await validateCharacterInteractionWorldSourceSelectionV1({ scope: input.scope, selection: bundle.selection })
   return bundle
 }
@@ -685,15 +806,22 @@ export async function readCharacterInteractionProductionContextV1(input: {
   productionId: number
 }): Promise<string> {
   const bundle = await assertCharacterInteractionFormalProductionReadyV1(input)
-  const frozen = await readCharacterInteractionSelectedWorldRowsV1({
-    scope: input.scope,
-    selection: bundle.selection,
-  })
   return [
-    `【角色互动冻结生产来源】${bundle.production.title}`,
-    `WorldRelease=${bundle.selection.worldReleaseId} / ${bundle.selection.worldContentHash}`,
+    `【角色互动产品自有生产约束】${bundle.production.title}`,
+    '世界语义正文不在此来源中；正式 Harness 只能通过 WorldReference + ProductSourcePlan 打开中立 WorldRelease Gateway。',
+    `WorldReference=${bundle.worldReference!.referenceHash}`,
+    `SourcePlan=${bundle.sourcePlan!.planHash}`,
     `Selection=${bundle.selection.selectionHash} / Brief=${bundle.briefRecord.briefHash}`,
-    `RunContract=${bundle.briefRecord.runContractHash}`,
-    stableJson({ brief: bundle.brief, selectedWorldRecords: frozen.records }),
+    `ConfirmedBrief=${bundle.confirmedBriefContract!.confirmationHash} / RunContract=${bundle.briefRecord.runContractHash}`,
+    stableJson({
+      brief: bundle.brief,
+      selectedWorldResourceKeys: bundle.sourcePlan!.initialResourceKeys,
+      sourceRequirements: bundle.sourcePlan!.requirements.map(requirement => ({
+        key: requirement.key,
+        level: requirement.level,
+        status: requirement.status,
+        minimumResources: requirement.minimumResources,
+      })),
+    }),
   ].join('\n')
 }

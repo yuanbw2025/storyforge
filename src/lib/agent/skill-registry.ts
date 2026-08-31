@@ -2964,6 +2964,24 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: gameProductionInputPolicy(['characterInteractionProduction']),
     contextCompression: compressionPolicy(['characterInteractionProduction']),
+    contextGateway: {
+      version: 1,
+      rollout: 'required',
+      requiredWriteTargets: [],
+      providerSourceKeys: ['worldRelease'],
+      // ProductSourcePlan performs the product-specific narrowing. The Skill
+      // is the static ceiling and therefore grants only registered kinds.
+      allowedResourceKinds: CONTEXT_RESOURCE_KINDS_V1,
+      allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
+      maxReadCalls: 200,
+      maxRetrievedTokens: 100_000,
+      maxPlanningSteps: 12,
+      maxPlanningModelTokens: 100_000,
+      allowOriginalRead: true,
+      additionalReadToolNames: [
+        'list_context_catalog', 'search_context', 'read_context_resource', 'read_original_evidence',
+      ],
+    },
     maxOutputTokens: 8_000,
     writeTargets: [],
     lastVerifiedAt: '2026-08-25',

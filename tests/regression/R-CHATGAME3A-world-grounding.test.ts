@@ -117,6 +117,7 @@ describe('CHATGAME-3A · world-grounded character start', () => {
     const projectId = await db.projects.add({
       name: 'CHATGAME-3A', genre: 'drama', genres: ['drama'], status: 'drafting',
       description: '世界落地角色起点回归', targetWordCount: 50_000, createdAt: now, updatedAt: now,
+      workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     } as any) as number
     const ownership = await ensureWorkspaceOwnership(projectId)
     const firstId = await db.characters.add({
@@ -242,7 +243,7 @@ describe('CHATGAME-3A · world-grounded character start', () => {
       order: firstScene!.order,
     })
 
-    const publication = await publishInteractionGameDraft({ scope: ownership.scope, gameDefinitionId: definition.id! })
+    const publication = await publishInteractionGameDraft({ scope: ownership.scope, gameDefinitionId: definition.id!, fixtureOnly: true })
     const frozen = parseInteractionGameReleaseManifest(publication.gameRelease.manifestJson)
     expect(frozen.interaction.profiles.find(item => item.name === '陆弦')).toMatchObject({
       characterKey: 'interaction-guest:north-mountain-visitor',

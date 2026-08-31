@@ -249,6 +249,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.workCharacterBindings, name: 'workCharacterBindings', owner: 'project', exportable: true,
     legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'characters',
+    resourceIdentity: RESOURCE_IDENTITY('work-character-binding', 'character', '作品角色身份与弧光'),
+    worldSemantic: { version: 1, area: 'characters', resourceKind: 'work-character-binding', canonPolicy: 'authoritative-table' },
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     exportRemap: [
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -1881,11 +1883,24 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: "productionId", remapVia: "ttrpgProductions", exportAs: "_productionExportId", onUnmapped: "require" },
       { field: "sourceWorldReleaseId", remapVia: "worldReleases", exportAs: "_sourceWorldReleaseExportId" },
     ],
+    exportRefRemap: [
+      {
+        field: "worldReferenceJson", remapVia: "worldReleases", kind: "json-id-paths",
+        paths: ["localReleaseRecordId"], exportAs: "_portableWorldReferenceJson", onUnmapped: "null",
+      },
+      {
+        field: "sourcePlanJson", remapVia: "worldReleases", kind: "json-id-paths",
+        paths: ["worldReference.localReleaseRecordId"], exportAs: "_portableSourcePlanJson", onUnmapped: "null",
+      },
+    ],
     memoryClassification: {
       version: 1, classification: "evidence", mirrorPolicy: "recovery-evidence",
       reason: "不可变跑团来源目录与选择证据；开发 fixture 明确不可发布，正式来源保留 Release 绑定。",
     },
-    defaults: { sourceWorldReleaseId: null, status: "frozen" },
+    defaults: {
+      sourceWorldReleaseId: null, status: "frozen",
+      worldReferenceJson: null, worldReferenceHash: null, sourcePlanJson: null, sourcePlanHash: null,
+    },
     note: "TTRPG-4B 跑团专属冻结 SourceSelection；不保存来源 Dexie 自增身份",
   },
 
@@ -1906,7 +1921,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       version: 1, classification: "editable", mirrorPolicy: "recovery-evidence",
       reason: "作者逐版本确认的跑团 Brief；每次修改追加新版本而不覆盖历史决定。",
     },
-    defaults: { status: "confirmed", briefJson: "{}", briefHash: "" },
+    defaults: {
+      status: "confirmed", briefJson: "{}", briefHash: "",
+      confirmedContractJson: null, confirmedContractHash: null, authorStartRevision: null,
+    },
     note: "TTRPG-4B 产品专属不可变 Brief revision",
   },
 
@@ -2010,11 +2028,20 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: "briefId", remapVia: "ttrpgProductionBriefs", exportAs: "_briefExportId", onUnmapped: "require" },
       { field: "buildId", remapVia: "ttrpgProductionBuilds", exportAs: "_buildExportId", onUnmapped: "require" },
     ],
+    exportRefRemap: [{
+      field: "manifestJson", remapVia: "worldReleases", kind: "json-id-paths",
+      paths: ["source.worldReleaseId", "source.selection.worldReleaseId"],
+      exportAs: "_portableManifestJson", onUnmapped: "require",
+    }],
     memoryClassification: {
       version: 1, classification: "evidence", mirrorPolicy: "recovery-evidence",
       reason: "不可变跑团产品发布清单；只能由正式世界来源和通过全部门槛的 Build 创建。",
     },
-    defaults: { manifestJson: "{}", contentHash: "" },
+    defaults: {
+      manifestJson: "{}", contentHash: "", releaseUid: null,
+      sourceManifestJson: null, sourceManifestHash: null,
+      lineageJson: null, lineageHash: null,
+    },
     note: "TTRPG-4B 产品专属不可变 Release；开发来源服务层硬拒绝写入",
   },
   {
@@ -2100,6 +2127,14 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
         exportAs: "_portableSelectionJson",
         onUnmapped: "require",
       },
+      {
+        field: "worldReferenceJson", remapVia: "worldReleases", kind: "json-id-paths",
+        paths: ["localReleaseRecordId"], exportAs: "_portableWorldReferenceJson", onUnmapped: "require",
+      },
+      {
+        field: "sourcePlanJson", remapVia: "worldReleases", kind: "json-id-paths",
+        paths: ["worldReference.localReleaseRecordId"], exportAs: "_portableSourcePlanJson", onUnmapped: "require",
+      },
     ],
     memoryClassification: {
       version: 1,
@@ -2112,6 +2147,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       selectionJson: "{}",
       selectionHash: "",
       worldContentHash: "",
+      worldReferenceJson: null,
+      worldReferenceHash: null,
+      sourcePlanJson: null,
+      sourcePlanHash: null,
     },
     note: "CHATGAME-CI-1 不可变 SourceSelection revision；长期身份只使用冻结包便携 ID",
   },
@@ -2168,6 +2207,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       runContractJson: null,
       runContractHash: null,
       confirmedAt: null,
+      confirmedContractJson: null,
+      confirmedContractHash: null,
+      authorStartRevision: null,
     },
     note: "CHATGAME-CI-2 产品专属 Brief revision 和正式模型权限合同",
   },
@@ -2259,7 +2301,11 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       exportAs: "_portableManifestJson", onUnmapped: "require",
     }],
     memoryClassification: { version: 1, classification: "evidence", mirrorPolicy: "recovery-evidence", reason: "不可变角色互动产品发行物及完整来源和媒资证明。" },
-    defaults: { manifestJson: "{}", contentHash: "" },
+    defaults: {
+      manifestJson: "{}", contentHash: "", releaseUid: null,
+      sourceManifestJson: null, sourceManifestHash: null,
+      lineageJson: null, lineageHash: null,
+    },
     note: "CHATGAME-CI-5 不可变 CharacterInteraction Product Release",
   },
 ]

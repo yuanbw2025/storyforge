@@ -274,7 +274,8 @@ export async function deleteAvgMediaAsset(input: { scope: WorkspaceScope; mediaA
   })
 }
 
-export async function publishAvgGame(input: { scope: WorkspaceScope; gameDefinitionId: number; label?: string }): Promise<AvgPublication> {
+export async function publishAvgGame(input: { scope: WorkspaceScope; gameDefinitionId: number; label?: string; fixtureOnly?: true }): Promise<AvgPublication> {
+  if (input.fixtureOnly !== true) throw new Error('[avg] 旧草稿发布只允许隔离测试夹具；正式发布必须进入产品制作中心')
   const scope = await resolveScope({ scope: input.scope })
   const definition = await definitionInScope(scope, input.gameDefinitionId)
   parseGameDefinitionWorldSource(definition)
@@ -284,9 +285,9 @@ export async function publishAvgGame(input: { scope: WorkspaceScope; gameDefinit
   if (!report.valid) throw new Error(`[avg] 演出内容不可发布:${report.errors.join('；')}`)
   const latest = (await listWorldRevisions(scope))[0]
   const label = input.label?.trim() || `${definition.title} · AVG 发布`
-  const revision = await createWorldRevision({ scope, label, parentRevisionId: latest?.id ?? null, selectedNarrativeModuleIds: [definition.narrativeModuleId] })
+  const revision = await createWorldRevision({ scope, label, parentRevisionId: latest?.id ?? null })
   const worldRelease = await publishWorldRevision(revision.id!, label)
-  const gameRelease = await publishGameDefinition({ scope, gameDefinitionId: definition.id!, worldReleaseId: worldRelease.id!, label })
+  const gameRelease = await publishGameDefinition({ scope, gameDefinitionId: definition.id!, worldReleaseId: worldRelease.id!, label, fixtureOnly: true })
   return { report, revision, worldRelease, gameRelease }
 }
 

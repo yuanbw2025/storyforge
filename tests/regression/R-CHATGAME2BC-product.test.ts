@@ -27,6 +27,7 @@ async function workspace() {
   const projectId = await db.projects.add({
     name: 'CHATGAME-2BC', genre: 'drama', genres: ['drama'], status: 'drafting',
     description: '角色互动产品回归', targetWordCount: 50_000, createdAt: now, updatedAt: now,
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
   } as any) as number
   const ownership = await ensureWorkspaceOwnership(projectId)
   const ids: number[] = []
@@ -63,7 +64,7 @@ describe('CHATGAME-2B/2C · product release, authoring and playback', () => {
     expect(ownerContext.visibleKnowledgeKeys).toContain('secret.sealed-letter')
     expect(outsiderContext.visibleKnowledgeKeys).not.toContain('secret.sealed-letter')
     expect(outsiderContext.hiddenKnowledgeKeys).toContain('secret.sealed-letter')
-    const publication = await publishInteractionGameDraft({ scope: owned.scope, gameDefinitionId: definition.id! })
+    const publication = await publishInteractionGameDraft({ scope: owned.scope, gameDefinitionId: definition.id!, fixtureOnly: true })
     const manifest = parseInteractionGameReleaseManifest(publication.gameRelease.manifestJson)
     expect(manifest.interaction.sceneTemplates).toHaveLength(5)
     expect(manifest.interaction.sceneTemplates.flatMap(item => item.relationshipRules).map(item => item.ruleKey)).toEqual([
@@ -128,7 +129,7 @@ describe('CHATGAME-2B/2C · product release, authoring and playback', () => {
     expect(otherContext.visibleKnowledgeKeys).not.toContain('sealed-letter')
     expect(otherContext.hiddenKnowledgeKeys).toContain('sealed-letter')
 
-    const publication = await publishInteractionGameDraft({ scope: owned.scope, gameDefinitionId: definition.id! })
+    const publication = await publishInteractionGameDraft({ scope: owned.scope, gameDefinitionId: definition.id!, fixtureOnly: true })
     const manifest = parseInteractionGameReleaseManifest(publication.gameRelease.manifestJson)
     expect(manifest).toMatchObject({
       productType: 'character-interaction',
@@ -187,6 +188,6 @@ describe('CHATGAME-2B/2C · product release, authoring and playback', () => {
     expect(report.diagnostics.map(item => item.code)).toEqual(expect.arrayContaining([
       'scene.unknown-participant', 'rule.large-change-without-evidence',
     ]))
-    await expect(publishInteractionGameDraft({ scope: owned.scope, gameDefinitionId: definition.id! })).rejects.toThrow('发布检查未通过')
+    await expect(publishInteractionGameDraft({ scope: owned.scope, gameDefinitionId: definition.id!, fixtureOnly: true })).rejects.toThrow('发布检查未通过')
   })
 })

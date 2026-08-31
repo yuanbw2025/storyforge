@@ -710,6 +710,17 @@ export interface ContextResourceDescriptorV1 {
     workId?: number
     worldGroupId?: number | null
     chapterId?: number
+    /** Immutable release locator when the resource comes from WorldReference. */
+    worldReleaseId?: number
+    worldReleaseHash?: string
+  }
+  /** Provider-neutral semantic identity. Product adapters match this instead
+   * of copying physical WorldRelease table names. */
+  worldSemantic?: {
+    area: WorldCapabilityArea
+    resourceKind: string
+    /** Release-scoped portable row identity; never a Dexie id. */
+    resourceCoordinate: string
   }
   relations: ContextResourceRelationV1[]
   timeRange?: ContextTimeRangeV1
@@ -734,6 +745,9 @@ export interface FrozenResourceScopeV1 {
   /** undefined = unrestricted catalog; null = explicitly no character
    * knowledge; number = only this perspective character's knowledge. */
   characterId?: number | null
+  /** Required by the registered immutable WorldRelease provider. */
+  worldReleaseId?: number
+  worldReleaseHash?: string
 }
 
 export interface ResourceListInputV1 {

@@ -847,7 +847,17 @@ export async function publishInteractionGameDraft(input: {
   scope: WorkspaceScope
   gameDefinitionId: number
   label?: string
+  /**
+   * Legacy deterministic runtime fixture only. Formal character-interaction
+   * publication must use the stage-two Brief/SourcePlan and stage-three
+   * production pipeline. Keeping this explicit guard prevents an authoring UI
+   * from silently turning product narrative into a WorldRelease again.
+   */
+  fixtureOnly: true
 }): Promise<InteractionGamePublication> {
+  if (input.fixtureOnly !== true) {
+    throw new Error('[chatgame] 旧草稿发布只允许隔离测试夹具；正式发布必须进入角色互动制作流程')
+  }
   const scope = await resolveScope({ scope: input.scope })
   const definition = await definitionInScope(scope, input.gameDefinitionId)
   const report = await validateInteractionGameDraft(scope, definition.id!)
@@ -860,7 +870,6 @@ export async function publishInteractionGameDraft(input: {
     scope,
     label,
     parentRevisionId: latest?.id ?? null,
-    selectedNarrativeModuleIds: [definition.narrativeModuleId],
   })
   const worldRelease = await publishWorldRevision(revision.id!, label)
   const gameRelease = await publishGameDefinition({
@@ -868,6 +877,7 @@ export async function publishInteractionGameDraft(input: {
     gameDefinitionId: definition.id!,
     worldReleaseId: worldRelease.id!,
     label,
+    fixtureOnly: true,
   })
   return { report, revision, worldRelease, gameRelease }
 }

@@ -263,6 +263,31 @@ export interface AuthoringCandidate {
 
 export type AuthoringCandidateDomain =
   | {
+      kind: 'worldview-field'
+      targetField: string
+      snapshot: import('../agent/worldview-field-copilot').WorldviewFieldCopilotSnapshot
+    }
+  | {
+      kind: 'story-core-field'
+      targetField: string
+      snapshot: import('../agent/story-core-copilot').StoryCoreCopilotSnapshot
+    }
+  | {
+      kind: 'character-supplement'
+      snapshot: import('../agent/character-supplement-copilot').CharacterSupplementCopilotSnapshotV1
+    }
+  | {
+      kind: 'story-arc'
+      snapshot: import('../agent/story-arc-copilot').StoryArcCopilotSnapshot
+      mutation: import('../agent/story-arc-copilot').StoryArcMutationRequestV1
+    }
+  | {
+      kind: 'character-relation'
+      producerRunId: number
+      candidateHash: string
+      candidateCount: number
+    }
+  | {
       kind: 'character'
       rosterSnapshot: string
     }

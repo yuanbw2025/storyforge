@@ -4,6 +4,7 @@ import { buildAuthoringCreationChainGraph } from './creation-chain'
 import type { AuthoringEdge, AuthoringNodeGraph, AuthoringNodeInstance } from './contracts'
 import { autoLayoutAuthoringGraph } from './productivity'
 import { deriveShortNovelStructure, SHORT_NOVEL_DEFAULT_WORDS } from '../world-engine/work-kind'
+import { assertOfficialAuthoringGraphUsesFormalActionsV1 } from './domain-action-registry'
 
 export const AUTHORING_OFFICIAL_TEMPLATE_IDS = [
   'world-foundation',
@@ -247,17 +248,25 @@ export function buildOfficialAuthoringTemplate(
 ): AuthoringNodeGraph {
   const template = AUTHORING_OFFICIAL_TEMPLATE_BY_ID.get(id)
   if (!template) throw new Error(`未知官方节点模板：${id}`)
+  let built: AuthoringNodeGraph
   if (id === 'short-novel') {
     const structure = deriveShortNovelStructure(
       options.targetWordCount ?? SHORT_NOVEL_DEFAULT_WORDS,
       options.preferredChapterCount,
     )
-    return configureCreationChain({
+    built = configureCreationChain({
       chapterCount: structure.chapterCount,
       volumeCount: structure.volumeCount,
       wordCount: structure.targetWordsPerChapter,
       namePrefix: 'short',
     })
+  } else {
+    built = template.build()
   }
-  return template.build()
+  assertOfficialAuthoringGraphUsesFormalActionsV1({
+    templateId: id,
+    nodes: built.nodes,
+    catalog: AUTHORING_NODE_BY_ID,
+  })
+  return built
 }

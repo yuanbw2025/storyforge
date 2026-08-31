@@ -5,6 +5,38 @@ import {
   prepareCharacterCopilot,
 } from '../agent/character-copilot'
 import {
+  WORLDVIEW_AGENT_FIELDS,
+  adoptRestoredWorldviewFieldCandidate,
+  formatWorldviewFieldGenerationRequestV1,
+  prepareWorldviewFieldCopilot,
+  type WorldviewAgentField,
+} from '../agent/worldview-field-copilot'
+import {
+  STORY_CORE_FIELDS,
+  adoptRestoredStoryCoreCandidate,
+  formatStoryCoreGenerationRequestV1,
+  prepareStoryCoreCopilot,
+  type StoryCoreField,
+} from '../agent/story-core-copilot'
+import {
+  adoptRestoredCharacterSupplementCandidateV1,
+  prepareCharacterSupplementCopilotV1,
+} from '../agent/character-supplement-copilot'
+import {
+  adoptRestoredStoryArcCandidate,
+  prepareStoryArcCopilot,
+  runStoryArcCreativeReliabilityV1,
+} from '../agent/story-arc-copilot'
+import {
+  adoptCharacterRelationshipCandidateV1,
+  generateCharacterRelationshipCandidateV1,
+} from '../agent/run/character-relationship-durable'
+import {
+  CHARACTER_DIMENSIONS,
+  type CharacterDimensionKey,
+} from '../character/character-dimensions'
+import { hashCanonicalValue } from '../agent/run/hash'
+import {
   prepareOutlineCopilot,
   adoptRestoredOutlineCandidate,
   runOutlineCreativeReliabilityV1,
@@ -41,7 +73,11 @@ import { db } from '../db/schema'
 import type { AIConfig, WorkspaceScope } from '../types'
 import type { AdoptResult } from '../registry/types'
 import { AUTHORING_NODE_BY_ID } from './catalog'
-import { hashAuthoringText, readAuthoringCanonBinding } from './bindings'
+import {
+  hashAuthoringText,
+  readAuthoringCanonBinding,
+  resolveAuthoringBoundRecordId,
+} from './bindings'
 import type {
   AuthoringCandidateDomain,
   AuthoringInputEnvelope,
@@ -126,6 +162,215 @@ function creativeReliabilitySettings(input: DomainExecutionInput) {
     enabled: isCreativeReliabilityRuntimeEnabledV1(),
     qualityMode: 'balanced' as const,
     budgetProfile: 'balanced' as const,
+  }
+}
+
+function registeredSingleField(input: DomainExecutionInput): string {
+  const fields = AUTHORING_NODE_BY_ID.get(input.node.templateId)?.writes?.fields ?? []
+  if (fields.length !== 1) throw new Error(`节点 ${input.node.templateId} 缺少唯一字段写回契约。`)
+  return fields[0]!
+}
+
+async function domainBinding(input: DomainExecutionInput) {
+  const scope = await resolveDomainScope(input)
+  return readAuthoringCanonBinding({
+    node: input.node,
+    projectId: input.projectId,
+    scope,
+    worldGroupId: input.worldGroupId,
+    contextBudget: typeof input.node.config.contextBudget === 'number'
+      ? input.node.config.contextBudget
+      : undefined,
+  })
+}
+
+async function executeWorldviewField(input: DomainExecutionInput): Promise<DomainExecutionResult> {
+  const scope = await resolveDomainScope(input)
+  const targetField = registeredSingleField(input)
+  if (!WORLDVIEW_AGENT_FIELDS.includes(targetField as WorldviewAgentField)) {
+    throw new Error(`世界观节点 ${input.node.templateId} 的字段 ${targetField} 未登记为可生成字段。`)
+  }
+  const field = targetField as WorldviewAgentField
+  const prepared = await prepareWorldviewFieldCopilot({
+    projectId: input.projectId,
+    scope,
+    worldGroupId: input.worldGroupId,
+    authorRequest: formatWorldviewFieldGenerationRequestV1({
+      field,
+      mode: 'expand',
+      hint: requestFor(input.node, `生成${AUTHORING_NODE_BY_ID.get(input.node.templateId)?.label ?? targetField}。`),
+    }),
+    supplementalContext: nonControlInput(input.inputs),
+    routingCategory: AUTHORING_NODE_BY_ID.get(input.node.templateId)?.promptModuleKey,
+    contextProfile: profileForBudget(contextBudget(input.node, input.inputs, 28_500)),
+    configOverride: input.aiConfig,
+    generationOverrides: generationOverrides(input.node, input.inputs),
+    signal: input.signal,
+  })
+  if (prepared.targetField !== field) throw new Error('世界观节点与字段 Copilot 解析出的目标不一致。')
+  const binding = await domainBinding(input)
+  const variants: string[] = []
+  for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
+    variants.push(JSON.stringify(await prepared.node.run(prepared.prepared.messages), null, 2))
+  }
+  return {
+    output: variants[0] ?? '',
+    variants,
+    semantic: input.node.outputs[0]?.semantic ?? 'world.setting',
+    sourceKeys: binding.sourceKeys,
+    sourceHash: binding.sourceHash,
+    sourceEvidence: binding,
+    domain: { kind: 'worldview-field', targetField: field, snapshot: prepared.snapshot },
+  }
+}
+
+async function executeStoryCoreField(input: DomainExecutionInput): Promise<DomainExecutionResult> {
+  const scope = await resolveDomainScope(input)
+  const targetField = registeredSingleField(input)
+  if (!STORY_CORE_FIELDS.includes(targetField as StoryCoreField)) {
+    throw new Error(`故事节点 ${input.node.templateId} 的字段 ${targetField} 未登记为可生成字段。`)
+  }
+  const field = targetField as StoryCoreField
+  const prepared = await prepareStoryCoreCopilot({
+    projectId: input.projectId,
+    scope,
+    worldGroupId: input.worldGroupId,
+    authorRequest: formatStoryCoreGenerationRequestV1({
+      field,
+      mode: 'expand',
+      hint: requestFor(input.node, `生成${AUTHORING_NODE_BY_ID.get(input.node.templateId)?.label ?? targetField}。`),
+    }),
+    supplementalContext: nonControlInput(input.inputs),
+    routingCategory: AUTHORING_NODE_BY_ID.get(input.node.templateId)?.promptModuleKey,
+    contextProfile: profileForBudget(contextBudget(input.node, input.inputs, 28_500)),
+    configOverride: input.aiConfig,
+    generationOverrides: generationOverrides(input.node, input.inputs),
+    signal: input.signal,
+  })
+  if (prepared.targetField !== field) throw new Error('故事节点与字段 Copilot 解析出的目标不一致。')
+  const binding = await domainBinding(input)
+  const variants: string[] = []
+  for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
+    variants.push(JSON.stringify(await prepared.node.run(prepared.prepared.messages), null, 2))
+  }
+  return {
+    output: variants[0] ?? '',
+    variants,
+    semantic: input.node.outputs[0]?.semantic ?? 'story.theme',
+    sourceKeys: binding.sourceKeys,
+    sourceHash: binding.sourceHash,
+    sourceEvidence: binding,
+    domain: { kind: 'story-core-field', targetField: field, snapshot: prepared.snapshot },
+  }
+}
+
+async function executeCharacterSupplement(input: DomainExecutionInput): Promise<DomainExecutionResult> {
+  const scope = await resolveDomainScope(input)
+  const targetField = registeredSingleField(input)
+  const dimension = CHARACTER_DIMENSIONS.find(item => item.key === targetField)?.key
+  if (!dimension) throw new Error(`角色节点 ${input.node.templateId} 的字段 ${targetField} 未登记为角色维度。`)
+  const characterId = await resolveAuthoringBoundRecordId({
+    node: input.node,
+    projectId: input.projectId,
+    scope,
+    worldGroupId: input.worldGroupId,
+    target: 'characters',
+  })
+  if (characterId == null) throw new Error('角色维度节点必须先绑定一个目标角色，才能复用分步骤补全流程。')
+  const prepared = await prepareCharacterSupplementCopilotV1({
+    projectId: input.projectId,
+    scope,
+    worldGroupId: input.worldGroupId,
+    request: { characterId, dimensions: [dimension as CharacterDimensionKey], useEvidence: true },
+    authorRequest: requestFor(input.node, `补全角色的${AUTHORING_NODE_BY_ID.get(input.node.templateId)?.label ?? targetField}。`),
+    routingCategory: AUTHORING_NODE_BY_ID.get(input.node.templateId)?.promptModuleKey,
+    contextProfile: profileForBudget(contextBudget(input.node, input.inputs, 28_500)),
+    configOverride: input.aiConfig,
+    generationOverrides: generationOverrides(input.node, input.inputs),
+    signal: input.signal,
+  })
+  const binding = await domainBinding(input)
+  const variants: string[] = []
+  for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
+    variants.push(JSON.stringify(await prepared.node.run(prepared.prepared.messages), null, 2))
+  }
+  return {
+    output: variants[0] ?? '',
+    variants,
+    semantic: 'character.profile',
+    sourceKeys: binding.sourceKeys,
+    sourceHash: binding.sourceHash,
+    sourceEvidence: binding,
+    domain: { kind: 'character-supplement', snapshot: prepared.snapshot },
+  }
+}
+
+async function executeStoryArc(input: DomainExecutionInput): Promise<DomainExecutionResult> {
+  const scope = await resolveDomainScope(input)
+  const reliability = creativeReliabilitySettings(input)
+  const prepared = await prepareStoryArcCopilot({
+    projectId: input.projectId,
+    scope,
+    worldGroupId: input.worldGroupId,
+    authorRequest: requestFor(input.node, '根据现有世界、故事和角色规划故事线。'),
+    supplementalContext: nonControlInput(input.inputs),
+    routingCategory: AUTHORING_NODE_BY_ID.get(input.node.templateId)?.promptModuleKey,
+    contextProfile: profileForBudget(contextBudget(input.node, input.inputs, 32_000)),
+    configOverride: input.aiConfig,
+    generationOverrides: generationOverrides(input.node, input.inputs),
+    creativeReliabilityEnabled: reliability.enabled,
+    signal: input.signal,
+  })
+  const binding = await domainBinding(input)
+  const variants: string[] = []
+  const creativeArtifacts: CreativeArtifactV1[] = []
+  for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
+    if (reliability.enabled) {
+      const result = await runStoryArcCreativeReliabilityV1({
+        prepared,
+        budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
+        qualityMode: reliability.qualityMode,
+      })
+      variants.push(result.draft)
+      creativeArtifacts.push(result.artifact)
+    } else {
+      variants.push(JSON.stringify(await prepared.node.run(prepared.prepared.messages), null, 2))
+    }
+  }
+  return {
+    output: variants[0] ?? '',
+    variants,
+    ...(creativeArtifacts.length ? { creativeArtifacts } : {}),
+    semantic: 'story.arc',
+    sourceKeys: binding.sourceKeys,
+    sourceHash: binding.sourceHash,
+    sourceEvidence: binding,
+    domain: { kind: 'story-arc', snapshot: prepared.snapshot, mutation: prepared.mutation },
+  }
+}
+
+async function executeCharacterRelation(input: DomainExecutionInput): Promise<DomainExecutionResult> {
+  const scope = await resolveDomainScope(input)
+  const generated = await generateCharacterRelationshipCandidateV1({
+    scope,
+    worldGroupId: input.worldGroupId,
+    aiConfig: input.aiConfig,
+  })
+  const binding = await domainBinding(input)
+  const output = JSON.stringify(generated.candidate, null, 2)
+  return {
+    output,
+    variants: [output],
+    semantic: 'character.relation',
+    sourceKeys: binding.sourceKeys,
+    sourceHash: binding.sourceHash,
+    sourceEvidence: binding,
+    domain: {
+      kind: 'character-relation',
+      producerRunId: generated.snapshot.run.id,
+      candidateHash: generated.candidate.candidateHash,
+      candidateCount: generated.candidate.relations.length,
+    },
   }
 }
 
@@ -633,8 +878,16 @@ async function executeFactNode(input: DomainExecutionInput): Promise<DomainExecu
 
 /** 领域节点专用执行器；返回 null 时由通用 FLOW-3 执行器处理。 */
 export async function executeDomainNode(input: DomainExecutionInput): Promise<DomainExecutionResult | null> {
+  if (input.node.templateId.startsWith('world.')) return executeWorldviewField(input)
+  if (input.node.templateId.startsWith('story.') && input.node.templateId !== 'story.arc') {
+    return executeStoryCoreField(input)
+  }
+  if (input.node.templateId.startsWith('character.field.')) return executeCharacterSupplement(input)
   switch (input.node.templateId) {
     case 'character.profile': return executeCharacter(input)
+    case 'character.relation': return executeCharacterRelation(input)
+    case 'story.arc':
+    case 'continuity.storyline': return executeStoryArc(input)
     case 'outline.volume':
     case 'outline.chapter': return executeOutline(input)
     case 'outline.plan': return executeDetail(input)
@@ -659,6 +912,75 @@ export async function adoptDomainCandidate(input: {
   worldGroupId: number | null
 }): Promise<AdoptResult | null> {
   const scope = await resolveDomainScope(input)
+  if (input.domain.kind === 'worldview-field') {
+    return adoptRestoredWorldviewFieldCandidate({
+      projectId: input.projectId,
+      scope,
+      worldGroupId: input.worldGroupId,
+      snapshot: input.domain.snapshot,
+      targetField: input.domain.targetField as WorldviewAgentField,
+      draft: input.output,
+    })
+  }
+  if (input.domain.kind === 'story-core-field') {
+    return adoptRestoredStoryCoreCandidate({
+      projectId: input.projectId,
+      scope,
+      snapshot: input.domain.snapshot,
+      targetField: input.domain.targetField as StoryCoreField,
+      draft: input.output,
+    })
+  }
+  if (input.domain.kind === 'character-supplement') {
+    const result = await adoptRestoredCharacterSupplementCandidateV1({
+      projectId: input.projectId,
+      scope,
+      worldGroupId: input.worldGroupId,
+      snapshot: input.domain.snapshot,
+      draft: input.output,
+    })
+    return { ...emptyAdoptResult(), written: [{ id: result.characterId, fields: result.fields }] }
+  }
+  if (input.domain.kind === 'story-arc') {
+    const result = await adoptRestoredStoryArcCandidate({
+      projectId: input.projectId,
+      scope,
+      worldGroupId: input.worldGroupId,
+      snapshot: input.domain.snapshot,
+      draft: input.output,
+      mutation: input.domain.mutation,
+    })
+    return {
+      ...emptyAdoptResult(),
+      written: result.ids.map(id => ({ id, fields: ['name', 'type', 'description', 'stages'] })),
+    }
+  }
+  if (input.domain.kind === 'character-relation') {
+    let candidate: Record<string, unknown>
+    try {
+      candidate = JSON.parse(input.output) as Record<string, unknown>
+    } catch {
+      throw new Error('角色关系候选必须是合法 JSON；请重新运行关系节点。')
+    }
+    const { candidateHash: _candidateHash, ...body } = candidate
+    const computedHash = await hashCanonicalValue(body)
+    if (
+      candidate.kind !== 'character-relationship-candidate'
+      || candidate.candidateHash !== input.domain.candidateHash
+      || computedHash !== input.domain.candidateHash
+      || !Array.isArray(candidate.relations)
+      || candidate.relations.length !== input.domain.candidateCount
+    ) throw new Error('角色关系候选已被编辑或证据不完整；请重新运行关系节点后再采纳。')
+    const result = await adoptCharacterRelationshipCandidateV1({
+      scope,
+      runId: input.domain.producerRunId,
+      selectedIndexes: Array.from({ length: input.domain.candidateCount }, (_, index) => index),
+    })
+    return {
+      ...emptyAdoptResult(),
+      written: Array.from({ length: result.written }, () => ({ id: 0, fields: ['relationType', 'label', 'description'] })),
+    }
+  }
   if (input.domain.kind === 'character') {
     const candidate = parseCharacterCandidateDraft(input.output)
     return adoptCharacterCopilotCandidate({

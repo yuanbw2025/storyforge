@@ -1,14 +1,22 @@
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
+import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { computeKnownCostUsd } from '../ai/usage-log'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1 } from '../agent/skill-registry'
 import { createAgentRunCheckpointV1 } from '../agent/run/checkpoint'
-import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manifest'
+import { createContextManifestV1, createContextManifestV2FromV1 } from '../agent/run/context-manifest'
 import { appendAgentRunEventV1, createAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
+import {
+  finalizeContextGatewayAttemptEvidenceV1,
+  recordContextGatewayPreflightEvidenceV1,
+  type ContextGatewayPreflightEvidenceV1,
+} from '../context-gateway/attempt-evidence'
+import { executeContextGatewayV1, type ContextGatewayExecutionV1 } from '../context-gateway/execution'
 import { assembleContext } from '../registry/assemble-context'
+import { resolveProductSourceReadBoundaryV1 } from '../world-engine/product-source-contracts'
 import type {
   AIConfig,
   CharacterInteractionArtifactRecordV1,
@@ -17,6 +25,7 @@ import type {
   SimulationTtrpgModelEvidenceV1,
   WorkspaceScope,
 } from '../types'
+import type { ContextManifestV2 } from '../types/agent-run'
 import {
   generateCharacterInteractionStepCandidateV1,
   prepareCharacterInteractionStepDraftV1,
@@ -106,6 +115,50 @@ async function append(
     payload,
     expectedLastSequence: snapshot.projection.lastSequence,
   } as Parameters<typeof appendAgentRunEventV1>[0])
+}
+
+async function createAttemptManifestV2(input: {
+  scope: WorkspaceScope
+  runId: number
+  attempt: number
+  assembled: Awaited<ReturnType<typeof assembleContext>>
+  gateway: ContextGatewayExecutionV1
+}): Promise<ContextManifestV2> {
+  const index = input.assembled.included.indexOf('characterInteractionProduction')
+  const segment = input.assembled.segments[index]
+  if (index < 0 || !segment) fail('角色互动产品自有生产上下文为空')
+  const productHash = await sha256Text(segment.content)
+  const worldTokens = input.gateway.contextPacket.tokenCount
+  const totalInputTokens = segment.tokens + worldTokens
+  const manifest = await createContextManifestV1({
+    version: 1,
+    runId: input.runId,
+    stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1,
+    attempt: input.attempt,
+    scope: { projectId: input.scope.projectId, worldGroupId: null },
+    inputBudget: Math.max(totalInputTokens, input.assembled.inputBudget + input.gateway.session.policy.maxRetrievedTokens),
+    totalInputTokens,
+    sources: [{
+      key: 'characterInteractionProduction',
+      status: 'included',
+      contentHash: productHash,
+      tokens: segment.tokens,
+      readerVersion: 'character-interaction-product-constraints-v2',
+    }, {
+      key: 'worldRelease',
+      status: 'included',
+      contentHash: input.gateway.contextPacket.contentHash,
+      tokens: worldTokens,
+      readerVersion: 'world-release-context-gateway-v1',
+    }],
+  })
+  return createContextManifestV2FromV1({ manifest, scope: input.scope })
+}
+
+interface ProductionGatewayAttemptV1 {
+  gateway: ContextGatewayExecutionV1
+  baseManifest: ContextManifestV2
+  preflight: ContextGatewayPreflightEvidenceV1
 }
 
 function proposalShape(stepKey: CharacterInteractionAIProductionStepV1): string {
@@ -285,6 +338,8 @@ export async function runCharacterInteractionProductionStepV1(input: {
     productionKey: details.production.productionKey,
     sourceSelectionHash: details.selection.selectionHash,
     briefHash: details.briefRecord.briefHash,
+    worldReferenceHash: details.worldReference?.referenceHash ?? null,
+    sourcePlanHash: details.sourcePlan?.planHash ?? null,
     stepKey: input.stepKey,
     baseHash,
     authorDirection,
@@ -299,10 +354,10 @@ export async function runCharacterInteractionProductionStepV1(input: {
       objective: `为角色互动生产步骤 ${input.stepKey} 生成待作者确认的冻结来源候选`,
       workflowKind: 'direct-generation',
       scope: { projectId: input.scope.projectId, worldGroupId: null },
-      permissions: { contextSourceKeys: ['characterInteractionProduction'], writeTargets: [] },
+      permissions: { contextSourceKeys: ['characterInteractionProduction', 'worldRelease'], writeTargets: [] },
       runtimeBindingHash,
       executionBindings: [{ stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1, ...executionBinding }],
-      budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 36_000, maxOutputTokens: 12_000, maxAttemptsPerStep: 2 },
+      budget: { maxModelCalls: 2, maxToolCalls: 200, maxInputTokens: 128_000, maxOutputTokens: 12_000, maxAttemptsPerStep: 2 },
       acceptance: [
         { id: 'candidate.protocol-valid', kind: 'deterministic-check', required: true },
         { id: 'candidate.source-closed', kind: 'deterministic-check', required: true },
@@ -320,6 +375,7 @@ export async function runCharacterInteractionProductionStepV1(input: {
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1, attempt: 1 })
   try {
+    if (!details.sourcePlan || !details.worldReference) fail('正式生产缺少 WorldReference/ProductSourcePlan')
     const assembled = await assembleContext({
       projectId: input.scope.projectId,
       scope: input.scope,
@@ -330,27 +386,56 @@ export async function runCharacterInteractionProductionStepV1(input: {
       inputBudgetMaxTokens: 20_000,
     })
     if (!assembled.included.includes('characterInteractionProduction')) fail('冻结角色互动生产上下文为空')
-    const manifest = await createContextManifestFromAssemblyV1({
-      runId: snapshot.run.id,
-      stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1,
-      attempt: 1,
-      projectId: input.scope.projectId,
-      worldGroupId: null,
-      declaredSourceKeys: ['characterInteractionProduction'],
-      assembled,
-      readerVersion: 'character-interaction-production-context-v1',
+    const readBoundary = await resolveProductSourceReadBoundaryV1(details.sourcePlan)
+    const gateway = await executeContextGatewayV1({
+      skill,
+      scope: input.scope,
+      resourceScope: readBoundary.sourceScope,
+      accessPolicyOverride: details.sourcePlan.gatewayPolicy,
+      allowedResourceKeys: readBoundary.allowedResourceKeys,
+      mandatoryResourceKeys: readBoundary.mandatoryResourceKeys,
+      mandatoryFullResourceKeys: readBoundary.mandatoryFullResourceKeys,
+      targetResourceKeys: readBoundary.targetResourceKeys,
+      query: authorDirection || `${details.production.title} ${input.stepKey}`,
+      budgetTokens: details.sourcePlan.gatewayPolicy.maxRetrievedTokens,
+      additionalReadsEnabled: false,
     })
-    snapshot = await append(input.scope, snapshot, 'context.assembled', {
-      stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1,
-      attempt: 1,
-      manifestHash: manifest.manifestHash,
+    if (gateway.session.policyHash !== details.sourcePlan.gatewayPolicyHash
+      || gateway.session.scope.worldReleaseHash !== details.worldReference.releaseHash) {
+      fail('Context Gateway 未绑定冻结 SourcePlan/WorldReference')
+    }
+    const prompt = messages({
+      stepKey: input.stepKey,
+      authorDirection,
+      context: `${assembled.text}\n\n【中立 WorldRelease Gateway 实际读取】\n${gateway.contextPacket.content}`,
+      base,
     })
-    const prompt = messages({ stepKey: input.stepKey, authorDirection, context: assembled.text, base })
+    const contextManifestHashes: string[] = []
     const call = async (callMessages: ChatMessage[], attempt: 1 | 2) => {
+      const baseManifest = await createAttemptManifestV2({
+        scope: input.scope,
+        runId: snapshot.run.id,
+        attempt,
+        assembled,
+        gateway,
+      })
+      const recorded = await recordContextGatewayPreflightEvidenceV1({
+        scope: input.scope,
+        runId: snapshot.run.id,
+        stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1,
+        attempt,
+        contextPacket: gateway.contextPacket,
+        selector: gateway.selector,
+        renderedRequest: callMessages,
+        sourceSnapshots: gateway.sourceSnapshots,
+        toolTranscript: gateway.toolTranscript,
+        expectedLastSequence: snapshot.projection.lastSequence,
+      })
+      snapshot = recorded.snapshot
       snapshot = await append(input.scope, snapshot, 'model.requested', {
         stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1,
         attempt,
-        bindingHash: await hashCanonicalValue({ runtimeBindingHash, contextManifestHash: manifest.manifestHash, callMessages }),
+        bindingHash: await hashCanonicalValue({ runtimeBindingHash, preflightHash: recorded.evidence.preflightHash }),
       })
       const result: ChatResult = {}
       const startedAt = Date.now()
@@ -382,16 +467,46 @@ export async function runCharacterInteractionProductionStepV1(input: {
         attempt,
         outputHash: await hashCanonicalValue(output),
       })
-      return { output, evidence }
+      return {
+        output,
+        evidence,
+        gatewayAttempt: { gateway, baseManifest, preflight: recorded.evidence } satisfies ProductionGatewayAttemptV1,
+      }
+    }
+    const finalizeAttempt = async (callResult: Awaited<ReturnType<typeof call>>, candidateHash: string) => {
+      const finalized = await finalizeContextGatewayAttemptEvidenceV1({
+        scope: input.scope,
+        runId: snapshot.run.id,
+        stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1,
+        attempt: callResult.gatewayAttempt.baseManifest.attempt,
+        baseManifest: callResult.gatewayAttempt.baseManifest,
+        preflight: callResult.gatewayAttempt.preflight,
+        selector: callResult.gatewayAttempt.gateway.selector,
+        sufficiency: callResult.gatewayAttempt.gateway.sufficiency,
+        retrievalTrace: callResult.gatewayAttempt.gateway.retrievalTrace,
+        gatewayVersionHash: callResult.gatewayAttempt.gateway.contextPacket.gatewayVersionHash,
+        policyHash: callResult.gatewayAttempt.gateway.session.policyHash,
+        rawResponse: callResult.output,
+        candidateHash,
+        expectedLastSequence: snapshot.projection.lastSequence,
+      })
+      snapshot = finalized.snapshot
+      contextManifestHashes.push(finalized.manifest.manifestHash)
+      return finalized.manifest
     }
     const first = await call(prompt, 1)
     const calls = [first.evidence]
     let candidatePayload: CharacterInteractionProductionArtifactPayloadV1
+    let candidatePayloadHash: string
+    let successfulManifestHash: string
     let repairApplied = false
     try {
       candidatePayload = applyProposal({ stepKey: input.stepKey, output: first.output, base })
+      candidatePayloadHash = await hashCanonicalValue(candidatePayload)
+      successfulManifestHash = (await finalizeAttempt(first, candidatePayloadHash)).manifestHash
     } catch (error) {
       const issue = error instanceof Error ? error.message : String(error)
+      await finalizeAttempt(first, await hashCanonicalValue(first.output))
       snapshot = await append(input.scope, snapshot, 'step.failed', {
         stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1,
         attempt: 1,
@@ -406,7 +521,14 @@ export async function runCharacterInteractionProductionStepV1(input: {
         content: `上次输出未通过：${issue.slice(0, 1_000)}。只修复协议、稳定 key 闭包和字段边界，重新输出完整 JSON。`,
       }], 2)
       calls.push(second.evidence)
-      candidatePayload = applyProposal({ stepKey: input.stepKey, output: second.output, base })
+      try {
+        candidatePayload = applyProposal({ stepKey: input.stepKey, output: second.output, base })
+        candidatePayloadHash = await hashCanonicalValue(candidatePayload)
+        successfulManifestHash = (await finalizeAttempt(second, candidatePayloadHash)).manifestHash
+      } catch (secondError) {
+        await finalizeAttempt(second, await hashCanonicalValue(second.output))
+        throw secondError
+      }
       repairApplied = true
     }
     const current = await readCharacterInteractionProductionDetailsV1({ scope: input.scope, productionId: input.productionId })
@@ -420,6 +542,7 @@ export async function runCharacterInteractionProductionStepV1(input: {
       producerRunId: snapshot.run.id,
       candidatePayload,
     })
+    if (artifact.payloadHash !== candidatePayloadHash) fail('候选持久化 hash 与 V3 Manifest 不一致')
     snapshot = await append(input.scope, snapshot, 'candidate.persisted', {
       stepId: CHARACTER_INTERACTION_PRODUCTION_AGENT_STEP_ID_V1,
       attempt: repairApplied ? 2 : 1,
@@ -437,7 +560,8 @@ export async function runCharacterInteractionProductionStepV1(input: {
         productionKey: details.production.productionKey,
         stepKey: input.stepKey,
         payloadHash: artifact.payloadHash,
-        contextManifestHash: manifest.manifestHash,
+        contextManifestHash: successfulManifestHash,
+        contextManifestHashes,
       },
       expectedLastSequence: snapshot.projection.lastSequence,
     })).snapshot
@@ -452,7 +576,7 @@ export async function runCharacterInteractionProductionStepV1(input: {
       runId: snapshot.run.id,
       generation: snapshot.projection.generation,
       contractHash: snapshot.run.contractHash,
-      contextManifestHashes: [manifest.manifestHash],
+      contextManifestHashes,
       candidateHashes: [artifact.payloadHash],
       adoptionEventIds: [],
       postStateHash: artifact.payloadHash,
@@ -471,7 +595,7 @@ export async function runCharacterInteractionProductionStepV1(input: {
       modelEvidence: aggregateEvidence(calls),
       modelCalls: calls,
       repairApplied,
-      contextManifestHash: manifest.manifestHash,
+      contextManifestHash: successfulManifestHash,
     }
   } catch (error) {
     try {

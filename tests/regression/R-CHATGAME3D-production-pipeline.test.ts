@@ -12,14 +12,19 @@ import {
   generateCharacterInteractionStepCandidateV1,
   confirmCharacterInteractionStepCandidateV1,
   publishCharacterInteractionProductReleaseV1,
+  prepareCharacterInteractionStepDraftV1,
   readCharacterInteractionProductionDetailsV1,
   prepareCharacterInteractionWorldUpgradeCandidateV1,
   applyCharacterInteractionWorldUpgradeV1,
   recoverInterruptedCharacterInteractionProductionsV1,
+  type CharacterInteractionCapsulesArtifactV1,
+  type CharacterInteractionMediaBibleArtifactV1,
+  type CharacterInteractionScenePlanArtifactV1,
 } from '../../src/lib/character-interaction/production-pipeline'
+import { runCharacterInteractionProductionStepV1 } from '../../src/lib/character-interaction/production-harness'
 import { loadCharacterInteractionWorldSourceCatalogV1 } from '../../src/lib/character-interaction/world-source'
-import { CHARACTER_INTERACTION_PRODUCTION_STEPS_V1 } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { CHARACTER_INTERACTION_PRODUCTION_STEPS_V1, type WorkspaceScope } from '../../src/lib/types'
+import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { stampNewRecord } from '../../src/lib/world-engine/scope'
 import { createInteractionGameInstance } from '../../src/lib/world-engine/instances'
@@ -29,11 +34,11 @@ import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 
 async function fixture(mediaTier: 'text-core' | 'portrait-standard' | 'voice-optional' = 'text-core') {
   const now = Date.now()
-  const projectId = await db.projects.add({
+  const owned = await createWorkspace({
     name: '角色互动生产闭环', genre: 'drama', genres: ['drama'], status: 'drafting',
     description: 'CI-3 到 CI-5', targetWordCount: 20_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
+  } as any, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
+  const projectId = owned.scope.projectId
   for (const [index, name] of ['岑星', '白榆'].entries()) {
     await db.characters.add(stampNewRecord(owned.scope, 'characters', {
       projectId, name, role: 'supporting', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
@@ -63,6 +68,56 @@ async function fixture(mediaTier: 'text-core' | 'portrait-standard' | 'voice-opt
   return { ...owned, projectId, release, confirmed }
 }
 
+async function formalCandidate(input: {
+  scope: WorkspaceScope
+  productionId: number
+  stepKey: (typeof CHARACTER_INTERACTION_PRODUCTION_STEPS_V1)[number]
+}) {
+  if (!['character-capsules', 'scene-plan', 'media-bible'].includes(input.stepKey)) {
+    return generateCharacterInteractionStepCandidateV1(input)
+  }
+  const base = await prepareCharacterInteractionStepDraftV1(input)
+  const proposal = input.stepKey === 'character-capsules'
+    ? {
+        refinements: (base as CharacterInteractionCapsulesArtifactV1).capsules.map(item => ({
+          participantKey: item.participantKey,
+          identitySummary: item.identitySummary,
+          voiceRules: item.voiceRules,
+          publicStance: item.publicStance,
+          privateAnchor: item.privateAnchor,
+        })),
+      }
+    : input.stepKey === 'scene-plan'
+      ? {
+          refinements: (base as CharacterInteractionScenePlanArtifactV1).scenes.map(item => ({
+            sceneKey: item.sceneKey,
+            title: item.title,
+            purpose: item.purpose,
+            goals: item.goals,
+            endingConditions: item.endingConditions,
+          })),
+        }
+      : {
+          styleDescription: (base as CharacterInteractionMediaBibleArtifactV1).style.description,
+          slots: (base as CharacterInteractionMediaBibleArtifactV1).slots.map(item => ({
+            slotKey: item.slotKey,
+            prompt: item.prompt,
+            fallbackText: item.fallbackText,
+            altText: item.altText,
+          })),
+        }
+  return (await runCharacterInteractionProductionStepV1({
+    ...input,
+    stepKey: input.stepKey as 'character-capsules' | 'scene-plan' | 'media-bible',
+    runAI: async () => JSON.stringify({
+      schema: 'storyforge.character-interaction-ai-step-proposal',
+      version: 1,
+      stepKey: input.stepKey,
+      proposal,
+    }),
+  })).artifact
+}
+
 describe('CHATGAME-3D · CI-3..5 产品生产、发布与运行候选闭环', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
@@ -74,7 +129,7 @@ describe('CHATGAME-3D · CI-3..5 产品生产、发布与运行候选闭环', ()
     })).rejects.toThrow('必须先确认前置步骤')
 
     for (const stepKey of CHARACTER_INTERACTION_PRODUCTION_STEPS_V1) {
-      const candidate = await generateCharacterInteractionStepCandidateV1({
+      const candidate = await formalCandidate({
         scope: owned.scope, productionId: owned.confirmed.production.id, stepKey,
       })
       expect(candidate).toMatchObject({ status: 'candidate', sourceSelectionHash: owned.confirmed.selection.selectionHash })
@@ -91,11 +146,18 @@ describe('CHATGAME-3D · CI-3..5 产品生产、发布与运行候选闭环', ()
       scope: owned.scope, productionId: owned.confirmed.production.id,
     })
     expect(published.productRelease.contentHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(published.productRelease.releaseUid).toMatch(/^PR-character-interaction-/)
+    expect(published.productRelease.sourceManifestHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(published.productRelease.lineageHash).toMatch(/^[a-f0-9]{64}$/)
+    const sourceManifest = JSON.parse(published.productRelease.sourceManifestJson!)
+    expect(sourceManifest.runContextManifests).toHaveLength(3)
+    expect(sourceManifest.runContextManifests.every((item: Record<string, unknown>) => !('runId' in item))).toBe(true)
     expect(published.gameRelease.gameDefinitionId).toBeNull()
     const manifest = await assertCharacterInteractionProductReleaseUnchangedV1({
       scope: owned.scope, productReleaseId: published.productRelease.id!,
     })
     expect(manifest.source.selection.productType).toBe('character-interaction')
+    expect(manifest.sourceContracts.sourceManifestHash).toBe(published.productRelease.sourceManifestHash)
     expect(JSON.stringify(manifest)).not.toContain('characterId')
 
     const session = await createInteractionGameInstance({
@@ -156,7 +218,7 @@ describe('CHATGAME-3D · CI-3..5 产品生产、发布与运行候选闭环', ()
   it('标准头像档位必须绑定真实图片字节或由作者逐槽显式降级，媒资未完成时保持 preview-ready', async () => {
     const owned = await fixture('portrait-standard')
     for (const stepKey of CHARACTER_INTERACTION_PRODUCTION_STEPS_V1) {
-      const candidate = await generateCharacterInteractionStepCandidateV1({
+      const candidate = await formalCandidate({
         scope: owned.scope, productionId: owned.confirmed.production.id, stepKey,
       })
       await confirmCharacterInteractionStepCandidateV1({
@@ -248,7 +310,7 @@ describe('CHATGAME-3D · CI-3..5 产品生产、发布与运行候选闭环', ()
   it('可选语音未生成不阻止文本/头像版本发布，未完成的 optional 槽不会伪装为已发布媒资', async () => {
     const owned = await fixture('voice-optional')
     for (const stepKey of CHARACTER_INTERACTION_PRODUCTION_STEPS_V1) {
-      const candidate = await generateCharacterInteractionStepCandidateV1({
+      const candidate = await formalCandidate({
         scope: owned.scope, productionId: owned.confirmed.production.id, stepKey,
       })
       await confirmCharacterInteractionStepCandidateV1({

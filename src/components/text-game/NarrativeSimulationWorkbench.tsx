@@ -18,14 +18,12 @@ import {
   createNarrativeSimulationGame,
   deleteNarrativeSimulationGameDraft,
   loadNarrativeSimulationAuthoringSnapshot,
-  publishNarrativeSimulationGame,
   saveNarrativeSimulationContent,
   updateNarrativeSimulationDefinition,
   validateNarrativeSimulationGame,
   type NarrativeSimulationAuthoringSnapshot,
   type NarrativeSimulationDraftReport,
 } from '../../lib/narrative-simulation/authoring'
-import { resolveLegacyManualPublicationPolicyV1 } from '../../lib/game-production/legacy-entry-governance'
 import {
   parseNarrativeSimulationContent,
   runNarrativeSimulationBatch,
@@ -91,11 +89,6 @@ export default function NarrativeSimulationWorkbench({ scope, onOpenProduction }
   const definition = snapshot.definitions.find(item => item.id === selectedId) ?? null
   const module = snapshot.simulationModules.find(item => item.gameDefinitionId === selectedId) ?? null
   const releases = snapshot.releases.filter(item => item.gameDefinitionId === selectedId)
-  const manualPublicationPolicy = resolveLegacyManualPublicationPolicyV1({
-    releases,
-    productionRouteAvailable: onOpenProduction != null,
-    legacyDraftPresent: definition != null,
-  })
   const parsed = useMemo(() => {
     try { return { content: parseNarrativeSimulationContent(editor), error: '' } }
     catch (reason) { return { content: null, error: reason instanceof Error ? reason.message : String(reason) } }
@@ -144,16 +137,13 @@ export default function NarrativeSimulationWorkbench({ scope, onOpenProduction }
     setReport(next); setView('diagnostics')
     setMessage(next.valid ? '模拟规则、引用和 Narrative 内容图均通过发布校验。' : '')
   })
-  const publish = () => run(async () => {
-    if (!definition) return
-    if (!manualPublicationPolicy.directPublicationAllowed && onOpenProduction) {
+  const publish = () => {
+    if (onOpenProduction) {
       onOpenProduction()
       return
     }
-    const result = await publishNarrativeSimulationGame({ scope, gameDefinitionId: definition.id! })
-    setReport(result.report); await refresh(); setView('release')
-    setMessage(`已冻结 GameRelease v${result.gameRelease.version}；后续草稿与参数调整不会改变该发布。`)
-  })
+    setError('正式发布必须进入制作中心，由来源计划、用户确认、Build 校验和原子发布共同完成。')
+  }
   const remove = () => run(async () => {
     if (!definition) return
     const confirmed = await dialog.confirm({
@@ -209,7 +199,7 @@ export default function NarrativeSimulationWorkbench({ scope, onOpenProduction }
         {view === 'content' && <section className="storygame-author-pane"><div className="storygame-author-heading"><div><small>NARRATIVE SIMULATION MODULE</small><h2>白名单规则契约</h2></div><button disabled={busy || !!parsed.error} onClick={() => void save()}><Save className="h-3.5 w-3.5" />校验并保存</button></div>{parsed.error && <div className="storygame-author-notice error"><AlertTriangle className="h-4 w-4" /><span>{parsed.error}</span></div>}<label className="storygame-json-editor">NarrativeSimulationContentV1<textarea aria-label="NarrativeSimulationContentV1 JSON" rows={36} spellCheck={false} value={editor} onChange={event => setEditor(event.target.value)} /></label>{liveReport && <div className={`storygame-author-notice ${liveReport.valid ? 'success' : 'error'}`}><FileJson2 className="h-4 w-4" /><span>{liveReport.valid ? '结构、引用、危机缓解路径和结局条件有效。' : liveReport.errors.join('；')}</span></div>}</section>}
         {view === 'balance' && <section className="storygame-author-pane"><div className="storygame-author-heading"><div><small>DETERMINISTIC BATCH</small><h2>长局稳定性与平衡预览</h2></div><FlaskConical className="h-5 w-5 text-accent" /></div><div className="storygame-preview-start"><label>最大回合<select value={batchTurns} onChange={event => setBatchTurns(Number(event.target.value) as 10 | 100 | 500)}><option value={10}>10 回合</option><option value={100}>100 回合</option><option value={500}>500 回合</option></select></label><button disabled={!parsed.content} onClick={simulate}><FlaskConical className="h-3.5 w-3.5" />运行固定种子</button></div>{batchResult && <><div className="storygame-author-summary-grid"><article><strong>{batchResult.state.turn}</strong><span>停止回合</span></article><article><strong>{batchResult.events.length}</strong><span>事件数</span></article><article><strong>{batchResult.state.qualifiedEndingKey ?? '未结束'}</strong><span>规则结局</span></article><article><strong>{batchResult.state.schedules.filter(item => item.status === 'pending').length}</strong><span>待结延迟效果</span></article></div><div className="storygame-author-contract"><CheckCircle2 className="h-5 w-5" /><div><strong>可复现平衡证据</strong><p>同一内容哈希、种子与决策函数会得到同一事件序列；AI 不参与该批量结算。</p></div></div></>}</section>}
         {view === 'diagnostics' && <section className="storygame-author-pane"><div className="storygame-author-heading"><div><small>RULE & RELEASE GATE</small><h2>发布前诊断</h2></div><button disabled={busy} onClick={() => void validate()}>{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}运行校验</button></div>{!report && <div className="storygame-empty"><FlaskConical className="h-7 w-7" /><p>检查缺失引用、无解危机、不可达结局、严格支配、无限增长与 Narrative 内容图。</p></div>}{report && <><div className={`storygame-author-notice ${report.valid ? 'success' : 'error'}`}>{report.valid ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}<span>{report.valid ? '所有发布闸门通过。' : '存在阻断问题。'}</span></div><div className="storygame-diagnostic-list">{diagnostics(report).map((item, index) => <article key={`${index}:${item}`}><AlertTriangle className="h-3.5 w-3.5" /><span>{item}</span></article>)}{report.valid && !diagnostics(report).length && <article><CheckCircle2 className="h-3.5 w-3.5" /><span>没有错误或警告。</span></article>}</div></>}</section>}
-        {view === 'release' && <section className="storygame-author-pane"><div className="storygame-author-heading"><div><small>IMMUTABLE GAME RELEASE</small><h2>发布冻结</h2></div><button disabled={busy} onClick={() => void publish()}><Rocket className="h-3.5 w-3.5" />{manualPublicationPolicy.mode === 'production-required' ? '交由制作中心发布' : onOpenProduction ? '校验并发布维护版' : '校验并发布'}</button></div><div className="storygame-author-contract"><ShieldCheck className="h-5 w-5" /><div><strong>规则与 Narrative 同时冻结</strong><p>WorldRevision、Narrative 与 NarrativeSimulationContent 被复制进带 hash 的统一 GameRelease；玩家实例只绑定不可变版本。</p></div></div><div className="storygame-release-list-author">{releases.map(item => <article key={item.id}><div><strong>v{item.version} · {item.label}</strong><small>{new Date(item.createdAt).toLocaleString()} · {item.contentHash.slice(0, 12)}</small></div><CheckCircle2 className="h-4 w-4" /></article>)}{!releases.length && <p>尚无正式发布。</p>}</div></section>}
+        {view === 'release' && <section className="storygame-author-pane"><div className="storygame-author-heading"><div><small>IMMUTABLE GAME RELEASE</small><h2>发布冻结</h2></div><button disabled={busy} onClick={publish}><Rocket className="h-3.5 w-3.5" />交由制作中心发布</button></div><div className="storygame-author-contract"><ShieldCheck className="h-5 w-5" /><div><strong>规则与 Narrative 同时冻结</strong><p>制作中心冻结世界来源、用户目标、模拟规则和产品内容，并由通过校验的 Build 原子生成不可变 ProductRelease。</p></div></div><div className="storygame-release-list-author">{releases.map(item => <article key={item.id}><div><strong>v{item.version} · {item.label}</strong><small>{new Date(item.createdAt).toLocaleString()} · {item.contentHash.slice(0, 12)}</small></div><CheckCircle2 className="h-4 w-4" /></article>)}{!releases.length && <p>尚无正式发布。</p>}</div></section>}
       </>}
     </main>
   </div>

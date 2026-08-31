@@ -16,6 +16,12 @@ export interface WorldRevision {
 
 export interface WorldRelease {
   id?: number
+  /**
+   * Stable release identity used by WorldReference. Unlike the local Dexie id,
+   * this value survives export/import remapping and is bound to the release
+   * content hash. Historical rows are deterministically backfilled by v83.
+   */
+  releaseUid?: string
   projectId: number
   worldId: number
   revisionId: number

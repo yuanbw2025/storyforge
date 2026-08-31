@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../src/lib/ai/client', () => ({
-  chat: vi.fn(async () => '节点生成的候选世界来源。'),
+  chat: vi.fn(async () => JSON.stringify({
+    field: 'worldOrigin',
+    value: '节点生成的候选世界来源。',
+  })),
 }))
 
 import { db } from '../../src/lib/db/schema'

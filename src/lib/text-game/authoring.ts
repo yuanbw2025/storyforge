@@ -677,7 +677,9 @@ export async function publishStoryGameDraft(input: {
   scope: WorkspaceScope
   gameDefinitionId: number
   label?: string
+  fixtureOnly?: true
 }): Promise<StoryGamePublication> {
+  if (input.fixtureOnly !== true) throw new Error('[storygame] 旧草稿发布只允许隔离测试夹具；正式发布必须进入产品制作中心')
   const scope = await resolveScope({ scope: input.scope })
   const definition = await scopedDefinition(scope, input.gameDefinitionId)
   parseGameDefinitionWorldSource(definition)
@@ -696,7 +698,6 @@ export async function publishStoryGameDraft(input: {
     scope,
     label,
     parentRevisionId: latest?.id ?? null,
-    selectedNarrativeModuleIds: [definition.narrativeModuleId],
   })
   const worldRelease = await publishWorldRevision(revision.id!, label)
   const gameRelease = await publishGameDefinition({
@@ -704,6 +705,7 @@ export async function publishStoryGameDraft(input: {
     gameDefinitionId: definition.id!,
     worldReleaseId: worldRelease.id!,
     label,
+    fixtureOnly: true,
   })
   return { report, revision, worldRelease, gameRelease }
 }

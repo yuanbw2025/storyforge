@@ -412,7 +412,10 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
       mode: 'snapshot',
       ref: { documentId: target!.documentId, fieldKey: 'motivation', target: 'characters' },
     }
-    vi.mocked(chat).mockResolvedValue('为了让沉没城市重见天日。')
+    vi.mocked(chat).mockResolvedValue(JSON.stringify({
+      version: 1,
+      patch: { motivation: '为了让沉没城市重见天日。' },
+    }))
     const flowId = await addNodeFlow(
       '角色维度绑定',
       JSON.stringify({ ...emptyAuthoringGraph(), nodes: [graphNode] }),
@@ -426,10 +429,22 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
   })
 
   it('官方完整创作链可按作者确认边界从故事生成到正式正文', async () => {
-    vi.mocked(chat).mockImplementation(async (_messages, _config, options) => {
+    vi.mocked(chat).mockImplementation(async (messages, _config, options) => {
       switch (options.category) {
-        case 'worldview.dimension': return '潮汐退去后，沉没城市会在每个月圆之夜从海床苏醒。'
-        case 'story.core': return '退潮后苏醒的城市迫使测潮者在真相与故乡之间选择。'
+        case 'worldview.dimension': return JSON.stringify({
+          field: 'worldOrigin',
+          value: '潮汐退去后，沉没城市会在每个月圆之夜从海床苏醒。',
+        })
+        case 'story.core': {
+          const prompt = messages.map(message => message.content).join('\n')
+          const field = prompt.includes('centralConflict') ? 'centralConflict' : 'concept'
+          return JSON.stringify({
+            field,
+            value: field === 'centralConflict'
+              ? '测潮者必须在旧文明真相与故乡安危之间选择。'
+              : '退潮后苏醒的城市迫使测潮者追索被掩埋的历史。',
+          })
+        }
         case 'character.generate': return characterDraft()
         case 'outline.volume': return JSON.stringify([{ title: '第一卷：潮门', summary: '主角发现海床城门并踏入旧文明。' }])
         case 'outline.chapter': return JSON.stringify([{ title: '第一章：退潮', summary: '主角在海岸发现城门。' }])

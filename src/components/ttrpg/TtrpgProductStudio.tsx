@@ -25,7 +25,6 @@ import {
   parseTtrpgCampaignContentV1,
   validateTtrpgCampaignForPublicationV1,
 } from "../../lib/ttrpg/campaign";
-import { publishTtrpgCampaignReleaseV1 } from "../../lib/ttrpg/release";
 import {
   parseRulePackV1,
   ruleCheckDefaultDifficultyV2,
@@ -58,8 +57,7 @@ interface CampaignView {
 export default function TtrpgProductStudio(props: {
   scope: WorkspaceScope;
   worldGroupId: number | null;
-  /** Upper-layer work is allowed; only the final world-bound publication stays closed. */
-  formalPublicationLocked?: boolean;
+  onOpenProduction?: () => void;
   onSessionCreated?: (sessionId: number) => void;
 }) {
   const [worldReleases, setWorldReleases] = useState<WorldRelease[]>([]);
@@ -201,14 +199,6 @@ export default function TtrpgProductStudio(props: {
     }
   };
 
-  const assertFormalPublicationReady = () => {
-    if (props.formalPublicationLocked) {
-      throw new Error(
-        "当前允许继续开发和试玩跑团上层能力，但最终世界适配完成前不能发布新的正式 Release。",
-      );
-    }
-  };
-
   const installRulePack = () =>
     run(async () => {
       const row = await installStoryForgeRulePackV1(props.scope);
@@ -219,15 +209,10 @@ export default function TtrpgProductStudio(props: {
 
   const publish = () =>
     run(async () => {
-      assertFormalPublicationReady();
-      if (campaignId == null) throw new Error("请先选择可发布战役。");
-      const release = await publishTtrpgCampaignReleaseV1({
-        scope: props.scope,
-        campaignModuleId: campaignId,
-      });
-      await refresh();
-      setGameReleaseId(release.id!);
-      setMessage("TTRPG 已作为统一 GameRelease 原子发布，可从冻结版本开局。");
+      if (!props.onOpenProduction) {
+        throw new Error("正式发布必须进入跑团制作中心，由世界来源、用户定向、Build 校验与原子发布共同完成。");
+      }
+      props.onOpenProduction();
     });
 
   const saveCharacterMappings = () =>
@@ -322,7 +307,7 @@ export default function TtrpgProductStudio(props: {
               跑团规则与历史草稿工作台
             </h2>
             <p className="mt-2 max-w-3xl text-xs leading-6 text-text-muted">
-              固定四场景编译器已经退出正式产品。这里继续开发规则、角色卡和战役草稿；世界出口稳定前只关闭最终正式发布，不影响上层制作和试玩。
+              固定四场景编译器已经退出正式产品。这里维护规则、角色卡、历史战役草稿和既有发布；任何新正式版本都从跑团制作中心开始。
             </p>
           </div>
           {busy && <Loader2 className="h-5 w-5 animate-spin text-accent" />}
@@ -381,7 +366,7 @@ export default function TtrpgProductStudio(props: {
           </label>
         </div>
         <div className="mt-4 rounded border border-warning/30 bg-warning/10 p-3 text-xs leading-5 text-warning" data-testid="ttrpg-authoring-development-boundary">
-          跑团上层开发已恢复：规则包、角色映射、AI 车卡候选和试玩可以继续。最终世界适配完成前只关闭新正式发布，既有 Release 仍可开团。
+          作者页不再承担正式发布：规则包、角色映射、AI 车卡候选和旧草稿可以继续维护；新版本必须进入制作中心，既有 Release 仍可开团。
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
@@ -399,12 +384,12 @@ export default function TtrpgProductStudio(props: {
             固定模板已停用
           </button>
           <button
-            disabled={busy || props.formalPublicationLocked || !selectedCampaign?.report.valid}
+            disabled={busy}
             onClick={publish}
             className="flex items-center gap-2 rounded bg-success px-3 py-2 text-xs text-white disabled:opacity-40"
           >
             <Rocket className="h-4 w-4" />
-            发布非 fixture 战役
+            进入制作中心发布
           </button>
         </div>
       </section>

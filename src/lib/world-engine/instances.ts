@@ -1162,7 +1162,11 @@ export async function assertInstanceBinding(
   }
   if (session.worldReleaseId != null) {
     await assertReleaseUnchanged(session.worldReleaseId);
-    if (session.narrativeModuleExportId != null) {
+    // Product narrative belongs to the immutable Game/Product Release, not to
+    // the semantic WorldRelease. Only legacy direct-world sessions may use a
+    // WorldRelease narrative coordinate; product-bound sessions are verified
+    // against their own release/build immediately below.
+    if (session.narrativeModuleExportId != null && playableSourceCount === 0) {
       const release = await db.worldReleases.get(session.worldReleaseId);
       if (
         !release ||

@@ -255,7 +255,9 @@ export async function publishNarrativeSimulationGame(input: {
   scope: WorkspaceScope
   gameDefinitionId: number
   label?: string
+  fixtureOnly?: true
 }): Promise<NarrativeSimulationPublication> {
+  if (input.fixtureOnly !== true) throw new Error('[textsim] 旧草稿发布只允许隔离测试夹具；正式发布必须进入产品制作中心')
   const scope = await resolveScope({ scope: input.scope })
   const definition = await definitionInScope(scope, input.gameDefinitionId)
   const report = await validateNarrativeSimulationGame(scope, definition.id!)
@@ -266,7 +268,6 @@ export async function publishNarrativeSimulationGame(input: {
     scope,
     label,
     parentRevisionId: latest?.id ?? null,
-    selectedNarrativeModuleIds: [definition.narrativeModuleId],
   })
   const worldRelease = await publishWorldRevision(revision.id!, label)
   const gameRelease = await publishGameDefinition({
@@ -274,6 +275,7 @@ export async function publishNarrativeSimulationGame(input: {
     gameDefinitionId: definition.id!,
     worldReleaseId: worldRelease.id!,
     label,
+    fixtureOnly: true,
   })
   return { report, revision, worldRelease, gameRelease }
 }

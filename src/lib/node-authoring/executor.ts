@@ -28,6 +28,7 @@ import type {
 } from './contracts'
 import { safeAuthoringGraphJson } from './contracts'
 import { adoptDomainCandidate, executeDomainNode } from './domain-execution'
+import { authoringDomainActionBindingV1 } from './domain-action-registry'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord } from '../world-engine/scope'
 
 export interface AuthoringRunSnapshot {
@@ -376,6 +377,7 @@ async function executeNode(input: {
     return { output: variants.join('\n\n--- 候选分隔 ---\n\n'), variants, semantic: 'candidate' }
   }
   if (template.capability === 'generate-field' || template.capability === 'generate-collection') {
+    const actionBinding = authoringDomainActionBindingV1(template)
     const aiState = useAIConfigStore.getState()
     const domain = await executeDomainNode({
       node,
@@ -392,6 +394,9 @@ async function executeNode(input: {
       signal: input.signal,
     })
     if (domain) return domain
+    if (actionBinding?.mode === 'formal-domain-action') {
+      throw new Error(`节点 ${template.label} 已登记正式领域动作，但执行器没有返回领域候选；已阻止回退到通用生成。`)
+    }
     const sourceKeys = template.reads?.sourceKeys ?? []
     const upstream = composeInputs(inputs.filter(item => item.state !== 'control'))
     const binding = !upstream && sourceKeys.length
@@ -484,6 +489,7 @@ export async function adoptAuthoringCandidate(input: {
   if (!node) throw new Error('候选节点不存在。')
   if (node.binding?.mode === 'live') throw new Error('实时 Canon 绑定节点只读，不能重复采纳；请采纳它的下游候选节点。')
   const template = AUTHORING_NODE_BY_ID.get(node.templateId)
+  const actionBinding = template ? authoringDomainActionBindingV1(template) : null
   const latestRuns = (await readOwnedRows<NodeRunRecord>(scope, 'nodeRuns', { owner: 'work' }))
     .filter(run => run.flowId === input.flow.id)
   latestRuns.sort((left, right) => right.startedAt - left.startedAt)
@@ -522,6 +528,12 @@ export async function adoptAuthoringCandidate(input: {
       worldGroupId: input.flow.worldGroupId ?? null,
     })
     if (adopted) return adopted
+  }
+  if (actionBinding?.mode === 'formal-domain-action') {
+    throw new Error('该正式节点缺少分步骤领域候选证据；请用当前版本重新运行节点后再采纳。')
+  }
+  if (actionBinding?.mode === 'experimental-draft') {
+    throw new Error('实验性自由节点只生成候选草稿，不能直接写入 Canon；请接入已登记的正式领域节点后再采纳。')
   }
   if (!template?.writes) throw new Error('该节点没有登记可采纳的写回契约。')
   const write = template.writes

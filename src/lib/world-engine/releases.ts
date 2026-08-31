@@ -65,6 +65,16 @@ async function sha256(value: unknown): Promise<string> {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
+/** Portable, content-bound identity. The local numeric row id is deliberately
+ * excluded so export/import reference remapping cannot change the identity. */
+export function worldReleaseUidV1(input: {
+  worldCode: string
+  version: number
+  contentHash: string
+}): string {
+  return `WR-${encodeURIComponent(input.worldCode)}-v${input.version}-${input.contentHash.slice(0, 24)}`
+}
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
@@ -201,7 +211,10 @@ async function buildWorldReleaseManifestInternal(input: {
   const resourceCatalog = dependencies.map(dependency => {
     const semantic = PROJECT_TABLES.find(spec => spec.name === dependency.table)!.worldSemantic!
     return {
-      resourceId: `world:${world.code}:table:${dependency.table}`,
+      // Public release coordinates describe semantic capabilities. The
+      // physical table remains an internal import locator and must never leak
+      // into product adapters or prompts.
+      resourceId: `world:${world.code}:semantic:${semantic.area}:${semantic.resourceKind}`,
       resourceKind: semantic.resourceKind,
       area: semantic.area,
       table: dependency.table,
@@ -365,6 +378,11 @@ export async function publishWorldRevision(revisionId: number, label?: string): 
     if (!isShareableWorld(world)) throw new Error('[release] 内部作用域不能发布为 WorldRelease')
     const releases = await db.worldReleases.where('worldId').equals(currentRevision.worldId).toArray()
     const row: WorldRelease = {
+      releaseUid: worldReleaseUidV1({
+        worldCode: world.code,
+        version: Math.max(0, ...releases.map(item => item.version)) + 1,
+        contentHash: currentRevision.contentHash,
+      }),
       projectId: currentRevision.projectId,
       worldId: currentRevision.worldId,
       revisionId: currentRevision.id!,

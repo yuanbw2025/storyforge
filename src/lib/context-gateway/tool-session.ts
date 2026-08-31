@@ -30,6 +30,9 @@ export interface ContextGatewayToolSessionV1 {
   readonly policy: ContextAccessPolicyV1
   readonly policyHash: string
   readonly providers: readonly ContextGatewayProviderBindingV1[]
+  /** Optional product-contract narrowing. It can only remove catalog resources;
+   * source/kind/depth authority still comes from the hashed access policy. */
+  readonly resourceKeyAllowList: ReadonlySet<string> | null
   readonly usage: { readCalls: number; retrievedTokens: number }
   readonly capabilities: Map<string, SourceRefCapabilityV1>
 }
@@ -48,6 +51,7 @@ function fail(code: string, message: string): never {
 export async function createContextGatewayToolSessionV1(input: {
   scope: FrozenResourceScopeV1
   policy: ContextAccessPolicyV1
+  allowedResourceKeys?: readonly string[]
 }): Promise<ContextGatewayToolSessionV1> {
   const policy = normalizeContextAccessPolicyV1(input.policy, CONTEXT_SOURCES)
   Object.freeze(policy.mandatorySourceKeys)
@@ -66,6 +70,13 @@ export async function createContextGatewayToolSessionV1(input: {
   if (!providers.length) fail('provider', 'Policy 没有可用的 CONTEXT_SOURCES Provider')
   const fingerprints = await Promise.all(providers.map(binding => binding.provider.fingerprint(input.scope)))
   if (new Set(fingerprints).size !== 1) fail('scope', 'Provider 对冻结 scope 的 fingerprint 不一致')
+  const allowedResourceKeys = input.allowedResourceKeys == null
+    ? null
+    : new Set(input.allowedResourceKeys)
+  if (allowedResourceKeys && (allowedResourceKeys.size !== input.allowedResourceKeys!.length
+    || [...allowedResourceKeys].some(key => !key.trim()))) {
+    fail('resource-allow-list', '资源 allow-list 含重复或空 key')
+  }
   return {
     version: 'context-gateway-tool-session-v1',
     scope: Object.freeze({ ...input.scope }),
@@ -73,9 +84,17 @@ export async function createContextGatewayToolSessionV1(input: {
     policy,
     policyHash: await hashCanonicalValue(policy),
     providers: Object.freeze(providers),
+    resourceKeyAllowList: allowedResourceKeys,
     usage: { readCalls: 0, retrievedTokens: 0 },
     capabilities: new Map(),
   }
+}
+
+export function isContextGatewayResourceAllowedV1(
+  session: ContextGatewayToolSessionV1,
+  resourceKey: string,
+): boolean {
+  return session.resourceKeyAllowList == null || session.resourceKeyAllowList.has(resourceKey)
 }
 
 export function claimContextGatewayReadCallV1(session: ContextGatewayToolSessionV1): void {

@@ -931,6 +931,73 @@ class StoryForgeDB extends Dexie {
     this.version(82).stores({
       worldReleaseMigrations: '++id, projectId, worldId, sourcePackageId, sourceWorldCode, semanticReleaseId, semanticContentHash, createdAt',
     })
+
+    // ARCH-04: stable WorldReference identity. Numeric Dexie ids remain local
+    // locators and may be remapped during import; releaseUid is content-bound.
+    this.version(83).stores({
+      worldReleases: '++id, releaseUid, projectId, worldId, revisionId, version, contentHash, createdAt',
+    }).upgrade(async tx => {
+      await tx.table('worldReleases').toCollection().modify(release => {
+        if (!release.releaseUid) {
+          release.releaseUid = `WR-${encodeURIComponent(String(release.sourceWorldCode ?? 'legacy'))}-v${Number(release.version ?? 0)}-${String(release.contentHash ?? '').slice(0, 24)}`
+        }
+      })
+    })
+
+    // ARCH-03/04/05: product-owned persistence for the five logical handoff
+    // contracts. No universal payload/table is introduced; each product keeps
+    // the contracts beside its own source, Brief and ProductRelease records.
+    this.version(84).stores({
+      ttrpgSourceSelections: '++id, projectId, worldId, workId, productionId, &[productionId+revision], &[productionId+selectionHash], [productionId+status], sourceKind, sourceWorldReleaseId, sourcePlanHash, createdAt',
+      ttrpgProductReleases: '++id, projectId, worldId, workId, productionId, sourceSelectionId, sourceWorldReleaseId, briefId, buildId, &[productionId+version], &[productionId+contentHash], lineageHash, createdAt',
+      characterInteractionSourceSelections: '++id, projectId, worldId, workId, productionId, &[productionId+revision], &[productionId+selectionHash], [productionId+status], sourceWorldReleaseId, worldContentHash, sourcePlanHash, createdAt',
+      characterInteractionProductReleases: '++id, projectId, worldId, workId, productionId, sourceSelectionId, sourceWorldReleaseId, briefId, gameReleaseId, &[productionId+version], &[productionId+contentHash], lineageHash, createdAt',
+    }).upgrade(async tx => {
+      for (const tableName of ['ttrpgSourceSelections', 'characterInteractionSourceSelections']) {
+        await tx.table(tableName).toCollection().modify(row => {
+          if (!Object.prototype.hasOwnProperty.call(row, 'worldReferenceJson')) row.worldReferenceJson = null
+          if (!Object.prototype.hasOwnProperty.call(row, 'worldReferenceHash')) row.worldReferenceHash = null
+          if (!Object.prototype.hasOwnProperty.call(row, 'sourcePlanJson')) row.sourcePlanJson = null
+          if (!Object.prototype.hasOwnProperty.call(row, 'sourcePlanHash')) row.sourcePlanHash = null
+        })
+      }
+      for (const tableName of ['ttrpgProductionBriefs', 'characterInteractionBriefs']) {
+        await tx.table(tableName).toCollection().modify(row => {
+          if (!Object.prototype.hasOwnProperty.call(row, 'confirmedContractJson')) row.confirmedContractJson = null
+          if (!Object.prototype.hasOwnProperty.call(row, 'confirmedContractHash')) row.confirmedContractHash = null
+          if (!Object.prototype.hasOwnProperty.call(row, 'authorStartRevision')) row.authorStartRevision = null
+        })
+      }
+      for (const tableName of ['ttrpgProductReleases', 'characterInteractionProductReleases']) {
+        await tx.table(tableName).toCollection().modify(row => {
+          if (!Object.prototype.hasOwnProperty.call(row, 'lineageJson')) row.lineageJson = null
+          if (!Object.prototype.hasOwnProperty.call(row, 'lineageHash')) row.lineageHash = null
+        })
+      }
+    })
+
+    // ARCH-03/04: ProductRelease freezes actual WorldRelease reads and the
+    // complete version lineage. Legacy rows remain readable but cannot be used
+    // as a formal parent until a migration produces these contracts.
+    this.version(85).stores({
+      ttrpgProductReleases: '++id, releaseUid, projectId, worldId, workId, productionId, sourceSelectionId, sourceWorldReleaseId, briefId, buildId, &[productionId+version], &[productionId+contentHash], sourceManifestHash, lineageHash, createdAt',
+      characterInteractionProductReleases: '++id, releaseUid, projectId, worldId, workId, productionId, sourceSelectionId, sourceWorldReleaseId, briefId, gameReleaseId, &[productionId+version], &[productionId+contentHash], sourceManifestHash, lineageHash, createdAt',
+    }).upgrade(async tx => {
+      for (const [tableName, productType] of [
+        ['ttrpgProductReleases', 'ttrpg'],
+        ['characterInteractionProductReleases', 'character-interaction'],
+      ] as const) {
+        await tx.table(tableName).toCollection().modify(row => {
+          if (!Object.prototype.hasOwnProperty.call(row, 'releaseUid')) {
+            row.releaseUid = `PR-legacy-${productType}-v${Number(row.version ?? 0)}-${String(row.contentHash ?? '').slice(0, 24)}`
+          }
+          if (!Object.prototype.hasOwnProperty.call(row, 'sourceManifestJson')) row.sourceManifestJson = null
+          if (!Object.prototype.hasOwnProperty.call(row, 'sourceManifestHash')) row.sourceManifestHash = null
+          if (!Object.prototype.hasOwnProperty.call(row, 'lineageJson')) row.lineageJson = null
+          if (!Object.prototype.hasOwnProperty.call(row, 'lineageHash')) row.lineageHash = null
+        })
+      }
+    })
   }
 }
 

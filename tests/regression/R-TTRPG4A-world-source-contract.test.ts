@@ -15,7 +15,9 @@ async function workspace() {
   const now = Date.now()
   const projectId = await db.projects.add({
     name: 'TTRPG 世界来源契约', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 80_000, createdAt: now, updatedAt: now,
+    description: '', targetWordCount: 80_000,
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
+    createdAt: now, updatedAt: now,
   } as never) as number
   const owned = await ensureWorkspaceOwnership(projectId)
   const [characterA, characterB] = await db.characters.bulkAdd([

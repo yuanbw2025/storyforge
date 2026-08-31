@@ -301,16 +301,17 @@ export async function validateTextOpenWorldGame(inputScope: WorkspaceScope, game
   return { valid: narrative.valid && interaction.valid && adventure.valid && simulation.valid && openWorld.valid && errors.length === 0, narrative, interaction, adventure, simulation, openWorld, errors, warnings: [...adventure.warnings, ...simulation.warnings, ...openWorld.warnings] }
 }
 
-export async function publishTextOpenWorldGame(input: { scope: WorkspaceScope; gameDefinitionId: number; label?: string }): Promise<TextOpenWorldPublication> {
+export async function publishTextOpenWorldGame(input: { scope: WorkspaceScope; gameDefinitionId: number; label?: string; fixtureOnly?: true }): Promise<TextOpenWorldPublication> {
+  if (input.fixtureOnly !== true) throw new Error('[textworld] 旧草稿发布只允许隔离测试夹具；正式发布必须进入产品制作中心')
   const scope = await resolveScope({ scope: input.scope })
   const definition = await definitionInScope(scope, input.gameDefinitionId)
   const report = await validateTextOpenWorldGame(scope, definition.id!)
   if (!report.valid) throw new Error(`[textworld] 内容不可发布:${report.errors.join('；')}`)
   const latest = (await listWorldRevisions(scope))[0]
   const label = input.label?.trim() || `${definition.title} · 开放世界发布`
-  const revision = await createWorldRevision({ scope, label, parentRevisionId: latest?.id ?? null, selectedNarrativeModuleIds: [definition.narrativeModuleId] })
+  const revision = await createWorldRevision({ scope, label, parentRevisionId: latest?.id ?? null })
   const worldRelease = await publishWorldRevision(revision.id!, label)
-  const gameRelease = await publishGameDefinition({ scope, gameDefinitionId: definition.id!, worldReleaseId: worldRelease.id!, label })
+  const gameRelease = await publishGameDefinition({ scope, gameDefinitionId: definition.id!, worldReleaseId: worldRelease.id!, label, fixtureOnly: true })
   return { report, revision, worldRelease, gameRelease }
 }
 

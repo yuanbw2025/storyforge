@@ -54,6 +54,12 @@ import {
 import { readForeshadowSuggestionBaselineContextV1 } from '../foreshadow/suggestions'
 import { readStyleLearningBaselineContextV1 } from '../style/learning-agent'
 import { CANON_RESOURCE_PROVIDER_V1 } from '../context-gateway/canon-provider'
+import {
+  WORLD_RELEASE_NORMALIZATION_VERSION_V1,
+  WORLD_RELEASE_PROVIDER_ID_V1,
+  WORLD_RELEASE_PROVIDER_VERSION_V1,
+  WORLD_RELEASE_RESOURCE_KINDS_V1,
+} from '../context-gateway/world-release-provider-contract'
 import type {
   Chapter,
   Character,
@@ -69,6 +75,7 @@ import {
   parseCharacterDrivenPlanArcs,
   parseCharacterDrivenPlotVolumes,
 } from '../types/character-driven-plan'
+import type { ContextResourceProviderV1 } from './types'
 import type { ContextSource } from './types'
 import { countWords, htmlToPlainText } from '../utils/html'
 import {
@@ -102,6 +109,24 @@ import type { AdaptationProject } from '../types'
 // 只有真正装配改编上下文时再加载，保持统一 CONTEXT_SOURCES 入口而不污染首屏包。
 async function loadAdaptationSourceReader() {
   return import('../adaptation/source-manifest')
+}
+
+const WORLD_RELEASE_RESOURCE_PROVIDER_PROXY_V1: ContextResourceProviderV1 = {
+  version: 'context-resource-provider-v1',
+  providerId: WORLD_RELEASE_PROVIDER_ID_V1,
+  providerVersion: WORLD_RELEASE_PROVIDER_VERSION_V1,
+  normalizationVersion: WORLD_RELEASE_NORMALIZATION_VERSION_V1,
+  kinds: WORLD_RELEASE_RESOURCE_KINDS_V1,
+  listMetadata: async input => (await import('../context-gateway/world-release-provider'))
+    .WORLD_RELEASE_RESOURCE_PROVIDER_V1.listMetadata(input),
+  searchMetadata: async input => (await import('../context-gateway/world-release-provider'))
+    .WORLD_RELEASE_RESOURCE_PROVIDER_V1.searchMetadata(input),
+  read: async input => (await import('../context-gateway/world-release-provider'))
+    .WORLD_RELEASE_RESOURCE_PROVIDER_V1.read(input),
+  readOriginal: async input => (await import('../context-gateway/world-release-provider'))
+    .WORLD_RELEASE_RESOURCE_PROVIDER_V1.readOriginal!(input),
+  fingerprint: async scope => (await import('../context-gateway/world-release-provider'))
+    .WORLD_RELEASE_RESOURCE_PROVIDER_V1.fingerprint(scope),
 }
 
 // Upper-product readers are lazy for the same reason as adaptation readers:
@@ -1342,6 +1367,21 @@ async function readCharacterPassages(projectId: number, name?: string, worldGrou
 }
 
 export const CONTEXT_SOURCES: ContextSource[] = [
+  {
+    // ARCH-05: immutable WorldReference resource provider. Ordinary
+    // assembleContext readers never activate it implicitly; upper-product
+    // adapters open a frozen Context Gateway session with release id + hash.
+    key: 'worldRelease',
+    label: '冻结世界版本资源',
+    scope: 'manual',
+    layer: 'L0',
+    ownerFrom: 'world',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: () => false,
+    resources: WORLD_RELEASE_RESOURCE_PROVIDER_PROXY_V1,
+    read: async () => '',
+  },
   {
     key: 'ttrpg.product-authoring',
     label: 'TTRPG 规则与战役包',

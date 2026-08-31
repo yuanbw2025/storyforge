@@ -21,6 +21,7 @@ async function fixture() {
   const projectId = await db.projects.add({
     name: '角色互动正式生产', genre: 'drama', genres: ['drama'], status: 'drafting',
     description: '冻结来源、Brief 和 Run Contract', targetWordCount: 20_000,
+    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
     createdAt: now, updatedAt: now,
   } as any) as number
   const owned = await ensureWorkspaceOwnership(projectId)

@@ -80,10 +80,11 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 86 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 87 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
+| `worldRelease` | 冻结世界版本资源 | manual | L0 | 100000 |
 | `ttrpg.product-authoring` | TTRPG 规则与战役包 | project | L0 | 16000 |
 | `ttrpg.character-authoring` | TTRPG 单角色安全车卡制作上下文 | project | L0 | 12000 |
 | `ttrpgRuntime` | 正式 TTRPG 主持人运行视角 | runtime | L0 | 10000 |
@@ -251,9 +252,9 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `cultivation-codex-reference-lifecycle` | `codexEntries` | `PROJECT_TABLES refs + cultivation DAG validator` | `src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/location/lifecycle.ts` | 2027-01-01 |
 | `cultivation-progress-lifecycle` | `cultivationProgress` | `ADOPTION_SCHEMAS + PROJECT_TABLES + cultivation DAG validator + canonical chapter sequence` | `src/lib/cultivation/progress.ts`<br/>`src/lib/cultivation/progress-lifecycle.ts` | 2027-01-01 |
 | `codex-category-scope-lifecycle` | `codexCategories` | `PROJECT_TABLES lifecycle` | `src/lib/registry/lifecycle.ts` | 2027-01-01 |
-| `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace identity + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/world-engine/works.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
-| `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/world-engine/create-workspace.ts` | 2027-08-01 |
-| `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/text-game/authoring.ts`<br/>`src/lib/avg/authoring.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/works.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts` | 2027-08-01 |
+| `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace identity + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/world-engine/works.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/identity-classification.ts`<br/>`src/lib/product/world-package-migration.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
+| `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/identity-classification.ts`<br/>`src/lib/product/world-package-migration.ts` | 2027-08-01 |
+| `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/text-game/authoring.ts`<br/>`src/lib/avg/authoring.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/works.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/product/world-package-migration.ts`<br/>`src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts` | 2027-08-01 |
 | `adaptation-root-lifecycle` | `adaptationProjects` | `PROJECT_TABLES + ADOPTION_SCHEMAS + adaptation state machine + source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts` | 2027-08-01 |
 | `adaptation-source-manifest-lifecycle` | `adaptationSourceUnits` | `PROJECT_TABLES + immutable source manifest policy + canonical chapter sequence` | `src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
 | `screenplay-scene-lifecycle` | `screenplayScenes` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + screenplay block validator + adaptation freshness CAS` | `src/lib/screenplay/service.ts`<br/>`src/lib/screenplay/adoption.ts` | 2027-08-01 |
@@ -294,21 +295,21 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:26` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:552`<br/>`src/lib/node-authoring/domain-execution.ts:616` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:797`<br/>`src/lib/node-authoring/domain-execution.ts:861` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1681` |
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1659` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1649` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
-| `character.interaction.production` | `src/lib/character-interaction/production-harness.ts:359` |
+| `character.interaction.production` | `src/lib/character-interaction/production-harness.ts:444` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:371` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:616` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:362`<br/>`src/lib/node-flow/executor.ts:207` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:363`<br/>`src/lib/node-flow/executor.ts:207` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:198`<br/>`src/lib/outline/generation-node.ts:60` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:652` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:55` |
@@ -364,7 +365,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/game-production/capabilities.ts:158 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/narrative-simulation/harness.ts:246 · chat`
-- `src/lib/node-authoring/executor.ts:416 · chat`
+- `src/lib/node-authoring/executor.ts:421 · chat`
 - `src/lib/open-world/harness.ts:139 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:468 · chat`
 - `src/lib/ttrpg/gm-harness.ts:545 · chat`
@@ -417,4 +418,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `5679dada`
+生成时间基准:commit `47e493b7`
