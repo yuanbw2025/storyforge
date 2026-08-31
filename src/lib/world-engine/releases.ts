@@ -2,21 +2,21 @@ import Dexie from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type {
-  NarrativeModule,
   WorldRelease,
   WorldReleaseManifestV2,
   WorldRevision,
   WorkspaceScope,
 } from '../types'
-import type { WorldReleaseSection } from '../registry/types'
-import { assertRecordInScope, resolveScope, scopeTransactionTables } from './scope'
+import type { TableSpec, WorldReleaseSection } from '../registry/types'
+import { resolveScope, scopeTransactionTables } from './scope'
 import type { ProjectExportData } from '../export/json-export'
 import {
   deriveStrictExportProjectSnapshot,
   deriveStrictExportProjectSnapshotInCurrentTransaction,
   type StrictProjectExportSnapshot,
 } from '../export/registry-export'
-import { validateNarrativeModule } from '../narrative/blueprint'
+import { isShareableWorld } from '../product/world-identity'
+import { effectiveWorkKind } from './work-kind'
 
 // Release snapshots are deliberately sparse world-share packages, not v6+
 // full-project backups. v5 predates mandatory adaptation-private tables.
@@ -27,17 +27,22 @@ export const WORLD_RELEASE_SECTIONS: ReadonlyArray<{
   label: string
   description: string
 }> = [
-  { key: 'foundation', label: '世界基础', description: '自然、人文、规则、地点、词条与世界结构' },
-  { key: 'characters', label: '角色资产', description: '角色主档、关系与本作品角色作用' },
-  { key: 'narrative', label: '故事设计', description: '故事核心、主线支线与已选叙事蓝图' },
-  { key: 'outline', label: '大纲与细纲', description: '卷纲、章纲及场景级细纲，不包含正文' },
+  { key: 'foundation', label: '世界基础', description: '自然、人文、规则、地点、实体、词条与多世界结构' },
+  { key: 'characters', label: '角色与关系', description: '角色主档、关系与已确认认知' },
+  { key: 'narrative', label: '故事设计', description: '故事核心、主线支线、年表、事实与伏笔' },
+  { key: 'outline', label: '大纲、细纲与正文', description: '卷章结构、场景级细纲及作者确认正文' },
 ]
 
 export function worldReleaseSectionTables(section: WorldReleaseSection): string[] {
+  const areas = section === 'foundation'
+    ? new Set(['foundation', 'entities', 'multi-world'])
+    : section === 'characters'
+      ? new Set(['characters', 'relations'])
+      : section === 'narrative'
+        ? new Set(['story', 'storylines'])
+        : new Set(['outline', 'detailed-outline', 'manuscript'])
   return PROJECT_TABLES
-    .filter(spec => spec.communityShare === 'world'
-      && spec.releaseSection === section
-      && spec.name !== 'worldReleases')
+    .filter(spec => spec.worldSemantic && areas.has(spec.worldSemantic.area))
     .map(spec => spec.name)
 }
 
@@ -68,10 +73,17 @@ function rowMatchesScope(row: Record<string, unknown>, worldExportId: number, wo
   return row._worldOwnerExportId === worldExportId || row._workOwnerExportId === workExportId
 }
 
+function isSemanticCanonRow(spec: TableSpec, row: Record<string, unknown>): boolean {
+  const policy = spec.worldSemantic
+  if (!policy) return false
+  if (policy.canonPolicy === 'authoritative-table') return true
+  const status = policy.statusField ? row[policy.statusField] : undefined
+  return typeof status === 'string' && Boolean(policy.confirmedStatusValues?.includes(status))
+}
+
 async function buildPortableReleaseProject(input: {
   scope: WorkspaceScope
   requestedTables: string[]
-  selectedNarrativeModules: NarrativeModule[]
   strictSnapshot?: StrictProjectExportSnapshot
 }): Promise<{
   portableProject: ProjectExportData
@@ -90,34 +102,28 @@ async function buildPortableReleaseProject(input: {
   if (!worldRoot || !workRoot) throw new Error('[release] 当前 World/Work 不在严格备份中')
   const portableWorldId = worldRoot._exportId
   const portableWorkId = workRoot._exportId
-  const moduleRows = input.selectedNarrativeModules.map(module => {
-    const exportId = module.id == null ? undefined : snapshot.exportIds.get('narrativeModules')?.get(module.id)
-    const exported = backup.narrativeModules?.find(row => row._exportId === exportId)
-    return { module, exported }
-  })
-  if (moduleRows.some(item => !item.exported)) throw new Error('[release] 叙事模块无法映射为便携 ID')
-  const selectedModuleExportIds = new Set(moduleRows.map(item => item.exported!._exportId))
-  const selectedNarrativeModules = moduleRows.map(item => ({
-    exportId: item.exported!._exportId,
-    kind: item.module.kind,
-    title: item.module.title,
-  }))
-
-  const project = clone(backup.project) as Record<string, unknown>
-  project._activeWorldExportId = portableWorldId
-  project._activeWorkExportId = portableWorkId
-  project._activeCharacterDrivenPlanExportId = null
-  project.worldCode = worldRoot.code
-  project.worldVersion = worldRoot.currentVersion
-  project.communityOrigin = worldRoot.communityOrigin
-  project.name = workRoot.title
-  project.description = workRoot.description
-  project.genres = [...workRoot.genres]
-  project.genre = workRoot.genres[0] ?? 'other'
-  project.status = workRoot.status
-  project.targetWordCount = workRoot.targetWordCount
-  for (const field of ['currentWordCount', 'coverImage', 'writingStyleId', 'methodologyId'] as const) {
-    project[field] = workRoot[field]
+  const sourceProject = clone(backup.project) as Record<string, unknown>
+  const project: Record<string, unknown> = {
+    workspaceUid: sourceProject.workspaceUid,
+    workspacePurpose: 'world-engine',
+    workspacePurposeDecision: 'explicit',
+    name: worldRoot.name ?? workRoot.title,
+    description: worldRoot.description ?? workRoot.description ?? '',
+    genres: Array.isArray(workRoot.genres) ? [...workRoot.genres] : ['other'],
+    genre: Array.isArray(workRoot.genres) ? workRoot.genres[0] ?? 'other' : 'other',
+    status: 'drafting',
+    targetWordCount: 0,
+    currentWordCount: 0,
+    enableMultiWorld: Boolean(sourceProject.enableMultiWorld),
+    worldCode: worldRoot.code,
+    worldVersion: worldRoot.currentVersion,
+    communityOrigin: worldRoot.communityOrigin,
+    ownershipSchemaVersion: 1,
+    _activeWorldExportId: portableWorldId,
+    _activeWorkExportId: portableWorkId,
+    _activeCharacterDrivenPlanExportId: null,
+    createdAt: 0,
+    updatedAt: 0,
   }
   const portable: Record<string, unknown> = {
     version: Math.min(backup.version, WORLD_RELEASE_PORTABLE_BACKUP_VERSION),
@@ -130,75 +136,56 @@ async function buildPortableReleaseProject(input: {
     works: [{ ...clone(workRoot), _activeCharacterDrivenPlanExportId: null }],
   }
   const source = backup as unknown as Record<string, unknown>
-  const sharedMediaRows = Array.isArray(source.mediaBlobObjects)
-    ? source.mediaBlobObjects as Record<string, unknown>[]
-    : []
   for (const tableName of input.requestedTables) {
     if (tableName === 'worlds' || tableName === 'works' || tableName === 'worldReleases') continue
     const rows = Array.isArray(source[tableName]) ? clone(source[tableName] as Record<string, unknown>[]) : []
-    if (tableName === 'narrativeModules') {
-      portable[tableName] = rows.filter(row => selectedModuleExportIds.has(row._exportId as number))
-    } else if (tableName === 'narrativeNodes'
-      || tableName === 'narrativeBeats'
-      || tableName === 'narrativeChoices') {
-      portable[tableName] = rows.filter(row => selectedModuleExportIds.has(row._moduleExportId as number))
-    } else {
-      const scopedRows = rows.filter(row => rowMatchesScope(row, portableWorldId, portableWorkId))
-      portable[tableName] = tableName === 'avgMediaBlobs'
-        ? scopedRows.map(row => {
-            if (typeof row.data === 'string' || !Number.isInteger(row._blobObjectExportId)) return row
-            const shared = sharedMediaRows.find(candidate => candidate._exportId === row._blobObjectExportId)
-            if (typeof shared?.data !== 'string') throw new Error('[release] AVG 共享媒资无法冻结到 WorldRelease')
-            return { ...row, data: shared.data }
-          })
-        : scopedRows
-    }
+    const spec = PROJECT_TABLES.find(candidate => candidate.name === tableName)
+    if (!spec?.worldSemantic) throw new Error(`[release] ${tableName} 未登记为世界语义资源`)
+    portable[tableName] = rows
+      .filter(row => rowMatchesScope(row, portableWorldId, portableWorkId))
+      .filter(row => isSemanticCanonRow(spec, row))
   }
   const portableWorks = portable.works as Array<Record<string, unknown>>
-  portableWorks[0]._activeNarrativeModuleExportId = selectedNarrativeModules[0]?.exportId ?? null
-  return { portableProject: portable as unknown as ProjectExportData, selectedNarrativeModules }
+  portableWorks[0]._activeNarrativeModuleExportId = null
+  for (const field of [
+    'coverImage', 'writingStyleId', 'methodologyId', 'activeCharacterDrivenPlanId',
+    'postAdoptionPolicy', 'postAdoptionTaskTypes', 'postAdoptionBudget',
+  ]) delete portableWorks[0][field]
+  // A WorldRelease owns semantic world content, not the source product's
+  // long/short/screenplay/comic workflow identity. Keep only a neutral Work
+  // compatibility root; derivation provenance records the true source kind.
+  portableWorks[0].kind = 'novel'
+  portableWorks[0].novelProfile = 'long'
+  portableWorks[0].targetWordCount = 0
+  portableWorks[0].currentWordCount = 0
+  return { portableProject: portable as unknown as ProjectExportData, selectedNarrativeModules: [] }
 }
 
-export async function buildWorldReleaseManifest(input: {
+async function buildWorldReleaseManifestInternal(input: {
   scope: WorkspaceScope
   selectedTables?: string[]
   selectedNarrativeModuleIds?: number[]
-}, strictSnapshot?: StrictProjectExportSnapshot): Promise<WorldReleaseManifestV2> {
+}, strictSnapshot?: StrictProjectExportSnapshot, options?: {
+  allowInternalSource?: boolean
+  sourceKind?: 'world-draft' | 'independent-work-derivation'
+}): Promise<WorldReleaseManifestV2> {
   const scope = await resolveScope({ scope: input.scope })
   const world = await db.worlds.get(scope.worldId)
   if (!world || world.projectId !== scope.projectId) throw new Error('[release] World 不属于当前工作区')
-  const publishable = PROJECT_TABLES.filter(spec => spec.communityShare === 'world' && spec.name !== 'worldReleases')
+  if (!options?.allowInternalSource && !isShareableWorld(world)) {
+    throw new Error('[release] 独立作品的内部作用域不能直接发布；请先显式派生世界草稿')
+  }
+  const publishable = PROJECT_TABLES.filter(spec => spec.worldSemantic)
   const requested = input.selectedTables ?? publishable.map(spec => spec.name)
   const unknown = requested.filter(name => !publishable.some(spec => spec.name === name))
   if (unknown.length) throw new Error(`[release] 表未登记为可发布:${unknown.join(', ')}`)
-  const moduleIds = [...new Set(input.selectedNarrativeModuleIds ?? [])]
-  const modules: NarrativeModule[] = []
-  for (const moduleId of moduleIds) {
-    const module = await db.narrativeModules.get(moduleId)
-    if (!module || !await assertRecordInScope(scope, 'narrativeModules', module)) {
-      throw new Error(`[release] 叙事模块 ${moduleId} 不属于当前 scope`)
-    }
-    const report = await validateNarrativeModule(scope, moduleId)
-    if (!report.valid) {
-      throw new Error(`[release] 叙事模块 ${module.title} 不可执行:${[
-        ...report.errors,
-        ...report.danglingSuccessors.map(item => `${item.nodeKey}->${item.successorKey}`),
-        ...report.unreachableKeys.map(key => `不可达:${key}`),
-      ].join('；')}`)
-    }
-    modules.push(module)
+  if (input.selectedNarrativeModuleIds?.length) {
+    throw new Error('[release] 可执行叙事模块属于上层产品，不能封存进语义 WorldRelease')
   }
-  const selectedTables = [...new Set([
-    ...requested,
-    'narrativeModules',
-    'narrativeNodes',
-    'narrativeBeats',
-    'narrativeChoices',
-  ])]
+  const selectedTables = [...new Set(requested)]
   const { portableProject, selectedNarrativeModules } = await buildPortableReleaseProject({
     scope,
     requestedTables: selectedTables,
-    selectedNarrativeModules: modules,
     strictSnapshot,
   })
   const portableRecord = portableProject as unknown as Record<string, unknown>
@@ -211,9 +198,44 @@ export async function buildWorldReleaseManifest(input: {
     rowCount: rows.length,
     contentHash: await sha256(rows),
   })))
+  const resourceCatalog = dependencies.map(dependency => {
+    const semantic = PROJECT_TABLES.find(spec => spec.name === dependency.table)!.worldSemantic!
+    return {
+      resourceId: `world:${world.code}:table:${dependency.table}`,
+      resourceKind: semantic.resourceKind,
+      area: semantic.area,
+      table: dependency.table,
+      rowCount: dependency.rowCount,
+      contentHash: dependency.contentHash,
+    }
+  })
+  const capabilityProfile = [...new Set(resourceCatalog.map(resource => resource.area))].map(area => {
+    const resources = resourceCatalog.filter(resource => resource.area === area)
+    const rowCount = resources.reduce((sum, resource) => sum + resource.rowCount, 0)
+    return {
+      area,
+      resourceCount: resources.length,
+      rowCount,
+      status: rowCount === 0 ? 'missing' as const : resources.every(resource => resource.rowCount > 0) ? 'available' as const : 'partial' as const,
+    }
+  })
+  const work = await db.works.get(scope.workId)
+  const project = await db.projects.get(scope.projectId)
+  const selectedResourceIds = resourceCatalog.filter(resource => resource.rowCount > 0).map(resource => resource.resourceId)
+  const omittedResourceIds = resourceCatalog.filter(resource => resource.rowCount === 0).map(resource => resource.resourceId)
+  const sourceManifestBase = {
+    sourceKind: options?.sourceKind ?? 'world-draft' as const,
+    sourceWorkspaceUid: project?.workspaceUid ?? `legacy:${scope.projectId}`,
+    sourceWorldCode: world.code,
+    sourceWorkCode: work?.code ?? `legacy:${scope.workId}`,
+    selectedResourceIds,
+    omittedResourceIds,
+  }
+  const sourceManifest = { ...sourceManifestBase, contentHash: await sha256(sourceManifestBase) }
   return {
     schema: 'storyforge.world-package',
     version: 2,
+    semanticContract: 3,
     worldCode: world.code,
     worldName: world.name,
     workTitle: (await db.works.get(scope.workId))?.title ?? '',
@@ -222,7 +244,50 @@ export async function buildWorldReleaseManifest(input: {
     dependencies,
     records,
     portableProject: portableProject as unknown as Record<string, unknown>,
+    capabilityProfile,
+    resourceCatalog,
+    sourceManifest,
   }
+}
+
+export async function buildWorldReleaseManifest(input: {
+  scope: WorkspaceScope
+  selectedTables?: string[]
+  selectedNarrativeModuleIds?: number[]
+}, strictSnapshot?: StrictProjectExportSnapshot): Promise<WorldReleaseManifestV2> {
+  return buildWorldReleaseManifestInternal(input, strictSnapshot)
+}
+
+/**
+ * ARCH-01: capture a novel's confirmed semantic Canon for an explicit,
+ * immutable derivation.  This never publishes the source's internal scope.
+ */
+export async function buildIndependentWorkWorldSnapshot(input: {
+  scope: WorkspaceScope
+  selectedTables?: string[]
+}): Promise<WorldReleaseManifestV2> {
+  const scope = await resolveScope({ scope: input.scope })
+  const [project, world, work] = await Promise.all([
+    db.projects.get(scope.projectId),
+    db.worlds.get(scope.worldId),
+    db.works.get(scope.workId),
+  ])
+  if (!project || !world || !work) throw new Error('[derivation] 源作品作用域不存在')
+  if (project.workspacePurpose === 'world-engine' || isShareableWorld(world)) {
+    throw new Error('[derivation] 该来源已经是世界引擎，不需要再次派生')
+  }
+  if (effectiveWorkKind(work) !== 'novel') {
+    throw new Error('[derivation] 只有长篇或短篇小说可以显式派生世界')
+  }
+  const manifest = await buildWorldReleaseManifestInternal({
+    scope,
+    selectedTables: input.selectedTables,
+  }, undefined, {
+    allowInternalSource: true,
+    sourceKind: 'independent-work-derivation',
+  })
+  manifest.workTitle = work.title
+  return manifest
 }
 
 export async function createWorldRevision(input: {
@@ -297,6 +362,7 @@ export async function publishWorldRevision(revisionId: number, label?: string): 
     if (existing) return existing
     const world = await db.worlds.get(currentRevision.worldId)
     if (!world || world.projectId !== currentRevision.projectId) throw new Error('[release] 修订 World 不存在')
+    if (!isShareableWorld(world)) throw new Error('[release] 内部作用域不能发布为 WorldRelease')
     const releases = await db.worldReleases.where('worldId').equals(currentRevision.worldId).toArray()
     const row: WorldRelease = {
       projectId: currentRevision.projectId,

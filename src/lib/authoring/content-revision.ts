@@ -32,7 +32,7 @@ function isBinaryTable(spec: TableSpec): boolean {
 export function contentRevisionTableSpecsV1(): TableSpec[] {
   return PROJECT_TABLES
     .filter(spec => !isBinaryTable(spec))
-    .filter(spec => spec.workspaceProjection != null || (spec.worldDomains?.length ?? 0) > 0)
+    .filter(spec => spec.workspaceProjection != null || spec.worldSemantic != null)
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 

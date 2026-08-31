@@ -89,6 +89,7 @@ import WorkKindBadge from '../components/work/WorkKindBadge'
 import { effectiveNovelProfile, effectiveWorkKind, SHORT_NOVEL_DEFAULT_WORDS } from '../lib/world-engine/work-kind'
 import { switchNovelProfile } from '../lib/world-engine/works'
 import { secondaryNovelWorkflowModules } from '../lib/novel/workflow'
+import WorldDerivationActions from '../components/world-engine/WorldDerivationActions'
 
 export default function WorkspacePage() {
   const { projectId } = useParams()
@@ -629,6 +630,11 @@ export default function WorkspacePage() {
             {profileSwitchError && <span className="max-w-72 truncate text-[11px] text-red-600" title={profileSwitchError}>{profileSwitchError}</span>}
           </div>
           <div className="flex items-center gap-1">
+            <WorldDerivationActions
+              project={project}
+              compact
+              onDerived={targetProjectId => navigate(`/workspace/${targetProjectId}?module=info`)}
+            />
             <button
               onClick={() => {
                 setShowCopilot(value => {

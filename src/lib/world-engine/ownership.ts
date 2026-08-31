@@ -1,6 +1,11 @@
 import Dexie, { type Collection } from 'dexie'
 import { db } from '../db/schema'
-import { generateWorldCode, hasShareableWorldIdentity, withWorldIdentity } from '../product/world-identity'
+import {
+  effectiveWorkspacePurpose,
+  generateWorkspaceScopeCode,
+  generateWorldCode,
+  isShareableWorld,
+} from '../product/world-identity'
 import { generateWorkCode } from '../memory/identity'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { transactionTablesFor } from '../registry/lifecycle'
@@ -53,6 +58,8 @@ const PROJECT_MIRROR_FIELDS = [
   'activeWorldId',
   'activeWorkId',
   'ownershipSchemaVersion',
+  'workspacePurpose',
+  'workspacePurposeDecision',
   'worldCode',
   'worldVersion',
   'communityOrigin',
@@ -477,13 +484,13 @@ async function persistPreparedReceipt(plan: OwnershipMigrationPlan): Promise<num
   })
 }
 
-async function allocateWorldCode(project: Project): Promise<string> {
-  let normalized = withWorldIdentity(project)
+async function allocateWorldRootCode(project: Project, shareable: boolean): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const code = normalized.worldCode ?? generateWorldCode()
+    const code = shareable
+      ? (attempt === 0 && project.worldCode ? project.worldCode : generateWorldCode())
+      : generateWorkspaceScopeCode()
     const collision = await db.worlds.where('code').equals(code).first()
     if (!collision || collision.projectId === project.id) return code
-    normalized = { ...normalized, worldCode: generateWorldCode() }
   }
   fail('OWNERSHIP_WORLD_CODE_COLLISION', '无法分配唯一的世界编号')
 }
@@ -548,7 +555,8 @@ async function readReadyResolution(
   if (!project || project.activeWorldId !== worldId || project.activeWorkId !== workId) {
     fail('OWNERSHIP_ACTIVE_SCOPE_INVALID', '工作区兼容指针与 World/Work 不一致')
   }
-  if (project.worldCode !== world.code || project.worldVersion !== world.currentVersion) {
+  if (isShareableWorld(world)
+    && (project.worldCode !== world.code || project.worldVersion !== world.currentVersion)) {
     fail('OWNERSHIP_WORLD_MIRROR_INVALID', '工作区世界编号/版本镜像与当前 World 不一致')
   }
   return { scope: { projectId: world.projectId, worldId, workId }, project, world, work, migrated }
@@ -584,24 +592,34 @@ async function runOwnershipMigration(plan: OwnershipMigrationPlan, receiptId: nu
         fail('OWNERSHIP_SOURCE_CHANGED', '迁移开始前源记录发生变化')
       }
 
-      const normalized = migrateGenre(withWorldIdentity(latest))
+      const normalized = migrateGenre(latest)
+      const workspacePurpose = effectiveWorkspacePurpose(normalized)
+      const workspacePurposeDecision = normalized.workspacePurposeDecision ?? 'legacy-review-required'
+      const identityKind = workspacePurpose === 'world-engine'
+        && workspacePurposeDecision !== 'legacy-review-required'
+        ? 'world-draft'
+        : 'workspace-scope'
       const now = Date.now()
       const existingWorld = plan.existingWorldId == null ? undefined : await db.worlds.get(plan.existingWorldId)
       if (plan.existingWorldId != null && !existingWorld) {
         fail('OWNERSHIP_UNKNOWN_ROOTS', '迁移准备阶段登记的 World 已不存在')
       }
-      const worldCode = existingWorld?.code ?? await allocateWorldCode(normalized)
-      const worldVersion = existingWorld?.currentVersion ?? normalized.worldVersion ?? 1
+      const worldCode = existingWorld?.code ?? await allocateWorldRootCode(normalized, identityKind === 'world-draft')
+      const worldVersion = existingWorld?.currentVersion ?? (identityKind === 'world-draft' ? normalized.worldVersion ?? 0 : 0)
       const worldId = plan.existingWorldId ?? await db.worlds.add({
         projectId,
+        identityKind,
         code: worldCode,
         name: normalized.name,
         description: normalized.description,
-        currentVersion: normalized.worldVersion ?? 1,
+        currentVersion: worldVersion,
         communityOrigin: normalized.communityOrigin,
         createdAt: normalized.createdAt ?? now,
         updatedAt: normalized.updatedAt ?? now,
       }) as number
+      if (existingWorld && existingWorld.identityKind !== identityKind) {
+        await db.worlds.update(existingWorld.id!, { identityKind, updatedAt: now })
+      }
       const workId = plan.existingWorkId ?? await db.works.add({
         projectId,
         worldId,
@@ -635,8 +653,10 @@ async function runOwnershipMigration(plan: OwnershipMigrationPlan, receiptId: nu
         activeWorldId: worldId,
         activeWorkId: workId,
         ownershipSchemaVersion: WORKSPACE_OWNERSHIP_CONTRACT_VERSION,
-        worldCode,
-        worldVersion,
+        workspacePurpose,
+        workspacePurposeDecision,
+        worldCode: identityKind === 'world-draft' ? worldCode : undefined,
+        worldVersion: identityKind === 'world-draft' ? worldVersion : undefined,
       })
 
       const readyState = await readWorkspaceState(projectId)
@@ -782,5 +802,4 @@ export function isWorkspaceOwnershipReady(project: Project): boolean {
   return project.ownershipSchemaVersion === WORKSPACE_OWNERSHIP_CONTRACT_VERSION
     && project.activeWorldId != null
     && project.activeWorkId != null
-    && hasShareableWorldIdentity(project)
 }

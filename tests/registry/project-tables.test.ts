@@ -28,8 +28,8 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(result.ok, result.errors.join('; ')).toBe(true)
     })
 
-    it('登记了全部 115 张表', () => {
-      expect(PROJECT_TABLES.length).toBe(115)   // v79 两条历史迁移线汇合
+    it('登记了全部 117 张表', () => {
+      expect(PROJECT_TABLES.length).toBe(117)   // v82 增加显式世界派生与旧发布迁移凭证
     })
 
     it('每张表名唯一', () => {
@@ -64,14 +64,14 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
     })
 
     it('所有世界发布表都从同一注册表声明用户可选分区', () => {
-      const publishable = PROJECT_TABLES.filter(spec => spec.communityShare === 'world')
+      const publishable = PROJECT_TABLES.filter(spec => spec.legacyWorldPackageV1 === 'world')
       expect(publishable.length).toBeGreaterThan(0)
-      expect(publishable.every(spec => spec.releaseSection != null)).toBe(true)
-      expect(publishable.filter(spec => spec.releaseSection === 'outline').map(spec => spec.name))
+      expect(publishable.every(spec => spec.legacyWorldReleaseSection != null)).toBe(true)
+      expect(publishable.filter(spec => spec.legacyWorldReleaseSection === 'outline').map(spec => spec.name))
         .toEqual(expect.arrayContaining(['outlineNodes', 'detailedOutlines']))
-      expect(publishable.filter(spec => spec.releaseSection === 'narrative').map(spec => spec.name))
+      expect(publishable.filter(spec => spec.legacyWorldReleaseSection === 'narrative').map(spec => spec.name))
         .toEqual(expect.arrayContaining(['storyCores', 'storyArcs', 'narrativeModules', 'narrativeNodes']))
-      expect(publishable.filter(spec => spec.releaseSection === 'characters').map(spec => spec.name))
+      expect(publishable.filter(spec => spec.legacyWorldReleaseSection === 'characters').map(spec => spec.name))
         .toEqual(expect.arrayContaining(['characters', 'characterRelations', 'workCharacterBindings']))
     })
   })

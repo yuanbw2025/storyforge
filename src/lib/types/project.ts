@@ -92,6 +92,21 @@ export interface CommunityWorldOrigin {
 }
 
 /**
+ * ARCH-01: the product purpose of a LocalWorkspace.
+ *
+ * A workspace may contain an internal World row for ownership/scoping without
+ * being a user-visible world-engine product.  Product identity must therefore
+ * never be inferred from the mere existence of that row.
+ */
+export type WorkspacePurpose = 'independent-work' | 'world-engine'
+
+/** How the current workspace purpose was established. */
+export type WorkspacePurposeDecision =
+  | 'explicit'
+  | 'legacy-review-required'
+  | 'legacy-confirmed'
+
+/**
  * MASTER-0: project-owned rollout consent. These flags are deliberately part
  * of the portable project root so an export/import never silently widens or
  * loses the author's experimental capability choices.
@@ -106,6 +121,10 @@ export interface Project {
   id?: number
   /** MEMORY-1: immutable portable identity for this LocalWorkspace. */
   workspaceUid?: string
+  /** ARCH-01: explicit product identity; legacy ambiguity defaults to independent work. */
+  workspacePurpose?: WorkspacePurpose
+  /** ARCH-01: legacy classification is never silently treated as author confirmation. */
+  workspacePurposeDecision?: WorkspacePurposeDecision
   name: string
   /** 兼容旧数据的单选流派（保留此字段避免旧代码报错，值始终有效） */
   genre: string
@@ -136,9 +155,12 @@ export interface Project {
   /** 是否启用多世界模式（默认 false） */
   enableMultiWorld?: boolean
 
-  /** 世界引擎公开编号。旧项目缺失时由项目 store 生成并持久化。 */
+  /**
+   * @deprecated ARCH-01 compatibility mirror only.  New code must read the
+   * explicit World row and its identityKind; independent works leave this empty.
+   */
   worldCode?: string
-  /** 世界引擎当前发布版本，首版为 1。 */
+  /** @deprecated ARCH-01 compatibility mirror only; not a WorldReference. */
   worldVersion?: number
   /** PLATFORM-1：从社区世界包导入时保留来源，本地副本仍分配自己的 worldCode。 */
   communityOrigin?: CommunityWorldOrigin

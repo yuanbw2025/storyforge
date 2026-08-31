@@ -25,10 +25,18 @@ export interface PostAdoptionBudgetV1 {
 export type WorkKind = 'novel' | 'screenplay' | 'comic'
 export type NovelWorkflowProfile = 'short' | 'long'
 
+/**
+ * ARCH-01: an internal scope root is not a shareable world product.
+ * `world-draft` is the only identity that may appear in the world library or
+ * be frozen into a WorldRelease.
+ */
+export type WorldIdentityKind = 'workspace-scope' | 'world-draft'
+
 /** WORLD-2C: a stable world root inside one local workspace. */
 export interface World {
   id?: number
   projectId: number
+  identityKind?: WorldIdentityKind
   code: string
   name: string
   description: string

@@ -1,4 +1,5 @@
 import type { NarrativeModuleKind } from './narrative-blueprint'
+import type { WorldCapabilityArea } from '../registry/types'
 
 export interface WorldRevision {
   id?: number
@@ -26,9 +27,48 @@ export interface WorldRelease {
   createdAt: number
 }
 
+/** ARCH-01/D-WORLD-03 immutable provenance for an explicit work -> world derivation. */
+export interface WorldDerivationV1 {
+  id?: number
+  projectId: number
+  worldId: number
+  sourceWorkspaceUid: string
+  sourceWorkCode: string
+  /** Source Work updatedAt at the instant the immutable content vector was captured. */
+  sourceWorkRevision: number
+  /** Full registered Canon revision vector, retained for replay and stale proof. */
+  sourceRevisionVectorJson: string
+  sourceKind: 'long-novel' | 'short-novel'
+  sourceRangeJson: string
+  selectedResourceIdsJson: string
+  sourceContentHash: string
+  targetRevisionId?: number | null
+  targetReleaseId?: number | null
+  createdAt: number
+}
+
+/** ARCH-02 durable receipt for splitting a legacy mixed world package. */
+export interface WorldReleaseMigrationV1 {
+  id?: number
+  projectId: number
+  worldId: number
+  sourcePackageId: string
+  sourceWorldCode: string
+  sourceWorldVersion: number
+  classificationJson: string
+  semanticReleaseId: number
+  semanticContentHash: string
+  /** Portable identity of the separate recovery workspace, never a cross-owner FK. */
+  productRecoveryWorkspaceUid?: string | null
+  productRecoveryContentHash?: string | null
+  createdAt: number
+}
+
 export interface WorldReleaseManifestV2 {
   schema: 'storyforge.world-package'
   version: 2
+  /** ARCH-02: absent means a legacy mixed package; 3 means pure semantic release. */
+  semanticContract?: 3
   worldCode: string
   worldName: string
   workTitle: string
@@ -45,4 +85,27 @@ export interface WorldReleaseManifestV2 {
   }>
   records: Record<string, unknown[]>
   portableProject: Record<string, unknown>
+  capabilityProfile?: Array<{
+    area: WorldCapabilityArea
+    resourceCount: number
+    rowCount: number
+    status: 'missing' | 'partial' | 'available'
+  }>
+  resourceCatalog?: Array<{
+    resourceId: string
+    resourceKind: string
+    area: WorldCapabilityArea
+    table: string
+    rowCount: number
+    contentHash: string
+  }>
+  sourceManifest?: {
+    sourceKind: 'world-draft' | 'independent-work-derivation'
+    sourceWorkspaceUid: string
+    sourceWorldCode: string
+    sourceWorkCode: string
+    selectedResourceIds: string[]
+    omittedResourceIds: string[]
+    contentHash: string
+  }
 }

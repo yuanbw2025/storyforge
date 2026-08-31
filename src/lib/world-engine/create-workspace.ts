@@ -1,6 +1,6 @@
 import { db } from '../db/schema'
 import { generateWorkspaceUid } from '../memory/identity'
-import { generateWorldCode } from '../product/world-identity'
+import { generateWorkspaceScopeCode, generateWorldCode } from '../product/world-identity'
 import type {
   Chapter,
   CreateProjectInput,
@@ -9,6 +9,7 @@ import type {
   Project,
   Work,
   WorkKind,
+  WorkspacePurpose,
   WorkspaceScope,
   World,
 } from '../types'
@@ -18,6 +19,8 @@ import { buildWorkRecord, projectCompatibilityMirror } from './works'
 import { deriveShortNovelStructure } from './work-kind'
 
 export interface CreateWorkspaceOptions {
+  /** ARCH-01: defaults to an independent authored work. */
+  purpose?: WorkspacePurpose
   kind?: WorkKind
   novelProfile?: NovelWorkflowProfile | null
   preferredChapterCount?: number
@@ -30,16 +33,22 @@ export interface CreatedWorkspace {
   scope: WorkspaceScope
 }
 
-function projectRoot(input: CreateProjectInput, now: number): Project {
+function projectRoot(input: CreateProjectInput, options: CreateWorkspaceOptions, now: number): Project {
   const genres = input.genres?.length ? [...input.genres] : [input.genre || 'other']
+  const purpose = options.purpose ?? input.workspacePurpose ?? 'independent-work'
+  const publicWorldCode = purpose === 'world-engine'
+    ? input.worldCode ?? generateWorldCode()
+    : undefined
   return {
     ...input,
     workspaceUid: input.workspaceUid ?? generateWorkspaceUid(),
+    workspacePurpose: purpose,
+    workspacePurposeDecision: 'explicit',
     genres,
     genre: input.genre || genres[0] || 'other',
     status: input.status ?? 'drafting',
-    worldCode: input.worldCode ?? generateWorldCode(),
-    worldVersion: input.worldVersion ?? 1,
+    worldCode: publicWorldCode,
+    worldVersion: purpose === 'world-engine' ? input.worldVersion ?? 0 : undefined,
     activeWorldId: null,
     activeWorkId: null,
     ownershipSchemaVersion: WORKSPACE_OWNERSHIP_CONTRACT_VERSION,
@@ -105,15 +114,16 @@ export async function createWorkspace(
   options: CreateWorkspaceOptions = {},
 ): Promise<CreatedWorkspace> {
   const now = Date.now()
-  const preparedProject = projectRoot(input, now)
+  const preparedProject = projectRoot(input, options, now)
   return db.transaction('rw', scopeTransactionTables(db.outlineNodes, db.chapters, db.ownershipMigrations), async () => {
     const projectId = await db.projects.add(preparedProject) as number
     const world: World = {
       projectId,
-      code: preparedProject.worldCode!,
+      identityKind: preparedProject.workspacePurpose === 'world-engine' ? 'world-draft' : 'workspace-scope',
+      code: preparedProject.worldCode ?? generateWorkspaceScopeCode(now),
       name: preparedProject.name,
       description: preparedProject.description,
-      currentVersion: preparedProject.worldVersion!,
+      currentVersion: preparedProject.worldVersion ?? 0,
       communityOrigin: preparedProject.communityOrigin,
       createdAt: now,
       updatedAt: now,

@@ -24,6 +24,7 @@ import {
 } from './work-kind'
 import type { Chapter } from '../types/outline'
 import { canonicalManuscriptWordCount } from '../chapters/selectors'
+import { isShareableWorld } from '../product/world-identity'
 
 export interface CreateWorkInput {
   title: string
@@ -95,12 +96,13 @@ const WORK_MIRROR_FIELDS = [
 ] as const satisfies readonly (keyof Project)[]
 
 export function projectCompatibilityMirror(world: World, work: Work): Partial<Project> {
+  const shareable = isShareableWorld(world)
   return {
     activeWorldId: world.id!,
     activeWorkId: work.id!,
-    worldCode: world.code,
-    worldVersion: world.currentVersion,
-    communityOrigin: world.communityOrigin,
+    worldCode: shareable ? world.code : undefined,
+    worldVersion: shareable ? world.currentVersion : undefined,
+    communityOrigin: shareable ? world.communityOrigin : undefined,
     name: work.title,
     description: work.description,
     genres: [...work.genres],
@@ -116,12 +118,13 @@ export function projectCompatibilityMirror(world: World, work: Work): Partial<Pr
 }
 
 export function projectCompatibilityWithoutWork(world: World): Partial<Project> {
+  const shareable = isShareableWorld(world)
   return {
     activeWorldId: world.id!,
     activeWorkId: null,
-    worldCode: world.code,
-    worldVersion: world.currentVersion,
-    communityOrigin: world.communityOrigin,
+    worldCode: shareable ? world.code : undefined,
+    worldVersion: shareable ? world.currentVersion : undefined,
+    communityOrigin: shareable ? world.communityOrigin : undefined,
     name: world.name,
     description: world.description,
     genres: [],

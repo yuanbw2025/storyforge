@@ -81,6 +81,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'works[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldRevisions[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldReleases[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'worldDerivations[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'worldReleaseMigrations[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'gameDefinitions[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'gameReleases[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'simulationSessions[worldId]', onDelete: 'cascade' },
@@ -223,7 +225,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       leaseOwnerField: 'leaseOwner', leaseExpiresAtField: 'leaseExpiresAt', lastVerifiedAtField: 'lastVerifiedAt',
     },
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['assets'],
     refs: [
       { kind: 'simple', field: 'id', target: 'comicMediaAssets[blobObjectId]', onDelete: 'keep' },
       { kind: 'simple', field: 'id', target: 'gameBuildArtifacts[blobObjectId]', onDelete: 'keep' },
@@ -247,7 +248,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'MEDIA-CORE/GAMEPROD 产品中立、Work-owned 内容寻址媒资；物理删除只允许引用感知 GC' },
 
   { table: db.workCharacterBindings, name: 'workCharacterBindings', owner: 'project', exportable: true,
-    communityShare: 'world', releaseSection: 'characters',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'characters',
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     exportRemap: [
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -268,7 +269,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.worldRevisions, name: 'worldRevisions', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
-    worldDomains: ['foundation', 'narrative'],
     tree: { parentField: 'parentRevisionId' },
     refs: [{ kind: 'simple', field: 'id', target: 'worldReleases[revisionId]', onDelete: 'keep' }],
     exportRemap: [
@@ -279,7 +279,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.worldReleases, name: 'worldReleases', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
-    worldDomains: ['foundation', 'narrative'], communityShare: 'world', releaseSection: 'foundation',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     refs: [{ kind: 'simple', field: 'id', target: 'gameReleases[worldReleaseId]', onDelete: 'cascade' }],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
@@ -287,41 +287,60 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     ],
     note: 'WORLD-2E 不可变发布版本；运行实例只绑定该记录或显式草稿快照' },
 
+  { table: db.worldDerivations, name: 'worldDerivations', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'targetRevisionId', remapVia: 'worldRevisions', exportAs: '_targetRevisionExportId' },
+      { field: 'targetReleaseId', remapVia: 'worldReleases', exportAs: '_targetReleaseExportId' },
+    ],
+    defaults: { targetRevisionId: null, targetReleaseId: null },
+    note: 'ARCH-01 长篇/短篇显式派生世界的不可变来源、范围与 hash；源作品只以便携身份引用' },
+
+  { table: db.worldReleaseMigrations, name: 'worldReleaseMigrations', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'semanticReleaseId', remapVia: 'worldReleases', exportAs: '_semanticReleaseExportId', onUnmapped: 'require' },
+    ],
+    defaults: { productRecoveryWorkspaceUid: null, productRecoveryContentHash: null },
+    note: 'ARCH-02 旧混合世界包拆分后的语义发布与独立产品恢复工作区凭证；跨 owner 只保存便携身份' },
+
   // ───────────────────── 世界观/设定(world-scoped 多)─────────────────────
-  { table: db.worldviews, name: 'worldviews', owner: 'project', worldScoped: true, communityShare: 'world', releaseSection: 'foundation',
+  { table: db.worldviews, name: 'worldviews', owner: 'project', worldScoped: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     resourceIdentity: RESOURCE_IDENTITY('worldview', 'worldview-field', '世界观', 'registered-fields'),
+    worldSemantic: { version: 1, area: 'foundation', resourceKind: 'worldview', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldDomains: ['foundation'],
     exportable: true,
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.storyCores, name: 'storyCores', owner: 'project', exportable: true,
     resourceIdentity: RESOURCE_IDENTITY('story-core', 'story-core-field', '故事核心', 'registered-fields'),
-    communityShare: 'world', releaseSection: 'narrative',
+    worldSemantic: { version: 1, area: 'story', resourceKind: 'story-core', canonPolicy: 'authoritative-table' },
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     domainOwner: LEGACY_WORK_OWNER,
     workspaceProjection: {
       version: 1, classification: 'editable', documentKind: 'story-core', mapper: 'work-semantic-v1',
       codec: 'yaml', editPolicy: 'author-editable', scopeOwner: 'work',
       dependencyEmitter: 'work-semantic-impact-v1', schemaVersion: 1,
     },
-    worldDomains: ['narrative'],
     refs: [
       { kind: 'simple', field: 'id', target: 'storyArcs[sourceStoryCoreId]', onDelete: 'setNull' },
     ],
     note: '每个 Work 一份故事核心；旧 project/world 兼容行在所有权迁移时归入明确 Work' },
 
-  { table: db.powerSystems, name: 'powerSystems', owner: 'project', worldScoped: true, communityShare: 'world', releaseSection: 'foundation',
+  { table: db.powerSystems, name: 'powerSystems', owner: 'project', worldScoped: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     resourceIdentity: RESOURCE_IDENTITY('power-system', 'worldview-field', '力量体系'),
+    worldSemantic: { version: 1, area: 'foundation', resourceKind: 'power-system', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldDomains: ['foundation'],
     exportable: true,
     refs: [{ kind: 'simple', field: 'id', target: 'characters[powerSystemId]', onDelete: 'setNull' }],
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
-  { table: db.cultivationSystems, name: 'cultivationSystems', owner: 'project', worldScoped: true, communityShare: 'world', releaseSection: 'foundation',
+  { table: db.cultivationSystems, name: 'cultivationSystems', owner: 'project', worldScoped: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     resourceIdentity: RESOURCE_IDENTITY('cultivation-system', 'worldview-field', '修炼体系'),
+    worldSemantic: { version: 1, area: 'foundation', resourceKind: 'cultivation-system', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldDomains: ['foundation', 'assets'],
     exportable: true, exportIdField: true,
     refs: [
       { kind: 'simple', field: 'id', target: 'characters[cultivationSystemId]', onDelete: 'setNull' },
@@ -337,6 +356,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.cultivationProgress, name: 'cultivationProgress', owner: 'project', worldScoped: true,
     resourceIdentity: RESOURCE_IDENTITY('cultivation-progress', 'fact', '修炼进度'),
+    worldSemantic: { version: 1, area: 'story', resourceKind: 'cultivation-progress', canonPolicy: 'confirmed-rows-only', statusField: 'status', confirmedStatusValues: ['confirmed'] },
     domainOwner: LEGACY_WORK_OWNER,
     exportable: true,
     exportRemap: [
@@ -348,24 +368,24 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     defaults: { status: 'confirmed', sourceOffset: 0, trigger: '' },
     note: 'Phase 34 作者确认的正文修炼事件；当前境界与实际路径按规范章序实时投影，软引用缺失时保留冗余名称与证据' },
 
-  { table: db.geographies, name: 'geographies', owner: 'project', worldScoped: true, communityShare: 'world', releaseSection: 'foundation',
+  { table: db.geographies, name: 'geographies', owner: 'project', worldScoped: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     resourceIdentity: RESOURCE_IDENTITY('geography', 'worldview-field', '地理环境'),
+    worldSemantic: { version: 1, area: 'foundation', resourceKind: 'geography', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldDomains: ['foundation'],
     exportable: true,
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
-  { table: db.histories, name: 'histories', owner: 'project', worldScoped: true, communityShare: 'world', releaseSection: 'foundation',
+  { table: db.histories, name: 'histories', owner: 'project', worldScoped: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     resourceIdentity: RESOURCE_IDENTITY('history', 'worldview-field', '历史'),
+    worldSemantic: { version: 1, area: 'foundation', resourceKind: 'history', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldDomains: ['foundation'],
     exportable: true,
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
-  { table: db.worldNodes, name: 'worldNodes', owner: 'project', worldScoped: true, communityShare: 'world', releaseSection: 'foundation',
+  { table: db.worldNodes, name: 'worldNodes', owner: 'project', worldScoped: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     resourceIdentity: RESOURCE_IDENTITY('world-node', 'location', '世界节点'),
+    worldSemantic: { version: 1, area: 'entities', resourceKind: 'world-node', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldDomains: ['foundation', 'assets'],
     exportable: true, tree: { parentField: 'parentId' }, exportIdField: true,
     refs: [
       { kind: 'json', field: 'portalsJSON', jsonPath: '$[].targetWorldId', target: 'worldNodes[id]', onDelete: 'remap' },
@@ -379,23 +399,23 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.historicalTimelineEvents, name: 'historicalTimelineEvents', owner: 'project',
     resourceIdentity: RESOURCE_IDENTITY('historical-event', 'fact', '历史事件'),
+    worldSemantic: { version: 1, area: 'foundation', resourceKind: 'historical-event', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldScoped: true, exportable: true, communityShare: 'world', releaseSection: 'foundation',
-    worldDomains: ['foundation'],
+    worldScoped: true, exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.historicalKeywords, name: 'historicalKeywords', owner: 'project',
     resourceIdentity: RESOURCE_IDENTITY('historical-keyword', 'fact', '历史关键词'),
+    worldSemantic: { version: 1, area: 'foundation', resourceKind: 'historical-keyword', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldScoped: true, exportable: true, communityShare: 'world', releaseSection: 'foundation',
-    worldDomains: ['foundation'],
+    worldScoped: true, exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }] },
 
   { table: db.importantLocations, name: 'importantLocations', owner: 'project',
     resourceIdentity: RESOURCE_IDENTITY('location', 'location', '重要地点'),
+    worldSemantic: { version: 1, area: 'entities', resourceKind: 'location', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    exportable: true, communityShare: 'world', releaseSection: 'foundation', tree: { parentField: 'parentId' }, exportIdField: true,
-    worldDomains: ['foundation', 'assets'],
+    exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation', tree: { parentField: 'parentId' }, exportIdField: true,
     refs: [
       { kind: 'simple', field: 'id', target: 'codexEntries[importantLocationId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'characters[importantLocationId]', onDelete: 'setNull' },
@@ -405,18 +425,18 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.worldRulesProfiles, name: 'worldRulesProfiles', owner: 'project',
     resourceIdentity: RESOURCE_IDENTITY('world-rules', 'worldview-field', '世界规则'),
+    worldSemantic: { version: 1, area: 'foundation', resourceKind: 'world-rules', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldScoped: true, exportable: true, communityShare: 'world', releaseSection: 'foundation',
-    worldDomains: ['foundation'],
+    worldScoped: true, exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     exportRemap: [{ field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' }],
     note: '真实与幻想规则每世界一套;null 为单世界/默认主世界' },
 
   // ───────────────────── 角色 ─────────────────────
   { table: db.characters, name: 'characters', owner: 'project', homeWorldScoped: true,
     resourceIdentity: RESOURCE_IDENTITY('character', 'character', '角色', 'registered-fields'),
+    worldSemantic: { version: 1, area: 'characters', resourceKind: 'character', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    exportable: true, communityShare: 'world', releaseSection: 'characters',
-    worldDomains: ['assets'],
+    exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'characters',
     defaults: { narrativeStatus: 'active' },
     refs: [
       // 删角色 → 关系级联删 + 细纲数组引用清理
@@ -440,9 +460,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.characterRelations, name: 'characterRelations', owner: 'project',
     resourceIdentity: RESOURCE_IDENTITY('character-relation', 'character-relation', '角色关系'),
+    worldSemantic: { version: 1, area: 'relations', resourceKind: 'character-relation', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    exportable: true, communityShare: 'world', releaseSection: 'characters',
-    worldDomains: ['assets'],
+    exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'characters',
     exportRemap: [
       { field: 'fromCharacterId', remapVia: 'characters', exportAs: '_fromCharacterIndex', onUnmapped: 'drop' },
       { field: 'toCharacterId', remapVia: 'characters', exportAs: '_toCharacterIndex', onUnmapped: 'drop' },
@@ -453,9 +473,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   // ───────────────────── 大纲 / 章节 / 细纲 ─────────────────────
   { table: db.outlineNodes, name: 'outlineNodes', owner: 'project', worldScoped: true,
     resourceIdentity: RESOURCE_IDENTITY('outline-node', 'outline-node', '大纲节点'),
+    worldSemantic: { version: 1, area: 'outline', resourceKind: 'outline-node', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
-    exportable: true, communityShare: 'world', releaseSection: 'outline', tree: { parentField: 'parentId' }, exportIdField: true,
-    worldDomains: ['narrative'],
+    exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'outline', tree: { parentField: 'parentId' }, exportIdField: true,
     // summary 是非可选字段,但老数据/跨版本导入的 JSON 可能整体缺该键 → 导入兜成 ''，
     // 保证 OutlineNode.summary 不变量(恒为 string),读取处无需散补 `?.`。
     defaults: { summary: '' },
@@ -472,6 +492,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.chapters, name: 'chapters', owner: 'project', exportable: true,
     resourceIdentity: RESOURCE_IDENTITY('chapter', 'chapter', '章节'),
+    worldSemantic: { version: 1, area: 'manuscript', resourceKind: 'chapter', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORK_OWNER,
     workspaceProjection: {
       version: 1, classification: 'editable', documentKind: 'chapter', mapper: 'chapter-markdown-v1',
@@ -494,9 +515,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.detailedOutlines, name: 'detailedOutlines', owner: 'project', exportable: true,
     resourceIdentity: RESOURCE_IDENTITY('detailed-outline', 'detailed-outline', '细纲'),
+    worldSemantic: { version: 1, area: 'detailed-outline', resourceKind: 'detailed-outline', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
-    communityShare: 'world', releaseSection: 'outline',
-    worldDomains: ['narrative'],
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'outline',
     refs: [
       { kind: 'array', field: 'appearingCharacterIds', itemTarget: 'characters', onDelete: 'removeItem' },
       { kind: 'array', field: 'foreshadowIds', itemTarget: 'foreshadows', onDelete: 'removeItem' },
@@ -517,15 +538,15 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   // ───────────────────── 下游产物 / 工具 ─────────────────────
   { table: db.foreshadows, name: 'foreshadows', owner: 'project', exportable: true,
     resourceIdentity: RESOURCE_IDENTITY('foreshadow', 'foreshadow', '伏笔'),
+    worldSemantic: { version: 1, area: 'story', resourceKind: 'foreshadow', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
-    worldDomains: ['narrative'],
     note: '可跨世界;plant/resolveChapterId 为软引用(删章不强删)' },
 
   { table: db.storyArcs, name: 'storyArcs', owner: 'project', exportable: true,
     resourceIdentity: RESOURCE_IDENTITY('story-arc', 'story-arc', '故事线'),
+    worldSemantic: { version: 1, area: 'storylines', resourceKind: 'story-arc', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
-    communityShare: 'world', releaseSection: 'narrative',
-    worldDomains: ['narrative'],
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportIdField: true,
     refs: [
       { kind: 'simple', field: 'id', target: 'storylineProgress[arcId]', onDelete: 'cascade' },
@@ -542,7 +563,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.narrativeModules, name: 'narrativeModules', owner: 'project', exportable: true, exportIdField: true,
     resourceIdentity: RESOURCE_IDENTITY('narrative-module', 'narrative-blueprint', '叙事蓝图'),
     domainOwner: LEGACY_WORLD_OR_WORK_OWNER,
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     refs: [
       { kind: 'simple', field: 'id', target: 'narrativeNodes[moduleId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'narrativeBeats[moduleId]', onDelete: 'cascade' },
@@ -557,7 +578,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.narrativeNodes, name: 'narrativeNodes', owner: 'project', exportable: true, exportIdField: true,
     resourceIdentity: RESOURCE_IDENTITY('narrative-node', 'narrative-blueprint', '叙事节点'),
     domainOwner: { allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportRemap: [
       { field: 'moduleId', remapVia: 'narrativeModules', exportAs: '_moduleExportId', onUnmapped: 'require' },
       { field: 'sourceOutlineNodeId', remapVia: 'outlineNodes', exportAs: '_sourceOutlineExportId' },
@@ -568,7 +589,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.narrativeBeats, name: 'narrativeBeats', owner: 'project', exportable: true, exportIdField: true,
     resourceIdentity: RESOURCE_IDENTITY('narrative-beat', 'narrative-blueprint', '叙事节拍'),
     domainOwner: { allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportRemap: [
       { field: 'moduleId', remapVia: 'narrativeModules', exportAs: '_moduleExportId', onUnmapped: 'require' },
       { field: 'speakerCharacterId', remapVia: 'characters', exportAs: '_speakerCharacterExportId' },
@@ -579,7 +600,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.narrativeChoices, name: 'narrativeChoices', owner: 'project', exportable: true, exportIdField: true,
     resourceIdentity: RESOURCE_IDENTITY('narrative-choice', 'narrative-blueprint', '叙事选择'),
     domainOwner: { allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportRemap: [
       { field: 'moduleId', remapVia: 'narrativeModules', exportAs: '_moduleExportId', onUnmapped: 'require' },
     ],
@@ -591,7 +612,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.gameDefinitions, name: 'gameDefinitions', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     refs: [
       { kind: 'simple', field: 'id', target: 'gameReleases[gameDefinitionId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'interactionCharacterProfiles[gameDefinitionId]', onDelete: 'cascade' },
@@ -616,7 +637,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.interactionCharacterProfiles, name: 'interactionCharacterProfiles', owner: 'project',
     exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -632,7 +653,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.interactionSceneTemplates, name: 'interactionSceneTemplates', owner: 'project',
     exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -649,7 +670,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.adventureModules, name: 'adventureModules', owner: 'project',
     exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -661,7 +682,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.avgMediaAssets, name: 'avgMediaAssets', owner: 'project',
     exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['assets'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     refs: [{ kind: 'simple', field: 'id', target: 'avgMediaBlobs[mediaAssetId]', onDelete: 'cascade' }],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
@@ -681,7 +702,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       integrity: { metadataTable: 'avgMediaAssets', referenceField: 'mediaAssetId', hashField: 'contentHash', sizeField: 'byteSize' },
     },
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['assets'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -694,7 +715,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.avgPresentationModules, name: 'avgPresentationModules', owner: 'project',
     exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -706,7 +727,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.narrativeSimulationModules, name: 'narrativeSimulationModules', owner: 'project',
     exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -718,7 +739,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.openWorldModules, name: 'openWorldModules', owner: 'project',
     exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['narrative'], communityShare: 'world', releaseSection: 'narrative',
+    legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'narrative',
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -729,7 +750,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.gameReleases, name: 'gameReleases', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    worldDomains: ['narrative'],
     refs: [{ kind: 'simple', field: 'id', target: 'simulationSessions[gameReleaseId]', onDelete: 'setNull' }],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
@@ -774,6 +794,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.storylineProgress, name: 'storylineProgress', owner: 'project',
     resourceIdentity: RESOURCE_IDENTITY('storyline-progress', 'storyline-progress', '故事线进度'),
+    worldSemantic: { version: 1, area: 'storylines', resourceKind: 'storyline-progress', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORK_OWNER,
     exportable: true,
     defaults: { status: 'dormant', involvedEntities: '[]' },
@@ -785,6 +806,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.storylineCrossings, name: 'storylineCrossings', owner: 'project',
     resourceIdentity: RESOURCE_IDENTITY('storyline-crossing', 'storyline-progress', '故事线交汇'),
+    worldSemantic: { version: 1, area: 'storylines', resourceKind: 'storyline-crossing', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORK_OWNER,
     exportable: true,
     exportRemap: [
@@ -796,10 +818,12 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.stateCards, name: 'stateCards', owner: 'project', exportable: true,
     resourceIdentity: RESOURCE_IDENTITY('state-card', 'fact', '状态卡'),
+    worldSemantic: { version: 1, area: 'entities', resourceKind: 'state-card', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORK_OWNER },
 
   { table: db.itemLedger, name: 'itemLedger', owner: 'project', exportable: true,
     resourceIdentity: RESOURCE_IDENTITY('item-ledger', 'fact', '物品流水'),
+    worldSemantic: { version: 1, area: 'entities', resourceKind: 'item-event', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORK_OWNER,
     defaults: { heldByName: '' },
     refs: [
@@ -813,6 +837,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.storyTimelineEvents, name: 'storyTimelineEvents', owner: 'project', exportable: true,
     resourceIdentity: RESOURCE_IDENTITY('story-timeline-event', 'fact', '故事年表'),
+    worldSemantic: { version: 1, area: 'story', resourceKind: 'story-timeline-event', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORK_OWNER,
     exportRemap: [{ field: 'chapterId', remapVia: 'chapters', exportAs: '_chapterExportId' }] },
 
@@ -839,8 +864,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   // ───────────────────── 词条系统 ─────────────────────
   { table: db.codexCategories, name: 'codexCategories', owner: 'project',
     resourceIdentity: RESOURCE_IDENTITY('codex-category', 'codex-entry', '词条分类'),
+    worldSemantic: { version: 1, area: 'entities', resourceKind: 'codex-category', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    exportable: true, communityShare: 'world', releaseSection: 'foundation', tree: { parentField: 'parentId' }, exportIdField: true,
+    exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation', tree: { parentField: 'parentId' }, exportIdField: true,
     refs: [{ kind: 'simple', field: 'id', target: 'codexEntries[categoryId]', onDelete: 'cascade' }],
     exportRemap: [
       { field: 'parentId', remapVia: 'codexCategories', selfTree: true, exportAs: '_parentExportId' },
@@ -850,9 +876,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.codexEntries, name: 'codexEntries', owner: 'project', worldScoped: true,
     resourceIdentity: RESOURCE_IDENTITY('codex-entry', 'codex-entry', '设定词条'),
+    worldSemantic: { version: 1, area: 'entities', resourceKind: 'codex-entry', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    exportable: true, communityShare: 'world', releaseSection: 'foundation',
-    worldDomains: ['foundation', 'assets'],
+    exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     refs: [
       { kind: 'json', field: 'refs', jsonPath: '$.*', target: 'codexEntries[id]', onDelete: 'remap' },
       { kind: 'simple', field: 'id', target: 'characters[raceEntryId]', onDelete: 'setNull' },
@@ -1018,7 +1044,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.simulationSessions, name: 'simulationSessions', owner: 'project',
     domainOwner: { allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'field', owner: 'instance', field: 'id' } },
     worldScoped: true, exportable: true, exportIdField: true,
-    worldDomains: ['runtime'],
     tree: { parentField: 'parentSessionId' },
     refs: [
       { kind: 'simple', field: 'id', target: 'simulationSessions[parentSessionId]', onDelete: 'setNull' },
@@ -1056,7 +1081,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.simulationEvents, name: 'simulationEvents', owner: 'project',
     domainOwner: { allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'parent', owner: 'instance', table: 'simulationSessions', field: 'sessionId' } },
     worldScoped: true, exportable: true,
-    worldDomains: ['runtime'],
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
       { field: 'sessionId', remapVia: 'simulationSessions',
@@ -1071,7 +1095,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.simulationCheckpoints, name: 'simulationCheckpoints', owner: 'project',
     domainOwner: { allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'parent', owner: 'instance', table: 'simulationSessions', field: 'sessionId' } },
     worldScoped: true, exportable: true,
-    worldDomains: ['runtime'],
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
       { field: 'sessionId', remapVia: 'simulationSessions',
@@ -1088,6 +1111,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   //   调 fact-ledger/lifecycle.ts 清 source/valid chapter FK 并降级待复核。绝不自动改写相邻时序。
   { table: db.temporalFacts, name: 'temporalFacts', owner: 'project', worldScoped: true,
     resourceIdentity: RESOURCE_IDENTITY('temporal-fact', 'fact', '时序事实'),
+    worldSemantic: { version: 1, area: 'story', resourceKind: 'temporal-fact', canonPolicy: 'confirmed-rows-only', statusField: 'status', confirmedStatusValues: ['confirmed'] },
     domainOwner: LEGACY_WORK_OWNER,
     exportable: true, exportIdField: true,
     defaults: { status: 'candidate', locked: false },
@@ -1119,6 +1143,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   // 项目/世界生命周期与导出导入由本注册表派生。
   { table: db.knowledgeLedger, name: 'knowledgeLedger', owner: 'project', worldScoped: true,
     resourceIdentity: RESOURCE_IDENTITY('knowledge-event', 'fact', '角色认知'),
+    worldSemantic: { version: 1, area: 'relations', resourceKind: 'knowledge-event', canonPolicy: 'confirmed-rows-only', statusField: 'status', confirmedStatusValues: ['confirmed'] },
     domainOwner: LEGACY_WORK_OWNER,
     exportable: true,
     defaults: { status: 'candidate' },
@@ -1147,17 +1172,17 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'NS-5 章→卷→全书层级摘要树·可重建派生缓存；四态 pending/rebuilding/verified/stale' },
 
   // ───────────────────── 多世界 ─────────────────────
-  { table: db.worldGroups, name: 'worldGroups', owner: 'project', exportable: true, communityShare: 'world', releaseSection: 'foundation',
+  { table: db.worldGroups, name: 'worldGroups', owner: 'project', exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     resourceIdentity: RESOURCE_IDENTITY('world-group', 'world', '世界'),
+    worldSemantic: { version: 1, area: 'multi-world', resourceKind: 'world-group', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldDomains: ['structure'],
     exportIdField: true, exportOrderBy: 'order',
     note: '导出用 _exportId(导出序)重映射;按 order 排序保证序稳定' },
 
-  { table: db.worldGroupLinks, name: 'worldGroupLinks', owner: 'project', exportable: true, communityShare: 'world', releaseSection: 'foundation',
+  { table: db.worldGroupLinks, name: 'worldGroupLinks', owner: 'project', exportable: true, legacyWorldPackageV1: 'world', legacyWorldReleaseSection: 'foundation',
     resourceIdentity: RESOURCE_IDENTITY('world-group-link', 'world-link', '世界通道'),
+    worldSemantic: { version: 1, area: 'multi-world', resourceKind: 'world-link', canonPolicy: 'authoritative-table' },
     domainOwner: LEGACY_WORLD_OWNER,
-    worldDomains: ['structure'],
     exportRemap: [
       { field: 'fromGroupId', remapVia: 'worldGroups', exportAs: '_fromGroupExportId', onUnmapped: 'require' },
       { field: 'toGroupId', remapVia: 'worldGroups', exportAs: '_toGroupExportId', onUnmapped: 'require' },
@@ -1604,7 +1629,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     refs: [
       {
         kind: "simple",
@@ -1645,7 +1669,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     exportRemap: [
       {
         field: "worldId",
@@ -1699,7 +1722,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     },
     worldScoped: true,
     exportable: true,
-    worldDomains: ["runtime"],
     exportRemap: [
       {
         field: "worldGroupId",
@@ -1755,7 +1777,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     },
     worldScoped: true,
     exportable: true,
-    worldDomains: ["runtime"],
     exportRemap: [
       {
         field: "worldGroupId",
@@ -1814,7 +1835,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     refs: [
       ...[
         "ttrpgSourceSelections",
@@ -1855,7 +1875,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     exportRemap: [
       { field: "worldId", remapVia: "worlds", exportAs: "_worldExportId", onUnmapped: "require" },
       { field: "workId", remapVia: "works", exportAs: "_workExportId", onUnmapped: "require" },
@@ -1877,7 +1896,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     exportRemap: [
       { field: "worldId", remapVia: "worlds", exportAs: "_worldExportId", onUnmapped: "require" },
       { field: "workId", remapVia: "works", exportAs: "_workExportId", onUnmapped: "require" },
@@ -1899,7 +1917,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     exportRemap: [
       { field: "worldId", remapVia: "worlds", exportAs: "_worldExportId", onUnmapped: "require" },
       { field: "workId", remapVia: "works", exportAs: "_workExportId", onUnmapped: "require" },
@@ -1921,7 +1938,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     refs: [
       {
         kind: "simple",
@@ -1958,7 +1974,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["assets"],
     exportRemap: [
       { field: "worldId", remapVia: "worlds", exportAs: "_worldExportId", onUnmapped: "require" },
       { field: "workId", remapVia: "works", exportAs: "_workExportId", onUnmapped: "require" },
@@ -1986,7 +2001,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     exportRemap: [
       { field: "worldId", remapVia: "worlds", exportAs: "_worldExportId", onUnmapped: "require" },
       { field: "workId", remapVia: "works", exportAs: "_workExportId", onUnmapped: "require" },
@@ -2010,7 +2024,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     refs: [
       {
         kind: "simple",
@@ -2058,7 +2071,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     refs: [
       {
         kind: "simple",
@@ -2111,7 +2123,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     refs: [
       {
         kind: "simple",
@@ -2168,7 +2179,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     exportRemap: [
       { field: "worldId", remapVia: "worlds", exportAs: "_worldExportId", onUnmapped: "require" },
       { field: "workId", remapVia: "works", exportAs: "_workExportId", onUnmapped: "require" },
@@ -2189,7 +2199,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     exportRemap: [
       { field: "worldId", remapVia: "worlds", exportAs: "_worldExportId", onUnmapped: "require" },
       { field: "workId", remapVia: "works", exportAs: "_workExportId", onUnmapped: "require" },
@@ -2214,7 +2223,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     refs: [{ kind: "simple", field: "blobObjectId", target: "mediaBlobObjects[id]", onDelete: "setNull" }],
     exportRemap: [
       { field: "worldId", remapVia: "worlds", exportAs: "_worldExportId", onUnmapped: "require" },
@@ -2235,7 +2243,6 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true,
     exportIdField: true,
     domainOwner: LEGACY_WORK_OWNER,
-    worldDomains: ["narrative"],
     refs: [{ kind: "simple", field: "id", target: "characterInteractionProductions[currentProductReleaseId]", onDelete: "setNull" }],
     exportRemap: [
       { field: "worldId", remapVia: "worlds", exportAs: "_worldExportId", onUnmapped: "require" },

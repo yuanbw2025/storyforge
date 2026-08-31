@@ -1,8 +1,6 @@
 import {
   ArrowRight,
   BookOpen,
-  Clock3,
-  Compass,
   Layers3,
   Map,
   Network,
@@ -12,7 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { SidebarModule } from '../layout/sidebar-tree'
-import type { WorldDomainArea } from '../../lib/registry/types'
+import type { WorldCapabilityArea } from '../../lib/registry/types'
 import type { WorldDomainSummary, WorldProjection } from '../../lib/world-engine/domain'
 import WorldWorkManager from './WorldWorkManager'
 import WorldNarrativeReleasePanel from './WorldNarrativeReleasePanel'
@@ -30,7 +28,7 @@ interface DomainModuleLink {
   label: string
 }
 
-const DOMAIN_META: Record<WorldDomainArea, { icon: LucideIcon; modules: readonly DomainModuleLink[] }> = {
+const DOMAIN_META: Record<WorldCapabilityArea, { icon: LucideIcon; modules: readonly DomainModuleLink[] }> = {
   foundation: {
     icon: Sparkles,
     modules: [
@@ -42,30 +40,48 @@ const DOMAIN_META: Record<WorldDomainArea, { icon: LucideIcon; modules: readonly
       { module: 'world-map', label: '世界地图' },
     ],
   },
-  assets: {
-    icon: Users,
-    modules: [
-      { module: 'characters', label: '角色档案' },
-      { module: 'relations', label: '角色关系' },
-      { module: 'locations', label: '重要地点' },
-    ],
-  },
-  narrative: {
+  story: {
     icon: BookOpen,
     modules: [
       { module: 'story-design', label: '故事设计' },
-      { module: 'story-arc', label: '主线与支线' },
-      { module: 'outline', label: '大纲与细纲' },
       { module: 'foreshadow', label: '伏笔管理' },
     ],
   },
-  structure: {
+  characters: {
+    icon: Users,
+    modules: [
+      { module: 'characters', label: '角色档案' },
+    ],
+  },
+  relations: {
+    icon: Network,
+    modules: [{ module: 'relations', label: '角色关系' }],
+  },
+  entities: {
+    icon: Map,
+    modules: [{ module: 'locations', label: '地点与实体' }],
+  },
+  storylines: {
+    icon: Layers3,
+    modules: [{ module: 'story-arc', label: '主线与支线' }],
+  },
+  outline: {
+    icon: BookOpen,
+    modules: [
+      { module: 'outline', label: '大纲' },
+    ],
+  },
+  'detailed-outline': {
+    icon: Layers3,
+    modules: [{ module: 'outline', label: '细纲' }],
+  },
+  manuscript: {
+    icon: BookOpen,
+    modules: [{ module: 'outline', label: '章节与正文' }],
+  },
+  'multi-world': {
     icon: Network,
     modules: [{ module: 'world-overview', label: '位面与多世界' }],
-  },
-  runtime: {
-    icon: Clock3,
-    modules: [{ module: 'simulation-runtime', label: '状态机与实例' }],
   },
 }
 
@@ -99,32 +115,29 @@ const TABLE_LABELS: Record<string, string> = {
   storyArcs: '故事线',
   outlineNodes: '大纲',
   detailedOutlines: '细纲',
+  chapters: '正文',
   foreshadows: '伏笔',
   worldGroups: '位面与子世界',
   worldGroupLinks: '世界通道',
-  simulationSessions: '运行实例',
-  simulationEvents: '状态事件',
-  simulationCheckpoints: '检查点',
-  worldRevisions: '世界修订',
-  worldReleases: '世界发布',
-  narrativeModules: '叙事模块',
-  narrativeNodes: '叙事节点',
-  narrativeBeats: '叙事节拍',
-  narrativeChoices: '叙事选择',
-  gameDefinitions: '游戏定义',
-  gameReleases: '游戏发布',
-  avgMediaAssets: '视觉媒资',
-  avgMediaBlobs: '媒资文件',
-  interactionModules: '互动模块',
-  interactionCharacterProfiles: '互动角色档案',
+  storylineProgress: '故事线进度',
+  storylineCrossings: '故事线交汇',
+  storyTimelineEvents: '故事年表',
+  temporalFacts: '时序事实',
+  knowledgeLedger: '角色认知',
+  itemLedger: '物品事件',
 }
 
 const TABLE_DISPLAY_PRIORITY: Record<WorldDomainSummary['key'], readonly string[]> = {
-  foundation: ['worldviews', 'worldRulesProfiles', 'geographies', 'histories', 'powerSystems', 'historicalTimelineEvents', 'historicalKeywords', 'importantLocations', 'worldReleases', 'worldRevisions'],
-  assets: ['characters', 'characterRelations', 'importantLocations', 'codexEntries', 'avgMediaAssets', 'avgMediaBlobs'],
-  narrative: ['storyCores', 'storyArcs', 'outlineNodes', 'detailedOutlines', 'foreshadows', 'narrativeModules', 'narrativeNodes', 'narrativeBeats', 'narrativeChoices', 'gameDefinitions', 'gameReleases'],
-  structure: ['worldGroups', 'worldGroupLinks', 'worldNodes'],
-  runtime: ['simulationSessions', 'simulationEvents', 'simulationCheckpoints'],
+  foundation: ['worldviews', 'worldRulesProfiles', 'geographies', 'histories', 'powerSystems', 'cultivationSystems', 'historicalTimelineEvents'],
+  story: ['storyCores', 'storyTimelineEvents', 'temporalFacts', 'foreshadows', 'cultivationProgress'],
+  characters: ['characters'],
+  relations: ['characterRelations', 'knowledgeLedger'],
+  entities: ['importantLocations', 'worldNodes', 'codexEntries', 'itemLedger', 'stateCards'],
+  storylines: ['storyArcs', 'storylineProgress', 'storylineCrossings'],
+  outline: ['outlineNodes'],
+  'detailed-outline': ['detailedOutlines'],
+  manuscript: ['chapters'],
+  'multi-world': ['worldGroups', 'worldGroupLinks'],
 }
 
 function DomainCard({ summary, onOpenModule }: { summary: WorldDomainSummary; onOpenModule: Props['onOpenModule'] }) {
@@ -140,7 +153,7 @@ function DomainCard({ summary, onOpenModule }: { summary: WorldDomainSummary; on
     })
   return (
     <article className="sf-feature-card sf-world-domain-card">
-      <span className={`sf-feature-icon sf-feature-${summary.key === 'foundation' ? 'ochre' : summary.key === 'assets' ? 'teal' : summary.key === 'narrative' ? 'rust' : summary.key === 'structure' ? 'blue' : 'violet'}`}>
+      <span className={`sf-feature-icon sf-feature-${summary.key === 'foundation' ? 'ochre' : summary.key === 'characters' || summary.key === 'relations' ? 'teal' : summary.key === 'story' || summary.key === 'storylines' ? 'rust' : summary.key === 'multi-world' ? 'blue' : 'violet'}`}>
         <Icon className="h-5 w-5" />
       </span>
       <div className="sf-feature-copy">
@@ -201,7 +214,6 @@ export default function WorldEngineWorkspace({ projection, onOpenModule, activeW
         projectId={projection.projectId}
         activeWorkId={activeWorkId}
         onChanged={onWorkChanged ?? (() => {})}
-        onOpenRuntime={() => onOpenModule('simulation-runtime')}
         onOpenGameProduction={onOpenGameProduction ?? (() => {})}
       />
       <div className="sf-world-engine-lower-grid">
@@ -211,17 +223,9 @@ export default function WorldEngineWorkspace({ projection, onOpenModule, activeW
           <div className="sf-world-engine-bridge-links">
             <button className="sf-action-tile" onClick={() => onOpenModule('outline')}><span className="sf-action-tile-icon"><BookOpen className="h-4 w-4" /></span><span><strong>分步骤叙事投影</strong><small>卷纲、章纲、细纲和正文继续使用原工作流</small></span><ArrowRight className="h-4 w-4" /></button>
             <button className="sf-action-tile" onClick={() => onOpenModule('world-map')}><span className="sf-action-tile-icon"><Map className="h-4 w-4" /></span><span><strong>空间与世界结构</strong><small>自然环境、地图和位面结构保持同一数据来源</small></span><ArrowRight className="h-4 w-4" /></button>
-            <button className="sf-action-tile" onClick={() => onOpenModule('characters')}><span className="sf-action-tile-icon"><Users className="h-4 w-4" /></span><span><strong>角色与关系资产</strong><small>世界角色、地点和关系可被作品与实例引用</small></span><ArrowRight className="h-4 w-4" /></button>
+            <button className="sf-action-tile" onClick={() => onOpenModule('characters')}><span className="sf-action-tile-icon"><Users className="h-4 w-4" /></span><span><strong>角色与关系语义</strong><small>角色、地点和关系通过冻结世界版本供上层产品按需读取</small></span><ArrowRight className="h-4 w-4" /></button>
           </div>
         </section>
-        <aside className="sf-world-engine-runtime">
-          <div className="sf-card-kicker"><Compass className="h-4 w-4" /> 运行基座</div>
-          <h3>独立实例状态</h3>
-          <div className="sf-world-runtime-stat"><strong>{projection.runtime.instanceCount}</strong><span>运行实例</span></div>
-          <div className="sf-world-runtime-stat"><strong>{projection.runtime.eventCount}</strong><span>事件记录</span></div>
-          <div className="sf-world-runtime-stat"><strong>{projection.runtime.checkpointCount}</strong><span>检查点</span></div>
-          <button className="sf-text-button" onClick={() => onOpenModule('simulation-runtime')}>查看状态机 <ArrowRight className="h-4 w-4" /></button>
-        </aside>
       </div>
     </div>
   )

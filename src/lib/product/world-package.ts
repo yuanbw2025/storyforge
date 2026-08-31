@@ -1,12 +1,17 @@
-import { exportProjectJSON, importProjectJSON, type ProjectExportData } from '../export/json-export'
+import { importProjectJSON, type ProjectExportData } from '../export/json-export'
 import { inspectProjectBackup } from '../export/backup-trust'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { db } from '../db/schema'
 import { cascadeDeleteProject } from '../registry/lifecycle'
-import type { CommunityWorldLicense, Project, WorldReleaseManifestV2 } from '../types'
+import type { CommunityWorldLicense, WorldReleaseManifestV2 } from '../types'
 import { generateWorldCode } from './world-identity'
 import { assertReleaseUnchanged, stableJson } from '../world-engine/releases'
 import { resolveWorkspaceScope } from '../world-engine/ownership'
+import {
+  classifyWorldReleasePayloadV1,
+  WORLD_SEMANTIC_TABLE_NAMES,
+  type WorldReleaseClassificationV1,
+} from '../world-engine/release-classification'
 
 export const WORLD_PACKAGE_FORMAT = 'storyforge.world-package'
 export const WORLD_PACKAGE_VERSION = 1
@@ -56,8 +61,12 @@ export interface WorldPackageV2 {
 
 export interface WorldPackageTrustReport {
   valid: boolean
+  /** Pure semantic packages are importable; legacy packages require split migration. */
+  importable: boolean
+  migrationRequired: boolean
   manifest: WorldPackageManifest | null
   backupReport: ReturnType<typeof inspectProjectBackup> | null
+  classification: WorldReleaseClassificationV1 | null
   errors: string[]
   warnings: string[]
 }
@@ -70,10 +79,6 @@ const LICENSES = new Set<CommunityWorldLicense>([
 ])
 
 const ROOT_TABLES = ['worlds', 'works'] as const
-// 世界包只承载世界共享表，不是 v6+ 的完整项目备份。固定声明为最后一个不要求
-// 改编私有表的备份版本，避免为了满足完整备份契约而在分享包中泄露/伪造私有表键。
-const WORLD_PACKAGE_PORTABLE_BACKUP_VERSION = 5
-
 // Frozen at PLATFORM-1 v1 (commit 60df0b4). Later world-engine tables are
 // optional when importing an existing v1 package, even if current v1 exports include them.
 const V1_REQUIRED_SHAREABLE_TABLES = [
@@ -95,21 +100,19 @@ const V1_REQUIRED_SHAREABLE_TABLES = [
   'worldGroupLinks',
 ] as const
 
-const RELEASE_SHAREABLE_TABLES = PROJECT_TABLES
-  .filter(spec => spec.communityShare === 'world'
+const LEGACY_V1_WORLD_TABLES = PROJECT_TABLES
+  .filter(spec => spec.legacyWorldPackageV1 === 'world'
     && spec.name !== 'projects'
     && spec.name !== 'worldReleases')
   .map(spec => spec.name)
 
-const SHAREABLE_TABLES = [...new Set([
-  ...ROOT_TABLES,
-  ...RELEASE_SHAREABLE_TABLES,
-])]
-
-const PRIVATE_TABLES = PROJECT_TABLES
-  .filter(spec => spec.exportable && spec.communityShare !== 'world'
+const LEGACY_V1_PRIVATE_TABLES = PROJECT_TABLES
+  .filter(spec => spec.exportable && spec.legacyWorldPackageV1 !== 'world'
     && spec.name !== 'projects' && !ROOT_TABLES.includes(spec.name as typeof ROOT_TABLES[number]))
   .map(spec => spec.name)
+
+const WORLD_SEMANTIC_SET = new Set(WORLD_SEMANTIC_TABLE_NAMES)
+const WORLD_PACKAGE_MAX_BYTES = 32 * 1024 * 1024
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -138,29 +141,6 @@ function payloadForIntegrity(pkg: Omit<WorldPackage, 'integrity'> | Omit<WorldPa
     : { format: pkg.format, packageVersion: pkg.packageVersion, manifest: pkg.manifest, release: pkg.release }
 }
 
-function buildPortableProject(backup: ProjectExportData): ProjectExportData {
-  const root = { ...backup.project } as Record<string, unknown>
-  // 世界包不携带作者正文、封面、风格画像或当前角色驱动方案；项目表仍由统一导入入口创建。
-  for (const key of ['currentWordCount', 'coverImage', 'writingStyleId', 'methodologyId', 'activeCharacterDrivenPlanId']) {
-    delete root[key]
-  }
-  root.status = 'drafting'
-  root.targetWordCount = 0
-  root.updatedAt = Date.now()
-
-  const portable: Record<string, unknown> = {
-    version: Math.min(backup.version, WORLD_PACKAGE_PORTABLE_BACKUP_VERSION),
-    exportedAt: Date.now(),
-    project: root,
-  }
-  if (backup.ownership) portable.ownership = cloneJson(backup.ownership)
-  const backupRecord = backup as unknown as Record<string, unknown>
-  for (const tableName of SHAREABLE_TABLES) {
-    portable[tableName] = JSON.parse(JSON.stringify(backupRecord[tableName] ?? []))
-  }
-  return portable as unknown as ProjectExportData
-}
-
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
@@ -175,36 +155,9 @@ export async function createWorldPackage(
     contentWarnings?: string[]
   },
 ): Promise<WorldPackage> {
-  const backup = await exportProjectJSON(projectId)
-  const project = backup.project as Project
-  if (!project.worldCode || !project.worldVersion) throw new Error('该项目还没有可发布的世界编号，请先回到世界引擎页面。')
-  if (!options.authorName.trim()) throw new Error('请填写作者署名。')
-  if (!LICENSES.has(options.license)) throw new Error('许可选项无效。')
-  if (!Object.values(options.allowedUses).some(Boolean)) throw new Error('至少选择一种允许的使用方式。')
-
-  const manifest: WorldPackageManifest = {
-    packageId: `${project.worldCode}@v${project.worldVersion}`,
-    sourceWorldCode: project.worldCode,
-    sourceWorldVersion: project.worldVersion,
-    name: project.name,
-    description: project.description || '',
-    authorName: options.authorName.trim(),
-    attribution: options.attribution?.trim() || `${options.authorName.trim()} · ${project.name}`,
-    license: options.license,
-    allowedUses: { ...options.allowedUses },
-    contentWarnings: (options.contentWarnings ?? []).map(item => item.trim()).filter(Boolean).slice(0, 12),
-    publishedAt: Date.now(),
-  }
-  const withoutIntegrity = {
-    format: WORLD_PACKAGE_FORMAT as typeof WORLD_PACKAGE_FORMAT,
-    packageVersion: WORLD_PACKAGE_VERSION as typeof WORLD_PACKAGE_VERSION,
-    manifest,
-    portableProject: buildPortableProject(backup),
-  }
-  return {
-    ...withoutIntegrity,
-    integrity: { algorithm: 'SHA-256', digest: await sha256(canonicalStringify(payloadForIntegrity(withoutIntegrity))) },
-  }
+  void projectId
+  void options
+  throw new Error('世界包 v1 仅供历史读取与迁移；请先封存纯语义 WorldRelease，再生成 v2 分享包。')
 }
 
 export async function createWorldPackageV2(
@@ -221,8 +174,13 @@ export async function createWorldPackageV2(
   const release = await db.worldReleases.get(releaseId)
   if (!release) throw new Error('发布版本不存在。')
   const releaseManifest = JSON.parse(release.manifestJson) as WorldReleaseManifestV2
-  if (releaseManifest.schema !== WORLD_PACKAGE_FORMAT || releaseManifest.version !== 2) {
-    throw new Error('发布版本不是可移植的世界包 v2。')
+  if (releaseManifest.schema !== WORLD_PACKAGE_FORMAT || releaseManifest.version !== 2
+    || releaseManifest.semanticContract !== 3) {
+    throw new Error('该发布不是纯语义 WorldRelease；旧发布必须先执行分类迁移。')
+  }
+  if (releaseManifest.selectedNarrativeModules.length > 0
+    || releaseManifest.selectedTables.some(table => !WORLD_SEMANTIC_SET.has(table))) {
+    throw new Error('WorldRelease 含上层产品内容，不能生成世界分享包。')
   }
   if (!options.authorName.trim()) throw new Error('请填写作者署名。')
   if (!LICENSES.has(options.license)) throw new Error('许可选项无效。')
@@ -240,7 +198,7 @@ export async function createWorldPackageV2(
     contentWarnings: (options.contentWarnings ?? []).map(item => item.trim()).filter(Boolean).slice(0, 12),
     publishedAt: release.createdAt,
     releaseHash: release.contentHash,
-    narrativeModules: cloneJson(releaseManifest.selectedNarrativeModules),
+    narrativeModules: [],
   }
   const withoutIntegrity: Omit<WorldPackageV2, 'integrity'> = {
     format: WORLD_PACKAGE_FORMAT,
@@ -253,17 +211,21 @@ export async function createWorldPackageV2(
       manifest: cloneJson(releaseManifest),
     },
   }
-  return {
+  const pkg: WorldPackageV2 = {
     ...withoutIntegrity,
     integrity: { algorithm: 'SHA-256', digest: await sha256(canonicalStringify(withoutIntegrity)) },
   }
+  if (new TextEncoder().encode(canonicalStringify(pkg)).byteLength > WORLD_PACKAGE_MAX_BYTES) {
+    throw new Error(`世界分享包超过 ${WORLD_PACKAGE_MAX_BYTES / 1024 / 1024} MiB 纯语义包预算。`)
+  }
+  return pkg
 }
 
 /** 只读验证包格式、分享范围和完整性；不写入 IndexedDB。 */
 export async function inspectWorldPackage(input: unknown): Promise<WorldPackageTrustReport> {
   const errors: string[] = []
   const warnings: string[] = []
-  if (!isRecord(input)) return { valid: false, manifest: null, backupReport: null, errors: ['分享包必须是 JSON 对象。'], warnings }
+  if (!isRecord(input)) return { valid: false, importable: false, migrationRequired: false, manifest: null, backupReport: null, classification: null, errors: ['分享包必须是 JSON 对象。'], warnings }
   if (input.format !== WORLD_PACKAGE_FORMAT) errors.push('这不是 StoryForge 世界分享包。')
   if (input.packageVersion !== WORLD_PACKAGE_VERSION && input.packageVersion !== WORLD_PACKAGE_V2_VERSION) {
     errors.push(`不支持的世界分享包版本：${String(input.packageVersion)}。`)
@@ -293,6 +255,13 @@ export async function inspectWorldPackage(input: unknown): Promise<WorldPackageT
     ? v2Manifest?.portableProject
     : input.portableProject
   const backupReport = isRecord(portableInput) ? inspectProjectBackup(portableInput) : null
+  const classification = await classifyWorldReleasePayloadV1({
+    manifest: v2Manifest as WorldReleaseManifestV2 | null,
+    portableProject: isRecord(portableInput) ? portableInput : null,
+  })
+  const semanticV2 = input.packageVersion === WORLD_PACKAGE_V2_VERSION
+    && v2Manifest?.semanticContract === 3
+    && classification.contract === 'semantic-v3'
   if (!backupReport) errors.push('分享包缺少可导入的世界数据。')
   else if (!backupReport.valid) errors.push(...backupReport.errors)
 
@@ -302,11 +271,12 @@ export async function inspectWorldPackage(input: unknown): Promise<WorldPackageT
       ? v2Manifest.selectedTables
       : []
     const v2SelectedTables = rawV2SelectedTables.filter((name): name is string => typeof name === 'string')
+    const allowedSelectedTables = semanticV2 ? WORLD_SEMANTIC_TABLE_NAMES : LEGACY_V1_WORLD_TABLES
     if (input.packageVersion === WORLD_PACKAGE_V2_VERSION
       && (!v2Manifest
         || v2SelectedTables.length !== rawV2SelectedTables.length
         || new Set(v2SelectedTables).size !== v2SelectedTables.length
-        || v2SelectedTables.some(name => !RELEASE_SHAREABLE_TABLES.includes(name)))) {
+        || v2SelectedTables.some(name => !allowedSelectedTables.includes(name)))) {
       errors.push('世界包 v2 的模块表清单无效。')
     }
     const expectedShareableTables = input.packageVersion === WORLD_PACKAGE_V2_VERSION && v2Manifest
@@ -317,7 +287,7 @@ export async function inspectWorldPackage(input: unknown): Promise<WorldPackageT
     }
     if (input.packageVersion === WORLD_PACKAGE_V2_VERSION && v2Manifest) {
       const selected = new Set(v2SelectedTables)
-      for (const tableName of RELEASE_SHAREABLE_TABLES) {
+      for (const tableName of allowedSelectedTables) {
         if (!selected.has(tableName) && Array.isArray(portable[tableName]) && portable[tableName].length > 0) {
           errors.push(`世界包 v2 含有未在清单选择的表「${tableName}」。`)
         }
@@ -356,9 +326,18 @@ export async function inspectWorldPackage(input: unknown): Promise<WorldPackageT
         }
       }
     }
-    for (const tableName of PRIVATE_TABLES) {
-      if (Array.isArray(portable[tableName]) && portable[tableName].length > 0) {
-        errors.push(`分享包包含未授权的私有表「${tableName}」，已拒绝导入。`)
+    if (semanticV2) {
+      for (const [tableName, value] of Object.entries(portable)) {
+        if (!Array.isArray(value) || value.length === 0 || ROOT_TABLES.includes(tableName as typeof ROOT_TABLES[number])) continue
+        if (!WORLD_SEMANTIC_SET.has(tableName)) {
+          errors.push(`纯语义世界包包含非世界资源「${tableName}」，已拒绝导入。`)
+        }
+      }
+    } else if (input.packageVersion === WORLD_PACKAGE_VERSION) {
+      for (const tableName of LEGACY_V1_PRIVATE_TABLES) {
+        if (Array.isArray(portable[tableName]) && portable[tableName].length > 0) {
+          errors.push(`历史分享包包含当时未授权的私有表「${tableName}」，已拒绝读取。`)
+        }
       }
     }
   }
@@ -400,12 +379,28 @@ export async function inspectWorldPackage(input: unknown): Promise<WorldPackageT
   }
 
   if (backupReport?.warnings.length) warnings.push(...backupReport.warnings)
-  return { valid: errors.length === 0, manifest, backupReport, errors, warnings }
+  if (classification.migrationRequired && errors.length === 0) {
+    warnings.push('该历史世界包混有产品内容、媒资或旧边界数据；可读取，但必须先分类迁移，不能直接导入为新世界。')
+  }
+  const valid = errors.length === 0
+  return {
+    valid,
+    importable: valid && semanticV2,
+    migrationRequired: valid && classification.migrationRequired,
+    manifest,
+    backupReport,
+    classification,
+    errors,
+    warnings,
+  }
 }
 
 export async function importWorldPackage(input: unknown): Promise<number> {
   const report = await inspectWorldPackage(input)
   if (!report.valid || !report.manifest || !isRecord(input)) throw new Error(`世界分享包预检失败：${report.errors.join('；')}`)
+  if (!report.importable) {
+    throw new Error('该历史世界包需要先执行分类迁移；系统不会把产品内容或媒资直接写入新世界。')
+  }
   const isV2 = input.packageVersion === WORLD_PACKAGE_V2_VERSION
   const release = isV2 && isRecord(input.release) ? input.release : null
   const releaseManifest = release && isRecord(release.manifest)
@@ -415,6 +410,8 @@ export async function importWorldPackage(input: unknown): Promise<number> {
   const project = { ...(packageData.project as Record<string, unknown>) }
   project.worldCode = generateWorldCode()
   project.worldVersion = report.manifest.sourceWorldVersion
+  project.workspacePurpose = 'world-engine'
+  project.workspacePurposeDecision = 'explicit'
   project.communityOrigin = {
     packageId: report.manifest.packageId,
     sourceWorldCode: report.manifest.sourceWorldCode,
@@ -435,6 +432,7 @@ export async function importWorldPackage(input: unknown): Promise<number> {
       throw new Error('世界包 v2 导入后缺少当前 World 指针')
     }
     await db.worlds.update(importedProject.activeWorldId, {
+      identityKind: 'world-draft',
       code: importedProject.worldCode,
       currentVersion: report.manifest.sourceWorldVersion,
       communityOrigin: importedProject.communityOrigin,
@@ -448,7 +446,7 @@ export async function importWorldPackage(input: unknown): Promise<number> {
       parentRevisionId: null,
       revision: Number(release.version),
       label: String(release.label),
-      manifestJson: canonicalStringify(releaseManifest),
+      manifestJson: stableJson(releaseManifest),
       contentHash: String(release.contentHash),
       createdAt: now,
       updatedAt: now,
@@ -459,7 +457,7 @@ export async function importWorldPackage(input: unknown): Promise<number> {
       revisionId,
       version: Number(release.version),
       label: String(release.label),
-      manifestJson: canonicalStringify(releaseManifest),
+      manifestJson: stableJson(releaseManifest),
       contentHash: String(release.contentHash),
       sourceWorldCode: report.manifest.sourceWorldCode,
       createdAt: now,
@@ -483,5 +481,5 @@ export function downloadWorldPackage(pkg: WorldPackage | WorldPackageV2, filenam
   URL.revokeObjectURL(url)
 }
 
-export const WORLD_PACKAGE_SHAREABLE_TABLES = [...SHAREABLE_TABLES]
+export const WORLD_PACKAGE_SHAREABLE_TABLES = [...ROOT_TABLES, ...WORLD_SEMANTIC_TABLE_NAMES]
 export const WORLD_PACKAGE_V1_REQUIRED_TABLES = [...V1_REQUIRED_SHAREABLE_TABLES]

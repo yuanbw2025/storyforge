@@ -34,8 +34,31 @@ export type TableOwner =
  * 这不是第二套数据库生命周期注册表，而是 PROJECT_TABLES 上的产品投影元数据：
  * 世界工作台、完整度和发布预检都从同一份表登记派生，避免组件再次手写表清单。
  */
-export type WorldDomainArea = 'foundation' | 'assets' | 'narrative' | 'structure' | 'runtime'
 export type WorldReleaseSection = 'foundation' | 'characters' | 'narrative' | 'outline'
+
+/** ARCH-02/07A: semantic capabilities a frozen world may actually own. */
+export type WorldCapabilityArea =
+  | 'foundation'
+  | 'story'
+  | 'characters'
+  | 'relations'
+  | 'entities'
+  | 'storylines'
+  | 'outline'
+  | 'detailed-outline'
+  | 'manuscript'
+  | 'multi-world'
+
+export interface WorldSemanticResourceSpec {
+  version: 1
+  area: WorldCapabilityArea
+  /** Stable logical resource kind exposed by the neutral release gateway. */
+  resourceKind: string
+  /** Canon rows only; candidate/derived/runtime rows need a different owner. */
+  canonPolicy: 'authoritative-table' | 'confirmed-rows-only'
+  statusField?: string
+  confirmedStatusValues?: readonly string[]
+}
 
 /** WORLD-2C product ownership, separate from the physical project lifecycle owner. */
 export type DomainOwnerKind = 'workspace' | 'world' | 'work' | 'instance'
@@ -309,8 +332,8 @@ export interface TableSpec<T = any> {
   worldGroupField?: string
   /** 是否带 homeWorldGroupId(仅 characters) */
   homeWorldScoped?: boolean
-  /** 世界引擎产品投影域；同一表可同时属于多个域。 */
-  worldDomains?: readonly WorldDomainArea[]
+  /** ARCH-02: explicit allow-list for immutable semantic WorldRelease content. */
+  worldSemantic?: WorldSemanticResourceSpec
   /** WORLD-2C 逻辑归属；物理删除/导出根仍由 owner 表达。 */
   domainOwner?: DomainOwnershipSpec
   /** MEMORY-2 人工可编辑工作区投影；未登记即禁止落盘。 */
@@ -338,10 +361,10 @@ export interface TableSpec<T = any> {
   refs?: RefSpec[]
   /** 是否纳入 JSON 备份导出 */
   exportable: boolean
-  /** PLATFORM-1：允许进入本地世界分享包；未显式登记的表默认禁止发布。 */
-  communityShare?: 'world'
-  /** WORLD-2E：发布选择 UI 的注册表派生分区；不得在组件手写表清单。 */
-  releaseSection?: WorldReleaseSection
+  /** @deprecated PLATFORM-1 v1 read/migration classification only. Never use for a new WorldRelease. */
+  legacyWorldPackageV1?: 'world'
+  /** @deprecated Historical v1 section retained only to recover old packages. */
+  legacyWorldReleaseSection?: WorldReleaseSection
   /** 导出时需要的 ID 重映射 */
   exportRemap?: ExportRemapField[]
   /**

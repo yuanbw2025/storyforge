@@ -254,6 +254,8 @@ class StoryForgeDB extends Dexie {
   narrativeNodes!: Table<NarrativeNode, number>
   worldRevisions!: Table<WorldRevision, number>
   worldReleases!: Table<WorldRelease, number>
+  worldDerivations!: Table<import('../types').WorldDerivationV1, number>
+  worldReleaseMigrations!: Table<import('../types').WorldReleaseMigrationV1, number>
 
   // MEMORY-1 —— 文件文档身份与三方同步基线；正文仍只存在原领域表。
   workspaceDocuments!: Table<WorkspaceDocumentBindingV1, number>
@@ -894,6 +896,40 @@ class StoryForgeDB extends Dexie {
         if (!Object.prototype.hasOwnProperty.call(blob, 'lastVerifiedAt')) patch.lastVerifiedAt = null
         if (Object.keys(patch).length > 0) await tx.table('mediaBlobObjects').update(blob.id, patch)
       }
+    })
+
+    // ARCH-01: distinguish an internal ownership World root from a user-visible
+    // world-engine product.  Historical projects were automatically assigned
+    // worldCode/worldVersion, so that pair is deliberately not accepted as
+    // author intent.  Only a community import is unambiguous; every other
+    // legacy workspace remains an independent work until the author confirms.
+    this.version(80).stores({
+      projects: '++id, &workspaceUid, workspacePurpose, workspacePurposeDecision, name, createdAt, updatedAt',
+      worlds: '++id, projectId, identityKind, code, [projectId+identityKind], [projectId+updatedAt]',
+    }).upgrade(async tx => {
+      const projects = await tx.table('projects').toArray()
+      for (const project of projects) {
+        const unambiguousWorldImport = Boolean(project.communityOrigin?.sourceWorldCode)
+        const workspacePurpose = unambiguousWorldImport ? 'world-engine' : 'independent-work'
+        const workspacePurposeDecision = unambiguousWorldImport
+          ? 'legacy-confirmed'
+          : 'legacy-review-required'
+        await tx.table('projects').update(project.id, {
+          workspacePurpose,
+          workspacePurposeDecision,
+        })
+        await tx.table('worlds').where('projectId').equals(project.id).modify(world => {
+          world.identityKind = unambiguousWorldImport ? 'world-draft' : 'workspace-scope'
+        })
+      }
+    })
+
+    this.version(81).stores({
+      worldDerivations: '++id, projectId, worldId, sourceWorkspaceUid, sourceWorkCode, sourceContentHash, targetRevisionId, targetReleaseId, createdAt',
+    })
+
+    this.version(82).stores({
+      worldReleaseMigrations: '++id, projectId, worldId, sourcePackageId, sourceWorldCode, semanticReleaseId, semanticContentHash, createdAt',
     })
   }
 }

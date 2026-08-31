@@ -50,6 +50,8 @@ import type {
   NarrativeNode,
   WorldRevision,
   WorldRelease,
+  WorldDerivationV1,
+  WorldReleaseMigrationV1,
   GameDefinition,
   GameRelease,
   NarrativeBeat,
@@ -216,6 +218,14 @@ export interface ProjectExportData {
   worldReleases?: (
     Omit<WorldRelease, 'id' | 'projectId' | 'worldId' | 'revisionId'>
     & { _exportId: number; _worldExportId: number; _revisionExportId: number }
+  )[]
+  worldDerivations?: (
+    Omit<WorldDerivationV1, 'id' | 'projectId' | 'worldId' | 'targetRevisionId' | 'targetReleaseId'>
+    & { _exportId: number; _worldExportId: number; _targetRevisionExportId?: number | null; _targetReleaseExportId?: number | null }
+  )[]
+  worldReleaseMigrations?: (
+    Omit<WorldReleaseMigrationV1, 'id' | 'projectId' | 'worldId' | 'semanticReleaseId'>
+    & { _exportId: number; _worldExportId: number; _semanticReleaseExportId: number }
   )[]
   gameDefinitions?: (Omit<GameDefinition, 'id' | 'projectId' | 'worldId' | 'workId' | 'narrativeModuleId'> & {
     _exportId: number

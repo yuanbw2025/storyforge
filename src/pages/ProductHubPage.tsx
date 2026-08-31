@@ -48,6 +48,7 @@ import { useActiveWork } from '../hooks/useActiveWork'
 import WorkKindBadge from '../components/work/WorkKindBadge'
 import { effectiveNovelProfile, effectiveWorkKind, SHORT_NOVEL_DEFAULT_WORDS } from '../lib/world-engine/work-kind'
 import { switchNovelProfile } from '../lib/world-engine/works'
+import WorldDerivationActions from '../components/world-engine/WorldDerivationActions'
 import './product-hub.css'
 
 const NodeAuthoringWorkspace = lazy(() => import('../components/node-authoring/NodeAuthoringWorkspace'))
@@ -168,14 +169,14 @@ function StatusDot({ tone = 'success' }: { tone?: 'success' | 'warning' | 'neutr
   return <span className={`sf-status-dot sf-status-dot-${tone}`} aria-hidden="true" />
 }
 
-function projectToWorld(project: Project, index: number, projection?: WorldProjection): ProductWorld {
+function projectToWorld(project: Project, index: number, projection: WorldProjection): ProductWorld {
   const tags = (project.genres?.length ? project.genres : [project.genre]).filter(Boolean).slice(0, 2)
   return {
     projectId: project.id!,
-    code: project.worldCode ?? '待分配编号',
-    name: project.name,
-    description: project.description || '这个世界还没有写下简介。',
-    version: project.worldVersion ?? 1,
+    code: projection.code,
+    name: projection.name,
+    description: projection.description,
+    version: projection.version,
     source: project.communityOrigin ? `社区导入 · ${project.communityOrigin.sourceWorldCode}` : project.enableMultiWorld ? '世界草稿 · 多世界结构' : '世界草稿',
     tags,
     accent: (['ochre', 'teal', 'blue', 'violet'] as Accent[])[index % 4],
@@ -240,18 +241,18 @@ function useSelectedWorldGroupId(project?: Project): number | null {
 }
 
 function EmptyProjectState({ onCreate }: { onCreate: () => void }) {
-  return <section className="sf-product-empty"><Globe2 className="h-8 w-8" /><h2>先建立一个世界或作品</h2><p>世界引擎可以独立创建；分步骤作品中的完整设定也会直接进入同一个世界工作台。</p><Button variant="primary" icon={Plus} onClick={onCreate}>新建内容</Button></section>
+  return <section className="sf-product-empty"><Globe2 className="h-8 w-8" /><h2>先建立一个世界或作品</h2><p>世界引擎与独立作品分别创建；长篇或短篇可在作者确认后显式派生世界。</p><Button variant="primary" icon={Plus} onClick={onCreate}>新建内容</Button></section>
 }
 
 function FeaturePanelFallback() {
   return <div className="flex min-h-[20rem] items-center justify-center text-sm text-text-muted">面板加载中…</div>
 }
 
-function HomePage({ worlds, activeProject, onSelect, onSelectWorld, onOpenCreate, onOpenWorldPicker }: { worlds: ProductWorld[]; activeProject?: ProductWorld; onSelect: (id: TabId) => void; onSelectWorld: (world: ProductWorld) => void; onOpenCreate: () => void; onOpenWorldPicker: () => void }) {
-  const activeWork = useActiveWork(activeProject?.project)
+function HomePage({ worlds, activeWorld, activeWorkProject, onSelect, onSelectWorld, onOpenCreate, onOpenWorldPicker }: { worlds: ProductWorld[]; activeWorld?: ProductWorld; activeWorkProject?: Project; onSelect: (id: TabId) => void; onSelectWorld: (world: ProductWorld) => void; onOpenCreate: () => void; onOpenWorldPicker: () => void }) {
+  const activeWork = useActiveWork(activeWorkProject)
   return <>
     <div className="sf-home-intro"><div><div className="sf-eyebrow">STORYFORGE · LOCAL WORKSPACE</div><h1>你的创作与游玩空间</h1><p>从一个世界出发，继续写作、编排、游玩，或者开始一段新的故事。</p></div><div className="sf-intro-actions"><Button icon={Hash} onClick={onOpenWorldPicker}>使用世界编号</Button><Button variant="primary" icon={Plus} onClick={onOpenCreate}>新建内容</Button></div></div>
-    {activeProject ? <section className="sf-resume-grid"><article className="sf-resume-card sf-resume-primary"><div className="sf-resume-visual"><span className="sf-visual-label"><StatusDot /> 当前世界</span><span className="sf-visual-rule" /><span className="sf-visual-coordinate">{activeProject.code} · v{activeProject.version}</span></div><div className="sf-resume-content"><span className="sf-card-kicker"><Globe2 className="h-4 w-4" /> 世界引擎</span><h2>{activeProject.name}</h2><p>{activeProject.description}</p><div className="sf-progress"><span style={{ width: `${activeProject.completeness}%` }} /></div><div className="sf-resume-meta"><span>数据域覆盖 {activeProject.completeness}%</span><span>{activeProject.source}</span></div><Button icon={ArrowRight} onClick={() => onSelect('worlds')}>进入世界引擎</Button></div></article><article className="sf-resume-card sf-resume-secondary"><div className="sf-resume-secondary-head"><span className="sf-card-kicker"><BookOpenText className="h-4 w-4" /> 最近作品</span><StatusDot tone="neutral" /></div><div className="sf-campaign-avatar"><BookOpenText className="h-5 w-5" /></div><h2>{activeProject.name}</h2>{activeWork && <WorkKindBadge work={activeWork} />}<p>{activeWork && effectiveWorkKind(activeWork) !== 'novel' ? '进入作品工作台继续制作' : `分步骤创作 · ${activeProject.project.currentWordCount ? `${(activeProject.project.currentWordCount / 10000).toFixed(1)} 万字` : '尚未开始正文'}`}</p><div className="sf-event-list"><div><StatusDot /><span>世界设定可被其他功能引用</span></div><div><StatusDot tone="warning" /><span>继续完善当前作品</span></div></div><Button variant="quiet" icon={ArrowRight} onClick={() => onSelect('novel')}>继续创作</Button></article></section> : <EmptyProjectState onCreate={onOpenCreate} />}
+    {(activeWorld || activeWorkProject) ? <section className="sf-resume-grid">{activeWorld && <article className="sf-resume-card sf-resume-primary"><div className="sf-resume-visual"><span className="sf-visual-label"><StatusDot /> 当前世界</span><span className="sf-visual-rule" /><span className="sf-visual-coordinate">{activeWorld.code} · v{activeWorld.version}</span></div><div className="sf-resume-content"><span className="sf-card-kicker"><Globe2 className="h-4 w-4" /> 世界引擎</span><h2>{activeWorld.name}</h2><p>{activeWorld.description}</p><div className="sf-progress"><span style={{ width: `${activeWorld.completeness}%` }} /></div><div className="sf-resume-meta"><span>数据域覆盖 {activeWorld.completeness}%</span><span>{activeWorld.source}</span></div><Button icon={ArrowRight} onClick={() => onSelect('worlds')}>进入世界引擎</Button></div></article>}{activeWorkProject && <article className="sf-resume-card sf-resume-secondary"><div className="sf-resume-secondary-head"><span className="sf-card-kicker"><BookOpenText className="h-4 w-4" /> 最近作品</span><StatusDot tone="neutral" /></div><div className="sf-campaign-avatar"><BookOpenText className="h-5 w-5" /></div><h2>{activeWorkProject.name}</h2>{activeWork && <WorkKindBadge work={activeWork} />}<p>{activeWork && effectiveWorkKind(activeWork) !== 'novel' ? '进入作品工作台继续制作' : `分步骤创作 · ${activeWorkProject.currentWordCount ? `${(activeWorkProject.currentWordCount / 10000).toFixed(1)} 万字` : '尚未开始正文'}`}</p><div className="sf-event-list"><div><StatusDot /><span>作品保持独立，不会自动公开为世界</span></div><div><StatusDot tone="warning" /><span>继续完善当前作品</span></div></div><Button variant="quiet" icon={ArrowRight} onClick={() => onSelect('novel')}>继续创作</Button></article>}</section> : <EmptyProjectState onCreate={onOpenCreate} />}
     <section className="sf-section"><div className="sf-section-header"><div><div className="sf-eyebrow">YOUR WORKSPACE</div><h2>从这里开始</h2></div><button className="sf-text-button" onClick={onOpenCreate}>新建 <ArrowRight className="h-4 w-4" /></button></div><div className="sf-feature-grid">{(Object.keys(FEATURE_META) as Array<Exclude<TabId, 'home'>>).map(id => { const meta = FEATURE_META[id]; const Icon = meta.icon; return <button key={id} className="sf-feature-card" onClick={() => onSelect(id)}><span className={`sf-feature-icon sf-feature-${meta.accent}`}><Icon className="h-5 w-5" /></span><span className="sf-feature-copy"><span className="sf-eyebrow">{meta.eyebrow}</span><h3>{NAV_TABS.find(tab => tab.id === id)?.label}</h3><p>{meta.description}</p></span><span className="sf-feature-footer"><span>{id === 'worlds' ? `${worlds.length} 个世界` : id === 'novel' ? '保留现有工作流' : id === 'nodes' ? '独立 DAG 工作区' : id === 'ttrpg' ? '冻结来源制作与试玩' : id === 'chat' ? '多角色生产与运行闭环' : id === 'market' ? '可验证分发闭环' : '共享运行时已可用'}</span><ArrowRight className="h-4 w-4" /></span></button> })}</div></section>
     <section className="sf-section"><div className="sf-section-header"><div><div className="sf-eyebrow">WORLD LIBRARY</div><h2>我的世界引擎</h2></div><button className="sf-text-button" onClick={() => onSelect('worlds')}>管理世界 <ArrowRight className="h-4 w-4" /></button></div><div className="sf-world-grid">{worlds.slice(0, 3).map(world => <WorldCard key={world.code} world={world} onOpen={() => { onSelectWorld(world); onSelect('worlds') }} />)}<button className="sf-new-world-card" onClick={onOpenCreate}><span className="sf-new-world-plus"><Plus className="h-5 w-5" /></span><strong>从零创建世界</strong><span>建立一个可被作品与游戏引用的新世界</span></button></div></section>
   </>
@@ -273,14 +274,14 @@ function WorldEnginePage({ worlds, activeWorld, onSelectWorld, onOpenCreate, onO
   </>
 }
 
-function NovelPage({ project, world, onOpenWorldPicker, onCreate }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void }) {
+function NovelPage({ project, onCreate, onDerived }: { project?: Project; onCreate: () => void; onDerived: (projectId: number) => void | Promise<void> }) {
   const [view, setView] = useState<'outline' | 'chapters'>('outline')
   const [nodeId, setNodeId] = useState<number | null>(null)
   const activeWork = useActiveWork(project)
   const loadProjects = useProjectStore(state => state.loadProjects)
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileError, setProfileError] = useState('')
-  if (!project || !world) return <><PageHeading eyebrow="AUTHORING / WORKS" title="作品创作" description="在同一创作基座中完成短篇、长篇与改编作品。" /><EmptyProjectState onCreate={onCreate} /></>
+  if (!project) return <><PageHeading eyebrow="AUTHORING / WORKS" title="作品创作" description="在独立创作产品中完成短篇、长篇与改编作品。" /><EmptyProjectState onCreate={onCreate} /></>
   const isNovel = !activeWork || effectiveWorkKind(activeWork) === 'novel'
   const profile = activeWork ? effectiveNovelProfile(activeWork) : 'long'
   const changeProfile = async (next: 'short' | 'long') => {
@@ -305,15 +306,15 @@ function NovelPage({ project, world, onOpenWorldPicker, onCreate }: { project?: 
   }
   if (!isNovel && activeWork) {
     const scope = scopeForProject(project)
-    return <><PageHeading eyebrow="AUTHORING / WORKS" title={effectiveWorkKind(activeWork) === 'screenplay' ? '正规剧本工作台' : '漫画工作台'} description="派生作品拥有独立结构、来源证据和导出链；不会修改源小说。" action={<WorkKindBadge work={activeWork} />} /><BindingBanner world={world} onChange={onOpenWorldPicker} />{scope ? <Suspense fallback={<FeaturePanelFallback />}>{effectiveWorkKind(activeWork) === 'screenplay' ? <ScreenplayStudio scope={scope} /> : <ComicStudio scope={scope} />}</Suspense> : <section className="sf-product-empty"><BookOpenText className="h-8 w-8" /><h2>漫画工作区归属尚未就绪</h2><p>请先完成目标 Work 初始化。</p></section>}</>
+    return <><PageHeading eyebrow="AUTHORING / WORKS" title={effectiveWorkKind(activeWork) === 'screenplay' ? '正规剧本工作台' : '漫画工作台'} description="派生作品拥有独立结构、来源证据和导出链；不会修改源小说。" action={<WorkKindBadge work={activeWork} />} />{scope ? <Suspense fallback={<FeaturePanelFallback />}>{effectiveWorkKind(activeWork) === 'screenplay' ? <ScreenplayStudio scope={scope} /> : <ComicStudio scope={scope} />}</Suspense> : <section className="sf-product-empty"><BookOpenText className="h-8 w-8" /><h2>漫画工作区归属尚未就绪</h2><p>请先完成目标 Work 初始化。</p></section>}</>
   }
-  return <><PageHeading eyebrow="AUTHORING / STEP BY STEP" title={profile === 'short' ? '短篇小说创作' : '长篇小说创作'} description={profile === 'short' ? '从现有分步骤长篇流程中裁剪出紧凑主路径，正文与大纲仍使用同一份 Canon。' : '以世界引擎为基础，继续使用原有完整的分步骤小说创作流程。'} action={<div className="flex items-center gap-2">{activeWork && <WorkKindBadge work={activeWork} />}<Button onClick={() => void changeProfile(profile === 'short' ? 'long' : 'short')} disabled={profileBusy}>{profileBusy ? '切换中…' : profile === 'short' ? '扩写为长篇' : '切换为短篇'}</Button><Button variant="primary" icon={ArrowRight} onClick={() => setView('chapters')}>打开正文</Button></div>} />{profileError && <p className="mb-3 text-sm text-red-600" role="alert">{profileError}</p>}<BindingBanner world={world} onChange={onOpenWorldPicker} /><div className="sf-subnav"><button className={view === 'outline' ? 'active' : ''} onClick={() => setView('outline')}><BookOpenText className="h-4 w-4" />卷纲与章纲</button><button className={view === 'chapters' ? 'active' : ''} onClick={() => setView('chapters')}><BookOpenText className="h-4 w-4" />章节与正文</button><span className="sf-subnav-spacer" /><span className="sf-subnav-note">{project.name}</span></div><section className="sf-product-panel sf-novel-panel"><Suspense fallback={<FeaturePanelFallback />}>{view === 'outline' ? <OutlinePanel project={project} onOpenChapter={id => { setNodeId(id); setView('chapters') }} /> : <ChaptersListPanel project={project} initialNodeId={nodeId} />}</Suspense></section></>
+  return <><PageHeading eyebrow="AUTHORING / STEP BY STEP" title={profile === 'short' ? '短篇小说创作' : '长篇小说创作'} description={profile === 'short' ? '独立短篇产品复用同一份可靠 Canon 与生成底座。' : '独立运行完整的分步骤长篇创作流程；世界引擎不是前置条件。'} action={<div className="flex flex-wrap items-center justify-end gap-2">{activeWork && <WorkKindBadge work={activeWork} />}<WorldDerivationActions project={project} onDerived={onDerived} /><Button onClick={() => void changeProfile(profile === 'short' ? 'long' : 'short')} disabled={profileBusy}>{profileBusy ? '切换中…' : profile === 'short' ? '扩写为长篇' : '切换为短篇'}</Button><Button variant="primary" icon={ArrowRight} onClick={() => setView('chapters')}>打开正文</Button></div>} />{profileError && <p className="mb-3 text-sm text-red-600" role="alert">{profileError}</p>}<div className="sf-subnav"><button className={view === 'outline' ? 'active' : ''} onClick={() => setView('outline')}><BookOpenText className="h-4 w-4" />卷纲与章纲</button><button className={view === 'chapters' ? 'active' : ''} onClick={() => setView('chapters')}><BookOpenText className="h-4 w-4" />章节与正文</button><span className="sf-subnav-spacer" /><span className="sf-subnav-note">{project.name}</span></div><section className="sf-product-panel sf-novel-panel"><Suspense fallback={<FeaturePanelFallback />}>{view === 'outline' ? <OutlinePanel project={project} onOpenChapter={id => { setNodeId(id); setView('chapters') }} /> : <ChaptersListPanel project={project} initialNodeId={nodeId} />}</Suspense></section></>
 }
 
-function NodesPage({ project, world, onOpenWorldPicker, onCreate }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void }) {
+function NodesPage({ project, onCreate }: { project?: Project; onCreate: () => void }) {
   const worldGroupId = useSelectedWorldGroupId(project)
-  if (!project || !world) return <><PageHeading eyebrow="FLOW / NODE AUTHORING" title="节点创作" description="自由编排资料、处理和生成节点。" /><EmptyProjectState onCreate={onCreate} /></>
-  return <><PageHeading eyebrow="FLOW / NODE AUTHORING" title="节点创作" description="把世界观、故事、角色、执行控制和输出候选自由编排成可观察、可回放的创作图。" /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}><NodeAuthoringWorkspace project={project} worldGroupId={worldGroupId} /></Suspense></section></>
+  if (!project) return <><PageHeading eyebrow="FLOW / NODE AUTHORING" title="节点创作" description="自由编排资料、处理和生成节点。" /><EmptyProjectState onCreate={onCreate} /></>
+  return <><PageHeading eyebrow="FLOW / NODE AUTHORING" title="节点创作" description="把分步骤长篇的同源能力拆成更自由、更细粒度、可视且可组合的创作图。" /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}><NodeAuthoringWorkspace project={project} worldGroupId={worldGroupId} /></Suspense></section></>
 }
 
 function TtrpgPage({ project, world, onOpenWorldPicker, onCreate, initialSessionId = null, initialProductionHandoff = null, initialOnlineHandoff = null, onOnlineHandoffConsumed }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void; initialSessionId?: number | null; initialProductionHandoff?: WorldGameProductionHandoffV2 | null; initialOnlineHandoff?: OnlineRoomJoinHandoffV1 | null; onOnlineHandoffConsumed?: () => void }) {
@@ -439,10 +440,11 @@ function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (
         name: name.trim(), genre: 'other', genres: ['other'], status: 'drafting',
         description: description.trim(), targetWordCount: isShort ? targetWordCount : 500_000, enableMultiWorld: false,
       }, isNovel ? {
+        purpose: 'independent-work',
         kind: 'novel',
         novelProfile: isShort ? 'short' : 'long',
         preferredChapterCount: isShort && preferredChapterCount !== '' ? preferredChapterCount : undefined,
-      } : undefined)
+      } : { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
       if (projectFolder) {
         try {
           await bindCreatedProjectStorageWorkspace(id, projectFolder)
@@ -534,9 +536,12 @@ export default function ProductHubPage() {
     return () => { cancelled = true }
   }, [projects])
 
-  const worlds = useMemo(() => projects.filter(project => project.id != null).map((project, index) => projectToWorld(project, index, projections[project.id!])), [projects, projections])
+  const worlds = useMemo(() => Object.values(projections).map((projection, index) => {
+    const project = projects.find(candidate => candidate.id === projection.projectId)
+    return project ? projectToWorld(project, index, projection) : null
+  }).filter((world): world is ProductWorld => world != null), [projects, projections])
+  const activeProject = projects.find(project => project.id === activeProjectId) ?? projects[0]
   const activeWorld = worlds.find(world => world.projectId === activeProjectId) ?? worlds[0]
-  const activeProject = activeWorld?.project
   const selectWorld = (world: ProductWorld) => setActiveProjectId(world.projectId)
   const selectTab = (tab: TabId) => {
     if (tab === 'game') setGameInitialMode('play')
@@ -587,13 +592,13 @@ export default function ProductHubPage() {
         setTextGameProductionHandoff(parsed)
         setActiveTab('game')
       }} />
-      case 'novel': return <NovelPage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
-      case 'nodes': return <NodesPage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
+      case 'novel': return <NovelPage project={activeProject} onCreate={() => setShowCreate(true)} onDerived={async projectId => { await loadProjects(); setActiveProjectId(projectId); setActiveTab('worlds') }} />
+      case 'nodes': return <NodesPage project={activeProject} onCreate={() => setShowCreate(true)} />
       case 'ttrpg': return <TtrpgPage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} initialSessionId={ttrpgInitialSessionId} initialProductionHandoff={ttrpgProductionHandoff} initialOnlineHandoff={onlineRoomHandoff} onOnlineHandoffConsumed={() => setOnlineRoomHandoff(null)} />
       case 'chat': return <ChatGamePage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} initialSessionId={chatPreviewSessionId} />
       case 'game': return <TextGamePage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} onOpenChat={sessionId => { setChatPreviewSessionId(sessionId ?? null); setActiveTab('chat') }} onOpenTtrpg={sessionId => { setTtrpgInitialSessionId(sessionId ?? null); setActiveTab('ttrpg') }} initialProduct={gameProduct} initialMode={gameInitialMode} initialProductionHandoff={textGameProductionHandoff} />
       case 'market': return <MarketplacePage project={activeProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onImported={loadProjects} onRoomHandoff={openAcceptedOnlineRoom} />
-      default: return <HomePage worlds={worlds} activeProject={activeWorld} onSelect={selectTab} onSelectWorld={selectWorld} onOpenCreate={() => setShowCreate(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} />
+      default: return <HomePage worlds={worlds} activeWorld={activeWorld} activeWorkProject={activeProject} onSelect={selectTab} onSelectWorld={selectWorld} onOpenCreate={() => setShowCreate(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} />
     }
   }
 

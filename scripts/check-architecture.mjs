@@ -183,6 +183,7 @@ for (const dir of ['src/components', 'src/hooks', 'src/lib']) {
 // 加新表自动进出,无需逐表手写。本守卫验证:① ProjectExportData 类型契约逐表声明完整;
 // ② 导出/导入确实委托给派生引擎,且派生引擎确实遍历 exportable 表(防回退到手写枚举)。
 const registrySrc = read('src/lib/registry/project-tables.ts')
+const registryTypesSource = read('src/lib/registry/types.ts')
 const jsonExportSrc = read('src/lib/export/json-export.ts')
 const deriveExportSrc = read('src/lib/export/registry-export.ts')
 const deriveImportSrc = read('src/lib/export/registry-import.ts')
@@ -548,7 +549,7 @@ for (const file of [
 }
 if (!contentRevisionSource.includes('return PROJECT_TABLES')
   || !contentRevisionSource.includes('spec.workspaceProjection')
-  || !contentRevisionSource.includes('spec.worldDomains')) {
+  || !contentRevisionSource.includes('spec.worldSemantic')) {
   violations.push('[⑮修订来源] content revision 的表集合必须从 PROJECT_TABLES 元数据派生')
 }
 for (const [file, source] of [
@@ -1257,6 +1258,58 @@ if (invalidateIndex < 0 || policyIndex <= invalidateIndex || runIndex <= policyI
   || !postAdoptionCoordinatorBody.includes("settings.policy === 'off'")
   || !postAdoptionCoordinatorBody.includes("settings.policy === 'auto-with-budget'")) {
   violations.push('[㉛章后策略顺序] 章后协调器必须先确定性失效，再读取 Work 策略，并在 off/suggest/auto 边界后创建 Run')
+}
+
+// ── ㉜ ARCH-01/02 产品身份与纯语义世界发布边界 ──
+const worldIdentitySource = read('src/lib/product/world-identity.ts')
+const worldReleaseSource = read('src/lib/world-engine/releases.ts')
+const worldPackageSource = read('src/lib/product/world-package.ts')
+const worldPackageMigrationSource = read('src/lib/product/world-package-migration.ts')
+const worldSharingPanelSource = read('src/components/product/WorldSharingPanel.tsx')
+const worldDerivationSource = read('src/lib/world-engine/derivation.ts')
+if (!worldIdentitySource.includes("WorkspacePurpose")
+  || !worldIdentitySource.includes("world.identityKind === 'world-draft'")
+  || !worldIdentitySource.includes('Number(project.worldVersion) >= 0')) {
+  violations.push('[㉜身份分离] 世界草稿、独立作品与 v0 公共身份必须有显式机器判定')
+}
+for (const token of [
+  'buildIndependentWorkWorldSnapshot', 'captureWorkspaceContentRevisionV1',
+  'verifyWorkspaceContentRevisionV1', 'worldDerivations', 'cascadeDeleteProject',
+]) {
+  if (!worldDerivationSource.includes(token)) violations.push(`[㉜显式派生] 派生服务缺少 ${token}`)
+}
+if (!worldReleaseSource.includes('PROJECT_TABLES.filter(spec => spec.worldSemantic)')
+  || worldReleaseSource.includes('legacyWorldPackageV1')
+  || worldReleaseSource.includes('communityShare')) {
+  violations.push('[㉜纯语义发布] 新 WorldRelease 必须只从 worldSemantic 派生，禁止读取任何旧分享标志')
+}
+if (!worldReleaseSource.includes('semanticContract: 3')
+  || !worldReleaseSource.includes('selectedNarrativeModules: []')
+  || !worldReleaseSource.includes('不能封存进语义 WorldRelease')) {
+  violations.push('[㉜产品内容隔离] 新 WorldRelease 必须声明 semanticContract 3 并拒绝可执行叙事模块')
+}
+for (const token of [
+  "releaseManifest.semanticContract !== 3", 'WORLD_SEMANTIC_TABLE_NAMES',
+  'WORLD_PACKAGE_MAX_BYTES', 'migrationRequired', 'report.importable',
+  'v1 仅供历史读取与迁移',
+]) {
+  if (!worldPackageSource.includes(token)) violations.push(`[㉜世界包边界] world-package 缺少 ${token}`)
+}
+if (worldSharingPanelSource.includes('createWorldPackage,')
+  || !worldSharingPanelSource.includes('migrateLegacyWorldPackageV1')
+  || !worldSharingPanelSource.includes('report.migrationRequired')) {
+  violations.push('[㉜世界包 UI] 正式 UI 不得回退创建 v1；旧包必须暴露分类迁移入口')
+}
+for (const token of [
+  'semanticPortableProject', 'productRecoveryProjectId', 'worldReleaseMigrations',
+  "confirmWorkspacePurpose(semanticProjectId, 'world-engine'",
+  "confirmWorkspacePurpose(recoveryProjectId, 'independent-work'",
+]) {
+  if (!worldPackageMigrationSource.includes(token)) violations.push(`[㉜旧包拆分] 迁移服务缺少 ${token}`)
+}
+if (!registryTypesSource.includes('@deprecated PLATFORM-1 v1 read/migration classification only')
+  || /\bcommunityShare\b|\breleaseSection\b/.test(registrySrc)) {
+  violations.push('[㉜旧元数据降权] 旧分享字段必须明确重命名为 legacy 专用，不能继续冒充发布协议')
 }
 
 // ── 报告 ──

@@ -54,11 +54,11 @@ export function checkRegistry(): RegistryValidationResult {
         errors.push(`${spec.name}.resourceIdentity 要求 registered-fields，但 FIELD_REGISTRY 无字段`)
       }
     }
-    if (spec.communityShare === 'world' && !spec.releaseSection) {
-      errors.push(`${spec.name}.communityShare=world 必须登记 releaseSection`)
+    if (spec.legacyWorldPackageV1 === 'world' && !spec.legacyWorldReleaseSection) {
+      errors.push(`${spec.name}.legacyWorldPackageV1=world 必须登记 legacyWorldReleaseSection`)
     }
-    if (spec.releaseSection && spec.communityShare !== 'world') {
-      errors.push(`${spec.name}.releaseSection 只能用于 world 可发布表`)
+    if (spec.legacyWorldReleaseSection && spec.legacyWorldPackageV1 !== 'world') {
+      errors.push(`${spec.name}.legacyWorldReleaseSection 只能用于历史 v1 世界包表`)
     }
     if (spec.owner !== 'global' && !spec.domainOwner) {
       errors.push(`${spec.name}.domainOwner 未登记逻辑归属`)
@@ -72,8 +72,12 @@ export function checkRegistry(): RegistryValidationResult {
       if (!allowed.includes(legacyDefault)) {
         errors.push(`${spec.name}.domainOwner.legacyDefault 不在 allowed 中`)
       }
-      if (spec.worldDomains?.length && legacyDefault === 'workspace') {
-        errors.push(`${spec.name}.worldDomains 不能默认归属 workspace`)
+      if (spec.worldSemantic && legacyDefault === 'workspace') {
+        errors.push(`${spec.name}.worldSemantic 不能默认归属 workspace`)
+      }
+      if (spec.worldSemantic?.canonPolicy === 'confirmed-rows-only'
+        && (!spec.worldSemantic.statusField || !spec.worldSemantic.confirmedStatusValues?.length)) {
+        errors.push(`${spec.name}.worldSemantic confirmed-rows-only 缺少状态字段/允许值`)
       }
       if (locator.kind === 'workspace' && !allowed.includes('workspace')) {
         errors.push(`${spec.name}.domainOwner workspace locator 未允许 workspace`)

@@ -4,34 +4,11 @@ import type { Project, CreateProjectInput } from '../lib/types'
 import { migrateGenre } from '../lib/types'
 import { requireBackupBefore } from '../lib/safety/require-backup-before'
 import { cascadeDeleteProject } from '../lib/registry/lifecycle'
-import {
-  hasShareableWorldIdentity,
-  withWorldIdentity,
-} from '../lib/product/world-identity'
 import { ensureWorkspaceOwnership } from '../lib/world-engine/ownership'
 import { updateProjectAndActiveWork } from '../lib/world-engine/works'
 import { clearProjectFolderHandle } from '../lib/storage/folder-handle-store'
 import { backfillResourceUidsV1 } from '../lib/context-gateway/resource-identity'
 import { createWorkspace, type CreateWorkspaceOptions } from '../lib/world-engine/create-workspace'
-
-async function ensureWorldIdentity(project: Project): Promise<Project> {
-  if (hasShareableWorldIdentity(project)) return project
-  if (!project.id) return withWorldIdentity(project)
-
-  // Legacy projects are upgraded in a transaction so concurrent entry points
-  // cannot assign different world codes to the same project.
-  return db.transaction('rw', db.projects, async () => {
-    const latest = await db.projects.get(project.id!)
-    if (!latest) return withWorldIdentity(project)
-    if (hasShareableWorldIdentity(latest)) return migrateGenre(latest)
-    const normalized = withWorldIdentity(migrateGenre(latest))
-    await db.projects.update(project.id!, {
-      worldCode: normalized.worldCode,
-      worldVersion: normalized.worldVersion,
-    })
-    return normalized
-  })
-}
 
 interface ProjectStore {
   projects: Project[]
@@ -64,11 +41,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       )
     }
     // 兼容旧数据：确保每条记录都有 genres[] 和 status
-    const projects = await Promise.all(raw.map(async rawProject => {
+    const projects = raw.map(rawProject => {
       const migrated = migrateGenre(rawProject)
       migrated.currentWordCount = wordCountByProject.get(rawProject.id!) ?? 0
-      return ensureWorldIdentity(migrated)
-    }))
+      return migrated
+    })
     set({ projects, loading: false })
   },
 
