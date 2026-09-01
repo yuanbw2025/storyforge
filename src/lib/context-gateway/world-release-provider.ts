@@ -38,7 +38,9 @@ const NORMALIZATION_VERSION = WORLD_RELEASE_NORMALIZATION_VERSION_V1
 const HASH = /^[a-f0-9]{64}$/
 const MAX_PAGE = 100
 const MAX_READ_TOKENS = 100_000
-const RELEASE_CACHE_LIMIT = 24
+// A release may contain a novel-sized semantic corpus. Keep only a very small
+// hot set and never cache a second copy of row payloads/projections.
+const RELEASE_CACHE_LIMIT = 3
 
 const validatedReleaseCache = new Map<number, LoadedReleaseV1>()
 const projectedReleaseCache = new Map<string, Promise<ProjectedReleaseResourceV1[]>>()
@@ -58,11 +60,9 @@ interface LoadedReleaseV1 {
 
 interface ProjectedReleaseResourceV1 {
   descriptor: ContextResourceDescriptorV1
-  original: string
-  focused: string
   table: string
   coordinate: string
-  row: unknown
+  rowIndex: number
 }
 
 interface CursorV1 {
@@ -225,14 +225,15 @@ function focusedFor(row: unknown): string {
       && value != null && value !== '' && value !== '[]' && value !== '{}')))
 }
 
-function addWorldRelation(
+function addRelation(
   source: ContextResourceDescriptorV1,
   targetResourceKey: string,
   direction: 'outgoing' | 'incoming',
+  kind: ContextResourceDescriptorV1['relations'][number]['kind'],
 ): void {
-  if (source.relations.some(item => item.kind === 'world-link'
+  if (source.relations.some(item => item.kind === kind
     && item.targetResourceKey === targetResourceKey && item.direction === direction)) return
-  source.relations.push({ kind: 'world-link', targetResourceKey, direction })
+  source.relations.push({ kind, targetResourceKey, direction })
 }
 
 async function mapWithConcurrencyV1<T, R>(
@@ -258,6 +259,10 @@ async function buildProjections(loaded: LoadedReleaseV1): Promise<ProjectedRelea
     .sort((left, right) => left.area.localeCompare(right.area) || left.resourceKind.localeCompare(right.resourceKind))
   const grouped = await Promise.all(catalogs.map(async catalog => {
     const rows = loaded.manifest.records[catalog.table] ?? []
+    const coordinates = rows.map((row, index) => coordinate(row, index))
+    if (new Set(coordinates).size !== coordinates.length) {
+      fail('resource-coordinate', `WorldRelease 资源坐标重复:${catalog.resourceId}`)
+    }
     const policyHash = await hashCanonicalValue({
       provider: PROVIDER_VERSION,
       normalization: NORMALIZATION_VERSION,
@@ -268,7 +273,8 @@ async function buildProjections(loaded: LoadedReleaseV1): Promise<ProjectedRelea
       const original = canonicalStringify(row)
       const rowHash = await sha256Text(original)
       const coord = coordinate(row, index)
-      const resourceKey = `world-release:${loaded.release.contentHash.slice(0, 16)}:${encodeURIComponent(catalog.area)}:${encodeURIComponent(catalog.resourceKind)}:${encodeURIComponent(coord)}`
+      const coordinateHash = await hashCanonicalValue({ resourceId: catalog.resourceId, coordinate: coord })
+      const resourceKey = `world-release:${loaded.release.contentHash}:${catalog.area}:${catalog.resourceKind}:${coordinateHash}`
       const title = titleFor(row, catalog.resourceKind, index)
       const summary = summaryFor(row)
       const focused = focusedFor(row)
@@ -317,20 +323,51 @@ async function buildProjections(loaded: LoadedReleaseV1): Promise<ProjectedRelea
         retrievalWeight: 1,
         tokenCap: Math.min(50_000, Math.max(100, originalTokens)),
       }
-      return { descriptor, original, focused, table: catalog.table, coordinate: coord, row }
+      return { descriptor, table: catalog.table, coordinate: coord, rowIndex: index }
     })
   }))
   const result = grouped.flat()
+  if (new Set(result.map(item => item.descriptor.resourceKey)).size !== result.length) {
+    fail('resource-key', 'WorldRelease 资源键发生碰撞')
+  }
   const byTableCoordinate = new Map(result.map(item => [`${item.table}:${item.coordinate}`, item] as const))
+  for (const entry of result.filter(item => item.table === 'codexEntries')) {
+    const row = loaded.manifest.records[entry.table]?.[entry.rowIndex]
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue
+    const categoryCoordinate = (row as Record<string, unknown>)._categoryExportId
+    if (typeof categoryCoordinate !== 'number' && typeof categoryCoordinate !== 'string') continue
+    const category = byTableCoordinate.get(`codexCategories:${String(categoryCoordinate)}`)
+    if (!category) continue
+    addRelation(entry.descriptor, category.descriptor.resourceKey, 'outgoing', 'same-entity')
+    addRelation(category.descriptor, entry.descriptor.resourceKey, 'incoming', 'same-entity')
+  }
+  for (const relation of result.filter(item => item.table === 'characterRelations')) {
+    const row = loaded.manifest.records[relation.table]?.[relation.rowIndex]
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue
+    const record = row as Record<string, unknown>
+    const from = typeof record._fromCharacterIndex === 'number' || typeof record._fromCharacterIndex === 'string'
+      ? byTableCoordinate.get(`characters:${String(record._fromCharacterIndex)}`) : undefined
+    const to = typeof record._toCharacterIndex === 'number' || typeof record._toCharacterIndex === 'string'
+      ? byTableCoordinate.get(`characters:${String(record._toCharacterIndex)}`) : undefined
+    if (!from || !to) continue
+    // Direction on the relation descriptor encodes its semantic endpoints:
+    // outgoing = from, incoming = to. Endpoint back-links are undirected
+    // membership and are not used to infer direction.
+    addRelation(relation.descriptor, from.descriptor.resourceKey, 'outgoing', 'depends-on')
+    addRelation(relation.descriptor, to.descriptor.resourceKey, 'incoming', 'depends-on')
+    addRelation(from.descriptor, relation.descriptor.resourceKey, 'outgoing', 'appears-in')
+    addRelation(to.descriptor, relation.descriptor.resourceKey, 'incoming', 'appears-in')
+  }
   for (const link of result.filter(item => item.table === 'worldGroupLinks')) {
-    if (!link.row || typeof link.row !== 'object' || Array.isArray(link.row)) continue
-    const record = link.row as Record<string, unknown>
+    const row = loaded.manifest.records[link.table]?.[link.rowIndex]
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue
+    const record = row as Record<string, unknown>
     for (const rawEndpoint of [record._fromGroupExportId, record._toGroupExportId]) {
       if (typeof rawEndpoint !== 'number' && typeof rawEndpoint !== 'string') continue
       const endpoint = byTableCoordinate.get(`worldGroups:${String(rawEndpoint)}`)
       if (!endpoint) continue
-      addWorldRelation(link.descriptor, endpoint.descriptor.resourceKey, 'outgoing')
-      addWorldRelation(endpoint.descriptor, link.descriptor.resourceKey, 'incoming')
+      addRelation(link.descriptor, endpoint.descriptor.resourceKey, 'outgoing', 'world-link')
+      addRelation(endpoint.descriptor, link.descriptor.resourceKey, 'incoming', 'world-link')
     }
   }
   for (const item of result) {
@@ -415,9 +452,12 @@ async function page(input: ResourceListInputV1 | ResourceSearchInputV1): Promise
   }
 }
 
-async function locate(scope: FrozenResourceScopeV1, resourceKey: string): Promise<ProjectedReleaseResourceV1> {
-  return (await projections(await load(scope))).find(item => item.descriptor.resourceKey === resourceKey)
-    ?? fail('not-found', `世界资源不存在:${resourceKey}`)
+function rowFor(loaded: LoadedReleaseV1, projected: ProjectedReleaseResourceV1): unknown {
+  const row = loaded.manifest.records[projected.table]?.[projected.rowIndex]
+  if (row == null || coordinate(row, projected.rowIndex) !== projected.coordinate) {
+    fail('resource-drift', `冻结世界资源坐标已漂移:${projected.descriptor.resourceKey}`)
+  }
+  return row
 }
 
 function capped(content: string, maxTokens: number): string {
@@ -435,14 +475,17 @@ function capped(content: string, maxTokens: number): string {
 }
 
 async function read(input: ResourceReadInputV1): Promise<ContextResourceReadV1> {
-  const projected = await locate(input.scope, input.resourceKey)
+  const loaded = await load(input.scope)
+  const projected = (await projections(loaded)).find(item => item.descriptor.resourceKey === input.resourceKey)
+    ?? fail('not-found', `世界资源不存在:${input.resourceKey}`)
+  const row = rowFor(loaded, projected)
   const source = input.depth === 'index'
     ? `${projected.descriptor.title}\n${projected.descriptor.shortSummary}`
     : input.depth === 'summary'
       ? projected.descriptor.shortSummary
       : input.depth === 'focused'
-        ? projected.focused
-        : projected.original
+        ? focusedFor(row)
+        : canonicalStringify(row)
   const content = capped(source, input.maxTokens)
   return {
     version: 1,
@@ -460,20 +503,23 @@ function sameRef(left: ContextSourceRefV1, right: ContextSourceRefV1): boolean {
 }
 
 async function readOriginal(input: OriginalEvidenceReadInputV1): Promise<OriginalEvidenceReadV1> {
-  const projected = await locate(input.scope, input.resourceKey)
+  const loaded = await load(input.scope)
+  const projected = (await projections(loaded)).find(item => item.descriptor.resourceKey === input.resourceKey)
+    ?? fail('not-found', `世界资源不存在:${input.resourceKey}`)
+  const original = canonicalStringify(rowFor(loaded, projected))
   const sourceRef = projected.descriptor.sourceRefs.find(ref => sameRef(ref, input.sourceRef))
     ?? fail('source-ref', 'source ref 不属于冻结世界资源')
-  if (sourceRef.contentHash !== await sha256Text(projected.original)) fail('source-ref', '世界原文证据 hash 损坏')
-  if (estimateTokens(projected.original) > input.maxTokens) {
+  if (sourceRef.contentHash !== await sha256Text(original)) fail('source-ref', '世界原文证据 hash 损坏')
+  if (estimateTokens(original) > input.maxTokens) {
     fail('original-budget', '世界原文超过显式预算；拒绝把截断内容伪装成 original')
   }
   return {
     version: 1,
     descriptor: structuredClone(projected.descriptor),
     sourceRef: structuredClone(sourceRef),
-    content: projected.original,
+    content: original,
     contentHash: sourceRef.contentHash,
-    tokenCount: estimateTokens(projected.original),
+    tokenCount: estimateTokens(original),
   }
 }
 

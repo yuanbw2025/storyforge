@@ -80,14 +80,13 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 82 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 81 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
 | `worldRelease` | 冻结世界版本资源 | manual | L0 | 100000 |
 | `ttrpgRuntime` | 正式 TTRPG 主持人运行视角 | runtime | L0 | 10000 |
 | `ttrpgPlayerRuntime` | 正式 TTRPG 单角色玩家运行视角 | runtime | L0 | 10000 |
-| `game-production.consultation-source` | 游戏生产会谈来源 | project | L0 | 6000 |
 | `game-production.brief` | 已授权游戏生产 Brief | project | L0 | 8000 |
 | `game-production.artifact-inputs` | 游戏生产任务依赖 | project | L1 | 10000 |
 | `game-production.quality-feedback` | 游戏生产质量反馈 | project | L1 | 6000 |
@@ -270,10 +269,10 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:753` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:840` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:752` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:839` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
-| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:349` |
+| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:424` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:26` |
@@ -398,4 +397,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `6b982863`
+生成时间基准:commit `c5e2f56d`

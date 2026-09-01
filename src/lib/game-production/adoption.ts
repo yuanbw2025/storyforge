@@ -1,5 +1,6 @@
 import { db } from '../db/schema'
 import type {
+  ConfirmedProductBriefV1,
   ProductMediaAsset,
   ProductMediaBlob,
   GameBuildArtifactRecordV1,
@@ -8,7 +9,11 @@ import type {
   GameProductionCommandRecordV1,
   GameProductionCommandV1,
   GameRelease,
+  GameReleaseManifestV3,
   GameRuntimePackageV2,
+  ProductReleaseLineageV1,
+  ProductSourceManifestV1,
+  ProductSourcePlanV1,
   WorkspaceScope,
 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
@@ -23,8 +28,25 @@ import {
   requirePassedGameBuildMainRouteGateV1,
   requirePassedGameMediaRuntimeGateV1,
 } from './quality-receipts'
-import { createGameReleaseManifestV2 } from './runtime-package'
+import {
+  createGameReleaseManifestV3,
+  gameReleaseIdentityHashV3,
+  verifyGameReleaseManifestV3,
+} from './runtime-package'
 import { createGameBuildRootTerminalReceiptV1 } from './receipts'
+import { readAgentRunV1 } from '../agent/run/event-store'
+import {
+  aggregateProductSourceManifestFromExactRunsV1,
+  createProductReleaseLineageV1,
+  portableProductSourcePlanV1,
+  productReleaseUidV1,
+  validateProductSourceManifestV1,
+} from '../world-engine/product-source-contracts'
+import {
+  gameProductionTaskUsesWorldGatewayV1,
+  parseGameConfirmedBriefV1,
+  parseGameProductionSourcePlanV1,
+} from './source-contracts'
 
 type PublishCommandV1 = Extract<GameProductionCommandV1, { type: 'publish' }>
 
@@ -77,6 +99,14 @@ interface VerifiedAdoption extends PreparedGameProductionAdoptionV1 {
   runtimePackage: GameRuntimePackageV2
   artifacts: GameBuildArtifactRecordV1[]
   mediaArtifacts: Map<string, GameBuildArtifactRecordV1>
+  sourcePlan: ProductSourcePlanV1
+  confirmedBrief: ConfirmedProductBriefV1
+  sourceManifest: ProductSourceManifestV1
+  releaseVersion: number
+  parentRelease: ProductReleaseLineageV1['parentRelease']
+  compatibilityHash: string
+  compatibilityStatus: ProductReleaseLineageV1['compatibility']['status']
+  qualityReceiptHashes: string[]
 }
 
 function fail(message: string): never {
@@ -175,6 +205,57 @@ export function parseGameBuildQualityReportV1(value: string): GameBuildQualityRe
   }
 }
 
+async function worldContextManifestPointersV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+  worldSourceTaskKeys: string[]
+}) {
+  const wanted = new Set(input.worldSourceTaskKeys)
+  const rows = await db.agentRuns.where('gameBuildId').equals(input.buildId).toArray()
+  const pointers: Array<{ runId: number; stepId: string; attempt: number; manifestHash: string }> = []
+  for (const row of rows) {
+    if (!row.id || !row.parentRelation?.startsWith('task:')) continue
+    const taskKey = row.parentRelation.slice('task:'.length)
+    if (!wanted.has(taskKey)) continue
+    const snapshot = await readAgentRunV1(input.scope, row.id)
+    for (const event of snapshot.events) {
+      if (event.type !== 'context.assembled' || event.payload.stepId !== taskKey) continue
+      pointers.push({
+        runId: row.id,
+        stepId: event.payload.stepId,
+        attempt: event.payload.attempt,
+        manifestHash: event.payload.manifestHash,
+      })
+    }
+  }
+  return pointers.sort((left, right) => left.runId - right.runId
+    || left.stepId.localeCompare(right.stepId) || left.attempt - right.attempt)
+}
+
+async function priorReleaseLineageV1(input: {
+  workId: number
+  productionKey: string
+}): Promise<{
+  version: number
+  parentRelease: ProductReleaseLineageV1['parentRelease']
+  sourceManifest: ProductSourceManifestV1 | null
+}> {
+  const rows = (await db.gameReleases.where('workId').equals(input.workId).toArray())
+    .filter(row => row.productionKey === input.productionKey)
+    .sort((left, right) => right.version - left.version)
+  const latest = rows[0]
+  if (!latest) return { version: 1, parentRelease: null, sourceManifest: null }
+  const manifest = await verifyGameReleaseManifestV3(latest.manifestJson)
+  return {
+    version: latest.version + 1,
+    parentRelease: {
+      releaseUid: manifest.lineage.releaseUid,
+      releaseHash: manifest.lineage.releaseHash,
+    },
+    sourceManifest: manifest.sourceContracts.sourceManifest,
+  }
+}
+
 async function inspectAdoption(scope: WorkspaceScope, productionId: number): Promise<VerifiedAdoption> {
   const production = await db.gameProductions.get(productionId)
   if (!production || !await assertRecordInScope(scope, 'gameProductions', production, { owner: 'work' })) {
@@ -254,6 +335,52 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
   })
   if (expectedRootReceipt !== build.rootTerminalReceiptHash) fail('root terminal receipt 校验失败')
 
+  const sourcePlan = await parseGameProductionSourcePlanV1(briefRow)
+  const confirmedBrief = await parseGameConfirmedBriefV1({ row: briefRow, sourcePlan })
+  if (sourcePlan.productType !== brief.intent.productType
+    || sourcePlan.productInstanceKey !== production.productionKey
+    || sourcePlan.worldReference.releaseHash !== brief.source.worldContentHash) {
+    fail('SourcePlan/ConfirmedBrief 与 Production/Brief/WorldRelease 不闭合')
+  }
+  const prior = await priorReleaseLineageV1({
+    workId: scope.workId,
+    productionKey: production.productionKey,
+  })
+  const pointers = await worldContextManifestPointersV1({
+    scope,
+    buildId: build.id!,
+    worldSourceTaskKeys: plan.tasks.filter(gameProductionTaskUsesWorldGatewayV1).map(task => task.taskKey),
+  })
+  const sourceManifest = pointers.length > 0
+    ? await aggregateProductSourceManifestFromExactRunsV1({
+      scope,
+      sourcePlan,
+      runContextManifests: pointers,
+    })
+    : prior.sourceManifest && prior.sourceManifest.sourcePlanHash === sourcePlan.planHash
+      ? await validateProductSourceManifestV1({ sourceManifest: prior.sourceManifest, sourcePlan })
+      : fail('当前 Build 没有真实世界读取 ContextManifestV3，且不存在可继承的同 SourcePlan 来源清单')
+  let compatibilityBody: unknown
+  try { compatibilityBody = JSON.parse(build.compatibilityJson) }
+  catch { fail('Build compatibility JSON 损坏') }
+  const compatibilityHash = await hashGameProductionValueV2(compatibilityBody)
+  const compatibilityLevel = object(compatibilityBody, 'Build compatibility').level
+  const compatibilityStatus: ProductReleaseLineageV1['compatibility']['status'] = prior.parentRelease == null
+    ? 'initial'
+    : compatibilityLevel === 'compatible'
+      ? 'compatible'
+      : compatibilityLevel === 'restart-recommended'
+        ? 'requires-migration'
+        : 'incompatible'
+  const qualityReceiptHashes = [
+    build.rootTerminalReceiptHash,
+    build.manifestHash,
+    build.qualityReportHash,
+    browserPerformance?.gateReceipt.receiptHash ?? null,
+    mainRoutePlaythrough?.gateReceipt.receiptHash ?? null,
+    mediaRuntime?.gateReceipt.receiptHash ?? null,
+  ].filter((value): value is string => value != null)
+
   const mediaArtifacts = new Map<string, GameBuildArtifactRecordV1>()
   const runtimeAssets = preview.runtimePackage.presentation?.assets ?? []
   if (preview.mediaBindings.length !== runtimeAssets.length) fail('Release-ready Preview 必须绑定全部 RuntimePackage 媒资')
@@ -296,6 +423,14 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     productType: preview.runtimePackage.productType, title: preview.runtimePackage.definition.title,
     mediaAssetKeys: runtimeAssets.map(asset => asset.assetKey).sort(),
     runtimePackage: preview.runtimePackage, artifacts, mediaArtifacts,
+    sourcePlan,
+    confirmedBrief,
+    sourceManifest,
+    releaseVersion: prior.version,
+    parentRelease: prior.parentRelease,
+    compatibilityHash,
+    compatibilityStatus,
+    qualityReceiptHashes,
   }
 }
 
@@ -424,70 +559,137 @@ export async function publishGameProductionBuild(input: {
   // transaction repeats a bounded field-level CAS over every locked authority
   // row, so it stays atomic without holding IndexedDB open across WebCrypto or
   // multi-megabyte byte verification.
-  const releaseManifest = await createGameReleaseManifestV2({
+  const productionProvenance: NonNullable<GameReleaseManifestV3['productionProvenance']> = {
+    productionKey: prepared.intent.productionKey,
+    buildNumber: prepared.intent.buildNumber,
+    buildManifestHash: prepared.intent.manifestHash,
+    rootTerminalReceiptHash: prepared.intent.rootTerminalReceiptHash,
+  }
+  const portableSourcePlan = await portableProductSourcePlanV1(prepared.sourcePlan)
+  const sourceContracts: GameReleaseManifestV3['sourceContracts'] = {
+    sourcePlan: portableSourcePlan,
+    confirmedBrief: prepared.confirmedBrief,
+    sourceManifest: prepared.sourceManifest,
+  }
+  const identityBody: Omit<GameReleaseManifestV3, 'releaseIdentityHash' | 'lineage'> = {
+    schema: 'storyforge.game-release',
+    version: 3,
+    productType: prepared.runtimePackage.productType,
+    sourceWorldRelease: { contentHash: prepared.runtimePackage.sourceWorld.contentHash },
     runtimePackage: prepared.runtimePackage,
-    productionProvenance: {
-      productionKey: prepared.intent.productionKey, buildNumber: prepared.intent.buildNumber,
-      buildManifestHash: prepared.intent.manifestHash,
-      rootTerminalReceiptHash: prepared.intent.rootTerminalReceiptHash,
+    packageHash: await hashGameProductionValueV2(prepared.runtimePackage),
+    productionProvenance,
+    sourceContracts,
+  }
+  const releaseIdentityHash = await gameReleaseIdentityHashV3(identityBody)
+  const releaseCreatedAt = Date.now()
+  const releaseUid = productReleaseUidV1({
+    productType: prepared.productType,
+    productInstanceKey: prepared.intent.productionKey,
+    releaseVersion: prepared.releaseVersion,
+    releaseHash: releaseIdentityHash,
+  })
+  const lineage = await createProductReleaseLineageV1({
+    productType: prepared.productType,
+    productInstanceKey: prepared.intent.productionKey,
+    releaseUid,
+    releaseVersion: prepared.releaseVersion,
+    releaseHash: releaseIdentityHash,
+    parentRelease: prepared.parentRelease,
+    worldReference: prepared.sourcePlan.worldReference,
+    sourcePlan: portableSourcePlan,
+    sourceManifest: prepared.sourceManifest,
+    confirmedBrief: prepared.confirmedBrief,
+    build: {
+      buildUid: `GB-${encodeURIComponent(prepared.intent.productionKey)}-b${prepared.intent.buildNumber}-${prepared.intent.manifestHash.slice(0, 24)}`,
+      buildHash: prepared.intent.manifestHash,
     },
+    quality: { passed: true, receiptHashes: prepared.qualityReceiptHashes },
+    compatibility: {
+      status: prepared.compatibilityStatus,
+      protocolVersion: 1,
+      evidenceHashes: [prepared.compatibilityHash],
+    },
+    createdAt: releaseCreatedAt,
+  })
+  const releaseManifest = await createGameReleaseManifestV3({
+    runtimePackage: prepared.runtimePackage,
+    productionProvenance,
+    sourceContracts,
+    lineage,
   })
   const manifestJson = canonicalGameProductionJsonV2(releaseManifest)
   const contentHash = await hashGameProductionValueV2(releaseManifest)
 
-  return db.transaction('rw', scopeTransactionTables(
-    db.gameProductions, db.gameProductionBriefs, db.gameProductionCommands, db.gameBuilds,
-    db.gameBuildArtifacts, db.mediaBlobObjects, db.worldReleases, db.gameReleases,
-    db.productMediaAssets, db.productMediaBlobs, db.gameQualityGateReceipts,
-  ), async () => {
-    const verified = prepared
-    await assertPreparedAdoptionUnchangedInTransaction(verified)
-    const duplicateCommand = await db.gameProductionCommands
-      .where('[productionId+commandId]').equals([input.productionId, command.commandId]).first()
-    if (duplicateCommand) fail('publish command 已被并发 claim')
-    const now = Date.now()
-    const claim = stampNewRecord(scope, 'gameProductionCommands', {
-      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-      productionId: input.productionId, commandId: command.commandId, type: 'publish' as const,
-      payloadHash, expectedStateRevision: command.expectedStateRevision, status: 'claimed' as const,
-      resultJson: '{}', errorCode: null, createdAt: now, completedAt: null,
-    } satisfies GameProductionCommandRecordV1, { owner: 'work' })
-    const claimId = await db.gameProductionCommands.add(claim) as number
-    await materializeReleaseMedia(verified, now)
-    const priorReleases = await db.gameReleases.where('workId').equals(scope.workId).toArray()
-    const productionReleases = priorReleases.filter(release => {
-      try {
-        const raw = JSON.parse(release.manifestJson) as { productionProvenance?: { productionKey?: string } | null }
-        return raw.productionProvenance?.productionKey === verified.intent.productionKey
-      } catch { return false }
+  let transactionStage = 'open'
+  try {
+    return await db.transaction('rw', scopeTransactionTables(
+      db.gameProductions, db.gameProductionBriefs, db.gameProductionCommands, db.gameBuilds,
+      db.gameBuildArtifacts, db.mediaBlobObjects, db.worldReleases, db.gameReleases,
+      db.productMediaAssets, db.productMediaBlobs, db.gameQualityGateReceipts,
+    ), async () => {
+      const verified = prepared
+      transactionStage = 'cas-authorities'
+      await assertPreparedAdoptionUnchangedInTransaction(verified)
+      transactionStage = 'claim-command'
+      const duplicateCommand = await db.gameProductionCommands
+        .where('[productionId+commandId]').equals([input.productionId, command.commandId]).first()
+      if (duplicateCommand) fail('publish command 已被并发 claim')
+      const now = releaseCreatedAt
+      const claim = stampNewRecord(scope, 'gameProductionCommands', {
+        projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+        productionId: input.productionId, commandId: command.commandId, type: 'publish' as const,
+        payloadHash, expectedStateRevision: command.expectedStateRevision, status: 'claimed' as const,
+        resultJson: '{}', errorCode: null, createdAt: now, completedAt: null,
+      } satisfies GameProductionCommandRecordV1, { owner: 'work' })
+      const claimId = await db.gameProductionCommands.add(claim) as number
+      transactionStage = 'materialize-media'
+      await materializeReleaseMedia(verified, now)
+      transactionStage = 'verify-release-version'
+      const priorReleases = await db.gameReleases.where('workId').equals(scope.workId).toArray()
+      const productionReleases = priorReleases.filter(release => {
+        try {
+          const raw = JSON.parse(release.manifestJson) as { productionProvenance?: { productionKey?: string } | null }
+          return raw.productionProvenance?.productionKey === verified.intent.productionKey
+        } catch { return false }
+      })
+      const expectedReleaseVersion = Math.max(0, ...productionReleases.map(release => release.version)) + 1
+      if (expectedReleaseVersion !== verified.releaseVersion) fail('发布版本在准备与提交之间发生变化')
+      const releaseRow: GameRelease = {
+        projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+        productionKey: verified.intent.productionKey,
+        worldReleaseId: verified.intent.worldReleaseId,
+        version: verified.releaseVersion,
+        label: input.label?.trim() || `${verified.title} v${verified.releaseVersion}`,
+        manifestJson, contentHash, createdAt: now,
+      }
+      transactionStage = 'insert-release'
+      const gameReleaseId = await db.gameReleases.add(releaseRow) as number
+      transactionStage = 'advance-build'
+      const stateRevision = verified.intent.expectedStateRevision + 1
+      await db.gameBuilds.update(verified.intent.buildId, {
+        status: 'released', stateRevision: (await db.gameBuilds.get(verified.intent.buildId))!.stateRevision + 1,
+        adoptionIntentHash: verified.adoptionIntentHash, releasedGameReleaseId: gameReleaseId,
+        completedAt: now, updatedAt: now,
+      })
+      transactionStage = 'advance-production'
+      await db.gameProductions.update(input.productionId, {
+        status: 'released', stateRevision, currentGameReleaseId: gameReleaseId, updatedAt: now,
+      })
+      const receipt: GameProductionPublishReceiptV1 = {
+        productionId: input.productionId, buildId: verified.intent.buildId,
+        buildNumber: verified.intent.buildNumber, gameReleaseId, releaseVersion: releaseRow.version,
+        releaseContentHash: contentHash, packageHash: verified.intent.packageHash,
+        adoptionIntentHash: verified.adoptionIntentHash, stateRevision, replayed: false,
+      }
+      transactionStage = 'commit-command'
+      await db.gameProductionCommands.update(claimId, {
+        status: 'succeeded', resultJson: canonicalGameProductionJsonV2(receipt), completedAt: now,
+      })
+      return receipt
     })
-    const releaseRow: GameRelease = {
-      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-      productionKey: verified.intent.productionKey,
-      worldReleaseId: verified.intent.worldReleaseId,
-      version: Math.max(0, ...productionReleases.map(release => release.version)) + 1,
-      label: input.label?.trim() || `${verified.title} v${productionReleases.length + 1}`,
-      manifestJson, contentHash, createdAt: now,
-    }
-    const gameReleaseId = await db.gameReleases.add(releaseRow) as number
-    const stateRevision = verified.intent.expectedStateRevision + 1
-    await db.gameBuilds.update(verified.intent.buildId, {
-      status: 'released', stateRevision: (await db.gameBuilds.get(verified.intent.buildId))!.stateRevision + 1,
-      adoptionIntentHash: verified.adoptionIntentHash, releasedGameReleaseId: gameReleaseId,
-      completedAt: now, updatedAt: now,
-    })
-    await db.gameProductions.update(input.productionId, {
-      status: 'released', stateRevision, currentGameReleaseId: gameReleaseId, updatedAt: now,
-    })
-    const receipt: GameProductionPublishReceiptV1 = {
-      productionId: input.productionId, buildId: verified.intent.buildId,
-      buildNumber: verified.intent.buildNumber, gameReleaseId, releaseVersion: releaseRow.version,
-      releaseContentHash: contentHash, packageHash: verified.intent.packageHash,
-      adoptionIntentHash: verified.adoptionIntentHash, stateRevision, replayed: false,
-    }
-    await db.gameProductionCommands.update(claimId, {
-      status: 'succeeded', resultJson: canonicalGameProductionJsonV2(receipt), completedAt: now,
-    })
-    return receipt
-  })
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause)
+    throw new Error(`[game-production-adoption:${transactionStage}] ${message}`)
+  }
 }

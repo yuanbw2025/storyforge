@@ -32,10 +32,45 @@ export async function ensureWorldReleaseUidV1(release: WorldRelease & { id: numb
   if (release.releaseUid && release.releaseUid !== expected) {
     fail('release-uid', 'WorldRelease releaseUid 与 code/version/contentHash 不一致')
   }
-  if (!release.releaseUid) {
-    await db.worldReleases.update(release.id, { releaseUid: expected })
-  }
   return expected
+}
+
+/**
+ * Validate only the portable identity of a WorldReference. This deliberately
+ * does not dereference `localReleaseRecordId`: published upper-product
+ * manifests must remain verifiable after export/import and local ID remapping.
+ */
+export async function validatePortableWorldReferenceV1(value: WorldReferenceV1): Promise<WorldReferenceV1> {
+  if (value.schema !== 'storyforge.world-reference' || value.version !== 1 || !HASH.test(value.referenceHash)) {
+    fail('contract', 'WorldReference 合同身份或 hash 非法')
+  }
+  if (!value.worldCode.trim() || !Number.isSafeInteger(value.releaseVersion) || value.releaseVersion < 1
+    || !HASH.test(value.releaseHash) || !HASH.test(value.manifestIdentity.schemaHash)
+    || !HASH.test(value.capabilityIdentity.catalogHash) || !HASH.test(value.capabilityIdentity.profileHash)
+    || !Number.isSafeInteger(value.localReleaseRecordId) || value.localReleaseRecordId < 0) {
+    fail('portable-fields', 'WorldReference portable identity 字段非法')
+  }
+  if (value.manifestIdentity.schema !== 'storyforge.world-package'
+    || value.manifestIdentity.version !== 2 || value.manifestIdentity.semanticContract !== 3) {
+    fail('manifest-identity', 'WorldReference manifest identity 非法')
+  }
+  const expectedUid = worldReleaseUidV1({
+    worldCode: value.worldCode,
+    version: value.releaseVersion,
+    contentHash: value.releaseHash,
+  })
+  if (value.releaseUid !== expectedUid) fail('release-uid', 'WorldReference releaseUid 与 portable identity 不一致')
+  const { referenceHash, ...body } = value
+  if (await hashCanonicalValue(referenceBody(body)) !== referenceHash) {
+    fail('reference-hash', 'WorldReference portable hash 不匹配')
+  }
+  return structuredClone(value)
+}
+
+/** Remove the host-local locator before serializing a product release. */
+export async function portableWorldReferenceV1(value: WorldReferenceV1): Promise<WorldReferenceV1> {
+  const reference = await validatePortableWorldReferenceV1(value)
+  return { ...reference, localReleaseRecordId: 0 }
 }
 
 export async function createWorldReferenceV1(localReleaseRecordId: number): Promise<WorldReferenceV1> {
@@ -74,9 +109,8 @@ export async function createWorldReferenceV1(localReleaseRecordId: number): Prom
 }
 
 export async function validateWorldReferenceV1(value: WorldReferenceV1): Promise<WorldReferenceV1> {
-  if (value.schema !== 'storyforge.world-reference' || value.version !== 1 || !HASH.test(value.referenceHash)) {
-    fail('contract', 'WorldReference 合同身份或 hash 非法')
-  }
+  await validatePortableWorldReferenceV1(value)
+  if (value.localReleaseRecordId < 1) fail('release-id', '本地执行需要已绑定的 WorldRelease locator')
   const current = await createWorldReferenceV1(value.localReleaseRecordId)
   if (current.releaseUid !== value.releaseUid
     || current.releaseHash !== value.releaseHash

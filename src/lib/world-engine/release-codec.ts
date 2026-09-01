@@ -7,6 +7,14 @@ const HASH = /^[a-f0-9]{64}$/
 const WORLD_SEMANTIC_TABLES = new Set(
   PROJECT_TABLES.filter(spec => spec.worldSemantic).map(spec => spec.name),
 )
+const WORLD_SEMANTIC_SPECS = PROJECT_TABLES.filter(spec => spec.worldSemantic)
+const WORLD_SEMANTIC_BY_TABLE = new Map(WORLD_SEMANTIC_SPECS.map(spec => [spec.name, spec] as const))
+
+function semanticResourceId(worldCode: string, table: string): string {
+  const semantic = WORLD_SEMANTIC_BY_TABLE.get(table)?.worldSemantic
+  if (!semantic) fail('ownership', `表 ${table} 未登记 worldSemantic`)
+  return `world:${worldCode}:semantic:${semantic.area}:${semantic.resourceKind}`
+}
 
 export type PureWorldReleaseManifestV3 = WorldReleaseManifestV2 & {
   semanticContract: 3
@@ -111,9 +119,13 @@ export function parsePureWorldReleaseManifestV3(
       fail('catalog', 'resourceCatalog 项非法、重复或越界')
     }
     const dependency = dependencies.get(resource.table)
+    const registered = WORLD_SEMANTIC_BY_TABLE.get(resource.table)?.worldSemantic
     if (!dependency || dependency.rowCount !== resource.rowCount
-      || dependency.contentHash !== resource.contentHash) {
-      fail('catalog', 'resourceCatalog 与 dependency 身份不一致')
+      || dependency.contentHash !== resource.contentHash
+      || !registered || resource.area !== registered.area
+      || resource.resourceKind !== registered.resourceKind
+      || resource.resourceId !== semanticResourceId(manifest.worldCode, resource.table)) {
+      fail('catalog', 'resourceCatalog 与 dependency/PROJECT_TABLES 语义身份不一致')
     }
     resourceIds.add(resource.resourceId)
     catalogTables.add(resource.table)
@@ -147,6 +159,15 @@ export function parsePureWorldReleaseManifestV3(
     || manifest.sourceManifest.selectedResourceIds.some(id => manifest.sourceManifest!.omittedResourceIds.includes(id))) {
     fail('source-manifest', 'sourceManifest 资源范围重复或相交')
   }
+  const expectedSelected = selectedTables.map(table => semanticResourceId(manifest.worldCode, table)).sort()
+  const expectedOmitted = WORLD_SEMANTIC_SPECS
+    .filter(spec => !selectedTables.includes(spec.name))
+    .map(spec => semanticResourceId(manifest.worldCode, spec.name))
+    .sort()
+  if (JSON.stringify([...manifest.sourceManifest.selectedResourceIds].sort()) !== JSON.stringify(expectedSelected)
+    || JSON.stringify([...manifest.sourceManifest.omittedResourceIds].sort()) !== JSON.stringify(expectedOmitted)) {
+    fail('source-manifest', 'sourceManifest selected/omitted 未与 PROJECT_TABLES 完整分区')
+  }
   return manifest as PureWorldReleaseManifestV3
 }
 
@@ -170,6 +191,44 @@ export async function verifyPureWorldReleaseManifestV3(input: {
     if (rows.length !== resource.rowCount
       || await hashWorldReleaseValueV1(rows) !== resource.contentHash) {
       fail('resource-hash', `世界资源 ${resource.resourceId} 行数或 hash 损坏`)
+    }
+  }
+  for (const area of WORLD_CAPABILITY_AREAS) {
+    const capability = manifest.capabilityProfile.find(item => item.area === area)!
+    const areaSpecs = WORLD_SEMANTIC_SPECS.filter(spec => spec.worldSemantic?.area === area)
+    const resources = manifest.resourceCatalog.filter(resource => resource.area === area)
+    const rowCount = resources.reduce((sum, resource) => sum + resource.rowCount, 0)
+    const selectedResourceCount = resources.length
+    const omittedResourceCount = areaSpecs.length - selectedResourceCount
+    const latestRevisions = resources
+      .map(resource => resource.latestRevision)
+      .filter((value): value is number => value != null)
+    const expected = {
+      area,
+      resourceCount: areaSpecs.length,
+      rowCount,
+      status: rowCount === 0
+        ? 'missing'
+        : omittedResourceCount === 0 && resources.every(resource => resource.rowCount > 0)
+          ? 'available'
+          : 'partial',
+      selectionStatus: selectedResourceCount === 0
+        ? 'omitted'
+        : omittedResourceCount === 0
+          ? 'selected'
+          : 'partial-selection',
+      selectedResourceCount,
+      omittedResourceCount,
+      confirmedRowCount: resources.reduce((sum, resource) => sum + (resource.confirmedRowCount ?? 0), 0),
+      candidateRowCount: resources.reduce((sum, resource) => sum + (resource.candidateRowCount ?? 0), 0),
+      conflictRowCount: resources.reduce((sum, resource) => sum + (resource.conflictRowCount ?? 0), 0),
+      omittedRowCount: resources.reduce((sum, resource) => sum + (resource.omittedRowCount ?? 0), 0),
+      latestRevision: latestRevisions.length ? Math.max(...latestRevisions) : null,
+      originalEvidenceAvailable: rowCount > 0,
+      queryableIndexAvailable: rowCount > 0,
+    }
+    if (await hashWorldReleaseValueV1(capability) !== await hashWorldReleaseValueV1(expected)) {
+      fail('capabilities', `capabilityProfile 与 catalog/PROJECT_TABLES 不一致:${area}`)
     }
   }
   const { contentHash: _sourceHash, ...sourceManifestBody } = manifest.sourceManifest

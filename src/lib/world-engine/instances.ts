@@ -1,9 +1,10 @@
 import { db } from '../db/schema'
 import {
   applySimulationEvent,
-  createPreviewGameSession,
-  createReleasedGameSession,
+  insertPreparedFormalGameSessionV1,
   hashSimulationRuntimeStateV1,
+  preparePreviewGameSessionRecordV1,
+  prepareReleasedGameSessionRecordV3,
   readSimulationState,
   withAdventureNarrativeProjection,
   withNarrativeSimulationProjection,
@@ -431,6 +432,28 @@ export async function createWorldInstance(
     }),
     initialState,
   }
+  // Cryptographic Release/Build and initial-state validation must finish before
+  // the atomic commit transaction; the transaction only repeats row-level CAS,
+  // inserts the prepared session and appends its initial events.
+  const preparedSession = input.gameSource.kind === 'release' && gameRelease
+    ? await prepareReleasedGameSessionRecordV3({
+        ...sessionInput,
+        worldId: scope.worldId,
+        workId: scope.workId,
+        gameReleaseId: gameRelease.id!,
+        origin: continuation ? 'branch' : 'release',
+      })
+    : input.gameSource.kind === 'build' && gameBuild
+      ? await preparePreviewGameSessionRecordV1({
+          ...sessionInput,
+          worldId: scope.worldId,
+          workId: scope.workId,
+          gameBuildId: gameBuild.id!,
+          expectedPreviewHash: input.gameSource.expectedPreviewHash,
+          runtimeSourceHash: playable.runtimeSourceHash,
+          origin: 'preview',
+        })
+      : (() => { throw new Error('[instance] 不支持的产品来源') })()
 
   return db.transaction('rw', scopeTransactionTables(
     db.worldGroups,
@@ -475,25 +498,7 @@ export async function createWorldInstance(
         throw new Error('[instance] 产品 Build 在实例创建过程中发生变化')
       }
     }
-    const session = input.gameSource.kind === 'release' && gameRelease
-      ? await createReleasedGameSession({
-          ...sessionInput,
-          worldId: currentScope.worldId,
-          workId: currentScope.workId,
-          gameReleaseId: gameRelease.id!,
-          origin: continuation ? 'branch' : 'release',
-        })
-      : input.gameSource.kind === 'build' && gameBuild
-        ? await createPreviewGameSession({
-            ...sessionInput,
-            worldId: currentScope.worldId,
-            workId: currentScope.workId,
-            gameBuildId: gameBuild.id!,
-            expectedPreviewHash: input.gameSource.expectedPreviewHash,
-            runtimeSourceHash: playable.runtimeSourceHash,
-            origin: 'preview',
-          })
-        : (() => { throw new Error('[instance] 不支持的产品来源') })()
+    const session = await insertPreparedFormalGameSessionV1(preparedSession)
 
     const binding = {
       parentSessionId: continuationParent?.id ?? null,

@@ -1208,6 +1208,7 @@ async function executeIntegrationTask(input: GameProductionTaskExecutionInputV1,
       workId: options.production.workId,
     },
     worldReleaseId: options.brief.source.worldReleaseId,
+    selection: options.brief.source.selection,
   })
   if (sourceCatalog.release.contentHash !== options.brief.source.worldContentHash) {
     fail('Production 的冻结 WorldRelease 不存在、跨世界或已漂移')

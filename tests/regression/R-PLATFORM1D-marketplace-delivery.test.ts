@@ -19,12 +19,12 @@ import {
   importMarketplaceGameDistributionV2,
 } from '../../src/lib/game-platform/distribution-bundle'
 import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
-import { createGameReleaseManifestV2 } from '../../src/lib/game-production/runtime-package'
 import { assertGameReleaseUnchanged } from '../../src/lib/text-game/releases'
 import type { GameRuntimePackageV2, WorkspaceScope } from '../../src/lib/types'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
+import { createFixtureGameReleaseManifestV3 } from '../helpers/game-release-v3'
 
 class CommercialStore implements CommercialPlatformPersistenceV1 {
   snapshot: CommercialPlatformSnapshotV1 | null = null
@@ -77,12 +77,13 @@ function storyPackage(worldContentHash: string): GameRuntimePackageV2 {
 async function releaseBundle(scope: WorkspaceScope) {
   const revision = await createWorldRevision({ scope, label: '发行世界' })
   const worldRelease = await publishWorldRevision(revision.id!)
-  const manifest = await createGameReleaseManifestV2({
-    runtimePackage: storyPackage(worldRelease.contentHash), productionProvenance: null,
+  const manifest = await createFixtureGameReleaseManifestV3({
+    runtimePackage: storyPackage(worldRelease.contentHash), productionKey: 'market.delivery',
   })
   const id = await db.gameReleases.add({
     projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-    gameDefinitionId: null, worldReleaseId: worldRelease.id!, version: 1, label: '市场闭环 v1',
+    gameDefinitionId: null, productionKey: 'market.delivery',
+    worldReleaseId: worldRelease.id!, version: 1, label: '市场闭环 v1',
     manifestJson: JSON.stringify(manifest), contentHash: await hashGameProductionValueV2(manifest),
     createdAt: Date.now(),
   }) as number

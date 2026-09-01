@@ -14,7 +14,8 @@ import {
   validateProductSourcePlanV1,
   worldReferenceResourceScopeV1,
 } from '../../src/lib/world-engine/product-source-contracts'
-import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { hashWorldReleaseValueV1 } from '../../src/lib/world-engine/release-hash'
+import { createWorldRevision, publishWorldRevision, worldReleaseUidV1 } from '../../src/lib/world-engine/releases'
 import { stampNewRecord } from '../../src/lib/world-engine/scope'
 import {
   createWorldReferenceV1,
@@ -165,12 +166,48 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
     expect(reboundDescriptors.every(item => item.scope.worldReleaseId === reboundId)).toBe(true)
   })
 
+  it('WorldReference 校验只读；旧记录缺少 releaseUid 时只派生身份、不暗中改库', async () => {
+    const owned = await fixture()
+    await db.worldReleases.update(owned.release.id!, { releaseUid: null } as any)
+
+    await expect(validateWorldReferenceV1(owned.reference)).resolves.toEqual(owned.reference)
+    expect((await db.worldReleases.get(owned.release.id!))?.releaseUid).toBeNull()
+  })
+
+  it('即使 records/hash 全部重新签名，重复语义坐标仍不能生成可歧义资源键', async () => {
+    const owned = await fixture()
+    const release = (await db.worldReleases.get(owned.release.id!))!
+    const manifest = JSON.parse(release.manifestJson)
+    const rows = manifest.records.characters as Array<Record<string, unknown>>
+    expect(rows).toHaveLength(2)
+    rows[0]!._exportId = 'duplicate-coordinate'
+    rows[1]!._exportId = 'duplicate-coordinate'
+    const rowsHash = await hashWorldReleaseValueV1(rows)
+    manifest.dependencies.find((item: any) => item.table === 'characters').contentHash = rowsHash
+    manifest.resourceCatalog.find((item: any) => item.table === 'characters').contentHash = rowsHash
+    const contentHash = await hashWorldReleaseValueV1(manifest)
+    await db.worldReleases.update(release.id!, {
+      manifestJson: JSON.stringify(manifest),
+      contentHash,
+      releaseUid: worldReleaseUidV1({
+        worldCode: release.sourceWorldCode,
+        version: release.version,
+        contentHash,
+      }),
+    })
+
+    await expect(listAllWorldReleaseResourceDescriptorsV1({
+      ...owned.resourceScope,
+      worldReleaseHash: contentHash,
+    })).rejects.toThrow('资源坐标重复')
+  })
+
   it('拒绝可变草稿冒充冻结来源以及 release ID/hash 任一侧漂移', async () => {
     const owned = await fixture()
     await expect(validateWorldReferenceV1({
       ...owned.reference,
       releaseHash: 'f'.repeat(64),
-    })).rejects.toThrow('不再同时匹配')
+    })).rejects.toThrow(/releaseUid|不再同时匹配/)
     await db.worldviews.toCollection().modify({ summary: '草稿已变化但 release 不变' })
     await expect(validateWorldReferenceV1(owned.reference)).resolves.toEqual(owned.reference)
     const frozen = await describeWorldReleaseV1(owned.resourceScope)

@@ -1,6 +1,6 @@
 import { db } from '../db/schema'
 import { hashCanonicalValue } from '../agent/run/hash'
-import { verifyGameReleaseManifestV2 } from '../game-production/runtime-package'
+import { verifyGameReleaseManifestV3 } from '../game-production/runtime-package'
 import {
   changeTtrpgSafetyStatus,
   commitTtrpgEffectPlanV2,
@@ -162,7 +162,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
     if (!session || session.kind !== 'ttrpg' || !release || release.contentHash !== input.releaseHash) {
       fail('release_mismatch', '在线房间必须绑定未改变的正式 TTRPG GameRelease')
     }
-    const manifest = await verifyGameReleaseManifestV2(release.manifestJson)
+    const manifest = await verifyGameReleaseManifestV3(release.manifestJson)
     if (manifest.productType !== 'ttrpg' || !manifest.runtimePackage.ttrpg
       || manifest.packageHash !== session.runtimeSourceHash) {
       fail('release_mismatch', '在线房间的正式 TTRPG RuntimePackage 不一致')

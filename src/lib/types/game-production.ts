@@ -728,6 +728,13 @@ export interface GameProductionBriefRecordV1 {
   estimateJson: string;
   briefJson: string;
   briefHash: string;
+  /** Frozen stage-two read authority. Empty legacy sentinels are rejected and
+   * require the author to save a fresh Brief before production can start. */
+  sourcePlanJson: string;
+  sourcePlanHash: string;
+  /** Frozen only by the explicit authorize-start command. */
+  confirmedBriefJson: string;
+  confirmedBriefHash: string;
   authorizedAt: number | null;
   createdAt: number;
 }

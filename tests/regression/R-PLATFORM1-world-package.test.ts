@@ -7,7 +7,27 @@ import {
 } from '../../src/lib/product/world-package'
 import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { hashWorldReleaseValueV1 } from '../../src/lib/world-engine/release-hash'
 import { stampNewRecord } from '../../src/lib/world-engine/scope'
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (value == null || typeof value !== 'object') return value
+  return Object.fromEntries(Object.keys(value as Record<string, unknown>).sort()
+    .map(key => [key, canonicalize((value as Record<string, unknown>)[key])]))
+}
+
+async function resignPackageIntegrity(pkg: Awaited<ReturnType<typeof createWorldPackage>>): Promise<void> {
+  const payload = {
+    format: pkg.format,
+    packageVersion: pkg.packageVersion,
+    manifest: pkg.manifest,
+    release: pkg.release,
+  }
+  const bytes = new TextEncoder().encode(JSON.stringify(canonicalize(payload)))
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  pkg.integrity.digest = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+}
 
 describe('PLATFORM-1 · 本地世界发布包', () => {
   beforeEach(async () => {
@@ -93,6 +113,60 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     expect(leakedReport.errors.join('；')).toMatch(/productMediaAssets|完整性校验失败/)
     await expect(importWorldPackage(leaked)).rejects.toThrow('世界分享包预检失败')
     expect(await db.projects.count()).toBe(1)
+  })
+
+  it('目录语义身份不可重标，source manifest 必须完整分区', async () => {
+    const seeded = await seedProject()
+    const pkg = await createWorldPackage(seeded.release.id!, {
+      authorName: '匿名', license: 'ALL-RIGHTS-RESERVED',
+      allowedUses: { writing: true, ttrpg: true, characterChat: true, textGame: true },
+    })
+    const mutations: Array<(copy: typeof pkg) => void> = [
+      copy => { copy.release.manifest.resourceCatalog![0]!.resourceId = 'world:forged:semantic:story:forged' },
+      copy => { copy.release.manifest.resourceCatalog![0]!.resourceKind = 'forged-kind' },
+      copy => {
+        const resource = copy.release.manifest.resourceCatalog![0]!
+        resource.area = resource.area === 'story' ? 'foundation' : 'story'
+      },
+    ]
+    for (const mutate of mutations) {
+      const copy = structuredClone(pkg)
+      mutate(copy)
+      const report = await inspectWorldPackage(copy)
+      expect(report.valid).toBe(false)
+      expect(report.errors.join('；')).toContain('resourceCatalog 与 dependency/PROJECT_TABLES 语义身份不一致')
+    }
+
+    const partition = structuredClone(pkg)
+    partition.release.manifest.sourceManifest!.selectedResourceIds.pop()
+    const partitionReport = await inspectWorldPackage(partition)
+    expect(partitionReport.valid).toBe(false)
+    expect(partitionReport.errors.join('；')).toContain('selected/omitted 未与 PROJECT_TABLES 完整分区')
+  })
+
+  it('selected table 即使为空也必须在便携数据中存在，不能被导入器默认为无事发生', async () => {
+    const seeded = await seedProject()
+    const pkg = await createWorldPackage(seeded.release.id!, {
+      authorName: '匿名', license: 'ALL-RIGHTS-RESERVED',
+      allowedUses: { writing: true, ttrpg: true, characterChat: true, textGame: true },
+    })
+    const portable = pkg.release.manifest.portableProject as Record<string, unknown>
+    const emptySelectedTable = pkg.release.manifest.selectedTables.find(table => (
+      Array.isArray(pkg.release.manifest.records[table])
+      && pkg.release.manifest.records[table]!.length === 0
+      && Array.isArray(portable[table])
+    ))
+    expect(emptySelectedTable).toBeTruthy()
+    const missing = structuredClone(pkg)
+    delete (missing.release.manifest.portableProject as Record<string, unknown>)[emptySelectedTable!]
+    missing.release.contentHash = await hashWorldReleaseValueV1(missing.release.manifest)
+    missing.manifest.releaseHash = missing.release.contentHash
+    await resignPackageIntegrity(missing)
+
+    const report = await inspectWorldPackage(missing)
+    expect(report.valid).toBe(false)
+    expect(report.errors.join('；')).toContain(`便携数据缺少冻结资源「${emptySelectedTable}」`)
+    await expect(importWorldPackage(missing)).rejects.toThrow('世界分享包预检失败')
   })
 
   it('导入为新本地编号并保存来源，不覆盖原世界或带入产品媒资', async () => {

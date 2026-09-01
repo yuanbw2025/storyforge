@@ -2,7 +2,6 @@ import { db } from '../db/schema'
 import type { WorkspaceScope } from '../types'
 import type { AssembleContextInput } from '../registry/types'
 import { assertRecordInScope } from '../world-engine/scope'
-import { loadGameProductionWorldSourceCatalogV2 } from './world-source'
 
 function requiredScope(input: AssembleContextInput): WorkspaceScope {
   if (!input.scope) throw new Error('[game-production-context] 缺少已解析 WorkspaceScope')
@@ -12,63 +11,6 @@ function requiredScope(input: AssembleContextInput): WorkspaceScope {
 function requiredId(value: number | undefined, label: string): number {
   if (!Number.isInteger(value) || (value ?? 0) <= 0) throw new Error(`[game-production-context] 缺少 ${label}`)
   return value!
-}
-
-export async function readGameProductionConsultationSource(input: AssembleContextInput): Promise<string> {
-  const scope = requiredScope(input)
-  const releaseId = requiredId(input.gameWorldReleaseId, 'gameWorldReleaseId')
-  const gameCatalog = await loadGameProductionWorldSourceCatalogV2({ scope, worldReleaseId: releaseId })
-  const option = (value: { resourceKey: string; name: string; description: string }, kind: string) => ({
-    resourceKey: value.resourceKey, label: value.name, summary: value.description, kind,
-  })
-  return JSON.stringify({
-    schema: 'storyforge.game-production.consultation-source', version: 1,
-    worldReference: gameCatalog.worldReference,
-    release: gameCatalog.release,
-    world: gameCatalog.world,
-    availableResources: gameCatalog.resources.map(resource => ({
-      resourceKey: resource.descriptor.resourceKey,
-      area: resource.descriptor.worldSemantic.area,
-      resourceKind: resource.descriptor.worldSemantic.resourceKind,
-    })),
-    opportunities: {
-      storySources: gameCatalog.storySources.slice(0, 30).map(value => option(value, 'story-source')),
-      characters: gameCatalog.characters.slice(0, 30).map(value => option(value, 'character')),
-      storyArcs: gameCatalog.storyArcs.slice(0, 30).map(value => option(value, value.type || 'story-arc')),
-      locations: gameCatalog.locations.slice(0, 30).map(value => option(value, 'location')),
-      historicalTimelineEvents: gameCatalog.resources
-        .filter(resource => resource.descriptor.worldSemantic.resourceKind === 'historical-event')
-        .slice(0, 30).map(resource => ({
-          resourceKey: resource.descriptor.resourceKey,
-          label: resource.descriptor.title,
-          summary: resource.descriptor.shortSummary,
-          kind: 'historical-event',
-        })),
-    },
-    selectionOptions: {
-      storySources: gameCatalog.storySources.map(item => option(item, 'story-source')),
-      characters: gameCatalog.characters.map(item => option(item, 'character')),
-      importantLocations: gameCatalog.locations.map(item => option(item, 'location')),
-      artifacts: gameCatalog.artifacts.map(item => option(item, 'artifact')),
-      codexEntries: gameCatalog.loreEntries.map(item => option(item, 'lore')),
-      storyArcs: gameCatalog.storyArcs.map(item => option(item, item.type || 'story-arc')),
-    },
-    selectionRelations: gameCatalog.relationships.map(item => ({
-      resourceKey: item.resourceKey,
-      fromCharacterResourceKey: item.fromCharacterResourceKey,
-      toCharacterResourceKey: item.toCharacterResourceKey,
-    })),
-    selectionCatalog: {
-      storyResourceKeys: gameCatalog.storySources.map(item => item.resourceKey),
-      characterResourceKeys: gameCatalog.characters.map(item => item.resourceKey),
-      importantLocationResourceKeys: gameCatalog.locations.map(item => item.resourceKey),
-      // Inventory events are not world assets. Only semantic artifact entries
-      // exposed by the neutral gateway may enter a product selection.
-      artifactResourceKeys: gameCatalog.artifacts.map(item => item.resourceKey),
-      codexEntryResourceKeys: gameCatalog.loreEntries.map(item => item.resourceKey),
-      storyArcResourceKeys: gameCatalog.storyArcs.map(item => item.resourceKey),
-    },
-  })
 }
 
 async function productionAndBuild(input: AssembleContextInput) {

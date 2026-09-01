@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { db } from "../../lib/db/schema";
 import { verifyPlayableGamePackageSource } from "../../lib/game-production/preview-source";
-import { verifyGameReleaseManifestV2 } from "../../lib/game-production/runtime-package";
+import { verifyGameReleaseManifestV3 } from "../../lib/game-production/runtime-package";
 import {
   activateTtrpgCampaignSupplementV2,
   completeTtrpgSessionZero,
@@ -390,7 +390,7 @@ export default function TtrpgCampaignGuide(props: {
         playableSource = { kind: "release", gameReleaseId: props.session.gameReleaseId };
         const release = await db.gameReleases.get(props.session.gameReleaseId);
         if (!release) throw new Error("正式战役发布不存在。");
-        const manifest = await verifyGameReleaseManifestV2(
+        const manifest = await verifyGameReleaseManifestV3(
           release.manifestJson,
         );
         runtimePackage = manifest.runtimePackage;
@@ -501,7 +501,7 @@ export default function TtrpgCampaignGuide(props: {
               )
               .map(async (row) => {
                 try {
-                  const manifest = await verifyGameReleaseManifestV2(
+                  const manifest = await verifyGameReleaseManifestV3(
                     row.manifestJson,
                   );
                   return manifest.productType === "ttrpg" ? row : null;
@@ -5682,7 +5682,7 @@ export default function TtrpgCampaignGuide(props: {
                               if (!targetRelease)
                                 throw new Error("目标 TTRPG 发布不存在。");
                               const targetManifest =
-                                await verifyGameReleaseManifestV2(
+                                await verifyGameReleaseManifestV3(
                                   targetRelease.manifestJson,
                                 );
                               const targetTtrpg =

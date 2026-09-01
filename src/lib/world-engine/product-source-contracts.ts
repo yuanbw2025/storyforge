@@ -29,7 +29,11 @@ import type {
   FrozenResourceScopeV1,
   RetrievalDecisionV1,
 } from '../registry/types'
-import { validateWorldReferenceV1 } from './world-reference'
+import {
+  portableWorldReferenceV1,
+  validatePortableWorldReferenceV1,
+  validateWorldReferenceV1,
+} from './world-reference'
 
 const HASH = /^[a-f0-9]{64}$/
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
@@ -312,7 +316,7 @@ export async function validateProductSourcePlanV1(plan: ProductSourcePlanV1): Pr
   if (plan.schema !== 'storyforge.product-source-plan' || plan.version !== 1) fail('plan-contract', 'SourcePlan 合同身份无效')
   assertHash(plan.planHash, 'planHash')
   assertHash(plan.gatewayPolicyHash, 'gatewayPolicyHash')
-  await validateWorldReferenceV1(plan.worldReference)
+  await validatePortableWorldReferenceV1(plan.worldReference)
   const { planHash, ...body } = plan
   if (await hashCanonicalValue(portableSourcePlanBodyV1(body)) !== planHash
     || await hashCanonicalValue(plan.gatewayPolicy) !== plan.gatewayPolicyHash) {
@@ -325,6 +329,16 @@ export async function validateProductSourcePlanV1(plan: ProductSourcePlanV1): Pr
   const normalizedReadiness = readiness({ requirements: plan.requirements, missingStrategy: plan.missingStrategy })
   if (normalizedReadiness !== plan.readiness) fail('plan-readiness', 'SourcePlan readiness 与必读缺口不一致')
   return structuredClone(plan)
+}
+
+/** Portable release form of a SourcePlan. Its identity is unchanged because
+ * localReleaseRecordId is explicitly excluded from plan/reference hashes. */
+export async function portableProductSourcePlanV1(planInput: ProductSourcePlanV1): Promise<ProductSourcePlanV1> {
+  const plan = await validateProductSourcePlanV1(planInput)
+  return {
+    ...plan,
+    worldReference: await portableWorldReferenceV1(plan.worldReference),
+  }
 }
 
 export async function createConfirmedProductBriefV1(input: {
@@ -546,18 +560,10 @@ export async function aggregateProductSourceManifestFromExactRunsV1(input: {
         reasonCode: decision.reason,
       })
     }
-    for (const omission of manifest.gateway.retrievalTrace.omitted) {
-      if (omission.sourceKey !== 'worldRelease') continue
-      const descriptor = await descriptorForTrace({ scope: sourceScope, resourceKey: omission.resourceKey })
-      if (!resourceAllowed(plan, descriptor)) continue
-      addDecision({
-        map: resourceMap,
-        descriptor,
-        status: 'omitted',
-        manifestHash: manifest.manifestHash,
-        reasonCode: omission.reasonCode,
-      })
-    }
+    // Per-resource omissions may cover the entire unread release and would
+    // make a product manifest grow with world size. Requirement outcomes below
+    // preserve omission/insufficiency semantics; `resources` is intentionally
+    // an exact ledger of resources actually read by production runs.
   }
   const resources: ProductSourceManifestResourceV1[] = [...resourceMap.values()]
     .map(item => ({
@@ -743,6 +749,7 @@ export async function assertFormalProductProductionStartV1(input: {
   authorStartRevision: number
 }): Promise<void> {
   const plan = await validateProductSourcePlanV1(input.sourcePlan)
+  await worldReferenceResourceScopeV1(plan.worldReference)
   const brief = await validateConfirmedProductBriefV1({ brief: input.confirmedBrief, sourcePlan: plan })
   if (plan.readiness === 'blocked') fail('source-plan-blocked', 'SourcePlan 存在未解决的稳定必读缺口')
   if (brief.authorStartRevision !== input.authorStartRevision) {

@@ -151,7 +151,7 @@ export interface FrozenRuntimeMediaAssetV2 extends FrozenProductMediaAsset {
 }
 
 /**
- * Product-neutral immutable package shared by Build Preview and GameRelease v2.
+ * Product-neutral immutable package shared by Build Preview and GameRelease v3.
  * It contains no Dexie ids, provider credentials, binary bytes, Build ids, or Release ids.
  */
 export interface GameRuntimePackageV2 {
@@ -179,9 +179,9 @@ export interface GameRuntimePackageV2 {
   ttrpg?: TtrpgRuntimeContentV1
 }
 
-export interface GameReleaseManifestV2 {
+export interface GameReleaseManifestV3 {
   schema: 'storyforge.game-release'
-  version: 2
+  version: 3
   productType: GameProductType
   sourceWorldRelease: {
     contentHash: string
@@ -193,7 +193,16 @@ export interface GameReleaseManifestV2 {
     buildNumber: number
     buildManifestHash: string
     rootTerminalReceiptHash: string
-  } | null
+  }
+  sourceContracts: {
+    sourcePlan: import('./world-product-contracts').ProductSourcePlanV1
+    confirmedBrief: import('./world-product-contracts').ConfirmedProductBriefV1
+    sourceManifest: import('./world-product-contracts').ProductSourceManifestV1
+  }
+  /** Hash of every release field except lineage. It breaks the otherwise
+   * circular identity between a release and its embedded lineage. */
+  releaseIdentityHash: string
+  lineage: import('./world-product-contracts').ProductReleaseLineageV1
 }
 
 export type StoryGameRuntimePackageV2 = GameRuntimePackageV2 & { productType: 'storygame' }
@@ -222,7 +231,7 @@ export type TextOpenWorldGameRuntimePackageV2 = GameRuntimePackageV2 & {
   openWorld: OpenWorldContentV1
 }
 
-export type AnyGameReleaseManifest = GameReleaseManifestV2
+export type AnyGameReleaseManifest = GameReleaseManifestV3
 
 export interface GameRelease {
   id?: number

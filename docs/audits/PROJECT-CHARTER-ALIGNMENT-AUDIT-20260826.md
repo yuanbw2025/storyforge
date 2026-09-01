@@ -1,7 +1,7 @@
 # StoryForge 项目架构治理对齐审计
 
-> 审计版本：3.0.0<br>
-> 复审日期：2026-08-31<br>
+> 审计版本：3.2.0<br>
+> 复审日期：2026-09-02<br>
 > 对照权威：[StoryForge 项目总纲](../PROJECT-MASTER-CHARTER.md) 1.3.0<br>
 > 审计对象：当前架构治理交付树的产品边界、所有权、阶段流转、版本与共享协议<br>
 > 状态：ARCH-01～07 的项目级纠偏已关闭并进入代码、检查器与回归；本文件不把短篇、剧本、漫画、跑团、聊天或文字游戏的专项功能误报为已经完成
@@ -20,7 +20,7 @@
 
 因此，本审计保留架构冲突，转交产品实现与质量事项，不再用总体审计替代产品设计。
 
-2.1.0 进一步纠正了另一类口径错误：Phase 5 已经完成分步骤长篇主体、真实 API 纵切面和百万字符工程规模门，不能因长期作者质量研究尚在继续，就把种族字段推广、完整 Harness、持续演化和长程记忆重新列为待施工功能。3.0.0 则记录七项架构纠偏与世界引擎基础闭环的实际关闭证据，使后续产品分支可以从同一稳定基线开工。
+2.1.0 进一步纠正了另一类口径错误：Phase 5 已经完成分步骤长篇主体、真实 API 纵切面和百万字符工程规模门，不能因长期作者质量研究尚在继续，就把种族字段推广、完整 Harness、持续演化和长程记忆重新列为待施工功能。3.0.0 则记录七项架构纠偏与世界引擎基础闭环的实际关闭证据。3.1.0 进一步完成旧世界 reader 清场，并把五套交接契约、逐 run 来源证据、GameRelease v3 身份链和正式 session 事务边界收口到同一产品生产纵切面，使后续产品分支可以从同一稳定基线开工。3.2.0 再消除确定性编译器的隐形重读：Gateway 与 RuntimePackage 编译共用“选择 + 语义依赖”闭包，并把每个实际输入先冻结为原文级 run 证据；同时删除跑团仅试玩、禁止正式发布的旧入口闸门。
 
 ## 2. 审计边界
 
@@ -242,9 +242,11 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 
 **证据**
 
-- `src/lib/ttrpg/world-source.ts`、`src/lib/character-interaction/world-source.ts`、`src/lib/game-production/context.ts`、`src/lib/text-game/world-generation.ts` 分别解析 `WorldReleaseManifestV2`、selected tables 和产品摘要。
-- 部分读取器还读取 AVG 媒资，进一步固化 ARCH-02。
-- 当前 Context Gateway 已有 provider、resource descriptor、目录/检索/详情和遗漏语义，可复用为不可变世界 provider。
+- `src/lib/context-gateway/world-release-provider.ts` 是唯一中立世界语义 provider，产品代码不再解析物理 manifest。
+- `src/lib/game-production/source-contracts.ts` 把用户确认的 Brief 与产品需求适配器编译为冻结 SourcePlan；Scheduler 对模型任务与确定性集成任务使用同一网关和证据边界。
+- `src/lib/game-production/world-source.ts` 让 Gateway 与 RuntimePackage 编译器共用选择/依赖闭包；确定性集成在调用编译器前必须为这些资源留下 original 读取证据。
+- 跑团专用世界目录、角色互动旧生产线和旧 consultation source 已删除；架构检查器将其列入禁止恢复清单。
+- 跑团的 Brief、生产、质量、GameRelease v3 和正式 runtime 已连成同一链，界面不再保留“仅供上层开发试玩”的旧禁止发布旁路。
 
 **架构修复包 `GOV-WORLD-PROTOCOL`**
 
@@ -253,7 +255,7 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 3. 允许适配器由类型化代码/配置与产品 Skill 协作，但版本、权限、必读、禁止和条件边界必须机器可校验，不能只靠提示词。
 4. 网关返回 matched/missing/conflict/omitted/insufficient 和 provenance；用户开始时产品冻结 ProductSourcePlan，production 每个 run 保存 Context Manifest，ProductRelease 聚合并冻结 ProductSourceManifest；runtime 新证据归 session/run。
 5. 先让至少两个需求明显不同的现有产品适配同一协议，以证明协议没有偷偷固化某一产品 payload；这不要求两个产品本身完成。
-6. 现存产品 reader 进入显式兼容白名单；产品专项迁移时双读对照、hash/资源等价后逐个停止旧读取。扫描器立即禁止白名单外新增直接解析，避免并行分支继续复制旧模式。
+6. 旧产品 reader、兼容白名单和重复目录类型已全部删除；扫描器禁止任何上层产品恢复物理 manifest 解析、旧 source key 或产品专用世界目录。
 
 **关闭条件**：产品新增需求只修改自己的 adapter/契约；网关无需新增万能字段；两个产品可从同一 release 得到不同且可追溯的 plan/run/release manifests；后续渐进读取不越过锁定版本和权限，也不改写旧 release。
 
@@ -297,8 +299,8 @@ StoryForge 不需要推倒重构。需要的是把已经存在的底座收口到
 | ARCH-01 | `Project` 仅作物理容器；内部 scope、独立 `Work` 与显式 `world-draft` 分开。长篇/短篇可基于确认内容派生世界并冻结来源，剧本/漫画被确定性拒绝 | `world-engine/derivation.ts`、`ownership.ts`、`R-ARCH01-world-derivation.test.ts`、schema v85 迁移与生命周期登记 |
 | ARCH-02 | WorldRelease 只从 `PROJECT_TABLES.worldSemantic` 派生确认语义资源，排除产品 production、媒资、build、可执行蓝图、session 和 runtime | `releases.ts`、`R-ARCH02-world-release-boundary.test.ts`、`R-WORLD2C-2F-completion.test.ts`、`R-WORLD2D-2F-runtime-closure.test.ts` |
 | ARCH-03 | 世界 UI 不再提供正式运行快捷入口；所有正式上层 kind 被统一 runtime boundary 拒绝从 WorldRelease/通用 preview 启动 | `product/runtime-boundary.ts`、`world-engine/instances.ts`、`simulation/runtime.ts`、`R-ARCH03-stage-gate.test.ts` |
-| ARCH-04 | 五项逻辑契约有确定性创建、hash 与验证；角色互动参考纵切面从冻结来源生产 ProductRelease，并把 release UID 与 lineage hash 固化到 session 后再启动 runtime | `world-reference.ts`、`product-source-contracts.ts`、`character-interaction/production-pipeline.ts`、`R-CHATGAME3D-production-pipeline.test.ts` |
-| ARCH-05 | 中立 WorldRelease provider 支持 describe/search/read/original evidence；跑团与角色互动用不同 requirement adapter 生成不同 plan，网关不包含万能产品 payload；旧 reader 被兼容白名单隔离，检查器禁止新产品复制物理 manifest 解析 | `context-gateway/world-release-provider.ts`、`world-engine/product-requirement-adapters.ts`、`check:architecture`、`R-ARCH05-world-protocol.test.ts` |
+| ARCH-04 | 五项逻辑契约有确定性创建、hash 与验证；统一产品 Scheduler 按 run 保存 Context Manifest，发布系统聚合 ProductSourceManifest、生成 lineage 并冻结在 GameRelease v3，runtime 只允许从经过完整性验证的 release/build 创建 session | `game-production/source-contracts.ts`、`scheduler.ts`、`adoption.ts`、`runtime-package.ts`、`R-GAMEPROD1C-vertical-slice.test.ts` |
+| ARCH-05 | 中立 WorldRelease provider 支持 describe/search/read/original evidence；所有产品由自己的 requirement adapter 生成不同 plan，网关不包含万能产品 payload；旧 reader 和兼容白名单已删除，检查器禁止恢复物理 manifest 解析 | `context-gateway/world-release-provider.ts`、`world-engine/product-requirement-adapters.ts`、`check:architecture`、`R-ARCH05-world-protocol.test.ts` |
 | ARCH-06 | 官方节点 action 由机器登记映射至正式长篇领域后端；通用生成只允许实验草稿且不能采纳 Canon | `node-authoring/domain-action-registry.ts`、`domain-execution.ts`、`R-ARCH06-node-same-source.test.ts` |
 | ARCH-07 | 世界能力画像限定十类语义域；产品目录登记成熟度、世界引用、媒资/runtime owner，生产只展示 `released` | `world-engine/domain.ts`、`product/product-catalog.ts`、`R-ARCH07-product-maturity-gate.test.ts` |
 
@@ -338,7 +340,7 @@ flowchart TD
 以下施工批次已经按依赖顺序完成；保留它们是为了说明迁移为何没有被改成一次破坏性重构：
 
 1. **身份与迁移基础**：先区分独立作品、世界和产品 owner，所有后续迁移才有可靠目标。
-2. **纯世界 release**：先建立兼容的新语义包，再让网关读取；不能先删除旧 reader。
+2. **纯世界 release**：迁移时先建立并验证新语义包与网关，等价证据通过后删除旧 reader；现行基线已完成删除，不再保留兼容路径。
 3. **中立世界协议**：用两个不同需求适配器验证协议，形成 source plan、per-run Context Manifests 和发布 source manifest。
 4. **阶段与谱系闸门**：收口顶层 handoff、显式开始、ProductRelease/runtime 绑定。
 5. **同源与入口门控**：节点旁路、世界能力命名、实验产品可见性并行收口。
@@ -348,11 +350,9 @@ flowchart TD
 
 ## 9. 迁移与兼容原则
 
-- 不删除旧表解决 owner 问题；先登记新身份与关系，再双读、影子构建、用户确认、单写和最终收口。
-- 不把所有旧 Project 自动公开为世界；歧义项默认保留为独立作品。
-- 不丢弃旧 WorldRelease 中的产品数据或媒资；按来源建立产品迁移候选。
-- 不让新旧路径长期双写 Canon；双读阶段必须有对照证据和退出条件。
-- 迁移记录保留 schema、old→new ID、owner、source/release/media hash、冲突、跳过、失败和 dry-run 报告。
+- 现行业务代码只能走新架构；旧 reader、旧表访问、旧类型和双写旁路不得作为兼容层保留。Dexie 历史 schema 声明只用于识别旧库并执行一次性升级，不是可调用的产品架构。
+- 不把旧 Project 自动公开为世界；歧义项默认保留为独立作品。能够可靠识别的旧数据通过事务性、可验证的单向迁移进入新 owner/契约；无法无损映射时保留可导出备份并明示阻断，不恢复旧运行路径。
+- 迁移记录保留 schema、old→new ID、owner、source/release/media hash、冲突、跳过、失败和恢复证据；成功后当前表、导出、删除和运行入口只认新合同。
 - 在隔离数据库验证新建、旧库升级、导出导入、删除、复制、引用重映射、失败回滚和恢复；不得使用作者当前浏览器项目做迁移试验。
 
 ## 10. 架构完成门

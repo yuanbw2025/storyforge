@@ -9,11 +9,11 @@ import {
   sha256MediaData,
 } from '../game-production/media-blob-store'
 import { readProductReleaseMediaBytes } from '../game-production/release-media'
-import { verifyGameReleaseManifestV2 } from '../game-production/runtime-package'
+import { verifyGameReleaseManifestV3 } from '../game-production/runtime-package'
 import type {
   FrozenRuntimeMediaAssetV2,
   GameRelease,
-  GameReleaseManifestV2,
+  GameReleaseManifestV3,
   ProductMediaAsset,
   ProductMediaBlob,
   WorkspaceScope,
@@ -41,7 +41,7 @@ export interface GameDistributionMediaV2 {
 export interface GameDistributionBundleV2 {
   schema: 'storyforge.game-distribution-bundle'
   version: 2
-  gameRelease: { contentHash: string; manifest: GameReleaseManifestV2 }
+  gameRelease: { contentHash: string; manifest: GameReleaseManifestV3 }
   sourceWorld: { contentHash: string }
   media: GameDistributionMediaV2[]
   bundleHash: string
@@ -123,7 +123,7 @@ async function verifiedBundle(value: unknown): Promise<{
   if (!isSha256Hash(game.contentHash) || !isSha256Hash(sourceWorld.contentHash)) {
     throw new Error('[distribution] Release contentHash 无效')
   }
-  const gameManifest = await verifyGameReleaseManifestV2(game.manifest)
+  const gameManifest = await verifyGameReleaseManifestV3(game.manifest)
   if (await hashGameProductionValueV2(gameManifest) !== game.contentHash) {
     throw new Error('[distribution] GameRelease contentHash 不一致')
   }
@@ -196,7 +196,7 @@ export async function exportGameDistributionBundleV2(input: {
     throw new Error('[distribution] GameRelease 不存在或跨 Work')
   }
   await assertGameReleaseUnchanged(release.id!)
-  const manifest = await verifyGameReleaseManifestV2(release.manifestJson)
+  const manifest = await verifyGameReleaseManifestV3(release.manifestJson)
   const media: GameDistributionMediaV2[] = []
   for (const asset of manifest.runtimePackage.presentation?.assets ?? []) {
     const data = await readProductReleaseMediaBytes({ scope, asset })

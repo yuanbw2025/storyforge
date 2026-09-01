@@ -1,4 +1,4 @@
-import { verifyGameReleaseManifestV2 } from "../game-production/runtime-package";
+import { verifyGameReleaseManifestV3 } from "../game-production/runtime-package";
 import { verifyPlayableGamePackageSource } from "../game-production/preview-source";
 import { db } from "../db/schema";
 import type { AssembleContextInput } from "../registry/types";
@@ -90,7 +90,7 @@ export async function loadTtrpgPlayerRuntimeViewV1(input: {
   let sourceIdentityHash: string;
   if (session.gameReleaseId != null) {
     const release = await assertGameReleaseUnchanged(session.gameReleaseId);
-    const manifest = await verifyGameReleaseManifestV2(release.manifestJson);
+    const manifest = await verifyGameReleaseManifestV3(release.manifestJson);
     runtimePackage = manifest.runtimePackage;
     packageHash = manifest.packageHash;
     sourceIdentityHash = release.contentHash;

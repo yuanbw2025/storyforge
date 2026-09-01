@@ -1,5 +1,5 @@
 import { hashGameProductionValueV2 } from '../game-production/hash'
-import { verifyGameReleaseManifestV2 } from '../game-production/runtime-package'
+import { verifyGameReleaseManifestV3 } from '../game-production/runtime-package'
 import type { TtrpgRuntimeContentV1 } from '../types'
 import {
   AuthoritativeOnlineRoomV1,
@@ -80,7 +80,7 @@ async function loadContent(input: {
   let raw: unknown
   try { raw = JSON.parse(record.manifestJson) } catch { fail('release_mismatch', 'GameRelease manifest 不是合法 JSON') }
   if (await hashGameProductionValueV2(raw) !== record.contentHash) fail('release_mismatch', 'GameRelease 内容 hash 不一致')
-  const manifest = await verifyGameReleaseManifestV2(raw)
+  const manifest = await verifyGameReleaseManifestV3(raw)
   if (manifest.productType !== 'ttrpg' || !manifest.runtimePackage.ttrpg) {
     fail('release_mismatch', 'GameRelease 不是正式 TTRPG 产品')
   }

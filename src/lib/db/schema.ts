@@ -1131,6 +1131,21 @@ class StoryForgeDB extends Dexie {
         await tx.table('nodeFlows').bulkDelete(retiredFlowIds)
       }
     })
+
+    // ARCH-CLOSURE-1: every newly authorized generic product build must bind a
+    // frozen SourcePlan and author-confirmed Brief. Existing drafts are kept
+    // recoverable, but their empty sentinels deliberately fail the formal start
+    // gate until the author saves a fresh Brief under the new contract.
+    this.version(90).stores({
+      gameProductionBriefs: '++id, projectId, worldId, workId, productionId, &[productionId+revision], &[productionId+briefHash], [productionId+status], sourceWorldReleaseId, sourcePlanHash, confirmedBriefHash, createdAt',
+    }).upgrade(async tx => {
+      await tx.table('gameProductionBriefs').toCollection().modify(row => {
+        if (!Object.prototype.hasOwnProperty.call(row, 'sourcePlanJson')) row.sourcePlanJson = '{}'
+        if (!Object.prototype.hasOwnProperty.call(row, 'sourcePlanHash')) row.sourcePlanHash = ''
+        if (!Object.prototype.hasOwnProperty.call(row, 'confirmedBriefJson')) row.confirmedBriefJson = '{}'
+        if (!Object.prototype.hasOwnProperty.call(row, 'confirmedBriefHash')) row.confirmedBriefHash = ''
+      })
+    })
   }
 }
 

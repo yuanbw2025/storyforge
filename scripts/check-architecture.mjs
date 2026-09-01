@@ -1381,6 +1381,16 @@ const productSourceContractsSource = read('src/lib/world-engine/product-source-c
 const productSourcePublicSource = read('src/lib/world-engine/product-source.ts')
 const requirementAdaptersSource = read('src/lib/world-engine/product-requirement-adapters.ts')
 const gameProductionWorldSource = read('src/lib/game-production/world-source.ts')
+const gameProductionSourceContractsSource = read('src/lib/game-production/source-contracts.ts')
+const gameProductionCommandsSource = read('src/lib/game-production/commands.ts')
+const gameProductionSchedulerSource = read('src/lib/game-production/scheduler.ts')
+const gameProductionAdoptionSource = read('src/lib/game-production/adoption.ts')
+const gameProductionExecutorSource = read('src/lib/game-production/production-executor.ts')
+const gameProductionStudioSource = read('src/components/text-game/GameProductionStudio.tsx')
+const gameRuntimePackageSource = read('src/lib/game-production/runtime-package.ts')
+const gameReleaseTypesSource = read('src/lib/types/text-game.ts')
+const worldReferenceSource = read('src/lib/world-engine/world-reference.ts')
+const releaseCodecSource = read('src/lib/world-engine/release-codec.ts')
 const productHubArchitectureSource = read('src/pages/ProductHubPage.tsx')
 const distributionBundleSource = read('src/lib/game-platform/distribution-bundle.ts')
 for (const token of [
@@ -1415,6 +1425,114 @@ if (!distributionBundleSource.includes("schema: 'storyforge.game-distribution-bu
   || distributionBundleSource.includes('db.worldReleases')
   || distributionBundleSource.includes('WorldReleaseManifestV2')) {
   violations.push('[㉝B自包含分发] 产品分发只能包含 GameRelease、产品媒资及世界 hash 来源证明')
+}
+for (const token of [
+  'createGameProductionSourcePlanV1', 'createGameConfirmedBriefV1',
+  'assertFormalProductProductionStartV1', 'sourcePlanJson', 'confirmedBriefJson',
+]) {
+  if (!gameProductionCommandsSource.includes(token)) {
+    violations.push(`[㉝B阶段二冻结] commands.ts 缺少 ${token}`)
+  }
+}
+for (const token of [
+  'executeGameProductionWorldGatewayV1', 'parseGameProductionSourcePlanV1',
+  'parseGameConfirmedBriefV1', 'recordContextGatewayPreflightEvidenceV1',
+  'finalizeContextGatewayAttemptEvidenceV1', 'sourcePlanHash', 'confirmedBriefHash',
+  'game-production-deterministic-world-integrator',
+  'requireCompilationResources:',
+]) {
+  if (!gameProductionSchedulerSource.includes(token)) {
+    violations.push(`[㉝B阶段三证据链] scheduler.ts 缺少 ${token}`)
+  }
+}
+for (const token of [
+  'aggregateProductSourceManifestFromExactRunsV1', 'portableProductSourcePlanV1',
+  'createProductReleaseLineageV1', 'createGameReleaseManifestV3',
+]) {
+  if (!gameProductionAdoptionSource.includes(token)) {
+    violations.push(`[㉝B发布冻结] adoption.ts 缺少 ${token}`)
+  }
+}
+if (!gameProductionExecutorSource.includes('selection: options.brief.source.selection')) {
+  violations.push('[㉝B作者选择生效] 正式产品编译器必须显式读取 Brief 冻结的世界资源 selection')
+}
+for (const token of [
+  'GameReleaseManifestV3', 'productionProvenance:', 'sourceContracts:',
+  'releaseIdentityHash:', 'lineage:',
+]) {
+  if (!gameReleaseTypesSource.includes(token)) violations.push(`[㉝B发布协议V3] text-game.ts 缺少 ${token}`)
+}
+for (const token of [
+  'verifyGameReleaseManifestV3', 'validateProductSourcePlanV1',
+  'validateConfirmedProductBriefV1', 'validateProductSourceManifestV1',
+  'validateProductReleaseLineageV1', 'gameReleaseIdentityHashV3',
+]) {
+  if (!gameRuntimePackageSource.includes(token)) violations.push(`[㉝B发布反篡改] runtime-package.ts 缺少 ${token}`)
+}
+if (gameReleaseTypesSource.includes('productionProvenance: null')
+  || gameReleaseTypesSource.includes('productionProvenance?:')) {
+  violations.push('[㉝B发布来源必填] GameRelease v3 不得允许空或可选 productionProvenance')
+}
+for (const token of [
+  'freezeProductSourcePlanV1', 'resolveProductSourceReadBoundaryV1',
+  'openWorldSemanticResourceCatalogV1', 'gameProductionTaskUsesWorldGatewayV1',
+  'resolveGameProductionWorldCompilationDescriptorsV2',
+  'mandatoryOriginalResourceKeys:',
+]) {
+  if (!gameProductionSourceContractsSource.includes(token)) {
+    violations.push(`[㉝B产品来源执行器] source-contracts.ts 缺少 ${token}`)
+  }
+}
+if (!gameProductionWorldSource.includes('resolveGameProductionWorldCompilationDescriptorsV2')
+  || !gameProductionWorldSource.includes("relation.direction === 'outgoing'")
+  || !gameProductionWorldSource.includes("relation.direction === 'incoming'")) {
+  violations.push('[①B确定性编译来源] 编译器与 Gateway 必须共用选择及语义依赖闭包')
+}
+for (const retiredCopy of [
+  'ttrpg-upper-layer-development-gate',
+  '正式世界适配完成前',
+  '不会发布为商业 GameRelease',
+  '正式发布等待最终对接',
+]) {
+  if (gameProductionStudioSource.includes(retiredCopy)) {
+    violations.push(`[①B跑团正式链] GameProductionStudio 不得恢复旧试玩/禁止发布旁路:${retiredCopy}`)
+  }
+}
+if (worldReferenceSource.includes('db.worldReleases.update(')) {
+  violations.push('[㉝B引用验证只读] WorldReference 创建/校验不得暗中回写 WorldRelease')
+}
+for (const token of [
+  'resource.area !== registered.area',
+  'resource.resourceKind !== registered.resourceKind',
+  'resource.resourceId !== semanticResourceId',
+  'sourceManifest selected/omitted 未与 PROJECT_TABLES 完整分区',
+  'capabilityProfile 与 catalog/PROJECT_TABLES 不一致',
+]) {
+  if (!releaseCodecSource.includes(token)) violations.push(`[㉝B世界发布反篡改] release-codec.ts 缺少 ${token}`)
+}
+if (!worldPackageSource.includes('便携数据缺少冻结资源')
+  || !worldPackageSource.includes('便携数据与冻结资源')) {
+  violations.push('[㉝B世界包精确闭合] 导入必须要求每个 selected table 存在且与冻结 records 一致，包括空表')
+}
+
+const createWorldInstanceStart = worldInstanceSource.indexOf('export async function createWorldInstance')
+const createWorldInstanceEnd = worldInstanceSource.indexOf('\nexport ', createWorldInstanceStart + 1)
+const createWorldInstanceBody = createWorldInstanceStart >= 0
+  ? worldInstanceSource.slice(createWorldInstanceStart, createWorldInstanceEnd > createWorldInstanceStart
+    ? createWorldInstanceEnd : worldInstanceSource.length)
+  : ''
+const prepareFormalSessionIndex = createWorldInstanceBody.indexOf('prepareReleasedGameSessionRecordV3({')
+const atomicSessionTransactionIndex = createWorldInstanceBody.indexOf("return db.transaction('rw'")
+const insertPreparedSessionIndex = createWorldInstanceBody.indexOf('insertPreparedFormalGameSessionV1(preparedSession)')
+if (prepareFormalSessionIndex < 0 || atomicSessionTransactionIndex <= prepareFormalSessionIndex
+  || insertPreparedSessionIndex <= atomicSessionTransactionIndex) {
+  violations.push('[㉝B会话事务边界] 加密发布校验必须在事务外准备；事务内只能 CAS、插入已验证 session 与初始事件')
+}
+for (const token of [
+  'prepareReleasedGameSessionRecordV3', 'preparePreviewGameSessionRecordV1',
+  'insertPreparedFormalGameSessionV1', 'preparedFormalGameSessionsV1',
+]) {
+  if (!simulationKernelSource.includes(token)) violations.push(`[㉝B正式会话准备] simulation/runtime.ts 缺少 ${token}`)
 }
 
 // ARCH-05: there is no compatibility allowlist. Physical WorldRelease decoding
@@ -1466,6 +1584,10 @@ const RETIRED_ARCHITECTURE_FILES = [
   'src/lib/text-game/authoring.ts',
   'src/lib/ttrpg/authoring.ts',
   'src/lib/ttrpg/release.ts',
+  'src/lib/ttrpg/world-source.ts',
+  'src/lib/types/ttrpg-production.ts',
+  'src/lib/types/ttrpg-production-source.ts',
+  'src/lib/types/ttrpg-world-source.ts',
   'src/lib/world-engine/release-classification.ts',
 ]
 for (const file of RETIRED_ARCHITECTURE_FILES) {
@@ -1497,6 +1619,15 @@ for (const token of [
     if (new RegExp(`\\b${token}\\b`).test(read(file))) {
       violations.push(`[㉝C旧绑定清场] ${file}: 已删除运行/发布绑定 ${token} 不得恢复`)
     }
+  }
+}
+for (const file of walk('src')) {
+  const source = read(file)
+  if (source.includes('game-production.consultation-source')) {
+    violations.push(`[㉝C旧上下文来源] ${file}: 已退役的 consultation-source 不得恢复`)
+  }
+  if (source.includes('storyforge.ttrpg-world-source-catalog')) {
+    violations.push(`[㉝C旧跑团目录] ${file}: 跑团不得恢复独立世界目录旁路`)
   }
 }
 
@@ -1601,7 +1732,7 @@ for (const token of [
 }
 for (const token of [
   'validatedReleaseCache', 'projectedReleaseCache', 'RELEASE_CACHE_LIMIT',
-  'addWorldRelation', "item.table === 'worldGroupLinks'",
+  'addRelation', "item.table === 'worldGroupLinks'",
   'searchWorldReleaseV1', 'readWorldResourceV1', 'readWorldOriginalEvidenceV1',
 ]) {
   if (!worldReleaseProviderSource.includes(token)) violations.push(`[㊱世界出口] world-release-provider.ts 缺少 ${token}`)

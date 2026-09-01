@@ -248,13 +248,14 @@ const ZERO_BUDGET: GameTaskBudgetReservationV1 = {
 
 function task(input: Pick<GameProductionPlanTaskV3,
   'taskKey' | 'lane' | 'kind' | 'dependsOn' | 'inputArtifactKeys' | 'outputArtifactKeys'
-  | 'acceptanceGateIds'>): GameProductionPlanTaskV3 {
+  | 'acceptanceGateIds'> & { budgetReservation?: Partial<GameTaskBudgetReservationV1> }): GameProductionPlanTaskV3 {
+  const { budgetReservation, ...definition } = input
   return {
-    ...input, skillId: null, executionMode: 'deterministic',
+    ...definition, skillId: null, executionMode: 'deterministic',
     requiredReceipts: input.dependsOn.map(taskKey => ({ taskKey, receiptHash: null })),
     requirementKeys: [], capabilityRequirementKeys: [], concurrencyGroup: input.lane,
     subjectLockKeys: input.outputArtifactKeys, priority: input.lane === 'qa' ? 100 : 50,
-    budgetReservation: { ...ZERO_BUDGET }, maxAttempts: 1, timeoutMs: 10_000,
+    budgetReservation: { ...ZERO_BUDGET, ...budgetReservation }, maxAttempts: 1, timeoutMs: 10_000,
     failurePolicy: 'fail-build', fallbackTaskKey: null, reuse: null,
   }
 }
@@ -272,7 +273,13 @@ export function createVerticalSliceGameProductionPlanV3(input: {
   const tasks = [
     task({ taskKey: 'content.compile', lane: 'content', kind: 'runtime-narrative', dependsOn: [], inputArtifactKeys: [], outputArtifactKeys: ['runtime.narrative'], acceptanceGateIds: ['narrative.graph.valid'] }),
     task({ taskKey: 'visual.compose', lane: 'visual', kind: 'key-visual', dependsOn: [], inputArtifactKeys: [], outputArtifactKeys: ['media.key-visual'], acceptanceGateIds: ['rights.complete'] }),
-    task({ taskKey: 'runtime.integrate', lane: 'integration', kind: 'runtime-package', dependsOn: ['content.compile', 'visual.compose'], inputArtifactKeys: ['runtime.narrative', 'media.key-visual'], outputArtifactKeys: ['runtime.package'], acceptanceGateIds: ['runtime.package.valid'] }),
+    task({
+      taskKey: 'runtime.integrate', lane: 'integration', kind: 'runtime-package',
+      dependsOn: ['content.compile', 'visual.compose'],
+      inputArtifactKeys: ['runtime.narrative', 'media.key-visual'],
+      outputArtifactKeys: ['runtime.package'], acceptanceGateIds: ['runtime.package.valid'],
+      budgetReservation: { inputTokens: brief.productionBudget.maximumInputTokens },
+    }),
     task({ taskKey: 'quality.verify', lane: 'qa', kind: 'quality-report', dependsOn: ['runtime.integrate'], inputArtifactKeys: ['runtime.package'], outputArtifactKeys: ['quality.report'], acceptanceGateIds: ['runtime.playable'] }),
   ]
   return parseGameProductionPlanV3({
@@ -341,7 +348,9 @@ export async function createGameProductionPlanV3(input: {
     { length: activeAudio ? Math.max(1, audioCalls) : 0 },
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
-  const perInput = Math.floor(brief.productionBudget.maximumInputTokens / 4)
+  // Four model tasks and deterministic package integration each receive a
+  // declared slice. Integration reads the frozen world through Context Gateway.
+  const perInput = Math.floor(brief.productionBudget.maximumInputTokens / 5)
   const perOutput = Math.floor(brief.productionBudget.maximumOutputTokens / 4)
   const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / 8)
   const costTaskCount = 4 + activeMediaLaneCount
@@ -449,7 +458,7 @@ export async function createGameProductionPlanV3(input: {
     outputArtifactKeys: integrationArtifactKeys, requirementKeys: [],
     capabilityRequirementKeys: transcodeCapabilities, concurrencyGroup: 'deterministic',
     subjectLockKeys: integrationArtifactKeys, priority: 50,
-    budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
+    budgetReservation: reservation({ inputTokens: perInput, durationMs: perDuration }), maxAttempts: 1,
     timeoutMs: 120_000, failurePolicy: 'fail-build', fallbackTaskKey: null,
     acceptanceGateIds: ['package.protocol', 'package.graph', 'package.media-bindings'],
   }))

@@ -205,6 +205,22 @@ const OUTLINE_CONTEXT_GATEWAY_POLICY = {
   ],
 } as const satisfies AgentSkillContextGatewayPolicyV1
 
+const GAME_PRODUCTION_WORLD_GATEWAY_POLICY = {
+  version: 1,
+  rollout: 'required',
+  providerSourceKeys: ['worldRelease'],
+  allowedResourceKinds: [...CONTEXT_RESOURCE_KINDS_V1],
+  allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
+  maxReadCalls: 200,
+  maxRetrievedTokens: 100_000,
+  maxPlanningSteps: 8,
+  maxPlanningModelTokens: 24_000,
+  allowOriginalRead: true,
+  additionalReadToolNames: [
+    'list_context_catalog', 'search_context', 'read_context_resource', 'read_original_evidence',
+  ],
+} as const satisfies AgentSkillContextGatewayPolicyV1
+
 const ADAPTATION_BRIEF_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'characters', 'worldview', 'creativeRules'] as const
 const ADAPTATION_PLAN_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'characters'] as const
 const SCREENPLAY_SCENES_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'adaptation.currentPlan', 'characters'] as const
@@ -2928,10 +2944,10 @@ export const AGENT_SKILLS = [
     executionMode: 'game-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.consultation-source'],
+    contextSourceKeys: [],
     optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['game-production.consultation-source']),
-    contextCompression: compressionPolicy(['game-production.consultation-source']),
+    inputPolicy: gameProductionInputPolicy(['worldRelease']),
+    contextCompression: compressionPolicy(['worldRelease']),
     contextGateway: {
       version: 1,
       rollout: 'required',
@@ -2971,10 +2987,11 @@ export const AGENT_SKILLS = [
     executionMode: 'game-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.consultation-source'],
+    contextSourceKeys: [],
     optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['game-production.consultation-source']),
-    contextCompression: compressionPolicy(['game-production.consultation-source']),
+    inputPolicy: gameProductionInputPolicy(['worldRelease']),
+    contextCompression: compressionPolicy(['worldRelease']),
+    contextGateway: GAME_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [],
     lastVerifiedAt: '2026-08-22',
@@ -2991,10 +3008,11 @@ export const AGENT_SKILLS = [
     executionMode: 'game-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.consultation-source'],
+    contextSourceKeys: [],
     optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['game-production.consultation-source']),
-    contextCompression: compressionPolicy(['game-production.consultation-source']),
+    inputPolicy: gameProductionInputPolicy(['worldRelease']),
+    contextCompression: compressionPolicy(['worldRelease']),
+    contextGateway: GAME_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{
       table: 'gameProductionBriefs',
@@ -3019,6 +3037,7 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: gameProductionInputPolicy(['game-production.brief']),
     contextCompression: compressionPolicy(['game-production.brief']),
+    contextGateway: GAME_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'gameBuilds', fields: ['planJson'], adoptionExtension: 'game-production-builds' }],
     lastVerifiedAt: '2026-08-21',
@@ -3039,6 +3058,7 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: ['game-production.artifact-inputs'],
     inputPolicy: gameProductionInputPolicy(['game-production.brief']),
     contextCompression: compressionPolicy(['game-production.brief', 'game-production.artifact-inputs']),
+    contextGateway: GAME_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'gameBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'game-production-artifacts' }],
     lastVerifiedAt: '2026-08-21',
@@ -3059,6 +3079,7 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: ['game-production.artifact-inputs'],
     inputPolicy: gameProductionInputPolicy(['game-production.brief']),
     contextCompression: compressionPolicy(['game-production.brief', 'game-production.artifact-inputs']),
+    contextGateway: GAME_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'gameBuildArtifacts', fields: ['metadataJson'], adoptionExtension: 'game-production-artifacts' }],
     lastVerifiedAt: '2026-08-21',
@@ -3079,6 +3100,7 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: ['game-production.artifact-inputs'],
     inputPolicy: gameProductionInputPolicy(['game-production.brief']),
     contextCompression: compressionPolicy(['game-production.brief', 'game-production.artifact-inputs']),
+    contextGateway: GAME_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 4_000,
     writeTargets: [{ table: 'gameBuildArtifacts', fields: [], adoptionExtension: 'game-production-artifacts' }],
     lastVerifiedAt: '2026-08-21',
@@ -3099,6 +3121,7 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: ['game-production.artifact-inputs'],
     inputPolicy: gameProductionInputPolicy(['game-production.brief']),
     contextCompression: compressionPolicy(['game-production.brief', 'game-production.artifact-inputs']),
+    contextGateway: GAME_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 6_000,
     writeTargets: [{ table: 'gameBuilds', fields: ['manifestJson', 'previewManifestJson'], adoptionExtension: 'game-production-builds' }],
     lastVerifiedAt: '2026-08-21',
@@ -3119,6 +3142,7 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: gameProductionInputPolicy(['game-production.brief', 'game-production.quality-feedback']),
     contextCompression: compressionPolicy(['game-production.brief', 'game-production.quality-feedback']),
+    contextGateway: GAME_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 6_000,
     writeTargets: [{ table: 'gameBuilds', fields: ['qualityReportJson'], adoptionExtension: 'game-production-builds' }],
     lastVerifiedAt: '2026-08-21',
@@ -3401,7 +3425,10 @@ export function validateAgentSkillDefinitionsV1(
       const tool = AGENT_TOOL_BY_NAME.get(toolName)
       if (!tool || tool.risk !== 'read') throw new Error(`Agent Skill ${skill.id} 引用了未知只读工具 ${toolName}`)
     }
-    const authorizedSourceKeys = resolveAgentSkillContextSourceKeysV1(skill, { includeOptional: true })
+    const authorizedSourceKeys = resolveAgentSkillContextSourceKeysV1(skill, {
+      includeOptional: true,
+      includeGatewayProviders: true,
+    })
     for (const sourceKey of authorizedSourceKeys) {
       if (!CONTEXT_SOURCE_BY_KEY.has(sourceKey)) {
         throw new Error(`Agent Skill ${skill.id} 引用了未登记上下文源 ${sourceKey}`)

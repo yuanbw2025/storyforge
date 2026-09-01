@@ -139,9 +139,6 @@ const WORLD_RELEASE_RESOURCE_PROVIDER_PROXY_V1: ContextResourceProviderV1 = {
 // Upper-product readers are lazy for the same reason as adaptation readers:
 // their production Harnesses import the Skill registry, so eager imports here
 // would create CONTEXT_SOURCES -> product Harness -> Skill -> CONTEXT_SOURCES.
-async function readGameProductionConsultationSource(input: AssembleContextInput): Promise<string> {
-  return (await import('../game-production/context')).readGameProductionConsultationSource(input)
-}
 async function readGameProductionBriefContext(input: AssembleContextInput): Promise<string> {
   return (await import('../game-production/context')).readGameProductionBriefContext(input)
 }
@@ -1356,17 +1353,6 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresSimulationSessionId: true,
     enabled: input => !!input.ttrpgPlayerActorKey?.trim(),
     read: readTtrpgPlayerRuntimeContextV1,
-  },
-  {
-    key: 'game-production.consultation-source',
-    label: '游戏生产会谈来源',
-    scope: 'project',
-    layer: 'L0',
-    ownerFrom: 'world',
-    budgetTokens: 6000,
-    protectedFromTrim: true,
-    enabled: input => Number.isInteger(input.gameWorldReleaseId),
-    read: readGameProductionConsultationSource,
   },
   {
     key: 'game-production.brief',

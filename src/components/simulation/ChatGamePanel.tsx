@@ -72,7 +72,7 @@ export default function ChatGamePanel(props: {
   return <div className="flex min-h-[42rem] flex-col bg-bg-base lg:flex-row">
     <aside className="w-full shrink-0 border-b border-border bg-bg-surface p-4 lg:w-72 lg:border-b-0 lg:border-r">
       <div className="mb-3 flex items-center gap-2"><MessageCircle className="h-4 w-4 text-accent" /><strong className="text-sm">角色互动发布</strong></div>
-      <p className="mb-4 text-xs leading-relaxed text-text-muted">新会话只从统一生产 Harness 发布的不可变 GameRelease v2 启动。</p>
+      <p className="mb-4 text-xs leading-relaxed text-text-muted">新会话只从统一生产 Harness 发布的不可变 GameRelease v3 启动。</p>
       <div className="space-y-2">{store.releases.map(item => <article key={item.release.id} className="rounded border border-border bg-bg-base p-3">
         <strong className="block text-sm">{item.manifest?.definition.title ?? item.release.label}</strong>
         <span className="mt-1 block text-[10px] text-text-muted">Product Release v{item.release.version} · {item.manifest?.interaction.profiles.length ?? 0} 角色 · {item.manifest?.interaction.sceneTemplates.length ?? 0} 场景</span>

@@ -438,6 +438,9 @@ export async function finalizeContextGatewayAttemptEvidenceV1(input: {
   policyHash: string
   rawResponse: unknown
   candidateHash: string
+  executionBoundary?:
+    | { kind: 'model' }
+    | { kind: 'tool'; toolName: string }
   checkpointHash?: string | null
   expectedLastSequence?: number
   now?: number
@@ -459,19 +462,24 @@ export async function finalizeContextGatewayAttemptEvidenceV1(input: {
   if (input.expectedLastSequence != null && input.expectedLastSequence !== snapshot.projection.lastSequence) {
     fail('sequence-conflict', '运行已推进，拒绝基于过期 response finalize')
   }
-  const requested = snapshot.events.filter((event): event is Extract<typeof event, { type: 'model.requested' }> => (
-    event.type === 'model.requested'
+  const boundary = input.executionBoundary ?? { kind: 'model' as const }
+  const requested = snapshot.events.filter(event => boundary.kind === 'model'
+    ? event.type === 'model.requested'
       && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
-  ))
-  const responded = snapshot.events.filter((event): event is Extract<typeof event, { type: 'model.responded' }> => (
-    event.type === 'model.responded'
+    : event.type === 'tool.called'
       && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
-  ))
+      && event.payload.toolName === boundary.toolName)
+  const responded = snapshot.events.filter(event => boundary.kind === 'model'
+    ? event.type === 'model.responded'
+      && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
+    : event.type === 'tool.returned'
+      && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt
+      && event.payload.toolName === boundary.toolName)
   const alreadyAssembled = snapshot.events.some(event => event.type === 'context.assembled'
     && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt)
   if (requested.length !== 1 || responded.length !== 1
     || snapshot.events.indexOf(responded[0]) <= snapshot.events.indexOf(requested[0])) {
-    fail('model-boundary', 'finalize 需要唯一且有序的 model.requested/model.responded 证据')
+    fail('execution-boundary', 'finalize 需要唯一且有序的 model 或 deterministic tool 执行边界证据')
   }
   if (alreadyAssembled) fail('duplicate-finalize', '同一 step/attempt 不得重复 finalize')
   const requestEventIndex = snapshot.events.indexOf(requested[0])
@@ -480,7 +488,7 @@ export async function finalizeContextGatewayAttemptEvidenceV1(input: {
       && event.payload.artifactKind === ref.artifactKind && event.payload.contentHash === ref.contentHash
       && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt)
     if (artifactEventIndex < 0 || artifactEventIndex >= requestEventIndex) {
-      fail('preflight-order', `${ref.role} exact artifact 未在 model.requested 前持久化`)
+      fail('preflight-order', `${ref.role} exact artifact 未在执行请求前持久化`)
     }
     await readAndVerifyArtifactBodyV1(input.scope.projectId, ref)
   }

@@ -212,16 +212,23 @@ export async function inspectWorldPackage(input: unknown): Promise<WorldPackageT
       errors.push('世界分享包的发布身份不一致。')
     }
     const portable = releaseManifest.portableProject as unknown as ProjectExportData
+    const portableRecord = portable as unknown as Record<string, unknown>
     const backupReport = inspectProjectBackup(portable)
     if (!backupReport.valid) errors.push(...backupReport.errors)
     warnings.push(...backupReport.warnings)
     const selected = new Set(releaseManifest.selectedTables)
-    for (const [tableName, rows] of Object.entries(portable)) {
-      if (!Array.isArray(rows) || rows.length === 0 || ROOT_TABLES.has(tableName)) continue
-      if (!WORLD_SEMANTIC_TABLES.has(tableName) || !selected.has(tableName)) {
-        errors.push(`纯语义世界包包含未冻结的资源「${tableName}」。`)
+    for (const tableName of releaseManifest.selectedTables) {
+      const rows = portableRecord[tableName]
+      if (!Array.isArray(rows)) {
+        errors.push(`便携数据缺少冻结资源「${tableName}」。`)
       } else if (canonicalStringify(rows) !== canonicalStringify(releaseManifest.records[tableName])) {
         errors.push(`便携数据与冻结资源「${tableName}」不一致。`)
+      }
+    }
+    for (const [tableName, rows] of Object.entries(portable)) {
+      if (!Array.isArray(rows) || ROOT_TABLES.has(tableName)) continue
+      if (!WORLD_SEMANTIC_TABLES.has(tableName) || !selected.has(tableName)) {
+        if (rows.length > 0) errors.push(`纯语义世界包包含未冻结的资源「${tableName}」。`)
       }
     }
   }

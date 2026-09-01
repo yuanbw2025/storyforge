@@ -64,7 +64,7 @@ flowchart LR
 
 ### 3.3 阶段三：产品执行与交付
 
-阶段三由具体产品的主 Agent 和内部能力完成。内容、规则、媒资、build、质量证据、ProductRelease、runtime、记忆、存档与私域演化全部归产品实例。Agent 可在 SourcePlan 允许的不可变 WorldRelease 内继续渐进式检索；每个 durable run 保存不可变 Context Manifest，发布时聚合为 ProductSourceManifest 快照。
+阶段三由具体产品的主 Agent 和内部能力完成。内容、规则、媒资、build、质量证据、ProductRelease、runtime、记忆、存档与私域演化全部归产品实例。Agent 可在 SourcePlan 允许的不可变 WorldRelease 内继续渐进式检索；每个 durable run 保存不可变 Context Manifest，发布时聚合为 ProductSourceManifest 快照。确定性组装器也是正式执行者，不得绕过网关重读世界；它要求的“用户选择 + 语义依赖闭包”必须先在同一 run 中留下可验签原文证据，才能编译 RuntimePackage。
 
 怎样生产、何时进入运行、用户进度何时触发下一轮演化、怎样形成结局，都属于该产品的专项功能。跨产品架构只强制：
 
@@ -113,6 +113,7 @@ Product-specific goal/config
 - 同一产品的不同用户目标也可以产生不同 source plan 和 manifest；
 - 新产品通过新增适配器接入，不修改一个全产品万能 payload；
 - 任何产品都不得复制世界底层表名、字段名或 release 解析清单；
+- 产品编译器的依赖闭包必须由中立语义 relation 推导，与 Gateway 共用同一解析器，不得一边记录一边暗读；
 - 资源不足时由产品决定私域补全、限制功能或请求用户调整，补全结果默认仍归产品。
 
 ## 6. 产品注册与扩展槽位

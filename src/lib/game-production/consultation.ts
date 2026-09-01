@@ -1,4 +1,3 @@
-import { assembleContext } from '../registry/assemble-context'
 import type {
   GameProductType,
   GameProductionBriefV3,
@@ -9,48 +8,41 @@ import type {
   GameStartingPointSuggestionV1,
   ProductWorldSourceSelectionV1,
   WorkspaceScope,
-  WorldReferenceV1,
 } from '../types'
 import { resolveScope } from '../world-engine/scope'
+import { compileGameProductWorldRoleBindingsV1 } from '../world-engine/product-requirement-adapters'
 import { hashGameProductionValueV2 } from './hash'
 import { parseGameProductionBriefV3 } from './contracts'
+import {
+  loadGameProductionConsultationSourceV2,
+  type GameProductionConsultationSourceV2,
+} from './world-source'
 import {
   compileTtrpgProductionBriefV2,
   type TtrpgProductionBriefDraftInputV2,
   unresolvedTtrpgProductionBriefDecisionsV2,
 } from '../ttrpg/production-brief'
 
-interface OpportunityRow {
-  resourceKey: string
-  label: string
-  summary: string
-  kind: string | null
-}
-
-interface ConsultationSourceV1 {
-  worldReference: WorldReferenceV1
-  release: { version: number; label: string; contentHash: string }
-  opportunities: {
-    storySources: OpportunityRow[]
-    characters: OpportunityRow[]
-    storyArcs: OpportunityRow[]
-    historicalTimelineEvents: OpportunityRow[]
-  }
-  selectionOptions: GameProductionSourceOptionsV1
-  selectionRelations: Array<{
-    resourceKey: string
-    fromCharacterResourceKey: string
-    toCharacterResourceKey: string
-  }>
-  selectionCatalog: GameProductionSourceSelectionV1
-}
+type ConsultationSourceV1 = GameProductionConsultationSourceV2
 
 function stableSlug(value: string): string {
   return value.normalize('NFKD').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 80) || 'option'
 }
 
+function sourceRefDiscriminator(sourceRefs: readonly string[]): string {
+  return sourceRefs.map(sourceRef => {
+    const segments = sourceRef.split(':')
+    const coordinateHash = segments[segments.length - 1] ?? sourceRef
+    return coordinateHash.replace(/[^A-Za-z0-9]/g, '').toLowerCase().slice(0, 32)
+  }).filter(Boolean).join('-') || 'source'
+}
+
 function suggestion(input: Omit<GameStartingPointSuggestionV1, 'suggestionKey'>): GameStartingPointSuggestionV1 {
-  const sourceDiscriminator = input.sourceRefs.length ? `:${stableSlug(input.sourceRefs.join('-'))}` : ''
+  // World resource keys share a deliberately long release-hash prefix. Using
+  // a prefix-truncated slug here therefore collapsed distinct resources onto
+  // the same suggestion key. The final segment is the resource coordinate
+  // hash, so it is both portable across ID remaps and unique inside a release.
+  const sourceDiscriminator = input.sourceRefs.length ? `:${sourceRefDiscriminator(input.sourceRefs)}` : ''
   return { suggestionKey: `${input.kind}:${stableSlug(input.title)}${sourceDiscriminator}`, ...input }
 }
 
@@ -78,53 +70,6 @@ const SCALE_DEFAULTS: Record<GameProductionScaleV1['scope'], Omit<GameProduction
   chapter: { targetPlayMinutes: 120, targetWordCount: 20_000, targetEndingCount: 3 },
   'multi-chapter': { targetPlayMinutes: 300, targetWordCount: 50_000, targetEndingCount: 4 },
   campaign: { targetPlayMinutes: 900, targetWordCount: 120_000, targetEndingCount: 5 },
-}
-
-function productRoleBindings(
-  productType: GameProductType,
-  catalog: ConsultationSourceV1['selectionCatalog'],
-): Record<string, string[]> {
-  if (productType === 'storygame') {
-    return { story: catalog.storyResourceKeys }
-  }
-  if (productType === 'character-interaction') {
-    return {
-      participants: catalog.characterResourceKeys,
-      context: [...catalog.storyResourceKeys, ...catalog.storyArcResourceKeys],
-    }
-  }
-  if (productType === 'text-adventure') {
-    return {
-      locations: catalog.importantLocationResourceKeys,
-      items: catalog.artifactResourceKeys,
-      quests: catalog.storyArcResourceKeys,
-    }
-  }
-  if (productType === 'avg') {
-    return {
-      story: [...catalog.storyResourceKeys, ...catalog.storyArcResourceKeys],
-      characters: catalog.characterResourceKeys,
-      locations: catalog.importantLocationResourceKeys,
-    }
-  }
-  if (productType === 'narrative-simulation') {
-    return {
-      issues: catalog.storyArcResourceKeys,
-      factions: catalog.codexEntryResourceKeys,
-    }
-  }
-  if (productType === 'ttrpg') {
-    return {
-      participants: catalog.characterResourceKeys,
-      locations: catalog.importantLocationResourceKeys,
-      quests: catalog.storyArcResourceKeys,
-    }
-  }
-  return {
-    regions: catalog.importantLocationResourceKeys,
-    factions: catalog.codexEntryResourceKeys,
-    quests: catalog.storyArcResourceKeys,
-  }
 }
 
 /** The chosen starting point must constrain the actual semantic resource set. */
@@ -244,21 +189,13 @@ export async function suggestGameStartingPoints(input: {
   worldReleaseId: number
 }): Promise<GameConsultationSuggestionSetV1> {
   const scope = await resolveScope({ scope: input.scope })
-  let assembled: Awaited<ReturnType<typeof assembleContext>>
+  let source: ConsultationSourceV1
   try {
-    assembled = await assembleContext({
-      projectId: scope.projectId,
-      scope,
-      sourceKeys: ['game-production.consultation-source'],
-      gameWorldReleaseId: input.worldReleaseId,
-    })
+    source = await loadGameProductionConsultationSourceV2({ scope, worldReleaseId: input.worldReleaseId })
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause)
     throw new Error(`[game-production] WorldRelease 已被篡改、不属于当前作用域或不符合纯语义契约：${detail}`)
   }
-  const segment = assembled.segments.find(item => item.label === '游戏生产会谈来源')
-  if (!segment) throw new Error('[game-production] 会谈来源未进入登记上下文')
-  const source = JSON.parse(segment.content) as ConsultationSourceV1
   const result: GameStartingPointSuggestionV1[] = []
   const main = source.opportunities.storySources[0]
   if (main) result.push(suggestion({
@@ -356,15 +293,10 @@ export async function draftGameProductionBriefV3(input: {
   const suggestions = await suggestGameStartingPoints({ scope, worldReleaseId: input.worldReleaseId })
   const selected = suggestions.suggestions.find(item => item.suggestionKey === input.suggestionKey)
   if (!selected) throw new Error('[game-production] 起点建议不属于当前冻结 WorldRelease')
-  const assembled = await assembleContext({
-    projectId: scope.projectId,
+  const source = await loadGameProductionConsultationSourceV2({
     scope,
-    sourceKeys: ['game-production.consultation-source'],
-    gameWorldReleaseId: input.worldReleaseId,
+    worldReleaseId: input.worldReleaseId,
   })
-  const segment = assembled.segments.find(item => item.label === '游戏生产会谈来源')
-  if (!segment) throw new Error('[game-production] 会谈来源未进入登记上下文')
-  const source = JSON.parse(segment.content) as ConsultationSourceV1
   if (source.release.contentHash !== suggestions.worldContentHash) {
     throw new Error('[game-production] 会谈期间 WorldRelease 来源发生变化')
   }
@@ -379,7 +311,7 @@ export async function draftGameProductionBriefV3(input: {
   const selectedCatalog = normalizeAuthorSelection({
     source, selected, authorSelection: input.sourceSelection,
   })
-  const roleBindings = productRoleBindings(input.productType, selectedCatalog)
+  const roleBindings = compileGameProductWorldRoleBindingsV1(input.productType, selectedCatalog)
   const selection: ProductWorldSourceSelectionV1 = {
     schema: 'storyforge.product-world-source-selection', version: 1,
     productType: input.productType,

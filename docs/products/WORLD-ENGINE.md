@@ -69,13 +69,13 @@
 
 适配器可以由类型化代码/配置与产品 Skill 协作：代码/schema 固定版本、权限、必读和禁止边界，Skill/Prompt 处理开放式目标和语义查询。不能只靠提示词声明“必须读取”，也不能把世界物理表名复制进每个产品。
 
-治理基线建立前已经存在的少数产品 reader 暂列在架构检查器的兼容白名单中，只允许维持旧产品可读性，不能作为新功能范例。对应产品开工时应以中立 provider 双读对照并逐个退役；白名单外任何新增 `WorldReleaseManifestV2` 直接解析都会被架构门拒绝。
+旧产品 reader 和兼容白名单已全部退役。现行代码中，只有世界引擎基础设施可以解码物理 `WorldRelease` manifest；上层产品、组件、Agent 和产品专用 service 只能通过中立 provider 与冻结 `ProductSourcePlan` 读取。架构检查器同时拒绝恢复旧 reader、旧上下文来源和跑团专用世界目录。
 
 ### 5.3 先锁定读取计划，再记录实际来源
 
 用户确认开始后，产品先把 WorldReference、需求适配器版本、需求、允许范围、缺失/补充策略以及咨询阶段 Context Manifest refs 冻结为 `ProductSourcePlan`。生产尚未执行时不能假装已经知道全部会用到的资源。
 
-阶段三中的 Agent 可在该 plan 允许的同一不可变 WorldRelease 内继续 `describe/search/read`；每个 durable run 保存自己的不可变 Context Manifest，ProductRelease 聚合生产证据为 `ProductSourceManifest` 快照并冻结 hash。开放式运行若需要继续查询世界，也必须经 ProductRelease 继承的 source plan 执行，读取证据归 session/run manifest，不能改读最新草稿或追写旧 ProductRelease。
+阶段三中的 Agent 可在该 plan 允许的同一不可变 WorldRelease 内继续 `describe/search/read`；每个 durable run 保存自己的不可变 Context Manifest，ProductRelease 聚合生产证据为 `ProductSourceManifest` 快照并冻结 hash。确定性编译不是例外：用户入选资源及从中立 relation 推导的必要依赖，必须由 Gateway 和编译器的同一闭包解析器确定，并先在该 run 中留下原文级证据，才能组装 RuntimePackage。开放式运行若需要继续查询世界，也必须经 ProductRelease 继承的 source plan 执行，读取证据归 session/run manifest，不能改读最新草稿或追写旧 ProductRelease。
 
 同一 WorldRelease 因产品和任务不同，可以产生不同 plan 和 manifest；这正是协议统一而 payload 不统一的设计目的。
 

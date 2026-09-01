@@ -95,7 +95,18 @@ export async function readWorldSemanticResourcesV1(input: {
   if (!Number.isSafeInteger(maximum) || maximum < 1 || input.descriptors.length > maximum) {
     throw new Error('[world-release-client] 世界资源批量读取数量超限')
   }
-  return Promise.all(input.descriptors.map(descriptor => (
-    readWorldSemanticResourceV1({ scope: input.scope, descriptor })
-  )))
+  const results = new Array<WorldSemanticResourceSnapshotV1>(input.descriptors.length)
+  let nextIndex = 0
+  const workers = Array.from({ length: Math.min(8, input.descriptors.length) }, async () => {
+    while (nextIndex < input.descriptors.length) {
+      const index = nextIndex
+      nextIndex += 1
+      results[index] = await readWorldSemanticResourceV1({
+        scope: input.scope,
+        descriptor: input.descriptors[index]!,
+      })
+    }
+  })
+  await Promise.all(workers)
+  return results
 }

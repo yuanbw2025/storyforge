@@ -143,6 +143,48 @@ describe('GAMEPROD-1B · user command control plane', () => {
     expect(await db.gameProductions.where('workId').equals(f.scope.workId).count()).toBe(1)
   })
 
+  it('刷新重放已完成的 Brief/开始命令时只读 durable receipt，不重新依赖本地世界来源', async () => {
+    const f = await fixture()
+    const created = await executeGameProductionCommand({
+      scope: f.scope,
+      command: {
+        type: 'create-intent', commandId: 'replay.intent', productionKey: 'replay-story',
+        worldReleaseId: f.worldReleaseId, userText: '验证持久回执',
+      },
+    })
+    const saveCommand = {
+      type: 'save-brief-revision' as const,
+      commandId: 'replay.brief',
+      expectedStateRevision: 0,
+      parentRevision: null,
+      brief: f.brief,
+    }
+    const saved = await executeGameProductionCommand({
+      scope: f.scope, productionId: created.productionId, command: saveCommand,
+    })
+    const startCommand = {
+      type: 'authorize-start' as const,
+      commandId: 'replay.start',
+      expectedStateRevision: 1,
+      briefRevision: 1,
+      briefHash: saved.result.briefHash as string,
+      authorizationNonce: 'replay.click',
+    }
+    await expect(executeGameProductionCommand({
+      scope: f.scope, productionId: created.productionId, command: startCommand,
+    })).resolves.toMatchObject({ ok: true, replayed: false })
+
+    await db.worldReleases.delete(f.worldReleaseId)
+    await expect(executeGameProductionCommand({
+      scope: f.scope, productionId: created.productionId, command: saveCommand,
+    })).resolves.toMatchObject({ ok: true, replayed: true, stateRevision: 2 })
+    await expect(executeGameProductionCommand({
+      scope: f.scope, productionId: created.productionId, command: startCommand,
+    })).resolves.toMatchObject({ ok: true, replayed: true, stateRevision: 2 })
+    expect(await db.gameProductionBriefs.where('productionId').equals(created.productionId).count()).toBe(1)
+    expect(await db.gameBuilds.where('productionId').equals(created.productionId).count()).toBe(1)
+  })
+
   it('可恢复归档 Preview Build，不删除 lineage、receipt 或冻结状态', async () => {
     const f = await fixture()
     const created = await executeGameProductionCommand({

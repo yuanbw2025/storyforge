@@ -4,7 +4,7 @@ import { assertGameReleaseUnchanged } from '../text-game/releases'
 import { assertRecordInScope, resolveScope } from '../world-engine/scope'
 import { createBuildGameMediaResolver, createReleaseGameMediaResolver } from './media-resolver'
 import { verifyGameBuildPreviewManifestV1 } from './preview-manifest'
-import { verifyGameReleaseManifestV2 } from './runtime-package'
+import { verifyGameReleaseManifestV3 } from './runtime-package'
 
 export async function playableGameSourceForSessionV2(session: SimulationSession): Promise<PlayableGameSourceV1> {
   if (session.gameReleaseId != null) return { kind: 'release', gameReleaseId: session.gameReleaseId }
@@ -58,7 +58,7 @@ export async function verifyPlayableGamePackageSource(input: {
     if (!await assertRecordInScope(scope, 'gameReleases', release, { owner: 'work' })) {
       throw new Error('[playable-game-source] GameRelease 不属于当前 Work')
     }
-    const parsed = await verifyGameReleaseManifestV2(release.manifestJson)
+    const parsed = await verifyGameReleaseManifestV3(release.manifestJson)
     const runtimePackage = parsed.runtimePackage
     const packageHash = parsed.packageHash
     return {

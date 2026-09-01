@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createGameReleaseManifestV2,
   parseGameRuntimePackageV2,
-  verifyGameReleaseManifestV2,
+  verifyGameReleaseManifestV3,
 } from '../../src/lib/game-production/runtime-package'
 import {
   canonicalGameProductionJsonV2,
@@ -10,6 +9,7 @@ import {
 } from '../../src/lib/game-production/hash'
 import type { GameRuntimePackageV2, ProductWorldSourceSelectionV1 } from '../../src/lib/types'
 import { currentProductSelection } from '../helpers/current-product-world'
+import { createFixtureGameReleaseManifestV3 } from '../helpers/game-release-v3'
 
 const HASH = 'a'.repeat(64)
 
@@ -62,7 +62,7 @@ function runtimePackage(): GameRuntimePackageV2 {
 describe('R-GAMEPROD-1A0 · RuntimePackage/Release v2', () => {
   it('严格解析并冻结 Preview/Release 共用的产品包', async () => {
     const parsed = parseGameRuntimePackageV2(runtimePackage())
-    const release = await createGameReleaseManifestV2({
+    const release = await createFixtureGameReleaseManifestV3({
       runtimePackage: parsed,
       productionProvenance: {
         productionKey: 'prod.harbor',
@@ -72,8 +72,8 @@ describe('R-GAMEPROD-1A0 · RuntimePackage/Release v2', () => {
       },
     })
 
-    expect(release.packageHash).toBe(await hashGameProductionValueV2(parsed))
-    await expect(verifyGameReleaseManifestV2(JSON.stringify(release))).resolves.toEqual(release)
+    expect(release.packageHash).toBe(await hashGameProductionValueV2(release.runtimePackage))
+    await expect(verifyGameReleaseManifestV3(JSON.stringify(release))).resolves.toEqual(release)
   })
 
   it('拒绝未知字段、产品模块不一致和被篡改的 packageHash', async () => {
@@ -83,8 +83,8 @@ describe('R-GAMEPROD-1A0 · RuntimePackage/Release v2', () => {
       definition: { ...runtimePackage().definition, enabledCapabilities: ['narrative', 'presentation'] },
     })).toThrow(/enabledCapabilities/)
 
-    const release = await createGameReleaseManifestV2({ runtimePackage: runtimePackage(), productionProvenance: null })
-    await expect(verifyGameReleaseManifestV2({
+    const release = await createFixtureGameReleaseManifestV3({ runtimePackage: runtimePackage() })
+    await expect(verifyGameReleaseManifestV3({
       ...release,
       runtimePackage: {
         ...release.runtimePackage,

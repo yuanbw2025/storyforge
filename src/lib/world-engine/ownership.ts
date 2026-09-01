@@ -6,7 +6,7 @@ import {
   generateWorldCode,
   isShareableWorld,
 } from '../product/world-identity'
-import { generateWorkCode } from '../memory/identity'
+import { generateWorkCode, generateWorkspaceUid, isWorkspaceUid } from '../memory/identity'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { transactionTablesFor } from '../registry/lifecycle'
 import type { TableSpec } from '../registry/types'
@@ -597,6 +597,9 @@ async function runOwnershipMigration(plan: OwnershipMigrationPlan, receiptId: nu
       }
 
       const normalized = migrateGenre(latest)
+      const workspaceUid = isWorkspaceUid(normalized.workspaceUid)
+        ? normalized.workspaceUid
+        : generateWorkspaceUid()
       const workspacePurpose = effectiveWorkspacePurpose(normalized)
       const workspacePurposeDecision = normalized.workspacePurposeDecision ?? 'legacy-review-required'
       const identityKind = workspacePurpose === 'world-engine'
@@ -653,7 +656,7 @@ async function runOwnershipMigration(plan: OwnershipMigrationPlan, receiptId: nu
 
       await stampLegacyOwners(plan, worldId, workId)
       await db.projects.update(projectId, {
-        workspaceUid: normalized.workspaceUid,
+        workspaceUid,
         activeWorldId: worldId,
         activeWorkId: workId,
         ownershipSchemaVersion: WORKSPACE_OWNERSHIP_CONTRACT_VERSION,

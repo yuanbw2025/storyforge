@@ -4,23 +4,24 @@ import type {
   FrozenNarrativeBeat,
   FrozenNarrativeChoice,
   FrozenGameNarrativeNode,
-  GameBuildManifestV1,
   GameBuildQualityReportV1,
   GameProductionBriefV3,
   GameRuntimePackageV2,
   WorkspaceScope,
 } from '../types'
 import { sanitizeSvg } from '../utils/sanitize-svg'
-import { assertRecordInScope, resolveScope, scopeTransactionTables } from '../world-engine/scope'
-import { acceptGameBuildArtifact, readAcceptedBuildArtifacts } from './artifact-store'
-import { createGameBuildCompatibilityReportV1 } from './compatibility'
+import { assertRecordInScope, resolveScope } from '../world-engine/scope'
 import { parseGameProductionBriefV3 } from './contracts'
-import { canonicalGameProductionJsonV2, hashGameProductionValueV2 } from './hash'
+import { hashGameProductionValueV2 } from './hash'
 import { putMediaBlobObject } from './media-blob-store'
 import { createVerticalSliceGameProductionPlanV3 } from './plan'
-import { createGameBuildPreviewManifestV1 } from './preview-manifest'
-import { createGameBuildRootTerminalReceiptV1 } from './receipts'
 import { parseGameRuntimePackageV2 } from './runtime-package'
+import {
+  runGameProductionUntilBlockedV1,
+  type GameProductionTaskExecutionInputV1,
+  type GameProductionTaskExecutionResultV1,
+  type GameProductionTaskUsageV1,
+} from './scheduler'
 
 function escapeXml(value: string): string {
   return value.replace(/[&<>'"]/g, character => ({
@@ -87,11 +88,161 @@ function narrativeFromBrief(brief: GameProductionBriefV3): {
   return { nodes, beats, choices }
 }
 
+function artifactPayload<T>(input: GameProductionTaskExecutionInputV1, artifactKey: string): T {
+  const artifact = input.inputArtifacts.find(row => row.artifactKey === artifactKey)
+  if (!artifact) throw new Error(`[game-production-vertical] 输入 Artifact 缺失:${artifactKey}`)
+  try { return JSON.parse(artifact.payloadJson) as T }
+  catch { throw new Error(`[game-production-vertical] 输入 Artifact JSON 损坏:${artifactKey}`) }
+}
+
+function localUsage(storageBytes = 0): GameProductionTaskUsageV1 {
+  return {
+    modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0,
+    costUsd: 0, durationMs: 0, storageBytes,
+  }
+}
+
+function result(
+  input: GameProductionTaskExecutionInputV1,
+  artifacts: GameProductionTaskExecutionResultV1['artifacts'],
+  storageBytes = 0,
+): GameProductionTaskExecutionResultV1 {
+  return { artifacts, passedGateIds: [...input.task.acceptanceGateIds], usage: localUsage(storageBytes) }
+}
+
+function createLocalVerticalExecutor(input: {
+  scope: WorkspaceScope
+  productionKey: string
+  title: string
+  brief: GameProductionBriefV3
+}) {
+  const narrative = narrativeFromBrief(input.brief)
+  const keyVisualAssetKey = `${input.productionKey}.background.opening`
+  return async (taskInput: GameProductionTaskExecutionInputV1): Promise<GameProductionTaskExecutionResultV1> => {
+    if (taskInput.task.taskKey === 'content.compile') {
+      return result(taskInput, [{
+        artifactKey: 'runtime.narrative', kind: 'narrative', payload: narrative,
+        quality: { graph: '5-nodes-2-endings', sourceAnchors: input.brief.source.startingPoint.sourceRefs },
+        rights: { origin: 'deterministic-local', containsThirdPartyText: false },
+      }])
+    }
+    if (taskInput.task.taskKey === 'visual.compose') {
+      if (input.brief.media.visualLevel === 'none') {
+        return result(taskInput, [{
+          artifactKey: 'media.key-visual', kind: 'visual-bible',
+          payload: { fallback: 'text-only', reason: 'Brief visualLevel=none' },
+          rights: { origin: 'none', commercialUse: true },
+        }])
+      }
+      const bytes = localKeyVisual({
+        title: input.title,
+        conflict: input.brief.intent.openingSituation,
+        tone: input.brief.intent.tone,
+      })
+      const blob = await putMediaBlobObject({
+        scope: input.scope, data: bytes, mimeType: 'image/svg+xml', backend: 'indexeddb', sanitizedSvg: true,
+      })
+      return result(taskInput, [{
+        artifactKey: 'media.key-visual', requirementKey: 'media.visual',
+        kind: 'image', mediaKind: 'background',
+        payload: { assetKey: keyVisualAssetKey, generator: 'storyforge-procedural-svg-v1' },
+        metadata: { width: 1200, height: 675, altText: `${input.title} 的开场概念图` },
+        quality: { dimensionsVerified: true, sanitizer: 'sanitize-svg' },
+        rights: { origin: 'storyforge-procedural-svg-v1', license: 'CC0-1.0', commercialUse: true },
+        contentHash: blob.contentHash, blobObjectId: blob.id!, mimeType: blob.mimeType, byteSize: blob.byteSize,
+      }], blob.byteSize)
+    }
+    if (taskInput.task.taskKey === 'runtime.integrate') {
+      if (!taskInput.contextText.trim()) {
+        throw new Error('[game-production-vertical] 集成任务没有收到冻结世界上下文')
+      }
+      const compiledNarrative = artifactPayload<typeof narrative>(taskInput, 'runtime.narrative')
+      const visual = taskInput.inputArtifacts.find(row => row.artifactKey === 'media.key-visual')!
+      const runtimePackage: GameRuntimePackageV2 = {
+        schema: 'storyforge.game-runtime-package', version: 2, productType: input.brief.intent.productType,
+        definition: {
+          gameKey: input.productionKey, title: input.title,
+          description: input.brief.intent.coreExperience.join('；'),
+          enabledCapabilities: input.brief.intent.productType === 'avg' ? ['narrative', 'presentation'] : ['narrative'],
+          rulesetVersion: 1, initialVariables: {},
+        },
+        sourceWorld: { contentHash: input.brief.source.worldContentHash, selection: input.brief.source.selection },
+        narrative: {
+          moduleKind: 'main', moduleTitle: input.brief.source.startingPoint.title,
+          entryNodeKey: 'opening', ...compiledNarrative,
+        },
+      }
+      if (input.brief.intent.productType === 'avg') {
+        const asset = visual.blobObjectId == null ? null : {
+          assetKey: keyVisualAssetKey, version: 1, kind: 'background' as const,
+          name: `${input.title} · 开场`, mimeType: visual.mimeType!, byteSize: visual.byteSize,
+          width: 1200, height: 675, durationMs: null, contentHash: visual.contentHash,
+          blobContentHash: visual.contentHash, source: 'storyforge-procedural-svg-v1', license: 'CC0-1.0',
+          altText: `${input.title} 的开场概念图`, characterTag: '', sceneTag: 'opening',
+        }
+        runtimePackage.presentation = {
+          version: 1,
+          cues: asset ? [{
+            cueKey: 'cue.opening.background', beatKey: 'beat.opening', phase: 'before',
+            type: 'set-background', assetKey: asset.assetKey, durationMs: 500,
+            easing: 'ease-in-out', order: 0,
+          }] : [],
+          assets: asset ? [asset] : [],
+        }
+      }
+      const parsed = parseGameRuntimePackageV2(runtimePackage)
+      return result(taskInput, [{
+        artifactKey: 'runtime.package', kind: 'presentation', payload: parsed,
+        quality: {
+          parser: 'parseGameRuntimePackageV2',
+          sourceContextHash: await hashGameProductionValueV2(taskInput.contextText),
+        },
+        rights: {
+          mediaArtifactKey: visual.artifactKey,
+          mediaRightsHash: await hashGameProductionValueV2(JSON.parse(visual.rightsJson)),
+        },
+      }])
+    }
+    if (taskInput.task.taskKey === 'quality.verify') {
+      const runtimePackage = parseGameRuntimePackageV2(
+        artifactPayload<GameRuntimePackageV2>(taskInput, 'runtime.package'),
+      )
+      const packageHash = await hashGameProductionValueV2(runtimePackage)
+      const visual = await db.gameBuildArtifacts
+        .where('[buildId+artifactKey]').equals([taskInput.buildId, 'media.key-visual']).first()
+      const mediaCoverage = input.brief.media.imageCount > 0
+        ? Math.min(1, (visual?.blobObjectId == null ? 0 : 1) / input.brief.media.imageCount)
+        : 1
+      const packageQualityReady = mediaCoverage >= input.brief.completionContract.minimumMediaCoverage
+      const hardGateIds = ['narrative.graph.valid', 'rights.complete', 'runtime.package.valid', 'runtime.playable']
+      const warnings = [
+        '内容由本地确定性 Brief 编译器生成，未调用或冒充外部模型。',
+        ...(visual?.blobObjectId == null ? ['未生成视觉，玩家使用纯文字 fallback。'] : []),
+        ...(input.brief.media.audioLevel !== 'none' ? ['本地纵切未生成音频，运行时保持静音可通关。'] : []),
+      ].sort()
+      const quality: GameBuildQualityReportV1 = {
+        schema: 'storyforge.game-build-quality-report', version: 1,
+        buildNumber: taskInput.buildNumber, packageHash,
+        hardGateResults: hardGateIds.map(gateId => ({ gateId, passed: true, evidence: [packageHash] })),
+        softGateResults: [{
+          gateId: 'media.coverage', passed: packageQualityReady,
+          evidence: [`coverage=${mediaCoverage}`, `required=${input.brief.completionContract.minimumMediaCoverage}`],
+        }],
+        mediaCoverage, playable: true, releaseReady: packageQualityReady, warnings,
+      }
+      return result(taskInput, [{
+        artifactKey: 'quality.report', kind: 'quality-report', payload: quality,
+        quality: { hardGatesPassed: true, releaseReady: packageQualityReady }, rights: {},
+      }])
+    }
+    throw new Error(`[game-production-vertical] 未登记的本地任务:${taskInput.task.taskKey}`)
+  }
+}
+
 /**
- * GAME-PROD-1C local vertical slice. It proves the complete production
- * transaction without pretending to be an external AI/media provider: text is
- * a deterministic Brief-grounded prototype and the key visual is labeled
- * local procedural output with explicit CC0 rights.
+ * No-provider acceptance fixture. It uses the same durable scheduler, world
+ * gateway, exact run evidence, artifact receipts and terminal join as formal
+ * production; only the task executor is deterministic and explicitly labeled.
  */
 export async function runLocalGameProductionVerticalSlice(input: {
   scope: WorkspaceScope
@@ -117,13 +268,15 @@ export async function runLocalGameProductionVerticalSlice(input: {
   if (!build || !briefRow || briefRow.status !== 'authorized' || build.briefHash !== briefRow.briefHash) {
     throw new Error('[game-production-vertical] Build/Brief 授权绑定损坏')
   }
-  if (build.status === 'preview-ready' || build.status === 'release-ready' || build.status === 'released') {
+  if (['preview-ready', 'release-ready', 'released'].includes(build.status)) {
     return {
       buildId: build.id!, previewHash: build.previewHash, packageHash: build.packageHash,
       releaseReady: build.status === 'release-ready' || build.status === 'released',
     }
   }
-  if (build.status !== 'authorized') throw new Error(`[game-production-vertical] Build 状态 ${build.status} 不可启动本地纵切`)
+  if (build.status !== 'authorized' && build.status !== 'building' && build.status !== 'recovery-required') {
+    throw new Error(`[game-production-vertical] Build 状态 ${build.status} 不可启动本地纵切`)
+  }
   const brief = parseGameProductionBriefV3(briefRow.briefJson)
   if (brief.intent.productType !== 'storygame' && brief.intent.productType !== 'avg') {
     throw new Error('[game-production-vertical] 本地 1C 纵切只支持分支叙事与轻量 AVG')
@@ -131,203 +284,25 @@ export async function runLocalGameProductionVerticalSlice(input: {
   const plan = createVerticalSliceGameProductionPlanV3({
     brief, briefHash: briefRow.briefHash, controlEpoch: build.controlEpoch, buildNumber: build.buildNumber,
   })
-  const planJson = canonicalGameProductionJsonV2(plan)
-  const planHash = await hashGameProductionValueV2(plan)
-  const startedAt = Date.now()
-  const started = await db.transaction('rw', scopeTransactionTables(db.gameBuilds, db.gameProductions), async () => {
-    const current = await db.gameBuilds.get(build.id!)
-    const root = await db.gameProductions.get(production.id!)
-    if (!current || !root || current.stateRevision !== build.stateRevision
-      || current.controlEpoch !== build.controlEpoch || current.status !== 'authorized') return false
-    await db.gameBuilds.update(current.id!, {
-      status: 'building', planRevision: current.planRevision + 1, planJson, planHash,
-      stateRevision: current.stateRevision + 1, startedAt, updatedAt: startedAt,
-    })
-    await db.gameProductions.update(root.id!, { updatedAt: startedAt })
-    return true
-  })
-  if (!started) throw new Error('[game-production-vertical] Build 启动 CAS 失败')
-
-  const narrative = narrativeFromBrief(brief)
-  const keyVisualAssetKey = `${production.productionKey}.build-${build.buildNumber}.background.opening`
-  const visualBytes = brief.media.visualLevel === 'none'
-    ? null
-    : localKeyVisual({ title: production.title, conflict: brief.intent.openingSituation, tone: brief.intent.tone })
-  const [narrativeArtifact, visual] = await Promise.all([
-    acceptGameBuildArtifact({
-      scope, buildId: build.id!, controlEpoch: build.controlEpoch, artifactKey: 'runtime.narrative',
-      kind: 'narrative', payload: narrative, inputHash: briefRow.briefHash,
-      quality: { graph: '5-nodes-2-endings', sourceAnchors: brief.source.startingPoint.sourceRefs },
-      rights: { origin: 'deterministic-local', containsThirdPartyText: false },
+  const projection = await runGameProductionUntilBlockedV1({
+    scope,
+    productionId: production.id!,
+    suppliedPlan: plan,
+    executor: createLocalVerticalExecutor({
+      scope, productionKey: production.productionKey, title: production.title, brief,
     }),
-    (async () => {
-      if (!visualBytes) return acceptGameBuildArtifact({
-        scope, buildId: build.id!, controlEpoch: build.controlEpoch, artifactKey: 'media.key-visual',
-        kind: 'visual-bible', payload: { fallback: 'text-only', reason: 'Brief visualLevel=none' },
-        inputHash: briefRow.briefHash, rights: { origin: 'none', commercialUse: true },
-      })
-      const blob = await putMediaBlobObject({
-        scope, data: visualBytes, mimeType: 'image/svg+xml', backend: 'indexeddb', sanitizedSvg: true,
-      })
-      return acceptGameBuildArtifact({
-        scope, buildId: build.id!, controlEpoch: build.controlEpoch, artifactKey: 'media.key-visual',
-        requirementKey: 'media.visual', kind: 'image', mediaKind: 'background',
-        payload: { assetKey: keyVisualAssetKey, generator: 'storyforge-procedural-svg-v1' },
-        metadata: { width: 1200, height: 675, altText: `${production.title} 的开场概念图` },
-        quality: { dimensionsVerified: true, sanitizer: 'sanitize-svg' },
-        rights: { origin: 'storyforge-procedural-svg-v1', license: 'CC0-1.0', commercialUse: true },
-        contentHash: blob.contentHash, blobObjectId: blob.id!, mimeType: blob.mimeType,
-        byteSize: blob.byteSize, inputHash: briefRow.briefHash,
-      })
-    })(),
-  ])
-
-  const runtimePackage: GameRuntimePackageV2 = {
-    schema: 'storyforge.game-runtime-package', version: 2, productType: brief.intent.productType,
-    definition: {
-      gameKey: production.productionKey, title: production.title,
-      description: brief.intent.coreExperience.join('；'),
-      enabledCapabilities: brief.intent.productType === 'avg' ? ['narrative', 'presentation'] : ['narrative'],
-      rulesetVersion: 1, initialVariables: {},
-    },
-    sourceWorld: { contentHash: brief.source.worldContentHash, selection: brief.source.selection },
-    narrative: {
-      moduleKind: 'main', moduleTitle: brief.source.startingPoint.title,
-      entryNodeKey: 'opening', ...narrative,
-    },
+    maximumCycles: 20,
+  })
+  const completed = await db.gameBuilds.get(build.id!)
+  if (!completed || !['preview-ready', 'release-ready', 'released'].includes(completed.status)
+    || !completed.previewHash || !completed.packageHash || !projection.terminal) {
+    throw new Error(`[game-production-vertical] durable scheduler 未完成:${completed?.status ?? 'missing'}`)
   }
-  if (brief.intent.productType === 'avg') {
-    const asset = visual.blobObjectId == null ? null : {
-      assetKey: keyVisualAssetKey, version: 1, kind: 'background' as const,
-      name: `${production.title} · 开场`, mimeType: visual.mimeType!, byteSize: visual.byteSize,
-      width: 1200, height: 675, durationMs: null, contentHash: visual.contentHash,
-      blobContentHash: visual.contentHash, source: 'storyforge-procedural-svg-v1', license: 'CC0-1.0',
-      altText: `${production.title} 的开场概念图`, characterTag: '', sceneTag: 'opening',
-    }
-    runtimePackage.presentation = {
-      version: 1,
-      cues: asset ? [{
-        cueKey: 'cue.opening.background', beatKey: 'beat.opening', phase: 'before',
-        type: 'set-background', assetKey: asset.assetKey, durationMs: 500, easing: 'ease-in-out', order: 0,
-      }] : [],
-      assets: asset ? [asset] : [],
-    }
-  }
-  const parsedPackage = parseGameRuntimePackageV2(runtimePackage)
-  const packageHash = await hashGameProductionValueV2(parsedPackage)
-  let previousPackage: Parameters<typeof createGameBuildCompatibilityReportV1>[0]['previous'] = null
-  if (build.parentBuildNumber != null) {
-    const parentBuild = await db.gameBuilds
-      .where('[productionId+buildNumber]').equals([build.productionId, build.parentBuildNumber]).first()
-    const parentArtifact = parentBuild?.id == null ? null : await db.gameBuildArtifacts
-      .where('[buildId+artifactKey]').equals([parentBuild.id, 'runtime.package']).first()
-    if (!parentBuild?.packageHash || !parentArtifact || !['accepted', 'carried-forward'].includes(parentArtifact.status)) {
-      throw new Error('[game-production-vertical] compatibility parent package 缺失')
-    }
-    const parentRuntimePackage = parseGameRuntimePackageV2(parentArtifact.payloadJson)
-    if (await hashGameProductionValueV2(parentRuntimePackage) !== parentBuild.packageHash) {
-      throw new Error('[game-production-vertical] compatibility parent package hash 不一致')
-    }
-    previousPackage = {
-      buildNumber: parentBuild.buildNumber, packageHash: parentBuild.packageHash,
-      runtimePackage: parentRuntimePackage,
-    }
-  }
-  const compatibility = await createGameBuildCompatibilityReportV1({
-    previous: previousPackage,
-    current: { buildNumber: build.buildNumber, packageHash, runtimePackage: parsedPackage },
-  })
-  const integrationInputHash = await hashGameProductionValueV2([
-    narrativeArtifact.contentHash, visual.contentHash, planHash,
-  ])
-  await acceptGameBuildArtifact({
-    scope, buildId: build.id!, controlEpoch: build.controlEpoch, artifactKey: 'runtime.package',
-    kind: 'presentation', payload: parsedPackage, inputHash: integrationInputHash,
-    quality: { parser: 'parseGameRuntimePackageV2', packageHash },
-    rights: { mediaArtifactKey: visual.artifactKey, mediaRightsHash: await hashGameProductionValueV2(JSON.parse(visual.rightsJson)) },
-  })
-
-  const mediaBindings = brief.intent.productType === 'avg' && visual.blobObjectId != null ? [{
-    assetKey: keyVisualAssetKey, artifactKey: visual.artifactKey, blobContentHash: visual.contentHash,
-  }] : []
-  const fallbackSummary = [
-    '内容由本地确定性 Brief 编译器生成，未调用或冒充外部模型。',
-    ...(visual.blobObjectId == null ? ['未生成视觉，玩家使用纯文字 fallback。'] : []),
-    ...(brief.media.audioLevel !== 'none' ? ['本地纵切未生成音频，运行时保持静音可通关。'] : []),
-  ].sort()
-  const completedGateIds = ['narrative.graph.valid', 'rights.complete', 'runtime.package.valid', 'runtime.playable']
-  const mediaCoverage = brief.media.imageCount > 0
-    ? Math.min(1, (visual.blobObjectId == null ? 0 : 1) / brief.media.imageCount)
-    : 1
-  const packageQualityReady = mediaCoverage >= brief.completionContract.minimumMediaCoverage
-  const releaseReady = packageQualityReady && brief.qualityProfile !== 'commercial-candidate'
-  const quality: GameBuildQualityReportV1 = {
-    schema: 'storyforge.game-build-quality-report', version: 1, buildNumber: build.buildNumber,
-    packageHash, hardGateResults: completedGateIds.map(gateId => ({
-      gateId, passed: true, evidence: [packageHash],
-    })),
-    softGateResults: [{
-      gateId: 'media.coverage', passed: packageQualityReady,
-      evidence: [`coverage=${mediaCoverage}`, `required=${brief.completionContract.minimumMediaCoverage}`],
-    }],
-    mediaCoverage, playable: true, releaseReady: packageQualityReady,
-    warnings: fallbackSummary,
-  }
-  const qualityHash = await hashGameProductionValueV2(quality)
-  await acceptGameBuildArtifact({
-    scope, buildId: build.id!, controlEpoch: build.controlEpoch, artifactKey: 'quality.report',
-    kind: 'quality-report', payload: quality, inputHash: packageHash,
-    quality: { hardGatesPassed: true, releaseReady: packageQualityReady }, rights: {},
-  })
-  const allArtifacts = await readAcceptedBuildArtifacts({ scope, buildId: build.id! })
-  const manifest: GameBuildManifestV1 = {
-    schema: 'storyforge.game-build-manifest', version: 1,
-    productionKey: production.productionKey, buildNumber: build.buildNumber,
-    briefRevision: briefRow.revision, briefHash: briefRow.briefHash, planHash,
-    controlEpoch: build.controlEpoch, runtimePackageHash: packageHash,
-    artifactReceipts: allArtifacts.map(row => ({
-      artifactKey: row.artifactKey, version: row.version, contentHash: row.contentHash,
-      producerReceiptHash: row.producerReceiptHash,
-    })),
-    completedGateIds, fallbackSummary,
-  }
-  const manifestJson = canonicalGameProductionJsonV2(manifest)
-  const manifestHash = await hashGameProductionValueV2(manifest)
-  const preview = await createGameBuildPreviewManifestV1({
-    productionKey: production.productionKey, buildNumber: build.buildNumber,
-    buildManifestHash: manifestHash, runtimePackage: parsedPackage, mediaBindings, fallbackSummary,
-  })
-  const rootTerminalReceiptHash = await createGameBuildRootTerminalReceiptV1({
-    planHash, manifestHash, packageHash, qualityReportHash: qualityHash,
-    controlEpoch: build.controlEpoch, budgetLedgerJson: build.budgetLedgerJson,
-    artifacts: allArtifacts,
-  })
-  const completedAt = Date.now()
-  const committed = await db.transaction('rw', scopeTransactionTables(
-    db.gameBuilds, db.gameProductions, db.gameBuildArtifacts, db.mediaBlobObjects,
-  ), async () => {
-    const current = await db.gameBuilds.get(build.id!)
-    const root = await db.gameProductions.get(production.id!)
-    if (!current || !root || current.controlEpoch !== build.controlEpoch || current.status !== 'building') return false
-    const currentArtifacts = await db.gameBuildArtifacts.where('buildId').equals(build.id!).toArray()
-    if (currentArtifacts.filter(row => row.status === 'accepted').length !== allArtifacts.length) return false
-    await db.gameBuilds.update(build.id!, {
-      status: releaseReady ? 'release-ready' : 'preview-ready',
-      stateRevision: current.stateRevision + 1,
-      manifestJson, manifestHash, packageHash,
-      previewManifestJson: canonicalGameProductionJsonV2(preview), previewHash: preview.previewHash,
-      qualityReportJson: canonicalGameProductionJsonV2(quality), qualityReportHash: qualityHash,
-      compatibilityJson: canonicalGameProductionJsonV2(compatibility),
-      rootTerminalReceiptHash, completedAt, updatedAt: completedAt,
-    })
-    await db.gameProductions.update(root.id!, {
-      status: 'preview-ready', stateRevision: root.stateRevision + 1, updatedAt: completedAt,
-    })
-    return true
-  })
-  if (!committed) throw new Error('[game-production-vertical] 终态提交时 Build epoch/status 已变化，产物已保留待恢复')
-  // Let any active Dexie transaction finish before the caller immediately
-  // opens the preview in a separate resolver/lease transaction.
+  // The caller may immediately begin the adoption transaction. Clear Dexie's
+  // async transaction context left by the terminal join before handing off.
   if (Dexie.currentTransaction) await Dexie.waitFor(Promise.resolve())
-  return { buildId: build.id!, previewHash: preview.previewHash, packageHash, releaseReady }
+  return {
+    buildId: completed.id!, previewHash: completed.previewHash, packageHash: completed.packageHash,
+    releaseReady: completed.status === 'release-ready' || completed.status === 'released',
+  }
 }

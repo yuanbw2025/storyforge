@@ -1,16 +1,24 @@
 import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type {
+  ConfirmedProductBriefV1,
   GameBuildRecordV1,
   GameProductionBriefRecordV1,
   GameProductionCommandRecordV1,
   GameProductionCommandV1,
   GameProductionRecordV1,
+  ProductSourcePlanV1,
   WorkspaceScope,
 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
 import { canonicalGameProductionJsonV2, hashGameProductionValueV2 } from './hash'
 import { parseGameProductionBriefV3, parseGameProductionCommandV1 } from './contracts'
+import {
+  createGameConfirmedBriefV1,
+  createGameProductionSourcePlanV1,
+  parseGameProductionSourcePlanV1,
+} from './source-contracts'
+import { assertFormalProductProductionStartV1 } from '../world-engine/product-source-contracts'
 
 export type GameProductionErrorCodeV1 =
   | 'production-not-found'
@@ -106,6 +114,8 @@ async function applyCommand(input: {
   production: GameProductionRecordV1 & { id: number }
   command: GameProductionCommandV1
   preparedBriefHash: string | null
+  preparedSourcePlan: ProductSourcePlanV1 | null
+  preparedConfirmedBrief: ConfirmedProductBriefV1 | null
   emptyHash: string
   now: number
 }): Promise<{ production: GameProductionRecordV1 & { id: number }; result: Record<string, unknown> }> {
@@ -127,6 +137,13 @@ async function applyCommand(input: {
     if (command.parentRevision !== expectedParent) reject('production-state-conflict', 'Brief parent revision 已过期')
     const revision = await nextBriefRevision(production.id)
     const briefHash = input.preparedBriefHash!
+    const sourcePlan = input.preparedSourcePlan
+    if (!sourcePlan || sourcePlan.productInstanceKey !== production.productionKey
+      || sourcePlan.productType !== brief.intent.productType
+      || sourcePlan.worldReference.localReleaseRecordId !== brief.source.worldReleaseId
+      || sourcePlan.worldReference.releaseHash !== brief.source.worldContentHash) {
+      reject('source-stale', '保存 Brief 缺少与当前 Production/WorldRelease 一致的 SourcePlan')
+    }
     const row = stampNewRecord(scope, 'gameProductionBriefs', {
       projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
       productionId: production.id, revision, parentRevision: command.parentRevision, status: 'draft' as const,
@@ -136,7 +153,10 @@ async function applyCommand(input: {
         scale: brief.scale, media: brief.media, productionBudget: brief.productionBudget,
         qualityProfile: brief.qualityProfile, externalDataPolicy: brief.externalDataPolicy,
       }),
-      briefJson: canonicalGameProductionJsonV2(brief), briefHash, authorizedAt: null, createdAt: now,
+      briefJson: canonicalGameProductionJsonV2(brief), briefHash,
+      sourcePlanJson: canonicalGameProductionJsonV2(sourcePlan), sourcePlanHash: sourcePlan.planHash,
+      confirmedBriefJson: '{}', confirmedBriefHash: '',
+      authorizedAt: null, createdAt: now,
     } satisfies GameProductionBriefRecordV1, { owner: 'work' })
     await db.gameProductionBriefs.add(row)
     const stateRevision = production.stateRevision + 1
@@ -158,6 +178,15 @@ async function applyCommand(input: {
     const brief = parseGameProductionBriefV3(briefRow.briefJson)
     if (brief.unresolvedDecisionKeys.length > 0) reject('brief-unresolved', 'Brief 仍有未解决决策')
     await assertWorldRelease(scope, brief.source.worldReleaseId, brief.source.worldContentHash)
+    const confirmedBrief = input.preparedConfirmedBrief
+    if (!confirmedBrief || confirmedBrief.productInstanceKey !== production.productionKey
+      || confirmedBrief.productType !== brief.intent.productType
+      || confirmedBrief.sourcePlanHash !== briefRow.sourcePlanHash
+      || confirmedBrief.briefRevision !== briefRow.revision
+      || confirmedBrief.briefContentHash !== briefRow.briefHash
+      || confirmedBrief.authorStartRevision !== command.expectedStateRevision) {
+      reject('brief-not-authorized', 'authorize-start 缺少与当前 SourcePlan/Brief/revision 一致的确认合同')
+    }
     const buildNumber = await nextBuildNumber(production.id)
     const build = stampNewRecord(scope, 'gameBuilds', {
       projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
@@ -174,7 +203,12 @@ async function applyCommand(input: {
     const buildId = await db.gameBuilds.add(build) as number
     await db.gameProductionBriefs.where('[productionId+status]').equals([production.id, 'authorized'])
       .modify({ status: 'superseded' })
-    await db.gameProductionBriefs.update(briefRow.id!, { status: 'authorized', authorizedAt: now })
+    await db.gameProductionBriefs.update(briefRow.id!, {
+      status: 'authorized',
+      confirmedBriefJson: canonicalGameProductionJsonV2(confirmedBrief),
+      confirmedBriefHash: confirmedBrief.confirmationHash,
+      authorizedAt: now,
+    })
     const stateRevision = production.stateRevision + 1
     await db.gameProductions.update(production.id, {
       status: 'producing', currentBuildNumber: buildNumber, stateRevision, updatedAt: now,
@@ -417,6 +451,10 @@ async function applyCommand(input: {
       evolutionImpact: nextBrief.evolution,
     }),
     briefJson: canonicalGameProductionJsonV2(nextBrief), briefHash,
+    sourcePlanJson: previous.sourcePlanJson,
+    sourcePlanHash: previous.sourcePlanHash,
+    confirmedBriefJson: '{}',
+    confirmedBriefHash: '',
     authorizedAt: null, createdAt: now,
   } satisfies GameProductionBriefRecordV1, { owner: 'work' }))
   const stateRevision = production.stateRevision + 1
@@ -431,6 +469,8 @@ async function executeTransaction(input: {
   command: GameProductionCommandV1
   payloadHash: string
   preparedBriefHash: string | null
+  preparedSourcePlan: ProductSourcePlanV1 | null
+  preparedConfirmedBrief: ConfirmedProductBriefV1 | null
   emptyHash: string
   now: number
 }): Promise<GameProductionCommandReceiptV1> {
@@ -485,7 +525,12 @@ async function executeTransaction(input: {
 
     try {
       const applied = await applyCommand({
-        scope, production, command, preparedBriefHash: input.preparedBriefHash, emptyHash: input.emptyHash, now,
+        scope, production, command,
+        preparedBriefHash: input.preparedBriefHash,
+        preparedSourcePlan: input.preparedSourcePlan,
+        preparedConfirmedBrief: input.preparedConfirmedBrief,
+        emptyHash: input.emptyHash,
+        now,
       })
       const resultJson = safeJson(applied.result)
       await db.gameProductionCommands.update(claimId, { status: 'succeeded', resultJson, completedAt: now })
@@ -524,11 +569,82 @@ export async function executeGameProductionCommand(input: {
   const scope = await resolveScope({ scope: input.scope })
   const command = parseGameProductionCommandV1(input.command)
   const payloadHash = await hashGameProductionValueV2(command)
+  const emptyHash = await hashGameProductionValueV2({})
+  const now = input.now ?? Date.now()
+  // Durable command replay must not depend on the source still being locally
+  // resolvable. The first execution already froze and verified those inputs;
+  // a refresh/retry replays that receipt before doing any WebCrypto/Gateway
+  // preflight that could now fail for unrelated reasons.
+  if (command.type !== 'create-intent' && Number.isInteger(input.productionId)) {
+    const existing = await db.gameProductionCommands
+      .where('[productionId+commandId]').equals([input.productionId!, command.commandId]).first()
+    if (existing) {
+      const replay = await executeTransaction({
+        scope,
+        productionId: input.productionId,
+        command,
+        payloadHash,
+        preparedBriefHash: null,
+        preparedSourcePlan: null,
+        preparedConfirmedBrief: null,
+        emptyHash,
+        now,
+      })
+      notifyProductionChanged(replay)
+      return replay
+    }
+  }
   const preparedBriefHash = command.type === 'save-brief-revision'
     ? await hashGameProductionValueV2(command.brief)
     : null
-  const emptyHash = await hashGameProductionValueV2({})
-  const request = { scope, productionId: input.productionId, command, payloadHash, preparedBriefHash, emptyHash, now: input.now ?? Date.now() }
+  let preparedSourcePlan: ProductSourcePlanV1 | null = null
+  let preparedConfirmedBrief: ConfirmedProductBriefV1 | null = null
+  if (command.type === 'save-brief-revision') {
+    if (!Number.isInteger(input.productionId)) {
+      throw new Error('[game-production] save-brief-revision 缺少 productionId')
+    }
+    const production = await productionInScope(scope, input.productionId!)
+    preparedSourcePlan = await createGameProductionSourcePlanV1({
+      scope,
+      productionKey: production.productionKey,
+      brief: command.brief,
+      createdAt: input.now,
+    })
+  } else if (command.type === 'authorize-start') {
+    if (!Number.isInteger(input.productionId)) {
+      throw new Error('[game-production] authorize-start 缺少 productionId')
+    }
+    const production = await productionInScope(scope, input.productionId!)
+    const briefRow = await db.gameProductionBriefs
+      .where('[productionId+revision]').equals([production.id, command.briefRevision]).first()
+    if (!briefRow || briefRow.briefHash !== command.briefHash) {
+      throw new Error('[game-production] authorize-start 的 Brief 不存在或 hash 已变化')
+    }
+    preparedSourcePlan = await parseGameProductionSourcePlanV1(briefRow)
+    preparedConfirmedBrief = await createGameConfirmedBriefV1({
+      productionKey: production.productionKey,
+      briefRow,
+      sourcePlan: preparedSourcePlan,
+      authorStartRevision: command.expectedStateRevision,
+      confirmedAt: input.now,
+    })
+    await assertFormalProductProductionStartV1({
+      sourcePlan: preparedSourcePlan,
+      confirmedBrief: preparedConfirmedBrief,
+      authorStartRevision: command.expectedStateRevision,
+    })
+  }
+  const request = {
+    scope,
+    productionId: input.productionId,
+    command,
+    payloadHash,
+    preparedBriefHash,
+    preparedSourcePlan,
+    preparedConfirmedBrief,
+    emptyHash,
+    now,
+  }
   let receipt: GameProductionCommandReceiptV1
   try {
     receipt = await executeTransaction(request)

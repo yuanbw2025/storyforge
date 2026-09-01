@@ -49,11 +49,11 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 973 个文件 / 335550 行 | `tsconfig.json` |
-| IndexedDB schema | v89 / 94 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
+| TypeScript 生产源码 | 970 个文件 / 336429 行 | `tsconfig.json` |
+| IndexedDB schema | v90 / 94 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 94 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
-| CONTEXT_SOURCES | 82 个上下文源 | `context-sources.ts` |
+| CONTEXT_SOURCES | 81 个上下文源 | `context-sources.ts` |
 | 写回治理 | 38 个通用 adopt target / 35 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 

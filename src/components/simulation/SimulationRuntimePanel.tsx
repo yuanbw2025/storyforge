@@ -47,6 +47,7 @@ import {
   parseTtrpgTurnCandidate,
 } from '../../lib/simulation/ttrpg'
 import { isNpcRuntimeEntity } from '../../lib/simulation/runtime'
+import { isFormalProductSessionKindV1 } from '../../lib/product/runtime-boundary'
 import TtrpgCampaignGuide from '../ttrpg/TtrpgCampaignGuide'
 
 const KIND_LABELS: Record<SimulationSessionKind, string> = {
@@ -197,6 +198,7 @@ export default function SimulationRuntimePanel(props: {
   const [campaignScheduleActivity, setCampaignScheduleActivity] = useState('')
   const [campaignScheduleRecurrence, setCampaignScheduleRecurrence] = useState<'once' | 'daily' | 'weekly'>('once')
   const { config } = useAIConfigStore()
+  const formalProductEntry = props.sessionKind != null && isFormalProductSessionKindV1(props.sessionKind)
 
   useEffect(() => {
     let cancelled = false
@@ -210,6 +212,12 @@ export default function SimulationRuntimePanel(props: {
 
   useEffect(() => {
     let cancelled = false
+    if (formalProductEntry) {
+      setCanonCandidates([])
+      setSelectedSourceKeys(new Set())
+      setCanonLoading(false)
+      return () => { cancelled = true }
+    }
     setCanonLoading(true)
     setSelectedSourceKeys(new Set())
     void loadSimulationCanonCandidates({
@@ -226,7 +234,7 @@ export default function SimulationRuntimePanel(props: {
       if (!cancelled) setCanonLoading(false)
     })
     return () => { cancelled = true }
-  }, [props.project.id, props.worldGroupId, scopeProjectId, scopeWorldId, scopeWorkId])
+  }, [formalProductEntry, props.project.id, props.worldGroupId, scopeProjectId, scopeWorldId, scopeWorkId])
 
   const visibleSessions = useMemo(
     () => store.sessions.filter(session => (
@@ -500,7 +508,21 @@ export default function SimulationRuntimePanel(props: {
           </p>
         </div>
 
-        <div className="mb-4 space-y-2 rounded-lg border border-border bg-bg-base p-3">
+        {formalProductEntry ? (
+          <div
+            className="mb-4 space-y-2 rounded-lg border border-accent/30 bg-accent/5 p-3 text-xs leading-5 text-text-secondary"
+            data-testid="formal-runtime-release-only"
+          >
+            <div
+              data-testid="runtime-kind-lock"
+              className="flex w-full items-center gap-2 rounded border border-border bg-bg-surface px-2 py-1.5 text-sm text-text-primary"
+            >
+              <Dices className="h-3.5 w-3.5 text-accent" />
+              {KIND_LABELS[props.sessionKind!]}存档
+            </div>
+            <p>正式产品存档只能由已验证的 GameRelease 或明确标记的 Build Preview 创建。这里不再从世界草稿直接冻结并启动产品。</p>
+          </div>
+        ) : <div className="mb-4 space-y-2 rounded-lg border border-border bg-bg-base p-3">
           <input
             value={newTitle}
             onChange={event => setNewTitle(event.target.value)}
@@ -586,7 +608,7 @@ export default function SimulationRuntimePanel(props: {
             <Plus className="h-3.5 w-3.5" />
             创建并冻结
           </button>
-        </div>
+        </div>}
 
         <div className="space-y-1">
           {visibleSessions.map(session => (
@@ -617,7 +639,9 @@ export default function SimulationRuntimePanel(props: {
         {!selected ? (
           <div className="flex h-full items-center justify-center text-sm text-text-muted">
             {props.sessionKind
-              ? `创建一个${KIND_LABELS[props.sessionKind]}会话，开始新的互动存档。`
+              ? formalProductEntry
+                ? `请先完成${KIND_LABELS[props.sessionKind]}产品制作，并从已验证的发布或预览进入。`
+                : `创建一个${KIND_LABELS[props.sessionKind]}会话，开始新的互动存档。`
               : '创建一个沙盒会话，开始验证共享运行时。'}
           </div>
         ) : (

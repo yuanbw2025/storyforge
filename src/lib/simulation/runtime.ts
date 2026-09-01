@@ -96,7 +96,7 @@ import {
   assertGameReleaseUnchanged,
 } from "../text-game/releases";
 import {
-  verifyGameReleaseManifestV2,
+  verifyGameReleaseManifestV3,
 } from "../game-production/runtime-package";
 import {
   verifyPlayableGamePackageSource,
@@ -6720,6 +6720,90 @@ async function insertSimulationSession(
   return session;
 }
 
+const preparedFormalGameSessionsV1 = new WeakSet<object>();
+
+/**
+ * Prepares and cryptographically verifies a Release-owned session before its
+ * caller opens the atomic session/event transaction. No WebCrypto work is left
+ * for the commit phase.
+ */
+export async function prepareReleasedGameSessionRecordV3(
+  input: CreateReleasedGameSessionInput,
+): Promise<SimulationSession> {
+  const gameRelease = await assertGameReleaseUnchanged(input.gameReleaseId);
+  if (
+    gameRelease.projectId !== input.projectId ||
+    gameRelease.worldId !== input.worldId ||
+    gameRelease.workId !== input.workId
+  ) {
+    throw new Error("文字游戏的 GameRelease 绑定无效。");
+  }
+  const manifest = await verifyGameReleaseManifestV3(gameRelease.manifestJson);
+  validateFrozenRuntimePackageSession({
+    session: input,
+    runtimePackage: manifest.runtimePackage,
+    runtimeSourceHash: manifest.packageHash,
+    origin: input.origin,
+  });
+  const session = await prepareSimulationSessionRecord(input, {
+    worldId: input.worldId,
+    workId: input.workId,
+    gameReleaseId: input.gameReleaseId,
+    gameBuildId: null,
+    runtimeSourceHash: manifest.packageHash,
+  });
+  preparedFormalGameSessionsV1.add(session);
+  return session;
+}
+
+/** Prepare a governed Build-preview session before the atomic commit phase. */
+export async function preparePreviewGameSessionRecordV1(
+  input: CreatePreviewGameSessionInput,
+): Promise<SimulationSession> {
+  const verified = await verifyPlayableGamePackageSource({
+    scope: {
+      projectId: input.projectId,
+      worldId: input.worldId,
+      workId: input.workId,
+    },
+    source: {
+      kind: "build",
+      gameBuildId: input.gameBuildId,
+      expectedPreviewHash: input.expectedPreviewHash,
+    },
+  });
+  if (verified.runtimeSourceHash !== input.runtimeSourceHash) {
+    throw new Error("文字游戏的 Build Preview 冻结绑定无效。");
+  }
+  validateFrozenRuntimePackageSession({
+    session: input,
+    runtimePackage: verified.runtimePackage,
+    runtimeSourceHash: verified.runtimeSourceHash,
+    origin: input.origin,
+  });
+  const session = await prepareSimulationSessionRecord(input, {
+    worldId: input.worldId,
+    workId: input.workId,
+    gameReleaseId: null,
+    gameBuildId: input.gameBuildId,
+    runtimeSourceHash: verified.runtimeSourceHash,
+  });
+  preparedFormalGameSessionsV1.add(session);
+  return session;
+}
+
+/** Commit-only half of the formal session boundary. */
+export async function insertPreparedFormalGameSessionV1(
+  session: SimulationSession,
+): Promise<SimulationSession> {
+  if (session.id != null || !preparedFormalGameSessionsV1.has(session)) {
+    throw new Error("未经验证准备的正式产品会话不得写入。");
+  }
+  session.id = (await db.simulationSessions.add(session)) as number;
+  preparedFormalGameSessionsV1.delete(session);
+  return session;
+}
+
 export async function createSimulationSession(
   input: CreateSimulationSessionInput,
 ): Promise<SimulationSession> {
@@ -6955,68 +7039,22 @@ function validateFrozenRuntimePackageSession(input: {
   }
 }
 
-/** Formal immutable GameRelease v2 lower insertion boundary. */
+/** Formal immutable GameRelease v3 lower insertion boundary. */
 export async function createReleasedGameSession(
   input: CreateReleasedGameSessionInput,
 ): Promise<SimulationSession> {
-  const gameRelease = await assertGameReleaseUnchanged(input.gameReleaseId);
-  if (
-    gameRelease.projectId !== input.projectId ||
-    gameRelease.worldId !== input.worldId ||
-    gameRelease.workId !== input.workId
-  ) {
-    throw new Error("文字游戏的 GameRelease 绑定无效。");
-  }
-  const manifest = await verifyGameReleaseManifestV2(gameRelease.manifestJson);
-  const runtimePackage = manifest.runtimePackage;
-  const runtimeSourceHash = manifest.packageHash;
-  validateFrozenRuntimePackageSession({
-    session: input,
-    runtimePackage,
-    runtimeSourceHash,
-    origin: input.origin,
-  });
-  return insertSimulationSession(input, {
-    worldId: input.worldId,
-    workId: input.workId,
-    gameReleaseId: input.gameReleaseId,
-    gameBuildId: null,
-    runtimeSourceHash,
-  });
+  return insertPreparedFormalGameSessionV1(
+    await prepareReleasedGameSessionRecordV3(input),
+  );
 }
 
 /** Build Preview lower insertion boundary; no generic SIM path may bypass it. */
 export async function createPreviewGameSession(
   input: CreatePreviewGameSessionInput,
 ): Promise<SimulationSession> {
-  const verified = await verifyPlayableGamePackageSource({
-    scope: {
-      projectId: input.projectId,
-      worldId: input.worldId,
-      workId: input.workId,
-    },
-    source: {
-      kind: "build",
-      gameBuildId: input.gameBuildId,
-      expectedPreviewHash: input.expectedPreviewHash,
-    },
-  });
-  if (verified.runtimeSourceHash !== input.runtimeSourceHash) {
-    throw new Error("文字游戏的 Build Preview 冻结绑定无效。");
-  }
-  validateFrozenRuntimePackageSession({
-    session: input,
-    runtimePackage: verified.runtimePackage,
-    runtimeSourceHash: verified.runtimeSourceHash,
-    origin: input.origin,
-  });
-  return insertSimulationSession(input, {
-    worldId: input.worldId,
-    workId: input.workId,
-    gameReleaseId: null,
-    gameBuildId: input.gameBuildId,
-    runtimeSourceHash: verified.runtimeSourceHash,
-  });
+  return insertPreparedFormalGameSessionV1(
+    await preparePreviewGameSessionRecordV1(input),
+  );
 }
 
 async function readSessionEvents(
@@ -7662,7 +7700,7 @@ async function verifyFormalTtrpgSource(session: SimulationSession) {
     };
   }
   const release = await assertGameReleaseUnchanged(session.gameReleaseId!);
-  const manifest = await verifyGameReleaseManifestV2(release.manifestJson);
+  const manifest = await verifyGameReleaseManifestV3(release.manifestJson);
   if (
     manifest.productType !== "ttrpg" ||
     !manifest.runtimePackage.ttrpg ||

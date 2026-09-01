@@ -8,11 +8,22 @@ import {
   readAgentRunV1,
   type AgentRunSnapshotV1,
 } from '../agent/run/event-store'
-import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manifest'
+import {
+  createContextManifestFromAssemblyV1,
+  createContextManifestV2FromV1,
+} from '../agent/run/context-manifest'
+import {
+  finalizeContextGatewayAttemptEvidenceV1,
+  recordContextGatewayPreflightEvidenceV1,
+  type ContextGatewayPreflightEvidenceV1,
+} from '../context-gateway/attempt-evidence'
+import type { ContextGatewayExecutionV1 } from '../context-gateway/execution'
 import { assembleContext } from '../registry/assemble-context'
+import type { AssembleContextResult } from '../registry/types'
 import type {
   AgentRunEventPayloadByTypeV1,
   AgentRunEventTypeV1,
+  ContextManifestV2,
   GameBuildArtifactKindV1,
   GameBuildArtifactRecordV1,
   GameProductionBriefV3,
@@ -35,10 +46,18 @@ import { createGameProductionPlanV3, parseGameProductionPlanV3 } from './plan'
 import { createGameBuildPreviewManifestV1 } from './preview-manifest'
 import { createGameBuildRootTerminalReceiptV1 } from './receipts'
 import { parseGameRuntimePackageV2 } from './runtime-package'
+import {
+  executeGameProductionWorldGatewayV1,
+  gameProductionTaskUsesWorldGatewayV1,
+  parseGameConfirmedBriefV1,
+  parseGameProductionSourcePlanV1,
+} from './source-contracts'
+import { assertFormalProductProductionStartV1 } from '../world-engine/product-source-contracts'
 
 const ROOT_TASK_KEY = '$root'
 const ROOT_STEP_ID = '$join'
 const CLAIM_TTL_MS = 15_000
+const DETERMINISTIC_WORLD_TOOL = 'game-production-deterministic-world-integrator'
 
 export interface GameProductionCapabilityBindingV1 {
   requirementKey: string
@@ -354,6 +373,58 @@ function taskContextSourceKeys(task: GameProductionPlanTaskV3): string[] {
   return ['game-production.brief', ...(task.inputArtifactKeys.length > 0 ? ['game-production.artifact-inputs'] : [])]
 }
 
+function taskContractContextSourceKeys(task: GameProductionPlanTaskV3): string[] {
+  const normal = taskContextSourceKeys(task)
+  const skill = task.skillId ? getAgentSkillV1(task.skillId) : null
+  return [...new Set([
+    ...normal,
+    ...(skill?.contextGateway?.providerSourceKeys ?? []),
+    ...(gameProductionTaskUsesWorldGatewayV1(task) ? ['worldRelease'] : []),
+  ])]
+}
+
+function combineGameProductionContextV1(input: {
+  assembled: AssembleContextResult
+  worldContent: string
+  worldContentHash: string
+  worldTokens: number
+  inputBudget: number
+}): AssembleContextResult {
+  const separator = input.assembled.text.trim() && input.worldContent.trim() ? '\n\n' : ''
+  const text = `${input.assembled.text}${separator}${input.worldContent}`
+  const included = [...new Set([...input.assembled.included, 'worldRelease'])]
+  const totalInputTokens = input.assembled.totalInputTokens + input.worldTokens
+  return {
+    ...input.assembled,
+    text,
+    segments: [
+      ...input.assembled.segments,
+      {
+        label: '冻结世界版本按需读取', layer: 'L0', content: input.worldContent,
+        tokens: input.worldTokens, trimmable: false,
+      },
+    ],
+    included,
+    omitted: input.assembled.omitted.filter(key => key !== 'worldRelease'),
+    trimmed: input.assembled.trimmed.filter(key => key !== 'worldRelease'),
+    sourceEvidence: [
+      ...(input.assembled.sourceEvidence ?? []),
+      {
+        key: 'worldRelease', status: 'included', delivery: 'full',
+        sourceHash: input.worldContentHash,
+        originalCharacters: input.worldContent.length,
+        inputCharacters: input.worldContent.length,
+        originalTokens: input.worldTokens,
+        inputTokens: input.worldTokens,
+      },
+    ],
+    totalInputTokens,
+    inputBudget: input.inputBudget,
+    overBudgetBeforeTrim: totalInputTokens > input.inputBudget,
+    overBudgetAfterTrim: totalInputTokens > input.inputBudget,
+  }
+}
+
 function rootContract(scope: WorkspaceScope, build: { id: number; buildNumber: number; controlEpoch: number; planHash: string }) {
   return {
     version: 1 as const,
@@ -406,7 +477,7 @@ function taskContract(input: {
   task: GameProductionPlanTaskV3
   capabilityBindingHash?: string
 }) {
-  const sourceKeys = taskContextSourceKeys(input.task)
+  const sourceKeys = taskContractContextSourceKeys(input.task)
   const skill = input.task.skillId ? getAgentSkillV1(input.task.skillId) : null
   return {
     version: 1 as const,
@@ -1034,25 +1105,114 @@ async function runClaimedTask(input: {
     if (!row?.terminalReceiptHash) throw new Error(`[game-production-scheduler] dependency receipt 缺失:${taskKey}`)
     return { taskKey, receiptHash: row.terminalReceiptHash }
   }))
-  const inputHash = await hashGameProductionValueV2({
+  const structuralInput = {
     planHash: input.build.planHash, taskKey: input.task.taskKey, controlEpoch: input.build.controlEpoch,
     dependencies: dependencyRuns, artifacts: artifacts.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
     capabilityBindings: bindings,
-  })
-  const sourceKeys = taskContextSourceKeys(input.task)
-  const assembled = await assembleContext({
-    projectId: input.scope.projectId, scope: input.scope, sourceKeys,
+  }
+  const normalSourceKeys = taskContextSourceKeys(input.task)
+  const contractSourceKeys = taskContractContextSourceKeys(input.task)
+  const totalInputBudget = Math.max(1, input.task.budgetReservation.inputTokens)
+  const worldGatewayRequired = gameProductionTaskUsesWorldGatewayV1(input.task)
+  const normalInputBudget = worldGatewayRequired
+    ? Math.max(1, Math.floor(totalInputBudget * 0.4))
+    : totalInputBudget
+  const normalAssembled = await assembleContext({
+    projectId: input.scope.projectId, scope: input.scope, sourceKeys: normalSourceKeys,
     gameProductionId: input.productionId, gameBuildId: input.build.id,
     gameArtifactKeys: input.task.inputArtifactKeys,
-    inputBudgetMaxTokens: Math.max(1, input.task.budgetReservation.inputTokens),
+    inputBudgetMaxTokens: normalInputBudget,
   })
-  const manifest = await createContextManifestFromAssemblyV1({
-    runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
-    projectId: input.scope.projectId, worldGroupId: null,
-    declaredSourceKeys: sourceKeys, assembled, readerVersion: 'game-production-context-v1',
-  })
-  snapshot = await append(input.scope, snapshot, 'context.assembled', {
-    stepId: input.task.taskKey, attempt, manifestHash: manifest.manifestHash,
+  let assembled = normalAssembled
+  let gatewayExecution: ContextGatewayExecutionV1 | null = null
+  let gatewayBaseManifest: ContextManifestV2 | null = null
+  let gatewayPreflight: ContextGatewayPreflightEvidenceV1 | null = null
+  let sourcePlanHash: string | null = null
+  let confirmedBriefHash: string | null = null
+  if (worldGatewayRequired) {
+    const production = await db.gameProductions.get(input.productionId)
+    if (!production?.id || production.currentBriefRevision == null) {
+      throw new Error('[game-production-scheduler] 模型任务缺少当前 Production/Brief')
+    }
+    const briefRow = await db.gameProductionBriefs
+      .where('[productionId+revision]').equals([production.id, production.currentBriefRevision]).first()
+    if (!briefRow || briefRow.status !== 'authorized') {
+      throw new Error('[game-production-scheduler] 模型任务缺少已授权 Brief')
+    }
+    const brief = parseGameProductionBriefV3(briefRow.briefJson)
+    const sourcePlan = await parseGameProductionSourcePlanV1(briefRow)
+    const confirmedBrief = await parseGameConfirmedBriefV1({ row: briefRow, sourcePlan })
+    await assertFormalProductProductionStartV1({
+      sourcePlan,
+      confirmedBrief,
+      authorStartRevision: confirmedBrief.authorStartRevision,
+    })
+    sourcePlanHash = sourcePlan.planHash
+    confirmedBriefHash = confirmedBrief.confirmationHash
+    const worldBudget = Math.max(1, totalInputBudget - normalInputBudget)
+    gatewayExecution = await executeGameProductionWorldGatewayV1({
+      scope: input.scope,
+      sourcePlan,
+      brief,
+      task: input.task,
+      budgetTokens: worldBudget,
+      requireCompilationResources: input.task.executionMode === 'deterministic'
+        && input.task.kind === 'runtime-package',
+      signal: input.signal,
+    })
+    assembled = combineGameProductionContextV1({
+      assembled: normalAssembled,
+      worldContent: gatewayExecution.contextPacket.content,
+      worldContentHash: gatewayExecution.contextPacket.contentHash,
+      worldTokens: gatewayExecution.contextPacket.tokenCount,
+      inputBudget: totalInputBudget,
+    })
+    if (assembled.overBudgetAfterTrim) {
+      throw new Error('[game-production-scheduler] Brief/Artifact 与冻结世界事实合并后超过任务输入预算')
+    }
+    const manifestV1 = await createContextManifestFromAssemblyV1({
+      runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
+      projectId: input.scope.projectId, worldGroupId: null,
+      declaredSourceKeys: contractSourceKeys, assembled,
+      readerVersion: 'game-production-world-gateway-v1',
+    })
+    gatewayBaseManifest = await createContextManifestV2FromV1({ manifest: manifestV1, scope: input.scope })
+    const recorded = await recordContextGatewayPreflightEvidenceV1({
+      scope: input.scope,
+      runId: snapshot.run.id,
+      stepId: input.task.taskKey,
+      attempt,
+      contextPacket: gatewayExecution.contextPacket,
+      selector: gatewayExecution.selector,
+      renderedRequest: {
+        schema: 'storyforge.game-production-task-request', version: 1,
+        taskKey: input.task.taskKey, planHash: input.build.planHash,
+        executionMode: input.task.executionMode,
+        contextText: assembled.text,
+        inputArtifacts: artifacts.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
+      },
+      sourceSnapshots: gatewayExecution.sourceSnapshots,
+      toolTranscript: gatewayExecution.toolTranscript,
+      expectedLastSequence: snapshot.projection.lastSequence,
+    })
+    snapshot = recorded.snapshot
+    gatewayPreflight = recorded.evidence
+  } else {
+    const manifest = await createContextManifestFromAssemblyV1({
+      runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
+      projectId: input.scope.projectId, worldGroupId: null,
+      declaredSourceKeys: normalSourceKeys, assembled,
+      readerVersion: 'game-production-context-v1',
+    })
+    snapshot = await append(input.scope, snapshot, 'context.assembled', {
+      stepId: input.task.taskKey, attempt, manifestHash: manifest.manifestHash,
+    })
+  }
+  const inputHash = await hashGameProductionValueV2({
+    ...structuralInput,
+    sourcePlanHash,
+    confirmedBriefHash,
+    contextPacketHash: gatewayExecution?.contextPacket.packetHash ?? null,
   })
   snapshot = await append(input.scope, snapshot, 'budget.reserved', {
     stepId: input.task.taskKey,
@@ -1067,6 +1227,10 @@ async function runClaimedTask(input: {
   } else if (input.task.executionMode === 'media-provider') {
     snapshot = await append(input.scope, snapshot, 'tool.called', {
       stepId: input.task.taskKey, attempt, toolName: 'game-media-provider', callHash: inputHash,
+    })
+  } else if (worldGatewayRequired) {
+    snapshot = await append(input.scope, snapshot, 'tool.called', {
+      stepId: input.task.taskKey, attempt, toolName: DETERMINISTIC_WORLD_TOOL, callHash: inputHash,
     })
   }
   await input.onDurableBoundary?.('provider.requested', snapshot)
@@ -1139,6 +1303,35 @@ async function runClaimedTask(input: {
     snapshot = await append(input.scope, snapshot, 'tool.returned', {
       stepId: input.task.taskKey, attempt, toolName: 'game-media-provider', resultHash: candidateHash,
     })
+  } else if (worldGatewayRequired) {
+    snapshot = await append(input.scope, snapshot, 'tool.returned', {
+      stepId: input.task.taskKey, attempt, toolName: DETERMINISTIC_WORLD_TOOL, resultHash: candidateHash,
+    })
+  }
+  if (worldGatewayRequired) {
+    if (!gatewayExecution || !gatewayBaseManifest || !gatewayPreflight) {
+      throw new Error('[game-production-scheduler] 世界来源任务缺少冻结 Gateway 证据')
+    }
+    const finalized = await finalizeContextGatewayAttemptEvidenceV1({
+      scope: input.scope,
+      runId: snapshot.run.id,
+      stepId: input.task.taskKey,
+      attempt,
+      baseManifest: gatewayBaseManifest,
+      preflight: gatewayPreflight,
+      selector: gatewayExecution.selector,
+      sufficiency: gatewayExecution.sufficiency,
+      retrievalTrace: gatewayExecution.retrievalTrace,
+      gatewayVersionHash: gatewayExecution.contextPacket.gatewayVersionHash,
+      policyHash: gatewayExecution.contextPacket.policyHash,
+      rawResponse: result,
+      candidateHash,
+      executionBoundary: input.task.executionMode === 'model'
+        ? { kind: 'model' }
+        : { kind: 'tool', toolName: DETERMINISTIC_WORLD_TOOL },
+      expectedLastSequence: snapshot.projection.lastSequence,
+    })
+    snapshot = finalized.snapshot
   }
   await input.onDurableBoundary?.('provider.responded', snapshot)
   const current = await db.gameBuilds.get(input.build.id)

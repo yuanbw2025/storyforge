@@ -13,11 +13,21 @@ import type {
   FrozenNarrativeBeat,
   FrozenNarrativeChoice,
   GameProductType,
-  GameReleaseManifestV2,
+  GameReleaseManifestV3,
   GameRuntimePackageV2,
+  ProductReleaseLineageV1,
+  ProductSourcePlanV1,
+  ConfirmedProductBriefV1,
+  ProductSourceManifestV1,
   ProductWorldSourceSelectionV1,
 } from '../types'
 import { canonicalGameProductionJsonV2, hashGameProductionValueV2, isSha256Hash } from './hash'
+import {
+  validateConfirmedProductBriefV1,
+  validateProductReleaseLineageV1,
+  validateProductSourceManifestV1,
+  validateProductSourcePlanV1,
+} from '../world-engine/product-source-contracts'
 
 const PRODUCT_TYPES = new Set<GameProductType>([
   'storygame',
@@ -365,73 +375,127 @@ export function parseGameRuntimePackageV2(value: string | unknown): GameRuntimeP
   return parsed
 }
 
-export function parseGameReleaseManifestV2(value: string | unknown): GameReleaseManifestV2 {
+export function parseGameReleaseManifestV3(value: string | unknown): GameReleaseManifestV3 {
   let raw: unknown = value
   if (typeof raw === 'string') {
-    try { raw = JSON.parse(raw) } catch { fail('Release v2 不是合法 JSON') }
+    try { raw = JSON.parse(raw) } catch { fail('Release v3 不是合法 JSON') }
   }
   const manifest = record(raw, 'release')
   exactKeys(manifest, [
-    'schema', 'version', 'productType', 'sourceWorldRelease', 'runtimePackage', 'packageHash', 'productionProvenance',
+    'schema', 'version', 'productType', 'sourceWorldRelease', 'runtimePackage', 'packageHash',
+    'productionProvenance', 'sourceContracts', 'releaseIdentityHash', 'lineage',
   ], 'release')
-  if (manifest.schema !== 'storyforge.game-release' || manifest.version !== 2) fail('Release v2 schema/version 无效')
+  if (manifest.schema !== 'storyforge.game-release' || manifest.version !== 3) fail('Release v3 schema/version 无效')
   const selectedProduct = productType(manifest.productType)
   const sourceWorldRelease = record(manifest.sourceWorldRelease, 'sourceWorldRelease')
   exactKeys(sourceWorldRelease, ['contentHash'], 'sourceWorldRelease')
   if (!isSha256Hash(sourceWorldRelease.contentHash)) fail('sourceWorldRelease.contentHash 无效')
   const runtimePackage = parseGameRuntimePackageV2(manifest.runtimePackage)
   if (runtimePackage.productType !== selectedProduct
-    || runtimePackage.sourceWorld.contentHash !== sourceWorldRelease.contentHash) fail('Release v2 与 RuntimePackage 来源不一致')
+    || runtimePackage.sourceWorld.contentHash !== sourceWorldRelease.contentHash) fail('Release v3 与 RuntimePackage 来源不一致')
   if (!isSha256Hash(manifest.packageHash)) fail('packageHash 无效')
+  if (!isSha256Hash(manifest.releaseIdentityHash)) fail('releaseIdentityHash 无效')
 
-  let productionProvenance: GameReleaseManifestV2['productionProvenance'] = null
-  if (manifest.productionProvenance != null) {
-    const provenance = record(manifest.productionProvenance, 'productionProvenance')
-    exactKeys(provenance, [
-      'productionKey', 'buildNumber', 'buildManifestHash', 'rootTerminalReceiptHash',
-    ], 'productionProvenance')
-    if (!isSha256Hash(provenance.buildManifestHash) || !isSha256Hash(provenance.rootTerminalReceiptHash)) {
-      fail('productionProvenance hash 无效')
-    }
-    productionProvenance = {
-      productionKey: requiredText(provenance.productionKey, 'productionKey', 500),
-      buildNumber: integer(provenance.buildNumber, 'buildNumber', 1),
-      buildManifestHash: provenance.buildManifestHash,
-      rootTerminalReceiptHash: provenance.rootTerminalReceiptHash,
-    }
+  const provenance = record(manifest.productionProvenance, 'productionProvenance')
+  exactKeys(provenance, [
+    'productionKey', 'buildNumber', 'buildManifestHash', 'rootTerminalReceiptHash',
+  ], 'productionProvenance')
+  if (!isSha256Hash(provenance.buildManifestHash) || !isSha256Hash(provenance.rootTerminalReceiptHash)) {
+    fail('productionProvenance hash 无效')
   }
+  const productionProvenance: GameReleaseManifestV3['productionProvenance'] = {
+    productionKey: requiredText(provenance.productionKey, 'productionKey', 500),
+    buildNumber: integer(provenance.buildNumber, 'buildNumber', 1),
+    buildManifestHash: provenance.buildManifestHash,
+    rootTerminalReceiptHash: provenance.rootTerminalReceiptHash,
+  }
+  const sourceContracts = record(manifest.sourceContracts, 'sourceContracts')
+  exactKeys(sourceContracts, ['sourcePlan', 'confirmedBrief', 'sourceManifest'], 'sourceContracts')
+  const lineage = record(manifest.lineage, 'lineage') as unknown as ProductReleaseLineageV1
   return {
     schema: 'storyforge.game-release',
-    version: 2,
+    version: 3,
     productType: selectedProduct,
     sourceWorldRelease: { contentHash: sourceWorldRelease.contentHash },
     runtimePackage,
     packageHash: manifest.packageHash,
     productionProvenance,
+    sourceContracts: {
+      sourcePlan: sourceContracts.sourcePlan as ProductSourcePlanV1,
+      confirmedBrief: sourceContracts.confirmedBrief as ConfirmedProductBriefV1,
+      sourceManifest: sourceContracts.sourceManifest as ProductSourceManifestV1,
+    },
+    releaseIdentityHash: manifest.releaseIdentityHash,
+    lineage,
   }
 }
 
-export async function verifyGameReleaseManifestV2(value: string | unknown): Promise<GameReleaseManifestV2> {
-  const manifest = parseGameReleaseManifestV2(value)
+type GameReleaseIdentityBodyV3 = Omit<GameReleaseManifestV3, 'releaseIdentityHash' | 'lineage'>
+
+export async function gameReleaseIdentityHashV3(body: GameReleaseIdentityBodyV3): Promise<string> {
+  return hashGameProductionValueV2(body)
+}
+
+export async function verifyGameReleaseManifestV3(value: string | unknown): Promise<GameReleaseManifestV3> {
+  const manifest = parseGameReleaseManifestV3(value)
   if (await hashGameProductionValueV2(manifest.runtimePackage) !== manifest.packageHash) fail('packageHash 校验失败')
   if (manifest.productType === 'ttrpg' && manifest.runtimePackage.ttrpg
     && await hashGameProductionValueV2(manifest.runtimePackage.ttrpg.rulePack.content)
       !== manifest.runtimePackage.ttrpg.rulePack.contentHash) fail('TTRPG RulePack contentHash 校验失败')
+  const sourcePlan = await validateProductSourcePlanV1(manifest.sourceContracts.sourcePlan)
+  const confirmedBrief = await validateConfirmedProductBriefV1({
+    brief: manifest.sourceContracts.confirmedBrief,
+    sourcePlan,
+  })
+  const sourceManifest = await validateProductSourceManifestV1({
+    sourceManifest: manifest.sourceContracts.sourceManifest,
+    sourcePlan,
+  })
+  const lineage = await validateProductReleaseLineageV1(manifest.lineage)
+  const { releaseIdentityHash, lineage: _lineage, ...identityBody } = manifest
+  const expectedIdentity = await gameReleaseIdentityHashV3(identityBody)
+  if (releaseIdentityHash !== expectedIdentity || lineage.releaseHash !== expectedIdentity
+    || lineage.productType !== manifest.productType
+    || lineage.productInstanceKey !== sourcePlan.productInstanceKey
+    || lineage.worldReferenceHash !== sourcePlan.worldReference.referenceHash
+    || lineage.sourcePlanHash !== sourcePlan.planHash
+    || lineage.sourceManifestHash !== sourceManifest.manifestHash
+    || lineage.confirmedBriefHash !== confirmedBrief.confirmationHash
+    || sourcePlan.worldReference.releaseHash !== manifest.sourceWorldRelease.contentHash
+    || manifest.productionProvenance.productionKey !== sourcePlan.productInstanceKey
+    || manifest.runtimePackage.sourceWorld.selection.worldReferenceHash
+      !== sourcePlan.worldReference.referenceHash
+    || manifest.runtimePackage.sourceWorld.selection.productType !== manifest.productType) {
+    fail('Release v3 来源合同、身份或 lineage 链不一致')
+  }
   return manifest
 }
 
-export async function createGameReleaseManifestV2(input: {
+export async function createGameReleaseManifestV3(input: {
   runtimePackage: GameRuntimePackageV2
-  productionProvenance: GameReleaseManifestV2['productionProvenance']
-}): Promise<GameReleaseManifestV2> {
+  productionProvenance: GameReleaseManifestV3['productionProvenance']
+  sourceContracts: GameReleaseManifestV3['sourceContracts']
+  lineage: ProductReleaseLineageV1
+}): Promise<GameReleaseManifestV3> {
   const runtimePackage = parseGameRuntimePackageV2(input.runtimePackage)
-  return parseGameReleaseManifestV2({
+  const identityBody: GameReleaseIdentityBodyV3 = {
     schema: 'storyforge.game-release',
-    version: 2,
+    version: 3,
     productType: runtimePackage.productType,
     sourceWorldRelease: { contentHash: runtimePackage.sourceWorld.contentHash },
     runtimePackage,
     packageHash: await hashGameProductionValueV2(runtimePackage),
     productionProvenance: input.productionProvenance,
+    sourceContracts: input.sourceContracts,
+  }
+  const releaseIdentityHash = await gameReleaseIdentityHashV3(identityBody)
+  if (input.lineage.releaseHash !== releaseIdentityHash) {
+    fail('lineage.releaseHash 与 Release identity 不一致')
+  }
+  const manifest = parseGameReleaseManifestV3({
+    ...identityBody,
+    releaseIdentityHash,
+    lineage: input.lineage,
   })
+  return verifyGameReleaseManifestV3(manifest)
 }

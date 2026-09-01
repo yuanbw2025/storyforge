@@ -8,12 +8,13 @@ import {
 } from '../../src/lib/game-platform/distribution-bundle'
 import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
 import { putMediaBlobObject, sha256MediaData } from '../../src/lib/game-production/media-blob-store'
-import { createGameReleaseManifestV2, parseGameRuntimePackageV2 } from '../../src/lib/game-production/runtime-package'
+import { parseGameRuntimePackageV2 } from '../../src/lib/game-production/runtime-package'
 import { assertGameReleaseUnchanged } from '../../src/lib/text-game/releases'
 import type { FrozenRuntimeMediaAssetV2, GameRuntimePackageV2, WorkspaceScope } from '../../src/lib/types'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
+import { createFixtureGameReleaseManifestV3 } from '../helpers/game-release-v3'
 
 async function workspace(name: string) {
   const now = Date.now()
@@ -83,8 +84,8 @@ async function publishedFixture(scope: WorkspaceScope) {
     projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
     mediaAssetId, blobObjectId: object.id!, data: null, createdAt: now,
   })
-  const manifest = await createGameReleaseManifestV2({
-    runtimePackage: avgPackage(worldRelease.contentHash, asset), productionProvenance: null,
+  const manifest = await createFixtureGameReleaseManifestV3({
+    runtimePackage: avgPackage(worldRelease.contentHash, asset), productionKey: 'market.harbor',
   })
   const releaseId = await db.gameReleases.add({
     projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,

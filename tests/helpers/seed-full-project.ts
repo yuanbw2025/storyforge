@@ -33,7 +33,7 @@ import type {
   WorkspaceScope,
 } from '../../src/lib/types'
 import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
-import { createGameReleaseManifestV2 } from '../../src/lib/game-production/runtime-package'
+import { createFixtureGameReleaseManifestV3 } from './game-release-v3'
 import { GAME_BROWSER_PERFORMANCE_POLICY_V1 } from '../../src/lib/game-production/browser-performance'
 import { recordGameBrowserPerformanceMeasurementV1 } from '../../src/lib/game-production/quality-receipts'
 import { createStoryForgeRulePackV1 } from '../../src/lib/ttrpg/storyforge-rule-pack'
@@ -1119,9 +1119,9 @@ export async function seedFullProject() {
       }],
     },
   }
-  const fixtureGameReleaseManifest = await createGameReleaseManifestV2({
+  const fixtureGameReleaseManifest = await createFixtureGameReleaseManifestV3({
     runtimePackage: fixtureRuntimePackage,
-    productionProvenance: null,
+    productionKey: 'full-fixture-production',
   })
   const gameRelease = await db.gameReleases.add({
     projectId, worldId, workId, productionKey: 'full-fixture-production', worldReleaseId: worldRelease,

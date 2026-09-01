@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { readContextGatewayManifestV3ForAttemptV1 } from '../../src/lib/context-gateway/attempt-evidence'
+import { openWorldSemanticResourceCatalogV1 } from '../../src/lib/context-gateway/world-release-client'
 import { executeGameProductionCommand } from '../../src/lib/game-production/commands'
 import { draftGameProductionBriefV3, suggestGameStartingPoints } from '../../src/lib/game-production/consultation'
 import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
@@ -12,6 +14,7 @@ import {
 } from '../../src/lib/game-production/scheduler'
 import type { GameBuildArtifactKindV1, GameRuntimePackageV2 } from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { resolveGameProductionWorldCompilationDescriptorsV2 } from '../../src/lib/game-production/world-source'
 
 async function fixture(name: string) {
   const owned = await seedCurrentProductWorld(name)
@@ -172,6 +175,29 @@ describe('R-GAMEPROD-1D · durable bounded DAG scheduler', () => {
     expect(children.filter(row => row.parentRunId === projection.rootRunId)).toHaveLength(projection.tasks.length)
     expect(new Set(children.filter(row => row.parentRunId === projection.rootRunId).map(row => row.parentRelation)).size)
       .toBe(projection.tasks.length)
+    const integrationRun = children.find(row => row.parentRelation === 'task:integration.package')!
+    const evidence = await readContextGatewayManifestV3ForAttemptV1({
+      scope: owned.scope,
+      runId: integrationRun.id!,
+      stepId: 'integration.package',
+      attempt: 1,
+    })
+    const catalog = await openWorldSemanticResourceCatalogV1({
+      localReleaseRecordId: owned.release.id!,
+      expectedProjectId: owned.scope.projectId,
+      expectedWorldId: owned.scope.worldId,
+    })
+    const compilationKeys = resolveGameProductionWorldCompilationDescriptorsV2({
+      descriptors: catalog.resources,
+      selection: owned.brief.source.selection,
+    }).map(descriptor => descriptor.resourceKey)
+    const traced = [
+      ...evidence.manifest.gateway.retrievalTrace.mandatory,
+      ...evidence.manifest.gateway.retrievalTrace.autoSelected,
+    ]
+    expect(compilationKeys.every(resourceKey => traced.some(decision => (
+      decision.resourceKey === resourceKey && decision.depth === 'original'
+    )))).toBe(true)
   }, 30_000)
 
   it('候选检查点后崩溃会从 durable payload 恢复，不重复调用已计费 executor', async () => {
