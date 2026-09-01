@@ -137,7 +137,7 @@ describe.sequential('FUTURE-1 · 只向未来的持续演化控制面', () => {
     expect(plan.protectedStoryArcs[0].protectedStageIds).toEqual(['stage-1', 'stage-2'])
     expect(plan.visibleCharacterIds).toHaveLength(2)
     expect(plan.stages.map(stage => stage.id)).toEqual([
-      'foundation', 'outline', 'detail', 'prose', 'settlement', 'product-projection',
+      'foundation', 'outline', 'detail', 'prose', 'settlement',
     ])
     expect(plan.stages.find(stage => stage.id === 'detail')?.targetOutlineNodeIds)
       .toEqual(fixture.outlineIds.slice(2))
@@ -146,10 +146,7 @@ describe.sequential('FUTURE-1 · 只向未来的持续演化控制面', () => {
     expect(plan.stages.flatMap(stage => stage.skillContracts).every(contract => (
       contract.contextSourceKeys.length > 0 && contract.writeTargets.length > 0
     ))).toBe(true)
-    expect(plan.productBoundary).toMatchObject({
-      rule: 'immutable-release-no-canon-backwrite',
-      feedbackRule: 'product-request-reenters-author-confirmed-future-cycle',
-    })
+    expect(plan).not.toHaveProperty('productBoundary')
   })
 
   it('任何正文或上游 Canon 变化都会使旧计划 stale，重新规划后推进边界', async () => {

@@ -8,7 +8,7 @@ import type {
   WorkspaceScope,
 } from '../types'
 import { assertRecordInScope, resolveScope } from '../world-engine/scope'
-import { readAvgReleaseMediaBytes } from '../avg/media'
+import { readProductReleaseMediaBytes } from './release-media'
 import { acquireMediaBlobLease, readMediaBlobObjectData } from './media-blob-store'
 
 interface ResolverLease {
@@ -87,7 +87,7 @@ export async function createReleaseGameMediaResolver(input: {
       if (asset.contentHash !== asset.blobContentHash) {
         throw new Error(`[game-media-resolver] Release 媒资哈希不闭合:${asset.assetKey}`)
       }
-      return readAvgReleaseMediaBytes({ scope, asset })
+      return readProductReleaseMediaBytes({ scope, asset })
     },
     async releaseAll() {},
   })

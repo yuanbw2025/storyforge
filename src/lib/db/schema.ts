@@ -72,25 +72,11 @@ import type {
   WorldRevision,
   WorldRelease,
   WorkspaceDocumentBindingV1,
-  GameDefinition,
   GameRelease,
   NarrativeBeat,
   NarrativeChoice,
-  InteractionCharacterProfile,
-  InteractionSceneTemplate,
-  CharacterInteractionProductionRecordV1,
-  CharacterInteractionSourceSelectionRecordV1,
-  CharacterInteractionBriefRecordV1,
-  CharacterInteractionProductionStepRecordV1,
-  CharacterInteractionArtifactRecordV1,
-  CharacterInteractionMediaAssetRecordV1,
-  CharacterInteractionProductReleaseRecordV1,
-  AdventureModule,
-  AvgMediaAsset,
-  AvgMediaBlob,
-  AvgPresentationModule,
-  NarrativeSimulationModule,
-  OpenWorldModule,
+  ProductMediaAsset,
+  ProductMediaBlob,
   AdaptationProject,
   AdaptationSourceUnit,
   ScreenplayScene,
@@ -106,16 +92,8 @@ import type {
   GameQualityGateReceiptRecordV1,
   MediaBlobObjectRecordV1,
   GameRulePackRecordV1,
-  TtrpgCampaignModuleRecordV1,
   TtrpgSessionParticipantRecordV2,
   TtrpgRuntimeAssetRequestRecordV1,
-  TtrpgProductionRecordV1,
-  TtrpgSourceSelectionRecordV1,
-  TtrpgProductionBriefRecordV1,
-  TtrpgProductionStepRecordV1,
-  TtrpgProductionBuildRecordV1,
-  TtrpgProductionMediaAssetRecordV1,
-  TtrpgProductReleaseRecordV1,
 } from '../types'
 import type { AIUsageEntry } from '../ai/usage-log'
 import type { TemporalFact } from '../types/temporal-fact'
@@ -255,31 +233,16 @@ class StoryForgeDB extends Dexie {
   worldRevisions!: Table<WorldRevision, number>
   worldReleases!: Table<WorldRelease, number>
   worldDerivations!: Table<import('../types').WorldDerivationV1, number>
-  worldReleaseMigrations!: Table<import('../types').WorldReleaseMigrationV1, number>
 
   // MEMORY-1 —— 文件文档身份与三方同步基线；正文仍只存在原领域表。
   workspaceDocuments!: Table<WorkspaceDocumentBindingV1, number>
 
-  // STORYGAME / CHATGAME / TEXTADV / AVG / TEXTSIM / TEXTWORLD
-  gameDefinitions!: Table<GameDefinition, number>
+  // Immutable upper-product releases and their frozen narrative protocol.
   gameReleases!: Table<GameRelease, number>
   narrativeBeats!: Table<NarrativeBeat, number>
   narrativeChoices!: Table<NarrativeChoice, number>
-  interactionCharacterProfiles!: Table<InteractionCharacterProfile, number>
-  interactionSceneTemplates!: Table<InteractionSceneTemplate, number>
-  characterInteractionProductions!: Table<CharacterInteractionProductionRecordV1, number>
-  characterInteractionSourceSelections!: Table<CharacterInteractionSourceSelectionRecordV1, number>
-  characterInteractionBriefs!: Table<CharacterInteractionBriefRecordV1, number>
-  characterInteractionProductionSteps!: Table<CharacterInteractionProductionStepRecordV1, number>
-  characterInteractionArtifacts!: Table<CharacterInteractionArtifactRecordV1, number>
-  characterInteractionMediaAssets!: Table<CharacterInteractionMediaAssetRecordV1, number>
-  characterInteractionProductReleases!: Table<CharacterInteractionProductReleaseRecordV1, number>
-  adventureModules!: Table<AdventureModule, number>
-  avgMediaAssets!: Table<AvgMediaAsset, number>
-  avgMediaBlobs!: Table<AvgMediaBlob, number>
-  avgPresentationModules!: Table<AvgPresentationModule, number>
-  narrativeSimulationModules!: Table<NarrativeSimulationModule, number>
-  openWorldModules!: Table<OpenWorldModule, number>
+  productMediaAssets!: Table<ProductMediaAsset, number>
+  productMediaBlobs!: Table<ProductMediaBlob, number>
   adaptationProjects!: Table<AdaptationProject, number>
   adaptationSourceUnits!: Table<AdaptationSourceUnit, number>
   screenplayScenes!: Table<ScreenplayScene, number>
@@ -297,14 +260,6 @@ class StoryForgeDB extends Dexie {
   gameQualityGateReceipts!: Table<GameQualityGateReceiptRecordV1, number>
   mediaBlobObjects!: Table<MediaBlobObjectRecordV1, number>
   gameRulePacks!: Table<GameRulePackRecordV1, number>
-  ttrpgCampaignModules!: Table<TtrpgCampaignModuleRecordV1, number>
-  ttrpgProductions!: Table<TtrpgProductionRecordV1, number>
-  ttrpgSourceSelections!: Table<TtrpgSourceSelectionRecordV1, number>
-  ttrpgProductionBriefs!: Table<TtrpgProductionBriefRecordV1, number>
-  ttrpgProductionSteps!: Table<TtrpgProductionStepRecordV1, number>
-  ttrpgProductionBuilds!: Table<TtrpgProductionBuildRecordV1, number>
-  ttrpgProductionMediaAssets!: Table<TtrpgProductionMediaAssetRecordV1, number>
-  ttrpgProductReleases!: Table<TtrpgProductReleaseRecordV1, number>
 
   constructor() {
     super('storyforge')
@@ -996,6 +951,184 @@ class StoryForgeDB extends Dexie {
           if (!Object.prototype.hasOwnProperty.call(row, 'lineageJson')) row.lineageJson = null
           if (!Object.prototype.hasOwnProperty.call(row, 'lineageHash')) row.lineageHash = null
         })
+      }
+    })
+
+    // ARCH-CLEAN-1: the generic Game Production Harness is now the sole
+    // production authority for TTRPG and character interaction. Dexie retains
+    // the historical version declarations above only so old databases can be
+    // opened and upgraded; these duplicate active stores are removed here.
+    this.version(86).stores({
+      interactionCharacterProfiles: null,
+      interactionSceneTemplates: null,
+      characterInteractionProductions: null,
+      characterInteractionSourceSelections: null,
+      characterInteractionBriefs: null,
+      characterInteractionProductionSteps: null,
+      characterInteractionArtifacts: null,
+      characterInteractionMediaAssets: null,
+      characterInteractionProductReleases: null,
+      ttrpgProductions: null,
+      ttrpgSourceSelections: null,
+      ttrpgProductionBriefs: null,
+      ttrpgProductionSteps: null,
+      ttrpgProductionBuilds: null,
+      ttrpgProductionMediaAssets: null,
+      ttrpgProductReleases: null,
+    })
+
+    // ARCH-CLEAN-2A: introduce product-neutral media stores while the historical
+    // AVG-named stores still exist. The next migration removes those old stores.
+    this.version(87).stores({
+      productMediaAssets: '++id, projectId, worldId, workId, &[workId+assetKey+version], [workId+kind], contentHash, updatedAt',
+      productMediaBlobs: '++id, projectId, worldId, workId, &mediaAssetId, blobObjectId',
+    }).upgrade(async tx => {
+      const oldAssets = await tx.table('avgMediaAssets').toArray()
+      const oldBlobs = await tx.table('avgMediaBlobs').toArray()
+      if (oldAssets.length > 0) await tx.table('productMediaAssets').bulkPut(oldAssets)
+      for (const oldBlob of oldBlobs) {
+        let blobObjectId = Number(oldBlob.blobObjectId ?? 0)
+        if (!Number.isSafeInteger(blobObjectId) || blobObjectId < 1) {
+          const asset = oldAssets.find(row => row.id === oldBlob.mediaAssetId)
+          if (!asset || !(oldBlob.data instanceof ArrayBuffer)) continue
+          const existing = await tx.table('mediaBlobObjects')
+            .where('[workId+contentHash]').equals([oldBlob.workId, asset.contentHash]).first()
+          if (existing?.id != null) {
+            blobObjectId = existing.id
+          } else {
+            const now = Date.now()
+            blobObjectId = await tx.table('mediaBlobObjects').add({
+              projectId: oldBlob.projectId,
+              worldId: oldBlob.worldId,
+              workId: oldBlob.workId,
+              contentHash: asset.contentHash,
+              mimeType: asset.mimeType,
+              byteSize: oldBlob.data.byteLength,
+              backend: 'indexeddb',
+              storageState: 'ready',
+              data: oldBlob.data,
+              opfsPath: null,
+              leaseOwner: null,
+              leaseExpiresAt: null,
+              lastVerifiedAt: now,
+              createdAt: oldBlob.createdAt ?? now,
+              updatedAt: now,
+            })
+          }
+        }
+        await tx.table('productMediaBlobs').put({
+          id: oldBlob.id,
+          projectId: oldBlob.projectId,
+          worldId: oldBlob.worldId,
+          workId: oldBlob.workId,
+          mediaAssetId: oldBlob.mediaAssetId,
+          blobObjectId,
+          data: null,
+          createdAt: oldBlob.createdAt,
+        })
+      }
+    })
+
+    // ARCH-CLEAN-2B: complete the cutover. Only migration declarations above
+    // retain old names; active code and the current schema expose no compatibility
+    // authoring tables, duplicate TTRPG campaign store, or AVG-owned media store.
+    this.version(88).stores({
+      gameDefinitions: null,
+      adventureModules: null,
+      avgMediaAssets: null,
+      avgMediaBlobs: null,
+      avgPresentationModules: null,
+      narrativeSimulationModules: null,
+      openWorldModules: null,
+      ttrpgCampaignModules: null,
+      gameProductions: '++id, projectId, worldId, workId, &[workId+productionKey], status, currentGameReleaseId, updatedAt',
+      gameReleases: '++id, projectId, worldId, workId, productionKey, worldReleaseId, &[workId+productionKey+version], contentHash, createdAt',
+      simulationSessions: '++id, projectId, worldGroupId, worldId, workId, gameReleaseId, gameBuildId, runtimeSourceHash, kind, status, parentSessionId, updatedAt',
+    }).upgrade(async tx => {
+      const invalidReleaseIds: number[] = []
+      const releases = await tx.table('gameReleases').toArray()
+      for (const release of releases) {
+        try {
+          const manifest = JSON.parse(String(release.manifestJson ?? ''))
+          if (manifest?.schema !== 'storyforge.game-release' || manifest?.version !== 2) {
+            if (release.id != null) invalidReleaseIds.push(release.id)
+            continue
+          }
+          release.productionKey = manifest.productionProvenance?.productionKey
+            ?? `imported:${String(manifest.runtimePackage?.definition?.gameKey ?? 'game')}:${String(release.contentHash ?? '').slice(0, 16)}`
+          delete release.gameDefinitionId
+          await tx.table('gameReleases').put(release)
+        } catch {
+          if (release.id != null) invalidReleaseIds.push(release.id)
+        }
+      }
+      if (invalidReleaseIds.length > 0) await tx.table('gameReleases').bulkDelete(invalidReleaseIds)
+      await tx.table('gameProductions').toCollection().modify(row => {
+        delete row.currentGameDefinitionId
+      })
+      await tx.table('gameBuilds').toCollection().modify(row => {
+        delete row.adoptedGameDefinitionId
+      })
+      const invalidSessionIds: number[] = []
+      const formalKinds = new Set(['storygame', 'chatgame', 'textadventure', 'avg', 'textsimulation', 'textworld', 'ttrpg'])
+      const sessions = await tx.table('simulationSessions').toArray()
+      for (const session of sessions) {
+        const sources = [session.gameReleaseId, session.gameBuildId].filter(value => value != null)
+        let narrativeVersion = 2
+        try {
+          narrativeVersion = JSON.parse(String(session.initialStateJson ?? '{}'))?.narrative?.version ?? 2
+        } catch {
+          narrativeVersion = -1
+        }
+        if (formalKinds.has(session.kind) && (
+          sources.length !== 1 ||
+          !String(session.runtimeSourceHash ?? '').trim() ||
+          narrativeVersion !== 2 ||
+          invalidReleaseIds.includes(session.gameReleaseId)
+        )) {
+          if (session.id != null) invalidSessionIds.push(session.id)
+          continue
+        }
+        delete session.worldReleaseId
+        delete session.ttrpgBuildId
+        delete session.narrativeModuleId
+        delete session.narrativeModuleExportId
+        delete session.draftSnapshotHash
+        delete session.productReleaseUid
+        delete session.productReleaseLineageHash
+        await tx.table('simulationSessions').put(session)
+      }
+      if (invalidSessionIds.length > 0) await tx.table('simulationSessions').bulkDelete(invalidSessionIds)
+      if (invalidSessionIds.length > 0) {
+        for (const tableName of [
+          'simulationEvents',
+          'simulationCheckpoints',
+          'ttrpgSessionParticipants',
+          'ttrpgRuntimeAssetRequests',
+        ]) {
+          await tx.table(tableName).where('sessionId').anyOf(invalidSessionIds).delete()
+        }
+      }
+    })
+
+    // ARCH-CLEAN-3: remove the retired free-node graph format and its run
+    // evidence. Runtime code accepts only the current domain-node contract;
+    // old graphs are intentionally not converted or kept as active records.
+    this.version(89).stores({
+      worldReleaseMigrations: null,
+    }).upgrade(async tx => {
+      const retiredFlowIds: number[] = []
+      for (const flow of await tx.table('nodeFlows').toArray()) {
+        try {
+          const graph = JSON.parse(String(flow.graphJson ?? ''))
+          if (graph?.version !== 2 && flow.id != null) retiredFlowIds.push(flow.id)
+        } catch {
+          if (flow.id != null) retiredFlowIds.push(flow.id)
+        }
+      }
+      if (retiredFlowIds.length > 0) {
+        await tx.table('nodeRuns').where('flowId').anyOf(retiredFlowIds).delete()
+        await tx.table('nodeFlows').bulkDelete(retiredFlowIds)
       }
     })
   }

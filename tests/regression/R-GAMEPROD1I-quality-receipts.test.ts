@@ -22,6 +22,7 @@ import { parseGameRuntimePackageV2 } from '../../src/lib/game-production/runtime
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 import { commitNarrativeChoice, readSimulationStateVersion } from '../../src/lib/simulation/runtime'
 import { EMPTY_SIMULATION_STATE } from '../../src/lib/types'
+import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
 
 const PACKAGE_HASH = 'a'.repeat(64)
 const PREVIEW_HASH = 'b'.repeat(64)
@@ -31,20 +32,18 @@ function commercialBrief() {
     schema: 'storyforge.game-production-brief', version: 3,
     source: {
       worldReleaseId: 1, worldContentHash: PACKAGE_HASH,
-      selection: {
-        schema: 'storyforge.world-game-source', version: 2, productType: 'avg',
-        worldContentHash: PACKAGE_HASH, narrativeModuleExportIds: [1], characterExportIds: [2],
-        characterRelationExportIds: [], importantLocationExportIds: [], artifactExportIds: [],
-        codexEntryExportIds: [], storyArcExportIds: [], avgMediaAssetExportIds: [],
-        productSource: { kind: 'avg', presentationStyle: 'cinematic', existingMediaAssetExportIds: [] },
-      },
+      selection: currentProductSelection('avg', {
+        story: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
+        characters: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+      }),
       startingPoint: {
         kind: 'mainline', title: '性能路线', summary: '冻结世界的主路线',
-        sourceRefs: ['narrativeModule:1'], protagonistRefs: ['character:2'], openingConflict: '潮门失去信号。',
+        sourceRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
+        protagonistRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.character], openingConflict: '潮门失去信号。',
       },
     },
     intent: {
-      productType: 'avg', playerRole: 'character:2', protagonistRefs: ['character:2'],
+      productType: 'avg', playerRole: '守灯人', protagonistRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
       openingSituation: '潮门失去信号。', coreExperience: ['可验证选择'], requiredFacts: ['世界事实不变'],
       forbiddenChanges: ['不写回世界'], contentBoundaries: [], tone: ['悬疑'],
     },
@@ -90,7 +89,7 @@ async function fixture() {
   const productionId = await db.gameProductions.add({
     ...owned.scope, productionKey: `perf.${projectId}`, title: '性能验收', status: 'preview-ready',
     stateRevision: 1, controlEpoch: 0, currentBriefRevision: 1, currentBuildNumber: 1,
-    currentGameDefinitionId: null, currentGameReleaseId: null, lastErrorJson: '{}',
+    currentGameReleaseId: null, lastErrorJson: '{}',
     createdAt: now, updatedAt: now,
   }) as number
   await db.gameProductionBriefs.add({
@@ -106,7 +105,7 @@ async function fixture() {
     budgetLedgerJson: '{}', manifestJson: '{}', manifestHash: PREVIEW_HASH, packageHash: PACKAGE_HASH,
     previewManifestJson: '{}', previewHash: PREVIEW_HASH, qualityReportJson: '{}', qualityReportHash: briefHash,
     compatibilityJson: '{}', rootTerminalReceiptHash: PACKAGE_HASH, adoptionIntentHash: null,
-    adoptedGameDefinitionId: null, releasedGameReleaseId: null, failureJson: '{}', authorizedAt: now,
+    releasedGameReleaseId: null, failureJson: '{}', authorizedAt: now,
     startedAt: now, completedAt: now, createdAt: now, updatedAt: now,
   }) as number
   return { ...owned, buildId }

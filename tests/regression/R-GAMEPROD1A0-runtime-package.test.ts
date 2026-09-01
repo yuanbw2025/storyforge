@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   createGameReleaseManifestV2,
-  gameRuntimePackageFromReleaseV1,
   parseGameRuntimePackageV2,
   verifyGameReleaseManifestV2,
 } from '../../src/lib/game-production/runtime-package'
@@ -9,31 +8,15 @@ import {
   canonicalGameProductionJsonV2,
   hashGameProductionValueV2,
 } from '../../src/lib/game-production/hash'
-import { parseAnyGameReleaseManifestVersion } from '../../src/lib/text-game/releases'
-import type {
-  GameReleaseManifestV1,
-  GameRuntimePackageV2,
-  WorldGameSourceSelectionV2,
-} from '../../src/lib/types'
+import type { GameRuntimePackageV2, ProductWorldSourceSelectionV1 } from '../../src/lib/types'
+import { currentProductSelection } from '../helpers/current-product-world'
 
 const HASH = 'a'.repeat(64)
 
-function selection(): WorldGameSourceSelectionV2 {
-  return {
-    schema: 'storyforge.world-game-source',
-    version: 2,
-    productType: 'storygame',
-    worldContentHash: HASH,
-    narrativeModuleExportIds: [2],
-    characterExportIds: [],
-    characterRelationExportIds: [],
-    importantLocationExportIds: [],
-    artifactExportIds: [],
-    codexEntryExportIds: [],
-    storyArcExportIds: [],
-    avgMediaAssetExportIds: [],
-    productSource: { kind: 'storygame', narrativeModuleExportIds: [2] },
-  }
+function selection(): ProductWorldSourceSelectionV1 {
+  return currentProductSelection('storygame', {
+    story: ['world-release:fixture:semantic:story-core:2'],
+  })
 }
 
 function runtimePackage(): GameRuntimePackageV2 {
@@ -91,7 +74,6 @@ describe('R-GAMEPROD-1A0 · RuntimePackage/Release v2', () => {
 
     expect(release.packageHash).toBe(await hashGameProductionValueV2(parsed))
     await expect(verifyGameReleaseManifestV2(JSON.stringify(release))).resolves.toEqual(release)
-    expect(parseAnyGameReleaseManifestVersion(JSON.stringify(release))).toEqual(release)
   })
 
   it('拒绝未知字段、产品模块不一致和被篡改的 packageHash', async () => {
@@ -124,29 +106,6 @@ describe('R-GAMEPROD-1A0 · RuntimePackage/Release v2', () => {
     expect(() => parseGameRuntimePackageV2(hiddenNodeData)).toThrow(/nodes\[0\] 字段不符合合同/)
   })
 
-  it('把历史 Release v1 投影到同一 RuntimePackage 而不修改旧清单', () => {
-    const pkg = runtimePackage()
-    const legacy: GameReleaseManifestV1 = {
-      schema: 'storyforge.game-release',
-      version: 1,
-      productType: 'storygame',
-      definition: {
-        ...pkg.definition,
-        source: null,
-      },
-      worldRelease: { contentHash: HASH, narrativeModuleExportId: 2 },
-      narrative: pkg.narrative,
-    }
-    const resolved = gameRuntimePackageFromReleaseV1(legacy)
-
-    expect(resolved.sourceWorld.selection).toMatchObject({
-      version: 2,
-      productType: 'storygame',
-      narrativeModuleExportIds: [2],
-    })
-    expect(legacy.version).toBe(1)
-  })
-
   it('canonical-json-v2 规范化 Unicode/key 顺序并拒绝非 JSON 数字和 undefined', () => {
     expect(canonicalGameProductionJsonV2({ z: 'e\u0301', a: 1 })).toBe('{"a":1,"z":"é"}')
     expect(() => canonicalGameProductionJsonV2({ value: Number.NaN })).toThrow(/NaN/)
@@ -163,13 +122,17 @@ describe('R-GAMEPROD-1A0 · RuntimePackage/Release v2', () => {
 
   it('规范化来源集合顺序，并拒绝产品专属来源越过通用选择边界', () => {
     const unordered = runtimePackage()
-    unordered.sourceWorld.selection.narrativeModuleExportIds = [3, 2]
-    unordered.sourceWorld.selection.productSource = { kind: 'storygame', narrativeModuleExportIds: [2] }
-    expect(parseGameRuntimePackageV2(unordered).sourceWorld.selection.narrativeModuleExportIds).toEqual([2, 3])
+    const first = 'world-release:fixture:semantic:story-core:2'
+    const second = 'world-release:fixture:semantic:story-core:3'
+    unordered.sourceWorld.selection.resourceKeys = [second, first]
+    unordered.sourceWorld.selection.roleBindings = { story: [first] }
+    expect(parseGameRuntimePackageV2(unordered).sourceWorld.selection.resourceKeys).toEqual([first, second])
 
     const escaped = runtimePackage()
-    escaped.sourceWorld.selection.productSource = { kind: 'storygame', narrativeModuleExportIds: [99] }
-    expect(() => parseGameRuntimePackageV2(escaped)).toThrow(/超出通用来源选择/)
+    escaped.sourceWorld.selection.roleBindings = {
+      story: ['world-release:fixture:semantic:story-core:99'],
+    }
+    expect(() => parseGameRuntimePackageV2(escaped)).toThrow(/超出资源选择/)
   })
 
   it('在解析阶段拒绝不可稳定发布的初始变量', () => {

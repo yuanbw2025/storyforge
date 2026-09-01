@@ -18,10 +18,11 @@ import {
   type AdventureIntentCandidateV1,
   type AdventureNarrationCandidateV1,
 } from '../lib/adventure/harness'
+import { verifyPlayableSessionPackageV2 } from '../lib/game-production/preview-source'
 import { assertGameReleaseUnchanged, parseAdventureGameReleaseManifest } from '../lib/text-game/releases'
 import { assertInstanceBinding, createTextAdventureInstance, readBoundInstances } from '../lib/world-engine/instances'
 import type {
-  AdventureGameReleaseManifestV1,
+  AdventureGameRuntimePackageV2,
   AIConfig,
   GameRelease,
   SimulationCheckpoint,
@@ -34,7 +35,7 @@ import { EMPTY_SIMULATION_STATE } from '../lib/types'
 
 export interface AdventureLibraryItem {
   release: GameRelease
-  manifest: AdventureGameReleaseManifestV1 | null
+  manifest: AdventureGameRuntimePackageV2 | null
   error: string
 }
 
@@ -48,7 +49,7 @@ interface AdventurePlayerState {
   checkpoints: SimulationCheckpoint[]
   recoverableRunIds: number[]
   runtimeState: SimulationRuntimeState
-  selectedManifest: AdventureGameReleaseManifestV1 | null
+  selectedManifest: AdventureGameRuntimePackageV2 | null
   pendingIntent: AdventureIntentCandidateV1 | null
   generatedNarrative: AdventureNarrationCandidateV1 | null
   generatingRunId: number | null
@@ -95,17 +96,24 @@ async function readLibrary(scope: WorkspaceScope): Promise<AdventureLibraryItem[
 
 async function assertAdventureSession(scope: WorkspaceScope, sessionId: number) {
   const session = await assertInstanceBinding(sessionId, scope)
-  if (session.kind !== 'textadventure' || session.gameReleaseId == null) throw new Error('该存档不是正式文字冒险。')
+  if (session.kind !== 'textadventure') throw new Error('该存档不是文字冒险。')
   return session
+}
+
+function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyPlayableSessionPackageV2>>['runtimePackage']) {
+  if (runtimePackage.productType !== 'text-adventure' || !runtimePackage.adventure || !runtimePackage.interaction) {
+    throw new Error('该存档没有绑定有效的文字冒险 Product Build 或 GameRelease。')
+  }
+  return structuredClone(runtimePackage) as AdventureGameRuntimePackageV2
 }
 
 async function details(scope: WorkspaceScope, sessionId: number) {
   const session = await assertAdventureSession(scope, sessionId)
-  const [events, checkpoints, runtimeState, release, runRows] = await Promise.all([
+  const [events, checkpoints, runtimeState, playable, runRows] = await Promise.all([
     db.simulationEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.simulationCheckpoints.where('sessionId').equals(sessionId).toArray(),
     readSimulationState(sessionId),
-    assertGameReleaseUnchanged(session.gameReleaseId!),
+    verifyPlayableSessionPackageV2({ scope, session }),
     db.agentRuns.where('simulationSessionId').equals(sessionId).toArray(),
   ])
   checkpoints.sort((left, right) => right.createdAt - left.createdAt)
@@ -117,7 +125,7 @@ async function details(scope: WorkspaceScope, sessionId: number) {
     events,
     checkpoints,
     runtimeState,
-    selectedManifest: parseAdventureGameReleaseManifest(release.manifestJson),
+    selectedManifest: playableManifest(playable.runtimePackage),
     recoverableRunIds: resumableRows
       .filter(row => resumeCheckpoints.some(item => item.runId === row.id && item.resumePayloadJson != null))
       .map(row => row.id!),

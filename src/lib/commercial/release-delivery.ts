@@ -1,6 +1,6 @@
 import {
-  verifyGameDistributionBundleV1,
-  type GameDistributionBundleV1,
+  verifyGameDistributionBundleV2,
+  type GameDistributionBundleV2,
 } from '../game-platform/distribution-bundle'
 import {
   CommercialAuthorityErrorV1,
@@ -16,7 +16,7 @@ export interface CommercialReleaseDeliveryRecordV1 {
   creatorId: string
   bundleHash: string
   encodedBytes: number
-  bundle: GameDistributionBundleV1
+  bundle: GameDistributionBundleV2
   registeredAt: number
 }
 
@@ -77,7 +77,7 @@ export class CommercialReleaseDeliveryServiceV1 {
     bundle: unknown
   }): Promise<{ releaseHash: string; bundleHash: string; duplicate: boolean }> {
     const creatorId = stablePrincipal(input.principal.userId)
-    const bundle = await verifyGameDistributionBundleV1(input.bundle)
+    const bundle = await verifyGameDistributionBundleV2(input.bundle)
     const hash = releaseHash(bundle.gameRelease.contentHash)
     if (!this.authority.canRegisterRelease({ principal: input.principal, releaseHash: hash })) {
       throw new CommercialAuthorityErrorV1('release_forbidden', '只有目录所有者可以登记发行物')
@@ -105,12 +105,12 @@ export class CommercialReleaseDeliveryServiceV1 {
     releaseHash: string
   }): Promise<{
     authorization: CommercialOfflineDeliveryAuthorizationV1
-    bundle: GameDistributionBundleV1
+    bundle: GameDistributionBundleV2
   }> {
     const authorization = this.authority.authorizeOfflineDelivery(input)
     const row = await this.persistence.load(authorization.releaseHash)
     if (!row) throw new CommercialAuthorityErrorV1('release_delivery_missing', '发行物尚未完成上传')
-    const bundle = await verifyGameDistributionBundleV1(row.bundle)
+    const bundle = await verifyGameDistributionBundleV2(row.bundle)
     if (bundle.gameRelease.contentHash !== authorization.releaseHash || bundle.bundleHash !== row.bundleHash) {
       throw new CommercialAuthorityErrorV1('release_corrupt', '发行物存储完整性校验失败')
     }

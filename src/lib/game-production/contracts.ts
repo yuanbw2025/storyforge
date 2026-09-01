@@ -15,9 +15,9 @@ import type {
   GameStartingPointV1,
   ProviderCapabilityRequirementV1,
 } from '../types'
-import { AVG_MEDIA_KINDS, GAME_PRODUCTION_COMMAND_TYPES } from '../types'
+import { PRODUCT_MEDIA_KINDS, GAME_PRODUCTION_COMMAND_TYPES } from '../types'
 import { isSha256Hash } from './hash'
-import { parseWorldGameSourceSelectionV2 } from './runtime-package'
+import { parseProductWorldSourceSelectionV1 } from './runtime-package'
 import { parseTtrpgProductionBriefV2 } from '../ttrpg/production-brief'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
@@ -111,8 +111,8 @@ function parseScale(value: unknown): GameProductionScaleV1 {
 function parseMedia(value: unknown): GameProductionMediaProfileV1 {
   const row = record(value, 'media')
   exactKeys(row, ['visualLevel', 'audioLevel', 'imageCount', 'musicTrackCount', 'sfxCount', 'voiceLineCount', 'requiredMediaKinds'], 'media')
-  const requiredMediaKinds = stringArray(row.requiredMediaKinds, 'media.requiredMediaKinds', AVG_MEDIA_KINDS.length) as GameProductionMediaProfileV1['requiredMediaKinds']
-  if (requiredMediaKinds.some(kind => !AVG_MEDIA_KINDS.includes(kind))) fail('media.requiredMediaKinds 枚举无效')
+  const requiredMediaKinds = stringArray(row.requiredMediaKinds, 'media.requiredMediaKinds', PRODUCT_MEDIA_KINDS.length) as GameProductionMediaProfileV1['requiredMediaKinds']
+  if (requiredMediaKinds.some(kind => !PRODUCT_MEDIA_KINDS.includes(kind))) fail('media.requiredMediaKinds 枚举无效')
   return {
     visualLevel: enumValue(row.visualLevel, ['none', 'key-scenes', 'illustrated'], 'media.visualLevel'),
     audioLevel: enumValue(row.audioLevel, ['none', 'music-sfx', 'full'], 'media.audioLevel'),
@@ -258,8 +258,7 @@ export function parseGameProductionBriefV3(value: unknown): GameProductionBriefV
   const source = record(row.source, 'source')
   exactKeys(source, ['worldReleaseId', 'worldContentHash', 'selection', 'startingPoint'], 'source')
   if (!isSha256Hash(source.worldContentHash)) fail('source.worldContentHash 无效')
-  const selection = parseWorldGameSourceSelectionV2(source.selection)
-  if (selection.worldContentHash !== source.worldContentHash) fail('source selection hash 不一致')
+  const selection = parseProductWorldSourceSelectionV1(source.selection)
 
   const intent = record(row.intent, 'intent')
   exactKeys(intent, [
@@ -337,9 +336,9 @@ export function parseGameProductionBriefV3(value: unknown): GameProductionBriefV
       && proposalDecisionUnresolved === parsed.ttrpg.campaignDesign.selection.confirmed) {
       fail('TTRPG 战役提案确认状态与 unresolvedDecisionKeys 不一致')
     }
-    const allowedCharacters = new Set(parsed.source.selection.characterExportIds)
-    if (parsed.ttrpg.table.seats.some(seat => seat.sourceCharacterExportId != null
-      && !allowedCharacters.has(seat.sourceCharacterExportId))) {
+    const allowedCharacters = new Set(parsed.source.selection.roleBindings.participants ?? [])
+    if (parsed.ttrpg.table.seats.some(seat => seat.sourceCharacterResourceKey != null
+      && !allowedCharacters.has(seat.sourceCharacterResourceKey))) {
       fail('TTRPG 席位引用了未进入冻结选择的世界角色')
     }
     if (parsed.authorConfirmations?.ttrpgDefaultRuleMappings !== parsed.ttrpg.confirmations.numericMappings) {

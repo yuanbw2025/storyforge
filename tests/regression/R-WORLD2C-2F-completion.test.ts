@@ -9,11 +9,11 @@ import {
   validateNarrativeModule,
 } from '../../src/lib/narrative/blueprint'
 import {
-  createWorldPackageV2,
+  createWorldPackage,
   importWorldPackage,
   inspectWorldPackage,
 } from '../../src/lib/product/world-package'
-import { appendSimulationEvent, branchSimulationSession, readSimulationState } from '../../src/lib/simulation/runtime'
+import { appendSimulationEvent, branchSimulationSession, createSimulationSession, readSimulationState } from '../../src/lib/simulation/runtime'
 import type { WorldReleaseManifestV2, WorkspaceScope } from '../../src/lib/types'
 import { createWorkspace as createWorkspaceRoot } from '../../src/lib/world-engine/create-workspace'
 import { createWorldInstance, readBoundInstances } from '../../src/lib/world-engine/instances'
@@ -107,7 +107,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     expect(await db.projects.count()).toBe(beforeProjects)
   })
 
-  it('删除 Work 级联父归属节点和绑定实例，但不影响另一 Work 或 World Canon', async () => {
+  it('删除 Work 级联父归属节点，但不影响另一 Work 或 World Canon', async () => {
     const ownership = await createWorkspace('双作品删除隔离')
     const workA = ownership.work
     const workB = await createWorldWork(ownership.scope.projectId, { title: '作品 B' })
@@ -126,20 +126,11 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     } as any)
-    await createWorldInstance({
-      scope: scopeA,
-      kind: 'npc-evolution',
-      title: 'A 的私域演化沙箱',
-      draftSnapshotHash: 'draft-a',
-      narrativeModuleId: moduleA.id,
-    })
-
     await deleteWork(workA.id!)
 
     expect(await db.works.get(workA.id!)).toBeUndefined()
     expect(await db.narrativeModules.get(moduleA.id!)).toBeUndefined()
     expect(await db.narrativeNodes.where('moduleId').equals(moduleA.id!).count()).toBe(0)
-    expect(await db.simulationSessions.where('workId').equals(workA.id!).count()).toBe(0)
     expect(await db.works.get(workB.id!)).toBeDefined()
     expect(await db.narrativeModules.get(moduleB.id!)).toBeDefined()
     expect(await db.narrativeNodes.where('moduleId').equals(moduleB.id!).count()).toBe(2)
@@ -239,7 +230,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
       kind: 'chatgame',
       title: '不得创建',
       draftSnapshotHash: 'forged-draft',
-    })).rejects.toThrow('有效 World/Work')
+    } as any)).rejects.toThrow('有效 World/Work')
     expect(await db.simulationSessions.count()).toBe(before)
     await expect(readBoundInstances(forged)).rejects.toThrow('有效 World/Work')
   })
@@ -462,7 +453,7 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
     expect(diff.changed).toContain('worldviews')
     expect(diff.changed).not.toContain('narrativeModules')
 
-    const pkg = await createWorldPackageV2(seeded.release.id!, PACKAGE_OPTIONS)
+    const pkg = await createWorldPackage(seeded.release.id!, PACKAGE_OPTIONS)
     const report = await inspectWorldPackage(pkg)
     expect(report.valid, report.errors.join('；')).toBe(true)
     const importedProjectId = await importWorldPackage(pkg)
@@ -503,19 +494,17 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
         title: `${kind} 不得直跑`,
         releaseId: seeded.release.id,
         seed: `seed-${kind}`,
-      })).rejects.toThrow('必须绑定不可变 GameRelease')
+      } as any)).rejects.toThrow('必须且只能绑定一个 Product Release/Build')
     }
-    const session = await createWorldInstance({
-      scope: seeded.ownership.scope,
+    const session = await createSimulationSession({
+      projectId: seeded.ownership.scope.projectId,
       kind: 'npc-evolution',
-      title: '世界私域演化沙箱',
-      draftSnapshotHash: 'private-evolution-draft',
+      title: '产品私域演化沙箱',
       seed: 'seed-evolution',
     })
     await appendSimulationEvent({ sessionId: session.id!, type: 'time.advanced', payload: { amount: 3 } })
     expect((await readSimulationState(session.id!)).clock).toBe(3)
     expect(await readSimulationState(session.id!)).toEqual(await readSimulationState(session.id!))
-    expect(await readBoundInstances(seeded.ownership.scope)).toHaveLength(1)
 
     const child = await branchSimulationSession({
       parentSessionId: session.id!,
@@ -523,11 +512,9 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
       title: '私域演化分支',
     })
     expect(child).toMatchObject({
-      worldId: seeded.ownership.scope.worldId,
-      workId: seeded.ownership.scope.workId,
-      worldReleaseId: null,
-      narrativeModuleId: null,
-      narrativeModuleExportId: null,
+      gameReleaseId: null,
+      gameBuildId: null,
+      runtimeSourceHash: null,
     })
     expect((await db.worldReleases.get(seeded.release.id!))?.manifestJson).toBe(seeded.release.manifestJson)
   })

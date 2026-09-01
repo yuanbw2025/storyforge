@@ -17,8 +17,11 @@ import type {
   ResourceSearchInputV1,
   WorldCapabilityArea,
 } from '../registry/types'
-import type { WorldRelease, WorldReleaseManifestV2 } from '../types'
-import { assertReleaseUnchanged } from '../world-engine/releases'
+import type { WorldRelease } from '../types'
+import {
+  type PureWorldReleaseManifestV3,
+  verifyPureWorldReleaseRecordV3,
+} from '../world-engine/release-codec'
 import { createWorldReferenceV1, ensureWorldReleaseUidV1 } from '../world-engine/world-reference'
 import {
   WORLD_RELEASE_NORMALIZATION_VERSION_V1,
@@ -49,11 +52,7 @@ function rememberBounded<K, V>(map: Map<K, V>, key: K, value: V): void {
 interface LoadedReleaseV1 {
   release: WorldRelease & { id: number }
   releaseUid: string
-  manifest: WorldReleaseManifestV2 & {
-    semanticContract: 3
-    resourceCatalog: NonNullable<WorldReleaseManifestV2['resourceCatalog']>
-    capabilityProfile: NonNullable<WorldReleaseManifestV2['capabilityProfile']>
-  }
+  manifest: PureWorldReleaseManifestV3
   fingerprint: string
 }
 
@@ -78,7 +77,16 @@ export interface WorldReleaseDescriptionV1 {
   version: 1
   worldReference: Awaited<ReturnType<typeof createWorldReferenceV1>>
   sourceManifestHash: string
-  capabilities: Array<NonNullable<WorldReleaseManifestV2['capabilityProfile']>[number]>
+  identity: {
+    worldCode: string
+    worldName: string
+    workTitle: string
+    releaseVersion: number
+    releaseLabel: string
+    releaseHash: string
+    releasedAt: number
+  }
+  capabilities: PureWorldReleaseManifestV3['capabilityProfile']
   resources: Array<{
     resourceId: string
     area: WorldCapabilityArea
@@ -87,6 +95,15 @@ export interface WorldReleaseDescriptionV1 {
     contentHash: string
   }>
   scopeFingerprint: string
+}
+
+export interface OpenWorldReleaseV1 {
+  description: WorldReleaseDescriptionV1
+  scope: FrozenResourceScopeV1 & {
+    worldId: number
+    worldReleaseId: number
+    worldReleaseHash: string
+  }
 }
 
 export class WorldReleaseResourceProviderErrorV1 extends Error {
@@ -110,20 +127,6 @@ function assertScope(scope: FrozenResourceScopeV1): { releaseId: number; release
   return { releaseId: Number(scope.worldReleaseId), releaseHash: scope.worldReleaseHash }
 }
 
-function parseManifest(release: WorldRelease): LoadedReleaseV1['manifest'] {
-  let parsed: unknown
-  try { parsed = JSON.parse(release.manifestJson) }
-  catch { return fail('manifest-json', 'WorldRelease manifest JSON 损坏') }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) fail('manifest-shape', 'WorldRelease manifest 根非法')
-  const manifest = parsed as WorldReleaseManifestV2
-  if (manifest.schema !== 'storyforge.world-package' || manifest.version !== 2
-    || manifest.semanticContract !== 3 || !Array.isArray(manifest.resourceCatalog)
-    || !Array.isArray(manifest.capabilityProfile) || !manifest.records) {
-    fail('manifest-contract', '只允许读取 semanticContract=3 的纯世界语义 release')
-  }
-  return manifest as LoadedReleaseV1['manifest']
-}
-
 async function load(scope: FrozenResourceScopeV1): Promise<LoadedReleaseV1> {
   const frozen = assertScope(scope)
   const release = await db.worldReleases.get(frozen.releaseId)
@@ -145,16 +148,7 @@ async function load(scope: FrozenResourceScopeV1): Promise<LoadedReleaseV1> {
     rememberBounded(validatedReleaseCache, frozen.releaseId, cached)
     return cached
   }
-  await assertReleaseUnchanged(release.id)
-  const manifest = parseManifest(release)
-  if (manifest.worldCode !== release.sourceWorldCode) fail('identity', 'manifest worldCode 与 release 不一致')
-  for (const resource of manifest.resourceCatalog) {
-    const rows = manifest.records[resource.table]
-    if (!Array.isArray(rows) || rows.length !== resource.rowCount
-      || await hashCanonicalValue(rows) !== resource.contentHash) {
-      fail('resource-integrity', `世界资源 ${resource.resourceId} 行数或 hash 损坏`)
-    }
-  }
+  const manifest = await verifyPureWorldReleaseRecordV3(release as WorldRelease & { id: number })
   const releaseUid = await ensureWorldReleaseUidV1(release as WorldRelease & { id: number })
   const loaded: LoadedReleaseV1 = {
     release: { ...release, releaseUid } as WorldRelease & { id: number },
@@ -527,6 +521,15 @@ export async function describeWorldReleaseV1(
     worldReference: await createWorldReferenceV1(loaded.release.id),
     sourceManifestHash: loaded.manifest.sourceManifest?.contentHash
       ?? await hashCanonicalValue(loaded.manifest.sourceManifest ?? null),
+    identity: {
+      worldCode: loaded.manifest.worldCode,
+      worldName: loaded.manifest.worldName,
+      workTitle: loaded.manifest.workTitle,
+      releaseVersion: loaded.release.version,
+      releaseLabel: loaded.release.label,
+      releaseHash: loaded.release.contentHash,
+      releasedAt: loaded.release.createdAt,
+    },
     capabilities: loaded.manifest.capabilityProfile
       .map(item => ({ ...item }))
       .sort((left, right) => left.area.localeCompare(right.area)),
@@ -535,5 +538,38 @@ export async function describeWorldReleaseV1(
       .sort((left, right) => left.area.localeCompare(right.area)
         || left.resourceKind.localeCompare(right.resourceKind)),
     scopeFingerprint: loaded.fingerprint,
+  }
+}
+
+/**
+ * Product-facing entry for resolving a user-selected local WorldRelease.
+ * The database row and physical manifest stay behind the provider boundary;
+ * callers receive only a frozen scope, WorldReference and semantic metadata.
+ */
+export async function openWorldReleaseV1(input: {
+  localReleaseRecordId: number
+  expectedProjectId: number
+  expectedWorldId?: number
+}): Promise<OpenWorldReleaseV1> {
+  if (!Number.isSafeInteger(input.localReleaseRecordId) || input.localReleaseRecordId < 1
+    || !Number.isSafeInteger(input.expectedProjectId) || input.expectedProjectId < 1
+    || (input.expectedWorldId != null
+      && (!Number.isSafeInteger(input.expectedWorldId) || input.expectedWorldId < 1))) {
+    fail('open-input', '打开 WorldRelease 的 ID/scope 非法')
+  }
+  const release = await db.worldReleases.get(input.localReleaseRecordId)
+  if (!release?.id || release.projectId !== input.expectedProjectId
+    || (input.expectedWorldId != null && release.worldId !== input.expectedWorldId)) {
+    fail('open-scope', 'WorldRelease 不存在或不属于请求的世界作用域')
+  }
+  const scope = {
+    projectId: release.projectId,
+    worldId: release.worldId,
+    worldReleaseId: release.id,
+    worldReleaseHash: release.contentHash,
+  }
+  return {
+    scope,
+    description: await describeWorldReleaseV1(scope),
   }
 }

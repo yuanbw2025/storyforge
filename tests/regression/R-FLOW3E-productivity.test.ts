@@ -72,7 +72,7 @@ describe('FLOW-3E · 大图效率、模板与可恢复执行', () => {
     expect(AUTHORING_OFFICIAL_TEMPLATES).toHaveLength(6)
     for (const template of AUTHORING_OFFICIAL_TEMPLATES) {
       const graph = buildOfficialAuthoringTemplate(template.id)
-      expect(parseAuthoringGraph(JSON.stringify(graph)).graph).toMatchObject({ version: 2 })
+      expect(parseAuthoringGraph(JSON.stringify(graph))).toMatchObject({ version: 2 })
       expect(graph.nodes.some(node => node.templateId === 'source.project-context')).toBe(true)
       expect(graph.nodes.every(node => AUTHORING_NODE_BY_ID.has(node.templateId))).toBe(true)
       expect(graph.nodes.some(node => node.templateId === 'output.review-adopt')).toBe(false)

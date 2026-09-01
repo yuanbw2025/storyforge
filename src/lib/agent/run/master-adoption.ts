@@ -67,10 +67,6 @@ import {
 } from './checkpoint'
 import { appendMasterAgentImpactReportV1 } from './master-impact'
 import { readFreshMasterCandidateStepReceiptV1 } from './master-step-verification'
-import {
-  worldGameCandidateMatchesBusinessStateV1,
-  type WorldGameCopilotSnapshotV1,
-} from '../world-game-copilot'
 import { assertWorkspaceContentRevisionFreshV1 } from '../../authoring/content-revision'
 import { maybeInjectHarnessFaultV1 } from '../dev-fault-injection'
 import { assertContextGatewayCandidateAdoptableV1 } from '../../context-gateway/execution'
@@ -84,7 +80,6 @@ export interface MasterAgentCandidateAdoptionRefV1 {
   runtime?: ExecutedMasterCandidate
   worldGroupId?: number | null
 }
-
 export interface MasterAgentCandidateAdoptionResultV1 {
   message: string
   adoptionHash: string
@@ -557,13 +552,6 @@ async function businessAlreadyMatches(
     return false
   }
   if (agentId === 'outline') {
-    if (candidate.payload.skillId === 'outline.world-game') {
-      return worldGameCandidateMatchesBusinessStateV1({
-        scope: input.scope,
-        snapshot: candidate.payload.baseSnapshot as WorldGameCopilotSnapshotV1,
-        draft: candidate.draft,
-      })
-    }
     if (candidate.payload.skillId === 'outline.character-revision') {
       return characterRevisionCandidateMatchesBusinessStateV1({
         scope: input.scope,
@@ -669,8 +657,7 @@ async function repairPartialOutlineAdoption(
     return
   }
     if (
-      candidate.payload.skillId === 'outline.world-game'
-      || candidate.payload.skillId === 'outline.story-arcs'
+      candidate.payload.skillId === 'outline.story-arcs'
       || candidate.payload.skillId === 'outline.storyline-progress'
       || candidate.payload.skillId === 'outline.character-driven'
     ) return

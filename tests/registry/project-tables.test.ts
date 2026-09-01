@@ -28,8 +28,10 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(result.ok, result.errors.join('; ')).toBe(true)
     })
 
-    it('登记了全部 117 张表', () => {
-      expect(PROJECT_TABLES.length).toBe(117)   // v82 增加显式世界派生与旧发布迁移凭证
+    it('注册表与当前 Dexie schema 保持同源，不用历史固定表数冒充合同', () => {
+      expect(PROJECT_TABLES.length).toBeGreaterThan(0)
+      expect(PROJECT_TABLES.map(spec => spec.name).sort())
+        .toEqual(db.tables.map(table => table.name).sort())
     })
 
     it('每张表名唯一', () => {
@@ -37,11 +39,18 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(new Set(names).size).toBe(names.length)
     })
 
+    it('simple 生命周期引用统一从父表 id 指向依赖表外键', () => {
+      const malformed = PROJECT_TABLES.flatMap(spec => (spec.refs ?? [])
+        .filter(ref => ref.kind === 'simple' && ref.field !== 'id')
+        .map(ref => `${spec.name}.${ref.field} -> ${ref.target}`))
+      expect(malformed).toEqual([])
+    })
+
     it('MEMORY-10 为 100% 表登记分配唯一磁盘记忆策略', () => {
       const allowed = new Set(['editable', 'evidence', 'derived-none', 'not-applicable'])
       expect(PROJECT_TABLES.every(spec => allowed.has(spec.memoryClassification.classification))).toBe(true)
       expect(PROJECT_TABLES.filter(spec => spec.memoryClassification.classification === 'editable').map(spec => spec.name).sort())
-        .toEqual(['chapters', 'characterInteractionBriefs', 'characterInteractionProductions', 'creativeRules', 'gameProductionBriefs', 'gameProductions', 'gameRulePacks', 'projects', 'storyCores', 'ttrpgCampaignModules', 'ttrpgProductionBriefs', 'ttrpgProductions', 'works', 'worlds'])
+        .toEqual(['chapters', 'creativeRules', 'gameProductionBriefs', 'gameProductions', 'gameRulePacks', 'projects', 'storyCores', 'works', 'worlds'])
       expect(PROJECT_TABLES.find(spec => spec.name === 'agentRunEvents')?.memoryClassification.classification).toBe('evidence')
       expect(PROJECT_TABLES.find(spec => spec.name === 'retrievalChunks')?.memoryClassification.classification).toBe('derived-none')
       expect(PROJECT_TABLES.find(spec => spec.name === 'promptTemplates')?.memoryClassification.classification).toBe('not-applicable')
@@ -63,16 +72,25 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       })
     })
 
-    it('所有世界发布表都从同一注册表声明用户可选分区', () => {
-      const publishable = PROJECT_TABLES.filter(spec => spec.legacyWorldPackageV1 === 'world')
+    it('世界发布资源只由 worldSemantic 声明，不含产品媒资、发布和运行数据', () => {
+      const publishable = PROJECT_TABLES.filter(spec => spec.worldSemantic != null)
       expect(publishable.length).toBeGreaterThan(0)
-      expect(publishable.every(spec => spec.legacyWorldReleaseSection != null)).toBe(true)
-      expect(publishable.filter(spec => spec.legacyWorldReleaseSection === 'outline').map(spec => spec.name))
-        .toEqual(expect.arrayContaining(['outlineNodes', 'detailedOutlines']))
-      expect(publishable.filter(spec => spec.legacyWorldReleaseSection === 'narrative').map(spec => spec.name))
-        .toEqual(expect.arrayContaining(['storyCores', 'storyArcs', 'narrativeModules', 'narrativeNodes']))
-      expect(publishable.filter(spec => spec.legacyWorldReleaseSection === 'characters').map(spec => spec.name))
-        .toEqual(expect.arrayContaining(['characters', 'characterRelations', 'workCharacterBindings']))
+      expect(publishable.every(spec => spec.worldSemantic?.area && spec.worldSemantic.resourceKind)).toBe(true)
+      expect(publishable.filter(spec => spec.worldSemantic?.area === 'outline').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['outlineNodes']))
+      expect(publishable.filter(spec => spec.worldSemantic?.area === 'detailed-outline').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['detailedOutlines']))
+      expect(publishable.filter(spec => spec.worldSemantic?.area === 'story').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['storyCores']))
+      expect(publishable.filter(spec => spec.worldSemantic?.area === 'characters').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['characters', 'workCharacterBindings']))
+      expect(publishable.filter(spec => spec.worldSemantic?.area === 'relations').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['characterRelations']))
+      const names = publishable.map(spec => spec.name)
+      expect(names).not.toEqual(expect.arrayContaining([
+        'productMediaAssets', 'productMediaBlobs', 'gameBuilds', 'gameReleases',
+        'simulationSessions', 'narrativeModules', 'narrativeNodes',
+      ]))
     })
   })
 

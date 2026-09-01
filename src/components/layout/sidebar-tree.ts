@@ -32,7 +32,7 @@ export type SidebarModule =
   | 'characters-npc'        // 占位 (P7)
   | 'characters-extra'      // 占位 (P7)
   | 'relations'             // 关系网
-  | 'geography'             // 地理环境（legacy）
+  | 'geography'             // 地理环境
   | 'locations'             // 重要地点（Phase 25.3）
   | 'history'               // 历史年表
   // 'codex' 独立侧栏入口已于 C4 移除：词条改在「自然环境」「人文环境」面板内就地编辑
@@ -43,7 +43,6 @@ export type SidebarModule =
   | 'character-driven-plot'  // Phase 26.3 — 角色驱动剧情
   | 'visual-workflows'       // FLOW-1 — 可视化节点创作工作流
   | 'rag-library'            // RAG-1 — 可见资料与检索管理
-  | 'simulation-runtime'     // legacy route only; formal products live in ProductHub
   | 'detailed-outline'      // 占位 (P8)
   | 'chapters-list'         // 占位 (P8)
   | 'editor'
@@ -88,9 +87,7 @@ export type SidebarModule =
 
   // 世界地图（Phase 20）
   | 'world-map'
-  // legacy aliases，路由仍兼容但不再出现在 sidebar
   | 'power-system'
-  | 'story-core' | 'backup'
 
 export type ModuleContentType = 'upstream' | 'writing' | 'downstream' | 'tool' | 'experience' | 'system'
 
@@ -128,7 +125,7 @@ export const MODULE_CONTENT_TYPE_DEFINITIONS: Record<ModuleContentType, ModuleCo
 
 /**
  * Phase 36 的模块内容类型单一事实源。
- * legacy 路由也必须显式登记，避免从旧入口进入时丢失标记。
+ * 所有正式模块都必须显式登记，避免新增入口丢失内容类型标记。
  */
 export const MODULE_CONTENT_TYPES: Record<SidebarModule, ModuleContentType> = {
   info: 'upstream',
@@ -154,7 +151,6 @@ export const MODULE_CONTENT_TYPES: Record<SidebarModule, ModuleContentType> = {
   'character-driven-plot': 'tool',
   'visual-workflows': 'tool',
   'rag-library': 'tool',
-  'simulation-runtime': 'experience',
   'detailed-outline': 'upstream',
   'chapters-list': 'writing',
   editor: 'writing',
@@ -178,8 +174,6 @@ export const MODULE_CONTENT_TYPES: Record<SidebarModule, ModuleContentType> = {
   'story-arc': 'upstream',
   'world-map': 'upstream',
   'power-system': 'upstream',
-  'story-core': 'upstream',
-  backup: 'system',
 }
 
 export function getModuleContentType(module: SidebarModule): ModuleContentType {

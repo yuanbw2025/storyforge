@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { NodeFlow, NodeRunRecord } from '../lib/types'
-import { parseAuthoringGraph } from '../lib/node-authoring/migration'
+import { parseAuthoringGraph } from '../lib/node-authoring/graph-codec'
 import { emptyAuthoringGraph, safeAuthoringGraphJson } from '../lib/node-authoring/contracts'
 import type { AuthoringNodeGraph } from '../lib/node-authoring/contracts'
 import {

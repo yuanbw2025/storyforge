@@ -6,9 +6,9 @@ import type {
   TtrpgCharacterSheetV2,
   TtrpgCharacterTemplateV1,
   TtrpgProductionBriefV2,
-  WorldGameSourceSelectionV2,
+  ProductWorldSourceSelectionV1,
 } from '../types'
-import type { WorldGameSourceCatalog } from '../text-game/world-generation'
+import type { GameProductionWorldSourceCatalogV2 as WorldGameSourceCatalog } from '../game-production/world-source'
 import {
   parseTtrpgCampaignContentV1,
   validateTtrpgCampaignForPublicationV1,
@@ -24,9 +24,8 @@ function safeKey(value: string, fallback: string): string {
   return normalized || fallback
 }
 
-function releasedLocationKey(exportId: number): string {
-  if (!Number.isInteger(exportId) || exportId < 0) fail(`冻结地点 exportId 无效:${exportId}`)
-  return `release-location:${exportId}`
+function productLocationKey(index: number): string {
+  return `location.world.${String(index + 1).padStart(3, '0')}`
 }
 
 /** Bind governed production assets to stable TTRPG slots without changing slot identity. */
@@ -108,8 +107,8 @@ function characterFromSeat(input: {
   sourceCatalog: Pick<WorldGameSourceCatalog, 'characters'>
   confirmed: boolean
 }): TtrpgCharacterTemplateV1 {
-  const source = input.seat.sourceCharacterExportId == null ? null
-    : input.sourceCatalog.characters.find(character => character.exportId === input.seat.sourceCharacterExportId) ?? null
+  const source = input.seat.sourceCharacterResourceKey == null ? null
+    : input.sourceCatalog.characters.find(character => character.resourceKey === input.seat.sourceCharacterResourceKey) ?? null
   let attributes = Object.fromEntries(input.rulePack.attributes.map(attribute => [attribute.key, attribute.defaultValue]))
   if (input.rulePack.ruleSystemId === 'storyforge.rank-lite' && input.seat.characterMode === 'quick-card' && input.seat.rankTier) {
     const card = createRankLiteQuickCardsV2().find(candidate => candidate.tier === input.seat.rankTier)
@@ -137,12 +136,12 @@ function characterFromSeat(input: {
   ) {
     attributes.level = progression.level
   }
-  const sourceRefs = source ? [`character:${source.exportId}`] : [`seat:${input.seat.seatKey}`]
+  const sourceRefs = source ? [source.resourceKey] : [`seat:${input.seat.seatKey}`]
   const name = input.seat.characterName || source?.name || `${input.seat.label}角色`
   const description = source?.description || `${name} 是由${input.seat.characterMode === 'manual' ? '玩家手动完善' : input.seat.characterMode === 'quick-card' ? `${input.seat.rankTier}级快速卡` : 'AI 按规则生成'}的玩家角色。`
   const rank = attributes.rankPower ?? 1
   const template: Omit<TtrpgCharacterTemplateV1, 'characterSheet'> = {
-    characterKey: source ? `release-character:${source.exportId}`
+    characterKey: source ? `character.world.${String(input.index + 1).padStart(3, '0')}`
       : safeKey(`pc.${input.seat.seatKey}`, `pc.${input.index + 1}`), name, description,
     seatKey: input.seat.seatKey, sourceRefs, role: 'player', controller: input.seat.controller, attributes,
     attributeMappings: Object.fromEntries(input.rulePack.attributes.map(attribute => [attribute.key, {
@@ -193,9 +192,9 @@ function npcTemplate(input: {
   ]))
   const name = input.source?.name ?? '核心对手'
   const description = input.source?.description || `围绕“${input.campaign.coreConflict}”采取行动的关键 NPC。`
-  const sourceRefs = input.source ? [`character:${input.source.exportId}`] : ['world:generated-npc']
+  const sourceRefs = input.source ? [input.source.resourceKey] : ['product:generated-npc']
   const template: Omit<TtrpgCharacterTemplateV1, 'characterSheet'> = {
-    characterKey: input.source ? `release-character:${input.source.exportId}` : `npc.generated.${input.index + 1}`,
+    characterKey: input.source ? `npc.world.${String(input.index + 1).padStart(3, '0')}` : `npc.generated.${input.index + 1}`,
     name, description, sourceRefs, role: 'npc', controller: 'gm', attributes,
     attributeMappings: Object.fromEntries(input.rulePack.attributes.map(attribute => [attribute.key, {
       value: attributes[attribute.key], derivationRule: `按 NPC 在“${input.campaign.coreConflict}”中的阻力职能映射。`,
@@ -235,7 +234,7 @@ function npcTemplate(input: {
 export function compileProductionTtrpgCampaignV2(input: {
   productionKey: string
   brief: TtrpgProductionBriefV2
-  selection: WorldGameSourceSelectionV2
+  selection: ProductWorldSourceSelectionV1
   narrative: Narrative
   sourceCatalog: Pick<WorldGameSourceCatalog, 'characters' | 'locations' | 'artifacts' | 'storyArcs'>
   rulePack: RulePackV1
@@ -262,9 +261,10 @@ export function compileProductionTtrpgCampaignV2(input: {
     seat, characterPolicy: brief.characters, index, rulePack, sourceCatalog: input.sourceCatalog,
     confirmed: brief.confirmations.numericMappings,
   }))
-  const usedSourceIds = new Set(brief.table.seats.flatMap(seat => seat.sourceCharacterExportId == null ? [] : [seat.sourceCharacterExportId]))
+  const usedSourceKeys = new Set(brief.table.seats.flatMap(seat => seat.sourceCharacterResourceKey == null ? [] : [seat.sourceCharacterResourceKey]))
+  const selectedCharacterKeys = new Set(input.selection.roleBindings.participants ?? [])
   const npcSources = input.sourceCatalog.characters.filter(character => (
-    input.selection.characterExportIds.includes(character.exportId) && !usedSourceIds.has(character.exportId)
+    selectedCharacterKeys.has(character.resourceKey) && !usedSourceKeys.has(character.resourceKey)
   ))
   const npcs = (npcSources.length ? npcSources : [null]).slice(0, 8).map((source, index) => npcTemplate({
     source, index, rulePack, campaign: effectiveCampaign, confirmed: brief.confirmations.numericMappings,
@@ -298,19 +298,20 @@ export function compileProductionTtrpgCampaignV2(input: {
       visibility: 'discoverable' as const, sourceRefs: [sourceRef],
     }
   })
-  const locationIds = input.selection.importantLocationExportIds
-  for (const locationId of locationIds) {
-    if (!input.sourceCatalog.locations.some(location => location.exportId === locationId)) {
-      fail(`冻结素材选择引用了不存在的地点:${locationId}`)
+  const locationResourceKeys = input.selection.roleBindings.locations ?? []
+  for (const locationResourceKey of locationResourceKeys) {
+    if (!input.sourceCatalog.locations.some(location => location.resourceKey === locationResourceKey)) {
+      fail(`冻结素材选择引用了不存在的地点:${locationResourceKey}`)
     }
   }
   const scenes = input.narrative.nodes.map((node, index) => {
-    const locationId = locationIds[index % Math.max(1, locationIds.length)] ?? null
+    const locationResourceKey = locationResourceKeys[index % Math.max(1, locationResourceKeys.length)] ?? null
     const directClue = clueKeys.get(node.key)
     return {
       sceneKey: node.key, title: node.title,
       description: node.key === input.narrative.entryNodeKey ? `${resolvedDesign.opening}\n${node.summary}` : node.summary,
-      locationKey: locationId == null ? null : releasedLocationKey(locationId),
+      locationKey: locationResourceKey == null ? null
+        : productLocationKey(locationResourceKeys.indexOf(locationResourceKey)),
       participantKeys, clueKeys: directClue ? [directClue] : [], actionKeys,
       nextSceneKeys: [...node.successorKeys],
       failureForward: brief.story.failForward
@@ -457,8 +458,9 @@ export function compileProductionTtrpgCampaignV2(input: {
       referenceAssetKeys: character.portraitAssetKey ? [character.portraitAssetKey] : [],
     })),
     locations: locationKeys.map(locationKey => {
-      const sourceId = Number(locationKey.replace(/^release-location:/, ''))
-      const source = input.sourceCatalog.locations.find(location => location.exportId === sourceId)
+      const sourceIndex = Number(locationKey.replace(/^location\.world\./, '')) - 1
+      const sourceResourceKey = locationResourceKeys[sourceIndex]
+      const source = input.sourceCatalog.locations.find(location => location.resourceKey === sourceResourceKey)
       return {
         locationKey,
         identityPrompt: `${source?.name ?? locationKey}。${source?.description || '严格依据冻结世界地点设定。'}`,

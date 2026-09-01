@@ -1,14 +1,10 @@
 import { db } from "../db/schema";
-import { verifyGameReleaseManifestV2 } from "../game-production/runtime-package";
 import type {
   SimulationSession,
   TtrpgCampaignContentV1,
   TtrpgSessionConsentPolicyV2,
   TtrpgSessionParticipantRecordV2,
 } from "../types";
-import { assertGameReleaseUnchanged } from "../text-game/releases";
-import { parseTtrpgCampaignContentV1 } from "./campaign";
-import { parseRulePackV1 } from "./rule-pack";
 
 function fail(message: string): never {
   throw new Error(`[ttrpg-participants] ${message}`);
@@ -215,119 +211,6 @@ export async function installInitialTtrpgParticipantsV2(input: {
   return records.map((row, index) => ({ ...row, id: ids[index] }));
 }
 
-/**
- * Explicit compatibility bridge for TTRPG sessions created before the
- * participant-authority table existed. Consent is deliberately left false:
- * this command restores seats, never fabricates disclosure or authorization.
- */
-export async function migrateLegacyTtrpgSessionParticipantsV2(input: {
-  sessionId: number;
-  commandId: string;
-  requestedByViewerKey: string;
-}): Promise<TtrpgSessionParticipantRecordV2[]> {
-  const commandId = stableKey(input.commandId, "commandId");
-  const requestedBy = stableKey(
-    input.requestedByViewerKey,
-    "requestedByViewerKey",
-  );
-  if (requestedBy !== "viewer.gm") fail("只有本局 GM 可以迁移旧席位");
-  const session = await db.simulationSessions.get(input.sessionId);
-  if (
-    !session ||
-    session.kind !== "ttrpg" ||
-    session.status !== "active" ||
-    session.id == null ||
-    session.gameReleaseId == null ||
-    !session.runtimeSourceHash
-  ) {
-    fail("只能迁移 active 的正式 TTRPG Instance");
-  }
-  const release = await assertGameReleaseUnchanged(session.gameReleaseId);
-  const manifest = await verifyGameReleaseManifestV2(release.manifestJson);
-  if (
-    manifest.productType !== "ttrpg" ||
-    !manifest.runtimePackage.ttrpg ||
-    manifest.packageHash !== session.runtimeSourceHash
-  ) {
-    fail("旧 Instance 与冻结 TTRPG RuntimePackage 不一致");
-  }
-  const rulePack = parseRulePackV1(
-    manifest.runtimePackage.ttrpg.rulePack.content,
-  );
-  const campaign = parseTtrpgCampaignContentV1(
-    manifest.runtimePackage.ttrpg.campaign,
-    rulePack,
-  );
-  const fingerprint = stableJson({
-    sessionId: session.id,
-    requestedBy,
-    releaseId: release.id,
-    releaseHash: release.contentHash,
-    packageHash: manifest.packageHash,
-  });
-  const records = buildInitialTtrpgParticipantsV2({ session, campaign }).map(
-    (row) =>
-      assertParticipant({
-        ...row,
-        consent: {
-          ...row.consent,
-          safetyBoundariesAccepted: false,
-          aiIdentityDisclosed: false,
-          aiAdviceAllowed: false,
-          aiSubstitutionAllowed: false,
-        },
-        substitutionPolicy: "never",
-        sessionZeroAcceptedAtSequence: null,
-        lastCommandId: commandId,
-        lastCommandFingerprint: fingerprint,
-      }),
-  );
-  return db.transaction(
-    "rw",
-    [
-      db.simulationSessions,
-      db.simulationEvents,
-      db.ttrpgSessionParticipants,
-      db.gameReleases,
-    ],
-    async () => {
-      const currentSession = await db.simulationSessions.get(input.sessionId);
-      const currentRelease = await db.gameReleases.get(session.gameReleaseId!);
-      const existing = await db.ttrpgSessionParticipants
-        .where("sessionId")
-        .equals(input.sessionId)
-        .sortBy("seatKey");
-      if (existing.length) {
-        if (
-          existing.every(
-            (row) =>
-              row.lastCommandId === commandId &&
-              row.lastCommandFingerprint === fingerprint,
-          )
-        ) {
-          return existing.map(assertParticipant);
-        }
-        fail("Instance 已存在显式席位，不能重复迁移");
-      }
-      if (
-        !currentSession ||
-        currentSession.status !== "active" ||
-        currentSession.gameReleaseId !== session.gameReleaseId ||
-        currentSession.runtimeSourceHash !== session.runtimeSourceHash ||
-        !currentRelease ||
-        currentRelease.manifestJson !== release.manifestJson ||
-        currentRelease.contentHash !== release.contentHash
-      ) {
-        fail("Instance 或 GameRelease 在迁移期间发生变化");
-      }
-      const ids = (await db.ttrpgSessionParticipants.bulkAdd(records, {
-        allKeys: true,
-      })) as number[];
-      return records.map((row, index) => ({ ...row, id: ids[index] }));
-    },
-  );
-}
-
 export async function readTtrpgSessionParticipantsV2(
   sessionId: number,
 ): Promise<TtrpgSessionParticipantRecordV2[]> {
@@ -340,8 +223,7 @@ export async function readTtrpgSessionParticipantsV2(
       .equals(sessionId)
       .sortBy("seatKey")
   ).map(assertParticipant);
-  if (!rows.length)
-    fail("旧会话尚未建立显式席位；必须先执行安全迁移或重新建团");
+  if (!rows.length) fail("TTRPG Instance 缺少正式席位记录");
   if (
     rows.some(
       (row) =>
@@ -403,10 +285,7 @@ export async function configureTtrpgSessionParticipantV2(input: {
       const sessionZeroCompleted = events.some(
         (event) => event.type === "ttrpg.session-zero.completed",
       );
-      const legacyReconsentPending =
-        rows.length > 0 &&
-        rows.every((row) => row.sessionZeroAcceptedAtSequence == null);
-      if (sessionZeroCompleted && !legacyReconsentPending)
+      if (sessionZeroCompleted)
         fail("Session Zero 完成后不能改变席位控制权或同意策略");
       const current =
         rows.find((row) => row.seatKey === seatKey) ?? fail("席位不存在");
@@ -468,131 +347,6 @@ export async function configureTtrpgSessionParticipantV2(input: {
   );
 }
 
-/**
- * A migrated, already-started table must explicitly re-acknowledge its active
- * seats. This writes no gameplay result and derives no consent from the legacy
- * Session Zero event; the caller must present the current state boundary.
- */
-export async function finalizeMigratedTtrpgParticipantsV2(input: {
-  sessionId: number;
-  baseSequence: number;
-  selectedCharacterKeys: string[];
-  commandId: string;
-  requestedByViewerKey: string;
-}): Promise<TtrpgSessionParticipantRecordV2[]> {
-  const commandId = stableKey(input.commandId, "commandId");
-  const requestedBy = stableKey(
-    input.requestedByViewerKey,
-    "requestedByViewerKey",
-  );
-  if (requestedBy !== "viewer.gm") fail("只有本局 GM 可以确认迁移后的席位");
-  if (!Number.isInteger(input.baseSequence) || input.baseSequence < 1)
-    fail("baseSequence 无效");
-  const selectedCharacterKeys = [
-    ...new Set(
-      input.selectedCharacterKeys.map((key) => stableKey(key, "characterKey")),
-    ),
-  ].sort();
-  if (!selectedCharacterKeys.length) fail("迁移确认缺少活动玩家角色");
-  const fingerprint = stableJson({
-    sessionId: input.sessionId,
-    baseSequence: input.baseSequence,
-    selectedCharacterKeys,
-    requestedBy,
-  });
-  return db.transaction(
-    "rw",
-    [db.simulationSessions, db.simulationEvents, db.ttrpgSessionParticipants],
-    async () => {
-      const session = await db.simulationSessions.get(input.sessionId);
-      if (!session || session.kind !== "ttrpg" || session.status !== "active")
-        fail("TTRPG Instance 当前不可确认迁移席位");
-      const events = await db.simulationEvents
-        .where("sessionId")
-        .equals(input.sessionId)
-        .sortBy("sequence");
-      const latestSequence = events[events.length - 1]?.sequence ?? 0;
-      const sessionZeroEvent = events.find(
-        (event) => event.type === "ttrpg.session-zero.completed",
-      );
-      if (!sessionZeroEvent)
-        fail("尚未完成 Session Zero 的旧会话应走正常确认流程");
-      if (latestSequence !== input.baseSequence)
-        fail("战役状态已变化，请刷新后重新确认");
-      const rows = await db.ttrpgSessionParticipants
-        .where("sessionId")
-        .equals(input.sessionId)
-        .sortBy("seatKey");
-      const activeRows = rows.filter(
-        (row) =>
-          row.role === "gm" ||
-          (row.actorKey != null &&
-            selectedCharacterKeys.includes(row.actorKey)),
-      );
-      if (
-        !activeRows.some((row) => row.role === "gm") ||
-        selectedCharacterKeys.some(
-          (key) => !activeRows.some((row) => row.actorKey === key),
-        )
-      ) {
-        fail("活动角色与迁移席位不一致");
-      }
-      if (
-        activeRows.every(
-          (row) =>
-            row.lastCommandId === commandId &&
-            row.lastCommandFingerprint === fingerprint,
-        )
-      ) {
-        return rows.map(assertParticipant);
-      }
-      if (activeRows.some((row) => row.sessionZeroAcceptedAtSequence != null))
-        fail("迁移席位已经确认或处于不一致状态");
-      if (
-        activeRows.some(
-          (row) =>
-            row.controller === "vacant" ||
-            row.assignmentState === "vacant" ||
-            row.assignmentState === "left",
-        )
-      ) {
-        fail("活动角色仍有空缺或离席席位");
-      }
-      if (
-        activeRows.some(
-          (row) =>
-            (row.controller === "ai" || row.controller === "hybrid") &&
-            !row.consent.aiIdentityDisclosed,
-        )
-      ) {
-        fail("必须先向全部活动席位披露 AI 身份");
-      }
-      const now = Date.now();
-      const activeSeatKeys = new Set(activeRows.map((row) => row.seatKey));
-      const updated = rows.map((row) =>
-        activeSeatKeys.has(row.seatKey)
-          ? assertParticipant({
-              ...row,
-              assignmentState:
-                row.assignmentState === "assigned" && row.controller !== "ai"
-                  ? "claimed"
-                  : row.assignmentState,
-              consent: { ...row.consent, safetyBoundariesAccepted: true },
-              sessionZeroAcceptedAtSequence: input.baseSequence,
-              revision: row.revision + 1,
-              lastCommandId: commandId,
-              lastCommandFingerprint: fingerprint,
-              updatedAt: now,
-            })
-          : assertParticipant(row),
-      );
-      await db.ttrpgSessionParticipants.bulkPut(updated);
-      return updated;
-    },
-  );
-}
-
-/** Called in the same transaction as the Session Zero event. */
 export async function finalizeTtrpgSessionParticipantsV2(input: {
   sessionId: number;
   selectedCharacterKeys: string[];

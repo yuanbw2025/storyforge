@@ -1,7 +1,7 @@
 import type {
   AdventureActionDefinition,
   AdventureActionHistoryEntry,
-  AdventureGameReleaseManifestV1,
+  AdventureGameRuntimePackageV2,
   SimulationEvent,
 } from '../types'
 
@@ -151,7 +151,7 @@ function speakerExportId(value: string): number | null {
   return match ? Number(match[1]) : null
 }
 
-function profileForSpeaker(manifest: AdventureGameReleaseManifestV1, speakerKey: string) {
+function profileForSpeaker(manifest: AdventureGameRuntimePackageV2, speakerKey: string) {
   const exportId = speakerExportId(speakerKey)
   return manifest.interaction.profiles.find(profile => (
     profile.characterKey === speakerKey
@@ -163,13 +163,13 @@ function profileForSpeaker(manifest: AdventureGameReleaseManifestV1, speakerKey:
   )) ?? null
 }
 
-function entryDialogueSpeakerKey(manifest: AdventureGameReleaseManifestV1): string | null {
+function entryDialogueSpeakerKey(manifest: AdventureGameRuntimePackageV2): string | null {
   return [...manifest.narrative.beats]
     .filter(beat => beat.nodeKey === manifest.narrative.entryNodeKey && beat.kind === 'dialogue' && beat.speakerKey)
     .sort((left, right) => left.order - right.order)[0]?.speakerKey ?? null
 }
 
-function entryMarkedDialogueSpeaker(manifest: AdventureGameReleaseManifestV1): string | null {
+function entryMarkedDialogueSpeaker(manifest: AdventureGameRuntimePackageV2): string | null {
   const beats = [...manifest.narrative.beats]
     .filter(beat => beat.nodeKey === manifest.narrative.entryNodeKey)
     .sort((left, right) => left.order - right.order)
@@ -180,13 +180,9 @@ function entryMarkedDialogueSpeaker(manifest: AdventureGameReleaseManifestV1): s
   return null
 }
 
-/**
- * Releases published before the explicit playerIdentity field remain playable.
- * Their entry scene's first speaking character is the single player role used
- * by the original world-to-adventure projection.
- */
+/** Resolve the player role solely from the self-contained product package. */
 export function resolveAdventurePlayerIdentity(
-  manifest: AdventureGameReleaseManifestV1,
+  manifest: AdventureGameRuntimePackageV2,
 ): AdventurePlayerIdentityResolution | null {
   const explicit = manifest.adventure.playerIdentity
   if (explicit) {
@@ -198,7 +194,6 @@ export function resolveAdventurePlayerIdentity(
       inferred: false,
     }
   }
-  if (!manifest.definition.source) return null
   const speakerKey = entryDialogueSpeakerKey(manifest)
   const markedSpeaker = speakerKey ? null : entryMarkedDialogueSpeaker(manifest)
   const profile = speakerKey
@@ -213,8 +208,8 @@ export function resolveAdventurePlayerIdentity(
 }
 
 function narrativeBlockForBeat(
-  manifest: AdventureGameReleaseManifestV1,
-  beat: AdventureGameReleaseManifestV1['narrative']['beats'][number],
+  manifest: AdventureGameRuntimePackageV2,
+  beat: AdventureGameRuntimePackageV2['narrative']['beats'][number],
 ): AdventureNarrativeBlock {
   const embedded = parseAdventureNarrativeBlocks(beat.text)
   if (embedded.length === 1 && embedded[0].kind !== 'narration') return embedded[0]
@@ -229,8 +224,8 @@ function narrativeBlockForBeat(
 }
 
 function actionStoryNodeKey(
-  manifest: AdventureGameReleaseManifestV1,
-  action: AdventureGameReleaseManifestV1['adventure']['actions'][number],
+  manifest: AdventureGameRuntimePackageV2,
+  action: AdventureGameRuntimePackageV2['adventure']['actions'][number],
 ): string | null {
   if (action.narrativeChoiceKey) {
     const choice = manifest.narrative.choices.find(item => item.choiceKey === action.narrativeChoiceKey)
@@ -258,7 +253,7 @@ function actionStoryNodeKey(
 }
 
 function projectActionNarrativeBlocks(
-  manifest: AdventureGameReleaseManifestV1,
+  manifest: AdventureGameRuntimePackageV2,
   action: AdventureActionHistoryEntry,
 ): AdventureNarrativeBlock[] {
   const base = parseAdventureNarrativeBlocks(action.narrative)
@@ -280,7 +275,7 @@ function projectActionNarrativeBlocks(
   return [...base, ...story.filter(block => !base.some(item => item.kind === block.kind && item.text === block.text))]
 }
 
-function eventChange(event: SimulationEvent, manifest: AdventureGameReleaseManifestV1): string | null {
+function eventChange(event: SimulationEvent, manifest: AdventureGameRuntimePackageV2): string | null {
   const body = payload(event)
   const adventure = manifest.adventure
   if (event.type === 'adventure.location.entered') {
@@ -341,7 +336,7 @@ function eventChange(event: SimulationEvent, manifest: AdventureGameReleaseManif
 }
 
 export function projectAdventureTranscript(
-  manifest: AdventureGameReleaseManifestV1,
+  manifest: AdventureGameRuntimePackageV2,
   history: AdventureActionHistoryEntry[],
   events: SimulationEvent[],
 ): AdventureTranscriptEntry[] {

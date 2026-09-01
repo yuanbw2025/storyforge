@@ -19,6 +19,7 @@ import {
   verifySimulationCheckpoint,
   type OpenWorldCommand,
 } from '../lib/simulation/runtime'
+import { verifyPlayableSessionPackageV2 } from '../lib/game-production/preview-source'
 import { assertGameReleaseUnchanged, parseTextOpenWorldGameReleaseManifest } from '../lib/text-game/releases'
 import { EMPTY_SIMULATION_STATE } from '../lib/types'
 import type {
@@ -28,14 +29,14 @@ import type {
   SimulationEvent,
   SimulationRuntimeState,
   SimulationSession,
-  TextOpenWorldGameReleaseManifestV1,
+  TextOpenWorldGameRuntimePackageV2,
   WorkspaceScope,
 } from '../lib/types'
 import { assertInstanceBinding, createTextOpenWorldInstance, readBoundInstances } from '../lib/world-engine/instances'
 
 export interface TextOpenWorldLibraryItem {
   release: GameRelease
-  manifest: TextOpenWorldGameReleaseManifestV1 | null
+  manifest: TextOpenWorldGameRuntimePackageV2 | null
   error: string
 }
 
@@ -48,7 +49,7 @@ interface TextOpenWorldPlayerState {
   events: SimulationEvent[]
   checkpoints: SimulationCheckpoint[]
   runtimeState: SimulationRuntimeState
-  selectedManifest: TextOpenWorldGameReleaseManifestV1 | null
+  selectedManifest: TextOpenWorldGameRuntimePackageV2 | null
   generatedCandidate: OpenWorldRuntimeCandidateV1 | null
   loading: boolean
   busy: boolean
@@ -85,23 +86,31 @@ async function readLibrary(scope: WorkspaceScope): Promise<TextOpenWorldLibraryI
 
 async function assertSession(scope: WorkspaceScope, sessionId: number): Promise<SimulationSession> {
   const session = await assertInstanceBinding(sessionId, scope)
-  if (session.kind !== 'textworld' || session.gameReleaseId == null) throw new Error('[textworld] 该存档不是正式文字开放世界。')
+  if (session.kind !== 'textworld') throw new Error('[textworld] 该存档不是文字开放世界。')
   return session
+}
+
+function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyPlayableSessionPackageV2>>['runtimePackage']) {
+  if (runtimePackage.productType !== 'text-open-world' || !runtimePackage.openWorld
+    || !runtimePackage.adventure || !runtimePackage.simulation || !runtimePackage.interaction) {
+    throw new Error('[textworld] 该存档没有绑定有效的 Product Build 或 GameRelease。')
+  }
+  return structuredClone(runtimePackage) as TextOpenWorldGameRuntimePackageV2
 }
 
 async function readDetails(scope: WorkspaceScope, sessionId: number) {
   const session = await assertSession(scope, sessionId)
-  const [events, checkpoints, runtimeState, release] = await Promise.all([
+  const [events, checkpoints, runtimeState, playable] = await Promise.all([
     db.simulationEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.simulationCheckpoints.where('sessionId').equals(sessionId).toArray(),
     readSimulationState(sessionId),
-    assertGameReleaseUnchanged(session.gameReleaseId!),
+    verifyPlayableSessionPackageV2({ scope, session }),
   ])
   return {
     events,
     checkpoints: checkpoints.sort((left, right) => right.createdAt - left.createdAt),
     runtimeState,
-    selectedManifest: parseTextOpenWorldGameReleaseManifest(release.manifestJson),
+    selectedManifest: playableManifest(playable.runtimePackage),
   }
 }
 

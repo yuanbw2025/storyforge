@@ -98,17 +98,24 @@ import {
 } from '../agent/read-sources'
 import { readRagSelectionContext } from '../retrieval/rag-library'
 import { parseSimulationCanonSnapshot, verifySimulationCanonSnapshot } from '../simulation/canon-snapshot'
-import { buildInteractionContextWindow } from '../character-interaction/runtime'
 import type { AssembleContextInput } from './types'
 import { readOwnedRows, resolveScope, assertRecordInScope } from '../world-engine/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
-import { parseWorldGameAuthoringRequestV1 } from '../text-game/agent-contract'
 import type { AdaptationProject } from '../types'
 
 // 改编来源冻结会拉入完整选择、哈希和同步实现。普通首页/小说创作不需要这段代码；
 // 只有真正装配改编上下文时再加载，保持统一 CONTEXT_SOURCES 入口而不污染首屏包。
 async function loadAdaptationSourceReader() {
   return import('../adaptation/source-manifest')
+}
+
+// Runtime package validation imports every product parser. Keep it behind the
+// runtime context boundary so ordinary writing routes do not eagerly load the
+// complete upper-product runtime into the application entry chunk.
+async function verifyPlayableRuntimeSession(
+  input: Parameters<typeof import('../game-production/preview-source')['verifyPlayableSessionPackageV2']>[0],
+) {
+  return (await import('../game-production/preview-source')).verifyPlayableSessionPackageV2(input)
 }
 
 const WORLD_RELEASE_RESOURCE_PROVIDER_PROXY_V1: ContextResourceProviderV1 = {
@@ -147,27 +154,12 @@ async function readGameProductionQualityFeedback(input: AssembleContextInput): P
 async function readGameProductionEvolutionBase(input: AssembleContextInput): Promise<string> {
   return (await import('../game-production/context')).readGameProductionEvolutionBase(input)
 }
-async function readTtrpgProductContext(input: AssembleContextInput): Promise<string> {
-  return (await import('../ttrpg/context')).readTtrpgProductContext(input)
-}
-async function readTtrpgCharacterAuthoringContextV2(input: AssembleContextInput): Promise<string> {
-  return (await import('../ttrpg/context')).readTtrpgCharacterAuthoringContextV2(input)
-}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
 async function readTtrpgPlayerRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/player-context')).readTtrpgPlayerRuntimeContextV1(input)
 }
-async function readCharacterInteractionProductionContext(
-  input: AssembleContextInput,
-): Promise<string> {
-  return (await import('../character-interaction/production')).readCharacterInteractionProductionContextV1({
-    scope: input.scope!,
-    productionId: input.characterInteractionProductionId!,
-  })
-}
-
 async function requireTargetAdaptation(input: AssembleContextInput): Promise<AdaptationProject> {
   if (input.adaptationProjectId == null || !input.scope) throw new Error('[adaptation-context] 缺少目标改编 selector')
   const root = await db.adaptationProjects.get(input.adaptationProjectId)
@@ -297,64 +289,6 @@ async function readSimulationStateForContext(sessionId: number) {
   return readSimulationState(sessionId)
 }
 
-async function readWorldGameAuthoringContext(input: AssembleContextInput): Promise<string> {
-  if (!input.manualSourceText?.trim()) return ''
-  let raw: unknown
-  try { raw = JSON.parse(input.manualSourceText) } catch { throw new Error('世界游戏创作选择不是合法 JSON。') }
-  const request = parseWorldGameAuthoringRequestV1(raw)
-  const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
-  const { loadWorldGameSourceCatalog } = await import('../text-game/world-generation')
-  const catalog = await loadWorldGameSourceCatalog({ scope, worldReleaseId: request.worldReleaseId })
-  if (catalog.release.contentHash !== request.worldContentHash) {
-    throw new Error('世界游戏创作所选 WorldRelease 已变化。')
-  }
-  const narrative = catalog.narrativeModules.find(item => item.exportId === request.narrativeModuleExportId)
-  if (!narrative) throw new Error('世界游戏创作所选叙事不在冻结版本中。')
-
-  const selected = <T extends { exportId: number }>(rows: T[], ids: number[], label: string): T[] => {
-    const byId = new Map(rows.map(item => [item.exportId, item]))
-    const missing = ids.filter(id => !byId.has(id))
-    if (missing.length) throw new Error(`世界游戏创作的${label}便携引用不存在：${missing.join('、')}`)
-    const selectedIds = new Set(ids)
-    return rows.filter(item => selectedIds.has(item.exportId))
-  }
-  const records = catalog.manifest.records
-  const portableRows = (tableName: string): Array<Record<string, unknown>> => (
-    (records[tableName] ?? []).filter((row): row is Record<string, unknown> => (
-      typeof row === 'object' && row !== null && !Array.isArray(row)
-    ))
-  )
-  const sourceGraph = {
-    module: portableRows('narrativeModules').find(row => row._exportId === narrative.exportId) ?? narrative,
-    nodes: portableRows('narrativeNodes').filter(row => row._moduleExportId === narrative.exportId),
-    beats: portableRows('narrativeBeats').filter(row => row._moduleExportId === narrative.exportId),
-    choices: portableRows('narrativeChoices').filter(row => row._moduleExportId === narrative.exportId),
-  }
-  return [
-    '【冻结世界 → 文字游戏创作包】',
-    `世界：${catalog.manifest.worldName}`,
-    `WorldRelease：v${catalog.release.version} / ${catalog.release.contentHash}`,
-    `目标产品：${request.productType}`,
-    `作者创作要求：${request.creativeBrief}`,
-    '以下内容是创作起点和素材，不是要求逐字复刻。请在不改动这些冻结身份的前提下，新增危机、行动、转折、分支后果和至少两个不同结局。',
-    `来源叙事：${JSON.stringify(sourceGraph)}`,
-    `角色：${JSON.stringify(selected(catalog.characters, request.characterExportIds, '角色'))}`,
-    `角色关系：${JSON.stringify(selected(catalog.relationships, request.characterRelationExportIds, '关系'))}`,
-    `地点：${JSON.stringify(selected(catalog.locations, request.importantLocationExportIds, '地点'))}`,
-    `artifact 道具：${JSON.stringify(selected(catalog.artifacts, request.artifactExportIds, '道具'))}`,
-    `世界词条：${JSON.stringify(selected(catalog.loreEntries, request.codexEntryExportIds, '词条'))}`,
-    `故事线：${JSON.stringify(selected(catalog.storyArcs, request.storyArcExportIds, '故事线'))}`,
-    `AVG 媒资目录：${JSON.stringify(selected(catalog.mediaAssets, request.avgMediaAssetExportIds, '媒资').map(asset => ({
-      exportId: asset.exportId,
-      assetKey: asset.assetKey,
-      kind: asset.kind,
-      name: asset.name,
-      characterTag: asset.characterTag,
-      sceneTag: asset.sceneTag,
-    })))}`,
-  ].join('\n')
-}
-
 async function readActiveNarrativeBlueprint(input: AssembleContextInput): Promise<string> {
   const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
   const work = await db.works.get(scope.workId)
@@ -390,14 +324,35 @@ async function readSimulationRuntimeContext(input: AssembleContextInput): Promis
   const session = await db.simulationSessions.get(input.simulationSessionId)
   if (!session || session.projectId !== input.projectId) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
-  const snapshot = parseSimulationCanonSnapshot(session.canonSnapshotJson)
-  if (!snapshot || !(await verifySimulationCanonSnapshot(snapshot))) {
-    throw new Error('冻结运行时 Canon 快照校验失败。')
+  let sourceLabel: string
+  let sourceWorldGroupId: number | null
+  let sourceHash: string
+  let sourceLines: string[]
+  if (session.runtimeSourceHash) {
+    if (session.worldId == null || session.workId == null) throw new Error('正式产品实例缺少 Workspace 绑定。')
+    const playable = await verifyPlayableRuntimeSession({
+      scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+      session,
+    })
+    if (playable.runtimeSourceHash !== session.runtimeSourceHash) throw new Error('RuntimePackage 校验失败。')
+    sourceLabel = playable.runtimePackage.definition.title
+    sourceWorldGroupId = session.worldGroupId ?? null
+    sourceHash = playable.runtimeSourceHash
+    sourceLines = playable.runtimePackage.sourceWorld.selection.resourceKeys.slice(0, 120)
+      .map(resourceKey => `- ${resourceKey}｜冻结产品来源`)
+  } else {
+    const snapshot = parseSimulationCanonSnapshot(session.canonSnapshotJson)
+    if (!snapshot || !(await verifySimulationCanonSnapshot(snapshot))) {
+      throw new Error('冻结运行时 Canon 快照校验失败。')
+    }
+    sourceLabel = snapshot.worldLabel
+    sourceWorldGroupId = snapshot.worldGroupId ?? null
+    sourceHash = snapshot.snapshotHash
+    sourceLines = snapshot.sources.slice(0, 120).map(source => (
+      `- ${source.sourceKey}｜${source.kind}｜${source.name}${source.summary ? `｜${source.summary}` : ''}`
+    ))
   }
   const state = await readSimulationStateForContext(session.id!)
-  const sourceLines = snapshot.sources.slice(0, 120).map(source => (
-    `- ${source.sourceKey}｜${source.kind}｜${source.name}${source.summary ? `｜${source.summary}` : ''}`
-  ))
   const entityLines = Object.values(state.entities).slice(0, 120).map(entity => {
     const attributes = Object.entries(entity.attributes)
       .slice(0, 16)
@@ -440,22 +395,13 @@ async function readSimulationRuntimeContext(input: AssembleContextInput): Promis
       )),
     ] : []),
   ] : []
-  const chat = state.chat
-  const chatLines = chat ? [
-    `- 角色=${chat.characterKey}｜用户=${chat.identity.name}${chat.identity.description ? `｜身份=${chat.identity.description}` : ''}`,
-    `- 场景=${chat.scene.title}${chat.scene.description ? `｜${chat.scene.description}` : ''}`,
-    ...chat.messages
-      .filter(message => message.supersededBySequence == null)
-      .slice(-24)
-      .map(message => `- ${message.role === 'user' ? chat.identity.name : (state.entities[message.speakerKey ?? '']?.name ?? message.speakerKey ?? '角色')}｜${message.text}`),
-  ] : []
   const interactionLines = state.interaction ? [
     `- 场景=${state.interaction.activeScene?.title ?? '未开始'}｜玩家回合=${state.interaction.totalPlayerTurns}｜导演剩余预算=${state.interaction.remainingDirectorBudget}`,
     `- 当前参与者=${state.interaction.activeScene?.activeParticipantKeys.join('、') || '无'}｜开放线索=${state.interaction.threads.filter(item => item.status === 'open').map(item => item.threadKey).join('、') || '无'}`,
   ] : []
   return [
     `【冻结运行时会话】${session.title}｜类型=${session.kind}｜逻辑时间=${state.clock}｜事件序号=${state.lastSequence}`,
-    `【冻结世界】${snapshot.worldLabel}｜worldGroupId=${snapshot.worldGroupId ?? 'null'}｜快照=${snapshot.snapshotHash.slice(0, 16)}`,
+    `【冻结来源】${sourceLabel}｜worldGroupId=${sourceWorldGroupId ?? 'null'}｜hash=${sourceHash.slice(0, 16)}`,
     '【冻结 Canon 来源（只读）】',
     ...(sourceLines.length ? sourceLines : ['- 暂无冻结来源']),
     '【运行时实体（只读）】',
@@ -465,7 +411,6 @@ async function readSimulationRuntimeContext(input: AssembleContextInput): Promis
     '【最近运行时叙事（只读）】',
     ...(narrativeLines.length ? narrativeLines : ['- 暂无叙事']),
     ...(ttrpgLines.length ? ['【跑团场景与回合（只读）】', ...ttrpgLines] : []),
-    ...(chatLines.length ? ['【角色聊天状态（只读）】', ...chatLines] : []),
     ...(interactionLines.length ? ['【角色互动状态（逐角色知识边界，只读）】', ...interactionLines] : []),
   ].join('\n')
 }
@@ -478,14 +423,21 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
   if (!session || session.projectId !== input.projectId
     || !['chatgame', 'textadventure', 'textworld'].includes(session.kind)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
-  const snapshot = parseSimulationCanonSnapshot(session.canonSnapshotJson)
-  if (!snapshot || !(await verifySimulationCanonSnapshot(snapshot))) {
-    throw new Error('冻结运行时 Canon 快照校验失败。')
+  if (session.worldId == null || session.workId == null || !session.runtimeSourceHash) {
+    throw new Error('正式角色互动实例缺少产品运行源。')
+  }
+  const playable = await verifyPlayableRuntimeSession({
+    scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+    session,
+  })
+  if (playable.runtimeSourceHash !== session.runtimeSourceHash) {
+    throw new Error('角色互动 RuntimePackage 校验失败。')
   }
   const state = await readSimulationStateForContext(session.id!)
   if (!state.interaction) return ''
   const profile = state.interaction.profiles.find(item => item.participantKey === participantKey)
   if (!profile) return ''
+  const { buildInteractionContextWindow } = await import('../character-interaction/runtime')
   const view = buildInteractionContextWindow(state.interaction, participantKey, {
     maxCharacters: 24_000,
     maxRecentMessages: 32,
@@ -511,25 +463,32 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
   const session = await db.simulationSessions.get(input.simulationSessionId)
   if (!session || session.projectId !== input.projectId
     || (session.kind !== 'textadventure' && session.kind !== 'textworld')
-    || session.gameReleaseId == null) return ''
+    || (session.gameReleaseId == null && session.gameBuildId == null)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
-  const [{ assertGameReleaseUnchanged, parseAnyGameReleaseManifest }, { availableAdventureActions }] = await Promise.all([
-    import('../text-game/releases'),
+  if (session.worldId == null || session.workId == null) throw new Error('正式文字冒险实例缺少工作区作用域。')
+  const [playable, { availableAdventureActions }] = await Promise.all([
+    verifyPlayableRuntimeSession({
+      scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+      session,
+    }),
     import('../adventure/runtime'),
   ])
-  const release = await assertGameReleaseUnchanged(session.gameReleaseId)
-  const parsedManifest = parseAnyGameReleaseManifest(release.manifestJson)
-  if (parsedManifest.productType !== 'text-adventure' && parsedManifest.productType !== 'text-open-world') return ''
+  const runtimePackage = playable.runtimePackage
+  if ((runtimePackage.productType !== 'text-adventure' && runtimePackage.productType !== 'text-open-world')
+    || !runtimePackage.adventure || playable.runtimeSourceHash !== session.runtimeSourceHash) {
+    throw new Error('文字冒险 RuntimePackage 校验失败。')
+  }
+  const adventure = runtimePackage.adventure
   const state = await readSimulationStateForContext(session.id!)
   if (!state.adventure) return ''
-  const location = parsedManifest.adventure.locations.find(item => item.key === state.adventure!.currentLocationKey)
+  const location = adventure.locations.find(item => item.key === state.adventure!.currentLocationKey)
   if (!location) throw new Error('文字冒险当前位置不在冻结发布中。')
-  const actions = availableAdventureActions(parsedManifest.adventure, state.adventure, state.narrative?.variables)
+  const actions = availableAdventureActions(adventure, state.adventure, state.narrative?.variables)
   const inventory = state.adventure.inventory
     .filter(item => item.ownerKey === 'player' && item.state !== 'transferred')
     .map(item => `${item.itemKey}×${item.quantity}`)
   const quests = state.adventure.quests.map(quest => {
-    const definition = parsedManifest.adventure.quests.find(item => item.key === quest.questKey)
+    const definition = adventure.quests.find(item => item.key === quest.questKey)
     const objectives = quest.objectives.map(objective => {
       const title = definition?.objectives.find(item => item.key === objective.objectiveKey)?.title ?? objective.objectiveKey
       return `${objective.completed ? '已完成' : '未完成'}:${title}`
@@ -539,9 +498,9 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
   const actionLines = actions.map(item => `- ${item.action.key}｜${item.action.kind}｜${item.action.label}｜${item.available ? '可执行' : `不可执行:${item.reason}`}`)
   const recent = state.adventure.actionHistory.slice(-12).map(item => `- #${item.eventSequence} ${item.actionKey}｜${item.outcome}｜${item.narrative}`)
   return [
-    `【文字冒险运行时】${session.title}｜事件序号=${state.lastSequence}｜发布=${release.contentHash.slice(0, 16)}`,
+    `【文字冒险运行时】${session.title}｜事件序号=${state.lastSequence}｜运行源=${playable.packageHash.slice(0, 16)}`,
     `【当前位置】${location.title}｜key=${location.key}｜${location.description}`,
-    `【在场交互物】${parsedManifest.adventure.objects.filter(item => item.locationKey === location.key).map(item => `${item.key}:${item.title}`).join('、') || '无'}`,
+    `【在场交互物】${adventure.objects.filter(item => item.locationKey === location.key).map(item => `${item.key}:${item.title}`).join('、') || '无'}`,
     `【背包】${inventory.join('、') || '空'}`,
     `【资源】${Object.entries(state.adventure.resources).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
     `【能力】${Object.entries(state.adventure.abilities).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
@@ -559,24 +518,30 @@ async function readNarrativeSimulationRuntimeContext(input: AssembleContextInput
   const session = await db.simulationSessions.get(input.simulationSessionId)
   if (!session || session.projectId !== input.projectId
     || (session.kind !== 'textsimulation' && session.kind !== 'textworld')
-    || session.gameReleaseId == null) return ''
+    || (session.gameReleaseId == null && session.gameBuildId == null)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
-  const [releaseModule, runtimeModule] = await Promise.all([
-    import('../text-game/releases'),
+  if (session.worldId == null || session.workId == null) throw new Error('正式叙事模拟实例缺少工作区作用域。')
+  const [playable, runtimeModule] = await Promise.all([
+    verifyPlayableRuntimeSession({
+      scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+      session,
+    }),
     import('../narrative-simulation/runtime'),
   ])
-  const release = await releaseModule.assertGameReleaseUnchanged(session.gameReleaseId)
-  const parsedManifest = releaseModule.parseAnyGameReleaseManifest(release.manifestJson)
-  if (parsedManifest.productType !== 'narrative-simulation' && parsedManifest.productType !== 'text-open-world') return ''
+  const runtimePackage = playable.runtimePackage
+  if ((runtimePackage.productType !== 'narrative-simulation' && runtimePackage.productType !== 'text-open-world')
+    || !runtimePackage.simulation || playable.runtimeSourceHash !== session.runtimeSourceHash) {
+    throw new Error('叙事模拟 RuntimePackage 校验失败。')
+  }
   const state = await readSimulationStateForContext(session.id!)
   if (!state.narrativeSimulation) return ''
   const simulation = state.narrativeSimulation
-  const actions = runtimeModule.availableNarrativeSimulationActions(parsedManifest.simulation, simulation)
+  const actions = runtimeModule.availableNarrativeSimulationActions(runtimePackage.simulation, simulation)
   const reports = runtimeModule.visibleNarrativeSimulationReports(simulation, 'player')
-  const issueByKey = new Map(parsedManifest.simulation.issues.map(issue => [issue.key, issue]))
+  const issueByKey = new Map(runtimePackage.simulation.issues.map(issue => [issue.key, issue]))
   return [
     `【叙事模拟玩家视角】${session.title}｜回合=${simulation.turn}/${simulation.turnLimit}｜阶段=${simulation.phase}｜事件序号=${state.lastSequence}`,
-    `【冻结发布】${release.contentHash.slice(0, 16)}｜行动预算=${simulation.actionBudget}`,
+    `【冻结运行源】${playable.packageHash.slice(0, 16)}｜行动预算=${simulation.actionBudget}`,
     `【资源】${Object.entries(simulation.resources).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
     `【指标】${Object.entries(simulation.metrics).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
     '【问题与危机】',
@@ -596,11 +561,19 @@ async function readNarrativeSimulationRuntimeContext(input: AssembleContextInput
 async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise<string> {
   if (input.simulationSessionId == null) return ''
   const session = await db.simulationSessions.get(input.simulationSessionId)
-  if (!session || session.projectId !== input.projectId || session.kind !== 'textworld' || session.gameReleaseId == null) return ''
+  if (!session || session.projectId !== input.projectId || session.kind !== 'textworld'
+    || (session.gameReleaseId == null && session.gameBuildId == null)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
-  const releaseModule = await import('../text-game/releases')
-  const release = await releaseModule.assertGameReleaseUnchanged(session.gameReleaseId)
-  const manifest = releaseModule.parseTextOpenWorldGameReleaseManifest(release.manifestJson)
+  if (session.worldId == null || session.workId == null) throw new Error('正式开放世界实例缺少工作区作用域。')
+  const playable = await verifyPlayableRuntimeSession({
+    scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+    session,
+  })
+  const manifest = playable.runtimePackage
+  if (manifest.productType !== 'text-open-world' || !manifest.openWorld
+    || playable.runtimeSourceHash !== session.runtimeSourceHash) {
+    throw new Error('开放世界 RuntimePackage 校验失败。')
+  }
   const state = await readSimulationStateForContext(session.id!)
   if (!state.openWorld) return ''
   const world = state.openWorld
@@ -613,7 +586,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
   const visibleQuests = world.questInstances.filter(item => ['revealed', 'active', 'resolved', 'failed'].includes(item.status))
   return [
     `【文字开放世界玩家视角】${session.title}｜tick=${world.tick}/${world.tickLimit}｜事件序号=${state.lastSequence}`,
-    `【冻结发布】${release.contentHash.slice(0, 16)}｜当前区域=${region.key}:${region.title}｜旅行=${world.travel ? `${world.travel.toRegionKey}(${world.travel.remainingTicks})` : '无'}`,
+    `【冻结运行源】${playable.packageHash.slice(0, 16)}｜当前区域=${region.key}:${region.title}｜旅行=${world.travel ? `${world.travel.toRegionKey}(${world.travel.remainingTicks})` : '无'}`,
     `【区域认知】${Object.entries(world.regionKnowledge).map(([key, value]) => `${key}=${value}`).join('、')}`,
     `【关注级别】${Object.entries(world.attentionLevels).map(([key, value]) => `${key}=${value}`).join('、')}`,
     `【当前区域资源】${Object.entries(projection.resources).map(([key, value]) => `${key}=${value}`).join('、')}`,
@@ -626,27 +599,6 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     ...(recentEvents.length ? recentEvents.map(event => `- #${event.sequence}｜${event.type}｜actor=${event.actorKey ?? '无'}｜target=${event.targetKey ?? '无'}`) : ['- 无']),
     `【Narrative】节点=${state.narrative?.currentNodeKey ?? '无'}｜可用选择=${state.narrative?.availableChoiceKeys?.join('、') || '无'}`,
     '模型只能润色已公开任务或叙述有正式事件证据的场景；不得创造新任务、人物、组织、地点、资源变化、旅行结果或世界事实。',
-  ].join('\n')
-}
-
-async function readAvgAuthoringContext(input: AssembleContextInput): Promise<string> {
-  const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
-  const definitions = (await db.gameDefinitions.where('workId').equals(scope.workId).toArray())
-    .filter(row => row.productType === 'avg' && row.worldId === scope.worldId)
-  if (!definitions.length) return ''
-  const modules = await db.avgPresentationModules.where('gameDefinitionId').anyOf(definitions.map(row => row.id!)).toArray()
-  const assets = await db.avgMediaAssets.where('workId').equals(scope.workId).toArray()
-  return [
-    '【AVG 作者演出上下文（只读）】',
-    ...definitions.map(definition => `- 游戏=${definition.gameKey}｜${definition.title}｜NarrativeModule=${definition.narrativeModuleId}`),
-    `【媒资版本】${assets.map(asset => `${asset.assetKey}@${asset.version}:${asset.kind}:${asset.contentHash.slice(0, 12)}`).join('、') || '无'}`,
-    `【声明式 Cue】${modules.reduce((total, module) => {
-      try {
-        const cues = (JSON.parse(module.contentJson) as { cues?: unknown[] }).cues
-        return total + (Array.isArray(cues) ? cues.length : 0)
-      } catch { return total }
-    }, 0)} 个`,
-    '演出建议只能引用已登记媒资与 Narrative Beat；不得改变剧情变量、关系、物品、任务或结局规则。',
   ].join('\n')
 }
 
@@ -1383,28 +1335,6 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: async () => '',
   },
   {
-    key: 'ttrpg.product-authoring',
-    label: 'TTRPG 规则与战役包',
-    scope: 'project',
-    layer: 'L0',
-    ownerFrom: 'work',
-    budgetTokens: 16_000,
-    protectedFromTrim: true,
-    enabled: input => Number.isInteger(input.ttrpgRulePackId) || Number.isInteger(input.ttrpgCampaignModuleId),
-    read: readTtrpgProductContext,
-  },
-  {
-    key: 'ttrpg.character-authoring',
-    label: 'TTRPG 单角色安全车卡制作上下文',
-    scope: 'project',
-    layer: 'L0',
-    ownerFrom: 'work',
-    budgetTokens: 12_000,
-    protectedFromTrim: true,
-    enabled: input => Number.isInteger(input.ttrpgCampaignModuleId) && !!input.ttrpgCharacterKey?.trim(),
-    read: readTtrpgCharacterAuthoringContextV2,
-  },
-  {
     key: 'ttrpgRuntime',
     label: '正式 TTRPG 主持人运行视角',
     scope: 'runtime',
@@ -1479,17 +1409,6 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     protectedFromTrim: true,
     enabled: input => Number.isInteger(input.gameBuildId),
     read: readGameProductionEvolutionBase,
-  },
-  {
-    key: 'characterInteractionProduction',
-    label: '角色互动冻结生产上下文',
-    scope: 'project',
-    layer: 'L0',
-    ownerFrom: 'work',
-    budgetTokens: 16_000,
-    protectedFromTrim: true,
-    enabled: input => Number.isInteger(input.characterInteractionProductionId),
-    read: readCharacterInteractionProductionContext,
   },
   {
     key: 'adaptation.sourceManifest',
@@ -1570,25 +1489,6 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresAdaptationProjectId: true,
     requiresComicPages: true,
     read: readComicCurrentPagesContext,
-  },
-  {
-    key: 'worldGameAuthoring',
-    label: '冻结世界游戏创作包',
-    scope: 'project',
-    layer: 'L1',
-    ownerFrom: 'work',
-    budgetTokens: 12_000,
-    protectedFromTrim: true,
-    enabled: input => !!input.manualSourceText?.trim(),
-    read: readWorldGameAuthoringContext,
-  },
-  {
-    key: 'avgAuthoring',
-    label: 'AVG 作者演出素材',
-    scope: 'project',
-    layer: 'L2',
-    budgetTokens: 4000,
-    read: readAvgAuthoringContext,
   },
   {
     key: 'adventureRuntime',

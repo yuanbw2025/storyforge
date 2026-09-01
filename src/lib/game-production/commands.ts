@@ -167,7 +167,7 @@ async function applyCommand(input: {
       planRevision: 0, planJson: '{}', planHash: input.emptyHash, budgetLedgerJson: '{}',
       manifestJson: '{}', manifestHash: input.emptyHash, packageHash: '', previewManifestJson: '{}',
       previewHash: '', qualityReportJson: '{}', qualityReportHash: input.emptyHash, compatibilityJson: '{}',
-      rootTerminalReceiptHash: null, adoptionIntentHash: null, adoptedGameDefinitionId: null,
+      rootTerminalReceiptHash: null, adoptionIntentHash: null,
       releasedGameReleaseId: null, failureJson: '{}', authorizedAt: now, startedAt: null,
       completedAt: null, createdAt: now, updatedAt: now,
     } satisfies GameBuildRecordV1, { owner: 'work' })
@@ -436,7 +436,7 @@ async function executeTransaction(input: {
 }): Promise<GameProductionCommandReceiptV1> {
   const { scope, command, now } = input
   return db.transaction('rw', scopeTransactionTables(
-    db.worldReleases, db.gameReleases, db.gameDefinitions,
+    db.worldReleases, db.gameReleases,
     db.gameProductions, db.gameProductionBriefs, db.gameProductionCommands,
     db.gameBuilds, db.gameBuildArtifacts, db.mediaBlobObjects,
   ), async () => {
@@ -452,7 +452,7 @@ async function executeTransaction(input: {
           projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
           productionKey: command.productionKey, title: command.userText.slice(0, 120), status: 'consulting' as const,
           stateRevision: 0, controlEpoch: 0, currentBriefRevision: null, currentBuildNumber: null,
-          currentGameDefinitionId: null, currentGameReleaseId: null, lastErrorJson: '{}', createdAt: now, updatedAt: now,
+          currentGameReleaseId: null, lastErrorJson: '{}', createdAt: now, updatedAt: now,
         } satisfies GameProductionRecordV1, { owner: 'work' })
         const id = await db.gameProductions.add(row) as number
         production = { ...row, id }

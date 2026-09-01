@@ -1,9 +1,8 @@
 import { db } from '../db/schema'
-import type { WorkspaceScope, WorldReleaseManifestV2 } from '../types'
+import type { WorkspaceScope } from '../types'
 import type { AssembleContextInput } from '../registry/types'
 import { assertRecordInScope } from '../world-engine/scope'
-import { assertReleaseUnchanged } from '../world-engine/releases'
-import { loadWorldGameSourceCatalog } from '../text-game/world-generation'
+import { loadGameProductionWorldSourceCatalogV2 } from './world-source'
 
 function requiredScope(input: AssembleContextInput): WorkspaceScope {
   if (!input.scope) throw new Error('[game-production-context] 缺少已解析 WorkspaceScope')
@@ -15,92 +14,59 @@ function requiredId(value: number | undefined, label: string): number {
   return value!
 }
 
-function parseWorldManifest(value: string): WorldReleaseManifestV2 {
-  let parsed: unknown
-  try { parsed = JSON.parse(value) } catch { throw new Error('[game-production-context] WorldRelease manifest 无法解析') }
-  if (!parsed || typeof parsed !== 'object' || (parsed as any).schema !== 'storyforge.world-package'
-    || (parsed as any).version !== 2 || !Array.isArray((parsed as any).selectedNarrativeModules)
-    || !Array.isArray((parsed as any).dependencies) || !(parsed as any).records) {
-    throw new Error('[game-production-context] WorldRelease manifest 合同无效')
-  }
-  return parsed as WorldReleaseManifestV2
-}
-
 export async function readGameProductionConsultationSource(input: AssembleContextInput): Promise<string> {
   const scope = requiredScope(input)
   const releaseId = requiredId(input.gameWorldReleaseId, 'gameWorldReleaseId')
-  const release = await db.worldReleases.get(releaseId)
-  if (!release || !await assertRecordInScope(scope, 'worldReleases', release, { owner: 'world' })) {
-    throw new Error('[game-production-context] WorldRelease 不存在或跨 World')
-  }
-  await assertReleaseUnchanged(releaseId)
-  const manifest = parseWorldManifest(release.manifestJson)
-  const gameCatalog = await loadWorldGameSourceCatalog({ scope, worldReleaseId: releaseId })
-  const compactRows = (table: string) => (manifest.records[table] ?? []).slice(0, 30).map((raw, index) => {
-    const row = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
-    const exportId = Number.isInteger(row._exportId) ? row._exportId : index
-    const label = [row.title, row.name, row.label].find(value => typeof value === 'string')
-    const summary = [row.summary, row.description, row.logline].find(value => typeof value === 'string')
-    return {
-      exportId,
-      label: typeof label === 'string' ? label.slice(0, 300) : `${table} ${exportId}`,
-      summary: typeof summary === 'string' ? summary.slice(0, 600) : '',
-      kind: typeof row.kind === 'string' ? row.kind : typeof row.type === 'string' ? row.type : null,
-    }
+  const gameCatalog = await loadGameProductionWorldSourceCatalogV2({ scope, worldReleaseId: releaseId })
+  const option = (value: { resourceKey: string; name: string; description: string }, kind: string) => ({
+    resourceKey: value.resourceKey, label: value.name, summary: value.description, kind,
   })
   return JSON.stringify({
     schema: 'storyforge.game-production.consultation-source', version: 1,
-    release: { version: release.version, label: release.label, contentHash: release.contentHash },
-    world: { code: manifest.worldCode, name: manifest.worldName, workTitle: manifest.workTitle },
-    selectedTables: manifest.selectedTables,
-    selectedNarrativeModules: manifest.selectedNarrativeModules,
-    dependencies: manifest.dependencies,
-    availableRecords: Object.entries(manifest.records).map(([table, rows]) => ({ table, rowCount: rows.length })),
+    worldReference: gameCatalog.worldReference,
+    release: gameCatalog.release,
+    world: gameCatalog.world,
+    availableResources: gameCatalog.resources.map(resource => ({
+      resourceKey: resource.descriptor.resourceKey,
+      area: resource.descriptor.worldSemantic.area,
+      resourceKind: resource.descriptor.worldSemantic.resourceKind,
+    })),
     opportunities: {
-      narrativeModules: compactRows('narrativeModules'),
-      characters: compactRows('characters'),
-      storyArcs: compactRows('storyArcs'),
-      historicalTimelineEvents: compactRows('historicalTimelineEvents'),
+      storySources: gameCatalog.storySources.slice(0, 30).map(value => option(value, 'story-source')),
+      characters: gameCatalog.characters.slice(0, 30).map(value => option(value, 'character')),
+      storyArcs: gameCatalog.storyArcs.slice(0, 30).map(value => option(value, value.type || 'story-arc')),
+      locations: gameCatalog.locations.slice(0, 30).map(value => option(value, 'location')),
+      historicalTimelineEvents: gameCatalog.resources
+        .filter(resource => resource.descriptor.worldSemantic.resourceKind === 'historical-event')
+        .slice(0, 30).map(resource => ({
+          resourceKey: resource.descriptor.resourceKey,
+          label: resource.descriptor.title,
+          summary: resource.descriptor.shortSummary,
+          kind: 'historical-event',
+        })),
     },
     selectionOptions: {
-      narrativeModules: manifest.selectedNarrativeModules.map(item => ({
-        exportId: item.exportId, label: item.title, summary: '', kind: item.kind,
-      })),
-      characters: gameCatalog.characters.map(item => ({
-        exportId: item.exportId, label: item.name, summary: item.description, kind: 'character',
-      })),
-      importantLocations: gameCatalog.locations.map(item => ({
-        exportId: item.exportId, label: item.name, summary: item.description, kind: 'location',
-      })),
-      artifacts: gameCatalog.artifacts.map(item => ({
-        exportId: item.exportId, label: item.name, summary: item.description, kind: 'artifact',
-      })),
-      codexEntries: gameCatalog.loreEntries.map(item => ({
-        exportId: item.exportId, label: item.name, summary: item.description, kind: 'lore',
-      })),
-      storyArcs: gameCatalog.storyArcs.map(item => ({
-        exportId: item.exportId, label: item.name, summary: item.description, kind: item.type || 'story-arc',
-      })),
-      avgMediaAssets: gameCatalog.mediaAssets.map(item => ({
-        exportId: item.exportId, label: item.name, summary: `${item.kind} · ${item.mimeType}`, kind: item.kind,
-      })),
+      storySources: gameCatalog.storySources.map(item => option(item, 'story-source')),
+      characters: gameCatalog.characters.map(item => option(item, 'character')),
+      importantLocations: gameCatalog.locations.map(item => option(item, 'location')),
+      artifacts: gameCatalog.artifacts.map(item => option(item, 'artifact')),
+      codexEntries: gameCatalog.loreEntries.map(item => option(item, 'lore')),
+      storyArcs: gameCatalog.storyArcs.map(item => option(item, item.type || 'story-arc')),
     },
     selectionRelations: gameCatalog.relationships.map(item => ({
-      exportId: item.exportId,
-      fromCharacterExportId: item.fromCharacterExportId,
-      toCharacterExportId: item.toCharacterExportId,
+      resourceKey: item.resourceKey,
+      fromCharacterResourceKey: item.fromCharacterResourceKey,
+      toCharacterResourceKey: item.toCharacterResourceKey,
     })),
     selectionCatalog: {
-      narrativeModuleExportIds: manifest.selectedNarrativeModules.map(item => item.exportId),
-      characterExportIds: gameCatalog.characters.map(item => item.exportId),
-      characterRelationExportIds: gameCatalog.relationships.map(item => item.exportId),
-      importantLocationExportIds: gameCatalog.locations.map(item => item.exportId),
-      // Inventory events are not world assets. Only codex entries under the
-      // governed built-in artifact category enter a portable game selection.
-      artifactExportIds: gameCatalog.artifacts.map(item => item.exportId),
-      codexEntryExportIds: gameCatalog.loreEntries.map(item => item.exportId),
-      storyArcExportIds: gameCatalog.storyArcs.map(item => item.exportId),
-      avgMediaAssetExportIds: gameCatalog.mediaAssets.map(item => item.exportId),
+      storyResourceKeys: gameCatalog.storySources.map(item => item.resourceKey),
+      characterResourceKeys: gameCatalog.characters.map(item => item.resourceKey),
+      importantLocationResourceKeys: gameCatalog.locations.map(item => item.resourceKey),
+      // Inventory events are not world assets. Only semantic artifact entries
+      // exposed by the neutral gateway may enter a product selection.
+      artifactResourceKeys: gameCatalog.artifacts.map(item => item.resourceKey),
+      codexEntryResourceKeys: gameCatalog.loreEntries.map(item => item.resourceKey),
+      storyArcResourceKeys: gameCatalog.storyArcs.map(item => item.resourceKey),
     },
   })
 }

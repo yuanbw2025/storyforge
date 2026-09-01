@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
+import { publishCurrentWorldRelease } from './helpers/world-release'
 
 type BrowserMeasurement = {
   browserName: string
@@ -101,19 +102,9 @@ async function createPerformanceBuild(page: Page) {
   await page.getByRole('button', { name: '添加阶段', exact: true }).click()
   await page.getByRole('button', { name: '添加阶段', exact: true }).click()
   await page.goto('./')
-  await page.getByRole('button', { name: '世界引擎', exact: true }).click()
-  const pipeline = page.getByRole('region', { name: '叙事蓝图与世界发布' })
-  await pipeline.getByRole('button', { name: '同步主线与支线', exact: true }).click()
-  await pipeline.locator('.sf-world-module-list button').click()
-  await pipeline.getByLabel('角色资产').uncheck()
-  await pipeline.getByPlaceholder('例如：世界修订 1').fill('性能验收来源')
-  await pipeline.getByRole('button', { name: '冻结修订', exact: true }).click()
-  await expect(pipeline.getByRole('status')).toContainText('已冻结新的世界草稿修订。')
-  await pipeline.getByRole('button', { name: '发布版本', exact: true }).click()
-  await page.getByRole('dialog').getByRole('button', { name: '发布版本', exact: true }).click()
-  await expect(pipeline.getByRole('status')).toContainText('不可变世界版本已发布。')
-  await page.getByRole('region', { name: '世界到文字游戏' })
-    .getByRole('button', { name: '进入游戏制作中心', exact: true }).click()
+  await page.getByTestId('product-tab-worlds').click()
+  const pipeline = await publishCurrentWorldRelease(page, '性能验收来源')
+  await pipeline.getByRole('button', { name: '交给文字游戏', exact: true }).click()
 
   const enableProduction = page.getByRole('button', { name: '为当前项目显式启用', exact: true })
   if (await enableProduction.isVisible().catch(() => false)) await enableProduction.click()

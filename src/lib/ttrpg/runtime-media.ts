@@ -1,7 +1,7 @@
 import Dexie from "dexie";
 import { db } from "../db/schema";
-import { importAvgMediaAsset } from "../avg/authoring";
-import { readAvgMediaBlobData } from "../game-production/media-blob-store";
+import { importProductMediaAssetV1 } from "../game-production/media-asset-library";
+import { readProductMediaBlobData } from "../game-production/media-blob-store";
 import { hashGameProductionValueV2 } from "../game-production/hash";
 import {
   detectGameImageDimensionsV1,
@@ -105,7 +105,6 @@ async function loadContext(sessionId: number): Promise<RuntimeMediaContextV1> {
   let resolvedSource:
     | { kind: "release"; gameReleaseId: number }
     | { kind: "build"; gameBuildId: number; expectedPreviewHash: string }
-    | { kind: "ttrpg-build"; ttrpgBuildId: number; expectedBuildHash: string }
     | null = null;
   if (session.gameReleaseId != null) {
     resolvedSource = { kind: "release", gameReleaseId: session.gameReleaseId };
@@ -117,15 +116,6 @@ async function loadContext(sessionId: number): Promise<RuntimeMediaContextV1> {
       kind: "build",
       gameBuildId: build.id,
       expectedPreviewHash: build.previewHash,
-    };
-  } else if (session.ttrpgBuildId != null) {
-    const build = await db.ttrpgProductionBuilds.get(session.ttrpgBuildId);
-    if (!build?.buildHash || build.id == null)
-      fail("TTRPG Product Build 不存在");
-    resolvedSource = {
-      kind: "ttrpg-build",
-      ttrpgBuildId: build.id,
-      expectedBuildHash: build.buildHash,
     };
   }
   if (!resolvedSource) fail("TTRPG Instance 没有冻结 Release/Build");
@@ -830,7 +820,7 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
     if (!dimensions) fail("provider 图片无法读取固有尺寸");
     const assetKey =
       `ttrpg.runtime.${claimed.sessionId}.${claimed.requestKey}`.slice(0, 200);
-    const asset = await importAvgMediaAsset({
+    const asset = await importProductMediaAssetV1({
       scope: context.scope,
       assetKey,
       kind: candidate.mediaKind,
@@ -861,12 +851,12 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
       db.simulationSessions,
       db.simulationEvents,
       db.ttrpgRuntimeAssetRequests,
-      db.avgMediaAssets,
+      db.productMediaAssets,
       async () => {
         const [session, row, currentAsset] = await Promise.all([
           db.simulationSessions.get(context.session.id!),
           db.ttrpgRuntimeAssetRequests.get(claimed.id!),
-          db.avgMediaAssets.get(asset.id!),
+          db.productMediaAssets.get(asset.id!),
         ]);
         if (
           !session ||
@@ -1157,28 +1147,28 @@ export async function readTtrpgRuntimeMediaBlobV1(input: {
     request.mediaAssetVersion == null
   )
     fail("viewer 不能读取该运行时媒资");
-  const asset = await db.avgMediaAssets.get(input.mediaAssetId);
+  const asset = await db.productMediaAssets.get(input.mediaAssetId);
   if (
     !asset ||
-    !(await assertRecordInScope(scope, "avgMediaAssets", asset, {
+    !(await assertRecordInScope(scope, "productMediaAssets", asset, {
       owner: "work",
     })) ||
     asset.contentHash !== request.mediaContentHash ||
     asset.version !== request.mediaAssetVersion
   )
     fail("统一媒资绑定损坏或跨 Work");
-  const mediaBlob = await db.avgMediaBlobs
+  const mediaBlob = await db.productMediaBlobs
     .where("mediaAssetId")
     .equals(asset.id!)
     .first();
   if (
     !mediaBlob ||
-    !(await assertRecordInScope(scope, "avgMediaBlobs", mediaBlob, {
+    !(await assertRecordInScope(scope, "productMediaBlobs", mediaBlob, {
       owner: "work",
     }))
   )
     fail("统一媒资字节链接缺失");
-  const data = await readAvgMediaBlobData({
+  const data = await readProductMediaBlobData({
     scope,
     blob: mediaBlob,
     expected: {

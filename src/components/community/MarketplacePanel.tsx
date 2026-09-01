@@ -11,8 +11,8 @@ import { CommunityHttpClientV1 } from '../../lib/community/http-client'
 import { CommercialOperationsHttpClientV1 } from '../../lib/commercial/operations-http-client'
 import type { CommercialListingV1 } from '../../lib/commercial/authority'
 import type { CommunitySocialEdgeV1 } from '../../lib/community/authority'
-import { exportGameDistributionBundleV1, importMarketplaceGameDistributionV1 } from '../../lib/game-platform/distribution-bundle'
-import type { GameDistributionBundleV1, MarketplaceImportProvenanceV1 } from '../../lib/game-platform/distribution-bundle'
+import { exportGameDistributionBundleV2, importMarketplaceGameDistributionV2 } from '../../lib/game-platform/distribution-bundle'
+import type { GameDistributionBundleV2, MarketplaceImportProvenanceV2 } from '../../lib/game-platform/distribution-bundle'
 import type { GameProductType, GameRelease, WorkspaceScope } from '../../lib/types'
 import type { OnlineRoomJoinHandoffV1 } from '../../lib/online/http-transport'
 import LfgCenterPanel from './LfgCenterPanel'
@@ -79,11 +79,11 @@ export default function MarketplacePanel(props: {
   initialServiceUrl?: string
   onImported?: (release: GameRelease) => void | Promise<void>
   onRoomHandoff?: (handoff: OnlineRoomJoinHandoffV1) => void | Promise<void>
-  exportBundle?: (input: { scope: WorkspaceScope; gameReleaseId: number }) => Promise<GameDistributionBundleV1>
+  exportBundle?: (input: { scope: WorkspaceScope; gameReleaseId: number }) => Promise<GameDistributionBundleV2>
   importBundle?: (input: {
     scope: WorkspaceScope
     bundle: unknown
-    provenance: MarketplaceImportProvenanceV1
+    provenance: MarketplaceImportProvenanceV2
   }) => Promise<GameRelease>
 }) {
   const [serviceUrl, setServiceUrl] = useState(props.initialServiceUrl ?? import.meta.env.VITE_STORYFORGE_PLATFORM_SERVICE_URL ?? '')
@@ -199,7 +199,7 @@ export default function MarketplacePanel(props: {
     if (!accessToken.trim()) throw new Error('请输入当前账号的访问凭据。')
     if (!props.scope) throw new Error('请选择一个已完成 World/Work 初始化的本地工作区。')
     const payload = await client.downloadRelease({ accessToken: accessToken.trim(), releaseHash: listing.releaseHash })
-    const release = await (props.importBundle ?? importMarketplaceGameDistributionV1)({
+    const release = await (props.importBundle ?? importMarketplaceGameDistributionV2)({
       scope: props.scope, bundle: payload.bundle, provenance: payload.provenance,
     })
     await refreshLocal()
@@ -241,7 +241,7 @@ export default function MarketplacePanel(props: {
       }
     }
     const ids = submission.current
-    const bundle = await (props.exportBundle ?? exportGameDistributionBundleV1)({
+    const bundle = await (props.exportBundle ?? exportGameDistributionBundleV2)({
       scope: props.scope, gameReleaseId: selectedReleaseId,
     })
     const listingInput = {

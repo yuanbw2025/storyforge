@@ -3,7 +3,7 @@ import type { NodeFlow } from '../types'
 import { hashAuthoringText, readAuthoringCanonBinding } from './bindings'
 import type { AuthoringCandidateMap, AuthoringRunSnapshotMap } from './executor'
 import { downstreamAuthoringNodeIds } from './graph'
-import { parseAuthoringGraph } from './migration'
+import { parseAuthoringGraph } from './graph-codec'
 
 export type AuthoringFreshnessReason =
   | 'never-run'
@@ -23,7 +23,7 @@ export interface AuthoringNodeFreshness {
 export type AuthoringFreshnessMap = Record<string, AuthoringNodeFreshness>
 
 function currentUpstreamHash(
-  graph: ReturnType<typeof parseAuthoringGraph>['graph'],
+  graph: ReturnType<typeof parseAuthoringGraph>,
   nodeId: string,
   candidates: AuthoringCandidateMap,
 ): string {
@@ -48,7 +48,7 @@ export async function inspectAuthoringGraphFreshness(input: {
   snapshots: AuthoringRunSnapshotMap
   candidates: AuthoringCandidateMap
 }): Promise<AuthoringFreshnessMap> {
-  const graph = parseAuthoringGraph(input.flow.graphJson).graph
+  const graph = parseAuthoringGraph(input.flow.graphJson)
   const result: AuthoringFreshnessMap = {}
   const staleRoots = new Set<string>()
 

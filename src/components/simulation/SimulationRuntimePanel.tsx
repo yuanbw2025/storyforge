@@ -88,7 +88,6 @@ function eventSummary(type: string, payloadJson: string): string {
       return `${payload.expression}: [${dice}] = ${payload.total}`
     }
     if (type === 'narrative.recorded') return String(payload.text ?? '')
-    if (type === 'narrative.node.advanced') return `叙事推进：${payload.fromNodeKey ?? ''} → ${payload.toNodeKey ?? ''}`
     if (type === 'ttrpg.scene.opened') return `场景开始：${(payload.scene as Record<string, unknown>)?.title ?? ''}`
     if (type === 'ttrpg.action.recorded') return `动作：${payload.text ?? ''}`
     if (type === 'ttrpg.check.resolved') {
@@ -120,9 +119,6 @@ function eventSummary(type: string, payloadJson: string): string {
       return `规则行动：${result?.actionName ?? result?.actionKey ?? ''} · ${result?.outcome ?? ''}`
     }
     if (type === 'ttrpg.campaign.ended') return `战役结局：${payload.title ?? payload.endingKey ?? ''}`
-    if (type === 'chat.session.configured') return `聊天场景：${(payload.scene as Record<string, unknown>)?.title ?? ''}`
-    if (type === 'chat.message.recorded') return `用户：${payload.text ?? ''}`
-    if (type === 'chat.reply.recorded') return `角色：${payload.text ?? ''}`
     if (type.startsWith('entity.')) return String(payload.entityKey ?? type)
     return type
   } catch {
@@ -257,11 +253,6 @@ export default function SimulationRuntimePanel(props: {
     () => selected ? parseSimulationCanonSnapshot(selected.canonSnapshotJson) : null,
     [selected],
   )
-  const narrative = store.runtimeState.narrative ?? null
-  const currentNarrativeNode = narrative?.nodes.find(node => node.key === narrative.currentNodeKey) ?? null
-  const narrativeChoices = narrative?.availableNodeKeys
-    .map(key => narrative.nodes.find(node => node.key === key))
-    .filter((node): node is NonNullable<typeof node> => node != null) ?? []
   const npcAI = useAIStream(createAISessionKey(
     props.project.id!,
     'simulation.npc-evolution',
@@ -684,47 +675,6 @@ export default function SimulationRuntimePanel(props: {
                 <div className="text-xs text-text-muted">叙事记录</div>
               </div>
             </section>}
-
-            {!hasFormalTtrpgProduct && narrative && currentNarrativeNode && (
-              <section className="rounded-lg border border-accent/30 bg-bg-surface" aria-label="冻结叙事进度">
-                <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-                      <GitBranch className="h-4 w-4 text-accent" />
-                      {narrative.moduleTitle}
-                    </div>
-                    <p className="mt-1 text-xs text-text-muted">
-                      冻结叙事 · 已访问 {narrative.visitedNodeKeys.length} 个节点
-                    </p>
-                  </div>
-                  <span className={narrative.completed ? 'text-xs text-accent' : 'text-xs text-text-muted'}>
-                    {narrative.completed ? '已到达结局' : '进行中'}
-                  </span>
-                </div>
-                <div className="space-y-3 p-4">
-                  <div>
-                    <div className="text-sm font-medium text-text-primary">{currentNarrativeNode.title}</div>
-                    {currentNarrativeNode.summary && <p className="mt-1 text-sm leading-6 text-text-secondary">{currentNarrativeNode.summary}</p>}
-                  </div>
-                  {!narrative.completed && (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {narrativeChoices.map(node => (
-                        <button
-                          key={node.key}
-                          disabled={busy}
-                          onClick={() => void run(() => store.advanceNarrative(node.key))}
-                          className="rounded border border-border bg-bg-base px-3 py-2 text-left hover:border-accent/50 hover:bg-accent/5 disabled:opacity-40"
-                        >
-                          <span className="block text-sm font-medium text-text-primary">{node.title}</span>
-                          {node.summary && <span className="mt-1 block line-clamp-2 text-xs text-text-muted">{node.summary}</span>}
-                        </button>
-                      ))}
-                      {narrativeChoices.length === 0 && <p className="text-sm text-danger">当前条件下没有可进入的后继节点。</p>}
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
 
             {!hasFormalTtrpgProduct && <section className="rounded-lg border border-border bg-bg-surface">
               <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">

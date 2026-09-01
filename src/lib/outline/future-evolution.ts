@@ -14,7 +14,6 @@ import type {
 } from '../types'
 import { parseStages } from '../types'
 import { readOwnedRows } from '../world-engine/scope'
-import { listWorldReleases } from '../world-engine/releases'
 import { walkOutlineChaptersInCanonicalOrder } from './canonical-outline-walk'
 
 export type FutureEvolutionStageIdV1 =
@@ -23,7 +22,6 @@ export type FutureEvolutionStageIdV1 =
   | 'detail'
   | 'prose'
   | 'settlement'
-  | 'product-projection'
 
 export interface FutureEvolutionSkillContractV1 {
   skillId: AgentSkillId
@@ -76,12 +74,6 @@ export interface FutureEvolutionPlanV1 {
   protectedStoryArcs: ProtectedStoryArcV1[]
   visibleCharacterIds: number[]
   stages: FutureEvolutionStageV1[]
-  productBoundary: {
-    latestWorldReleaseId: number | null
-    latestWorldReleaseHash: string | null
-    rule: 'immutable-release-no-canon-backwrite'
-    feedbackRule: 'product-request-reenters-author-confirmed-future-cycle'
-  }
   anomalies: string[]
   basisHash: string
   planHash: string
@@ -129,14 +121,13 @@ export async function buildFutureEvolutionPlanV1(input: {
   scope: WorkspaceScope
   worldGroupId: number | null
 }): Promise<FutureEvolutionPlanV1> {
-  const [outlines, chapters, details, arcs, progress, characters, releases] = await Promise.all([
+  const [outlines, chapters, details, arcs, progress, characters] = await Promise.all([
     readOwnedRows<OutlineNode>(input.scope, 'outlineNodes', { owner: 'work' }),
     readOwnedRows<Chapter>(input.scope, 'chapters', { owner: 'work' }),
     readOwnedRows<DetailedOutline>(input.scope, 'detailedOutlines', { owner: 'work' }),
     readOwnedRows<StoryArc>(input.scope, 'storyArcs', { owner: 'work' }),
     readOwnedRows<StorylineProgress>(input.scope, 'storylineProgress', { owner: 'work' }),
     readOwnedRows<Character>(input.scope, 'characters', { owner: 'world' }),
-    listWorldReleases(input.scope),
   ])
   const walk = walkOutlineChaptersInCanonicalOrder(outlines)
   const sequence = walk.chapters.filter(item => item.worldGroupId === input.worldGroupId)
@@ -183,9 +174,6 @@ export async function buildFutureEvolutionPlanV1(input: {
   const visibleCharacters = characters.filter(character => (
     character.id != null && visibleCharacter(character, input.worldGroupId)
   ))
-  const latestRelease = [...releases].sort((left, right) => (
-    right.version - left.version || (right.id ?? 0) - (left.id ?? 0)
-  ))[0]
   const lastWritten = lastWrittenIndex < 0
     ? null
     : protectedSequence[protectedSequence.length - 1] ?? null
@@ -255,17 +243,6 @@ export async function buildFutureEvolutionPlanV1(input: {
       requiresAuthorAdoptionBeforeNext: true,
       readiness: nextProseTarget ? 'ready' : 'empty-target',
     },
-    {
-      id: 'product-projection',
-      label: '游戏、跑团与角色聊天投影',
-      purpose: '产品只消费不可变 WorldRelease；试玩反馈作为新作者目标重新进入未来演化循环。',
-      dependsOnStageIds: [],
-      skillContracts: [skillContract('outline.world-game', 'outline')],
-      targetOutlineNodeIds: [],
-      allowedOperations: ['project-from-immutable-release', 'return-feedback-as-author-request'],
-      requiresAuthorAdoptionBeforeNext: true,
-      readiness: latestRelease ? 'ready' : 'empty-target',
-    },
   ]
   const basis = {
     scope: input.scope,
@@ -286,9 +263,6 @@ export async function buildFutureEvolutionPlanV1(input: {
     characters: visibleCharacters.map(row => ({
       id: row.id, narrativeStatus: row.narrativeStatus, updatedAt: row.updatedAt,
     })),
-    latestRelease: latestRelease
-      ? { id: latestRelease.id, contentHash: latestRelease.contentHash, version: latestRelease.version }
-      : null,
   }
   const basisHash = await hashCanonicalValue(basis)
   const planWithoutHash = {
@@ -306,12 +280,6 @@ export async function buildFutureEvolutionPlanV1(input: {
     protectedStoryArcs,
     visibleCharacterIds: visibleCharacters.flatMap(character => character.id == null ? [] : [character.id]),
     stages,
-    productBoundary: {
-      latestWorldReleaseId: latestRelease?.id ?? null,
-      latestWorldReleaseHash: latestRelease?.contentHash ?? null,
-      rule: 'immutable-release-no-canon-backwrite' as const,
-      feedbackRule: 'product-request-reenters-author-confirmed-future-cycle' as const,
-    },
     anomalies: walk.anomalies.map(anomaly => `${anomaly.kind}:${anomaly.detail}`),
     basisHash,
   }

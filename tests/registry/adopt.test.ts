@@ -43,62 +43,23 @@ describe('Phase 1.2a · 统一写回层', () => {
       expect(FIELD_BY_TARGET.has(schema.target), `ADOPTION_SCHEMA target 缺字段:${schema.target}`).toBe(true)
       expect(ADOPTION_BY_TARGET.get(schema.target)).toBe(schema)
     }
-    expect(ADOPTION_EXTENSIONS.map(extension => extension.id)).toEqual([
-      'ttrpg-product-authoring',
-      'ttrpg-campaign-authoring',
-      'reference-analysis-run-lifecycle',
-      'reference-analysis-source-lifecycle',
-      'reference-analysis-chunk-lifecycle',
-      'reference-analysis-reference-lifecycle',
-      'reference-analysis-citation-lifecycle',
-      'fact-ledger',
-      'character-merge-lifecycle',
-      'knowledge-ledger',
-      'storyline-progress-lifecycle',
-      'storyline-crossing-lifecycle',
-      'story-arc-dynamic-lifecycle',
-      'cultivation-codex-reference-lifecycle',
-      'cultivation-progress-lifecycle',
-      'codex-category-scope-lifecycle',
+    const extensionIds = ADOPTION_EXTENSIONS.map(extension => extension.id)
+    expect(new Set(extensionIds).size).toBe(extensionIds.length)
+    expect(extensionIds).toEqual(expect.arrayContaining([
       'workspace-root-lifecycle',
       'world-root-lifecycle',
       'work-root-lifecycle',
-      'adaptation-root-lifecycle',
-      'adaptation-source-manifest-lifecycle',
-      'screenplay-scene-lifecycle',
-      'comic-page-panel-lifecycle',
-      'comic-panel-lifecycle',
-      'comic-visual-subject-lifecycle',
-      'comic-media-asset-lifecycle',
-      'media-blob-object-lifecycle',
-      'short-novel-outline-skeleton-lifecycle',
-      'chapter-delete-lifecycle',
-      'chapter-emotion-delete-lifecycle',
-      'world-game-narrative-modules',
-      'world-game-narrative-nodes',
-      'world-game-narrative-beats',
-      'world-game-narrative-choices',
-      'world-game-definitions',
-      'world-game-adventure-modules',
-      'world-game-interaction-profiles',
-      'world-game-interaction-scenes',
-      'world-game-avg-presentations',
-      'world-game-avg-media-assets',
-      'world-game-avg-media-blobs',
-      'character-interaction-production-roots',
-      'character-interaction-production-steps',
-      'character-interaction-production-artifacts',
-      'character-interaction-production-media',
-      'character-interaction-product-releases',
       'game-production-roots',
       'game-production-briefs',
       'game-production-commands',
       'game-production-builds',
       'game-production-artifacts',
       'game-production-release-adoption',
-      'game-production-textsim-adoption',
-      'game-production-openworld-adoption',
-    ])
+      'ttrpg-rule-pack-library',
+    ]))
+    expect(extensionIds.some(id => id.startsWith('world-game-'))).toBe(false)
+    expect(extensionIds.some(id => id.startsWith('character-interaction-production-'))).toBe(false)
+    expect(extensionIds.some(id => id.startsWith('ttrpg-product-') || id.startsWith('ttrpg-campaign-'))).toBe(false)
     for (const extension of ADOPTION_EXTENSIONS) {
       expect(REGISTRY_BY_NAME.has(extension.target), `ADOPTION_EXTENSION target 缺表:${extension.target}`).toBe(true)
       expect(extension.entrypoints.length).toBeGreaterThan(0)

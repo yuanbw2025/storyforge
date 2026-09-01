@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type {
   GameRuntimePackageV2,
+  ProductWorldSourceSelectionV1,
   TtrpgProductionSeatV2,
   WorkspaceScope,
-  WorldGameSourceSelectionV2,
 } from "../../src/lib/types";
 import {
   compileTtrpgProductionBriefV2,
@@ -20,30 +20,22 @@ import {
   createDefaultTtrpgProductionWizardValueV2,
   toTtrpgProductionBriefDraftInputV2,
 } from "../../src/components/ttrpg/TtrpgProductionWizard";
+import {
+  CURRENT_PRODUCT_RESOURCE_KEYS,
+  CURRENT_PRODUCT_SOURCE_CATALOG,
+  currentProductSelection,
+} from "../helpers/current-product-world";
 
 const scope: WorkspaceScope = { projectId: 1, worldId: 1, workId: 1 };
+const WORLD_HASH = "a".repeat(64);
 
-function selection(): WorldGameSourceSelectionV2 {
-  return {
-    schema: "storyforge.world-game-source",
-    version: 2,
-    productType: "ttrpg",
-    worldContentHash: "a".repeat(64),
-    narrativeModuleExportIds: [0],
-    characterExportIds: [0, 1],
-    characterRelationExportIds: [],
-    importantLocationExportIds: [0],
-    artifactExportIds: [0],
-    codexEntryExportIds: [],
-    storyArcExportIds: [0],
-    avgMediaAssetExportIds: [],
-    productSource: {
-      kind: "ttrpg",
-      participantCharacterExportIds: [0, 1],
-      locationExportIds: [0],
-      questStoryArcExportIds: [0],
-    },
-  };
+function selection(): ProductWorldSourceSelectionV1 {
+  return currentProductSelection("ttrpg", {
+    participants: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+    locations: [CURRENT_PRODUCT_RESOURCE_KEYS.location],
+    items: [CURRENT_PRODUCT_RESOURCE_KEYS.artifact],
+    quests: [CURRENT_PRODUCT_RESOURCE_KEYS.arc],
+  });
 }
 
 const seats: TtrpgProductionSeatV2[] = [
@@ -53,7 +45,7 @@ const seats: TtrpgProductionSeatV2[] = [
     controller: "human",
     role: "player",
     characterMode: "world-template",
-    sourceCharacterExportId: 0,
+    sourceCharacterResourceKey: CURRENT_PRODUCT_RESOURCE_KEYS.character,
     characterName: "林舟",
     rankTier: null,
     privateGoal: "寻找失踪导师",
@@ -64,7 +56,7 @@ const seats: TtrpgProductionSeatV2[] = [
     controller: "ai",
     role: "player",
     characterMode: "quick-card",
-    sourceCharacterExportId: null,
+    sourceCharacterResourceKey: null,
     characterName: "守潮人",
     rankTier: "B",
     privateGoal: "隐藏旧港秘密",
@@ -106,6 +98,7 @@ describe("R-TTRPG-3E · nine-step production brief", () => {
     const brief = await compileTtrpgProductionBriefV2({
       scope,
       selection: selection(),
+      worldContentHash: WORLD_HASH,
       title: "英雄骰濒死团",
       premise: "潮门正在坍塌。",
       tone: ["奇幻"],
@@ -126,6 +119,7 @@ describe("R-TTRPG-3E · nine-step production brief", () => {
     const brief = await compileTtrpgProductionBriefV2({
       scope,
       selection: selection(),
+      worldContentHash: WORLD_HASH,
       title: "雾港潮门",
       premise: "在潮门关闭前找出失踪信号真相。",
       tone: ["悬疑", "克制"],
@@ -219,6 +213,7 @@ describe("R-TTRPG-3E · nine-step production brief", () => {
       compileTtrpgProductionBriefV2({
         scope,
         selection: selection(),
+        worldContentHash: WORLD_HASH,
         title: "越界骰",
         premise: "测试",
         tone: ["测试"],
@@ -245,6 +240,7 @@ describe("R-TTRPG-3E · nine-step production brief", () => {
     const brief = await compileTtrpgProductionBriefV2({
       scope,
       selection: selection(),
+      worldContentHash: WORLD_HASH,
       title: "席位权威",
       premise: "两名玩家与一名 NPC 推进调查。",
       tone: ["悬疑"],
@@ -336,20 +332,10 @@ describe("R-TTRPG-3E · nine-step production brief", () => {
       selection: selection(),
       narrative,
       sourceCatalog: {
-        characters: [
-          { exportId: 0, name: "林舟", description: "真人调查者" },
-          { exportId: 1, name: "潮汐学者", description: "场景 NPC" },
-        ],
-        locations: [{ exportId: 0, name: "雾港", description: "旧港" }],
-        artifacts: [{ exportId: 0, name: "潮门钥匙", description: "关键物品" }],
-        storyArcs: [
-          {
-            exportId: 0,
-            name: "失踪信号",
-            description: "调查主线",
-            type: "main",
-          },
-        ],
+        characters: CURRENT_PRODUCT_SOURCE_CATALOG.characters,
+        locations: CURRENT_PRODUCT_SOURCE_CATALOG.locations,
+        artifacts: CURRENT_PRODUCT_SOURCE_CATALOG.artifacts,
+        storyArcs: CURRENT_PRODUCT_SOURCE_CATALOG.storyArcs,
       },
       rulePack,
       worldContentHash: "a".repeat(64),
@@ -528,6 +514,7 @@ describe("R-TTRPG-3E · nine-step production brief", () => {
     const brief = await compileTtrpgProductionBriefV2({
       scope,
       selection: selection(),
+      worldContentHash: WORLD_HASH,
       title: "未确认",
       premise: "测试确认",
       tone: ["测试"],

@@ -168,7 +168,7 @@ function GenericProps({ module }: { module: SidebarModule }) {
       title: '世界观',
       tips: ['世界观是AI写作的核心上下文', '建议先填写基础设定再开始写作', '功法体系会影响战斗场景的生成质量'],
     },
-    'story-core': {
+    'story-design': {
       icon: FileText,
       title: '故事核心',
       tips: ['故事核心定义主线冲突与主题', '清晰的主角动机有助于AI保持人物一致性'],

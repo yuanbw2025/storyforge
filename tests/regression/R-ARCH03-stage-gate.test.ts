@@ -70,7 +70,7 @@ describe('ARCH-03 · 世界/作者草稿不得绕过产品生产直启正式运�
       draftSnapshotHash: 'a'.repeat(64),
       canonSnapshot: { version: 1, sources: [] },
       initialState: structuredClone(EMPTY_SIMULATION_STATE),
-    })).rejects.toThrow('WorldRelease 与作者草稿只能进入产品制作阶段')
+    } as any)).rejects.toThrow('必须且只能绑定一个 Product Release/Build')
 
     const leafIds = NAV_TREE.flatMap(section => [
       ...(section.rootLeaf ? [section.rootLeaf.id] : []),

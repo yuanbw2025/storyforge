@@ -51,26 +51,11 @@ import type {
   WorldRevision,
   WorldRelease,
   WorldDerivationV1,
-  WorldReleaseMigrationV1,
-  GameDefinition,
   GameRelease,
   NarrativeBeat,
   NarrativeChoice,
-  InteractionCharacterProfile,
-  InteractionSceneTemplate,
-  CharacterInteractionProductionRecordV1,
-  CharacterInteractionSourceSelectionRecordV1,
-  CharacterInteractionBriefRecordV1,
-  CharacterInteractionProductionStepRecordV1,
-  CharacterInteractionArtifactRecordV1,
-  CharacterInteractionMediaAssetRecordV1,
-  CharacterInteractionProductReleaseRecordV1,
-  AdventureModule,
-  AvgMediaAsset,
-  AvgMediaBlob,
-  AvgPresentationModule,
-  NarrativeSimulationModule,
-  OpenWorldModule,
+  ProductMediaAsset,
+  ProductMediaBlob,
   AdaptationProject,
   AdaptationSourceUnit,
   ScreenplayScene,
@@ -79,16 +64,8 @@ import type {
   ComicVisualSubject,
   ComicMediaAsset,
   GameRulePackRecordV1,
-  TtrpgCampaignModuleRecordV1,
   TtrpgSessionParticipantRecordV2,
   TtrpgRuntimeAssetRequestRecordV1,
-  TtrpgProductionRecordV1,
-  TtrpgSourceSelectionRecordV1,
-  TtrpgProductionBriefRecordV1,
-  TtrpgProductionStepRecordV1,
-  TtrpgProductionBuildRecordV1,
-  TtrpgProductionMediaAssetRecordV1,
-  TtrpgProductReleaseRecordV1,
   GameProductionRecordV1,
   GameProductionBriefRecordV1,
   GameProductionCommandRecordV1,
@@ -223,22 +200,11 @@ export interface ProjectExportData {
     Omit<WorldDerivationV1, 'id' | 'projectId' | 'worldId' | 'targetRevisionId' | 'targetReleaseId'>
     & { _exportId: number; _worldExportId: number; _targetRevisionExportId?: number | null; _targetReleaseExportId?: number | null }
   )[]
-  worldReleaseMigrations?: (
-    Omit<WorldReleaseMigrationV1, 'id' | 'projectId' | 'worldId' | 'semanticReleaseId'>
-    & { _exportId: number; _worldExportId: number; _semanticReleaseExportId: number }
-  )[]
-  gameDefinitions?: (Omit<GameDefinition, 'id' | 'projectId' | 'worldId' | 'workId' | 'narrativeModuleId'> & {
+  gameReleases?: (Omit<GameRelease, 'id' | 'projectId' | 'worldId' | 'workId' | 'worldReleaseId'> & {
     _exportId: number
     _worldExportId: number
     _workExportId: number
-    _narrativeModuleExportId: number
-  })[]
-  gameReleases?: (Omit<GameRelease, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId' | 'worldReleaseId'> & {
-    _exportId: number
-    _worldExportId: number
-    _workExportId: number
-    _gameDefinitionExportId?: number | null
-    _worldReleaseExportId: number
+    _worldReleaseExportId?: number | null
   })[]
   narrativeBeats?: (Omit<NarrativeBeat, 'id' | 'projectId' | 'moduleId' | 'speakerCharacterId'> & {
     _exportId: number
@@ -249,237 +215,25 @@ export interface ProjectExportData {
     _exportId: number
     _moduleExportId: number
   })[]
-  interactionCharacterProfiles?: (
-    Omit<InteractionCharacterProfile, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId' | 'characterId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _gameDefinitionExportId: number
-      _characterExportId: number
-    }
-  )[]
-  interactionSceneTemplates?: (
-    Omit<InteractionSceneTemplate, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId'>
-    & { _exportId: number; _worldExportId: number; _workExportId: number; _gameDefinitionExportId: number }
-  )[]
-  adventureModules?: (
-    Omit<AdventureModule, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId'>
-    & { _exportId: number; _worldExportId: number; _workExportId: number; _gameDefinitionExportId: number }
-  )[]
-  avgMediaAssets?: (
-    Omit<AvgMediaAsset, 'id' | 'projectId' | 'worldId' | 'workId'>
+  productMediaAssets?: (
+    Omit<ProductMediaAsset, 'id' | 'projectId' | 'worldId' | 'workId'>
     & { _exportId: number; _worldExportId: number; _workExportId: number }
   )[]
-  avgMediaBlobs?: (
-    Omit<AvgMediaBlob, 'id' | 'projectId' | 'worldId' | 'workId' | 'mediaAssetId' | 'blobObjectId' | 'data'>
-    & { _exportId: number; _worldExportId: number; _workExportId: number; _mediaAssetExportId: number; _blobObjectExportId?: number | null; data?: string | null }
-  )[]
-  avgPresentationModules?: (
-    Omit<AvgPresentationModule, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId'>
-    & { _exportId: number; _worldExportId: number; _workExportId: number; _gameDefinitionExportId: number }
-  )[]
-  narrativeSimulationModules?: (
-    Omit<NarrativeSimulationModule, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId'>
-    & { _exportId: number; _worldExportId: number; _workExportId: number; _gameDefinitionExportId: number }
-  )[]
-  openWorldModules?: (
-    Omit<OpenWorldModule, 'id' | 'projectId' | 'worldId' | 'workId' | 'gameDefinitionId'>
-    & { _exportId: number; _worldExportId: number; _workExportId: number; _gameDefinitionExportId: number }
+  productMediaBlobs?: (
+    Omit<ProductMediaBlob, 'id' | 'projectId' | 'worldId' | 'workId' | 'mediaAssetId' | 'blobObjectId'>
+    & { _exportId: number; _worldExportId: number; _workExportId: number; _mediaAssetExportId: number; _blobObjectExportId: number }
   )[]
 
-  characterInteractionProductions?: (
-    Omit<CharacterInteractionProductionRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'activeSourceSelectionId' | 'activeBriefId' | 'currentProductReleaseId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _activeSourceSelectionExportId?: number | null
-      _activeBriefExportId?: number | null
-      _currentProductReleaseExportId?: number | null
-    }
-  )[]
-  characterInteractionSourceSelections?: (
-    Omit<CharacterInteractionSourceSelectionRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceWorldReleaseId' | 'selectionJson'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _productionExportId: number
-      _sourceWorldReleaseExportId: number
-      selectionJson?: string
-      _portableSelectionJson: string
-    }
-  )[]
-  characterInteractionBriefs?: (
-    Omit<CharacterInteractionBriefRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceSelectionId' | 'briefJson' | 'runContractJson'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _productionExportId: number
-      _sourceSelectionExportId: number
-      briefJson?: string
-      runContractJson?: string | null
-      _portableBriefJson: string
-      _portableRunContractJson: string | null
-    }
-  )[]
-  characterInteractionProductionSteps?: (
-    Omit<CharacterInteractionProductionStepRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'candidateArtifactId' | 'confirmedArtifactId' | 'producerRunId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _productionExportId: number
-      _candidateArtifactExportId?: number | null
-      _confirmedArtifactExportId?: number | null
-      _producerRunExportId?: number | null
-    }
-  )[]
-  characterInteractionArtifacts?: (
-    Omit<CharacterInteractionArtifactRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'producerRunId' | 'sourceSessionId' | 'payloadJson'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _productionExportId: number
-      _producerRunExportId?: number | null
-      _sourceSessionExportId?: number | null
-      payloadJson?: string
-      _portablePayloadJson?: string
-    }
-  )[]
-  characterInteractionMediaAssets?: (
-    Omit<CharacterInteractionMediaAssetRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'blobObjectId' | 'producerRunId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _productionExportId: number
-      _blobObjectExportId?: number | null
-      _producerRunExportId?: number | null
-    }
-  )[]
-  characterInteractionProductReleases?: (
-    Omit<CharacterInteractionProductReleaseRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceSelectionId' | 'sourceWorldReleaseId' | 'briefId' | 'gameReleaseId' | 'manifestJson'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _productionExportId: number
-      _sourceSelectionExportId: number
-      _sourceWorldReleaseExportId: number
-      _briefExportId: number
-      _gameReleaseExportId: number
-      manifestJson?: string
-      _portableManifestJson: string
-    }
-  )[]
   gameRulePacks?: (
     Omit<GameRulePackRecordV1, 'id' | 'projectId' | 'worldId' | 'workId'>
     & { _exportId: number; _worldExportId: number; _workExportId: number }
   )[]
-  ttrpgCampaignModules?: (
-    Omit<TtrpgCampaignModuleRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'sourceWorldReleaseId' | 'rulePackId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _sourceWorldReleaseExportId: number
-      _rulePackExportId: number
-    }
-  )[]
-  ttrpgProductions?: (
-    Omit<TtrpgProductionRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'activeSourceSelectionId' | 'activeBriefId' | 'currentBuildId' | 'currentProductReleaseId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _activeSourceSelectionExportId?: number | null
-      _activeBriefExportId?: number | null
-      _currentBuildExportId?: number | null
-      _currentProductReleaseExportId?: number | null
-    }
-  )[]
-  ttrpgSourceSelections?: (
-    Omit<TtrpgSourceSelectionRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceWorldReleaseId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _productionExportId: number
-      _sourceWorldReleaseExportId?: number | null
-    }
-  )[]
-  ttrpgProductionBriefs?: (
-    Omit<TtrpgProductionBriefRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceSelectionId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _productionExportId: number
-      _sourceSelectionExportId: number
-    }
-  )[]
-  ttrpgProductionSteps?: (
-    Omit<TtrpgProductionStepRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'buildId'>
-    & { _exportId: number; _worldExportId: number; _workExportId: number; _productionExportId: number; _buildExportId?: number | null }
-  )[]
-  ttrpgProductionBuilds?: (
-    Omit<TtrpgProductionBuildRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceSelectionId' | 'briefId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _productionExportId: number
-      _sourceSelectionExportId: number
-      _briefExportId: number
-    }
-  )[]
-  ttrpgProductionMediaAssets?: (
-    Omit<TtrpgProductionMediaAssetRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'buildId' | 'blobObjectId' | 'producerRunId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _buildExportId: number
-      _blobObjectExportId?: number | null
-      _producerRunExportId?: number | null
-    }
-  )[]
-  ttrpgProductReleases?: (
-    Omit<TtrpgProductReleaseRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceSelectionId' | 'sourceWorldReleaseId' | 'briefId' | 'buildId'>
-    & {
-      _exportId: number
-      _worldExportId: number
-      _workExportId: number
-      _productionExportId: number
-      _sourceSelectionExportId: number
-      _sourceWorldReleaseExportId: number
-      _briefExportId: number
-      _buildExportId: number
-    }
-  )[]
   gameProductions?: (
-    Omit<GameProductionRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'currentGameDefinitionId' | 'currentGameReleaseId'>
+    Omit<GameProductionRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'currentGameReleaseId'>
     & {
       _exportId: number
       _worldExportId: number
       _workExportId: number
-      _currentGameDefinitionExportId?: number | null
       _currentGameReleaseExportId?: number | null
     }
   )[]
@@ -500,14 +254,13 @@ export interface ProjectExportData {
   gameBuilds?: (
     Omit<GameBuildRecordV1,
       'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceGameReleaseId'
-      | 'adoptedGameDefinitionId' | 'releasedGameReleaseId'>
+      | 'releasedGameReleaseId'>
     & {
       _exportId: number
       _worldExportId: number
       _workExportId: number
       _productionExportId: number
       _sourceGameReleaseExportId?: number | null
-      _adoptedGameDefinitionExportId?: number | null
       _releasedGameReleaseExportId?: number | null
     }
   )[]
@@ -612,7 +365,7 @@ export interface ProjectExportData {
   )[]
   /** CTXG-2 content-addressed exact evidence bodies and prune tombstones. */
   agentRunArtifacts?: Omit<AgentRunArtifactRecordV1, 'id' | 'projectId'>[]
-  /** FLOW-2 独立自由节点文档与运行记录。 */
+  /** 领域节点模式的可视编排文档与运行记录。 */
   nodeFlows?: (
     Omit<NodeFlow, 'id' | 'projectId' | 'worldGroupId'>
     & WorldGroupExportRef
@@ -626,18 +379,14 @@ export interface ProjectExportData {
   simulationSessions?: (
     Omit<SimulationSession,
       'id' | 'projectId' | 'worldGroupId' | 'worldId' | 'workId'
-      | 'worldReleaseId' | 'gameReleaseId' | 'gameBuildId' | 'ttrpgBuildId'
-      | 'narrativeModuleId' | 'parentSessionId'>
+      | 'gameReleaseId' | 'gameBuildId' | 'parentSessionId'>
     & WorldGroupExportRef
     & {
       _exportId: number
       _worldExportId?: number | null
       _workExportId?: number | null
-      _worldReleaseExportId?: number | null
       _gameReleaseExportId?: number | null
       _gameBuildExportId?: number | null
-      _ttrpgBuildExportId?: number | null
-      _narrativeModuleExportId?: number | null
       _parentSessionExportId?: number | null
     }
   )[]

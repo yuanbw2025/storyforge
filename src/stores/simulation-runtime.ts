@@ -2,10 +2,6 @@ import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import {
   appendSimulationEvent,
-  advanceSimulationNarrative,
-  appendChatMessage,
-  appendChatReply,
-  configureChatSession,
   acceptNpcEvolutionProposal,
   appendTtrpgTurn,
   appendNpcEvolutionProposal,
@@ -31,7 +27,6 @@ import {
   verifySimulationCheckpoint,
 } from '../lib/simulation/runtime'
 import { buildSimulationCanonSnapshot } from '../lib/simulation/canon-snapshot'
-import { createWorldInstance } from '../lib/world-engine/instances'
 import { isFormalProductSessionKindV1 } from '../lib/product/runtime-boundary'
 import {
   EMPTY_SIMULATION_STATE,
@@ -47,8 +42,6 @@ import {
   type SimulationTtrpgCondition,
   type SimulationTtrpgNpcSchedule,
   type SimulationTtrpgQuest,
-  type SimulationChatIdentity,
-  type SimulationChatScene,
   type WorkspaceScope,
 } from '../lib/types'
 
@@ -73,18 +66,9 @@ interface SimulationRuntimeStore {
     seed?: string
     sourceKeys: string[]
     scope?: WorkspaceScope
-    chatConfig?: {
-      characterKey: string
-      identity: SimulationChatIdentity
-      scene: SimulationChatScene
-    }
   }): Promise<number>
-  configureChat(input: { characterKey: string; identity: SimulationChatIdentity; scene: SimulationChatScene }): Promise<void>
-  recordChatMessage(text: string): Promise<number>
-  recordChatReply(input: { replyToSequence: number; text: string; baseSequence: number; supersedesSequence?: number | null }): Promise<void>
   advanceTime(amount: number): Promise<void>
   recordNarrative(text: string): Promise<void>
-  advanceNarrative(targetNodeKey: string): Promise<void>
   proposeNpcEvolution(candidate: SimulationNpcEvolutionCandidate): Promise<void>
   acceptNpcEvolution(proposalSequence: number): Promise<void>
   rejectNpcEvolution(proposalSequence: number, reason?: string): Promise<void>
@@ -198,61 +182,18 @@ export const useSimulationRuntimeStore = create<SimulationRuntimeStore>((set, ge
         sourceKeys: input.sourceKeys,
       })
       const initialState = structuredClone(frozen.initialState)
-      if (input.chatConfig) {
-        initialState.chat = {
-          characterKey: input.chatConfig.characterKey.trim(),
-          identity: structuredClone(input.chatConfig.identity),
-          scene: structuredClone(input.chatConfig.scene),
-          messages: [],
-        }
-      }
-      const activeWork = input.scope ? await db.works.get(input.scope.workId) : null
-      const session = input.scope
-        ? await createWorldInstance({
-          scope: input.scope,
-          kind: input.kind,
-          title: input.title,
-          seed: input.seed,
-          draftSnapshotHash: frozen.snapshot.snapshotHash,
-          narrativeModuleId: activeWork?.activeNarrativeModuleId ?? null,
-          canonSnapshot: frozen.snapshot,
-          initialState,
-          worldGroupId: input.worldGroupId,
-        })
-        : await createSimulationSession({
-          projectId: input.projectId,
-          worldGroupId: input.worldGroupId,
-          kind: input.kind,
-          title: input.title,
-          seed: input.seed,
-          canonSnapshot: frozen.snapshot,
-          initialState,
-        })
+      const session = await createSimulationSession({
+        projectId: input.projectId,
+        worldGroupId: input.worldGroupId,
+        kind: input.kind,
+        title: input.title,
+        seed: input.seed,
+        canonSnapshot: frozen.snapshot,
+        initialState,
+      })
       await get().load(input.projectId, input.worldGroupId)
       await get().select(session.id!)
       return session.id!
-    },
-
-    configureChat: async input => {
-      const sessionId = get().selectedSessionId
-      if (sessionId == null) throw new Error('请先选择角色聊天会话。')
-      await configureChatSession({ sessionId, ...input, baseSequence: get().runtimeState.lastSequence })
-      await refreshSelected()
-    },
-
-    recordChatMessage: async text => {
-      const sessionId = get().selectedSessionId
-      if (sessionId == null) throw new Error('请先选择角色聊天会话。')
-      const event = await appendChatMessage({ sessionId, text })
-      await refreshSelected()
-      return event.sequence
-    },
-
-    recordChatReply: async input => {
-      const sessionId = get().selectedSessionId
-      if (sessionId == null) throw new Error('请先选择角色聊天会话。')
-      await appendChatReply({ sessionId, ...input })
-      await refreshSelected()
     },
 
     advanceTime: async amount => {
@@ -273,17 +214,6 @@ export const useSimulationRuntimeStore = create<SimulationRuntimeStore>((set, ge
         sessionId,
         type: 'narrative.recorded',
         payload: { text },
-      })
-      await refreshSelected()
-    },
-
-    advanceNarrative: async targetNodeKey => {
-      const sessionId = get().selectedSessionId
-      if (sessionId == null) throw new Error('请先选择运行时会话。')
-      await advanceSimulationNarrative({
-        sessionId,
-        targetNodeKey,
-        baseSequence: get().runtimeState.lastSequence,
       })
       await refreshSelected()
     },

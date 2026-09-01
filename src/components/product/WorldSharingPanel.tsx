@@ -4,14 +4,13 @@ import {
 } from 'lucide-react'
 import type { CommunityWorldLicense, Project } from '../../lib/types'
 import {
-  createWorldPackageV2,
+  createWorldPackage,
   downloadWorldPackage,
   importWorldPackage,
   inspectWorldPackage,
   type WorldPackageTrustReport,
   type WorldPackageUse,
 } from '../../lib/product/world-package'
-import { migrateLegacyWorldPackageV1 } from '../../lib/product/world-package-migration'
 import type { WorldRelease } from '../../lib/types'
 import { resolveWorkspaceScope } from '../../lib/world-engine/ownership'
 import { listWorldReleases } from '../../lib/world-engine/releases'
@@ -71,7 +70,7 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
         contentWarnings: warnings.split(/[，,\n]/),
       }
       if (!latestRelease?.id) throw new Error('请先在世界引擎封存一个纯语义 WorldRelease。')
-      const pkg = await createWorldPackageV2(latestRelease.id, options)
+      const pkg = await createWorldPackage(latestRelease.id, options)
       downloadWorldPackage(pkg, `storyforge-world-${pkg.manifest.sourceWorldCode}-v${pkg.manifest.sourceWorldVersion}.json`)
       setMessage('纯语义世界分享包已生成；不包含任何产品制作、媒资或运行记录。')
     } catch (error) {
@@ -104,20 +103,6 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
     } finally { setBusy(false) }
   }
 
-  const migratePackage = async () => {
-    if (!preview?.report.migrationRequired) return
-    setBusy(true); setMessage(null)
-    try {
-      const result = await migrateLegacyWorldPackageV1(preview.input)
-      setMessage(result.productRecoveryProjectId == null
-        ? '旧包已迁移为纯语义世界版本。'
-        : '旧包已拆分：纯语义世界已封存，原产品/媒资内容已保存在独立恢复工作区。')
-      onImported?.(result.semanticProjectId)
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '历史世界包迁移失败。')
-    } finally { setBusy(false) }
-  }
-
   return (
     <section className="sf-world-sharing" aria-label="世界发布与导入">
       <div className="sf-section-header">
@@ -146,7 +131,7 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
             <Upload className="h-4 w-4" />选择世界分享包
           </button>
           <input ref={fileRef} className="sf-sharing-file" type="file" accept="application/json,.json" aria-label="选择世界分享包" onChange={event => { const file = event.target.files?.[0]; if (file) void choosePackage(file); event.target.value = '' }} />
-          {preview && <WorldPackagePreview preview={preview} busy={busy} onImport={() => void importPackage()} onMigrate={() => void migratePackage()} />}
+          {preview && <WorldPackagePreview preview={preview} busy={busy} onImport={() => void importPackage()} />}
         </div>
       </div>
       {message && <p className="sf-product-message" role="status">{message}</p>}
@@ -154,7 +139,7 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
   )
 }
 
-function WorldPackagePreview({ preview, busy, onImport, onMigrate }: { preview: Preview; busy: boolean; onImport: () => void; onMigrate: () => void }) {
+function WorldPackagePreview({ preview, busy, onImport }: { preview: Preview; busy: boolean; onImport: () => void }) {
   const { report } = preview
   const manifest = report.manifest
   return (
@@ -164,7 +149,6 @@ function WorldPackagePreview({ preview, busy, onImport, onMigrate }: { preview: 
       {report.errors.map(error => <p key={error} className="sf-sharing-error">{error}</p>)}
       {report.warnings.map(warning => <p key={warning} className="sf-sharing-warning">{warning}</p>)}
       {report.importable && <button className="sf-button sf-button-primary" onClick={onImport} disabled={busy}><ShieldCheck className="h-4 w-4" />确认导入纯语义世界</button>}
-      {report.migrationRequired && <button className="sf-button sf-button-primary" onClick={onMigrate} disabled={busy}><ShieldCheck className="h-4 w-4" />分类迁移并保留旧产品内容</button>}
     </div>
   )
 }

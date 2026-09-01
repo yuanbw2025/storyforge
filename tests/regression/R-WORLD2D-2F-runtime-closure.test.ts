@@ -5,10 +5,11 @@ import {
   validateNarrativeModule,
 } from '../../src/lib/narrative/blueprint'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
-import { createWorldPackageV2, inspectWorldPackage } from '../../src/lib/product/world-package'
+import { createWorldPackage, inspectWorldPackage } from '../../src/lib/product/world-package'
 import {
   appendSimulationEvent,
   branchSimulationSession,
+  createSimulationSession,
   createSimulationCheckpoint,
   readSimulationState,
   verifySimulationCheckpoint,
@@ -209,7 +210,7 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
     expect(repeatedRevision.contentHash).toBe(fullRevision.contentHash)
 
     const release = await publishWorldRevision(repeatedRevision.id!)
-    const pkg = await createWorldPackageV2(release.id!, {
+    const pkg = await createWorldPackage(release.id!, {
       authorName: '测试作者',
       license: 'CC-BY-4.0',
       allowedUses: { writing: true, ttrpg: true, characterChat: true, textGame: true },
@@ -218,14 +219,14 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
     tampered.release.manifest.selectedTables.push(tampered.release.manifest.selectedTables[0])
     const report = await inspectWorldPackage(tampered)
     expect(report.valid).toBe(false)
-    expect(report.errors.join('；')).toContain('模块表清单无效')
+    expect(report.errors.join('；')).toContain('selectedTables 不允许重复')
 
     const mismatched = structuredClone(pkg)
     const portableStoryCores = mismatched.release.manifest.portableProject.storyCores as Array<Record<string, unknown>>
     portableStoryCores[0].logline = '与冻结 records 不一致的内容'
     const mismatchReport = await inspectWorldPackage(mismatched)
     expect(mismatchReport.valid).toBe(false)
-    expect(mismatchReport.errors.join('；')).toContain('便携数据与冻结记录「storyCores」不一致')
+    expect(mismatchReport.errors.join('；')).toContain('WorldRelease contentHash 不匹配')
   })
 
   it('WorldRelease 不能绕过产品生产直接运行；仅私域演化内核可确定回放、检查点和分支', async () => {
@@ -246,14 +247,13 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
         kind,
         title: `${kind} 不得直跑`,
         releaseId: release.id,
-      })).rejects.toThrow('必须绑定不可变 GameRelease')
+      } as any)).rejects.toThrow('必须且只能绑定一个 Product Release/Build')
     }
 
-    const session = await createWorldInstance({
-      scope,
+    const session = await createSimulationSession({
+      projectId: scope.projectId,
       kind: 'npc-evolution',
-      title: '世界私域演化内核',
-      draftSnapshotHash: 'private-evolution-draft',
+      title: '产品私域演化内核',
       seed: 'fixed-evolution',
     })
     await appendSimulationEvent({ sessionId: session.id!, type: 'time.advanced', payload: { amount: 2 } })
@@ -270,9 +270,9 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
       seed: 'branch-fixed',
     })
     expect(branch).toMatchObject({
-      worldReleaseId: null,
-      narrativeModuleId: null,
-      narrativeModuleExportId: null,
+      gameReleaseId: null,
+      gameBuildId: null,
+      runtimeSourceHash: null,
       parentThroughSequence: 1,
     })
     expect((await readSimulationState(branch.id!)).clock).toBe(2)

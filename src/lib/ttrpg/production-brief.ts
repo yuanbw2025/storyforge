@@ -10,7 +10,7 @@ import type {
   TtrpgProductionBriefV2,
   TtrpgProductionSeatV2,
   WorkspaceScope,
-  WorldGameSourceSelectionV2,
+  ProductWorldSourceSelectionV1,
 } from "../types";
 import { assertRecordInScope, resolveScope } from "../world-engine/scope";
 import {
@@ -110,10 +110,12 @@ function nullableId(value: unknown, label: string): number | null {
     ? null
     : integer(value, label, 1, Number.MAX_SAFE_INTEGER);
 }
-function nullablePortableId(value: unknown, label: string): number | null {
-  return value === null
-    ? null
-    : integer(value, label, 0, Number.MAX_SAFE_INTEGER);
+function nullableWorldResourceKey(value: unknown, label: string): string | null {
+  if (value === null) return null;
+  const resourceKey = text(value, label, 1_000);
+  if (!resourceKey.startsWith("world-release:") || /\s/.test(resourceKey))
+    fail(`${label} 不是中立世界资源 key`);
+  return resourceKey;
 }
 function nullableTier(
   value: unknown,
@@ -139,7 +141,7 @@ function parseSeat(value: unknown, index: number): TtrpgProductionSeatV2 {
       "controller",
       "role",
       "characterMode",
-      "sourceCharacterExportId",
+      "sourceCharacterResourceKey",
       "characterName",
       "rankTier",
       "privateGoal",
@@ -151,15 +153,15 @@ function parseSeat(value: unknown, index: number): TtrpgProductionSeatV2 {
     ["world-template", "quick-card", "manual", "ai-generated"],
     `${label}.characterMode`,
   );
-  const sourceCharacterExportId = nullablePortableId(
-    row.sourceCharacterExportId,
-    `${label}.sourceCharacterExportId`,
+  const sourceCharacterResourceKey = nullableWorldResourceKey(
+    row.sourceCharacterResourceKey,
+    `${label}.sourceCharacterResourceKey`,
   );
   const rankTier = nullableTier(row.rankTier, `${label}.rankTier`);
-  if (characterMode === "world-template" && sourceCharacterExportId === null)
-    fail(`${label} 世界模板缺少 portable ID`);
-  if (characterMode !== "world-template" && sourceCharacterExportId !== null)
-    fail(`${label} 非世界模板不得绑定 portable ID`);
+  if (characterMode === "world-template" && sourceCharacterResourceKey === null)
+    fail(`${label} 世界模板缺少世界资源 key`);
+  if (characterMode !== "world-template" && sourceCharacterResourceKey !== null)
+    fail(`${label} 非世界模板不得绑定世界资源 key`);
   if (characterMode === "quick-card" && rankTier === null)
     fail(`${label} 快速卡缺少阶位`);
   if (characterMode !== "quick-card" && rankTier !== null)
@@ -174,7 +176,7 @@ function parseSeat(value: unknown, index: number): TtrpgProductionSeatV2 {
     ),
     role: enumValue(row.role, ["player", "assistant-gm"], `${label}.role`),
     characterMode,
-    sourceCharacterExportId,
+    sourceCharacterResourceKey,
     characterName: text(row.characterName, `${label}.characterName`, 300, true),
     rankTier,
     privateGoal: text(row.privateGoal, `${label}.privateGoal`, 2_000, true),
@@ -337,7 +339,7 @@ export function parseTtrpgProductionBriefV2(
   if (new Set(seats.map((seat) => seat.seatKey)).size !== seats.length)
     fail("seatKey 重复");
   const worldSeatIds = seats.flatMap((seat) =>
-    seat.sourceCharacterExportId == null ? [] : [seat.sourceCharacterExportId],
+    seat.sourceCharacterResourceKey == null ? [] : [seat.sourceCharacterResourceKey],
   );
   if (new Set(worldSeatIds).size !== worldSeatIds.length)
     fail("同一世界角色不能同时绑定多个席位");
@@ -724,12 +726,12 @@ export interface TtrpgProductionBriefDraftInputV2 {
 
 function defaultSeats(input: {
   playerCount: number;
-  selection: WorldGameSourceSelectionV2;
+  selection: ProductWorldSourceSelectionV1;
   defaultMode: TtrpgProductionSeatV2["characterMode"];
 }): TtrpgProductionSeatV2[] {
   return Array.from({ length: input.playerCount }, (_, index) => {
-    const exportId = input.selection.characterExportIds[index] ?? null;
-    const worldTemplate = exportId !== null;
+    const resourceKey = input.selection.roleBindings.participants?.[index] ?? null;
+    const worldTemplate = resourceKey !== null;
     const characterMode = worldTemplate
       ? "world-template"
       : input.defaultMode === "world-template"
@@ -741,8 +743,8 @@ function defaultSeats(input: {
       controller: index === 0 ? ("human" as const) : ("ai" as const),
       role: "player" as const,
       characterMode,
-      sourceCharacterExportId: worldTemplate ? exportId : null,
-      characterName: worldTemplate ? `世界角色 #${exportId}` : "",
+      sourceCharacterResourceKey: worldTemplate ? resourceKey : null,
+      characterName: worldTemplate ? `世界角色 ${index + 1}` : "",
       rankTier: characterMode === "quick-card" ? ("C" as const) : null,
       privateGoal: "",
     };
@@ -833,7 +835,8 @@ export async function resolveTtrpgProductionRulePackV2(input: {
 /** Deterministically compile the nine-step author choices into a frozen contract. */
 export async function compileTtrpgProductionBriefV2(input: {
   scope: WorkspaceScope;
-  selection: WorldGameSourceSelectionV2;
+  selection: ProductWorldSourceSelectionV1;
+  worldContentHash: string;
   /** Presentation-only source identity. Legacy callers default to WorldRelease. */
   sourceDescriptor?: {
     kind: "world-release" | "development-fixture";
@@ -894,7 +897,7 @@ export async function compileTtrpgProductionBriefV2(input: {
     draft.characters?.defaultCreationMode ?? "ai-generated";
   const playerCount =
     draft.playerCount ??
-    Math.max(1, Math.min(4, input.selection.characterExportIds.length || 1));
+    Math.max(1, Math.min(4, input.selection.roleBindings.participants?.length || 1));
   const seats =
     draft.seats ??
     defaultSeats({
@@ -939,7 +942,7 @@ export async function compileTtrpgProductionBriefV2(input: {
   const sourceDescriptor = input.sourceDescriptor ?? {
     kind: "world-release" as const,
     label: "冻结 WorldRelease",
-    rootRef: `world:${input.selection.worldContentHash}`,
+    rootRef: `world:${input.selection.worldReferenceHash}`,
   };
   const campaignBackground = draft.campaign?.background
     ?? `严格基于${sourceDescriptor.label}展开，不把产品生成内容反写为世界 Canon。`;
@@ -947,7 +950,7 @@ export async function compileTtrpgProductionBriefV2(input: {
   const campaignStructure = draft.story?.structure ?? "node-based";
   const campaignDesign = draft.campaignDesign ?? (() => {
     const generated = createAuthorGuidedTtrpgCampaignDesignV2({
-      sourceWorldContentHash: input.selection.worldContentHash,
+      sourceWorldContentHash: input.worldContentHash,
       title: campaignTitle,
       background: campaignBackground,
       coreConflict: campaignCoreConflict,
@@ -955,15 +958,15 @@ export async function compileTtrpgProductionBriefV2(input: {
       structure: campaignStructure,
       sourceRefs: [
         sourceDescriptor.rootRef,
-        ...input.selection.characterExportIds.map((id) => `character:${id}`),
-        ...input.selection.importantLocationExportIds.map((id) => `location:${id}`),
-        ...input.selection.storyArcExportIds.map((id) => `storyArc:${id}`),
+        ...(input.selection.roleBindings.participants ?? []),
+        ...(input.selection.roleBindings.locations ?? []),
+        ...(input.selection.roleBindings.quests ?? []),
       ],
     });
     generated.selection.confirmed = confirmed;
     return parseTtrpgCampaignDesignV2(generated);
   })();
-  if (campaignDesign.sourceWorldContentHash !== input.selection.worldContentHash) fail("战役提案来源与冻结世界不一致");
+  if (campaignDesign.sourceWorldContentHash !== input.worldContentHash) fail("战役提案来源与冻结世界不一致");
   return parseTtrpgProductionBriefV2({
     schema: "storyforge.ttrpg-production-brief",
     version: 2,

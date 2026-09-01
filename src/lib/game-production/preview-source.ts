@@ -1,13 +1,30 @@
 import { db } from '../db/schema'
-import type { PlayableGameSourceV1, ResolvedPlayableGamePackageV2, WorkspaceScope } from '../types'
-import { assertGameReleaseUnchanged, parseAnyGameReleaseManifest, parseAnyGameReleaseManifestVersion } from '../text-game/releases'
+import type { PlayableGameSourceV1, ResolvedPlayableGamePackageV2, SimulationSession, WorkspaceScope } from '../types'
+import { assertGameReleaseUnchanged } from '../text-game/releases'
 import { assertRecordInScope, resolveScope } from '../world-engine/scope'
-import { assertReleaseUnchanged } from '../world-engine/releases'
 import { createBuildGameMediaResolver, createReleaseGameMediaResolver } from './media-resolver'
 import { verifyGameBuildPreviewManifestV1 } from './preview-manifest'
-import { gameRuntimePackageFromReleaseV1, verifyGameReleaseManifestV2 } from './runtime-package'
-import { resolveTtrpgProductionBuildRuntimeV1 } from '../ttrpg/production-service'
-import { createTtrpgProductionBuildMediaResolverV1 } from '../ttrpg/production-media'
+import { verifyGameReleaseManifestV2 } from './runtime-package'
+
+export async function playableGameSourceForSessionV2(session: SimulationSession): Promise<PlayableGameSourceV1> {
+  if (session.gameReleaseId != null) return { kind: 'release', gameReleaseId: session.gameReleaseId }
+  if (session.gameBuildId != null) {
+    const build = await db.gameBuilds.get(session.gameBuildId)
+    if (!build?.previewHash) throw new Error('[playable-game-source] 会话绑定的 Product Build 不存在或尚未冻结')
+    return { kind: 'build', gameBuildId: build.id!, expectedPreviewHash: build.previewHash }
+  }
+  throw new Error('[playable-game-source] 会话没有绑定 Product Release 或 Build')
+}
+
+export async function verifyPlayableSessionPackageV2(input: {
+  scope: WorkspaceScope
+  session: SimulationSession
+}): Promise<Omit<ResolvedPlayableGamePackageV2, 'mediaResolver'>> {
+  return verifyPlayableGamePackageSource({
+    scope: input.scope,
+    source: await playableGameSourceForSessionV2(input.session),
+  })
+}
 
 export async function resolvePlayableGameSource(input: {
   scope: WorkspaceScope
@@ -16,16 +33,12 @@ export async function resolvePlayableGameSource(input: {
   const verified = await verifyPlayableGamePackageSource(input)
   const mediaResolver = input.source.kind === 'release'
     ? await createReleaseGameMediaResolver({ scope: input.scope, runtimePackage: verified.runtimePackage })
-    : input.source.kind === 'build' ? await createBuildGameMediaResolver({
+    : await createBuildGameMediaResolver({
       scope: input.scope,
       gameBuildId: input.source.gameBuildId,
       preview: await verifyGameBuildPreviewManifestV1(
         (await db.gameBuilds.get(input.source.gameBuildId))?.previewManifestJson ?? '',
       ),
-    }) : await createTtrpgProductionBuildMediaResolverV1({
-      scope: input.scope,
-      buildId: input.source.ttrpgBuildId,
-      expectedBuildHash: input.source.expectedBuildHash,
     })
   return { ...verified, mediaResolver }
 }
@@ -45,27 +58,15 @@ export async function verifyPlayableGamePackageSource(input: {
     if (!await assertRecordInScope(scope, 'gameReleases', release, { owner: 'work' })) {
       throw new Error('[playable-game-source] GameRelease 不属于当前 Work')
     }
-    const parsed = parseAnyGameReleaseManifestVersion(release.manifestJson)
-    const runtimePackage = parsed.version === 2
-      ? (await verifyGameReleaseManifestV2(parsed)).runtimePackage
-      : gameRuntimePackageFromReleaseV1(parseAnyGameReleaseManifest(release.manifestJson))
-    const packageHash = parsed.version === 2 ? parsed.packageHash : release.contentHash
+    const parsed = await verifyGameReleaseManifestV2(release.manifestJson)
+    const runtimePackage = parsed.runtimePackage
+    const packageHash = parsed.packageHash
     return {
       source: input.source,
       runtimePackage,
       packageHash,
       runtimeSourceHash: packageHash,
-      sourceWorldReleaseId: release.worldReleaseId,
     }
-  }
-
-  if (input.source.kind === 'ttrpg-build') {
-    const resolved = await resolveTtrpgProductionBuildRuntimeV1({
-      scope,
-      buildId: input.source.ttrpgBuildId,
-      expectedBuildHash: input.source.expectedBuildHash,
-    })
-    return { source: input.source, ...resolved }
   }
 
   const build = await db.gameBuilds.get(input.source.gameBuildId)
@@ -88,18 +89,13 @@ export async function verifyPlayableGamePackageSource(input: {
     || preview.productionKey !== production.productionKey || preview.buildNumber !== build.buildNumber) {
     throw new Error('[playable-game-source] Build Preview 指针或 hash 不一致')
   }
-  const worldRelease = await db.worldReleases.get(brief.sourceWorldReleaseId)
-  if (!worldRelease || worldRelease.projectId !== scope.projectId || worldRelease.worldId !== scope.worldId
-    || worldRelease.contentHash !== brief.sourceWorldContentHash
-    || preview.runtimePackage.sourceWorld.contentHash !== worldRelease.contentHash) {
-    throw new Error('[playable-game-source] Build Preview 的 WorldRelease 来源损坏')
+  if (preview.runtimePackage.sourceWorld.contentHash !== brief.sourceWorldContentHash) {
+    throw new Error('[playable-game-source] Build Preview 的冻结世界来源证据损坏')
   }
-  await assertReleaseUnchanged(worldRelease.id!)
   return {
     source: input.source,
     runtimePackage: preview.runtimePackage,
     packageHash: preview.packageHash,
     runtimeSourceHash: preview.packageHash,
-    sourceWorldReleaseId: worldRelease.id!,
   }
 }

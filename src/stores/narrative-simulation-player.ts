@@ -17,11 +17,12 @@ import {
   readSimulationStateVersion,
   verifySimulationCheckpoint,
 } from '../lib/simulation/runtime'
+import { verifyPlayableSessionPackageV2 } from '../lib/game-production/preview-source'
 import { assertGameReleaseUnchanged, parseNarrativeSimulationGameReleaseManifest } from '../lib/text-game/releases'
 import type {
   AIConfig,
   GameRelease,
-  NarrativeSimulationGameReleaseManifestV1,
+  NarrativeSimulationGameRuntimePackageV2,
   SimulationCheckpoint,
   SimulationEvent,
   SimulationRuntimeState,
@@ -33,7 +34,7 @@ import { assertInstanceBinding, createNarrativeSimulationInstance, readBoundInst
 
 export interface NarrativeSimulationLibraryItem {
   release: GameRelease
-  manifest: NarrativeSimulationGameReleaseManifestV1 | null
+  manifest: NarrativeSimulationGameRuntimePackageV2 | null
   error: string
 }
 
@@ -46,7 +47,7 @@ interface NarrativeSimulationPlayerState {
   events: SimulationEvent[]
   checkpoints: SimulationCheckpoint[]
   runtimeState: SimulationRuntimeState
-  selectedManifest: NarrativeSimulationGameReleaseManifestV1 | null
+  selectedManifest: NarrativeSimulationGameRuntimePackageV2 | null
   generatedCandidate: NarrativeSimulationRuntimeCandidateV1 | null
   loading: boolean
   busy: boolean
@@ -82,25 +83,30 @@ async function readLibrary(scope: WorkspaceScope): Promise<NarrativeSimulationLi
 
 async function assertSession(scope: WorkspaceScope, sessionId: number): Promise<SimulationSession> {
   const session = await assertInstanceBinding(sessionId, scope)
-  if (session.kind !== 'textsimulation' || session.gameReleaseId == null) {
-    throw new Error('[textsim] 该存档不是正式叙事模拟。')
-  }
+  if (session.kind !== 'textsimulation') throw new Error('[textsim] 该存档不是叙事模拟。')
   return session
+}
+
+function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyPlayableSessionPackageV2>>['runtimePackage']) {
+  if (runtimePackage.productType !== 'narrative-simulation' || !runtimePackage.simulation) {
+    throw new Error('[textsim] 该存档没有绑定有效的 Product Build 或 GameRelease。')
+  }
+  return structuredClone(runtimePackage) as NarrativeSimulationGameRuntimePackageV2
 }
 
 async function readDetails(scope: WorkspaceScope, sessionId: number) {
   const session = await assertSession(scope, sessionId)
-  const [events, checkpoints, runtimeState, release] = await Promise.all([
+  const [events, checkpoints, runtimeState, playable] = await Promise.all([
     db.simulationEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.simulationCheckpoints.where('sessionId').equals(sessionId).toArray(),
     readSimulationState(sessionId),
-    assertGameReleaseUnchanged(session.gameReleaseId!),
+    verifyPlayableSessionPackageV2({ scope, session }),
   ])
   return {
     events,
     checkpoints: checkpoints.sort((left, right) => right.createdAt - left.createdAt),
     runtimeState,
-    selectedManifest: parseNarrativeSimulationGameReleaseManifest(release.manifestJson),
+    selectedManifest: playableManifest(playable.runtimePackage),
   }
 }
 

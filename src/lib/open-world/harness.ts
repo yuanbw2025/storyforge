@@ -14,9 +14,9 @@ import { hashCanonicalValue } from '../agent/run/hash'
 import { assertOpenWorldRuntimeHarnessFreshV1, captureOpenWorldRuntimeHarnessBoundaryV1 } from '../agent/run/runtime-scope'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { db } from '../db/schema'
+import { verifyPlayableSessionPackageV2 } from '../game-production/preview-source'
 import { assembleContext } from '../registry/assemble-context'
 import { readSimulationState, readSimulationStateVersion } from '../simulation/runtime'
-import { assertGameReleaseUnchanged, parseTextOpenWorldGameReleaseManifest } from '../text-game/releases'
 import type { AIConfig, ChatMessage, OpenWorldExpressionCandidateV1, WorkspaceScope } from '../types'
 import { validateOpenWorldExpressionCandidate } from './runtime'
 
@@ -140,10 +140,14 @@ export async function generateOpenWorldRuntimeCandidateV1(input: {
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1, outputHash: await hashCanonicalValue(output) })
     const draft = parseDraft(input.skillId, output)
     const [state, events, session] = await Promise.all([readSimulationState(input.simulationSessionId), db.simulationEvents.where('sessionId').equals(input.simulationSessionId).toArray(), db.simulationSessions.get(input.simulationSessionId)])
-    if (!state.openWorld || session?.gameReleaseId == null) fail('模型返回时开放世界实例已失效')
-    const release = await assertGameReleaseUnchanged(session.gameReleaseId)
-    const manifest = parseTextOpenWorldGameReleaseManifest(release.manifestJson)
-    validateOpenWorldExpressionCandidate({ candidate: draft, state: state.openWorld, content: manifest.openWorld, events })
+    if (!state.openWorld || !session || session.worldId == null || session.workId == null) fail('模型返回时开放世界实例已失效')
+    const playable = await verifyPlayableSessionPackageV2({
+      scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId }, session,
+    })
+    if (playable.runtimeSourceHash !== session.runtimeSourceHash
+      || playable.runtimePackage.productType !== 'text-open-world'
+      || !playable.runtimePackage.openWorld) fail('模型返回时开放世界冻结运行源已失效')
+    validateOpenWorldExpressionCandidate({ candidate: draft, state: state.openWorld, content: playable.runtimePackage.openWorld, events })
     const body = { version: 1 as const, portable: false as const, runId: snapshot.run.id, ...boundary.scope.runtime, contextManifestHash: contextManifest.manifestHash, ...draft }
     const candidate = { ...body, candidateHash: await hashCanonicalValue(body) }
     snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1, candidateHash: candidate.candidateHash, requiresConfirmation: false })
@@ -180,10 +184,14 @@ export async function adoptOpenWorldRuntimeCandidateV1(input: { scope: Workspace
     throw Object.assign(error instanceof Error ? error : new Error('运行时候选已过期'), { snapshot })
   }
   const [state, events, version, session] = await Promise.all([readSimulationState(candidate.simulationSessionId), db.simulationEvents.where('sessionId').equals(candidate.simulationSessionId).toArray(), readSimulationStateVersion(candidate.simulationSessionId), db.simulationSessions.get(candidate.simulationSessionId)])
-  if (!state.openWorld || session?.gameReleaseId == null) fail('开放世界实例已失效')
-  const release = await assertGameReleaseUnchanged(session.gameReleaseId)
-  const manifest = parseTextOpenWorldGameReleaseManifest(release.manifestJson)
-  validateOpenWorldExpressionCandidate({ candidate, state: state.openWorld, content: manifest.openWorld, events })
+  if (!state.openWorld || !session || session.worldId == null || session.workId == null) fail('开放世界实例已失效')
+  const playable = await verifyPlayableSessionPackageV2({
+    scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId }, session,
+  })
+  if (playable.runtimeSourceHash !== session.runtimeSourceHash
+    || playable.runtimePackage.productType !== 'text-open-world'
+    || !playable.runtimePackage.openWorld) fail('开放世界冻结运行源已失效')
+  validateOpenWorldExpressionCandidate({ candidate, state: state.openWorld, content: playable.runtimePackage.openWorld, events })
   const adoptionHash = await hashCanonicalValue({ candidateHash: candidate.candidateHash, resultingSequence: version.sequence, resultingStateHash: version.stateHash, writeTargets: [] })
   snapshot = await appendRuntimeCandidateAdoptedV1({ scope: input.scope, runId: snapshot.run.id, expectedLastSequence: snapshot.projection.lastSequence, payload: { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, candidateHash: candidate.candidateHash, adoptionHash, commandIds: [], baseSequence: candidate.baseSequence, resultingSequence: version.sequence } })
   snapshot = await append(input.scope, snapshot, 'step.succeeded', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1, outputHash: adoptionHash })

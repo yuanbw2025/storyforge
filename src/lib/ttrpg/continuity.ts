@@ -4,12 +4,11 @@ import {
   hashSimulationRuntimeStateV1,
   readSimulationState,
 } from "../simulation/runtime";
-import { buildPlayableWorldBundleFromRelease } from "../simulation/canon-snapshot";
 import type {
   SimulationSession,
   WorkspaceScope,
-  WorldReleaseManifestV2,
 } from "../types";
+import { EMPTY_SIMULATION_STATE } from "../types";
 import { createContinuedTtrpgGameInstanceV2 } from "../world-engine/instances";
 import { resolveScope } from "../world-engine/scope";
 import { parseTtrpgCampaignContentV1 } from "./campaign";
@@ -66,31 +65,8 @@ export async function previewTtrpgContinuationV2(input: {
     verifiedTtrpgSource(scope, input.targetGameReleaseId),
     readSimulationState(parent.id!),
   ]);
-  if (targetPlayable.sourceWorldReleaseId == null) {
-    throw new Error(
-      "[ttrpg-continuity] 续团目标必须绑定正式 WorldRelease",
-    );
-  }
-  const targetRelease = await db.worldReleases.get(
-    targetPlayable.sourceWorldReleaseId,
-  );
-  if (
-    !targetRelease ||
-    targetRelease.projectId !== scope.projectId ||
-    targetRelease.worldId !== scope.worldId
-  ) {
-    throw new Error("[ttrpg-continuity] 目标世界发布不存在或跨 World");
-  }
-  const targetWorldManifest = JSON.parse(
-    targetRelease.manifestJson,
-  ) as WorldReleaseManifestV2;
-  const playableWorld = await buildPlayableWorldBundleFromRelease({
-    manifest: targetWorldManifest,
-    worldContentHash: targetRelease.contentHash,
-    createdAt: targetRelease.createdAt,
-  });
   const targetInitialState = createInitialTtrpgProductStateV1({
-    initialState: playableWorld.initialState,
+    initialState: structuredClone(EMPTY_SIMULATION_STATE),
     content: targetPlayable.runtimePackage.ttrpg!,
   });
   const parentRulePack = parseRulePackV1(

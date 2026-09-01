@@ -30,21 +30,22 @@ describe('GAMEPROD-1A1 · six-table production lifecycle', () => {
     const run = build?.id == null
       ? undefined
       : await db.agentRuns.where('gameBuildId').equals(build.id).first()
-    const avgBlob = await db.avgMediaBlobs.where('projectId').equals(importedProjectId).first()
+    const productBlob = await db.productMediaBlobs.where('projectId').equals(importedProjectId).first()
 
     expect(brief?.productionId).toBe(production?.id)
     expect(command?.productionId).toBe(production?.id)
     expect(build?.productionId).toBe(production?.id)
     expect(artifact).toMatchObject({ buildId: build?.id, producerRunId: run?.id, blobObjectId: media?.id })
     expect(run?.gameBuildId).toBe(build?.id)
-    expect(avgBlob?.blobObjectId).toBe(media?.id)
+    expect(productBlob?.blobObjectId).toBe(media?.id)
     expect(media).toMatchObject({ backend: 'indexeddb', storageState: 'ready', opfsPath: null, leaseOwner: null })
     expect(media?.data).toBeInstanceOf(ArrayBuffer)
 
     await cascadeDeleteProject(importedProjectId)
     for (const table of [
       db.gameProductions, db.gameProductionBriefs, db.gameProductionCommands,
-      db.gameBuilds, db.gameBuildArtifacts, db.mediaBlobObjects,
+      db.gameBuilds, db.gameBuildArtifacts, db.productMediaAssets, db.productMediaBlobs,
+      db.mediaBlobObjects,
     ]) expect(await table.where('projectId').equals(importedProjectId).count()).toBe(0)
   }, 40_000)
 

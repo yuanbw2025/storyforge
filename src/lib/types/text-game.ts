@@ -9,7 +9,8 @@ import type {
   FrozenInteractionSceneTemplate,
 } from './character-interaction'
 import type { AdventureContentV1 } from './adventure'
-import type { AvgPresentationContentV1, FrozenAvgMediaAsset } from './avg'
+import type { AvgPresentationContentV1 } from './avg'
+import type { FrozenProductMediaAsset } from './product-media'
 import type { NarrativeSimulationContentV1 } from './narrative-simulation'
 import type { OpenWorldContentV1 } from './open-world'
 import type { RagDocumentMetadata } from './rag-library'
@@ -26,99 +27,21 @@ export const GAME_PRODUCT_TYPES = [
 ] as const
 export type GameProductType = typeof GAME_PRODUCT_TYPES[number]
 
-export interface WorldGameSourceSelectionV1 {
-  schema: 'storyforge.world-game-source'
+/**
+ * Product-owned selection over the neutral WorldRelease resource protocol.
+ *
+ * The selection deliberately contains no world table names, export ids,
+ * executable narrative modules or media assets. Product requirement adapters
+ * assign semantic resources to product-local roles; the product Build owns all
+ * narrative, media and runtime state created from those resources.
+ */
+export interface ProductWorldSourceSelectionV1 {
+  schema: 'storyforge.product-world-source-selection'
   version: 1
-  productType: Extract<GameProductType, 'storygame' | 'text-adventure' | 'avg'>
-  worldContentHash: string
-  narrativeModuleExportId: number
-  characterExportIds: number[]
-  characterRelationExportIds: number[]
-  importantLocationExportIds: number[]
-  artifactExportIds: number[]
-  codexEntryExportIds: number[]
-  storyArcExportIds: number[]
-  avgMediaAssetExportIds: number[]
-}
-
-export type ProductSpecificWorldSourceV1 =
-  | {
-      kind: 'storygame'
-      narrativeModuleExportIds: number[]
-    }
-  | {
-      kind: 'character-interaction'
-      participantCharacterExportIds: number[]
-      sceneKeys: string[]
-    }
-  | {
-      kind: 'text-adventure'
-      locationExportIds: number[]
-      itemExportIds: number[]
-      questStoryArcExportIds: number[]
-    }
-  | {
-      kind: 'avg'
-      presentationStyle: string
-      existingMediaAssetExportIds: number[]
-    }
-  | {
-      kind: 'narrative-simulation'
-      issueStoryArcExportIds: number[]
-      factionExportIds: number[]
-    }
-  | {
-      kind: 'text-open-world'
-      regionLocationExportIds: number[]
-      factionExportIds: number[]
-      questStoryArcExportIds: number[]
-    }
-  | {
-      kind: 'ttrpg'
-      participantCharacterExportIds: number[]
-      locationExportIds: number[]
-      questStoryArcExportIds: number[]
-    }
-
-/** Portable selection shared by six text-game products and TTRPG Builds/Releases. */
-export interface WorldGameSourceSelectionV2 {
-  schema: 'storyforge.world-game-source'
-  version: 2
   productType: GameProductType
-  worldContentHash: string
-  narrativeModuleExportIds: number[]
-  characterExportIds: number[]
-  characterRelationExportIds: number[]
-  importantLocationExportIds: number[]
-  artifactExportIds: number[]
-  codexEntryExportIds: number[]
-  storyArcExportIds: number[]
-  avgMediaAssetExportIds: number[]
-  productSource: ProductSpecificWorldSourceV1 | null
-}
-
-export interface GameDefinition {
-  id?: number
-  projectId: number
-  worldId: number
-  workId: number
-  gameKey: string
-  productType: GameProductType
-  title: string
-  description: string
-  status: 'draft' | 'archived'
-  narrativeModuleId: number
-  enabledCapabilitiesJson: string
-  initialVariablesJson: string
-  rulesetVersion: number
-  /** Immutable WorldRelease content hash used to derive this authored draft. */
-  sourceWorldContentHash?: string
-  /** Portable export-id selection; never stores source Dexie numeric ids. */
-  sourceSelectionJson?: string
-  /** Deterministic world-to-game mapping contract version. */
-  sourceMappingVersion?: number
-  createdAt: number
-  updatedAt: number
+  worldReferenceHash: string
+  resourceKeys: string[]
+  roleBindings: Record<string, string[]>
 }
 
 export const NARRATIVE_BEAT_KINDS = ['narration', 'dialogue', 'action', 'system'] as const
@@ -207,100 +130,22 @@ export interface NarrativeContentGraphReport {
   errors: string[]
 }
 
-export interface GameReleaseManifestV1 {
-  schema: 'storyforge.game-release'
-  version: 1
-  productType: 'storygame'
-  definition: {
-    gameKey: string
-    title: string
-    description: string
-    enabledCapabilities: string[]
-    rulesetVersion: number
-    initialVariables: Record<string, unknown>
-    source?: {
-      worldContentHash: string
-      mappingVersion: number
-      selection: WorldGameSourceSelectionV1
-    } | null
-  }
-  worldRelease: {
-    contentHash: string
-    narrativeModuleExportId: number
-  }
-  narrative: {
-    moduleKind: NarrativeModuleKind
-    moduleTitle: string
-    entryNodeKey: string
-    nodes: FrozenGameNarrativeNode[]
-    beats: FrozenNarrativeBeat[]
-    choices: FrozenNarrativeChoice[]
-  }
+export interface FrozenGameNarrativeV2 {
+  moduleKind: NarrativeModuleKind
+  moduleTitle: string
+  entryNodeKey: string
+  nodes: FrozenGameNarrativeNode[]
+  beats: FrozenNarrativeBeat[]
+  choices: FrozenNarrativeChoice[]
 }
 
-export interface InteractionGameReleaseManifestV1 {
-  schema: 'storyforge.game-release'
-  version: 1
-  productType: 'character-interaction'
-  definition: GameReleaseManifestV1['definition']
-  worldRelease: GameReleaseManifestV1['worldRelease']
-  narrative: GameReleaseManifestV1['narrative']
-  interaction: {
-    playerKey: 'player'
-    profiles: FrozenInteractionCharacterProfile[]
-    sceneTemplates: FrozenInteractionSceneTemplate[]
-  }
+export interface FrozenInteractionRuntimeV2 {
+  playerKey: 'player'
+  profiles: FrozenInteractionCharacterProfile[]
+  sceneTemplates: FrozenInteractionSceneTemplate[]
 }
 
-export interface AdventureGameReleaseManifestV1 {
-  schema: 'storyforge.game-release'
-  version: 1
-  productType: 'text-adventure'
-  definition: GameReleaseManifestV1['definition']
-  worldRelease: GameReleaseManifestV1['worldRelease']
-  narrative: GameReleaseManifestV1['narrative']
-  interaction: InteractionGameReleaseManifestV1['interaction']
-  adventure: AdventureContentV1
-}
-
-export interface AvgGameReleaseManifestV1 {
-  schema: 'storyforge.game-release'
-  version: 1
-  productType: 'avg'
-  definition: GameReleaseManifestV1['definition']
-  worldRelease: GameReleaseManifestV1['worldRelease']
-  narrative: GameReleaseManifestV1['narrative']
-  presentation: AvgPresentationContentV1 & {
-    assets: FrozenAvgMediaAsset[]
-  }
-}
-
-export interface NarrativeSimulationGameReleaseManifestV1 {
-  schema: 'storyforge.game-release'
-  version: 1
-  productType: 'narrative-simulation'
-  definition: GameReleaseManifestV1['definition']
-  worldRelease: GameReleaseManifestV1['worldRelease']
-  narrative: GameReleaseManifestV1['narrative']
-  simulation: NarrativeSimulationContentV1
-}
-
-export interface TextOpenWorldGameReleaseManifestV1 {
-  schema: 'storyforge.game-release'
-  version: 1
-  productType: 'text-open-world'
-  definition: GameReleaseManifestV1['definition']
-  worldRelease: GameReleaseManifestV1['worldRelease']
-  narrative: GameReleaseManifestV1['narrative']
-  interaction: InteractionGameReleaseManifestV1['interaction']
-  adventure: AdventureContentV1
-  simulation: NarrativeSimulationContentV1
-  openWorld: OpenWorldContentV1
-}
-
-export type AnyGameReleaseManifestV1 = GameReleaseManifestV1 | InteractionGameReleaseManifestV1 | AdventureGameReleaseManifestV1 | AvgGameReleaseManifestV1 | NarrativeSimulationGameReleaseManifestV1 | TextOpenWorldGameReleaseManifestV1
-
-export interface FrozenRuntimeMediaAssetV2 extends FrozenAvgMediaAsset {
+export interface FrozenRuntimeMediaAssetV2 extends FrozenProductMediaAsset {
   /** Content-addressed physical object identity; never a local row id or object URL. */
   blobContentHash: string
 }
@@ -323,10 +168,10 @@ export interface GameRuntimePackageV2 {
   }
   sourceWorld: {
     contentHash: string
-    selection: WorldGameSourceSelectionV2
+    selection: ProductWorldSourceSelectionV1
   }
-  narrative: GameReleaseManifestV1['narrative']
-  interaction?: InteractionGameReleaseManifestV1['interaction']
+  narrative: FrozenGameNarrativeV2
+  interaction?: FrozenInteractionRuntimeV2
   adventure?: AdventureContentV1
   presentation?: AvgPresentationContentV1 & { assets: FrozenRuntimeMediaAssetV2[] }
   simulation?: NarrativeSimulationContentV1
@@ -351,15 +196,43 @@ export interface GameReleaseManifestV2 {
   } | null
 }
 
-export type AnyGameReleaseManifest = AnyGameReleaseManifestV1 | GameReleaseManifestV2
+export type StoryGameRuntimePackageV2 = GameRuntimePackageV2 & { productType: 'storygame' }
+export type InteractionGameRuntimePackageV2 = GameRuntimePackageV2 & {
+  productType: 'character-interaction'
+  interaction: FrozenInteractionRuntimeV2
+}
+export type AdventureGameRuntimePackageV2 = GameRuntimePackageV2 & {
+  productType: 'text-adventure'
+  interaction: FrozenInteractionRuntimeV2
+  adventure: AdventureContentV1
+}
+export type AvgGameRuntimePackageV2 = GameRuntimePackageV2 & {
+  productType: 'avg'
+  presentation: AvgPresentationContentV1 & { assets: FrozenRuntimeMediaAssetV2[] }
+}
+export type NarrativeSimulationGameRuntimePackageV2 = GameRuntimePackageV2 & {
+  productType: 'narrative-simulation'
+  simulation: NarrativeSimulationContentV1
+}
+export type TextOpenWorldGameRuntimePackageV2 = GameRuntimePackageV2 & {
+  productType: 'text-open-world'
+  interaction: FrozenInteractionRuntimeV2
+  adventure: AdventureContentV1
+  simulation: NarrativeSimulationContentV1
+  openWorld: OpenWorldContentV1
+}
+
+export type AnyGameReleaseManifest = GameReleaseManifestV2
 
 export interface GameRelease {
   id?: number
   projectId: number
   worldId: number
   workId: number
-  gameDefinitionId?: number | null
-  worldReleaseId: number
+  /** Stable product release line within the owning Work. */
+  productionKey: string
+  /** Optional local provenance locator; runtime never dereferences it. */
+  worldReleaseId: number | null
   version: number
   label: string
   manifestJson: string

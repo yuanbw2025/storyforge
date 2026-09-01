@@ -17,7 +17,7 @@ import {
   resolveAuthoringBoundRecordId,
 } from './bindings'
 import { validateAuthoringGraph, topologicalAuthoringOrder } from './graph'
-import { parseAuthoringGraph } from './migration'
+import { parseAuthoringGraph } from './graph-codec'
 import type {
   AuthoringCandidate,
   AuthoringCandidateDomain,
@@ -484,8 +484,8 @@ export async function adoptAuthoringCandidate(input: {
   if (!storedFlow || !await assertRecordInScope(scope, 'nodeFlows', storedFlow, { owner: 'work' })) {
     throw new Error('节点图不存在或不属于当前作品。')
   }
-  const parsed = parseAuthoringGraph(input.flow.graphJson)
-  const node = parsed.graph.nodes.find(item => item.id === input.nodeId)
+  const graph = parseAuthoringGraph(input.flow.graphJson)
+  const node = graph.nodes.find(item => item.id === input.nodeId)
   if (!node) throw new Error('候选节点不存在。')
   if (node.binding?.mode === 'live') throw new Error('实时 Canon 绑定节点只读，不能重复采纳；请采纳它的下游候选节点。')
   const template = AUTHORING_NODE_BY_ID.get(node.templateId)
@@ -660,15 +660,15 @@ export async function runAuthoringGraph(input: {
   if (!storedFlow || !await assertRecordInScope(scope, 'nodeFlows', storedFlow, { owner: 'work' })) {
     throw new Error('节点图不存在或不属于当前作品。')
   }
-  const parsed = parseAuthoringGraph(input.flow.graphJson)
-  const issues = validateAuthoringGraph(parsed.graph)
+  const graph = parseAuthoringGraph(input.flow.graphJson)
+  const issues = validateAuthoringGraph(graph)
   if (issues.length) throw new Error(issues.map(issue => issue.message).join('；'))
-  let ordered = topologicalAuthoringOrder(parsed.graph, input.targetNodeId)
+  let ordered = topologicalAuthoringOrder(graph, input.targetNodeId)
   if (input.runNodeIds) ordered = ordered.filter(node => input.runNodeIds?.has(node.id))
   if (!ordered.length) throw new Error('本次执行计划没有需要运行的节点。')
   const now = Date.now()
   let plan = buildAuthoringExecutionPlan({
-    graph: parsed.graph,
+    graph,
     targetNodeId: input.targetNodeId,
     runNodeIds: input.runNodeIds,
   })
@@ -698,7 +698,7 @@ export async function runAuthoringGraph(input: {
     }
     ordered = previousPlan.orderedNodeIds
       .filter(nodeId => !completed.has(nodeId))
-      .map(nodeId => parsed.graph.nodes.find(node => node.id === nodeId))
+      .map(nodeId => graph.nodes.find(node => node.id === nodeId))
       .filter((node): node is AuthoringNodeInstance => Boolean(node))
     if (!ordered.length) throw new Error('该运行没有待恢复节点。')
     plan = { ...previousPlan, pendingNodeIds: ordered.map(node => node.id) }
@@ -746,7 +746,7 @@ export async function runAuthoringGraph(input: {
 
   for (const node of ordered) {
     if (input.signal?.aborted) break
-    const inputs = incomingFor(parsed.graph, node, candidates)
+    const inputs = incomingFor(graph, node, candidates)
     snapshots[node.id] = {
       nodeId: node.id,
       nodeTitle: node.title,

@@ -1,6 +1,6 @@
 import Dexie from 'dexie'
 import { db } from '../db/schema'
-import type { AvgMediaBlob, MediaBlobObjectRecordV1, WorkspaceScope } from '../types'
+import type { MediaBlobObjectRecordV1, ProductMediaBlob, WorkspaceScope } from '../types'
 import { assertRecordInScope, resolveScope, stampNewRecord } from '../world-engine/scope'
 
 const INDEXED_DB_MAXIMUM_BYTES = 8 * 1024 * 1024
@@ -116,25 +116,17 @@ export async function readMediaBlobObjectData(input: {
   }
 }
 
-/** Resolve the shared object link first, while retaining old inline AVG rows. */
-export async function readAvgMediaBlobData(input: {
+/** Resolve a product-owned media binding through the content-addressed object. */
+export async function readProductMediaBlobData(input: {
   scope: WorkspaceScope
-  blob: AvgMediaBlob
+  blob: ProductMediaBlob
   expected: { contentHash: string; byteSize: number; mimeType: string }
 }): Promise<ArrayBuffer> {
-  if (input.blob.blobObjectId != null) {
-    return readMediaBlobObjectData({
-      scope: input.scope,
-      blobObjectId: input.blob.blobObjectId,
-      expected: input.expected,
-    })
-  }
-  const data = input.blob.data
-  if (!data || data.byteLength !== input.expected.byteSize
-    || await sha256MediaData(data) !== input.expected.contentHash) {
-    throw new Error('[game-production] 旧版内联媒资缺失或完整性失败')
-  }
-  return data
+  return readMediaBlobObjectData({
+    scope: input.scope,
+    blobObjectId: input.blob.blobObjectId,
+    expected: input.expected,
+  })
 }
 
 export async function putMediaBlobObject(input: {
@@ -221,33 +213,6 @@ export async function putMediaBlobObject(input: {
   }
 }
 
-export async function migrateLegacyAvgMediaBlob(input: {
-  scope: WorkspaceScope
-  avgMediaBlobId: number
-  expected: { contentHash: string; byteSize: number; mimeType: string }
-}): Promise<MediaBlobObjectRecordV1> {
-  const scope = await resolveScope({ scope: input.scope })
-  const blob = await db.avgMediaBlobs.get(input.avgMediaBlobId)
-  if (!blob || !await assertRecordInScope(scope, 'avgMediaBlobs', blob, { owner: 'work' })) {
-    throw new Error('[game-production] 旧版 AVG 媒资不存在或跨 Work')
-  }
-  if (blob.blobObjectId != null) {
-    const existing = await db.mediaBlobObjects.get(blob.blobObjectId)
-    if (!existing) throw new Error('[game-production] AVG 媒资共享链接损坏')
-    await readMediaBlobObjectData({ scope, blobObjectId: existing.id!, expected: input.expected })
-    return existing
-  }
-  if (!blob.data) throw new Error('[game-production] 旧版 AVG 媒资没有可迁移的内联数据')
-  const object = await putMediaBlobObject({
-    scope,
-    data: blob.data,
-    mimeType: input.expected.mimeType,
-    expectedContentHash: input.expected.contentHash,
-  })
-  await db.avgMediaBlobs.update(blob.id!, { blobObjectId: object.id! })
-  return object
-}
-
 export interface MediaBlobLeaseV1 {
   blobObjectId: number
   owner: string
@@ -308,24 +273,16 @@ export async function collectUnreferencedMediaBlobObjects(input: {
 }): Promise<MediaBlobGcReceiptV1> {
   const scope = await resolveScope({ scope: input.scope })
   const now = input.now ?? Date.now()
-  const [objects, artifacts, avgBlobs, ttrpgAssets, characterInteractionAssets] = await Promise.all([
+  const [objects, artifacts, productBlobs] = await Promise.all([
     db.mediaBlobObjects.where('workId').equals(scope.workId).toArray(),
     db.gameBuildArtifacts.where('workId').equals(scope.workId).toArray(),
-    db.avgMediaBlobs.where('workId').equals(scope.workId).toArray(),
-    db.ttrpgProductionMediaAssets.where('workId').equals(scope.workId).toArray(),
-    db.characterInteractionMediaAssets.where('workId').equals(scope.workId).toArray(),
+    db.productMediaBlobs.where('workId').equals(scope.workId).toArray(),
   ])
   const referenced = new Set([
     ...artifacts
       .filter(row => row.status === 'accepted' || row.status === 'carried-forward')
       .flatMap(row => row.blobObjectId == null ? [] : [row.blobObjectId]),
-    ...avgBlobs.flatMap(row => row.blobObjectId == null ? [] : [row.blobObjectId]),
-    ...ttrpgAssets
-      .filter(row => row.status === 'available')
-      .flatMap(row => row.blobObjectId == null ? [] : [row.blobObjectId]),
-    ...characterInteractionAssets
-      .filter(row => row.status === 'available')
-      .flatMap(row => row.blobObjectId == null ? [] : [row.blobObjectId]),
+    ...productBlobs.map(row => row.blobObjectId),
   ])
   const retained: number[] = []
   const deleted: number[] = []
@@ -340,25 +297,19 @@ export async function collectUnreferencedMediaBlobObjects(input: {
       [
         db.mediaBlobObjects,
         db.gameBuildArtifacts,
-        db.avgMediaBlobs,
-        db.ttrpgProductionMediaAssets,
-        db.characterInteractionMediaAssets,
+        db.productMediaBlobs,
       ],
       async () => {
         const current = await db.mediaBlobObjects.get(object.id!)
         if (!current || current.workId !== scope.workId || current.storageState === 'pending-write'
           || (current.leaseExpiresAt ?? 0) > now) return null
-        const [artifactRef, avgRef, ttrpgRef, characterInteractionRef] = await Promise.all([
+        const [artifactRef, productRef] = await Promise.all([
           db.gameBuildArtifacts.where('blobObjectId').equals(object.id!).filter(row => (
             row.status === 'accepted' || row.status === 'carried-forward'
           )).first(),
-          db.avgMediaBlobs.where('blobObjectId').equals(object.id!).first(),
-          db.ttrpgProductionMediaAssets.where('blobObjectId').equals(object.id!)
-            .filter(row => row.status === 'available').first(),
-          db.characterInteractionMediaAssets.where('blobObjectId').equals(object.id!)
-            .filter(row => row.status === 'available').first(),
+          db.productMediaBlobs.where('blobObjectId').equals(object.id!).first(),
         ])
-        if (artifactRef || avgRef || ttrpgRef || characterInteractionRef) return null
+        if (artifactRef || productRef) return null
         await db.mediaBlobObjects.update(object.id!, { storageState: 'pending-delete', updatedAt: now })
         return current
       },

@@ -3,6 +3,7 @@ import { createGameBuildCompatibilityReportV1 } from '../../src/lib/game-product
 import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
 import { parseGameRuntimePackageV2 } from '../../src/lib/game-production/runtime-package'
 import type { GameRuntimePackageV2 } from '../../src/lib/types'
+import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
 
 function storyPackage(choiceEffectsJson = '[]'): GameRuntimePackageV2 {
   const hash = 'a'.repeat(64)
@@ -14,12 +15,9 @@ function storyPackage(choiceEffectsJson = '[]'): GameRuntimePackageV2 {
     },
     sourceWorld: {
       contentHash: hash,
-      selection: {
-        schema: 'storyforge.world-game-source', version: 2, productType: 'storygame', worldContentHash: hash,
-        narrativeModuleExportIds: [], characterExportIds: [], characterRelationExportIds: [],
-        importantLocationExportIds: [], artifactExportIds: [], codexEntryExportIds: [], storyArcExportIds: [],
-        avgMediaAssetExportIds: [], productSource: { kind: 'storygame', narrativeModuleExportIds: [] },
-      },
+      selection: currentProductSelection('storygame', {
+        story: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
+      }),
     },
     narrative: {
       moduleKind: 'main', moduleTitle: '兼容测试', entryNodeKey: 'opening',

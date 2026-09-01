@@ -7,74 +7,78 @@ import {
 import { db } from '../../src/lib/db/schema'
 import { deriveStrictExportProjectJSON } from '../../src/lib/export/registry-export'
 import { deriveImportProjectJSON } from '../../src/lib/export/registry-import'
-import { buildSimulationCanonSnapshot } from '../../src/lib/simulation/canon-snapshot'
+import { loadGameProductionWorldSourceCatalogV2 } from '../../src/lib/game-production/world-source'
 import {
   commitInteractionPlayerMessage,
-  createSimulationSessionFixtureV1,
   deleteSimulationSession,
   readSimulationState,
   readSimulationStateVersion,
   startInteractionScene,
 } from '../../src/lib/simulation/runtime'
 import type {
-  SimulationInteractionState,
-  SimulationRuntimeState,
+  GameRuntimePackageV2,
   WorkspaceScope,
 } from '../../src/lib/types'
-import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
-
-function interaction(): SimulationInteractionState {
-  return {
-    schema: 'storyforge.character-interaction', version: 1, playerKey: 'player',
-    profiles: [{
-      participantKey: 'aria', characterKey: 'character:aria', name: '阿莉娅',
-      roleLabel: '信使', voiceRules: '克制直接', maxMemoryEntries: 20,
-    }],
-    sceneTemplates: [{
-      sceneKey: 'tower', title: '钟楼', purpose: '回应玩家', location: '旧钟楼', timeLabel: '雨夜',
-      participantKeys: ['aria'], publicKnowledgeKeys: [], goals: ['回答问题'], endingConditions: ['玩家离开'],
-      safetyBoundaries: ['不替玩家发言'], openingNodeKey: null, endingNodeKey: null,
-      maxTurns: 20, directorBudget: 100,
-    }],
-    activeScene: null, sceneHistory: [], messages: [], knowledge: [], memories: [],
-    relationships: [], relationshipHistory: [], threads: [], totalPlayerTurns: 0, remainingDirectorBudget: 0,
-  }
-}
-
-function initialState(): SimulationRuntimeState {
-  return {
-    version: 1, clock: 0, entities: {}, memories: [], narratives: [],
-    ttrpg: null, chat: null, interaction: interaction(), narrative: null, lastSequence: 0,
-  }
-}
+import { seedCurrentPlayableBuild } from '../helpers/current-playable-build'
+import { currentProductSelection, seedCurrentProductWorld } from '../helpers/current-product-world'
 
 async function fixture(): Promise<{ scope: WorkspaceScope; sessionId: number; playerSequence: number }> {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'HARNESS-RUNTIME-1', genre: 'drama', genres: ['drama'], description: '', status: 'drafting',
-    targetWordCount: 10_000, enableMultiWorld: false, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `runtime-${projectId}`, name: '钟楼世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '钟楼来信', description: '', genres: ['drama'], status: 'drafting',
-    targetWordCount: 10_000, createdAt: now, updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1,
-    worldCode: `runtime-${projectId}`, worldVersion: 1,
+  const owned = await seedCurrentProductWorld('HARNESS-RUNTIME-1')
+  const { scope, release } = owned
+  const catalog = await loadGameProductionWorldSourceCatalogV2({
+    scope,
+    worldReleaseId: release.id!,
   })
-  const scope = { projectId, worldId, workId }
-  const canon = await buildSimulationCanonSnapshot({
-    projectId, scope, worldGroupId: null, sourceKeys: [`project-world:${projectId}`],
+  const runtimePackage: GameRuntimePackageV2 = {
+    schema: 'storyforge.game-runtime-package',
+    version: 2,
+    productType: 'character-interaction',
+    definition: {
+      gameKey: 'harness.runtime.interaction',
+      title: '雨夜钟楼',
+      description: '统一产品 Build 驱动的角色互动 Harness 测试包。',
+      enabledCapabilities: ['narrative', 'interaction'],
+      rulesetVersion: 1,
+      initialVariables: {},
+    },
+    sourceWorld: {
+      contentHash: release.contentHash,
+      selection: currentProductSelection('character-interaction', {
+        participants: [catalog.characters[0].resourceKey],
+      }, catalog.worldReference.referenceHash),
+    },
+    narrative: {
+      moduleKind: 'main',
+      moduleTitle: '钟楼来信',
+      entryNodeKey: 'tower.entry',
+      nodes: [{
+        key: 'tower.entry', kind: 'ending', title: '雨夜钟楼', summary: '角色互动场景由产品模块独立推进。',
+        conditionJson: '{}', effectsJson: '[]', successorKeys: [],
+      }],
+      beats: [],
+      choices: [],
+    },
+    interaction: {
+      playerKey: 'player',
+      profiles: [{
+        participantKey: 'aria', characterKey: 'character:aria', name: '阿莉娅',
+        roleLabel: '信使', voiceRules: '克制直接', initialKnowledge: [],
+        relationshipDimensions: [], maxMemoryEntries: 20,
+      }],
+      sceneTemplates: [{
+        sceneKey: 'tower', title: '钟楼', purpose: '回应玩家', location: '旧钟楼', timeLabel: '雨夜',
+        participantKeys: ['aria'], publicKnowledgeKeys: [], goals: ['回答问题'], endingConditions: ['玩家离开'],
+        safetyBoundaries: ['不替玩家发言'], relationshipRules: [], openingNodeKey: null, endingNodeKey: null,
+        maxTurns: 20, directorBudget: 100, order: 0,
+      }],
+    },
+  }
+  const { session: created } = await seedCurrentPlayableBuild({
+    scope,
+    worldRelease: release as typeof release & { id: number },
+    runtimePackage,
+    title: '雨夜钟楼',
   })
-  const draftSnapshotHash = await hashCanonicalValue({ kind: 'chatgame-draft', projectId, worldId, workId })
-  const created = await createSimulationSessionFixtureV1({
-    projectId, kind: 'chatgame', title: '雨夜钟楼', canonSnapshot: canon.snapshot, initialState: initialState(),
-  })
-  await db.simulationSessions.update(created.id!, { worldId, workId, draftSnapshotHash })
   let version = await readSimulationStateVersion(created.id!)
   await startInteractionScene({
     sessionId: created.id!, commandId: 'fixture:scene', baseSequence: version.sequence,

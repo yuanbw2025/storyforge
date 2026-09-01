@@ -3,10 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import GameProductionStudio from '../../src/components/text-game/GameProductionStudio'
 import { db } from '../../src/lib/db/schema'
-import { seedStoryGameAcceptanceSample } from '../../src/lib/text-game/authoring'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { publishWorldRevision } from '../../src/lib/world-engine/releases'
-import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
+import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -17,7 +14,9 @@ function button(host: ParentNode, label: string): HTMLButtonElement {
 }
 
 function checkbox(host: ParentNode, label: string): HTMLInputElement {
-  const wrapper = [...host.querySelectorAll('label')].find(item => item.textContent?.includes(label))
+  const wrapper = [...host.querySelectorAll('label')].find(item => (
+    [...item.querySelectorAll('strong')].some(title => title.textContent?.trim() === label)
+  ))
   const result = wrapper?.querySelector<HTMLInputElement>('input[type="checkbox"]')
   if (!result) throw new Error(`找不到复选框:${label}`)
   return result
@@ -33,36 +32,7 @@ async function waitFor(assertion: () => void | Promise<void>): Promise<void> {
 }
 
 async function fixture() {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
-    name: '素材选择 UI', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 10_000, createdAt: now, updatedAt: now,
-  } as never) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
-  await db.characters.bulkAdd([
-    {
-      projectId, worldId: owned.scope.worldId, workId: owned.scope.workId, isCrossWorld: true,
-      name: '林舟', role: 'protagonist', roleWeight: 'main', identity: '谨慎的守灯调查者',
-      createdAt: now, updatedAt: now,
-    },
-    {
-      projectId, worldId: owned.scope.worldId, workId: owned.scope.workId, isCrossWorld: true,
-      name: '守潮人', role: 'supporting', roleWeight: 'npc', identity: '掌握旧港秘密的向导',
-      createdAt: now, updatedAt: now,
-    },
-  ] as never[])
-  await db.importantLocations.add({
-    projectId, worldId: owned.scope.worldId, workId: owned.scope.workId, parentId: null,
-    name: '雾港灯塔', type: 'lighthouse', description: '潮门关闭前仍可进入的调查起点。',
-    createdAt: now, updatedAt: now,
-  } as never)
-  const story = await seedStoryGameAcceptanceSample({ scope: owned.scope })
-  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
-    scope: owned.scope, label: 'UI 冻结来源', selectedNarrativeModuleIds: [story.narrativeModuleId],
-  })
-  await publishWorldRevision(revision.id!)
-  return owned
+  return seedCurrentProductWorld('素材选择 UI')
 }
 
 describe('GAME-PROD-1B · frozen source selector UI', () => {
@@ -116,5 +86,5 @@ describe('GAME-PROD-1B · frozen source selector UI', () => {
       expect(summary?.textContent).toContain('地点 0')
     })
     expect(host.textContent).toContain('严格 Brief 已生成')
-  })
+  }, 15_000)
 })

@@ -114,7 +114,7 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
     expect(boundary.mandatoryResourceKeys).toHaveLength(1)
     expect(boundary.mandatoryFullResourceKeys).toEqual(boundary.mandatoryResourceKeys)
     const gateway = await executeContextGatewayV1({
-      skill: getAgentSkillV1('character.interaction-production-step.v1'),
+      skill: getAgentSkillV1('game-production.consult.v1'),
       scope: owned.scope,
       resourceScope: boundary.sourceScope,
       accessPolicyOverride: chat.gatewayPolicy,

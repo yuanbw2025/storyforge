@@ -26,6 +26,8 @@ const entrypoints = [
   'src/lib/agent/index.ts',
   // CTXG Phase 1A is a headless public Context Gateway/evidence boundary until formal Skills switch in CTXG-7.
   'src/lib/context-gateway/index.ts',
+  // Neutral world-to-product source contracts are a headless architecture API.
+  'src/lib/world-engine/product-source.ts',
   // FLOW-3 public domain-node boundary is exercised by regression tests and external tooling.
   'src/lib/node-authoring/index.ts',
   // HARNESS-26 is a headless offline release-evaluation boundary; production routing must not import it.
@@ -34,22 +36,9 @@ const entrypoints = [
   'src/lib/evals/long-consistency/index.ts',
   // PHASE4 is a headless engineering-scale gate; it remains report-only and never writes author Canon.
   'src/lib/evals/index.ts',
-  // FLOW-2 compatibility workspace remains intentionally reachable for old graphs and migration tests
-  // while the product entry points use NodeAuthoringWorkspace.
-  'src/components/node-flow/NodeModeWorkspace.tsx',
   // Server-only commercial/community/online adapters and external creator tooling live behind a
   // headless boundary. It must stay independently reachable without entering the pure browser bundle.
   'src/lib/game-platform/headless-platform.ts',
-  // CHATGAME-2 legacy authoring compatibility is retained only for migration/regression evidence while
-  // ProductHub routes new work through the frozen-source production studio. Delete this explicit
-  // entrypoint after legacy migration coverage no longer imports the old workbench directly.
-  'src/components/character-interaction/InteractionGameWorkbench.tsx',
-  // Legacy game-release policy is a headless migration classifier only. No routed UI may import it;
-  // check:architecture enforces that boundary until v1 release migration support is retired.
-  'src/lib/game-production/legacy-entry-governance.ts',
-  // Mist Harbor is a deterministic regression/roadshow fixture. It intentionally exercises a large
-  // world authoring surface without becoming a product or WorldRelease entrypoint.
-  'src/lib/world-engine/mist-harbor-demo.ts',
   // Scope conversion is a headless ownership-administration service. It remains independently tested
   // while no author UI exposes arbitrary record-owner conversion.
   'src/lib/world-engine/scope-conversion.ts',

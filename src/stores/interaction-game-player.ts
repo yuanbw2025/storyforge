@@ -6,10 +6,6 @@ import {
   generateInteractionRuntimeCandidateV1,
 } from '../lib/character-interaction/harness'
 import {
-  assertCharacterInteractionProductReleaseUnchangedV1,
-  createCharacterInteractionProductInstanceV1,
-} from '../lib/character-interaction/production-pipeline'
-import {
   branchSimulationSession,
   changeInteractionRelationship,
   commitInteractionPlayerMessage,
@@ -24,16 +20,18 @@ import {
 } from '../lib/simulation/runtime'
 import {
   assertGameReleaseUnchanged,
+  parseAnyGameReleaseManifest,
   parseInteractionGameReleaseManifest,
 } from '../lib/text-game/releases'
+import { verifyPlayableSessionPackageV2 } from '../lib/game-production/preview-source'
 import {
   assertInstanceBinding,
+  createInteractionGameInstance,
 } from '../lib/world-engine/instances'
 import type {
   AIConfig,
-  CharacterInteractionProductReleaseRecordV1,
   GameRelease,
-  InteractionGameReleaseManifestV1,
+  InteractionGameRuntimePackageV2,
   SimulationCheckpoint,
   SimulationEvent,
   SimulationRuntimeState,
@@ -43,9 +41,8 @@ import type {
 import { EMPTY_SIMULATION_STATE } from '../lib/types'
 
 export interface InteractionGameLibraryItem {
-  productRelease: CharacterInteractionProductReleaseRecordV1
-  release: GameRelease | null
-  manifest: InteractionGameReleaseManifestV1 | null
+  release: GameRelease
+  manifest: InteractionGameRuntimePackageV2 | null
   error: string
 }
 
@@ -65,7 +62,7 @@ interface InteractionGamePlayerState {
   error: string
   load(scope: WorkspaceScope, worldGroupId: number | null): Promise<void>
   select(sessionId: number | null): Promise<void>
-  start(productReleaseId: number, title?: string): Promise<number>
+  start(gameReleaseId: number, title?: string): Promise<number>
   startScene(sceneKey: string): Promise<void>
   sendPlayerMessage(text: string, audienceKeys?: string[] | null): Promise<number>
   applyFixedAction(ruleKey: string): Promise<void>
@@ -85,24 +82,18 @@ interface InteractionGamePlayerState {
 let generationAbortController: AbortController | null = null
 
 async function readLibrary(scope: WorkspaceScope): Promise<InteractionGameLibraryItem[]> {
-  const rows = (await db.characterInteractionProductReleases.where('projectId').equals(scope.projectId).toArray())
+  const rows = (await db.gameReleases.where('projectId').equals(scope.projectId).toArray())
     .filter(row => row.worldId === scope.worldId && row.workId === scope.workId)
     .sort((a, b) => b.createdAt - a.createdAt)
   const items: InteractionGameLibraryItem[] = []
-  for (const productRelease of rows) {
-    const release = await db.gameReleases.get(productRelease.gameReleaseId) ?? null
+  for (const release of rows) {
     try {
-      await assertCharacterInteractionProductReleaseUnchangedV1({
-        scope,
-        productReleaseId: productRelease.id!,
-      })
-      if (!release) throw new Error('Product Release 指向的 GameRelease 不存在。')
       await assertGameReleaseUnchanged(release.id!)
+      if (parseAnyGameReleaseManifest(release.manifestJson).productType !== 'character-interaction') continue
       const manifest = parseInteractionGameReleaseManifest(release.manifestJson)
-      items.push({ productRelease, release, manifest, error: '' })
+      items.push({ release, manifest, error: '' })
     } catch (reason) {
       items.push({
-        productRelease,
         release,
         manifest: null,
         error: reason instanceof Error ? reason.message : String(reason),
@@ -115,8 +106,13 @@ async function readLibrary(scope: WorkspaceScope): Promise<InteractionGameLibrar
 async function assertInteractionSession(scope: WorkspaceScope, sessionId: number): Promise<SimulationSession> {
   const session = await assertInstanceBinding(sessionId, scope)
   if (session.kind !== 'chatgame') throw new Error('该存档不是角色互动存档。')
+  const playable = await verifyPlayableSessionPackageV2({ scope, session })
+  if (playable.runtimePackage.productType !== 'character-interaction'
+    || !playable.runtimePackage.interaction) {
+    throw new Error('该存档没有绑定有效的角色互动 Product Build 或 GameRelease。')
+  }
   const state = await readSimulationState(sessionId)
-  if (!state.interaction) throw new Error('该存档是 CHATGAME-1 旧存档，仅保留只读兼容。')
+  if (!state.interaction) throw new Error('该存档不符合角色互动运行协议。')
   return session
 }
 
@@ -126,25 +122,16 @@ async function readInteractionSessions(
 ): Promise<SimulationSession[]> {
   const rows = await db.simulationSessions.where('projectId').equals(scope.projectId).toArray()
   return rows.filter(row => {
-    if (row.kind !== 'chatgame' || (row.worldGroupId ?? null) !== worldGroupId) return false
-    if (row.gameReleaseId != null) return row.worldId === scope.worldId && row.workId === scope.workId
-    // CHATGAME-1 predates World/Work ownership. Bound legacy saves stay in their
-    // work; project-wide saves remain readable because there is no honest way to
-    // infer a narrower owner during migration.
-    return (row.worldId === scope.worldId && row.workId === scope.workId)
-      || (row.worldId == null && row.workId == null)
+    return row.kind === 'chatgame'
+      && (row.gameReleaseId != null || row.gameBuildId != null)
+      && (row.worldGroupId ?? null) === worldGroupId
+      && row.worldId === scope.worldId
+      && row.workId === scope.workId
   }).sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 async function assertReadableInteractionSession(scope: WorkspaceScope, sessionId: number): Promise<SimulationSession> {
-  const session = await db.simulationSessions.get(sessionId)
-  if (!session || session.projectId !== scope.projectId || session.kind !== 'chatgame') {
-    throw new Error('该角色互动存档不属于当前项目。')
-  }
-  if (session.gameReleaseId != null || session.worldId != null || session.workId != null) {
-    return assertInstanceBinding(sessionId, scope)
-  }
-  return session
+  return assertInteractionSession(scope, sessionId)
 }
 
 async function details(scope: WorkspaceScope, sessionId: number) {
@@ -241,13 +228,13 @@ export const useInteractionGamePlayerStore = create<InteractionGamePlayerState>(
       finally { set({ loading: false }) }
     },
 
-    start: async (productReleaseId, title) => withBusy(async () => {
+    start: async (gameReleaseId, title) => withBusy(async () => {
       const scope = get().scope
-      const item = get().releases.find(row => row.productRelease.id === productReleaseId)
+      const item = get().releases.find(row => row.release.id === gameReleaseId)
       if (!scope || !item?.manifest || item.error) throw new Error('请选择可用的角色互动发布。')
-      const session = await createCharacterInteractionProductInstanceV1({
+      const session = await createInteractionGameInstance({
         scope,
-        productReleaseId,
+        gameReleaseId,
         title: title?.trim() || `${item.manifest.definition.title} · 新会话`,
         worldGroupId: get().worldGroupId,
       })

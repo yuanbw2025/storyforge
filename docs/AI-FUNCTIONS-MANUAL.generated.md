@@ -80,13 +80,11 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 87 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 82 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
 | `worldRelease` | 冻结世界版本资源 | manual | L0 | 100000 |
-| `ttrpg.product-authoring` | TTRPG 规则与战役包 | project | L0 | 16000 |
-| `ttrpg.character-authoring` | TTRPG 单角色安全车卡制作上下文 | project | L0 | 12000 |
 | `ttrpgRuntime` | 正式 TTRPG 主持人运行视角 | runtime | L0 | 10000 |
 | `ttrpgPlayerRuntime` | 正式 TTRPG 单角色玩家运行视角 | runtime | L0 | 10000 |
 | `game-production.consultation-source` | 游戏生产会谈来源 | project | L0 | 6000 |
@@ -94,7 +92,6 @@
 | `game-production.artifact-inputs` | 游戏生产任务依赖 | project | L1 | 10000 |
 | `game-production.quality-feedback` | 游戏生产质量反馈 | project | L1 | 6000 |
 | `game-production.evolution-base` | 游戏持续演化基线 | project | L0 | 12000 |
-| `characterInteractionProduction` | 角色互动冻结生产上下文 | project | L0 | 16000 |
 | `adaptation.sourceManifest` | 改编来源清单 | project | L0 | 6000 |
 | `adaptation.sourceContent` | 改编来源正文 | project | L0 | 24000 |
 | `adaptation.currentBrief` | 已确认改编 Brief | project | L0 | 4000 |
@@ -102,8 +99,6 @@
 | `screenplay.currentScenes` | 当前剧本场景 | project | L0 | 16000 |
 | `comic.visualBible` | 漫画视觉圣经与视觉条目 | project | L0 | 12000 |
 | `comic.currentPages` | 当前漫画页格 | project | L0 | 20000 |
-| `worldGameAuthoring` | 冻结世界游戏创作包 | project | L1 | 12000 |
-| `avgAuthoring` | AVG 作者演出素材 | project | L2 | 4000 |
 | `adventureRuntime` | 文字冒险玩家视角 | runtime | L0 | 8000 |
 | `narrativeSimulationRuntime` | 叙事模拟玩家视角 | runtime | L0 | 8000 |
 | `openWorldRuntime` | 文字开放世界玩家视角 | runtime | L0 | 8000 |
@@ -183,9 +178,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `adaptationProjects` | `brief` `plan` `visualBible` |
 | `chapters` | `content` `continuityHandoff` `notes` `order` `outlineNodeId` `perspectiveCharacterId` `planReconciliation` `status` `summary` `summarySourceTextHash` `summaryTextNormalizationVersion` `title` `wordCount` |
 | `characterDrivenPlans` | `generatedVolumes` `status` |
-| `characterInteractionArtifacts` | `confirmationJson` `payloadJson` |
-| `characterInteractionMediaAssets` | `failureJson` `rightsJson` `specJson` |
-| `characterInteractionProductionSteps` | `checkpointJson` `errorJson` |
 | `characterRelations` | `description` `fromCharacterId` `isBidirectional` `label` `relationType` `toCharacterId` |
 | `characters` | `abilities` `activeChapterRange` `alignment` `appearance` `arc` `background` `cultivationStageId` `cultivationSystemId` `ending` `exitChapterId` `fears` `firstAppearChapterId` `firstAppearance` `goals` `habits` `homeWorldGroupId` `identity` `importantLocationId` `innerConflict` `isCrossWorld` `keyEvents` `location` `moralAxis` `motivation` `name` `narrativeStatus` `orderAxis` `personality` `powerLevel` `powerSystemId` `profile` `raceEntryId` `relationships` `role` `roleWeight` `shortDescription` `signatureItem` `speechStyle` `statusEvidenceChapterId` `statusEvidenceStoryArcId` `statusProducerCandidateHash` `statusProducerContractHash` `statusReason` `storyRole` `strengths` `values` `weaknesses` |
 | `codexCategories` | `builtInKey` `domain` `fieldSchema` `hidden` `icon` `name` `order` `parentId` `worldGroupId` |
@@ -223,7 +215,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `storyTimelineEvents` | `chapterId` `chapterTitle` `description` `importance` `order` `storyTime` `title` |
 | `storylineCrossings` | `arcIdA` `arcIdB` `chapterId` `chapterTitle` `evidenceQuote` `note` |
 | `storylineProgress` | `arcId` `currentStageId` `evidenceQuote` `involvedEntities` `lastActiveChapterId` `lastActiveChapterTitle` `progressNote` `status` |
-| `ttrpgCampaignModules` | `campaignKey` `contentHash` `contentJson` `rulePackId` `sourceWorldReleaseId` `status` `title` |
 | `userStyleProfiles` | `enabled` `profile` `sampleCount` `sampleWords` `sourceChapterIds` |
 | `works` | `description` `genres` `methodologyId` `status` `targetWordCount` `title` `writingStyleId` |
 | `worldGroups` | `description` `entryCondition` `exitCondition` `icon` `name` `order` `plannedChapterCount` `powerRestriction` `takeawayRules` `type` |
@@ -236,8 +227,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 | ID | 目标表 | 领域策略注册表 | 唯一入口 | 复审日期 |
 |---|---|---|---|---|
-| `ttrpg-product-authoring` | `gameRulePacks` | `TTRPG_RULE_PACK_V1 + TTRPG_CAMPAIGN_V1 + PROJECT_TABLES` | `src/lib/ttrpg/authoring.ts` | 2027-08-21 |
-| `ttrpg-campaign-authoring` | `ttrpgCampaignModules` | `TTRPG_RULE_PACK_V1 + TTRPG_CAMPAIGN_V1 + PROJECT_TABLES` | `src/lib/ttrpg/authoring.ts` | 2027-08-21 |
 | `reference-analysis-run-lifecycle` | `referenceAnalysisRuns` | `REFERENCE_ANALYSIS_RUN_POLICY + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts`<br/>`src/lib/reference-analysis/legacy-bridge.ts` | 2027-01-01 |
 | `reference-analysis-source-lifecycle` | `referenceAnalysisSources` | `REFERENCE_ANALYSIS_RUN_POLICY + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
 | `reference-analysis-chunk-lifecycle` | `referenceChunkAnalysis` | `REFERENCE_ANALYSIS_RUN_POLICY + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts`<br/>`src/lib/reference-analysis/legacy-bridge.ts` | 2027-01-01 |
@@ -252,9 +241,9 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `cultivation-codex-reference-lifecycle` | `codexEntries` | `PROJECT_TABLES refs + cultivation DAG validator` | `src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/location/lifecycle.ts` | 2027-01-01 |
 | `cultivation-progress-lifecycle` | `cultivationProgress` | `ADOPTION_SCHEMAS + PROJECT_TABLES + cultivation DAG validator + canonical chapter sequence` | `src/lib/cultivation/progress.ts`<br/>`src/lib/cultivation/progress-lifecycle.ts` | 2027-01-01 |
 | `codex-category-scope-lifecycle` | `codexCategories` | `PROJECT_TABLES lifecycle` | `src/lib/registry/lifecycle.ts` | 2027-01-01 |
-| `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace identity + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/world-engine/works.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/identity-classification.ts`<br/>`src/lib/product/world-package-migration.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
-| `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/identity-classification.ts`<br/>`src/lib/product/world-package-migration.ts` | 2027-08-01 |
-| `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/text-game/authoring.ts`<br/>`src/lib/avg/authoring.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/works.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/product/world-package-migration.ts`<br/>`src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts` | 2027-08-01 |
+| `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace identity + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/world-engine/works.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/identity-classification.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
+| `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/product/world-package.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/identity-classification.ts` | 2027-08-01 |
+| `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/world-engine/lifecycle.ts`<br/>`src/lib/world-engine/ownership.ts`<br/>`src/lib/world-engine/works.ts`<br/>`src/lib/world-engine/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts` | 2027-08-01 |
 | `adaptation-root-lifecycle` | `adaptationProjects` | `PROJECT_TABLES + ADOPTION_SCHEMAS + adaptation state machine + source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts` | 2027-08-01 |
 | `adaptation-source-manifest-lifecycle` | `adaptationSourceUnits` | `PROJECT_TABLES + immutable source manifest policy + canonical chapter sequence` | `src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
 | `screenplay-scene-lifecycle` | `screenplayScenes` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + screenplay block validator + adaptation freshness CAS` | `src/lib/screenplay/service.ts`<br/>`src/lib/screenplay/adoption.ts` | 2027-08-01 |
@@ -266,32 +255,25 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `short-novel-outline-skeleton-lifecycle` | `outlineNodes` | `PROJECT_TABLES tree refs + WorkspaceScope + SHORT_NOVEL_WORKFLOW_OVERRIDES` | `src/lib/world-engine/create-workspace.ts` | 2027-08-01 |
 | `chapter-delete-lifecycle` | `chapters` | `PROJECT_TABLES refs + WorkspaceScope + chapter deletion impact policy + short skeleton policy` | `src/lib/chapters/lifecycle.ts`<br/>`src/lib/world-engine/create-workspace.ts` | 2027-08-01 |
 | `chapter-emotion-delete-lifecycle` | `emotionBeatCards` | `PROJECT_TABLES chapter refs` | `src/lib/chapters/lifecycle.ts` | 2027-08-01 |
-| `character-interaction-production-roots` | `characterInteractionProductions` | `CHARACTER_INTERACTION_PRODUCTION_CONTRACT_V1 + PROJECT_TABLES` | `src/lib/character-interaction/production.ts`<br/>`src/lib/character-interaction/production-pipeline.ts` | 2027-08-25 |
-| `character-interaction-production-steps` | `characterInteractionProductionSteps` | `CHARACTER_INTERACTION_PRODUCTION_CONTRACT_V1 + PROJECT_TABLES` | `src/lib/character-interaction/production-pipeline.ts`<br/>`src/lib/character-interaction/production-harness.ts` | 2027-08-25 |
-| `character-interaction-production-artifacts` | `characterInteractionArtifacts` | `CHARACTER_INTERACTION_PRODUCTION_CONTRACT_V1 + PROJECT_TABLES` | `src/lib/character-interaction/production-pipeline.ts`<br/>`src/lib/character-interaction/production-harness.ts` | 2027-08-25 |
-| `character-interaction-production-media` | `characterInteractionMediaAssets` | `CHARACTER_INTERACTION_MEDIA_CONTRACT_V1 + PROJECT_TABLES` | `src/lib/character-interaction/production-pipeline.ts` | 2027-08-25 |
-| `character-interaction-product-releases` | `characterInteractionProductReleases` | `CHARACTER_INTERACTION_PRODUCT_RELEASE_V1 + PROJECT_TABLES` | `src/lib/character-interaction/production-pipeline.ts` | 2027-08-25 |
 | `game-production-roots` | `gameProductions` | `GAME_PRODUCTION_COMMAND_POLICY + GAME_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/game-production/commands.ts`<br/>`src/lib/game-production/artifact-store.ts`<br/>`src/lib/game-production/media-blob-store.ts`<br/>`src/lib/game-production/vertical-slice.ts`<br/>`src/lib/game-production/adoption.ts`<br/>`src/lib/game-production/scheduler.ts` | 2027-08-21 |
 | `game-production-briefs` | `gameProductionBriefs` | `GAME_PRODUCTION_COMMAND_POLICY + PROJECT_TABLES` | `src/lib/game-production/commands.ts`<br/>`src/lib/game-production/adoption.ts` | 2027-08-21 |
 | `game-production-commands` | `gameProductionCommands` | `GAME_PRODUCTION_COMMAND_POLICY + PROJECT_TABLES` | `src/lib/game-production/commands.ts`<br/>`src/lib/game-production/adoption.ts` | 2027-08-21 |
 | `game-production-builds` | `gameBuilds` | `GAME_PRODUCTION_COMMAND_POLICY + GAME_PRODUCTION_ARTIFACT_POLICY + GAME_QUALITY_GATE_RECEIPT_V1 + PROJECT_TABLES` | `src/lib/game-production/commands.ts`<br/>`src/lib/game-production/artifact-store.ts`<br/>`src/lib/game-production/vertical-slice.ts`<br/>`src/lib/game-production/adoption.ts`<br/>`src/lib/game-production/scheduler.ts`<br/>`src/lib/game-production/quality-receipts.ts` | 2027-08-21 |
 | `game-production-artifacts` | `gameBuildArtifacts` | `GAME_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/game-production/commands.ts`<br/>`src/lib/game-production/artifact-store.ts`<br/>`src/lib/game-production/adoption.ts`<br/>`src/lib/game-production/scheduler.ts` | 2027-08-21 |
-| `game-production-release-adoption` | `gameReleases` | `GAME_PRODUCTION_PACKAGE_ADOPTION_V1 + GAME_DISTRIBUTION_BUNDLE_V1 + PROJECT_TABLES + product validators` | `src/lib/text-game/releases.ts`<br/>`src/lib/game-production/adoption.ts`<br/>`src/lib/ttrpg/release.ts`<br/>`src/lib/character-interaction/production-pipeline.ts`<br/>`src/lib/game-platform/distribution-bundle.ts` | 2027-08-21 |
-| `game-production-textsim-adoption` | `narrativeSimulationModules` | `GAME_PRODUCTION_PACKAGE_ADOPTION_V1 + PROJECT_TABLES + product validators` | `src/lib/narrative-simulation/authoring.ts`<br/>`src/lib/open-world/authoring.ts`<br/>`src/lib/game-production/adoption.ts` | 2027-08-21 |
-| `game-production-openworld-adoption` | `openWorldModules` | `GAME_PRODUCTION_PACKAGE_ADOPTION_V1 + PROJECT_TABLES + product validators` | `src/lib/open-world/authoring.ts`<br/>`src/lib/game-production/adoption.ts` | 2027-08-21 |
+| `game-production-release-adoption` | `gameReleases` | `GAME_PRODUCTION_PACKAGE_ADOPTION_V1 + GAME_DISTRIBUTION_BUNDLE_V1 + PROJECT_TABLES + product validators` | `src/lib/text-game/releases.ts`<br/>`src/lib/game-production/adoption.ts`<br/>`src/lib/game-platform/distribution-bundle.ts` | 2027-08-21 |
+| `ttrpg-rule-pack-library` | `gameRulePacks` | `RULE_PACK_V1 parser + fixture verifier + immutable version identity + PROJECT_TABLES` | `src/lib/ttrpg/rule-pack-library.ts` | 2027-08-21 |
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 43 个 category。
-未分类调用: 0 个。动态 category 调用: 36 个。
+共 41 个 category。
+未分类调用: 0 个。动态 category 调用: 35 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:759` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:846` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:753` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:840` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
-| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:348` |
-| `authoring.ttrpg-character` | `src/lib/ttrpg/character-sheet-harness.ts:279` |
+| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:349` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:26` |
@@ -300,7 +282,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1659` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1649` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
-| `character.interaction.production` | `src/lib/character-interaction/production-harness.ts:444` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:616` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
@@ -309,7 +290,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:363`<br/>`src/lib/node-flow/executor.ts:207` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:363` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:198`<br/>`src/lib/outline/generation-node.ts:60` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:652` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:55` |
@@ -356,7 +337,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/story-arc-copilot.ts:1636 · chat`
 - `src/lib/agent/story-core-copilot.ts:556 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:375 · chat`
-- `src/lib/agent/world-game-copilot.ts:295 · chat`
 - `src/lib/agent/world-origin-copilot.ts:255 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:889 · chat`
 - `src/lib/character-interaction/harness.ts:396 · chat`
@@ -418,4 +398,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `47e493b7`
+生成时间基准:commit `6b982863`

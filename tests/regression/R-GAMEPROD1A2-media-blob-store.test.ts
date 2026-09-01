@@ -4,12 +4,9 @@ import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-
 import {
   acquireMediaBlobLease,
   collectUnreferencedMediaBlobObjects,
-  migrateLegacyAvgMediaBlob,
   putMediaBlobObject,
-  readAvgMediaBlobData,
   readMediaBlobObjectData,
   recoverInterruptedMediaBlobObjects,
-  sha256MediaData,
 } from '../../src/lib/game-production/media-blob-store'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 
@@ -50,35 +47,6 @@ describe('R-GAMEPROD-1A2 · shared media blob store', () => {
     expect(await db.mediaBlobObjects.count()).toBe(2)
   })
 
-  it('旧 AVG 内联二进制可惰性链接到共享对象，原始数据保留且读取结果不变', async () => {
-    const owned = await workspace('旧 AVG 迁移')
-    const data = bytes('legacy-avg-binary')
-    const contentHash = await sha256MediaData(data)
-    const now = Date.now()
-    const blobId = await db.avgMediaBlobs.add({
-      projectId: owned.scope.projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-      mediaAssetId: 42, blobObjectId: null, data, createdAt: now,
-    }) as number
-    const object = await migrateLegacyAvgMediaBlob({
-      scope: owned.scope,
-      avgMediaBlobId: blobId,
-      expected: { contentHash, byteSize: data.byteLength, mimeType: 'audio/wav' },
-    })
-    const migrated = await db.avgMediaBlobs.get(blobId)
-    expect(migrated?.blobObjectId).toBe(object.id)
-    expect(migrated?.data).toBeInstanceOf(ArrayBuffer)
-    expect(await readAvgMediaBlobData({
-      scope: owned.scope,
-      blob: migrated!,
-      expected: { contentHash, byteSize: data.byteLength, mimeType: 'audio/wav' },
-    })).toEqual(data)
-    expect((await migrateLegacyAvgMediaBlob({
-      scope: owned.scope,
-      avgMediaBlobId: blobId,
-      expected: { contentHash, byteSize: data.byteLength, mimeType: 'audio/wav' },
-    })).id).toBe(object.id)
-  })
-
   it('lease 和正式链接阻止 GC；释放且移除引用后两阶段回收对象', async () => {
     const owned = await workspace('媒资 GC')
     const object = await putMediaBlobObject({ scope: owned.scope, data: bytes('gc-object'), mimeType: 'image/png' })
@@ -86,12 +54,20 @@ describe('R-GAMEPROD-1A2 · shared media blob store', () => {
     expect((await collectUnreferencedMediaBlobObjects({ scope: owned.scope })).retained).toContain(object.id)
     await lease.release()
 
-    const linkId = await db.avgMediaBlobs.add({
+    const now = Date.now()
+    const mediaAssetId = await db.productMediaAssets.add({
       projectId: owned.scope.projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-      mediaAssetId: 7, blobObjectId: object.id!, data: null, createdAt: Date.now(),
+      assetKey: 'gc.asset', version: 1, kind: 'background', name: 'GC 测试素材', mimeType: 'image/png',
+      byteSize: object.byteSize, width: null, height: null, durationMs: null, contentHash: object.contentHash,
+      source: 'test', license: 'test-only', altText: '', characterTag: '', sceneTag: 'test',
+      createdAt: now, updatedAt: now,
+    }) as number
+    const linkId = await db.productMediaBlobs.add({
+      projectId: owned.scope.projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
+      mediaAssetId, blobObjectId: object.id!, data: null, createdAt: now,
     }) as number
     expect((await collectUnreferencedMediaBlobObjects({ scope: owned.scope })).retained).toContain(object.id)
-    await db.avgMediaBlobs.delete(linkId)
+    await db.productMediaBlobs.delete(linkId)
     expect((await collectUnreferencedMediaBlobObjects({ scope: owned.scope })).deleted).toContain(object.id)
     expect(await db.mediaBlobObjects.get(object.id!)).toBeUndefined()
   })

@@ -54,12 +54,6 @@ export function checkRegistry(): RegistryValidationResult {
         errors.push(`${spec.name}.resourceIdentity 要求 registered-fields，但 FIELD_REGISTRY 无字段`)
       }
     }
-    if (spec.legacyWorldPackageV1 === 'world' && !spec.legacyWorldReleaseSection) {
-      errors.push(`${spec.name}.legacyWorldPackageV1=world 必须登记 legacyWorldReleaseSection`)
-    }
-    if (spec.legacyWorldReleaseSection && spec.legacyWorldPackageV1 !== 'world') {
-      errors.push(`${spec.name}.legacyWorldReleaseSection 只能用于历史 v1 世界包表`)
-    }
     if (spec.owner !== 'global' && !spec.domainOwner) {
       errors.push(`${spec.name}.domainOwner 未登记逻辑归属`)
     }
@@ -105,6 +99,9 @@ export function checkRegistry(): RegistryValidationResult {
 
     for (const ref of spec.refs ?? []) {
       if (ref.kind === 'simple' || ref.kind === 'json') {
+        if (ref.kind === 'simple' && ref.field !== 'id') {
+          errors.push(`${spec.name}.refs(simple) 必须从父表 id 指向依赖表外键，禁止反向登记: ${ref.field} -> ${ref.target}`)
+        }
         const t = parseTargetTable(ref.target)
         if (t && !REGISTRY_BY_NAME.has(t)) {
           errors.push(`${spec.name}.refs 指向不存在的表: ${ref.target}`)

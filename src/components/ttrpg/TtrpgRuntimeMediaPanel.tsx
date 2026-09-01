@@ -109,7 +109,6 @@ export default function TtrpgRuntimeMediaPanel(props: {
       const next: Record<string, string> = {};
       const prebuiltKeys = props.media.slots.flatMap((slot) => {
         if (slot.mediaAssetId != null) return [];
-        if (props.source.kind === "ttrpg-build") return [slot.assetKey ?? slot.slotKey];
         return slot.status === "available" && slot.assetKey ? [slot.assetKey] : [];
       });
       if (prebuiltKeys.length) {
@@ -122,7 +121,7 @@ export default function TtrpgRuntimeMediaPanel(props: {
           maximumBytes: 100 * 1024 * 1024,
         });
         for (const slot of props.media.slots) {
-          const key = props.source.kind === "ttrpg-build" ? slot.assetKey ?? slot.slotKey : slot.assetKey;
+          const key = slot.assetKey;
           if (key && catalog.urls[key]) next[slot.slotKey] = catalog.urls[key];
         }
       }

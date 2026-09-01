@@ -14,10 +14,14 @@ import {
   type RuntimeAttributes,
   type RuntimeEntityState,
   type RuntimeMemory,
-  type AnyGameReleaseManifestV1,
   type FrozenNarrativeBeat,
   type FrozenNarrativeChoice,
+  type GameBuildRecordV1,
+  type GameProductionBriefRecordV1,
+  type GameProductionRecordV1,
+  type GameRelease,
   type GameRuntimePackageV2,
+  type TextOpenWorldGameRuntimePackageV2,
   type NarrativeChoiceHistoryEntry,
   type SimulationCheckpoint,
   type SimulationEvent,
@@ -38,10 +42,6 @@ import {
   type SimulationTtrpgCampaignState,
   type SimulationTtrpgCampaignMemoryV2,
   type SimulationTtrpgCampaignSessionV2,
-  type SimulationChatIdentity,
-  type SimulationChatScene,
-  type SimulationChatState,
-  type SimulationChatMessage,
   type InteractionMemoryKind,
   type SimulationTtrpgEncounter,
   type SimulationTtrpgEncounterCandidate,
@@ -94,14 +94,14 @@ import {
 } from "../text-game/content";
 import {
   assertGameReleaseUnchanged,
-  parseAnyGameReleaseManifest,
-  parseAnyGameReleaseManifestVersion,
 } from "../text-game/releases";
 import {
-  gameRuntimePackageFromReleaseV1,
   verifyGameReleaseManifestV2,
 } from "../game-production/runtime-package";
-import { verifyPlayableGamePackageSource } from "../game-production/preview-source";
+import {
+  verifyPlayableGamePackageSource,
+  verifyPlayableSessionPackageV2,
+} from "../game-production/preview-source";
 import {
   applyAvgPresentationEvent,
   createInitialAvgPresentationState,
@@ -211,9 +211,7 @@ export interface CreateSimulationSessionInput {
 export interface CreateReleasedGameSessionInput extends CreateSimulationSessionInput {
   worldId: number;
   workId: number;
-  worldReleaseId: number;
   gameReleaseId: number;
-  narrativeModuleExportId: number | null;
   /** New games must match the release entry state; validated branches preserve a replayed mid-game state. */
   origin: "release" | "branch";
 }
@@ -221,25 +219,10 @@ export interface CreateReleasedGameSessionInput extends CreateSimulationSessionI
 export interface CreatePreviewGameSessionInput extends CreateSimulationSessionInput {
   worldId: number;
   workId: number;
-  worldReleaseId: number;
   gameBuildId: number;
   expectedPreviewHash: string;
   runtimeSourceHash: string;
-  narrativeModuleExportId: number | null;
   /** New previews start at entry; branches preserve an already replayed state. */
-  origin: "preview" | "branch";
-}
-
-export interface CreateTtrpgProductPreviewSessionInput
-  extends CreateSimulationSessionInput {
-  worldId: number;
-  workId: number;
-  worldReleaseId: number | null;
-  ttrpgBuildId: number;
-  expectedBuildHash: string;
-  runtimeSourceHash: string;
-  narrativeModuleExportId: number | null;
-  /** Development previews and replay branches share the same frozen product Build. */
   origin: "preview" | "branch";
 }
 
@@ -277,16 +260,6 @@ function assertFiniteInteger(
     throw new Error(`${label} 必须是 ${min}..${max} 的整数。`);
   }
   return Number(value);
-}
-
-function optionalPositiveInteger(value: unknown, label: string): number | null {
-  if (value == null) return null;
-  return assertFiniteInteger(value, label, 1, Number.MAX_SAFE_INTEGER);
-}
-
-function optionalPortableInteger(value: unknown, label: string): number | null {
-  if (value == null) return null;
-  return assertFiniteInteger(value, label, 0, Number.MAX_SAFE_INTEGER);
 }
 
 function narrativeKeyArray(
@@ -453,7 +426,7 @@ function parseSimulationNarrativeState(
   if (
     !isObject(value) ||
     value.schema !== "storyforge.simulation-narrative" ||
-    (value.version !== 1 && value.version !== 2)
+    value.version !== 2
   ) {
     throw new Error("不支持的冻结叙事状态。");
   }
@@ -495,17 +468,9 @@ function parseSimulationNarrativeState(
   if (!isObject(value.variables)) throw new Error("冻结叙事变量必须是对象。");
   if (typeof value.completed !== "boolean")
     throw new Error("冻结叙事完成状态无效。");
-  const common: SimulationNarrativeState = {
-    schema: "storyforge.simulation-narrative",
-    version: value.version,
-    sourceModuleId: optionalPositiveInteger(
-      value.sourceModuleId,
-      "叙事来源模块 ID",
-    ),
-    sourceModuleExportId: optionalPortableInteger(
-      value.sourceModuleExportId,
-      "叙事来源便携 ID",
-    ),
+  const common = {
+    schema: "storyforge.simulation-narrative" as const,
+    version: 2 as const,
     moduleKind: moduleKind as SimulationNarrativeState["moduleKind"],
     moduleTitle,
     sourceHash,
@@ -525,7 +490,6 @@ function parseSimulationNarrativeState(
     variables: structuredClone(value.variables),
     completed: value.completed,
   };
-  if (value.version === 1) return common;
   const contentHash = String(value.contentHash ?? "").trim();
   if (!/^[a-f0-9]{64}$/.test(contentHash))
     throw new Error("冻结游戏发布身份无效。");
@@ -3983,104 +3947,6 @@ function parseTtrpgCampaignState(value: unknown): SimulationTtrpgCampaignState {
   };
 }
 
-function assertChatIdentity(value: unknown): SimulationChatIdentity {
-  if (!isObject(value)) throw new Error("聊天用户身份必须是对象。");
-  const name = String(value.name ?? "").trim();
-  const description = String(value.description ?? "").trim();
-  if (!name || name.length > 160) throw new Error("聊天用户身份名称无效。");
-  if (description.length > 2_000) throw new Error("聊天用户身份描述过长。");
-  return { name, description };
-}
-
-function assertChatScene(value: unknown): SimulationChatScene {
-  if (!isObject(value)) throw new Error("聊天场景必须是对象。");
-  const title = String(value.title ?? "").trim();
-  const description = String(value.description ?? "").trim();
-  if (!title || title.length > 200) throw new Error("聊天场景标题无效。");
-  if (description.length > 8_000) throw new Error("聊天场景描述过长。");
-  return { title, description };
-}
-
-function assertChatMessage(value: unknown): SimulationChatMessage {
-  if (!isObject(value)) throw new Error("聊天消息必须是对象。");
-  const messageId = String(value.messageId ?? "").trim();
-  const eventSequence = assertFiniteInteger(
-    value.eventSequence,
-    "聊天消息事件序号",
-    1,
-    Number.MAX_SAFE_INTEGER,
-  );
-  const role = String(value.role ?? "");
-  const speakerKey =
-    value.speakerKey == null ? null : String(value.speakerKey).trim() || null;
-  const text = String(value.text ?? "").trim();
-  const replyToSequence =
-    value.replyToSequence == null
-      ? null
-      : assertFiniteInteger(
-          value.replyToSequence,
-          "聊天回复目标序号",
-          1,
-          Number.MAX_SAFE_INTEGER,
-        );
-  const supersededBySequence =
-    value.supersededBySequence == null
-      ? null
-      : assertFiniteInteger(
-          value.supersededBySequence,
-          "聊天替代序号",
-          1,
-          Number.MAX_SAFE_INTEGER,
-        );
-  if (!messageId || messageId.length > 160)
-    throw new Error("聊天消息 ID 无效。");
-  if (role !== "user" && role !== "character")
-    throw new Error("聊天消息角色无效。");
-  if (role === "user" && speakerKey != null)
-    throw new Error("用户消息不能绑定角色实体。");
-  if (role === "character" && !speakerKey)
-    throw new Error("角色回复缺少角色实体。");
-  if (!text || text.length > 20_000) throw new Error("聊天消息文本无效。");
-  if (role === "user" && replyToSequence != null)
-    throw new Error("用户消息不能引用回复目标。");
-  if (role === "character" && replyToSequence == null)
-    throw new Error("角色回复必须引用用户消息。");
-  return {
-    messageId,
-    eventSequence,
-    role: role as SimulationChatMessage["role"],
-    speakerKey,
-    text,
-    replyToSequence,
-    supersededBySequence,
-  };
-}
-
-function parseChatState(value: unknown): SimulationChatState | null {
-  if (value == null) return null;
-  if (!isObject(value)) throw new Error("角色聊天状态必须是对象。");
-  const characterKey = String(value.characterKey ?? "").trim();
-  if (!characterKey || characterKey.length > 160)
-    throw new Error("角色聊天缺少有效角色。");
-  const identity = assertChatIdentity(value.identity);
-  const scene = assertChatScene(value.scene);
-  if (!Array.isArray(value.messages))
-    throw new Error("角色聊天消息必须是数组。");
-  const messages = value.messages.map(assertChatMessage);
-  if (
-    new Set(messages.map((message) => message.messageId)).size !==
-    messages.length
-  ) {
-    throw new Error("角色聊天消息 ID 不能重复。");
-  }
-  return { characterKey, identity, scene, messages };
-}
-
-function requireChatState(state: SimulationRuntimeState): SimulationChatState {
-  if (!state.chat) throw new Error("角色聊天尚未配置。");
-  return state.chat;
-}
-
 function requireTtrpgState(
   state: SimulationRuntimeState,
 ): SimulationTtrpgState {
@@ -4218,7 +4084,6 @@ export function parseSimulationState(
     memories,
     narratives,
     ttrpg: parseTtrpgState(parsed.ttrpg),
-    chat: parseChatState(parsed.chat),
     interaction: parseInteractionState(parsed.interaction),
     narrative: parseSimulationNarrativeState(parsed.narrative),
     adventure: parseAdventureState(parsed.adventure),
@@ -4676,25 +4541,6 @@ export function applySimulationEvent(
       narrative.lastEnteredNodeSequence = event.sequence;
       break;
     }
-    case "narrative.node.advanced": {
-      if (
-        !state.narrative ||
-        state.narrative.completed ||
-        !state.narrative.currentNodeKey
-      ) {
-        throw new Error("当前会话没有可推进的冻结叙事。");
-      }
-      if (state.narrative.version !== 1)
-        throw new Error("GameRelease 叙事必须通过正式 Choice 提交。");
-      const fromNodeKey = String(payload.fromNodeKey ?? "").trim();
-      const toNodeKey = String(payload.toNodeKey ?? "").trim();
-      if (fromNodeKey !== state.narrative.currentNodeKey)
-        throw new Error("冻结叙事推进来源节点已变化。");
-      if (!state.narrative.availableNodeKeys.includes(toNodeKey))
-        throw new Error("冻结叙事目标不是当前可选后继。");
-      state.narrative = enterFrozenNarrativeNode(state.narrative, toNodeKey);
-      break;
-    }
     case "narrative.choice.committed": {
       const narrative = state.narrative;
       if (
@@ -4770,112 +4616,6 @@ export function applySimulationEvent(
       if (narrative.lastEnteredNodeSequence !== enteredSequence)
         throw new Error("结局事件引用的节点尚未正式进入。");
       narrative.completedAtSequence = event.sequence;
-      break;
-    }
-    case "chat.session.configured": {
-      const characterKey = String(payload.characterKey ?? "").trim();
-      const character = state.entities[characterKey];
-      if (!character || !["character", "npc"].includes(character.kind)) {
-        throw new Error(`角色聊天角色不存在或类型不支持: ${characterKey}`);
-      }
-      const identity = assertChatIdentity(payload.identity);
-      const scene = assertChatScene(payload.scene);
-      const current = state.chat;
-      if (
-        current &&
-        current.messages.length > 0 &&
-        current.characterKey !== characterKey
-      ) {
-        throw new Error("已有聊天消息后不能更换角色；请从当前会话建立分支。");
-      }
-      state.chat = {
-        characterKey,
-        identity,
-        scene,
-        messages: current?.messages ?? [],
-      };
-      break;
-    }
-    case "chat.message.recorded": {
-      const chat = requireChatState(state);
-      if (
-        chat.messages.some(
-          (message) =>
-            message.role === "user" &&
-            message.supersededBySequence == null &&
-            message.replyToSequence == null,
-        )
-      ) {
-        const last = chat.messages[chat.messages.length - 1];
-        if (last?.role === "user")
-          throw new Error("上一条用户消息尚未得到角色回复。");
-      }
-      const message = assertChatMessage({
-        ...payload,
-        eventSequence: event.sequence,
-        role: "user",
-        speakerKey: null,
-        replyToSequence: null,
-        supersededBySequence: null,
-      });
-      chat.messages.push(message);
-      break;
-    }
-    case "chat.reply.recorded": {
-      const chat = requireChatState(state);
-      const replyToSequence = assertFiniteInteger(
-        payload.replyToSequence,
-        "聊天回复目标序号",
-        1,
-        event.sequence - 1,
-      );
-      const target = chat.messages.find(
-        (message) => message.eventSequence === replyToSequence,
-      );
-      if (!target || target.role !== "user")
-        throw new Error("聊天回复必须引用当前会话中的用户消息。");
-      const activeReply = chat.messages.find(
-        (message) =>
-          message.role === "character" &&
-          message.replyToSequence === replyToSequence &&
-          message.supersededBySequence == null,
-      );
-      const supersedesSequence =
-        payload.supersedesSequence == null
-          ? null
-          : assertFiniteInteger(
-              payload.supersedesSequence,
-              "聊天替代回复序号",
-              1,
-              event.sequence - 1,
-            );
-      if (activeReply && supersedesSequence !== activeReply.eventSequence) {
-        throw new Error("该用户消息已有当前回复；重生成必须明确替代原回复。");
-      }
-      if (supersedesSequence != null) {
-        const superseded = chat.messages.find(
-          (message) => message.eventSequence === supersedesSequence,
-        );
-        if (
-          !superseded ||
-          superseded.role !== "character" ||
-          superseded.replyToSequence !== replyToSequence ||
-          superseded.supersededBySequence != null
-        ) {
-          throw new Error("待替代的聊天回复无效或已经被替代。");
-        }
-        superseded.supersededBySequence = event.sequence;
-      }
-      const message = assertChatMessage({
-        ...payload,
-        eventSequence: event.sequence,
-        messageId: payload.messageId ?? `chat:${event.sequence}`,
-        role: "character",
-        speakerKey: chat.characterKey,
-        replyToSequence,
-        supersededBySequence: null,
-      });
-      chat.messages.push(message);
       break;
     }
     case "ttrpg.character.customized": {
@@ -6923,12 +6663,9 @@ async function prepareSimulationSessionRecord(
     SimulationSession,
     | "worldId"
     | "workId"
-    | "worldReleaseId"
     | "gameReleaseId"
     | "gameBuildId"
-    | "ttrpgBuildId"
     | "runtimeSourceHash"
-    | "narrativeModuleExportId"
   >,
 ): Promise<SimulationSession> {
   await assertSessionScope(input);
@@ -6973,12 +6710,9 @@ async function insertSimulationSession(
     SimulationSession,
     | "worldId"
     | "workId"
-    | "worldReleaseId"
     | "gameReleaseId"
     | "gameBuildId"
-    | "ttrpgBuildId"
     | "runtimeSourceHash"
-    | "narrativeModuleExportId"
   >,
 ): Promise<SimulationSession> {
   const session = await prepareSimulationSessionRecord(input, binding);
@@ -7033,7 +6767,6 @@ function validateFrozenRuntimePackageSession(input: {
   session: CreateSimulationSessionInput;
   runtimePackage: GameRuntimePackageV2;
   runtimeSourceHash: string;
-  narrativeModuleExportId: number | null;
   origin: "release" | "preview" | "branch";
 }): void {
   const { runtimePackage, runtimeSourceHash } = input;
@@ -7041,11 +6774,6 @@ function validateFrozenRuntimePackageSession(input: {
     input.session.kind !== sessionKindForProduct(runtimePackage.productType)
   ) {
     throw new Error(`${runtimePackage.productType} 与会话类型不匹配。`);
-  }
-  const selectedNarrativeExportId =
-    runtimePackage.sourceWorld.selection.narrativeModuleExportIds[0] ?? null;
-  if (selectedNarrativeExportId !== input.narrativeModuleExportId) {
-    throw new Error("文字游戏的冻结叙事绑定无效。");
   }
   const initial = parseSimulationState(
     input.session.initialState ?? EMPTY_SIMULATION_STATE,
@@ -7055,8 +6783,6 @@ function validateFrozenRuntimePackageSession(input: {
     narrative?.version !== 2 ||
     narrative.contentHash !== runtimeSourceHash ||
     narrative.sourceHash !== runtimeSourceHash ||
-    narrative.sourceModuleId != null ||
-    narrative.sourceModuleExportId !== input.narrativeModuleExportId ||
     narrative.moduleKind !== runtimePackage.narrative.moduleKind ||
     narrative.moduleTitle !== runtimePackage.narrative.moduleTitle ||
     stableJson(narrative.nodes) !==
@@ -7229,54 +6955,33 @@ function validateFrozenRuntimePackageSession(input: {
   }
 }
 
-/** Formal Release v1/v2 lower insertion boundary. */
+/** Formal immutable GameRelease v2 lower insertion boundary. */
 export async function createReleasedGameSession(
   input: CreateReleasedGameSessionInput,
 ): Promise<SimulationSession> {
-  const [gameRelease, worldRelease] = await Promise.all([
-    assertGameReleaseUnchanged(input.gameReleaseId),
-    db.worldReleases.get(input.worldReleaseId),
-  ]);
+  const gameRelease = await assertGameReleaseUnchanged(input.gameReleaseId);
   if (
     gameRelease.projectId !== input.projectId ||
     gameRelease.worldId !== input.worldId ||
-    gameRelease.workId !== input.workId ||
-    gameRelease.worldReleaseId !== input.worldReleaseId
+    gameRelease.workId !== input.workId
   ) {
     throw new Error("文字游戏的 GameRelease 绑定无效。");
   }
-  if (
-    !worldRelease ||
-    worldRelease.projectId !== input.projectId ||
-    worldRelease.worldId !== input.worldId
-  ) {
-    throw new Error("文字游戏的 WorldRelease 绑定无效。");
-  }
-  const manifest = parseAnyGameReleaseManifestVersion(gameRelease.manifestJson);
-  const runtimePackage =
-    manifest.version === 2
-      ? (await verifyGameReleaseManifestV2(manifest)).runtimePackage
-      : gameRuntimePackageFromReleaseV1(
-          parseAnyGameReleaseManifest(gameRelease.manifestJson),
-        );
-  const runtimeSourceHash =
-    manifest.version === 2 ? manifest.packageHash : gameRelease.contentHash;
+  const manifest = await verifyGameReleaseManifestV2(gameRelease.manifestJson);
+  const runtimePackage = manifest.runtimePackage;
+  const runtimeSourceHash = manifest.packageHash;
   validateFrozenRuntimePackageSession({
     session: input,
     runtimePackage,
     runtimeSourceHash,
-    narrativeModuleExportId: input.narrativeModuleExportId,
     origin: input.origin,
   });
   return insertSimulationSession(input, {
     worldId: input.worldId,
     workId: input.workId,
-    worldReleaseId: input.worldReleaseId,
     gameReleaseId: input.gameReleaseId,
     gameBuildId: null,
-    ttrpgBuildId: null,
     runtimeSourceHash,
-    narrativeModuleExportId: input.narrativeModuleExportId,
   });
 }
 
@@ -7296,115 +7001,22 @@ export async function createPreviewGameSession(
       expectedPreviewHash: input.expectedPreviewHash,
     },
   });
-  if (
-    verified.sourceWorldReleaseId !== input.worldReleaseId ||
-    verified.runtimeSourceHash !== input.runtimeSourceHash
-  ) {
+  if (verified.runtimeSourceHash !== input.runtimeSourceHash) {
     throw new Error("文字游戏的 Build Preview 冻结绑定无效。");
   }
   validateFrozenRuntimePackageSession({
     session: input,
     runtimePackage: verified.runtimePackage,
     runtimeSourceHash: verified.runtimeSourceHash,
-    narrativeModuleExportId: input.narrativeModuleExportId,
     origin: input.origin,
   });
   return insertSimulationSession(input, {
     worldId: input.worldId,
     workId: input.workId,
-    worldReleaseId: input.worldReleaseId,
     gameReleaseId: null,
     gameBuildId: input.gameBuildId,
-    ttrpgBuildId: null,
     runtimeSourceHash: verified.runtimeSourceHash,
-    narrativeModuleExportId: input.narrativeModuleExportId,
   });
-}
-
-/** TTRPG-4B lower insertion boundary for a product-owned frozen Build. */
-export async function createTtrpgProductPreviewSessionV1(
-  input: CreateTtrpgProductPreviewSessionInput,
-): Promise<SimulationSession> {
-  const prepared = await prepareTtrpgProductPreviewSessionV1(input);
-  return insertPreparedTtrpgProductPreviewSessionV1(prepared);
-}
-
-/**
- * Resolve hashes and prepare the exact row before an orchestrator opens its
- * atomic write transaction. This keeps WebCrypto outside Dexie's live IDB
- * transaction while the paired insert boundary below remains synchronous-IDB.
- */
-export async function prepareTtrpgProductPreviewSessionV1(
-  input: CreateTtrpgProductPreviewSessionInput,
-): Promise<SimulationSession> {
-  if (input.kind !== "ttrpg") {
-    throw new Error("TTRPG Product Build 只能创建 ttrpg 会话。");
-  }
-  const verified = await verifyPlayableGamePackageSource({
-    scope: {
-      projectId: input.projectId,
-      worldId: input.worldId,
-      workId: input.workId,
-    },
-    source: {
-      kind: "ttrpg-build",
-      ttrpgBuildId: input.ttrpgBuildId,
-      expectedBuildHash: input.expectedBuildHash,
-    },
-  });
-  if (
-    verified.runtimePackage.productType !== "ttrpg" ||
-    verified.sourceWorldReleaseId !== input.worldReleaseId ||
-    verified.runtimeSourceHash !== input.runtimeSourceHash
-  ) {
-    throw new Error("TTRPG Product Build 冻结绑定无效。");
-  }
-  validateFrozenRuntimePackageSession({
-    session: input,
-    runtimePackage: verified.runtimePackage,
-    runtimeSourceHash: verified.runtimeSourceHash,
-    narrativeModuleExportId: input.narrativeModuleExportId,
-    origin: input.origin,
-  });
-  return prepareSimulationSessionRecord(input, {
-    worldId: input.worldId,
-    workId: input.workId,
-    worldReleaseId: input.worldReleaseId,
-    gameReleaseId: null,
-    gameBuildId: null,
-    ttrpgBuildId: input.ttrpgBuildId,
-    runtimeSourceHash: verified.runtimeSourceHash,
-    narrativeModuleExportId: input.narrativeModuleExportId,
-  });
-}
-
-/** Atomic orchestrator insert for a row produced by prepareTtrpgProductPreviewSessionV1. */
-export async function insertPreparedTtrpgProductPreviewSessionV1(
-  prepared: SimulationSession,
-): Promise<SimulationSession> {
-  if (
-    prepared.id != null ||
-    prepared.kind !== "ttrpg" ||
-    prepared.ttrpgBuildId == null ||
-    prepared.gameBuildId != null ||
-    prepared.gameReleaseId != null ||
-    !prepared.runtimeSourceHash ||
-    !prepared.runtimeHeadStateHash
-  ) {
-    throw new Error("TTRPG Product Build 预备会话无效。");
-  }
-  const session = structuredClone(prepared);
-  session.id = (await db.simulationSessions.add(session)) as number;
-  return session;
-}
-
-/** @deprecated STORYGAME compatibility wrapper; new product code uses createReleasedGameSession. */
-export async function createReleasedStoryGameSession(
-  input: CreateReleasedGameSessionInput,
-): Promise<SimulationSession> {
-  if (input.kind !== "storygame")
-    throw new Error("storygame 兼容入口只接受 storygame。");
-  return createReleasedGameSession(input);
 }
 
 async function readSessionEvents(
@@ -7616,12 +7228,8 @@ export async function appendSimulationEvent(input: {
     input.type === "ttrpg.effects.applied" ||
     input.type === "ttrpg.campaign.ended" ||
     input.type === "ttrpg.tabletop.updated" ||
-    input.type === "chat.session.configured" ||
-    input.type === "chat.message.recorded" ||
-    input.type === "chat.reply.recorded" ||
     input.type === "narrative.started" ||
     input.type === "narrative.node.entered" ||
-    input.type === "narrative.node.advanced" ||
     input.type === "narrative.choice.committed" ||
     input.type === "narrative.ending.reached"
   ) {
@@ -7814,39 +7422,6 @@ export async function recordAvgMediaFailure(input: {
   );
 }
 
-export async function advanceSimulationNarrative(input: {
-  sessionId: number;
-  targetNodeKey: string;
-  baseSequence?: number;
-}): Promise<SimulationEvent> {
-  const targetNodeKey = input.targetNodeKey.trim();
-  if (!targetNodeKey) throw new Error("请选择要进入的叙事节点。");
-  return appendBuiltEvent(input.sessionId, ({ state }) => {
-    const narrative = state.narrative;
-    if (!narrative || narrative.completed || !narrative.currentNodeKey) {
-      throw new Error("当前会话没有可推进的冻结叙事。");
-    }
-    if (narrative.version !== 1)
-      throw new Error("GameRelease 叙事必须提交正式 Choice。");
-    const baseSequence = input.baseSequence ?? state.lastSequence;
-    if (baseSequence !== state.lastSequence)
-      throw new Error("叙事分支已变化，请刷新后重试。");
-    if (!narrative.availableNodeKeys.includes(targetNodeKey)) {
-      throw new Error("所选节点不是当前条件允许的后继。");
-    }
-    return {
-      type: "narrative.node.advanced",
-      actorKey: null,
-      targetKey: targetNodeKey,
-      payloadJson: JSON.stringify({
-        fromNodeKey: narrative.currentNodeKey,
-        toNodeKey: targetNodeKey,
-        baseSequence,
-      }),
-    };
-  });
-}
-
 function normalizeCommandId(value: string): string {
   const commandId = value.trim();
   if (
@@ -7870,6 +7445,121 @@ export async function readSimulationStateVersion(sessionId: number): Promise<{
     sequence: head.sequence,
     stateHash: head.stateHash,
   };
+}
+
+type FrozenFormalPlayableSourceV1 = {
+  runtimePackage: GameRuntimePackageV2;
+  packageHash: string;
+  source:
+    | { kind: "release"; release: GameRelease & { id: number } }
+    | {
+        kind: "build";
+        build: GameBuildRecordV1 & { id: number };
+        production: GameProductionRecordV1 & { id: number };
+        brief: GameProductionBriefRecordV1 & { id: number };
+      };
+};
+
+/**
+ * Product-neutral runtime source guard shared by every upper-product command.
+ * A formal instance may bind one immutable Product Release or one governed
+ * Build Preview; product commands must never reopen the WorldRelease directly.
+ */
+async function verifyFormalPlayableSourceV1(
+  session: SimulationSession,
+  allowedProductTypes: readonly GameRuntimePackageV2["productType"][],
+): Promise<FrozenFormalPlayableSourceV1> {
+  const sourceCount = [session.gameReleaseId, session.gameBuildId]
+    .filter((value) => value != null).length;
+  if (
+    sourceCount !== 1 ||
+    session.worldId == null ||
+    session.workId == null ||
+    !session.runtimeSourceHash
+  ) {
+    throw new Error("[product-runtime] 正式实例没有唯一冻结 Product Release/Build 来源。");
+  }
+  const playable = await verifyPlayableSessionPackageV2({
+    scope: {
+      projectId: session.projectId,
+      worldId: session.worldId,
+      workId: session.workId,
+    },
+    session,
+  });
+  if (
+    playable.packageHash !== session.runtimeSourceHash ||
+    !allowedProductTypes.includes(playable.runtimePackage.productType)
+  ) {
+    throw new Error("[product-runtime] 实例产品类型或冻结运行包 hash 不匹配。");
+  }
+  if (session.gameReleaseId != null) {
+    const release = await db.gameReleases.get(session.gameReleaseId);
+    if (!release?.id) throw new Error("[product-runtime] Product Release 已不存在。");
+    return {
+      runtimePackage: playable.runtimePackage,
+      packageHash: playable.packageHash,
+      source: { kind: "release", release: release as GameRelease & { id: number } },
+    };
+  }
+  const build = await db.gameBuilds.get(session.gameBuildId!);
+  if (!build?.id) throw new Error("[product-runtime] Product Build 已不存在。");
+  const [production, brief] = await Promise.all([
+    db.gameProductions.get(build.productionId),
+    db.gameProductionBriefs
+      .where("[productionId+revision]")
+      .equals([build.productionId, build.briefRevision])
+      .first(),
+  ]);
+  if (!production?.id || !brief?.id) {
+    throw new Error("[product-runtime] Product Build 的 Production/Brief 来源已损坏。");
+  }
+  return {
+    runtimePackage: playable.runtimePackage,
+    packageHash: playable.packageHash,
+    source: {
+      kind: "build",
+      build: build as GameBuildRecordV1 & { id: number },
+      production: production as GameProductionRecordV1 & { id: number },
+      brief: brief as GameProductionBriefRecordV1 & { id: number },
+    },
+  };
+}
+
+async function assertFormalPlayableSourceUnchangedV1(input: {
+  previewSession: SimulationSession;
+  session: SimulationSession;
+  frozen: FrozenFormalPlayableSourceV1;
+}): Promise<void> {
+  const session = input.session;
+  if (
+    session.gameReleaseId !== input.previewSession.gameReleaseId ||
+    session.gameBuildId !== input.previewSession.gameBuildId ||
+    session.runtimeSourceHash !== input.frozen.packageHash ||
+    session.seed !== input.previewSession.seed
+  ) {
+    throw new Error("[product-runtime] 实例冻结运行源在命令提交期间发生变化。");
+  }
+  if (input.frozen.source.kind === "release") {
+    const release = await db.gameReleases.get(input.frozen.source.release.id);
+    if (!release || stableJson(release) !== stableJson(input.frozen.source.release)) {
+      throw new Error("[product-runtime] Product Release 在命令提交期间发生变化。");
+    }
+    return;
+  }
+  const [build, production, brief] = await Promise.all([
+    db.gameBuilds.get(input.frozen.source.build.id),
+    db.gameProductions.get(input.frozen.source.production.id),
+    db.gameProductionBriefs.get(input.frozen.source.brief.id),
+  ]);
+  if (
+    !build || !production || !brief ||
+    stableJson(build) !== stableJson(input.frozen.source.build) ||
+    stableJson(production) !== stableJson(input.frozen.source.production) ||
+    stableJson(brief) !== stableJson(input.frozen.source.brief)
+  ) {
+    throw new Error("[product-runtime] Product Build/Production/Brief 在命令提交期间发生变化。");
+  }
 }
 
 /** Hash an already verified in-memory projection without replaying its event log again. */
@@ -7917,7 +7607,6 @@ async function verifyFormalTtrpgSource(session: SimulationSession) {
   const sourceCount = [
     session.gameReleaseId,
     session.gameBuildId,
-    session.ttrpgBuildId,
   ].filter((value) => value != null).length;
   if (
     session.kind !== "ttrpg" ||
@@ -7925,76 +7614,6 @@ async function verifyFormalTtrpgSource(session: SimulationSession) {
     sourceCount !== 1
   ) {
     throw new Error("[ttrpg] 正式 TTRPG 实例没有唯一冻结运行源。");
-  }
-  if (session.ttrpgBuildId != null) {
-    if (session.worldId == null || session.workId == null) {
-      throw new Error("[ttrpg] TTRPG Product Build 实例缺少完整工作区作用域。");
-    }
-    const buildBefore = await db.ttrpgProductionBuilds.get(
-      session.ttrpgBuildId,
-    );
-    if (!buildBefore?.buildHash) {
-      throw new Error("[ttrpg] TTRPG Product Build 运行源不存在。");
-    }
-    const playable = await verifyPlayableGamePackageSource({
-      scope: {
-        projectId: session.projectId,
-        worldId: session.worldId,
-        workId: session.workId,
-      },
-      source: {
-        kind: "ttrpg-build",
-        ttrpgBuildId: session.ttrpgBuildId,
-        expectedBuildHash: buildBefore.buildHash,
-      },
-    });
-    const [build, production, sourceSelection, brief] = await Promise.all([
-      db.ttrpgProductionBuilds.get(session.ttrpgBuildId),
-      db.ttrpgProductions.get(buildBefore.productionId),
-      db.ttrpgSourceSelections.get(buildBefore.sourceSelectionId),
-      db.ttrpgProductionBriefs.get(buildBefore.briefId),
-    ]);
-    if (
-      !build ||
-      !production ||
-      !sourceSelection ||
-      !brief ||
-      stableJson(build) !== stableJson(buildBefore)
-    ) {
-      throw new Error(
-        "[ttrpg] TTRPG Product Build 在运行源校验期间发生变化。",
-      );
-    }
-    if (
-      playable.runtimePackage.productType !== "ttrpg" ||
-      !playable.runtimePackage.ttrpg ||
-      playable.packageHash !== session.runtimeSourceHash ||
-      playable.sourceWorldReleaseId !== (session.worldReleaseId ?? null)
-    ) {
-      throw new Error(
-        "[ttrpg] 实例与冻结 TTRPG Product Build 不一致。",
-      );
-    }
-    const rulePack = parseRulePackV1(
-      playable.runtimePackage.ttrpg.rulePack.content,
-    );
-    const campaign = parseTtrpgCampaignContentV1(
-      playable.runtimePackage.ttrpg.campaign,
-      rulePack,
-    );
-    return {
-      source: {
-        kind: "ttrpg-build" as const,
-        build,
-        production,
-        sourceSelection,
-        brief,
-      },
-      runtimePackage: playable.runtimePackage,
-      packageHash: playable.packageHash,
-      rulePack,
-      campaign,
-    };
   }
   if (session.gameBuildId != null) {
     if (session.worldId == null || session.workId == null) {
@@ -8023,8 +7642,7 @@ async function verifyFormalTtrpgSource(session: SimulationSession) {
     if (
       playable.runtimePackage.productType !== "ttrpg" ||
       !playable.runtimePackage.ttrpg ||
-      playable.packageHash !== session.runtimeSourceHash ||
-      playable.sourceWorldReleaseId !== session.worldReleaseId
+      playable.packageHash !== session.runtimeSourceHash
     ) {
       throw new Error("[ttrpg] 实例与冻结 TTRPG Build Preview 不一致。");
     }
@@ -8044,10 +7662,7 @@ async function verifyFormalTtrpgSource(session: SimulationSession) {
     };
   }
   const release = await assertGameReleaseUnchanged(session.gameReleaseId!);
-  const parsed = parseAnyGameReleaseManifestVersion(release.manifestJson);
-  if (parsed.version !== 2)
-    throw new Error("[ttrpg] 正式 TTRPG 只支持 GameRelease v2。");
-  const manifest = await verifyGameReleaseManifestV2(parsed);
+  const manifest = await verifyGameReleaseManifestV2(release.manifestJson);
   if (
     manifest.productType !== "ttrpg" ||
     !manifest.runtimePackage.ttrpg ||
@@ -8212,11 +7827,6 @@ async function appendFormalTtrpgCommand(
       db.ttrpgSessionParticipants,
       db.gameReleases,
       db.gameBuilds,
-      db.ttrpgProductions,
-      db.ttrpgSourceSelections,
-      db.ttrpgProductionBriefs,
-      db.ttrpgProductionBuilds,
-      db.worldReleases,
     ],
     async () => {
       const session = await db.simulationSessions.get(input.sessionId);
@@ -8225,13 +7835,9 @@ async function appendFormalTtrpgCommand(
         ? session.gameReleaseId == null
           ? null
           : await db.gameReleases.get(session.gameReleaseId)
-        : frozen.source.kind === "build"
-          ? session.gameBuildId == null
-            ? null
-            : await db.gameBuilds.get(session.gameBuildId)
-          : session.ttrpgBuildId == null
-            ? null
-            : await db.ttrpgProductionBuilds.get(session.ttrpgBuildId);
+        : session.gameBuildId == null
+          ? null
+          : await db.gameBuilds.get(session.gameBuildId);
       const sourceUnchanged =
         frozen.source.kind === "release"
           ? currentSource != null &&
@@ -8240,8 +7846,7 @@ async function appendFormalTtrpgCommand(
             currentSource.manifestJson === frozen.source.release.manifestJson &&
             currentSource.contentHash === frozen.source.release.contentHash &&
             session.gameBuildId == null
-          : frozen.source.kind === "build"
-            ? currentSource != null &&
+          : currentSource != null &&
             currentSource.id === frozen.source.build.id &&
             "previewHash" in currentSource &&
             currentSource.productionId === frozen.source.build.productionId &&
@@ -8256,34 +7861,11 @@ async function appendFormalTtrpgCommand(
             ["preview-ready", "release-ready", "released"].includes(
               currentSource.status,
             ) &&
-            session.gameReleaseId == null &&
-            session.ttrpgBuildId == null
-            : currentSource != null &&
-              "buildHash" in currentSource &&
-              stableJson(currentSource) === stableJson(frozen.source.build) &&
-              stableJson(
-                await db.ttrpgProductions.get(
-                  frozen.source.production.id!,
-                ),
-              ) === stableJson(frozen.source.production) &&
-              stableJson(
-                await db.ttrpgSourceSelections.get(
-                  frozen.source.sourceSelection.id!,
-                ),
-              ) === stableJson(frozen.source.sourceSelection) &&
-              stableJson(
-                await db.ttrpgProductionBriefs.get(frozen.source.brief.id!),
-              ) === stableJson(frozen.source.brief) &&
-              ["preview-ready", "validated", "release-ready"].includes(
-                currentSource.status,
-              ) &&
-              session.gameReleaseId == null &&
-              session.gameBuildId == null;
+            session.gameReleaseId == null;
       if (
         !sourceUnchanged ||
         session.gameReleaseId !== previewSession.gameReleaseId ||
         session.gameBuildId !== previewSession.gameBuildId ||
-        session.ttrpgBuildId !== previewSession.ttrpgBuildId ||
         session.runtimeSourceHash !== frozen.packageHash ||
         session.seed !== previewSession.seed
       ) {
@@ -12868,9 +12450,16 @@ export async function commitAdventureNarrativeChoice(input: {
   if (
     !session ||
     (session.kind !== "textadventure" && session.kind !== "textworld") ||
-    session.gameReleaseId == null
+    (session.gameReleaseId == null && session.gameBuildId == null)
   ) {
     throw new Error("[adventure] 正式文字冒险实例不存在。");
+  }
+  const frozen = await verifyFormalPlayableSourceV1(session, [
+    "text-adventure",
+    "text-open-world",
+  ]);
+  if (!frozen.runtimePackage.adventure) {
+    throw new Error("[adventure] 冻结 Product RuntimePackage 缺少冒险模块。");
   }
   const bridgeChoiceCommandId = adventureNarrativeChoiceCommandId(
     session.id!,
@@ -12924,14 +12513,7 @@ export async function commitAdventureNarrativeChoice(input: {
   }
   if (actionTags.length === 1) {
     const actionKey = actionTags[0].slice("adventure-action:".length);
-    const release = await assertGameReleaseUnchanged(session.gameReleaseId);
-    const manifest = parseAnyGameReleaseManifest(release.manifestJson);
-    if (
-      manifest.productType !== "text-adventure" &&
-      manifest.productType !== "text-open-world"
-    )
-      throw new Error("[adventure] 实例发布绑定无效。");
-    const action = manifest.adventure.actions.find(
+    const action = frozen.runtimePackage.adventure.actions.find(
       (item) => item.key === actionKey,
     );
     if (!action || action.narrativeChoiceKey !== choiceKey) {
@@ -12968,42 +12550,6 @@ export async function commitAdventureNarrativeChoice(input: {
     baseSequence: state.lastSequence,
     baseStateHash,
   });
-}
-
-export async function configureChatSession(input: {
-  sessionId: number;
-  characterKey: string;
-  identity: SimulationChatIdentity;
-  scene: SimulationChatScene;
-  baseSequence?: number;
-}): Promise<SimulationEvent> {
-  void input;
-  throw new Error(
-    "CHATGAME-1 已进入只读兼容；新配置必须从 character-interaction GameRelease 启动。",
-  );
-}
-
-export async function appendChatMessage(input: {
-  sessionId: number;
-  text: string;
-}): Promise<SimulationEvent> {
-  void input;
-  throw new Error(
-    "CHATGAME-1 已进入只读兼容；新消息必须使用 CHATGAME-2 互动命令。",
-  );
-}
-
-export async function appendChatReply(input: {
-  sessionId: number;
-  replyToSequence: number;
-  text: string;
-  baseSequence: number;
-  supersedesSequence?: number | null;
-}): Promise<SimulationEvent> {
-  void input;
-  throw new Error(
-    "CHATGAME-1 已进入只读兼容；新回复必须由 Instance Harness 候选经 CHATGAME-2 命令采用。",
-  );
 }
 
 function proposalSequenceFromResolution(event: SimulationEvent): number | null {
@@ -13401,14 +12947,21 @@ export async function commitAdventureAction(
     !previewSession ||
     (previewSession.kind !== "textadventure" &&
       previewSession.kind !== "textworld") ||
-    previewSession.gameReleaseId == null
+    (previewSession.gameReleaseId == null && previewSession.gameBuildId == null)
   ) {
     throw new Error("[adventure] 正式文字冒险实例不存在。");
   }
-  const [previewEvents, release] = await Promise.all([
+  const [previewEvents, frozen] = await Promise.all([
     readSessionEvents(previewSession),
-    assertGameReleaseUnchanged(previewSession.gameReleaseId),
+    verifyFormalPlayableSourceV1(previewSession, [
+      "text-adventure",
+      "text-open-world",
+    ]),
   ]);
+  const adventureContent = frozen.runtimePackage.adventure;
+  if (!adventureContent) {
+    throw new Error("[adventure] 冻结 Product RuntimePackage 缺少冒险模块。");
+  }
   const previewPrior = previewEvents.find(
     (event) => event.commandId === commandId,
   );
@@ -13429,17 +12982,14 @@ export async function commitAdventureAction(
     previewEvents,
   );
   const previewStateHash = await hashStateJson(JSON.stringify(previewState));
-  const manifest = parseAnyGameReleaseManifest(release.manifestJson);
   if (
-    (manifest.productType !== "text-adventure" &&
-      manifest.productType !== "text-open-world") ||
     !previewState.adventure ||
-    previewState.adventure.contentHash !== release.contentHash
+    previewState.adventure.contentHash !== frozen.packageHash
   ) {
-    throw new Error("[adventure] 实例发布绑定无效。");
+    throw new Error("[adventure] 实例 Product Release/Build 绑定无效。");
   }
   const previewAvailable = availableAdventureActions(
-    manifest.adventure,
+    adventureContent,
     previewState.adventure,
     previewState.narrative?.variables,
   ).find((item) => item.action.key === actionKey);
@@ -13463,18 +13013,27 @@ export async function commitAdventureAction(
   });
   return db.transaction(
     "rw",
-    db.simulationSessions,
-    db.simulationEvents,
-    db.gameReleases,
-    db.worldReleases,
+    [
+      db.simulationSessions,
+      db.simulationEvents,
+      db.gameReleases,
+      db.gameBuilds,
+      db.gameProductions,
+      db.gameProductionBriefs,
+    ],
     async () => {
       const session = await db.simulationSessions.get(input.sessionId);
       if (
         !session ||
         (session.kind !== "textadventure" && session.kind !== "textworld") ||
-        session.gameReleaseId == null
+        (session.gameReleaseId == null && session.gameBuildId == null)
       )
         throw new Error("[adventure] 正式文字冒险实例不存在。");
+      await assertFormalPlayableSourceUnchangedV1({
+        previewSession,
+        session,
+        frozen,
+      });
       const events = await readSessionEvents(session);
       const prior = events.find((event) => event.commandId === commandId);
       if (prior) {
@@ -13498,21 +13057,18 @@ export async function commitAdventureAction(
       if (projected.lastSequence !== input.baseSequence)
         throw new Error("[adventure] 冒险状态已变化，请刷新后重试。");
       if (
-        previewSession.gameReleaseId !== session.gameReleaseId ||
         previewState.lastSequence !== projected.lastSequence ||
         previewStateHash !== input.baseStateHash
       )
         throw new Error("[adventure] 冒险状态哈希已变化。");
       if (
-        (manifest.productType !== "text-adventure" &&
-          manifest.productType !== "text-open-world") ||
         !projected.adventure ||
-        projected.adventure.contentHash !== release.contentHash
+        projected.adventure.contentHash !== frozen.packageHash
       ) {
-        throw new Error("[adventure] 实例发布绑定无效。");
+        throw new Error("[adventure] 实例 Product Release/Build 绑定无效。");
       }
       const available = availableAdventureActions(
-        manifest.adventure,
+        adventureContent,
         projected.adventure,
         projected.narrative?.variables,
       ).find((item) => item.action.key === actionKey);
@@ -13700,7 +13256,7 @@ export async function commitAdventureAction(
             ];
       // Preflight all effects against a pure clone before the first mutating event.
       applyAdventureEffects(
-        manifest.adventure,
+        adventureContent,
         projected.adventure,
         effects,
         nextSequence(),
@@ -13722,7 +13278,7 @@ export async function commitAdventureAction(
         else if (effect.op === "change-item-state")
           await append("adventure.item.state-changed", effect);
         else if (effect.op === "change-resource") {
-          const definition = manifest.adventure.resources.find(
+          const definition = adventureContent.resources.find(
             (item) => item.key === effect.resourceKey,
           )!;
           const before = projected.adventure!.resources[effect.resourceKey];
@@ -13739,7 +13295,7 @@ export async function commitAdventureAction(
             delta: effect.delta,
           });
         } else if (effect.op === "change-ability") {
-          const definition = manifest.adventure.abilities.find(
+          const definition = adventureContent.abilities.find(
             (item) => item.key === effect.abilityKey,
           )!;
           const before = projected.adventure!.abilities[effect.abilityKey];
@@ -13774,7 +13330,7 @@ export async function commitAdventureAction(
             await append("adventure.quest.completed", {
               questKey: effect.questKey,
             });
-            const reward = manifest.adventure.quests.find(
+            const reward = adventureContent.quests.find(
               (item) => item.key === effect.questKey,
             )!.rewardEffects;
             for (const rewardEffect of reward) {
@@ -13793,7 +13349,7 @@ export async function commitAdventureAction(
               else if (rewardEffect.op === "apply-condition")
                 await append("adventure.condition.applied", rewardEffect);
               else if (rewardEffect.op === "change-ability") {
-                const definition = manifest.adventure.abilities.find(
+                const definition = adventureContent.abilities.find(
                   (item) => item.key === rewardEffect.abilityKey,
                 )!;
                 const before =
@@ -13810,7 +13366,7 @@ export async function commitAdventureAction(
                   delta: rewardEffect.delta,
                 });
               } else {
-                const definition = manifest.adventure.resources.find(
+                const definition = adventureContent.resources.find(
                   (item) => item.key === rewardEffect.resourceKey,
                 )!;
                 const before =
@@ -14645,21 +14201,18 @@ export async function commitNarrativeSimulationTurn(input: {
     !previewSession ||
     (previewSession.kind !== "textsimulation" &&
       previewSession.kind !== "textworld") ||
-    previewSession.gameReleaseId == null
+    (previewSession.gameReleaseId == null && previewSession.gameBuildId == null)
   ) {
     throw new Error("[textsim] 正式叙事模拟实例不存在。");
   }
-  const previewRelease = await assertGameReleaseUnchanged(
-    previewSession.gameReleaseId,
-  );
-  const previewManifest = parseAnyGameReleaseManifest(
-    previewRelease.manifestJson,
-  );
-  if (
-    previewManifest.productType !== "narrative-simulation" &&
-    previewManifest.productType !== "text-open-world"
-  )
-    throw new Error("[textsim] 实例发布绑定无效。");
+  const frozen = await verifyFormalPlayableSourceV1(previewSession, [
+    "narrative-simulation",
+    "text-open-world",
+  ]);
+  const simulationContent = frozen.runtimePackage.simulation;
+  if (!simulationContent) {
+    throw new Error("[textsim] 冻结 Product RuntimePackage 缺少模拟模块。");
+  }
   const previewEvents = await readSessionEvents(previewSession);
   const previewState = replaySimulationEvents(
     parseSimulationState(previewSession.initialStateJson),
@@ -14670,9 +14223,9 @@ export async function commitNarrativeSimulationTurn(input: {
   );
   if (
     !previewState.narrativeSimulation ||
-    previewState.narrativeSimulation.contentHash !== previewRelease.contentHash
+    previewState.narrativeSimulation.contentHash !== frozen.packageHash
   ) {
-    throw new Error("[textsim] 实例冻结状态与 GameRelease 不一致。");
+    throw new Error("[textsim] 实例冻结状态与 Product Release/Build 不一致。");
   }
   if (
     !previewPrior &&
@@ -14683,7 +14236,7 @@ export async function commitNarrativeSimulationTurn(input: {
   }
   if (!previewPrior) {
     planNarrativeSimulationTurn({
-      content: previewManifest.simulation,
+      content: simulationContent,
       state: previewState.narrativeSimulation,
       decisionKeys: input.decisionKeys,
       seed: previewSession.seed,
@@ -14693,33 +14246,29 @@ export async function commitNarrativeSimulationTurn(input: {
 
   return db.transaction(
     "rw",
-    db.simulationSessions,
-    db.simulationEvents,
-    db.simulationCheckpoints,
-    db.gameReleases,
+    [
+      db.simulationSessions,
+      db.simulationEvents,
+      db.simulationCheckpoints,
+      db.gameReleases,
+      db.gameBuilds,
+      db.gameProductions,
+      db.gameProductionBriefs,
+    ],
     async () => {
       const session = await db.simulationSessions.get(input.sessionId);
       if (
         !session ||
         (session.kind !== "textsimulation" && session.kind !== "textworld") ||
-        session.gameReleaseId == null
+        (session.gameReleaseId == null && session.gameBuildId == null)
       ) {
         throw new Error("[textsim] 正式叙事模拟实例不存在。");
       }
-      const release = await db.gameReleases.get(session.gameReleaseId);
-      if (
-        !release ||
-        release.manifestJson !== previewRelease.manifestJson ||
-        release.contentHash !== previewRelease.contentHash
-      ) {
-        throw new Error("[textsim] GameRelease 在回合提交期间发生变化。");
-      }
-      const manifest = parseAnyGameReleaseManifest(release.manifestJson);
-      if (
-        manifest.productType !== "narrative-simulation" &&
-        manifest.productType !== "text-open-world"
-      )
-        throw new Error("[textsim] 实例发布绑定无效。");
+      await assertFormalPlayableSourceUnchangedV1({
+        previewSession,
+        session,
+        frozen,
+      });
       const events = await readSessionEvents(session);
       const prior = events.find((event) => event.commandId === commandId);
       if (prior) {
@@ -14771,13 +14320,13 @@ export async function commitNarrativeSimulationTurn(input: {
       }
       if (
         !state.narrativeSimulation ||
-        state.narrativeSimulation.contentHash !== release.contentHash
+        state.narrativeSimulation.contentHash !== frozen.packageHash
       ) {
-        throw new Error("[textsim] 实例冻结状态与 GameRelease 不一致。");
+        throw new Error("[textsim] 实例冻结状态与 Product Release/Build 不一致。");
       }
       const settledTurn = state.narrativeSimulation.turn;
       const plan = planNarrativeSimulationTurn({
-        content: manifest.simulation,
+        content: simulationContent,
         state: state.narrativeSimulation,
         decisionKeys: input.decisionKeys,
         seed: session.seed,
@@ -14889,10 +14438,7 @@ function normalizeOpenWorldCommand(
 }
 
 function planOpenWorldCommand(input: {
-  manifest: Extract<
-    AnyGameReleaseManifestV1,
-    { productType: "text-open-world" }
-  >;
+  manifest: TextOpenWorldGameRuntimePackageV2;
   state: SimulationRuntimeState;
   seed: string;
   command: OpenWorldCommand;
@@ -14964,19 +14510,23 @@ export async function commitOpenWorldCommand(input: {
   if (
     !previewSession ||
     previewSession.kind !== "textworld" ||
-    previewSession.gameReleaseId == null
+    (previewSession.gameReleaseId == null && previewSession.gameBuildId == null)
   ) {
     throw new Error("[textworld] 正式文字开放世界实例不存在。");
   }
-  const [previewRelease, previewEvents] = await Promise.all([
-    assertGameReleaseUnchanged(previewSession.gameReleaseId),
+  const [frozen, previewEvents] = await Promise.all([
+    verifyFormalPlayableSourceV1(previewSession, ["text-open-world"]),
     readSessionEvents(previewSession),
   ]);
-  const previewManifest = parseAnyGameReleaseManifest(
-    previewRelease.manifestJson,
-  );
-  if (previewManifest.productType !== "text-open-world")
-    throw new Error("[textworld] 实例发布绑定无效。");
+  const previewManifest = frozen.runtimePackage as TextOpenWorldGameRuntimePackageV2;
+  if (
+    !previewManifest.openWorld ||
+    !previewManifest.adventure ||
+    !previewManifest.simulation ||
+    !previewManifest.interaction
+  ) {
+    throw new Error("[textworld] 冻结 Product RuntimePackage 缺少开放世界模块闭包。");
+  }
   const previewState = replaySimulationEvents(
     parseSimulationState(previewSession.initialStateJson),
     previewEvents,
@@ -15003,30 +14553,30 @@ export async function commitOpenWorldCommand(input: {
 
   return db.transaction(
     "rw",
-    db.simulationSessions,
-    db.simulationEvents,
-    db.simulationCheckpoints,
-    db.gameReleases,
+    [
+      db.simulationSessions,
+      db.simulationEvents,
+      db.simulationCheckpoints,
+      db.gameReleases,
+      db.gameBuilds,
+      db.gameProductions,
+      db.gameProductionBriefs,
+    ],
     async () => {
       const session = await db.simulationSessions.get(input.sessionId);
       if (
         !session ||
         session.kind !== "textworld" ||
-        session.gameReleaseId == null
+        (session.gameReleaseId == null && session.gameBuildId == null)
       ) {
         throw new Error("[textworld] 正式文字开放世界实例不存在。");
       }
-      const release = await db.gameReleases.get(session.gameReleaseId);
-      if (
-        !release ||
-        release.contentHash !== previewRelease.contentHash ||
-        release.manifestJson !== previewRelease.manifestJson
-      ) {
-        throw new Error("[textworld] GameRelease 在命令提交期间发生变化。");
-      }
-      const manifest = parseAnyGameReleaseManifest(release.manifestJson);
-      if (manifest.productType !== "text-open-world")
-        throw new Error("[textworld] 实例发布绑定无效。");
+      await assertFormalPlayableSourceUnchangedV1({
+        previewSession,
+        session,
+        frozen,
+      });
+      const manifest = previewManifest;
       const events = await readSessionEvents(session);
       const existing = events.find((event) => event.commandId === commandId);
       if (existing) {
@@ -15073,11 +14623,11 @@ export async function commitOpenWorldCommand(input: {
         !state.openWorld ||
         !state.adventure ||
         !state.narrativeSimulation ||
-        state.openWorld.contentHash !== release.contentHash ||
-        state.adventure.contentHash !== release.contentHash ||
-        state.narrativeSimulation.contentHash !== release.contentHash
+        state.openWorld.contentHash !== frozen.packageHash ||
+        state.adventure.contentHash !== frozen.packageHash ||
+        state.narrativeSimulation.contentHash !== frozen.packageHash
       ) {
-        throw new Error("[textworld] 实例冻结状态与 GameRelease 不一致。");
+        throw new Error("[textworld] 实例冻结状态与 Product Release/Build 不一致。");
       }
       const plan = planOpenWorldCommand({
         manifest,
@@ -15364,10 +14914,6 @@ async function branchSimulationSessionInternal(
     parent.gameBuildId == null
       ? null
       : await db.gameBuilds.get(parent.gameBuildId);
-  const parentTtrpgBuild =
-    parent.ttrpgBuildId == null
-      ? null
-      : await db.ttrpgProductionBuilds.get(parent.ttrpgBuildId);
   const child =
     (parent.kind === "storygame" ||
       parent.kind === "chatgame" ||
@@ -15378,15 +14924,12 @@ async function branchSimulationSessionInternal(
       parent.kind === "ttrpg") &&
     parent.gameReleaseId != null &&
     parent.worldId != null &&
-    parent.workId != null &&
-    parent.worldReleaseId != null
+    parent.workId != null
       ? await createReleasedGameSession({
           ...childInput,
           worldId: parent.worldId,
           workId: parent.workId,
-          worldReleaseId: parent.worldReleaseId,
           gameReleaseId: parent.gameReleaseId,
-          narrativeModuleExportId: parent.narrativeModuleExportId ?? null,
           origin: "branch",
         })
       : (parent.kind === "storygame" ||
@@ -15400,40 +14943,17 @@ async function branchSimulationSessionInternal(
           parentBuild &&
           parent.runtimeSourceHash &&
           parent.worldId != null &&
-          parent.workId != null &&
-          parent.worldReleaseId != null
+          parent.workId != null
         ? await createPreviewGameSession({
             ...childInput,
             worldId: parent.worldId,
             workId: parent.workId,
-            worldReleaseId: parent.worldReleaseId,
             gameBuildId: parent.gameBuildId,
             expectedPreviewHash: parentBuild.previewHash,
             runtimeSourceHash: parent.runtimeSourceHash,
-            narrativeModuleExportId: parent.narrativeModuleExportId ?? null,
             origin: "branch",
           })
-        : parent.kind === "ttrpg" &&
-            parent.ttrpgBuildId != null &&
-            parentTtrpgBuild?.buildHash &&
-            parent.runtimeSourceHash &&
-            parent.worldId != null &&
-            parent.workId != null
-          ? await createTtrpgProductPreviewSessionV1({
-              ...childInput,
-              worldId: parent.worldId,
-              workId: parent.workId,
-              worldReleaseId: parent.worldReleaseId ?? null,
-              ttrpgBuildId: parent.ttrpgBuildId,
-              expectedBuildHash: parentTtrpgBuild.buildHash,
-              runtimeSourceHash: parent.runtimeSourceHash,
-              narrativeModuleExportId:
-                parent.narrativeModuleExportId ?? null,
-              origin: "branch",
-            })
         : options.allowFormalFixture && isFormalProductSessionKindV1(parent.kind)
-          ? await insertSimulationSession(childInput)
-        : parent.kind === "storygame" && state.narrative?.version === 1
           ? await insertSimulationSession(childInput)
           : await createSimulationSession(childInput);
   await db.simulationSessions.update(child.id!, {
@@ -15441,14 +14961,9 @@ async function branchSimulationSessionInternal(
     parentThroughSequence: input.throughSequence,
     worldId: parent.worldId ?? null,
     workId: parent.workId ?? null,
-    worldReleaseId: parent.worldReleaseId ?? null,
     gameReleaseId: parent.gameReleaseId ?? null,
     gameBuildId: parent.gameBuildId ?? null,
-    ttrpgBuildId: parent.ttrpgBuildId ?? null,
     runtimeSourceHash: parent.runtimeSourceHash ?? null,
-    narrativeModuleId: parent.narrativeModuleId ?? null,
-    narrativeModuleExportId: parent.narrativeModuleExportId ?? null,
-    draftSnapshotHash: parent.draftSnapshotHash ?? null,
   });
   const boundChild = {
     ...child,
@@ -15456,14 +14971,9 @@ async function branchSimulationSessionInternal(
     parentThroughSequence: input.throughSequence,
     worldId: parent.worldId ?? null,
     workId: parent.workId ?? null,
-    worldReleaseId: parent.worldReleaseId ?? null,
     gameReleaseId: parent.gameReleaseId ?? null,
     gameBuildId: parent.gameBuildId ?? null,
-    ttrpgBuildId: parent.ttrpgBuildId ?? null,
     runtimeSourceHash: parent.runtimeSourceHash ?? null,
-    narrativeModuleId: parent.narrativeModuleId ?? null,
-    narrativeModuleExportId: parent.narrativeModuleExportId ?? null,
-    draftSnapshotHash: parent.draftSnapshotHash ?? null,
   };
   if (parent.kind === "ttrpg") {
     try {

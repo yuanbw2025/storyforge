@@ -626,7 +626,6 @@ for (const file of [
   'src/lib/agent/inspiration-copilot.ts',
   'src/lib/agent/outline-copilot.ts',
   'src/lib/agent/story-arc-copilot.ts',
-  'src/lib/text-game/agent-contract.ts',
 ]) {
   const source = read(file)
   if (!source.includes('parseStructuredOutputV1')) {
@@ -1264,7 +1263,6 @@ if (invalidateIndex < 0 || policyIndex <= invalidateIndex || runIndex <= policyI
 const worldIdentitySource = read('src/lib/product/world-identity.ts')
 const worldReleaseSource = read('src/lib/world-engine/releases.ts')
 const worldPackageSource = read('src/lib/product/world-package.ts')
-const worldPackageMigrationSource = read('src/lib/product/world-package-migration.ts')
 const worldSharingPanelSource = read('src/components/product/WorldSharingPanel.tsx')
 const worldDerivationSource = read('src/lib/world-engine/derivation.ts')
 if (!worldIdentitySource.includes("WorkspacePurpose")
@@ -1279,9 +1277,8 @@ for (const token of [
   if (!worldDerivationSource.includes(token)) violations.push(`[㉜显式派生] 派生服务缺少 ${token}`)
 }
 if (!worldReleaseSource.includes('PROJECT_TABLES.filter(spec => spec.worldSemantic)')
-  || worldReleaseSource.includes('legacyWorldPackageV1')
   || worldReleaseSource.includes('communityShare')) {
-  violations.push('[㉜纯语义发布] 新 WorldRelease 必须只从 worldSemantic 派生，禁止读取任何旧分享标志')
+  violations.push('[㉜纯语义发布] WorldRelease 必须只从 worldSemantic 派生，禁止读取分享兼容标志')
 }
 if (!worldReleaseSource.includes('semanticContract: 3')
   || !worldReleaseSource.includes('selectedNarrativeModules: []')
@@ -1289,31 +1286,22 @@ if (!worldReleaseSource.includes('semanticContract: 3')
   violations.push('[㉜产品内容隔离] 新 WorldRelease 必须声明 semanticContract 3 并拒绝可执行叙事模块')
 }
 for (const token of [
-  "releaseManifest.semanticContract !== 3", 'WORLD_SEMANTIC_TABLE_NAMES',
-  'WORLD_PACKAGE_MAX_BYTES', 'migrationRequired', 'report.importable',
-  'v1 仅供历史读取与迁移',
+  'WORLD_PACKAGE_VERSION = 2', 'WORLD_PACKAGE_MAX_BYTES',
+  'verifyPureWorldReleaseManifestV3', 'report.importable',
 ]) {
   if (!worldPackageSource.includes(token)) violations.push(`[㉜世界包边界] world-package 缺少 ${token}`)
 }
-if (worldSharingPanelSource.includes('createWorldPackage,')
-  || !worldSharingPanelSource.includes('migrateLegacyWorldPackageV1')
-  || !worldSharingPanelSource.includes('report.migrationRequired')) {
-  violations.push('[㉜世界包 UI] 正式 UI 不得回退创建 v1；旧包必须暴露分类迁移入口')
+if (!worldSharingPanelSource.includes('createWorldPackage,')
+  || /migrateLegacy|migrationRequired|分类迁移/.test(worldSharingPanelSource)) {
+  violations.push('[㉜世界包 UI] 正式 UI 只能创建和导入当前纯语义协议，不得保留旧包迁移入口')
 }
-for (const token of [
-  'semanticPortableProject', 'productRecoveryProjectId', 'worldReleaseMigrations',
-  "confirmWorkspacePurpose(semanticProjectId, 'world-engine'",
-  "confirmWorkspacePurpose(recoveryProjectId, 'independent-work'",
-]) {
-  if (!worldPackageMigrationSource.includes(token)) violations.push(`[㉜旧包拆分] 迁移服务缺少 ${token}`)
-}
-if (!registryTypesSource.includes('@deprecated PLATFORM-1 v1 read/migration classification only')
-  || /\bcommunityShare\b|\breleaseSection\b/.test(registrySrc)) {
-  violations.push('[㉜旧元数据降权] 旧分享字段必须明确重命名为 legacy 专用，不能继续冒充发布协议')
+if (/legacyWorldPackageV1|legacyWorldReleaseSection|worldReleaseMigrations/.test(registrySrc)
+  || /legacyWorldPackageV1|legacyWorldReleaseSection/.test(registryTypesSource)) {
+  violations.push('[㉜零旧世界协议] 三注册表不得保留旧世界包分类元数据或迁移表')
 }
 
 // ── ㉝ ARCH-03 上层产品不得绕过制作阶段从作者 UI 直接发布 ──
-const LEGACY_FIXTURE_PUBLISHERS = [
+const FORBIDDEN_DIRECT_PUBLISHERS = [
   'publishGameDefinition',
   'publishStoryGameDraft',
   'publishAdventureGameDraft',
@@ -1323,39 +1311,13 @@ const LEGACY_FIXTURE_PUBLISHERS = [
   'publishInteractionGameDraft',
   'publishTtrpgCampaignReleaseV1',
 ]
-for (const dir of UI_DIRS) {
-  for (const file of walk(dir)) {
-    const source = read(file)
-    for (const publisher of LEGACY_FIXTURE_PUBLISHERS) {
-      if (new RegExp(`\\b${publisher}\\b`).test(source)) {
-        violations.push(`[㉝三阶段旁路] ${file}: UI 不得调用 ${publisher}；正式发布必须进入产品制作中心`)
-      }
+for (const file of walk('src')) {
+  const source = read(file)
+  for (const publisher of FORBIDDEN_DIRECT_PUBLISHERS) {
+    if (new RegExp(`\\b${publisher}\\b`).test(source)) {
+      violations.push(`[㉝三阶段旁路] ${file}: 已删除的直发入口 ${publisher} 不得重新出现`)
     }
   }
-}
-for (const [file, publisher, fixtureFlag = 'fixtureOnly'] of [
-  ['src/lib/text-game/releases.ts', 'publishGameDefinition'],
-  ['src/lib/text-game/authoring.ts', 'publishStoryGameDraft'],
-  ['src/lib/adventure/authoring.ts', 'publishAdventureGameDraft'],
-  ['src/lib/avg/authoring.ts', 'publishAvgGame'],
-  ['src/lib/narrative-simulation/authoring.ts', 'publishNarrativeSimulationGame'],
-  ['src/lib/open-world/authoring.ts', 'publishTextOpenWorldGame'],
-  ['src/lib/character-interaction/authoring.ts', 'publishInteractionGameDraft'],
-  ['src/lib/ttrpg/release.ts', 'publishTtrpgCampaignReleaseV1', 'testOnlyAllowFixtureCampaign'],
-]) {
-  const source = read(file)
-  const start = source.indexOf(`function ${publisher}`)
-  const body = start >= 0 ? source.slice(start, start + 1_200) : ''
-  if (!body.includes(fixtureFlag)
-    || !body.includes("if (import.meta.env.MODE !== 'test')")) {
-    violations.push(`[㉝fixture 闸门] ${file}: ${publisher} 必须无条件拒绝非 test mode；fixtureOnly 参数不能成为生产旁路`)
-  }
-}
-const ttrpgFixtureAuthoringSource = read('src/lib/ttrpg/authoring.ts')
-const ttrpgFixtureCampaignSource = read('src/lib/ttrpg/campaign.ts')
-if (!ttrpgFixtureAuthoringSource.includes('import.meta.env.MODE !== "test" || input.fixtureOnly !== true')
-  || !ttrpgFixtureCampaignSource.includes("import.meta.env.MODE !== 'test' || input.fixtureOnly !== true")) {
-  violations.push('[㉝跑团 fixture 闸门] 固定战役编译器及其持久化入口必须同时验证 test mode 与 fixtureOnly')
 }
 const formalRuntimeBoundarySource = read('src/lib/product/runtime-boundary.ts')
 const worldInstanceSource = read('src/lib/world-engine/instances.ts')
@@ -1369,8 +1331,11 @@ for (const kind of [
     violations.push(`[㉝正式运行类型] runtime-boundary.ts 漏登记 ${kind}`)
   }
 }
-if (!worldInstanceSource.includes('isFormalProductSessionKindV1(input.kind) && !playable')
-  || worldInstanceSource.includes('explicitLegacyBinding')) {
+if (!worldInstanceSource.includes('if (!isFormalProductSessionKindV1(input.kind))')
+  || !worldInstanceSource.includes('verifyPlayableGamePackageSource({')
+  || !worldInstanceSource.includes('source: input.gameSource')
+  || worldInstanceSource.includes('explicitLegacyBinding')
+  || /worldReleaseId\??:\s*number/.test(worldInstanceSource)) {
   violations.push('[㉝底层实例闸门] 正式产品必须统一拒绝 WorldRelease/草稿直启，禁止恢复 legacy 特例')
 }
 if (!simulationKernelSource.includes('isFormalProductSessionKindV1(input.kind)')
@@ -1405,19 +1370,19 @@ for (const dir of UI_DIRS) {
     }
   }
 }
-if (sidebarTreeSource.includes("leaf('simulation-runtime'")) {
-  violations.push('[㉝长篇入口隔离] 分步骤侧栏不得重新暴露通用互动运行时')
-}
-if (workspacePageSource.includes("import('../components/simulation/SimulationRuntimePanel')")
-  || !workspacePageSource.includes('互动运行已移至独立上层产品')) {
-  violations.push('[㉝旧路由收口] 长篇 legacy runtime 路由只能显示产品中心交接说明，不得渲染创建器')
+if (sidebarTreeSource.includes('simulation-runtime')
+  || workspacePageSource.includes('simulation-runtime')
+  || workspacePageSource.includes("import('../components/simulation/SimulationRuntimePanel')")) {
+  violations.push('[㉝长篇入口隔离] 分步骤工作区不得登记、渲染或兼容上层产品运行路由')
 }
 
 // ── ㉝B ARCH-04 产品发布谱系必须先于正式 Runtime 校验 ──
 const productSourceContractsSource = read('src/lib/world-engine/product-source-contracts.ts')
-const characterProductPipelineSource = read('src/lib/character-interaction/production-pipeline.ts')
-const characterPlayerStoreSource = read('src/stores/interaction-game-player.ts')
-const chatGamePanelSource = read('src/components/simulation/ChatGamePanel.tsx')
+const productSourcePublicSource = read('src/lib/world-engine/product-source.ts')
+const requirementAdaptersSource = read('src/lib/world-engine/product-requirement-adapters.ts')
+const gameProductionWorldSource = read('src/lib/game-production/world-source.ts')
+const productHubArchitectureSource = read('src/pages/ProductHubPage.tsx')
+const distributionBundleSource = read('src/lib/game-platform/distribution-bundle.ts')
 for (const token of [
   'validateWorldReferenceV1', 'validateProductSourcePlanV1',
   'validateConfirmedProductBriefV1', 'validateProductSourceManifestV1',
@@ -1427,64 +1392,132 @@ for (const token of [
     violations.push(`[㉝B五契约] product-source-contracts.ts 缺少 ${token}`)
   }
 }
+if (!productSourcePublicSource.includes("from './product-source-contracts'")
+  || !productSourcePublicSource.includes("from './product-requirement-adapters'")) {
+  violations.push('[㉝B产品来源公共边界] 五项逻辑契约与产品需求适配器必须从同一 headless 入口导出')
+}
 for (const token of [
-  'publishCharacterInteractionProductReleaseV1',
-  'assertCharacterInteractionProductReleaseUnchangedV1',
-  'createCharacterInteractionProductInstanceV1',
-  'sourceManifestHash', 'lineageHash', 'productReleaseUid',
-  'productReleaseLineageHash', 'deleteSimulationSession(session.id!)',
+  'TTRPG_WORLD_REQUIREMENT_ADAPTER_V1',
+  'CHARACTER_INTERACTION_WORLD_REQUIREMENT_ADAPTER_V1',
 ]) {
-  if (!characterProductPipelineSource.includes(token)) {
-    violations.push(`[㉝B参考纵切面] 角色互动 ProductRelease→Runtime 缺少 ${token}`)
-  }
+  if (!requirementAdaptersSource.includes(token)) violations.push(`[㉝B需求适配器] 缺少 ${token}`)
 }
-if (!characterPlayerStoreSource.includes('db.characterInteractionProductReleases')
-  || !characterPlayerStoreSource.includes('createCharacterInteractionProductInstanceV1({')
-  || characterPlayerStoreSource.includes('createInteractionGameInstance({')) {
-  violations.push('[㉝B角色运行入口] 正式角色互动玩家必须列 ProductRelease 并经 lineage launcher，禁止直接列/启 GameRelease')
+if (!gameProductionWorldSource.includes('openWorldSemanticResourceCatalogV1({')
+  || !gameProductionWorldSource.includes('readWorldSemanticResourcesV1({')) {
+  violations.push('[㉝B中立世界读取] 统一产品生产必须经语义目录与资源读取协议，不得解析物理 WorldRelease')
 }
-if (!chatGamePanelSource.includes('item.productRelease.id')
-  || chatGamePanelSource.includes('store.start(item.release.id')) {
-  violations.push('[㉝B角色运行 UI] 新会话必须传 ProductRelease identity，不能传裸 GameRelease id')
+if (!productHubArchitectureSource.includes("lazy(() => import('../components/text-game/GameProductionStudio'))")
+  || !productHubArchitectureSource.includes('<GameProductionStudio')) {
+  violations.push('[㉝B统一产品生产] 产品中心必须把上层产品制作统一路由到 GameProductionStudio')
+}
+if (!distributionBundleSource.includes("schema: 'storyforge.game-distribution-bundle'")
+  || !distributionBundleSource.includes('sourceWorld: { contentHash: string }')
+  || distributionBundleSource.includes('db.worldReleases')
+  || distributionBundleSource.includes('WorldReleaseManifestV2')) {
+  violations.push('[㉝B自包含分发] 产品分发只能包含 GameRelease、产品媒资及世界 hash 来源证明')
 }
 
-// ARCH-05 compatibility quarantine. Existing product readers are kept only so
-// their product-specific migrations can be completed without a destructive
-// rewrite. New product code must consume WorldReference + the neutral provider
-// through a versioned requirement adapter instead of parsing the physical
-// WorldRelease manifest. Delete entries as each legacy reader is retired.
-const WORLD_RELEASE_MANIFEST_COMPATIBILITY_ALLOWLIST = new Set([
-  'src/lib/character-interaction/world-source.ts',
+// ARCH-05: there is no compatibility allowlist. Physical WorldRelease decoding
+// is world-owned infrastructure; upper products consume only the neutral gateway.
+const WORLD_RELEASE_PHYSICAL_OWNERS = new Set([
   'src/lib/context-gateway/world-release-provider.ts',
-  'src/lib/game-platform/distribution-bundle.ts',
-  'src/lib/game-production/context.ts',
   'src/lib/product/world-package.ts',
-  'src/lib/simulation/canon-snapshot.ts',
-  'src/lib/text-game/releases.ts',
-  'src/lib/text-game/world-generation.ts',
-  'src/lib/ttrpg/authoring.ts',
-  'src/lib/ttrpg/continuity.ts',
-  'src/lib/ttrpg/release.ts',
-  'src/lib/ttrpg/world-source.ts',
-  'src/lib/types/character-interaction.ts',
   'src/lib/types/world-release.ts',
-  'src/lib/world-engine/instances.ts',
-  'src/lib/world-engine/release-classification.ts',
+  'src/lib/world-engine/release-codec.ts',
   'src/lib/world-engine/releases.ts',
   'src/lib/world-engine/world-reference.ts',
 ])
 for (const file of walk('src')) {
   const source = read(file)
-  if (source.includes('WorldReleaseManifestV2')
-    && !WORLD_RELEASE_MANIFEST_COMPATIBILITY_ALLOWLIST.has(file)) {
-    violations.push(`[㉝C世界读取兼容隔离] ${file}: 新产品代码不得解析 WorldReleaseManifestV2；请新增产品 requirement adapter 并使用中立 provider`)
+  if ((source.includes('WorldReleaseManifestV2')
+      || source.includes('parsePureWorldReleaseManifestV3'))
+    && !WORLD_RELEASE_PHYSICAL_OWNERS.has(file)) {
+    violations.push(`[㉝C世界物理边界] ${file}: 非世界基础设施不得解析物理 WorldRelease`)
   }
 }
-const requirementAdaptersSource = read('src/lib/world-engine/product-requirement-adapters.ts')
 if (requirementAdaptersSource.includes('WorldReleaseManifestV2')
   || requirementAdaptersSource.includes('selectedTables')
   || requirementAdaptersSource.includes('.records')) {
   violations.push('[㉝C需求适配器中立性] 产品 requirement adapter 不得读取物理表、selectedTables 或 WorldRelease records')
+}
+
+const RETIRED_ARCHITECTURE_FILES = [
+  'src/components/character-interaction/CharacterInteractionProductionStudio.tsx',
+  'src/components/character-interaction/InteractionGameWorkbench.tsx',
+  'src/components/node-flow/NodeModeWorkspace.tsx',
+  'src/components/text-game/AdventureGameWorkbench.tsx',
+  'src/components/text-game/AvgGameWorkbench.tsx',
+  'src/components/text-game/NarrativeSimulationWorkbench.tsx',
+  'src/components/text-game/StoryGameWorkbench.tsx',
+  'src/components/text-game/TextOpenWorldWorkbench.tsx',
+  'src/components/ttrpg/TtrpgProductStudio.tsx',
+  'src/components/ttrpg/TtrpgProductionWorkspace.tsx',
+  'src/lib/adventure/authoring.ts',
+  'src/lib/avg/authoring.ts',
+  'src/lib/character-interaction/authoring.ts',
+  'src/lib/character-interaction/production-pipeline.ts',
+  'src/lib/game-production/legacy-entry-governance.ts',
+  'src/lib/narrative-simulation/authoring.ts',
+  'src/lib/node-authoring/migration.ts',
+  'src/lib/node-flow/executor.ts',
+  'src/lib/node-flow/graph.ts',
+  'src/lib/open-world/authoring.ts',
+  'src/lib/product/world-package-migration.ts',
+  'src/lib/text-game/authoring.ts',
+  'src/lib/ttrpg/authoring.ts',
+  'src/lib/ttrpg/release.ts',
+  'src/lib/world-engine/release-classification.ts',
+]
+for (const file of RETIRED_ARCHITECTURE_FILES) {
+  if (fs.existsSync(path.join(root, file))) violations.push(`[㉝C旧架构文件] ${file} 已退役，不得恢复`)
+}
+
+const retiredTableTokens = [
+  'gameDefinitions', 'adventureModules', 'avgMediaAssets', 'avgMediaBlobs',
+  'avgPresentationModules', 'narrativeSimulationModules', 'openWorldModules',
+  'ttrpgCampaignModules', 'worldReleaseMigrations',
+]
+for (const file of walk('src')) {
+  if (file === 'src/lib/db/schema.ts') continue
+  const source = read(file)
+  for (const token of retiredTableTokens) {
+    const accessesRetiredStore = new RegExp(`\\bdb\\.${token}\\b`).test(source)
+    const registersRetiredStore = new RegExp(`\\b(?:name|target):\\s*['\"]${token}['\"]`).test(source)
+    if (accessesRetiredStore || registersRetiredStore) {
+      violations.push(`[㉝C旧表清场] ${file}: 已删除表 ${token} 只能留在历史 Dexie schema 声明`)
+    }
+  }
+}
+for (const token of [
+  'gameDefinitionId', 'currentGameDefinitionId', 'adoptedGameDefinitionId',
+  'ttrpgBuildId', 'narrativeModuleExportId', 'draftSnapshotHash',
+]) {
+  for (const file of walk('src')) {
+    if (file === 'src/lib/db/schema.ts') continue
+    if (new RegExp(`\\b${token}\\b`).test(read(file))) {
+      violations.push(`[㉝C旧绑定清场] ${file}: 已删除运行/发布绑定 ${token} 不得恢复`)
+    }
+  }
+}
+
+const CURRENT_PRODUCT_PLAYER_STORES = [
+  'src/stores/story-game-player.ts',
+  'src/stores/interaction-game-player.ts',
+  'src/stores/adventure-game-player.ts',
+  'src/stores/avg-game-player.ts',
+  'src/stores/narrative-simulation-player.ts',
+  'src/stores/text-open-world-player.ts',
+]
+for (const file of CURRENT_PRODUCT_PLAYER_STORES) {
+  const source = read(file)
+  if (!source.includes('verifyPlayableSessionPackageV2')
+    && !source.includes('resolvePlayableGameSource')) {
+    violations.push(`[㉝C统一预览运行] ${file}: 玩家端必须同时验证 Product Build Preview 与 GameRelease`)
+  }
+  if (/session\.gameReleaseId\s*==\s*null[^\n]*(?:throw|return)/.test(source)
+    || /row\.gameReleaseId\s*!=\s*null\s*&&/.test(source)) {
+    violations.push(`[㉝C统一预览运行] ${file}: 不得把统一 Product Build Preview 当作旧存档排除`)
+  }
 }
 
 // ── ㉞ ARCH-06 节点模式只能编排分步骤领域动作，不得复制第二套生成/写回后端 ──
@@ -1584,22 +1617,21 @@ if (!registryTypesSource.includes('WORLD_CAPABILITY_AREAS')
   violations.push('[㊱世界能力单一事实源] 能力域必须有可运行常量并包含 multi-world')
 }
 
-// ── ㊲ Headless 迁移/演示边界不得重新进入正式产品 UI ──
+// ── ㊲ Headless 管理边界不得进入正式产品 UI ──
 for (const dir of UI_DIRS) {
   for (const file of walk(dir)) {
     const source = read(file)
-    if (/legacy-entry-governance|mist-harbor-(?:demo|roadshow)|scope-conversion/.test(source)) {
-      violations.push(`[㊲headless 边界] ${file}: 不得导入旧发布策略、路演 fixture 或任意 scope 转换服务`)
+    if (/scope-conversion/.test(source)) {
+      violations.push(`[㊲headless 边界] ${file}: 产品 UI 不得导入任意 scope 转换服务`)
     }
   }
 }
-for (const file of walk('src')) {
-  if (file === 'src/lib/world-engine/mist-harbor-demo.ts'
-    || file === 'src/lib/world-engine/mist-harbor-roadshow-authoring.ts'
-    || file === 'src/lib/world-engine/mist-harbor-roadshow-story.ts') continue
-  if (/mist-harbor-(?:demo|roadshow-authoring|roadshow-story)/.test(read(file))) {
-    violations.push(`[㊲演示隔离] ${file}: 雾港 fixture 只能在其 headless fixture 边界内部互相引用`)
-  }
+for (const file of [
+  'src/lib/world-engine/mist-harbor-demo.ts',
+  'src/lib/world-engine/mist-harbor-roadshow-authoring.ts',
+  'src/lib/world-engine/mist-harbor-roadshow-story.ts',
+]) {
+  if (fs.existsSync(path.join(root, file))) violations.push(`[㊲演示清场] ${file} 已退役，不得恢复`)
 }
 
 // ── 报告 ──

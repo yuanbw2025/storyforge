@@ -1,4 +1,4 @@
-import type { AvgMediaKind } from '../types'
+import type { ProductMediaKind } from '../types'
 import { sha256MediaData } from './media-blob-store'
 
 export type GameMediaClassV1 = 'image' | 'music' | 'sfx'
@@ -21,7 +21,7 @@ export interface GameMediaRequestV1 {
   requestId: string
   adapterId: string
   mediaClass: GameMediaClassV1
-  mediaKind: AvgMediaKind
+  mediaKind: ProductMediaKind
   requirementKey: string
   artifactKey: string
   prompt: string
@@ -77,7 +77,7 @@ export interface GameMediaCandidateV1 {
   requestId: string
   candidateIndex: number
   mediaClass: GameMediaClassV1
-  mediaKind: AvgMediaKind
+  mediaKind: ProductMediaKind
   mimeType: string
   byteSize: number
   contentHash: string

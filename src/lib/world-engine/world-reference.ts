@@ -1,6 +1,7 @@
 import { hashCanonicalValue } from '../agent/run/hash'
 import { db } from '../db/schema'
-import type { WorldReferenceV1, WorldRelease, WorldReleaseManifestV2 } from '../types'
+import type { WorldReferenceV1, WorldRelease } from '../types'
+import { verifyPureWorldReleaseRecordV3 } from './release-codec'
 import { assertReleaseUnchanged, worldReleaseUidV1 } from './releases'
 
 const HASH = /^[a-f0-9]{64}$/
@@ -14,21 +15,6 @@ export class WorldReferenceErrorV1 extends Error {
 
 function fail(code: string, message: string): never {
   throw new WorldReferenceErrorV1(code, message)
-}
-
-function parseManifest(release: WorldRelease): WorldReleaseManifestV2 {
-  let value: unknown
-  try { value = JSON.parse(release.manifestJson) }
-  catch { return fail('manifest-json', 'WorldRelease manifest 不是合法 JSON') }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('manifest-shape', 'WorldRelease manifest 根必须是对象')
-  const manifest = value as WorldReleaseManifestV2
-  if (manifest.schema !== 'storyforge.world-package' || manifest.version !== 2 || manifest.semanticContract !== 3) {
-    fail('semantic-contract', 'WorldReference 只能指向纯语义 WorldRelease semanticContract=3')
-  }
-  if (manifest.worldCode !== release.sourceWorldCode || !manifest.resourceCatalog || !manifest.capabilityProfile) {
-    fail('manifest-identity', 'WorldRelease 缺少中立资源目录、能力画像或 worldCode 不一致')
-  }
-  return manifest
 }
 
 function referenceBody(reference: Omit<WorldReferenceV1, 'referenceHash'>): unknown {
@@ -59,7 +45,7 @@ export async function createWorldReferenceV1(localReleaseRecordId: number): Prom
   const release = await db.worldReleases.get(localReleaseRecordId)
   if (!release?.id) fail('release-missing', 'WorldRelease 不存在')
   await assertReleaseUnchanged(release.id)
-  const manifest = parseManifest(release)
+  const manifest = await verifyPureWorldReleaseRecordV3(release as WorldRelease & { id: number })
   const releaseUid = await ensureWorldReleaseUidV1(release as WorldRelease & { id: number })
   const base: Omit<WorldReferenceV1, 'referenceHash'> = {
     schema: 'storyforge.world-reference',

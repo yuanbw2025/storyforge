@@ -56,7 +56,7 @@ import TtrpgProductionWizard, {
 } from '../ttrpg/TtrpgProductionWizard'
 import TtrpgCampaignProposalSelector from '../ttrpg/TtrpgCampaignProposalSelector'
 import { generateTtrpgCampaignProposalCandidateV2 } from '../../lib/ttrpg/campaign-proposal-harness'
-import { loadTtrpgWorldSourceCatalogV1 } from '../../lib/ttrpg/world-source'
+import { loadTtrpgWorldSourceCatalogV2 } from '../../lib/ttrpg/world-source'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { resolveRequestConfig } from '../../lib/ai/client'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
@@ -78,13 +78,12 @@ interface CommandActivityV1 {
 }
 
 const SOURCE_SELECTION_FACETS = [
-  ['narrativeModules', 'narrativeModuleExportIds', '叙事模块'],
-  ['characters', 'characterExportIds', '角色'],
-  ['importantLocations', 'importantLocationExportIds', '地点'],
-  ['artifacts', 'artifactExportIds', '道具'],
-  ['codexEntries', 'codexEntryExportIds', '设定 / 阵营'],
-  ['storyArcs', 'storyArcExportIds', '故事线'],
-  ['avgMediaAssets', 'avgMediaAssetExportIds', '已有媒资'],
+  ['storySources', 'storyResourceKeys', '故事来源'],
+  ['characters', 'characterResourceKeys', '角色'],
+  ['importantLocations', 'importantLocationResourceKeys', '地点'],
+  ['artifacts', 'artifactResourceKeys', '道具'],
+  ['codexEntries', 'codexEntryResourceKeys', '设定 / 阵营'],
+  ['storyArcs', 'storyArcResourceKeys', '故事线'],
 ] as const satisfies ReadonlyArray<[
   keyof GameProductionSourceOptionsV1,
   keyof GameProductionSourceSelectionV1,
@@ -107,6 +106,17 @@ function formatDurationMs(value: number): string {
 
 function nonEmptyLines(value: string): string[] {
   return [...new Set(value.split(/\r?\n/).map(line => line.trim()).filter(Boolean))]
+}
+
+function frozenSourceFacetSummary(
+  draft: GameProductionBriefV3,
+  options: GameProductionSourceOptionsV1 | null,
+): string {
+  if (!options) return `语义资源 ${draft.source.selection.resourceKeys.length}`
+  const selected = new Set(draft.source.selection.resourceKeys)
+  return SOURCE_SELECTION_FACETS.map(([optionField, , label]) => (
+    `${label} ${options[optionField].filter(option => selected.has(option.resourceKey)).length}`
+  )).join(' · ')
 }
 
 function statusLabel(value: string): string {
@@ -133,8 +143,8 @@ async function ttrpgWorldSourceAlignmentMessageV1(input: {
   scope: WorkspaceScope
   worldReleaseId: number
 }): Promise<string> {
-  const catalog = await loadTtrpgWorldSourceCatalogV1(input)
-  const unavailable = catalog.unselectableReleaseTables.map(item => item.table)
+  const catalog = await loadTtrpgWorldSourceCatalogV2(input)
+  const unavailable = catalog.unavailableResourceKinds
   return unavailable.length
     ? `当前测试来源仍有 ${unavailable.join('、')} 无法解析；请改用其它冻结测试来源。`
     : '冻结来源可用于跑团上层开发。当前 Build 只允许制作和试玩；正式世界适配与商业发布将在世界出口稳定后接入。'
@@ -758,21 +768,22 @@ export default function GameProductionStudio(props: {
           }} className={`rounded border p-4 text-left ${item.suggestionKey === suggestionKey ? 'border-accent bg-accent/10' : 'border-border bg-bg-elevated'}`}><span className="flex justify-between gap-2"><strong className="text-sm">{item.title}</strong><code className="text-[9px] text-accent">{item.kind}</code></span><p className="mt-2 text-[10px] leading-5 text-text-muted">{item.rationale}</p><small className="mt-2 block text-[9px] text-text-muted">来源 {item.sourceRefs.join('、') || '自定义'} · 建议规模 {item.scale}</small></button>)}</div>
           {sourceOptions && sourceSelection && <details className="mt-4 rounded border border-border bg-bg-elevated p-4" data-testid="game-production-source-selector">
             <summary className="cursor-pointer text-xs font-semibold">编辑本次进入游戏的冻结素材</summary>
-            <p className="mt-2 text-[10px] leading-5 text-text-muted">这里只能勾选当前 WorldRelease 的便携素材。角色关系会按所选角色自动重算；取消素材不会删除世界数据。</p>
+            <p className="mt-2 text-[10px] leading-5 text-text-muted">这里只能勾选当前 WorldRelease 通过中立网关公开的语义资源；取消资源不会删除世界数据。</p>
             <div className="mt-4 grid gap-4 md:grid-cols-2">{SOURCE_SELECTION_FACETS.map(([optionField, selectionField, label]) => {
               const options = sourceOptions[optionField]
               if (options.length === 0) return null
               const selectedIds = new Set(sourceSelection[selectionField])
               return <fieldset key={selectionField} className="rounded border border-border bg-bg-base p-3">
                 <legend className="px-1 text-[10px] font-semibold">{label} · {selectedIds.size}/{options.length}</legend>
-                <div className="mt-2 max-h-44 space-y-2 overflow-auto">{options.map(option => <label key={option.exportId} className="flex items-start gap-2 text-[10px] text-text-muted" title={option.summary}>
-                  <input type="checkbox" checked={selectedIds.has(option.exportId)} onChange={event => {
+                <div className="mt-2 max-h-44 space-y-2 overflow-auto">{options.map(option => <label key={option.resourceKey} className="flex items-start gap-2 text-[10px] text-text-muted" title={option.summary}>
+                  <input type="checkbox" checked={selectedIds.has(option.resourceKey)} onChange={event => {
+                    const checked = event.currentTarget.checked
                     setSourceSelection(current => {
                       if (!current) return current
                       const ids = new Set(current[selectionField])
-                      if (event.target.checked) ids.add(option.exportId)
-                      else ids.delete(option.exportId)
-                      return { ...current, [selectionField]: [...ids].sort((left, right) => left - right) }
+                      if (checked) ids.add(option.resourceKey)
+                      else ids.delete(option.resourceKey)
+                      return { ...current, [selectionField]: [...ids].sort() }
                     })
                     setDraft(null)
                   }} className="mt-0.5" />
@@ -783,7 +794,7 @@ export default function GameProductionStudio(props: {
             <button type="button" onClick={() => { setSourceSelection(structuredClone(selectionDefaults[suggestionKey])); setDraft(null) }} className="mt-4 rounded border border-border px-3 py-2 text-[10px] text-text-muted">恢复该起点的推荐素材</button>
           </details>}
         </section>}
-        {draft && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Brief v3 审查摘要</h2><code className="text-[9px] text-accent">{draft.intent.productType} / {draft.qualityProfile}</code></div><div className="mt-4 grid gap-3 text-[10px] md:grid-cols-3"><article className="rounded bg-bg-base p-3"><strong className="block text-xs">体验</strong><p className="mt-1 text-text-muted">{draft.intent.openingSituation}</p></article><article className="rounded bg-bg-base p-3"><strong className="block text-xs">规模</strong><p className="mt-1 text-text-muted">{draft.scale.targetPlayMinutes} 分钟 · {draft.scale.targetEndingCount} 结局</p></article><article className="rounded bg-bg-base p-3"><strong className="block text-xs">完成合同</strong><p className="mt-1 text-text-muted">可玩预览 · 媒资覆盖 {Math.round(draft.completionContract.minimumMediaCoverage * 100)}%</p></article></div>{selectedSuggestion && <p className="mt-4 text-[10px] text-text-muted">起点冲突：{selectedSuggestion.openingConflict}</p>}<p className="mt-2 text-[10px] text-text-muted" data-testid="game-production-source-selection-summary">冻结素材选择：叙事模块 {draft.source.selection.narrativeModuleExportIds.length} · 角色 {draft.source.selection.characterExportIds.length} · 地点 {draft.source.selection.importantLocationExportIds.length} · 道具 {draft.source.selection.artifactExportIds.length} · 支线 {draft.source.selection.storyArcExportIds.length}。起点指定的主角、主线或支线会真实收窄这些便携 ID，不只是修改标题。</p></section>}
+        {draft && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Brief v3 审查摘要</h2><code className="text-[9px] text-accent">{draft.intent.productType} / {draft.qualityProfile}</code></div><div className="mt-4 grid gap-3 text-[10px] md:grid-cols-3"><article className="rounded bg-bg-base p-3"><strong className="block text-xs">体验</strong><p className="mt-1 text-text-muted">{draft.intent.openingSituation}</p></article><article className="rounded bg-bg-base p-3"><strong className="block text-xs">规模</strong><p className="mt-1 text-text-muted">{draft.scale.targetPlayMinutes} 分钟 · {draft.scale.targetEndingCount} 结局</p></article><article className="rounded bg-bg-base p-3"><strong className="block text-xs">完成合同</strong><p className="mt-1 text-text-muted">可玩预览 · 媒资覆盖 {Math.round(draft.completionContract.minimumMediaCoverage * 100)}%</p></article></div>{selectedSuggestion && <p className="mt-4 text-[10px] text-text-muted">起点冲突：{selectedSuggestion.openingConflict}</p>}<p className="mt-2 text-[10px] text-text-muted" data-testid="game-production-source-selection-summary">本次通过世界网关冻结 {draft.source.selection.resourceKeys.length} 项语义资源（{frozenSourceFacetSummary(draft, sourceOptions)}）；上层叙事、媒资和运行状态均由产品 Build 自己拥有。</p></section>}
         {draft?.ttrpg?.campaignDesign && <TtrpgCampaignProposalSelector
           value={draft.ttrpg.campaignDesign}
           aiGenerating={campaignProposalRunning}

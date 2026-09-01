@@ -35,7 +35,7 @@ import {
   type AdventureSystemCommand,
 } from '../../lib/adventure/player-experience'
 import { currentPlayerReleases } from '../../lib/text-game/player-library'
-import type { AdventureGameReleaseManifestV1, Project, WorkspaceScope } from '../../lib/types'
+import type { AdventureGameRuntimePackageV2, Project, WorkspaceScope } from '../../lib/types'
 import { useAdventureGamePlayerStore, selectAdventureActions } from '../../stores/adventure-game-player'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useDialog } from '../shared/Dialog'
@@ -102,7 +102,7 @@ function formatTime(value: number): string {
   return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(value)
 }
 
-function adventureNpcCount(manifest: AdventureGameReleaseManifestV1): number {
+function adventureNpcCount(manifest: AdventureGameRuntimePackageV2): number {
   const player = resolveAdventurePlayerIdentity(manifest)
   return manifest.interaction.profiles.filter(profile => profile.participantKey !== player?.participantKey).length
 }

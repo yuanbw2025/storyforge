@@ -10,6 +10,7 @@ import { adoptAuthoringCandidate } from '../../src/lib/node-authoring/executor'
 import { buildRagLibrary } from '../../src/lib/retrieval/rag-library'
 import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
 import { buildSimulationCanonSnapshot, loadSimulationCanonCandidates, parseSimulationCanonSnapshot } from '../../src/lib/simulation/canon-snapshot'
+import { createSimulationSession } from '../../src/lib/simulation/runtime'
 import type { NodeFlow, WorkspaceScope } from '../../src/lib/types'
 import { stampNewRecord } from '../../src/lib/world-engine/scope'
 import { createWorldInstance } from '../../src/lib/world-engine/instances'
@@ -222,7 +223,7 @@ describe('WORLD-2C · 双 Work 下游边界反例', () => {
     expect(catalog.candidates.map(candidate => candidate.name)).not.toContain('B王冠')
   })
 
-  it('显式为非当前 Work B 创建实例时，冻结快照和绑定都不得回落到活动 Work A', async () => {
+  it('显式为非当前 Work B 创建沙箱快照时不得回落到活动 Work A，且不冒充正式产品实例', async () => {
     const { a, b } = await createTwoWorkWorkspace()
     const now = Date.now()
     await db.itemLedger.bulkAdd([
@@ -244,12 +245,17 @@ describe('WORLD-2C · 双 Work 下游边界反例', () => {
     })).rejects.toThrow('不可变 GameRelease')
 
     const frozen = await buildSimulationCanonSnapshot({ projectId: b.projectId, scope: b, worldGroupId: null, sourceKeys })
-    const session = await createWorldInstance({
+    await expect(createWorldInstance({
       scope: b,
+      kind: 'sandbox',
+      title: '不得经产品入口创建沙箱',
+    } as any)).rejects.toThrow('只创建上层产品实例')
+
+    const session = await createSimulationSession({
+      projectId: b.projectId,
       worldGroupId: null,
       kind: 'sandbox',
       title: 'B 的冻结实例',
-      draftSnapshotHash: frozen.snapshot.snapshotHash,
       canonSnapshot: frozen.snapshot,
       initialState: frozen.initialState,
     })
@@ -257,7 +263,8 @@ describe('WORLD-2C · 双 Work 下游边界反例', () => {
 
     const savedSession = await db.simulationSessions.get(sessionId)
     const snapshot = parseSimulationCanonSnapshot(savedSession!.canonSnapshotJson)
-    expect(savedSession).toMatchObject({ worldId: b.worldId, workId: b.workId })
+    expect(savedSession?.gameReleaseId).toBeUndefined()
+    expect(savedSession?.gameBuildId).toBeUndefined()
     expect(snapshot?.sources.map(source => source.name)).toEqual(['B徽记'])
     expect(snapshot?.sources.map(source => source.name)).not.toContain('A密钥')
   })

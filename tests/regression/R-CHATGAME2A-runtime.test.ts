@@ -4,6 +4,7 @@ import {
   interactionVisibilityView,
 } from '../../src/lib/character-interaction/runtime'
 import { db } from '../../src/lib/db/schema'
+import { loadGameProductionWorldSourceCatalogV2 } from '../../src/lib/game-production/world-source'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { buildSimulationCanonSnapshot } from '../../src/lib/simulation/canon-snapshot'
 import {
@@ -20,7 +21,9 @@ import {
   startInteractionScene,
   verifySimulationCheckpoint,
 } from '../../src/lib/simulation/runtime'
-import type { SimulationInteractionState, SimulationRuntimeState } from '../../src/lib/types'
+import type { GameRuntimePackageV2, SimulationInteractionState, SimulationRuntimeState } from '../../src/lib/types'
+import { seedCurrentPlayableBuild } from '../helpers/current-playable-build'
+import { currentProductSelection, seedCurrentProductWorld } from '../helpers/current-product-world'
 
 function interactionState(maxTurns = 200): SimulationInteractionState {
   return {
@@ -131,6 +134,84 @@ describe('CHATGAME-2A · 确定性角色互动内核', () => {
   async function envelope(sessionId: number, commandId: string) {
     const version = await readSimulationStateVersion(sessionId)
     return { sessionId, commandId, baseSequence: version.sequence, baseStateHash: version.stateHash }
+  }
+
+  async function formalInteractionSession() {
+    const owned = await seedCurrentProductWorld('CHATGAME-2A 正式产品上下文')
+    const catalog = await loadGameProductionWorldSourceCatalogV2({
+      scope: owned.scope,
+      worldReleaseId: owned.release.id!,
+    })
+    const runtimePackage: GameRuntimePackageV2 = {
+      schema: 'storyforge.game-runtime-package',
+      version: 2,
+      productType: 'character-interaction',
+      definition: {
+        gameKey: 'chatgame.context.boundary',
+        title: '钟楼会面',
+        description: '正式 Product Build 驱动的逐角色知识隔离测试。',
+        enabledCapabilities: ['narrative', 'interaction'],
+        rulesetVersion: 1,
+        initialVariables: {},
+      },
+      sourceWorld: {
+        contentHash: owned.release.contentHash,
+        selection: currentProductSelection('character-interaction', {
+          participants: catalog.characters.map(item => item.resourceKey),
+          context: catalog.storyArcs.map(item => item.resourceKey),
+        }, catalog.worldReference.referenceHash),
+      },
+      narrative: {
+        moduleKind: 'main',
+        moduleTitle: '钟楼会面',
+        entryNodeKey: 'clocktower.entry',
+        nodes: [{
+          key: 'clocktower.entry',
+          kind: 'ending',
+          title: '钟楼会面',
+          summary: '角色互动由产品运行包独立推进。',
+          conditionJson: '{}',
+          effectsJson: '[]',
+          successorKeys: [],
+        }],
+        beats: [],
+        choices: [],
+      },
+      interaction: {
+        playerKey: 'player',
+        profiles: [
+          {
+            participantKey: 'aria', characterKey: 'character:aria', name: '阿莉娅', roleLabel: '信使',
+            voiceRules: '克制直接',
+            initialKnowledge: [{ key: 'sealed-letter', content: '失踪的信藏在钟楼第三层。', visibility: 'private', importance: 95 }],
+            relationshipDimensions: [{ key: 'trust', label: '信任', minimum: -5, maximum: 5, initial: 1, largeChangeThreshold: 2 }],
+            maxMemoryEntries: 20,
+          },
+          {
+            participantKey: 'bo', characterKey: 'character:bo', name: '博', roleLabel: '修表匠',
+            voiceRules: '谨慎', initialKnowledge: [], relationshipDimensions: [], maxMemoryEntries: 20,
+          },
+          {
+            participantKey: 'cen', characterKey: 'character:cen', name: '岑', roleLabel: '巡夜人',
+            voiceRules: '简短', initialKnowledge: [], relationshipDimensions: [], maxMemoryEntries: 20,
+          },
+        ],
+        sceneTemplates: [{
+          sceneKey: 'clocktower', title: '钟楼会面', purpose: '确认失踪信件的去向',
+          location: '旧钟楼', timeLabel: '雨夜', participantKeys: ['aria', 'bo', 'cen'],
+          publicKnowledgeKeys: [], goals: ['决定是否公开秘密'], endingConditions: ['秘密已经处理'],
+          safetyBoundaries: ['不替玩家发言'], relationshipRules: [], openingNodeKey: null,
+          endingNodeKey: null, maxTurns: 200, directorBudget: 50_000, order: 0,
+        }],
+      },
+    }
+    const built = await seedCurrentPlayableBuild({
+      scope: owned.scope,
+      worldRelease: owned.release as typeof owned.release & { id: number },
+      runtimePackage,
+      title: '钟楼会面',
+    })
+    return { ...built, scope: owned.scope }
   }
 
   it('知识只经真实告知传播，关系变化有证据与幅度规则，记忆不能伪造', async () => {
@@ -359,7 +440,8 @@ describe('CHATGAME-2A · 确定性角色互动内核', () => {
   }, 30_000)
 
   it('CONTEXT_SOURCES 只装配指定角色视角，不泄露其他角色私聊', async () => {
-    const created = await session()
+    const formal = await formalInteractionSession()
+    const created = formal.session
     await startInteractionScene({ ...await envelope(created.id!, 'scene.start'), sceneId: 'scene:context', sceneKey: 'clocktower' })
     await commitInteractionPlayerMessage({
       ...await envelope(created.id!, 'message.private'),
@@ -368,19 +450,22 @@ describe('CHATGAME-2A · 确定性角色互动内核', () => {
       audienceKeys: ['aria'],
     })
     const aria = await assembleContext({
-      projectId: 99201,
+      projectId: formal.scope.projectId,
+      scope: formal.scope,
       simulationSessionId: created.id!,
       interactionParticipantKey: 'aria',
       sourceKeys: ['interactionRuntime'],
     })
     const bo = await assembleContext({
-      projectId: 99201,
+      projectId: formal.scope.projectId,
+      scope: formal.scope,
       simulationSessionId: created.id!,
       interactionParticipantKey: 'bo',
       sourceKeys: ['interactionRuntime'],
     })
     const shared = await assembleContext({
-      projectId: 99201,
+      projectId: formal.scope.projectId,
+      scope: formal.scope,
       simulationSessionId: created.id!,
       sourceKeys: ['simulationRuntime'],
     })

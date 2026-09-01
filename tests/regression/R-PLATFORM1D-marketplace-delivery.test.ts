@@ -15,8 +15,8 @@ import {
   InMemoryCommercialReleaseDeliveryPersistenceV1,
 } from '../../src/lib/commercial/release-delivery'
 import {
-  exportGameDistributionBundleV1,
-  importMarketplaceGameDistributionV1,
+  exportGameDistributionBundleV2,
+  importMarketplaceGameDistributionV2,
 } from '../../src/lib/game-platform/distribution-bundle'
 import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
 import { createGameReleaseManifestV2 } from '../../src/lib/game-production/runtime-package'
@@ -24,6 +24,7 @@ import { assertGameReleaseUnchanged } from '../../src/lib/text-game/releases'
 import type { GameRuntimePackageV2, WorkspaceScope } from '../../src/lib/types'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
 
 class CommercialStore implements CommercialPlatformPersistenceV1 {
   snapshot: CommercialPlatformSnapshotV1 | null = null
@@ -54,13 +55,9 @@ function storyPackage(worldContentHash: string): GameRuntimePackageV2 {
     },
     sourceWorld: {
       contentHash: worldContentHash,
-      selection: {
-        schema: 'storyforge.world-game-source', version: 2, productType: 'storygame', worldContentHash,
-        narrativeModuleExportIds: [], characterExportIds: [], characterRelationExportIds: [],
-        importantLocationExportIds: [], artifactExportIds: [], codexEntryExportIds: [],
-        storyArcExportIds: [], avgMediaAssetExportIds: [],
-        productSource: { kind: 'storygame', narrativeModuleExportIds: [] },
-      },
+      selection: currentProductSelection('storygame', {
+        story: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
+      }),
     },
     narrative: {
       moduleKind: 'main', moduleTitle: '市场闭环', entryNodeKey: 'ending.ready',
@@ -89,7 +86,7 @@ async function releaseBundle(scope: WorkspaceScope) {
     manifestJson: JSON.stringify(manifest), contentHash: await hashGameProductionValueV2(manifest),
     createdAt: Date.now(),
   }) as number
-  return exportGameDistributionBundleV1({ scope, gameReleaseId: id })
+  return exportGameDistributionBundleV2({ scope, gameReleaseId: id })
 }
 
 const TOKEN_CREATOR = 'token-creator-123456789'
@@ -168,7 +165,7 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
     const payload = downloaded.body as Awaited<ReturnType<typeof delivery.download>>
     const playerWorkspace = await workspace('玩家')
     const { releaseHash: _releaseHash, ...provenance } = payload.authorization
-    const imported = await importMarketplaceGameDistributionV1({
+    const imported = await importMarketplaceGameDistributionV2({
       scope: playerWorkspace.scope, bundle: payload.bundle, provenance,
     })
     await expect(assertGameReleaseUnchanged(imported.id!)).resolves.toMatchObject({ id: imported.id })
@@ -229,7 +226,7 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
       accessToken: TOKEN_BUYER, releaseHash: bundle.gameRelease.contentHash,
     })
     const playerWorkspace = await workspace('HTTP 玩家')
-    const imported = await importMarketplaceGameDistributionV1({
+    const imported = await importMarketplaceGameDistributionV2({
       scope: playerWorkspace.scope, bundle: downloaded.bundle, provenance: downloaded.provenance,
     })
     await expect(assertGameReleaseUnchanged(imported.id!)).resolves.toMatchObject({ id: imported.id })

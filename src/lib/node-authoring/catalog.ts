@@ -542,22 +542,22 @@ const CONTROL_TEMPLATES: AuthoringNodeTemplate[] = [
 
 const PROCESSOR_TEMPLATES: AuthoringNodeTemplate[] = [
   {
-    id: 'input.manual-text', version: 1, label: '自由文本', description: '作者要求、临时设定或任意文字。', category: '输入', class: 'content', capability: 'manual-draft', inputs: [], outputs: [{ id: 'text', label: '文字', semantic: 'text', cardinality: 'one', state: 'draft' }], legacyKind: 'input.text', parameters: [{ key: 'text', label: '作者输入', type: 'text', defaultValue: '' }],
+    id: 'input.manual-text', version: 1, label: '自由文本', description: '作者要求、临时设定或任意文字。', category: '输入', class: 'content', capability: 'manual-draft', inputs: [], outputs: [{ id: 'text', label: '文字', semantic: 'text', cardinality: 'one', state: 'draft' }], parameters: [{ key: 'text', label: '作者输入', type: 'text', defaultValue: '' }],
   },
   {
-    id: 'source.project-context', version: 1, label: '项目资料', description: '通过登记上下文或稳定字段键读取 Canon。', category: '输入', class: 'content', capability: 'read-canon', inputs: [], outputs: [{ id: 'context', label: '项目资料', semantic: 'any', cardinality: 'many', state: 'canon' }], reads: { sourceKeys: ['ragSelection'], allowExactFields: true }, legacyKind: 'source.context',
+    id: 'source.project-context', version: 1, label: '项目资料', description: '通过登记上下文或稳定字段键读取 Canon。', category: '输入', class: 'content', capability: 'read-canon', inputs: [], outputs: [{ id: 'context', label: '项目资料', semantic: 'any', cardinality: 'many', state: 'canon' }], reads: { sourceKeys: ['ragSelection'], allowExactFields: true },
   },
   {
-    id: 'processor.compose', version: 1, label: '整理与合并', description: '按字段、优先级和模板组合上游内容。', category: '处理', class: 'processor', capability: 'transform', inputs: [contextInput()], outputs: [{ id: 'text', label: '整理结果', semantic: 'text', cardinality: 'one', state: 'draft' }], legacyKind: 'transform.compose', parameters: [{ key: 'template', label: '组合模板', type: 'text', defaultValue: '' }],
+    id: 'processor.compose', version: 1, label: '整理与合并', description: '按字段、优先级和模板组合上游内容。', category: '处理', class: 'processor', capability: 'transform', inputs: [contextInput()], outputs: [{ id: 'text', label: '整理结果', semantic: 'text', cardinality: 'one', state: 'draft' }], parameters: [{ key: 'template', label: '组合模板', type: 'text', defaultValue: '' }],
   },
   {
-    id: 'processor.free-generation', version: 1, label: '自由创作', description: '保留 FLOW-2 自由指令能力，输出仍是候选。', category: '处理', class: 'processor', capability: 'transform', inputs: generationInputs(), outputs: [candidateOutput('candidate')], legacyKind: 'generation.freeform', promptModuleKey: 'prompt.operations', parameters: [{ key: 'instruction', label: '创作指令', type: 'text', defaultValue: '' }],
+    id: 'processor.free-generation', version: 1, label: '自由创作', description: '按作者自由指令生成候选内容。', category: '处理', class: 'processor', capability: 'transform', inputs: generationInputs(), outputs: [candidateOutput('candidate')], promptModuleKey: 'prompt.operations', parameters: [{ key: 'instruction', label: '创作指令', type: 'text', defaultValue: '' }],
   },
   {
-    id: 'processor.validate', version: 1, label: '内容校验', description: '执行空值、必含和禁用内容检查。', category: '处理', class: 'processor', capability: 'validate', inputs: [{ id: 'candidate', label: '待校验内容', semantic: 'any', cardinality: 'one', state: 'candidate', required: true }], outputs: [candidateOutput('candidate')], legacyKind: 'validation.required', parameters: [{ key: 'requiredTerms', label: '必含内容', type: 'text' }, { key: 'forbiddenTerms', label: '禁用内容', type: 'text' }],
+    id: 'processor.validate', version: 1, label: '内容校验', description: '执行空值、必含和禁用内容检查。', category: '处理', class: 'processor', capability: 'validate', inputs: [{ id: 'candidate', label: '待校验内容', semantic: 'any', cardinality: 'one', state: 'candidate', required: true }], outputs: [candidateOutput('candidate')], parameters: [{ key: 'requiredTerms', label: '必含内容', type: 'text' }, { key: 'forbiddenTerms', label: '禁用内容', type: 'text' }],
   },
   {
-    id: 'output.review-adopt', version: 1, label: '预览与采纳', description: '查看差异并通过上游写契约确认采纳。', category: '输出', class: 'output', capability: 'adopt', inputs: [{ id: 'candidate', label: '候选内容', semantic: 'any', cardinality: 'one', state: 'candidate', required: true }], outputs: [{ id: 'adopted', label: '已确认内容', semantic: 'any', cardinality: 'one', state: 'canon' }], legacyKind: 'output.preview',
+    id: 'output.review-adopt', version: 1, label: '预览与采纳', description: '查看差异并通过上游写契约确认采纳。', category: '输出', class: 'output', capability: 'adopt', inputs: [{ id: 'candidate', label: '候选内容', semantic: 'any', cardinality: 'one', state: 'candidate', required: true }], outputs: [{ id: 'adopted', label: '已确认内容', semantic: 'any', cardinality: 'one', state: 'canon' }],
   },
 ]
 

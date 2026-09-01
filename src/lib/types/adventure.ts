@@ -171,17 +171,6 @@ export interface AdventureContentV1 {
   initialInventory: Array<{ itemKey: string; quantity: number }>
 }
 
-export interface AdventureModule {
-  id?: number
-  projectId: number
-  worldId: number
-  workId: number
-  gameDefinitionId: number
-  contentJson: string
-  createdAt: number
-  updatedAt: number
-}
-
 export interface AdventureInventoryEntry {
   itemKey: string
   ownerKey: string

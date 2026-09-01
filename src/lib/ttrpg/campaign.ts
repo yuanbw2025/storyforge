@@ -3,7 +3,6 @@ import type {
   RulePackV1,
   TtrpgCampaignContentV1,
   TtrpgCharacterTemplateV1,
-  WorldGameSourceSelectionV2,
 } from '../types'
 import { isSha256Hash } from '../game-production/hash'
 import { evaluateRuleNumberExpressionV1, parseRulePackV1 } from './rule-pack'
@@ -771,7 +770,6 @@ export function compileTtrpgCampaignDraftV1(input: {
   playableWorld: PlayableWorldBundleV1
   rulePack: RulePackV1
   fixtureOnly: true
-  selection?: WorldGameSourceSelectionV2
   campaignKey?: string
   title?: string
   confirmDefaultMappings?: boolean
@@ -784,20 +782,9 @@ export function compileTtrpgCampaignDraftV1(input: {
     && !isSha256Hash(input.playableWorld.source.worldContentHash)) fail('PlayableWorld 来源 hash 无效')
   if (!isSha256Hash(input.playableWorld.bundleHash)) fail('PlayableWorld bundleHash 无效')
   const entities = Object.values(input.playableWorld.initialState.entities)
-  const selectedCharacterKeys = input.selection
-    ? new Set(input.selection.characterExportIds.map(id => `release-character:${id}`)) : null
-  const selectedLocationKeys = input.selection
-    ? new Set(input.selection.importantLocationExportIds.map(id => `release-location:${id}`)) : null
-  if (input.selection && (input.selection.productType !== 'ttrpg'
-    || input.selection.worldContentHash !== input.playableWorld.source.worldContentHash
-    || input.selection.productSource?.kind !== 'ttrpg')) {
-    fail('TTRPG 素材选择与 PlayableWorld 来源不一致')
-  }
-  const characters = entities.filter(entity => (entity.kind === 'character' || entity.kind === 'npc' || entity.kind === 'player')
-    && (!selectedCharacterKeys || selectedCharacterKeys.has(entity.entityKey)))
+  const characters = entities.filter(entity => entity.kind === 'character' || entity.kind === 'npc' || entity.kind === 'player')
   if (!characters.length) fail('世界发布至少需要一个角色，才能编译正式 TTRPG 战役')
-  const locations = entities.filter(entity => entity.kind === 'location'
-    && (!selectedLocationKeys || selectedLocationKeys.has(entity.entityKey)))
+  const locations = entities.filter(entity => entity.kind === 'location')
   const looksLikeNpc = (entity: typeof characters[number]) => {
     const hint = [entity.attributes.role, entity.attributes.roleWeight, entity.attributes.identity]
       .filter((value): value is string => typeof value === 'string').join(' ').toLowerCase()

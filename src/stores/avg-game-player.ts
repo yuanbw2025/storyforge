@@ -1,17 +1,17 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import { branchSimulationSession, commitNarrativeChoice, createSimulationCheckpoint, deleteSimulationSession, reachAvgPresentationBeat, readSimulationState, readSimulationStateVersion, recordAvgMediaFailure, verifySimulationCheckpoint } from '../lib/simulation/runtime'
-import { assertGameReleaseUnchanged, parseAvgGameReleaseManifest, parseWorldReleaseSpeakerNames } from '../lib/text-game/releases'
+import { assertGameReleaseUnchanged, parseAvgGameReleaseManifest, runtimePackageSpeakerNames } from '../lib/text-game/releases'
 import { assertInstanceBinding, createAvgGameInstance, readBoundInstances } from '../lib/world-engine/instances'
 import { resolvePlayableGameSource } from '../lib/game-production/preview-source'
-import type { AvgGameReleaseManifestV1, GameMediaResolverV1, GameRelease, GameRuntimePackageV2, SimulationCheckpoint, SimulationEvent, SimulationRuntimeState, SimulationSession, WorkspaceScope } from '../lib/types'
+import type { AvgGameRuntimePackageV2, GameMediaResolverV1, GameRelease, GameRuntimePackageV2, SimulationCheckpoint, SimulationEvent, SimulationRuntimeState, SimulationSession, WorkspaceScope } from '../lib/types'
 import { EMPTY_SIMULATION_STATE } from '../lib/types'
 
-export interface AvgLibraryItem { release: GameRelease; manifest: AvgGameReleaseManifestV1 | null; error: string }
+export interface AvgLibraryItem { release: GameRelease; manifest: AvgGameRuntimePackageV2 | null; error: string }
 interface AvgGamePlayerState {
   scope: WorkspaceScope | null; worldGroupId: number | null; releases: AvgLibraryItem[]; sessions: SimulationSession[]
   selectedSessionId: number | null; events: SimulationEvent[]; checkpoints: SimulationCheckpoint[]; runtimeState: SimulationRuntimeState
-  selectedManifest: AvgGameReleaseManifestV1 | null; selectedMediaResolver: GameMediaResolverV1 | null
+  selectedManifest: AvgGameRuntimePackageV2 | null; selectedMediaResolver: GameMediaResolverV1 | null
   selectedSourceSessionId: number | null; speakerNames: Record<string, string>; loading: boolean; busy: boolean; error: string
   load(scope: WorkspaceScope, worldGroupId: number | null, openLibrary?: boolean): Promise<void>; select(id: number | null): Promise<void>
   start(releaseId: number, title?: string): Promise<number>; reachBeat(beatKey: string): Promise<void>; choose(choiceKey: string): Promise<void>
@@ -20,20 +20,11 @@ interface AvgGamePlayerState {
   saveCheckpoint(name: string): Promise<void>; forkCheckpoint(id: number, title?: string): Promise<number>; remove(id: number): Promise<void>
 }
 
-function playableManifest(runtimePackage: GameRuntimePackageV2): AvgGameReleaseManifestV1 {
+function playableManifest(runtimePackage: GameRuntimePackageV2): AvgGameRuntimePackageV2 {
   if (runtimePackage.productType !== 'avg' || !runtimePackage.presentation) {
     throw new Error('[avg] 当前可玩来源不是完整 AVG RuntimePackage')
   }
-  return {
-    schema: 'storyforge.game-release', version: 1, productType: 'avg',
-    definition: structuredClone(runtimePackage.definition),
-    worldRelease: {
-      contentHash: runtimePackage.sourceWorld.contentHash,
-      narrativeModuleExportId: runtimePackage.sourceWorld.selection.narrativeModuleExportIds[0] ?? 0,
-    },
-    narrative: structuredClone(runtimePackage.narrative),
-    presentation: structuredClone(runtimePackage.presentation),
-  }
+  return structuredClone(runtimePackage) as AvgGameRuntimePackageV2
 }
 
 async function library(scope: WorkspaceScope): Promise<AvgLibraryItem[]> {
@@ -64,9 +55,8 @@ async function ensureAutomaticCheckpoint(sessionId: number): Promise<void> {
 export const useAvgGamePlayerStore = create<AvgGamePlayerState>((set, get) => {
   const details = async (id: number) => {
     const scope = get().scope!; const session = await assertSession(scope, id)
-    const [events, checkpoints, runtimeState, worldRelease] = await Promise.all([
+    const [events, checkpoints, runtimeState] = await Promise.all([
       db.simulationEvents.where('sessionId').equals(id).sortBy('sequence'), db.simulationCheckpoints.where('sessionId').equals(id).toArray(), readSimulationState(id),
-      session.worldReleaseId == null ? null : db.worldReleases.get(session.worldReleaseId),
     ])
     let selectedManifest = get().selectedManifest
     let selectedMediaResolver = get().selectedMediaResolver
@@ -89,7 +79,7 @@ export const useAvgGamePlayerStore = create<AvgGamePlayerState>((set, get) => {
     set({
       events, checkpoints: checkpoints.sort((a, b) => b.createdAt - a.createdAt), runtimeState,
       selectedManifest, selectedMediaResolver, selectedSourceSessionId: id,
-      speakerNames: worldRelease ? parseWorldReleaseSpeakerNames(worldRelease.manifestJson) : {},
+      speakerNames: runtimePackageSpeakerNames(selectedManifest),
     })
   }
   const reload = async (selected?: number | null) => {

@@ -1,5 +1,6 @@
 import { parseAdventureContent } from '../adventure/runtime'
-import { freezeAvgMediaAsset, parseAvgPresentationContent, validateAvgPresentation } from '../avg/runtime'
+import { parseAvgPresentationContent, validateAvgPresentation } from '../avg/runtime'
+import { freezeProductMediaAsset } from './media-contracts'
 import { parseNarrativeSimulationContent, validateNarrativeSimulationContent } from '../narrative-simulation/runtime'
 import { parseOpenWorldContent, validateOpenWorldContent } from '../open-world/runtime'
 import { validateNarrativeContentGraph } from '../text-game/content'
@@ -7,17 +8,14 @@ import { parseTtrpgCampaignContentV1 } from '../ttrpg/campaign'
 import { parseRulePackV1 } from '../ttrpg/rule-pack'
 import { NARRATIVE_BEAT_KINDS, NARRATIVE_MODULE_KINDS, NARRATIVE_NODE_KINDS } from '../types'
 import type {
-  AnyGameReleaseManifestV1,
-  AvgMediaAsset,
+  ProductMediaAsset,
   FrozenGameNarrativeNode,
   FrozenNarrativeBeat,
   FrozenNarrativeChoice,
   GameProductType,
   GameReleaseManifestV2,
   GameRuntimePackageV2,
-  ProductSpecificWorldSourceV1,
-  WorldGameSourceSelectionV1,
-  WorldGameSourceSelectionV2,
+  ProductWorldSourceSelectionV1,
 } from '../types'
 import { canonicalGameProductionJsonV2, hashGameProductionValueV2, isSha256Hash } from './hash'
 
@@ -172,110 +170,22 @@ function parseFrozenNarrative(value: unknown): GameRuntimePackageV2['narrative']
   }
 }
 
-function portableIdArray(value: unknown, label: string): number[] {
-  if (!Array.isArray(value) || value.length > 10_000) fail(`${label} 必须是有界数组`)
-  const ids = value.map((item, index) => integer(item, `${label}[${index}]`))
-  if (new Set(ids).size !== ids.length) fail(`${label} 不能重复`)
-  return ids.sort((left, right) => left - right)
-}
-
 function productType(value: unknown): GameProductType {
   if (typeof value !== 'string' || !PRODUCT_TYPES.has(value as GameProductType)) fail('productType 无效')
   return value as GameProductType
 }
 
-function parseProductSource(value: unknown, expectedProduct: GameProductType): ProductSpecificWorldSourceV1 | null {
-  if (value == null) return null
-  const source = record(value, 'selection.productSource')
-  if (source.kind !== expectedProduct) fail('selection.productSource.kind 与 productType 不一致')
-  if (expectedProduct === 'storygame') {
-    exactKeys(source, ['kind', 'narrativeModuleExportIds'], 'storygame productSource')
-    return { kind: 'storygame', narrativeModuleExportIds: portableIdArray(source.narrativeModuleExportIds, 'narrativeModuleExportIds') }
-  }
-  if (expectedProduct === 'character-interaction') {
-    exactKeys(source, ['kind', 'participantCharacterExportIds', 'sceneKeys'], 'character-interaction productSource')
-    return {
-      kind: 'character-interaction',
-      participantCharacterExportIds: portableIdArray(source.participantCharacterExportIds, 'participantCharacterExportIds'),
-      sceneKeys: stringArray(source.sceneKeys, 'sceneKeys'),
-    }
-  }
-  if (expectedProduct === 'text-adventure') {
-    exactKeys(source, ['kind', 'locationExportIds', 'itemExportIds', 'questStoryArcExportIds'], 'text-adventure productSource')
-    return {
-      kind: 'text-adventure',
-      locationExportIds: portableIdArray(source.locationExportIds, 'locationExportIds'),
-      itemExportIds: portableIdArray(source.itemExportIds, 'itemExportIds'),
-      questStoryArcExportIds: portableIdArray(source.questStoryArcExportIds, 'questStoryArcExportIds'),
-    }
-  }
-  if (expectedProduct === 'avg') {
-    exactKeys(source, ['kind', 'presentationStyle', 'existingMediaAssetExportIds'], 'avg productSource')
-    return {
-      kind: 'avg',
-      presentationStyle: optionalText(source.presentationStyle, 'presentationStyle', 2_000),
-      existingMediaAssetExportIds: portableIdArray(source.existingMediaAssetExportIds, 'existingMediaAssetExportIds'),
-    }
-  }
-  if (expectedProduct === 'narrative-simulation') {
-    exactKeys(source, ['kind', 'issueStoryArcExportIds', 'factionExportIds'], 'narrative-simulation productSource')
-    return {
-      kind: 'narrative-simulation',
-      issueStoryArcExportIds: portableIdArray(source.issueStoryArcExportIds, 'issueStoryArcExportIds'),
-      factionExportIds: portableIdArray(source.factionExportIds, 'factionExportIds'),
-    }
-  }
-  if (expectedProduct === 'ttrpg') {
-    exactKeys(source, ['kind', 'participantCharacterExportIds', 'locationExportIds', 'questStoryArcExportIds'], 'ttrpg productSource')
-    return {
-      kind: 'ttrpg',
-      participantCharacterExportIds: portableIdArray(source.participantCharacterExportIds, 'participantCharacterExportIds'),
-      locationExportIds: portableIdArray(source.locationExportIds, 'locationExportIds'),
-      questStoryArcExportIds: portableIdArray(source.questStoryArcExportIds, 'questStoryArcExportIds'),
-    }
-  }
-  exactKeys(source, ['kind', 'regionLocationExportIds', 'factionExportIds', 'questStoryArcExportIds'], 'text-open-world productSource')
-  return {
-    kind: 'text-open-world',
-    regionLocationExportIds: portableIdArray(source.regionLocationExportIds, 'regionLocationExportIds'),
-    factionExportIds: portableIdArray(source.factionExportIds, 'factionExportIds'),
-    questStoryArcExportIds: portableIdArray(source.questStoryArcExportIds, 'questStoryArcExportIds'),
-  }
+function worldResourceKey(value: unknown, label: string): string {
+  const key = requiredText(value, label, 1_000)
+  if (!key.startsWith('world-release:') || /\s/.test(key)) fail(`${label} 不是中立世界资源 key`)
+  return key
 }
 
-function requireSubset(values: number[], allowedValues: number[], label: string): void {
-  const allowed = new Set(allowedValues)
-  const outsideSelection = values.filter(value => !allowed.has(value))
-  if (outsideSelection.length) fail(`${label} 超出通用来源选择:${outsideSelection.join(',')}`)
-}
-
-function validateProductSourceClosure(
-  source: ProductSpecificWorldSourceV1 | null,
-  selection: Omit<WorldGameSourceSelectionV2, 'productSource'>,
-): void {
-  if (!source) return
-  if (source.kind === 'storygame') {
-    requireSubset(source.narrativeModuleExportIds, selection.narrativeModuleExportIds, 'narrativeModuleExportIds')
-  } else if (source.kind === 'character-interaction') {
-    requireSubset(source.participantCharacterExportIds, selection.characterExportIds, 'participantCharacterExportIds')
-  } else if (source.kind === 'text-adventure') {
-    requireSubset(source.locationExportIds, selection.importantLocationExportIds, 'locationExportIds')
-    requireSubset(source.itemExportIds, selection.artifactExportIds, 'itemExportIds')
-    requireSubset(source.questStoryArcExportIds, selection.storyArcExportIds, 'questStoryArcExportIds')
-  } else if (source.kind === 'avg') {
-    requireSubset(source.existingMediaAssetExportIds, selection.avgMediaAssetExportIds, 'existingMediaAssetExportIds')
-  } else if (source.kind === 'narrative-simulation') {
-    requireSubset(source.issueStoryArcExportIds, selection.storyArcExportIds, 'issueStoryArcExportIds')
-    requireSubset(source.factionExportIds, selection.codexEntryExportIds, 'factionExportIds')
-  } else if (source.kind === 'text-open-world') {
-    requireSubset(source.regionLocationExportIds, selection.importantLocationExportIds, 'regionLocationExportIds')
-    requireSubset(source.factionExportIds, selection.codexEntryExportIds, 'factionExportIds')
-    requireSubset(source.questStoryArcExportIds, selection.storyArcExportIds, 'questStoryArcExportIds')
-  } else {
-    requireSubset(source.participantCharacterExportIds, selection.characterExportIds, 'participantCharacterExportIds')
-    requireSubset(source.locationExportIds, selection.importantLocationExportIds, 'locationExportIds')
-    requireSubset(source.questStoryArcExportIds, selection.storyArcExportIds, 'questStoryArcExportIds')
-  }
+function worldResourceKeyArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.length > 20_000) fail(`${label} 必须是有界数组`)
+  const keys = value.map((item, index) => worldResourceKey(item, `${label}[${index}]`))
+  if (new Set(keys).size !== keys.length) fail(`${label} 不能重复`)
+  return keys.sort()
 }
 
 function validateTtrpg(value: unknown, sourceWorldHash: string): NonNullable<GameRuntimePackageV2['ttrpg']> {
@@ -301,34 +211,32 @@ function validateTtrpg(value: unknown, sourceWorldHash: string): NonNullable<Gam
   }
 }
 
-export function parseWorldGameSourceSelectionV2(value: unknown): WorldGameSourceSelectionV2 {
+export function parseProductWorldSourceSelectionV1(value: unknown): ProductWorldSourceSelectionV1 {
   const selection = record(value, 'sourceWorld.selection')
-  exactKeys(selection, [
-    'schema', 'version', 'productType', 'worldContentHash', 'narrativeModuleExportIds',
-    'characterExportIds', 'characterRelationExportIds', 'importantLocationExportIds',
-    'artifactExportIds', 'codexEntryExportIds', 'storyArcExportIds', 'avgMediaAssetExportIds',
-    'productSource',
-  ], 'sourceWorld.selection')
-  if (selection.schema !== 'storyforge.world-game-source' || selection.version !== 2) fail('source selection 版本无效')
-  const selectedProduct = productType(selection.productType)
-  if (!isSha256Hash(selection.worldContentHash)) fail('selection.worldContentHash 无效')
-  const parsed: WorldGameSourceSelectionV2 = {
-    schema: 'storyforge.world-game-source',
-    version: 2,
-    productType: selectedProduct,
-    worldContentHash: selection.worldContentHash,
-    narrativeModuleExportIds: portableIdArray(selection.narrativeModuleExportIds, 'narrativeModuleExportIds'),
-    characterExportIds: portableIdArray(selection.characterExportIds, 'characterExportIds'),
-    characterRelationExportIds: portableIdArray(selection.characterRelationExportIds, 'characterRelationExportIds'),
-    importantLocationExportIds: portableIdArray(selection.importantLocationExportIds, 'importantLocationExportIds'),
-    artifactExportIds: portableIdArray(selection.artifactExportIds, 'artifactExportIds'),
-    codexEntryExportIds: portableIdArray(selection.codexEntryExportIds, 'codexEntryExportIds'),
-    storyArcExportIds: portableIdArray(selection.storyArcExportIds, 'storyArcExportIds'),
-    avgMediaAssetExportIds: portableIdArray(selection.avgMediaAssetExportIds, 'avgMediaAssetExportIds'),
-    productSource: parseProductSource(selection.productSource, selectedProduct),
+  exactKeys(selection, ['schema', 'version', 'productType', 'worldReferenceHash', 'resourceKeys', 'roleBindings'], 'sourceWorld.selection')
+  if (selection.schema !== 'storyforge.product-world-source-selection' || selection.version !== 1) {
+    fail('source selection 版本无效')
   }
-  validateProductSourceClosure(parsed.productSource, parsed)
-  return parsed
+  const selectedProduct = productType(selection.productType)
+  if (!isSha256Hash(selection.worldReferenceHash)) fail('selection.worldReferenceHash 无效')
+  const resourceKeys = worldResourceKeyArray(selection.resourceKeys, 'selection.resourceKeys')
+  const roleRecord = record(selection.roleBindings, 'selection.roleBindings')
+  if (Object.keys(roleRecord).length > 100) fail('selection.roleBindings 数量超限')
+  const allowed = new Set(resourceKeys)
+  const roleBindings = Object.fromEntries(Object.entries(roleRecord).sort(([left], [right]) => left.localeCompare(right)).map(([role, rawKeys]) => {
+    stableKey(role, `selection.roleBindings.${role}`)
+    const keys = worldResourceKeyArray(rawKeys, `selection.roleBindings.${role}`)
+    if (keys.some(key => !allowed.has(key))) fail(`selection.roleBindings.${role} 超出资源选择`)
+    return [role, keys]
+  }))
+  return {
+    schema: 'storyforge.product-world-source-selection',
+    version: 1,
+    productType: selectedProduct,
+    worldReferenceHash: selection.worldReferenceHash,
+    resourceKeys,
+    roleBindings,
+  }
 }
 
 function validateInteraction(value: unknown): GameRuntimePackageV2['interaction'] {
@@ -380,19 +288,17 @@ export function parseGameRuntimePackageV2(value: string | unknown): GameRuntimeP
   const sourceWorld = record(pkg.sourceWorld, 'sourceWorld')
   exactKeys(sourceWorld, ['contentHash', 'selection'], 'sourceWorld')
   if (!isSha256Hash(sourceWorld.contentHash)) fail('sourceWorld.contentHash 无效')
-  const selection = parseWorldGameSourceSelectionV2(sourceWorld.selection)
-  if (selection.productType !== selectedProduct || selection.worldContentHash !== sourceWorld.contentHash) {
+  const selection = parseProductWorldSourceSelectionV1(sourceWorld.selection)
+  if (selection.productType !== selectedProduct) {
     fail('source selection 与 package 来源不一致')
   }
 
   const narrative = parseFrozenNarrative(pkg.narrative)
-  const knownSpeakerKeys = new Set(selection.characterExportIds.map(id => `character:${id}`))
   const graph = validateNarrativeContentGraph({
     entryNodeKey: narrative.entryNodeKey,
     nodes: narrative.nodes,
     beats: narrative.beats,
     choices: narrative.choices,
-    knownSpeakerKeys,
   })
   if (!graph.valid) fail(`narrative 图无效:${graph.errors.join('；')}`)
 
@@ -424,7 +330,7 @@ export function parseGameRuntimePackageV2(value: string | unknown): GameRuntimeP
     const assets = presentation.assets.map((asset, index) => {
       const row = record(asset, `presentation.assets[${index}]`)
       if (!isSha256Hash(row.blobContentHash)) fail(`presentation.assets[${index}].blobContentHash 无效`)
-      const frozen = freezeAvgMediaAsset(row as unknown as AvgMediaAsset)
+      const frozen = freezeProductMediaAsset(row as unknown as ProductMediaAsset)
       if (frozen.contentHash !== row.blobContentHash) fail(`presentation.assets[${index}] bytes hash 不一致`)
       return { ...frozen, blobContentHash: row.blobContentHash }
     })
@@ -512,112 +418,6 @@ export async function verifyGameReleaseManifestV2(value: string | unknown): Prom
     && await hashGameProductionValueV2(manifest.runtimePackage.ttrpg.rulePack.content)
       !== manifest.runtimePackage.ttrpg.rulePack.contentHash) fail('TTRPG RulePack contentHash 校验失败')
   return manifest
-}
-
-function v1Selection(selection: WorldGameSourceSelectionV1 | undefined, manifest: AnyGameReleaseManifestV1): WorldGameSourceSelectionV2 {
-  const worldContentHash = manifest.worldRelease.contentHash
-  const narrativeCharacterExportIds = manifest.narrative.beats.flatMap(beat => {
-    const match = /^character:(\d+)$/.exec(beat.speakerKey ?? '')
-    return match ? [Number(match[1])] : []
-  })
-  const characterExportIds = [...new Set([
-    ...(selection?.characterExportIds ?? []),
-    ...narrativeCharacterExportIds,
-  ])].sort((left, right) => left - right)
-  const narrativeModuleExportIds = selection
-    ? [selection.narrativeModuleExportId]
-    : [manifest.worldRelease.narrativeModuleExportId]
-  let productSource: ProductSpecificWorldSourceV1
-  if (manifest.productType === 'storygame') {
-    productSource = { kind: 'storygame', narrativeModuleExportIds }
-  } else if (manifest.productType === 'character-interaction') {
-    productSource = {
-      kind: 'character-interaction',
-      participantCharacterExportIds: characterExportIds,
-      sceneKeys: manifest.interaction.sceneTemplates.map(scene => scene.sceneKey),
-    }
-  } else if (manifest.productType === 'text-adventure') {
-    productSource = {
-      kind: 'text-adventure', locationExportIds: selection?.importantLocationExportIds ?? [],
-      itemExportIds: selection?.artifactExportIds ?? [], questStoryArcExportIds: selection?.storyArcExportIds ?? [],
-    }
-  } else if (manifest.productType === 'avg') {
-    productSource = {
-      kind: 'avg', presentationStyle: '', existingMediaAssetExportIds: selection?.avgMediaAssetExportIds ?? [],
-    }
-  } else if (manifest.productType === 'narrative-simulation') {
-    productSource = {
-      kind: 'narrative-simulation', issueStoryArcExportIds: selection?.storyArcExportIds ?? [], factionExportIds: [],
-    }
-  } else if (manifest.productType === 'text-open-world') {
-    productSource = {
-      kind: 'text-open-world', regionLocationExportIds: selection?.importantLocationExportIds ?? [],
-      factionExportIds: [], questStoryArcExportIds: selection?.storyArcExportIds ?? [],
-    }
-  } else {
-    // v1 manifests predate the TTRPG product; this branch is unreachable for
-    // valid historical manifests but keeps the discriminated union exhaustive.
-    productSource = {
-      kind: 'ttrpg', participantCharacterExportIds: characterExportIds,
-      locationExportIds: selection?.importantLocationExportIds ?? [],
-      questStoryArcExportIds: selection?.storyArcExportIds ?? [],
-    }
-  }
-  return {
-    schema: 'storyforge.world-game-source',
-    version: 2,
-    productType: manifest.productType,
-    worldContentHash,
-    narrativeModuleExportIds,
-    characterExportIds,
-    characterRelationExportIds: selection?.characterRelationExportIds ?? [],
-    importantLocationExportIds: selection?.importantLocationExportIds ?? [],
-    artifactExportIds: selection?.artifactExportIds ?? [],
-    codexEntryExportIds: selection?.codexEntryExportIds ?? [],
-    storyArcExportIds: selection?.storyArcExportIds ?? [],
-    avgMediaAssetExportIds: selection?.avgMediaAssetExportIds ?? [],
-    productSource,
-  }
-}
-
-/** Convert a validated historical Release v1 into the common runtime package without mutating it. */
-export function gameRuntimePackageFromReleaseV1(manifest: AnyGameReleaseManifestV1): GameRuntimePackageV2 {
-  const selectionV1 = manifest.definition.source?.selection
-  const runtimePackage: GameRuntimePackageV2 = {
-    schema: 'storyforge.game-runtime-package',
-    version: 2,
-    productType: manifest.productType,
-    definition: {
-      gameKey: manifest.definition.gameKey,
-      title: manifest.definition.title,
-      description: manifest.definition.description,
-      enabledCapabilities: structuredClone(manifest.definition.enabledCapabilities),
-      rulesetVersion: manifest.definition.rulesetVersion,
-      initialVariables: structuredClone(manifest.definition.initialVariables),
-    },
-    sourceWorld: {
-      contentHash: manifest.worldRelease.contentHash,
-      selection: v1Selection(selectionV1, manifest),
-    },
-    narrative: structuredClone(manifest.narrative),
-  }
-  if (manifest.productType === 'character-interaction' || manifest.productType === 'text-adventure'
-    || manifest.productType === 'text-open-world') runtimePackage.interaction = structuredClone(manifest.interaction)
-  if (manifest.productType === 'text-adventure' || manifest.productType === 'text-open-world') {
-    runtimePackage.adventure = structuredClone(manifest.adventure)
-  }
-  if (manifest.productType === 'avg') {
-    runtimePackage.presentation = {
-      version: manifest.presentation.version,
-      cues: structuredClone(manifest.presentation.cues),
-      assets: manifest.presentation.assets.map(asset => ({ ...structuredClone(asset), blobContentHash: asset.contentHash })),
-    }
-  }
-  if (manifest.productType === 'narrative-simulation' || manifest.productType === 'text-open-world') {
-    runtimePackage.simulation = structuredClone(manifest.simulation)
-  }
-  if (manifest.productType === 'text-open-world') runtimePackage.openWorld = structuredClone(manifest.openWorld)
-  return parseGameRuntimePackageV2(runtimePackage)
 }
 
 export async function createGameReleaseManifestV2(input: {

@@ -6,11 +6,11 @@ import type {
   TtrpgProductionSeatV2,
   WorkspaceScope,
 } from "../../lib/types";
-import { listTtrpgProductDraftsV1 } from "../../lib/ttrpg/authoring";
+import { listValidatedTtrpgRulePacksV1 } from "../../lib/ttrpg/rule-pack-library";
 import type { TtrpgProductionBriefDraftInputV2 } from "../../lib/ttrpg/production-brief";
 
-type SeatDraft = Omit<TtrpgProductionSeatV2, "sourceCharacterExportId"> & {
-  sourceCharacterExportId: number | null;
+type SeatDraft = Omit<TtrpgProductionSeatV2, "sourceCharacterResourceKey"> & {
+  sourceCharacterResourceKey: string | null;
 };
 
 type HouseRulePatchDraft = {
@@ -101,7 +101,7 @@ export function createDefaultTtrpgProductionWizardValueV2(): TtrpgProductionWiza
         controller: "human",
         role: "player",
         characterMode: "world-template",
-        sourceCharacterExportId: null,
+        sourceCharacterResourceKey: null,
         characterName: "",
         rankTier: null,
         privateGoal: "",
@@ -112,7 +112,7 @@ export function createDefaultTtrpgProductionWizardValueV2(): TtrpgProductionWiza
         controller: "ai",
         role: "player",
         characterMode: "ai-generated",
-        sourceCharacterExportId: null,
+        sourceCharacterResourceKey: null,
         characterName: "",
         rankTier: null,
         privateGoal: "",
@@ -174,37 +174,37 @@ export function toTtrpgProductionBriefDraftInputV2(input: {
 }): TtrpgProductionBriefDraftInputV2 {
   const value = input.value;
   const selectedWorldCharacters =
-    input.sourceSelection?.characterExportIds ?? [];
+    input.sourceSelection?.characterResourceKeys ?? [];
   const selectedSet = new Set(selectedWorldCharacters);
-  const used = new Set<number>();
+  const used = new Set<string>();
   const seats = value.seats.map((seat, index): TtrpgProductionSeatV2 => {
-    let sourceCharacterExportId = seat.sourceCharacterExportId;
+    let sourceCharacterResourceKey = seat.sourceCharacterResourceKey;
     if (
       seat.characterMode === "world-template" &&
-      (sourceCharacterExportId == null ||
-        !selectedSet.has(sourceCharacterExportId))
+      (sourceCharacterResourceKey == null ||
+        !selectedSet.has(sourceCharacterResourceKey))
     ) {
-      sourceCharacterExportId =
+      sourceCharacterResourceKey =
         selectedWorldCharacters.find((id) => !used.has(id)) ??
         selectedWorldCharacters[0] ??
         null;
     }
     const characterMode =
-      seat.characterMode === "world-template" && sourceCharacterExportId == null
+      seat.characterMode === "world-template" && sourceCharacterResourceKey == null
         ? ("ai-generated" as const)
         : seat.characterMode;
-    if (sourceCharacterExportId != null) used.add(sourceCharacterExportId);
+    if (sourceCharacterResourceKey != null) used.add(sourceCharacterResourceKey);
     const sourceName =
       input.sourceOptions?.characters.find(
-        (option) => option.exportId === sourceCharacterExportId,
+        (option) => option.resourceKey === sourceCharacterResourceKey,
       )?.label ?? "";
     return {
       ...seat,
       seatKey: `player.${index + 1}`,
       label: seat.label.trim() || `玩家 ${index + 1}`,
       characterMode,
-      sourceCharacterExportId:
-        characterMode === "world-template" ? sourceCharacterExportId : null,
+      sourceCharacterResourceKey:
+        characterMode === "world-template" ? sourceCharacterResourceKey : null,
       characterName: seat.characterName.trim() || sourceName,
       rankTier: characterMode === "quick-card" ? (seat.rankTier ?? "C") : null,
     };
@@ -376,16 +376,13 @@ export default function TtrpgProductionWizard(props: {
   const scopeWorkId = props.scope.workId;
   useEffect(() => {
     let active = true;
-    void listTtrpgProductDraftsV1({
+    void listValidatedTtrpgRulePacksV1({
       projectId: scopeProjectId,
       worldId: scopeWorldId,
       workId: scopeWorkId,
     })
       .then((result) => {
-        if (active)
-          setRulePacks(
-            result.rulePacks.filter((pack) => pack.status === "validated"),
-          );
+        if (active) setRulePacks(result);
       })
       .catch(() => {
         if (active) setRulePacks([]);
@@ -398,10 +395,10 @@ export default function TtrpgProductionWizard(props: {
   const patch = (next: Partial<TtrpgProductionWizardValueV2>) =>
     props.onChange({ ...value, ...next });
   const selectedCharacters = useMemo(() => {
-    const ids = new Set(props.sourceSelection?.characterExportIds ?? []);
+    const ids = new Set(props.sourceSelection?.characterResourceKeys ?? []);
     return (
       props.sourceOptions?.characters.filter((option) =>
-        ids.has(option.exportId),
+        ids.has(option.resourceKey),
       ) ?? []
     );
   }, [props.sourceOptions, props.sourceSelection]);
@@ -874,7 +871,7 @@ export default function TtrpgProductionWizard(props: {
                       patchSeat(index, {
                         characterMode: event.target
                           .value as SeatDraft["characterMode"],
-                        sourceCharacterExportId: null,
+                        sourceCharacterResourceKey: null,
                         rankTier:
                           event.target.value === "quick-card" ? "C" : null,
                       })
@@ -889,18 +886,18 @@ export default function TtrpgProductionWizard(props: {
                     <select
                       aria-label={`席位 ${index + 1} 世界角色`}
                       className={inputClass}
-                      value={seat.sourceCharacterExportId ?? ""}
+                      value={seat.sourceCharacterResourceKey ?? ""}
                       onChange={(event) =>
                         patchSeat(index, {
-                          sourceCharacterExportId: Number(event.target.value),
+                          sourceCharacterResourceKey: event.target.value || null,
                         })
                       }
                     >
                       <option value="">自动匹配</option>
                       {selectedCharacters.map((character) => (
                         <option
-                          key={character.exportId}
-                          value={character.exportId}
+                          key={character.resourceKey}
+                          value={character.resourceKey}
                         >
                           {character.label}
                         </option>
@@ -975,7 +972,7 @@ export default function TtrpgProductionWizard(props: {
                       controller: "open",
                       role: "player",
                       characterMode: "ai-generated",
-                      sourceCharacterExportId: null,
+                      sourceCharacterResourceKey: null,
                       characterName: "",
                       rankTier: null,
                       privateGoal: "",

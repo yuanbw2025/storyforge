@@ -145,6 +145,28 @@ export function createInitialTtrpgProductStateV1(input: {
         template.attributes[rulePack.turnStructure.initiativeAttributeKey] ?? 0,
     };
   }
+  const visualLocations = new Map(
+    (campaign.visualBible?.locations ?? []).map((location) => [
+      location.locationKey,
+      location,
+    ]),
+  );
+  for (const scene of campaign.scenes) {
+    if (scene.locationKey == null || state.entities[scene.locationKey]) continue;
+    const visual = visualLocations.get(scene.locationKey);
+    state.entities[scene.locationKey] = {
+      entityKey: scene.locationKey,
+      kind: "location",
+      sourceId: null,
+      name: visual?.anchors[0] ?? scene.locationKey,
+      locationKey: null,
+      lifecycleStatus: "active",
+      attributes: {
+        gameOnly: true,
+        identity: visual?.identityPrompt ?? scene.description,
+      },
+    };
+  }
   state.ttrpg = {
     scene: null,
     round: 0,

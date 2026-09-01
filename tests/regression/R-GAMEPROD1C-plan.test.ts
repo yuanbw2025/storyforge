@@ -6,6 +6,7 @@ import {
   parseGameProductionPlanV3,
 } from '../../src/lib/game-production/plan'
 import type { GameProductionBriefV3 } from '../../src/lib/types'
+import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
 
 const HASH = 'a'.repeat(64)
 
@@ -32,20 +33,20 @@ function brief(): GameProductionBriefV3 {
     source: {
       worldReleaseId: 1,
       worldContentHash: HASH,
-      selection: {
-        schema: 'storyforge.world-game-source', version: 2, productType: 'avg', worldContentHash: HASH,
-        narrativeModuleExportIds: [1], characterExportIds: [2], characterRelationExportIds: [],
-        importantLocationExportIds: [3], artifactExportIds: [], codexEntryExportIds: [],
-        storyArcExportIds: [4], avgMediaAssetExportIds: [],
-        productSource: { kind: 'avg', presentationStyle: 'cinematic', existingMediaAssetExportIds: [] },
-      },
+      selection: currentProductSelection('avg', {
+        story: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
+        characters: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+        locations: [CURRENT_PRODUCT_RESOURCE_KEYS.location],
+        storyArcs: [CURRENT_PRODUCT_RESOURCE_KEYS.arc],
+      }),
       startingPoint: {
         kind: 'mainline', title: '从港口开始', summary: '冻结世界的主线入口',
-        sourceRefs: ['narrativeModule:1'], protagonistRefs: ['character:2'], openingConflict: '灯塔熄灭。',
+        sourceRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
+        protagonistRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.character], openingConflict: '灯塔熄灭。',
       },
     },
     intent: {
-      productType: 'avg', playerRole: 'character:2', protagonistRefs: ['character:2'],
+      productType: 'avg', playerRole: '守灯人', protagonistRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
       openingSituation: '灯塔熄灭。', coreExperience: ['有后果的选择'], requiredFacts: ['港口仍被封锁'],
       forbiddenChanges: ['不能复活旧王'], contentBoundaries: ['不生成露骨内容'], tone: ['悬疑'],
     },

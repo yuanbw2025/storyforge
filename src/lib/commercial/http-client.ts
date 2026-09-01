@@ -1,7 +1,7 @@
 import {
-  verifyGameDistributionBundleV1,
-  type GameDistributionBundleV1,
-  type MarketplaceImportProvenanceV1,
+  verifyGameDistributionBundleV2,
+  type GameDistributionBundleV2,
+  type MarketplaceImportProvenanceV2,
 } from '../game-platform/distribution-bundle'
 import type {
   CommercialEntitlementV1,
@@ -322,9 +322,9 @@ export class CommercialHttpClientV1 {
   async registerRelease(input: {
     accessToken: string
     requestId: string
-    bundle: GameDistributionBundleV1
+    bundle: GameDistributionBundleV2
   }): Promise<{ releaseHash: string; bundleHash: string; duplicate: boolean }> {
-    const bundle = await verifyGameDistributionBundleV1(input.bundle)
+    const bundle = await verifyGameDistributionBundleV2(input.bundle)
     const row = record(await this.post('/v1/commercial/releases/register', {
       requestId: input.requestId, bundle,
     }, input.accessToken, 2_000_000), 'release registration')
@@ -341,8 +341,8 @@ export class CommercialHttpClientV1 {
   }
 
   async downloadRelease(input: { accessToken: string; releaseHash: string }): Promise<{
-    bundle: GameDistributionBundleV1
-    provenance: MarketplaceImportProvenanceV1
+    bundle: GameDistributionBundleV2
+    provenance: MarketplaceImportProvenanceV2
   }> {
     const row = record(await this.post('/v1/commercial/releases/download', {
       releaseHash: input.releaseHash,
@@ -356,7 +356,7 @@ export class CommercialHttpClientV1 {
     if (!Array.isArray(authorization.attribution) || authorization.attribution.some(item => typeof item !== 'string')) {
       fail('protocol', 'release authorization.attribution 无效')
     }
-    const bundle = await verifyGameDistributionBundleV1(row.bundle)
+    const bundle = await verifyGameDistributionBundleV2(row.bundle)
     if (sha(authorization.releaseHash, 'release authorization.releaseHash') !== bundle.gameRelease.contentHash) {
       fail('protocol', '下载授权与发行物哈希不一致')
     }

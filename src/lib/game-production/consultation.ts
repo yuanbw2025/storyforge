@@ -7,9 +7,9 @@ import type {
   GameProductionSourceOptionsV1,
   GameProductionSourceSelectionV1,
   GameStartingPointSuggestionV1,
-  ProductSpecificWorldSourceV1,
+  ProductWorldSourceSelectionV1,
   WorkspaceScope,
-  WorldGameSourceSelectionV2,
+  WorldReferenceV1,
 } from '../types'
 import { resolveScope } from '../world-engine/scope'
 import { hashGameProductionValueV2 } from './hash'
@@ -21,29 +21,28 @@ import {
 } from '../ttrpg/production-brief'
 
 interface OpportunityRow {
-  exportId: number
+  resourceKey: string
   label: string
   summary: string
   kind: string | null
 }
 
 interface ConsultationSourceV1 {
+  worldReference: WorldReferenceV1
   release: { version: number; label: string; contentHash: string }
-  selectedNarrativeModules: Array<{ exportId: number; kind: string; title: string }>
   opportunities: {
-    narrativeModules: OpportunityRow[]
+    storySources: OpportunityRow[]
     characters: OpportunityRow[]
     storyArcs: OpportunityRow[]
     historicalTimelineEvents: OpportunityRow[]
   }
   selectionOptions: GameProductionSourceOptionsV1
   selectionRelations: Array<{
-    exportId: number
-    fromCharacterExportId: number
-    toCharacterExportId: number
+    resourceKey: string
+    fromCharacterResourceKey: string
+    toCharacterResourceKey: string
   }>
-  selectionCatalog: Omit<WorldGameSourceSelectionV2,
-    'schema' | 'version' | 'productType' | 'worldContentHash' | 'productSource'>
+  selectionCatalog: GameProductionSourceSelectionV1
 }
 
 function stableSlug(value: string): string {
@@ -81,87 +80,83 @@ const SCALE_DEFAULTS: Record<GameProductionScaleV1['scope'], Omit<GameProduction
   campaign: { targetPlayMinutes: 900, targetWordCount: 120_000, targetEndingCount: 5 },
 }
 
-function productSource(
+function productRoleBindings(
   productType: GameProductType,
   catalog: ConsultationSourceV1['selectionCatalog'],
-): ProductSpecificWorldSourceV1 {
+): Record<string, string[]> {
   if (productType === 'storygame') {
-    return { kind: 'storygame', narrativeModuleExportIds: catalog.narrativeModuleExportIds }
+    return { story: catalog.storyResourceKeys }
   }
   if (productType === 'character-interaction') {
     return {
-      kind: 'character-interaction',
-      participantCharacterExportIds: catalog.characterExportIds,
-      sceneKeys: ['opening'],
+      participants: catalog.characterResourceKeys,
+      context: [...catalog.storyResourceKeys, ...catalog.storyArcResourceKeys],
     }
   }
   if (productType === 'text-adventure') {
     return {
-      kind: 'text-adventure', locationExportIds: catalog.importantLocationExportIds,
-      itemExportIds: catalog.artifactExportIds, questStoryArcExportIds: catalog.storyArcExportIds,
+      locations: catalog.importantLocationResourceKeys,
+      items: catalog.artifactResourceKeys,
+      quests: catalog.storyArcResourceKeys,
     }
   }
   if (productType === 'avg') {
-    return { kind: 'avg', presentationStyle: 'cinematic', existingMediaAssetExportIds: catalog.avgMediaAssetExportIds }
+    return {
+      story: [...catalog.storyResourceKeys, ...catalog.storyArcResourceKeys],
+      characters: catalog.characterResourceKeys,
+      locations: catalog.importantLocationResourceKeys,
+    }
   }
   if (productType === 'narrative-simulation') {
     return {
-      kind: 'narrative-simulation', issueStoryArcExportIds: catalog.storyArcExportIds,
-      factionExportIds: catalog.codexEntryExportIds,
+      issues: catalog.storyArcResourceKeys,
+      factions: catalog.codexEntryResourceKeys,
     }
   }
   if (productType === 'ttrpg') {
     return {
-      kind: 'ttrpg', participantCharacterExportIds: catalog.characterExportIds,
-      locationExportIds: catalog.importantLocationExportIds,
-      questStoryArcExportIds: catalog.storyArcExportIds,
+      participants: catalog.characterResourceKeys,
+      locations: catalog.importantLocationResourceKeys,
+      quests: catalog.storyArcResourceKeys,
     }
   }
   return {
-    kind: 'text-open-world', regionLocationExportIds: catalog.importantLocationExportIds,
-    factionExportIds: catalog.codexEntryExportIds, questStoryArcExportIds: catalog.storyArcExportIds,
+    regions: catalog.importantLocationResourceKeys,
+    factions: catalog.codexEntryResourceKeys,
+    quests: catalog.storyArcResourceKeys,
   }
 }
 
-function referencedIds(refs: readonly string[], kind: string): number[] {
-  const prefix = `${kind}:`
-  return [...new Set(refs.flatMap(ref => {
-    if (!ref.startsWith(prefix)) return []
-    const id = Number(ref.slice(prefix.length))
-    return Number.isInteger(id) && id >= 0 ? [id] : []
-  }))].sort((left, right) => left - right)
-}
-
-/** The chosen starting point must constrain the actual portable source set. */
+/** The chosen starting point must constrain the actual semantic resource set. */
 function selectionForStartingPoint(
-  catalog: ConsultationSourceV1['selectionCatalog'],
+  source: ConsultationSourceV1,
   selected: GameStartingPointSuggestionV1,
 ): ConsultationSourceV1['selectionCatalog'] {
-  const refs = [...selected.sourceRefs, ...selected.protagonistRefs]
-  const narrativeModuleExportIds = referencedIds(refs, 'narrativeModule')
-  const characterExportIds = referencedIds(refs, 'character')
-  const storyArcExportIds = referencedIds(refs, 'storyArc')
-  return {
-    ...structuredClone(catalog),
-    ...(narrativeModuleExportIds.length ? { narrativeModuleExportIds } : {}),
-    ...(characterExportIds.length ? {
-      characterExportIds,
-      // A one-character focus cannot safely retain opaque relations to
-      // characters outside the authorized subset.
-      characterRelationExportIds: [],
-    } : {}),
-    ...(storyArcExportIds.length ? { storyArcExportIds } : {}),
+  const refs = new Set([...selected.sourceRefs, ...selected.protagonistRefs])
+  const next = structuredClone(source.selectionCatalog)
+  const optionFields: Array<[keyof GameProductionSourceOptionsV1, keyof GameProductionSourceSelectionV1]> = [
+    ['storySources', 'storyResourceKeys'],
+    ['characters', 'characterResourceKeys'],
+    ['importantLocations', 'importantLocationResourceKeys'],
+    ['artifacts', 'artifactResourceKeys'],
+    ['codexEntries', 'codexEntryResourceKeys'],
+    ['storyArcs', 'storyArcResourceKeys'],
+  ]
+  for (const [optionField, selectionField] of optionFields) {
+    const selectedKeys = source.selectionOptions[optionField]
+      .map(option => option.resourceKey).filter(key => refs.has(key))
+    if (selectedKeys.length) next[selectionField] = selectedKeys.sort()
   }
+  return next
 }
 
 const AUTHOR_SELECTION_FIELDS = [
-  'narrativeModuleExportIds',
-  'characterExportIds',
-  'importantLocationExportIds',
-  'artifactExportIds',
-  'codexEntryExportIds',
-  'storyArcExportIds',
-  'avgMediaAssetExportIds',
+  'storyResourceKeys',
+  'characterResourceKeys',
+  'importantLocationResourceKeys',
+  'artifactResourceKeys',
+  'codexEntryResourceKeys',
+  'storyArcResourceKeys',
 ] as const satisfies readonly (keyof GameProductionSourceSelectionV1)[]
 
 function editableSelection(
@@ -177,30 +172,24 @@ function normalizeAuthorSelection(input: {
   selected: GameStartingPointSuggestionV1
   authorSelection?: GameProductionSourceSelectionV1
 }): ConsultationSourceV1['selectionCatalog'] {
-  const startingSelection = selectionForStartingPoint(input.source.selectionCatalog, input.selected)
+  const startingSelection = selectionForStartingPoint(input.source, input.selected)
   if (!input.authorSelection) return startingSelection
   const next = structuredClone(startingSelection)
   for (const field of AUTHOR_SELECTION_FIELDS) {
     const submitted = input.authorSelection[field]
     if (!Array.isArray(submitted)) throw new Error(`[game-production] 冻结素材选择缺少 ${field}`)
-    if (submitted.some(value => !Number.isInteger(value) || value < 0)) {
-      throw new Error(`[game-production] 冻结素材选择 ${field} 包含非法 portable ID`)
+    if (submitted.some(value => typeof value !== 'string' || !value.startsWith('world-release:'))) {
+      throw new Error(`[game-production] 冻结素材选择 ${field} 包含非法世界资源 key`)
     }
     if (new Set(submitted).size !== submitted.length) {
-      throw new Error(`[game-production] 冻结素材选择 ${field} 包含重复 portable ID`)
+      throw new Error(`[game-production] 冻结素材选择 ${field} 包含重复世界资源 key`)
     }
     const allowed = new Set(input.source.selectionCatalog[field])
     if (submitted.some(value => !allowed.has(value))) {
-      throw new Error(`[game-production] 冻结素材选择 ${field} 包含不属于当前 WorldRelease 的 ID`)
+      throw new Error(`[game-production] 冻结素材选择 ${field} 包含不属于当前 WorldRelease 的资源`)
     }
-    next[field] = [...submitted].sort((left, right) => left - right)
+    next[field] = [...submitted].sort()
   }
-  const characters = new Set(next.characterExportIds)
-  next.characterRelationExportIds = input.source.selectionRelations
-    .filter(relation => characters.has(relation.fromCharacterExportId)
-      && characters.has(relation.toCharacterExportId))
-    .map(relation => relation.exportId)
-    .sort((left, right) => left - right)
   return next
 }
 
@@ -255,39 +244,45 @@ export async function suggestGameStartingPoints(input: {
   worldReleaseId: number
 }): Promise<GameConsultationSuggestionSetV1> {
   const scope = await resolveScope({ scope: input.scope })
-  const assembled = await assembleContext({
-    projectId: scope.projectId,
-    scope,
-    sourceKeys: ['game-production.consultation-source'],
-    gameWorldReleaseId: input.worldReleaseId,
-  })
+  let assembled: Awaited<ReturnType<typeof assembleContext>>
+  try {
+    assembled = await assembleContext({
+      projectId: scope.projectId,
+      scope,
+      sourceKeys: ['game-production.consultation-source'],
+      gameWorldReleaseId: input.worldReleaseId,
+    })
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    throw new Error(`[game-production] WorldRelease 已被篡改、不属于当前作用域或不符合纯语义契约：${detail}`)
+  }
   const segment = assembled.segments.find(item => item.label === '游戏生产会谈来源')
   if (!segment) throw new Error('[game-production] 会谈来源未进入登记上下文')
   const source = JSON.parse(segment.content) as ConsultationSourceV1
   const result: GameStartingPointSuggestionV1[] = []
-  const main = source.selectedNarrativeModules.find(item => item.kind === 'main') ?? source.selectedNarrativeModules[0]
+  const main = source.opportunities.storySources[0]
   if (main) result.push(suggestion({
-    kind: 'mainline', title: `从「${main.title}」当前主线开始`,
+    kind: 'mainline', title: `从「${main.label}」当前故事开始`,
     rationale: '来源明确、核心人物和冲突通常最完整，适合最快形成可玩纵切。',
-    sourceRefs: [`narrativeModule:${main.exportId}`], protagonistRefs: [],
-    openingConflict: `围绕「${main.title}」选择一个尚未解决的即时危机作为开场。`,
+    sourceRefs: [main.resourceKey], protagonistRefs: [],
+    openingConflict: `围绕「${main.label}」选择一个尚未解决的即时危机作为开场。`,
     recommendedProductTypes: productFit('mainline'), scale: 'chapter',
     risks: ['主线范围容易过大，需要冻结本次只做的章节或短弧。'],
   }))
   const branch = source.opportunities.storyArcs[0]
-    ?? source.opportunities.narrativeModules.find(item => item.exportId !== main?.exportId)
+    ?? source.opportunities.storySources.find(item => item.resourceKey !== main?.resourceKey)
   if (branch) result.push(suggestion({
     kind: 'branch', title: `从支线「${branch.label}」切入`,
     rationale: branch.summary || '支线更适合做成独立目标、探索和不同结局。',
-    sourceRefs: [`${source.opportunities.storyArcs.includes(branch) ? 'storyArc' : 'narrativeModule'}:${branch.exportId}`],
+    sourceRefs: [branch.resourceKey],
     protagonistRefs: [], openingConflict: `让玩家在「${branch.label}」最紧迫的节点介入。`,
     recommendedProductTypes: productFit('branch'), scale: 'short-arc',
     risks: ['需要确认支线与主线的时间位置及不可改变的事实。'],
   }))
   else if (main) result.push(suggestion({
-    kind: 'branch', title: `从「${main.title}」旁边的一条未展开支线开始`,
+    kind: 'branch', title: `从「${main.label}」旁边的一条未展开支线开始`,
     rationale: '保留主线事实，但让玩家从一个较小、可独立收束的目标进入世界。',
-    sourceRefs: [`narrativeModule:${main.exportId}`], protagonistRefs: [],
+    sourceRefs: [main.resourceKey], protagonistRefs: [],
     openingConflict: '选择一个受主线影响、但尚未被正文解决的人物或地点危机。',
     recommendedProductTypes: productFit('branch'), scale: 'short-arc',
     risks: ['需要用户明确这条新支线不能改写哪些主线结果。'],
@@ -295,7 +290,7 @@ export async function suggestGameStartingPoints(input: {
   for (const character of source.opportunities.characters.slice(0, 2)) result.push(suggestion({
     kind: 'character', title: `跟随角色「${character.label}」开始`,
     rationale: character.summary || '角色视角适合聚焦关系、秘密和个人选择。',
-    sourceRefs: [`character:${character.exportId}`], protagonistRefs: [`character:${character.exportId}`],
+    sourceRefs: [character.resourceKey], protagonistRefs: [character.resourceKey],
     openingConflict: `从「${character.label}」必须立即做出代价选择的时刻开始。`,
     recommendedProductTypes: productFit('character'), scale: 'short-arc',
     risks: ['必须确认玩家扮演该角色，还是与该角色互动。'],
@@ -304,7 +299,7 @@ export async function suggestGameStartingPoints(input: {
   if (history && result.length < 5) result.push(suggestion({
     kind: 'history', title: `从历史事件「${history.label}」开始`,
     rationale: history.summary || '历史节点适合做成调查、模拟或多视角重演。',
-    sourceRefs: [`historicalTimelineEvent:${history.exportId}`], protagonistRefs: [],
+    sourceRefs: [history.resourceKey], protagonistRefs: [],
     openingConflict: `从「${history.label}」发生前最后一个可改变局部结果的时刻开始。`,
     recommendedProductTypes: productFit('history'), scale: 'chapter',
     risks: ['只能改变局部体验；Brief 必须列出不能改写的既定历史。'],
@@ -319,7 +314,7 @@ export async function suggestGameStartingPoints(input: {
   const suggestions = result.slice(0, 6)
   const selectionDefaults = Object.fromEntries(suggestions.map(item => [
     item.suggestionKey,
-    editableSelection(selectionForStartingPoint(source.selectionCatalog, item)),
+    editableSelection(selectionForStartingPoint(source, item)),
   ]))
   const base = {
     schema: 'storyforge.game-starting-point-suggestions' as const,
@@ -384,14 +379,16 @@ export async function draftGameProductionBriefV3(input: {
   const selectedCatalog = normalizeAuthorSelection({
     source, selected, authorSelection: input.sourceSelection,
   })
-  const selection: WorldGameSourceSelectionV2 = {
-    schema: 'storyforge.world-game-source', version: 2, productType: input.productType,
-    worldContentHash: source.release.contentHash,
-    ...selectedCatalog,
-    productSource: productSource(input.productType, selectedCatalog),
+  const roleBindings = productRoleBindings(input.productType, selectedCatalog)
+  const selection: ProductWorldSourceSelectionV1 = {
+    schema: 'storyforge.product-world-source-selection', version: 1,
+    productType: input.productType,
+    worldReferenceHash: source.worldReference.referenceHash,
+    resourceKeys: [...new Set(Object.values(selectedCatalog).flat())].sort(),
+    roleBindings,
   }
   const ttrpg = input.productType === 'ttrpg' ? await compileTtrpgProductionBriefV2({
-    scope, selection,
+    scope, selection, worldContentHash: source.release.contentHash,
     title: input.ttrpg?.campaign?.title ?? selected.title,
     premise: input.openingSituation?.trim() || selected.openingConflict,
     tone: input.tone?.length ? input.tone : ['沉浸', '清晰'],
@@ -424,12 +421,12 @@ export async function draftGameProductionBriefV3(input: {
     unresolvedDecisionKeys.push('player-character-or-counterpart')
   }
   if (input.productType === 'text-adventure'
-    && selection.importantLocationExportIds.length === 0
+    && (selection.roleBindings.locations?.length ?? 0) === 0
     && !explicitOpeningSituation) {
     unresolvedDecisionKeys.push('adventure-starting-location')
   }
   if (input.productType === 'ttrpg') {
-    if (selection.importantLocationExportIds.length === 0) unresolvedDecisionKeys.push('ttrpg-starting-location')
+    if ((selection.roleBindings.locations?.length ?? 0) === 0) unresolvedDecisionKeys.push('ttrpg-starting-location')
     unresolvedDecisionKeys.push(...unresolvedTtrpgProductionBriefDecisionsV2(ttrpg!))
   }
   return parseGameProductionBriefV3({

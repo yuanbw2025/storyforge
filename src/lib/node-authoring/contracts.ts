@@ -134,8 +134,6 @@ export interface AuthoringNodeTemplate {
   writes?: AuthoringWriteContract
   promptModuleKey?: PromptModuleKey
   parameters?: AuthoringParameterDefinition[]
-  /** FLOW-2 kind is retained only for compatibility and conversion. */
-  legacyKind?: string
   /** Semantic suggestions for the smart connection menu. */
   recommendedBefore?: string[]
   recommendedAfter?: string[]
@@ -207,12 +205,6 @@ export interface AuthoringNodeGraph {
   edges: AuthoringEdge[]
   viewport: AuthoringViewport
   groups?: Array<{ id: string; title: string; color?: string }>
-}
-
-export interface AuthoringGraphParseResult {
-  graph: AuthoringNodeGraph
-  sourceVersion: 1 | 2
-  migrated: boolean
 }
 
 export interface AuthoringInputEnvelope {

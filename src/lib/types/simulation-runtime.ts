@@ -946,33 +946,6 @@ export interface SimulationTtrpgCampaignState {
   versionTransitions: SimulationTtrpgVersionTransitionV2[];
 }
 
-export interface SimulationChatIdentity {
-  name: string;
-  description: string;
-}
-
-export interface SimulationChatScene {
-  title: string;
-  description: string;
-}
-
-export interface SimulationChatMessage {
-  messageId: string;
-  eventSequence: number;
-  role: "user" | "character";
-  speakerKey: string | null;
-  text: string;
-  replyToSequence: number | null;
-  supersededBySequence: number | null;
-}
-
-export interface SimulationChatState {
-  characterKey: string;
-  identity: SimulationChatIdentity;
-  scene: SimulationChatScene;
-  messages: SimulationChatMessage[];
-}
-
 export type InteractionSceneStatus = "active" | "ended";
 export type InteractionMemoryStatus =
   "proposed" | "accepted" | "rejected" | "superseded";
@@ -1119,9 +1092,7 @@ export interface SimulationNarrativeNodeSnapshot {
 
 export interface SimulationNarrativeState {
   schema: "storyforge.simulation-narrative";
-  version: 1 | 2;
-  sourceModuleId: number | null;
-  sourceModuleExportId: number | null;
+  version: 2;
   moduleKind: NarrativeModuleKind;
   moduleTitle: string;
   sourceHash: string;
@@ -1131,17 +1102,16 @@ export interface SimulationNarrativeState {
   availableNodeKeys: string[];
   variables: Record<string, unknown>;
   completed: boolean;
-  /** STORYGAME-1A fields are required for v2 and absent on legacy v1 snapshots. */
-  contentHash?: string;
-  beats?: FrozenNarrativeBeat[];
-  choices?: FrozenNarrativeChoice[];
-  visibleChoiceKeys?: string[];
-  availableChoiceKeys?: string[];
-  choiceHistory?: NarrativeChoiceHistoryEntry[];
-  endingKey?: string | null;
-  completedAtSequence?: number | null;
+  contentHash: string;
+  beats: FrozenNarrativeBeat[];
+  choices: FrozenNarrativeChoice[];
+  visibleChoiceKeys: string[];
+  availableChoiceKeys: string[];
+  choiceHistory: NarrativeChoiceHistoryEntry[];
+  endingKey: string | null;
+  completedAtSequence: number | null;
   /** Last emitted node-entered event, used to validate the explicit event protocol. */
-  lastEnteredNodeSequence?: number | null;
+  lastEnteredNodeSequence: number | null;
 }
 
 export interface SimulationRuntimeState {
@@ -1155,9 +1125,7 @@ export interface SimulationRuntimeState {
   }>;
   /** 旧存档缺少该字段时按 null 处理。 */
   ttrpg?: SimulationTtrpgState | null;
-  /** 旧存档缺少该字段时按 null 处理。 */
-  chat?: SimulationChatState | null;
-  /** CHATGAME-2 governed state; legacy CHATGAME-1 sessions keep this null. */
+  /** Governed character-interaction state. */
   interaction?: SimulationInteractionState | null;
   /** WORLD-2F: frozen executable narrative; legacy sessions default to null. */
   narrative?: SimulationNarrativeState | null;
@@ -1176,26 +1144,13 @@ export interface SimulationSession {
   id?: number;
   projectId: number;
   worldGroupId?: number | null;
-  /** WORLD-2F immutable release binding; legacy sessions may omit it. */
   worldId?: number | null;
   workId?: number | null;
-  worldReleaseId?: number | null;
-  /** STORYGAME-1A immutable product release; legacy sessions omit it. */
   gameReleaseId?: number | null;
   /** GAMEPROD-1 preview source; mutually exclusive with a formal gameReleaseId. */
   gameBuildId?: number | null;
-  /** TTRPG-4B product-owned preview source; mutually exclusive with gameRelease/gameBuild. */
-  ttrpgBuildId?: number | null;
   /** Hash of the exact preview or release runtime source used to create this session. */
   runtimeSourceHash?: string | null;
-  /** ARCH-04 portable logical ProductRelease identity; product tables keep the local FK. */
-  productReleaseUid?: string | null;
-  /** Hash of the ProductRelease lineage verified at formal runtime creation. */
-  productReleaseLineageHash?: string | null;
-  narrativeModuleId?: number | null;
-  /** Portable NarrativeModule identity inside an immutable release manifest. */
-  narrativeModuleExportId?: number | null;
-  draftSnapshotHash?: string | null;
   kind: SimulationSessionKind;
   title: string;
   status: SimulationSessionStatus;
@@ -1227,7 +1182,6 @@ export const SIMULATION_EVENT_TYPES = [
   "narrative.recorded",
   "narrative.started",
   "narrative.node.entered",
-  "narrative.node.advanced",
   "narrative.choice.committed",
   "narrative.ending.reached",
   "npc.evolution.proposed",
@@ -1272,9 +1226,6 @@ export const SIMULATION_EVENT_TYPES = [
   "ttrpg.media.available",
   "ttrpg.media.failed",
   "ttrpg.media.cancelled",
-  "chat.session.configured",
-  "chat.message.recorded",
-  "chat.reply.recorded",
   "interaction.scene.started",
   "interaction.scene.ended",
   "interaction.participant.joined",
@@ -1387,7 +1338,6 @@ export const EMPTY_SIMULATION_STATE: SimulationRuntimeState = {
   memories: [],
   narratives: [],
   ttrpg: null,
-  chat: null,
   interaction: null,
   narrative: null,
   adventure: null,

@@ -6,53 +6,10 @@ import {
 } from '../../src/lib/game-production/consultation'
 import { executeGameProductionCommand } from '../../src/lib/game-production/commands'
 import { parseGameProductionBriefV3 } from '../../src/lib/game-production/contracts'
-import { seedStoryGameAcceptanceSample } from '../../src/lib/text-game/authoring'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { publishWorldRevision } from '../../src/lib/world-engine/releases'
-import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 async function workspace(name: string) {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
-    name, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 10_000, createdAt: now, updatedAt: now,
-  } as never) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
-  await db.characters.bulkAdd([
-    {
-      projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-      isCrossWorld: true, name: '林舟', role: 'protagonist', roleWeight: 'main',
-      identity: '谨慎的守灯调查者', createdAt: now, updatedAt: now,
-    },
-    {
-      projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-      isCrossWorld: true, name: '守潮人', role: 'supporting', roleWeight: 'npc',
-      identity: '掌握旧港秘密的向导', createdAt: now, updatedAt: now,
-    },
-  ] as never[])
-  await db.importantLocations.add({
-    projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-    parentId: null, name: '雾港灯塔', type: 'lighthouse', description: '潮门关闭前仍可进入的调查起点。',
-    createdAt: now, updatedAt: now,
-  } as never)
-  const artifactCategoryId = await db.codexCategories.add(stampNewRecord(owned.scope, 'codexCategories', {
-    projectId, domain: 'humanity', parentId: null, name: '人工器物', builtInKey: 'artifact',
-    fieldSchema: '[]', hidden: false, order: 0, worldGroupId: null, createdAt: now, updatedAt: now,
-  } as never, { owner: 'world' })) as number
-  await db.codexEntries.add(stampNewRecord(owned.scope, 'codexEntries', {
-    projectId, categoryId: artifactCategoryId, name: '黄铜潮汐钥匙', summary: '能够重新启动潮汐钟机。',
-    description: '钥匙齿纹对应着旧档案中的潮位。', fields: '{}', refs: '{}', tags: '["关键道具"]',
-    importance: 5, order: 0, worldGroupId: null, createdAt: now, updatedAt: now,
-  } as never, { owner: 'world' }))
-  const definition = await seedStoryGameAcceptanceSample({ scope: owned.scope })
-  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
-    scope: owned.scope, label: '会谈冻结来源',
-    selectedNarrativeModuleIds: [definition.narrativeModuleId],
-  })
-  const release = await publishWorldRevision(revision.id!)
-  return { ...owned, release }
+  return seedCurrentProductWorld(name)
 }
 
 describe('R-GAMEPROD-1B · consultation and reviewable Brief', () => {
@@ -98,7 +55,7 @@ describe('R-GAMEPROD-1B · consultation and reviewable Brief', () => {
       media: { visualLevel: 'none', imageCount: 0, audioLevel: 'none' },
       unresolvedDecisionKeys: [],
     })
-    expect(storyBrief.source.selection.narrativeModuleExportIds.length).toBeGreaterThan(0)
+    expect(storyBrief.source.selection.roleBindings.story.length).toBeGreaterThan(0)
     expect(await db.gameProductions.count()).toBe(0)
 
     const interactionBrief = await draftGameProductionBriefV3({
@@ -166,20 +123,15 @@ describe('R-GAMEPROD-1B · consultation and reviewable Brief', () => {
       productType: 'ttrpg', playerRole: '扮演所选角色', openingSituation: '从灯塔潮门开始调查。',
       confirmTtrpgDefaultMappings: true,
     })
-    const selectedCharacterId = Number(characterStart.protagonistRefs[0].split(':')[1])
-    expect(brief.source.selection.characterExportIds).toEqual([selectedCharacterId])
-    expect(brief.source.selection.characterRelationExportIds).toEqual([])
-    expect(brief.source.selection.artifactExportIds).toHaveLength(1)
-    expect(brief.source.selection.productSource).toEqual({
-      kind: 'ttrpg', participantCharacterExportIds: [selectedCharacterId],
-      locationExportIds: brief.source.selection.importantLocationExportIds,
-      questStoryArcExportIds: brief.source.selection.storyArcExportIds,
-    })
+    const selectedCharacterKey = characterStart.protagonistRefs[0]
+    expect(brief.source.selection.roleBindings.participants).toEqual([selectedCharacterKey])
+    expect(brief.source.selection.resourceKeys).toContain(selectedCharacterKey)
+    expect(brief.source.selection.resourceKeys).toContain(suggestions.sourceOptions.artifacts[0].resourceKey)
     expect(suggestions.sourceOptions.characters).toHaveLength(2)
     expect(suggestions.sourceOptions.artifacts.map(item => item.label)).toEqual(['黄铜潮汐钥匙'])
     expect(suggestions.sourceOptions.codexEntries.map(item => item.label)).not.toContain('黄铜潮汐钥匙')
-    expect(suggestions.selectionDefaults[characterStart.suggestionKey].characterExportIds)
-      .toEqual([selectedCharacterId])
+    expect(suggestions.selectionDefaults[characterStart.suggestionKey].characterResourceKeys)
+      .toEqual([selectedCharacterKey])
   })
 
   it('作者可在冻结白名单内编辑素材子集；编译器重建 productSource 并拒绝伪造 ID', async () => {
@@ -187,23 +139,20 @@ describe('R-GAMEPROD-1B · consultation and reviewable Brief', () => {
     const suggestions = await suggestGameStartingPoints({ scope: owned.scope, worldReleaseId: owned.release.id! })
     const customStart = suggestions.suggestions.find(item => item.kind === 'custom')!
     const selection = structuredClone(suggestions.selectionDefaults[customStart.suggestionKey])
-    const chosenCharacter = suggestions.sourceOptions.characters[1].exportId
-    selection.characterExportIds = [chosenCharacter]
-    selection.importantLocationExportIds = []
-    selection.artifactExportIds = []
+    const chosenCharacter = suggestions.sourceOptions.characters[1].resourceKey
+    selection.characterResourceKeys = [chosenCharacter]
+    selection.importantLocationResourceKeys = []
+    selection.artifactResourceKeys = []
     const brief = await draftGameProductionBriefV3({
       scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: customStart.suggestionKey,
       productType: 'ttrpg', playerRole: '扮演自定义调查者', openingSituation: '从海雾中开始。',
       confirmTtrpgDefaultMappings: true, sourceSelection: selection,
     })
-    expect(brief.source.selection.characterExportIds).toEqual([chosenCharacter])
-    expect(brief.source.selection.characterRelationExportIds).toEqual([])
-    expect(brief.source.selection.productSource).toMatchObject({
-      kind: 'ttrpg', participantCharacterExportIds: [chosenCharacter], locationExportIds: [],
-    })
+    expect(brief.source.selection.roleBindings.participants).toEqual([chosenCharacter])
+    expect(brief.source.selection.roleBindings.locations).toEqual([])
     expect(brief.unresolvedDecisionKeys).toContain('ttrpg-starting-location')
 
-    selection.characterExportIds = [999_999]
+    selection.characterResourceKeys = ['world-release:forged:character:999999']
     await expect(draftGameProductionBriefV3({
       scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: customStart.suggestionKey,
       productType: 'storygame', sourceSelection: selection,
@@ -214,7 +163,7 @@ describe('R-GAMEPROD-1B · consultation and reviewable Brief', () => {
     const left = await workspace('会谈左侧')
     const right = await workspace('会谈右侧')
     await expect(suggestGameStartingPoints({ scope: right.scope, worldReleaseId: left.release.id! }))
-      .rejects.toThrow(/跨 World/)
+      .rejects.toThrow(/不属于请求的世界作用域/)
     await expect(draftGameProductionBriefV3({
       scope: left.scope, worldReleaseId: left.release.id!, suggestionKey: 'custom:forged',
       productType: 'storygame',

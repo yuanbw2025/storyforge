@@ -138,7 +138,11 @@ export interface WorkspaceProjectionSpecV1 {
   schemaVersion: 1
 }
 
-/** 简单外键引用(table[field] 形式) */
+/**
+ * 简单反向引用(table[field] 形式)。注册在被引用的父表上：field 是父表
+ * 主键字段，target 是持有外键的依赖表字段。生命周期据此从父记录派生
+ * cascade/setNull，禁止把“子表外键 -> 父表主键”倒着登记。
+ */
 export interface SimpleRef {
   kind: 'simple'
   field: string
@@ -364,10 +368,6 @@ export interface TableSpec<T = any> {
   refs?: RefSpec[]
   /** 是否纳入 JSON 备份导出 */
   exportable: boolean
-  /** @deprecated PLATFORM-1 v1 read/migration classification only. Never use for a new WorldRelease. */
-  legacyWorldPackageV1?: 'world'
-  /** @deprecated Historical v1 section retained only to recover old packages. */
-  legacyWorldReleaseSection?: WorldReleaseSection
   /** 导出时需要的 ID 重映射 */
   exportRemap?: ExportRemapField[]
   /**
@@ -616,15 +616,9 @@ export interface AssembleContextInput {
   gameBuildId?: number
   gameWorldReleaseId?: number
   gameArtifactKeys?: string[]
-  /** TTRPG-2A registered immutable/editable product authoring inputs. */
-  ttrpgRulePackId?: number
-  ttrpgCampaignModuleId?: number
-  /** R3 AI character-card candidate target inside the registered CampaignPack. */
-  ttrpgCharacterKey?: string
   /** CHATGAME-2: exactly one character viewpoint for the registered interaction reader. */
   interactionParticipantKey?: string
   /** CHATGAME-CI-2: frozen product source + confirmed product Brief. */
-  characterInteractionProductionId?: number
   /** CM-1: 本次明确参与增量融合的碎片；由 inspirationWorkspace source 读取。 */
   inspirationFragmentIds?: string[]
   /** CM-1: 单世界与多世界各自维护最近确认版本。 */

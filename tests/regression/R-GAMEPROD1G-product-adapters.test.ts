@@ -3,7 +3,6 @@ import type {
   GameBuildRecordV1,
   GameProductionBriefV3,
   GameRuntimePackageV2,
-  ProductSpecificWorldSourceV1,
   WorkspaceScope,
   WorldRelease,
 } from '../../src/lib/types'
@@ -20,32 +19,47 @@ import {
   createInitialNarrativeSimulationState,
   planNarrativeSimulationTurn,
 } from '../../src/lib/narrative-simulation/runtime'
-import { createInitialOpenWorldState, planOpenWorldTravel } from '../../src/lib/open-world/runtime'
+import {
+  createInitialOpenWorldState,
+  planOpenWorldDraw,
+  planOpenWorldTravel,
+} from '../../src/lib/open-world/runtime'
 import { db } from '../../src/lib/db/schema'
 import { createGameBuildPreviewManifestV1 } from '../../src/lib/game-production/preview-manifest'
 import { createPlayableGameInstance } from '../../src/lib/world-engine/instances'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
 import { readSimulationState } from '../../src/lib/simulation/runtime'
+import {
+  CURRENT_PRODUCT_RESOURCE_KEYS,
+  CURRENT_PRODUCT_SOURCE_CATALOG,
+  currentProductSelection,
+} from '../helpers/current-product-world'
 
 const PRODUCTS: ProductionProductTypeV1[] = [
   'storygame', 'character-interaction', 'text-adventure', 'avg',
   'narrative-simulation', 'text-open-world',
 ]
 
-function productSource(productType: ProductionProductTypeV1): ProductSpecificWorldSourceV1 {
-  if (productType === 'storygame') return { kind: productType, narrativeModuleExportIds: [1] }
+function productRoles(productType: ProductionProductTypeV1): Record<string, string[]> {
+  const key = CURRENT_PRODUCT_RESOURCE_KEYS
+  if (productType === 'storygame') return { story: [key.story] }
   if (productType === 'character-interaction') return {
-    kind: productType, participantCharacterExportIds: [1], sceneKeys: ['production.opening'],
+    participants: [key.character], context: [key.story, key.arc],
   }
   if (productType === 'text-adventure') return {
-    kind: productType, locationExportIds: [1], itemExportIds: [1], questStoryArcExportIds: [1],
+    characters: [key.character], locations: [key.location], items: [key.artifact], quests: [key.arc],
   }
-  if (productType === 'avg') return { kind: productType, presentationStyle: 'key-scenes', existingMediaAssetExportIds: [] }
+  if (productType === 'avg') return {
+    story: [key.story, key.arc], characters: [key.character], locations: [key.location],
+  }
   if (productType === 'narrative-simulation') return {
-    kind: productType, issueStoryArcExportIds: [1], factionExportIds: [1],
+    issues: [key.arc], factions: [key.lore], characters: [key.character],
   }
-  return { kind: productType, regionLocationExportIds: [1], factionExportIds: [1], questStoryArcExportIds: [1] }
+  return {
+    characters: [key.character], regions: [key.location], items: [key.artifact],
+    factions: [key.lore], quests: [key.arc],
+  }
 }
 
 function brief(productType: ProductionProductTypeV1): GameProductionBriefV3 {
@@ -54,19 +68,16 @@ function brief(productType: ProductionProductTypeV1): GameProductionBriefV3 {
     schema: 'storyforge.game-production-brief', version: 3,
     source: {
       worldReleaseId: 1, worldContentHash,
-      selection: {
-        schema: 'storyforge.world-game-source', version: 2, productType, worldContentHash,
-        narrativeModuleExportIds: [1], characterExportIds: [1], characterRelationExportIds: [],
-        importantLocationExportIds: [1], artifactExportIds: [1], codexEntryExportIds: [1],
-        storyArcExportIds: [1], avgMediaAssetExportIds: [], productSource: productSource(productType),
-      },
+      selection: currentProductSelection(productType, productRoles(productType)),
       startingPoint: {
-        kind: 'mainline', title: '冻结主线', summary: '从主线冲突开始', sourceRefs: ['narrative:1'],
-        protagonistRefs: ['character:1'], openingConflict: '在潮门关闭前决定公开真相还是保护同伴。',
+        kind: 'mainline', title: '冻结主线', summary: '从主线冲突开始',
+        sourceRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
+        protagonistRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+        openingConflict: '在潮门关闭前决定公开真相还是保护同伴。',
       },
     },
     intent: {
-      productType, playerRole: '守灯人', protagonistRefs: ['character:1'],
+      productType, playerRole: '守灯人', protagonistRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
       openingSituation: '在潮门关闭前决定公开真相还是保护同伴。',
       coreExperience: ['调查', '抉择', '承担后果'], requiredFacts: [], forbiddenChanges: [],
       contentBoundaries: ['不生成未授权露骨内容'], tone: ['克制', '悬疑'],
@@ -135,7 +146,9 @@ function narrative(): GameRuntimePackageV2['narrative'] {
 function runtimePackage(productType: ProductionProductTypeV1): GameRuntimePackageV2 {
   const currentBrief = brief(productType)
   const currentNarrative = narrative()
-  const modules = buildGameProductModulesV1({ brief: currentBrief, narrative: currentNarrative })
+  const modules = buildGameProductModulesV1({
+    brief: currentBrief, narrative: currentNarrative, sourceCatalog: CURRENT_PRODUCT_SOURCE_CATALOG,
+  })
   const pkg: GameRuntimePackageV2 = {
     schema: 'storyforge.game-runtime-package', version: 2, productType,
     definition: {
@@ -176,7 +189,7 @@ async function insertPreviewBuild(input: {
   const productionId = await db.gameProductions.add({
     projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId,
     productionKey, title: input.runtimePackage.definition.title, status: 'preview-ready', stateRevision: 2,
-    controlEpoch: 1, currentBriefRevision: 1, currentBuildNumber: 1, currentGameDefinitionId: null,
+    controlEpoch: 1, currentBriefRevision: 1, currentBuildNumber: 1,
     currentGameReleaseId: null, lastErrorJson: '{}', createdAt: now, updatedAt: now,
   }) as number
   await db.gameProductionBriefs.add({
@@ -198,7 +211,7 @@ async function insertPreviewBuild(input: {
     manifestHash, packageHash: preview.packageHash, previewManifestJson: JSON.stringify(preview),
     previewHash: preview.previewHash, qualityReportJson: '{}', qualityReportHash: emptyHash,
     compatibilityJson: '{}', rootTerminalReceiptHash: emptyHash, adoptionIntentHash: null,
-    adoptedGameDefinitionId: null, releasedGameReleaseId: null, failureJson: '{}', authorizedAt: now,
+    releasedGameReleaseId: null, failureJson: '{}', authorizedAt: now,
     startedAt: now, completedAt: now, createdAt: now, updatedAt: now,
   }
   const buildId = await db.gameBuilds.add(build) as number
@@ -215,7 +228,9 @@ describe('R-GAMEPROD-1G · seven-product adapter registry', () => {
       const currentBrief = brief(productType)
       const worldContentHash = currentBrief.source.worldContentHash
       const currentNarrative = narrative()
-      const modules = buildGameProductModulesV1({ brief: currentBrief, narrative: currentNarrative })
+      const modules = buildGameProductModulesV1({
+        brief: currentBrief, narrative: currentNarrative, sourceCatalog: CURRENT_PRODUCT_SOURCE_CATALOG,
+      })
       const pkg: GameRuntimePackageV2 = {
         schema: 'storyforge.game-runtime-package', version: 2, productType,
         definition: {
@@ -243,10 +258,12 @@ describe('R-GAMEPROD-1G · seven-product adapter registry', () => {
       if (parsed.adventure) {
         const initial = createInitialAdventureState(parsed.adventure, worldContentHash)
         expect(initial.currentLocationKey).toBe(parsed.adventure.initialLocationKey)
-        const first = availableAdventureActions(parsed.adventure, initial)
-          .find(item => item.available && item.action.narrativeChoiceKey != null)!.action
-        const moved = applyAdventureEffects(parsed.adventure, initial, first.successEffects, 1)
-        expect(moved.currentLocationKey).not.toBe(initial.currentLocationKey)
+        if (productType === 'text-adventure') {
+          const first = availableAdventureActions(parsed.adventure, initial)
+            .find(item => item.available && item.action.narrativeChoiceKey != null)!.action
+          const moved = applyAdventureEffects(parsed.adventure, initial, first.successEffects, 1)
+          expect(moved.currentLocationKey).not.toBe(initial.currentLocationKey)
+        }
       }
       if (parsed.simulation) {
         const initial = createInitialNarrativeSimulationState(parsed.simulation, worldContentHash)
@@ -260,6 +277,16 @@ describe('R-GAMEPROD-1G · seven-product adapter registry', () => {
       if (parsed.openWorld) {
         const initial = createInitialOpenWorldState(parsed.openWorld, worldContentHash)
         expect(initial.currentRegionKey).toBe(parsed.openWorld.initialRegionKey)
+        expect(parsed.adventure!.quests.every(quest => quest.initialStatus === 'available')).toBe(true)
+        const draw = planOpenWorldDraw({
+          content: parsed.openWorld,
+          state: initial,
+          adventure: createInitialAdventureState(parsed.adventure!, worldContentHash),
+          trigger: 'observe',
+          seed: 'registry',
+          startingSequence: 0,
+        })
+        expect(draw.projected.questInstances.some(instance => instance.status === 'revealed')).toBe(true)
         const edge = parsed.openWorld.travelEdges.find(item => item.fromRegionKey === initial.currentRegionKey)!
         const travel = planOpenWorldTravel({ content: parsed.openWorld, state: initial, edgeKey: edge.key, startingSequence: 0 })
         expect(travel.projected.travel?.edgeKey).toBe(edge.key)
@@ -303,11 +330,7 @@ describe('R-GAMEPROD-1G · seven-product adapter registry', () => {
       brief: currentBrief,
       narrative: narrative(),
       sourceCatalog: {
-        characters: [{ exportId: 1, name: '林舟', description: '谨慎的守灯调查者。' }],
-        locations: [{ exportId: 1, name: '雾港灯塔', description: '潮门关闭前仍可进入的调查起点。' }],
-        artifacts: [{ exportId: 1, name: '黄铜潮汐钥匙', description: '能够重新启动潮汐钟机。' }],
-        loreEntries: [{ exportId: 1, name: '守潮公会', description: '负责维护旧港潮汐设施。' }],
-        storyArcs: [{ exportId: 1, name: '失踪船队', description: '求救信号与禁航令的冲突。', type: 'side' }],
+        ...CURRENT_PRODUCT_SOURCE_CATALOG,
       },
     })
     expect(modules.interaction?.profiles[0]).toMatchObject({
@@ -318,7 +341,7 @@ describe('R-GAMEPROD-1G · seven-product adapter registry', () => {
     })
     expect(modules.adventure?.items).toContainEqual(expect.objectContaining({ title: '黄铜潮汐钥匙' }))
     expect(modules.adventure?.actions).toContainEqual(expect.objectContaining({
-      key: 'action.take.source.1', label: '取得：黄铜潮汐钥匙',
+      key: 'action.take.source.001', label: '取得：黄铜潮汐钥匙',
     }))
     expect(modules.simulation?.actors).toEqual(expect.arrayContaining([
       expect.objectContaining({ title: '林舟', kind: 'actor' }),
@@ -377,7 +400,6 @@ describe('R-GAMEPROD-1H · six-product playable Build Preview', () => {
     for (const productType of PRODUCTS) {
       const pkg = runtimePackage(productType)
       pkg.sourceWorld.contentHash = worldRelease.contentHash
-      pkg.sourceWorld.selection.worldContentHash = worldRelease.contentHash
       const build = await insertPreviewBuild({ scope: owned.scope, sourceWorldRelease: worldRelease, runtimePackage: pkg })
       const session = await createPlayableGameInstance({
         scope: owned.scope,

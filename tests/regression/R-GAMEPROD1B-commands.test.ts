@@ -1,87 +1,30 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { executeGameProductionCommand } from '../../src/lib/game-production/commands'
-import { suggestGameStartingPoints } from '../../src/lib/game-production/consultation'
-import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
+import { draftGameProductionBriefV3, suggestGameStartingPoints } from '../../src/lib/game-production/consultation'
 import { readGameProductionDetailsV1 } from '../../src/lib/game-production/service'
-import type { GameProductionBriefV3 } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 async function fixture() {
-  const now = 1_700_000_100_000
-  const projectId = await db.projects.add({
-    name: 'GAMEPROD commands', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 1000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
-  const manifestJson = JSON.stringify({
-    schema: 'storyforge.world-package', version: 2, worldCode: 'command-world', worldName: '命令世界',
-    workTitle: '命令作品', selectedTables: ['narrativeModules'],
-    selectedNarrativeModules: [{ exportId: 0, kind: 'main', title: '主线' }],
-    dependencies: [], records: {
-      narrativeModules: [{ id: 'portable-main' }],
-      storyArcs: [{ _exportId: 0, title: '山门支线', summary: '日落前寻找失踪的守门人' }],
-    }, portableProject: {},
+  const owned = await seedCurrentProductWorld('GAMEPROD commands')
+  const worldReleaseId = owned.release.id!
+  const suggestions = await suggestGameStartingPoints({ scope: owned.scope, worldReleaseId })
+  const brief = await draftGameProductionBriefV3({
+    scope: owned.scope,
+    worldReleaseId,
+    suggestionKey: suggestions.suggestions[0].suggestionKey,
+    productType: 'storygame',
+    scale: 'scene',
+    visualLevel: 'none',
+    audioLevel: 'none',
+    playerRole: '扮演林舟',
+    openingSituation: '在潮门关闭前作出选择。',
+    coreExperience: ['选择与后果'],
+    requiredFacts: ['潮门只在满月开启'],
+    forbiddenChanges: ['不得改写冻结世界'],
+    contentBoundaries: ['不含露骨内容'],
+    tone: ['克制', '紧张'],
   })
-  const worldContentHash = await hashGameProductionValueV2(JSON.parse(manifestJson))
-  const revisionId = await db.worldRevisions.add({
-    projectId, worldId: owned.scope.worldId, parentRevisionId: null, revision: 1, label: 'v1',
-    manifestJson, contentHash: worldContentHash, createdAt: now, updatedAt: now,
-  }) as number
-  const worldReleaseId = await db.worldReleases.add({
-    projectId, worldId: owned.scope.worldId, revisionId, version: 1, label: 'v1', manifestJson,
-    contentHash: worldContentHash, sourceWorldCode: 'command-world', createdAt: now,
-  }) as number
-  const brief: GameProductionBriefV3 = {
-    schema: 'storyforge.game-production-brief', version: 3,
-    source: {
-      worldReleaseId, worldContentHash,
-      selection: {
-        schema: 'storyforge.world-game-source', version: 2, productType: 'storygame', worldContentHash,
-        narrativeModuleExportIds: [0], characterExportIds: [0], characterRelationExportIds: [],
-        importantLocationExportIds: [], artifactExportIds: [], codexEntryExportIds: [], storyArcExportIds: [],
-        avgMediaAssetExportIds: [], productSource: { kind: 'storygame', narrativeModuleExportIds: [0] },
-      },
-      startingPoint: {
-        kind: 'mainline', title: '主线开场', summary: '从当前主线开始', sourceRefs: ['narrative:0'],
-        protagonistRefs: ['character:0'], openingConflict: '山门即将关闭',
-      },
-    },
-    intent: {
-      productType: 'storygame', playerRole: '主角', protagonistRefs: ['character:0'],
-      openingSituation: '在山门关闭前作出选择', coreExperience: ['选择与后果'], requiredFacts: ['山门日落关闭'],
-      forbiddenChanges: ['不得改变主角身份'], contentBoundaries: ['不含露骨内容'], tone: ['克制', '紧张'],
-    },
-    scale: { scope: 'scene', targetPlayMinutes: 20, targetWordCount: 3000, targetEndingCount: 2 },
-    media: {
-      visualLevel: 'key-scenes', audioLevel: 'music-sfx', imageCount: 2, musicTrackCount: 1,
-      sfxCount: 2, voiceLineCount: 0, requiredMediaKinds: ['background', 'bgm', 'sfx'],
-    },
-    consultationBudget: { maximumModelCalls: 2, maximumInputTokens: 20_000, maximumOutputTokens: 5000, maximumCostUsd: null },
-    productionBudget: {
-      maximumModelCalls: 10, maximumInputTokens: 100_000, maximumOutputTokens: 30_000, maximumCostUsd: null,
-      maximumMediaCalls: 5, maximumDurationMs: 3_600_000, maximumStorageBytes: 100_000_000,
-    },
-    qualityProfile: 'prototype',
-    capabilityRequirements: [{
-      requirementKey: 'text.main', mediaClass: 'text', operation: 'generate', adapterFamily: 'openai-compatible',
-      minimumCapabilityVersion: '1', allowedDataClasses: ['world-selection'], maximumRequestCost: null,
-      maximumTotalCost: null, rightsPolicyVersion: 'rights-v1', capabilityHash: 'b'.repeat(64), required: true,
-    }],
-    externalDataPolicy: {
-      allowedDataClasses: ['world-selection'], forbiddenDataClasses: ['api-key'],
-      allowReferenceImages: false, allowVoiceScripts: false,
-    },
-    fallbackPolicy: {
-      allowTextOnly: true, allowExistingProjectMedia: true, allowProceduralAudio: true,
-      onRequiredCapabilityMissing: 'pause',
-    },
-    completionContract: {
-      requiresPlayablePreview: true, requiredGateIds: ['runtime.playable'],
-      minimumMediaCoverage: 0.5, allowSoftWaivers: true,
-    },
-    unresolvedDecisionKeys: [],
-  }
   return { ...owned, worldReleaseId, brief }
 }
 
@@ -114,7 +57,6 @@ describe('GAMEPROD-1B · user command control plane', () => {
     expect(replay).toMatchObject({ ok: true, productionId: created.productionId, replayed: true })
     expect(await db.gameBuilds.where('productionId').equals(created.productionId).count()).toBe(0)
     expect(await db.agentRuns.where('projectId').equals(f.scope.projectId).count()).toBe(0)
-    expect(await db.gameDefinitions.where('workId').equals(f.scope.workId).count()).toBe(0)
 
     const saved = await executeGameProductionCommand({
       scope: f.scope, productionId: created.productionId,

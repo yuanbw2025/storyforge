@@ -215,7 +215,6 @@ function initialRuntimeState(
       memories: [],
       narratives: [],
       ttrpg: null,
-      chat: null,
       interaction: null,
       narrative: null,
       adventure: null,

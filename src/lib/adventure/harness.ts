@@ -17,6 +17,7 @@ import {
 } from '../agent/run/runtime-scope'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { db } from '../db/schema'
+import { verifyPlayableSessionPackageV2 } from '../game-production/preview-source'
 import { assembleContext } from '../registry/assemble-context'
 import {
   commitAdventureAction,
@@ -30,7 +31,6 @@ import type {
   SimulationEvent,
   WorkspaceScope,
 } from '../types'
-import { assertGameReleaseUnchanged, parseAdventureGameReleaseManifest } from '../text-game/releases'
 import { availableAdventureActions } from './runtime'
 
 export const ADVENTURE_RUNTIME_STEP_ID_V1 = 'adventure:runtime-candidate' as const
@@ -250,14 +250,26 @@ export async function generateAdventureRuntimeCandidateV1(input: {
       stepId: ADVENTURE_RUNTIME_STEP_ID_V1, attempt: 1, outputHash: await hashCanonicalValue(output),
     })
     const draft = parseDraft(input.skillId, output)
-    const state = await readSimulationState(input.simulationSessionId)
-    const release = await db.simulationSessions.get(input.simulationSessionId)
-      .then(session => session?.gameReleaseId == null ? null : assertGameReleaseUnchanged(session.gameReleaseId))
-    if (!state.adventure || !release) fail('模型返回时文字冒险实例已失效')
+    const [state, session] = await Promise.all([
+      readSimulationState(input.simulationSessionId),
+      db.simulationSessions.get(input.simulationSessionId),
+    ])
+    if (!state.adventure || !session || session.worldId == null || session.workId == null) {
+      fail('模型返回时文字冒险实例已失效')
+    }
+    const playable = await verifyPlayableSessionPackageV2({
+      scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+      session,
+    })
+    if (playable.runtimeSourceHash !== session.runtimeSourceHash
+      || (playable.runtimePackage.productType !== 'text-adventure'
+        && playable.runtimePackage.productType !== 'text-open-world')
+      || !playable.runtimePackage.adventure) {
+      fail('模型返回时文字冒险冻结运行源已失效')
+    }
     if (draft.kind === 'adventure-intent-candidate') {
-      const manifest = parseAdventureGameReleaseManifest(release.manifestJson)
       const available = availableAdventureActions(
-        manifest.adventure,
+        playable.runtimePackage.adventure,
         state.adventure,
         state.narrative?.variables,
       ).some(item => item.action.key === draft.actionKey && item.available)

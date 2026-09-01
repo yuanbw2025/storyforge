@@ -1240,19 +1240,6 @@ export interface TtrpgRuntimeContentV1 {
   };
 }
 
-export interface TtrpgGameReleaseManifestV1 {
-  schema: "storyforge.game-release";
-  version: 2;
-  productType: "ttrpg";
-  sourceWorldRelease: { contentHash: string };
-  runtimePackage: import("./text-game").GameRuntimePackageV2 & {
-    productType: "ttrpg";
-    ttrpg: TtrpgRuntimeContentV1;
-  };
-  packageHash: string;
-  productionProvenance: import("./text-game").GameReleaseManifestV2["productionProvenance"];
-}
-
 export interface GameRulePackRecordV1 {
   id?: number;
   projectId: number;
@@ -1263,22 +1250,6 @@ export interface GameRulePackRecordV1 {
   title: string;
   status: "draft" | "validated" | "archived";
   rulePackJson: string;
-  contentHash: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface TtrpgCampaignModuleRecordV1 {
-  id?: number;
-  projectId: number;
-  worldId: number;
-  workId: number;
-  campaignKey: string;
-  title: string;
-  status: "draft" | "validated" | "archived";
-  sourceWorldReleaseId: number;
-  rulePackId: number;
-  contentJson: string;
   contentHash: string;
   createdAt: number;
   updatedAt: number;

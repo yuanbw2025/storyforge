@@ -2,7 +2,7 @@ import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { validateNarrativeContentGraph } from '../text-game/content'
 import type {
-  AvgMediaKind,
+  ProductMediaKind,
   FrozenGameNarrativeNode,
   FrozenNarrativeBeat,
   FrozenNarrativeChoice,
@@ -25,8 +25,8 @@ import { evaluateGameRuntimeProductQualityV1 } from './product-quality'
 import { buildGameProductModulesV1, type ProductionProductTypeV1 } from './product-adapters'
 import { parseTtrpgCampaignContentV1 } from '../ttrpg/campaign'
 import { parseRulePackV1 } from '../ttrpg/rule-pack'
-import { loadWorldGameSourceCatalog } from '../text-game/world-generation'
-import { buildPlayableWorldBundleFromRelease, verifyPlayableWorldBundle } from '../simulation/canon-snapshot'
+import { loadGameProductionWorldSourceCatalogV2 } from './world-source'
+import { buildPlayableWorldBundleFromResourcesV2, verifyPlayableWorldBundle } from '../simulation/canon-snapshot'
 import { resolveTtrpgProductionRulePackV2 } from '../ttrpg/production-brief'
 import { bindProductionMediaToTtrpgCampaignV1, compileProductionTtrpgCampaignV2 } from '../ttrpg/production-compiler'
 import { resolveTtrpgCampaignDesignV2 } from '../ttrpg/campaign-proposal'
@@ -43,6 +43,12 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const COLOR = /^#[0-9a-fA-F]{6}$/
 
 type JsonRecord = Record<string, unknown>
+
+function productCharacterKeys(brief: GameProductionBriefV3): string[] {
+  const resources = brief.source.selection.roleBindings.characters
+    ?? brief.source.selection.roleBindings.participants ?? []
+  return resources.slice(0, 100).map((_, index) => `character:${index + 1}`)
+}
 
 interface GameDesignArtifactV1 {
   schema: 'storyforge.game-design-artifact'
@@ -84,7 +90,7 @@ interface ProductModuleArtifactV1 {
 
 interface VisualRequirementV1 {
   artifactKey: string
-  mediaKind: Extract<AvgMediaKind, 'background' | 'character-pose' | 'character-expression' | 'cg' | 'ui'>
+  mediaKind: Extract<ProductMediaKind, 'background' | 'character-pose' | 'character-expression' | 'cg' | 'ui'>
   sceneTag: string
   beatKey: string
   prompt: string
@@ -98,7 +104,7 @@ interface VisualRequirementV1 {
 
 interface AudioRequirementV1 {
   artifactKey: string
-  mediaKind: Extract<AvgMediaKind, 'bgm' | 'ambience' | 'sfx'>
+  mediaKind: Extract<ProductMediaKind, 'bgm' | 'ambience' | 'sfx'>
   sceneTag: string
   beatKey: string
   prompt: string
@@ -459,7 +465,7 @@ function parseNarrative(value: unknown, brief: GameProductionBriefV3): Narrative
   })
   const beats = candidateBeats.filter(beat => reachable.has(beat.nodeKey))
   if (nodes.length < 3 || beats.length < 3 || choices.length < 2) fail('narrative 可玩闭包基础数量无效')
-  const knownSpeakerKeys = new Set(brief.source.selection.characterExportIds.map(id => `character:${id}`))
+  const knownSpeakerKeys = new Set(productCharacterKeys(brief))
   const report = validateNarrativeContentGraph({
     entryNodeKey, nodes, beats, choices, knownSpeakerKeys,
   })
@@ -580,7 +586,7 @@ export function parseGameMediaRequirementsArtifactV2(
     || !Array.isArray(row.visual) || !Array.isArray(row.audio)) fail('mediaRequirements schema/数组无效')
   const allowedCharacterAnchors = new Set([
     'intent:protagonist',
-    ...brief.source.selection.characterExportIds.map(id => `character:${id}`),
+    ...productCharacterKeys(brief),
   ])
   const requiredCharacterConstraints = [...new Set([
     '保持角色身份、年龄段与核心视觉特征',
@@ -685,7 +691,7 @@ function textSystem(taskKey: string, brief: GameProductionBriefV3): string {
     `所有 key/beatKey/choiceKey/nodeKey 必须匹配 ^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$。` +
     `所有节点必须从入口可达；每个非结局节点至少一个选择；kind=ending 的节点必须恰好 ${Math.min(8, Math.max(1, brief.scale.targetEndingCount))} 个、全部从入口可达且不得再有出边；每个节点至少一个 beat。` +
     `输出前必须自行逐项检查：入口存在、无孤岛、无非结局死路、可达 ending 数量恰好为 ${Math.min(8, Math.max(1, brief.scale.targetEndingCount))}。` +
-    `dialogue 的 speakerKey 只能从 ${JSON.stringify(brief.source.selection.characterExportIds.map(id => `character:${id}`))} 选择；没有合法角色时只用 narration/action/system。` +
+    `dialogue 的 speakerKey 只能从 ${JSON.stringify(productCharacterKeys(brief))} 选择；没有合法角色时只用 narration/action/system。` +
     (ttrpgDesign ? `\n这是作者已比较/混合的跑团战役方向，必须落实且不得改写 lockedSections：${JSON.stringify(ttrpgDesign)}。` : '')
   }
   if (taskKey === 'content.product-module') return `${common}\n输出字段必须精确为：` +
@@ -699,8 +705,7 @@ function textSystem(taskKey: string, brief: GameProductionBriefV3): string {
     prompt: '具体可施工的原创画面描述', altText: '无障碍描述',
     width: index === 0 ? 1280 : 720, height: index === 0 ? 720 : 1080,
     palette: ['#112233', '#445566', '#ddeeff'],
-    characterAnchorRefs: index === 0 ? [] : [brief.source.selection.characterExportIds.length
-      ? `character:${brief.source.selection.characterExportIds[0]}` : 'intent:protagonist'],
+    characterAnchorRefs: index === 0 ? [] : [productCharacterKeys(brief)[0] ?? 'intent:protagonist'],
     hardConstraints: index === 0 ? [] : [...new Set([
       '保持角色身份、年龄段与核心视觉特征', `角色定位：${brief.intent.playerRole}`,
       ...brief.intent.forbiddenChanges,
@@ -862,7 +867,7 @@ async function generateProviderMedia(input: {
   requirement: ProviderCapabilityRequirementV1
   artifactKey: string
   mediaClass: GameMediaClassV1
-  mediaKind: AvgMediaKind
+  mediaKind: ProductMediaKind
   prompt: string
   width: number | null
   height: number | null
@@ -1196,7 +1201,7 @@ async function executeIntegrationTask(input: GameProductionTaskExecutionInputV1,
   parseGameMediaRequirementsArtifactV2(artifactPayload(input, 'media.requirements'), options.brief)
   const media = input.inputArtifacts.filter(row => row.blobObjectId != null).map(mediaAsset)
   const assets = media.map(item => item.asset)
-  const sourceCatalog = await loadWorldGameSourceCatalog({
+  const sourceCatalog = await loadGameProductionWorldSourceCatalogV2({
     scope: {
       projectId: options.production.projectId,
       worldId: options.production.worldId,
@@ -1222,9 +1227,13 @@ async function executeIntegrationTask(input: GameProductionTaskExecutionInputV1,
     if (rulePackContentHash !== options.brief.ttrpg.rules.effectiveContentHash) {
       fail('TTRPG RulePack 与 Brief effective hash 不一致')
     }
-    const playableWorld = await buildPlayableWorldBundleFromRelease({
-      manifest: sourceCatalog.manifest, worldContentHash: sourceCatalog.release.contentHash,
-      createdAt: sourceCatalog.release.createdAt,
+    const playableWorld = await buildPlayableWorldBundleFromResourcesV2({
+      world: sourceCatalog.world,
+      release: {
+        contentHash: sourceCatalog.release.contentHash,
+        createdAt: sourceCatalog.release.createdAt,
+      },
+      resources: sourceCatalog.resources,
     })
     if (!await verifyPlayableWorldBundle(playableWorld)) fail('PlayableWorldBundle 校验失败')
     // TTRPG 固定四场景 fallback 已停用：编译失败必须阻断生产，不能回退到演示 fixture。
@@ -1341,7 +1350,7 @@ async function executeQualityTask(input: GameProductionTaskExecutionInputV1, opt
     entryNodeKey: runtimePackage.narrative.entryNodeKey,
     nodes: runtimePackage.narrative.nodes, beats: runtimePackage.narrative.beats,
     choices: runtimePackage.narrative.choices,
-    knownSpeakerKeys: new Set(options.brief.source.selection.characterExportIds.map(id => `character:${id}`)),
+    knownSpeakerKeys: new Set(productCharacterKeys(options.brief)),
   })
   const assets = runtimePackage.presentation?.assets ?? []
   const requiredKinds = new Set(options.brief.media.requiredMediaKinds)

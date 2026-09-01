@@ -63,7 +63,7 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
 
   afterEach(() => db.close())
 
-  it('新建图使用 version=2，并保留 FLOW-2 保存兼容', async () => {
+  it('新建图使用当前 version=2，并拒绝把旧 FLOW-2 图重新写回', async () => {
     const flowId = await useNodeFlowStore.getState().createFlow(project.id!, null)
     const created = (await db.nodeFlows.get(flowId))!
     expect(JSON.parse(created.graphJson).version).toBe(2)
@@ -76,7 +76,7 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 },
       }),
-    })).resolves.toBe(flowId)
+    })).rejects.toThrow('不支持的节点图版本：1')
   })
 
   it('把控制参数传入共享 AI，先保存候选，确认后才写 Canon', async () => {

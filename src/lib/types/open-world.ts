@@ -205,17 +205,6 @@ export interface OpenWorldContentV1 {
   director: OpenWorldDirectorRules
 }
 
-export interface OpenWorldModule {
-  id?: number
-  projectId: number
-  worldId: number
-  workId: number
-  gameDefinitionId: number
-  contentJson: string
-  createdAt: number
-  updatedAt: number
-}
-
 export interface OpenWorldRegionalProjection {
   regionKey: string
   resources: Record<string, number>

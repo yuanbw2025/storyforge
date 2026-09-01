@@ -13,7 +13,6 @@ import {
   type AuthoringNodeGraph,
   type AuthoringNodeInstance,
 } from '../../src/lib/node-authoring'
-import type { NodeFlowGraph } from '../../src/lib/types'
 
 function node(templateId: string, id = templateId): AuthoringNodeInstance {
   const template = AUTHORING_NODE_BY_ID.get(templateId)
@@ -94,8 +93,8 @@ describe('FLOW-3A · 领域节点合同与三注册表守卫', () => {
     expect(suggestions.every(item => authoringPortsCompatible(origin.outputs[0], item.port))).toBe(true)
   })
 
-  it('无损读取 FLOW-2 图并迁移为 version=2，保留配置、端口预算和连线', () => {
-    const legacy: NodeFlowGraph = {
+  it('只接受当前领域节点图合同，旧 FLOW-2 图必须先由数据库清场迁移删除', () => {
+    const retiredGraph = {
       version: 1,
       viewport: { x: 10, y: 20, zoom: 0.8 },
       nodes: [
@@ -107,14 +106,16 @@ describe('FLOW-3A · 领域节点合同与三注册表守卫', () => {
       ],
       edges: [{ id: 'edge', sourceNodeId: 'source', targetNodeId: 'compose', targetSlotId: 'material' }],
     }
-    const parsed = parseAuthoringGraph(JSON.stringify(legacy))
-    expect(parsed.sourceVersion).toBe(1)
-    expect(parsed.migrated).toBe(true)
-    expect(parsed.graph.version).toBe(2)
-    expect(parsed.graph.nodes[0].config).toMatchObject({ text: '河流源于北境。', legacyKind: 'input.text' })
-    expect(parsed.graph.nodes[1].inputs[0]).toMatchObject({ id: 'material', maxTokens: 2000, priority: 80 })
-    expect(parsed.graph.edges[0]).toMatchObject({ sourcePortId: 'text', targetPortId: 'material' })
-    expect(validateAuthoringGraph(parsed.graph)).toEqual([])
+    expect(() => parseAuthoringGraph(JSON.stringify(retiredGraph))).toThrow('不支持的节点图版本：1')
+
+    const current: AuthoringNodeGraph = {
+      version: 2,
+      viewport: { x: 10, y: 20, zoom: 0.8 },
+      nodes: [node('world.origin', 'origin')],
+      edges: [],
+    }
+    expect(parseAuthoringGraph(JSON.stringify(current))).toEqual({ ...current, groups: [] })
+    expect(validateAuthoringGraph(current)).toEqual([])
   })
 
   it('验证必需输入、类型和环路，并支持目标祖先闭包与下游顺序', () => {

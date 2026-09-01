@@ -1,7 +1,7 @@
 import { db } from '../db/schema'
 import type {
-  AvgMediaAsset,
-  AvgMediaBlob,
+  ProductMediaAsset,
+  ProductMediaBlob,
   GameBuildArtifactRecordV1,
   GameBuildManifestV1,
   GameBuildQualityReportV1,
@@ -314,28 +314,28 @@ export async function prepareGameProductionAdoption(input: {
 async function materializeReleaseMedia(verified: VerifiedAdoption, now: number): Promise<void> {
   for (const asset of verified.runtimePackage.presentation?.assets ?? []) {
     const artifact = verified.mediaArtifacts.get(asset.assetKey)!
-    const existing = await db.avgMediaAssets
+    const existing = await db.productMediaAssets
       .where('[workId+assetKey+version]').equals([verified.scope.workId, asset.assetKey, asset.version]).first()
     if (existing) {
       if (existing.contentHash !== asset.contentHash || existing.mimeType !== asset.mimeType
         || existing.byteSize !== asset.byteSize || existing.kind !== asset.kind) fail(`正式媒资版本冲突:${asset.assetKey}`)
-      const blob = await db.avgMediaBlobs.where('mediaAssetId').equals(existing.id!).first()
+      const blob = await db.productMediaBlobs.where('mediaAssetId').equals(existing.id!).first()
       if (!blob || blob.blobObjectId !== artifact.blobObjectId) fail(`正式媒资二进制绑定冲突:${asset.assetKey}`)
       continue
     }
-    const row = stampNewRecord(verified.scope, 'avgMediaAssets', {
+    const row = stampNewRecord(verified.scope, 'productMediaAssets', {
       projectId: verified.scope.projectId, worldId: verified.scope.worldId, workId: verified.scope.workId,
       assetKey: asset.assetKey, version: asset.version, kind: asset.kind, name: asset.name,
       mimeType: asset.mimeType, byteSize: asset.byteSize, width: asset.width, height: asset.height,
       durationMs: asset.durationMs, contentHash: asset.contentHash, source: asset.source,
       license: asset.license, altText: asset.altText, characterTag: asset.characterTag,
       sceneTag: asset.sceneTag, createdAt: now, updatedAt: now,
-    } satisfies AvgMediaAsset, { owner: 'work' })
-    const mediaAssetId = await db.avgMediaAssets.add(row) as number
-    await db.avgMediaBlobs.add(stampNewRecord(verified.scope, 'avgMediaBlobs', {
+    } satisfies ProductMediaAsset, { owner: 'work' })
+    const mediaAssetId = await db.productMediaAssets.add(row) as number
+    await db.productMediaBlobs.add(stampNewRecord(verified.scope, 'productMediaBlobs', {
       projectId: verified.scope.projectId, worldId: verified.scope.worldId, workId: verified.scope.workId,
       mediaAssetId, blobObjectId: artifact.blobObjectId!, data: null, createdAt: now,
-    } satisfies AvgMediaBlob, { owner: 'work' }))
+    } satisfies ProductMediaBlob, { owner: 'work' }))
   }
 }
 
@@ -438,7 +438,7 @@ export async function publishGameProductionBuild(input: {
   return db.transaction('rw', scopeTransactionTables(
     db.gameProductions, db.gameProductionBriefs, db.gameProductionCommands, db.gameBuilds,
     db.gameBuildArtifacts, db.mediaBlobObjects, db.worldReleases, db.gameReleases,
-    db.avgMediaAssets, db.avgMediaBlobs, db.gameQualityGateReceipts,
+    db.productMediaAssets, db.productMediaBlobs, db.gameQualityGateReceipts,
   ), async () => {
     const verified = prepared
     await assertPreparedAdoptionUnchangedInTransaction(verified)
@@ -463,7 +463,8 @@ export async function publishGameProductionBuild(input: {
     })
     const releaseRow: GameRelease = {
       projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-      gameDefinitionId: null, worldReleaseId: verified.intent.worldReleaseId,
+      productionKey: verified.intent.productionKey,
+      worldReleaseId: verified.intent.worldReleaseId,
       version: Math.max(0, ...productionReleases.map(release => release.version)) + 1,
       label: input.label?.trim() || `${verified.title} v${productionReleases.length + 1}`,
       manifestJson, contentHash, createdAt: now,

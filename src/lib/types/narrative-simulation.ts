@@ -171,17 +171,6 @@ export interface NarrativeSimulationContentV1 {
   themes: NarrativeSimulationThemeMapping[]
 }
 
-export interface NarrativeSimulationModule {
-  id?: number
-  projectId: number
-  worldId: number
-  workId: number
-  gameDefinitionId: number
-  contentJson: string
-  createdAt: number
-  updatedAt: number
-}
-
 export interface NarrativeSimulationActiveModifier {
   instanceKey: string
   modifierKey: string

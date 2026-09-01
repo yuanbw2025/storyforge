@@ -3,7 +3,6 @@ import { db } from '../lib/db/schema'
 import {
   branchSimulationSession,
   commitNarrativeChoiceWithStateV1,
-  advanceSimulationNarrative,
   createSimulationCheckpoint,
   deleteSimulationSession,
   hashSimulationRuntimeStateV1,
@@ -13,14 +12,15 @@ import {
 import {
   assertGameReleaseUnchanged,
   parseGameReleaseManifest,
-  parseWorldReleasePlayerCharacter,
-  parseWorldReleaseSpeakerNames,
-  type WorldReleasePlayerCharacter,
+  runtimePackagePlayerCharacter,
+  runtimePackageSpeakerNames,
+  type RuntimePlayerCharacterV2,
 } from '../lib/text-game/releases'
+import { verifyPlayableSessionPackageV2 } from '../lib/game-production/preview-source'
 import { assertInstanceBinding, createStoryGameInstance, readBoundInstances } from '../lib/world-engine/instances'
 import type {
   GameRelease,
-  GameReleaseManifestV1,
+  StoryGameRuntimePackageV2,
   SimulationCheckpoint,
   SimulationEvent,
   SimulationRuntimeState,
@@ -31,9 +31,9 @@ import { EMPTY_SIMULATION_STATE } from '../lib/types'
 
 export interface StoryGameLibraryItem {
   release: GameRelease
-  manifest: GameReleaseManifestV1 | null
+  manifest: StoryGameRuntimePackageV2 | null
   speakerNames: Record<string, string>
-  playerCharacter: WorldReleasePlayerCharacter | null
+  playerCharacter: RuntimePlayerCharacterV2 | null
   error: string
 }
 
@@ -54,7 +54,6 @@ interface StoryGamePlayerState {
   select(sessionId: number | null): Promise<void>
   start(gameReleaseId: number, title?: string): Promise<number>
   choose(choiceKey: string): Promise<void>
-  advanceLegacy(targetNodeKey: string): Promise<void>
   saveCheckpoint(name: string): Promise<void>
   forkCheckpoint(checkpointId: number, title?: string): Promise<number>
   forkCurrent(title?: string): Promise<number>
@@ -75,12 +74,12 @@ async function readLibrary(scope: WorkspaceScope): Promise<StoryGameLibraryItem[
   return Promise.all(storyReleases.map(async release => {
     try {
       await assertGameReleaseUnchanged(release.id!)
-      const worldRelease = await db.worldReleases.get(release.worldReleaseId)
+      const manifest = parseGameReleaseManifest(release.manifestJson)
       return {
         release,
-        manifest: parseGameReleaseManifest(release.manifestJson),
-        speakerNames: worldRelease ? parseWorldReleaseSpeakerNames(worldRelease.manifestJson) : {},
-        playerCharacter: worldRelease ? parseWorldReleasePlayerCharacter(worldRelease.manifestJson) : null,
+        manifest,
+        speakerNames: runtimePackageSpeakerNames(manifest),
+        playerCharacter: runtimePackagePlayerCharacter(manifest),
         error: '',
       }
     } catch (error) {
@@ -97,18 +96,18 @@ async function readLibrary(scope: WorkspaceScope): Promise<StoryGameLibraryItem[
 
 async function readSessionDetails(scope: WorkspaceScope, sessionId: number) {
   const session = await assertStoryGameSession(scope, sessionId)
-  const [events, checkpoints, runtimeState, worldRelease] = await Promise.all([
+  const [events, checkpoints, runtimeState, playable] = await Promise.all([
     db.simulationEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.simulationCheckpoints.where('sessionId').equals(sessionId).toArray(),
     readSimulationState(sessionId),
-    session.worldReleaseId == null ? null : db.worldReleases.get(session.worldReleaseId),
+    verifyPlayableSessionPackageV2({ scope, session }),
   ])
   checkpoints.sort((left, right) => right.createdAt - left.createdAt)
   return {
     events,
     checkpoints,
     runtimeState,
-    speakerNames: worldRelease ? parseWorldReleaseSpeakerNames(worldRelease.manifestJson) : {},
+    speakerNames: runtimePackageSpeakerNames(playable.runtimePackage),
   }
 }
 
@@ -279,27 +278,6 @@ export const useStoryGamePlayerStore = create<StoryGamePlayerState>((set, get) =
         const message = error instanceof Error ? error.message : String(error)
         set({ error: message })
         try { await refreshSelected() } catch { /* retain the actionable original error */ }
-        throw error
-      } finally {
-        set({ busy: false })
-      }
-    },
-
-    advanceLegacy: async targetNodeKey => {
-      const sessionId = get().selectedSessionId
-      const scope = get().scope
-      if (sessionId == null || !scope) throw new Error('请先选择旧版文字游戏存档。')
-      set({ busy: true, error: '' })
-      try {
-        await assertStoryGameSession(scope, sessionId)
-        await advanceSimulationNarrative({
-          sessionId,
-          targetNodeKey,
-          baseSequence: get().runtimeState.lastSequence,
-        })
-        await refreshSelected()
-      } catch (error) {
-        set({ error: error instanceof Error ? error.message : String(error) })
         throw error
       } finally {
         set({ busy: false })

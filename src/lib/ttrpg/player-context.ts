@@ -76,7 +76,6 @@ export async function loadTtrpgPlayerRuntimeViewV1(input: {
   const sourceCount = [
     session.gameReleaseId,
     session.gameBuildId,
-    session.ttrpgBuildId,
   ].filter((value) => value != null).length;
   if (
     session.kind !== "ttrpg" ||
@@ -109,21 +108,7 @@ export async function loadTtrpgPlayerRuntimeViewV1(input: {
     runtimePackage = playable.runtimePackage;
     packageHash = playable.packageHash;
     sourceIdentityHash = build.previewHash;
-  } else {
-    const build = await db.ttrpgProductionBuilds.get(session.ttrpgBuildId!);
-    if (!build?.buildHash) fail("TTRPG Product Build 缺少冻结 buildHash");
-    const playable = await verifyPlayableGamePackageSource({
-      scope: input.scope,
-      source: {
-        kind: "ttrpg-build",
-        ttrpgBuildId: session.ttrpgBuildId!,
-        expectedBuildHash: build.buildHash,
-      },
-    });
-    runtimePackage = playable.runtimePackage;
-    packageHash = playable.packageHash;
-    sourceIdentityHash = build.buildHash;
-  }
+  } else fail("旧 TTRPG 专用 Build 已下线；请重新生成统一 Product Build");
   if (
     runtimePackage.productType !== "ttrpg" ||
     !runtimePackage.ttrpg ||

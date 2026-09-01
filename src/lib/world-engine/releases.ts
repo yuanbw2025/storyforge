@@ -1,4 +1,3 @@
-import Dexie from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type {
@@ -17,6 +16,8 @@ import {
 } from '../export/registry-export'
 import { isShareableWorld } from '../product/world-identity'
 import { effectiveWorkKind } from './work-kind'
+import { parsePureWorldReleaseManifestV3, verifyPureWorldReleaseRecordV3 } from './release-codec'
+import { canonicalWorldReleaseJsonV1, hashWorldReleaseValueV1 } from './release-hash'
 
 // Release snapshots are deliberately sparse world-share packages, not v6+
 // full-project backups. v5 predates mandatory adaptation-private tables.
@@ -47,14 +48,7 @@ export function worldReleaseSectionTables(section: WorldReleaseSection): string[
 }
 
 export function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, child]) => child !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-    return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`).join(',')}}`
-  }
-  return JSON.stringify(value) ?? 'null'
+  return canonicalWorldReleaseJsonV1(value)
 }
 
 function strictSnapshotContentJson(snapshot: StrictProjectExportSnapshot): string {
@@ -68,17 +62,9 @@ function strictSnapshotContentJson(snapshot: StrictProjectExportSnapshot): strin
   return stableJson({ ...content, exportedAt: 0 })
 }
 
-async function sha256(value: unknown): Promise<string> {
-  const digestPromise = crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableJson(value)))
-  const digest = Dexie.currentTransaction
-    ? await Dexie.waitFor(digestPromise)
-    : await digestPromise
-  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-}
-
 /** Canonical content hash used by WorldRevision and WorldRelease integrity checks. */
 export async function hashWorldReleaseManifestV1(value: unknown): Promise<string> {
-  return sha256(value)
+  return hashWorldReleaseValueV1(value)
 }
 
 /** Portable, content-bound identity. The local numeric row id is deliberately
@@ -285,7 +271,7 @@ async function buildWorldReleaseManifestInternal(input: {
   const dependencies = await Promise.all(Object.entries(records).map(async ([table, rows]) => ({
     table,
     rowCount: rows.length,
-    contentHash: await sha256(rows),
+    contentHash: await hashWorldReleaseValueV1(rows),
   })))
   const resourceCatalog = dependencies.map(dependency => {
     const semantic = PROJECT_TABLES.find(spec => spec.name === dependency.table)!.worldSemantic!
@@ -354,7 +340,7 @@ async function buildWorldReleaseManifestInternal(input: {
     selectedResourceIds,
     omittedResourceIds,
   }
-  const sourceManifest = { ...sourceManifestBase, contentHash: await sha256(sourceManifestBase) }
+  const sourceManifest = { ...sourceManifestBase, contentHash: await hashWorldReleaseValueV1(sourceManifestBase) }
   return {
     schema: 'storyforge.world-package',
     version: 2,
@@ -470,7 +456,7 @@ export async function createWorldRevision(input: {
 export async function publishWorldRevision(revisionId: number, label?: string): Promise<WorldRelease> {
   const revision = await db.worldRevisions.get(revisionId)
   if (!revision) throw new Error('[release] 修订不存在')
-  const recalculated = await hashWorldReleaseManifestV1(JSON.parse(revision.manifestJson))
+  const recalculated = await hashWorldReleaseManifestV1(parsePureWorldReleaseManifestV3(revision.manifestJson))
   if (recalculated !== revision.contentHash) throw new Error('[release] 修订内容哈希不匹配')
   return db.transaction('rw', db.worldRevisions, db.worldReleases, db.worlds, db.projects, async () => {
     const currentRevision = await db.worldRevisions.get(revisionId)
@@ -646,8 +632,8 @@ export async function diffWorldRevisions(leftId: number, rightId: number): Promi
 }> {
   const [left, right] = await Promise.all([db.worldRevisions.get(leftId), db.worldRevisions.get(rightId)])
   if (!left || !right || left.worldId !== right.worldId) throw new Error('[release] 只能比较同一 World 的修订')
-  const leftRecords = (JSON.parse(left.manifestJson) as WorldReleaseManifestV2).records
-  const rightRecords = (JSON.parse(right.manifestJson) as WorldReleaseManifestV2).records
+  const leftRecords = parsePureWorldReleaseManifestV3(left.manifestJson).records
+  const rightRecords = parsePureWorldReleaseManifestV3(right.manifestJson).records
   const names = new Set([...Object.keys(leftRecords), ...Object.keys(rightRecords)])
   const added: string[] = []; const removed: string[] = []; const changed: string[] = []
   for (const name of names) {
@@ -661,9 +647,7 @@ export async function diffWorldRevisions(leftId: number, rightId: number): Promi
 export async function assertReleaseUnchanged(releaseId: number): Promise<void> {
   const release = await db.worldReleases.get(releaseId)
   if (!release) throw new Error('[release] 发布版本不存在')
-  if (await hashWorldReleaseManifestV1(JSON.parse(release.manifestJson)) !== release.contentHash) {
-    throw new Error('[release] 发布版本已被篡改')
-  }
+  await verifyPureWorldReleaseRecordV3(release as WorldRelease & { id: number })
 }
 
 export async function listWorldRevisions(scope: WorkspaceScope): Promise<WorldRevision[]> {

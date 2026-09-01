@@ -12,7 +12,7 @@ import type {
   NarrativeSimulationContentV1,
   TtrpgRuntimeContentV1,
 } from '../types'
-import type { WorldGameSourceCatalog } from '../text-game/world-generation'
+import type { GameProductionWorldSourceCatalogV2 as WorldGameSourceCatalog } from './world-source'
 
 export type ProductionProductTypeV1 = GameProductType
 

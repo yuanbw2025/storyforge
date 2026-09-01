@@ -1,27 +1,6 @@
-import { interactionVisibilityView } from "../../character-interaction/runtime";
 import { db } from "../../db/schema";
-import {
-  readSimulationState,
-  readSimulationStateVersion,
-} from "../../simulation/runtime";
 import type { AgentRunScopeV1, WorkspaceScope } from "../../types";
-import { assertInstanceBinding } from "../../world-engine/instances";
-import { assertGameReleaseUnchanged } from "../../text-game/releases";
-import { assertReleaseUnchanged } from "../../world-engine/releases";
 import { hashCanonicalValue } from "./hash";
-import {
-  adventureNarrativeProjection,
-  availableAdventureActions,
-} from "../../adventure/runtime";
-import { parseAnyGameReleaseManifest } from "../../text-game/releases";
-import {
-  availableNarrativeSimulationActions,
-  narrativeSimulationProjection,
-  visibleNarrativeSimulationReports,
-} from "../../narrative-simulation/runtime";
-import { openWorldMainlineProjection } from "../../open-world/runtime";
-import { loadTtrpgGmRuntimeViewV1 } from "../../ttrpg/gm-context";
-import { loadTtrpgPlayerRuntimeViewV1 } from "../../ttrpg/player-context";
 
 export interface RuntimeHarnessBoundaryV1 {
   scope: AgentRunScopeV1 & { runtime: NonNullable<AgentRunScopeV1["runtime"]> };
@@ -32,21 +11,44 @@ function fail(message: string): never {
   throw new Error(`[runtime-harness] ${message}`);
 }
 
-async function releaseHash(sessionId: number): Promise<string> {
+// Runtime Skills are a formal but route-local subsystem. Lazy boundaries keep
+// all product engines and release parsers out of the writing application's
+// initial bundle while preserving one verified implementation at execution.
+async function readRuntimeState(sessionId: number) {
+  return (await import("../../simulation/runtime")).readSimulationState(sessionId);
+}
+
+async function readRuntimeStateVersion(sessionId: number) {
+  return (await import("../../simulation/runtime")).readSimulationStateVersion(sessionId);
+}
+
+async function assertRuntimeInstanceBinding(sessionId: number, scope: WorkspaceScope) {
+  return (await import("../../world-engine/instances")).assertInstanceBinding(sessionId, scope);
+}
+
+async function frozenRuntimeSource(sessionId: number) {
   const session = await db.simulationSessions.get(sessionId);
   if (!session) fail("运行实例不存在");
-  if (session.gameReleaseId != null) {
-    return (await assertGameReleaseUnchanged(session.gameReleaseId))
-      .contentHash;
+  if (
+    session.worldId == null ||
+    session.workId == null ||
+    !session.runtimeSourceHash?.trim()
+  ) {
+    fail("正式运行实例缺少工作区或冻结运行源");
   }
-  if (session.worldReleaseId != null) {
-    await assertReleaseUnchanged(session.worldReleaseId);
-    const release = await db.worldReleases.get(session.worldReleaseId);
-    if (!release) fail("WorldRelease 在验证后丢失");
-    return release.contentHash;
+  const verified = await (await import("../../game-production/preview-source"))
+    .verifyPlayableSessionPackageV2({
+    scope: {
+      projectId: session.projectId,
+      worldId: session.worldId,
+      workId: session.workId,
+    },
+    session,
+  });
+  if (verified.runtimeSourceHash !== session.runtimeSourceHash) {
+    fail("运行实例与冻结 RuntimePackage 不一致");
   }
-  if (session.draftSnapshotHash?.trim()) return session.draftSnapshotHash;
-  fail("运行实例没有可验证的发布或草稿快照哈希");
+  return verified;
 }
 
 /** Capture the exact visible runtime input used by one character-facing model call. */
@@ -55,7 +57,7 @@ export async function captureRuntimeHarnessBoundaryV1(input: {
   simulationSessionId: number;
   participantKey: string;
 }): Promise<RuntimeHarnessBoundaryV1> {
-  const session = await assertInstanceBinding(
+  const session = await assertRuntimeInstanceBinding(
     input.simulationSessionId,
     input.scope,
   );
@@ -68,12 +70,13 @@ export async function captureRuntimeHarnessBoundaryV1(input: {
   }
   const participantKey = input.participantKey.trim();
   if (!participantKey) fail("缺少角色参与者 key");
-  const [version, state, frozenReleaseHash] = await Promise.all([
-    readSimulationStateVersion(session.id!),
-    readSimulationState(session.id!),
-    releaseHash(session.id!),
+  const [version, state, frozen] = await Promise.all([
+    readRuntimeStateVersion(session.id!),
+    readRuntimeState(session.id!),
+    frozenRuntimeSource(session.id!),
   ]);
   if (!state.interaction) fail("实例没有 CHATGAME-2 互动状态");
+  const { interactionVisibilityView } = await import("../../character-interaction/runtime");
   const visibilityHash = await hashCanonicalValue(
     interactionVisibilityView(state.interaction, participantKey),
   );
@@ -82,7 +85,7 @@ export async function captureRuntimeHarnessBoundaryV1(input: {
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
-    releaseHash: frozenReleaseHash,
+    releaseHash: frozen.runtimeSourceHash,
   };
   return {
     scope: {
@@ -118,33 +121,37 @@ export async function captureAdventureRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
   simulationSessionId: number;
 }): Promise<RuntimeHarnessBoundaryV1> {
-  const session = await assertInstanceBinding(
+  const session = await assertRuntimeInstanceBinding(
     input.simulationSessionId,
     input.scope,
   );
   if (
     (session.kind !== "textadventure" && session.kind !== "textworld") ||
-    session.gameReleaseId == null
+    (session.gameReleaseId == null && session.gameBuildId == null)
   ) {
     fail("文字冒险技能只能绑定带冻结冒险状态的正式实例");
   }
-  const [version, state, frozenReleaseHash, release] = await Promise.all([
-    readSimulationStateVersion(session.id!),
-    readSimulationState(session.id!),
-    releaseHash(session.id!),
-    assertGameReleaseUnchanged(session.gameReleaseId),
+  const [version, state, frozen] = await Promise.all([
+    readRuntimeStateVersion(session.id!),
+    readRuntimeState(session.id!),
+    frozenRuntimeSource(session.id!),
   ]);
   if (!state.adventure) fail("实例没有 TEXTADV-1 冒险状态");
-  const parsedManifest = parseAnyGameReleaseManifest(release.manifestJson);
-  const manifest =
-    parsedManifest.productType === "text-adventure" ||
-    parsedManifest.productType === "text-open-world"
-      ? parsedManifest
-      : fail("实例没有可用的冻结冒险内容");
+  if (
+    (frozen.runtimePackage.productType !== "text-adventure" &&
+      frozen.runtimePackage.productType !== "text-open-world") ||
+    !frozen.runtimePackage.adventure
+  ) {
+    fail("实例冻结 RuntimePackage 缺少冒险模块");
+  }
+  const {
+    adventureNarrativeProjection,
+    availableAdventureActions,
+  } = await import("../../adventure/runtime");
   const visibilityHash = await hashCanonicalValue({
     adventure: adventureNarrativeProjection(state.adventure),
     actions: availableAdventureActions(
-      manifest.adventure,
+      frozen.runtimePackage.adventure,
       state.adventure,
       state.narrative?.variables,
     ).map((item) => ({
@@ -163,7 +170,7 @@ export async function captureAdventureRuntimeHarnessBoundaryV1(input: {
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
-    releaseHash: frozenReleaseHash,
+    releaseHash: frozen.runtimeSourceHash,
   };
   return {
     scope: {
@@ -195,33 +202,38 @@ export async function captureNarrativeSimulationRuntimeHarnessBoundaryV1(input: 
   scope: WorkspaceScope;
   simulationSessionId: number;
 }): Promise<RuntimeHarnessBoundaryV1> {
-  const session = await assertInstanceBinding(
+  const session = await assertRuntimeInstanceBinding(
     input.simulationSessionId,
     input.scope,
   );
   if (
     (session.kind !== "textsimulation" && session.kind !== "textworld") ||
-    session.gameReleaseId == null
+    (session.gameReleaseId == null && session.gameBuildId == null)
   ) {
     fail("叙事模拟技能只能绑定带冻结模拟状态的正式实例");
   }
-  const [version, state, frozenReleaseHash, release] = await Promise.all([
-    readSimulationStateVersion(session.id!),
-    readSimulationState(session.id!),
-    releaseHash(session.id!),
-    assertGameReleaseUnchanged(session.gameReleaseId),
+  const [version, state, frozen] = await Promise.all([
+    readRuntimeStateVersion(session.id!),
+    readRuntimeState(session.id!),
+    frozenRuntimeSource(session.id!),
   ]);
   if (!state.narrativeSimulation) fail("实例没有 TEXTSIM-1 模拟状态");
-  const parsedManifest = parseAnyGameReleaseManifest(release.manifestJson);
-  const manifest =
-    parsedManifest.productType === "narrative-simulation" ||
-    parsedManifest.productType === "text-open-world"
-      ? parsedManifest
-      : fail("实例没有可用的冻结模拟内容");
+  if (
+    (frozen.runtimePackage.productType !== "narrative-simulation" &&
+      frozen.runtimePackage.productType !== "text-open-world") ||
+    !frozen.runtimePackage.simulation
+  ) {
+    fail("实例冻结 RuntimePackage 缺少叙事模拟模块");
+  }
+  const {
+    availableNarrativeSimulationActions,
+    narrativeSimulationProjection,
+    visibleNarrativeSimulationReports,
+  } = await import("../../narrative-simulation/runtime");
   const visibilityHash = await hashCanonicalValue({
     simulation: narrativeSimulationProjection(state.narrativeSimulation),
     actions: availableNarrativeSimulationActions(
-      manifest.simulation,
+      frozen.runtimePackage.simulation,
       state.narrativeSimulation,
     ).map((item) => ({
       key: item.action.key,
@@ -243,7 +255,7 @@ export async function captureNarrativeSimulationRuntimeHarnessBoundaryV1(input: 
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
-    releaseHash: frozenReleaseHash,
+    releaseHash: frozen.runtimeSourceHash,
   };
   return {
     scope: {
@@ -275,30 +287,33 @@ export async function captureOpenWorldRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
   simulationSessionId: number;
 }): Promise<RuntimeHarnessBoundaryV1> {
-  const session = await assertInstanceBinding(
+  const session = await assertRuntimeInstanceBinding(
     input.simulationSessionId,
     input.scope,
   );
-  if (session.kind !== "textworld" || session.gameReleaseId == null) {
+  if (
+    session.kind !== "textworld" ||
+    (session.gameReleaseId == null && session.gameBuildId == null)
+  ) {
     fail("开放世界技能只能绑定正式 textworld 实例");
   }
-  const [version, state, frozenReleaseHash, release] = await Promise.all([
-    readSimulationStateVersion(session.id!),
-    readSimulationState(session.id!),
-    releaseHash(session.id!),
-    assertGameReleaseUnchanged(session.gameReleaseId),
+  const [version, state, frozen] = await Promise.all([
+    readRuntimeStateVersion(session.id!),
+    readRuntimeState(session.id!),
+    frozenRuntimeSource(session.id!),
   ]);
   if (!state.openWorld) fail("实例没有 TEXTWORLD-1 区域状态");
-  const manifest = parseAnyGameReleaseManifest(release.manifestJson);
-  if (manifest.productType !== "text-open-world")
-    fail("实例没有开放世界冻结发布");
-  const region = manifest.openWorld.regions.find(
+  if (frozen.runtimePackage.productType !== "text-open-world" || !frozen.runtimePackage.openWorld) {
+    fail("实例冻结 RuntimePackage 缺少开放世界模块");
+  }
+  const region = frozen.runtimePackage.openWorld.regions.find(
     (item) => item.key === state.openWorld!.currentRegionKey,
   );
   const projection = state.openWorld.regionalProjections.find(
     (item) => item.regionKey === state.openWorld!.currentRegionKey,
   );
   if (!region || !projection) fail("当前区域投影不完整");
+  const { openWorldMainlineProjection } = await import("../../open-world/runtime");
   const visibilityHash = await hashCanonicalValue({
     world: openWorldMainlineProjection(
       state.openWorld,
@@ -320,7 +335,7 @@ export async function captureOpenWorldRuntimeHarnessBoundaryV1(input: {
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
-    releaseHash: frozenReleaseHash,
+    releaseHash: frozen.runtimeSourceHash,
   };
   return {
     scope: {
@@ -352,13 +367,13 @@ export async function captureTtrpgGmRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
   simulationSessionId: number;
 }): Promise<RuntimeHarnessBoundaryV1> {
-  const view = await loadTtrpgGmRuntimeViewV1(input);
+  const view = await (await import("../../ttrpg/gm-context")).loadTtrpgGmRuntimeViewV1(input);
   if (!view.safety.completed || !view.scene || !view.latestAction) {
     fail("可信 AI GM 需要已完成 Session Zero、已打开场景和最近正式规则行动");
   }
   const [version, state] = await Promise.all([
-    readSimulationStateVersion(view.session.id),
-    readSimulationState(view.session.id),
+    readRuntimeStateVersion(view.session.id),
+    readRuntimeState(view.session.id),
   ]);
   if (
     version.sequence !== view.session.eventSequence ||
@@ -406,7 +421,7 @@ export async function captureTtrpgGmActorRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
   simulationSessionId: number;
 }): Promise<RuntimeHarnessBoundaryV1> {
-  const view = await loadTtrpgGmRuntimeViewV1(input);
+  const view = await (await import("../../ttrpg/gm-context")).loadTtrpgGmRuntimeViewV1(input);
   if (
     !view.safety.completed ||
     view.safety.status !== "active" ||
@@ -419,7 +434,7 @@ export async function captureTtrpgGmActorRuntimeHarnessBoundaryV1(input: {
       "AI KP 角色行动需要活动场景、AI/混合 GM 权威和当前 NPC 的合法行动闭集",
     );
   }
-  const version = await readSimulationStateVersion(view.session.id);
+  const version = await readRuntimeStateVersion(view.session.id);
   if (version.sequence !== view.session.eventSequence)
     fail("AI KP 角色行动上下文已经变化");
   const visibilityHash = await hashCanonicalValue(view);
@@ -461,10 +476,10 @@ export async function captureTtrpgPlayerRuntimeHarnessBoundaryV1(input: {
   simulationSessionId: number;
   actorKey: string;
 }): Promise<RuntimeHarnessBoundaryV1> {
-  const view = await loadTtrpgPlayerRuntimeViewV1(input);
+  const view = await (await import("../../ttrpg/player-context")).loadTtrpgPlayerRuntimeViewV1(input);
   const [version, state] = await Promise.all([
-    readSimulationStateVersion(view.session.id),
-    readSimulationState(view.session.id),
+    readRuntimeStateVersion(view.session.id),
+    readRuntimeState(view.session.id),
   ]);
   if (
     version.sequence !== view.session.eventSequence ||

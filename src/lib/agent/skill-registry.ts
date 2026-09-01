@@ -57,7 +57,6 @@ export type AgentSkillExecutionModeV1 =
   | 'storyline-progress'
   | 'character-driven'
   | 'character-revision'
-  | 'world-game'
   | 'impact-summary-regenerate'
   | 'volumes'
   | 'chapters'
@@ -91,7 +90,6 @@ export type AgentSkillExecutionModeV1 =
   | 'ttrpg-gm-narrator'
   | 'ttrpg-gm-actor-intent'
   | 'ttrpg-player-intent'
-  | 'ttrpg-character-sheet-candidate'
   | 'game-production'
   | 'adaptation-brief'
   | 'adaptation-impact'
@@ -207,7 +205,6 @@ const OUTLINE_CONTEXT_GATEWAY_POLICY = {
   ],
 } as const satisfies AgentSkillContextGatewayPolicyV1
 
-const WORLD_GAME_CONTEXT_SOURCE_KEYS = ['worldGameAuthoring'] as const
 const ADAPTATION_BRIEF_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'characters', 'worldview', 'creativeRules'] as const
 const ADAPTATION_PLAN_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'characters'] as const
 const SCREENPLAY_SCENES_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'adaptation.currentPlan', 'characters'] as const
@@ -689,24 +686,6 @@ const OUTLINE_VOLUME_INPUT_POLICY = {
   },
 } as const satisfies AgentSkillInputPolicyV1
 
-const WORLD_GAME_INPUT_POLICY = {
-  sourceKeys: ['worldGameAuthoring'],
-  states: {
-    empty: {
-      handling: 'require-upstream',
-      instruction: '缺少已发布的冻结世界或叙事时停止生成，先完成 WorldRelease。',
-    },
-    partial: {
-      handling: 'grounded-transform',
-      instruction: '把已选择的冻结世界资产作为创作地基，补足新的危机、行动、分支后果和结局；不要逐字复刻来源剧情。',
-    },
-    complete: {
-      handling: 'grounded-transform',
-      instruction: '使用完整冻结创作包演化新的可玩剧情；保留便携身份引用，同时让冲突、推进、选择和结局形成独立游戏体验。',
-    },
-  },
-} as const satisfies AgentSkillInputPolicyV1
-
 const OUTLINE_STORY_ARC_INPUT_POLICY = {
   sourceKeys: ['worldview', 'storyCore', 'characters'],
   states: {
@@ -984,7 +963,6 @@ const CHARACTER_SUPPLEMENT_COMPRESSION_POLICY = compressionPolicy([
 ])
 const INSPIRATION_COMPRESSION_POLICY = compressionPolicy(['inspirationWorkspace'])
 const OUTLINE_COMPRESSION_POLICY = compressionPolicy(['ragSelection'])
-const WORLD_GAME_COMPRESSION_POLICY = compressionPolicy(['worldGameAuthoring'])
 const OUTLINE_STORY_ARC_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'storyCore',
@@ -1132,24 +1110,6 @@ const TTRPG_PLAYER_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   },
 }
 const TTRPG_PLAYER_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['ttrpgPlayerRuntime'])
-const TTRPG_CHARACTER_AUTHORING_INPUT_POLICY: AgentSkillInputPolicyV1 = {
-  sourceKeys: ['ttrpg.character-authoring'],
-  states: {
-    empty: { handling: 'require-upstream', instruction: '缺少冻结 RulePack、CampaignPack 或目标玩家角色时停止，不得凭空车卡。' },
-    partial: { handling: 'require-upstream', instruction: '单角色车卡上下文不完整时停止，等待重新装配。' },
-    complete: { handling: 'grounded-transform', instruction: '只能提出角色卡候选；数值必须遵守 RulePack，锁定字段不得改变，采用前必须由作者确认。' },
-  },
-}
-const TTRPG_CHARACTER_AUTHORING_COMPRESSION_POLICY = compressionPolicy(['ttrpg.character-authoring'])
-const AVG_AUTHORING_INPUT_POLICY: AgentSkillInputPolicyV1 = {
-  sourceKeys: ['avgAuthoring'],
-  states: {
-    empty: { handling: 'require-upstream', instruction: '缺少 AVG 媒资与演出上下文时停止，不得臆造媒资 key。' },
-    partial: { handling: 'grounded-transform', instruction: '只指出缺失项和可用改进，不得把建议直接写入演出模块。' },
-    complete: { handling: 'grounded-transform', instruction: '基于已登记媒资与 Beat 给出只读演出审阅建议。' },
-  },
-}
-const AVG_AUTHORING_COMPRESSION_POLICY = compressionPolicy(['avgAuthoring'])
 const PROSE_STYLE_LEARNING_INPUT_POLICY = {
   sourceKeys: ['styleLearningBaseline'],
   states: {
@@ -2071,38 +2031,6 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
-    id: 'outline.world-game',
-    agentId: 'outline',
-    defaultForAgent: false,
-    label: '冻结世界演化为文字游戏',
-    owner: 'outline-agent',
-    promptVersion: 'world-game-copilot-v1',
-    executionMode: 'world-game',
-    contextTaskKind: 'agent-outline',
-    readToolNames: [],
-    contextSourceKeys: WORLD_GAME_CONTEXT_SOURCE_KEYS,
-    optionalContextSourceKeys: [],
-    inputPolicy: WORLD_GAME_INPUT_POLICY,
-    contextCompression: WORLD_GAME_COMPRESSION_POLICY,
-    maxOutputTokens: 12_000,
-    writeTargets: [
-      { table: 'narrativeModules', fields: [], adoptionExtension: 'world-game-narrative-modules' },
-      { table: 'narrativeNodes', fields: [], adoptionExtension: 'world-game-narrative-nodes' },
-      { table: 'narrativeBeats', fields: [], adoptionExtension: 'world-game-narrative-beats' },
-      { table: 'narrativeChoices', fields: [], adoptionExtension: 'world-game-narrative-choices' },
-      { table: 'gameDefinitions', fields: [], adoptionExtension: 'world-game-definitions' },
-      { table: 'adventureModules', fields: [], adoptionExtension: 'world-game-adventure-modules' },
-      { table: 'interactionCharacterProfiles', fields: [], adoptionExtension: 'world-game-interaction-profiles' },
-      { table: 'interactionSceneTemplates', fields: [], adoptionExtension: 'world-game-interaction-scenes' },
-      { table: 'avgPresentationModules', fields: [], adoptionExtension: 'world-game-avg-presentations' },
-      { table: 'avgMediaAssets', fields: [], adoptionExtension: 'world-game-avg-media-assets' },
-      { table: 'avgMediaBlobs', fields: [], adoptionExtension: 'world-game-avg-media-blobs' },
-    ],
-    lastVerifiedAt: '2026-08-15',
-    regressionTests: ['R-WORLDGAME5-main-agent-authoring'],
-  },
-  {
-    version: 1,
     id: 'outline.adaptation-brief',
     agentId: 'outline',
     defaultForAgent: false,
@@ -2786,28 +2714,8 @@ export const AGENT_SKILLS = [
     contextCompression: ADVENTURE_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 1_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTADV1-harness'],
-  },
-  {
-    version: 1,
-    id: 'prose.avg-presentation-review',
-    agentId: 'prose',
-    defaultForAgent: false,
-    label: 'AVG 演出只读审阅',
-    owner: 'prose-agent',
-    promptVersion: 'avg-presentation-review-v1',
-    executionMode: 'review',
-    contextTaskKind: 'agent-prose',
-    readToolNames: [],
-    contextSourceKeys: ['avgAuthoring'],
-    optionalContextSourceKeys: [],
-    inputPolicy: AVG_AUTHORING_INPUT_POLICY,
-    contextCompression: AVG_AUTHORING_COMPRESSION_POLICY,
-    maxOutputTokens: 2_000,
-    writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-AVG1-core'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2826,8 +2734,8 @@ export const AGENT_SKILLS = [
     contextCompression: ADVENTURE_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTADV1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2846,8 +2754,8 @@ export const AGENT_SKILLS = [
     contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTSIM1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2866,8 +2774,8 @@ export const AGENT_SKILLS = [
     contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTSIM1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2886,8 +2794,8 @@ export const AGENT_SKILLS = [
     contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTSIM1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2906,8 +2814,8 @@ export const AGENT_SKILLS = [
     contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTSIM1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2926,8 +2834,8 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTWORLD1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2946,46 +2854,8 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTWORLD1-harness'],
-  },
-  {
-    version: 1,
-    id: 'character.interaction-production-step.v1',
-    agentId: 'outline',
-    defaultForAgent: false,
-    label: '冻结世界角色互动生产候选',
-    owner: 'outline-agent',
-    promptVersion: 'character-interaction-production-step-v1',
-    executionMode: 'character-interaction-production',
-    contextTaskKind: 'agent-outline',
-    readToolNames: [],
-    contextSourceKeys: ['characterInteractionProduction'],
-    optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['characterInteractionProduction']),
-    contextCompression: compressionPolicy(['characterInteractionProduction']),
-    contextGateway: {
-      version: 1,
-      rollout: 'required',
-      requiredWriteTargets: [],
-      providerSourceKeys: ['worldRelease'],
-      // ProductSourcePlan performs the product-specific narrowing. The Skill
-      // is the static ceiling and therefore grants only registered kinds.
-      allowedResourceKinds: CONTEXT_RESOURCE_KINDS_V1,
-      allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
-      maxReadCalls: 200,
-      maxRetrievedTokens: 100_000,
-      maxPlanningSteps: 12,
-      maxPlanningModelTokens: 100_000,
-      allowOriginalRead: true,
-      additionalReadToolNames: [
-        'list_context_catalog', 'search_context', 'read_context_resource', 'read_original_evidence',
-      ],
-    },
-    maxOutputTokens: 8_000,
-    writeTargets: [],
-    lastVerifiedAt: '2026-08-25',
-    regressionTests: ['R-CHATGAME3E-production-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -3004,8 +2874,8 @@ export const AGENT_SKILLS = [
     contextCompression: TTRPG_GM_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-TTRPG2C-trustworthy-ai-gm'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
     version: 1,
@@ -3024,8 +2894,8 @@ export const AGENT_SKILLS = [
     contextCompression: TTRPG_PLAYER_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 1_200,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-TTRPG2F-ai-player'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
     version: 1,
@@ -3044,28 +2914,8 @@ export const AGENT_SKILLS = [
     contextCompression: TTRPG_GM_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 1_200,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-TTRPG3O-ai-gm-actor'],
-  },
-  {
-    version: 1,
-    id: 'prose.ttrpg-character-sheet-candidate',
-    agentId: 'prose',
-    defaultForAgent: false,
-    label: 'TTRPG 完整车卡候选',
-    owner: 'prose-agent',
-    promptVersion: 'ttrpg-character-sheet-candidate-v2',
-    executionMode: 'ttrpg-character-sheet-candidate',
-    contextTaskKind: 'agent-prose',
-    readToolNames: [],
-    contextSourceKeys: ['ttrpg.character-authoring'],
-    optionalContextSourceKeys: [],
-    inputPolicy: TTRPG_CHARACTER_AUTHORING_INPUT_POLICY,
-    contextCompression: TTRPG_CHARACTER_AUTHORING_COMPRESSION_POLICY,
-    maxOutputTokens: 4_000,
-    writeTargets: [],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-TTRPG3F-character-sheet-ai'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
     version: 1,
@@ -3082,6 +2932,25 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: gameProductionInputPolicy(['game-production.consultation-source']),
     contextCompression: compressionPolicy(['game-production.consultation-source']),
+    contextGateway: {
+      version: 1,
+      rollout: 'required',
+      requiredWriteTargets: ['gameProductionBriefs.userIntentSummary'],
+      providerSourceKeys: ['worldRelease'],
+      allowedResourceKinds: [...CONTEXT_RESOURCE_KINDS_V1],
+      allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
+      maxReadCalls: 200,
+      maxRetrievedTokens: 100_000,
+      maxPlanningSteps: 8,
+      maxPlanningModelTokens: 24_000,
+      allowOriginalRead: true,
+      additionalReadToolNames: [
+        'list_context_catalog',
+        'search_context',
+        'read_context_resource',
+        'read_original_evidence',
+      ],
+    },
     maxOutputTokens: 4_000,
     writeTargets: [{
       table: 'gameProductionBriefs',
@@ -3501,8 +3370,8 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'world-game', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-brief', 'adaptation-impact', 'screenplay-plan', 'comic-plan', 'comic-storyboard', 'character-interaction-production', 'game-production']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'simulation-briefing', 'simulation-advisor', 'simulation-narrator', 'simulation-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scenes', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-player-intent', 'ttrpg-character-sheet-candidate']),
+    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-brief', 'adaptation-impact', 'screenplay-plan', 'comic-plan', 'comic-storyboard', 'character-interaction-production', 'game-production']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'simulation-briefing', 'simulation-advisor', 'simulation-narrator', 'simulation-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scenes', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-player-intent']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

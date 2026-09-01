@@ -34,7 +34,7 @@ async function seedProductionGraph() {
   const productionId = await db.gameProductions.add({
     projectId, worldId, workId, productionKey: 'production.harbor', title: '雾港游戏', status: 'producing',
     stateRevision: 3, controlEpoch: 1, currentBriefRevision: 1, currentBuildNumber: 1,
-    currentGameDefinitionId: null, currentGameReleaseId: null, lastErrorJson: '{}', createdAt: now, updatedAt: now,
+    currentGameReleaseId: null, lastErrorJson: '{}', createdAt: now, updatedAt: now,
   }) as number
   await db.gameProductionBriefs.add({
     projectId, worldId, workId, productionId, revision: 1, parentRevision: null, status: 'authorized',
@@ -53,7 +53,7 @@ async function seedProductionGraph() {
     budgetLedgerJson: '{}', manifestJson: '{}', manifestHash: HASH_B, packageHash: '',
     previewManifestJson: '{}', previewHash: '', qualityReportJson: '{}', qualityReportHash: '',
     compatibilityJson: '{}', rootTerminalReceiptHash: null, adoptionIntentHash: null,
-    adoptedGameDefinitionId: null, releasedGameReleaseId: null, failureJson: '{}', authorizedAt: now,
+    releasedGameReleaseId: null, failureJson: '{}', authorizedAt: now,
     startedAt: now, completedAt: null, createdAt: now, updatedAt: now,
   }) as number
   await db.gameQualityGateReceipts.add({

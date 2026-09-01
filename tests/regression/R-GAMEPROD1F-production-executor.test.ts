@@ -43,24 +43,11 @@ import {
   readTtrpgSessionParticipantsV2,
 } from '../../src/lib/ttrpg/participants'
 import type { ProductionProductTypeV1 } from '../../src/lib/game-production/product-adapters'
-import { seedStoryGameAcceptanceSample } from '../../src/lib/text-game/authoring'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { publishWorldRevision } from '../../src/lib/world-engine/releases'
-import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
+import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'prototype') {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
-    name: 'formal-executor', genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
-    description: '', targetWordCount: 10_000, createdAt: now, updatedAt: now,
-  } as never) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
-  const definition = await seedStoryGameAcceptanceSample({ scope: owned.scope })
-  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
-    scope: owned.scope, label: 'formal source', selectedNarrativeModuleIds: [definition.narrativeModuleId],
-  })
-  const release = await publishWorldRevision(revision.id!)
+  const owned = await seedCurrentProductWorld('formal-executor')
+  const release = owned.release
   const suggestions = await suggestGameStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
   const brief = await draftGameProductionBriefV3({
     scope: owned.scope, worldReleaseId: release.id!, suggestionKey: suggestions.suggestions[0].suggestionKey,
@@ -92,37 +79,8 @@ async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'p
 }
 
 async function fixtureForProduct(productType: ProductionProductTypeV1) {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
-    name: `formal-${productType}`, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
-    description: '', targetWordCount: 10_000, createdAt: now, updatedAt: now,
-  } as never) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
-  if (productType === 'ttrpg') {
-    await db.characters.bulkAdd([
-      {
-        projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-        isCrossWorld: true, name: '林舟', role: 'protagonist', roleWeight: 'main',
-        identity: '谨慎的调查者', createdAt: now, updatedAt: now,
-      },
-      {
-        projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-        isCrossWorld: true, name: '守潮人', role: 'supporting', roleWeight: 'npc',
-        identity: '知道旧港秘密的向导', createdAt: now, updatedAt: now,
-      },
-    ] as never[])
-    await db.importantLocations.add({
-      projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-      parentId: null, name: '雾港', type: 'harbor', description: '退潮时显露的旧港。',
-      createdAt: now, updatedAt: now,
-    } as never)
-  }
-  const definition = await seedStoryGameAcceptanceSample({ scope: owned.scope })
-  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
-    scope: owned.scope, label: `${productType} source`, selectedNarrativeModuleIds: [definition.narrativeModuleId],
-  })
-  const release = await publishWorldRevision(revision.id!)
+  const owned = await seedCurrentProductWorld(`formal-${productType}`)
+  const release = owned.release
   const suggestions = await suggestGameStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
   const brief = await draftGameProductionBriefV3({
     scope: owned.scope, worldReleaseId: release.id!, suggestionKey: suggestions.suggestions[0].suggestionKey,
@@ -160,6 +118,12 @@ async function fixtureForProduct(productType: ProductionProductTypeV1) {
     throw new Error(`authorize ${productType} failed: ${authorized.errorCode ?? 'unknown'} ${String(authorized.result.message ?? '')}`)
   }
   return { ...owned, release, brief, productionId: created.productionId }
+}
+
+function firstCharacterAnchor(brief: Awaited<ReturnType<typeof fixture>>['brief']): string {
+  const selected = brief.source.selection.roleBindings.characters
+    ?? brief.source.selection.roleBindings.participants ?? []
+  return selected.length ? 'character:1' : 'intent:protagonist'
 }
 
 async function completeAvgBuildPreviewMainRoute(input: {
@@ -348,8 +312,7 @@ describe('R-GAMEPROD-1F · configured formal production executor', () => {
     const outputs = modelOutputs(
       owned.brief.source.worldContentHash,
       'avg',
-      owned.brief.source.selection.characterExportIds.length
-        ? `character:${owned.brief.source.selection.characterExportIds[0]}` : 'intent:protagonist',
+      firstCharacterAnchor(owned.brief),
       owned.brief.intent.playerRole,
     )
     const forgedAnchors = structuredClone(outputs['media.requirements'])
@@ -357,8 +320,7 @@ describe('R-GAMEPROD-1F · configured formal production executor', () => {
     expect(() => parseGameMediaRequirementsArtifactV2(forgedAnchors, owned.brief))
       .toThrow(/角色锚点未绑定 Brief 冻结角色/)
     const anchoredScene = structuredClone(outputs['media.requirements'])
-    anchoredScene.visual[0].characterAnchorRefs = [owned.brief.source.selection.characterExportIds.length
-      ? `character:${owned.brief.source.selection.characterExportIds[0]}` : 'intent:protagonist']
+    anchoredScene.visual[0].characterAnchorRefs = [firstCharacterAnchor(owned.brief)]
     anchoredScene.visual[0].hardConstraints = [
       '不得写回世界正式表',
       '保持角色身份、年龄段与核心视觉特征',
@@ -569,8 +531,7 @@ describe('R-GAMEPROD-1F · configured formal production executor', () => {
     const outputs = modelOutputs(
       owned.brief.source.worldContentHash,
       'avg',
-      owned.brief.source.selection.characterExportIds.length
-        ? `character:${owned.brief.source.selection.characterExportIds[0]}` : 'intent:protagonist',
+      firstCharacterAnchor(owned.brief),
       owned.brief.intent.playerRole,
     )
     const runText: ProductionTextRunnerV1 = async request => {
@@ -631,8 +592,7 @@ describe('R-GAMEPROD-1F · configured formal production executor', () => {
     const characterArtifact = providerMedia.find(item => item.mediaKind === 'character-pose')!
     expect(JSON.parse(characterArtifact.qualityJson)).toMatchObject({
       anchorRulesHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-      characterAnchorRefs: [owned.brief.source.selection.characterExportIds.length
-        ? `character:${owned.brief.source.selection.characterExportIds[0]}` : 'intent:protagonist'],
+      characterAnchorRefs: [firstCharacterAnchor(owned.brief)],
       hardConstraintsApplied: expect.arrayContaining([
         '不得写回世界正式表', '保持角色身份、年龄段与核心视觉特征',
         `角色定位：${owned.brief.intent.playerRole}`,
@@ -722,8 +682,7 @@ describe('R-GAMEPROD-1F · configured formal production executor', () => {
     const outputs = modelOutputs(
       owned.brief.source.worldContentHash,
       'avg',
-      owned.brief.source.selection.characterExportIds.length
-        ? `character:${owned.brief.source.selection.characterExportIds[0]}` : 'intent:protagonist',
+      firstCharacterAnchor(owned.brief),
       owned.brief.intent.playerRole,
     )
     const calls: string[] = []

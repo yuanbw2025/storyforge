@@ -1,5 +1,5 @@
 import type { GameRuntimePackageV2 } from "./text-game";
-import type { AvgMediaKind } from "./avg";
+import type { ProductMediaKind } from "./product-media";
 import type {
   TtrpgHouseRuleDiffV2,
   TtrpgHouseRuleOverlayV2,
@@ -41,15 +41,13 @@ export interface GameBuildPreviewManifestV1 {
 
 export type PlayableGameSourceV1 =
   | { kind: "release"; gameReleaseId: number }
-  | { kind: "build"; gameBuildId: number; expectedPreviewHash: string }
-  | { kind: "ttrpg-build"; ttrpgBuildId: number; expectedBuildHash: string };
+  | { kind: "build"; gameBuildId: number; expectedPreviewHash: string };
 
 export interface ResolvedPlayableGamePackageV2 {
   source: PlayableGameSourceV1;
   runtimePackage: GameRuntimePackageV2;
   packageHash: string;
   runtimeSourceHash: string;
-  sourceWorldReleaseId: number | null;
   mediaResolver: GameMediaResolverV1;
 }
 
@@ -162,20 +160,19 @@ export interface GameStartingPointSuggestionV1 {
 
 /** Human-reviewable portable source facets exposed by the frozen WorldRelease. */
 export interface GameProductionSourceOptionV1 {
-  exportId: number;
+  resourceKey: string;
   label: string;
   summary: string;
   kind: string | null;
 }
 
 export interface GameProductionSourceOptionsV1 {
-  narrativeModules: GameProductionSourceOptionV1[];
+  storySources: GameProductionSourceOptionV1[];
   characters: GameProductionSourceOptionV1[];
   importantLocations: GameProductionSourceOptionV1[];
   artifacts: GameProductionSourceOptionV1[];
   codexEntries: GameProductionSourceOptionV1[];
   storyArcs: GameProductionSourceOptionV1[];
-  avgMediaAssets: GameProductionSourceOptionV1[];
 }
 
 /**
@@ -183,13 +180,12 @@ export interface GameProductionSourceOptionsV1 {
  * derived by the compiler so callers cannot smuggle dangling references.
  */
 export interface GameProductionSourceSelectionV1 {
-  narrativeModuleExportIds: number[];
-  characterExportIds: number[];
-  importantLocationExportIds: number[];
-  artifactExportIds: number[];
-  codexEntryExportIds: number[];
-  storyArcExportIds: number[];
-  avgMediaAssetExportIds: number[];
+  storyResourceKeys: string[];
+  characterResourceKeys: string[];
+  importantLocationResourceKeys: string[];
+  artifactResourceKeys: string[];
+  codexEntryResourceKeys: string[];
+  storyArcResourceKeys: string[];
 }
 
 export interface GameProductionScaleV1 {
@@ -206,7 +202,7 @@ export interface GameProductionMediaProfileV1 {
   musicTrackCount: number;
   sfxCount: number;
   voiceLineCount: number;
-  requiredMediaKinds: AvgMediaKind[];
+  requiredMediaKinds: ProductMediaKind[];
 }
 
 export interface GameConsultationBudgetV1 {
@@ -263,7 +259,7 @@ export interface TtrpgProductionSeatV2 {
   controller: "human" | "ai" | "open";
   role: "player" | "assistant-gm";
   characterMode: "world-template" | "quick-card" | "manual" | "ai-generated";
-  sourceCharacterExportId: number | null;
+  sourceCharacterResourceKey: string | null;
   characterName: string;
   rankTier: "D" | "C" | "B" | "A" | null;
   privateGoal: string;
@@ -420,7 +416,7 @@ export interface GameProductionBriefV3 {
   source: {
     worldReleaseId: number;
     worldContentHash: string;
-    selection: import("./text-game").WorldGameSourceSelectionV2;
+    selection: import("./text-game").ProductWorldSourceSelectionV1;
     startingPoint: GameStartingPointV1;
   };
   intent: {
@@ -710,7 +706,6 @@ export interface GameProductionRecordV1 {
   controlEpoch: number;
   currentBriefRevision: number | null;
   currentBuildNumber: number | null;
-  currentGameDefinitionId: number | null;
   currentGameReleaseId: number | null;
   lastErrorJson: string;
   createdAt: number;
@@ -783,7 +778,6 @@ export interface GameBuildRecordV1 {
   compatibilityJson: string;
   rootTerminalReceiptHash: string | null;
   adoptionIntentHash: string | null;
-  adoptedGameDefinitionId: number | null;
   releasedGameReleaseId: number | null;
   failureJson: string;
   authorizedAt: number;
@@ -803,7 +797,7 @@ export interface GameBuildArtifactRecordV1 {
   requirementKey: string | null;
   version: number;
   kind: GameBuildArtifactKindV1;
-  mediaKind: AvgMediaKind | null;
+  mediaKind: ProductMediaKind | null;
   status: GameBuildArtifactStatusV1;
   producerRunId: number | null;
   producerReceiptHash: string | null;

@@ -7,7 +7,6 @@ import { useCharacterStore } from '../../src/stores/character'
 import { applyCharacterReferenceRemap } from '../../src/lib/registry/character-references'
 import { transactionTablesFor } from '../../src/lib/registry/lifecycle'
 import { parseFields, stringifyFields } from '../../src/lib/types/state-card'
-import { resolveWorkspaceScope } from '../../src/lib/world-engine/ownership'
 
 describe('R-15: character reference remap', () => {
   beforeEach(async () => {
@@ -52,25 +51,6 @@ describe('R-15: character reference remap', () => {
       sourceType: 'chapter', status: 'confirmed', locked: false,
       createdAt: now, updatedAt: now,
     } as any) as number
-    const scope = await resolveWorkspaceScope(projectId)
-    const moduleId = await db.narrativeModules.add({
-      projectId, worldId: null, workId: scope.workId, kind: 'main', title: '角色互动', description: '',
-      status: 'draft', sourceProjection: 'custom', entryNodeKey: null,
-      createdAt: now, updatedAt: now,
-    } as any) as number
-    const gameDefinitionId = await db.gameDefinitions.add({
-      projectId, worldId: scope.worldId, workId: scope.workId, gameKey: 'character-interaction',
-      productType: 'character-interaction', title: '角色互动', description: '', status: 'draft',
-      narrativeModuleId: moduleId, enabledCapabilitiesJson: '["narrative","character-interaction"]',
-      initialVariablesJson: '{}', rulesetVersion: 1, createdAt: now, updatedAt: now,
-    } as any) as number
-    await db.interactionCharacterProfiles.add({
-      projectId, worldId: scope.worldId, workId: scope.workId, gameDefinitionId,
-      characterId: deletedId, participantKey: 'old-character', roleLabel: '', voiceRules: '',
-      initialKnowledgeJson: '[]', relationshipDimensionsJson: '[]', maxMemoryEntries: 20,
-      createdAt: now, updatedAt: now,
-    } as any)
-
     await useCharacterStore.getState().loadAll(projectId)
     await useCharacterStore.getState().deleteCharacter(deletedId)
 
@@ -80,7 +60,6 @@ describe('R-15: character reference remap', () => {
     expect(await db.characterRelations.count()).toBe(0)
     expect(await db.stateCards.where('projectId').equals(projectId).count()).toBe(0)
     expect(await db.characters.get(deletedId)).toBeUndefined()
-    expect(await db.interactionCharacterProfiles.where('characterId').equals(deletedId).count()).toBe(0)
     const fact = await db.temporalFacts.get(factId)
     expect(fact?.characterId).toBeNull()
     expect(fact?.sourceCharacterId).toBeNull()
@@ -132,25 +111,6 @@ describe('R-15: character reference remap', () => {
       projectId, itemName: '别名佩剑', heldByName: '别名角色', characterId: aliasId,
       action: 'gain', quantity: 1, createdAt: now,
     } as any) as number
-    const scope = await resolveWorkspaceScope(projectId)
-    const moduleId = await db.narrativeModules.add({
-      projectId, worldId: null, workId: scope.workId, kind: 'main', title: '角色互动', description: '',
-      status: 'draft', sourceProjection: 'custom', entryNodeKey: null,
-      createdAt: now, updatedAt: now,
-    } as any) as number
-    const gameDefinitionId = await db.gameDefinitions.add({
-      projectId, worldId: scope.worldId, workId: scope.workId, gameKey: 'character-interaction',
-      productType: 'character-interaction', title: '角色互动', description: '', status: 'draft',
-      narrativeModuleId: moduleId, enabledCapabilitiesJson: '["narrative","character-interaction"]',
-      initialVariablesJson: '{}', rulesetVersion: 1, createdAt: now, updatedAt: now,
-    } as any) as number
-    const interactionProfileId = await db.interactionCharacterProfiles.add({
-      projectId, worldId: scope.worldId, workId: scope.workId, gameDefinitionId,
-      characterId: aliasId, participantKey: 'alias-character', roleLabel: '', voiceRules: '',
-      initialKnowledgeJson: '[]', relationshipDimensionsJson: '[]', maxMemoryEntries: 20,
-      createdAt: now, updatedAt: now,
-    } as any) as number
-
     await db.transaction('rw', transactionTablesFor('importProject'), async () => {
       await applyCharacterReferenceRemap({
         projectId,
@@ -179,7 +139,6 @@ describe('R-15: character reference remap', () => {
     const item = await db.itemLedger.get(itemId)
     expect(item?.characterId).toBe(primaryId)
     expect(item?.heldByName).toBe('主角色')
-    expect((await db.interactionCharacterProfiles.get(interactionProfileId))?.characterId).toBe(primaryId)
   })
 })
 

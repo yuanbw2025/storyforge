@@ -53,28 +53,11 @@ export interface WorldDerivationV1 {
   createdAt: number
 }
 
-/** ARCH-02 durable receipt for splitting a legacy mixed world package. */
-export interface WorldReleaseMigrationV1 {
-  id?: number
-  projectId: number
-  worldId: number
-  sourcePackageId: string
-  sourceWorldCode: string
-  sourceWorldVersion: number
-  classificationJson: string
-  semanticReleaseId: number
-  semanticContentHash: string
-  /** Portable identity of the separate recovery workspace, never a cross-owner FK. */
-  productRecoveryWorkspaceUid?: string | null
-  productRecoveryContentHash?: string | null
-  createdAt: number
-}
-
 export interface WorldReleaseManifestV2 {
   schema: 'storyforge.world-package'
   version: 2
-  /** ARCH-02: absent means a legacy mixed package; 3 means pure semantic release. */
-  semanticContract?: 3
+  /** Pure semantic world contract. */
+  semanticContract: 3
   worldCode: string
   worldName: string
   workTitle: string
@@ -91,7 +74,7 @@ export interface WorldReleaseManifestV2 {
   }>
   records: Record<string, unknown[]>
   portableProject: Record<string, unknown>
-  capabilityProfile?: Array<{
+  capabilityProfile: Array<{
     area: WorldCapabilityArea
     resourceCount: number
     rowCount: number
@@ -108,7 +91,7 @@ export interface WorldReleaseManifestV2 {
     originalEvidenceAvailable?: boolean
     queryableIndexAvailable?: boolean
   }>
-  resourceCatalog?: Array<{
+  resourceCatalog: Array<{
     resourceId: string
     resourceKind: string
     area: WorldCapabilityArea
@@ -121,7 +104,7 @@ export interface WorldReleaseManifestV2 {
     omittedRowCount?: number
     latestRevision?: number | null
   }>
-  sourceManifest?: {
+  sourceManifest: {
     sourceKind: 'world-draft' | 'independent-work-derivation'
     sourceWorkspaceUid: string
     sourceWorldCode: string

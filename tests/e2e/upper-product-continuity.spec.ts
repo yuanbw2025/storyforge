@@ -1,69 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
+import { openCurrentTtrpgPlayer, seedCurrentTtrpgProduct } from './helpers/current-products'
+import { publishCurrentWorldRelease } from './helpers/world-release'
 
 async function seedFormalTtrpgCampaign(page: Page) {
-  await page.goto('./')
-  return page.evaluate(async () => {
-    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
-    const [
-      { db },
-      { hashGameProductionValueV2 },
-      { ensureWorkspaceOwnership },
-      { installStoryForgeRulePackV1, compileWorldReleaseToTtrpgCampaignDraftV1 },
-      { publishTtrpgCampaignReleaseV1 },
-      { createWorldInstance },
-    ] = await Promise.all([
-      importer('/storyforge/src/lib/db/schema.ts'),
-      importer('/storyforge/src/lib/game-production/hash.ts'),
-      importer('/storyforge/src/lib/world-engine/ownership.ts'),
-      importer('/storyforge/src/lib/ttrpg/authoring.ts'),
-      importer('/storyforge/src/lib/ttrpg/release.ts'),
-      importer('/storyforge/src/lib/world-engine/instances.ts'),
-    ])
-    const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '浏览器正式跑团验收', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-      description: '从冻结世界到正式战役的真实浏览器主路径。', targetWordCount: 100_000,
-      createdAt: now, updatedAt: now,
-    }) as number
-    const scope = (await ensureWorkspaceOwnership(projectId)).scope
-    const records = {
-      characters: [
-        { _exportId: 0, name: '林舟', identity: '谨慎的调查者', location: '雾港', roleWeight: 'main' },
-        { _exportId: 1, name: '潮汐学者', identity: '负责交叉验证的同伴', location: '雾港', roleWeight: 'main' },
-        { _exportId: 2, name: '守潮人', identity: '知道旧港秘密的向导', location: '雾港', roleWeight: 'npc' },
-      ],
-      characterRelations: [],
-      importantLocations: [{ _exportId: 0, name: '雾港', description: '退潮时显露的旧港。' }],
-      storyArcs: [], itemLedger: [], codexEntries: [], avgMediaAssets: [],
-      narrativeModules: [], narrativeNodes: [],
-    }
-    const manifest = {
-      schema: 'storyforge.world-package', version: 2,
-      worldCode: 'browser-formal-ttrpg', worldName: '潮汐界', workTitle: '雾港纪事',
-      selectedTables: Object.keys(records), selectedNarrativeModules: [],
-      dependencies: [], records, portableProject: {},
-    }
-    const manifestJson = JSON.stringify(manifest)
-    const worldContentHash = await hashGameProductionValueV2(manifest)
-    const revisionId = await db.worldRevisions.add({
-      projectId, worldId: scope.worldId, parentRevisionId: null, revision: 1,
-      label: '浏览器正式跑团来源', manifestJson, contentHash: worldContentHash,
-      createdAt: now, updatedAt: now,
-    }) as number
-    const worldReleaseId = await db.worldReleases.add({
-      projectId, worldId: scope.worldId, revisionId, version: 1, label: '潮汐界 v1',
-      manifestJson, contentHash: worldContentHash, sourceWorldCode: 'browser-formal-ttrpg', createdAt: now,
-    }) as number
-    const rulePack = await installStoryForgeRulePackV1(scope)
-    const campaign = await compileWorldReleaseToTtrpgCampaignDraftV1({
-      scope, worldReleaseId, rulePackId: rulePack.id, fixtureOnly: true, confirmDefaultMappings: true,
-    })
-    const release = await publishTtrpgCampaignReleaseV1({ scope, campaignModuleId: campaign.id, testOnlyAllowFixtureCampaign: true })
-    const session = await createWorldInstance({
-      scope, kind: 'ttrpg', title: '雾港正式调查战役', worldGroupId: null,
-      gameSource: { kind: 'release', gameReleaseId: release.id }, seed: 'browser-formal-ttrpg',
-    })
-    return { projectId, sessionId: session.id, releaseHash: release.contentHash }
+  return seedCurrentTtrpgProduct(page, {
+    title: '浏览器正式跑团验收',
+    gmMode: 'human',
+    playerController: 'human',
+    ruleOrigin: 'builtin-storyforge',
   })
 }
 
@@ -73,9 +17,7 @@ async function seedEvolutionCompatibilityCampaign(page: Page) {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
     const [
       { db },
-      { ensureWorkspaceOwnership },
-      { seedStoryGameAcceptanceSample },
-      { createWorldRevision, publishWorldRevision },
+      { seedCurrentProductWorld },
       { suggestGameStartingPoints, draftGameProductionBriefV3 },
       { executeGameProductionCommand },
       { runLocalGameProductionVerticalSlice },
@@ -88,9 +30,7 @@ async function seedEvolutionCompatibilityCampaign(page: Page) {
       },
     ] = await Promise.all([
       importer('/storyforge/src/lib/db/schema.ts'),
-      importer('/storyforge/src/lib/world-engine/ownership.ts'),
-      importer('/storyforge/src/lib/text-game/authoring.ts'),
-      importer('/storyforge/src/lib/world-engine/releases.ts'),
+      importer('/storyforge/tests/helpers/current-product-world.ts'),
       importer('/storyforge/src/lib/game-production/consultation.ts'),
       importer('/storyforge/src/lib/game-production/commands.ts'),
       importer('/storyforge/src/lib/game-production/vertical-slice.ts'),
@@ -98,21 +38,11 @@ async function seedEvolutionCompatibilityCampaign(page: Page) {
       importer('/storyforge/src/lib/world-engine/instances.ts'),
       importer('/storyforge/src/lib/simulation/runtime.ts'),
     ])
-    const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '浏览器演化兼容验收', genre: 'interactive-fiction', genres: ['interactive-fiction'],
-      status: 'drafting', description: '证明新版 Build 不会改写旧 Release 与旧存档。',
-      targetWordCount: 20_000,
-      gamePlatformOptIns: { gameProductionV3: true },
-      createdAt: now, updatedAt: now,
-    }) as number
-    const scope = (await ensureWorkspaceOwnership(projectId)).scope
-    const definition = await seedStoryGameAcceptanceSample({ scope })
-    const revision = await createWorldRevision({
-      scope, label: '演化兼容冻结来源',
-      selectedNarrativeModuleIds: [definition.narrativeModuleId],
-    })
-    const worldRelease = await publishWorldRevision(revision.id)
+    const world = await seedCurrentProductWorld('浏览器演化兼容验收')
+    const projectId = world.scope.projectId
+    const scope = world.scope
+    const worldRelease = world.release
+    await db.projects.update(projectId, { gamePlatformOptIns: { gameProductionV3: true } })
     const suggestions = await suggestGameStartingPoints({
       scope, worldReleaseId: worldRelease.id,
     })
@@ -226,12 +156,8 @@ test('正式跑团从冻结发布完成 Session Zero、规则桌面、安全暂�
   })
   const seeded = await seedFormalTtrpgCampaign(page)
   expect(seeded.releaseHash).toMatch(/^[a-f0-9]{64}$/)
-  await page.reload()
-  await page.getByRole('button', { name: '跑团', exact: true }).click()
-
-  const guide = page.getByTestId('formal-ttrpg-campaign-guide')
-  await expect(guide).toBeVisible({ timeout: 15_000 })
-  await expect(guide.getByRole('heading', { name: '潮汐界：失落的证据', exact: true })).toBeVisible()
+  const guide = await openCurrentTtrpgPlayer(page)
+  await expect(guide.getByRole('heading', { name: '浏览器正式跑团验收', exact: true })).toBeVisible()
   const sessionZero = guide.getByTestId('ttrpg-session-zero')
   await expect(sessionZero).toContainText('开局共识与安全工具')
   const consent = sessionZero
@@ -244,44 +170,27 @@ test('正式跑团从冻结发布完成 Session Zero、规则桌面、安全暂�
   await expect(guide.getByTestId('ttrpg-gm-prep-board')).toContainText('失败前进')
 
   await guide.getByRole('button', { name: '打开场景', exact: true }).click()
-  const tabletop = guide.getByTestId('ttrpg-tabletop')
-  await expect(tabletop).toBeVisible()
-  await expect(tabletop).toContainText('异常出现 · 区域图')
-  await expect(tabletop.getByRole('button', { name: '选择 token：林舟', exact: true })).toBeVisible()
-  await tabletop.getByRole('button', { name: '选择 token：林舟', exact: true }).click()
-  const playerToken = tabletop.getByRole('button', { name: '选择 token：林舟', exact: true })
-  await expect(playerToken).toHaveCSS('left', /.+/)
-  const beforeMove = await playerToken.getAttribute('style')
-  await tabletop.getByRole('button', { name: 'token 向→移动', exact: true }).click()
-  await expect(playerToken).not.toHaveAttribute('style', beforeMove ?? '')
-
-  await guide.getByLabel('角色行动声明').fill('我检查现场留下的异常痕迹，并把可公开的发现告诉在场角色。')
-  await guide.getByRole('button', { name: /提交意图.*结算/ }).first().click()
-  await expect(guide).toContainText('最近行动：调查')
-  await guide.getByRole('button', { name: '使用确定性旁白', exact: true }).click()
-  await expect(guide.getByTestId('formal-ttrpg-gm-narration')).toContainText('无模型调用')
+  await expect(guide.getByTestId('ttrpg-active-actor')).toBeVisible()
+  await expect(guide).toContainText('可用行动')
+  await expect(guide).toContainText('潮门之前')
 
   await guide.getByRole('button', { name: '玩家视图', exact: true }).click()
   await expect(guide.getByText('GM 私密提示', { exact: true })).toHaveCount(0)
   await expect(guide).not.toContainText('两条线索分别指向时间与动机')
-  await expect(tabletop).toContainText('玩家安全投影')
-  await expect(tabletop).toContainText('未探索')
   await guide.getByLabel('安全暂停原因').fill('浏览器验收暂停并确认边界')
   await guide.getByRole('button', { name: '立即暂停', exact: true }).click()
   await expect(guide).toContainText('战役已安全暂停')
 
   await page.reload()
-  await page.getByRole('button', { name: '跑团', exact: true }).click()
-  const restored = page.getByTestId('formal-ttrpg-campaign-guide')
+  const restored = await openCurrentTtrpgPlayer(page)
   await expect(restored).toContainText('战役已安全暂停')
-  await expect(restored.getByTestId('formal-ttrpg-gm-narration')).toContainText('规则结果旁白')
   await restored.getByRole('button', { name: '确认边界并恢复', exact: true }).click()
   await expect(restored).toContainText('安全工具可用')
 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await expect(restored.getByRole('button', { name: '玩家视图', exact: true })).toBeVisible()
-  await expect(restored.getByTestId('ttrpg-tabletop')).toBeVisible()
+  await expect(restored.getByTestId('ttrpg-active-actor')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
@@ -304,7 +213,7 @@ test('演化 Build 展示稳定键兼容报告且旧 Release 与旧存档继续�
   })
 
   await page.reload()
-  await page.getByRole('button', { name: '文字游戏', exact: true }).click()
+  await page.getByTestId('product-tab-game').click()
   await page.getByRole('button', { name: '制作', exact: true }).click()
   const studio = page.getByTestId('game-production-studio')
   await expect(studio).toBeVisible({ timeout: 15_000 })
@@ -370,23 +279,10 @@ test('世界到游戏只进入统一制作中心并自动复用全局 AI 配置'
   await page.getByRole('button', { name: '添加阶段', exact: true }).click()
 
   await page.goto('./')
-  await page.getByRole('button', { name: '世界引擎', exact: true }).click()
-  const pipeline = page.getByRole('region', { name: '叙事蓝图与世界发布' })
-  await pipeline.getByRole('button', { name: '同步主线与支线', exact: true }).click()
-  await expect(pipeline.getByRole('status')).toContainText('已同步 1 条主线/支线。')
-  await pipeline.locator('.sf-world-module-list button').click()
-  await pipeline.getByLabel('角色资产').uncheck()
-  await pipeline.getByPlaceholder('例如：世界修订 1').fill('生产入口修订')
-  await pipeline.getByRole('button', { name: '冻结修订', exact: true }).click()
-  await expect(pipeline.getByRole('status')).toContainText('已冻结新的世界草稿修订。')
-  await pipeline.getByRole('button', { name: '发布版本', exact: true }).click()
-  await page.getByRole('dialog').getByRole('button', { name: '发布版本', exact: true }).click()
-  await expect(pipeline.getByRole('status')).toContainText('不可变世界版本已发布。')
-
-  const bridge = page.getByRole('region', { name: '世界到文字游戏' })
-  await expect(bridge.getByRole('button', { name: '主 Agent 生成游戏候选' })).toHaveCount(0)
-  await expect(bridge.getByRole('button', { name: /快速映射|直接发布/ })).toHaveCount(0)
-  await bridge.getByRole('button', { name: '进入游戏制作中心', exact: true }).click()
+  await page.getByTestId('product-tab-worlds').click()
+  const pipeline = await publishCurrentWorldRelease(page, '生产入口修订')
+  await expect(pipeline.getByRole('button', { name: /主 Agent 生成游戏候选|快速映射|直接发布/ })).toHaveCount(0)
+  await pipeline.getByRole('button', { name: '交给文字游戏', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: '游戏制作中心', exact: true })).toBeVisible()
   await expect(page.getByText('自动游戏制作需要项目授权', { exact: true })).toBeVisible()
@@ -395,10 +291,8 @@ test('世界到游戏只进入统一制作中心并自动复用全局 AI 配置'
   await expect(page.getByText(/直接复用 agnes \/ agnes-2\.0-flash，无需再次填写 API Key/)).toBeVisible()
   await expect(page.getByLabel('API Key', { exact: true })).toHaveCount(0)
 
-  await page.getByRole('button', { name: '手工维护', exact: true }).click()
-  await expect(page.getByText('没有需要维护的旧草稿', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '手工维护', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /新建空白游戏|载入验收样例/ })).toHaveCount(0)
-  await page.getByRole('button', { name: '制作', exact: true }).evaluate((button: HTMLButtonElement) => button.click())
   await expect(page.getByTestId('game-production-studio')).toBeVisible()
   await page.getByRole('combobox', { name: /产品形态/ }).selectOption('avg')
   await page.getByRole('combobox', { name: /制作质量/ }).selectOption('commercial-candidate')

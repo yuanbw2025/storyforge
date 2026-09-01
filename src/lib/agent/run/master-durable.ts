@@ -483,7 +483,7 @@ function readOptionalSkillId(
     'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules']),
     character: new Set(['create', 'supplement', 'lifecycle']),
     inspiration: new Set(['reverse']),
-    outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'world-game', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue']),
   }
   if (!allowedModes[agentId].has(skill.executionMode)) {

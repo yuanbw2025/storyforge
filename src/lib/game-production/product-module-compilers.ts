@@ -10,7 +10,7 @@ import type {
   NarrativeSimulationContentV1,
   OpenWorldContentV1,
 } from '../types'
-import type { WorldGameSourceCatalog } from '../text-game/world-generation'
+import type { GameProductionWorldSourceCatalogV2 as WorldGameSourceCatalog } from './world-source'
 
 export interface ProductModuleCompilerInputV1 {
   brief: GameProductionBriefV3
@@ -40,45 +40,56 @@ function endings(input: ProductModuleCompilerInputV1) {
 }
 
 function participants(input: ProductModuleCompilerInputV1): string[] {
-  const ids = input.brief.source.selection.characterExportIds.slice(0, 8)
-  return ids.length ? ids.map((_, index) => `participant.${pad(index)}`) : ['participant.001']
+  const keys = (input.brief.source.selection.roleBindings.characters
+    ?? input.brief.source.selection.roleBindings.participants ?? []).slice(0, 8)
+  return keys.length ? keys.map((_, index) => `participant.${pad(index)}`) : ['participant.001']
 }
 
 function characterKey(input: ProductModuleCompilerInputV1, index: number): string {
-  const id = input.brief.source.selection.characterExportIds[index]
-  return id == null ? `generated:participant.${pad(index)}` : `character:${id}`
+  const key = (input.brief.source.selection.roleBindings.characters
+    ?? input.brief.source.selection.roleBindings.participants ?? [])[index]
+  return key == null ? `generated:participant.${pad(index)}` : `character:${index + 1}`
 }
 
-function selectedRows<T extends { exportId: number }>(
+function selectedRows<T extends { resourceKey: string }>(
   rows: readonly T[] | undefined,
-  ids: readonly number[],
+  resourceKeys: readonly string[],
 ): T[] {
-  if (!rows?.length || !ids.length) return []
-  const byId = new Map(rows.map(row => [row.exportId, row]))
-  return ids.flatMap(id => {
-    const row = byId.get(id)
+  if (!rows?.length || !resourceKeys.length) return []
+  const byKey = new Map(rows.map(row => [row.resourceKey, row]))
+  return resourceKeys.flatMap(resourceKey => {
+    const row = byKey.get(resourceKey)
     return row ? [row] : []
   })
 }
 
 function selectedCharacters(input: ProductModuleCompilerInputV1) {
-  return selectedRows(input.sourceCatalog?.characters, input.brief.source.selection.characterExportIds)
+  return selectedRows(input.sourceCatalog?.characters,
+    input.brief.source.selection.roleBindings.characters
+      ?? input.brief.source.selection.roleBindings.participants ?? [])
 }
 
 function selectedLocations(input: ProductModuleCompilerInputV1) {
-  return selectedRows(input.sourceCatalog?.locations, input.brief.source.selection.importantLocationExportIds)
+  return selectedRows(input.sourceCatalog?.locations,
+    input.brief.source.selection.roleBindings.locations
+      ?? input.brief.source.selection.roleBindings.regions ?? [])
 }
 
 function selectedArtifacts(input: ProductModuleCompilerInputV1) {
-  return selectedRows(input.sourceCatalog?.artifacts, input.brief.source.selection.artifactExportIds)
+  return selectedRows(input.sourceCatalog?.artifacts,
+    input.brief.source.selection.roleBindings.items ?? [])
 }
 
 function selectedLore(input: ProductModuleCompilerInputV1) {
-  return selectedRows(input.sourceCatalog?.loreEntries, input.brief.source.selection.codexEntryExportIds)
+  return selectedRows(input.sourceCatalog?.loreEntries,
+    input.brief.source.selection.roleBindings.lore
+      ?? input.brief.source.selection.roleBindings.factions ?? [])
 }
 
 function selectedStoryArcs(input: ProductModuleCompilerInputV1) {
-  return selectedRows(input.sourceCatalog?.storyArcs, input.brief.source.selection.storyArcExportIds)
+  return selectedRows(input.sourceCatalog?.storyArcs,
+    input.brief.source.selection.roleBindings.quests
+      ?? input.brief.source.selection.roleBindings.issues ?? [])
 }
 
 function choiceMap(input: ProductModuleCompilerInputV1) {
@@ -99,8 +110,7 @@ export function compileInteractionModulesV1(input: ProductModuleCompilerInputV1)
       .slice(0, 12).map(beat => beat.text)
     return {
       participantKey, characterKey: frozenCharacterKey,
-      name: sourceCharacter?.name ?? (input.brief.source.selection.characterExportIds[index] == null
-        ? `世界角色 ${index + 1}` : `冻结角色 ${input.brief.source.selection.characterExportIds[index]}`),
+      name: sourceCharacter?.name ?? `产品角色 ${index + 1}`,
       roleLabel: index === 0 ? '核心互动角色' : '相关角色',
       voiceRules: `保持 ${sourceCharacter?.description || frozenCharacterKey} 的冻结事实和知识边界；遵守：${input.brief.intent.contentBoundaries.join('；')}`,
       initialKnowledge: [{
@@ -216,24 +226,24 @@ export function compileAdventureModuleV1(input: ProductModuleCompilerInputV1): A
   const fieldNotesItemKey = 'item.field-notes'
   const fieldNotesObjectKey = 'object.field-notes'
   const sourceArtifactObjects: AdventureContentV1['objects'] = worldArtifacts.map((artifact, artifactIndex) => ({
-    key: `object.source.${artifact.exportId}`,
+    key: `object.source.${pad(artifactIndex)}`,
     locationKey: index.locationByNode.get(input.narrative.nodes[artifactIndex % input.narrative.nodes.length].key)!,
     title: artifact.name, description: artifact.description || `来自冻结世界的道具：${artifact.name}`,
-    tags: ['world-artifact', `source:${artifact.exportId}`],
+    tags: ['world-artifact', `source:${artifact.resourceKey}`],
   }))
-  const sourceArtifactItems: AdventureContentV1['items'] = worldArtifacts.map(artifact => ({
-    key: `item.source.${artifact.exportId}`, title: artifact.name,
+  const sourceArtifactItems: AdventureContentV1['items'] = worldArtifacts.map((artifact, artifactIndex) => ({
+    key: `item.source.${pad(artifactIndex)}`, title: artifact.name,
     description: artifact.description || `来自冻结世界的道具：${artifact.name}`,
-    tags: ['world-artifact', `source:${artifact.exportId}`], stackable: false, consumable: false,
+    tags: ['world-artifact', `source:${artifact.resourceKey}`], stackable: false, consumable: false,
   }))
   const sourceArtifactActions: AdventureContentV1['actions'] = worldArtifacts.map((artifact, artifactIndex) => ({
-    key: `action.take.source.${artifact.exportId}`, kind: 'take', label: `取得：${artifact.name}`,
+    key: `action.take.source.${pad(artifactIndex)}`, kind: 'take', label: `取得：${artifact.name}`,
     description: artifact.description || `把 ${artifact.name} 收入随身物品。`,
     locationKey: sourceArtifactObjects[artifactIndex].locationKey,
     targetKey: sourceArtifactObjects[artifactIndex].key, requirements: [], rule: { kind: 'automatic' },
     successEffects: [{
       op: 'gain-item', itemKey: sourceArtifactItems[artifactIndex].key,
-      quantity: 1, claimKey: `claim.source.${artifact.exportId}`,
+      quantity: 1, claimKey: `claim.source.${pad(artifactIndex)}`,
     }],
     costlySuccessEffects: [], failureEffects: [], successText: `你取得了${artifact.name}。`,
     costlySuccessText: `你付出代价后取得了${artifact.name}。`, failureText: `${artifact.name}暂时无法取得。`,
@@ -245,7 +255,7 @@ export function compileAdventureModuleV1(input: ProductModuleCompilerInputV1): A
     key: 'action.talk.opening', kind: 'talk', label: `交谈：${interaction.profiles[0].name}`,
     description: '进入共享角色互动场景，关系变化由冻结规则显式结算。',
     locationKey: initialLocationKey,
-    targetKey: interaction.profiles[0].characterKey.startsWith('character:')
+    targetKey: interaction.profiles[0].characterKey.startsWith('character.')
       ? interaction.profiles[0].characterKey : null,
     requirements: [], rule: { kind: 'automatic' }, successEffects: [], costlySuccessEffects: [], failureEffects: [],
     successText: '对话留下了可回放的关系与知识证据。', costlySuccessText: '对话推进，但关系付出代价。',
@@ -268,7 +278,7 @@ export function compileAdventureModuleV1(input: ProductModuleCompilerInputV1): A
         description: [worldLocation?.description, node.summary
           || input.narrative.beats.filter(beat => beat.nodeKey === node.key).map(beat => beat.text).join('\n')]
           .filter(Boolean).join('\n'),
-        tags: [node.kind, `narrative:${node.key}`, ...(worldLocation ? [`world-location:${worldLocation.exportId}`] : [])],
+        tags: [node.kind, `narrative:${node.key}`, ...(worldLocation ? [`world-location:${worldLocation.resourceKey}`] : [])],
       }
     }),
     objects: [{
@@ -303,7 +313,8 @@ export function compileSimulationModuleV1(input: ProductModuleCompilerInputV1): 
   const loreRows = selectedLore(input)
   const storyArcRows = selectedStoryArcs(input)
   const organizationSources = loreRows.length ? loreRows.slice(0, 8) : [{
-    exportId: -1, name: '世界局势参与方', description: `围绕${input.narrative.moduleTitle}行动的冻结世界组织。`,
+    resourceKey: 'product-generated:organization', name: '世界局势参与方',
+    description: `围绕${input.narrative.moduleTitle}行动的产品私域组织。`,
   }]
   const organizationKeys = organizationSources.map((_, index) => `organization.${pad(index)}`)
   const actorKeys = [...participantActorKeys, ...organizationKeys]
@@ -375,7 +386,14 @@ export function compileSimulationModuleV1(input: ProductModuleCompilerInputV1): 
 
 export function compileOpenWorldModulesV1(input: ProductModuleCompilerInputV1) {
   const interaction = compileInteractionModulesV1(input)
-  const adventure = compileAdventureModuleV1(input)
+  const compiledAdventure = compileAdventureModuleV1(input)
+  // 开放世界的任务必须先由任务牌公开，再由玩家接受。`active` 会让导演把
+  // 所有任务判定为已经开始而永久拒绝发牌；`available` 则表示它可以由
+  // OpenWorld 的显式 accept command 激活，但并不把任务公开给玩家。
+  const adventure: AdventureContentV1 = {
+    ...compiledAdventure,
+    quests: compiledAdventure.quests.map(quest => ({ ...quest, initialStatus: 'available' })),
+  }
   const simulation = compileSimulationModuleV1(input)
   const locationIndex = locations(input)
   const nodeIndex = new Map(input.narrative.nodes.map((node, index) => [node.key, index]))

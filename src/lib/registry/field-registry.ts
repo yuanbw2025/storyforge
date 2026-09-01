@@ -749,17 +749,6 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   json('gameBuildArtifacts', 'qualityJson'),
   json('gameBuildArtifacts', 'rightsJson'),
 
-  // CHATGAME-CI-3..5: model output is only a product artifact candidate. The
-  // product pipeline validates source/dependencies/hash and requires explicit
-  // author confirmation before the same immutable payload can be released.
-  { ...json('characterInteractionArtifacts', 'payloadJson'), candidateId: 'characterInteraction.productionArtifactCandidate' },
-  json('characterInteractionArtifacts', 'confirmationJson'),
-  json('characterInteractionProductionSteps', 'checkpointJson'),
-  json('characterInteractionProductionSteps', 'errorJson'),
-  json('characterInteractionMediaAssets', 'specJson'),
-  json('characterInteractionMediaAssets', 'rightsJson'),
-  json('characterInteractionMediaAssets', 'failureJson'),
-
   // TTRPG-2A: AI may propose inert rule/campaign JSON, but only the governed
   // authoring service may parse, hash, fixture-test and persist it.
   { ...text('gameRulePacks', 'title'), candidateId: 'ttrpg.rulePackTitleCandidate' },
@@ -768,13 +757,6 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   { ...json('gameRulePacks', 'rulePackJson'), candidateId: 'ttrpg.rulePackCandidate' },
   text('gameRulePacks', 'contentHash'),
   enumeration('gameRulePacks', 'status', ['draft', 'validated', 'archived']),
-  { ...text('ttrpgCampaignModules', 'title'), candidateId: 'ttrpg.campaignPackTitleCandidate' },
-  text('ttrpgCampaignModules', 'campaignKey'),
-  num('ttrpgCampaignModules', 'sourceWorldReleaseId'),
-  num('ttrpgCampaignModules', 'rulePackId'),
-  { ...json('ttrpgCampaignModules', 'contentJson'), candidateId: 'ttrpg.campaignPackCandidate' },
-  text('ttrpgCampaignModules', 'contentHash'),
-  enumeration('ttrpgCampaignModules', 'status', ['draft', 'validated', 'archived']),
 
   enumeration('stateCards', 'category', ['character', 'location', 'item', 'faction', 'event']),
   text('stateCards', 'entityName', ['角色名', '实体名']),

@@ -3,6 +3,11 @@ import type { GameProductionBriefV3, GameRuntimePackageV2 } from '../../src/lib/
 import { buildGameProductModulesV1, type ProductionProductTypeV1 } from '../../src/lib/game-production/product-adapters'
 import { evaluateGameRuntimeProductQualityV1 } from '../../src/lib/game-production/product-quality'
 import { parseGameRuntimePackageV2 } from '../../src/lib/game-production/runtime-package'
+import {
+  CURRENT_PRODUCT_RESOURCE_KEYS,
+  CURRENT_PRODUCT_SOURCE_CATALOG,
+  currentProductSelection,
+} from '../helpers/current-product-world'
 
 const PRODUCTS: ProductionProductTypeV1[] = [
   'storygame', 'character-interaction', 'text-adventure', 'avg', 'narrative-simulation', 'text-open-world',
@@ -10,31 +15,30 @@ const PRODUCTS: ProductionProductTypeV1[] = [
 
 function brief(productType: ProductionProductTypeV1): GameProductionBriefV3 {
   const hash = 'a'.repeat(64)
-  const productSource = productType === 'storygame'
-    ? { kind: productType as const, narrativeModuleExportIds: [1] }
+  const key = CURRENT_PRODUCT_RESOURCE_KEYS
+  const roleBindings = productType === 'storygame'
+    ? { story: [key.story] }
     : productType === 'character-interaction'
-      ? { kind: productType as const, participantCharacterExportIds: [1], sceneKeys: ['scene.1'] }
+      ? { participants: [key.character], context: [key.story, key.arc] }
       : productType === 'text-adventure'
-        ? { kind: productType as const, locationExportIds: [1], itemExportIds: [], questStoryArcExportIds: [1] }
+        ? { characters: [key.character], locations: [key.location], items: [key.artifact], quests: [key.arc] }
         : productType === 'avg'
-          ? { kind: productType as const, presentationStyle: 'key-scenes' as const, existingMediaAssetExportIds: [] }
+          ? { story: [key.story, key.arc], characters: [key.character], locations: [key.location] }
           : productType === 'narrative-simulation'
-            ? { kind: productType as const, issueStoryArcExportIds: [1], factionExportIds: [1] }
-            : { kind: productType as const, regionLocationExportIds: [1], factionExportIds: [1], questStoryArcExportIds: [1] }
+            ? { issues: [key.arc], factions: [key.lore], characters: [key.character] }
+            : { characters: [key.character], regions: [key.location], factions: [key.lore], quests: [key.arc] }
   return {
     schema: 'storyforge.game-production-brief', version: 3,
     source: {
       worldReleaseId: 1, worldContentHash: hash,
-      selection: {
-        schema: 'storyforge.world-game-source', version: 2, productType, worldContentHash: hash,
-        narrativeModuleExportIds: [1], characterExportIds: [1], characterRelationExportIds: [],
-        importantLocationExportIds: [1], artifactExportIds: [], codexEntryExportIds: [1], storyArcExportIds: [1],
-        avgMediaAssetExportIds: [], productSource,
+      selection: currentProductSelection(productType, roleBindings),
+      startingPoint: {
+        kind: 'mainline', title: '主线', summary: '调查并抉择', sourceRefs: [key.story],
+        protagonistRefs: [key.character], openingConflict: '危机逼近。',
       },
-      startingPoint: { kind: 'mainline', title: '主线', summary: '调查并抉择', sourceRefs: ['story:1'], protagonistRefs: ['character:1'], openingConflict: '危机逼近。' },
     },
     intent: {
-      productType, playerRole: '调查者', protagonistRefs: ['character:1'], openingSituation: '危机逼近。',
+      productType, playerRole: '调查者', protagonistRefs: [key.character], openingSituation: '危机逼近。',
       coreExperience: ['调查', '抉择'], requiredFacts: [], forbiddenChanges: [], contentBoundaries: ['安全边界'], tone: ['悬疑'],
     },
     scale: { scope: 'scene', targetPlayMinutes: 60, targetWordCount: 8_000, targetEndingCount: 2 },
@@ -75,7 +79,9 @@ function narrative(): GameRuntimePackageV2['narrative'] {
 function runtime(productType: ProductionProductTypeV1): GameRuntimePackageV2 {
   const currentBrief = brief(productType)
   const currentNarrative = narrative()
-  const modules = buildGameProductModulesV1({ brief: currentBrief, narrative: currentNarrative })
+  const modules = buildGameProductModulesV1({
+    brief: currentBrief, narrative: currentNarrative, sourceCatalog: CURRENT_PRODUCT_SOURCE_CATALOG,
+  })
   return parseGameRuntimePackageV2({
     schema: 'storyforge.game-runtime-package', version: 2, productType,
     definition: { gameKey: `quality.${productType}`, title: '质量门', description: '', enabledCapabilities: modules.enabledCapabilities, rulesetVersion: 1, initialVariables: { productAdapterCommercialReady: modules.commercialReady } },

@@ -9,29 +9,15 @@ import { verifyGameBuildPreviewManifestV1 } from '../../src/lib/game-production/
 import { resolvePlayableGameSource } from '../../src/lib/game-production/preview-source'
 import { runLocalGameProductionVerticalSlice } from '../../src/lib/game-production/vertical-slice'
 import { createPlayableGameInstance } from '../../src/lib/world-engine/instances'
-import { seedStoryGameAcceptanceSample } from '../../src/lib/text-game/authoring'
-import { publishWorldRevision } from '../../src/lib/world-engine/releases'
-import { createLegacyExecutableWorldRevisionFixtureV1 } from '../helpers/legacy-executable-world-release'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 async function authorizedProduction(input: {
   name: string
   productType?: 'storygame' | 'avg'
   visualLevel?: 'none' | 'key-scenes'
 }) {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
-    name: input.name, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
-    description: '', targetWordCount: 10_000, createdAt: now, updatedAt: now,
-  } as never) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
-  const definition = await seedStoryGameAcceptanceSample({ scope: owned.scope })
-  const revision = await createLegacyExecutableWorldRevisionFixtureV1({
-    scope: owned.scope, label: 'GAMEPROD 纵切冻结来源',
-    selectedNarrativeModuleIds: [definition.narrativeModuleId],
-  })
-  const release = await publishWorldRevision(revision.id!)
+  const owned = await seedCurrentProductWorld(input.name)
+  const release = owned.release
   const suggestions = await suggestGameStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
   const startingPoint = suggestions.suggestions.find(item => item.kind === 'mainline')!
   const brief = await draftGameProductionBriefV3({
@@ -234,8 +220,8 @@ describe('R-GAMEPROD-1C · authorized local vertical slice', () => {
     })).rejects.toThrow(/injected-after-release/)
     update.mockRestore()
     expect(await db.gameReleases.where('workId').equals(owned.scope.workId).count()).toBe(0)
-    expect(await db.avgMediaAssets.where('workId').equals(owned.scope.workId).count()).toBe(0)
-    expect(await db.avgMediaBlobs.where('workId').equals(owned.scope.workId).count()).toBe(0)
+    expect(await db.productMediaAssets.where('workId').equals(owned.scope.workId).count()).toBe(0)
+    expect(await db.productMediaBlobs.where('workId').equals(owned.scope.workId).count()).toBe(0)
     expect(await db.gameProductionCommands
       .where('[productionId+commandId]').equals([owned.productionId, command.commandId]).count()).toBe(0)
     expect(await db.gameBuilds.get(owned.buildId)).toMatchObject({ status: 'release-ready', releasedGameReleaseId: null })
