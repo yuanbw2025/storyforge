@@ -6,8 +6,8 @@ import type {
   AdventureQuestStatus,
   AdventureRequirement,
   AdventureRule,
-  SimulationAdventureState,
-  SimulationEvent,
+  AdventureRuntimeState,
+  ProductRuntimeEvent,
 } from '../types'
 
 const STABLE_KEY = /^[a-zA-Z0-9._:-]+$/
@@ -172,7 +172,7 @@ function narrativeProjectionKey(value: string): string {
  * condition DSL. Stable author keys are normalized only at this boundary so
  * content and event identities retain their original values.
  */
-export function adventureNarrativeProjection(state: SimulationAdventureState): Record<string, unknown> {
+export function adventureNarrativeProjection(state: AdventureRuntimeState): Record<string, unknown> {
   const keyed = <T>(values: readonly T[], getKey: (value: T) => string, getValue: (value: T) => unknown) => {
     const result: Record<string, unknown> = {}
     for (const value of values) {
@@ -361,7 +361,7 @@ export function validateAdventureContent(value: AdventureContentV1): AdventureCo
   return { valid: errors.length === 0, errors, warnings, unreachableLocationKeys, unavailableQuestKeys, sourceLessItemKeys }
 }
 
-export function createInitialAdventureState(contentValue: AdventureContentV1, contentHash: string): SimulationAdventureState {
+export function createInitialAdventureState(contentValue: AdventureContentV1, contentHash: string): AdventureRuntimeState {
   const content = parseAdventureContent(contentValue)
   const inventory = content.initialInventory.map(item => ({ itemKey: item.itemKey, ownerKey: 'player', quantity: item.quantity, state: 'carried' as const, sourceEventSequence: 0 }))
   return parseAdventureState({
@@ -373,13 +373,13 @@ export function createInitialAdventureState(contentValue: AdventureContentV1, co
   })!
 }
 
-export function parseAdventureState(value: unknown): SimulationAdventureState | null {
+export function parseAdventureState(value: unknown): AdventureRuntimeState | null {
   if (value == null) return null
   const row = record(value, '冒险状态')
   if (row.schema !== 'storyforge.text-adventure' || row.version !== 1 || row.playerKey !== 'player') fail('不支持的冒险状态')
   if (!Array.isArray(row.visitedLocationKeys) || !Array.isArray(row.inventory) || !Array.isArray(row.conditions) || !Array.isArray(row.quests) || !Array.isArray(row.completedActionKeys) || !Array.isArray(row.claimKeys) || !Array.isArray(row.actionHistory) || !Array.isArray(row.checks)) fail('冒险状态集合无效')
   const resources = record(row.resources, '冒险资源'); const abilities = record(row.abilities, '冒险能力')
-  const result: SimulationAdventureState = {
+  const result: AdventureRuntimeState = {
     schema: 'storyforge.text-adventure', version: 1, contentHash: key(row.contentHash, '内容 hash'), playerKey: 'player', currentLocationKey: key(row.currentLocationKey, '当前地点'), visitedLocationKeys: strings(row.visitedLocationKeys, '已访问地点'),
     inventory: row.inventory.map(raw => { const item = record(raw, '背包'); const state = String(item.state); if (!['carried', 'equipped', 'transferred'].includes(state)) fail('物品状态无效'); return { itemKey: key(item.itemKey, '背包物品'), ownerKey: key(item.ownerKey, '物品拥有者'), quantity: integer(item.quantity, '物品数量', 1, 1_000_000), state: state as 'carried' | 'equipped' | 'transferred', sourceEventSequence: integer(item.sourceEventSequence, '物品来源序号', 0) } }),
     resources: Object.fromEntries(Object.entries(resources).map(([name, amount]) => [key(name, '资源 key'), finite(amount, '资源值', -1_000_000, 1_000_000)])),
@@ -395,11 +395,11 @@ export function parseAdventureState(value: unknown): SimulationAdventureState | 
   return result
 }
 
-function eventPayload(event: SimulationEvent): Record<string, unknown> {
+function eventPayload(event: ProductRuntimeEvent): Record<string, unknown> {
   try { return record(JSON.parse(event.payloadJson), '冒险事件载荷') } catch (cause) { if (cause instanceof SyntaxError) fail('冒险事件载荷不是 JSON'); throw cause }
 }
 
-export function applyAdventureEvent(value: SimulationAdventureState | null, event: SimulationEvent): SimulationAdventureState | null {
+export function applyAdventureEvent(value: AdventureRuntimeState | null, event: ProductRuntimeEvent): AdventureRuntimeState | null {
   if (!event.type.startsWith('adventure.')) return value
   const state = parseAdventureState(value) ?? fail('当前实例没有冒险状态')
   const body = eventPayload(event)
@@ -522,7 +522,7 @@ export function applyAdventureEvent(value: SimulationAdventureState | null, even
 
 export function adventureRequirementSatisfied(
   requirement: AdventureRequirement,
-  state: SimulationAdventureState,
+  state: AdventureRuntimeState,
   narrativeVariables: Record<string, unknown> = {},
 ): boolean {
   if (requirement.itemKey && (state.inventory.find(item => item.itemKey === requirement.itemKey && item.ownerKey === 'player')?.quantity ?? 0) < (requirement.itemQuantity ?? 1)) return false
@@ -538,14 +538,14 @@ export function adventureRequirementSatisfied(
   return true
 }
 
-export function availableAdventureActions(content: AdventureContentV1, state: SimulationAdventureState, narrativeVariables: Record<string, unknown> = {}): Array<{ action: AdventureActionDefinition; available: boolean; reason: string }> {
+export function availableAdventureActions(content: AdventureContentV1, state: AdventureRuntimeState, narrativeVariables: Record<string, unknown> = {}): Array<{ action: AdventureActionDefinition; available: boolean; reason: string }> {
   return content.actions.filter(action => action.locationKey === state.currentLocationKey).map(action => {
     const available = (action.repeatable || !state.completedActionKeys.includes(action.key)) && action.requirements.every(item => adventureRequirementSatisfied(item, state, narrativeVariables))
     return { action, available, reason: available ? '' : action.unavailableText }
   })
 }
 
-export function applyAdventureEffects(content: AdventureContentV1, stateValue: SimulationAdventureState, effects: AdventureEffect[], sequence: number): SimulationAdventureState {
+export function applyAdventureEffects(content: AdventureContentV1, stateValue: AdventureRuntimeState, effects: AdventureEffect[], sequence: number): AdventureRuntimeState {
   const state = structuredClone(stateValue)
   const pending = [...effects]
   while (pending.length) {

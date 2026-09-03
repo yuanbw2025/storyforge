@@ -1,6 +1,6 @@
 import { hashCanonicalValue } from '../agent/run/hash'
 import type { StoryArc, StoryCore } from '../types'
-import { readOwnedRows, resolveScopeLike, type WorkspaceScopeLike } from '../world-engine/scope'
+import { readOwnedRows, resolveScopeLike, type WorkspaceScopeLike } from '../workspace/scope'
 
 export const STORY_INTENT_FIELDS_V1 = [
   'logline',
@@ -25,9 +25,7 @@ export type StoryArcIntentAlignmentV1 = 'aligned' | 'stale' | 'source-missing' |
 function valuesOf(row: StoryCore | null): StoryCoreIntentSnapshotV1['values'] {
   return Object.fromEntries(STORY_INTENT_FIELDS_V1.map(field => [
     field,
-    field === 'mainPlot'
-      ? row?.mainPlot ?? row?.storyLines ?? ''
-      : row?.[field] ?? '',
+    row?.[field] ?? '',
   ])) as StoryCoreIntentSnapshotV1['values']
 }
 

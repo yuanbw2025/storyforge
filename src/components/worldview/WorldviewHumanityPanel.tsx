@@ -74,15 +74,12 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   useEffect(() => {
     if (!worldview) return
     setValues({
-      history:   worldview.historyLine || '',
-      events:    worldview.worldEvents || '',
       races:     worldview.races || '',
       factions:  worldview.factionLayout || '',
       cities:    worldview.regionDimensions || '',
       politics: worldview.politicsOverview || '',
       economy: worldview.economyOverview || '',
       culture: worldview.cultureOverview || '',
-      legacySociety: worldview.politicsEconomyCulture || '',
       conflicts: worldview.internalConflicts || '',
       items:     worldview.itemDesign || '',
     })
@@ -196,41 +193,6 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                 <BookOpen className="w-4 h-4" />
                 打开正式历史年表
               </button>
-              <details className="border border-border rounded-xl bg-bg-surface p-4">
-                <summary className="cursor-pointer text-sm font-medium text-text-secondary">
-                  旧版历史资料（保留兼容，不作为新历史主入口）
-                </summary>
-                <div className="mt-4 space-y-4">
-                  <label className="block">
-                    <span className="block text-xs text-text-muted mb-1">旧版世界历史线</span>
-                    <InlineTextarea
-                      value={values.history || ''}
-                      onChange={value => {
-                        setValues(prev => ({ ...prev, history: value }))
-                        save('historyLine', value)
-                      }}
-                      placeholder="旧版历史资料"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="block text-xs text-text-muted mb-1">旧版世界大事记</span>
-                    <InlineTextarea
-                      value={values.events || ''}
-                      onChange={value => {
-                        setValues(prev => ({ ...prev, events: value }))
-                        save('worldEvents', value)
-                      }}
-                      placeholder="旧版大事记资料"
-                    />
-                  </label>
-                  <CodexPanel
-                    project={project}
-                    fixedCategoryKeys={['humEra', 'humEvent']}
-                    extractionSourceText={`${values.history || ''}\n${values.events || ''}`}
-                    embedded
-                  />
-                </div>
-              </details>
             </div>
           )}
           {FIELDS.map(f => (
@@ -267,29 +229,6 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                     embedded
                   />
                 </div>
-              )}
-              {f.key === 'politics' && (
-                <details className="mt-6 border border-border rounded-xl bg-bg-surface p-4">
-                  <summary className="cursor-pointer text-sm font-medium text-text-secondary">
-                    旧版“政经文化”兼容资料
-                  </summary>
-                  <div className="mt-4 space-y-4">
-                    <InlineTextarea
-                      value={values.legacySociety || ''}
-                      onChange={value => {
-                        setValues(prev => ({ ...prev, legacySociety: value }))
-                        save('politicsEconomyCulture', value)
-                      }}
-                      placeholder="旧版政经文化原文"
-                    />
-                    <CodexPanel
-                      project={project}
-                      fixedCategoryKeys={['humSociety']}
-                      extractionSourceText={values.legacySociety || ''}
-                      embedded
-                    />
-                  </div>
-                </details>
               )}
             </div>
           ))}

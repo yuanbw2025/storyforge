@@ -18,7 +18,7 @@ import {
   runGenerationNode,
 } from '../../src/lib/generation/generation-node'
 import type { AIConfigPreset, Chapter, OutlineNode, Project } from '../../src/lib/types'
-import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { buildNarrativeBriefV1 } from '../../src/lib/agent/narrative-brief'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'

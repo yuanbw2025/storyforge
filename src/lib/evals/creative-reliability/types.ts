@@ -4,7 +4,7 @@ import type {
 } from '../../agent/creative-reliability'
 
 export const CREATIVE_RELIABILITY_EVAL_VARIANTS_V1 = [
-  'legacy-direct',
+  'baseline-direct',
   'creative-reliability',
 ] as const
 
@@ -53,8 +53,8 @@ export interface CreativeReliabilityEvalGenerationV1 {
   variant: CreativeReliabilityEvalVariantV1
   status:
     | CreativeArtifactStatusV1
-    | 'legacy-ready'
-    | 'legacy-protocol-failed'
+    | 'baseline-ready'
+    | 'baseline-protocol-failed'
     | 'provider-failed'
   presentedText: string
   outputHash: string | null
@@ -143,7 +143,7 @@ export interface CreativeReliabilityVariantAggregateV1 {
 }
 
 export interface CreativeReliabilityEvalAggregateV1 {
-  legacyDirect: CreativeReliabilityVariantAggregateV1
+  baselineDirect: CreativeReliabilityVariantAggregateV1
   creativeReliability: CreativeReliabilityVariantAggregateV1
   comparison: {
     tokenPerAdoptableMultiplier: number | null

@@ -24,8 +24,8 @@ interface StableSubjectRefs {
 
 type TableApi = Pick<Transaction, 'table'> | { table: (name: string) => any }
 
-const MIGRATED_SOURCE = 'legacy-state-card'
-const LEGACY_PREDICATE = 'legacyState'
+const MIGRATED_SOURCE = 'migrated-state-card'
+const MIGRATED_PREDICATE = 'migratedStateCard'
 
 function normalizeEntityName(name: string): string {
   return (name || '').trim()
@@ -40,15 +40,15 @@ function safeFields(raw: string): StateField[] {
 }
 
 function factValueFor(category: StateCategory, field: StateField, predicate: string): string {
-  if (predicate === LEGACY_PREDICATE) {
+  if (predicate === MIGRATED_PREDICATE) {
     return JSON.stringify({ category, field: field.key, value: field.value })
   }
   return field.value
 }
 
 function predicateFor(category: StateCategory, fieldKey: string): string {
-  if (category !== 'character') return LEGACY_PREDICATE
-  return normalizeFactPredicate(fieldKey)?.key ?? LEGACY_PREDICATE
+  if (category !== 'character') return MIGRATED_PREDICATE
+  return normalizeFactPredicate(fieldKey)?.key ?? MIGRATED_PREDICATE
 }
 
 async function projectRows(api: TableApi, table: string, projectId: number): Promise<any[]> {
@@ -131,7 +131,7 @@ export async function migrateStateCardsToTemporalFactCandidates(api: TableApi, o
         value,
         sourceType: 'import',
         sourceRecordTable: MIGRATED_SOURCE,
-        sourceQuote: `旧状态卡/${card.category}/${subjectName}/${field.key}：${field.value}`,
+        sourceQuote: `迁移状态卡/${card.category}/${subjectName}/${field.key}：${field.value}`,
         validFromChapterId: card.lastChapterId ?? null,
         validToChapterId: null,
         status: 'candidate',

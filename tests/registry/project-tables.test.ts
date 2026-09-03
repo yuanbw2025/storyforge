@@ -50,7 +50,7 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       const allowed = new Set(['editable', 'evidence', 'derived-none', 'not-applicable'])
       expect(PROJECT_TABLES.every(spec => allowed.has(spec.memoryClassification.classification))).toBe(true)
       expect(PROJECT_TABLES.filter(spec => spec.memoryClassification.classification === 'editable').map(spec => spec.name).sort())
-        .toEqual(['chapters', 'creativeRules', 'gameProductionBriefs', 'gameProductions', 'gameRulePacks', 'projects', 'storyCores', 'works', 'worlds'])
+        .toEqual(['chapters', 'creativeRules', 'productProductionBriefs', 'productProductions', 'projects', 'storyCores', 'ttrpgRulePacks', 'works', 'worlds'])
       expect(PROJECT_TABLES.find(spec => spec.name === 'agentRunEvents')?.memoryClassification.classification).toBe('evidence')
       expect(PROJECT_TABLES.find(spec => spec.name === 'retrievalChunks')?.memoryClassification.classification).toBe('derived-none')
       expect(PROJECT_TABLES.find(spec => spec.name === 'promptTemplates')?.memoryClassification.classification).toBe('not-applicable')
@@ -65,10 +65,10 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
         kind: 'field', owner: 'world', field: 'worldId',
       })
       expect(PROJECT_TABLES.find(spec => spec.name === 'storyCores')?.domainOwner).toMatchObject({
-        allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
+        allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
       })
       expect(PROJECT_TABLES.find(spec => spec.name === 'chapters')?.domainOwner).toMatchObject({
-        allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
+        allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
       })
     })
 
@@ -88,8 +88,8 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
         .toEqual(expect.arrayContaining(['characterRelations']))
       const names = publishable.map(spec => spec.name)
       expect(names).not.toEqual(expect.arrayContaining([
-        'productMediaAssets', 'productMediaBlobs', 'gameBuilds', 'gameReleases',
-        'simulationSessions', 'narrativeModules', 'narrativeNodes',
+        'productMediaAssets', 'productMediaBlobs', 'productBuilds', 'productReleases',
+        'productRuntimeSessions', 'narrativeModules', 'narrativeNodes',
       ]))
     })
   })

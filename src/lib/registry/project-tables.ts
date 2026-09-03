@@ -14,19 +14,19 @@ import { db } from '../db/schema'
 import type { DomainOwnershipSpec, TableSpec, WorkspaceMemoryClassificationV1 } from './types'
 
 const WORKSPACE_DOMAIN_OWNER = {
-  allowed: ['workspace'], legacyDefault: 'workspace', locator: { kind: 'workspace' },
+  allowed: ['workspace'], defaultOwner: 'workspace', locator: { kind: 'workspace' },
 } as const satisfies DomainOwnershipSpec
 
 const WORLD_DOMAIN_OWNER = {
-  allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' },
+  allowed: ['world'], defaultOwner: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' },
 } as const satisfies DomainOwnershipSpec
 
 const WORK_DOMAIN_OWNER = {
-  allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
+  allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
 } as const satisfies DomainOwnershipSpec
 
 const WORLD_OR_WORK_DOMAIN_OWNER = {
-  allowed: ['world', 'work'], legacyDefault: 'work', locator: {
+  allowed: ['world', 'work'], defaultOwner: 'work', locator: {
     kind: 'exclusive-fields', worldField: 'worldId', workField: 'workId',
   },
 } as const satisfies DomainOwnershipSpec
@@ -82,13 +82,13 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'worldRevisions[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldReleases[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldDerivations[worldId]', onDelete: 'cascade' },
-      { kind: 'simple', field: 'id', target: 'gameReleases[worldId]', onDelete: 'cascade' },
-      { kind: 'simple', field: 'id', target: 'simulationSessions[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'productReleases[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'productRuntimeSessions[worldId]', onDelete: 'cascade' },
     ],
     note: 'WORLD-2C 显式世界根；公开身份和世界版本的未来权威' },
 
   { table: db.works, name: 'works', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
+    domainOwner: { allowed: ['world'], defaultOwner: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
     workspaceProjection: {
       version: 1, classification: 'editable', documentKind: 'work', mapper: 'work-root-v1',
       codec: 'yaml', editPolicy: 'author-editable', scopeOwner: 'work',
@@ -96,8 +96,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     },
     refs: [
       { kind: 'simple', field: 'id', target: 'workCharacterBindings[workId]', onDelete: 'cascade' },
-      { kind: 'simple', field: 'id', target: 'gameReleases[workId]', onDelete: 'cascade' },
-      { kind: 'simple', field: 'id', target: 'simulationSessions[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'productReleases[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'productRuntimeSessions[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'agentRuns[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'adaptationProjects[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'adaptationProjects[sourceWorkId]', onDelete: 'setNull' },
@@ -112,7 +112,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'WORLD-2C 显式作品根；同一 World 可包含多部隔离作品' },
 
   { table: db.adaptationProjects, name: 'adaptationProjects', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     refs: [
       { kind: 'simple', field: 'id', target: 'adaptationSourceUnits[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'screenplayScenes[adaptationProjectId]', onDelete: 'cascade' },
@@ -137,7 +137,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'ADAPT-CORE-1 改编公共根；唯一目标 Work 授权跨 Work 来源读取，Brief/Plan 为原生结构化对象' },
 
   { table: db.adaptationSourceUnits, name: 'adaptationSourceUnits', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
     exportRemap: [
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
       { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
@@ -148,7 +148,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'ADAPT-CORE-1 追加式不可变来源清单；不复制全文，稳定 key 和 hash 跨备份保留' },
 
   { table: db.screenplayScenes, name: 'screenplayScenes', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     refs: [
       { kind: 'array', field: 'sourceUnitIds', itemTarget: 'adaptationSourceUnits', onDelete: 'removeItem' },
       { kind: 'json', field: 'blocks', jsonPath: '$[].characterId', target: 'characters[id]', onDelete: 'remap' },
@@ -165,7 +165,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'SCREEN-1 结构化正规剧本场景；块级角色和不可变来源证据统一重映射' },
 
   { table: db.comicPages, name: 'comicPages', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     refs: [{ kind: 'simple', field: 'id', target: 'comicPanels[pageId]', onDelete: 'cascade' }],
     exportRemap: [
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -175,7 +175,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'COMIC-1 页级节奏与布局根；页面尺寸只取 AdaptationProject targetSpec' },
 
   { table: db.comicPanels, name: 'comicPanels', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     refs: [
       { kind: 'array', field: 'sourceUnitIds', itemTarget: 'adaptationSourceUnits', onDelete: 'removeItem' },
       { kind: 'simple', field: 'id', target: 'comicMediaAssets[panelId]', onDelete: 'cascade' },
@@ -189,7 +189,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'COMIC-1 可编辑格、镜头、排字与来源证据；媒体选择使用稳定字符串 key' },
 
   { table: db.comicVisualSubjects, name: 'comicVisualSubjects', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     refs: [
       { kind: 'array', field: 'sourceUnitIds', itemTarget: 'adaptationSourceUnits', onDelete: 'removeItem' },
     ],
@@ -204,7 +204,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.comicMediaAssets, name: 'comicMediaAssets', owner: 'project', exportable: true, exportIdField: true,
     mediaRef: { blobTable: 'mediaBlobObjects', field: 'blobObjectId' },
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     exportRemap: [
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
       { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
@@ -221,10 +221,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       backendField: 'backend', stateField: 'storageState', pathField: 'opfsPath',
       leaseOwnerField: 'leaseOwner', leaseExpiresAtField: 'leaseExpiresAt', lastVerifiedAtField: 'lastVerifiedAt',
     },
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     refs: [
       { kind: 'simple', field: 'id', target: 'comicMediaAssets[blobObjectId]', onDelete: 'keep' },
-      { kind: 'simple', field: 'id', target: 'gameBuildArtifacts[blobObjectId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'productBuildArtifacts[blobObjectId]', onDelete: 'keep' },
       { kind: 'simple', field: 'id', target: 'productMediaBlobs[blobObjectId]', onDelete: 'keep' },
     ],
     exportRemap: [
@@ -240,12 +240,12 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       leaseOwner: null, leaseExpiresAt: null, lastVerifiedAt: null,
       disposition: 'available', deleteRequestedAt: null, deleteReceiptHash: null,
     },
-    note: 'MEDIA-CORE/GAMEPROD 产品中立、Work-owned 内容寻址媒资；物理删除只允许引用感知 GC' },
+    note: 'MEDIA-CORE/PRODUCTPROD 产品中立、Work-owned 内容寻址媒资；物理删除只允许引用感知 GC' },
 
   { table: db.workCharacterBindings, name: 'workCharacterBindings', owner: 'project', exportable: true,
     resourceIdentity: RESOURCE_IDENTITY('work-character-binding', 'character', '作品角色身份与弧光'),
     worldSemantic: { version: 1, area: 'characters', resourceKind: 'work-character-binding', canonPolicy: 'authoritative-table' },
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     exportRemap: [
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
       { field: 'characterId', remapVia: 'characters', exportAs: '_characterExportId', onUnmapped: 'require' },
@@ -261,7 +261,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'MEMORY-1 文件文档绑定与三方基线；不复制领域正文，可从正式表与磁盘 manifest 重建' },
 
   { table: db.worldRevisions, name: 'worldRevisions', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
+    domainOwner: { allowed: ['world'], defaultOwner: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
     tree: { parentField: 'parentRevisionId' },
     refs: [{ kind: 'simple', field: 'id', target: 'worldReleases[revisionId]', onDelete: 'keep' }],
     exportRemap: [
@@ -271,8 +271,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'WORLD-2E 可比较的世界草稿修订；manifest 为冻结快照' },
 
   { table: db.worldReleases, name: 'worldReleases', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
-    refs: [{ kind: 'simple', field: 'id', target: 'gameReleases[worldReleaseId]', onDelete: 'setNull' }],
+    domainOwner: { allowed: ['world'], defaultOwner: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
+    refs: [{ kind: 'simple', field: 'id', target: 'productReleases[worldReleaseId]', onDelete: 'setNull' }],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'revisionId', remapVia: 'worldRevisions', exportAs: '_revisionExportId', onUnmapped: 'require' },
@@ -280,7 +280,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'WORLD-2E 不可变发布版本；运行实例只绑定该记录或显式草稿快照' },
 
   { table: db.worldDerivations, name: 'worldDerivations', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['world'], legacyDefault: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
+    domainOwner: { allowed: ['world'], defaultOwner: 'world', locator: { kind: 'field', owner: 'world', field: 'worldId' } },
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'targetRevisionId', remapVia: 'worldRevisions', exportAs: '_targetRevisionExportId' },
@@ -554,7 +554,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.narrativeNodes, name: 'narrativeNodes', owner: 'project', exportable: true, exportIdField: true,
     resourceIdentity: RESOURCE_IDENTITY('narrative-node', 'narrative-blueprint', '叙事节点'),
-    domainOwner: { allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
+    domainOwner: { allowed: ['world', 'work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
     exportRemap: [
       { field: 'moduleId', remapVia: 'narrativeModules', exportAs: '_moduleExportId', onUnmapped: 'require' },
       { field: 'sourceOutlineNodeId', remapVia: 'outlineNodes', exportAs: '_sourceOutlineExportId' },
@@ -564,17 +564,17 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.narrativeBeats, name: 'narrativeBeats', owner: 'project', exportable: true, exportIdField: true,
     resourceIdentity: RESOURCE_IDENTITY('narrative-beat', 'narrative-blueprint', '叙事节拍'),
-    domainOwner: { allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
+    domainOwner: { allowed: ['world', 'work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
     exportRemap: [
       { field: 'moduleId', remapVia: 'narrativeModules', exportAs: '_moduleExportId', onUnmapped: 'require' },
       { field: 'speakerCharacterId', remapVia: 'characters', exportAs: '_speakerCharacterExportId' },
     ],
     defaults: { speakerCharacterId: null, order: 0 },
-    note: 'STORYGAME-1A 节点内有序旁白、对话、动作和系统提示；不保存玩家进度' },
+    note: '长篇与世界设计蓝图节点内的有序旁白、对话、动作和系统提示；不属于上层产品发布或玩家进度' },
 
   { table: db.narrativeChoices, name: 'narrativeChoices', owner: 'project', exportable: true, exportIdField: true,
     resourceIdentity: RESOURCE_IDENTITY('narrative-choice', 'narrative-blueprint', '叙事选择'),
-    domainOwner: { allowed: ['world', 'work'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
+    domainOwner: { allowed: ['world', 'work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'narrativeModules', field: 'moduleId' } },
     exportRemap: [
       { field: 'moduleId', remapVia: 'narrativeModules', exportAs: '_moduleExportId', onUnmapped: 'require' },
     ],
@@ -582,25 +582,31 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       description: '', unavailableReason: '', displayConditionJson: '{}',
       availableConditionJson: '{}', effectsJson: '[]', tagsJson: '[]', order: 0,
     },
-    note: 'STORYGAME-1A 正式内容选择；目标使用节点稳定 key，运行选择由 SIM 事件记录' },
+    note: '上层产品正式内容选择；目标使用节点稳定 key，运行选择由 ProductRuntime 事件记录' },
 
   { table: db.productMediaAssets, name: 'productMediaAssets', owner: 'project',
     exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    refs: [{ kind: 'simple', field: 'id', target: 'productMediaBlobs[mediaAssetId]', onDelete: 'cascade' }],
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    refs: [
+      { kind: 'simple', field: 'id', target: 'productMediaBlobs[mediaAssetId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'ttrpgRuntimeAssetRequests[mediaAssetId]', onDelete: 'setNull' },
+    ],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'productReleaseId', remapVia: 'productReleases', exportAs: '_productReleaseExportId' },
+      { field: 'productRuntimeSessionId', remapVia: 'productRuntimeSessions', exportAs: '_productRuntimeSessionExportId' },
     ],
     defaults: {
+      productReleaseId: null, productRuntimeSessionId: null,
       width: null, height: null, durationMs: null, source: '', license: '', altText: '',
       characterTag: '', sceneTag: '',
     },
-    note: '所有上层产品共用的 Work-owned 稳定 key + 版本媒资元数据；从不进入 WorldRelease' },
+    note: '上层产品媒资元数据；必须且只能归属一个 ProductRelease 或 ProductRuntimeSession，从不进入 WorldRelease' },
 
   { table: db.productMediaBlobs, name: 'productMediaBlobs', owner: 'project',
     exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -610,9 +616,12 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     defaults: { data: null },
     note: '产品媒资到共享内容寻址对象的强绑定；物理字节只存在 mediaBlobObjects' },
 
-  { table: db.gameReleases, name: 'gameReleases', owner: 'project', exportable: true, exportIdField: true,
-    domainOwner: { allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
-    refs: [{ kind: 'simple', field: 'id', target: 'simulationSessions[gameReleaseId]', onDelete: 'cascade' }],
+  { table: db.productReleases, name: 'productReleases', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    refs: [
+      { kind: 'simple', field: 'id', target: 'productRuntimeSessions[productReleaseId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'productMediaAssets[productReleaseId]', onDelete: 'cascade' },
+    ],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
@@ -791,8 +800,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   { table: db.agentRuns, name: 'agentRuns', owner: 'project',
     domainOwner: {
-      allowed: ['work', 'instance'], legacyDefault: 'work',
-      locator: { kind: 'exclusive-work-instance', workField: 'workId', instanceField: 'simulationSessionId' },
+      allowed: ['work', 'instance'], defaultOwner: 'work',
+      locator: { kind: 'exclusive-work-instance', workField: 'workId', instanceField: 'productRuntimeSessionId' },
     },
     worldScoped: true, exportable: true, exportIdField: true,
     tree: { parentField: 'parentRunId' },
@@ -809,15 +818,15 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'parentRunId', remapVia: 'agentRuns', selfTree: true, exportAs: '_parentExportId' },
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
       { field: 'conversationId', remapVia: 'agentConversations', exportAs: '_conversationExportId' },
-      { field: 'simulationSessionId', remapVia: 'simulationSessions',
-        exportAs: '_simulationSessionExportId' },
-      { field: 'gameBuildId', remapVia: 'gameBuilds', exportAs: '_gameBuildExportId' },
+      { field: 'productRuntimeSessionId', remapVia: 'productRuntimeSessions',
+        exportAs: '_productRuntimeSessionExportId' },
+      { field: 'productBuildId', remapVia: 'productBuilds', exportAs: '_productBuildExportId' },
     ],
     portableData: {
       kind: 'agent-run-root',
       contractField: 'contractJson',
       contractHashField: 'contractHash',
-      dependencies: ['worldGroups', 'chapters', 'outlineNodes', 'simulationSessions', 'gameBuilds'],
+      dependencies: ['worldGroups', 'chapters', 'outlineNodes', 'productRuntimeSessions', 'productBuilds'],
     },
     defaults: {
       status: 'planned',
@@ -830,13 +839,13 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       parentRelation: null,
       parentReceiptHash: null,
       parentArtifactHash: null,
-      simulationSessionId: null,
-      gameBuildId: null,
+      productRuntimeSessionId: null,
+      productBuildId: null,
     },
     note: 'HARNESS-1/21/RUNTIME-1 durable run 根；Work/Instance owner 恰好二选一，复用严格事件投影与恢复，不保存隐藏推理' },
 
   { table: db.agentRunEvents, name: 'agentRunEvents', owner: 'project',
-    domainOwner: { allowed: ['work', 'instance'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'inherit', table: 'agentRuns', field: 'runId' } },
+    domainOwner: { allowed: ['work', 'instance'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'inherit', table: 'agentRuns', field: 'runId' } },
     worldScoped: true, exportable: true,
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
@@ -847,7 +856,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'HARNESS-1 严格追加事件；(runId,sequence) 唯一，非法版本/断序/scope 污染 fail-closed' },
 
   { table: db.agentRunCheckpoints, name: 'agentRunCheckpoints', owner: 'project',
-    domainOwner: { allowed: ['work', 'instance'], legacyDefault: 'work', locator: { kind: 'parent', owner: 'inherit', table: 'agentRuns', field: 'runId' } },
+    domainOwner: { allowed: ['work', 'instance'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'inherit', table: 'agentRuns', field: 'runId' } },
     worldScoped: true, exportable: true,
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
@@ -898,64 +907,61 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     },
     note: '领域节点模式逐节点输入、输出、执行计划与断点记录，保证刷新后仍可见可恢复' },
 
-  // ───────────────────── SIM-1 共享互动运行时 ─────────────────────
-  { table: db.simulationSessions, name: 'simulationSessions', owner: 'project',
-    domainOwner: { allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'field', owner: 'instance', field: 'id' } },
+  // ───────────────────── PRODUCT-RUNTIME-1 上层产品运行时 ─────────────────────
+  { table: db.productRuntimeSessions, name: 'productRuntimeSessions', owner: 'project',
+    domainOwner: { allowed: ['instance'], defaultOwner: 'instance', locator: { kind: 'field', owner: 'instance', field: 'id' } },
     worldScoped: true, exportable: true, exportIdField: true,
     tree: { parentField: 'parentSessionId' },
     refs: [
-      { kind: 'simple', field: 'id', target: 'simulationSessions[parentSessionId]', onDelete: 'setNull' },
-      { kind: 'simple', field: 'id', target: 'simulationEvents[sessionId]', onDelete: 'cascade' },
-      { kind: 'simple', field: 'id', target: 'simulationCheckpoints[sessionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'productRuntimeSessions[parentSessionId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'productRuntimeEvents[sessionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'productRuntimeCheckpoints[sessionId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'ttrpgSessionParticipants[sessionId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'ttrpgRuntimeAssetRequests[sessionId]', onDelete: 'cascade' },
-      { kind: 'simple', field: 'id', target: 'agentRuns[simulationSessionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'productMediaAssets[productRuntimeSessionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'agentRuns[productRuntimeSessionId]', onDelete: 'cascade' },
     ],
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
-      { field: 'parentSessionId', remapVia: 'simulationSessions', selfTree: true,
+      { field: 'parentSessionId', remapVia: 'productRuntimeSessions', selfTree: true,
         exportAs: '_parentSessionExportId' },
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId' },
       { field: 'workId', remapVia: 'works', exportAs: '_workExportId' },
-      { field: 'gameReleaseId', remapVia: 'gameReleases', exportAs: '_gameReleaseExportId' },
-      { field: 'gameBuildId', remapVia: 'gameBuilds', exportAs: '_gameBuildExportId' },
+      { field: 'productReleaseId', remapVia: 'productReleases', exportAs: '_productReleaseExportId' },
+      { field: 'productBuildId', remapVia: 'productBuilds', exportAs: '_productBuildExportId' },
     ],
     defaults: {
-      kind: 'sandbox',
       status: 'active',
       rulesetVersion: 1,
       canonSnapshotJson: '{"version":1,"sources":[]}',
       initialStateJson: '{"version":1,"clock":0,"entities":{},"memories":[],"narratives":[],"ttrpg":null,"lastSequence":0}',
-      gameReleaseId: null,
-      gameBuildId: null,
-      runtimeSourceHash: null,
     },
-    note: 'SIM-1 独立互动世界实例；冻结创作来源，不反写 Canon；分支拥有独立事件流' },
+    note: 'PRODUCT-RUNTIME-1 产品实例；必须绑定恰好一个已验证 ProductRelease 或 ProductBuild，冻结来源且不反写世界引擎' },
 
-  { table: db.simulationEvents, name: 'simulationEvents', owner: 'project',
-    domainOwner: { allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'parent', owner: 'instance', table: 'simulationSessions', field: 'sessionId' } },
-    worldScoped: true, exportable: true,
+  { table: db.productRuntimeEvents, name: 'productRuntimeEvents', owner: 'project',
+    domainOwner: { allowed: ['instance'], defaultOwner: 'instance', locator: { kind: 'parent', owner: 'instance', table: 'productRuntimeSessions', field: 'sessionId' } },
+    worldScoped: true, exportable: true, exportIdField: true,
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
-      { field: 'sessionId', remapVia: 'simulationSessions',
-        exportAs: '_simulationSessionExportId', onUnmapped: 'require' },
+      { field: 'sessionId', remapVia: 'productRuntimeSessions',
+        exportAs: '_productRuntimeSessionExportId', onUnmapped: 'require' },
     ],
     defaults: {
       actorKey: null, targetKey: null, commandId: null,
       baseSequence: null, baseStateHash: null, payloadJson: '{}',
     },
-    note: 'SIM-1 严格追加事件；(sessionId,sequence) 唯一，状态、骰子、记忆和叙事均从事件回放' },
+    note: 'PRODUCT-RUNTIME-1 严格追加事件；(sessionId,sequence) 唯一，产品状态从事件回放' },
 
-  { table: db.simulationCheckpoints, name: 'simulationCheckpoints', owner: 'project',
-    domainOwner: { allowed: ['instance'], legacyDefault: 'instance', locator: { kind: 'parent', owner: 'instance', table: 'simulationSessions', field: 'sessionId' } },
-    worldScoped: true, exportable: true,
+  { table: db.productRuntimeCheckpoints, name: 'productRuntimeCheckpoints', owner: 'project',
+    domainOwner: { allowed: ['instance'], defaultOwner: 'instance', locator: { kind: 'parent', owner: 'instance', table: 'productRuntimeSessions', field: 'sessionId' } },
+    worldScoped: true, exportable: true, exportIdField: true,
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
-      { field: 'sessionId', remapVia: 'simulationSessions',
-        exportAs: '_simulationSessionExportId', onUnmapped: 'require' },
+      { field: 'sessionId', remapVia: 'productRuntimeSessions',
+        exportAs: '_productRuntimeSessionExportId', onUnmapped: 'require' },
     ],
     defaults: { throughSequence: 0, name: '检查点' },
-    note: 'SIM-1 可重建状态检查点；hash 异常时从初始状态与追加事件恢复' },
+    note: 'PRODUCT-RUNTIME-1 可重建状态检查点；hash 异常时从初始状态与追加事件恢复' },
 
   // ───────────────────── NS-4 时序事实账本 ─────────────────────
   // 导出/导入：全部分类型 FK + 三个章节引用 + 自引用 supersedesFactId 都做 exportRemap，
@@ -1131,8 +1137,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: '消耗统计;projectId 可空;体积大不导出' },
 
   {
-    table: db.gameProductions,
-    name: "gameProductions",
+    table: db.productProductions,
+    name: "productProductions",
     owner: "project",
     exportable: true,
     exportIdField: true,
@@ -1141,19 +1147,19 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       {
         kind: "simple",
         field: "id",
-        target: "gameProductionBriefs[productionId]",
+        target: "productProductionBriefs[productionId]",
         onDelete: "cascade",
       },
       {
         kind: "simple",
         field: "id",
-        target: "gameProductionCommands[productionId]",
+        target: "productProductionCommands[productionId]",
         onDelete: "cascade",
       },
       {
         kind: "simple",
         field: "id",
-        target: "gameBuilds[productionId]",
+        target: "productBuilds[productionId]",
         onDelete: "cascade",
       },
     ],
@@ -1171,9 +1177,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
         onUnmapped: "require",
       },
       {
-        field: "currentGameReleaseId",
-        remapVia: "gameReleases",
-        exportAs: "_currentGameReleaseExportId",
+        field: "currentProductReleaseId",
+        remapVia: "productReleases",
+        exportAs: "_currentProductReleaseExportId",
       },
     ],
     memoryClassification: {
@@ -1188,15 +1194,15 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       controlEpoch: 0,
       currentBriefRevision: null,
       currentBuildNumber: null,
-      currentGameReleaseId: null,
+      currentProductReleaseId: null,
       lastErrorJson: "{}",
     },
-    note: "GAMEPROD-1 多轮演化生产根；用户命令是唯一状态转换入口",
+    note: "PRODUCTPROD-1 多轮演化生产根；用户命令是唯一状态转换入口",
   },
 
   {
-    table: db.gameProductionBriefs,
-    name: "gameProductionBriefs",
+    table: db.productProductionBriefs,
+    name: "productProductionBriefs",
     owner: "project",
     exportable: true,
     exportIdField: true,
@@ -1216,7 +1222,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       },
       {
         field: "productionId",
-        remapVia: "gameProductions",
+        remapVia: "productProductions",
         exportAs: "_productionExportId",
         onUnmapped: "require",
       },
@@ -1241,12 +1247,12 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       estimateJson: "{}",
       authorizedAt: null,
     },
-    note: "GAMEPROD-1 不可变 Brief 修订与一次性授权边界",
+    note: "PRODUCTPROD-1 不可变 Brief 修订与一次性授权边界",
   },
 
   {
-    table: db.gameProductionCommands,
-    name: "gameProductionCommands",
+    table: db.productProductionCommands,
+    name: "productProductionCommands",
     owner: "project",
     exportable: true,
     exportIdField: true,
@@ -1266,7 +1272,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       },
       {
         field: "productionId",
-        remapVia: "gameProductions",
+        remapVia: "productProductions",
         exportAs: "_productionExportId",
         onUnmapped: "require",
       },
@@ -1278,12 +1284,12 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       errorCode: null,
       completedAt: null,
     },
-    note: "GAMEPROD-1 幂等命令 claim/CAS receipt；不保存密钥或外部原始响应",
+    note: "PRODUCTPROD-1 幂等命令 claim/CAS receipt；不保存密钥或外部原始响应",
   },
 
   {
-    table: db.gameBuilds,
-    name: "gameBuilds",
+    table: db.productBuilds,
+    name: "productBuilds",
     owner: "project",
     exportable: true,
     exportIdField: true,
@@ -1292,25 +1298,25 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       {
         kind: "simple",
         field: "id",
-        target: "gameBuildArtifacts[buildId]",
+        target: "productBuildArtifacts[buildId]",
         onDelete: "cascade",
       },
       {
         kind: "simple",
         field: "id",
-        target: "gameQualityGateReceipts[buildId]",
+        target: "productQualityGateReceipts[buildId]",
         onDelete: "cascade",
       },
       {
         kind: "simple",
         field: "id",
-        target: "agentRuns[gameBuildId]",
+        target: "agentRuns[productBuildId]",
         onDelete: "cascade",
       },
       {
         kind: "simple",
         field: "id",
-        target: "simulationSessions[gameBuildId]",
+        target: "productRuntimeSessions[productBuildId]",
         onDelete: "cascade",
       },
     ],
@@ -1329,24 +1335,24 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       },
       {
         field: "productionId",
-        remapVia: "gameProductions",
+        remapVia: "productProductions",
         exportAs: "_productionExportId",
         onUnmapped: "require",
       },
       {
-        field: "sourceGameReleaseId",
-        remapVia: "gameReleases",
-        exportAs: "_sourceGameReleaseExportId",
+        field: "sourceProductReleaseId",
+        remapVia: "productReleases",
+        exportAs: "_sourceProductReleaseExportId",
       },
       {
-        field: "releasedGameReleaseId",
-        remapVia: "gameReleases",
-        exportAs: "_releasedGameReleaseExportId",
+        field: "releasedProductReleaseId",
+        remapVia: "productReleases",
+        exportAs: "_releasedProductReleaseExportId",
       },
     ],
     defaults: {
       parentBuildNumber: null,
-      sourceGameReleaseId: null,
+      sourceProductReleaseId: null,
       status: "draft",
       resumeState: null,
       stateRevision: 0,
@@ -1365,17 +1371,17 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       compatibilityJson: "{}",
       rootTerminalReceiptHash: null,
       adoptionIntentHash: null,
-      releasedGameReleaseId: null,
+      releasedProductReleaseId: null,
       failureJson: "{}",
       startedAt: null,
       completedAt: null,
     },
-    note: "GAMEPROD-1 单轮可恢复 Build、计划、预算、集成、QA 与发布证据",
+    note: "PRODUCTPROD-1 单轮可恢复 Build、计划、预算、集成、QA 与发布证据",
   },
 
   {
-    table: db.gameQualityGateReceipts,
-    name: "gameQualityGateReceipts",
+    table: db.productQualityGateReceipts,
+    name: "productQualityGateReceipts",
     owner: "project",
     exportable: true,
     exportIdField: true,
@@ -1395,7 +1401,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       },
       {
         field: "buildId",
-        remapVia: "gameBuilds",
+        remapVia: "productBuilds",
         exportAs: "_buildExportId",
         onUnmapped: "require",
       },
@@ -1407,12 +1413,12 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       reason:
         "Build 质量门的测量环境、阈值、输入 hash 与结果回执；阈值升级追加新证据，不改写旧 Build。",
     },
-    note: "GAMEPROD-1I 浏览器性能及后续 verifier 的不可变 Build 质量回执",
+    note: "PRODUCTPROD-1I 浏览器性能及后续 verifier 的不可变 Build 质量回执",
   },
 
   {
-    table: db.gameBuildArtifacts,
-    name: "gameBuildArtifacts",
+    table: db.productBuildArtifacts,
+    name: "productBuildArtifacts",
     owner: "project",
     exportable: true,
     exportIdField: true,
@@ -1432,7 +1438,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       },
       {
         field: "buildId",
-        remapVia: "gameBuilds",
+        remapVia: "productBuilds",
         exportAs: "_buildExportId",
         onUnmapped: "require",
       },
@@ -1462,11 +1468,11 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       parentArtifactHash: null,
       carriedFrom: null,
     },
-    note: "GAMEPROD-1 结构化与二进制候选、验收、继承和来源证据",
+    note: "PRODUCTPROD-1 结构化与二进制候选、验收、继承和来源证据",
   },
   {
-    table: db.gameRulePacks,
-    name: "gameRulePacks",
+    table: db.ttrpgRulePacks,
+    name: "ttrpgRulePacks",
     owner: "project",
     exportable: true,
     exportIdField: true,
@@ -1502,11 +1508,11 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     owner: "project",
     domainOwner: {
       allowed: ["instance"],
-      legacyDefault: "instance",
+      defaultOwner: "instance",
       locator: {
         kind: "parent",
         owner: "instance",
-        table: "simulationSessions",
+        table: "productRuntimeSessions",
         field: "sessionId",
       },
     },
@@ -1532,8 +1538,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       },
       {
         field: "sessionId",
-        remapVia: "simulationSessions",
-        exportAs: "_simulationSessionExportId",
+        remapVia: "productRuntimeSessions",
+        exportAs: "_productRuntimeSessionExportId",
         onUnmapped: "require",
       },
     ],
@@ -1557,11 +1563,11 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     owner: "project",
     domainOwner: {
       allowed: ["instance"],
-      legacyDefault: "instance",
+      defaultOwner: "instance",
       locator: {
         kind: "parent",
         owner: "instance",
-        table: "simulationSessions",
+        table: "productRuntimeSessions",
         field: "sessionId",
       },
     },
@@ -1587,8 +1593,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       },
       {
         field: "sessionId",
-        remapVia: "simulationSessions",
-        exportAs: "_simulationSessionExportId",
+        remapVia: "productRuntimeSessions",
+        exportAs: "_productRuntimeSessionExportId",
         onUnmapped: "require",
       },
       {

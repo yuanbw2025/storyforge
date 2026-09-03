@@ -17,9 +17,9 @@ import type {
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { countWords, htmlToPlainText } from '../utils/html'
-import { buildWorkRecord, projectCompatibilityMirror } from '../world-engine/works'
-import { effectiveWorkKind } from '../world-engine/work-kind'
-import { assertRecordInScope, readOwnedRows, resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
+import { buildWorkRecord, projectActiveWorkProjection } from '../workspace/works'
+import { effectiveWorkKind } from '../workspace/work-kind'
+import { assertRecordInScope, readOwnedRows, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import {
   assertAdaptationBriefV1,
   assertAdaptationPlanV1,
@@ -484,7 +484,7 @@ export async function createAdaptation(input: CreateAdaptationInput): Promise<{
       activeSourceManifestHash: manifest.manifestHash,
     })
     await db.adaptationSourceUnits.bulkAdd(manifest.units.map(unit => stampNewRecord(targetScope, 'adaptationSourceUnits', unit, { owner: 'work' })))
-    await db.projects.update(project.id!, { ...projectCompatibilityMirror(world, targetWork), updatedAt: now })
+    await db.projects.update(project.id!, { ...projectActiveWorkProjection(world, targetWork), updatedAt: now })
     return {
       adaptation: root,
       targetWork,
@@ -817,7 +817,7 @@ async function updateAdaptationRootContent(
       const ongoingWork: Work = { ...work, status: 'ongoing', updatedAt }
       await db.works.put(ongoingWork)
       if (project.activeWorkId === root.workId) {
-        await db.projects.update(project.id!, { ...projectCompatibilityMirror(world, ongoingWork), updatedAt })
+        await db.projects.update(project.id!, { ...projectActiveWorkProjection(world, ongoingWork), updatedAt })
       }
     }
     return next

@@ -26,7 +26,6 @@ import type { AssembleContextResult } from '../../lib/registry/types'
 import {
   adoptOutlineGenerationCandidateV1,
   createOutlineGenerationTraceV1,
-  isOutlineDurableHarnessEnabledV1,
   rejectOutlineGenerationCandidateV1,
   recoverPendingOutlineGenerationAdoptionsV1,
   restoreLatestOutlineGenerationCandidateV1,
@@ -43,7 +42,7 @@ import {
   captureWorkspaceContentRevisionV1,
   type WorkspaceContentRevisionVectorV1,
 } from '../../lib/authoring/content-revision'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 
 type GenerationAI = Pick<
   UseAIStreamReturn,
@@ -252,7 +251,6 @@ export function useOutlineGenerationController({
   useEffect(() => {
     if (project.id == null || ai.isStreaming || restoreProjectRef.current === project.id) return
     restoreProjectRef.current = project.id
-    if (executionBoundary !== 'formal' && !isOutlineDurableHarnessEnabledV1()) return
     let cancelled = false
     void (async () => {
       const recovery = await recoverPendingOutlineGenerationAdoptionsV1(project.id!)

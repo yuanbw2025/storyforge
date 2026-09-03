@@ -18,8 +18,8 @@ import { importLegacyArraysToCodex } from '../migrations/legacy-to-codex-upgrade
 import { migrateStateCardsToTemporalFactCandidates } from '../migrations/state-cards-to-temporal-facts'
 import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
-import { normalizeCharacterAxes } from '../character/character-axes'
-import { ensureWorkspaceOwnership } from '../world-engine/ownership'
+import { upgradeImportedCharacterAxesV32 } from '../migrations/character-axes-upgrade'
+import { ensureWorkspaceOwnership } from '../workspace/ownership'
 import { rebindPortableAgentRunContractV1 } from '../agent/run/contract-portability'
 import { finalizeImportedAgentRunLedgersV1 } from '../agent/run/ledger-portability'
 import {
@@ -29,11 +29,12 @@ import {
   isWorkCode,
 } from '../memory/identity'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
-import { assertStoredWorkClassification } from '../world-engine/work-kind'
+import { assertStoredWorkClassification } from '../workspace/work-kind'
 import { assertAdaptationProjectInvariant } from '../adaptation/contracts'
 import { validateScreenplayBlocksV1 } from '../screenplay/contracts'
 import { assertComicLetteringV1, assertComicMediaAssetV1, assertNormalizedFrameV1, framesOverlap } from '../comic/contracts'
 import type { AdaptationProject, ComicLetteringItemV1, ComicMediaAsset, ScreenplayBlock, Work } from '../types'
+import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 
 const PORTABLE_OWNER_VERSION = 4
 const WORK_CLASSIFICATION_VERSION = 5
@@ -41,6 +42,112 @@ const ADAPTATION_VERSION = 6
 const SCREENPLAY_VERSION = 7
 const COMIC_STORYBOARD_VERSION = 8
 const COMIC_MEDIA_VERSION = 9
+const PRODUCT_ARCHITECTURE_VERSION = 10
+
+function portableRows(value: Record<string, any>, name: string): Record<string, any>[] {
+  const rows = value[name]
+  if (!Array.isArray(rows)) throw new Error(`[deriveImport] v10 备份缺少 ${name}`)
+  const ids = new Set<number>()
+  for (const row of rows) {
+    if (!row || typeof row !== 'object' || !Number.isInteger(row._exportId) || ids.has(row._exportId)) {
+      throw new Error(`[deriveImport] v10 ${name} 便携 ID 重复或无效`)
+    }
+    ids.add(row._exportId)
+  }
+  return rows
+}
+
+function validateProductArchitectureBackup(value: Record<string, any>): void {
+  const productKinds = new Set<string>(PRODUCTION_PRODUCT_KINDS_V1)
+  const productions = new Map(portableRows(value, 'productProductions').map(row => [row._exportId, row]))
+  const briefs = portableRows(value, 'productProductionBriefs')
+  const commands = portableRows(value, 'productProductionCommands')
+  const builds = new Map(portableRows(value, 'productBuilds').map(row => [row._exportId, row]))
+  const artifacts = portableRows(value, 'productBuildArtifacts')
+  const receipts = portableRows(value, 'productQualityGateReceipts')
+  const releases = new Map(portableRows(value, 'productReleases').map(row => [row._exportId, row]))
+  const runtimeSessions = portableRows(value, 'productRuntimeSessions')
+  const runtimeSessionById = new Map(runtimeSessions.map(row => [row._exportId, row]))
+  const mediaAssets = portableRows(value, 'productMediaAssets')
+  portableRows(value, 'productRuntimeEvents')
+  portableRows(value, 'productRuntimeCheckpoints')
+  const worldReleases = new Map(portableRows(value, 'worldReleases').map(row => [row._exportId, row]))
+
+  for (const production of productions.values()) {
+    if (!productKinds.has(production.productType) || typeof production.productionKey !== 'string' || !production.productionKey.trim()) {
+      throw new Error('[deriveImport] v10 ProductProduction 身份无效')
+    }
+  }
+  const sameOwner = (child: Record<string, any>, parent: Record<string, any>, label: string) => {
+    if (child._worldExportId !== parent._worldExportId || child._workExportId !== parent._workExportId) {
+      throw new Error(`[deriveImport] v10 ${label} owner 与父记录不一致`)
+    }
+  }
+  for (const brief of briefs) {
+    const production = productions.get(brief._productionExportId)
+    const worldRelease = worldReleases.get(brief._sourceWorldReleaseExportId)
+    if (!production || !worldRelease) throw new Error('[deriveImport] v10 ProductBrief 来源引用越界')
+    sameOwner(brief, production, 'ProductBrief')
+    if (brief._worldExportId !== worldRelease._worldExportId) {
+      throw new Error('[deriveImport] v10 ProductBrief 与 WorldRelease 世界不一致')
+    }
+  }
+  for (const command of commands) {
+    const production = productions.get(command._productionExportId)
+    if (!production) throw new Error('[deriveImport] v10 ProductCommand 生产引用越界')
+    sameOwner(command, production, 'ProductCommand')
+  }
+  for (const build of builds.values()) {
+    const production = productions.get(build._productionExportId)
+    if (!production) throw new Error('[deriveImport] v10 ProductBuild 生产引用越界')
+    sameOwner(build, production, 'ProductBuild')
+  }
+  for (const row of [...artifacts, ...receipts]) {
+    const build = builds.get(row._buildExportId)
+    if (!build) throw new Error('[deriveImport] v10 Build 子记录引用越界')
+    sameOwner(row, build, 'Build 子记录')
+  }
+  for (const release of releases.values()) {
+    if (!productKinds.has(release.productType) || !/^[a-f0-9]{64}$/.test(String(release.contentHash ?? ''))) {
+      throw new Error('[deriveImport] v10 ProductRelease 身份或 hash 无效')
+    }
+    let manifest: Record<string, any>
+    try { manifest = JSON.parse(String(release.manifestJson ?? '')) }
+    catch { throw new Error('[deriveImport] v10 ProductRelease manifest 不是 JSON') }
+    if (manifest.schema !== 'storyforge.product-release' || manifest.version !== 1
+      || manifest.productType !== release.productType) {
+      throw new Error('[deriveImport] v10 ProductRelease manifest 与根身份不一致')
+    }
+  }
+  for (const session of runtimeSessions) {
+    const releaseId = session._productReleaseExportId
+    const buildId = session._productBuildExportId
+    if (!productKinds.has(session.kind) || (releaseId == null) === (buildId == null)
+      || !/^[a-f0-9]{64}$/.test(String(session.runtimeSourceHash ?? ''))) {
+      throw new Error('[deriveImport] v10 ProductRuntime 必须具有唯一、有效的产品来源')
+    }
+    const sourceProductType = releaseId != null
+      ? releases.get(releaseId)?.productType
+      : productions.get(builds.get(buildId)?._productionExportId)?.productType
+    if (sourceProductType !== session.kind) {
+      throw new Error('[deriveImport] v10 ProductRuntime 身份与来源产品不一致')
+    }
+  }
+  for (const asset of mediaAssets) {
+    const releaseId = asset._productReleaseExportId
+    const runtimeSessionId = asset._productRuntimeSessionExportId
+    if (!productKinds.has(asset.productType) || (releaseId == null) === (runtimeSessionId == null)
+      || (asset.ownerKind === 'release') !== (releaseId != null)
+      || (asset.ownerKind === 'runtime') !== (runtimeSessionId != null)) {
+      throw new Error('[deriveImport] v10 ProductMedia 必须具有唯一、有效的产品所有者')
+    }
+    const owner = releaseId != null ? releases.get(releaseId) : runtimeSessionById.get(runtimeSessionId)
+    if (!owner || owner.productType !== asset.productType && owner.kind !== asset.productType) {
+      throw new Error('[deriveImport] v10 ProductMedia 身份与所属产品不一致')
+    }
+    sameOwner(asset, owner, 'ProductMedia')
+  }
+}
 
 function strictOwnerShadow(spec: TableSpec, row: Record<string, any>): {
   kind: 'world' | 'work' | 'instance'
@@ -49,7 +156,7 @@ function strictOwnerShadow(spec: TableSpec, row: Record<string, any>): {
 } | null {
   if (spec.name === 'worlds' || spec.name === 'works') return null
   const locator = spec.domainOwner?.locator
-  if (!locator || locator.kind === 'workspace' || locator.kind === 'compat-project') return null
+  if (!locator || locator.kind === 'workspace') return null
   if (locator.kind === 'field') {
     if (locator.owner !== 'world' && locator.owner !== 'work') return null
     const shadowField = locator.owner === 'world' ? '_worldOwnerExportId' : '_workOwnerExportId'
@@ -86,7 +193,7 @@ function validateStrictOwnership(data: ProjectExportData): void {
   }
   const worldIds = new Set(value.worlds.map((row: any) => row?._exportId))
   const workIds = new Set(value.works.map((row: any) => row?._exportId))
-  const instanceIds = new Set((value.simulationSessions ?? []).map((row: any) => row?._exportId))
+  const instanceIds = new Set((value.productRuntimeSessions ?? []).map((row: any) => row?._exportId))
   if (worldIds.size !== value.worlds.length || workIds.size !== value.works.length
     || [...worldIds].some(id => !Number.isInteger(id)) || [...workIds].some(id => !Number.isInteger(id))) {
     throw new Error('[deriveImport] v4 World/Work 便携 ID 重复或无效')
@@ -108,6 +215,7 @@ function validateStrictOwnership(data: ProjectExportData): void {
   if (data.version >= SCREENPLAY_VERSION) validateScreenplayBackup(value)
   if (data.version >= COMIC_STORYBOARD_VERSION) validateComicStoryboardBackup(value)
   if (data.version >= COMIC_MEDIA_VERSION) validateComicMediaBackup(value)
+  if (data.version >= PRODUCT_ARCHITECTURE_VERSION) validateProductArchitectureBackup(value)
   for (const spec of PROJECT_TABLES) {
     if (!spec.exportable || spec.name === 'projects' || spec.name === 'worlds' || spec.name === 'works') continue
     const rows = value[spec.name]
@@ -336,7 +444,7 @@ function restoreStrictOwner(
   delete obj._workOwnerExportId
   delete obj._instanceOwnerExportId
   if (!shadow) return
-  const ownerMap = newIdMaps.get(shadow.kind === 'world' ? 'worlds' : shadow.kind === 'work' ? 'works' : 'simulationSessions')
+  const ownerMap = newIdMaps.get(shadow.kind === 'world' ? 'worlds' : shadow.kind === 'work' ? 'works' : 'productRuntimeSessions')
   const mapped = ownerMap?.get(shadow.exportId)
   if (mapped == null) throw new Error(`[deriveImport] v4 owner 无法重映射:${spec.name}`)
   if (obj[shadow.field] != null && obj[shadow.field] !== mapped) {
@@ -386,7 +494,7 @@ function deriveImportOrder(specs: TableSpec[]): TableSpec[] {
       const ownerDeps = spec.domainOwner?.locator?.kind === 'field'
         ? [spec.domainOwner.locator.owner === 'world' ? 'worlds' : spec.domainOwner.locator.owner === 'work' ? 'works' : null]
         : spec.domainOwner?.locator?.kind === 'exclusive-fields' ? ['worlds', 'works']
-          : spec.domainOwner?.locator?.kind === 'exclusive-work-instance' ? ['works', 'simulationSessions'] : []
+          : spec.domainOwner?.locator?.kind === 'exclusive-work-instance' ? ['works', 'productRuntimeSessions'] : []
       const portableDeps = spec.portableData?.kind === 'agent-run-root'
         ? spec.portableData.dependencies
         : []
@@ -656,7 +764,7 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
           obj[spec.portableData.contractHashField] = rebound.contractHash
         }
         if (spec.name === 'characters') {
-          Object.assign(obj, normalizeCharacterAxes(obj))
+          Object.assign(obj, upgradeImportedCharacterAxesV32(obj))
         }
 
         // JSON 引用字段(portals)先剥离,待全表映射建好后两阶段回填

@@ -49,7 +49,7 @@ describe('Phase 36 · 页面上游/下游内容标记', () => {
     expect(getModuleContentType('editor')).toBe('writing')
     expect(getModuleContentType('data-management')).toBe('system')
     expect((MODULE_CONTENT_TYPES as Record<string, unknown>)['story-core']).toBeUndefined()
-    expect((MODULE_CONTENT_TYPES as Record<string, unknown>)['simulation-runtime']).toBeUndefined()
+    expect((MODULE_CONTENT_TYPES as Record<string, unknown>)['product-runtime']).toBeUndefined()
     expect((MODULE_CONTENT_TYPES as Record<string, unknown>).backup).toBeUndefined()
   })
 
@@ -101,6 +101,6 @@ describe('Phase 36 · 页面上游/下游内容标记', () => {
       button.textContent?.includes('互动运行时'),
     )
     expect(runtimeButton).toBeUndefined()
-    expect(onSelect).not.toHaveBeenCalledWith('simulation-runtime')
+    expect(onSelect).not.toHaveBeenCalledWith('product-runtime')
   })
 })

@@ -5,7 +5,7 @@ import {
   deleteReferenceWithAnalysis,
   getReferenceAnalysisRunChunks,
 } from '../lib/reference-analysis/lifecycle'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 interface ReferenceStore {

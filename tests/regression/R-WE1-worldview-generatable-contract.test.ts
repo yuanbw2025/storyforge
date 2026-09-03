@@ -20,8 +20,8 @@ import {
 } from '../../src/lib/registry/field-registry'
 import { checkRegistry } from '../../src/lib/registry/validate'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { NaturalResources, WorkspaceScope } from '../../src/lib/types'
 
 const NOW = 1_788_200_000_000

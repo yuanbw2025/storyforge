@@ -1,9 +1,18 @@
 import { db } from '../../src/lib/db/schema'
-import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
-import type { GameProductType, ProductWorldSourceSelectionV1 } from '../../src/lib/types'
-import type { GameProductionWorldSourceCatalogV2 } from '../../src/lib/game-production/world-source'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import type {
+  ProductionProductKindV1,
+  ProductWorldSourceSelectionV1,
+  WorkspaceScope,
+} from '../../src/lib/types'
+import {
+  loadProductProductionConsultationSourceV2,
+  loadProductProductionWorldSourceCatalogV2,
+  type ProductProductionWorldSourceCatalogV2,
+} from '../../src/lib/product-production/world-source'
+import { compileUpperProductWorldRoleBindingsV1 } from '../../src/lib/product/world-requirement-adapters'
 
 export const CURRENT_PRODUCT_RESOURCE_KEYS = {
   story: 'world-release:story-core:1',
@@ -14,7 +23,7 @@ export const CURRENT_PRODUCT_RESOURCE_KEYS = {
   arc: 'world-release:story-arc:1',
 } as const
 
-export const CURRENT_PRODUCT_SOURCE_CATALOG: Pick<GameProductionWorldSourceCatalogV2,
+export const CURRENT_PRODUCT_SOURCE_CATALOG: Pick<ProductProductionWorldSourceCatalogV2,
   'characters' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs'> = {
   characters: [{
     resourceKey: CURRENT_PRODUCT_RESOURCE_KEYS.character,
@@ -45,7 +54,7 @@ export const CURRENT_PRODUCT_SOURCE_CATALOG: Pick<GameProductionWorldSourceCatal
 }
 
 export function currentProductSelection(
-  productType: GameProductType,
+  productType: ProductionProductKindV1,
   roleBindings: Record<string, string[]> = {},
   worldReferenceHash = 'a'.repeat(64),
 ): ProductWorldSourceSelectionV1 {
@@ -62,6 +71,39 @@ export function currentProductSelection(
     resourceKeys: [...new Set(Object.values(normalizedBindings).flat())].sort(),
     roleBindings: normalizedBindings,
   }
+}
+
+/**
+ * Test-only traversal of the current source contract. Tests may select every
+ * resource offered by consultation, but must still make that choice explicit
+ * and bind it to one product adapter and one immutable WorldReference.
+ */
+export async function loadCurrentProductWorldSourceCatalogV1(input: {
+  scope: WorkspaceScope
+  worldReleaseId: number
+  productType: ProductionProductKindV1
+}): Promise<ProductProductionWorldSourceCatalogV2> {
+  const consultation = await loadProductProductionConsultationSourceV2({
+    scope: input.scope,
+    worldReleaseId: input.worldReleaseId,
+  })
+  const roleBindings = compileUpperProductWorldRoleBindingsV1(
+    input.productType,
+    consultation.selectionCatalog,
+  )
+  const selection: ProductWorldSourceSelectionV1 = {
+    schema: 'storyforge.product-world-source-selection',
+    version: 1,
+    productType: input.productType,
+    worldReferenceHash: consultation.worldReference.referenceHash,
+    resourceKeys: [...new Set(Object.values(consultation.selectionCatalog).flat())].sort(),
+    roleBindings,
+  }
+  return loadProductProductionWorldSourceCatalogV2({
+    scope: input.scope,
+    worldReleaseId: input.worldReleaseId,
+    selection,
+  })
 }
 
 /**
@@ -83,15 +125,30 @@ export async function seedCurrentProductWorld(name: string) {
     projectId: created.scope.projectId,
     summary: '雾港受潮汐钟维持，禁航令正在撕裂港内秩序。',
     worldOrigin: '双月潮汐塑造了港口文明。',
-    geography: '群岛、雾港与潮门', history: '失踪船队曾在满月夜发出求救信号。',
-    society: '守灯人与航海公会共同治理港口。', culture: '居民敬畏潮汐钟声。',
-    economy: '航运与灯塔税维持港口。', rules: '满月时潮门开启。', races: '潮民与渡海者',
+    politicsOverview: '守灯人与航海公会共同治理港口。',
+    cultureOverview: '居民敬畏潮汐钟声。',
+    economyOverview: '航运与灯塔税维持港口。', races: '潮民与渡海者',
+    createdAt: now, updatedAt: now,
+  } as never, { owner: 'world' }))
+  await db.geographies.add(stampNewRecord(created.scope, 'geographies', {
+    projectId: created.scope.projectId,
+    overview: '群岛、雾港与潮门', locations: '[]', worldMapData: '',
+    createdAt: now, updatedAt: now,
+  } as never, { owner: 'world' }))
+  await db.histories.add(stampNewRecord(created.scope, 'histories', {
+    projectId: created.scope.projectId,
+    overview: '失踪船队曾在满月夜发出求救信号。', eraSystem: '', events: '[]',
+    createdAt: now, updatedAt: now,
+  } as never, { owner: 'world' }))
+  await db.worldRulesProfiles.add(stampNewRecord(created.scope, 'worldRulesProfiles', {
+    projectId: created.scope.projectId,
+    entries: {}, customNodes: [], globalNote: '满月时潮门开启。',
     createdAt: now, updatedAt: now,
   } as never, { owner: 'world' }))
   const storyCoreId = await db.storyCores.add(stampNewRecord(created.scope, 'storyCores', {
     projectId: created.scope.projectId,
     theme: '真相与救援的代价', centralConflict: '守灯人必须在公开信号和保护港口之间选择。',
-    plotPattern: '调查—抉择—承担后果', storyLines: '调查失踪船队的求救信号并阻止潮门失控。',
+    plotPattern: '调查—抉择—承担后果',
     logline: '暴潮前夜，守灯人追查一封不该出现的求救信号。',
     concept: '潮汐规则约束下的港口悬疑', mainPlot: '追查信号、修复潮汐钟并决定真相是否公开。',
     subPlots: '航海公会与守潮人的信任冲突。', createdAt: now, updatedAt: now,

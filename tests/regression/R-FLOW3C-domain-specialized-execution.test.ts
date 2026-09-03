@@ -6,7 +6,6 @@ vi.mock('../../src/lib/ai/client', async () => {
 })
 
 import { chat } from '../../src/lib/ai/client'
-import { setCreativeReliabilityRuntimeEnabledV1 } from '../../src/lib/agent/creative-reliability'
 import { CHARACTER_DIMENSIONS } from '../../src/lib/character/character-dimensions'
 import { db } from '../../src/lib/db/schema'
 import { adoptDomainCandidate, executeDomainNode } from '../../src/lib/node-authoring/domain-execution'
@@ -23,7 +22,7 @@ import { buildRagLibrary } from '../../src/lib/retrieval/rag-library'
 import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import type { AIConfig, NodeFlow, Project } from '../../src/lib/types'
-import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
 
 const project: Project = {
   id: 73003,
@@ -128,10 +127,8 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
     } as any)
     await backfillResourceUidsV1(project.id!)
     vi.mocked(chat).mockReset()
-    setCreativeReliabilityRuntimeEnabledV1(true)
     useAIConfigStore.setState({
       config: aiConfig,
-      creativeReliabilityEnabled: true,
       creativeQualityMode: 'balanced',
       agentTeamBudgetProfile: 'balanced',
     })
@@ -244,24 +241,6 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
       output: corrected,
       authorEditedAfterArtifact: true,
     })
-  })
-
-  it('关闭 CREL 回滚开关后卷纲节点保持旧式单次路径且不附加产物证据', async () => {
-    setCreativeReliabilityRuntimeEnabledV1(false)
-    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify([
-      { title: '第一卷：潮门', summary: '主角发现海床城门并踏入旧文明。' },
-    ]))
-
-    const result = await executeDomainNode({
-      node: node('outline.volume', { request: '规划第一卷' }),
-      inputs: [],
-      projectId: project.id!,
-      worldGroupId: null,
-      aiConfig,
-    })
-
-    expect(chat).toHaveBeenCalledTimes(1)
-    expect(result?.creativeArtifacts).toBeUndefined()
   })
 
   it('细纲协议失败保留原始候选，作者可本地修正后采纳且不会追加调用', async () => {

@@ -1,8 +1,8 @@
 import {
-  verifyGameDistributionBundleV2,
-  type GameDistributionBundleV2,
+  verifyProductDistributionBundleV2,
+  type ProductDistributionBundleV2,
   type MarketplaceImportProvenanceV2,
-} from '../game-platform/distribution-bundle'
+} from '../product-platform/distribution-bundle'
 import type {
   CommercialEntitlementV1,
   CommercialLicenseV1,
@@ -10,7 +10,7 @@ import type {
   CommercialOrderV1,
 } from './authority'
 import type { CommercialCheckoutSessionV1 } from './gateway'
-import type { GameProductType } from '../types'
+import { PRODUCTION_PRODUCT_KINDS_V1, type ProductionProductKindV1 } from '../types'
 
 interface FetchResponseV1 {
   ok: boolean
@@ -105,17 +105,14 @@ function parseListing(value: unknown): CommercialListingV1 {
     'license', 'currency', 'amountMinor', 'creatorShareBps', 'status', 'rightsConfirmed', 'reviewedBy',
     'reviewReasonCode', 'createdAt', 'updatedAt',
   ], 'listing')
-  const products: GameProductType[] = [
-    'storygame', 'character-interaction', 'text-adventure', 'avg',
-    'narrative-simulation', 'text-open-world', 'ttrpg',
-  ]
-  if (!products.includes(row.productType as GameProductType) || !['draft', 'submitted', 'changes-requested', 'published', 'suspended', 'withdrawn'].includes(String(row.status))
+  const products: readonly ProductionProductKindV1[] = PRODUCTION_PRODUCT_KINDS_V1
+  if (!products.includes(row.productType as ProductionProductKindV1) || !['draft', 'submitted', 'changes-requested', 'published', 'suspended', 'withdrawn'].includes(String(row.status))
     || !Array.isArray(row.contentWarnings) || row.contentWarnings.some(item => typeof item !== 'string')) {
     fail('protocol', 'listing 枚举或警告字段无效')
   }
   return {
     listingId: text(row.listingId, 'listing.listingId', 200), releaseHash: sha(row.releaseHash, 'listing.releaseHash'),
-    creatorId: text(row.creatorId, 'listing.creatorId', 200), productType: row.productType as GameProductType,
+    creatorId: text(row.creatorId, 'listing.creatorId', 200), productType: row.productType as ProductionProductKindV1,
     title: text(row.title, 'listing.title'), summary: text(row.summary, 'listing.summary', 4_000),
     contentWarnings: [...row.contentWarnings] as string[], license: parseLicense(row.license),
     currency: text(row.currency, 'listing.currency', 3), amountMinor: integer(row.amountMinor, 'listing.amountMinor'),
@@ -207,7 +204,7 @@ export class CommercialHttpClientV1 {
       || this.timeoutMs < 100 || this.timeoutMs > 300_000) fail('configuration', '市场 HTTP 配置无效')
   }
 
-  async discover(input: { productType?: GameProductType; query?: string } = {}): Promise<CommercialListingV1[]> {
+  async discover(input: { productType?: ProductionProductKindV1; query?: string } = {}): Promise<CommercialListingV1[]> {
     const value = await this.post('/v1/commercial/discover', input, null, 2_000_000)
     if (!Array.isArray(value) || value.length > 10_000) fail('protocol', 'discover 响应无效')
     return value.map(parseListing)
@@ -217,7 +214,7 @@ export class CommercialHttpClientV1 {
     accessToken: string
     requestId: string
     releaseHash: string
-    productType: GameProductType
+    productType: ProductionProductKindV1
     title: string
     summary: string
     contentWarnings: string[]
@@ -322,9 +319,9 @@ export class CommercialHttpClientV1 {
   async registerRelease(input: {
     accessToken: string
     requestId: string
-    bundle: GameDistributionBundleV2
+    bundle: ProductDistributionBundleV2
   }): Promise<{ releaseHash: string; bundleHash: string; duplicate: boolean }> {
-    const bundle = await verifyGameDistributionBundleV2(input.bundle)
+    const bundle = await verifyProductDistributionBundleV2(input.bundle)
     const row = record(await this.post('/v1/commercial/releases/register', {
       requestId: input.requestId, bundle,
     }, input.accessToken, 2_000_000), 'release registration')
@@ -334,14 +331,14 @@ export class CommercialHttpClientV1 {
       bundleHash: sha(row.bundleHash, 'release registration.bundleHash'),
       duplicate: boolean(row.duplicate, 'release registration.duplicate'),
     }
-    if (result.releaseHash !== bundle.gameRelease.contentHash || result.bundleHash !== bundle.bundleHash) {
+    if (result.releaseHash !== bundle.productRelease.contentHash || result.bundleHash !== bundle.bundleHash) {
       fail('protocol', 'release registration 回执与上传包不一致')
     }
     return result
   }
 
   async downloadRelease(input: { accessToken: string; releaseHash: string }): Promise<{
-    bundle: GameDistributionBundleV2
+    bundle: ProductDistributionBundleV2
     provenance: MarketplaceImportProvenanceV2
   }> {
     const row = record(await this.post('/v1/commercial/releases/download', {
@@ -356,8 +353,8 @@ export class CommercialHttpClientV1 {
     if (!Array.isArray(authorization.attribution) || authorization.attribution.some(item => typeof item !== 'string')) {
       fail('protocol', 'release authorization.attribution 无效')
     }
-    const bundle = await verifyGameDistributionBundleV2(row.bundle)
-    if (sha(authorization.releaseHash, 'release authorization.releaseHash') !== bundle.gameRelease.contentHash) {
+    const bundle = await verifyProductDistributionBundleV2(row.bundle)
+    if (sha(authorization.releaseHash, 'release authorization.releaseHash') !== bundle.productRelease.contentHash) {
       fail('protocol', '下载授权与发行物哈希不一致')
     }
     return {

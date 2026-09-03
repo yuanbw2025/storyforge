@@ -1,8 +1,8 @@
 import { db } from "../db/schema";
 import {
-  hashGameProductionValueV2,
+  hashProductProductionValueV2,
   isSha256Hash,
-} from "../game-production/hash";
+} from "../product-production/hash";
 import type {
   RulePackV1,
   TtrpgHouseRuleDiffV2,
@@ -12,7 +12,7 @@ import type {
   WorkspaceScope,
   ProductWorldSourceSelectionV1,
 } from "../types";
-import { assertRecordInScope, resolveScope } from "../world-engine/scope";
+import { assertRecordInScope, resolveScope } from "../workspace/scope";
 import {
   applyTtrpgHouseRuleOverlayV2,
   parseTtrpgHouseRuleOverlayV2,
@@ -774,23 +774,23 @@ async function resolveRulePack(input: {
       origin,
       recordId: null,
       base,
-      baseHash: await hashGameProductionValueV2(base),
+      baseHash: await hashProductProductionValueV2(base),
     };
   }
   const id = input.rules?.savedRulePackId;
   if (!Number.isInteger(id) || Number(id) < 1)
     fail("saved-rule-pack 缺少 rulePackRecordId");
   const scope = await resolveScope({ scope: input.scope });
-  const row = await db.gameRulePacks.get(Number(id));
+  const row = await db.ttrpgRulePacks.get(Number(id));
   if (
     !row ||
-    !(await assertRecordInScope(scope, "gameRulePacks", row, { owner: "work" }))
+    !(await assertRecordInScope(scope, "ttrpgRulePacks", row, { owner: "work" }))
   )
     fail("RulePack 不存在或跨 Work");
   if (row.status !== "validated") fail("只允许使用 validated RulePack");
   const base = parseRulePackV1(row.rulePackJson);
   runRulePackFixturesV1(base);
-  const baseHash = await hashGameProductionValueV2(base);
+  const baseHash = await hashProductProductionValueV2(base);
   if (baseHash !== row.contentHash) fail("保存的 RulePack hash 已漂移");
   return { origin, recordId: row.id!, base, baseHash };
 }
@@ -837,12 +837,6 @@ export async function compileTtrpgProductionBriefV2(input: {
   scope: WorkspaceScope;
   selection: ProductWorldSourceSelectionV1;
   worldContentHash: string;
-  /** Presentation-only source identity. Legacy callers default to WorldRelease. */
-  sourceDescriptor?: {
-    kind: "world-release" | "development-fixture";
-    label: string;
-    rootRef: string;
-  };
   title: string;
   premise: string;
   tone: string[];
@@ -939,13 +933,8 @@ export async function compileTtrpgProductionBriefV2(input: {
             : 2;
   const campaignTitle = draft.campaign?.title ?? input.title;
   const campaignPremise = draft.campaign?.premise ?? input.premise;
-  const sourceDescriptor = input.sourceDescriptor ?? {
-    kind: "world-release" as const,
-    label: "冻结 WorldRelease",
-    rootRef: `world:${input.selection.worldReferenceHash}`,
-  };
   const campaignBackground = draft.campaign?.background
-    ?? `严格基于${sourceDescriptor.label}展开，不把产品生成内容反写为世界 Canon。`;
+    ?? "严格基于冻结 WorldRelease 展开，不把产品生成内容反写为世界 Canon。";
   const campaignCoreConflict = draft.campaign?.coreConflict ?? input.premise;
   const campaignStructure = draft.story?.structure ?? "node-based";
   const campaignDesign = draft.campaignDesign ?? (() => {
@@ -957,7 +946,7 @@ export async function compileTtrpgProductionBriefV2(input: {
       opening: draft.story?.openingScene ?? input.premise,
       structure: campaignStructure,
       sourceRefs: [
-        sourceDescriptor.rootRef,
+        `world:${input.selection.worldReferenceHash}`,
         ...(input.selection.roleBindings.participants ?? []),
         ...(input.selection.roleBindings.locations ?? []),
         ...(input.selection.roleBindings.quests ?? []),
@@ -973,16 +962,13 @@ export async function compileTtrpgProductionBriefV2(input: {
     creationMode: draft.creationMode ?? "quick",
     naturalLanguageInstruction:
       draft.naturalLanguageInstruction?.trim() ||
-      `请依据${sourceDescriptor.label}制作跑团：${input.premise}`,
+      `请依据冻结 WorldRelease 制作跑团：${input.premise}`,
     campaign: {
       title: campaignTitle,
       premise: campaignPremise,
       background: campaignBackground,
       coreConflict: campaignCoreConflict,
-      genreTags: draft.campaign?.genreTags ?? [
-        sourceDescriptor.kind === "world-release" ? "世界引擎衍生" : "开发来源演练",
-        "角色驱动",
-      ],
+      genreTags: draft.campaign?.genreTags ?? ["世界引擎衍生", "角色驱动"],
       tone: draft.campaign?.tone ?? input.tone,
       difficulty: draft.campaign?.difficulty ?? "standard",
       targetSessions: draft.campaign?.targetSessions ?? targetSessions,

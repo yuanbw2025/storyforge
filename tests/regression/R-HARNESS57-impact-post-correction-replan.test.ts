@@ -27,7 +27,7 @@ async function seed(): Promise<{
   const now = Date.now()
   const projectId = await db.projects.add({
     name: '修正后重规划', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 100_000, worldCode: `replan-${now}`, worldVersion: 1, createdAt: now, updatedAt: now,
+    targetWordCount: 100_000,createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({
     projectId, code: `replan-${now}`, name: '主世界', description: '', currentVersion: 1,

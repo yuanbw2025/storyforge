@@ -67,7 +67,7 @@ const GlobalReplacePanel = lazy(() => import('../components/tools/GlobalReplaceP
 const ChatCopilotPanel = lazy(() => import('../components/agent/ChatCopilotPanel'))
 import { useLocationStore } from '../stores/location'
 import { useWorldGroupStore } from '../stores/world-group'
-import { resolveScopeLike } from '../lib/world-engine/scope'
+import { resolveScopeLike } from '../lib/workspace/scope'
 import {
   isImpactHandoffRouteModuleV2,
   parseImpactHandoffV2,
@@ -85,8 +85,8 @@ import { flushPendingEditsV1 } from '../lib/authoring/pending-edit-coordinator'
 import { useToast } from '../components/shared/Toast'
 import { useActiveWork } from '../hooks/useActiveWork'
 import WorkKindBadge from '../components/work/WorkKindBadge'
-import { effectiveNovelProfile, effectiveWorkKind, SHORT_NOVEL_DEFAULT_WORDS } from '../lib/world-engine/work-kind'
-import { switchNovelProfile } from '../lib/world-engine/works'
+import { effectiveNovelProfile, effectiveWorkKind, SHORT_NOVEL_DEFAULT_WORDS } from '../lib/workspace/work-kind'
+import { switchNovelProfile } from '../lib/workspace/works'
 import { secondaryNovelWorkflowModules } from '../lib/novel/workflow'
 import WorldDerivationActions from '../components/world-engine/WorldDerivationActions'
 
@@ -100,7 +100,7 @@ export default function WorkspacePage() {
   const initialSidebarModule = initialModule && Object.prototype.hasOwnProperty.call(MODULE_CONTENT_TYPES, initialModule)
     ? initialModule as SidebarModule
     : null
-  const backPath = initialSidebarModule ? '/' : '/projects'
+  const backPath = '/'
   const [activeModule, setActiveModule] = useState<SidebarModule>(initialSidebarModule ?? 'info')
   const [loading, setLoading] = useState(true)
   const [editorNodeId, setEditorNodeId] = useState<number | null>(null)

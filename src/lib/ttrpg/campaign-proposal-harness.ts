@@ -13,13 +13,13 @@ import {
   recordContextGatewayPreflightEvidenceV1,
 } from '../context-gateway/attempt-evidence'
 import { executeContextGatewayV1 } from '../context-gateway/execution'
-import { loadGameProductionConsultationSourceV2 } from '../game-production/world-source'
+import { loadProductProductionConsultationSourceV2 } from '../product-production/world-source'
 import type { AssembleContextResult } from '../registry/types'
 import type {
   AIConfig,
   ChatMessage,
   ContextManifestV2,
-  SimulationTtrpgModelEvidenceV1,
+  TtrpgRuntimeModelEvidenceV1,
   TtrpgCampaignDesignV2,
   TtrpgCampaignProposalSectionV2,
   TtrpgCampaignProposalV2,
@@ -28,8 +28,8 @@ import type {
 import {
   freezeProductSourcePlanV1,
   resolveProductSourceReadBoundaryV1,
-} from '../world-engine/product-source-contracts'
-import { TTRPG_WORLD_REQUIREMENT_ADAPTER_V1 } from '../world-engine/product-requirement-adapters'
+} from '../product/source-contracts'
+import { TTRPG_WORLD_REQUIREMENT_ADAPTER_V1 } from '../product/world-requirement-adapters'
 import {
   parseTtrpgCampaignDesignV2,
   TTRPG_CAMPAIGN_PROPOSAL_SECTIONS_V2,
@@ -47,8 +47,8 @@ export interface TtrpgCampaignProposalCandidateV2 {
   worldContentHash: string
   contextManifestHash: string
   proposals: TtrpgCampaignProposalV2[]
-  modelEvidence: SimulationTtrpgModelEvidenceV1
-  modelCalls: SimulationTtrpgModelEvidenceV1[]
+  modelEvidence: TtrpgRuntimeModelEvidenceV1
+  modelCalls: TtrpgRuntimeModelEvidenceV1[]
   repairApplied: boolean
   regeneratedSections: TtrpgCampaignProposalSectionV2[]
   preservedSections: TtrpgCampaignProposalSectionV2[]
@@ -74,7 +74,7 @@ function parseJson(output: string): Record<string, unknown> {
   try { return record(JSON.parse(source), '模型输出') }
   catch (error) { if (error instanceof SyntaxError) fail('模型输出不是有效 JSON'); throw error }
 }
-function aggregateEvidence(calls: SimulationTtrpgModelEvidenceV1[]): SimulationTtrpgModelEvidenceV1 {
+function aggregateEvidence(calls: TtrpgRuntimeModelEvidenceV1[]): TtrpgRuntimeModelEvidenceV1 {
   const first = calls[0] ?? fail('缺少模型调用证据')
   const inputTokens = calls.reduce((sum, call) => sum + call.inputTokens, 0)
   const outputTokens = calls.reduce((sum, call) => sum + call.outputTokens, 0)
@@ -275,7 +275,7 @@ export async function generateTtrpgCampaignProposalCandidateV2(input: {
   const objective = input.objective.trim()
   if (!objective || objective.length > 8_000) fail('作者目标为空或过长')
   if (!input.aiConfig && !input.runAI) fail('缺少 AI 配置')
-  const catalog = await loadGameProductionConsultationSourceV2({ scope: input.scope, worldReleaseId: input.worldReleaseId })
+  const catalog = await loadProductProductionConsultationSourceV2({ scope: input.scope, worldReleaseId: input.worldReleaseId })
   const worldContentHash = catalog.release.contentHash
   const requiredSourceRef = `world-reference:${catalog.worldReference.referenceHash}`
   const allowedSourceRefs = [...new Set([
@@ -285,7 +285,7 @@ export async function generateTtrpgCampaignProposalCandidateV2(input: {
     ...catalog.selectionOptions.artifacts.map(item => item.resourceKey),
     ...catalog.selectionOptions.storyArcs.map(item => item.resourceKey),
   ])].sort()
-  const skill = getAgentSkillV1('game-production.ttrpg-campaign-proposals.v2')
+  const skill = getAgentSkillV1('product-production.ttrpg-campaign-proposals.v2')
   const anchorKeys = [...new Set([
     catalog.selectionCatalog.characterResourceKeys[0],
     catalog.selectionCatalog.storyArcResourceKeys[0],
@@ -295,9 +295,14 @@ export async function generateTtrpgCampaignProposalCandidateV2(input: {
     worldReference: catalog.worldReference,
     adapter: TTRPG_WORLD_REQUIREMENT_ADAPTER_V1,
     goal: {
+      selectedAreas: ['foundation', 'characters', 'relations', 'story', 'storylines', 'outline', 'detailed-outline', 'manuscript', 'entities', 'multi-world'],
+      selectedResourceKinds: [],
+      selectedContextKinds: ['world', 'worldview-field', 'world-link', 'story-core-field', 'character', 'character-relation', 'story-arc', 'storyline-progress', 'outline-node', 'detailed-outline', 'chapter', 'foreshadow', 'location', 'codex-entry', 'fact'],
+      selectedResourceCount: Math.max(1, anchorKeys.length),
+      participantCount: catalog.selectionOptions.characters.length > 0 ? 1 : 0,
+      includeSelectedRelations: catalog.selectionOptions.characters.length > 1,
+      inheritStoryContinuity: /正文|原作|既有剧情|连续性/.test(`${objective}${JSON.stringify(input.seed)}`),
       allowCrossWorld: /跨世界|多世界|穿越/.test(`${objective}${JSON.stringify(input.seed)}`),
-      useManuscriptContinuity: /正文|原作|既有剧情|连续性/.test(`${objective}${JSON.stringify(input.seed)}`),
-      investigationHeavy: /调查|侦探|线索|谜团|推理/.test(`${objective}${JSON.stringify(input.seed)}`),
     },
     missingStrategy: 'block',
     initialResourceKeys: anchorKeys,
@@ -428,7 +433,7 @@ export async function generateTtrpgCampaignProposalCandidateV2(input: {
       )
       const inputTokens = result.usage?.inputTokens ?? messages.reduce((sum, message) => sum + estimateTokens(message.content), 0)
       const outputTokens = result.usage?.outputTokens ?? estimateTokens(output)
-      const modelEvidence: SimulationTtrpgModelEvidenceV1 = {
+      const modelEvidence: TtrpgRuntimeModelEvidenceV1 = {
         provider: modelIdentity.provider, model: modelIdentity.model,
         usageSource: result.usage ? 'provider' : 'estimated', inputTokens, outputTokens,
         totalTokens: inputTokens + outputTokens, latencyMs: Math.max(0, Date.now() - startedAt),
@@ -477,7 +482,7 @@ export async function generateTtrpgCampaignProposalCandidateV2(input: {
       proposals = parseProposalOutput({ output: second.output, worldContentHash, requiredSourceRef, allowedSourceRefs: new Set(allowedSourceRefs) })
       repairApplied = true
     }
-    const current = await loadGameProductionConsultationSourceV2({ scope: input.scope, worldReleaseId: input.worldReleaseId })
+    const current = await loadProductProductionConsultationSourceV2({ scope: input.scope, worldReleaseId: input.worldReleaseId })
     if (current.release.contentHash !== worldContentHash) fail('模型生成期间 WorldRelease 已变化')
     const regeneration = applyRegenerationPolicy({
       proposals, priorDesign, regenerateSections: input.regenerateSections, worldContentHash,

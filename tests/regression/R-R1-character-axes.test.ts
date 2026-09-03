@@ -2,11 +2,14 @@ import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
-  axesFromLegacy,
   deriveCharacterRole,
   filterCharactersByRoleWeight,
 } from '../../src/lib/character/character-axes'
-import { migrateCharactersToAxes, CHARACTER_AXES_SNAPSHOT_KIND } from '../../src/lib/migrations/character-axes-upgrade'
+import {
+  axesFromCharacterRoleV32,
+  migrateCharactersToAxes,
+  CHARACTER_AXES_SNAPSHOT_KIND,
+} from '../../src/lib/migrations/character-axes-upgrade'
 import { finalizeCharacterAxesMigrationSnapshots } from '../../src/lib/migrations/finalize-character-axes-snapshots'
 import { adopt } from '../../src/lib/registry/adopt'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
@@ -93,7 +96,7 @@ describe('R-R1-character-axes', () => {
     expect(deriveCharacterRole('secondary', 'evil')).toBe('minor')
     expect(deriveCharacterRole('npc', 'good')).toBe('npc')
     expect(deriveCharacterRole('extra', 'evil')).toBe('extra')
-    expect(axesFromLegacy('supporting', 'evil')).toMatchObject({
+    expect(axesFromCharacterRoleV32('supporting', 'evil')).toMatchObject({
       roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral',
     })
   })

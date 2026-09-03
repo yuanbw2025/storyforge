@@ -89,7 +89,7 @@ import {
   type AgentTeamBudgetProfile,
 } from '../team-budget'
 import { db } from '../../db/schema'
-import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../../workspace/scope'
 import {
   MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1,
   MasterCandidateSemanticReviewBlockedError,
@@ -137,35 +137,7 @@ import { recordAgentRunArtifactV1 } from '../../memory/artifact-store'
 
 export const MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1 = 'master-agent-plan'
 export const MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 = 1 as const
-export const MASTER_AGENT_DURABLE_HARNESS_STORAGE_KEY = 'storyforge:harness:master-agent-durable-v1'
-export const MASTER_AGENT_REPLAN_STORAGE_KEY = 'storyforge:harness:master-agent-replan-v1'
-export const MASTER_CANDIDATE_SEMANTIC_REVIEW_STORAGE_KEY = 'storyforge:harness:master-candidate-semantic-review-v1'
 export const MAX_MASTER_AGENT_REPLANS_V1 = 1
-
-export function isMasterAgentDurableHarnessEnabledV1(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(MASTER_AGENT_DURABLE_HARNESS_STORAGE_KEY) !== 'disabled'
-  } catch {
-    return true
-  }
-}
-
-export function isMasterAgentReplanEnabledV1(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(MASTER_AGENT_REPLAN_STORAGE_KEY) !== 'disabled'
-  } catch {
-    return true
-  }
-}
-
-/** HARNESS-26 release evidence is still pending, so new production runs opt in explicitly. */
-export function isMasterCandidateSemanticReviewEnabledV1(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(MASTER_CANDIDATE_SEMANTIC_REVIEW_STORAGE_KEY) === 'enabled'
-  } catch {
-    return false
-  }
-}
 
 const MAX_PLAN_TASKS = 5
 const MAX_PLAN_SUMMARY_CHARS = 500
@@ -218,6 +190,8 @@ export interface RunDurableMasterAgentInputV1 {
   plan?: MasterAgentPlan
   runId?: number
   budget?: AgentTeamBudgetTracker
+  /** Explicit creation-time policy. The choice is frozen into the durable Run Contract. */
+  candidateSemanticReview?: 'required' | 'disabled'
   signal?: AbortSignal
   onDurableBoundary?: (boundary: MasterAgentDurableBoundaryV1) => void | Promise<void>
   onTask?: (
@@ -232,6 +206,8 @@ export interface MasterAgentDurableDependenciesV1 {
   execute?: typeof executeMasterAgentPlan
   replan?: typeof createMasterAgentReplanV1
   semanticReview?: typeof runMasterCandidateSemanticReviewWithClientV1
+  /** Deterministic failure inspection only; production may never disable the current replan path. */
+  disableAutomaticReplanForTest?: boolean
 }
 
 function fail(message: string): never {
@@ -971,7 +947,6 @@ export interface ReplanDurableMasterAgentRunInputV1 {
 export async function replanDurableMasterAgentRunV1(
   input: ReplanDurableMasterAgentRunInputV1,
 ): Promise<AgentRunSnapshotV1> {
-  if (!isMasterAgentReplanEnabledV1()) fail('主 Agent 有限重规划已通过回滚开关关闭')
   const before = await readAgentRunV1(input.scope, input.runId)
   if (before.projection.state !== 'paused') fail('只有 paused 主 Agent run 可以有限重规划')
   const maxReplans = before.contract.budget.maxReplans ?? 0
@@ -1834,6 +1809,10 @@ export async function runDurableMasterAgentPlanV1(
 ): Promise<DurableMasterAgentResultV1> {
   const now = input.now ?? Date.now
   const execute = dependencies.execute ?? executeMasterAgentPlan
+  if (dependencies.disableAutomaticReplanForTest && import.meta.env.MODE !== 'test') {
+    fail('disableAutomaticReplanForTest 仅允许隔离测试环境')
+  }
+  const automaticReplanEnabled = !dependencies.disableAutomaticReplanForTest
   let snapshot: AgentRunSnapshotV1
   let plan: MasterAgentPlan
   let budget: AgentTeamBudgetTracker
@@ -1850,7 +1829,7 @@ export async function runDurableMasterAgentPlanV1(
       worldGroupId: input.worldGroupId,
       plan,
       budgetEvidence: evidence,
-      includeCandidateSemanticReviewPolicy: isMasterCandidateSemanticReviewEnabledV1(),
+      includeCandidateSemanticReviewPolicy: input.candidateSemanticReview === 'required',
     })
     await assertConversationScope(input)
     snapshot = await createAgentRunV1({
@@ -2777,7 +2756,6 @@ export async function runDurableMasterAgentPlanV1(
       const replanCount = snapshot.events.filter(event => event.type === 'plan.replanned').length
       const replanLimit = snapshot.contract.budget.maxReplans ?? 0
       const replanExhausted = requiresReplan
-        && isMasterAgentReplanEnabledV1()
         && replanCount >= replanLimit
       if (['running', 'awaiting_confirmation'].includes(snapshot.projection.state)) {
         snapshot = replanExhausted
@@ -2822,7 +2800,7 @@ export async function runDurableMasterAgentPlanV1(
         requiresReplan
         && replanFailures.length > 0
         && !replanExhausted
-        && isMasterAgentReplanEnabledV1()
+        && automaticReplanEnabled
       ) {
         let replannedSnapshot: AgentRunSnapshotV1
         try {

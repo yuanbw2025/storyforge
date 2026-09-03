@@ -21,10 +21,9 @@ import {
   type StorylineAnalysisCandidates,
 } from '../storyline/storyline-progress'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   attachAgentContextInputStateV1,
   evidenceFromContextResult,
@@ -286,7 +285,7 @@ export async function prepareStorylineProgressCopilotV1(
   if (project.enableMultiWorld && input.worldGroupId == null) throw new Error('多世界项目必须先选择一个世界。')
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
   const before = await readSnapshot(input.projectId, input.chapterId, scope)
   const routingCategory = input.routingCategory ?? 'agent.outline.storyline-progress'
   const config = input.configOverride ?? resolveRequestConfig(

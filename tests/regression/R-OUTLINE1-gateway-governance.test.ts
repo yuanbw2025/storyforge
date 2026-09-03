@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord, type WorkspaceScope } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord, type WorkspaceScope } from '../../src/lib/workspace/scope'
 import { prepareOutlineGatewayAssemblyV1 } from '../../src/lib/outline/gateway-context'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 

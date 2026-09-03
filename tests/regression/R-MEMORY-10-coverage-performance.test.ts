@@ -7,7 +7,7 @@ import {
   synchronizeProjectChangesToFolderV1,
   WORKSPACE_FILE_SCAN_MAX_BYTES_V1,
 } from '../../src/lib/memory/workspace-projection'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 
 function notFound(): DOMException { return new DOMException('not found', 'NotFoundError') }
 

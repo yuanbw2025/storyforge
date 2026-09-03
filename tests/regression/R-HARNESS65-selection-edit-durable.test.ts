@@ -27,7 +27,7 @@ async function seed(suffix = '') {
   const now = Date.now()
   const projectId = await db.projects.add({
     name: `局部编辑${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 80_000, worldCode: `selection-${now}-${suffix}`, worldVersion: 1,
+    targetWordCount: 80_000,
     createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({

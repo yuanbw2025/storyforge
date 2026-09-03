@@ -3,9 +3,9 @@ import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import { deriveNovelToWorld } from '../../src/lib/world-engine/derivation'
-import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
-import type { WorldReleaseManifestV2, Worldview } from '../../src/lib/types'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import type { WorldReleaseManifestV3, Worldview } from '../../src/lib/types'
 
 function projectInput(name: string, targetWordCount = 100_000) {
   return {
@@ -22,12 +22,6 @@ function projectInput(name: string, targetWordCount = 100_000) {
 function worldview(scope: { projectId: number; worldId: number; workId: number }, now: number): Worldview {
   return stampNewRecord(scope, 'worldviews', {
     projectId: scope.projectId,
-    geography: '',
-    history: '',
-    society: '',
-    culture: '',
-    economy: '',
-    rules: '',
     summary: '潮汐城邦由三族共同治理。',
     worldOrigin: '月潮塑造了群岛文明。',
     races: '潮民、羽民、旧陆人保持不同语言和航海传统。',
@@ -65,15 +59,15 @@ describe('ARCH-01 · 长短篇显式派生世界', () => {
       db.worldviews.where('projectId').equals(result.targetProjectId).first(),
     ])
     expect(sourceProject).toMatchObject({ workspacePurpose: 'independent-work' })
-    expect(sourceProject?.worldCode).toBeUndefined()
+    expect(sourceProject).not.toHaveProperty('worldCode')
     expect(targetProject).toMatchObject({
       name: '潮汐世界',
       workspacePurpose: 'world-engine',
-      workspacePurposeDecision: 'explicit',
-      worldVersion: 1,
     })
-    expect(targetProject?.worldCode).toMatch(/^W-/)
-    expect(targetWorld).toMatchObject({ identityKind: 'world-draft', code: targetProject?.worldCode })
+    expect(targetProject).not.toHaveProperty('worldCode')
+    expect(targetProject).not.toHaveProperty('worldVersion')
+    expect(targetWorld).toMatchObject({ identityKind: 'world-draft', currentVersion: 1 })
+    expect(targetWorld?.code).toMatch(/^W-/)
     expect(targetWorldview?.races).toContain('潮民')
     expect(result.derivation).toMatchObject({
       projectId: result.targetProjectId,
@@ -87,12 +81,14 @@ describe('ARCH-01 · 长短篇显式派生世界', () => {
     expect(JSON.parse(result.derivation.sourceRevisionVectorJson)).toMatchObject({ version: 1 })
     expect(JSON.parse(result.derivation.sourceRangeJson)).toEqual({ kind: 'all-confirmed-canon' })
 
-    const manifest = JSON.parse(result.release!.manifestJson) as WorldReleaseManifestV2
+    const manifest = JSON.parse(result.release!.manifestJson) as WorldReleaseManifestV3
     expect(manifest.semanticContract).toBe(3)
-    expect(manifest.selectedNarrativeModules).toEqual([])
+    expect(manifest).not.toHaveProperty('selectedNarrativeModules')
     expect(manifest.selectedTables).toContain('worldviews')
-    expect(manifest.selectedTables).not.toContain('gameDefinitions')
-    expect(manifest.selectedTables).not.toContain('mediaAssets')
+    expect(manifest.selectedTables).not.toEqual(expect.arrayContaining([
+      'productProductions', 'productBuilds', 'productReleases', 'productMediaAssets',
+      'productRuntimeSessions',
+    ]))
 
     await db.worldviews.update(sourceWorldviewId, { races: '源作品后来改成单一种族。', updatedAt: Date.now() + 100 })
     expect((await db.worldviews.where('projectId').equals(result.targetProjectId).first())?.races).toContain('潮民')

@@ -39,8 +39,7 @@ const activeDocs = [
   'docs/roadmap/README.md',
   'docs/roadmap/CAPABILITY-BASELINE.md',
   'docs/roadmap/COMPLETED.md',
-  'docs/audits/BRANCH-CONSOLIDATION-LEDGER-20260825.md',
-  'docs/audits/PROJECT-CHARTER-ALIGNMENT-AUDIT-20260826.md',
+  'docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md',
   'docs/ttrpg/licenses/SRD-5.2.1-CC-BY-4.0.md',
 ]
 
@@ -82,7 +81,7 @@ for (const file of [...activeRootDocuments, ...activeDocs]) {
 }
 
 const archivedAuthority =
-  /MASTER-BLUEPRINT|ROADMAP-LEGACY|FEATURE-GUIDE|docs\/(?:refactor|completion|text-game|pitch|assets|brand|evals|game-platform|readme|adr|archive)\//
+  /MASTER-BLUEPRINT|ROADMAP-LEGACY|FEATURE-GUIDE|docs\/(?:refactor|completion|text-game|pitch|assets|brand|evals|product-platform|readme|adr|archive)\//
 for (const file of [...activeRootDocuments, ...activeDocs]) {
   if (
     file === 'CHANGELOG.md' ||

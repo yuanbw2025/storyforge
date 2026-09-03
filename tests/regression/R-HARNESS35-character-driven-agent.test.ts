@@ -47,8 +47,8 @@ async function seedWorkspace() {
     description: '',
     targetWordCount: 100_000,
     enableMultiWorld: false,
-    worldCode: 'harness35-world',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number

@@ -4,8 +4,8 @@ import type { FrozenNarrativeChoice, Project, WorkspaceScope } from '../../lib/t
 import { useAvgGamePlayerStore } from '../../stores/avg-game-player'
 import { applyAvgCue } from '../../lib/avg/runtime'
 import { currentPlayerReleases } from '../../lib/text-game/player-library'
-import { verifyGameMediaRuntimeUrlsV1 } from '../../lib/game-production/media-runtime-verifier'
-import { recordGameMediaRuntimeMeasurementV1 } from '../../lib/game-production/quality-receipts'
+import { verifyProductMediaRuntimeUrlsV1 } from '../../lib/product-production/media-runtime-verifier'
+import { recordProductMediaRuntimeMeasurementV1 } from '../../lib/product-production/quality-receipts'
 import { useDialog } from '../shared/Dialog'
 import './player-roadshow.css'
 
@@ -91,20 +91,20 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
         setMediaFailures(result.failures)
         void store.recordMediaFailures(result.failures).catch(() => undefined)
       }
-      if (session?.gameBuildId == null || manifest.presentation.assets.length === 0) return
-      const verificationKey = `${session.gameBuildId}:${manifest.presentation.assets
+      if (session?.productBuildId == null || manifest.presentation.assets.length === 0) return
+      const verificationKey = `${session.productBuildId}:${manifest.presentation.assets
         .map(asset => `${asset.assetKey}:${asset.contentHash}`).sort().join('|')}`
       if (mediaVerificationKeys.current.has(verificationKey)) return
       mediaVerificationKeys.current.add(verificationKey)
-      void verifyGameMediaRuntimeUrlsV1({
+      void verifyProductMediaRuntimeUrlsV1({
         assets: manifest.presentation.assets.map(asset => ({
           assetKey: asset.assetKey, contentHash: asset.contentHash, mimeType: asset.mimeType,
           width: asset.width, height: asset.height, durationMs: asset.durationMs,
         })),
         urls: result.urls,
         environment: currentBrowserEnvironment(),
-      }).then(measurement => recordGameMediaRuntimeMeasurementV1({
-        scope: props.scope, gameBuildId: session.gameBuildId!, measurement,
+      }).then(measurement => recordProductMediaRuntimeMeasurementV1({
+        scope: props.scope, productBuildId: session.productBuildId!, measurement,
       })).then(verified => {
         if (!verified.evidence.passed) mediaVerificationKeys.current.delete(verificationKey)
       }).catch(() => {
@@ -230,7 +230,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
           <h3>{catalogRelease.manifest?.definition.title ?? catalogRelease.release.label}</h3>
           <p>{catalogRelease.manifest?.definition.description || '一部等待开演的视觉小说。'}</p>
           {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.narrative.nodes.length} 个场景</span><span>{catalogRelease.manifest.narrative.beats.length} 段对白</span><span>{catalogRelease.manifest.presentation.assets.length} 项美术</span><span>{catalogRelease.manifest.presentation.cues.length} 个演出指令</span></div>}
-          {catalogRelease.error ? <small>{catalogRelease.error}</small> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新游戏</button>{store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id)!.id!)}><Save />继续上次进度</button>}</div>}
+          {catalogRelease.error ? <small>{catalogRelease.error}</small> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新游戏</button>{store.sessions.find(session => session.productReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.productReleaseId === catalogRelease.release.id)!.id!)}><Save />继续上次进度</button>}</div>}
         </div>
       </section> : <>
         <div className="textgame-catalog-heading"><span>全部游戏</span><small>{catalog.length} 部可游玩作品</small></div>

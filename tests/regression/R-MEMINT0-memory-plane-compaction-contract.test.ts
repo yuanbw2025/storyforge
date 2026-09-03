@@ -19,7 +19,7 @@ import {
 import { buildMemoryArtifactIndexV1 } from '../../src/lib/memory/settlement'
 import { recordAgentRunArtifactV1 } from '../../src/lib/memory/artifact-store'
 import { planExactArtifactRetentionV1 } from '../../src/lib/memory/artifact-retention'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 
 const HASH_A = 'a'.repeat(64)
 const HASH_B = 'b'.repeat(64)

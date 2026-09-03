@@ -6,7 +6,7 @@ import { executeWorldLinkContextV1 } from '../../src/lib/agent/world-link-contex
 import { CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'
 import { FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
 import { useWorldGroupStore } from '../../src/stores/world-group'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { ContextResourceDescriptorV1, WorkspaceScope } from '../../src/lib/types'
 
 const now = 1_787_600_000_000
@@ -41,8 +41,6 @@ async function seed() {
   const scopeA2 = { projectId, worldId: worldA, workId: workA2 } satisfies WorkspaceScope
   const scopeB = { projectId, worldId: worldB, workId: workB } satisfies WorkspaceScope
   await db.projects.update(projectId, { activeWorldId: worldA, activeWorkId: workA, ownershipSchemaVersion: 1 })
-  await db.projects.update(projectId, { worldCode: `mw-a-${projectId}`, worldVersion: 1 })
-
   const addGroup = (scope: WorkspaceScope, row: Record<string, unknown>) => db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
     projectId, description: '', icon: '🌐', order: 0, createdAt: now, updatedAt: now, ...row,
   }, { owner: 'world' })) as Promise<number>

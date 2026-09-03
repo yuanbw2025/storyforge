@@ -771,7 +771,7 @@ export class AuthoritativeOnlineRoomV1 {
       if (command.roomId !== this.roomId)
         fail("room_mismatch", "命令 roomId 不属于当前房间");
       if (command.releaseHash !== this.releaseHash)
-        fail("release_spoof", "命令伪造或使用了过期 GameRelease");
+        fail("release_spoof", "命令伪造或使用了过期 ProductRelease");
       const member = await this.authenticate(
         command.memberId,
         command.authToken,

@@ -17,7 +17,7 @@ export type AgentRunWorkflowKind =
 export type AgentExecutionBoundaryV1 =
   | 'formal'
   | 'evaluation'
-  | 'simulation'
+  | 'product-runtime'
   | 'experimental'
 
 export interface AgentRunScopeV1 {
@@ -27,15 +27,15 @@ export interface AgentRunScopeV1 {
   outlineNodeIds?: number[]
   /** HARNESS-RUNTIME-1 immutable instance input boundary. */
   runtime?: {
-    simulationSessionId: number
+    productRuntimeSessionId: number
     baseSequence: number
     stateHash: string
     visibilityHash: string
     releaseHash: string
   }
-  /** GAMEPROD-1 immutable Build/task boundary for Work-owned production runs. */
-  gameProduction?: {
-    gameBuildId: number
+  /** PRODUCTPROD-1 immutable Build/task boundary for Work-owned production runs. */
+  productProduction?: {
+    productBuildId: number
     buildNumber: number
     controlEpoch: number
     planHash: string
@@ -530,10 +530,10 @@ export interface AgentRunRecord {
   id?: number
   projectId: number
   workId?: number | null
-  /** Exactly one of workId / simulationSessionId owns every non-legacy run. */
-  simulationSessionId?: number | null
-  /** GAMEPROD-1 build owner; build runs remain Work-owned and never use this as a second owner. */
-  gameBuildId?: number | null
+  /** Exactly one of workId / productRuntimeSessionId owns every non-legacy run. */
+  productRuntimeSessionId?: number | null
+  /** PRODUCTPROD-1 build owner; build runs remain Work-owned and never use this as a second owner. */
+  productBuildId?: number | null
   worldGroupId?: number | null
   conversationId?: number | null
   /** Materialized child index; mirrors contract.ownership or legacy lineage.parent. */

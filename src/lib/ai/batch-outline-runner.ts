@@ -21,7 +21,7 @@ import {
   assertWorkspaceContentRevisionFreshV1,
   captureWorkspaceContentRevisionV1,
 } from '../authoring/content-revision'
-import { resolveScopeLike } from '../world-engine/scope'
+import { resolveScopeLike } from '../workspace/scope'
 
 export interface BatchOutlineProgress {
   currentVolumeIndex: number

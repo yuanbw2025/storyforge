@@ -18,12 +18,11 @@ import type { AdoptResult, AssembleContextResult } from '../registry/types'
 import type { AIConfig, ChatMessage, StoryCore } from '../types'
 import type { WorkspaceScope } from '../types/world-ownership'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   createAgentContextCompressionSessionV1,
   type AgentContextCompressionRuntimeV1,
@@ -150,7 +149,7 @@ function valuesOf(row: StoryCore | null): Record<StoryCoreField, string> {
     theme: asText(row?.theme),
     centralConflict: asText(row?.centralConflict),
     plotPattern: asText(row?.plotPattern),
-    mainPlot: asText(row?.mainPlot) || asText(row?.storyLines),
+    mainPlot: asText(row?.mainPlot),
     subPlots: asText(row?.subPlots),
   }
 }
@@ -393,7 +392,7 @@ export async function prepareStoryCoreCopilot(
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
   const before = await readSnapshot(input.projectId, scope)
   const targetField = resolveStoryCoreFieldV1(request)
   const capability = STORY_CORE_FIELD_CAPABILITIES.get(targetField)

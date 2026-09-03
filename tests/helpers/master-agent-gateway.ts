@@ -10,7 +10,7 @@ import { executeContextGatewayV1 } from '../../src/lib/context-gateway/execution
 import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
 import type { WorkspaceScope } from '../../src/lib/types'
 import type { ContextResourceDescriptorV1 } from '../../src/lib/registry/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 
 interface MasterGatewayFixtureOptions {
   scope: WorkspaceScope

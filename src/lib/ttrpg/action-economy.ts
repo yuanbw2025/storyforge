@@ -1,4 +1,4 @@
-import type { RuleActionDefinitionV1, SimulationTtrpgActionEconomyV2 } from '../types'
+import type { RuleActionDefinitionV1, TtrpgRuntimeActionEconomyV2 } from '../types'
 
 function fail(message: string): never {
   throw new Error(`[ttrpg-action-economy] ${message}`)
@@ -20,7 +20,7 @@ export function createDormantTtrpgActionEconomyV2(input: {
   actionsPerTurn: number
   reactionsPerRound: number
   freeActionsPerTurn?: number
-}): SimulationTtrpgActionEconomyV2 {
+}): TtrpgRuntimeActionEconomyV2 {
   return {
     schema: 'storyforge.ttrpg-action-economy', version: 2,
     actionsPerTurn: boundedInteger(input.actionsPerTurn, 'actionsPerTurn', 1, 20),
@@ -31,10 +31,10 @@ export function createDormantTtrpgActionEconomyV2(input: {
 }
 
 export function startTtrpgActionEconomySceneV2(input: {
-  economy: SimulationTtrpgActionEconomyV2
+  economy: TtrpgRuntimeActionEconomyV2
   sceneKey: string
   turnOrder: string[]
-}): SimulationTtrpgActionEconomyV2 {
+}): TtrpgRuntimeActionEconomyV2 {
   const parsed = parseTtrpgActionEconomyV2(input.economy)
   const sceneKey = actorKey(input.sceneKey, 'sceneKey')
   if (!Array.isArray(input.turnOrder) || !input.turnOrder.length || input.turnOrder.length > 100) fail('turnOrder 无效')
@@ -53,7 +53,7 @@ export function startTtrpgActionEconomySceneV2(input: {
   }
 }
 
-export function parseTtrpgActionEconomyV2(value: unknown): SimulationTtrpgActionEconomyV2 {
+export function parseTtrpgActionEconomyV2(value: unknown): TtrpgRuntimeActionEconomyV2 {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail('状态必须是对象')
   const row = value as Record<string, unknown>
   const expected = ['schema', 'version', 'actionsPerTurn', 'reactionsPerRound', 'freeActionsPerTurn', 'sceneKey', 'round', 'activeActorKey', 'budgets']
@@ -66,7 +66,7 @@ export function parseTtrpgActionEconomyV2(value: unknown): SimulationTtrpgAction
   const activeActorKey = row.activeActorKey == null ? null : actorKey(row.activeActorKey, 'activeActorKey')
   const round = boundedInteger(row.round, 'round', 0, Number.MAX_SAFE_INTEGER)
   if (!row.budgets || typeof row.budgets !== 'object' || Array.isArray(row.budgets)) fail('budgets 无效')
-  const budgets: SimulationTtrpgActionEconomyV2['budgets'] = {}
+  const budgets: TtrpgRuntimeActionEconomyV2['budgets'] = {}
   for (const [rawActorKey, rawBudget] of Object.entries(row.budgets as Record<string, unknown>)) {
     const key = actorKey(rawActorKey, 'budget.actorKey')
     if (!rawBudget || typeof rawBudget !== 'object' || Array.isArray(rawBudget)) fail(`budget ${key} 无效`)
@@ -93,11 +93,11 @@ export function parseTtrpgActionEconomyV2(value: unknown): SimulationTtrpgAction
 }
 
 export function spendTtrpgActionEconomyV2(input: {
-  economy: SimulationTtrpgActionEconomyV2
+  economy: TtrpgRuntimeActionEconomyV2
   turnOrder: string[]
   actorKey: string
   phase: RuleActionDefinitionV1['phase']
-}): { economy: SimulationTtrpgActionEconomyV2; nextActorKey: string | null; nextRound: number } {
+}): { economy: TtrpgRuntimeActionEconomyV2; nextActorKey: string | null; nextRound: number } {
   const economy = parseTtrpgActionEconomyV2(input.economy)
   const actor = actorKey(input.actorKey, 'actorKey')
   const budget = economy.budgets[actor]

@@ -8,7 +8,6 @@ import {
 import {
   buildMasterAgentRunContractV1,
   hashMasterAgentPlanV1,
-  MASTER_AGENT_REPLAN_STORAGE_KEY,
   parseMasterAgentPlanV1,
   restoreMasterAgentCandidatesV1,
   runDurableMasterAgentPlanV1,
@@ -52,8 +51,8 @@ async function createWorkspace(label: string): Promise<{
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number
@@ -171,11 +170,9 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    localStorage.setItem(MASTER_AGENT_REPLAN_STORAGE_KEY, 'disabled')
   })
 
   afterEach(() => {
-    localStorage.removeItem(MASTER_AGENT_REPLAN_STORAGE_KEY)
     resetHarnessFaultInjectionV1()
     db.close()
   })

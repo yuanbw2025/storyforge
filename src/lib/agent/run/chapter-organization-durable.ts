@@ -15,7 +15,7 @@ import {
   type ChapterOrganizationDurableEvidence,
   type ChapterOrganizationDomain,
 } from '../chapter-organization'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../../workspace/scope'
 
 export const CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1 = 'chapter-organization'
 export const CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1 = 'chapter-organization-terminal-v1'

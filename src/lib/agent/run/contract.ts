@@ -51,7 +51,7 @@ const WORKFLOW_KINDS: readonly AgentRunWorkflowKind[] = [
 const EXECUTION_BOUNDARIES: readonly AgentExecutionBoundaryV1[] = [
   'formal',
   'evaluation',
-  'simulation',
+  'product-runtime',
   'experimental',
 ]
 
@@ -369,7 +369,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
   const scopeRecord = readRecord(record.scope, 'contract.scope')
   assertExactKeys(
     scopeRecord,
-    ['projectId', 'worldGroupId', 'chapterIds', 'outlineNodeIds', 'runtime', 'gameProduction'],
+    ['projectId', 'worldGroupId', 'chapterIds', 'outlineNodeIds', 'runtime', 'productProduction'],
     ['projectId', 'worldGroupId'],
     'contract.scope',
   )
@@ -381,37 +381,37 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
     const runtimeRecord = readRecord(scopeRecord.runtime, 'contract.scope.runtime')
     assertExactKeys(
       runtimeRecord,
-      ['simulationSessionId', 'baseSequence', 'stateHash', 'visibilityHash', 'releaseHash'],
-      ['simulationSessionId', 'baseSequence', 'stateHash', 'visibilityHash', 'releaseHash'],
+      ['productRuntimeSessionId', 'baseSequence', 'stateHash', 'visibilityHash', 'releaseHash'],
+      ['productRuntimeSessionId', 'baseSequence', 'stateHash', 'visibilityHash', 'releaseHash'],
       'contract.scope.runtime',
     )
     runtime = {
-      simulationSessionId: readInteger(runtimeRecord.simulationSessionId, 'contract.scope.runtime.simulationSessionId', { min: 1 }),
+      productRuntimeSessionId: readInteger(runtimeRecord.productRuntimeSessionId, 'contract.scope.runtime.productRuntimeSessionId', { min: 1 }),
       baseSequence: readInteger(runtimeRecord.baseSequence, 'contract.scope.runtime.baseSequence', { min: 0 }),
       stateHash: readHash(runtimeRecord.stateHash, 'contract.scope.runtime.stateHash'),
       visibilityHash: readHash(runtimeRecord.visibilityHash, 'contract.scope.runtime.visibilityHash'),
       releaseHash: readHash(runtimeRecord.releaseHash, 'contract.scope.runtime.releaseHash'),
     }
   }
-  let gameProduction: AgentRunContractV1['scope']['gameProduction']
-  if (scopeRecord.gameProduction !== undefined) {
-    const productionRecord = readRecord(scopeRecord.gameProduction, 'contract.scope.gameProduction')
+  let productProduction: AgentRunContractV1['scope']['productProduction']
+  if (scopeRecord.productProduction !== undefined) {
+    const productionRecord = readRecord(scopeRecord.productProduction, 'contract.scope.productProduction')
     assertExactKeys(
       productionRecord,
-      ['gameBuildId', 'buildNumber', 'controlEpoch', 'planHash', 'taskKey'],
-      ['gameBuildId', 'buildNumber', 'controlEpoch', 'planHash', 'taskKey'],
-      'contract.scope.gameProduction',
+      ['productBuildId', 'buildNumber', 'controlEpoch', 'planHash', 'taskKey'],
+      ['productBuildId', 'buildNumber', 'controlEpoch', 'planHash', 'taskKey'],
+      'contract.scope.productProduction',
     )
-    gameProduction = {
-      gameBuildId: readInteger(productionRecord.gameBuildId, 'contract.scope.gameProduction.gameBuildId', { min: 1 }),
-      buildNumber: readInteger(productionRecord.buildNumber, 'contract.scope.gameProduction.buildNumber', { min: 1 }),
-      controlEpoch: readInteger(productionRecord.controlEpoch, 'contract.scope.gameProduction.controlEpoch', { min: 0 }),
-      planHash: readHash(productionRecord.planHash, 'contract.scope.gameProduction.planHash'),
-      taskKey: readString(productionRecord.taskKey, 'contract.scope.gameProduction.taskKey', { max: 200 }),
+    productProduction = {
+      productBuildId: readInteger(productionRecord.productBuildId, 'contract.scope.productProduction.productBuildId', { min: 1 }),
+      buildNumber: readInteger(productionRecord.buildNumber, 'contract.scope.productProduction.buildNumber', { min: 1 }),
+      controlEpoch: readInteger(productionRecord.controlEpoch, 'contract.scope.productProduction.controlEpoch', { min: 0 }),
+      planHash: readHash(productionRecord.planHash, 'contract.scope.productProduction.planHash'),
+      taskKey: readString(productionRecord.taskKey, 'contract.scope.productProduction.taskKey', { max: 200 }),
     }
   }
-  if (runtime && gameProduction) {
-    failSchema('invalid_scope', 'contract.scope', 'runtime 与 gameProduction 运行边界互斥')
+  if (runtime && productProduction) {
+    failSchema('invalid_scope', 'contract.scope', 'runtime 与 productProduction 运行边界互斥')
   }
 
   const permissionsRecord = readRecord(record.permissions, 'contract.permissions')
@@ -651,7 +651,7 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
       chapterIds: readIdArray(scopeRecord.chapterIds, 'contract.scope.chapterIds'),
       outlineNodeIds: readIdArray(scopeRecord.outlineNodeIds, 'contract.scope.outlineNodeIds'),
       ...(runtime ? { runtime } : {}),
-      ...(gameProduction ? { gameProduction } : {}),
+      ...(productProduction ? { productProduction } : {}),
     },
     permissions: { contextSourceKeys, writeTargets },
     ...(record.runtimeBindingHash === undefined ? {} : {
@@ -772,10 +772,10 @@ function parseSkillBoundContract(
   }
   assertUnique(executionBindings.map(item => item.stepId), 'contract.executionBindings')
 
-  const legacyShape = { ...record, version: 1 } as Record<string, unknown>
-  delete legacyShape.executionBindings
-  if (expectedVersion === 3) delete legacyShape.executionBoundary
-  const base = parseAgentRunContractV1(legacyShape)
+  const baseShape = { ...record, version: 1 } as Record<string, unknown>
+  delete baseShape.executionBindings
+  if (expectedVersion === 3) delete baseShape.executionBoundary
+  const base = parseAgentRunContractV1(baseShape)
   const permissionSources = [...new Set(base.permissions.contextSourceKeys)].sort()
   const bindingSources = [...new Set(executionBindings.flatMap(binding => binding.contextSourceKeys))].sort()
   if (JSON.stringify(permissionSources) !== JSON.stringify(bindingSources)) {

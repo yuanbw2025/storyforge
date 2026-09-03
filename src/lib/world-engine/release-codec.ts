@@ -1,6 +1,6 @@
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { WORLD_CAPABILITY_AREAS, type WorldCapabilityArea } from '../registry/types'
-import type { WorldRelease, WorldReleaseManifestV2 } from '../types'
+import type { WorldRelease, WorldReleaseManifestV3 } from '../types'
 import { hashWorldReleaseValueV1 } from './release-hash'
 
 const HASH = /^[a-f0-9]{64}$/
@@ -9,6 +9,11 @@ const WORLD_SEMANTIC_TABLES = new Set(
 )
 const WORLD_SEMANTIC_SPECS = PROJECT_TABLES.filter(spec => spec.worldSemantic)
 const WORLD_SEMANTIC_BY_TABLE = new Map(WORLD_SEMANTIC_SPECS.map(spec => [spec.name, spec] as const))
+const WORLD_RELEASE_MANIFEST_KEYS = new Set([
+  'schema', 'version', 'semanticContract', 'worldCode', 'worldName', 'workTitle',
+  'selectedTables', 'dependencies', 'records', 'portableProject',
+  'capabilityProfile', 'resourceCatalog', 'sourceManifest',
+])
 
 function semanticResourceId(worldCode: string, table: string): string {
   const semantic = WORLD_SEMANTIC_BY_TABLE.get(table)?.worldSemantic
@@ -16,11 +21,11 @@ function semanticResourceId(worldCode: string, table: string): string {
   return `world:${worldCode}:semantic:${semantic.area}:${semantic.resourceKind}`
 }
 
-export type PureWorldReleaseManifestV3 = WorldReleaseManifestV2 & {
+export type PureWorldReleaseManifestV3 = WorldReleaseManifestV3 & {
   semanticContract: 3
-  capabilityProfile: NonNullable<WorldReleaseManifestV2['capabilityProfile']>
-  resourceCatalog: NonNullable<WorldReleaseManifestV2['resourceCatalog']>
-  sourceManifest: NonNullable<WorldReleaseManifestV2['sourceManifest']>
+  capabilityProfile: NonNullable<WorldReleaseManifestV3['capabilityProfile']>
+  resourceCatalog: NonNullable<WorldReleaseManifestV3['resourceCatalog']>
+  sourceManifest: NonNullable<WorldReleaseManifestV3['sourceManifest']>
 }
 
 export class WorldReleaseCodecErrorV1 extends Error {
@@ -64,8 +69,10 @@ export function parsePureWorldReleaseManifestV3(
 ): PureWorldReleaseManifestV3 {
   const parsed = typeof value === 'string' ? parseJson(value) : value
   if (!isRecord(parsed)) fail('root', 'WorldRelease manifest 根必须是对象')
-  const manifest = parsed as unknown as WorldReleaseManifestV2
-  if (manifest.schema !== 'storyforge.world-package' || manifest.version !== 2
+  const manifest = parsed as unknown as WorldReleaseManifestV3
+  const unknownKeys = Object.keys(parsed).filter(key => !WORLD_RELEASE_MANIFEST_KEYS.has(key))
+  if (unknownKeys.length > 0) fail('shape', `WorldRelease manifest 包含未知字段:${unknownKeys.join(',')}`)
+  if (manifest.schema !== 'storyforge.world-release' || manifest.version !== 3
     || manifest.semanticContract !== 3) {
     fail('contract', '只允许 semanticContract=3 的纯语义 WorldRelease')
   }
@@ -78,10 +85,6 @@ export function parsePureWorldReleaseManifestV3(
   if (selectedTables.some(table => !WORLD_SEMANTIC_TABLES.has(table))) {
     fail('ownership', 'WorldRelease 含非世界语义表')
   }
-  if (!Array.isArray(manifest.selectedNarrativeModules)
-    || manifest.selectedNarrativeModules.length !== 0) {
-    fail('product-content', 'WorldRelease 不得包含可执行叙事模块')
-  }
   if (!isRecord(manifest.records)
     || Object.keys(manifest.records).length !== selectedTables.length
     || Object.keys(manifest.records).some(table => !selectedTables.includes(table))
@@ -92,7 +95,7 @@ export function parsePureWorldReleaseManifestV3(
     || manifest.dependencies.length !== selectedTables.length) {
     fail('dependencies', 'dependencies 必须与 selectedTables 精确闭合')
   }
-  const dependencies = new Map<string, WorldReleaseManifestV2['dependencies'][number]>()
+  const dependencies = new Map<string, WorldReleaseManifestV3['dependencies'][number]>()
   for (const dependency of manifest.dependencies) {
     if (!dependency || typeof dependency.table !== 'string'
       || dependencies.has(dependency.table) || !selectedTables.includes(dependency.table)

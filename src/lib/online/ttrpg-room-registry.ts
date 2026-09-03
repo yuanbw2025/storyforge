@@ -1,5 +1,5 @@
-import { hashGameProductionValueV2 } from '../game-production/hash'
-import { verifyGameReleaseManifestV3 } from '../game-production/runtime-package'
+import { hashProductProductionValueV2 } from '../product-production/hash'
+import { verifyProductReleaseManifestV1 } from '../product-production/runtime-package'
 import type { TtrpgRuntimeContentV1 } from '../types'
 import {
   AuthoritativeOnlineRoomV1,
@@ -75,14 +75,14 @@ async function loadContent(input: {
 }): Promise<TtrpgRuntimeContentV1> {
   const record = await input.releases.loadByContentHash(input.releaseHash)
   if (!record || record.contentHash !== input.releaseHash || record.status !== 'published') {
-    fail('release_mismatch', '正式 TTRPG GameRelease 不存在或不可主持')
+    fail('release_mismatch', '正式 TTRPG ProductRelease 不存在或不可主持')
   }
   let raw: unknown
-  try { raw = JSON.parse(record.manifestJson) } catch { fail('release_mismatch', 'GameRelease manifest 不是合法 JSON') }
-  if (await hashGameProductionValueV2(raw) !== record.contentHash) fail('release_mismatch', 'GameRelease 内容 hash 不一致')
-  const manifest = await verifyGameReleaseManifestV3(raw)
+  try { raw = JSON.parse(record.manifestJson) } catch { fail('release_mismatch', 'ProductRelease manifest 不是合法 JSON') }
+  if (await hashProductProductionValueV2(raw) !== record.contentHash) fail('release_mismatch', 'ProductRelease 内容 hash 不一致')
+  const manifest = await verifyProductReleaseManifestV1(raw)
   if (manifest.productType !== 'ttrpg' || !manifest.runtimePackage.ttrpg) {
-    fail('release_mismatch', 'GameRelease 不是正式 TTRPG 产品')
+    fail('release_mismatch', 'ProductRelease 不是正式 TTRPG 产品')
   }
   return structuredClone(manifest.runtimePackage.ttrpg)
 }
@@ -163,7 +163,7 @@ export class HostedFormalTtrpgRoomRegistryV1 implements OnlineRoomAuthorityRegis
     })
     if (!identity) fail('unauthorized', '房间创建凭据无效或过期')
     if (!identity.entitled || !identity.allowedToHost) fail('forbidden', '账号没有该 Release 的主持权限')
-    const provisioningFingerprint = await hashGameProductionValueV2({
+    const provisioningFingerprint = await hashProductProductionValueV2({
       protocolVersion: 1,
       requestId: input.requestId,
       roomId: input.roomId,

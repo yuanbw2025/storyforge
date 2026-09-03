@@ -2,17 +2,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { canonicalManuscriptWordCount } from '../../src/lib/chapters/selectors'
-import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import {
   readCanonicalWorkManuscriptWordCount,
   switchNovelProfile,
   updateProjectAndActiveWork,
-} from '../../src/lib/world-engine/works'
+} from '../../src/lib/workspace/works'
 import {
   deriveShortNovelStructure,
   effectiveNovelProfile,
   effectiveWorkKind,
-} from '../../src/lib/world-engine/work-kind'
+} from '../../src/lib/workspace/work-kind'
 import type { Chapter, CreateProjectInput, Work } from '../../src/lib/types'
 
 function projectInput(name: string, targetWordCount: number): CreateProjectInput {
@@ -114,7 +114,7 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
       novelProfile: 'short',
     })
     const backup = await exportProjectJSON(created.scope.projectId)
-    expect(backup.version).toBe(9)
+    expect(backup.version).toBe(10)
     expect(backup.works?.[0]).toMatchObject({ kind: 'novel', novelProfile: 'short' })
 
     const importedId = await importProjectJSON(structuredClone(backup))

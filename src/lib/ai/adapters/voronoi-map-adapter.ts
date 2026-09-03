@@ -80,9 +80,6 @@ export function buildVoronoiMapPrompt(
     contextParts.push(`【经济制度】${worldview.economyOverview}`)
   if (worldview?.cultureOverview)
     contextParts.push(`【文化制度】${worldview.cultureOverview}`)
-  if (!worldview?.politicsOverview && !worldview?.economyOverview && !worldview?.cultureOverview
-    && worldview?.politicsEconomyCulture)
-    contextParts.push(`【政治经济文化（旧版资料）】${worldview.politicsEconomyCulture}`)
   if (overview)
     contextParts.push(`【地理总述】${overview}`)
   if (codexContext && codexContext.trim())

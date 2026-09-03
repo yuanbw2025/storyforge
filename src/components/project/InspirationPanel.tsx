@@ -130,11 +130,19 @@ export default function InspirationPanel({ project }: Props) {
             powerHierarchy: w.powerHierarchy || '',
             continentLayout: w.continentLayout || '',
             climateByRegion: w.climateByRegion || '',
-            historyLine: w.historyLine || '',
             races: w.races || '',
             factionLayout: w.factionLayout || '',
           },
         })
+        if (w.historyOverview) {
+          await adopt({
+            projectId: project.id!,
+            worldGroupId: groupId,
+            target: 'histories',
+            mode: 'replace',
+            data: { overview: w.historyOverview },
+          })
+        }
       }
 
       // 3. 角色：按 homeWorld 归属，跨世界角色标记
@@ -188,7 +196,7 @@ export default function InspirationPanel({ project }: Props) {
         if (w.worldOrigin) lines.push(`- 世界来源：${w.worldOrigin}`)
         if (w.powerHierarchy) lines.push(`- 力量体系：${w.powerHierarchy}`)
         if (w.continentLayout) lines.push(`- 地貌分布：${w.continentLayout}`)
-        if (w.historyLine) lines.push(`- 世界历史：${w.historyLine}`)
+        if (w.historyOverview) lines.push(`- 世界历史：${w.historyOverview}`)
         if (w.factionLayout) lines.push(`- 势力分布：${w.factionLayout}`)
         if (w.entryCondition) lines.push(`- 进入条件：${w.entryCondition}`)
         if (w.powerRestriction) lines.push(`- 能力限制：${w.powerRestriction}`)
@@ -207,7 +215,7 @@ export default function InspirationPanel({ project }: Props) {
       if (wv.worldOrigin) lines.push(`- 世界来源：${wv.worldOrigin}`)
       if (wv.powerHierarchy) lines.push(`- 力量体系：${wv.powerHierarchy}`)
       if (wv.continentLayout) lines.push(`- 地貌分布：${wv.continentLayout}`)
-      if (wv.historyLine) lines.push(`- 世界历史：${wv.historyLine}`)
+      if (result.history.overview) lines.push(`- 世界历史：${result.history.overview}`)
       if (wv.factionLayout) lines.push(`- 势力分布：${wv.factionLayout}`)
       lines.push(`\n## 故事核心`)
       if (sc.logline) lines.push(`- 一句话：${sc.logline}`)
@@ -246,7 +254,7 @@ export default function InspirationPanel({ project }: Props) {
     })
   }
 
-  // ── 采纳世界观 ─────────────────────────────────
+  // ── 采纳世界基础与独立历史 ─────────────────────
   const handleAdoptWorldview = async () => {
     if (!result || adoptedSections.has('worldview')) return
     setAdopting(true)
@@ -260,11 +268,18 @@ export default function InspirationPanel({ project }: Props) {
         powerHierarchy: wv.powerHierarchy || undefined,
         continentLayout: wv.continentLayout || undefined,
         climateByRegion: wv.climateByRegion || undefined,
-        historyLine: wv.historyLine || undefined,
         races: wv.races || undefined,
         factionLayout: wv.factionLayout || undefined,
       },
     })
+    if (result.history.overview) {
+      await adopt({
+        projectId: project.id!,
+        target: 'histories',
+        mode: 'replace',
+        data: { overview: result.history.overview },
+      })
+    }
     setAdoptedSections(prev => new Set(prev).add('worldview'))
     setAdopting(false)
   }

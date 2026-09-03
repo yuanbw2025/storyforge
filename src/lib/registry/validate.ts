@@ -58,15 +58,15 @@ export function checkRegistry(): RegistryValidationResult {
       errors.push(`${spec.name}.domainOwner 未登记逻辑归属`)
     }
     if (spec.domainOwner) {
-      const { allowed, legacyDefault, locator } = spec.domainOwner
+      const { allowed, defaultOwner, locator } = spec.domainOwner
       if (allowed.length === 0) errors.push(`${spec.name}.domainOwner.allowed 不能为空`)
       if (new Set(allowed).size !== allowed.length) {
         errors.push(`${spec.name}.domainOwner.allowed 存在重复 owner`)
       }
-      if (!allowed.includes(legacyDefault)) {
-        errors.push(`${spec.name}.domainOwner.legacyDefault 不在 allowed 中`)
+      if (!allowed.includes(defaultOwner)) {
+        errors.push(`${spec.name}.domainOwner.defaultOwner 不在 allowed 中`)
       }
-      if (spec.worldSemantic && legacyDefault === 'workspace') {
+      if (spec.worldSemantic && defaultOwner === 'workspace') {
         errors.push(`${spec.name}.worldSemantic 不能默认归属 workspace`)
       }
       if (spec.worldSemantic?.canonPolicy === 'confirmed-rows-only'
@@ -90,10 +90,6 @@ export function checkRegistry(): RegistryValidationResult {
         if (locator.owner !== 'inherit' && !allowed.includes(locator.owner)) {
           errors.push(`${spec.name}.domainOwner parent owner 未在 allowed 中: ${locator.owner}`)
         }
-      }
-      if ((spec.name === 'worlds' || spec.name === 'works' || spec.name === 'workCharacterBindings')
-        && locator.kind === 'compat-project') {
-        errors.push(`${spec.name}.domainOwner 新根/绑定不得使用 compat-project`)
       }
     }
 

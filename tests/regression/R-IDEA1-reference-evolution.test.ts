@@ -8,7 +8,6 @@ import {
   createReferenceAnalysisRun,
   deleteReferenceWithAnalysis,
   diffReferenceAnalysisChunks,
-  ensureLegacyActiveReferenceRun,
   getActiveReferenceAnalysisRun,
   getReferenceAnalysisRunChunks,
   listReferenceAnalysisRuns,
@@ -16,7 +15,7 @@ import {
 } from '../../src/lib/reference-analysis/lifecycle'
 import { verifiedRawExcerpt } from '../../src/lib/reference-analysis/pipeline'
 import type { ReferenceChunkAnalysis } from '../../src/lib/types'
-import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
 
 async function seedProjectAndReference(title = '演化参考') {
   const now = Date.now()
@@ -27,7 +26,7 @@ async function seedProjectAndReference(title = '演化参考') {
   const referenceId = await db.references.add({
     projectId, title, author: '作者', type: 'story', note: '', url: '',
     analysisDepth: 'quick', analysisStatus: 'done', analysisProgress: 100,
-    fileHash: 'legacy-hash', totalChars: 100,
+    fileHash: 'reference-hash', totalChars: 100,
     createdAt: now, updatedAt: now,
   } as any) as number
   return { projectId, referenceId, now }
@@ -55,6 +54,25 @@ async function addScopedChunk(projectId: number, row: ReferenceChunkAnalysis): P
   ) as Promise<number>
 }
 
+async function createActiveRun(projectId: number, referenceId: number, openingTechnique: string) {
+  const run = await createReferenceAnalysisRun({
+    referenceId,
+    depth: 'quick',
+    sourceFilename: 'baseline.txt',
+    fileHash: `baseline-${referenceId}`,
+    totalChars: 10,
+    expectedChunks: 1,
+    sourceKind: 'own-work',
+    usageScope: 'analysis-only',
+    rightsConfirmed: true,
+    sourceText: '基准原文',
+  })
+  await addScopedChunk(projectId, chunk(referenceId, openingTechnique, run.id))
+  await completeReferenceAnalysisRun(run.id!, 1)
+  await activateReferenceAnalysisRun(run.id!)
+  return (await db.referenceAnalysisRuns.get(run.id!))!
+}
+
 describe('R-IDEA1 · 参考资料版本化演化', () => {
   beforeEach(async () => {
     await db.delete()
@@ -62,28 +80,9 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
   })
   afterEach(() => db.close())
 
-  it('旧分析首次使用时无损桥接为 active v1，迁移不猜测来源', async () => {
-    const { referenceId } = await seedProjectAndReference()
-    const oldId = await db.referenceChunkAnalysis.add(chunk(referenceId, '旧开篇技法')) as number
-
-    const run = await ensureLegacyActiveReferenceRun(referenceId)
-
-    expect(run).toMatchObject({
-      version: 1,
-      status: 'active',
-      sourceKind: 'unknown',
-      usageScope: 'analysis-only',
-      rightsConfirmed: false,
-    })
-    const bridged = await db.referenceChunkAnalysis.get(oldId)
-    expect(bridged?.openingTechnique).toBe('旧开篇技法')
-    expect(bridged?.analysisRunId).toBe(run?.id)
-  })
-
   it('新分析先 ready，激活后才进入上下文，并可原子回滚旧版本', async () => {
     const { projectId, referenceId } = await seedProjectAndReference()
-    await db.referenceChunkAnalysis.add(chunk(referenceId, '旧版本钩子'))
-    const oldRun = await ensureLegacyActiveReferenceRun(referenceId)
+    const oldRun = await createActiveRun(projectId, referenceId, '既有版本钩子')
 
     const candidate = await createReferenceAnalysisRun({
       referenceId,
@@ -104,17 +103,17 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
     const staged = await db.referenceAnalysisRuns.get(candidate.id!)
     expect(staged?.usageScope, '未知来源必须降级为仅分析').toBe('analysis-only')
     expect(await readReferenceAnalysisSource(candidate.id!)).toBe('新的原文内容')
-    expect(await buildRefAnalysisContext([referenceId])).toContain('旧版本钩子')
+    expect(await buildRefAnalysisContext([referenceId])).toContain('既有版本钩子')
     expect(await buildRefAnalysisContext([referenceId])).not.toContain('新版本悬念钩子')
 
     await activateReferenceAnalysisRun(candidate.id!)
     expect(await buildRefAnalysisContext([referenceId])).toContain('新版本悬念钩子')
-    expect(await buildRefAnalysisContext([referenceId])).not.toContain('旧版本钩子')
-    expect((await db.referenceAnalysisRuns.get(oldRun!.id!))?.status).toBe('superseded')
+    expect(await buildRefAnalysisContext([referenceId])).not.toContain('既有版本钩子')
+    expect((await db.referenceAnalysisRuns.get(oldRun.id!))?.status).toBe('superseded')
 
-    await activateReferenceAnalysisRun(oldRun!.id!)
-    expect((await getActiveReferenceAnalysisRun(referenceId))?.id).toBe(oldRun?.id)
-    expect(await buildRefAnalysisContext([referenceId])).toContain('旧版本钩子')
+    await activateReferenceAnalysisRun(oldRun.id!)
+    expect((await getActiveReferenceAnalysisRun(referenceId))?.id).toBe(oldRun.id)
+    expect(await buildRefAnalysisContext([referenceId])).toContain('既有版本钩子')
   })
 
   it('AI 引文必须能在本块原文中核对，差异按维度公开', () => {
@@ -133,8 +132,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
 
   it('部分成功保留为待确认版本且公开缺块，不覆盖 active', async () => {
     const { projectId, referenceId } = await seedProjectAndReference()
-    await db.referenceChunkAnalysis.add(chunk(referenceId, '稳定旧版'))
-    await ensureLegacyActiveReferenceRun(referenceId)
+    await createActiveRun(projectId, referenceId, '稳定基准版')
     const partial = await createReferenceAnalysisRun({
       referenceId,
       depth: 'deep',
@@ -156,14 +154,13 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
       progress: 50,
       error: '共 2 块，成功 1',
     })
-    expect(await buildRefAnalysisContext([referenceId])).toContain('稳定旧版')
+    expect(await buildRefAnalysisContext([referenceId])).toContain('稳定基准版')
     expect(await buildRefAnalysisContext([referenceId])).not.toContain('只完成一块')
   })
 
   it('版本上限不会静默裁剪 active/ready/analyzing', async () => {
-    const { referenceId } = await seedProjectAndReference()
-    await db.referenceChunkAnalysis.add(chunk(referenceId, '稳定旧版'))
-    await ensureLegacyActiveReferenceRun(referenceId)
+    const { projectId, referenceId } = await seedProjectAndReference()
+    await createActiveRun(projectId, referenceId, '稳定基准版')
     for (let index = 0; index < 5; index++) {
       await createReferenceAnalysisRun({
         referenceId,

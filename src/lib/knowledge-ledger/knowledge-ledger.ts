@@ -7,7 +7,7 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import { adopt } from '../registry/adopt'
 import { resolveProjectionBoundary } from '../consistency/projection-boundary'

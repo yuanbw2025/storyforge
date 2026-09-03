@@ -5,7 +5,7 @@
   "createdAt": "2026-08-16",
   "source": "项目作者提供的人物参考图，以及为 StoryForge 雾港演示生成的场景和结局插画",
   "license": "StoryForge 项目内演示与产品使用",
-  "notes": "人物原始下载文件保持不变；生产文件统一转换为 WebP。所有资源必须经 avgMediaAssets/avgMediaBlobs、WorldRelease 和 GameRelease 冻结链路使用。",
+  "notes": "人物原始下载文件保持不变；生产文件统一转换为 WebP。所有资源必须经产品媒资表、WorldReference 和 ProductRelease 冻结链路使用。",
   "assets": [
     { "assetKey": "mist.bg.harbor", "file": "mist-bg-harbor.webp", "kind": "background", "name": "雾港码头", "width": 1672, "height": 941, "sceneTag": "entry", "altText": "暴雨将至的雾港码头与远方灯塔" },
     { "assetKey": "mist.bg.archive", "file": "mist-bg-archive.webp", "kind": "background", "name": "旧档案馆", "width": 1672, "height": 941, "sceneTag": "archive", "altText": "堆满航海档案与潮汐机械的旧档案馆" },

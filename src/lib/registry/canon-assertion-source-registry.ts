@@ -35,7 +35,6 @@ export const CANON_ASSERTION_SOURCE_REGISTRY: readonly CanonAssertionSourceSpec[
       { field: 'politicsOverview', label: '政治制度', predicates: ['technologyLevel'] },
       { field: 'economyOverview', label: '经济制度', predicates: ['technologyLevel'] },
       { field: 'cultureOverview', label: '文化制度', predicates: ['technologyLevel'] },
-      { field: 'politicsEconomyCulture', label: '政治经济文化', predicates: ['technologyLevel'] },
     ],
   },
   {

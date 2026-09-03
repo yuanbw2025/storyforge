@@ -7,7 +7,7 @@ import type { Chapter, StoryArc } from '../../lib/types'
 import { parseStages } from '../../lib/types'
 import { htmlToPlainText } from '../../lib/utils/html'
 import { resolveCanonicalChapterSequence } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
-import { readOwnedRows, resolveReadScopeLike } from '../../lib/world-engine/scope'
+import { readOwnedRows, resolveReadScopeLike } from '../../lib/workspace/scope'
 import {
   parseStorylineProgressResult,
   type StorylineAnalysisCandidates,

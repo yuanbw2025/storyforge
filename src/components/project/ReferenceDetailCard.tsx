@@ -26,11 +26,13 @@ const WORLDVIEW_LABELS: Record<string, string> = {
   regionDimensions: '区域面积',
   mountainsRivers: '山川河流',
   climateByRegion: '分区域气候',
-  historyLine: '世界历史线',
-  worldEvents: '世界大事记',
+  geographyOverview: '地理总述',
+  historyOverview: '历史总述',
   races: '种族设定',
   factionLayout: '势力分布',
-  politicsEconomyCulture: '政治/经济/文化',
+  politicsOverview: '政治制度',
+  economyOverview: '经济制度',
+  cultureOverview: '文化制度',
   internalConflicts: '矛盾冲突',
   itemDesign: '道具设计',
 }
@@ -48,7 +50,11 @@ export default function ReferenceDetailCard({ reference, referenceIndex, onUpdat
   const data = reference.importedData
   const glyphColor = REFERENCE_GLYPH_COLORS[referenceIndex % REFERENCE_GLYPH_COLORS.length]
   const config = REFERENCE_TYPE_CONFIG[reference.type]
-  const worldviewEntries = data?.worldview ? Object.entries(data.worldview).filter(([, value]) => value?.trim()) : []
+  const worldviewEntries = [
+    ...(data?.worldview ? Object.entries(data.worldview) : []),
+    ...(data?.geography?.overview ? [['geographyOverview', data.geography.overview] as [string, string]] : []),
+    ...(data?.history?.overview ? [['historyOverview', data.history.overview] as [string, string]] : []),
+  ].filter(([, value]) => value?.trim())
   const characters = data?.characters || []
   const outline = data?.outline || []
 

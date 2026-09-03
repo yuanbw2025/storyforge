@@ -11,8 +11,8 @@ import {
   saveAdaptationBriefDraft,
   saveAdaptationPlanDraft,
 } from '../../src/lib/adaptation/source-manifest'
-import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
-import { deleteWork } from '../../src/lib/world-engine/lifecycle'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { deleteWork } from '../../src/lib/workspace/lifecycle'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import type {
   AdaptationBriefV1,
@@ -256,7 +256,7 @@ describe('ADAPT-CORE-1A · 来源冻结、stale 与生命周期', () => {
     const source = await sourceWorkspace()
     const result = await createAdaptation({ sourceScope: source.scope, sourceWorkId: source.scope.workId, title: '可移植剧本', sourceSelection: { mode: 'entire-work' }, medium: 'screenplay', targetSpec: screenplaySpec })
     const backup = await exportProjectJSON(source.scope.projectId)
-    expect(backup.version).toBe(9)
+    expect(backup.version).toBe(10)
     expect(backup.adaptationProjects).toHaveLength(1)
     expect(backup.adaptationSourceUnits?.length).toBeGreaterThan(1)
     const importedId = await importProjectJSON(structuredClone(backup))

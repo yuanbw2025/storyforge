@@ -27,7 +27,7 @@ import {
   readOwnedRows,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   attachAgentContextInputStateV1,
   evidenceFromContextResult,
@@ -62,7 +62,6 @@ import {
   type CreativeRawModelResultV1,
 } from './creative-execution'
 import {
-  isCreativeReliabilityRuntimeEnabledV1,
   parseCreativeArtifactV1,
   type CreativeAssumptionV1,
   type CreativeArtifactIssueV1,
@@ -107,7 +106,6 @@ export interface ProseCopilotInput {
   snapshot: ProseCopilotSnapshot
   assembled: ProseGatewayAssemblyV1
   narrativeBrief: NarrativeBriefV1
-  creativeReliabilityEnabled?: boolean
   previousTail: string
   config: AIConfig
   /** 显式叙事视角。不得让模型从正文或角色列表自行猜测。 */
@@ -359,9 +357,7 @@ function buildProseMessages(input: ProseCopilotInput) {
   const hint = [
     input.inputGuidance,
     input.authorRequest + wordCountHint + supplemental,
-    ...(input.creativeReliabilityEnabled !== false
-      ? [formatNarrativeBriefForPromptV1(input.narrativeBrief)]
-      : []),
+    formatNarrativeBriefForPromptV1(input.narrativeBrief),
   ].join('\n\n')
   if (input.operation === 'continue') {
     const context = characters ? `${world}\n\n${characters}` : world
@@ -528,7 +524,6 @@ export async function prepareProseCopilot(input: {
   generationOverrides?: { temperature?: number; maxTokens?: number }
   contextCompressionRuntime?: AgentContextCompressionRuntimeV1
   inheritedAssumptions?: readonly CreativeAssumptionV1[]
-  creativeReliabilityEnabled?: boolean
   signal?: AbortSignal
 }, dependencies: ProseCopilotDependencies = {}): Promise<PreparedProseCopilot> {
   const project = await db.projects.get(input.projectId)
@@ -594,7 +589,7 @@ export async function prepareProseCopilot(input: {
     perspectiveCharacterId,
     config,
     contextProfile,
-    requireDetailedOutline: false,
+    allowOutlineOnlyAgentDraft: true,
     signal: input.signal,
   })
   const current = await readSnapshot(scope, snapshot, worldGroupId)
@@ -618,8 +613,6 @@ export async function prepareProseCopilot(input: {
     assembled,
     inheritedAssumptions: input.inheritedAssumptions,
   })
-  const creativeReliabilityEnabled = input.creativeReliabilityEnabled
-    ?? isCreativeReliabilityRuntimeEnabledV1()
   const nodeInput: ProseCopilotInput = {
     project,
     scope,
@@ -633,7 +626,6 @@ export async function prepareProseCopilot(input: {
     snapshot,
     assembled,
     narrativeBrief,
-    creativeReliabilityEnabled,
     previousTail: '',
     config,
     parameterValues: input.parameterValues,

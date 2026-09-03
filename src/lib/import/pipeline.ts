@@ -406,6 +406,8 @@ export async function applyReferenceFromSession(
     analysisDepth: depth,
     importedData: {
       worldview: session.merged?.worldview,
+      geography: session.merged?.geography,
+      history: session.merged?.history,
       characters: session.merged?.characters,
       outline: session.merged?.outline,
       writingTechniques: session.merged?.writingTechniques,
@@ -461,7 +463,7 @@ export async function applyReferenceFromSession(
 }
 
 /**
- * 从一份(已解析完成的) session 落地到「当前项目设定库」(世界观/角色/大纲),零重复解析。
+ * 从一份(已解析完成的) session 落地到当前内容库（世界基础/地理/历史/角色/大纲），零重复解析。
  * "解析一次·多次落地"的另一半:用户已解析过对标文(或导入过参考),想把设定搬进设定库时,
  * 直接复用 session.merged 写库,**不再调用解析 AI**(省钱),也不必一个个手填。
  */

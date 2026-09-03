@@ -55,15 +55,12 @@ function defaultNodePosition(index: number): { x: number; y: number } {
   }
 }
 
-function legacyTargetVariable(step: PromptWorkflowStep): string {
+function linearTargetVariable(step: PromptWorkflowStep): string {
   return step.inputMapping?.previousOutput?.trim() || 'worldContext'
 }
 
-/**
- * 旧 PromptWorkflow 的兼容视图。相邻步骤显式连线，保持旧 Runner 无论是否声明
- * inputMapping 都会把上一步输出放进 worldContext 的行为。
- */
-export function createLegacyWorkflowGraph(steps: PromptWorkflowStep[]): PromptWorkflowGraph {
+/** 为新建工作流或数据库升级生成一张显式线性图。 */
+export function createLinearWorkflowGraph(steps: PromptWorkflowStep[]): PromptWorkflowGraph {
   return {
     version: WORKFLOW_GRAPH_VERSION,
     nodes: steps.map((step, index) => ({
@@ -71,24 +68,22 @@ export function createLegacyWorkflowGraph(steps: PromptWorkflowStep[]): PromptWo
       ...defaultNodePosition(index),
     })),
     edges: steps.slice(1).map((step, index) => ({
-      edgeId: `legacy-${steps[index].stepId}-${step.stepId}`,
+      edgeId: `linear-${steps[index].stepId}-${step.stepId}`,
       sourceStepId: steps[index].stepId,
       targetStepId: step.stepId,
-      targetVariable: legacyTargetVariable(step),
+      targetVariable: linearTargetVariable(step),
     })),
     viewport: { x: 0, y: 0, zoom: 1 },
   }
 }
 
 export function workflowGraphFor(workflow: PromptWorkflow): PromptWorkflowGraph {
-  return workflow.graph
-    ? {
-        version: workflow.graph.version,
-        nodes: workflow.graph.nodes.map(node => ({ ...node })),
-        edges: workflow.graph.edges.map(edge => ({ ...edge })),
-        viewport: workflow.graph.viewport ? { ...workflow.graph.viewport } : undefined,
-      }
-    : createLegacyWorkflowGraph(workflow.steps)
+  return {
+    version: workflow.graph.version,
+    nodes: workflow.graph.nodes.map(node => ({ ...node })),
+    edges: workflow.graph.edges.map(edge => ({ ...edge })),
+    viewport: workflow.graph.viewport ? { ...workflow.graph.viewport } : undefined,
+  }
 }
 
 export function validateWorkflowGraph(workflow: PromptWorkflow): WorkflowGraphIssue[] {

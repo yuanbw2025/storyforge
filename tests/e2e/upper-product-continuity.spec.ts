@@ -18,59 +18,54 @@ async function seedEvolutionCompatibilityCampaign(page: Page) {
     const [
       { db },
       { seedCurrentProductWorld },
-      { suggestGameStartingPoints, draftGameProductionBriefV3 },
-      { executeGameProductionCommand },
-      { runLocalGameProductionVerticalSlice },
-      { publishGameProductionV1, beginGameProductionEvolutionV1 },
-      { createPlayableGameInstance },
-      {
-        readSimulationState,
-        hashSimulationRuntimeStateV1,
-        commitNarrativeChoiceWithStateV1,
-      },
+      { suggestProductStartingPoints, draftProductProductionBriefV3 },
+      { executeProductProductionCommand },
+      { runCurrentProductProductionAcceptanceFixture },
+      { publishProductProductionV1, beginProductProductionEvolutionV1 },
+      { createProductRuntimeInstanceFromSource },
     ] = await Promise.all([
       importer('/storyforge/src/lib/db/schema.ts'),
       importer('/storyforge/tests/helpers/current-product-world.ts'),
-      importer('/storyforge/src/lib/game-production/consultation.ts'),
-      importer('/storyforge/src/lib/game-production/commands.ts'),
-      importer('/storyforge/src/lib/game-production/vertical-slice.ts'),
-      importer('/storyforge/src/lib/game-production/service.ts'),
-      importer('/storyforge/src/lib/world-engine/instances.ts'),
-      importer('/storyforge/src/lib/simulation/runtime.ts'),
+      importer('/storyforge/src/lib/product-production/consultation.ts'),
+      importer('/storyforge/src/lib/product-production/commands.ts'),
+      importer('/storyforge/tests/helpers/current-product-production-acceptance-fixture.ts'),
+      importer('/storyforge/src/lib/product-production/service.ts'),
+      importer('/storyforge/src/lib/product/runtime-instances.ts'),
     ])
     const world = await seedCurrentProductWorld('浏览器演化兼容验收')
     const projectId = world.scope.projectId
     const scope = world.scope
     const worldRelease = world.release
-    await db.projects.update(projectId, { gamePlatformOptIns: { gameProductionV3: true } })
-    const suggestions = await suggestGameStartingPoints({
+    await db.projects.update(projectId, { productPlatformOptIns: { productProductionV3: true } })
+    const suggestions = await suggestProductStartingPoints({
       scope, worldReleaseId: worldRelease.id,
     })
     const startingPoint = suggestions.suggestions.find((item: { kind: string }) => item.kind === 'mainline')
       ?? suggestions.suggestions[0]
     if (!startingPoint) throw new Error('演化兼容验收缺少可玩起点')
-    const brief = await draftGameProductionBriefV3({
+    const brief = await draftProductProductionBriefV3({
       scope, worldReleaseId: worldRelease.id, suggestionKey: startingPoint.suggestionKey,
-      productType: 'storygame', scale: 'scene', visualLevel: 'none', audioLevel: 'none',
+      productType: 'avg', scale: 'scene', visualLevel: 'none', audioLevel: 'none',
       requiredFacts: ['旧港失踪案的既有证据不得被新版覆盖'],
       forbiddenChanges: ['旧 Release 与旧存档必须继续固定在原 packageHash'],
     })
-    const created = await executeGameProductionCommand({
+    const created = await executeProductProductionCommand({
       scope,
       command: {
         type: 'create-intent', commandId: 'browser-evolution.intent',
         productionKey: 'browser.evolution.compatibility', worldReleaseId: worldRelease.id,
+        productType: 'avg',
         userText: '浏览器演化兼容游戏',
       },
     })
-    const saved = await executeGameProductionCommand({
+    const saved = await executeProductProductionCommand({
       scope, productionId: created.productionId,
       command: {
         type: 'save-brief-revision', commandId: 'browser-evolution.brief-1',
         expectedStateRevision: 0, parentRevision: null, brief,
       },
     })
-    const authorized = await executeGameProductionCommand({
+    const authorized = await executeProductProductionCommand({
       scope, productionId: created.productionId,
       command: {
         type: 'authorize-start', commandId: 'browser-evolution.authorize-1',
@@ -79,39 +74,32 @@ async function seedEvolutionCompatibilityCampaign(page: Page) {
       },
     })
     if (!authorized.ok) throw new Error('首版 Build 授权失败')
-    const firstBuild = await runLocalGameProductionVerticalSlice({
+    const firstBuild = await runCurrentProductProductionAcceptanceFixture({
       scope, productionId: created.productionId,
     })
-    const published = await publishGameProductionV1({ scope, productionId: created.productionId })
-    const oldReleaseId = published.receipt.gameReleaseId
-    const oldRelease = await db.gameReleases.get(oldReleaseId)
-    if (!oldRelease) throw new Error('首版 GameRelease 缺失')
-    const oldSession = await createPlayableGameInstance({
-      scope, source: { kind: 'release', gameReleaseId: oldReleaseId },
+    const published = await publishProductProductionV1({ scope, productionId: created.productionId })
+    const oldReleaseId = published.receipt.productReleaseId
+    const oldRelease = await db.productReleases.get(oldReleaseId)
+    if (!oldRelease) throw new Error('首版 ProductRelease 缺失')
+    const oldSession = await createProductRuntimeInstanceFromSource({
+      scope, source: { kind: 'release', productReleaseId: oldReleaseId },
       title: '旧版固定存档', seed: 'browser-evolution-old-session',
     })
-    const initialState = await readSimulationState(oldSession.id)
-    await commitNarrativeChoiceWithStateV1({
-      sessionId: oldSession.id, choiceKey: 'choice.observe',
-      commandId: 'browser-evolution.old-session.observe',
-      baseSequence: initialState.lastSequence,
-      baseStateHash: await hashSimulationRuntimeStateV1(initialState),
-    })
-    const eventsBeforeEvolution = await db.simulationEvents.where('sessionId').equals(oldSession.id).count()
+    const eventsBeforeEvolution = await db.productRuntimeEvents.where('sessionId').equals(oldSession.id).count()
 
-    await beginGameProductionEvolutionV1({
+    await beginProductProductionEvolutionV1({
       scope, productionId: created.productionId,
       userText: '保留既有选择后果，增加旧港失踪案的后续调查表现。',
       affectedLanes: ['content'],
     })
-    const production = await db.gameProductions.get(created.productionId)
+    const production = await db.productProductions.get(created.productionId)
     if (!production?.currentBriefRevision) throw new Error('演化 Brief 未生成')
-    const evolvedBrief = await db.gameProductionBriefs
+    const evolvedBrief = await db.productProductionBriefs
       .where('[productionId+revision]')
       .equals([created.productionId, production.currentBriefRevision])
       .first()
     if (!evolvedBrief) throw new Error('演化 Brief 行缺失')
-    const evolvedAuthorization = await executeGameProductionCommand({
+    const evolvedAuthorization = await executeProductProductionCommand({
       scope, productionId: created.productionId,
       command: {
         type: 'authorize-start', commandId: 'browser-evolution.authorize-2',
@@ -121,12 +109,12 @@ async function seedEvolutionCompatibilityCampaign(page: Page) {
       },
     })
     if (!evolvedAuthorization.ok) throw new Error('演化 Build 授权失败')
-    const secondBuild = await runLocalGameProductionVerticalSlice({
+    const secondBuild = await runCurrentProductProductionAcceptanceFixture({
       scope, productionId: created.productionId,
     })
-    const secondBuildRow = await db.gameBuilds.get(secondBuild.buildId)
-    const oldSessionAfterEvolution = await db.simulationSessions.get(oldSession.id)
-    const oldReleaseAfterEvolution = await db.gameReleases.get(oldReleaseId)
+    const secondBuildRow = await db.productBuilds.get(secondBuild.buildId)
+    const oldSessionAfterEvolution = await db.productRuntimeSessions.get(oldSession.id)
+    const oldReleaseAfterEvolution = await db.productReleases.get(oldReleaseId)
     if (!secondBuildRow || !oldSessionAfterEvolution || !oldReleaseAfterEvolution) {
       throw new Error('演化后冻结记录缺失')
     }
@@ -138,7 +126,7 @@ async function seedEvolutionCompatibilityCampaign(page: Page) {
       oldReleaseHash: oldRelease.contentHash,
       oldReleaseHashAfterEvolution: oldReleaseAfterEvolution.contentHash,
       oldSessionId: oldSession.id,
-      oldSessionReleaseId: oldSessionAfterEvolution.gameReleaseId,
+      oldSessionReleaseId: oldSessionAfterEvolution.productReleaseId,
       oldSessionRuntimeSourceHash: oldSessionAfterEvolution.runtimeSourceHash,
       eventsBeforeEvolution,
       firstPackageHash: firstBuild.packageHash,
@@ -191,7 +179,27 @@ test('正式跑团从冻结发布完成 Session Zero、规则桌面、安全暂�
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await expect(restored.getByRole('button', { name: '玩家视图', exact: true })).toBeVisible()
   await expect(restored.getByTestId('ttrpg-active-actor')).toBeVisible()
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  const overflow = await page.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    elements: Array.from(document.querySelectorAll<HTMLElement>('body *'))
+      .filter(element => {
+        const rect = element.getBoundingClientRect()
+        return rect.width > 0 && (rect.left < -0.5 || rect.right > window.innerWidth + 0.5)
+      })
+      .slice(0, 12)
+      .map(element => ({
+        tag: element.tagName.toLowerCase(),
+        className: element.className,
+        left: element.getBoundingClientRect().left,
+        right: element.getBoundingClientRect().right,
+      })),
+  }))
+  expect(overflow, JSON.stringify(overflow, null, 2)).toMatchObject({
+    viewportWidth: 390,
+    documentWidth: 390,
+    elements: [],
+  })
 })
 
 test('演化 Build 展示稳定键兼容报告且旧 Release 与旧存档继续可玩', async ({ page }) => {
@@ -213,16 +221,16 @@ test('演化 Build 展示稳定键兼容报告且旧 Release 与旧存档继续�
   })
 
   await page.reload()
-  await page.getByTestId('product-tab-game').click()
+  await page.getByTestId('product-tab-text-games').click()
   await page.getByRole('button', { name: '制作', exact: true }).click()
-  const studio = page.getByTestId('game-production-studio')
+  const studio = page.getByTestId('product-production-studio')
   await expect(studio).toBeVisible({ timeout: 15_000 })
-  const compatibility = studio.getByTestId('game-production-compatibility')
+  const compatibility = studio.getByTestId('product-production-compatibility')
   await expect(compatibility).toContainText('存档兼容报告')
   await expect(compatibility).toContainText('可兼容')
   await expect(compatibility).toContainText('Build #1 → #2 · identity')
   await expect(compatibility).toContainText('变化只涉及不进入存档语义的表现内容')
-  const lineage = studio.getByTestId('game-production-version-history')
+  const lineage = studio.getByTestId('product-production-version-history')
   await expect(lineage).toContainText('Build #2')
   await expect(lineage).toContainText('parent #1')
   await expect(lineage).toContainText('Build #1')
@@ -230,25 +238,29 @@ test('演化 Build 展示稳定键兼容报告且旧 Release 与旧存档继续�
 
   await page.getByRole('button', { name: '玩家', exact: true }).click()
   await expect(page.getByText('旧版固定存档', { exact: true })).toBeVisible({ timeout: 15_000 })
-  await page.getByRole('button', { name: /旧版固定存档.*自动保存/ }).click()
-  await expect(page.getByRole('heading', { name: '先理解局势', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '显示全文', exact: true }).click()
-  await page.getByRole('button', { name: '进入选择', exact: true }).click()
-  await page.getByRole('button', { name: /带着证据作结/ }).click()
-  await expect(page.getByRole('heading', { name: '看清代价', exact: true })).toBeVisible()
+  await page.getByRole('region', { name: '已有存档' })
+    .getByRole('button', { name: /旧版固定存档/ }).click()
+  const avgPlayer = page.getByTestId('avg-player')
+  await avgPlayer.getByRole('button', { name: '继续', exact: true }).click()
+  await avgPlayer.getByRole('button', { name: '先调查再决定', exact: true }).click()
+  await expect(avgPlayer).toContainText('你停下来核对已知事实')
+  await avgPlayer.getByRole('button', { name: '继续', exact: true }).click()
+  await avgPlayer.getByRole('button', { name: '带着证据作结', exact: true }).click()
+  await avgPlayer.getByRole('button', { name: '继续', exact: true }).click()
+  await expect(avgPlayer.locator('.avg-ending h2')).toHaveText('看清代价')
 
   const oldBindingAfterPlay = await page.evaluate(async oldSessionId => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
     const { db } = await importer('/storyforge/src/lib/db/schema.ts')
-    const session = await db.simulationSessions.get(oldSessionId)
+    const session = await db.productRuntimeSessions.get(oldSessionId)
     return {
-      gameReleaseId: session?.gameReleaseId,
+      productReleaseId: session?.productReleaseId,
       runtimeSourceHash: session?.runtimeSourceHash,
-      eventCount: await db.simulationEvents.where('sessionId').equals(oldSessionId).count(),
+      eventCount: await db.productRuntimeEvents.where('sessionId').equals(oldSessionId).count(),
     }
   }, seeded.oldSessionId)
   expect(oldBindingAfterPlay).toMatchObject({
-    gameReleaseId: seeded.oldReleaseId,
+    productReleaseId: seeded.oldReleaseId,
     runtimeSourceHash: seeded.firstPackageHash,
   })
   expect(oldBindingAfterPlay.eventCount).toBeGreaterThan(seeded.eventsBeforeEvolution)
@@ -270,7 +282,7 @@ test('世界到游戏只进入统一制作中心并自动复用全局 AI 配置'
   await page.goto('./')
   await page.getByRole('banner').getByRole('button', { name: '新建', exact: true }).click()
   await page.getByRole('button', { name: /世界引擎.*从零创建/ }).click()
-  await page.getByPlaceholder('例如：潮汐之后').fill('游戏生产入口验收世界')
+  await page.getByPlaceholder('例如：潮汐之后').fill('上层产品生产入口验收世界')
   await page.getByRole('button', { name: '创建世界引擎', exact: true }).click()
 
   await page.getByRole('button', { name: '主线与支线', exact: true }).click()
@@ -284,7 +296,7 @@ test('世界到游戏只进入统一制作中心并自动复用全局 AI 配置'
   await expect(pipeline.getByRole('button', { name: /主 Agent 生成游戏候选|快速映射|直接发布/ })).toHaveCount(0)
   await pipeline.getByRole('button', { name: '交给文字游戏', exact: true }).click()
 
-  await expect(page.getByRole('heading', { name: '游戏制作中心', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '文字游戏制作中心', exact: true })).toBeVisible()
   await expect(page.getByText('自动游戏制作需要项目授权', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '为当前项目显式启用', exact: true }).click()
   await expect(page.getByText('文本生成能力已就绪', { exact: true })).toBeVisible()
@@ -293,13 +305,12 @@ test('世界到游戏只进入统一制作中心并自动复用全局 AI 配置'
 
   await expect(page.getByRole('button', { name: '手工维护', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /新建空白游戏|载入验收样例/ })).toHaveCount(0)
-  await expect(page.getByTestId('game-production-studio')).toBeVisible()
+  await expect(page.getByTestId('product-production-studio')).toBeVisible()
   await page.getByRole('combobox', { name: /产品形态/ }).selectOption('avg')
   await page.getByRole('combobox', { name: /制作质量/ }).selectOption('commercial-candidate')
   await expect(page.getByText(/图片能力已就绪：复用同一 Agnes Key.*agnes-image-2\.1-flash/)).toBeVisible()
   await expect(page.getByText(/Agnes 当前公开接口未提供独立音乐\/SFX 生成/)).toBeVisible()
   await expect(page.getByLabel('API Key', { exact: true })).toHaveCount(0)
-  await page.getByRole('combobox', { name: /产品形态/ }).selectOption('storygame')
   await page.getByRole('combobox', { name: /制作质量/ }).selectOption('prototype')
 
   const authoredTitle = '用户明确命名的游戏'

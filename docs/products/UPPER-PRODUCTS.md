@@ -1,7 +1,7 @@
 # 世界引擎上层产品跨产品架构契约
 
-> 版本：2.2.0 · 生效：2026-08-31 · 对应总纲：§6、阶段 E
-> 本文只规定跑团、角色聊天、AI 小镇和文字游戏共同遵守的架构边界与流转协议，不替代任何一个产品的专项功能设计。
+> 版本：2.4.0 · 生效：2026-09-03 · 对应总纲：§6、阶段 E
+> 本文只规定跑团、角色互动、AI 小镇、文字冒险、AVG 和文字开放世界共同遵守的架构边界与流转协议，不替代任何一个产品的专项功能设计。
 
 ## 1. 契约目的与非范围
 
@@ -11,11 +11,19 @@
 
 - 跑团怎样车卡、判定、分队或主持；
 - 角色聊天怎样调度单人、多角色或小镇居民；
-- 某种文字游戏怎样设计玩法、分支、结局和界面；
+- 文字冒险、AVG、文字开放世界分别怎样设计玩法、分支、结局和界面；
 - 一个产品使用几个 Agent、哪些专用表或怎样生成具体媒资；
 - 时长、章节、回合、分支或“无限演绎”等产品设置的具体字段。
 
 这些内容必须在对应产品开工时单独研究和设计。总体架构只规定它们放在哪一阶段、由谁拥有、怎样交接和怎样留下版本证据。
+
+### 1.1 产品身份闭集
+
+- 上层产品边界共有：跑团、角色互动、AI 小镇、文字冒险、AVG、文字开放世界。
+- 用户可见的文字游戏分类严格只有：文字冒险、AVG、文字开放世界。不得恢复“故事游戏”“独立叙事模拟”或其它历史分类。
+- 当前统一生产 Harness 只接受跑团、角色互动、文字冒险、AVG、文字开放世界五种索引化身份；每种身份都有自己的需求适配器和生产模块。
+- AI 小镇目前只登记独立产品边界，未形成自己的 Brief、生产和 runtime 契约前，不得借角色互动或文字开放世界身份接入。
+- 叙事模拟是文字开放世界可以调用的内部运行能力，不是产品身份，不拥有独立 Production、ProductRelease、Session 或入口。
 
 ## 2. 三阶段主链
 
@@ -79,7 +87,7 @@ flowchart LR
 
 | 交接物 | 作用 | 最低要求 |
 |---|---|---|
-| `WorldReference` | 阶段一 → 阶段二 | world code、release ID、release hash、schema/capability identity |
+| `WorldReference` | 阶段一 → 阶段二 | 从中立目录选择的 world code、release ID、release hash、schema/capability identity；不暴露物理 release 行 |
 | `ProductSourcePlan` | 阶段二 → 阶段三 | WorldReference、需求适配器/版本、资源需求、允许范围、初始选择、缺失/补充策略和咨询 Context Manifest refs |
 | `ConfirmedProductBrief` | 阶段二 → 阶段三 | product kind、用户目标、产品专用设置、限制、revision、确认时间/主体 |
 | `ProductSourceManifest` | 阶段三发布证据 | 聚合 production run manifests 中实际读取/采用/缺失/冲突/遗漏的世界资源；发布时冻结 hash |
@@ -96,6 +104,7 @@ flowchart LR
 ```text
 Product-specific goal/config
 → WorldRequirementAdapter
+→ list neutral WorldReference catalog
 → describe/search/read immutable WorldRelease
 → matched/missing/conflict/omitted resources
 → frozen ProductSourcePlan
@@ -103,7 +112,9 @@ Product-specific goal/config
 → ProductRelease freezes aggregated ProductSourceManifest
 ```
 
-每个产品拥有自己的需求适配器，决定当前任务需要哪些能力、资源类型、细节层级和证据，并明确稳定必读、建议/选读、条件读取和禁止读取。世界网关负责版本化寻址、检索、读取、充分性和来源语义，不负责理解全部产品业务。
+每个产品拥有自己的需求适配器，决定当前任务需要哪些能力、资源类型、细节层级和证据，并明确稳定必读、建议/选读、条件读取和禁止读取。现行代码已分别登记跑团、角色互动、文字冒险、AVG、文字开放世界五个适配器；它们共享目标输入形状和中立协议，不共享固定资源结果。世界网关负责版本化寻址、检索、读取、充分性和来源语义，不负责理解全部产品业务。
+
+产品 UI 和服务只能通过中立目录取得 `WorldReference` 候选，随后再调用需求适配器与网关；物理 `WorldRelease` 行、内部 manifest 和世界表结构都不能穿透到产品层。
 
 需求适配器可以组合类型化代码/配置与产品 Skill：机器契约负责版本、权限、必读、禁止和条件边界，Skill/Prompt 负责将开放式用户目标转成查询。Skill 可以辅助选择，但不能单独充当数据访问控制或必读验证器。
 
@@ -135,7 +146,7 @@ Product-specific goal/config
 
 ## 7. 媒资边界
 
-媒资生产属于阶段三。主 Agent 可按产品方案自动拆解和调度图片、声音、UI 或其他资产，但所有候选、选定资产、绑定和成品都必须归明确的 product production/build/release。
+媒资生产属于阶段三。主 Agent 可按产品方案自动拆解和调度图片、声音、UI 或其他资产，但所有候选、选定资产、绑定和成品都必须归明确 owner：生产/发布媒资归 product production/build/ProductRelease，运行时私域生成媒资归 ProductRuntimeSession。禁止一个媒资同时声明 release owner 与 session owner。
 
 共享 media/blob/生成设施只提供传输、存储、溯源和处理能力，不取得内容 owner。世界引擎保存可供媒资创作使用的语义描述，不保存上层产品生成的媒体资产。
 
@@ -168,6 +179,6 @@ Product-specific goal/config
 
 ## 10. 并行产品分支
 
-跑团、角色聊天、AI 小镇和各种文字游戏可以从同一治理基线分别开工。每个分支新增自己的 requirement adapter、Brief、Agent/Skill、production、媒资、ProductRelease 和 runtime；不能修改中立世界出口去迎合单一产品，也不能借通用 simulation preview 绕过正式 release。
+跑团、角色互动、AI 小镇、文字冒险、AVG 和文字开放世界可以从同一治理基线分别开工。每个分支新增自己的 requirement adapter、Brief、Agent/Skill、production、媒资、ProductRelease 和产品专用 runtime API；不能修改中立世界出口去迎合单一产品，也不能借通用预览绕过正式 release。文字游戏分支只能选择三种已登记文字游戏身份之一，不能再创造共享工厂里的第四类产品。
 
 若两个产品发现真正相同的能力，先在至少一个真实纵切面中证明它，再以独立共享基础提交进入 Harness、媒资设施或世界协议。共享提交串行集成，产品分支随后同步；最终产品也逐个串行进入主干并在最新基线上重跑阶段闸门、谱系、所有权、生命周期和真实体验测试。

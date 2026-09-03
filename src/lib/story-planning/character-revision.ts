@@ -2,11 +2,10 @@ import { normalizeChapterText } from '../ai/chapter-memory/text-normalization'
 import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { Chapter, OutlineNode } from '../types'
 import type { WorkspaceScope } from '../types/world-ownership'
 
@@ -193,7 +192,7 @@ export async function buildCharacterRevisionSnapshot(scopeInput: WorkspaceScopeL
   const chaptersById = new Map(chapters.filter(chapter => chapter.id != null).map(chapter => [chapter.id!, chapter]))
   return {
     projectId,
-    ...(!isLegacyReadScope(scope) ? { workspaceScope: scope } : {}),
+    workspaceScope: scope,
     chapters: snapshots,
     lastWrittenOrdinal: lastWritten?.ordinal ?? 0,
     lastWrittenChapterId: lastWritten?.chapterId ?? null,

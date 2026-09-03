@@ -12,6 +12,8 @@ import { db } from '../db/schema'
 import { adopt } from '../registry/adopt'
 import type { UnifiedParseResult } from '../types'
 import { CHARACTER_DIMENSIONS } from '../character/character-dimensions'
+import { upgradeImportedCharacterAxesV32 } from '../migrations/character-axes-upgrade'
+import { readOwnedRows, resolveReadScopeLike } from '../workspace/scope'
 import {
   deduplicateWorldviewText,
   checkCharacterDuplicate,
@@ -48,6 +50,29 @@ export async function applyChunkResult(
   let charactersAdded = 0
   let outlineAdded = 0
 
+  const mergeWorldOverview = async (
+    target: 'geographies' | 'histories',
+    incoming: string | undefined,
+  ): Promise<number> => {
+    const value = incoming?.trim()
+    if (!value) return 0
+    const scope = await resolveReadScopeLike(projectId)
+    const rows = await readOwnedRows<Record<string, unknown>>(scope, target, { owner: 'world' })
+    const existing = rows.find(row => (row.worldGroupId ?? null) === targetWorldGroupId)
+    const current = typeof existing?.overview === 'string' ? existing.overview : ''
+    const addition = deduplicateWorldviewText(current, value)
+    if (!addition) return 0
+    await adopt({
+      projectId,
+      scope,
+      worldGroupId: targetWorldGroupId,
+      target,
+      mode: 'replace',
+      data: { overview: current ? `${current}\n\n${addition}` : addition },
+    })
+    return 1
+  }
+
   // ── 世界观：合并写（Phase 30.5: 句子级去重） ────────────────────
   if (result.worldview) {
     const wvStore = useWorldviewStore.getState()
@@ -83,6 +108,9 @@ export async function applyChunkResult(
     }
   }
 
+  worldviewFields += await mergeWorldOverview('geographies', result.geography?.overview)
+  worldviewFields += await mergeWorldOverview('histories', result.history?.overview)
+
   // ── 角色：去重后写入（Phase 30.5: 同名角色合并） ──────────────
   if (Array.isArray(result.characters)) {
     const chStore = useCharacterStore.getState()
@@ -97,13 +125,15 @@ export async function applyChunkResult(
 
     for (const c of result.characters) {
       if (!c || typeof c.name !== 'string' || !c.name.trim()) continue
-      const axes = c.roleWeight
-        ? {
-            roleWeight: c.roleWeight,
-            moralAxis: c.moralAxis,
-            orderAxis: c.orderAxis,
-          }
-        : { role: c.role || 'minor' }
+      // Import is the only current boundary allowed to translate pre-v33 role
+      // rows. Formal adopt() remains strict and accepts only the three-axis
+      // character contract.
+      const migratedCharacter = upgradeImportedCharacterAxesV32(c as unknown as Record<string, unknown>)
+      const axes = {
+        roleWeight: migratedCharacter.roleWeight,
+        moralAxis: migratedCharacter.moralAxis,
+        orderAxis: migratedCharacter.orderAxis,
+      }
       const incomingFields = pickCharacterFields(c as Record<string, unknown>)
 
       // Phase 30.5: 检查同名角色

@@ -32,7 +32,7 @@ import {
   formatLongTermConsistencyDossierV1,
 } from '../memory/consistency-dossier'
 import { htmlToPlainText } from '../utils/html'
-import { assertRecordInScope, resolveScope } from '../world-engine/scope'
+import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { isPortableResourceUidV1 } from './resource-uid'
 import {
   narrativePlanMatchesSourceRefsV1,

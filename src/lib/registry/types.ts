@@ -68,7 +68,6 @@ export type DomainOwnerKind = 'workspace' | 'world' | 'work' | 'instance'
 
 export type DomainOwnerLocator =
   | { kind: 'workspace' }
-  | { kind: 'compat-project' }
   | { kind: 'field'; owner: DomainOwnerKind; field: string }
   | {
       kind: 'exclusive-fields'
@@ -90,12 +89,12 @@ export type DomainOwnerLocator =
     }
 
 /**
- * Logical product owner for a table. `compat-project` means the table has been
- * classified but its legacy rows have not yet received explicit owner fields.
+ * Logical product owner for a table. Every current row must resolve through
+ * one explicit locator; older rows are upgraded before entering this layer.
  */
 export interface DomainOwnershipSpec {
   allowed: readonly DomainOwnerKind[]
-  legacyDefault: DomainOwnerKind
+  defaultOwner: DomainOwnerKind
   locator: DomainOwnerLocator
 }
 
@@ -607,18 +606,17 @@ export interface AssembleContextInput {
   subjectCharacterName?: string
   /** INV-1: 按角色过滤物品流水/持有投影。 */
   characterId?: number | null
-  /** SIM-1C: 冻结运行时会话，供 NPC 演进候选只读上下文使用。 */
-  simulationSessionId?: number
+  /** ProductRuntime: 冻结的上层产品运行会话，仅供对应产品 Skill 读取。 */
+  productRuntimeSessionId?: number
   /** TTRPG R7: exact player character POV for the isolated AI-player reader. */
   ttrpgPlayerActorKey?: string
-  /** GAMEPROD-1 registered production context anchors. */
-  gameProductionId?: number
-  gameBuildId?: number
-  gameWorldReleaseId?: number
-  gameArtifactKeys?: string[]
-  /** CHATGAME-2: exactly one character viewpoint for the registered interaction reader. */
+  /** PRODUCTPROD-1 registered production context anchors. */
+  productProductionId?: number
+  productBuildId?: number
+  productArtifactKeys?: string[]
+  /** Character interaction: exactly one viewpoint for the registered reader. */
   interactionParticipantKey?: string
-  /** CHATGAME-CI-2: frozen product source + confirmed product Brief. */
+  /** Character interaction: frozen product source + confirmed product Brief. */
   /** CM-1: 本次明确参与增量融合的碎片；由 inspirationWorkspace source 读取。 */
   inspirationFragmentIds?: string[]
   /** CM-1: 单世界与多世界各自维护最近确认版本。 */
@@ -960,7 +958,7 @@ export interface ContextSource {
   /** Source can use a caller-provided continuity snapshot without reading a Chapter row. */
   acceptsDetachedContinuitySnapshot?: boolean
   requiresWorldGroupId?: boolean
-  requiresSimulationSessionId?: boolean
+  requiresProductRuntimeSessionId?: boolean
   requiresOutlineNodeId?: boolean
   requiresChapterId?: boolean
   requiresAdaptationProjectId?: boolean

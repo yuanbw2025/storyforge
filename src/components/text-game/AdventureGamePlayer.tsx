@@ -35,7 +35,7 @@ import {
   type AdventureSystemCommand,
 } from '../../lib/adventure/player-experience'
 import { currentPlayerReleases } from '../../lib/text-game/player-library'
-import type { AdventureGameRuntimePackageV2, Project, WorkspaceScope } from '../../lib/types'
+import type { AdventureProductRuntimePackageV1, Project, WorkspaceScope } from '../../lib/types'
 import { useAdventureGamePlayerStore, selectAdventureActions } from '../../stores/adventure-game-player'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useDialog } from '../shared/Dialog'
@@ -102,7 +102,7 @@ function formatTime(value: number): string {
   return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(value)
 }
 
-function adventureNpcCount(manifest: AdventureGameRuntimePackageV2): number {
+function adventureNpcCount(manifest: AdventureProductRuntimePackageV1): number {
   const player = resolveAdventurePlayerIdentity(manifest)
   return manifest.interaction.profiles.filter(profile => profile.participantKey !== player?.participantKey).length
 }
@@ -371,7 +371,7 @@ export default function AdventureGamePlayer(props: {
           <h3>{catalogRelease.manifest?.definition.title ?? catalogRelease.release.label}</h3>
           <p>{catalogRelease.manifest?.definition.description || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>
           {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.adventure.locations.length} 个地点</span><span>{adventureNpcCount(catalogRelease.manifest)} 名可交谈角色</span><span>{catalogRelease.manifest.adventure.items.length} 件物品</span><span>{catalogRelease.manifest.adventure.abilities.length} 项技能</span><span>{catalogRelease.manifest.adventure.quests.length} 个任务</span></div>}
-          {catalogRelease.error ? <p className="adventure-error">{catalogRelease.error}</p> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新冒险</button>{store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.gameReleaseId === catalogRelease.release.id)!.id!)}><Save />继续上次进度</button>}</div>}
+          {catalogRelease.error ? <p className="adventure-error">{catalogRelease.error}</p> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新冒险</button>{store.sessions.find(session => session.productReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.productReleaseId === catalogRelease.release.id)!.id!)}><Save />继续上次进度</button>}</div>}
         </div>
       </section> : <>
         <div className="textgame-catalog-heading"><span>全部游戏</span><small>{catalog.length} 部可游玩作品</small></div>

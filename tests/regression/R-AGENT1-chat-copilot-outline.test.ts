@@ -21,12 +21,12 @@ import {
 } from '../../src/lib/generation/generation-node'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import type { Project } from '../../src/lib/types'
-import { resolveScopeLike } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { buildNarrativeBriefV1 } from '../../src/lib/agent/narrative-brief'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 
 async function prepareOutlineCopilot(
   ...args: Parameters<typeof prepareOutlineCopilotRaw>

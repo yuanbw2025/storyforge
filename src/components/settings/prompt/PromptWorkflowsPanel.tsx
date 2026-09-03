@@ -4,7 +4,7 @@ import {
   Upload, Download, Plus, Edit3,
 } from 'lucide-react'
 import { useWorkflowStore } from '../../../stores/workflow'
-import type { Project } from '../../../lib/types'
+import type { Project, PromptWorkflowStep } from '../../../lib/types'
 import WorkflowEditor from './WorkflowEditor'
 import WorkflowRunner from './WorkflowRunner'
 import { useDialog } from '../../shared/Dialog'
@@ -13,6 +13,7 @@ import {
   parseImportedWorkflows,
   serializeWorkflows,
 } from '../../../lib/workflow/import-export'
+import { createLinearWorkflowGraph } from '../../../lib/workflow/graph'
 
 interface Props {
   project?: Project
@@ -70,11 +71,13 @@ export default function PromptWorkflowsPanel({ project }: Props = {}) {
 
   const handleNew = async () => {
     const now = Date.now()
+    const steps: PromptWorkflowStep[] = []
     const id = await saveWorkflow({
       scope: 'user',
       name: '新建工作流',
       description: '',
-      steps: [],
+      steps,
+      graph: createLinearWorkflowGraph(steps),
       isDefault: false,
       createdAt: now,
       updatedAt: now,

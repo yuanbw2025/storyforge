@@ -21,14 +21,14 @@ import { assembleContext } from '../registry/assemble-context'
 import {
   commitInteractionCharacterReply,
   proposeInteractionMemory,
-  readSimulationState,
-  readSimulationStateVersion,
-} from '../simulation/runtime'
+  readProductRuntimeState,
+  readProductRuntimeStateVersion,
+} from './runtime-api'
 import type {
   AIConfig,
   ChatMessage,
   InteractionMemoryKind,
-  SimulationEvent,
+  ProductRuntimeEvent,
   WorkspaceScope,
 } from '../types'
 
@@ -45,7 +45,7 @@ interface RuntimeCandidateBaseV1 {
   version: 1
   portable: false
   runId: number
-  simulationSessionId: number
+  productRuntimeSessionId: number
   participantKey: string
   sceneId: string
   baseSequence: number
@@ -305,7 +305,7 @@ async function append(
   return appendAgentRunEventV1({
     scope,
     runId: snapshot.run.id,
-    simulationSessionId: snapshot.run.simulationSessionId ?? fail('运行时事件缺少 Instance owner'),
+    productRuntimeSessionId: snapshot.run.productRuntimeSessionId ?? fail('运行时事件缺少 Instance owner'),
     type,
     payload,
     expectedLastSequence: snapshot.projection.lastSequence,
@@ -314,7 +314,7 @@ async function append(
 
 export async function generateInteractionRuntimeCandidateV1(input: {
   scope: WorkspaceScope
-  simulationSessionId: number
+  productRuntimeSessionId: number
   participantKey: string
   skillId: InteractionRuntimeSkillIdV1
   objective: string
@@ -334,7 +334,7 @@ export async function generateInteractionRuntimeCandidateV1(input: {
   const skill = getAgentSkillV1(input.skillId)
   const boundary = await captureRuntimeHarnessBoundaryV1({
     scope: input.scope,
-    simulationSessionId: input.simulationSessionId,
+    productRuntimeSessionId: input.productRuntimeSessionId,
     participantKey,
   })
   const executionBinding = createAgentSkillExecutionBindingV1(skill)
@@ -345,7 +345,7 @@ export async function generateInteractionRuntimeCandidateV1(input: {
   const runtimeBindingHash = await hashCanonicalValue({ executionBinding, modelIdentity })
   let snapshot = await createAgentRunV1({
     scope: input.scope,
-    simulationSessionId: input.simulationSessionId,
+    productRuntimeSessionId: input.productRuntimeSessionId,
     worldGroupId: boundary.scope.worldGroupId,
     contract: buildContract({ objective, boundary, skillId: input.skillId, runtimeBindingHash }),
   })
@@ -357,7 +357,7 @@ export async function generateInteractionRuntimeCandidateV1(input: {
       projectId: input.scope.projectId,
       scope: input.scope,
       worldGroupId: boundary.scope.worldGroupId,
-      simulationSessionId: input.simulationSessionId,
+      productRuntimeSessionId: input.productRuntimeSessionId,
       interactionParticipantKey: participantKey,
       sourceKeys: ['interactionRuntime'],
       provider: input.aiConfig?.provider,
@@ -404,7 +404,7 @@ export async function generateInteractionRuntimeCandidateV1(input: {
       outputHash: await hashCanonicalValue(output),
     })
     const draft = parseModelDraft({ skillId: input.skillId, output })
-    const state = await readSimulationState(input.simulationSessionId)
+    const state = await readProductRuntimeState(input.productRuntimeSessionId)
     const sceneId = state.interaction?.activeScene?.sceneId
     if (!sceneId) fail('模型返回时互动场景已经结束')
     const commandId = draft.kind === 'scene-director-candidate'
@@ -455,7 +455,7 @@ export async function generateInteractionRuntimeCandidateV1(input: {
     const saved = await createAgentRunCheckpointV1({
       scope: input.scope,
       runId: snapshot.run.id,
-      simulationSessionId: input.simulationSessionId,
+      productRuntimeSessionId: input.productRuntimeSessionId,
       resumePayload: candidate,
       expectedLastSequence: snapshot.projection.lastSequence,
     })
@@ -491,7 +491,7 @@ function isCandidate(value: unknown): value is InteractionRuntimeCandidateV1 {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const row = value as Partial<InteractionRuntimeCandidateV1>
   return row.version === 1 && row.portable === false && typeof row.runId === 'number'
-    && typeof row.simulationSessionId === 'number' && typeof row.participantKey === 'string'
+    && typeof row.productRuntimeSessionId === 'number' && typeof row.participantKey === 'string'
     && typeof row.sceneId === 'string' && typeof row.baseSequence === 'number'
     && typeof row.stateHash === 'string' && typeof row.visibilityHash === 'string'
     && typeof row.releaseHash === 'string' && typeof row.contextManifestHash === 'string'
@@ -512,10 +512,10 @@ async function readCandidate(scope: WorkspaceScope, runId: number): Promise<{
   return { snapshot: saved.snapshot, candidate }
 }
 
-async function applyCandidate(candidate: InteractionRuntimeCandidateV1): Promise<SimulationEvent | null> {
+async function applyCandidate(candidate: InteractionRuntimeCandidateV1): Promise<ProductRuntimeEvent | null> {
   if (candidate.kind === 'scene-director-candidate') return null
   const envelope = {
-    sessionId: candidate.simulationSessionId,
+    sessionId: candidate.productRuntimeSessionId,
     commandId: candidate.commandId!,
     baseSequence: candidate.baseSequence,
     baseStateHash: candidate.stateHash,
@@ -550,7 +550,7 @@ export async function adoptInteractionRuntimeCandidateV1(input: {
   runId: number
   /** Test/host crash-injection boundary; the durable event is already committed. */
   onDurableBoundary?: (eventType: string, snapshot: AgentRunSnapshotV1) => void | Promise<void>
-}): Promise<{ snapshot: AgentRunSnapshotV1; event: SimulationEvent | null; receiptHash: string }> {
+}): Promise<{ snapshot: AgentRunSnapshotV1; event: ProductRuntimeEvent | null; receiptHash: string }> {
   const loaded = await readCandidate(input.scope, input.runId)
   let { snapshot } = loaded
   const { candidate } = loaded
@@ -558,7 +558,7 @@ export async function adoptInteractionRuntimeCandidateV1(input: {
   const completedAdoption = adopted?.type === 'runtime.candidate.adopted' ? adopted : null
   if (completedAdoption && snapshot.projection.state === 'completed') {
     const commandEvents = completedAdoption.payload.commandIds.length
-      ? await db.simulationEvents.where('sessionId').equals(candidate.simulationSessionId).toArray()
+      ? await db.productRuntimeEvents.where('sessionId').equals(candidate.productRuntimeSessionId).toArray()
       : []
     return {
       snapshot,
@@ -570,7 +570,7 @@ export async function adoptInteractionRuntimeCandidateV1(input: {
   }
   const priorCommand = candidate.commandId == null
     ? null
-    : (await db.simulationEvents.where('sessionId').equals(candidate.simulationSessionId).toArray())
+    : (await db.productRuntimeEvents.where('sessionId').equals(candidate.productRuntimeSessionId).toArray())
         .find(event => event.commandId === candidate.commandId) ?? null
   if (!adopted && !priorCommand) {
     try {
@@ -579,7 +579,7 @@ export async function adoptInteractionRuntimeCandidateV1(input: {
         contractScope: snapshot.contract.scope,
         participantKey: candidate.participantKey,
       })
-      const state = await readSimulationState(candidate.simulationSessionId)
+      const state = await readProductRuntimeState(candidate.productRuntimeSessionId)
       if (state.interaction?.activeScene?.sceneId !== candidate.sceneId) fail('互动场景已经变化')
     } catch (error) {
       snapshot = await append(input.scope, snapshot, 'candidate.staled', {
@@ -593,7 +593,7 @@ export async function adoptInteractionRuntimeCandidateV1(input: {
   const event = adopted
     ? priorCommand
     : await applyCandidate(candidate)
-  let version = await readSimulationStateVersion(candidate.simulationSessionId)
+  let version = await readProductRuntimeStateVersion(candidate.productRuntimeSessionId)
   if (adopted?.type === 'runtime.candidate.adopted') {
     if (
       adopted.payload.candidateHash !== candidate.candidateHash
@@ -650,7 +650,7 @@ export async function adoptInteractionRuntimeCandidateV1(input: {
     })
     await input.onDurableBoundary?.('verification.started', snapshot)
   }
-  version = await readSimulationStateVersion(candidate.simulationSessionId)
+  version = await readProductRuntimeStateVersion(candidate.productRuntimeSessionId)
   if (version.sequence !== adopted.payload.resultingSequence) {
     fail('采用后 SIM 状态已继续推进，拒绝对过期终态签发回执')
   }

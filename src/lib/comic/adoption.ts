@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import type { ComicPage, ComicPanel, WorkspaceScope } from '../types'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { inspectAdaptationFreshness } from '../adaptation/source-manifest'
-import { resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
+import { resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { assertComicPageV1, assertComicPanelV1, assertPagePanelLayoutV1 } from './contracts'
 
 export interface ComicPanelCandidateV1 extends Pick<ComicPanel, 'stableKey' | 'frame' | 'shot' | 'action' | 'visualPrompt' | 'negativePrompt' | 'continuityRefs' | 'lettering'> {

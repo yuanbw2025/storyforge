@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { StoryTimelineEvent } from '../lib/types'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 interface StoryTimelineStore {
   events: StoryTimelineEvent[]

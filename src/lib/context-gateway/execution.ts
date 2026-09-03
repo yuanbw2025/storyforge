@@ -678,9 +678,9 @@ export async function assertContextGatewayCandidateAdoptableV1(input: {
   candidateHash: string
   contextManifestHash?: string
   excludedResourceKinds?: readonly ContextResourceDescriptorV1['kind'][]
-}): Promise<{ mode: 'legacy-or-shadow' } | { mode: 'required'; manifestHash: string; freshnessHash: string }> {
+}): Promise<{ mode: 'registry-context' } | { mode: 'required'; manifestHash: string; freshnessHash: string }> {
   if (!isContextGatewayRequiredForWriteTargetV1(input.skill, input.writeTarget)) {
-    return { mode: 'legacy-or-shadow' }
+    return { mode: 'registry-context' }
   }
   if (!input.contextManifestHash) fail('candidate-manifest-required', `Skill ${input.skill.id} 的候选缺少 ContextManifestV3`)
   const verified = await verifyContextGatewayCandidateEvidenceV1({

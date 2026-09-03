@@ -22,7 +22,7 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 
 const CHUNK_SIZE = 400
 const SUMMARY_EXCERPT_CHARS = 220

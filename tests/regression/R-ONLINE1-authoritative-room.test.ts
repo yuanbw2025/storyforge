@@ -107,7 +107,7 @@ describe('PLATFORM-1B · authoritative online room core', () => {
     await expect(created.room.submit(command({ ...base, authToken: 'forged.token', kind: 'dice.request', actorKey: 'player.1' })))
       .rejects.toThrow('成员凭据无效')
     await expect(created.room.submit(command({ ...base, releaseHash: 'b'.repeat(64), kind: 'dice.request', actorKey: 'player.1' })))
-      .rejects.toThrow('过期 GameRelease')
+      .rejects.toThrow('过期 ProductRelease')
     await expect(created.room.submit(command({ ...base, kind: 'dice.request', actorKey: 'player.2' })))
       .rejects.toThrow('自己的已分配角色')
     await expect(created.room.submit(command({ ...base, kind: 'scene.open' })))

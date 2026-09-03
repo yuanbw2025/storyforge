@@ -1,5 +1,5 @@
 import type { Work } from '../../lib/types'
-import { effectiveNovelProfile, effectiveWorkKind } from '../../lib/world-engine/work-kind'
+import { effectiveNovelProfile, effectiveWorkKind } from '../../lib/workspace/work-kind'
 
 export function workKindLabel(work: Pick<Work, 'kind' | 'novelProfile'>): string {
   const kind = effectiveWorkKind(work)

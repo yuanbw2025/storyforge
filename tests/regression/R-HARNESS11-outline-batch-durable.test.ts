@@ -15,7 +15,7 @@ import type { OutlineNode, Project, WorkspaceScope } from '../../src/lib/types'
 import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
 import { prepareOutlineGatewayAssemblyV1 } from '../../src/lib/outline/gateway-context'
 import { useAIConfigStore } from '../../src/stores/ai-config'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { generateWorkspaceUid, generateWorkCode } from '../../src/lib/memory/identity'
 import { verifyContextGatewayCandidateEvidenceV1 } from '../../src/lib/context-gateway/attempt-evidence'
 
@@ -34,8 +34,8 @@ async function createWorkspace(): Promise<{
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: 'outline-batch-world',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number

@@ -1,5 +1,5 @@
 import { hashCanonicalValue } from '../agent/run/hash'
-import { canonicalGameProductionJsonV2 } from '../game-production/hash'
+import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import type { RulePackV1, TtrpgCampaignContentV1 } from '../types'
 import { parseTtrpgCampaignContentV1 } from './campaign'
 import { evaluateRuleNumberExpressionV1, parseRulePackV1 } from './rule-pack'
@@ -212,12 +212,12 @@ function revocationReason(value: unknown, label: string): TtrpgCreatorRevocation
 
 function assertBoundedJson(value: unknown, label: string, maximumBytes = MAX_CREATOR_PACKAGE_BYTES): void {
   let json: string
-  try { json = canonicalGameProductionJsonV2(value) } catch { fail(`${label} 不是可序列化的纯数据`) }
+  try { json = canonicalProductProductionJsonV2(value) } catch { fail(`${label} 不是可序列化的纯数据`) }
   if (new TextEncoder().encode(json).byteLength > maximumBytes) fail(`${label} 超过 ${maximumBytes} bytes`)
 }
 
 function signingBody(pkg: Omit<TtrpgCreatorPackageV1, 'signature'>): string {
-  return canonicalGameProductionJsonV2(pkg)
+  return canonicalProductProductionJsonV2(pkg)
 }
 
 function parsePackage(value: unknown): TtrpgCreatorPackageV1 {
@@ -270,11 +270,11 @@ function parsePackage(value: unknown): TtrpgCreatorPackageV1 {
 function trustManifestHashBody(
   manifest: Omit<TtrpgCreatorTrustManifestV1, 'manifestHash' | 'signature'>,
 ): string {
-  return canonicalGameProductionJsonV2(manifest)
+  return canonicalProductProductionJsonV2(manifest)
 }
 
 function trustManifestSigningBody(manifest: Omit<TtrpgCreatorTrustManifestV1, 'signature'>): string {
-  return canonicalGameProductionJsonV2(manifest)
+  return canonicalProductProductionJsonV2(manifest)
 }
 
 function parseTrustManifest(value: unknown): TtrpgCreatorTrustManifestV1 {
@@ -567,7 +567,7 @@ export async function verifyTtrpgCreatorPackageAgainstTrustManifestV1(input: {
 }
 
 function dependencyLockBody(lock: Omit<TtrpgCreatorDependencyLockV1, 'lockHash'>): string {
-  return canonicalGameProductionJsonV2(lock)
+  return canonicalProductProductionJsonV2(lock)
 }
 
 function parseDependencyLock(value: unknown): TtrpgCreatorDependencyLockV1 {
@@ -595,7 +595,7 @@ function parseDependencyLock(value: unknown): TtrpgCreatorDependencyLockV1 {
     fail('dependencyLock 不允许同一 packageId 出现多个版本')
   }
   const sorted = [...packages].sort((left, right) => left.packageId.localeCompare(right.packageId))
-  if (canonicalGameProductionJsonV2(sorted) !== canonicalGameProductionJsonV2(packages)) {
+  if (canonicalProductProductionJsonV2(sorted) !== canonicalProductProductionJsonV2(packages)) {
     fail('dependencyLock.packages 必须按 packageId 排序')
   }
   const parsed: TtrpgCreatorDependencyLockV1 = {
@@ -674,7 +674,7 @@ export async function verifyTtrpgCreatorDependencyLockV1(input: {
     payloadHash: item.package.payloadHash,
     publisherKeyId: item.package.publisher.keyId,
   })).sort((left, right) => left.packageId.localeCompare(right.packageId))
-  if (canonicalGameProductionJsonV2(actualEntries) !== canonicalGameProductionJsonV2(lock.packages)) {
+  if (canonicalProductProductionJsonV2(actualEntries) !== canonicalProductProductionJsonV2(lock.packages)) {
     fail('dependencyLock 与实际安装包集合不一致')
   }
   return {

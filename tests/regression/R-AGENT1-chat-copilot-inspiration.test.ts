@@ -22,10 +22,10 @@ const singleResult = {
     powerHierarchy: '',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
     races: '',
     factionLayout: '',
   },
+  history: { overview: '' },
   storyCore: {
     logline: '守塔人追查被雨抹去的名字',
     theme: '记忆',
@@ -173,6 +173,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 灵感反推闭环', () => {
     })
     const empty = parseInspirationCandidateDraft(JSON.stringify({
       worldview: {},
+      history: {},
       storyCore: {},
       characters: [],
     }), 'single')

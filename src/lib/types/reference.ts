@@ -76,8 +76,11 @@ export interface Reference extends RagDocumentMetadata {
 
 /** 导入到"项目参考"时保存的结构化数据 */
 export interface ImportedReferenceData {
-  /** 世界观各维度 */
+  /** 世界基础各维度 */
   worldview?: Record<string, string>
+  /** 地理与历史保持独立语义分区，不混回世界基础字段。 */
+  geography?: { overview?: string }
+  history?: { overview?: string }
   /** 角色列表 */
   characters?: Array<Record<string, unknown>>
   /** 大纲结构 */

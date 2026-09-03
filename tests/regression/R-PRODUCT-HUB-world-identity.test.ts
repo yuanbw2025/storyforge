@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import {
-  confirmWorkspacePurpose,
-  inspectWorkspaceIdentity,
-} from '../../src/lib/world-engine/identity-classification'
+import { promoteNovelWorkspaceToWorldEngine } from '../../src/lib/world-engine/promotion'
 import { useProjectStore } from '../../src/stores/project'
 import { useWorldGroupStore } from '../../src/stores/world-group'
 
@@ -41,11 +38,10 @@ describe('ARCH-01 · 独立作品与世界身份分离', () => {
     const world = await db.worlds.get(project!.activeWorldId!)
     expect(project).toMatchObject({
       workspacePurpose: 'independent-work',
-      workspacePurposeDecision: 'explicit',
       ownershipSchemaVersion: 1,
     })
-    expect(project?.worldCode).toBeUndefined()
-    expect(project?.worldVersion).toBeUndefined()
+    expect(project).not.toHaveProperty('worldCode')
+    expect(project).not.toHaveProperty('worldVersion')
     expect(world).toMatchObject({ identityKind: 'workspace-scope', currentVersion: 0 })
     expect(world?.code).toMatch(/^S-/)
     expect(await db.works.where('projectId').equals(id).count()).toBe(1)
@@ -61,38 +57,29 @@ describe('ARCH-01 · 独立作品与世界身份分离', () => {
     const world = await db.worlds.get(project!.activeWorldId!)
     expect(project).toMatchObject({
       workspacePurpose: 'world-engine',
-      workspacePurposeDecision: 'explicit',
-      worldVersion: 0,
     })
-    expect(project?.worldCode).toMatch(/^W-[A-Z0-9]+-[A-Z0-9]+$/)
+    expect(project).not.toHaveProperty('worldCode')
+    expect(project).not.toHaveProperty('worldVersion')
     expect(world).toMatchObject({
       identityKind: 'world-draft',
-      code: project?.worldCode,
       currentVersion: 0,
     })
+    expect(world?.code).toMatch(/^W-[A-Z0-9]+-[A-Z0-9]+$/)
   })
 
-  it('读取旧项目只补 owner 根，默认保留独立作品并生成只读分类报告', async () => {
+  it('缺少作用域根的工作区只补内部 owner 根并默认保留独立作品', async () => {
     const now = Date.now()
     const id = await db.projects.add({ ...input('旧分步骤项目'), createdAt: now, updatedAt: now } as any) as number
 
     const loaded = await useProjectStore.getState().loadProject(id)
     const persisted = await db.projects.get(id)
     const world = await db.worlds.get(persisted!.activeWorldId!)
-    const report = await inspectWorkspaceIdentity(id)
     expect(loaded).toMatchObject({
       workspacePurpose: 'independent-work',
-      workspacePurposeDecision: 'legacy-review-required',
       enableMultiWorld: false,
     })
-    expect(persisted?.worldCode).toBeUndefined()
+    expect(persisted).not.toHaveProperty('worldCode')
     expect(world?.identityKind).toBe('workspace-scope')
-    expect(report).toMatchObject({
-      readOnly: true,
-      currentPurpose: 'independent-work',
-      decision: 'legacy-review-required',
-      allowedConfirmations: ['independent-work', 'world-engine'],
-    })
   })
 
   it('并发读取旧项目复用同一内部作用域且不会生成两个根', async () => {
@@ -103,39 +90,31 @@ describe('ARCH-01 · 独立作品与世界身份分离', () => {
       useProjectStore.getState().loadProject(id),
     ])
     expect(first?.activeWorldId).toBe(second?.activeWorldId)
-    expect(first?.worldCode).toBeUndefined()
+    expect(first).not.toHaveProperty('worldCode')
     expect(await db.worlds.where('projectId').equals(id).count()).toBe(1)
     expect(await db.works.where('projectId').equals(id).count()).toBe(1)
   })
 
-  it('旧自动编号不会在读取时升级；作者可显式确认成世界', async () => {
-    const now = Date.now()
-    const id = await db.projects.add({
-      ...input('旧编号项目'), worldCode: 'W-00001', worldVersion: 1, createdAt: now, updatedAt: now,
-    } as any) as number
-    await useProjectStore.getState().loadProject(id)
-    expect((await db.projects.get(id))?.workspacePurposeDecision).toBe('legacy-review-required')
-
-    await confirmWorkspacePurpose(id, 'world-engine')
+  it('作者显式派生时只提升 World 身份，不在 Project 复制编号和版本', async () => {
+    const id = await useProjectStore.getState().createProject(input('待派生小说'), {
+      purpose: 'independent-work', kind: 'novel', novelProfile: 'long',
+    })
+    await promoteNovelWorkspaceToWorldEngine(id)
     const project = await db.projects.get(id)
     const world = await db.worlds.get(project!.activeWorldId!)
-    expect(project).toMatchObject({
-      workspacePurpose: 'world-engine',
-      workspacePurposeDecision: 'legacy-confirmed',
-      worldVersion: 0,
-    })
-    expect(project?.worldCode).toMatch(/^W-[A-Z0-9]+-[A-Z0-9]+$/)
-    expect(project?.worldCode).not.toBe('W-00001')
-    expect(world).toMatchObject({ identityKind: 'world-draft', code: project?.worldCode })
+    expect(project).toMatchObject({ workspacePurpose: 'world-engine' })
+    expect(project).not.toHaveProperty('worldCode')
+    expect(project).not.toHaveProperty('worldVersion')
+    expect(world).toMatchObject({ identityKind: 'world-draft', currentVersion: 0 })
+    expect(world?.code).toMatch(/^W-/)
   })
 
-  it('剧本和漫画分类报告不允许直接确认成世界', async () => {
+  it('剧本和漫画不能直接提升成世界', async () => {
     const id = await useProjectStore.getState().createProject(input('独立剧本'), {
       purpose: 'independent-work',
       kind: 'screenplay',
     })
-    expect((await inspectWorkspaceIdentity(id)).allowedConfirmations).toEqual(['independent-work'])
-    await expect(confirmWorkspacePurpose(id, 'world-engine')).rejects.toThrow('剧本和漫画保持独立')
+    await expect(promoteNovelWorkspaceToWorldEngine(id)).rejects.toThrow('只有长篇或短篇小说')
   })
 
   it('并发打开多世界结构时只创建一个主世界组', async () => {

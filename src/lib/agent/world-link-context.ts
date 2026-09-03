@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import { executeContextGatewayV1, type ContextGatewayExecutionV1 } from '../context-gateway/execution'
 import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 import type { WorkspaceScope } from '../types'
-import { assertRecordInScope } from '../world-engine/scope'
+import { assertRecordInScope } from '../workspace/scope'
 import { getAgentSkillV1 } from './skill-registry'
 
 /**

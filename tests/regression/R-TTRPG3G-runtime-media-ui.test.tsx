@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TtrpgRuntimeMediaPanel from "../../src/components/ttrpg/TtrpgRuntimeMediaPanel";
 import type { TtrpgViewerProjectionV1 } from "../../src/lib/ttrpg/viewer-projection";
-import type { GameRuntimePackageV2 } from "../../src/lib/types";
+import type { ProductRuntimePackageV1 } from "../../src/lib/types";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -23,8 +23,8 @@ vi.mock("../../src/lib/ttrpg/runtime-media", () => ({
   readTtrpgRuntimeMediaBlobV1: mediaMocks.readBlob,
 }));
 
-vi.mock("../../src/lib/game-production/media-resolver", () => ({
-  createReleaseGameMediaResolver: vi.fn(async () => ({
+vi.mock("../../src/lib/product-production/media-resolver", () => ({
+  createReleaseProductMediaResolver: vi.fn(async () => ({
     read: vi.fn(),
     preload: vi.fn(async () => ({ urls: {}, failures: [], usedBytes: 0 })),
     dispose: vi.fn(),
@@ -60,11 +60,11 @@ function projection(
 }
 
 const runtimePackage = {
-  schema: "storyforge.game-runtime-package",
-  version: 2,
+  schema: "storyforge.product-runtime-package",
+  version: 1,
   productType: "ttrpg",
   presentation: { version: 1, cues: [], assets: [] },
-} as unknown as GameRuntimePackageV2;
+} as unknown as ProductRuntimePackageV1;
 
 describe("R-TTRPG-3G · runtime media UI", () => {
   let host: HTMLDivElement;
@@ -98,7 +98,7 @@ describe("R-TTRPG-3G · runtime media UI", () => {
           sessionId: 7,
           scope: { projectId: 1, worldId: 2, workId: 3 },
           runtimePackage,
-          source: { kind: "release", gameReleaseId: 1 },
+          source: { kind: "release", productReleaseId: 1 },
           media: projection("placeholder", null),
           viewerKey: "viewer.player.1",
           disabled: false,
@@ -148,7 +148,7 @@ describe("R-TTRPG-3G · runtime media UI", () => {
           sessionId: 7,
           scope: { projectId: 1, worldId: 2, workId: 3 },
           runtimePackage,
-          source: { kind: "release", gameReleaseId: 1 },
+          source: { kind: "release", productReleaseId: 1 },
           media: projection("failed", "runtime.failed.1"),
           viewerKey: "viewer.gm",
           disabled: false,

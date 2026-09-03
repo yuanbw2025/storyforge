@@ -461,10 +461,10 @@ const inspirationResult = {
     powerHierarchy: '',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
     races: '',
     factionLayout: '',
   },
+  history: { overview: '' },
   storyCore: {
     logline: '守塔人追查被雨抹去的名字',
     theme: '记忆',
@@ -537,8 +537,8 @@ async function createWorkspace(variant: AgentHarnessWorkflowVariantV1): Promise<
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: `h26-${variant}`,
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number

@@ -13,6 +13,8 @@ import {
   type CultivationStage,
 } from '../../src/lib/types/cultivation'
 import { useCultivationStore } from '../../src/stores/cultivation'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 const stages: CultivationStage[] = [
   { id: 'root', name: '炼体', parentStageIds: [] },
@@ -117,26 +119,29 @@ describe('WORLD-1 · 修炼体系 DAG', () => {
 
   it('进入世界宪法来源并在修改后把旧断言标记为 stale', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'canon', genre: '', description: '', targetWordCount: 0,
-      enableMultiWorld: true, createdAt: now, updatedAt: now,
-    } as any) as number
-    const systemId = await db.cultivationSystems.add({
-      projectId, worldGroupId: 7, name: '剑修', description: '最高只能斩断山岳',
+    const created = await seedCurrentWorkspace('canon')
+    const projectId = created.scope.projectId
+    const worldGroupId = await db.worldGroups.add(stampNewRecord(created.scope, 'worldGroups', {
+      projectId, name: '镜界', type: 'custom', description: '', icon: '', order: 0,
+      entryCondition: '', exitCondition: '', powerRestriction: '', takeawayRules: '',
+      plannedChapterCount: 0, createdAt: now, updatedAt: now,
+    } as never, { owner: 'world' })) as number
+    const systemId = await db.cultivationSystems.add(stampNewRecord(created.scope, 'cultivationSystems', {
+      projectId, worldGroupId, name: '剑修', description: '最高只能斩断山岳',
       stages: stringifyCultivationStages(stages), createdAt: now, updatedAt: now,
-    }) as number
-    const sources = await listSettingAssertionSources(projectId, 7)
+    } as never, { owner: 'world' })) as number
+    const sources = await listSettingAssertionSources(projectId, worldGroupId)
     const source = sources.find(item =>
       item.table === 'cultivationSystems' && item.recordId === systemId && item.field === 'description')!
     expect(source.text).toContain('最高只能斩断山岳')
-    const factId = await db.temporalFacts.add({
-      projectId, worldGroupId: 7, subjectName: '镜界', predicate: 'powerCeiling',
+    const factId = await db.temporalFacts.add(stampNewRecord(created.scope, 'temporalFacts', {
+      projectId, worldGroupId, subjectName: '镜界', predicate: 'powerCeiling',
       factKind: 'rule', value: '斩断山岳', sourceType: 'setting',
       sourceRecordTable: source.table, sourceRecordId: source.recordId,
       sourceCultivationSystemId: source.recordId, sourceField: source.field,
       sourceFingerprint: source.fingerprint, status: 'confirmed', locked: true,
       createdAt: now, updatedAt: now,
-    } as any) as number
+    } as never, { owner: 'work' })) as number
     await useCultivationStore.getState().loadAll(projectId)
     await useCultivationStore.getState().updateSystem(systemId, { description: '最高只能劈开巨石' })
     expect((await db.temporalFacts.get(factId))?.status).toBe('stale')

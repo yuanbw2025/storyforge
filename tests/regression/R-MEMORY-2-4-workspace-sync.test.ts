@@ -18,8 +18,8 @@ import {
   workspaceMarkdownToChapterHtmlV1,
 } from '../../src/lib/memory/workspace-projection'
 import { adopt, hashAdoptRecordFieldsV1 } from '../../src/lib/registry/adopt'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 function notFound(): DOMException {
   return new DOMException('not found', 'NotFoundError')

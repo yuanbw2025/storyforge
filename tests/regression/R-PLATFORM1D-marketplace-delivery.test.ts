@@ -15,16 +15,16 @@ import {
   InMemoryCommercialReleaseDeliveryPersistenceV1,
 } from '../../src/lib/commercial/release-delivery'
 import {
-  exportGameDistributionBundleV2,
-  importMarketplaceGameDistributionV2,
-} from '../../src/lib/game-platform/distribution-bundle'
-import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
-import { assertGameReleaseUnchanged } from '../../src/lib/text-game/releases'
-import type { GameRuntimePackageV2, WorkspaceScope } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+  exportProductDistributionBundleV2,
+  importMarketplaceProductDistributionV2,
+} from '../../src/lib/product-platform/distribution-bundle'
+import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { assertProductReleaseUnchanged } from '../../src/lib/product/releases'
+import type { ProductRuntimePackageV1, WorkspaceScope } from '../../src/lib/types'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
-import { createFixtureGameReleaseManifestV3 } from '../helpers/game-release-v3'
+import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
 
 class CommercialStore implements CommercialPlatformPersistenceV1 {
   snapshot: CommercialPlatformSnapshotV1 | null = null
@@ -39,23 +39,23 @@ class CommercialStore implements CommercialPlatformPersistenceV1 {
 async function workspace(name: string) {
   const now = Date.now()
   const projectId = await db.projects.add({
-    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
+    workspacePurpose: 'world-engine',
     name, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
     description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
   } as never) as number
   return ensureWorkspaceOwnership(projectId)
 }
 
-function storyPackage(worldContentHash: string): GameRuntimePackageV2 {
+function avgPackage(worldContentHash: string): ProductRuntimePackageV1 {
   return {
-    schema: 'storyforge.game-runtime-package', version: 2, productType: 'storygame',
+    schema: 'storyforge.product-runtime-package', version: 1, productType: 'avg',
     definition: {
-      gameKey: 'market.complete-loop', title: '完整市场短篇', description: '',
-      enabledCapabilities: ['narrative'], rulesetVersion: 1, initialVariables: {},
+      productKey: 'market.complete-loop', title: '完整市场短篇', description: '',
+      enabledCapabilities: ['narrative', 'presentation'], rulesetVersion: 1, initialVariables: {},
     },
     sourceWorld: {
       contentHash: worldContentHash,
-      selection: currentProductSelection('storygame', {
+      selection: currentProductSelection('avg', {
         story: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
       }),
     },
@@ -71,23 +71,24 @@ function storyPackage(worldContentHash: string): GameRuntimePackageV2 {
       }],
       choices: [],
     },
+    presentation: { version: 1, cues: [], assets: [] },
   }
 }
 
 async function releaseBundle(scope: WorkspaceScope) {
   const revision = await createWorldRevision({ scope, label: '发行世界' })
   const worldRelease = await publishWorldRevision(revision.id!)
-  const manifest = await createFixtureGameReleaseManifestV3({
-    runtimePackage: storyPackage(worldRelease.contentHash), productionKey: 'market.delivery',
+  const manifest = await createFixtureProductReleaseManifestV1({
+    runtimePackage: avgPackage(worldRelease.contentHash), productionKey: 'market.delivery',
   })
-  const id = await db.gameReleases.add({
+  const id = await db.productReleases.add({
     projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-    gameDefinitionId: null, productionKey: 'market.delivery',
+    productionKey: 'market.delivery', productType: 'avg',
     worldReleaseId: worldRelease.id!, version: 1, label: '市场闭环 v1',
-    manifestJson: JSON.stringify(manifest), contentHash: await hashGameProductionValueV2(manifest),
+    manifestJson: JSON.stringify(manifest), contentHash: await hashProductProductionValueV2(manifest),
     createdAt: Date.now(),
   }) as number
-  return exportGameDistributionBundleV2({ scope, gameReleaseId: id })
+  return exportProductDistributionBundleV2({ scope, productReleaseId: id })
 }
 
 const TOKEN_CREATOR = 'token-creator-123456789'
@@ -128,8 +129,8 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
     })
     const files = createCommercialReleaseDeliveryGatewayV1({ service: delivery, identity })
     const created = await commercial(request('/v1/commercial/listings', {
-      requestId: 'create.market', releaseHash: bundle.gameRelease.contentHash,
-      productType: 'storygame', title: '完整市场短篇', summary: '可导入并游玩的发行物', contentWarnings: [],
+      requestId: 'create.market', releaseHash: bundle.productRelease.contentHash,
+      productType: 'avg', title: '完整市场短篇', summary: '可导入并游玩的发行物', contentWarnings: [],
       license: {
         licenseId: 'license.offline', licenseVersion: '1.0.0', allowOfflineExport: true,
         allowRemix: false, commercialReuse: false, requiresAttribution: true,
@@ -143,12 +144,12 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
       requestId: 'publish.before-upload', listingId, rightsConfirmed: true,
     }, TOKEN_PUBLISHER))).resolves.toMatchObject({ status: 409, body: { code: 'release_delivery_missing' } })
     await expect(files(request('/v1/commercial/releases/download', {
-      releaseHash: bundle.gameRelease.contentHash,
+      releaseHash: bundle.productRelease.contentHash,
     }, TOKEN_BUYER))).resolves.toMatchObject({ status: 403, body: { code: 'entitlement_required' } })
 
     await expect(files(request('/v1/commercial/releases/register', {
       requestId: 'upload.market', bundle,
-    }, TOKEN_CREATOR))).resolves.toMatchObject({ status: 201, body: { releaseHash: bundle.gameRelease.contentHash } })
+    }, TOKEN_CREATOR))).resolves.toMatchObject({ status: 201, body: { releaseHash: bundle.productRelease.contentHash } })
     await expect(commercial(request('/v1/commercial/listings/submit', {
       requestId: 'submit.after-upload', listingId, rightsConfirmed: true,
     }, TOKEN_CREATOR))).resolves.toMatchObject({ status: 200, body: { status: 'submitted' } })
@@ -160,16 +161,16 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
     }, TOKEN_BUYER))).resolves.toMatchObject({ status: 201, body: { entitlement: { status: 'active' } } })
 
     const downloaded = await files(request('/v1/commercial/releases/download', {
-      releaseHash: bundle.gameRelease.contentHash,
+      releaseHash: bundle.productRelease.contentHash,
     }, TOKEN_BUYER))
     expect(downloaded.status).toBe(200)
     const payload = downloaded.body as Awaited<ReturnType<typeof delivery.download>>
     const playerWorkspace = await workspace('玩家')
     const { releaseHash: _releaseHash, ...provenance } = payload.authorization
-    const imported = await importMarketplaceGameDistributionV2({
+    const imported = await importMarketplaceProductDistributionV2({
       scope: playerWorkspace.scope, bundle: payload.bundle, provenance,
     })
-    await expect(assertGameReleaseUnchanged(imported.id!)).resolves.toMatchObject({ id: imported.id })
+    await expect(assertProductReleaseUnchanged(imported.id!)).resolves.toMatchObject({ id: imported.id })
     expect(imported.distributionProvenance).toMatchObject({
       listingId, entitlementId: expect.stringMatching(/^entitlement\./), localCopyPreserved: true,
     })
@@ -202,8 +203,8 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
       })),
     })
     const listing = await client.createListing({
-      accessToken: TOKEN_CREATOR, requestId: 'http.create', releaseHash: bundle.gameRelease.contentHash,
-      productType: 'storygame', title: 'HTTP 完整短篇', summary: 'Web 标准边界', contentWarnings: [],
+      accessToken: TOKEN_CREATOR, requestId: 'http.create', releaseHash: bundle.productRelease.contentHash,
+      productType: 'avg', title: 'HTTP 完整短篇', summary: 'Web 标准边界', contentWarnings: [],
       license: {
         licenseId: 'license.http', licenseVersion: '1.0.0', allowOfflineExport: true,
         allowRemix: false, commercialReuse: false, requiresAttribution: false,
@@ -224,12 +225,12 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
     await expect(client.discover({ query: 'HTTP' })).resolves.toMatchObject([{ listingId: listing.listingId }])
     await client.acquire({ accessToken: TOKEN_BUYER, requestId: 'http.claim', listingId: listing.listingId })
     const downloaded = await client.downloadRelease({
-      accessToken: TOKEN_BUYER, releaseHash: bundle.gameRelease.contentHash,
+      accessToken: TOKEN_BUYER, releaseHash: bundle.productRelease.contentHash,
     })
     const playerWorkspace = await workspace('HTTP 玩家')
-    const imported = await importMarketplaceGameDistributionV2({
+    const imported = await importMarketplaceProductDistributionV2({
       scope: playerWorkspace.scope, bundle: downloaded.bundle, provenance: downloaded.provenance,
     })
-    await expect(assertGameReleaseUnchanged(imported.id!)).resolves.toMatchObject({ id: imported.id })
+    await expect(assertProductReleaseUnchanged(imported.id!)).resolves.toMatchObject({ id: imported.id })
   }, 40_000)
 })

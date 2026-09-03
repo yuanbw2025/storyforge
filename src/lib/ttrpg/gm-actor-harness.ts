@@ -24,14 +24,14 @@ import { createVerificationReceiptV1 } from "../agent/run/verification-receipt";
 import { assembleContext } from "../registry/assemble-context";
 import {
   commitTtrpgGmActorActionFromHarnessV1,
-  readSimulationState,
-  readSimulationStateVersion,
-} from "../simulation/runtime";
+  readProductRuntimeState,
+  readProductRuntimeStateVersion,
+} from "./runtime-api";
 import type {
   AIConfig,
   ChatMessage,
-  SimulationEvent,
-  SimulationTtrpgModelEvidenceV1,
+  ProductRuntimeEvent,
+  TtrpgRuntimeModelEvidenceV1,
   WorkspaceScope,
 } from "../types";
 import {
@@ -49,7 +49,7 @@ export interface TtrpgGmActorActionCandidateV1 {
   version: 1;
   portable: false;
   runId: number;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
   baseSequence: number;
   stateHash: string;
   visibilityHash: string;
@@ -67,8 +67,8 @@ export interface TtrpgGmActorActionCandidateV1 {
   defaultDifficulty: number | null;
   approach: string;
   spokenIntent: string | null;
-  modelEvidence: SimulationTtrpgModelEvidenceV1;
-  modelCalls: SimulationTtrpgModelEvidenceV1[];
+  modelEvidence: TtrpgRuntimeModelEvidenceV1;
+  modelCalls: TtrpgRuntimeModelEvidenceV1[];
   repairEvidence?: {
     initialIssue: string;
     initialOutputHash: string;
@@ -308,8 +308,8 @@ async function append(
   return appendAgentRunEventV1({
     scope,
     runId: snapshot.run.id,
-    simulationSessionId:
-      snapshot.run.simulationSessionId ?? fail("运行时事件缺少 Instance owner"),
+    productRuntimeSessionId:
+      snapshot.run.productRuntimeSessionId ?? fail("运行时事件缺少 Instance owner"),
     type,
     payload,
     expectedLastSequence: snapshot.projection.lastSequence,
@@ -336,8 +336,8 @@ function repairPrompt(
   ];
 }
 function aggregateEvidence(
-  calls: SimulationTtrpgModelEvidenceV1[],
-): SimulationTtrpgModelEvidenceV1 {
+  calls: TtrpgRuntimeModelEvidenceV1[],
+): TtrpgRuntimeModelEvidenceV1 {
   const first = calls[0] ?? fail("AI KP 角色行动缺少模型调用证据");
   const inputTokens = calls.reduce((sum, call) => sum + call.inputTokens, 0);
   const outputTokens = calls.reduce((sum, call) => sum + call.outputTokens, 0);
@@ -360,7 +360,7 @@ function aggregateEvidence(
 
 export async function generateTtrpgGmActorActionCandidateV1(input: {
   scope: WorkspaceScope;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
   objective: string;
   aiConfig?: AIConfig;
   runAI?: RunAI;
@@ -400,7 +400,7 @@ export async function generateTtrpgGmActorActionCandidateV1(input: {
   });
   let snapshot = await createAgentRunV1({
     scope: input.scope,
-    simulationSessionId: input.simulationSessionId,
+    productRuntimeSessionId: input.productRuntimeSessionId,
     worldGroupId: boundary.scope.worldGroupId,
     contract: contract({
       objective,
@@ -423,7 +423,7 @@ export async function generateTtrpgGmActorActionCandidateV1(input: {
       projectId: input.scope.projectId,
       scope: input.scope,
       worldGroupId: boundary.scope.worldGroupId,
-      simulationSessionId: input.simulationSessionId,
+      productRuntimeSessionId: input.productRuntimeSessionId,
       sourceKeys: ["ttrpgRuntime"],
       provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
@@ -485,7 +485,7 @@ export async function generateTtrpgGmActorActionCandidateV1(input: {
       const inputTokens = chatResult.usage?.inputTokens ?? estimatedInputTokens;
       const outputTokens =
         chatResult.usage?.outputTokens ?? estimateTokens(output);
-      const evidence: SimulationTtrpgModelEvidenceV1 = {
+      const evidence: TtrpgRuntimeModelEvidenceV1 = {
         provider: modelIdentity.provider,
         model: modelIdentity.model,
         usageSource: chatResult.usage ? "provider" : "estimated",
@@ -548,7 +548,7 @@ export async function generateTtrpgGmActorActionCandidateV1(input: {
       runId: snapshot.run.id,
       ...boundary.scope.runtime,
       contextManifestHash: manifest.manifestHash,
-      coordinatorKey: `ttrpg-gm-actor:${input.simulationSessionId}:${boundary.scope.runtime.baseSequence}:${turn.actorKey}`,
+      coordinatorKey: `ttrpg-gm-actor:${input.productRuntimeSessionId}:${boundary.scope.runtime.baseSequence}:${turn.actorKey}`,
       actorKey: turn.actorKey,
       viewerKey: "viewer.gm",
       controller: turn.gmController,
@@ -571,7 +571,7 @@ export async function generateTtrpgGmActorActionCandidateV1(input: {
     const saved = await createAgentRunCheckpointV1({
       scope: input.scope,
       runId: snapshot.run.id,
-      simulationSessionId: input.simulationSessionId,
+      productRuntimeSessionId: input.productRuntimeSessionId,
       resumePayload: candidate,
       expectedLastSequence: snapshot.projection.lastSequence,
     });
@@ -619,7 +619,7 @@ function isCandidate(value: unknown): value is TtrpgGmActorActionCandidateV1 {
     row.version === 1 &&
     row.portable === false &&
     Number.isInteger(row.runId) &&
-    Number.isInteger(row.simulationSessionId) &&
+    Number.isInteger(row.productRuntimeSessionId) &&
     Number.isInteger(row.baseSequence) &&
     typeof row.stateHash === "string" &&
     typeof row.visibilityHash === "string" &&
@@ -641,7 +641,7 @@ export async function adoptTtrpgGmActorActionCandidateV1(input: {
 }): Promise<{
   snapshot: AgentRunSnapshotV1;
   candidate: TtrpgGmActorActionCandidateV1;
-  event: SimulationEvent;
+  event: ProductRuntimeEvent;
   receiptHash: string;
 }> {
   const saved = await readLatestVerifiedAgentRunCheckpointV1(
@@ -664,9 +664,9 @@ export async function adoptTtrpgGmActorActionCandidateV1(input: {
     (event) => event.type === "runtime.candidate.adopted",
   );
   let committed = await import("../db/schema").then(({ db }) =>
-    db.simulationEvents
+    db.productRuntimeEvents
       .where("sessionId")
-      .equals(candidate.simulationSessionId)
+      .equals(candidate.productRuntimeSessionId)
       .and(
         (event) =>
           event.commandId ===
@@ -682,7 +682,7 @@ export async function adoptTtrpgGmActorActionCandidateV1(input: {
       });
       const currentView = await loadTtrpgGmRuntimeViewV1({
         scope: input.scope,
-        simulationSessionId: candidate.simulationSessionId,
+        productRuntimeSessionId: candidate.productRuntimeSessionId,
       });
       const revalidated = parseDraft(
         JSON.stringify({
@@ -733,7 +733,7 @@ export async function adoptTtrpgGmActorActionCandidateV1(input: {
       fail("自动 AI KP 角色行动候选状态无效");
     }
     committed = await commitTtrpgGmActorActionFromHarnessV1({
-      sessionId: candidate.simulationSessionId,
+      sessionId: candidate.productRuntimeSessionId,
       runId: candidate.runId,
       candidateHash: candidate.candidateHash,
     });
@@ -749,10 +749,10 @@ export async function adoptTtrpgGmActorActionCandidateV1(input: {
   ) {
     fail("已提交规则行动与 AI KP 角色行动候选不一致");
   }
-  const version = await readSimulationStateVersion(
-    candidate.simulationSessionId,
+  const version = await readProductRuntimeStateVersion(
+    candidate.productRuntimeSessionId,
   );
-  const state = await readSimulationState(candidate.simulationSessionId);
+  const state = await readProductRuntimeState(candidate.productRuntimeSessionId);
   const result = state.ttrpg?.product?.actionHistory.find(
     (item) => item.eventSequence === committed.sequence,
   );

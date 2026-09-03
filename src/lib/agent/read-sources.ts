@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import type { AssembleContextInput } from '../registry/types'
 import type { OutlineNode } from '../types'
 import { countWords, htmlToPlainText } from '../utils/html'
-import { readOwnedRows } from '../world-engine/scope'
+import { readOwnedRows } from '../workspace/scope'
 
 export const AGENT_SEARCH_KINDS = [
   'chapter',

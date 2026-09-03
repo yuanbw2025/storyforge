@@ -8,7 +8,7 @@ import {
   resolveScopeLike,
   stampNewRecord,
   type WorkspaceScopeLike,
-} from '../lib/world-engine/scope'
+} from '../lib/workspace/scope'
 
 interface HistoricalStore {
   events: HistoricalTimelineEvent[]

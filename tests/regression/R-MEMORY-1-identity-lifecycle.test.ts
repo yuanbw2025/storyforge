@@ -8,7 +8,7 @@ import {
   isWorkspaceUid,
   isWorkCode,
 } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import {

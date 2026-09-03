@@ -41,7 +41,7 @@ async function seed(): Promise<{ projectId: number; profile: UserStyleProfile }>
   const now = Date.now()
   const projectId = await db.projects.add({
     name: '校准草稿', genre: 'modern', genres: ['modern'], status: 'drafting', description: '',
-    targetWordCount: 10_000, worldCode: `calibration-${now}`, worldVersion: 1,
+    targetWordCount: 10_000,
     createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({

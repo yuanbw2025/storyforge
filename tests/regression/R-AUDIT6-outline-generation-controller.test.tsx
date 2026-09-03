@@ -5,7 +5,6 @@ import type { UseAIStreamReturn } from '../../src/hooks/useAIStream'
 import type { AssembleContextResult } from '../../src/lib/registry/types'
 import type { OutlineNode, Project } from '../../src/lib/types'
 import { useOutlineGenerationController } from '../../src/components/outline/useOutlineGenerationController'
-import { OUTLINE_DURABLE_HARNESS_STORAGE_KEY } from '../../src/lib/outline/harness'
 import { resolveOutlineGenerationSourceKeysV2 } from '../../src/lib/outline/harness'
 
 const revisionMocks = vi.hoisted(() => ({
@@ -13,8 +12,8 @@ const revisionMocks = vi.hoisted(() => ({
   revision: { version: 1 as const, entries: [], vectorHash: 'a'.repeat(64) },
 }))
 
-vi.mock('../../src/lib/world-engine/scope', async importOriginal => ({
-  ...await importOriginal<typeof import('../../src/lib/world-engine/scope')>(),
+vi.mock('../../src/lib/workspace/scope', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/lib/workspace/scope')>(),
   resolveScope: vi.fn(async () => revisionMocks.scope),
   resolveScopeLike: vi.fn(async () => revisionMocks.scope),
 }))
@@ -138,7 +137,6 @@ async function mount(patch: Partial<Parameters<typeof useOutlineGenerationContro
 }
 
 beforeEach(() => {
-  localStorage.setItem(OUTLINE_DURABLE_HARNESS_STORAGE_KEY, 'disabled')
 })
 
 afterEach(async () => {
@@ -147,7 +145,6 @@ afterEach(async () => {
     await act(async () => item.root.unmount())
     item.host.remove()
   }
-  localStorage.removeItem(OUTLINE_DURABLE_HARNESS_STORAGE_KEY)
 })
 
 describe('AUDIT-6 · 大纲生成 controller', () => {

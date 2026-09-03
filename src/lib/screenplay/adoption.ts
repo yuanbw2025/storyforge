@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import type { ScreenplayBlock, ScreenplayCharacterExtension, ScreenplayScene, WorkspaceScope } from '../types'
 import { inspectAdaptationFreshness } from '../adaptation/source-manifest'
 import { hashCanonicalValue } from '../agent/run/hash'
-import { resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
+import { resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { assertValidScreenplaySceneV1 } from './contracts'
 
 export type ScreenplayBlockCandidateV1 =

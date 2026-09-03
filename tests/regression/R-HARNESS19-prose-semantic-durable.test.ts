@@ -67,8 +67,8 @@ async function seedWorkspace(): Promise<{
     status: 'drafting',
     description: '',
     targetWordCount: 100_000,
-    worldCode: 'h19-world',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number

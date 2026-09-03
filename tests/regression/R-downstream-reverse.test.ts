@@ -25,7 +25,7 @@ async function seedProjectWithCharacter(): Promise<number> {
     createdAt: now, updatedAt: now,
   } as any)
   await db.characters.add({
-    projectId, name: '林惊羽', role: 'protagonist', shortDescription: '天才剑修',
+    projectId, name: '林惊羽', role: 'protagonist', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral', shortDescription: '天才剑修',
     personality: '坚毅', background: '灭门遗孤', motivation: '复仇', createdAt: now, updatedAt: now,
   } as any)
   return projectId

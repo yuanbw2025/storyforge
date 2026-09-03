@@ -9,7 +9,7 @@ import type {
 import { adopt } from '../registry/adopt'
 import { transactionTablesFor } from '../registry/lifecycle'
 import type { WorkspaceScope } from '../types/world-ownership'
-import { resolveScope } from '../world-engine/scope'
+import { resolveScope } from '../workspace/scope'
 import {
   buildChapterSearchTargets,
   findChapterMatches,

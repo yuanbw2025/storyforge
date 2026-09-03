@@ -1,8 +1,9 @@
 import { hashCanonicalValue } from '../agent/run/hash'
 import { db } from '../db/schema'
-import type { WorldReferenceV1, WorldRelease } from '../types'
+import type { WorkspaceScope, WorldReferenceCatalogEntryV1, WorldReferenceV1, WorldRelease } from '../types'
+import type { FrozenResourceScopeV1 } from '../registry/types'
 import { verifyPureWorldReleaseRecordV3 } from './release-codec'
-import { assertReleaseUnchanged, worldReleaseUidV1 } from './releases'
+import { assertReleaseUnchanged, listWorldReleases, worldReleaseUidV1 } from './releases'
 
 const HASH = /^[a-f0-9]{64}$/
 
@@ -50,8 +51,8 @@ export async function validatePortableWorldReferenceV1(value: WorldReferenceV1):
     || !Number.isSafeInteger(value.localReleaseRecordId) || value.localReleaseRecordId < 0) {
     fail('portable-fields', 'WorldReference portable identity 字段非法')
   }
-  if (value.manifestIdentity.schema !== 'storyforge.world-package'
-    || value.manifestIdentity.version !== 2 || value.manifestIdentity.semanticContract !== 3) {
+  if (value.manifestIdentity.schema !== 'storyforge.world-release'
+    || value.manifestIdentity.version !== 3 || value.manifestIdentity.semanticContract !== 3) {
     fail('manifest-identity', 'WorldReference manifest identity 非法')
   }
   const expectedUid = worldReleaseUidV1({
@@ -91,8 +92,8 @@ export async function createWorldReferenceV1(localReleaseRecordId: number): Prom
     releaseHash: release.contentHash,
     localReleaseRecordId: release.id,
     manifestIdentity: {
-      schema: 'storyforge.world-package',
-      version: 2,
+      schema: 'storyforge.world-release',
+      version: 3,
       semanticContract: 3,
       schemaHash: await hashCanonicalValue({
         schema: manifest.schema,
@@ -106,6 +107,21 @@ export async function createWorldReferenceV1(localReleaseRecordId: number): Prom
     },
   }
   return { ...base, referenceHash: await hashCanonicalValue(referenceBody(base)) }
+}
+
+/** The only catalog projection upper products may use to choose a world. */
+export async function listWorldReferenceCatalogV1(
+  scope: WorkspaceScope,
+): Promise<WorldReferenceCatalogEntryV1[]> {
+  const releases = await listWorldReleases(scope)
+  return Promise.all(releases.map(async release => {
+    if (!release.id) fail('release-id', 'WorldRelease catalog 存在无 ID 记录')
+    return {
+      reference: await createWorldReferenceV1(release.id),
+      label: release.label,
+      createdAt: release.createdAt,
+    }
+  }))
 }
 
 export async function validateWorldReferenceV1(value: WorldReferenceV1): Promise<WorldReferenceV1> {
@@ -123,6 +139,23 @@ export async function validateWorldReferenceV1(value: WorldReferenceV1): Promise
     fail('stale-or-rebound', 'WorldReference 的 release ID/hash/schema/capability 身份不再同时匹配')
   }
   return structuredClone(value)
+}
+
+/** Resolve the host-local frozen Gateway scope behind a verified reference.
+ * This physical lookup remains world-owned; upper-product contracts receive
+ * only the resulting neutral resource scope. */
+export async function resolveWorldReferenceResourceScopeV1(
+  referenceInput: WorldReferenceV1,
+): Promise<FrozenResourceScopeV1> {
+  const reference = await validateWorldReferenceV1(referenceInput)
+  const release = await db.worldReleases.get(reference.localReleaseRecordId)
+  if (!release?.id) fail('release-missing', 'WorldReference 指向的本地 release 不存在')
+  return {
+    projectId: release.projectId,
+    worldId: release.worldId,
+    worldReleaseId: release.id,
+    worldReleaseHash: release.contentHash,
+  }
 }
 
 /** Rebinds only the local locator after import, preserving the portable hash. */

@@ -27,7 +27,7 @@ import {
   resolveScopeLike,
   stampNewRecord,
   type WorkspaceScopeLike,
-} from '../lib/world-engine/scope'
+} from '../lib/workspace/scope'
 import type { WorkspaceScope } from '../lib/types/world-ownership'
 
 interface CaptureRevisionPairInput {

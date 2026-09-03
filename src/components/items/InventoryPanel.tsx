@@ -20,7 +20,7 @@ import {
   listInventoryExtractionChapters,
   type InventoryExtractionMode,
 } from '../../lib/inventory/extraction-range'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import ExtractionReviewPanel from '../shared/ExtractionReviewPanel'
 import {
   abandonInventoryExtractionV1,

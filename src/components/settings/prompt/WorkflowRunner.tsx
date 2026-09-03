@@ -81,7 +81,6 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
     }
   }, [workflow])
   const executionSteps = graphCompilation.compiled?.orderedSteps ?? []
-  const usesExplicitGraph = workflow.graph != null
 
   /**
    * 步骤输出累加器(FB-1 修复 · 缺陷 A)。
@@ -224,8 +223,8 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
 
   /**
    * 重新生成或改写较早节点后，旧的后序候选已经基于过期输入，不能继续展示为可保存结果。
-   * v1 仍是按稳定拓扑顺序串行执行，因此保守地作废该位置之后的全部候选，避免为省调用
-   * 错把独立分支与旧依赖结果混在同一次运行里。
+   * v1 仍按稳定拓扑顺序串行执行，因此保守地作废该位置之后的全部候选，避免为省调用
+   * 错把独立分支与过期依赖结果混在同一次运行里。
    */
   const invalidateFromIndex = (startIndex: number) => {
     const invalidated = executionSteps.slice(startIndex)
@@ -257,14 +256,11 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
    */
   const buildStepContext = async (
     step: PromptWorkflowStep,
-    idx: number,
   ): Promise<Record<string, string | number | undefined>> => {
-    // ① FLOW-1 显式图只读取自己的入边；旧工作流保持紧邻上一步兼容语义。
-    const prevStep = idx > 0 ? executionSteps[idx - 1] : undefined
-    const prevOut = prevStep ? (stepOutputsRef.current.get(prevStep.stepId) ?? '') : ''
-    const upstreamInputs = usesExplicitGraph && graphCompilation.compiled
+    // ① 所有工作流都只读取显式图中指向自己的入边。
+    const upstreamInputs = graphCompilation.compiled
       ? collectWorkflowUpstreamInputs(graphCompilation.compiled, step.stepId, stepOutputsRef.current)
-      : undefined
+      : []
 
     // ② 走注册表拉取已存项目设定 + 真实与幻想规则(单一事实源,不在此手挑 buildXxxContext · 缺陷 B)
     let assembledText = ''
@@ -290,7 +286,6 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
     // ③ 纯逻辑整形(可单测,见 tests/regression/R-WF-*)
     const ctx = assembleWorkflowStepVars({
       step,
-      prevOutput: prevOut,
       projectName: project?.name,
       genres: project?.genre,
       assembledContext: assembledText,
@@ -317,23 +312,16 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
       let messages
       if (tpl.variableBindings?.length) {
         const wg = project?.enableMultiWorld ? activeGroupId : null
-        const upstreamInputs = usesExplicitGraph && graphCompilation.compiled
+        const upstreamInputs = graphCompilation.compiled
           ? collectWorkflowUpstreamInputs(graphCompilation.compiled, step.stepId, stepOutputsRef.current)
           : []
-        const legacyPreviousOutput = idx > 0
-          ? stepOutputsRef.current.get(executionSteps[idx - 1].stepId)
-          : ''
-        const workflowContext = usesExplicitGraph
-          ? formatWorkflowUpstreamContext(upstreamInputs)
-          : legacyPreviousOutput
+        const workflowContext = formatWorkflowUpstreamContext(upstreamInputs)
         const bound = await assembleBoundPrompt({
           template: tpl,
           project,
           worldGroupId: wg,
           previousOutput: workflowContext,
-          workflowValues: usesExplicitGraph
-            ? groupWorkflowInputsByVariable(upstreamInputs)
-            : undefined,
+          workflowValues: groupWorkflowInputsByVariable(upstreamInputs),
           userHint: userInputsRef.current.get(step.stepId),
           manualValues: step.inputValues,
           parameterValues: step.parameterValues,
@@ -346,7 +334,7 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
         }
         messages = bound.messages
       } else {
-        const ctx = await buildStepContext(step, idx)
+        const ctx = await buildStepContext(step)
         messages = renderPrompt(tpl, ctx, { parameterValues: step.parameterValues }).messages
       }
       const generationNode = createWorkflowGenerationNode({

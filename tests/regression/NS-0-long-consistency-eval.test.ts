@@ -40,9 +40,9 @@ describe('NS-0 long-consistency evaluation harness', () => {
 
   it('snapshots the current production builders and exact 500-char predecessor tail', () => {
     const fixtures = getFixtures('development')
-    const completion = buildEvalCase(fixtures[0], 'legacy-500-tail')
-    const continuation = buildEvalCase(fixtures[1], 'legacy-500-tail')
-    const expansion = buildEvalCase(fixtures[2], 'legacy-500-tail')
+    const completion = buildEvalCase(fixtures[0], 'baseline-500-tail')
+    const continuation = buildEvalCase(fixtures[1], 'baseline-500-tail')
+    const expansion = buildEvalCase(fixtures[2], 'baseline-500-tail')
 
     expect(completion.productionSnapshot).toEqual({
       task: 'completion',
@@ -57,13 +57,13 @@ describe('NS-0 long-consistency evaluation harness', () => {
 
   it('quarantines labeled future/foreign prose and never injects the scoring answer key', () => {
     const fixture = getFixtures('development')[0]
-    const legacy = buildEvalCase(fixture, 'legacy-500-tail')
+    const baseline = buildEvalCase(fixture, 'baseline-500-tail')
     const candidate = buildEvalCase(fixture, 'handoff-tail-summary')
-    const legacyText = legacy.messages.map(message => message.content).join('\n')
+    const baselineText = baseline.messages.map(message => message.content).join('\n')
     const candidateText = candidate.messages.map(message => message.content).join('\n')
 
-    expect(legacyText).toContain('未来计划（尚未发生）')
-    expect(legacyText).toContain('异世界档案')
+    expect(baselineText).not.toContain('未来计划（尚未发生）')
+    expect(baselineText).not.toContain('异世界档案')
     expect(candidateText).not.toContain('银冠加冕')
     expect(candidateText).not.toContain('黑曜石哨')
 
@@ -87,14 +87,14 @@ describe('NS-0 long-consistency evaluation harness', () => {
     expect(withHandoffText).toContain('本章林砚与苏禾约定暗号')
   })
 
-  it('fixtures are discriminating: legacy-visible text misses facts that only the full prior chapter carries', () => {
-    // 尺子的硬性质：legacy（500 字尾巴 / existingContent）必须【漏掉】requiredFacts，
+  it('fixtures are discriminating: baseline-visible text misses facts that only the full prior chapter carries', () => {
+    // 尺子的硬性质：baseline（500 字尾巴 / existingContent）必须【漏掉】requiredFacts，
     // 而 handoff 的抽取源（previousChapterText 全文）必须【含有】它们。
     // 否则两个变体得分一样高，A/B 测不出 handoff 的价值（旧夹具就栽在这）。
     for (const fixture of LONG_CONSISTENCY_FIXTURES) {
       if (fixture.task === 'expansion') continue // expansion 的 handoff 收益边际，不做严格守卫
       const fullSource = fixture.previousChapterText
-      const legacyVisible = fixture.task === 'completion'
+      const baselineVisible = fixture.task === 'completion'
         ? fixture.previousChapterText.slice(-500)
         : fixture.existingContent
 
@@ -104,8 +104,8 @@ describe('NS-0 long-consistency evaluation harness', () => {
           `${fixture.id} 全文应含事实 ${fact.id}`,
         ).toBe(true)
         expect(
-          fact.aliases.some(alias => legacyVisible.includes(alias)),
-          `${fixture.id} legacy 可见部分不应含事实 ${fact.id}（否则无分辨力）`,
+          fact.aliases.some(alias => baselineVisible.includes(alias)),
+          `${fixture.id} baseline 可见部分不应含事实 ${fact.id}（否则无分辨力）`,
         ).toBe(false)
       }
     }
@@ -136,8 +136,8 @@ describe('NS-0 long-consistency evaluation harness', () => {
       minimumRequiredFactRecall: 0.85,
       minimumConstraintRecall: 0.85,
       minimumEvidenceCitationRecall: 0.9,
-      maximumEstimatedInputTokenMultiplierVsLegacy: 1.6,
-      minimumFactRecallImprovementVsLegacy: 0.1,
+      maximumEstimatedInputTokenMultiplierVsBaseline: 1.6,
+      minimumFactRecallImprovementVsBaseline: 0.1,
     })
   })
 
@@ -171,7 +171,7 @@ describe('NS-0 long-consistency evaluation harness', () => {
 
   it('applies the pre-registered NS-1 gate without post-hoc threshold changes', () => {
     const makeRecord = (
-      variant: 'legacy-500-tail' | 'handoff-tail-summary',
+      variant: 'baseline-500-tail' | 'handoff-tail-summary',
       fact: number,
       constraint: number,
       inputTokens: number,
@@ -198,15 +198,15 @@ describe('NS-0 long-consistency evaluation harness', () => {
       },
     })
     expect(evaluateNs1Gate(
-      makeRecord('legacy-500-tail', 0.4, 0.5, 1000),
+      makeRecord('baseline-500-tail', 0.4, 0.5, 1000),
       makeRecord('handoff-tail-summary', 0.9, 0.9, 1500),
     )).toEqual({ passed: true, failures: [] })
     expect(evaluateNs1Gate(
-      makeRecord('legacy-500-tail', 0.8, 0.8, 1000),
+      makeRecord('baseline-500-tail', 0.8, 0.8, 1000),
       makeRecord('handoff-tail-summary', 0.84, 0.9, 1700),
     ).passed).toBe(false)
     expect(evaluateNs1Gate(
-      makeRecord('legacy-500-tail', 1, 0.9, 1000),
+      makeRecord('baseline-500-tail', 1, 0.9, 1000),
       makeRecord('handoff-tail-summary', 1, 1, 1500),
       { requireFactImprovement: false },
     )).toEqual({ passed: true, failures: [] })

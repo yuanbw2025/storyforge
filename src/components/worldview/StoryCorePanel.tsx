@@ -83,7 +83,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
       theme:           storyCore.theme || '',
       centralConflict: storyCore.centralConflict || '',
       plotPattern:     storyCore.plotPattern || '',
-      mainPlot:        storyCore.mainPlot || storyCore.storyLines || '',
+      mainPlot:        storyCore.mainPlot || '',
       subPlots:        storyCore.subPlots || '',
     })
   }, [storyCore])

@@ -122,7 +122,7 @@ export interface AdventureActionDefinition {
   narrativeChoiceKey: string | null
   /**
    * Talk actions never mutate relationship state themselves. They reference a
-   * frozen CHATGAME scene/rule and the authoritative adventure command emits
+   * frozen character-interaction scene/rule and the authoritative adventure command emits
    * the shared interaction event protocol before applying adventure effects.
    */
   interaction?: {
@@ -222,7 +222,7 @@ export interface AdventureCheckEvidence {
   outcome: AdventureCheckOutcome
 }
 
-export interface SimulationAdventureState {
+export interface AdventureRuntimeState {
   schema: 'storyforge.text-adventure'
   version: 1
   contentHash: string

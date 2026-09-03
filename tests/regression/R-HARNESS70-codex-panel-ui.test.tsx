@@ -51,7 +51,7 @@ vi.mock('../../src/lib/ai/client', () => ({
   resolveRequestConfig: (config: Record<string, unknown>) => ({ config }),
 }))
 
-vi.mock('../../src/lib/world-engine/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
+vi.mock('../../src/lib/workspace/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
 vi.mock('../../src/lib/agent/run/codex-extraction-durable', () => ({
   generateCodexExtractionCandidateV1: mocks.generate,
   generateCodexEnrichmentCandidateV1: mocks.generateEnrichment,

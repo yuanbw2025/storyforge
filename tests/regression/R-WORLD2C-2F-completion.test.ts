@@ -12,14 +12,16 @@ import {
   createWorldPackage,
   importWorldPackage,
   inspectWorldPackage,
-} from '../../src/lib/product/world-package'
-import { appendSimulationEvent, branchSimulationSession, createSimulationSession, readSimulationState } from '../../src/lib/simulation/runtime'
-import type { WorldReleaseManifestV2, WorkspaceScope } from '../../src/lib/types'
-import { createWorkspace as createWorkspaceRoot } from '../../src/lib/world-engine/create-workspace'
-import { createWorldInstance, readBoundInstances } from '../../src/lib/world-engine/instances'
-import { deleteWork, deleteWorld } from '../../src/lib/world-engine/lifecycle'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { changeRecordScope } from '../../src/lib/world-engine/scope-conversion'
+} from '../../src/lib/world-engine/world-package'
+import { branchProductRuntimeSession, readProductRuntimeState } from '../../src/lib/product/runtime-api'
+import { appendProductRuntimeEvent } from '../../src/lib/product/runtime-core'
+import type { WorldReleaseManifestV3, WorkspaceScope } from '../../src/lib/types'
+import { createWorkspace as createWorkspaceRoot } from '../../src/lib/workspace/create-workspace'
+import { createProductRuntimeInstance, readBoundInstances } from '../../src/lib/product/runtime-instances'
+import { createCurrentTtrpgRuntimeTestBedV1 } from '../helpers/current-product-runtime'
+import { deleteWork, deleteWorld } from '../../src/lib/workspace/lifecycle'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { changeRecordScope } from '../../src/lib/registry/ownership-scope-conversion'
 import {
   assertReleaseUnchanged,
   createWorldRevision,
@@ -33,12 +35,15 @@ import {
   selectWorkNarrativeModule,
   switchActiveWork,
   updateProjectAndActiveWork,
-} from '../../src/lib/world-engine/works'
+} from '../../src/lib/workspace/works'
 
 const PACKAGE_OPTIONS = {
   authorName: '世界作者',
   license: 'CC-BY-4.0' as const,
-  allowedUses: { writing: true, ttrpg: true, characterChat: true, textGame: true },
+  allowedUses: {
+    'world-remix': true, ttrpg: true, 'character-interaction': true, 'ai-town': true,
+    'text-adventure': true, avg: true, 'text-open-world': true,
+  },
 }
 
 async function createWorkspace(name = 'WORLD-2 完成项目') {
@@ -93,7 +98,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
       updatedAt: Date.now(),
     } as any)
     const backup = await exportProjectJSON(ownership.scope.projectId)
-    expect(backup.version).toBe(9)
+    expect(backup.version).toBe(10)
     const beforeProjects = await db.projects.count()
     const damaged = structuredClone(backup) as any
     damaged.storyCores[0]._workOwnerExportId = 999999
@@ -223,15 +228,14 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
   it('伪造 World/Work scope 创建实例时拒绝且不产生任何运行记录', async () => {
     const ownership = await createWorkspace('伪造实例作用域')
     const forged = { ...ownership.scope, workId: ownership.scope.workId + 9999 }
-    const before = await db.simulationSessions.count()
+    const before = await db.productRuntimeSessions.count()
 
-    await expect(createWorldInstance({
+    await expect(createProductRuntimeInstance({
       scope: forged,
-      kind: 'chatgame',
+      kind: 'character-interaction',
       title: '不得创建',
-      draftSnapshotHash: 'forged-draft',
     } as any)).rejects.toThrow('有效 World/Work')
-    expect(await db.simulationSessions.count()).toBe(before)
+    expect(await db.productRuntimeSessions.count()).toBe(before)
     await expect(readBoundInstances(forged)).rejects.toThrow('有效 World/Work')
   })
 })
@@ -396,7 +400,7 @@ describe('WORLD-2D · executable narrative blueprint completion', () => {
       scope: scopeB,
       label: 'B 的修订',
     })
-    const manifest = JSON.parse(revision.manifestJson) as WorldReleaseManifestV2
+    const manifest = JSON.parse(revision.manifestJson) as WorldReleaseManifestV3
     const portableProject = manifest.portableProject as any
 
     expect((await db.projects.get(scopeB.projectId))?.activeWorkId).toBe(ownership.scope.workId)
@@ -409,7 +413,7 @@ describe('WORLD-2D · executable narrative blueprint completion', () => {
     expect(portableProject.works[0].title).toBe('非活动作品 B')
     expect((manifest.records.storyCores as any[]).map(row => row.theme)).toEqual(['B 的故事'])
     expect(manifest.records.narrativeModules).toBeUndefined()
-    expect(manifest.selectedNarrativeModules).toEqual([])
+    expect(manifest).not.toHaveProperty('selectedNarrativeModules')
   })
 })
 
@@ -461,7 +465,7 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
     expect(await db.narrativeModules.where('projectId').equals(importedProjectId).count()).toBe(0)
     expect((await db.works.get(importedScope.scope.workId))?.activeNarrativeModuleId ?? null).toBeNull()
     expect(await db.worldReleases.where('projectId').equals(importedProjectId).count()).toBe(1)
-    expect((await db.projects.get(importedProjectId))?.communityOrigin?.sourceWorldCode)
+    expect((await db.worlds.get(importedScope.scope.worldId))?.communityOrigin?.sourceWorldCode)
       .toBe(seeded.release.sourceWorldCode)
   })
 
@@ -485,10 +489,10 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
     expect((await listWorldReleases(seeded.ownership.scope)).map(item => item.id)).toEqual([release2.id, seeded.release.id])
   })
 
-  it('WorldRelease 只能进入产品制作；正式产品拒绝直跑，私域演化内核可确定回放和分支', async () => {
+  it('WorldRelease 只能进入产品制作；正式产品拒绝直跑，受治理 Build 可验证确定性内核', async () => {
     const seeded = await seedRelease()
-    for (const kind of ['ttrpg', 'chatgame'] as const) {
-      await expect(createWorldInstance({
+    for (const kind of ['ttrpg', 'character-interaction'] as const) {
+      await expect(createProductRuntimeInstance({
         scope: seeded.ownership.scope,
         kind,
         title: `${kind} 不得直跑`,
@@ -496,25 +500,24 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
         seed: `seed-${kind}`,
       } as any)).rejects.toThrow('必须且只能绑定一个 Product Release/Build')
     }
-    const session = await createSimulationSession({
-      projectId: seeded.ownership.scope.projectId,
-      kind: 'npc-evolution',
-      title: '产品私域演化沙箱',
+    const bed = await createCurrentTtrpgRuntimeTestBedV1({
+      title: '测试专用产品内核',
       seed: 'seed-evolution',
     })
-    await appendSimulationEvent({ sessionId: session.id!, type: 'time.advanced', payload: { amount: 3 } })
-    expect((await readSimulationState(session.id!)).clock).toBe(3)
-    expect(await readSimulationState(session.id!)).toEqual(await readSimulationState(session.id!))
+    const session = bed.session
+    await appendProductRuntimeEvent({ sessionId: session.id!, type: 'time.advanced', payload: { amount: 3 } })
+    expect((await readProductRuntimeState(session.id!)).clock).toBe(3)
+    expect(await readProductRuntimeState(session.id!)).toEqual(await readProductRuntimeState(session.id!))
 
-    const child = await branchSimulationSession({
+    const child = await branchProductRuntimeSession({
       parentSessionId: session.id!,
       throughSequence: 1,
-      title: '私域演化分支',
+      title: '测试内核分支',
     })
     expect(child).toMatchObject({
-      gameReleaseId: null,
-      gameBuildId: null,
-      runtimeSourceHash: null,
+      productReleaseId: null,
+      productBuildId: bed.buildId,
+      runtimeSourceHash: expect.stringMatching(/^[0-9a-f]{64}$/),
     })
     expect((await db.worldReleases.get(seeded.release.id!))?.manifestJson).toBe(seeded.release.manifestJson)
   })

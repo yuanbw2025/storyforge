@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import type { OutlineNode, Chapter } from '../types'
 import { isHtml, htmlToPlainText } from '../utils/html'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
-import { readOwnedRows, resolveReadScopeLike, type WorkspaceScopeLike } from '../world-engine/scope'
+import { readOwnedRows, resolveReadScopeLike, type WorkspaceScopeLike } from '../workspace/scope'
 
 /** HTML → Markdown（简化规则，覆盖 TipTap StarterKit 产出的常见结构） */
 function htmlToMarkdown(html: string): string {

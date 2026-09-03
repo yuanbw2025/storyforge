@@ -17,8 +17,8 @@ import {
 import type { Character } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
 
 function candidate(patch: Partial<CharacterCopilotCandidate> = {}): CharacterCopilotCandidate {
   return {

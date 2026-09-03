@@ -5,15 +5,9 @@ import type {
   WorldCapabilityArea,
 } from '../registry/types'
 import type { AgentContextTaskKind } from '../agent/context-policy'
+import type { UpperProductKindV1 } from './product-identity'
 
-export type UpperProductKindV1 =
-  | 'ttrpg'
-  | 'character-interaction'
-  | 'ai-town'
-  | 'text-adventure'
-  | 'avg'
-  | 'open-world-text-game'
-  | (string & {})
+export type { UpperProductKindV1 } from './product-identity'
 
 /** Immutable stage-one handoff. `localReleaseRecordId` is a remappable locator,
  * never part of the portable reference identity. */
@@ -26,8 +20,8 @@ export interface WorldReferenceV1 {
   releaseHash: string
   localReleaseRecordId: number
   manifestIdentity: {
-    schema: 'storyforge.world-package'
-    version: 2
+    schema: 'storyforge.world-release'
+    version: 3
     semanticContract: 3
     schemaHash: string
   }
@@ -36,6 +30,15 @@ export interface WorldReferenceV1 {
     profileHash: string
   }
   referenceHash: string
+}
+
+/** Neutral, read-only catalog entry shown while an upper product chooses its
+ * immutable world source. The physical WorldRelease row and manifest are never
+ * exposed across the product boundary. */
+export interface WorldReferenceCatalogEntryV1 {
+  reference: WorldReferenceV1
+  label: string
+  createdAt: number
 }
 
 export type WorldRequirementLevelV1 =

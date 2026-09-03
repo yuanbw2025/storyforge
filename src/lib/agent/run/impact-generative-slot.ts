@@ -1,6 +1,6 @@
 import type { WorkspaceScope } from '../../types'
 import type { AgentRunRecord } from '../../types/agent-run'
-import { readOwnedRows } from '../../world-engine/scope'
+import { readOwnedRows } from '../../workspace/scope'
 import type { ImpactPostCorrectionReplanResultV1 } from './impact-post-correction-replan-durable'
 
 export const IMPACT_GENERATIVE_SLOT_RELATION_PREFIX_V1 = 'impact-generative-target:' as const

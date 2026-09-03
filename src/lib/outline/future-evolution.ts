@@ -13,7 +13,7 @@ import type {
   WorkspaceScope,
 } from '../types'
 import { parseStages } from '../types'
-import { readOwnedRows } from '../world-engine/scope'
+import { readOwnedRows } from '../workspace/scope'
 import { walkOutlineChaptersInCanonicalOrder } from './canonical-outline-walk'
 
 export type FutureEvolutionStageIdV1 =

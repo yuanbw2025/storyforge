@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { createAdaptation, listActiveSourceUnits, startAdaptationProduction } from '../../src/lib/adaptation/source-manifest'
 import type { AdaptationBriefV1, ScreenplayTargetSpecV1 } from '../../src/lib/types'
 import {

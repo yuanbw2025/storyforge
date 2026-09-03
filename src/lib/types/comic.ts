@@ -1,4 +1,4 @@
-import type { MediaBlobObjectRecordV1 } from './game-production'
+import type { MediaBlobObjectRecordV1 } from './product-production'
 
 export interface ComicNormalizedFrameV1 {
   x: number

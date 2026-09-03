@@ -77,8 +77,8 @@ describe.sequential('R-CREL13 · 浏览器真实调用适配器', { timeout: 30_
         content = JSON.stringify({ storyArcs: [invalid] })
       } else {
         generationCalls += 1
-        const { type: _type, ...legacy } = storyArc('旧入口候选')
-        content = JSON.stringify(legacy)
+        const { type: _type, ...baseline } = storyArc('基线直连候选')
+        content = JSON.stringify(baseline)
       }
       return new Response(JSON.stringify({
         choices: [{ message: { content }, finish_reason: 'stop' }],
@@ -93,9 +93,9 @@ describe.sequential('R-CREL13 · 浏览器真实调用适配器', { timeout: 30_
     })
     const fixture = CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1[0]
     const identity = { provider: 'openai', model: 'generator-test', promptVersion: 'paired-v1' }
-    const legacy = await dependencies.generate({
+    const baseline = await dependencies.generate({
       fixture,
-      variant: 'legacy-direct',
+      variant: 'baseline-direct',
       identity,
       parameters: { temperature: 0.55, maxOutputTokens: 6_000 },
     })
@@ -112,7 +112,7 @@ describe.sequential('R-CREL13 · 浏览器真实调用适配器', { timeout: 30_
       identity: { provider: 'custom', model: 'verifier-test', promptVersion: 'verifier-v1' },
     })
 
-    expect(legacy).toMatchObject({ status: 'legacy-ready', artifactModelCalls: 1, adoptable: true })
+    expect(baseline).toMatchObject({ status: 'baseline-ready', artifactModelCalls: 1, adoptable: true })
     expect(current).toMatchObject({
       status: 'ready',
       artifactModelCalls: 2,

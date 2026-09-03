@@ -59,10 +59,10 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
       projectId, worldGroupId: worldB, worldOrigin: '冰海界由潮汐神殿统治', createdAt: now, updatedAt: now,
     } as any)
     await db.characters.add({
-      projectId, homeWorldGroupId: worldA, name: '赤衡', role: 'protagonist', shortDescription: '火契继承人', createdAt: now, updatedAt: now,
+      projectId, homeWorldGroupId: worldA, name: '赤衡', role: 'protagonist', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral', shortDescription: '火契继承人', createdAt: now, updatedAt: now,
     } as any)
     await db.characters.add({
-      projectId, homeWorldGroupId: worldB, name: '澜青', role: 'antagonist', shortDescription: '潮汐祭司', createdAt: now, updatedAt: now,
+      projectId, homeWorldGroupId: worldB, name: '澜青', role: 'antagonist', roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral', shortDescription: '潮汐祭司', createdAt: now, updatedAt: now,
     } as any)
 
     const assembled = await assembleContext({
@@ -297,8 +297,28 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
       analysisStatus: 'done', analysisProgress: 100,
       createdAt: now, updatedAt: now,
     } as any) as number
+    const analysisRunId = await db.referenceAnalysisRuns.add({
+      projectId,
+      referenceId: refId,
+      version: 1,
+      status: 'active',
+      depth: 'quick',
+      sourceFilename: 'reference.txt',
+      fileHash: 'reference-hash',
+      totalChars: 1_000,
+      sourceKind: 'own-work',
+      usageScope: 'creative-reference',
+      rightsNote: '',
+      rightsConfirmed: true,
+      rightsDeclaredAt: now,
+      expectedChunks: 1,
+      completedChunks: 1,
+      progress: 100,
+      createdAt: now,
+      updatedAt: now,
+    } as any) as number
     await db.referenceChunkAnalysis.add({
-      referenceId: refId, chunkIndex: 0,
+      referenceId: refId, analysisRunId, chunkIndex: 0,
       narrativeStyle: '这是一段非常长的叙事手法分析。'.repeat(200),
       createdAt: now,
     } as any)

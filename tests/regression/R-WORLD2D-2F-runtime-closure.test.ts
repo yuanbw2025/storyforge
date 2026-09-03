@@ -5,26 +5,26 @@ import {
   validateNarrativeModule,
 } from '../../src/lib/narrative/blueprint'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
-import { createWorldPackage, inspectWorldPackage } from '../../src/lib/product/world-package'
+import { createWorldPackage, inspectWorldPackage } from '../../src/lib/world-engine/world-package'
 import {
-  appendSimulationEvent,
-  branchSimulationSession,
-  createSimulationSession,
-  createSimulationCheckpoint,
-  readSimulationState,
-  verifySimulationCheckpoint,
-} from '../../src/lib/simulation/runtime'
-import type { NarrativeModuleKind, WorldReleaseManifestV2, WorkspaceScope } from '../../src/lib/types'
-import { createWorkspace as createWorkspaceRoot } from '../../src/lib/world-engine/create-workspace'
-import { createWorldInstance } from '../../src/lib/world-engine/instances'
+  branchProductRuntimeSession,
+  createProductRuntimeCheckpoint,
+  readProductRuntimeState,
+  verifyProductRuntimeCheckpoint,
+} from '../../src/lib/product/runtime-api'
+import { appendProductRuntimeEvent } from '../../src/lib/product/runtime-core'
+import type { NarrativeModuleKind, WorldReleaseManifestV3, WorkspaceScope } from '../../src/lib/types'
+import { createWorkspace as createWorkspaceRoot } from '../../src/lib/workspace/create-workspace'
+import { createProductRuntimeInstance } from '../../src/lib/product/runtime-instances'
+import { createCurrentTtrpgRuntimeTestBedV1 } from '../helpers/current-product-runtime'
 import {
   assertReleaseUnchanged,
   createWorldRevision,
   publishWorldRevision,
   worldReleaseSectionTables,
 } from '../../src/lib/world-engine/releases'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
-import { createWorldWork, selectWorkNarrativeModule } from '../../src/lib/world-engine/works'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { createWorldWork, selectWorkNarrativeModule } from '../../src/lib/workspace/works'
 
 async function createWorkspace(name: string) {
   return createWorkspaceRoot({
@@ -89,11 +89,10 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
     expect(contextB.text).toContain('B 当前主线')
     expect(contextB.text).not.toContain('A 当前主线')
 
-    await expect(createWorldRevision({
-      scope: ownership.scope,
-      label: '不得封存产品叙事',
-      selectedNarrativeModuleIds: [moduleA.id!],
-    })).rejects.toThrow('上层产品')
+    const revision = await createWorldRevision({ scope: ownership.scope, label: '纯语义修订' })
+    const manifest = JSON.parse(revision.manifestJson) as WorldReleaseManifestV3
+    expect(manifest.records.narrativeModules).toBeUndefined()
+    expect(manifest).not.toHaveProperty('selectedNarrativeModules')
   })
 
   it('发布范围只由 worldSemantic 注册表派生；可选正文，排除参考资料、媒资和可执行蓝图', async () => {
@@ -174,7 +173,7 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
       ...worldReleaseSectionTables('outline'),
     ]
     const revision = await createWorldRevision({ scope, label: '不含角色的修订', selectedTables })
-    const manifest = JSON.parse(revision.manifestJson) as WorldReleaseManifestV2
+    const manifest = JSON.parse(revision.manifestJson) as WorldReleaseManifestV3
     expect(manifest.records.worldviews).toHaveLength(1)
     expect(manifest.records.storyCores).toHaveLength(1)
     expect(manifest.records.outlineNodes).toHaveLength(1)
@@ -184,7 +183,7 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
     expect(manifest.records.workCharacterBindings).toBeUndefined()
     expect(manifest.records.references).toBeUndefined()
     expect(manifest.records.narrativeModules).toBeUndefined()
-    expect(manifest.selectedNarrativeModules).toEqual([])
+    expect(manifest).not.toHaveProperty('selectedNarrativeModules')
     expect((manifest.portableProject as Record<string, unknown>).references).toBeUndefined()
 
     const allSections = ['foundation', 'characters', 'narrative', 'outline'] as const
@@ -194,7 +193,7 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
       parentRevisionId: revision.id,
       selectedTables: allSections.flatMap(worldReleaseSectionTables),
     })
-    const fullManifest = JSON.parse(fullRevision.manifestJson) as WorldReleaseManifestV2
+    const fullManifest = JSON.parse(fullRevision.manifestJson) as WorldReleaseManifestV3
     expect(fullManifest.records.characters).toHaveLength(1)
     expect(fullManifest.records.workCharacterBindings).toHaveLength(1)
     expect(fullManifest.records.chapters).toHaveLength(1)
@@ -213,7 +212,10 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
     const pkg = await createWorldPackage(release.id!, {
       authorName: '测试作者',
       license: 'CC-BY-4.0',
-      allowedUses: { writing: true, ttrpg: true, characterChat: true, textGame: true },
+      allowedUses: {
+        'world-remix': true, ttrpg: true, 'character-interaction': true, 'ai-town': true,
+        'text-adventure': true, avg: true, 'text-open-world': true,
+      },
     })
     const tampered = structuredClone(pkg)
     tampered.release.manifest.selectedTables.push(tampered.release.manifest.selectedTables[0])
@@ -229,7 +231,7 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
     expect(mismatchReport.errors.join('；')).toContain('WorldRelease contentHash 不匹配')
   })
 
-  it('WorldRelease 不能绕过产品生产直接运行；仅私域演化内核可确定回放、检查点和分支', async () => {
+  it('WorldRelease 不能绕过产品生产直接运行；受治理 Build 私域可确定回放、检查点和分支', async () => {
     const ownership = await createWorkspace('三阶段运行闸门')
     const scope = ownership.scope
     await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
@@ -241,8 +243,8 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
     const revision = await createWorldRevision({ scope, label: '语义世界修订' })
     const release = await publishWorldRevision(revision.id!)
 
-    for (const kind of ['ttrpg', 'chatgame', 'storygame'] as const) {
-      await expect(createWorldInstance({
+    for (const kind of ['ttrpg', 'character-interaction', 'text-adventure', 'avg', 'text-open-world'] as const) {
+      await expect(createProductRuntimeInstance({
         scope,
         kind,
         title: `${kind} 不得直跑`,
@@ -250,32 +252,31 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
       } as any)).rejects.toThrow('必须且只能绑定一个 Product Release/Build')
     }
 
-    const session = await createSimulationSession({
-      projectId: scope.projectId,
-      kind: 'npc-evolution',
-      title: '产品私域演化内核',
+    const bed = await createCurrentTtrpgRuntimeTestBedV1({
+      title: '测试专用产品内核',
       seed: 'fixed-evolution',
     })
-    await appendSimulationEvent({ sessionId: session.id!, type: 'time.advanced', payload: { amount: 2 } })
-    const state = await readSimulationState(session.id!)
+    const session = bed.session
+    await appendProductRuntimeEvent({ sessionId: session.id!, type: 'time.advanced', payload: { amount: 2 } })
+    const state = await readProductRuntimeState(session.id!)
     expect(state.clock).toBe(2)
-    expect(await readSimulationState(session.id!)).toEqual(state)
-    const checkpoint = await createSimulationCheckpoint({ sessionId: session.id!, name: '推进后', throughSequence: 1 })
-    expect(await verifySimulationCheckpoint(checkpoint.id!)).toBe(true)
+    expect(await readProductRuntimeState(session.id!)).toEqual(state)
+    const checkpoint = await createProductRuntimeCheckpoint({ sessionId: session.id!, name: '推进后', throughSequence: 1 })
+    expect(await verifyProductRuntimeCheckpoint(checkpoint.id!)).toBe(true)
 
-    const branch = await branchSimulationSession({
+    const branch = await branchProductRuntimeSession({
       parentSessionId: session.id!,
       throughSequence: 1,
-      title: '私域演化分支',
+      title: '测试内核分支',
       seed: 'branch-fixed',
     })
     expect(branch).toMatchObject({
-      gameReleaseId: null,
-      gameBuildId: null,
-      runtimeSourceHash: null,
+      productReleaseId: null,
+      productBuildId: bed.buildId,
+      runtimeSourceHash: expect.stringMatching(/^[0-9a-f]{64}$/),
       parentThroughSequence: 1,
     })
-    expect((await readSimulationState(branch.id!)).clock).toBe(2)
+    expect((await readProductRuntimeState(branch.id!)).clock).toBe(2)
     await assertReleaseUnchanged(release.id!)
   })
 })

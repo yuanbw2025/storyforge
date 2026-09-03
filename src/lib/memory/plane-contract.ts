@@ -38,9 +38,9 @@ export const MEMORY_PLANE_CONTRACT_V1 = {
         'agentRunArtifacts',
         'nodeFlows',
         'nodeRuns',
-        'simulationSessions',
-        'simulationEvents',
-        'simulationCheckpoints',
+        'productRuntimeSessions',
+        'productRuntimeEvents',
+        'productRuntimeCheckpoints',
       ] as const,
     },
     'bounded-working-context': {

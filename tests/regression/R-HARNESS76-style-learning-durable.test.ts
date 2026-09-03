@@ -24,7 +24,7 @@ async function seed(suffix = '', withProfile = true) {
   const projectId = await db.projects.add({
     name: `纸灯小说${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
     description: '作者用短促句和克制意象写一座雨城。', targetWordCount: 80_000,
-    worldCode: `style-${now}-${suffix}`, worldVersion: 1, enableMultiWorld: false,
+enableMultiWorld: false,
     createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({

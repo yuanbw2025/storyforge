@@ -6,16 +6,17 @@ async function openCleanHome(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
-  await page.goto('./projects', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: /开始.*第一部.*小说/ }))
+  await page.goto('./', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '你的创作与游玩空间', exact: true }))
     .toBeVisible({ timeout: 15_000 })
 }
 
 async function createProject(page: Page, name: string) {
-  await page.getByRole('button', { name: '+ 新建项目', exact: true }).click()
-  await page.getByPlaceholder('如：《剑出山门》').fill(name)
-  await page.getByRole('button', { name: '创建', exact: true }).click()
-  await expect(page).toHaveURL(/\/storyforge\/workspace\/\d+$/)
+  await page.getByRole('banner').getByRole('button', { name: '新建', exact: true }).click()
+  await page.getByRole('button', { name: /长篇小说/ }).click()
+  await page.getByLabel('名称').fill(name)
+  await page.getByRole('button', { name: '创建长篇小说', exact: true }).click()
+  await expect(page).toHaveURL(/\/storyforge\/workspace\/\d+\?module=outline$/)
   await expect(page.getByTitle(name)).toBeVisible()
 }
 
@@ -32,19 +33,18 @@ test('产品综合首页提供并列功能入口和真实世界基座', async ({
   await page.goto('./')
   await expect(page.getByRole('heading', { name: '你的创作与游玩空间', exact: true })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '产品页签' })).toBeVisible()
-  for (const tab of ['worlds', 'novel', 'nodes', 'ttrpg', 'chat', 'game']) {
+  for (const tab of ['worlds', 'novel', 'nodes', 'ttrpg', 'chat', 'text-games']) {
     await expect(page.getByTestId(`product-tab-${tab}`)).toBeVisible()
   }
 })
 
-test('短篇小说沿用统一创作基座，旧 live-Work 改编入口默认隔离', async ({ page }) => {
+test('短篇小说使用独立创作基座，世界页不暴露可变作品改编入口', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
   await page.goto('./')
 
-  // SHORT-1: the short workflow is a constrained profile of the existing
-  // novel canon, with server-side/domain validation behind the HTML hints.
+  // 短篇是独立作品中的受约束小说规格，HTML 提示之外仍有领域校验。
   await page.getByRole('banner').getByRole('button', { name: '新建', exact: true }).click()
   await page.getByRole('button', { name: /短篇小说/ }).click()
   await page.getByLabel('名称').fill('E2E 短篇改编源')
@@ -60,15 +60,13 @@ test('短篇小说沿用统一创作基座，旧 live-Work 改编入口默认隔
   await expect(volumeSummary).toHaveValue(/暴雨封锁旧站/)
 
   await page.goto('./')
-  await page.getByRole('button', { name: '作品创作', exact: true }).click()
+  await page.getByTestId('product-tab-novel').click()
   await expect(page.getByRole('heading', { name: '短篇小说创作', exact: true })).toBeVisible()
   await expect(page.getByText('小说 · 短篇', { exact: true })).toBeVisible()
 
-  // Charter alignment: the legacy adaptation wizard reads the mutable Work.
-  // Keep it unreachable until product-specific frozen SourceSelection exists.
-  await page.getByRole('button', { name: '世界引擎', exact: true }).click()
-  const manager = page.getByRole('region', { name: '世界作品' })
-  await expect(manager.getByRole('button', { name: '把当前小说改成剧本或漫画', exact: true })).toHaveCount(0)
+  // 世界引擎不能把可变作品直接送进改编产品；改编拥有自己的冻结来源契约。
+  await page.getByTestId('product-tab-worlds').click()
+  await expect(page.getByRole('button', { name: '把当前小说改成剧本或漫画', exact: true })).toHaveCount(0)
 })
 
 test('产品综合首页可从零创建世界引擎并分配稳定编号', async ({ page }) => {
@@ -101,7 +99,7 @@ test('产品综合首页可从零创建世界引擎并分配稳定编号', async
   await expect(page.locator('.sf-worlds-featured').getByRole('heading', { name: '潮汐之后', exact: true })).toBeVisible()
 
   await page.getByRole('banner').getByRole('button', { name: '搜索世界', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '选择一个世界', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '选择世界入口', exact: true })).toBeVisible()
 })
 
 test('独立长篇保持独立，并可由作者显式派生且封存为世界 v1', async ({ page }) => {
@@ -189,15 +187,15 @@ test('世界引擎只封存纯语义 Release，并显式交给上层产品生产
   await expect(pipeline.getByLabel('互动实例类型')).toHaveCount(0)
   await expect(pipeline.getByRole('button', { name: /创建实例|直接运行/ })).toHaveCount(0)
   await pipeline.getByRole('button', { name: '交给文字游戏', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '游戏制作中心', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '文字游戏制作中心', exact: true })).toBeVisible()
   const enableProduction = page.getByRole('button', { name: '为当前项目显式启用', exact: true })
   if (await enableProduction.isVisible().catch(() => false)) await enableProduction.click()
-  await expect(page.getByTestId('game-production-studio')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('product-production-studio')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByLabel('冻结 WorldRelease')).not.toHaveValue('')
   const runtimeRows = await page.evaluate(async () => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
     const { db } = await importer('/storyforge/src/lib/db/schema.ts')
-    return db.simulationSessions.count()
+    return db.productRuntimeSessions.count()
   })
   expect(runtimeRows).toBe(0)
 })
@@ -271,11 +269,14 @@ test('世界引擎可生成并预检本地世界分享包，再导入为新编�
   const projects = await page.evaluate(async () => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
     const { db } = await importer('/storyforge/src/lib/db/schema.ts')
-    return (await db.projects.toArray()).map((project: any) => ({
+    const projects = await db.projects.toArray()
+    return Promise.all(projects.map(async (project: any) => ({
       id: project.id,
       name: project.name,
-      origin: project.communityOrigin ?? null,
-    }))
+      origin: project.activeWorldId == null
+        ? null
+        : (await db.worlds.get(project.activeWorldId))?.communityOrigin ?? null,
+    })))
   })
   expect(projects).toHaveLength(2)
   expect(projects).toContainEqual(expect.objectContaining({
@@ -377,7 +378,10 @@ test('领域节点模式空态可直接创建官方模板并自动布局', async
 
   await page.getByRole('button', { name: /基础世界构建/ }).click()
   await expect(page.getByRole('textbox', { name: '节点图名称' })).toHaveValue('基础世界构建')
-  await expect(page.locator('[data-authoring-node-template]')).toHaveCount(13)
+  await expect(page.locator('[data-authoring-node-template]')).toHaveCount(16)
+  await expect(page.locator('[data-authoring-node-template="source.world-geography"]')).toBeVisible()
+  await expect(page.locator('[data-authoring-node-template="source.world-history"]')).toBeVisible()
+  await expect(page.locator('[data-authoring-node-template="source.world-rules"]')).toBeVisible()
   await page.getByRole('button', { name: '自动布局', exact: true }).click()
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await expect(page.getByText('节点图已保存。', { exact: true })).toBeVisible()
@@ -385,7 +389,10 @@ test('领域节点模式空态可直接创建官方模板并自动布局', async
   await page.reload()
   await openSidebarLeaf(page, '创作区', '节点模式')
   await expect(page.getByRole('textbox', { name: '节点图名称' })).toHaveValue('基础世界构建')
-  await expect(page.locator('[data-authoring-node-template]')).toHaveCount(13)
+  await expect(page.locator('[data-authoring-node-template]')).toHaveCount(16)
+  await expect(page.locator('[data-authoring-node-template="source.world-geography"]')).toBeVisible()
+  await expect(page.locator('[data-authoring-node-template="source.world-history"]')).toBeVisible()
+  await expect(page.locator('[data-authoring-node-template="source.world-rules"]')).toBeVisible()
 })
 
 test('领域节点模式可创建世界到正文的完整创作链并刷新恢复', async ({ page }) => {
@@ -448,14 +455,14 @@ test('领域角色节点可生成候选、人工确认并写入角色主档', as
   await expect(page.getByText('潮汐测者', { exact: true })).toBeVisible()
 })
 
-test('旧通用互动运行时不可达，上层产品只保留独立制作与玩家入口', async ({ page }) => {
+test('上层产品只暴露独立制作与玩家入口，不存在通用互动运行时', async ({ page }) => {
   await openCleanHome(page)
   await createProject(page, 'E2E 互动运行时')
   await expect(sidebarButton(page, '互动运行时')).toHaveCount(0)
   await page.goto('./')
   await expect(page.getByTestId('product-tab-chat')).toBeVisible()
   await expect(page.getByTestId('product-tab-ttrpg')).toBeVisible()
-  await expect(page.getByTestId('product-tab-game')).toBeVisible()
+  await expect(page.getByTestId('product-tab-text-games')).toBeVisible()
   await page.getByTestId('product-tab-chat').click()
   await expect(page.getByRole('heading', { name: '角色聊天', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '创建并冻结', exact: true })).toHaveCount(0)
@@ -1024,9 +1031,11 @@ test('手动快照可恢复为新项目且不覆盖原项目', async ({ page }) 
   await expect(page).not.toHaveURL(originalWorkspaceUrl)
   await expect(page).toHaveURL(/\/storyforge\/workspace\/\d+$/)
   await page.getByRole('button', { name: '返回首页', exact: true }).click()
-  await expect(page.getByRole('heading', { name: /共有 2 部作品/ })).toBeVisible()
-  await expect(page.getByText(projectName, { exact: true })).toBeVisible()
-  await expect(page.getByText(`${projectName}（导入）`, { exact: true })).toBeVisible()
+  const library = page.getByTestId('workspace-library')
+  await expect(library.locator('article')).toHaveCount(2)
+  await expect(library.locator('article').filter({ hasText: projectName })).toHaveCount(2)
+  await expect(library.getByText(projectName, { exact: true })).toBeVisible()
+  await expect(library.getByText(`${projectName}（导入）`, { exact: true })).toBeVisible()
 })
 
 test('删除项目经过双重安全门且不影响其它项目', async ({ page }) => {
@@ -1037,21 +1046,21 @@ test('删除项目经过双重安全门且不影响其它项目', async ({ page 
   await createProject(page, keptProject)
   await page.getByRole('button', { name: '返回首页', exact: true }).click()
 
-  const deletedRow = page.getByText(deletedProject, { exact: true })
-    .locator('xpath=ancestor::div[contains(@class,"group")][1]')
-  await deletedRow.getByTitle('删除').click()
-  await expect(deletedRow.getByRole('button', { name: '确认', exact: true })).toBeVisible()
+  const library = page.getByTestId('workspace-library')
+  const deletedRow = library.locator('article').filter({ hasText: deletedProject })
+  await deletedRow.getByRole('button', { name: `删除 ${deletedProject}`, exact: true }).click()
+  await expect(deletedRow.getByRole('button', { name: `确认删除 ${deletedProject}`, exact: true })).toBeVisible()
   await expect(page.getByText(deletedProject, { exact: true })).toBeVisible()
 
-  await deletedRow.getByRole('button', { name: '确认', exact: true }).click()
+  await deletedRow.getByRole('button', { name: `确认删除 ${deletedProject}`, exact: true }).click()
   await expect(page.getByRole('heading', { name: '危险操作:删除项目' })).toBeVisible()
   await page.getByRole('button', { name: '继续', exact: true }).click()
   await expect(page.getByRole('heading', { name: '是否立即下载备份(JSON 文件到本地)?' })).toBeVisible()
   await page.getByRole('button', { name: '已备份，继续', exact: true }).click()
 
   await expect(page.getByText(deletedProject, { exact: true })).toHaveCount(0)
-  await expect(page.getByText(keptProject, { exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: /共有 1 部作品/ })).toBeVisible()
+  await expect(library.getByText(keptProject, { exact: true })).toBeVisible()
+  await expect(library.locator('article')).toHaveCount(1)
 })
 
 test('取消删除安全门后项目与正文都保留', async ({ page }) => {
@@ -1060,16 +1069,16 @@ test('取消删除安全门后项目与正文都保留', async ({ page }) => {
   await createBookWithSavedChapter(page, projectName, chapterText)
   await page.getByRole('button', { name: '返回首页', exact: true }).click()
 
-  const projectRow = page.getByText(projectName, { exact: true })
-    .locator('xpath=ancestor::div[contains(@class,"group")][1]')
-  await projectRow.getByTitle('删除').click()
-  await projectRow.getByRole('button', { name: '确认', exact: true }).click()
+  const library = page.getByTestId('workspace-library')
+  const projectRow = library.locator('article').filter({ hasText: projectName })
+  await projectRow.getByRole('button', { name: `删除 ${projectName}`, exact: true }).click()
+  await projectRow.getByRole('button', { name: `确认删除 ${projectName}`, exact: true }).click()
   await expect(page.getByRole('heading', { name: '危险操作:删除项目' })).toBeVisible()
   await page.getByRole('button', { name: '取消', exact: true }).click()
 
-  await expect(page.getByText(projectName, { exact: true })).toBeVisible()
-  await page.getByText(projectName, { exact: true }).click()
-  await page.getByRole('button', { name: '章节', exact: true }).click()
+  await expect(library.getByText(projectName, { exact: true })).toBeVisible()
+  await library.getByText(projectName, { exact: true }).click()
+  await page.getByRole('button', { name: '章节与正文', exact: true }).click()
   await expect(page.locator('.tiptap-editor')).toContainText(chapterText)
 })
 
@@ -1530,10 +1539,10 @@ test('灵感反推主面板通过定向 durable Skill 生成、恢复、拒绝�
       powerHierarchy: '',
       continentLayout: '',
       climateByRegion: '',
-      historyLine: '',
       races: '',
       factionLayout: '',
     },
+    history: { overview: '' },
     storyCore: {
       logline: '守灯人必须在下一次海啸前找回失踪的潮汐钟。',
       theme: '记忆与守护',
@@ -2765,14 +2774,13 @@ test('角色中途重规划保护已写正文，只把审查后的 patch 应用�
   await expect(page.locator('input[value="归途重排"]')).toBeVisible()
 })
 
-test('世界组七字段扩写只产生可恢复候选，作者确认后一次性写入正式世界观', async ({ page }) => {
+test('世界组六字段扩写只产生可恢复候选，作者确认后一次性写入正式世界观', async ({ page }) => {
   let generationCalls = 0
   const modelCandidate = {
     worldOrigin: '作者确认前不可见的新世界来源：黑潮来自被封存的旧纪元。',
     powerHierarchy: '守灯人通过记忆契约维持力量，拾忆者能短暂夺回被典当的往事。',
     continentLayout: '群岛环绕沉没钟塔分布，西侧旧港与东侧灯塔群隔海相望。',
     climateByRegion: '外海终年暴雨，内港受潮汐钟庇护，北岸每月经历一次记忆雾。',
-    historyLine: '旧纪元崩毁后，港城以周期性遗忘换取存续，拾忆者随后开始反抗。',
     races: '人类、潮裔与失忆者共同生活，各自保存不同版本的旧纪元历史。',
     factionLayout: '灯塔议会维护遗忘契约，拾忆者试图公开真相，港务会在两者之间摇摆。',
   }
@@ -2796,7 +2804,7 @@ test('世界组七字段扩写只产生可恢复候选，作者确认后一次�
     expect(combined).toContain('黑潮前的世界由七座灯塔共同守护。')
     expect(combined).toContain('守灯人必须在共同记忆与港城安全之间作出选择。')
     expect(combined).toContain('黑潮每年抹去港城的一段共同历史。')
-    expect(combined).toContain('严格输出既定七字段')
+    expect(combined).toContain('严格输出既定六字段')
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -2808,7 +2816,7 @@ test('世界组七字段扩写只产生可恢复候选，作者确认后一次�
   })
 
   await openCleanHome(page)
-  await createProject(page, 'E2E 世界组七字段 Harness 闭环')
+  await createProject(page, 'E2E 世界组六字段 Harness 闭环')
 
   await openSidebarLeaf(page, '世界观', '世界起源')
   const originPlaceholder = '创世神话 / 历史时期 / 文明起源……世界从何而来？'
@@ -2845,7 +2853,7 @@ test('世界组七字段扩写只产生可恢复候选，作者确认后一次�
   await expect(page.getByRole('button', { name: '保存中...', exact: true })).toHaveCount(0)
 
   await page.getByRole('button', { name: 'AI 扩写世界观', exact: true }).click()
-  await expect(page.getByText('七字段世界观候选尚未写入', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('六字段世界观候选尚未写入', { exact: true })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(modelCandidate.worldOrigin, { exact: true })).toBeVisible()
   expect(generationCalls).toBe(1)
 
@@ -2859,10 +2867,10 @@ test('世界组七字段扩写只产生可恢复候选，作者确认后一次�
   const restoredPrimaryRow = page.getByText('主世界', { exact: true })
     .locator('xpath=ancestor::div[contains(@class,"group")][1]')
   await restoredPrimaryRow.getByTitle('编辑').click()
-  await expect(page.getByText('七字段世界观候选尚未写入', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('六字段世界观候选尚未写入', { exact: true })).toBeVisible({ timeout: 30_000 })
   expect(generationCalls).toBe(1)
 
-  await page.getByRole('button', { name: '确认写入七字段', exact: true }).click()
+  await page.getByRole('button', { name: '确认写入六字段', exact: true }).click()
   await expect(page.getByRole('button', { name: '已写入世界观', exact: true })).toBeVisible({ timeout: 30_000 })
   await openSidebarLeaf(page, '世界观', '世界起源')
   await expect(page.getByText(modelCandidate.worldOrigin, { exact: true })).toBeVisible()

@@ -8,7 +8,7 @@ import {
 } from '../reference-analysis/lifecycle'
 import { loadContextMemo } from '../export/context-snapshot'
 import { db } from '../db/schema'
-import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import { readOwnedRows, resolveScope } from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import {
   MORAL_AXIS_LABELS,
@@ -71,8 +71,8 @@ function formatNaturalResources(nr: Worldview['naturalResources']): string {
 
 /**
  * 格式化世界观全部字段为【世界观】块。
- * 覆盖所有面板可填的 v3 字段；v3 全空时回退 v2 旧字段（极老项目）。
- * 注：naturalResources / itemDesign 现以自由文本注入；Phase 35-b 迁到词条后由 codex 承载，届时从此移除避免双轨。
+ * 覆盖所有当前面板可填字段。存量字段由数据库升级一次性迁入正式表，
+ * 因此上下文装配不承担格式兼容或双读职责。
  */
 export function formatWorldviewBlock(wv: Worldview | null): string {
   if (!wv) return ''
@@ -100,18 +100,10 @@ export function formatWorldviewBlock(wv: Worldview | null): string {
     wv.politicsOverview && `政治制度：${wv.politicsOverview}`,
     wv.economyOverview && `经济制度：${wv.economyOverview}`,
     wv.cultureOverview && `文化制度：${wv.cultureOverview}`,
-    !wv.politicsOverview && !wv.economyOverview && !wv.cultureOverview &&
-      wv.politicsEconomyCulture && `政经文化（旧版资料）：${wv.politicsEconomyCulture}`,
     wv.internalConflicts && `矛盾冲突：${wv.internalConflicts}`,
     wv.itemDesign && `道具设计：${wv.itemDesign}`,
   ].filter(Boolean)
-  if (v3.length) return `【世界观】\n${v3.join('\n')}`
-  const v2 = [
-    wv.geography && `地理：${wv.geography}`,
-    wv.society && `社会：${wv.society}`,
-    wv.rules && `规则：${wv.rules}`,
-  ].filter(Boolean)
-  return v2.length ? `【世界观】\n${v2.join('\n')}` : ''
+  return v3.length ? `【世界观】\n${v3.join('\n')}` : ''
 }
 
 /** 格式化故事核心为【故事核心】块（全字段）。 */
@@ -123,7 +115,7 @@ export function formatStoryCoreBlock(sc: StoryCore | null): string {
     sc.theme && `主题：${sc.theme}`,
     sc.centralConflict && `核心冲突：${sc.centralConflict}`,
     sc.plotPattern && `情节模式：${sc.plotPattern}`,
-    (sc.mainPlot || sc.storyLines) && `主线：${sc.mainPlot || sc.storyLines}`,
+    sc.mainPlot && `主线：${sc.mainPlot}`,
     sc.subPlots && `复线：${sc.subPlots}`,
   ].filter(Boolean)
   return parts.length ? `【故事核心】\n${parts.join('\n')}` : ''
@@ -157,32 +149,6 @@ export function buildWorldContext(wv: Worldview | null, sc: StoryCore | null, ps
   if (scBlock) parts.push(scBlock)
   const psBlock = formatPowerSystemBlock(ps)
   if (psBlock) parts.push(psBlock)
-
-  // Phase 23.2: 货币体系注入
-  if (wv?.economy) {
-    try {
-      const parsed = JSON.parse(wv.economy)
-      if (parsed.currencies?.length > 0) {
-        const lines = ['【货币体系】']
-        for (const c of parsed.currencies) {
-          lines.push(`- ${c.symbol || '💰'} ${c.name}${c.description ? `（${c.description}）` : ''}`)
-        }
-        if (parsed.currencies.length >= 2) {
-          const base = parsed.currencies.find((c: { id: string }) => c.id === parsed.baseCurrencyId)
-          if (base) {
-            lines.push('兑换：')
-            for (const c of parsed.currencies) {
-              if (c.id === parsed.baseCurrencyId) continue
-              lines.push(`  1 ${base.name} = ${(c.value / base.value).toFixed(c.value >= base.value ? 0 : 2)} ${c.name}`)
-            }
-          }
-        }
-        if (parsed.note) lines.push(`备注：${parsed.note}`)
-        lines.push('请严格使用以上货币，不要自创。')
-        parts.push(lines.join('\n'))
-      }
-    } catch { /* not JSON currency format, skip */ }
-  }
 
   return parts.join('\n\n')
 }
@@ -355,22 +321,6 @@ export async function buildHistoricalContext(projectId: number, worldGroupId?: n
     const block = `【纪年体系】\n${eraSystem}`
     parts.push(block)
     charCount += block.length
-  }
-
-  // 正式历史完全为空时才读取旧 Worldview 历史字段，避免同一语义双份注入。
-  if (!overview && !eraSystem) {
-    const worldviews = filterWorldScope(await readOwnedRows<any>(resolved, 'worldviews', { owner: 'world' }))
-    const worldview = worldviews[0]
-    const legacy = [
-      worldview?.historyLine?.trim(),
-      worldview?.worldEvents?.trim() &&
-        `【旧版世界大事记】\n${worldview.worldEvents.trim()}`,
-    ].filter(Boolean).join('\n\n')
-    if (legacy) {
-      const block = `【历史总述（旧版兼容）】\n${legacy}`
-      parts.push(block)
-      charCount += block.length
-    }
   }
 
   // 2. 历史时间线事件（按年份排序，取关键事件）

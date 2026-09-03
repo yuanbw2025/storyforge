@@ -21,7 +21,7 @@ async function seed(name = '人工修正证明'): Promise<{
   const now = Date.now()
   const projectId = await db.projects.add({
     name, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 100_000, worldCode: `correction-${now}`, worldVersion: 1,
+    targetWordCount: 100_000,
     createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({

@@ -15,6 +15,8 @@ import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
+import { generateWorldCode } from '../../src/lib/workspace/identity'
 
 async function seedBoundaryProject(): Promise<{
   scope: WorkspaceScope
@@ -27,20 +29,23 @@ async function seedBoundaryProject(): Promise<{
 }> {
   const now = Date.now()
   const projectId = await db.projects.add({
+    workspaceUid: generateWorkspaceUid(),
+    workspacePurpose: 'independent-work',
     name: '信息边界项目',
     genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: '',
     targetWordCount: 100_000,
-    worldCode: 'boundary-world',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({
     projectId,
-    code: 'boundary-world',
+    code: generateWorldCode(),
+    identityKind: 'workspace-scope',
     name: '边界世界',
     description: '',
     currentVersion: 1,
@@ -50,6 +55,9 @@ async function seedBoundaryProject(): Promise<{
   const workId = await db.works.add({
     projectId,
     worldId,
+    code: generateWorkCode(),
+    kind: 'novel',
+    novelProfile: 'long',
     title: '边界作品',
     description: '',
     genres: ['fantasy'],
@@ -302,7 +310,9 @@ describe.sequential('R-HARNESS9 · 正文信息边界', () => {
         candidateHash: await hashProseGenerationCandidateV1(candidateBody),
       },
     }
-    expect(await isProseGenerationCandidateCurrentV1(candidate)).toBe(true)
+    // A candidate-shaped object without a persisted run ledger is never a
+    // current formal candidate, even when its content hashes still match.
+    expect(await isProseGenerationCandidateCurrentV1(candidate)).toBe(false)
 
     await db.outlineNodes.update(fixture.futureOutlineId, {
       summary: '守灯人在钟楼地下发现第二枚从未登记的黑色钟芯',

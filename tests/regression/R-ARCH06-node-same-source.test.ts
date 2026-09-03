@@ -42,6 +42,19 @@ describe('ARCH-06 · 节点模式与分步骤模式同源', () => {
     }
   })
 
+  it('官方创作链把独立地理、历史和世界规则作为只读 Canon 来源显式接入', () => {
+    for (const officialId of ['world-foundation', 'long-novel', 'short-novel'] as const) {
+      const graph = buildOfficialAuthoringTemplate(officialId)
+      const templateIds = new Set(graph.nodes.map(node => node.templateId))
+      expect(templateIds.has('source.world-geography'), officialId).toBe(true)
+      expect(templateIds.has('source.world-history'), officialId).toBe(true)
+      expect(templateIds.has('source.world-rules'), officialId).toBe(true)
+    }
+    expect(AUTHORING_NODE_BY_ID.get('source.world-geography')?.reads?.sourceKeys).toEqual(['geography', 'locations'])
+    expect(AUTHORING_NODE_BY_ID.get('source.world-history')?.reads?.sourceKeys).toEqual(['historical'])
+    expect(AUTHORING_NODE_BY_ID.get('source.world-rules')?.reads?.sourceKeys).toEqual(['worldRules', 'canonAssertions'])
+  })
+
   it('尚未接入正式领域流程的自由实体节点只能生成候选草稿', () => {
     const binding = authoringDomainActionBindingV1(AUTHORING_NODE_BY_ID.get('entity.location')!)
     expect(binding).toEqual({

@@ -13,7 +13,7 @@ import {
   rejectConstitutionExtractionCandidateV1,
   type ConstitutionExtractionCandidateV1,
 } from '../../lib/agent/run/constitution-extraction-durable'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 
 type ConstitutionTab = 'candidate' | 'confirmed' | 'exceptions' | 'rejected'
 const EXCEPTIONS: FactStatus[] = ['stale', 'source-missing', 'invalid-range']

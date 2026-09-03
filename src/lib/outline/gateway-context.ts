@@ -8,7 +8,7 @@ import { assembleContext } from '../registry/assemble-context'
 import type { AssembleContextResult } from '../registry/types'
 import type { AIConfig, OutlineNode, WorkspaceScope } from '../types'
 import { parseStages } from '../types/story-arc'
-import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import { readOwnedRows, resolveScope } from '../workspace/scope'
 import type { OutlineGenerationRequest } from './generation-request'
 import { assertOutlineRequestTargetsUnwrittenFutureV1 } from './future-boundary'
 

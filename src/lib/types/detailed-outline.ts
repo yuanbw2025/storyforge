@@ -20,7 +20,7 @@ export interface DetailedScene {
   title: string
   summary: string             // 一句话场景概要
   characterIds: number[]      // 涉及的角色 id（指向 characters 表）
-  location: string            // 发生地点（自由文本，未来可关联 worldview.geography）
+  location: string            // 发生地点（自由文本，可与正式地理地点关联）
   conflict: string            // 本场景的核心冲突
   pace: ScenePace
   estimatedWords: number      // 估算字数

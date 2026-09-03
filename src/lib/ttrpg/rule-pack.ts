@@ -7,7 +7,7 @@ import type {
   TtrpgDegreeV2,
   TtrpgResolutionRequestV2,
 } from "../types";
-import { hashGameProductionValueV2 } from "../game-production/hash";
+import { hashProductProductionValueV2 } from "../product-production/hash";
 import { assertTtrpgDieSidesV2, sampleTtrpgDiceWithSha256V2 } from "./dice";
 import type { TtrpgDiceRollTraceV2 } from "../types";
 import { resolveTtrpgResolutionV2 } from "./resolution";
@@ -1689,7 +1689,7 @@ export interface RuleDiceResolutionV1 {
 export async function commitRulePackDiceSeedV2(seed: string): Promise<string> {
   if (typeof seed !== "string" || !seed.trim() || seed.length > 10_000)
     fail("dice.seed 无效");
-  return hashGameProductionValueV2({ seed });
+  return hashProductProductionValueV2({ seed });
 }
 
 async function deterministicRuleDice(input: {
@@ -1730,7 +1730,7 @@ async function deterministicRuleDice(input: {
     seedCommitment: await commitRulePackDiceSeedV2(input.seed),
     nonce: input.nonce,
   };
-  return { ...basis, proofHash: await hashGameProductionValueV2(basis) };
+  return { ...basis, proofHash: await hashProductProductionValueV2(basis) };
 }
 
 export async function resolveRulePackDiceModelV1(input: {
@@ -1766,8 +1766,8 @@ export async function verifyRulePackDiceResolutionV2(input: {
       return false;
     const expected = await resolveRulePackDiceModelV1(input);
     return (
-      (await hashGameProductionValueV2(expected)) ===
-      (await hashGameProductionValueV2(input.resolution))
+      (await hashProductProductionValueV2(expected)) ===
+      (await hashProductProductionValueV2(input.resolution))
     );
   } catch {
     return false;
@@ -2058,7 +2058,7 @@ export async function resolveRulePackCheckV1(input: {
     seedCommitment: await commitRulePackDiceSeedV2(input.seed),
     nonce: input.nonce,
   };
-  return { ...basis, proofHash: await hashGameProductionValueV2(basis) };
+  return { ...basis, proofHash: await hashProductProductionValueV2(basis) };
 }
 
 export async function verifyRulePackCheckResolutionV2(input: {
@@ -2099,8 +2099,8 @@ export async function verifyRulePackCheckResolutionV2(input: {
       opponent: input.opponent,
     });
     return (
-      (await hashGameProductionValueV2(expected)) ===
-      (await hashGameProductionValueV2(input.resolution))
+      (await hashProductProductionValueV2(expected)) ===
+      (await hashProductProductionValueV2(input.resolution))
     );
   } catch {
     return false;

@@ -9,7 +9,7 @@ import type { MapGenConfig } from '../../world-map/engine'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt, hashAdoptFieldValueV1 } from '../../registry/adopt'
 import { db } from '../../db/schema'
-import { assertRecordInScope, readOwnedRows } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import {

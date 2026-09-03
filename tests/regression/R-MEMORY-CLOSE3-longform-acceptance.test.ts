@@ -22,8 +22,8 @@ import {
   synchronizeProjectChangesToFolderV1,
 } from '../../src/lib/memory/workspace-projection'
 import { buildWorkspaceImpactPlanV1 } from '../../src/lib/memory/workspace-impact'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { resolveScopeLike } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveScopeLike } from '../../src/lib/workspace/scope'
 import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
 
 const legacyFixturePath = path.resolve(__dirname, '../fixtures/legacy-export-v3.json')
@@ -154,7 +154,6 @@ async function seedRepresentativeLongform() {
     theme: '记忆必须经证据与作者裁决才能成为事实',
     centralConflict: '被篡改的历史与可验证记忆之间的冲突',
     plotPattern: '三幕式长篇',
-    storyLines: '林舟追索潮汐档案',
     mainPlot: '林舟追索潮汐档案并修复主世界',
     subPlots: '玄铁剑的归属与镜界来客的承诺',
     updatedAt: now,
@@ -237,7 +236,6 @@ async function seedRepresentativeLongform() {
     theme: '乙作品绝不串线标记',
     centralConflict: '侦探与无声城市',
     plotPattern: '谜案',
-    storyLines: '寻找钟声',
     mainPlot: '寻找钟声',
     subPlots: '',
     createdAt: now,

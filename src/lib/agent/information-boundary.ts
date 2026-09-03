@@ -18,7 +18,7 @@ import type {
   StorylineProgress,
   WorkspaceScope,
 } from '../types'
-import { readOwnedRows } from '../world-engine/scope'
+import { readOwnedRows } from '../workspace/scope'
 import { hashCanonicalValue } from './run/hash'
 
 export const INFORMATION_BOUNDARY_VERSION_V1 = 1

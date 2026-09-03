@@ -15,7 +15,7 @@ import {
   rejectWorldviewExpandCandidateV1,
   type WorldviewExpandCandidateV1,
 } from '../../lib/agent/run/worldview-expand-durable'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import type { WorkspaceScope, WorldGroup, WorldGroupType } from '../../lib/types'
 import { WORLD_GROUP_TYPE_LABELS } from '../../lib/types/world-group'
 
@@ -29,7 +29,7 @@ const TYPE_OPTIONS: { value: WorldGroupType; label: string }[] = [
 ]
 
 const EMOJI_OPTIONS = ['🏠', '🔥', '⭐', '🗡️', '🌊', '🏔️', '🌙', '⚡', '🎭', '🐉', '🌸', '💎', '🌍', '☀️', '🌑', '🏰']
-const ADOPTION_RECOVERY_MESSAGE = '上次七字段确认写入尚未完成；请继续原运行完成写入与终验，不会重复调用模型。'
+const ADOPTION_RECOVERY_MESSAGE = '上次六字段确认写入尚未完成；请继续原运行完成写入与终验，不会重复调用模型。'
 
 interface Props {
   group: WorldGroup
@@ -297,7 +297,7 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
       {candidate && (
         <div className="rounded-lg border border-accent/20 bg-accent/10 p-3">
           <div className="mb-1 text-xs text-amber-400">
-            {resumeAdoption ? '七字段采纳等待恢复终验' : '七字段世界观候选尚未写入'}
+            {resumeAdoption ? '六字段采纳等待恢复终验' : '六字段世界观候选尚未写入'}
           </div>
           <div className="mb-2 text-sm text-text-primary">
             {candidate.values.worldOrigin.slice(0, 120)}{candidate.values.worldOrigin.length > 120 ? '…' : ''}
@@ -305,12 +305,12 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
           <div className="mb-2 text-xs text-text-muted">
             {resumeAdoption
               ? '继续同一 durable 运行完成正式写入与终验；不会重复调用模型。'
-              : '世界来源、力量体系、地貌、气候、历史、种族和势力共 7 个字段；确认前正式世界观保持原值。'}
+              : '世界来源、力量体系、地貌、气候、种族和势力共 6 个字段；历史由独立历史模块维护；确认前正式世界观保持原值。'}
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => { void handleAcceptExpand() }} disabled={expandBusy}
               className="flex items-center gap-1 rounded bg-accent px-2 py-1 text-xs text-white hover:bg-accent-hover disabled:opacity-50">
-              <Check className="h-3 w-3" />{resumeAdoption ? '继续写入与终验' : '确认写入七字段'}
+              <Check className="h-3 w-3" />{resumeAdoption ? '继续写入与终验' : '确认写入六字段'}
             </button>
             {!resumeAdoption && (
               <button type="button" onClick={() => { void handleRejectExpand() }} disabled={expandBusy}

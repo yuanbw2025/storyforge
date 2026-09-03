@@ -2,8 +2,8 @@ import type { ChatMessage } from '../../types'
 import { normalizeCreativeJsonEnvelopeV1 } from '../../agent/creative-json-normalizer'
 import type { CreativeReliabilityFixtureV1 } from './fixtures'
 
-export const CREATIVE_RELIABILITY_LEGACY_PROMPT_VERSION_V1 =
-  'crel-story-arc-legacy-direct-v1'
+export const CREATIVE_RELIABILITY_BASELINE_PROMPT_VERSION_V1 =
+  'crel-story-arc-baseline-direct-v1'
 export const CREATIVE_RELIABILITY_GENERATOR_PROMPT_VERSION_V1 = 'outline.story-arcs-v6'
 export const CREATIVE_RELIABILITY_REPAIR_PROMPT_VERSION_V1 =
   'crel-story-arc-targeted-repair-v1'
@@ -21,7 +21,7 @@ export interface CreativeReliabilityVerifierAssessmentV1 {
   infodumpOnly: boolean
 }
 
-export function buildCreativeReliabilityLegacyMessagesV1(input: {
+export function buildCreativeReliabilityBaselineMessagesV1(input: {
   fixture: CreativeReliabilityFixtureV1
   assembledContext: string
 }): ChatMessage[] {
@@ -45,35 +45,35 @@ export function buildCreativeReliabilityLegacyMessagesV1(input: {
   }]
 }
 
-export function parseCreativeReliabilityLegacyOutputV1(raw: string): string {
+export function parseCreativeReliabilityBaselineOutputV1(raw: string): string {
   const trimmed = raw.trim()
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1]?.trim() ?? trimmed
   const start = fenced.indexOf('{')
   const end = fenced.lastIndexOf('}')
-  if (start < 0 || end < start) throw new Error('legacy_output_missing_json')
+  if (start < 0 || end < start) throw new Error('baseline_output_missing_json')
   const parsed = JSON.parse(fenced.slice(start, end + 1)) as Record<string, unknown>
-  if (typeof parsed.name !== 'string' || !parsed.name.trim()) throw new Error('legacy_name_invalid')
+  if (typeof parsed.name !== 'string' || !parsed.name.trim()) throw new Error('baseline_name_invalid')
   if (typeof parsed.description !== 'string' || !parsed.description.trim()) {
-    throw new Error('legacy_description_invalid')
+    throw new Error('baseline_description_invalid')
   }
   if (!Array.isArray(parsed.stages) || parsed.stages.length < 3 || parsed.stages.length > 7) {
-    throw new Error('legacy_stages_invalid')
+    throw new Error('baseline_stages_invalid')
   }
   const stages = parsed.stages.map((item, index) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(`legacy_stage_${index}_invalid`)
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(`baseline_stage_${index}_invalid`)
     const stage = item as Record<string, unknown>
     if (
       typeof stage.title !== 'string'
       || !stage.title.trim()
       || typeof stage.description !== 'string'
       || !stage.description.trim()
-    ) throw new Error(`legacy_stage_${index}_text_invalid`)
+    ) throw new Error(`baseline_stage_${index}_text_invalid`)
     if (
       !Array.isArray(stage.keyEvents)
       || stage.keyEvents.length < 1
       || stage.keyEvents.length > 3
       || stage.keyEvents.some(event => typeof event !== 'string' || !event.trim())
-    ) throw new Error(`legacy_stage_${index}_events_invalid`)
+    ) throw new Error(`baseline_stage_${index}_events_invalid`)
     return {
       title: stage.title.trim(),
       description: stage.description.trim(),

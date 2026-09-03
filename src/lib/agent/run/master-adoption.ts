@@ -7,7 +7,7 @@ import {
   type ExecutedMasterCandidate,
 } from '../orchestrator'
 import { appendAgentEvent } from '../conversations'
-import { scopeTransactionTables } from '../../world-engine/scope'
+import { scopeTransactionTables } from '../../workspace/scope'
 import {
   restoreMasterAgentCandidatesV1,
   type MasterAgentDurableCandidateV1,
@@ -19,7 +19,7 @@ import {
   type AgentRunSnapshotV1,
 } from './event-store'
 import { hashCanonicalValue } from './hash'
-import { readOwnedRows } from '../../world-engine/scope'
+import { readOwnedRows } from '../../workspace/scope'
 import { adoptGeneratedOutlineItems } from '../../outline/adopt-generation'
 import { parseCharacterCandidateDraft } from '../character-copilot'
 import { parseOutlineCandidateDraft } from '../outline-copilot'

@@ -49,7 +49,7 @@ vi.mock('../../src/stores/fact-ledger', () => ({
   }),
 }))
 
-vi.mock('../../src/lib/world-engine/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
+vi.mock('../../src/lib/workspace/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
 
 vi.mock('../../src/lib/agent/run/constitution-extraction-durable', () => ({
   generateConstitutionExtractionCandidateV1: mocks.generate,

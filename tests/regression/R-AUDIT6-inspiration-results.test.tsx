@@ -37,10 +37,10 @@ const singleResult: ReverseResult = {
     powerHierarchy: '潮汐术分为三阶',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
     races: '',
     factionLayout: '',
   },
+  history: { overview: '' },
   storyCore: {
     logline: '守门人穿越镜海寻找失踪者',
     theme: '信任',
@@ -60,7 +60,7 @@ const multiWorldResult: ReverseMultiWorldResult = {
     powerHierarchy: '潮汐术',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
+    historyOverview: '',
     races: '',
     factionLayout: '七城议会',
     entryCondition: '',
@@ -97,12 +97,12 @@ describe('AUDIT-6 · 灵感反推结果视图', () => {
     }))
 
     expect(host.textContent).not.toContain('镜海退潮后形成七座城邦')
-    const worldviewTitle = Array.from(host.querySelectorAll('span')).find(node => node.textContent === '世界观草稿')!
+    const worldviewTitle = Array.from(host.querySelectorAll('span')).find(node => node.textContent === '世界基础与历史草稿')!
     const worldviewHeader = worldviewTitle.parentElement!.parentElement!
     await act(async () => worldviewHeader.click())
     expect(onToggleSection).toHaveBeenCalledWith('worldview')
 
-    const adoptButton = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('写入世界观'))!
+    const adoptButton = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('写入世界基础与历史'))!
     await act(async () => adoptButton.click())
     expect(onAdoptWorldview).toHaveBeenCalledOnce()
     expect(onToggleSection).toHaveBeenCalledOnce()

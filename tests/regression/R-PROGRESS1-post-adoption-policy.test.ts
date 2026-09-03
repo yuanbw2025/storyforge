@@ -65,8 +65,8 @@ async function seed(label: string, projectId?: number, worldId?: number): Promis
       activeWorldId: wid,
       activeWorkId: workId,
       ownershipSchemaVersion: 1,
-      worldCode: `world-${label}`,
-      worldVersion: 1,
+
+
     })
   }
   const outlineNodeId = await db.outlineNodes.add({
@@ -113,7 +113,10 @@ describe.sequential('PROGRESS-1 · 章后策略、预算与七域演化', () => 
       scope: fixture.scope,
       chapterId: fixture.chapterId,
       sourceTextHash: await hashChapterText(chapter!.content),
-      model: 'gemini-3.5-flash',
+      modelRoutes: [
+        { taskType: 'organization', provider: 'gemini', model: 'gemini-3.5-flash' },
+        { taskType: 'memory', provider: 'gemini', model: 'gemini-3.5-flash' },
+      ],
       settings,
     })
     const first = await createChapterPostAdoptionDurableRunV1({
@@ -161,7 +164,9 @@ describe.sequential('PROGRESS-1 · 章后策略、预算与七域演化', () => 
       scope: first.scope,
       chapterId: first.chapterId,
       sourceTextHash: await hashChapterText(chapter!.content),
-      model: 'gemini-3.5-flash',
+      modelRoutes: [
+        { taskType: 'organization', provider: 'gemini', model: 'gemini-3.5-flash' },
+      ],
       settings: selected,
     })
     let snapshot = await createChapterPostAdoptionDurableRunV1({
@@ -194,7 +199,10 @@ describe.sequential('PROGRESS-1 · 章后策略、预算与七域演化', () => 
       scope: fixture.scope,
       chapterId: fixture.chapterId,
       sourceTextHash: await hashChapterText(chapter!.content),
-      model: 'gemini-3.5-flash',
+      modelRoutes: [
+        { taskType: 'organization', provider: 'gemini', model: 'gemini-3.5-flash' },
+        { taskType: 'memory', provider: 'gemini', model: 'gemini-3.5-flash' },
+      ],
       settings: await readWorkPostAdoptionSettingsV1(fixture.scope),
     })
     const snapshot = await createChapterPostAdoptionDurableRunV1({
@@ -233,7 +241,9 @@ describe.sequential('PROGRESS-1 · 章后策略、预算与七域演化', () => 
       scope: fixture.scope,
       chapterId: fixture.chapterId,
       sourceTextHash: await hashChapterText(chapter!.content),
-      model: 'agnes-2.5-flash',
+      modelRoutes: [
+        { taskType: 'organization', provider: 'agnes', model: 'agnes-2.5-flash' },
+      ],
       settings,
     })
     expect(preflightPostAdoptionAutoV1(unknown)).toMatchObject({ allowed: false })
@@ -249,7 +259,9 @@ describe.sequential('PROGRESS-1 · 章后策略、预算与七域演化', () => 
       scope: fixture.scope,
       chapterId: fixture.chapterId,
       sourceTextHash: await hashChapterText(chapter!.content),
-      model: 'gemini-3.5-flash',
+      modelRoutes: [
+        { taskType: 'organization', provider: 'gemini', model: 'gemini-3.5-flash' },
+      ],
       settings: { ...settings, budget: { ...settings.budget, maxOutputTokens: 1_000 } },
     })
     expect(preflightPostAdoptionAutoV1(tooSmall)).toMatchObject({

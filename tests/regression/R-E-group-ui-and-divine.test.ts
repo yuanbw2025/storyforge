@@ -31,7 +31,7 @@ describe('R-E-group-ui-and-divine · E 组收尾', () => {
   it('E-3: 兼容旧版被序列化为 JSON string 的神明信仰数据', () => {
     const row = {
       projectId: 1,
-      geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '',
+      summary: '',
       divineDesign: JSON.stringify({
         hasDivinity: true,
         divineRank: '主神 / 次神',

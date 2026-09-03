@@ -5,7 +5,7 @@ import type {
   ReferenceChunkAnalysis,
   WorkspaceScope,
 } from '../types'
-import { readOwnedRows } from '../world-engine/scope'
+import { readOwnedRows } from '../workspace/scope'
 import {
   collectCharacterCraftTexts,
   mergeAnalysisResults,

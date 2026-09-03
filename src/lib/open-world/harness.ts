@@ -14,9 +14,9 @@ import { hashCanonicalValue } from '../agent/run/hash'
 import { assertOpenWorldRuntimeHarnessFreshV1, captureOpenWorldRuntimeHarnessBoundaryV1 } from '../agent/run/runtime-scope'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { db } from '../db/schema'
-import { verifyPlayableSessionPackageV2 } from '../game-production/preview-source'
+import { verifyProductRuntimeSessionSourceV1 } from '../product-production/preview-source'
 import { assembleContext } from '../registry/assemble-context'
-import { readSimulationState, readSimulationStateVersion } from '../simulation/runtime'
+import { readProductRuntimeState, readProductRuntimeStateVersion } from './runtime-api'
 import type { AIConfig, ChatMessage, OpenWorldExpressionCandidateV1, WorkspaceScope } from '../types'
 import { validateOpenWorldExpressionCandidate } from './runtime'
 
@@ -29,7 +29,7 @@ interface CandidateBaseV1 {
   version: 1
   portable: false
   runId: number
-  simulationSessionId: number
+  productRuntimeSessionId: number
   baseSequence: number
   stateHash: string
   visibilityHash: string
@@ -41,7 +41,7 @@ interface CandidateBaseV1 {
 export type OpenWorldRuntimeCandidateV1 = CandidateBaseV1 & OpenWorldExpressionCandidateV1
 type RunAI = (messages: ChatMessage[], signal?: AbortSignal) => Promise<string>
 
-function fail(message: string): never { throw new Error(`[textworld-harness] ${message}`) }
+function fail(message: string): never { throw new Error(`[text-open-world-harness] ${message}`) }
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`${label}必须是对象`)
   return value as Record<string, unknown>
@@ -105,12 +105,12 @@ function contract(input: { objective: string; boundary: Awaited<ReturnType<typeo
 }
 
 async function append(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type: Parameters<typeof appendAgentRunEventV1>[0]['type'], payload: unknown) {
-  return appendAgentRunEventV1({ scope, runId: snapshot.run.id, simulationSessionId: snapshot.run.simulationSessionId ?? fail('运行时事件缺少 Instance owner'), type, payload, expectedLastSequence: snapshot.projection.lastSequence } as Parameters<typeof appendAgentRunEventV1>[0])
+  return appendAgentRunEventV1({ scope, runId: snapshot.run.id, productRuntimeSessionId: snapshot.run.productRuntimeSessionId ?? fail('运行时事件缺少 Instance owner'), type, payload, expectedLastSequence: snapshot.projection.lastSequence } as Parameters<typeof appendAgentRunEventV1>[0])
 }
 
 export async function generateOpenWorldRuntimeCandidateV1(input: {
   scope: WorkspaceScope
-  simulationSessionId: number
+  productRuntimeSessionId: number
   skillId: OpenWorldRuntimeSkillIdV1
   objective: string
   aiConfig?: AIConfig
@@ -121,15 +121,15 @@ export async function generateOpenWorldRuntimeCandidateV1(input: {
   const objective = input.objective.trim()
   if (!objective || objective.length > 4_000) fail('objective 无效')
   const skill = getAgentSkillV1(input.skillId)
-  const boundary = await captureOpenWorldRuntimeHarnessBoundaryV1({ scope: input.scope, simulationSessionId: input.simulationSessionId })
+  const boundary = await captureOpenWorldRuntimeHarnessBoundaryV1({ scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId })
   if (!input.runAI && !input.aiConfig) fail('缺少 AI 配置')
   const runtimeBindingHash = await hashCanonicalValue({ executionBinding: createAgentSkillExecutionBindingV1(skill), modelIdentity: input.runAI ? { provider: 'test-adapter', model: 'injected', transport: 'chat-v1' } : { provider: input.aiConfig?.provider, model: input.aiConfig?.model, transport: 'chat-v1' } })
-  let snapshot = await createAgentRunV1({ scope: input.scope, simulationSessionId: input.simulationSessionId, worldGroupId: boundary.scope.worldGroupId, contract: contract({ objective, boundary, skillId: input.skillId, runtimeBindingHash }) })
+  let snapshot = await createAgentRunV1({ scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId, worldGroupId: boundary.scope.worldGroupId, contract: contract({ objective, boundary, skillId: input.skillId, runtimeBindingHash }) })
   await input.onRunCreated?.(snapshot.run.id)
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1 })
   try {
-    const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: boundary.scope.worldGroupId, simulationSessionId: input.simulationSessionId, sourceKeys: ['openWorldRuntime'], provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 16_000 })
+    const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, worldGroupId: boundary.scope.worldGroupId, productRuntimeSessionId: input.productRuntimeSessionId, sourceKeys: ['openWorldRuntime'], provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 16_000 })
     if (!assembled.included.includes('openWorldRuntime')) fail('开放世界运行时上下文为空')
     await assertOpenWorldRuntimeHarnessFreshV1({ scope: input.scope, contractScope: snapshot.contract.scope })
     const contextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1, projectId: input.scope.projectId, worldGroupId: boundary.scope.worldGroupId, declaredSourceKeys: ['openWorldRuntime'], assembled, readerVersion: 'text-open-world-player-view-v1' })
@@ -139,9 +139,9 @@ export async function generateOpenWorldRuntimeCandidateV1(input: {
     const output = input.runAI ? await input.runAI(prompt, input.signal) : await chat(prompt, input.aiConfig!, { category: `runtime.${input.skillId}`, projectId: input.scope.projectId, contextOverflowPolicy: 'reject' }, input.signal)
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1, outputHash: await hashCanonicalValue(output) })
     const draft = parseDraft(input.skillId, output)
-    const [state, events, session] = await Promise.all([readSimulationState(input.simulationSessionId), db.simulationEvents.where('sessionId').equals(input.simulationSessionId).toArray(), db.simulationSessions.get(input.simulationSessionId)])
+    const [state, events, session] = await Promise.all([readProductRuntimeState(input.productRuntimeSessionId), db.productRuntimeEvents.where('sessionId').equals(input.productRuntimeSessionId).toArray(), db.productRuntimeSessions.get(input.productRuntimeSessionId)])
     if (!state.openWorld || !session || session.worldId == null || session.workId == null) fail('模型返回时开放世界实例已失效')
-    const playable = await verifyPlayableSessionPackageV2({
+    const playable = await verifyProductRuntimeSessionSourceV1({
       scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId }, session,
     })
     if (playable.runtimeSourceHash !== session.runtimeSourceHash
@@ -151,7 +151,7 @@ export async function generateOpenWorldRuntimeCandidateV1(input: {
     const body = { version: 1 as const, portable: false as const, runId: snapshot.run.id, ...boundary.scope.runtime, contextManifestHash: contextManifest.manifestHash, ...draft }
     const candidate = { ...body, candidateHash: await hashCanonicalValue(body) }
     snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, attempt: 1, candidateHash: candidate.candidateHash, requiresConfirmation: false })
-    const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id, simulationSessionId: input.simulationSessionId, resumePayload: candidate, expectedLastSequence: snapshot.projection.lastSequence })
+    const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id, productRuntimeSessionId: input.productRuntimeSessionId, resumePayload: candidate, expectedLastSequence: snapshot.projection.lastSequence })
     return { snapshot: saved.snapshot, candidate }
   } catch (error) {
     const current = await readInstanceAgentRunV1(input.scope, snapshot.run.id)
@@ -165,7 +165,7 @@ function candidateBody(candidate: OpenWorldRuntimeCandidateV1) { const { candida
 function isCandidate(value: unknown): value is OpenWorldRuntimeCandidateV1 {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const row = value as Partial<OpenWorldRuntimeCandidateV1>
-  return row.version === 1 && row.portable === false && typeof row.runId === 'number' && typeof row.simulationSessionId === 'number'
+  return row.version === 1 && row.portable === false && typeof row.runId === 'number' && typeof row.productRuntimeSessionId === 'number'
     && typeof row.baseSequence === 'number' && typeof row.stateHash === 'string' && typeof row.visibilityHash === 'string'
     && typeof row.releaseHash === 'string' && typeof row.contextManifestHash === 'string' && typeof row.candidateHash === 'string'
     && (row.kind === 'quest-expression' || row.kind === 'scene-narration')
@@ -183,9 +183,9 @@ export async function adoptOpenWorldRuntimeCandidateV1(input: { scope: Workspace
     snapshot = await append(input.scope, snapshot, 'candidate.staled', { stepId: OPEN_WORLD_RUNTIME_STEP_ID_V1, candidateHash: candidate.candidateHash, reason: error instanceof Error ? error.message.slice(0, 1_000) : 'runtime-input-stale' })
     throw Object.assign(error instanceof Error ? error : new Error('运行时候选已过期'), { snapshot })
   }
-  const [state, events, version, session] = await Promise.all([readSimulationState(candidate.simulationSessionId), db.simulationEvents.where('sessionId').equals(candidate.simulationSessionId).toArray(), readSimulationStateVersion(candidate.simulationSessionId), db.simulationSessions.get(candidate.simulationSessionId)])
+  const [state, events, version, session] = await Promise.all([readProductRuntimeState(candidate.productRuntimeSessionId), db.productRuntimeEvents.where('sessionId').equals(candidate.productRuntimeSessionId).toArray(), readProductRuntimeStateVersion(candidate.productRuntimeSessionId), db.productRuntimeSessions.get(candidate.productRuntimeSessionId)])
   if (!state.openWorld || !session || session.worldId == null || session.workId == null) fail('开放世界实例已失效')
-  const playable = await verifyPlayableSessionPackageV2({
+  const playable = await verifyProductRuntimeSessionSourceV1({
     scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId }, session,
   })
   if (playable.runtimeSourceHash !== session.runtimeSourceHash

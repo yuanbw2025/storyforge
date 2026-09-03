@@ -1,10 +1,10 @@
-import { buildGameProductModulesV1 } from '../../src/lib/game-production/product-adapters'
-import { parseGameRuntimePackageV2 } from '../../src/lib/game-production/runtime-package'
-import type { GameProductionWorldSourceCatalogV2 } from '../../src/lib/game-production/world-source'
+import { buildUpperProductModulesV1 } from '../../src/lib/product-production/product-adapters'
+import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import type { ProductProductionWorldSourceCatalogV2 } from '../../src/lib/product-production/world-source'
 import type {
-  GameProductionBriefV3,
-  GameProductType,
-  GameRuntimePackageV2,
+  ProductProductionBriefV3,
+  ProductionProductKindV1,
+  ProductRuntimePackageV1,
   WorldRelease,
 } from '../../src/lib/types'
 import {
@@ -12,9 +12,8 @@ import {
   currentProductSelection,
 } from './current-product-world'
 
-function productRoles(productType: GameProductType): Record<string, string[]> {
+function productRoles(productType: ProductionProductKindV1): Record<string, string[]> {
   const key = CURRENT_PRODUCT_RESOURCE_KEYS
-  if (productType === 'storygame') return { story: [key.story] }
   if (productType === 'character-interaction') {
     return { participants: [key.character], context: [key.story, key.arc] }
   }
@@ -31,13 +30,6 @@ function productRoles(productType: GameProductType): Record<string, string[]> {
       story: [key.story, key.arc],
       characters: [key.character],
       locations: [key.location],
-    }
-  }
-  if (productType === 'narrative-simulation') {
-    return {
-      issues: [key.arc],
-      factions: [key.lore],
-      characters: [key.character],
     }
   }
   if (productType === 'text-open-world') {
@@ -57,7 +49,7 @@ function productRoles(productType: GameProductType): Record<string, string[]> {
   }
 }
 
-export function createCurrentNarrativeFixture(): GameRuntimePackageV2['narrative'] {
+export function createCurrentNarrativeFixture(): ProductRuntimePackageV1['narrative'] {
   const endingKeys = ['ending.truth', 'ending.shelter', 'ending.depart', 'ending.wait']
   return {
     moduleKind: 'main',
@@ -106,18 +98,18 @@ export function createCurrentNarrativeFixture(): GameRuntimePackageV2['narrative
   }
 }
 
-export function createCurrentGameBriefFixture(input: {
-  productType: GameProductType
+export function createCurrentProductBriefFixture(input: {
+  productType: ProductionProductKindV1
   worldRelease: WorldRelease & { id: number }
-  sourceCatalog: GameProductionWorldSourceCatalogV2
-}): GameProductionBriefV3 {
+  sourceCatalog: ProductProductionWorldSourceCatalogV2
+}): ProductProductionBriefV3 {
   const selection = currentProductSelection(
     input.productType,
     productRoles(input.productType),
     input.sourceCatalog.worldReference.referenceHash,
   )
   return {
-    schema: 'storyforge.game-production-brief',
+    schema: 'storyforge.product-production-brief',
     version: 3,
     source: {
       worldReleaseId: input.worldRelease.id,
@@ -173,21 +165,21 @@ export function createCurrentGameBriefFixture(input: {
 }
 
 export function createCurrentRuntimePackageFixture(input: {
-  productType: Exclude<GameProductType, 'ttrpg'>
+  productType: Exclude<ProductionProductKindV1, 'ttrpg'>
   worldRelease: WorldRelease & { id: number }
-  sourceCatalog: GameProductionWorldSourceCatalogV2
-}): GameRuntimePackageV2 {
-  const brief = createCurrentGameBriefFixture(input)
+  sourceCatalog: ProductProductionWorldSourceCatalogV2
+}): ProductRuntimePackageV1 {
+  const brief = createCurrentProductBriefFixture(input)
   const narrative = createCurrentNarrativeFixture()
-  const modules = buildGameProductModulesV1({
+  const modules = buildUpperProductModulesV1({
     brief,
     narrative,
     sourceCatalog: input.sourceCatalog,
   })
-  const runtimePackage: GameRuntimePackageV2 = {
-    schema: 'storyforge.game-runtime-package', version: 2, productType: input.productType,
+  const runtimePackage: ProductRuntimePackageV1 = {
+    schema: 'storyforge.product-runtime-package', version: 1, productType: input.productType,
     definition: {
-      gameKey: `current.${input.productType}`, title: `Current ${input.productType}`,
+      productKey: `current.${input.productType}`, title: `Current ${input.productType}`,
       description: '现行统一 Product Build 运行包。', enabledCapabilities: modules.enabledCapabilities,
       rulesetVersion: 1, initialVariables: { productAdapterId: modules.adapterId },
     },
@@ -199,8 +191,8 @@ export function createCurrentRuntimePackageFixture(input: {
   }
   if (modules.interaction) runtimePackage.interaction = modules.interaction
   if (modules.adventure) runtimePackage.adventure = modules.adventure
-  if (modules.simulation) runtimePackage.simulation = modules.simulation
+  if (modules.openWorldEvolution) runtimePackage.openWorldEvolution = modules.openWorldEvolution
   if (modules.openWorld) runtimePackage.openWorld = modules.openWorld
   if (input.productType === 'avg') runtimePackage.presentation = { version: 1, cues: [], assets: [] }
-  return parseGameRuntimePackageV2(runtimePackage)
+  return parseProductRuntimePackageV1(runtimePackage)
 }

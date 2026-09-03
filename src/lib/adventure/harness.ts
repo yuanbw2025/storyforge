@@ -17,18 +17,18 @@ import {
 } from '../agent/run/runtime-scope'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { db } from '../db/schema'
-import { verifyPlayableSessionPackageV2 } from '../game-production/preview-source'
+import { verifyProductRuntimeSessionSourceV1 } from '../product-production/preview-source'
 import { assembleContext } from '../registry/assemble-context'
 import {
   commitAdventureAction,
-  readSimulationState,
-  readSimulationStateVersion,
-} from '../simulation/runtime'
+  readProductRuntimeState,
+  readProductRuntimeStateVersion,
+} from './runtime-api'
 import type {
   AdventureActionCandidateV1,
   AIConfig,
   ChatMessage,
-  SimulationEvent,
+  ProductRuntimeEvent,
   WorkspaceScope,
 } from '../types'
 import { availableAdventureActions } from './runtime'
@@ -44,7 +44,7 @@ interface AdventureRuntimeCandidateBaseV1 {
   version: 1
   portable: false
   runId: number
-  simulationSessionId: number
+  productRuntimeSessionId: number
   baseSequence: number
   stateHash: string
   visibilityHash: string
@@ -181,14 +181,14 @@ async function append(
 ) {
   return appendAgentRunEventV1({
     scope, runId: snapshot.run.id,
-    simulationSessionId: snapshot.run.simulationSessionId ?? fail('运行时事件缺少 Instance owner'),
+    productRuntimeSessionId: snapshot.run.productRuntimeSessionId ?? fail('运行时事件缺少 Instance owner'),
     type, payload, expectedLastSequence: snapshot.projection.lastSequence,
   } as Parameters<typeof appendAgentRunEventV1>[0])
 }
 
 export async function generateAdventureRuntimeCandidateV1(input: {
   scope: WorkspaceScope
-  simulationSessionId: number
+  productRuntimeSessionId: number
   skillId: AdventureRuntimeSkillIdV1
   objective: string
   aiConfig?: AIConfig
@@ -199,7 +199,7 @@ export async function generateAdventureRuntimeCandidateV1(input: {
   const objective = text(input.objective, 'objective', 4_000)
   const skill = getAgentSkillV1(input.skillId)
   const boundary = await captureAdventureRuntimeHarnessBoundaryV1({
-    scope: input.scope, simulationSessionId: input.simulationSessionId,
+    scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId,
   })
   if (!input.runAI && !input.aiConfig) fail('缺少 AI 配置')
   const runtimeBindingHash = await hashCanonicalValue({
@@ -209,7 +209,7 @@ export async function generateAdventureRuntimeCandidateV1(input: {
       : { provider: input.aiConfig?.provider, model: input.aiConfig?.model, transport: 'chat-v1' },
   })
   let snapshot = await createAgentRunV1({
-    scope: input.scope, simulationSessionId: input.simulationSessionId,
+    scope: input.scope, productRuntimeSessionId: input.productRuntimeSessionId,
     worldGroupId: boundary.scope.worldGroupId,
     contract: contract({ objective, boundary, skillId: input.skillId, runtimeBindingHash }),
   })
@@ -220,7 +220,7 @@ export async function generateAdventureRuntimeCandidateV1(input: {
     const assembled = await assembleContext({
       projectId: input.scope.projectId, scope: input.scope,
       worldGroupId: boundary.scope.worldGroupId,
-      simulationSessionId: input.simulationSessionId,
+      productRuntimeSessionId: input.productRuntimeSessionId,
       sourceKeys: ['adventureRuntime'],
       provider: input.aiConfig?.provider, model: input.aiConfig?.model,
       inputBudgetMaxTokens: 16_000,
@@ -251,13 +251,13 @@ export async function generateAdventureRuntimeCandidateV1(input: {
     })
     const draft = parseDraft(input.skillId, output)
     const [state, session] = await Promise.all([
-      readSimulationState(input.simulationSessionId),
-      db.simulationSessions.get(input.simulationSessionId),
+      readProductRuntimeState(input.productRuntimeSessionId),
+      db.productRuntimeSessions.get(input.productRuntimeSessionId),
     ])
     if (!state.adventure || !session || session.worldId == null || session.workId == null) {
       fail('模型返回时文字冒险实例已失效')
     }
-    const playable = await verifyPlayableSessionPackageV2({
+    const playable = await verifyProductRuntimeSessionSourceV1({
       scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
       session,
     })
@@ -275,7 +275,7 @@ export async function generateAdventureRuntimeCandidateV1(input: {
       ).some(item => item.action.key === draft.actionKey && item.available)
       if (!available) fail('模型映射了未登记行动')
     } else {
-      const events = await db.simulationEvents.where('sessionId').equals(input.simulationSessionId).toArray()
+      const events = await db.productRuntimeEvents.where('sessionId').equals(input.productRuntimeSessionId).toArray()
       const evidence = new Map(events.map(event => [event.sequence, event]))
       if (draft.evidenceEventSequences.some(sequence => !evidence.get(sequence)?.type.startsWith('adventure.'))) {
         fail('结果叙述引用了非冒险或不存在事件')
@@ -298,7 +298,7 @@ export async function generateAdventureRuntimeCandidateV1(input: {
     })
     const saved = await createAgentRunCheckpointV1({
       scope: input.scope, runId: snapshot.run.id,
-      simulationSessionId: input.simulationSessionId,
+      productRuntimeSessionId: input.productRuntimeSessionId,
       resumePayload: candidate, expectedLastSequence: snapshot.projection.lastSequence,
     })
     return { snapshot: saved.snapshot, candidate }
@@ -328,7 +328,7 @@ function isCandidate(value: unknown): value is AdventureRuntimeCandidateV1 {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const row = value as Partial<AdventureRuntimeCandidateV1>
   return row.version === 1 && row.portable === false && typeof row.runId === 'number'
-    && typeof row.simulationSessionId === 'number' && typeof row.baseSequence === 'number'
+    && typeof row.productRuntimeSessionId === 'number' && typeof row.baseSequence === 'number'
     && typeof row.stateHash === 'string' && typeof row.visibilityHash === 'string'
     && typeof row.releaseHash === 'string' && typeof row.contextManifestHash === 'string'
     && typeof row.candidateHash === 'string'
@@ -349,19 +349,19 @@ export async function adoptAdventureRuntimeCandidateV1(input: {
   scope: WorkspaceScope
   runId: number
   onDurableBoundary?: (eventType: string, snapshot: AgentRunSnapshotV1) => void | Promise<void>
-}): Promise<{ snapshot: AgentRunSnapshotV1; event: SimulationEvent | null; receiptHash: string; candidate: AdventureRuntimeCandidateV1 }> {
+}): Promise<{ snapshot: AgentRunSnapshotV1; event: ProductRuntimeEvent | null; receiptHash: string; candidate: AdventureRuntimeCandidateV1 }> {
   const loaded = await readCandidate(input.scope, input.runId)
   let { snapshot } = loaded
   const { candidate } = loaded
   let adopted = snapshot.events.find(event => event.type === 'runtime.candidate.adopted')
   if (adopted?.type === 'runtime.candidate.adopted' && snapshot.projection.state === 'completed') {
     const event = candidate.commandId == null ? null
-      : (await db.simulationEvents.where('sessionId').equals(candidate.simulationSessionId).toArray())
+      : (await db.productRuntimeEvents.where('sessionId').equals(candidate.productRuntimeSessionId).toArray())
           .find(item => item.commandId === candidate.commandId) ?? null
     return { snapshot, event, candidate, receiptHash: snapshot.projection.terminalReceiptHash ?? fail('已采用运行缺少终验回执') }
   }
   const prior = candidate.commandId == null ? null
-    : (await db.simulationEvents.where('sessionId').equals(candidate.simulationSessionId).toArray())
+    : (await db.productRuntimeEvents.where('sessionId').equals(candidate.productRuntimeSessionId).toArray())
         .find(item => item.commandId === candidate.commandId) ?? null
   if (!adopted && !prior) {
     try {
@@ -376,12 +376,12 @@ export async function adoptAdventureRuntimeCandidateV1(input: {
   }
   const event = prior ?? (candidate.kind === 'adventure-intent-candidate'
     ? await commitAdventureAction({
-        sessionId: candidate.simulationSessionId, commandId: candidate.commandId!,
+        sessionId: candidate.productRuntimeSessionId, commandId: candidate.commandId!,
         baseSequence: candidate.baseSequence, baseStateHash: candidate.stateHash,
         actionKey: candidate.actionKey,
       })
     : null)
-  let version = await readSimulationStateVersion(candidate.simulationSessionId)
+  let version = await readProductRuntimeStateVersion(candidate.productRuntimeSessionId)
   if (!adopted) {
     const adoptionHash = await hashCanonicalValue({
       candidateHash: candidate.candidateHash, commandId: candidate.commandId,
@@ -413,7 +413,7 @@ export async function adoptAdventureRuntimeCandidateV1(input: {
       verifierSetVersion: ADVENTURE_RUNTIME_VERIFIER_SET_V1,
     })
   }
-  version = await readSimulationStateVersion(candidate.simulationSessionId)
+  version = await readProductRuntimeStateVersion(candidate.productRuntimeSessionId)
   if (version.sequence !== adopted.payload.resultingSequence) fail('采用后 SIM 状态已继续推进，拒绝签发过期回执')
   const receipt = await createVerificationReceiptV1({
     version: 1, runId: snapshot.run.id, generation: snapshot.projection.generation,

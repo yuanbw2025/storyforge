@@ -9,7 +9,7 @@ async function seed(): Promise<{ scope: WorkspaceScope; chapterId: number; world
   const now = Date.now()
   const projectId = await db.projects.add({
     name: '影响重建', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 100_000, worldCode: 'impact-remediation', worldVersion: 1, createdAt: now, updatedAt: now,
+    targetWordCount: 100_000,createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({ projectId, code: 'impact-remediation', name: '主世界', description: '', currentVersion: 1, createdAt: now, updatedAt: now }) as number
   const workId = await db.works.add({ projectId, worldId, title: '影响重建', description: '', genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now } as any) as number

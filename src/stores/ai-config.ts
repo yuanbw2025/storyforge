@@ -21,9 +21,7 @@ import {
   type AgentTeamBudgetProfile,
 } from '../lib/agent/team-budget'
 import {
-  isCreativeReliabilityRuntimeEnabledV1,
   sanitizeCreativeQualityModeV1,
-  setCreativeReliabilityRuntimeEnabledV1,
   type CreativeQualityModeV1,
 } from '../lib/agent/creative-reliability'
 
@@ -293,7 +291,6 @@ interface AIConfigStore {
   taskRoutes: AITaskRoutes
   agentContextProfiles: AgentContextProfiles
   agentTeamBudgetProfile: AgentTeamBudgetProfile
-  creativeReliabilityEnabled: boolean
   creativeQualityMode: CreativeQualityModeV1
   /** 当前生效的预设 id（null = 未对应任何预设/已改动） */
   activePresetId: string | null
@@ -315,7 +312,6 @@ interface AIConfigStore {
   setTaskRoute: (taskKind: AITaskKind, presetId: string | null) => void
   setAgentContextProfile: (taskKind: AgentContextTaskKind, profile: AgentContextProfile) => void
   setAgentTeamBudgetProfile: (profile: AgentTeamBudgetProfile) => void
-  setCreativeReliabilityEnabled: (enabled: boolean) => void
   setCreativeQualityMode: (mode: CreativeQualityModeV1) => void
 }
 
@@ -328,7 +324,6 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   taskRoutes: loadTaskRoutes(),
   agentContextProfiles: loadAgentContextProfiles(),
   agentTeamBudgetProfile: loadAgentTeamBudgetProfile(),
-  creativeReliabilityEnabled: isCreativeReliabilityRuntimeEnabledV1(),
   creativeQualityMode: loadCreativeQualityMode(),
   activePresetId: null,
   editingPresetId: null,
@@ -435,11 +430,6 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
     const agentTeamBudgetProfile = sanitizeAgentTeamBudgetProfile(profile)
     saveAgentTeamBudgetProfile(agentTeamBudgetProfile)
     set({ agentTeamBudgetProfile })
-  },
-
-  setCreativeReliabilityEnabled: enabled => {
-    setCreativeReliabilityRuntimeEnabledV1(enabled)
-    set({ creativeReliabilityEnabled: enabled })
   },
 
   setCreativeQualityMode: mode => {

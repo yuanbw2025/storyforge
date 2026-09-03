@@ -1,4 +1,4 @@
-import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import { readOwnedRows, resolveScope } from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import {
   cultivationStageTiers,

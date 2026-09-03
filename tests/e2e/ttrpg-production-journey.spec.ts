@@ -41,12 +41,59 @@ async function configureMockedTextProvider(page: Page) {
           spokenIntent: "先让我确认这里发生了什么。",
         }
       : system.includes("StoryForge 可信 AI GM 的候选叙事生成器")
-        ? {
-            narration:
-              "规则结果已经呈现；现场人物依据各自所知作出反应，后续选择仍交给玩家决定。",
-            offeredClueKeys: [],
-            recommendedNextSceneKeys: [],
-          }
+        ? (() => {
+            const marker = "【冻结主持上下文】\n";
+            const contextMessage = body.messages?.find(
+              (message) => message.role === "user" && message.content?.includes(marker),
+            )?.content;
+            if (!contextMessage) throw new Error("AI GM 测试请求缺少冻结主持上下文");
+            const view = JSON.parse(contextMessage.slice(contextMessage.indexOf(marker) + marker.length)) as {
+              latestAction?: {
+                receipt?: {
+                  actionSequence: number;
+                  mechanicalSummary: string;
+                  actorConsequence: string;
+                  sceneConsequence: string;
+                  worldConsequence: string;
+                  context: {
+                    actorKey: string;
+                    observers: Array<{
+                      actorKey: string;
+                      relevance: "primary" | "relevant" | "ambient";
+                      responsePolicy: "actor-owned" | "prompt-human" | "ai-eligible" | "gm-eligible" | "observe-only";
+                    }>;
+                  };
+                };
+              };
+            };
+            const receipt = view.latestAction?.receipt;
+            if (!receipt) throw new Error("AI GM 测试上下文缺少行动回执");
+            return {
+              narration:
+                "规则结果已经呈现；现场人物依据各自所知作出反应，后续选择仍交给玩家决定。",
+              synthesisFrame: {
+                schema: "storyforge.ttrpg-gm-synthesis-frame",
+                version: 2,
+                actionSequence: receipt.actionSequence,
+                mechanicalOutcome: receipt.mechanicalSummary,
+                actorFeedback: receipt.actorConsequence,
+                reactions: receipt.context.observers
+                  .filter(observer => observer.actorKey !== receipt.context.actorKey && observer.relevance !== "ambient")
+                  .map(observer => ({
+                    actorKey: observer.actorKey,
+                    responsePolicy: observer.responsePolicy,
+                    text: observer.responsePolicy === "ai-eligible" || observer.responsePolicy === "gm-eligible"
+                      ? "该角色依据当前已知信息回应规则结果。"
+                      : null,
+                  })),
+                sceneUpdate: receipt.sceneConsequence,
+                worldUpdate: receipt.worldConsequence,
+                nextPrompts: [],
+              },
+              offeredClueKeys: [],
+              recommendedNextSceneKeys: [],
+            };
+          })()
         : system.includes("StoryForge 的隔离 AI 玩家行动提议器")
           ? {
               actionKey: "investigate",
@@ -207,14 +254,14 @@ test("跑团专属受控 Golden C slice：统一 Build、三真人开桌、规�
       path: string,
     ) => Promise<any>;
     const { db } = await importer("/storyforge/src/lib/db/schema.ts");
-    const session = await db.simulationSessions.get(sessionId);
+    const session = await db.productRuntimeSessions.get(sessionId);
     const build =
-      session?.gameBuildId == null
+      session?.productBuildId == null
         ? null
-        : await db.gameBuilds.get(session.gameBuildId);
+        : await db.productBuilds.get(session.productBuildId);
     return {
-      sessionBuildId: session?.gameBuildId ?? null,
-      sessionReleaseId: session?.gameReleaseId ?? null,
+      sessionBuildId: session?.productBuildId ?? null,
+      sessionReleaseId: session?.productReleaseId ?? null,
       runtimeSourceHash: session?.runtimeSourceHash ?? null,
       buildProductionId: build?.productionId ?? null,
     };

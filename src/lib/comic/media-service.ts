@@ -11,7 +11,7 @@ import type {
   MediaRightsV1,
   WorkspaceScope,
 } from '../types'
-import { resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
+import { resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { assertComicMediaAssetV1 } from './contracts'
 import { imageBindingFromAIConfigV1, createMediaProviderReceiptV1, OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1, resolveOpenAICompatibleImageSizeV1 } from '../media/capability'
 import {

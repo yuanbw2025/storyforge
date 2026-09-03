@@ -35,12 +35,11 @@ import {
 } from './team-budget'
 import {
   assertRecordInScope,
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScopeLike,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import { hashCanonicalValue } from './run/hash'
 import { readAgentRunV1 } from './run/event-store'
@@ -276,7 +275,7 @@ export async function runConsistencyAgent(input: {
   const [evidence, cognition, lifecycle, deterministicFindings] = await Promise.all([
     assembleContext({
       projectId: input.projectId,
-      scope: isLegacyReadScope(scope) ? undefined : scope,
+      scope,
       chapterId: input.chapterId,
       outlineNodeId: input.outlineNodeId,
       worldGroupId: input.worldGroupId,

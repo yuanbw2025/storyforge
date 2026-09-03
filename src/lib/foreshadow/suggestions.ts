@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import { canonicalStringify } from '../agent/run/hash'
 import { adopt } from '../registry/adopt'
 import type { ForeshadowType, WorkspaceScope } from '../types'
-import { readOwnedRows, scopeTransactionTables } from '../world-engine/scope'
+import { readOwnedRows, scopeTransactionTables } from '../workspace/scope'
 
 export interface ForeshadowSuggestionBaselineRowV1 {
   id: number

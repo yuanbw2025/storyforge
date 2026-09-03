@@ -15,7 +15,7 @@ import { db } from '../../db/schema'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt } from '../../registry/adopt'
 import type { AssembleContextResult, ContextPacketV1 } from '../../registry/types'
-import { readOwnedRows, scopeTransactionTables } from '../../world-engine/scope'
+import { readOwnedRows, scopeTransactionTables } from '../../workspace/scope'
 import {
   formatCodexExtractionBaselineV1,
   readCodexExtractionBaselineV1,

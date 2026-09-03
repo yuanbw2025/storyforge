@@ -9,7 +9,7 @@ import type { Character, ChatMessage, RelationType } from '../types'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from './prompt-engine'
 import { characterAxesLabel } from '../character/character-axes'
-import { readOwnedRows, resolveReadScopeLike } from '../world-engine/scope'
+import { readOwnedRows, resolveReadScopeLike } from '../workspace/scope'
 
 /** AI 返回的原始关系条目 */
 export interface ExtractedRelation {

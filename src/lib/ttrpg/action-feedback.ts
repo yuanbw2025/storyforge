@@ -1,15 +1,15 @@
 import type {
   RuleActionDefinitionV1,
   RulePackV1,
-  SimulationRuntimeState,
-  SimulationTtrpgActionContextV2,
-  SimulationTtrpgActionObserverV2,
-  SimulationTtrpgActionReceiptV2,
-  SimulationTtrpgActorControllerV2,
-  SimulationTtrpgCheck,
-  SimulationTtrpgGmSynthesisFrameV2,
-  SimulationTtrpgReactionCandidateV2,
-  SimulationTtrpgRuleActionResultV1,
+  ProductRuntimeState,
+  TtrpgRuntimeActionContextV2,
+  TtrpgRuntimeActionObserverV2,
+  TtrpgRuntimeActionReceiptV2,
+  TtrpgRuntimeActorControllerV2,
+  TtrpgRuntimeCheck,
+  TtrpgRuntimeGmSynthesisFrameV2,
+  TtrpgRuntimeReactionCandidateV2,
+  TtrpgRuntimeRuleActionResultV1,
   TtrpgCampaignContentV1,
   TtrpgCharacterTemplateV1,
 } from "../types";
@@ -83,7 +83,7 @@ function textArray(value: unknown, label: string, maximum = 64): string[] {
 export function resolveTtrpgCharacterControllerV2(
   template: Pick<TtrpgCharacterTemplateV1, "role" | "controller">,
   participantController?: "human" | "ai" | "hybrid" | "vacant" | null,
-): SimulationTtrpgActorControllerV2 {
+): TtrpgRuntimeActorControllerV2 {
   if (participantController) return participantController;
   if (template.controller === "open") return "vacant";
   if (template.controller) return template.controller;
@@ -93,8 +93,8 @@ export function resolveTtrpgCharacterControllerV2(
 function responsePolicy(input: {
   actorKey: string;
   actingActorKey: string;
-  controller: SimulationTtrpgActorControllerV2;
-}): SimulationTtrpgActionObserverV2["responsePolicy"] {
+  controller: TtrpgRuntimeActorControllerV2;
+}): TtrpgRuntimeActionObserverV2["responsePolicy"] {
   if (input.actorKey === input.actingActorKey) return "actor-owned";
   if (input.controller === "human" || input.controller === "hybrid")
     return "prompt-human";
@@ -104,14 +104,14 @@ function responsePolicy(input: {
   return "observe-only";
 }
 
-function ownedItems(state: SimulationRuntimeState, actorKey: string) {
+function ownedItems(state: ProductRuntimeState, actorKey: string) {
   return Object.values(state.ttrpg?.product?.inventory?.items ?? {}).filter(
     (item) => item.ownerRef === actorKey && !item.stateTags.includes("broken"),
   );
 }
 
 function grantedActions(input: {
-  state: SimulationRuntimeState;
+  state: ProductRuntimeState;
   template: TtrpgCharacterTemplateV1;
   rulePack: RulePackV1;
 }): Set<string> {
@@ -127,7 +127,7 @@ function grantedActions(input: {
 }
 
 function degreeLabel(
-  outcome: SimulationTtrpgRuleActionResultV1["outcome"],
+  outcome: TtrpgRuntimeRuleActionResultV1["outcome"],
 ): string {
   return (
     {
@@ -146,7 +146,7 @@ function degreeLabel(
 /** Reject explicit prose claims that invert the already committed degree. */
 export function assertTtrpgFeedbackOutcomeConsistentV2(
   feedback: string,
-  outcome: SimulationTtrpgRuleActionResultV1["outcome"],
+  outcome: TtrpgRuntimeRuleActionResultV1["outcome"],
 ): void {
   const normalized = feedback.normalize("NFC").toLocaleLowerCase();
   const claimsFailure =
@@ -185,7 +185,7 @@ export function assertTtrpgFeedbackOutcomeConsistentV2(
 }
 
 export function createTtrpgActionReceiptV2(input: {
-  state: SimulationRuntimeState;
+  state: ProductRuntimeState;
   campaign: TtrpgCampaignContentV1;
   rulePack: RulePackV1;
   sequence: number;
@@ -193,12 +193,12 @@ export function createTtrpgActionReceiptV2(input: {
   action: RuleActionDefinitionV1;
   actorKey: string;
   targetKey: string | null;
-  check: SimulationTtrpgCheck | null;
-  outcome: SimulationTtrpgRuleActionResultV1["outcome"];
-  resourceChanges: SimulationTtrpgRuleActionResultV1["resourceChanges"];
-  conditionChanges: SimulationTtrpgRuleActionResultV1["conditionChanges"];
+  check: TtrpgRuntimeCheck | null;
+  outcome: TtrpgRuntimeRuleActionResultV1["outcome"];
+  resourceChanges: TtrpgRuntimeRuleActionResultV1["resourceChanges"];
+  conditionChanges: TtrpgRuntimeRuleActionResultV1["conditionChanges"];
   abilityChange: NonNullable<
-    SimulationTtrpgRuleActionResultV1["abilityChange"]
+    TtrpgRuntimeRuleActionResultV1["abilityChange"]
   >;
   nextActorKey: string | null;
   nextRound: number;
@@ -209,7 +209,7 @@ export function createTtrpgActionReceiptV2(input: {
     method: string | null;
   } | null;
   participantControllers?: Record<string, "human" | "ai" | "hybrid" | "vacant">;
-}): SimulationTtrpgActionReceiptV2 {
+}): TtrpgRuntimeActionReceiptV2 {
   const runtime = input.state.ttrpg ?? fail("运行时缺少 TTRPG 状态");
   const product = runtime.product ?? fail("运行时缺少正式 TTRPG 产品状态");
   const scene =
@@ -241,20 +241,20 @@ export function createTtrpgActionReceiptV2(input: {
     criticalityReasons.push("行动可能施加或移除持续状态");
   if (clueRelevant) criticalityReasons.push("行动命中当前场景的线索发现路径");
   if (input.check) criticalityReasons.push("行动包含正式规则检定");
-  const criticality: SimulationTtrpgActionContextV2["criticality"] =
+  const criticality: TtrpgRuntimeActionContextV2["criticality"] =
     criticalityReasons.some((reason) => /生存|持续状态|线索/u.test(reason))
       ? "critical"
       : input.check || input.resourceChanges.length
         ? "meaningful"
         : "routine";
 
-  const observers: SimulationTtrpgActionObserverV2[] = participantKeys.map(
+  const observers: TtrpgRuntimeActionObserverV2[] = participantKeys.map(
     (actorKey) => {
       const template =
         input.campaign.characterTemplates.find(
           (item) => item.characterKey === actorKey,
         ) ?? fail(`场景参与者不在 CampaignPack:${actorKey}`);
-      const relation: SimulationTtrpgActionObserverV2["relation"] =
+      const relation: TtrpgRuntimeActionObserverV2["relation"] =
         actorKey === input.actorKey
           ? "actor"
           : actorKey === input.targetKey
@@ -262,7 +262,7 @@ export function createTtrpgActionReceiptV2(input: {
             : affectedKeys.has(actorKey)
               ? "direct-effect"
               : "scene-witness";
-      const relevance: SimulationTtrpgActionObserverV2["relevance"] =
+      const relevance: TtrpgRuntimeActionObserverV2["relevance"] =
         relation === "actor" || relation === "target"
           ? "primary"
           : relation === "direct-effect" || criticality === "critical"
@@ -324,7 +324,7 @@ export function createTtrpgActionReceiptV2(input: {
       observer.actorKey !== input.actorKey && observer.relevance !== "ambient",
   );
   const humanConfirmationRequiredActorKeys = (
-    values: SimulationTtrpgActionObserverV2[],
+    values: TtrpgRuntimeActionObserverV2[],
   ) =>
     values
       .filter((observer) => observer.responsePolicy === "prompt-human")
@@ -378,7 +378,7 @@ export function createTtrpgActionReceiptV2(input: {
   const reactionActorKeys = new Set(
     reactionActors.map((observer) => observer.actorKey),
   );
-  const reactionCandidates: SimulationTtrpgReactionCandidateV2[] =
+  const reactionCandidates: TtrpgRuntimeReactionCandidateV2[] =
     relevantResponders.map((observer) => {
       const template = input.campaign.characterTemplates.find(
         (item) => item.characterKey === observer.actorKey,
@@ -508,7 +508,7 @@ export function createTtrpgActionReceiptV2(input: {
       : (input.state.entities[input.targetKey]?.name ?? input.targetKey);
   const failForwardAvailable =
     !!input.check && !input.check.success && !!scene.failureForward;
-  const context: SimulationTtrpgActionContextV2 = {
+  const context: TtrpgRuntimeActionContextV2 = {
     schema: "storyforge.ttrpg-action-context",
     version: 2,
     sceneKey: scene.sceneKey,
@@ -598,7 +598,7 @@ export function createTtrpgActionReceiptV2(input: {
 function parseObserver(
   value: unknown,
   label: string,
-): SimulationTtrpgActionObserverV2 {
+): TtrpgRuntimeActionObserverV2 {
   const row = object(value, label);
   exact(
     row,
@@ -702,7 +702,7 @@ function parseReactionWindow(value: unknown, label: string) {
 function parseReactionCandidate(
   value: unknown,
   label: string,
-): SimulationTtrpgReactionCandidateV2 {
+): TtrpgRuntimeReactionCandidateV2 {
   const row = object(value, label);
   exact(
     row,
@@ -785,7 +785,7 @@ function parseReactionCandidate(
 
 export function parseTtrpgActionReceiptV2(
   value: unknown,
-): SimulationTtrpgActionReceiptV2 {
+): TtrpgRuntimeActionReceiptV2 {
   const row = object(value, "ActionReceipt");
   exact(
     row,
@@ -1043,7 +1043,7 @@ export function parseTtrpgActionReceiptV2(
     version: 2,
     receiptKey: String(row.receiptKey),
     actionSequence,
-    terminalStatus: row.terminalStatus as SimulationTtrpgActionReceiptV2["terminalStatus"],
+    terminalStatus: row.terminalStatus as TtrpgRuntimeActionReceiptV2["terminalStatus"],
     context: {
       schema: "storyforge.ttrpg-action-context",
       version: 2,
@@ -1145,8 +1145,8 @@ export function parseTtrpgActionReceiptV2(
 }
 
 export function createDeterministicGmSynthesisFrameV2(
-  receipt: SimulationTtrpgActionReceiptV2,
-): SimulationTtrpgGmSynthesisFrameV2 {
+  receipt: TtrpgRuntimeActionReceiptV2,
+): TtrpgRuntimeGmSynthesisFrameV2 {
   const candidateByActor = new Map(
     (receipt.context.reactionCandidates ?? []).map((candidate) => [
       candidate.actorKey,
@@ -1188,8 +1188,8 @@ export function createDeterministicGmSynthesisFrameV2(
 
 export function parseTtrpgGmSynthesisFrameV2(
   value: unknown,
-  receipt: SimulationTtrpgActionReceiptV2,
-): SimulationTtrpgGmSynthesisFrameV2 {
+  receipt: TtrpgRuntimeActionReceiptV2,
+): TtrpgRuntimeGmSynthesisFrameV2 {
   const row = object(value, "GmSynthesisFrame");
   exact(
     row,

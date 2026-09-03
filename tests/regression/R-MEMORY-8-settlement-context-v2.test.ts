@@ -14,7 +14,7 @@ import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 import { buildMemoryArtifactIndexV1, evaluateMemorySettlementBarrierV1 } from '../../src/lib/memory/settlement'
 import { buildWorkspaceSelfCheckReportV1, synchronizeProjectChangesToFolderV1 } from '../../src/lib/memory/workspace-projection'
 import * as settlementCore from '../../src/lib/memory/settlement-core'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import aiEntryRegistry from '../../src/lib/agent/ai-entry-registry.json'
 
 const HASH_A = 'a'.repeat(64)
@@ -78,7 +78,7 @@ describe('MEMORY-8 · Harness settlement and ContextManifestV2', () => {
   it('keeps every formal UI model entry governed while auxiliary entries remain explicitly non-Canon', () => {
     const formalEntries = aiEntryRegistry.entries.filter(entry => entry.entryKind === 'formal')
     expect(formalEntries
-      .every(entry => ['durable-run', 'generation-node', 'authoring-draft', 'simulation-runtime']
+      .every(entry => ['durable-run', 'generation-node', 'authoring-draft', 'product-runtime']
         .includes(entry.executionBoundary))).toBe(true)
     expect(formalEntries.filter(entry => entry.executionBoundary === 'authoring-draft')
       .every(entry => entry.adoptAllowed === true

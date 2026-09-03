@@ -40,9 +40,9 @@ import type {
   AgentRunArtifactRecordV1,
   NodeFlow,
   NodeRunRecord,
-  SimulationSession,
-  SimulationEvent,
-  SimulationCheckpoint,
+  ProductRuntimeSession,
+  ProductRuntimeEvent,
+  ProductRuntimeCheckpoint,
   World,
   Work,
   WorkCharacterBinding,
@@ -51,7 +51,7 @@ import type {
   WorldRevision,
   WorldRelease,
   WorldDerivationV1,
-  GameRelease,
+  ProductRelease,
   NarrativeBeat,
   NarrativeChoice,
   ProductMediaAsset,
@@ -63,15 +63,15 @@ import type {
   ComicPanel,
   ComicVisualSubject,
   ComicMediaAsset,
-  GameRulePackRecordV1,
+  TtrpgRulePackRecordV1,
   TtrpgSessionParticipantRecordV2,
   TtrpgRuntimeAssetRequestRecordV1,
-  GameProductionRecordV1,
-  GameProductionBriefRecordV1,
-  GameProductionCommandRecordV1,
-  GameBuildRecordV1,
-  GameBuildArtifactRecordV1,
-  GameQualityGateReceiptRecordV1,
+  ProductProductionRecordV1,
+  ProductProductionBriefRecordV1,
+  ProductProductionCommandRecordV1,
+  ProductBuildRecordV1,
+  ProductBuildArtifactRecordV1,
+  ProductQualityGateReceiptRecordV1,
   MediaBlobObjectRecordV1,
 } from '../types'
 import type { TemporalFact } from '../types/temporal-fact'
@@ -101,6 +101,7 @@ type HomeWorldGroupExportRef = {
  *   7 — 结构化正规剧本场景（SCREEN-1A）
  *   8 — 漫画页、格与视觉条目（COMIC-1A）
  *   9 — 漫画媒资与共享 Blob（MEDIA-CORE-1 / COMIC-2）
+ *   10 — 上层产品生产、发布与运行根闭集（PRODUCT-RUNTIME-1）
  */
 export interface ProjectExportData {
   version: number
@@ -200,7 +201,7 @@ export interface ProjectExportData {
     Omit<WorldDerivationV1, 'id' | 'projectId' | 'worldId' | 'targetRevisionId' | 'targetReleaseId'>
     & { _exportId: number; _worldExportId: number; _targetRevisionExportId?: number | null; _targetReleaseExportId?: number | null }
   )[]
-  gameReleases?: (Omit<GameRelease, 'id' | 'projectId' | 'worldId' | 'workId' | 'worldReleaseId'> & {
+  productReleases?: (Omit<ProductRelease, 'id' | 'projectId' | 'worldId' | 'workId' | 'worldReleaseId'> & {
     _exportId: number
     _worldExportId: number
     _workExportId: number
@@ -216,29 +217,35 @@ export interface ProjectExportData {
     _moduleExportId: number
   })[]
   productMediaAssets?: (
-    Omit<ProductMediaAsset, 'id' | 'projectId' | 'worldId' | 'workId'>
-    & { _exportId: number; _worldExportId: number; _workExportId: number }
+    Omit<ProductMediaAsset, 'id' | 'projectId' | 'worldId' | 'workId' | 'productReleaseId' | 'productRuntimeSessionId'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _workExportId: number
+      _productReleaseExportId?: number | null
+      _productRuntimeSessionExportId?: number | null
+    }
   )[]
   productMediaBlobs?: (
     Omit<ProductMediaBlob, 'id' | 'projectId' | 'worldId' | 'workId' | 'mediaAssetId' | 'blobObjectId'>
     & { _exportId: number; _worldExportId: number; _workExportId: number; _mediaAssetExportId: number; _blobObjectExportId: number }
   )[]
 
-  gameRulePacks?: (
-    Omit<GameRulePackRecordV1, 'id' | 'projectId' | 'worldId' | 'workId'>
+  ttrpgRulePacks?: (
+    Omit<TtrpgRulePackRecordV1, 'id' | 'projectId' | 'worldId' | 'workId'>
     & { _exportId: number; _worldExportId: number; _workExportId: number }
   )[]
-  gameProductions?: (
-    Omit<GameProductionRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'currentGameReleaseId'>
+  productProductions?: (
+    Omit<ProductProductionRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'currentProductReleaseId'>
     & {
       _exportId: number
       _worldExportId: number
       _workExportId: number
-      _currentGameReleaseExportId?: number | null
+      _currentProductReleaseExportId?: number | null
     }
   )[]
-  gameProductionBriefs?: (
-    Omit<GameProductionBriefRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceWorldReleaseId'>
+  productProductionBriefs?: (
+    Omit<ProductProductionBriefRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceWorldReleaseId'>
     & {
       _exportId: number
       _worldExportId: number
@@ -247,25 +254,25 @@ export interface ProjectExportData {
       _sourceWorldReleaseExportId: number
     }
   )[]
-  gameProductionCommands?: (
-    Omit<GameProductionCommandRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'productionId'>
+  productProductionCommands?: (
+    Omit<ProductProductionCommandRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'productionId'>
     & { _exportId: number; _worldExportId: number; _workExportId: number; _productionExportId: number }
   )[]
-  gameBuilds?: (
-    Omit<GameBuildRecordV1,
-      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceGameReleaseId'
-      | 'releasedGameReleaseId'>
+  productBuilds?: (
+    Omit<ProductBuildRecordV1,
+      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceProductReleaseId'
+      | 'releasedProductReleaseId'>
     & {
       _exportId: number
       _worldExportId: number
       _workExportId: number
       _productionExportId: number
-      _sourceGameReleaseExportId?: number | null
-      _releasedGameReleaseExportId?: number | null
+      _sourceProductReleaseExportId?: number | null
+      _releasedProductReleaseExportId?: number | null
     }
   )[]
-  gameQualityGateReceipts?: (
-    Omit<GameQualityGateReceiptRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'buildId'>
+  productQualityGateReceipts?: (
+    Omit<ProductQualityGateReceiptRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'buildId'>
     & {
       _exportId: number
       _worldExportId: number
@@ -273,8 +280,8 @@ export interface ProjectExportData {
       _buildExportId: number
     }
   )[]
-  gameBuildArtifacts?: (
-    Omit<GameBuildArtifactRecordV1,
+  productBuildArtifacts?: (
+    Omit<ProductBuildArtifactRecordV1,
       'id' | 'projectId' | 'worldId' | 'workId' | 'buildId' | 'producerRunId' | 'blobObjectId'>
     & {
       _exportId: number
@@ -291,7 +298,7 @@ export interface ProjectExportData {
       _worldGroupExportId?: number | null
       _worldExportId: number
       _workExportId: number
-      _simulationSessionExportId: number
+      _productRuntimeSessionExportId: number
     }
   )[]
   ttrpgRuntimeAssetRequests?: (
@@ -300,7 +307,7 @@ export interface ProjectExportData {
       _worldGroupExportId?: number | null
       _worldExportId: number
       _workExportId: number
-      _simulationSessionExportId: number
+      _productRuntimeSessionExportId: number
       _mediaAssetExportId?: number | null
     }
   )[]
@@ -341,15 +348,15 @@ export interface ProjectExportData {
   )[]
   /** HARNESS-1 可恢复运行账本；事件/检查点只通过便携 run ID 关联。 */
   agentRuns?: (
-    Omit<AgentRunRecord, 'id' | 'projectId' | 'workId' | 'simulationSessionId' | 'gameBuildId' | 'worldGroupId' | 'conversationId' | 'parentRunId'>
+    Omit<AgentRunRecord, 'id' | 'projectId' | 'workId' | 'productRuntimeSessionId' | 'productBuildId' | 'worldGroupId' | 'conversationId' | 'parentRunId'>
     & WorldGroupExportRef
     & {
       _exportId: number
       _parentExportId?: number | null
       _workOwnerExportId?: number
       _instanceOwnerExportId?: number
-      _simulationSessionExportId?: number | null
-      _gameBuildExportId?: number | null
+      _productRuntimeSessionExportId?: number | null
+      _productBuildExportId?: number | null
       _conversationExportId?: number | null
     }
   )[]
@@ -375,30 +382,30 @@ export interface ProjectExportData {
     Omit<NodeRunRecord, 'id' | 'projectId' | 'flowId'>
     & { _flowExportId: number }
   )[]
-  /** SIM-1 共享互动运行时；创作 Canon 与运行存档严格分层。 */
-  simulationSessions?: (
-    Omit<SimulationSession,
+  /** ProductRuntime 上层产品运行态；世界语义与产品私域严格分层。 */
+  productRuntimeSessions?: (
+    Omit<ProductRuntimeSession,
       'id' | 'projectId' | 'worldGroupId' | 'worldId' | 'workId'
-      | 'gameReleaseId' | 'gameBuildId' | 'parentSessionId'>
+      | 'productReleaseId' | 'productBuildId' | 'parentSessionId'>
     & WorldGroupExportRef
     & {
       _exportId: number
       _worldExportId?: number | null
       _workExportId?: number | null
-      _gameReleaseExportId?: number | null
-      _gameBuildExportId?: number | null
+      _productReleaseExportId?: number | null
+      _productBuildExportId?: number | null
       _parentSessionExportId?: number | null
     }
   )[]
-  simulationEvents?: (
-    Omit<SimulationEvent, 'id' | 'projectId' | 'worldGroupId' | 'sessionId'>
+  productRuntimeEvents?: (
+    Omit<ProductRuntimeEvent, 'id' | 'projectId' | 'worldGroupId' | 'sessionId'>
     & WorldGroupExportRef
-    & { _simulationSessionExportId: number }
+    & { _productRuntimeSessionExportId: number }
   )[]
-  simulationCheckpoints?: (
-    Omit<SimulationCheckpoint, 'id' | 'projectId' | 'worldGroupId' | 'sessionId'>
+  productRuntimeCheckpoints?: (
+    Omit<ProductRuntimeCheckpoint, 'id' | 'projectId' | 'worldGroupId' | 'sessionId'>
     & WorldGroupExportRef
-    & { _simulationSessionExportId: number }
+    & { _productRuntimeSessionExportId: number }
   )[]
   /** NS-4 时序事实账本(各 FK 在派生导出里被 remap 成 _xxxExportId) */
   temporalFacts?: (Omit<TemporalFact, 'id' | 'projectId'> & Record<string, unknown>)[]

@@ -12,7 +12,6 @@ import type {
 } from '../types'
 import { ANALYSIS_DIMENSIONS } from '../types/reference'
 import type { ChunkPlan } from '../import/chunker'
-import { ensureLegacyActiveReferenceRun } from './legacy-bridge'
 import type { WorkspaceScope } from '../types/world-ownership'
 import {
   assertRecordInScope,
@@ -20,9 +19,8 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 
-export { ensureLegacyActiveReferenceRun } from './legacy-bridge'
 
 export const REFERENCE_ANALYSIS_RUN_POLICY = Object.freeze({
   maxRunsPerReference: 6,
@@ -106,7 +104,6 @@ export async function createReferenceAnalysisRun(
     throw new Error(`每份参考最多保留 ${REFERENCE_ANALYSIS_RUN_POLICY.maxRunsPerReference} 个版本，请先删除未使用版本`)
   }
 
-  await ensureLegacyActiveReferenceRun(ref.id!, scope)
   const existing = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === ref.id)
   const version = Math.max(0, ...existing.map(run => run.version)) + 1
@@ -166,7 +163,6 @@ export async function createReferenceAnalysisRun(
 
 export async function listReferenceAnalysisRuns(referenceId: number): Promise<ReferenceAnalysisRun[]> {
   const { scope } = await requireReference(referenceId)
-  await ensureLegacyActiveReferenceRun(referenceId, scope)
   const runs = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === referenceId)
   return runs.sort((a, b) => b.version - a.version)
@@ -176,8 +172,6 @@ export async function getActiveReferenceAnalysisRun(
   referenceId: number,
 ): Promise<ReferenceAnalysisRun | undefined> {
   const { scope } = await requireReference(referenceId)
-  const legacy = await ensureLegacyActiveReferenceRun(referenceId, scope)
-  if (legacy) return legacy
   return (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === referenceId)
     .find(run => run.status === 'active')
@@ -194,9 +188,7 @@ export async function getReferenceAnalysisRunChunks(
   if (run && run.referenceId !== referenceId) return []
   const chunks = await readOwnedRows<ReferenceChunkAnalysis>(scope, 'referenceChunkAnalysis', { owner: 'work' })
   return chunks
-    .filter(chunk => run?.id ? chunk.analysisRunId === run.id : (
-      chunk.referenceId === referenceId && chunk.analysisRunId == null
-    ))
+    .filter(chunk => run?.id != null && chunk.analysisRunId === run.id)
     .sort((left, right) => left.chunkIndex - right.chunkIndex)
 }
 

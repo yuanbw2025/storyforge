@@ -1,6 +1,6 @@
 import { db } from "../db/schema";
 import type {
-  SimulationSession,
+  ProductRuntimeSession,
   TtrpgCampaignContentV1,
   TtrpgSessionConsentPolicyV2,
   TtrpgSessionParticipantRecordV2,
@@ -94,7 +94,7 @@ function assertParticipant(
 }
 
 export function buildInitialTtrpgParticipantsV2(input: {
-  session: SimulationSession;
+  session: ProductRuntimeSession;
   campaign: TtrpgCampaignContentV1;
   now?: number;
 }): TtrpgSessionParticipantRecordV2[] {
@@ -196,7 +196,7 @@ export function buildInitialTtrpgParticipantsV2(input: {
 }
 
 export async function installInitialTtrpgParticipantsV2(input: {
-  session: SimulationSession;
+  session: ProductRuntimeSession;
   campaign: TtrpgCampaignContentV1;
 }): Promise<TtrpgSessionParticipantRecordV2[]> {
   const records = buildInitialTtrpgParticipantsV2(input);
@@ -215,7 +215,7 @@ export async function readTtrpgSessionParticipantsV2(
   sessionId: number,
 ): Promise<TtrpgSessionParticipantRecordV2[]> {
   if (!Number.isInteger(sessionId) || sessionId < 1) fail("sessionId 无效");
-  const session = await db.simulationSessions.get(sessionId);
+  const session = await db.productRuntimeSessions.get(sessionId);
   if (!session || session.kind !== "ttrpg") fail("TTRPG Instance 不存在");
   const rows = (
     await db.ttrpgSessionParticipants
@@ -267,14 +267,14 @@ export async function configureTtrpgSessionParticipantV2(input: {
   });
   return db.transaction(
     "rw",
-    db.simulationSessions,
-    db.simulationEvents,
+    db.productRuntimeSessions,
+    db.productRuntimeEvents,
     db.ttrpgSessionParticipants,
     async () => {
-      const session = await db.simulationSessions.get(input.sessionId);
+      const session = await db.productRuntimeSessions.get(input.sessionId);
       if (!session || session.kind !== "ttrpg" || session.status !== "active")
         fail("TTRPG Instance 当前不可配置席位");
-      const events = await db.simulationEvents
+      const events = await db.productRuntimeEvents
         .where("sessionId")
         .equals(input.sessionId)
         .toArray();
@@ -408,7 +408,7 @@ export async function finalizeTtrpgSessionParticipantsV2(input: {
  */
 export async function carryTtrpgContinuationParticipantsV2(input: {
   parentSessionId: number;
-  child: SimulationSession;
+  child: ProductRuntimeSession;
   transitionKey: string;
 }): Promise<void> {
   if (
@@ -480,7 +480,7 @@ export async function carryTtrpgContinuationParticipantsV2(input: {
 
 export async function cloneTtrpgSessionParticipantsV2(input: {
   parentSessionId: number;
-  child: SimulationSession;
+  child: ProductRuntimeSession;
 }): Promise<void> {
   const parentRows = await db.ttrpgSessionParticipants
     .where("sessionId")

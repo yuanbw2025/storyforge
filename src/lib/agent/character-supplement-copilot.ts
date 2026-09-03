@@ -13,10 +13,9 @@ import { adopt } from '../registry/adopt'
 import type { AssembleContextResult } from '../registry/types'
 import type { AIConfig, Character, ChatMessage, WorkspaceScope } from '../types'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   attachAgentContextInputStateV1,
   evidenceFromContextResult,
@@ -398,9 +397,6 @@ async function applyCandidate(input: {
     ? await input.readCurrentSourceBindings()
     : await (async () => {
         const resolved = input.scope ?? await resolveReadScopeLike(input.projectId)
-        if (isLegacyReadScope(resolved)) {
-          throw new Error('角色补全 required Gateway 候选缺少稳定 WorkspaceScope。')
-        }
         return currentGatewaySourceBindings({
           scope: resolved,
           worldGroupId: input.worldGroupId,
@@ -484,7 +480,7 @@ export async function prepareCharacterSupplementCopilotV1(
     throw new Error('多世界项目必须先确定目标角色所属世界。')
   }
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
   const character = await readTargetCharacter(input.projectId, scope, input.worldGroupId, request.characterId)
   const routingCategory = input.routingCategory ?? 'agent.character.supplement'
   const config = input.configOverride ?? resolveRequestConfig(

@@ -1,8 +1,8 @@
-import type { GameRelease, GameRuntimePackageV2 } from '../types'
+import type { ProductRelease, ProductRuntimePackageV1 } from '../types'
 
 interface PlayerLibraryRelease {
-  release: GameRelease
-  manifest: GameRuntimePackageV2 | null
+  release: ProductRelease
+  manifest: ProductRuntimePackageV1 | null
 }
 
 function normalizedTitle(title: string): string {
@@ -37,7 +37,7 @@ export function currentPlayerReleases<T extends PlayerLibraryRelease>(items: rea
     const key = item.manifest
       ? titleKey
         ? `${item.manifest.productType}:title:${titleKey}`
-        : `${item.manifest.productType}:game:${item.manifest.definition.gameKey}:world:${item.manifest.sourceWorld.contentHash}`
+        : `${item.manifest.productType}:game:${item.manifest.definition.productKey}:world:${item.manifest.sourceWorld.contentHash}`
       : `unreadable:${item.release.id ?? item.release.contentHash}`
     const existing = current.get(key)
     if (!existing || isNewer(item, existing)) current.set(key, item)

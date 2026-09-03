@@ -42,8 +42,8 @@ async function seedWorkspace(): Promise<{ project: Project; scope: WorkspaceScop
     description: '',
     status: 'drafting',
     targetWordCount: 120_000,
-    worldCode: 'harness39-world',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as Project) as number

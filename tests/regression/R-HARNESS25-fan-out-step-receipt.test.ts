@@ -5,7 +5,6 @@ import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-
 import { getOrCreateAgentConversation, updateAgentEventCandidate } from '../../src/lib/agent/conversations'
 import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import {
-  MASTER_AGENT_REPLAN_STORAGE_KEY,
   replanDurableMasterAgentRunV1,
   restoreMasterAgentCandidatesV1,
   runDurableMasterAgentPlanV1,
@@ -43,8 +42,8 @@ async function createWorkspace(label: string): Promise<{
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number
@@ -126,10 +125,10 @@ const inspirationDraft = JSON.stringify({
     powerHierarchy: '',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
     races: '',
     factionLayout: '',
   },
+  history: { overview: '' },
   storyCore: {
     logline: '守灯人追查被雨抹去的名字',
     theme: '记忆',
@@ -233,11 +232,9 @@ describe.sequential('R-HARNESS25 · fan-out 步骤回执与 fresh join', { timeo
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    globalThis.localStorage?.removeItem(MASTER_AGENT_REPLAN_STORAGE_KEY)
   })
 
   afterEach(() => {
-    globalThis.localStorage?.removeItem(MASTER_AGENT_REPLAN_STORAGE_KEY)
     db.close()
   })
 
@@ -349,7 +346,6 @@ describe.sequential('R-HARNESS25 · fan-out 步骤回执与 fresh join', { timeo
   })
 
   it('结构化叶子未通过确定性验证时不持久化候选，也不会启动下游汇合模型', async () => {
-    globalThis.localStorage?.setItem(MASTER_AGENT_REPLAN_STORAGE_KEY, 'disabled')
     const fixture = await createWorkspace('叶子硬门')
     const conversation = await getOrCreateAgentConversation({
       projectId: fixture.scope.projectId,
@@ -366,6 +362,7 @@ describe.sequential('R-HARNESS25 · fan-out 步骤回执与 fresh join', { timeo
       onDurableBoundary: boundary => { runId = boundary.runId },
     }, {
       execute: ((options: any) => executeFixture(options, { 'inspiration-1': '{}' })) as any,
+      disableAutomaticReplanForTest: true,
     })).rejects.toThrow('缺少字段 worldview')
 
     const snapshot = await readAgentRunV1(fixture.scope, runId)

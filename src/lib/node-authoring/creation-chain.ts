@@ -8,6 +8,9 @@ import type {
 
 export const AUTHORING_CREATION_CHAIN_NODE_IDS = Object.freeze({
   context: 'chain-source-context',
+  geography: 'chain-source-geography',
+  history: 'chain-source-history',
+  worldRules: 'chain-source-world-rules',
   world: 'chain-world-origin',
   concept: 'chain-story-concept',
   conflict: 'chain-story-conflict',
@@ -65,7 +68,7 @@ function edge(
 }
 
 function connectContext(source: AuthoringNodeInstance, target: AuthoringNodeInstance): AuthoringEdge {
-  return edge(source, target, 'context', source.templateId === 'source.project-context' ? 'context' : 'candidate')
+  return edge(source, target, 'context', source.outputs[0]?.id ?? 'candidate')
 }
 
 /**
@@ -81,6 +84,9 @@ export function buildAuthoringCreationChainGraph(): {
     contextBudget: 24_000,
   })
   const world = node('world', 'world.origin', 360, 40)
+  const geography = node('geography', 'source.world-geography', 360, 180, { contextBudget: 12_000 })
+  const history = node('history', 'source.world-history', 360, 320, { contextBudget: 12_000 })
+  const worldRules = node('worldRules', 'source.world-rules', 360, 460, { contextBudget: 12_000 })
   const concept = node('concept', 'story.concept', 680, 40, { request: '明确这个世界最适合承载的故事概念。' })
   const conflict = node('conflict', 'story.conflict', 680, 260, { request: '从世界设定和故事概念中提炼核心冲突。' })
   const character = node('character', 'character.profile', 1010, 40, { request: '根据世界和核心冲突创建一名关键角色。' })
@@ -95,7 +101,9 @@ export function buildAuthoringCreationChainGraph(): {
   const temperature = node('temperature', 'control.temperature', 2000, 40)
   const maxTokens = node('maxTokens', 'control.max-tokens', 2000, 170)
 
-  const nodes = [context, world, concept, conflict, character, volume, chapter, detail, prose, volumeCount, chapterCount, candidateCount, wordCount, temperature, maxTokens]
+  const nodes = [context, world, geography, history, worldRules, concept, conflict, character, volume, chapter, detail, prose, volumeCount, chapterCount, candidateCount, wordCount, temperature, maxTokens]
+  const canonicalWorldSources = [geography, history, worldRules]
+  const worldAwareTargets = [concept, conflict, character, volume, chapter, detail, prose]
   const edges = [
     connectContext(context, world),
     connectContext(context, concept),
@@ -109,6 +117,7 @@ export function buildAuthoringCreationChainGraph(): {
     connectContext(world, conflict),
     connectContext(world, character),
     connectContext(world, volume),
+    ...canonicalWorldSources.flatMap(source => worldAwareTargets.map(target => connectContext(source, target))),
     connectContext(concept, conflict),
     connectContext(concept, volume),
     connectContext(concept, chapter),

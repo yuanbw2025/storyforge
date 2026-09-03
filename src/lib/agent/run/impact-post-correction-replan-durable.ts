@@ -19,7 +19,7 @@ import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } fr
 import { createContextManifestFromAssemblyV1 } from './context-manifest'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
-import { assertRecordInScope, readOwnedRows } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 import type { AgentRunRecord } from '../../types/agent-run'
 import { replanImpactRemediationV1 } from '../../consistency/impact-remediation-replan'
 

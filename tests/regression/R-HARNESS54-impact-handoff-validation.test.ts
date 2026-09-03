@@ -14,7 +14,7 @@ async function seed(): Promise<{
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({ name: '交接验签', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '', targetWordCount: 100_000, worldCode: 'handoff', worldVersion: 1, createdAt: now, updatedAt: now } as any) as number
+  const projectId = await db.projects.add({ name: '交接验签', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '', targetWordCount: 100_000,createdAt: now, updatedAt: now } as any) as number
   const worldId = await db.worlds.add({ projectId, code: 'handoff', name: '主世界', description: '', currentVersion: 1, createdAt: now, updatedAt: now }) as number
   const workId = await db.works.add({ projectId, worldId, title: '交接验签', description: '', genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now } as any) as number
   await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })

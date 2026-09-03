@@ -193,8 +193,8 @@ async function seedWorkspace(): Promise<{
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: 'tide-gate',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number

@@ -1,3 +1,5 @@
+import type { ProductionProductKindV1 } from './product-identity'
+
 export const PRODUCT_MEDIA_KINDS = [
   'background',
   'character-pose',
@@ -18,6 +20,13 @@ export interface ProductMediaAsset {
   projectId: number
   worldId: number
   workId: number
+  /** Product media is never merely Work-owned. A frozen asset belongs to one
+   * ProductRelease; an asset created during play belongs to one runtime
+   * session. Exactly one owner id must be present. */
+  ownerKind: 'release' | 'runtime'
+  productType: ProductionProductKindV1
+  productReleaseId: number | null
+  productRuntimeSessionId: number | null
   assetKey: string
   version: number
   kind: ProductMediaKind

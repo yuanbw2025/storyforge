@@ -3,7 +3,7 @@ import { db } from '../lib/db/schema'
 import type { Worldview, StoryCore, PowerSystem, DivineDesign, NaturalResources } from '../lib/types'
 import { adopt } from '../lib/registry/adopt'
 import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-assertions'
-import { readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 interface WorldviewStore {

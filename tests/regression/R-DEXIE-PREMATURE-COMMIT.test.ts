@@ -9,7 +9,7 @@ import { db } from '../../src/lib/db/schema'
 import { deriveStrictExportProjectJSON } from '../../src/lib/export/registry-export'
 import { deriveImportProjectJSON } from '../../src/lib/export/registry-import'
 import type { AgentEvent, Character, WorkspaceScope } from '../../src/lib/types'
-import { readOwnedRows, scopeTransactionTables } from '../../src/lib/world-engine/scope'
+import { readOwnedRows, scopeTransactionTables } from '../../src/lib/workspace/scope'
 
 async function createWorkspace(): Promise<WorkspaceScope> {
   const now = Date.now()
@@ -20,8 +20,8 @@ async function createWorkspace(): Promise<WorkspaceScope> {
     status: 'drafting',
     description: '',
     targetWordCount: 100_000,
-    worldCode: 'dexie-transaction-longevity',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number

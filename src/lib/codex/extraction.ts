@@ -1,7 +1,7 @@
 import type { CodexCategory, CodexEntry, CodexFieldDef } from '../types/codex'
 import { filterCodexEntriesByWorld, parseFieldSchema } from '../types/codex'
 import type { WorkspaceScope } from '../types/world-ownership'
-import { readOwnedRows } from '../world-engine/scope'
+import { readOwnedRows } from '../workspace/scope'
 
 export interface CodexExtractionCategoryV1 {
   id: number

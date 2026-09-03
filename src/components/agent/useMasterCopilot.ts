@@ -6,16 +6,14 @@ import {
   updateAgentEventCandidate,
 } from '../../lib/agent/conversations'
 import {
-  adoptMasterCandidate,
   createMasterAgentPlan,
-  executeMasterAgentPlan,
   type ExecutedMasterCandidate,
+  type MasterAgentTask,
   type PinnedMasterAgentTaskV1,
   type MasterCandidatePayload,
 } from '../../lib/agent/orchestrator'
 import {
   findResumableMasterAgentRunV1,
-  isMasterAgentDurableHarnessEnabledV1,
   runDurableMasterAgentPlanV1,
 } from '../../lib/agent/run/master-durable'
 import {
@@ -198,7 +196,7 @@ export function useMasterCopilot(input: {
       ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
       : undefined
   ), [project.activeWorkId, project.activeWorldId, project.id])
-  const scopeKey = `${project.id}:${project.activeWorldId ?? 'legacy'}:${project.activeWorkId ?? 'legacy'}:${worldGroupId ?? 'global'}`
+  const scopeKey = `${project.id}:${project.activeWorldId ?? 'unresolved'}:${project.activeWorkId ?? 'unresolved'}:${worldGroupId ?? 'global'}`
 
   activeCandidateScope.current = scopeKey
 
@@ -227,7 +225,7 @@ export function useMasterCopilot(input: {
   }, [conversationId, reload, scopeKey])
 
   const recordTask = useCallback(async (
-    task: Parameters<NonNullable<Parameters<typeof executeMasterAgentPlan>[0]['onTask']>>[0],
+    task: MasterAgentTask,
     status: 'running' | 'completed' | 'failed',
     error?: string,
   ) => {
@@ -334,7 +332,7 @@ export function useMasterCopilot(input: {
     })
     return events
       .filter(event => event.kind === 'candidate' && event.id != null && !resolved.has(event.id))
-      .map(event => {
+      .flatMap(event => {
         const payload = parseAgentEventPayload<MasterCandidatePayload>(event, {
           version: 1,
           taskId: '',
@@ -343,7 +341,13 @@ export function useMasterCopilot(input: {
           contextSources: [],
           baseSnapshot: {},
         })
-        return {
+        if (
+          event.durableRunId == null
+          || payload.runId !== event.durableRunId
+          || typeof payload.runStepId !== 'string'
+          || typeof payload.candidateHash !== 'string'
+        ) return []
+        return [{
           event,
           payload,
           lifecycle: buildPendingHarnessLifecycleEvidenceV1({
@@ -358,7 +362,7 @@ export function useMasterCopilot(input: {
               ? { blockedReason: '创作可靠性门禁尚未通过' }
               : {}),
           }),
-        }
+        }]
       })
   }, [events])
 
@@ -419,50 +423,27 @@ export function useMasterCopilot(input: {
       })
       await reload(conversationId)
 
-      const durable = workspaceScope && isMasterAgentDurableHarnessEnabledV1()
-        ? await runDurableMasterAgentPlanV1({
-            scope: workspaceScope,
-            worldGroupId,
-            conversationId,
-            plan,
-            budget: teamBudget,
-            signal: controller.signal,
-            onTask: recordTask,
-          })
-        : null
-      const candidates = durable
-        ? durable.candidates.map(candidate => ({
-            payload: candidate.payload,
-            draft: candidate.draft,
-            runtimeNode: candidate.runtime?.runtimeNode ?? ({} as any),
-            runtimeOutput: candidate.runtime?.runtimeOutput ?? candidate.draft,
-          }))
-        : await executeMasterAgentPlan({
-            projectId: project.id!,
-            scope: workspaceScope,
-            worldGroupId,
-            plan,
-            budget: teamBudget,
-            signal: controller.signal,
-            onTask: recordTask,
-          })
-      if (!durable) {
-        for (const candidate of candidates) {
-          const event = await appendAgentEvent({
-            projectId: project.id!,
-            conversationId,
-            kind: 'candidate',
-            content: candidate.draft,
-            payload: candidate.payload,
-            scope: workspaceScope,
-          })
-          runtimeCandidates.current.set(event.id!, candidate)
-        }
-      } else {
-        for (const candidate of durable.candidates) {
-          if (candidate.event.id != null && candidate.runtime) {
-            runtimeCandidates.current.set(candidate.event.id, candidate.runtime)
-          }
+      if (!workspaceScope) {
+        throw new Error('当前作品尚未完成世界与作品身份初始化，主 Agent 已阻止生成。')
+      }
+      const durable = await runDurableMasterAgentPlanV1({
+        scope: workspaceScope,
+        worldGroupId,
+        conversationId,
+        plan,
+        budget: teamBudget,
+        signal: controller.signal,
+        onTask: recordTask,
+      })
+      const candidates = durable.candidates.map(candidate => ({
+        payload: candidate.payload,
+        draft: candidate.draft,
+        runtimeNode: candidate.runtime?.runtimeNode ?? ({} as any),
+        runtimeOutput: candidate.runtime?.runtimeOutput ?? candidate.draft,
+      }))
+      for (const candidate of durable.candidates) {
+        if (candidate.event.id != null && candidate.runtime) {
+          runtimeCandidates.current.set(candidate.event.id, candidate.runtime)
         }
       }
       await appendAgentEvent({
@@ -670,8 +651,14 @@ export function useMasterCopilot(input: {
       let message = '候选已拒绝，没有写入项目。'
       let terminalMessage: string | null = null
       let lifecycleEvidence: HarnessLifecycleEvidenceV1 | undefined
-      const durableCandidate = persistedCandidate.payload.runId != null && persistedCandidate.payload.runStepId
-      if (durableCandidate && decision === 'adopted') {
+      const durableCandidate = persistedCandidate.event.durableRunId != null
+        && persistedCandidate.payload.runId === persistedCandidate.event.durableRunId
+        && typeof persistedCandidate.payload.runStepId === 'string'
+        && typeof persistedCandidate.payload.candidateHash === 'string'
+      if (!durableCandidate) {
+        throw new Error('该候选缺少当前 durable Harness 绑定，已退出正式候选队列。')
+      }
+      if (decision === 'adopted') {
         failureStage = 'adoption'
         const adoption = await commitMasterAgentCandidateAdoptionV1({
           scope: workspaceScope!,
@@ -753,32 +740,12 @@ export function useMasterCopilot(input: {
             terminalDetail: `终验阻断：${verification.codes.join('、')}`,
           })
         }
-      } else if (durableCandidate) {
+      } else {
         await rejectMasterAgentCandidateV1({
           scope: workspaceScope!,
           runId: persistedCandidate.payload.runId!,
           candidateEventId: persistedCandidate.event.id!,
           worldGroupId,
-        })
-      } else if (decision === 'adopted') {
-        message = await adoptMasterCandidate({
-          projectId: project.id!,
-          scope: workspaceScope,
-          worldGroupId,
-          event: persistedCandidate.event,
-          payload: persistedCandidate.payload,
-          draft: persistedCandidate.event.content,
-          runtime: runtimeCandidates.current.get(persistedCandidate.event.id!),
-        })
-      }
-      if (!durableCandidate) {
-        await appendAgentEvent({
-          projectId: project.id!,
-          conversationId,
-          kind: 'confirmation',
-          content: message,
-          payload: { candidateEventId: persistedCandidate.event.id, decision },
-          scope: workspaceScope,
         })
       }
       await appendAgentEvent({

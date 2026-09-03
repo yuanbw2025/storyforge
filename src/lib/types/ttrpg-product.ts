@@ -380,7 +380,7 @@ export interface TtrpgInventoryStateV2 {
   appliedCommandIds: string[];
 }
 
-export interface RuleLegacyCheckDefinitionV1 {
+export interface RuleTotalVsTargetCheckDefinitionV1 {
   key: string;
   name: string;
   diceModelKey: string;
@@ -445,9 +445,9 @@ export interface RuleResolvedCheckDefinitionV2 {
   resolver: RuleCheckResolverV2;
 }
 
-/** Legacy meet-or-beat checks remain byte-for-byte stable in frozen releases. */
+/** V1 meet-or-beat checks remain byte-for-byte stable in frozen releases. */
 export type RuleCheckDefinitionV1 =
-  RuleLegacyCheckDefinitionV1 | RuleResolvedCheckDefinitionV2;
+  RuleTotalVsTargetCheckDefinitionV1 | RuleResolvedCheckDefinitionV2;
 
 export interface RuleResourceDefinitionV1 {
   key: string;
@@ -469,7 +469,7 @@ export interface RuleConditionDefinitionV1 {
 }
 
 export interface RuleActionEffectApplicationV2 {
-  /** Omitted preserves the legacy rule: apply whenever the check succeeds. */
+  /** Omitted preserves the V1 rule: apply whenever the check succeeds. */
   appliesOnDegrees?: Array<"automatic" | TtrpgDegreeV2>;
   /** Omitted targets the action target (or actor for scene/self actions). */
   targetScope?: "action-target" | "actor";
@@ -1240,7 +1240,7 @@ export interface TtrpgRuntimeContentV1 {
   };
 }
 
-export interface GameRulePackRecordV1 {
+export interface TtrpgRulePackRecordV1 {
   id?: number;
   projectId: number;
   worldId: number;

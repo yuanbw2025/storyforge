@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteGroup, cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
-import { deleteWork } from '../../src/lib/world-engine/lifecycle'
+import { deleteWork } from '../../src/lib/workspace/lifecycle'
 import {
   appendAgentRunEventV1,
   createAgentRunV1,
@@ -90,8 +90,8 @@ async function createSmallWorkspace(): Promise<{
     activeWorldId: worldId,
     activeWorkId: workId,
     ownershipSchemaVersion: 1,
-    worldCode: `receipt-${projectId}`,
-    worldVersion: 1,
+
+
   })
   const worldGroupId = await db.worldGroups.add({
     projectId,

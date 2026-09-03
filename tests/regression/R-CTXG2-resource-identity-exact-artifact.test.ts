@@ -18,8 +18,8 @@ import {
 } from '../../src/lib/memory/artifact-store'
 import { buildMemoryArtifactIndexV1 } from '../../src/lib/memory/settlement'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { WorkspaceScope } from '../../src/lib/types'
 
 const opened: Dexie[] = []

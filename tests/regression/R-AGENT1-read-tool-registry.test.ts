@@ -3,7 +3,7 @@ import { AGENT_READ_TOOLS, executeAgentTool } from '../../src/lib/agent/tool-reg
 import { db } from '../../src/lib/db/schema'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
 import { createContextGatewayToolSessionV1 } from '../../src/lib/context-gateway/tool-session'
 import { CANON_RESOURCE_KINDS_V1, CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'

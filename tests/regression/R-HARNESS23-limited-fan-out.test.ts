@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import {
-  MASTER_AGENT_REPLAN_STORAGE_KEY,
   runDurableMasterAgentPlanV1,
   type DurableMasterAgentResultV1,
 } from '../../src/lib/agent/run/master-durable'
@@ -22,10 +21,10 @@ const inspirationResult = {
     powerHierarchy: '',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
     races: '',
     factionLayout: '',
   },
+  history: { overview: '' },
   storyCore: {
     logline: '守塔人追查被雨抹去的名字',
     theme: '记忆',
@@ -64,8 +63,8 @@ async function createWorkspace(): Promise<{
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: 'fan-out-world',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number
@@ -163,7 +162,6 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
     await db.delete()
     await db.open()
     globalThis.localStorage?.removeItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY)
-    globalThis.localStorage?.setItem(MASTER_AGENT_REPLAN_STORAGE_KEY, 'disabled')
     useAIConfigStore.setState({
       config: {
         ...originalConfig,
@@ -182,7 +180,6 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
   afterEach(() => {
     vi.unstubAllGlobals()
     globalThis.localStorage?.removeItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY)
-    globalThis.localStorage?.removeItem(MASTER_AGENT_REPLAN_STORAGE_KEY)
     useAIConfigStore.setState({ config: originalConfig, presets: [], taskRoutes: {} })
     db.close()
   })

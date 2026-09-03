@@ -15,15 +15,15 @@ import { remapWorldPortalTargets } from '../utils/world-portals'
 import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
 import { redactAuthoringSecrets } from '../node-authoring/contracts'
-import { ensureWorkspaceOwnership } from '../world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../workspace/ownership'
 import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
-import { readVerifiedMediaBlobObjectData } from '../game-production/media-blob-store'
+import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
 
 /** 旧 fixture 等价导出版本；仅供兼容测试和无 ownership 的空项目使用。 */
 const EXPORT_VERSION = 3
-/** v6 adds governed adaptation roots/source manifests atop v4 portable owners and v5 Work classification. */
-export const STRICT_EXPORT_VERSION = 9
+/** v10 adds the closed upper-product production/runtime graph contract. */
+export const STRICT_EXPORT_VERSION = 10
 
 export interface StrictProjectExportSnapshot {
   data: ProjectExportData
@@ -143,10 +143,10 @@ function toExportRow(
         const portableId = idMaps.get('works')?.get(row[locator.workField])
         if (portableId == null) throw new Error(`[strictExport] ${spec.name} Work owner 缺失或越界`)
         obj._workOwnerExportId = portableId
-      } else if (!Number.isInteger(obj._simulationSessionExportId)) {
+      } else if (!Number.isInteger(obj._productRuntimeSessionExportId)) {
         throw new Error(`[strictExport] ${spec.name} Instance owner 缺失或越界`)
       } else {
-        obj._instanceOwnerExportId = obj._simulationSessionExportId
+        obj._instanceOwnerExportId = obj._productRuntimeSessionExportId
       }
       delete obj[locator.workField]
       delete obj[locator.instanceField]

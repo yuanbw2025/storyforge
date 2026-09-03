@@ -26,8 +26,8 @@ import { verifyMasterAgentRunV1 } from '../../src/lib/agent/run/master-verificat
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { db } from '../../src/lib/db/schema'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import {
   adoptGenerationNodeOutput,
   runGenerationNode,
@@ -68,7 +68,6 @@ async function createWorkspace(): Promise<{ project: Project; scope: WorkspaceSc
     theme: '记忆与责任',
     centralConflict: '主角必须在保住父亲记忆与公开镜税真相之间选择。',
     plotPattern: '线性调查',
-    storyLines: '',
     mainPlot: '主角沿盐晶来源追查镜税制度。',
     subPlots: '拾忆行会内部的继承权争夺。',
     createdAt: now,

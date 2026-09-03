@@ -36,8 +36,8 @@ async function createWorkspace(): Promise<WorkspaceScope> {
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: 'h14-world',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number

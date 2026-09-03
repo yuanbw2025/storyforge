@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { loadGameProductionWorldSourceCatalogV2 } from '../../src/lib/game-production/world-source'
 import {
   completeTtrpgSessionZero,
   openTtrpgCampaignScene,
-  readSimulationState,
-  readSimulationStateVersion,
+  readProductRuntimeState,
+  readProductRuntimeStateVersion,
   resolveTtrpgRuleAction,
-} from '../../src/lib/simulation/runtime'
+} from '../../src/lib/ttrpg/runtime-api'
 import { createDeterministicGmSynthesisFrameV2 } from '../../src/lib/ttrpg/action-feedback'
 import {
   adoptTtrpgGmActorActionCandidateV1,
@@ -15,6 +14,7 @@ import {
 } from '../../src/lib/ttrpg/gm-actor-harness'
 import {
   adoptTtrpgGmNarrationCandidateV1,
+  evaluateTtrpgGmCandidateOutputV1,
   generateTtrpgGmNarrationCandidateV1,
 } from '../../src/lib/ttrpg/gm-harness'
 import { loadTtrpgGmRuntimeViewV1 } from '../../src/lib/ttrpg/gm-context'
@@ -28,20 +28,23 @@ import {
 } from '../../src/lib/ttrpg/player-harness'
 import { loadTtrpgPlayerRuntimeViewV1 } from '../../src/lib/ttrpg/player-context'
 import type {
-  GameRuntimePackageV2,
-  SimulationSession,
+  ProductRuntimePackageV1,
+  ProductRuntimeSession,
   WorkspaceScope,
   WorldRelease,
 } from '../../src/lib/types'
-import { seedCurrentPlayableBuild } from '../helpers/current-playable-build'
-import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { seedCurrentProductBuild } from '../helpers/current-product-build'
+import {
+  loadCurrentProductWorldSourceCatalogV1,
+  seedCurrentProductWorld,
+} from '../helpers/current-product-world'
 import { createCurrentTtrpgRuntimePackageFixture } from '../helpers/current-ttrpg-runtime-package'
 
 interface TtrpgFixture {
   scope: WorkspaceScope
   release: WorldRelease & { id: number }
-  session: SimulationSession & { id: number }
-  runtimePackage: GameRuntimePackageV2
+  session: ProductRuntimeSession & { id: number }
+  runtimePackage: ProductRuntimePackageV1
 }
 
 async function readyFixture(input: {
@@ -51,9 +54,10 @@ async function readyFixture(input: {
 }): Promise<TtrpgFixture> {
   const world = await seedCurrentProductWorld(input.title)
   const release = world.release as WorldRelease & { id: number }
-  const sourceCatalog = await loadGameProductionWorldSourceCatalogV2({
+  const sourceCatalog = await loadCurrentProductWorldSourceCatalogV1({
     scope: world.scope,
     worldReleaseId: release.id,
+    productType: 'ttrpg',
   })
   const runtimePackage = await createCurrentTtrpgRuntimePackageFixture({
     scope: world.scope,
@@ -62,13 +66,13 @@ async function readyFixture(input: {
     playerController: input.playerController,
     gmMode: input.gmMode,
   })
-  const created = await seedCurrentPlayableBuild({
+  const created = await seedCurrentProductBuild({
     scope: world.scope,
     worldRelease: release,
     runtimePackage,
     title: input.title,
   })
-  const session = created.session as SimulationSession & { id: number }
+  const session = created.session as ProductRuntimeSession & { id: number }
   const participants = await readTtrpgSessionParticipantsV2(session.id)
   for (const participant of participants) {
     await configureTtrpgSessionParticipantV2({
@@ -80,8 +84,8 @@ async function readyFixture(input: {
       consent: { aiIdentityDisclosed: true },
     })
   }
-  const initial = await readSimulationState(session.id)
-  let version = await readSimulationStateVersion(session.id)
+  const initial = await readProductRuntimeState(session.id)
+  let version = await readProductRuntimeStateVersion(session.id)
   await completeTtrpgSessionZero({
     sessionId: session.id,
     commandId: 'current.session-zero',
@@ -90,7 +94,7 @@ async function readyFixture(input: {
     acceptedItemKeys: initial.ttrpg!.product!.sessionZero.requiredItemKeys,
     completedBy: 'gm',
   })
-  version = await readSimulationStateVersion(session.id)
+  version = await readProductRuntimeStateVersion(session.id)
   await openTtrpgCampaignScene({
     sessionId: session.id,
     commandId: 'current.opening',
@@ -102,7 +106,7 @@ async function readyFixture(input: {
 }
 
 async function resolveActiveManually(fixture: TtrpgFixture, commandId: string): Promise<void> {
-  const state = await readSimulationState(fixture.session.id)
+  const state = await readProductRuntimeState(fixture.session.id)
   const actorKey = state.ttrpg?.activeActorKey
   const sceneKey = state.ttrpg?.scene?.sceneKey
   if (!actorKey || !sceneKey) throw new Error('现行 TTRPG 会话没有活动行动者或场景')
@@ -118,7 +122,7 @@ async function resolveActiveManually(fixture: TtrpgFixture, commandId: string): 
   const targetKey = action.target === 'single'
     ? state.ttrpg!.turnOrder.find(candidate => candidate !== actorKey) ?? null
     : null
-  const version = await readSimulationStateVersion(fixture.session.id)
+  const version = await readProductRuntimeStateVersion(fixture.session.id)
   await resolveTtrpgRuleAction({
     sessionId: fixture.session.id,
     commandId,
@@ -143,7 +147,7 @@ async function advanceUntil(input: {
   commandPrefix: string
 }): Promise<string> {
   for (let guard = 0; guard < 8; guard += 1) {
-    const state = await readSimulationState(input.fixture.session.id)
+    const state = await readProductRuntimeState(input.fixture.session.id)
     const actorKey = state.ttrpg?.activeActorKey
     if (!actorKey) throw new Error('现行 TTRPG 会话没有活动行动者')
     if (input.predicate(actorKey)) return actorKey
@@ -177,13 +181,18 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
     await resolveActiveManually(fixture, 'current.gm-narration.action')
     const view = await loadTtrpgGmRuntimeViewV1({
       scope: fixture.scope,
-      simulationSessionId: fixture.session.id,
+      productRuntimeSessionId: fixture.session.id,
     })
     const receipt = view.latestAction?.receipt
     if (!receipt) throw new Error('现行 Build 行动缺少 ActionReceipt')
+    expect(evaluateTtrpgGmCandidateOutputV1(JSON.stringify({
+      narration: '缺少结构化综合反馈的文本。',
+      offeredClueKeys: [],
+      recommendedNextSceneKeys: [],
+    }), view)).toMatchObject({ accepted: false })
     const generated = await generateTtrpgGmNarrationCandidateV1({
       scope: fixture.scope,
-      simulationSessionId: fixture.session.id,
+      productRuntimeSessionId: fixture.session.id,
       objective: '只叙述刚才已经结算的调查结果',
       runAI: async () => JSON.stringify({
         narration: '潮声之中，已经完成的检查留下了可供下一步判断的明确痕迹。',
@@ -197,9 +206,9 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
       runId: generated.candidate.runId,
     })
     expect(adopted.snapshot.projection.state).toBe('completed')
-    expect((await readSimulationState(fixture.session.id)).ttrpg!.product!.gmNarrations)
+    expect((await readProductRuntimeState(fixture.session.id)).ttrpg!.product!.gmNarrations)
       .toContainEqual(expect.objectContaining({ candidateHash: generated.candidate.candidateHash }))
-    expect(fixture.session).toMatchObject({ gameBuildId: expect.any(Number), gameReleaseId: null })
+    expect(fixture.session).toMatchObject({ productBuildId: expect.any(Number), productReleaseId: null })
   })
 
   it('AI 玩家 Skill 从本人可见闭集选行动，并由 Build 的 RulePack 正式结算', async () => {
@@ -216,7 +225,7 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
     })
     const view = await loadTtrpgPlayerRuntimeViewV1({
       scope: fixture.scope,
-      simulationSessionId: fixture.session.id,
+      productRuntimeSessionId: fixture.session.id,
       actorKey: player.actorKey,
     })
     const action = view.projection.availableActions[0]
@@ -228,7 +237,7 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
     })
     const generated = await generateTtrpgPlayerActionCandidateV1({
       scope: fixture.scope,
-      simulationSessionId: fixture.session.id,
+      productRuntimeSessionId: fixture.session.id,
       actorKey: player.actorKey,
       objective: '依据角色目标选择一个合法调查行动',
       runAI: async () => JSON.stringify({
@@ -243,7 +252,7 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
       runId: generated.candidate.runId,
     })
     expect(adopted.snapshot.projection.state).toBe('completed')
-    expect((await readSimulationState(fixture.session.id)).ttrpg!.product!.actionHistory.at(-1)!.actorAuthority)
+    expect((await readProductRuntimeState(fixture.session.id)).ttrpg!.product!.actionHistory.at(-1)!.actorAuthority)
       .toMatchObject({ source: 'ai-player', candidateHash: generated.candidate.candidateHash })
   })
 
@@ -258,7 +267,7 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
     })
     const view = await loadTtrpgGmRuntimeViewV1({
       scope: fixture.scope,
-      simulationSessionId: fixture.session.id,
+      productRuntimeSessionId: fixture.session.id,
     })
     const turn = view.activeTurn
     if (!turn) throw new Error('现行 TTRPG Build 未进入 NPC 回合')
@@ -271,7 +280,7 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
     })
     const generated = await generateTtrpgGmActorActionCandidateV1({
       scope: fixture.scope,
-      simulationSessionId: fixture.session.id,
+      productRuntimeSessionId: fixture.session.id,
       objective: '依据 NPC 已知目标合理推进当前回合',
       runAI: async () => JSON.stringify({
         actionKey: action.actionKey,
@@ -285,7 +294,7 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
       runId: generated.candidate.runId,
     })
     expect(adopted.snapshot.projection.state).toBe('completed')
-    expect((await readSimulationState(fixture.session.id)).ttrpg!.product!.actionHistory.at(-1)!.actorAuthority)
+    expect((await readProductRuntimeState(fixture.session.id)).ttrpg!.product!.actionHistory.at(-1)!.actorAuthority)
       .toMatchObject({ source: 'ai-gm-npc', candidateHash: generated.candidate.candidateHash })
   })
 })

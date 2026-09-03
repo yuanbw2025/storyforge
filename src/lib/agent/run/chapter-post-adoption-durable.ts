@@ -36,7 +36,7 @@ import { verifyContextManifestIntegrityV1 } from './context-manifest'
 import {
   assertRecordInScope,
   readOwnedRows,
-} from '../../world-engine/scope'
+} from '../../workspace/scope'
 import {
   preflightPostAdoptionAutoV1,
   type PostAdoptionAuthorizationSnapshotV1,
@@ -137,7 +137,7 @@ export type ChapterPostAdoptionChainStateV1 =
   | 'downstream-failed'
   | 'downstream-completed'
   | 'upstream-invalid'
-  | 'legacy-unlinked'
+  | 'unlinked'
 
 export interface ChapterPostAdoptionDurableEvidenceV1 {
   runId: number
@@ -444,11 +444,11 @@ async function assertChapterPostAdoptionLineageCurrentV1(
 export function chapterPostAdoptionChainStateV1(
   snapshot: AgentRunSnapshotV1 | null,
 ): ChapterPostAdoptionChainStateV1 {
-  if (!snapshot) return 'legacy-unlinked'
+  if (!snapshot) return 'unlinked'
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash) return 'downstream-completed'
   const authorization = snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.authorization]
   if (authorization?.status === 'awaiting_confirmation') return 'downstream-suggested'
-  if (!snapshot.contract.lineage?.parent) return 'legacy-unlinked'
+  if (!snapshot.contract.lineage?.parent) return 'unlinked'
   const steps = Object.values(snapshot.projection.steps)
   if (snapshot.projection.state === 'awaiting_confirmation' || steps.some(step => step.status === 'awaiting_confirmation')) {
     return 'downstream-awaiting-confirmation'

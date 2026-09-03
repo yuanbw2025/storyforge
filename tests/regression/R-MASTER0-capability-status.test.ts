@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   CURRENT_TTRPG_COMPLETION_ATTESTATION_V2,
-  GAME_PLATFORM_CAPABILITIES_V1,
-  evaluateGamePlatformCapabilityV1,
+  PRODUCT_PLATFORM_CAPABILITIES_V1,
+  evaluateProductPlatformCapabilityV1,
   validateAiGmBetaDeploymentAttestationV1,
   validateTtrpgCompletionEvidenceV2,
-} from '../../src/lib/game-platform/capability-status'
+} from '../../src/lib/product-platform/capability-status'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { seedFullProject } from '../helpers/seed-full-project'
@@ -40,7 +40,7 @@ function completionReport(index: number, details: Record<string, unknown>) {
 function validTtrpgCompletionAttestationV2() {
   const goldenDetails = (index: number) => ({
     browserJourneyReceiptHash: receiptHash(index),
-    gameReleaseHash: receiptHash(index + 1),
+    productReleaseHash: receiptHash(index + 1),
     participantReceiptHashes: [receiptHash(index + 2), receiptHash(index + 3), receiptHash(index + 4)],
     providerReceiptHashes: [receiptHash(index + 5)],
   })
@@ -116,47 +116,47 @@ describe('MASTER-0 · game platform status dictionary', () => {
   afterEach(() => db.close())
 
   it('每项能力只有一个 ID，并明确证据、开放阶段与环境', () => {
-    expect(new Set(GAME_PLATFORM_CAPABILITIES_V1.map(item => item.id)).size).toBe(GAME_PLATFORM_CAPABILITIES_V1.length)
-    expect(GAME_PLATFORM_CAPABILITIES_V1.every(item => item.reason.length > 10 && item.allowedEnvironments.length > 0)).toBe(true)
+    expect(new Set(PRODUCT_PLATFORM_CAPABILITIES_V1.map(item => item.id)).size).toBe(PRODUCT_PLATFORM_CAPABILITIES_V1.length)
+    expect(PRODUCT_PLATFORM_CAPABILITIES_V1.every(item => item.reason.length > 10 && item.allowedEnvironments.length > 0)).toBe(true)
   })
 
   it('生产只开放证据成立的能力，未过 Golden 的 TTRPG、在线、支付和 AI GM fail-closed', () => {
-    expect(evaluateGamePlatformCapabilityV1('playable-world-bundle', productionContext).enabled).toBe(true)
-    expect(evaluateGamePlatformCapabilityV1('ttrpg-formal-local', productionContext)).toMatchObject({
+    expect(evaluateProductPlatformCapabilityV1('product-world-source-bundle', productionContext).enabled).toBe(true)
+    expect(evaluateProductPlatformCapabilityV1('ttrpg-formal-local', productionContext)).toMatchObject({
       enabled: false,
       capability: { rollout: 'developer', evidence: 'partial' },
     })
-    expect(evaluateGamePlatformCapabilityV1('game-production-v3', productionContext)).toMatchObject({
+    expect(evaluateProductPlatformCapabilityV1('product-production-v3', productionContext)).toMatchObject({
       enabled: false, blockers: ['作者尚未显式启用'],
     })
-    expect(evaluateGamePlatformCapabilityV1('ttrpg-ai-gm', productionContext).enabled).toBe(false)
-    expect(evaluateGamePlatformCapabilityV1('online-authoritative-room', productionContext).enabled).toBe(false)
-    expect(evaluateGamePlatformCapabilityV1('commerce-payments', productionContext).enabled).toBe(false)
+    expect(evaluateProductPlatformCapabilityV1('ttrpg-ai-gm', productionContext).enabled).toBe(false)
+    expect(evaluateProductPlatformCapabilityV1('online-authoritative-room', productionContext).enabled).toBe(false)
+    expect(evaluateProductPlatformCapabilityV1('commerce-payments', productionContext).enabled).toBe(false)
   })
 
   it('满足实验/评测或作者授权时只开放对应能力，不扩大其他权限', () => {
-    expect(evaluateGamePlatformCapabilityV1('ttrpg-ai-gm', {
+    expect(evaluateProductPlatformCapabilityV1('ttrpg-ai-gm', {
       ...productionContext, experimentalProject: true, aiGmBetaGatePassed: true,
     }).enabled).toBe(true)
-    expect(evaluateGamePlatformCapabilityV1('game-production-v3', {
+    expect(evaluateProductPlatformCapabilityV1('product-production-v3', {
       ...productionContext, authorOptIn: true,
     }).enabled).toBe(true)
-    expect(evaluateGamePlatformCapabilityV1('release-catalog', {
+    expect(evaluateProductPlatformCapabilityV1('release-catalog', {
       ...productionContext, environment: 'development', onlineServiceConfigured: true,
     }).enabled).toBe(true)
-    expect(evaluateGamePlatformCapabilityV1('release-catalog', {
+    expect(evaluateProductPlatformCapabilityV1('release-catalog', {
       ...productionContext, onlineServiceConfigured: true,
     }).enabled).toBe(false)
   })
 
   it('开发环境允许显式加入实验的项目收集样本，但生产仍必须通过真实模型门', () => {
-    expect(evaluateGamePlatformCapabilityV1('ttrpg-formal-local', {
+    expect(evaluateProductPlatformCapabilityV1('ttrpg-formal-local', {
       ...productionContext, environment: 'development',
     })).toMatchObject({ enabled: true, blockers: [] })
-    expect(evaluateGamePlatformCapabilityV1('ttrpg-ai-gm', {
+    expect(evaluateProductPlatformCapabilityV1('ttrpg-ai-gm', {
       ...productionContext, environment: 'development', experimentalProject: true,
     })).toMatchObject({ enabled: true, blockers: [] })
-    expect(evaluateGamePlatformCapabilityV1('ttrpg-ai-gm', {
+    expect(evaluateProductPlatformCapabilityV1('ttrpg-ai-gm', {
       ...productionContext, experimentalProject: true,
     })).toMatchObject({ enabled: false, blockers: ['AI GM 真实样本门未通过'] })
   })
@@ -218,16 +218,16 @@ describe('MASTER-0 · game platform status dictionary', () => {
   })
 
   it('正式生产与作者 UI 不得重新接回固定战役 fixture 编译器', () => {
-    const productionExecutor = readFileSync(resolve(process.cwd(), 'src/lib/game-production/production-executor.ts'), 'utf8')
-    const productStudio = readFileSync(resolve(process.cwd(), 'src/components/text-game/GameProductionStudio.tsx'), 'utf8')
+    const productionExecutor = readFileSync(resolve(process.cwd(), 'src/lib/product-production/production-executor.ts'), 'utf8')
+    const productStudio = readFileSync(resolve(process.cwd(), 'src/components/product/ProductProductionStudio.tsx'), 'utf8')
     const productHub = readFileSync(resolve(process.cwd(), 'src/pages/ProductHubPage.tsx'), 'utf8')
     expect(productionExecutor).not.toContain('compileTtrpgCampaignDraftV1')
     expect(productionExecutor).toContain('TTRPG 固定四场景 fallback 已停用')
     expect(productStudio).not.toContain('compileWorldReleaseToTtrpgCampaignDraftV1')
-    expect(productStudio).toContain('createGameProductionWithBriefV1')
-    expect(productStudio).toContain('export default function GameProductionStudio')
+    expect(productStudio).toContain('createProductProductionWithBriefV1')
+    expect(productStudio).toContain('export default function ProductProductionStudio')
     expect(productHub).toContain('冻结来源制作与试玩')
-    expect(productHub).toContain('GameProductionStudio')
+    expect(productHub).toContain('ProductProductionStudio')
     expect(productHub).toContain('ttrpg-production-contract-boundary')
     expect(productHub).toContain('跑团只通过统一产品生产链读取冻结世界资源')
     expect(productHub).not.toContain('formalPublicationLocked')
@@ -237,15 +237,15 @@ describe('MASTER-0 · game platform status dictionary', () => {
   it('项目授权随完整备份往返，不会在导入时丢失或扩大', async () => {
     const source = await seedFullProject()
     await db.projects.update(source.projectId, {
-      gamePlatformOptIns: { gameProductionV3: true, ttrpgAiGmExperimental: true },
+      productPlatformOptIns: { productProductionV3: true, ttrpgAiGmExperimental: true },
     })
     const backup = await exportProjectJSON(source.projectId)
-    expect(backup.project.gamePlatformOptIns).toEqual({
-      gameProductionV3: true, ttrpgAiGmExperimental: true,
+    expect(backup.project.productPlatformOptIns).toEqual({
+      productProductionV3: true, ttrpgAiGmExperimental: true,
     })
     const importedProjectId = await importProjectJSON(backup)
-    expect((await db.projects.get(importedProjectId))?.gamePlatformOptIns).toEqual({
-      gameProductionV3: true, ttrpgAiGmExperimental: true,
+    expect((await db.projects.get(importedProjectId))?.productPlatformOptIns).toEqual({
+      productProductionV3: true, ttrpgAiGmExperimental: true,
     })
   })
 })

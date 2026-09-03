@@ -21,7 +21,7 @@ import {
   type AuthoringNodeGraph,
   type AuthoringNodeInstance,
 } from '../../src/lib/node-authoring'
-import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
 
 const project: Project = {
   id: 73002,

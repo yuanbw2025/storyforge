@@ -11,7 +11,7 @@ import {
   resolveScope,
   scopeTransactionTables,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import { hashChapterText, sha256Text, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../ai/chapter-memory/text-normalization'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
@@ -517,7 +517,7 @@ async function adoptSingleton(
       ...patch,
       createdAt: now,
       updatedAt: now,
-    }, { owner: tableSpec.domainOwner?.legacyDefault === 'world' ? 'world' : 'work' })
+    }, { owner: tableSpec.domainOwner?.defaultOwner === 'world' ? 'world' : 'work' })
     const id = await tableSpec.table.add(row as any) as number
     result.written.push({ id, fields: Object.keys(patch) })
   }
@@ -709,7 +709,7 @@ function validateAndCoerce(spec: FieldSpec, value: unknown, result: AdoptResult)
 }
 
 async function findSingleton(input: AdoptInput, tableSpec: TableSpec): Promise<any | null> {
-  const owner = tableSpec.domainOwner?.legacyDefault === 'world' ? 'world' : 'work'
+  const owner = tableSpec.domainOwner?.defaultOwner === 'world' ? 'world' : 'work'
   const rows = await readOwnedRows<any>(input.scope!, input.target, { owner })
   if (tableSpec.worldScoped) {
     const wgField = tableSpec.worldGroupField ?? 'worldGroupId'
@@ -720,10 +720,10 @@ async function findSingleton(input: AdoptInput, tableSpec: TableSpec): Promise<a
 
 function defaultSingletonRow(target: string): Record<string, unknown> {
   if (target === 'worldviews') {
-    return { geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '' }
+    return { summary: '' }
   }
   if (target === 'storyCores') {
-    return { theme: '', centralConflict: '', plotPattern: '', storyLines: '' }
+    return { theme: '', centralConflict: '', plotPattern: '', mainPlot: '' }
   }
   if (target === 'creativeRules') {
     return {

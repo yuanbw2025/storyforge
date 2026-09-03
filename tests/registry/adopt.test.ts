@@ -9,18 +9,31 @@ import { FIELD_REGISTRY, FIELD_BY_TARGET } from '../../src/lib/registry/field-re
 import { ADOPTION_EXTENSIONS, ADOPTION_SCHEMAS, ADOPTION_BY_TARGET } from '../../src/lib/registry/adoption-schema'
 import { REGISTRY_BY_NAME } from '../../src/lib/registry/project-tables'
 import { adopt, clearAdoptedCollection } from '../../src/lib/registry/adopt'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { resolveWorkspaceScope } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 async function createProject(): Promise<number> {
-  const now = Date.now()
-  return await db.projects.add({
-    name: 'Adopt Test',
-    genre: '',
+  return (await seedCurrentWorkspace('Adopt Test')).scope.projectId
+}
+
+async function createWorldGroup(projectId: number, name: string): Promise<number> {
+  const scope = await resolveWorkspaceScope(projectId)
+  return db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
+    projectId,
+    name,
+    type: 'custom',
     description: '',
-    targetWordCount: 0,
-    enableMultiWorld: true,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
+    icon: '',
+    order: 0,
+    entryCondition: '',
+    exitCondition: '',
+    powerRestriction: '',
+    takeawayRules: '',
+    plannedChapterCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  } as never, { owner: 'world' })) as Promise<number>
 }
 
 describe('Phase 1.2a · 统一写回层', () => {
@@ -49,12 +62,12 @@ describe('Phase 1.2a · 统一写回层', () => {
       'workspace-root-lifecycle',
       'world-root-lifecycle',
       'work-root-lifecycle',
-      'game-production-roots',
-      'game-production-briefs',
-      'game-production-commands',
-      'game-production-builds',
-      'game-production-artifacts',
-      'game-production-release-adoption',
+      'product-production-roots',
+      'product-production-briefs',
+      'product-production-commands',
+      'product-production-builds',
+      'product-production-artifacts',
+      'product-production-release-adoption',
       'ttrpg-rule-pack-library',
     ]))
     expect(extensionIds.some(id => id.startsWith('world-game-'))).toBe(false)
@@ -114,13 +127,13 @@ describe('Phase 1.2a · 统一写回层', () => {
     expect(typeof row?.divineDesign).toBe('object')
   })
 
-  it('单例写回:storyCores.storyLines 自动映射到 mainPlot,append 合并长文本', async () => {
+  it('单例写回:storyCores.mainPlot 支持 append 合并长文本', async () => {
     const projectId = await createProject()
     await adopt({
       projectId,
       target: 'storyCores',
       mode: 'replace',
-      data: { storyLines: '主角寻找失落星门', theme: '自由意志' },
+      data: { mainPlot: '主角寻找失落星门', theme: '自由意志' },
     })
     await adopt({
       projectId,
@@ -134,16 +147,17 @@ describe('Phase 1.2a · 统一写回层', () => {
     expect(row?.theme).toBe('自由意志')
   })
 
-  it('集合写回:characters 中文 role 归一,同名角色自动合并', async () => {
+  it('集合写回:characters 按三轴派生 role,同名角色自动合并', async () => {
     const projectId = await createProject()
+    const worldGroupId = await createWorldGroup(projectId, '炉火界')
     const result = await adopt({
       projectId,
-      worldGroupId: 7,
+      worldGroupId,
       target: 'characters',
       mode: 'add-many',
       data: [
-        { name: '燕飞', role: '主角', summary: '背负旧王血脉' },
-        { name: '燕飞', role: '反派', summary: '重复角色' },
+        { name: '燕飞', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral', summary: '背负旧王血脉' },
+        { name: '燕飞', roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral', summary: '重复角色' },
       ],
     })
 
@@ -156,37 +170,41 @@ describe('Phase 1.2a · 统一写回层', () => {
     expect(rows[0].name).toBe('燕飞')
     expect(rows[0].role).toBe('antagonist')
     expect(rows[0].shortDescription).toBe('重复角色')
-    expect(rows[0].homeWorldGroupId).toBe(7)
+    expect(rows[0].homeWorldGroupId).toBe(worldGroupId)
   })
 
   it('集合写回:characters 同名不同世界不误合并', async () => {
     const projectId = await createProject()
+    const firstWorldGroupId = await createWorldGroup(projectId, '主世界组')
+    const secondWorldGroupId = await createWorldGroup(projectId, '副世界组')
     await adopt({
       projectId,
-      worldGroupId: 1,
+      worldGroupId: firstWorldGroupId,
       target: 'characters',
       mode: 'add',
-      data: { name: '燕飞', role: '主角', summary: '主世界角色' },
+      data: { name: '燕飞', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral', summary: '主世界角色' },
     })
     await adopt({
       projectId,
-      worldGroupId: 2,
+      worldGroupId: secondWorldGroupId,
       target: 'characters',
       mode: 'add',
-      data: { name: '燕飞', role: '反派', summary: '副世界角色' },
+      data: { name: '燕飞', roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral', summary: '副世界角色' },
     })
 
     const rows = await db.characters.where('projectId').equals(projectId).toArray()
     expect(rows).toHaveLength(2)
-    expect(rows.map(r => r.homeWorldGroupId).sort()).toEqual([1, 2])
-    expect(rows.find(r => r.homeWorldGroupId === 1)?.role).toBe('protagonist')
-    expect(rows.find(r => r.homeWorldGroupId === 2)?.role).toBe('antagonist')
+    expect(rows.map(r => r.homeWorldGroupId).sort()).toEqual([firstWorldGroupId, secondWorldGroupId].sort())
+    expect(rows.find(r => r.homeWorldGroupId === firstWorldGroupId)?.role).toBe('protagonist')
+    expect(rows.find(r => r.homeWorldGroupId === secondWorldGroupId)?.role).toBe('antagonist')
   })
 
   it('集合写回:codexEntries 校验 categoryId,无效 FK 不落库', async () => {
     const projectId = await createProject()
+    const scope = await resolveWorkspaceScope(projectId)
+    const worldGroupId = await createWorldGroup(projectId, '词条世界')
     const now = Date.now()
-    const categoryId = await db.codexCategories.add({
+    const categoryId = await db.codexCategories.add(stampNewRecord(scope, 'codexCategories', {
       projectId,
       domain: 'natural',
       parentId: null,
@@ -196,7 +214,7 @@ describe('Phase 1.2a · 统一写回层', () => {
       worldGroupId: null,
       createdAt: now,
       updatedAt: now,
-    } as any) as number
+    } as never, { owner: 'world' })) as number
 
     const bad = await adopt({
       projectId,
@@ -209,7 +227,7 @@ describe('Phase 1.2a · 统一写回层', () => {
 
     const good = await adopt({
       projectId,
-      worldGroupId: 3,
+      worldGroupId,
       target: 'codexEntries',
       mode: 'add',
       data: { categoryId, name: '九曜玄铁', fields: { rank: '神品' }, refs: {} },
@@ -217,14 +235,15 @@ describe('Phase 1.2a · 统一写回层', () => {
     expect(good.written.length).toBe(1)
     const row = await db.codexEntries.where('projectId').equals(projectId).first()
     expect(row?.categoryId).toBe(categoryId)
-    expect(row?.worldGroupId).toBe(3)
+    expect(row?.worldGroupId).toBe(worldGroupId)
     expect(row?.fields).toBe(JSON.stringify({ rank: '神品' }))
   })
 
   it('集合写回:detailedOutlines 数组成员校验过滤不存在的角色 ID', async () => {
     const projectId = await createProject()
+    const scope = await resolveWorkspaceScope(projectId)
     const now = Date.now()
-    const outlineNodeId = await db.outlineNodes.add({
+    const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
       projectId,
       parentId: null,
       type: 'chapter',
@@ -233,15 +252,18 @@ describe('Phase 1.2a · 统一写回层', () => {
       order: 0,
       createdAt: now,
       updatedAt: now,
-    } as any) as number
-    const characterId = await db.characters.add({
+    } as never, { owner: 'work' })) as number
+    const characterId = await db.characters.add(stampNewRecord(scope, 'characters', {
       projectId,
       name: '沈璃',
       role: 'supporting',
+      roleWeight: 'main',
+      moralAxis: 'neutral',
+      orderAxis: 'neutral',
       shortDescription: '',
       createdAt: now,
       updatedAt: now,
-    } as any) as number
+    } as never, { owner: 'world' })) as number
 
     const result = await adopt({
       projectId,
@@ -262,8 +284,9 @@ describe('Phase 1.2a · 统一写回层', () => {
   it('参考分析写回按 referenceId 继承项目归属，并支持注册式整批替换', async () => {
     const projectId = await createProject()
     const otherProjectId = await createProject()
+    const scope = await resolveWorkspaceScope(projectId)
     const now = Date.now()
-    const referenceId = await db.references.add({
+    const referenceId = await db.references.add(stampNewRecord(scope, 'references', {
       projectId,
       title: '本项目参考',
       author: '',
@@ -272,8 +295,8 @@ describe('Phase 1.2a · 统一写回层', () => {
       url: '',
       createdAt: now,
       updatedAt: now,
-    } as any) as number
-    const analysisRunId = await db.referenceAnalysisRuns.add({
+    } as never, { owner: 'work' })) as number
+    const analysisRunId = await db.referenceAnalysisRuns.add(stampNewRecord(scope, 'referenceAnalysisRuns', {
       projectId,
       referenceId,
       version: 1,
@@ -292,7 +315,7 @@ describe('Phase 1.2a · 统一写回层', () => {
       progress: 0,
       createdAt: now,
       updatedAt: now,
-    }) as number
+    } as never, { owner: 'work' })) as number
 
     const rejected = await adopt({
       projectId: otherProjectId,

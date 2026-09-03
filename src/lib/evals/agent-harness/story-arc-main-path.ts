@@ -9,7 +9,7 @@ import {
 
 export const H86_STORY_ARC_CHECKPOINT_VERSION_V1 = 1 as const
 export const H86_STORY_ARC_STORAGE_KEY_V1 = 'storyforge:h86-story-arc-main-path-v1'
-export const H86_LEGACY_PROMPT_VERSION_V1 = 'story-arc-legacy-direct-b6b57f4-parent-v1'
+export const H86_BASELINE_PROMPT_VERSION_V1 = 'story-arc-baseline-direct-b6b57f4-parent-v1'
 export const H86_AGENT_PROMPT_VERSION_V1 = 'outline.story-arcs-v4'
 const H86_AGENT_PROMPT_VERSIONS_V1 = [
   'outline.story-arcs-current-v1',
@@ -17,10 +17,10 @@ const H86_AGENT_PROMPT_VERSIONS_V1 = [
   'outline.story-arcs-v3',
   H86_AGENT_PROMPT_VERSION_V1,
 ] as const
-export const H86_GENERATOR_PAIR_VERSION_V1 = 'story-arc-legacy-vs-agent-harness-v1'
+export const H86_GENERATOR_PAIR_VERSION_V1 = 'story-arc-baseline-vs-agent-harness-v1'
 export const H86_VERIFIER_PROMPT_VERSION_V1 = 'story-arc-independent-verifier-v1'
 
-export const H86_STORY_ARC_VARIANTS_V1 = ['legacy-direct', 'agent-harness'] as const
+export const H86_STORY_ARC_VARIANTS_V1 = ['baseline-direct', 'agent-harness'] as const
 export type H86StoryArcVariantV1 = typeof H86_STORY_ARC_VARIANTS_V1[number]
 
 export interface H86ModelIdentityV1 {
@@ -124,7 +124,7 @@ export interface H86VariantAggregateV1 {
 }
 
 export interface H86AggregateV1 {
-  legacyDirect: H86VariantAggregateV1
+  baselineDirect: H86VariantAggregateV1
   agentHarness: H86VariantAggregateV1
   comparison: {
     semanticRegression: number
@@ -137,7 +137,7 @@ export interface H86AggregateV1 {
 
 export type H86MachineGateFailureV1 =
   | 'minimum-paired-cases'
-  | 'legacy-completion'
+  | 'baseline-completion'
   | 'agent-harness-completion'
   | 'agent-harness-durable-evidence'
   | 'semantic-quality-noninferiority'
@@ -237,7 +237,7 @@ function checkpointShapeIsExact(checkpoint: H86CheckpointV1): boolean {
     && (value.assessment == null || assessment(value.assessment))
   for (const item of checkpoint.cases) {
     if (!exactKeys(item, ['fixtureId', 'executionOrder', 'variants'])
-      || !exactKeys(item.variants, ['legacy-direct', 'agent-harness'])) return false
+      || !exactKeys(item.variants, ['baseline-direct', 'agent-harness'])) return false
     for (const variant of H86_STORY_ARC_VARIANTS_V1) {
       const state = item.variants[variant]
       if (!exactKeys(state, ['generationAttempts', 'verificationAttempts'])
@@ -251,8 +251,8 @@ function checkpointShapeIsExact(checkpoint: H86CheckpointV1): boolean {
     'inputTokens', 'outputTokens', 'totalLatencyMs', 'p95LatencyMs', 'costUsd', 'meteredCalls', 'totalCalls',
   ])
   if (checkpoint.aggregate != null && (
-    !exactKeys(checkpoint.aggregate, ['legacyDirect', 'agentHarness', 'comparison'])
-    || !variantAggregate(checkpoint.aggregate.legacyDirect)
+    !exactKeys(checkpoint.aggregate, ['baselineDirect', 'agentHarness', 'comparison'])
+    || !variantAggregate(checkpoint.aggregate.baselineDirect)
     || !variantAggregate(checkpoint.aggregate.agentHarness)
     || !exactKeys(checkpoint.aggregate.comparison, [
       'semanticRegression', 'factCoverageRegression', 'p95LatencyRatio', 'tokenMultiplier', 'costMultiplier',
@@ -291,8 +291,8 @@ async function sealCheckpoint(checkpoint: H86CheckpointV1): Promise<H86Checkpoin
 
 function executionOrder(index: number): [H86StoryArcVariantV1, H86StoryArcVariantV1] {
   return index % 2 === 0
-    ? ['legacy-direct', 'agent-harness']
-    : ['agent-harness', 'legacy-direct']
+    ? ['baseline-direct', 'agent-harness']
+    : ['agent-harness', 'baseline-direct']
 }
 
 function emptyCases(fixtures: readonly H86StoryArcFixtureV1[]): H86CaseStateV1[] {
@@ -300,7 +300,7 @@ function emptyCases(fixtures: readonly H86StoryArcFixtureV1[]): H86CaseStateV1[]
     fixtureId: fixture.id,
     executionOrder: executionOrder(index),
     variants: {
-      'legacy-direct': { generationAttempts: [], verificationAttempts: [] },
+      'baseline-direct': { generationAttempts: [], verificationAttempts: [] },
       'agent-harness': { generationAttempts: [], verificationAttempts: [] },
     },
   }))
@@ -377,27 +377,27 @@ export function aggregateH86StoryArcCheckpointV1(
   checkpoint: Pick<H86CheckpointV1, 'cases'>,
   fixtures: readonly H86StoryArcFixtureV1[] = H86_STORY_ARC_DEVELOPMENT_FIXTURES_V1,
 ): H86AggregateV1 {
-  const legacyDirect = aggregateVariant(fixtures, checkpoint.cases, 'legacy-direct')
+  const baselineDirect = aggregateVariant(fixtures, checkpoint.cases, 'baseline-direct')
   const agentHarness = aggregateVariant(fixtures, checkpoint.cases, 'agent-harness')
-  const legacyTokens = legacyDirect.inputTokens + legacyDirect.outputTokens
+  const baselineTokens = baselineDirect.inputTokens + baselineDirect.outputTokens
   const agentTokens = agentHarness.inputTokens + agentHarness.outputTokens
   return {
-    legacyDirect,
+    baselineDirect,
     agentHarness,
     comparison: {
-      semanticRegression: Math.max(0, legacyDirect.semanticScore - agentHarness.semanticScore),
-      factCoverageRegression: Math.max(0, legacyDirect.requiredFactCoverage - agentHarness.requiredFactCoverage),
-      p95LatencyRatio: legacyDirect.p95LatencyMs > 0 ? agentHarness.p95LatencyMs / legacyDirect.p95LatencyMs : null,
-      tokenMultiplier: legacyTokens > 0 ? agentTokens / legacyTokens : null,
-      costMultiplier: legacyDirect.costUsd > 0 ? agentHarness.costUsd / legacyDirect.costUsd : null,
+      semanticRegression: Math.max(0, baselineDirect.semanticScore - agentHarness.semanticScore),
+      factCoverageRegression: Math.max(0, baselineDirect.requiredFactCoverage - agentHarness.requiredFactCoverage),
+      p95LatencyRatio: baselineDirect.p95LatencyMs > 0 ? agentHarness.p95LatencyMs / baselineDirect.p95LatencyMs : null,
+      tokenMultiplier: baselineTokens > 0 ? agentTokens / baselineTokens : null,
+      costMultiplier: baselineDirect.costUsd > 0 ? agentHarness.costUsd / baselineDirect.costUsd : null,
     },
   }
 }
 
 export function evaluateH86MachineGateV1(aggregate: H86AggregateV1): H86MachineGateV1 {
   const failures: H86MachineGateFailureV1[] = []
-  if (aggregate.legacyDirect.caseCount < 6 || aggregate.agentHarness.caseCount < 6) failures.push('minimum-paired-cases')
-  if (aggregate.legacyDirect.completionRate < 1 || aggregate.legacyDirect.verifierCompletionRate < 1) failures.push('legacy-completion')
+  if (aggregate.baselineDirect.caseCount < 6 || aggregate.agentHarness.caseCount < 6) failures.push('minimum-paired-cases')
+  if (aggregate.baselineDirect.completionRate < 1 || aggregate.baselineDirect.verifierCompletionRate < 1) failures.push('baseline-completion')
   if (aggregate.agentHarness.completionRate < 1 || aggregate.agentHarness.verifierCompletionRate < 1) failures.push('agent-harness-completion')
   if (aggregate.agentHarness.durableEvidenceCoverage < 1) failures.push('agent-harness-durable-evidence')
   if (aggregate.comparison.semanticRegression > 0.02) failures.push('semantic-quality-noninferiority')
@@ -405,7 +405,7 @@ export function evaluateH86MachineGateV1(aggregate: H86AggregateV1): H86MachineG
   if (aggregate.agentHarness.futureLeakageRate > 0) failures.push('future-leakage')
   if (aggregate.agentHarness.wrongWorldLeakageRate > 0) failures.push('wrong-world-leakage')
   if (
-    aggregate.legacyDirect.meteredCalls !== aggregate.legacyDirect.totalCalls
+    aggregate.baselineDirect.meteredCalls !== aggregate.baselineDirect.totalCalls
     || aggregate.agentHarness.meteredCalls !== aggregate.agentHarness.totalCalls
   ) failures.push('usage-evidence-missing')
   if (aggregate.comparison.p95LatencyRatio == null || aggregate.comparison.p95LatencyRatio > 1.5) failures.push('p95-latency-budget')
@@ -450,8 +450,8 @@ async function validateGenerationAttempt(
   if (!Number.isInteger(attempt.attempt) || attempt.attempt < 1) throw new Error('H86 generation attempt 无效')
   if (!attempt.calls.length) throw new Error('H86 generation attempt 缺少调用账本')
   const promptVersion = attempt.calls[0].promptVersion
-  if (variant === 'legacy-direct' && promptVersion !== H86_LEGACY_PROMPT_VERSION_V1) {
-    throw new Error('H86 旧入口 Prompt 版本无效')
+  if (variant === 'baseline-direct' && promptVersion !== H86_BASELINE_PROMPT_VERSION_V1) {
+    throw new Error('H86 基线直连 Prompt 版本无效')
   }
   if (variant === 'agent-harness'
     && !H86_AGENT_PROMPT_VERSIONS_V1.includes(promptVersion as typeof H86_AGENT_PROMPT_VERSIONS_V1[number])) {
@@ -700,7 +700,7 @@ async function createSyntheticFailureAttempt(input: {
   const failureMessage = sanitizeFailureMessage(input.error)
   const inputHash = await hashCanonicalValue({ fixtureId: input.fixture.id, stage: input.stage, attempt: input.attempt })
   const promptVersion = input.stage === 'generation'
-    ? input.variant === 'legacy-direct' ? H86_LEGACY_PROMPT_VERSION_V1 : H86_AGENT_PROMPT_VERSION_V1
+    ? input.variant === 'baseline-direct' ? H86_BASELINE_PROMPT_VERSION_V1 : H86_AGENT_PROMPT_VERSION_V1
     : input.identity.promptVersion
   const call: H86CallEvidenceV1 = {
     stage: input.stage,
@@ -738,7 +738,7 @@ async function createSyntheticFailureAttempt(input: {
   }
 }
 
-export function buildH86LegacyStoryArcMessagesV1(
+export function buildH86BaselineStoryArcMessagesV1(
   fixture: H86StoryArcFixtureV1,
   assembledContext: string,
 ): ChatMessage[] {
@@ -766,26 +766,26 @@ export function buildH86LegacyStoryArcMessagesV1(
   return [{ role: 'system', content: system }, { role: 'user', content: user }]
 }
 
-export function parseH86LegacyStoryArcOutputV1(raw: string, fixture: H86StoryArcFixtureV1): string {
+export function parseH86BaselineStoryArcOutputV1(raw: string, fixture: H86StoryArcFixtureV1): string {
   const trimmed = raw.trim()
   const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
   const candidate = fence?.[1]?.trim() ?? trimmed
   const start = candidate.indexOf('{')
   const end = candidate.lastIndexOf('}')
-  if (start < 0 || end < start) throw new Error('legacy_output_missing_json')
+  if (start < 0 || end < start) throw new Error('baseline_output_missing_json')
   const parsed = JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>
-  if (typeof parsed.name !== 'string' || !parsed.name.trim()) throw new Error('legacy_output_name_invalid')
-  if (typeof parsed.description !== 'string') throw new Error('legacy_output_description_invalid')
+  if (typeof parsed.name !== 'string' || !parsed.name.trim()) throw new Error('baseline_output_name_invalid')
+  if (typeof parsed.description !== 'string') throw new Error('baseline_output_description_invalid')
   if (!Array.isArray(parsed.stages) || parsed.stages.length < 3 || parsed.stages.length > 7) {
-    throw new Error('legacy_output_stages_invalid')
+    throw new Error('baseline_output_stages_invalid')
   }
   const stages = parsed.stages.map((value, index) => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`legacy_stage_${index}_invalid`)
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`baseline_stage_${index}_invalid`)
     const stage = value as Record<string, unknown>
-    if (typeof stage.title !== 'string' || typeof stage.description !== 'string') throw new Error(`legacy_stage_${index}_text_invalid`)
+    if (typeof stage.title !== 'string' || typeof stage.description !== 'string') throw new Error(`baseline_stage_${index}_text_invalid`)
     if (!Array.isArray(stage.keyEvents) || stage.keyEvents.length < 1 || stage.keyEvents.length > 3
       || stage.keyEvents.some(item => typeof item !== 'string' || !item.trim())) {
-      throw new Error(`legacy_stage_${index}_events_invalid`)
+      throw new Error(`baseline_stage_${index}_events_invalid`)
     }
     return {
       title: stage.title.trim(),

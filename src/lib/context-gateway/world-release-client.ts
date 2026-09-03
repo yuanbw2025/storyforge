@@ -32,6 +32,38 @@ function hasWorldSemantic(
   return descriptor.sourceKey === 'worldRelease' && descriptor.worldSemantic != null
 }
 
+/** Neutral descriptor boundary for product requirement resolution. Physical
+ * WorldRelease decoding remains private to the provider behind this client. */
+export async function listWorldSemanticResourceDescriptorsV1(
+  scope: FrozenResourceScopeV1,
+): Promise<Array<ContextResourceDescriptorV1 & {
+  worldSemantic: NonNullable<ContextResourceDescriptorV1['worldSemantic']>
+}>> {
+  return (await listAllWorldReleaseResourceDescriptorsV1(scope))
+    .filter(hasWorldSemantic)
+    .sort((left, right) => left.resourceKey.localeCompare(right.resourceKey))
+}
+
+/** Resolve one immutable resource descriptor without exposing provider APIs to
+ * an upper product. */
+export async function describeWorldSemanticResourceV1(input: {
+  scope: FrozenResourceScopeV1
+  resourceKey: string
+}): Promise<ContextResourceDescriptorV1 & {
+  worldSemantic: NonNullable<ContextResourceDescriptorV1['worldSemantic']>
+}> {
+  const read = await readWorldResourceV1({
+    scope: input.scope,
+    resourceKey: input.resourceKey,
+    depth: 'index',
+    maxTokens: 1,
+  })
+  if (!hasWorldSemantic(read.descriptor)) {
+    throw new Error(`[world-release-client] 资源不是世界语义资源:${input.resourceKey}`)
+  }
+  return read.descriptor
+}
+
 function parseSemanticValue(content: string, resourceKey: string): Record<string, unknown> {
   let value: unknown
   try { value = JSON.parse(content) }
@@ -52,8 +84,7 @@ export async function openWorldSemanticResourceCatalogV1(input: {
   const opened = await openWorldReleaseV1(input)
   const areaFilter = new Set(input.areas ?? [])
   const kindFilter = new Set(input.resourceKinds ?? [])
-  const resources = (await listAllWorldReleaseResourceDescriptorsV1(opened.scope))
-    .filter(hasWorldSemantic)
+  const resources = (await listWorldSemanticResourceDescriptorsV1(opened.scope))
     .filter(descriptor => areaFilter.size === 0 || areaFilter.has(descriptor.worldSemantic.area))
     .filter(descriptor => kindFilter.size === 0 || kindFilter.has(descriptor.worldSemantic.resourceKind))
     .sort((left, right) => left.resourceKey.localeCompare(right.resourceKey))

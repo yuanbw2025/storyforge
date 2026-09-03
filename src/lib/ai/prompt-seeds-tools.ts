@@ -49,15 +49,15 @@ JSON 字段定义（每个角色对象）：
     description: '从世界观设定文档中抽取结构化字段（JSON）。',
     systemPrompt: `你是一位精确的文档结构化抽取器。从用户提供的世界观文档中抽取信息到 JSON 对象。
 
-JSON 字段（按 v3 数据模型）：
+输出当前内容模型的三个分区：worldview 保存世界基础，geography 保存地理总述，history 保存历史总述。
+
+worldview 字段：
 - worldOrigin: 世界来源
 - powerHierarchy: 力量体系
 - worldStructure: 世界结构
 - continentLayout: 大陆分布
 - mountainsRivers: 山川河流
 - climateByRegion: 气候
-- historyLine: 世界历史线
-- worldEvents: 世界大事记
 - races: 种族设定
 - factionLayout: 势力分布
 - politicsOverview: 政治制度与权力结构
@@ -66,7 +66,7 @@ JSON 字段（按 v3 数据模型）：
 - itemDesign: 道具设计
 
 输出要求：
-1. 只输出 JSON 对象（用 \`\`\`json 代码块包裹）
+1. 只输出 {"worldview": {...}, "geography": {"overview": ""}, "history": {"overview": ""}}（用 \`\`\`json 代码块包裹）
 2. 没有对应内容的字段输出空字符串
 3. 不要编造文档里没有的信息`,
     userPromptTemplate: `请从以下文档抽取世界观字段：
@@ -117,14 +117,14 @@ JSON 节点字段：
     moduleKey: 'import.parse-all',
     promptType: 'parse',
     name: '内置-智能统一解析',
-    description: '一次性从任意文档（设定文档或成品小说）中提取世界观 / 角色 / 大纲章节三类结构化数据。',
+    description: '一次性从任意文档中提取世界基础、地理、历史、角色、大纲章节与写作技法。',
     systemPrompt: `你是一位顶级的小说结构化分析师。用户会给你一份文档，它可能是：
 A) 小说设定集（世界观 + 人物表 + 大纲混排）
 B) 成品小说正文（连续章节）
 C) 大纲草稿或角色表
 D) 以上的混合
 
-你的任务：无论文档是什么形式，都把它拆解成四类结构化数据——世界观、角色、大纲章节、写作技法，统一输出为一个 JSON 对象。
+你的任务：无论文档是什么形式，都把它拆解成六类结构化数据——世界基础、地理、历史、角色、大纲章节、写作技法，统一输出为一个 JSON 对象。
 
 ═══ 重要分类边界 ═══
 - "金手指 / 系统 / 外挂 / 天赋 / 特殊能力"若绑定某个角色,写进该角色的 abilities,不要单独生成名为"金手指"或"系统"的角色。
@@ -141,8 +141,6 @@ D) 以上的混合
     "continentLayout": "",
     "mountainsRivers": "",
     "climateByRegion": "",
-    "historyLine": "",
-    "worldEvents": "",
     "races": "",
     "factionLayout": "",
     "politicsOverview": "",
@@ -150,6 +148,8 @@ D) 以上的混合
     "cultureOverview": "",
     "itemDesign": ""
   },
+  "geography": { "overview": "" },
+  "history": { "overview": "" },
   "characters": [
     {
       "name": "",
@@ -208,13 +208,13 @@ D) 以上的混合
    - 每个字段都要写出具体的、可操作的分析，带具体例子（引用章节号/情节点），不要泛泛而谈。
    - 如果文档不是成品小说（如设定集/大纲），写作技法部分可留空。
 5. **严禁编造**：文档里找不到的信息就留空，不要猜。
-6. **JSON 完整性**：worldview / characters / outline / writingTechniques 四个顶层字段必须都有。
+6. **JSON 完整性**：worldview / geography / history / characters / outline / writingTechniques 六个顶层字段必须都有。
 
 ═══ 输出要求 ═══
 - 只输出一个 JSON 对象，用 \`\`\`json 代码块包裹。
 - 不要任何解释 / 前言 / 后记。
 - 字段值都是字符串（worldview、writingTechniques 所有字段）或对应结构（characters / outline）。`,
-    userPromptTemplate: `下面是用户上传的文档，请一次性拆解出世界观 / 角色 / 大纲 / 写作技法四类结构化数据：
+    userPromptTemplate: `下面是用户上传的文档，请一次性拆解出世界基础 / 地理 / 历史 / 角色 / 大纲 / 写作技法六类结构化数据：
 
 ---DOCUMENT START---
 {{rawDocument}}
@@ -231,11 +231,11 @@ D) 以上的混合
     moduleKey: 'import.parse-chunk',
     promptType: 'parse',
     name: '内置-分块解析（大文档流水线）',
-    description: '针对百万字级小说，把原文切成多块后逐块抽取世界观 / 角色 / 大纲，可带已识别上下文。',
+    description: '针对百万字级小说，把原文切成多块后逐块抽取世界基础、地理、历史、角色、大纲与词条候选。',
     systemPrompt: `你是一位顶级的小说结构化分析师，正在分块处理一部大型长篇小说。
 
 ═══ 你的任务 ═══
-只针对"本块"内容抽取四类数据：世界观 / 角色 / 大纲章节 / Codex 实体候选；输出 JSON。
+只针对"本块"内容抽取六类数据：世界基础 / 地理 / 历史 / 角色 / 大纲章节 / Codex 实体候选；输出 JSON。
 整本书的汇总由程序跨块合并，你**不需要**考虑"其他块"会写什么，也**不要**重复输出上下文里已给你的已知角色（如果一个人本块没新信息、也没新行为，就不要重新输出；反之有新描写就输出增量信息即可）。
 
 ═══ 重要分类边界 ═══
@@ -257,7 +257,9 @@ D) 以上的混合
 ═══ 输出 JSON 结构 ═══
 \`\`\`json
 {
-  "worldview": { "worldOrigin":"", "powerHierarchy":"", "worldStructure":"", "continentLayout":"", "mountainsRivers":"", "climateByRegion":"", "historyLine":"", "worldEvents":"", "races":"", "factionLayout":"", "politicsOverview":"", "economyOverview":"", "cultureOverview":"", "itemDesign":"" },
+  "worldview": { "worldOrigin":"", "powerHierarchy":"", "worldStructure":"", "continentLayout":"", "mountainsRivers":"", "climateByRegion":"", "races":"", "factionLayout":"", "politicsOverview":"", "economyOverview":"", "cultureOverview":"", "itemDesign":"" },
+  "geography": { "overview":"" },
+  "history": { "overview":"" },
   "characters": [
     { "name":"", "roleWeight":"main|secondary|npc|extra",
       "moralAxis":"good|neutral|evil", "orderAxis":"lawful|neutral|chaotic",
@@ -627,9 +629,11 @@ pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords �
     "powerHierarchy": "力量体系（如修真等级、社会阶层、科技层级等，如何分层、怎么晋升）",
     "continentLayout": "大陆/地貌分布概述（主要大陆、地形特征、核心区域的地理关系）",
     "climateByRegion": "气候与环境特征（不同区域的气候类型、季节特征）",
-    "historyLine": "世界历史线概述（从远古到当下的关键历史节点）",
     "races": "种族/民族设定（如有多个种族，描述各自特征和关系）",
     "factionLayout": "势力分布（主要势力/门派/国家的格局和敌友关系）"
+  },
+  "history": {
+    "overview": "世界历史总述（从远古到当下的关键时代与转折）"
   },
   "storyCore": {
     "logline": "一句话故事（20-40字）",
@@ -708,7 +712,7 @@ pace 只能取 slow / medium / fast / climax 四个值之一；estimatedWords �
       "powerHierarchy": "力量体系",
       "continentLayout": "地貌分布",
       "climateByRegion": "气候环境",
-      "historyLine": "世界历史线",
+      "historyOverview": "世界历史总述",
       "races": "种族/民族",
       "factionLayout": "势力分布",
       "entryCondition": "进入此世界的条件（主世界留空）",
@@ -818,7 +822,6 @@ type 含义：traversal=穿越目标，instance=副本，parallel=平行世界�
   "powerHierarchy": "力量体系（等级划分、晋升方式）",
   "continentLayout": "地貌分布（大陆、地形、核心区域）",
   "climateByRegion": "气候与环境特征",
-  "historyLine": "世界历史线（关键历史节点）",
   "races": "种族/民族设定",
   "factionLayout": "势力分布（主要势力的格局和关系）"
 }

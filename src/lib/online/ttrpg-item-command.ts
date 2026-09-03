@@ -1,4 +1,4 @@
-import type { SimulationTtrpgItemReceiptV2 } from "../types";
+import type { TtrpgRuntimeItemReceiptV2 } from "../types";
 import type { TtrpgItemCommandV2 } from "../ttrpg/item-ledger";
 import { OnlineRoomAuthorityError, type OnlineRoomMemberV1 } from "./room-authority";
 
@@ -127,7 +127,7 @@ export function buildOnlineTtrpgItemCommandV1(input: {
 }
 
 export function createOnlineTtrpgItemVisiblePayloadsV1(input: {
-  receipt: SimulationTtrpgItemReceiptV2;
+  receipt: TtrpgRuntimeItemReceiptV2;
   members: OnlineRoomMemberV1[];
   requesterMemberId: string;
 }): {

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { CultivationProgress } from '../lib/types'
 import { deleteCultivationProgressEvent } from '../lib/cultivation/progress'
-import { readOwnedRows, resolveReadScopeLike, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { readOwnedRows, resolveReadScopeLike, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 interface CultivationProgressStore {
   events: CultivationProgress[]

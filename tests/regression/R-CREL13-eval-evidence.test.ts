@@ -16,7 +16,7 @@ import {
 } from '../../src/lib/evals/creative-reliability/evidence'
 import {
   buildCreativeReliabilityVerifierMessagesV1,
-  parseCreativeReliabilityLegacyOutputV1,
+  parseCreativeReliabilityBaselineOutputV1,
   parseCreativeReliabilityVerifierAssessmentV1,
 } from '../../src/lib/evals/creative-reliability/protocol'
 import {
@@ -138,7 +138,7 @@ async function generation(
   } : undefined
   return {
     variant,
-    status: current ? index === 1 ? 'usable-with-warnings' : 'ready' : 'legacy-ready',
+    status: current ? index === 1 ? 'usable-with-warnings' : 'ready' : 'baseline-ready',
     presentedText,
     outputHash: await hashCanonicalValue(presentedText),
     editableArtifact: true,
@@ -209,14 +209,14 @@ async function cases(
   return await Promise.all(fixtures.map(async (fixture, index) => ({
     fixtureId: fixture.id,
     executionOrder: index % 2 === 0
-      ? ['legacy-direct', 'creative-reliability']
-      : ['creative-reliability', 'legacy-direct'],
+      ? ['baseline-direct', 'creative-reliability']
+      : ['creative-reliability', 'baseline-direct'],
     generations: {
-      'legacy-direct': await generation('legacy-direct', index),
+      'baseline-direct': await generation('baseline-direct', index),
       'creative-reliability': await generation('creative-reliability', index),
     },
     verifications: {
-      'legacy-direct': await verification(fixture, 'legacy-direct'),
+      'baseline-direct': await verification(fixture, 'baseline-direct'),
       'creative-reliability': await verification(fixture, 'creative-reliability'),
     },
     humanReview: null,
@@ -247,8 +247,8 @@ async function humanReviews(): Promise<Record<string, CreativeReliabilityHumanRe
       reviewerIdHash,
       completedAt: 10 + index,
       blindOrder: index % 2 === 0
-        ? ['legacy-direct', 'creative-reliability']
-        : ['creative-reliability', 'legacy-direct'],
+        ? ['baseline-direct', 'creative-reliability']
+        : ['creative-reliability', 'baseline-direct'],
       verdicts: index % 2 === 0
         ? [
             { label: 'A', willingToEdit: index < 3, estimatedEditMinutes: 24, retainedRatio: 0.55 },
@@ -313,7 +313,7 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
       CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1,
       await humanReviews(),
     )
-    expect(reviewed.aggregate.legacyDirect.willingToEditRate).toBe(0.5)
+    expect(reviewed.aggregate.baselineDirect.willingToEditRate).toBe(0.5)
     expect(reviewed.aggregate.creativeReliability.willingToEditRate).toBe(1)
     expect(reviewed.aggregate.comparison.willingToEditDelta).toBe(0.5)
     expect(reviewed.communityGate).toMatchObject({ passed: true, failures: [] })
@@ -415,7 +415,7 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
 
     const oldRecord = structuredClone(created)
     for (const item of oldRecord.cases) {
-      delete item.generations['legacy-direct'].repairTargetIssueCodes
+      delete item.generations['baseline-direct'].repairTargetIssueCodes
       delete item.generations['creative-reliability'].repairTargetIssueCodes
       delete item.generations['creative-reliability'].creativeArtifact
     }
@@ -441,7 +441,7 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
 
   it('真实协议把旧 JSON 归一成可编辑数组，并严格核对独立 verifier 的 fact partition', () => {
     const fixture = CREATIVE_RELIABILITY_DEVELOPMENT_FIXTURES_V1[0]
-    const output = parseCreativeReliabilityLegacyOutputV1(JSON.stringify({
+    const output = parseCreativeReliabilityBaselineOutputV1(JSON.stringify({
       name: '坠落倒计时',
       description: '守书人必须在群岛坠落前决定朗读哪一页。',
       stages: Array.from({ length: 3 }, (_, index) => ({
@@ -551,7 +551,7 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
       onCheckpoint: checkpoint => { checkpoints.push(checkpoint.checkpointHash) },
     })
     expect(first.status).toBe('provider-blocked')
-    expect(first.cases[0].generations['legacy-direct']?.status).toBe('provider-failed')
+    expect(first.cases[0].generations['baseline-direct']?.status).toBe('provider-failed')
     expect(await verifyCreativeReliabilityEvalCheckpointV1(first, fixtures)).toBe(true)
 
     const resumed = await runCreativeReliabilityEvalV1({
@@ -567,7 +567,7 @@ describe('CREL-13 · 新 development / sealed holdout 与可验签门槛', () =>
       onCheckpoint: checkpoint => { checkpoints.push(checkpoint.checkpointHash) },
     })
     expect(resumed.status).toBe('completed')
-    expect(resumed.record?.cases[0].generations['legacy-direct'].status).toBe('provider-failed')
+    expect(resumed.record?.cases[0].generations['baseline-direct'].status).toBe('provider-failed')
     expect(resumed.record?.machineGate.passed).toBe(false)
     expect(new Set(checkpoints).size).toBeGreaterThan(10)
     expect(await verifyCreativeReliabilityEvalCheckpointV1(resumed, fixtures)).toBe(true)

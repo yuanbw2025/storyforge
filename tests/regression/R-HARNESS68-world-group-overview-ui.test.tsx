@@ -55,7 +55,7 @@ vi.mock('../../src/stores/ai-config', () => ({
   }),
 }))
 
-vi.mock('../../src/lib/world-engine/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
+vi.mock('../../src/lib/workspace/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
 
 vi.mock('../../src/lib/agent/run/world-suggest-durable', () => ({
   generateWorldSuggestCandidateV1: mocks.generate,

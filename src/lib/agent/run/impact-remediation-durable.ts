@@ -11,7 +11,7 @@ import {
   rebuildProjectNarrativeSummaries,
 } from '../../retrieval/retrieval'
 import { hashChapterText } from '../../ai/chapter-memory/text-normalization'
-import { assertRecordInScope, readOwnedRows } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 import {
   appendAgentRunEventV1,
   createAgentRunV1,

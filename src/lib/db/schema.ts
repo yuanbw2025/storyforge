@@ -5,6 +5,7 @@ import { migrateStateCardsToTemporalFactCandidates } from '../migrations/state-c
 import { migrateItemLedgerToCharacterOwnership } from '../migrations/item-ledger-character-ownership'
 import { migrateWorldHistoryConsolidation } from '../migrations/world-history-consolidation'
 import { migrateWorkspacePortableIdentities } from '../migrations/workspace-identity-upgrade'
+import { migrateCanonicalAuthoringContentV94 } from '../migrations/canonical-authoring-content-v94'
 import type {
   Project,
   Worldview,
@@ -60,9 +61,9 @@ import type {
   AgentRunArtifactRecordV1,
   NodeFlow,
   NodeRunRecord,
-  SimulationSession,
-  SimulationEvent,
-  SimulationCheckpoint,
+  ProductRuntimeSession,
+  ProductRuntimeEvent,
+  ProductRuntimeCheckpoint,
   World,
   Work,
   WorkCharacterBinding,
@@ -72,7 +73,7 @@ import type {
   WorldRevision,
   WorldRelease,
   WorkspaceDocumentBindingV1,
-  GameRelease,
+  ProductRelease,
   NarrativeBeat,
   NarrativeChoice,
   ProductMediaAsset,
@@ -84,14 +85,14 @@ import type {
   ComicPanel,
   ComicVisualSubject,
   ComicMediaAsset,
-  GameProductionRecordV1,
-  GameProductionBriefRecordV1,
-  GameProductionCommandRecordV1,
-  GameBuildRecordV1,
-  GameBuildArtifactRecordV1,
-  GameQualityGateReceiptRecordV1,
+  ProductProductionRecordV1,
+  ProductProductionBriefRecordV1,
+  ProductProductionCommandRecordV1,
+  ProductBuildRecordV1,
+  ProductBuildArtifactRecordV1,
+  ProductQualityGateReceiptRecordV1,
   MediaBlobObjectRecordV1,
-  GameRulePackRecordV1,
+  TtrpgRulePackRecordV1,
   TtrpgSessionParticipantRecordV2,
   TtrpgRuntimeAssetRequestRecordV1,
 } from '../types'
@@ -101,7 +102,7 @@ import type { KnowledgeLedgerEntry } from '../types/knowledge-ledger'
 import type { RetrievalChunk } from '../types/retrieval-chunk'
 import type { NarrativeSummaryNode } from '../types/narrative-summary'
 
-class StoryForgeDB extends Dexie {
+export class StoryForgeDB extends Dexie {
   projects!: Table<Project>
   worlds!: Table<World, number>
   works!: Table<Work, number>
@@ -222,10 +223,10 @@ class StoryForgeDB extends Dexie {
   nodeFlows!: Table<NodeFlow, number>
   nodeRuns!: Table<NodeRunRecord, number>
 
-  // SIM-1 —— NPC/跑团/角色聊天共用的独立互动运行时
-  simulationSessions!: Table<SimulationSession, number>
-  simulationEvents!: Table<SimulationEvent, number>
-  simulationCheckpoints!: Table<SimulationCheckpoint, number>
+  // PRODUCT-RUNTIME-1 —— 各上层产品共享协议、各产品实例独立拥有状态的运行时
+  productRuntimeSessions!: Table<ProductRuntimeSession, number>
+  productRuntimeEvents!: Table<ProductRuntimeEvent, number>
+  productRuntimeCheckpoints!: Table<ProductRuntimeCheckpoint, number>
   ttrpgSessionParticipants!: Table<TtrpgSessionParticipantRecordV2, number>
   ttrpgRuntimeAssetRequests!: Table<TtrpgRuntimeAssetRequestRecordV1, number>
   narrativeModules!: Table<NarrativeModule, number>
@@ -238,7 +239,7 @@ class StoryForgeDB extends Dexie {
   workspaceDocuments!: Table<WorkspaceDocumentBindingV1, number>
 
   // Immutable upper-product releases and their frozen narrative protocol.
-  gameReleases!: Table<GameRelease, number>
+  productReleases!: Table<ProductRelease, number>
   narrativeBeats!: Table<NarrativeBeat, number>
   narrativeChoices!: Table<NarrativeChoice, number>
   productMediaAssets!: Table<ProductMediaAsset, number>
@@ -251,18 +252,18 @@ class StoryForgeDB extends Dexie {
   comicVisualSubjects!: Table<ComicVisualSubject, number>
   comicMediaAssets!: Table<ComicMediaAsset, number>
 
-  // GAMEPROD / TTRPG / CHATGAME —— 上层产品生产与媒资生命周期。
-  gameProductions!: Table<GameProductionRecordV1, number>
-  gameProductionBriefs!: Table<GameProductionBriefRecordV1, number>
-  gameProductionCommands!: Table<GameProductionCommandRecordV1, number>
-  gameBuilds!: Table<GameBuildRecordV1, number>
-  gameBuildArtifacts!: Table<GameBuildArtifactRecordV1, number>
-  gameQualityGateReceipts!: Table<GameQualityGateReceiptRecordV1, number>
+  // 上层产品统一生产、发布与媒资生命周期。
+  productProductions!: Table<ProductProductionRecordV1, number>
+  productProductionBriefs!: Table<ProductProductionBriefRecordV1, number>
+  productProductionCommands!: Table<ProductProductionCommandRecordV1, number>
+  productBuilds!: Table<ProductBuildRecordV1, number>
+  productBuildArtifacts!: Table<ProductBuildArtifactRecordV1, number>
+  productQualityGateReceipts!: Table<ProductQualityGateReceiptRecordV1, number>
   mediaBlobObjects!: Table<MediaBlobObjectRecordV1, number>
-  gameRulePacks!: Table<GameRulePackRecordV1, number>
+  ttrpgRulePacks!: Table<TtrpgRulePackRecordV1, number>
 
-  constructor() {
-    super('storyforge')
+  constructor(databaseName = 'storyforge') {
+    super(databaseName)
 
     this.version(1).stores({
       projects: '++id, name, createdAt, updatedAt',
@@ -1146,6 +1147,240 @@ class StoryForgeDB extends Dexie {
         if (!Object.prototype.hasOwnProperty.call(row, 'confirmedBriefHash')) row.confirmedBriefHash = ''
       })
     })
+
+    // ARCH-CLEAN-4: product identity is a hard, indexed root property. Retired
+    // user-visible products are not retained as hidden aliases: their preview
+    // Production/Release/Session rows are removed with dependent run evidence.
+    // Historical schema declarations above remain only as one-way DB upgrade
+    // instructions and are not accepted by current runtime contracts.
+    this.version(91).stores({
+      gameProductions: '++id, projectId, worldId, workId, productType, &[workId+productionKey], [workId+productType], status, currentGameReleaseId, updatedAt',
+      gameReleases: '++id, projectId, worldId, workId, productType, productionKey, worldReleaseId, &[workId+productionKey+version], [workId+productType], contentHash, createdAt',
+      simulationSessions: '++id, projectId, worldGroupId, worldId, workId, gameReleaseId, gameBuildId, runtimeSourceHash, kind, status, parentSessionId, updatedAt',
+    }).upgrade(async tx => {
+      const canonicalProducts = new Set([
+        'ttrpg', 'character-interaction', 'text-adventure', 'avg', 'text-open-world',
+      ])
+      const retiredProducts = new Set(['storygame', 'narrative-simulation'])
+
+      const deleteAgentRunClosure = async (seedIds: number[]): Promise<void> => {
+        if (seedIds.length === 0) return
+        const allRuns = await tx.table('agentRuns').toArray()
+        const runIds = new Set(seedIds)
+        let changed = true
+        while (changed) {
+          changed = false
+          for (const run of allRuns) {
+            if (run.id == null || run.parentRunId == null || runIds.has(run.id)) continue
+            if (runIds.has(run.parentRunId)) {
+              runIds.add(run.id)
+              changed = true
+            }
+          }
+        }
+        const ids = [...runIds]
+        await tx.table('agentRunEvents').where('runId').anyOf(ids).delete()
+        await tx.table('agentRunCheckpoints').where('runId').anyOf(ids).delete()
+        await tx.table('agentRuns').bulkDelete(ids)
+      }
+
+      const invalidProductionIds: number[] = []
+      for (const production of await tx.table('gameProductions').toArray()) {
+        if (production.id == null) continue
+        const briefs = await tx.table('gameProductionBriefs')
+          .where('productionId').equals(production.id).toArray()
+        const productTypes = new Set<string>()
+        for (const brief of briefs) {
+          try {
+            const parsed = JSON.parse(String(brief.briefJson ?? '{}'))
+            if (typeof parsed?.intent?.productType === 'string') productTypes.add(parsed.intent.productType)
+          } catch { /* malformed legacy Brief is not a current product authority */ }
+        }
+        if (productTypes.size !== 1 || !canonicalProducts.has([...productTypes][0])) {
+          invalidProductionIds.push(production.id)
+          continue
+        }
+        production.productType = [...productTypes][0]
+        await tx.table('gameProductions').put(production)
+      }
+
+      const invalidBuildIds = invalidProductionIds.length === 0 ? [] : (await tx.table('gameBuilds')
+        .where('productionId').anyOf(invalidProductionIds).toArray())
+        .map(row => row.id).filter((id): id is number => Number.isInteger(id))
+      const invalidRunIds = invalidBuildIds.length === 0 ? [] : (await tx.table('agentRuns')
+        .where('gameBuildId').anyOf(invalidBuildIds).toArray())
+        .map(row => row.id).filter((id): id is number => Number.isInteger(id))
+
+      await deleteAgentRunClosure(invalidRunIds)
+      if (invalidBuildIds.length > 0) {
+        await tx.table('gameBuildArtifacts').where('buildId').anyOf(invalidBuildIds).delete()
+        await tx.table('gameQualityGateReceipts').where('buildId').anyOf(invalidBuildIds).delete()
+        await tx.table('gameBuilds').bulkDelete(invalidBuildIds)
+      }
+      if (invalidProductionIds.length > 0) {
+        await tx.table('gameProductionBriefs').where('productionId').anyOf(invalidProductionIds).delete()
+        await tx.table('gameProductionCommands').where('productionId').anyOf(invalidProductionIds).delete()
+        await tx.table('gameProductions').bulkDelete(invalidProductionIds)
+      }
+
+      const invalidReleaseIds: number[] = []
+      for (const release of await tx.table('gameReleases').toArray()) {
+        if (release.id == null) continue
+        try {
+          const manifest = JSON.parse(String(release.manifestJson ?? '{}'))
+          const productType = manifest?.productType
+          if (manifest?.schema !== 'storyforge.game-release' || manifest?.version !== 3
+            || typeof productType !== 'string' || !canonicalProducts.has(productType)) {
+            invalidReleaseIds.push(release.id)
+            continue
+          }
+          release.productType = productType
+          await tx.table('gameReleases').put(release)
+        } catch {
+          invalidReleaseIds.push(release.id)
+        }
+      }
+
+      const sessionKindMigration = new Map<string, string>([
+        ['chatgame', 'character-interaction'],
+        ['textadventure', 'text-adventure'],
+        ['textworld', 'text-open-world'],
+        ['character-interaction', 'character-interaction'],
+        ['text-adventure', 'text-adventure'],
+        ['text-open-world', 'text-open-world'],
+      ])
+      const currentFormalKinds = new Set([
+        'ttrpg', 'character-interaction', 'text-adventure', 'avg', 'text-open-world',
+      ])
+      const invalidSessionIds: number[] = []
+      for (const session of await tx.table('simulationSessions').toArray()) {
+        if (session.id == null) continue
+        const migratedKind = sessionKindMigration.get(String(session.kind)) ?? String(session.kind)
+        const referencesRemovedSource = invalidReleaseIds.includes(session.gameReleaseId)
+          || invalidBuildIds.includes(session.gameBuildId)
+        const formal = currentFormalKinds.has(migratedKind)
+        const sourceIds = [session.gameReleaseId, session.gameBuildId].filter(value => value != null)
+        let sourceProductType: string | null = null
+        if (formal && session.gameReleaseId != null) {
+          sourceProductType = String((await tx.table('gameReleases').get(session.gameReleaseId))?.productType ?? '')
+        } else if (formal && session.gameBuildId != null) {
+          const build = await tx.table('gameBuilds').get(session.gameBuildId)
+          if (build?.productionId != null) {
+            sourceProductType = String((await tx.table('gameProductions').get(build.productionId))?.productType ?? '')
+          }
+        }
+        if (retiredProducts.has(String(session.kind)) || session.kind === 'textsimulation'
+          || referencesRemovedSource
+          || (!['sandbox', 'npc-evolution'].includes(migratedKind) && !formal)
+          || (formal && (sourceIds.length !== 1
+            || !/^[a-f0-9]{64}$/.test(String(session.runtimeSourceHash ?? ''))
+            || sourceProductType !== migratedKind))) {
+          invalidSessionIds.push(session.id)
+          continue
+        }
+        session.kind = migratedKind
+        await tx.table('simulationSessions').put(session)
+      }
+      if (invalidSessionIds.length > 0) {
+        for (const tableName of [
+          'simulationEvents', 'simulationCheckpoints',
+          'ttrpgSessionParticipants', 'ttrpgRuntimeAssetRequests',
+        ]) {
+          await tx.table(tableName).where('sessionId').anyOf(invalidSessionIds).delete()
+        }
+        const invalidSessionRunIds = (await tx.table('agentRuns')
+          .where('simulationSessionId').anyOf(invalidSessionIds).toArray())
+          .map(row => row.id).filter((id): id is number => Number.isInteger(id))
+        await deleteAgentRunClosure(invalidSessionRunIds)
+        await tx.table('simulationSessions').bulkDelete(invalidSessionIds)
+      }
+      if (invalidReleaseIds.length > 0) await tx.table('gameReleases').bulkDelete(invalidReleaseIds)
+    })
+
+    // ARCH-RESET-1: the active upper-product model starts from a clean,
+    // product-neutral persistence boundary. Author manuscripts, semantic
+    // worlds and WorldRelease rows are preserved. Retired Game* production,
+    // release, runtime and media rows are deliberately removed because their
+    // protocol hashes and ownership cannot truthfully represent Product* v1.
+    this.version(92).stores({
+      productProductions: '++id, projectId, worldId, workId, productType, &[workId+productionKey], [workId+productType], status, currentProductReleaseId, updatedAt',
+      productProductionBriefs: '++id, projectId, worldId, workId, productionId, &[productionId+revision], &[productionId+briefHash], [productionId+status], sourceWorldReleaseId, sourcePlanHash, confirmedBriefHash, createdAt',
+      productProductionCommands: '++id, projectId, worldId, workId, productionId, &[productionId+commandId], [productionId+status], type, createdAt',
+      productBuilds: '++id, projectId, worldId, workId, productionId, &[productionId+buildNumber], [productionId+status], sourceProductReleaseId, packageHash, previewHash, releasedProductReleaseId, updatedAt',
+      productBuildArtifacts: '++id, projectId, worldId, workId, buildId, &[buildId+artifactKey+version], [buildId+status], [buildId+requirementKey], producerRunId, blobObjectId, contentHash, createdAt',
+      productQualityGateReceipts: '++id, projectId, worldId, workId, buildId, &[buildId+gateId+receiptHash], [buildId+gateId], [buildId+status], gateId, status, createdAt',
+      productReleases: '++id, projectId, worldId, workId, productType, productionKey, worldReleaseId, &[workId+productionKey+version], [workId+productType], contentHash, createdAt',
+      productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version], [workId+productType], contentHash, updatedAt',
+      ttrpgRulePacks: '++id, projectId, worldId, workId, &[workId+ruleSystemId+ruleSystemVersion], [workId+status], contentHash, updatedAt',
+      agentRuns: '++id, projectId, workId, productRuntimeSessionId, productBuildId, worldGroupId, conversationId, parentRunId, &[parentRunId+parentRelation], status, updatedAt',
+      productRuntimeSessions: '++id, projectId, worldGroupId, worldId, workId, productReleaseId, productBuildId, runtimeSourceHash, kind, status, parentSessionId, updatedAt',
+      productRuntimeEvents: '++id, projectId, worldGroupId, sessionId, &[sessionId+sequence], &[sessionId+commandId], type, createdAt',
+      productRuntimeCheckpoints: '++id, projectId, worldGroupId, sessionId, [sessionId+throughSequence], createdAt',
+      simulationSessions: null,
+      simulationEvents: null,
+      simulationCheckpoints: null,
+      gameProductions: null,
+      gameProductionBriefs: null,
+      gameProductionCommands: null,
+      gameBuilds: null,
+      gameBuildArtifacts: null,
+      gameQualityGateReceipts: null,
+      gameReleases: null,
+      gameRulePacks: null,
+    }).upgrade(async tx => {
+      const retiredRunIds = (await tx.table('agentRuns').toArray())
+        .filter(run => run.simulationSessionId != null || run.gameBuildId != null)
+        .map(run => run.id)
+        .filter((id): id is number => Number.isInteger(id))
+      if (retiredRunIds.length > 0) {
+        await tx.table('agentRunEvents').where('runId').anyOf(retiredRunIds).delete()
+        await tx.table('agentRunCheckpoints').where('runId').anyOf(retiredRunIds).delete()
+        await tx.table('agentRuns').bulkDelete(retiredRunIds)
+      }
+      await tx.table('agentRuns').toCollection().modify(run => {
+        delete run.gameBuildId
+        delete run.simulationSessionId
+        run.productBuildId = null
+        run.productRuntimeSessionId = null
+      })
+      for (const tableName of [
+        'ttrpgSessionParticipants', 'ttrpgRuntimeAssetRequests',
+        'productMediaAssets', 'productMediaBlobs', 'mediaBlobObjects',
+      ]) {
+        await tx.table(tableName).clear()
+      }
+    })
+
+    // ARCH-ROOT-1: World is the single authority for public identity, version
+    // and imported-world provenance. Project remains a LocalWorkspace shell
+    // with purpose plus active World/Work pointers; obsolete mirror fields are
+    // removed so current code cannot observe two conflicting truths.
+    this.version(93).stores({
+      projects: '++id, &workspaceUid, workspacePurpose, name, createdAt, updatedAt',
+    }).upgrade(async tx => {
+      for (const project of await tx.table('projects').toArray()) {
+        const world = project.activeWorldId == null
+          ? undefined
+          : await tx.table('worlds').get(project.activeWorldId)
+        if (world && project.communityOrigin && !world.communityOrigin) {
+          world.communityOrigin = project.communityOrigin
+          await tx.table('worlds').put(world)
+        }
+        project.workspacePurpose = world?.identityKind === 'world-draft'
+          ? 'world-engine'
+          : 'independent-work'
+        delete project.workspacePurposeDecision
+        delete project.worldCode
+        delete project.worldVersion
+        delete project.communityOrigin
+        await tx.table('projects').put(project)
+      }
+    })
+
+    // CURRENT-CONTENT-1: preserve author text while removing superseded
+    // world/story storage fields and materializing an explicit graph for every
+    // node workflow. Current application code only reads the canonical homes.
+    this.version(94).stores({}).upgrade(migrateCanonicalAuthoringContentV94)
   }
 }
 

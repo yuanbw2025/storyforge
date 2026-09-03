@@ -25,7 +25,7 @@ import {
   resolveScope,
   scopeTransactionTables,
   stampNewRecord,
-} from '../../world-engine/scope'
+} from '../../workspace/scope'
 import {
   buildChapterInformationBoundaryV1,
   validateProseInformationBoundaryV1,
@@ -269,7 +269,7 @@ export interface BuildProseGenerationRunContractV2Input {
 export async function buildProseGenerationRunContractV2(
   input: BuildProseGenerationRunContractV2Input,
 ): Promise<AgentRunContractV2> {
-  const legacy = buildProseGenerationRunContractV1(input)
+  const baseContract = buildProseGenerationRunContractV1(input)
   const expectedGeneration = await resolveProseGenerationExecutionBindingV2(input)
   const generationBinding = input.generationBinding ?? expectedGeneration
   await assertAgentSkillExecutionBindingIntegrityV2(generationBinding, '正文生成 binding')
@@ -301,7 +301,7 @@ export async function buildProseGenerationRunContractV2(
   const contextSourceKeys = [...new Set(stepBindings.flatMap(binding => binding.contextSourceKeys))]
   const writeTargets = generationBinding.writeTargets.map(target => ({ ...target, fields: [...target.fields] }))
   return {
-    ...legacy,
+    ...baseContract,
     version: 2,
     permissions: { contextSourceKeys, writeTargets },
     executionBindings: stepBindings,
@@ -896,6 +896,7 @@ export async function persistProseGenerationCandidateV1(input: {
       const event = stampNewRecord(input.scope, 'agentEvents', {
         projectId: input.scope.projectId,
         conversationId,
+        durableRunId: input.candidate.durable.runId,
         sequence: 1,
         kind: 'candidate',
         content: `正文生成候选 ${input.candidate.outputText.length} 字`,
@@ -982,15 +983,13 @@ export async function isProseGenerationCandidateCurrentV1(
   const { durable, ...candidateBody } = candidate
   if (await hashProseGenerationCandidateV1(candidateBody) !== durable.candidateHash) return false
   if (candidate.semanticReview && !await verifySemanticReviewEvidence(candidate)) return false
-  let scope: WorkspaceScope | null = null
-  let run: AgentRunSnapshotV1 | null = null
+  let scope: WorkspaceScope
+  let run: AgentRunSnapshotV1
   try {
     scope = await resolveScopeForCandidate(candidate)
     run = await readAgentRunV1(scope, candidate.durable.runId)
   } catch {
-    // Legacy candidates may outlive their event ledger during migration. Keep
-    // the historical hash/source checks usable, but never relax a run whose
-    // current contract is available and explicitly requires the boundary.
+    return false
   }
   if (candidate.semanticReview) {
     try {
@@ -1006,7 +1005,7 @@ export async function isProseGenerationCandidateCurrentV1(
     candidate.perspectiveFromChapter
     && (chapter.perspectiveCharacterId ?? null) !== (candidate.perspectiveCharacterId ?? null)
   ) return false
-  if (!candidate.informationBoundaryHash) return !run || !requiresProseInformationBoundaryV1(run)
+  if (!candidate.informationBoundaryHash) return !requiresProseInformationBoundaryV1(run)
   try {
     scope ??= await resolveScopeForCandidate(candidate)
     const boundary = await buildChapterInformationBoundaryV1({

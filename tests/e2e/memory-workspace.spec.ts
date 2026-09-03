@@ -10,17 +10,18 @@ async function openCleanHome(page: Page) {
       return root.getDirectoryHandle('custom-location', { create: true })
     }
   })
-  await page.goto('./projects', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: /开始.*第一部.*小说/ })).toBeVisible({ timeout: 15_000 })
+  await page.goto('./', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '你的创作与游玩空间', exact: true })).toBeVisible({ timeout: 15_000 })
 }
 
 async function createProject(page: Page, name: string) {
-  await page.getByRole('button', { name: '+ 新建项目', exact: true }).click()
-  await page.getByPlaceholder('如：《剑出山门》').fill(name)
+  await page.getByRole('banner').getByRole('button', { name: '新建', exact: true }).click()
+  await page.getByRole('button', { name: /长篇小说/ }).click()
+  await page.getByLabel('名称').fill(name)
   await page.getByRole('button', { name: '选择项目文件夹', exact: true }).click()
   await expect(page.getByText(/已选择：/)).toBeVisible()
-  await page.getByRole('button', { name: '创建', exact: true }).click()
-  await expect(page).toHaveURL(/\/storyforge\/workspace\/\d+$/)
+  await page.getByRole('button', { name: '创建长篇小说', exact: true }).click()
+  await expect(page).toHaveURL(/\/storyforge\/workspace\/\d+\?module=outline$/)
 }
 
 function sidebarButton(page: Page, name: string) {

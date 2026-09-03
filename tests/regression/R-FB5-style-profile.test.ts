@@ -13,7 +13,7 @@ import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import { adopt } from '../../src/lib/registry/adopt'
-import { resolveScopeLike } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike } from '../../src/lib/workspace/scope'
 
 async function createProject(): Promise<number> {
   const now = Date.now()

@@ -8,7 +8,7 @@ import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outlin
 import type { AssembleContextResult } from '../registry/types'
 import type { AIConfig, Chapter, OutlineNode, WorkspaceScope } from '../types'
 import { parseStages } from '../types/story-arc'
-import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import { readOwnedRows, resolveScope } from '../workspace/scope'
 
 type StableRow = {
   id?: number
@@ -68,9 +68,10 @@ export async function prepareProseGatewayAssemblyV1(input: {
   citedReferenceIds?: readonly number[]
   config: AIConfig
   contextProfile?: AgentContextProfile
-  /** ChapterEditor requires a confirmed detail. The master prose copilot may
-   * still prepare a no-write candidate for a legacy outline-only target. */
-  requireDetailedOutline?: boolean
+  /** The step editor requires a confirmed detail. The master Agent may opt in
+   * to an outline-only, candidate-only draft; that draft still cannot bypass
+   * the normal adoption and stale gates. */
+  allowOutlineOnlyAgentDraft?: boolean
   signal?: AbortSignal
 }): Promise<ProseGatewayAssemblyV1> {
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
@@ -112,7 +113,7 @@ export async function prepareProseGatewayAssemblyV1(input: {
     ? targetChapter?.perspectiveCharacterId ?? null
     : input.perspectiveCharacterId
   const detail = details.find(row => row.outlineNodeId === input.outlineNodeId)
-  if (!detail?.ragDocumentId && input.requireDetailedOutline !== false) {
+  if (!detail?.ragDocumentId && input.allowOutlineOnlyAgentDraft !== true) {
     throw new Error('正文生成前必须先建立目标章细纲。')
   }
 

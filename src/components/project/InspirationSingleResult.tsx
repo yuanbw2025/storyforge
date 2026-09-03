@@ -62,7 +62,7 @@ export default function InspirationSingleResult({
       </div>
 
       <ResultCard
-        title="世界观草稿"
+        title="世界基础与历史草稿"
         icon={<Globe className="w-4 h-4 text-blue-500" />}
         expanded={expandedSections.has('worldview')}
         onToggle={() => onToggleSection('worldview')}
@@ -70,14 +70,14 @@ export default function InspirationSingleResult({
         onAdopt={onAdoptWorldview}
         adopting={adopting}
         adoptionLocked={adoptionLocked}
-        adoptLabel="写入世界观"
+        adoptLabel="写入世界基础与历史"
       >
         <div className="space-y-2 text-sm">
           {result.worldview.worldOrigin && <FieldRow label="世界来源" value={result.worldview.worldOrigin} />}
           {result.worldview.powerHierarchy && <FieldRow label="力量体系" value={result.worldview.powerHierarchy} />}
           {result.worldview.continentLayout && <FieldRow label="地貌分布" value={result.worldview.continentLayout} />}
           {result.worldview.climateByRegion && <FieldRow label="气候环境" value={result.worldview.climateByRegion} />}
-          {result.worldview.historyLine && <FieldRow label="世界历史" value={result.worldview.historyLine} />}
+          {result.history.overview && <FieldRow label="世界历史" value={result.history.overview} />}
           {result.worldview.races && <FieldRow label="种族民族" value={result.worldview.races} />}
           {result.worldview.factionLayout && <FieldRow label="势力分布" value={result.worldview.factionLayout} />}
         </div>

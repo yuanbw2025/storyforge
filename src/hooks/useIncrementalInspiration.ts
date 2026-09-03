@@ -32,10 +32,10 @@ export function useIncrementalInspiration(
       : undefined
   ), [project.activeWorkId, project.activeWorldId, project.id])
   const scopeInput = workspaceScope ?? project.id!
-  const scopeKey = `${project.activeWorldId ?? 'legacy'}:${project.activeWorkId ?? 'legacy'}`
+  const scopeKey = `${project.activeWorldId ?? 'unresolved'}:${project.activeWorkId ?? 'unresolved'}`
   const copilot = useMasterCopilot({ project, worldGroupId: null })
   const workspace = useInspirationWorkspaceStore()
-  const draftKey = `sf-inspiration-draft-${project.id}-${scopeKey}`
+  const draftKey = `sf-inspiration-draft-v2-${project.id}-${scopeKey}`
   const draftLoaded = useRef(false)
 
   const [inspiration, setInspiration] = useState('')
@@ -90,7 +90,7 @@ export function useIncrementalInspiration(
       setSelectedFragmentIds(new Set(state.fragments.map(fragment => fragment.id)))
       const latest = latestInspirationVersion(state.versions, mode)
       if (!latest) return
-      try { applyResult(JSON.parse(latest.resultJson), mode) } catch { /* ignore invalid legacy data */ }
+      try { applyResult(JSON.parse(latest.resultJson), mode) } catch { /* ignore invalid data */ }
     })
     return () => { active = false }
   // Store methods are stable Zustand actions; mode changes reload the matching latest version.

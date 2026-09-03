@@ -11,7 +11,7 @@ import {
   BUILTIN_CATEGORIES, stringifyFieldSchema,
   type CodexCategory, type CodexEntry, type CodexDomain, type CodexFieldDef,
 } from '../lib/types/codex'
-import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 interface CodexStore {
   categories: CodexCategory[]
@@ -64,10 +64,10 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
   loadedProjectId: null,
 
   loadAll: async (scopeInput) => {
-    const scope = await resolveScopeLike(scopeInput)
-    const projectId = scope.projectId
     set({ loading: true })
     try {
+      const scope = await resolveScopeLike(scopeInput)
+      const projectId = scope.projectId
       await get().ensureBuiltIns(scope)
       const [categories, entries] = await Promise.all([
         readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
@@ -76,15 +76,15 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       set({ categories, entries, loading: false, loadedProjectId: projectId })
     } catch (err) {
       console.error('[Codex] loadAll 失败:', err)
-      set({ loading: false })
+      set({ categories: [], entries: [], loading: false, loadedProjectId: null })
     }
   },
 
   loadExisting: async (scopeInput) => {
-    const scope = await resolveReadScopeLike(scopeInput)
-    const projectId = scope.projectId
     set({ loading: true })
     try {
+      const scope = await resolveReadScopeLike(scopeInput)
+      const projectId = scope.projectId
       const [categories, entries] = await Promise.all([
         readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
         readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }),
@@ -92,7 +92,7 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       set({ categories, entries, loading: false, loadedProjectId: projectId })
     } catch (err) {
       console.error('[Codex] loadExisting 失败:', err)
-      set({ loading: false })
+      set({ categories: [], entries: [], loading: false, loadedProjectId: null })
     }
   },
 

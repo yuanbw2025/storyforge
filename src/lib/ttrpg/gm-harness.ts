@@ -25,14 +25,14 @@ import { db } from "../db/schema";
 import { assembleContext } from "../registry/assemble-context";
 import {
   commitTtrpgGmNarrationFromHarnessV1,
-  readSimulationState,
-  readSimulationStateVersion,
-} from "../simulation/runtime";
+  readProductRuntimeState,
+  readProductRuntimeStateVersion,
+} from "./runtime-api";
 import type {
   AIConfig,
   ChatMessage,
-  SimulationTtrpgGmSynthesisFrameV2,
-  SimulationTtrpgModelEvidenceV1,
+  TtrpgRuntimeGmSynthesisFrameV2,
+  TtrpgRuntimeModelEvidenceV1,
   WorkspaceScope,
 } from "../types";
 import {
@@ -41,7 +41,6 @@ import {
 } from "./gm-context";
 import {
   assertTtrpgFeedbackOutcomeConsistentV2,
-  createDeterministicGmSynthesisFrameV2,
   parseTtrpgGmSynthesisFrameV2,
 } from "./action-feedback";
 
@@ -55,7 +54,7 @@ export interface TtrpgGmNarrationCandidateV1 {
   version: 1;
   portable: false;
   runId: number;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
   baseSequence: number;
   stateHash: string;
   visibilityHash: string;
@@ -64,11 +63,11 @@ export interface TtrpgGmNarrationCandidateV1 {
   sceneKey: string;
   actionSequence: number;
   narration: string;
-  synthesisFrame: SimulationTtrpgGmSynthesisFrameV2;
+  synthesisFrame: TtrpgRuntimeGmSynthesisFrameV2;
   offeredClueKeys: string[];
   recommendedNextSceneKeys: string[];
-  modelEvidence?: SimulationTtrpgModelEvidenceV1;
-  modelCalls?: SimulationTtrpgModelEvidenceV1[];
+  modelEvidence?: TtrpgRuntimeModelEvidenceV1;
+  modelCalls?: TtrpgRuntimeModelEvidenceV1[];
   repairEvidence?: {
     initialIssue: string;
     initialOutputHash: string;
@@ -157,7 +156,7 @@ function validateDraftAgainstView(input: {
     | "actionSequence"
     | "sceneKey"
   > & {
-    synthesisFrame?: SimulationTtrpgGmSynthesisFrameV2;
+    synthesisFrame?: TtrpgRuntimeGmSynthesisFrameV2;
   };
   view: TtrpgGmRuntimeViewV1;
 }): void {
@@ -237,20 +236,14 @@ function validateDraftAgainstView(input: {
 
 function parseDraft(output: string, view: TtrpgGmRuntimeViewV1) {
   const source = parseJson(output);
-  const legacy = !Object.prototype.hasOwnProperty.call(
-    source,
-    "synthesisFrame",
-  );
   exact(
     source,
-    legacy
-      ? ["narration", "offeredClueKeys", "recommendedNextSceneKeys"]
-      : [
-          "narration",
-          "synthesisFrame",
-          "offeredClueKeys",
-          "recommendedNextSceneKeys",
-        ],
+    [
+      "narration",
+      "synthesisFrame",
+      "offeredClueKeys",
+      "recommendedNextSceneKeys",
+    ],
     "AI GM 候选",
   );
   if (
@@ -260,19 +253,15 @@ function parseDraft(output: string, view: TtrpgGmRuntimeViewV1) {
   )
     fail("AI GM 叙事无效");
   const receipt = view.latestAction?.receipt ?? null;
-  const synthesisFrame = legacy
-    ? receipt
-      ? createDeterministicGmSynthesisFrameV2(receipt)
-      : undefined
-    : receipt
-      ? parseTtrpgGmSynthesisFrameV2(source.synthesisFrame, receipt)
-      : fail("综合反馈缺少 ActionReceipt");
+  const synthesisFrame = receipt
+    ? parseTtrpgGmSynthesisFrameV2(source.synthesisFrame, receipt)
+    : fail("综合反馈缺少 ActionReceipt");
   const draft = {
     sceneKey: view.scene?.sceneKey ?? fail("当前没有正式场景"),
     actionSequence:
       view.latestAction?.eventSequence ?? fail("当前没有正式规则行动"),
     narration: source.narration.trim().normalize("NFC"),
-    ...(synthesisFrame ? { synthesisFrame } : {}),
+    synthesisFrame,
     offeredClueKeys: uniqueKeys(source.offeredClueKeys, "offeredClueKeys"),
     recommendedNextSceneKeys: uniqueKeys(
       source.recommendedNextSceneKeys,
@@ -380,8 +369,8 @@ async function append(
   return appendAgentRunEventV1({
     scope,
     runId: snapshot.run.id,
-    simulationSessionId:
-      snapshot.run.simulationSessionId ?? fail("运行时事件缺少 Instance owner"),
+    productRuntimeSessionId:
+      snapshot.run.productRuntimeSessionId ?? fail("运行时事件缺少 Instance owner"),
     type,
     payload,
     expectedLastSequence: snapshot.projection.lastSequence,
@@ -415,8 +404,8 @@ function repairPrompt(
 }
 
 function aggregateModelEvidence(
-  calls: SimulationTtrpgModelEvidenceV1[],
-): SimulationTtrpgModelEvidenceV1 {
+  calls: TtrpgRuntimeModelEvidenceV1[],
+): TtrpgRuntimeModelEvidenceV1 {
   const first = calls[0] ?? fail("AI GM 缺少模型调用证据");
   const inputTokens = calls.reduce((sum, call) => sum + call.inputTokens, 0);
   const outputTokens = calls.reduce((sum, call) => sum + call.outputTokens, 0);
@@ -439,7 +428,7 @@ function aggregateModelEvidence(
 
 export async function generateTtrpgGmNarrationCandidateV1(input: {
   scope: WorkspaceScope;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
   objective: string;
   aiConfig?: AIConfig;
   runAI?: RunAI;
@@ -479,7 +468,7 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
   });
   let snapshot = await createAgentRunV1({
     scope: input.scope,
-    simulationSessionId: input.simulationSessionId,
+    productRuntimeSessionId: input.productRuntimeSessionId,
     worldGroupId: boundary.scope.worldGroupId,
     contract: contract({ objective, boundary, runtimeBindingHash }),
   });
@@ -497,7 +486,7 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
       projectId: input.scope.projectId,
       scope: input.scope,
       worldGroupId: boundary.scope.worldGroupId,
-      simulationSessionId: input.simulationSessionId,
+      productRuntimeSessionId: input.productRuntimeSessionId,
       sourceKeys: ["ttrpgRuntime"],
       provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
@@ -563,7 +552,7 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
       const inputTokens = chatResult.usage?.inputTokens ?? estimatedInputTokens;
       const outputTokens =
         chatResult.usage?.outputTokens ?? estimateTokens(output);
-      const evidence: SimulationTtrpgModelEvidenceV1 = {
+      const evidence: TtrpgRuntimeModelEvidenceV1 = {
         provider: modelIdentity.provider,
         model: modelIdentity.model,
         usageSource: chatResult.usage ? "provider" : "estimated",
@@ -652,7 +641,7 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
     const saved = await createAgentRunCheckpointV1({
       scope: input.scope,
       runId: snapshot.run.id,
-      simulationSessionId: input.simulationSessionId,
+      productRuntimeSessionId: input.productRuntimeSessionId,
       resumePayload: candidate,
       expectedLastSequence: snapshot.projection.lastSequence,
     });
@@ -701,7 +690,7 @@ function isCandidate(value: unknown): value is TtrpgGmNarrationCandidateV1 {
     row.version === 1 &&
     row.portable === false &&
     Number.isInteger(row.runId) &&
-    Number.isInteger(row.simulationSessionId) &&
+    Number.isInteger(row.productRuntimeSessionId) &&
     Number.isInteger(row.baseSequence) &&
     Number.isInteger(row.actionSequence) &&
     typeof row.stateHash === "string" &&
@@ -762,9 +751,9 @@ export async function adoptTtrpgGmNarrationCandidateV1(input: {
     };
   }
   const stableCommandId = commandId(candidate);
-  let committed = await db.simulationEvents
+  let committed = await db.productRuntimeEvents
     .where("sessionId")
-    .equals(candidate.simulationSessionId)
+    .equals(candidate.productRuntimeSessionId)
     .and((event) => event.commandId === stableCommandId)
     .first();
   if (!committed) {
@@ -775,7 +764,7 @@ export async function adoptTtrpgGmNarrationCandidateV1(input: {
       });
       const view = await loadTtrpgGmRuntimeViewV1({
         scope: input.scope,
-        simulationSessionId: candidate.simulationSessionId,
+        productRuntimeSessionId: candidate.productRuntimeSessionId,
       });
       validateDraftAgainstView({ draft: candidate, view });
     } catch (error) {
@@ -808,7 +797,7 @@ export async function adoptTtrpgGmNarrationCandidateV1(input: {
       fail("AI GM 候选当前不等待作者确认");
     }
     committed = await commitTtrpgGmNarrationFromHarnessV1({
-      sessionId: candidate.simulationSessionId,
+      sessionId: candidate.productRuntimeSessionId,
       commandId: stableCommandId,
       baseSequence: candidate.baseSequence,
       baseStateHash: candidate.stateHash,
@@ -833,8 +822,8 @@ export async function adoptTtrpgGmNarrationCandidateV1(input: {
     fail("已提交的 GM 叙事与候选不一致");
   }
   const [version, state] = await Promise.all([
-    readSimulationStateVersion(candidate.simulationSessionId),
-    readSimulationState(candidate.simulationSessionId),
+    readProductRuntimeStateVersion(candidate.productRuntimeSessionId),
+    readProductRuntimeState(candidate.productRuntimeSessionId),
   ]);
   const narration = state.ttrpg?.product?.gmNarrations.find(
     (item) => item.candidateHash === candidate.candidateHash,

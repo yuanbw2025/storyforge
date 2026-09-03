@@ -7,7 +7,7 @@ import type {
   WorkspaceScope,
 } from '../types'
 import { HISTORICAL_ERA_LABELS, KEYWORD_CATEGORY_LABELS } from '../types/history'
-import { readOwnedRows } from '../world-engine/scope'
+import { readOwnedRows } from '../workspace/scope'
 import { formatHistoricalYear } from './year'
 
 export type HistoryAgentModeV1 = 'consult' | 'storm'

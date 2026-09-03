@@ -11,7 +11,7 @@ import type {
   AgentToolJsonSchema,
   AgentToolResult,
 } from './types'
-import { assertRecordInScope, isLegacyReadScope, readOwnedRows, resolveReadScope } from '../world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveReadScope } from '../workspace/scope'
 
 type ArgRules = {
   allowed: readonly string[]
@@ -403,7 +403,7 @@ async function resolveScope(
 
   return {
     projectId,
-    scope: isLegacyReadScope(workspaceScope) ? undefined : workspaceScope,
+    scope: workspaceScope,
     ...(needsWorld || explicitWorld ? { worldGroupId: worldGroupId ?? null } : {}),
     chapterId,
     outlineNodeId,
@@ -455,7 +455,7 @@ async function executeReadTool(
   }
 }
 
-const LEGACY_AGENT_READ_TOOLS: readonly AgentToolDefinition[] = READ_TOOL_SPECS.map(spec => {
+const REGISTERED_SOURCE_READ_TOOLS: readonly AgentToolDefinition[] = READ_TOOL_SPECS.map(spec => {
   for (const sourceKey of spec.sourceKeys) {
     if (!CONTEXT_SOURCE_BY_KEY.has(sourceKey)) {
       throw new Error(`Agent 工具 ${spec.name} 引用了未注册上下文源：${sourceKey}`)
@@ -473,7 +473,7 @@ const LEGACY_AGENT_READ_TOOLS: readonly AgentToolDefinition[] = READ_TOOL_SPECS.
 })
 
 export const AGENT_READ_TOOLS: readonly AgentToolDefinition[] = [
-  ...LEGACY_AGENT_READ_TOOLS,
+  ...REGISTERED_SOURCE_READ_TOOLS,
   ...CONTEXT_GATEWAY_READ_TOOLS_V1,
 ]
 

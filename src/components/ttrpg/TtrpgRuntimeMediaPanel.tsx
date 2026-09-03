@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ImageIcon, Loader2, RefreshCw, Sparkles, XCircle } from "lucide-react";
-import { resolvePlayableGameSource } from "../../lib/game-production/preview-source";
+import { resolveProductRuntimeSource } from "../../lib/product-production/preview-source";
 import {
   cancelTtrpgRuntimeAssetRequestV1,
   readTtrpgRuntimeMediaBlobV1,
@@ -9,8 +9,8 @@ import {
   retryConfiguredTtrpgRuntimeAssetRequestV1,
 } from "../../lib/ttrpg/runtime-media";
 import type {
-  GameRuntimePackageV2,
-  PlayableGameSourceV1,
+  ProductRuntimePackageV1,
+  ProductRuntimeSourceV1,
   TtrpgRuntimeAssetRequestRecordV1,
   WorkspaceScope,
 } from "../../lib/types";
@@ -53,8 +53,8 @@ function requestKey(sessionId: number): string {
 export default function TtrpgRuntimeMediaPanel(props: {
   sessionId: number;
   scope: WorkspaceScope;
-  runtimePackage: GameRuntimePackageV2;
-  source: PlayableGameSourceV1;
+  runtimePackage: ProductRuntimePackageV1;
+  source: ProductRuntimeSourceV1;
   media: MediaProjection;
   viewerKey: string;
   disabled: boolean;
@@ -104,7 +104,7 @@ export default function TtrpgRuntimeMediaPanel(props: {
   useEffect(() => {
     let cancelled = false;
     const objectUrls: string[] = [];
-    let resolver: Awaited<ReturnType<typeof resolvePlayableGameSource>>["mediaResolver"] | null = null;
+    let resolver: Awaited<ReturnType<typeof resolveProductRuntimeSource>>["mediaResolver"] | null = null;
     void (async () => {
       const next: Record<string, string> = {};
       const prebuiltKeys = props.media.slots.flatMap((slot) => {
@@ -112,7 +112,7 @@ export default function TtrpgRuntimeMediaPanel(props: {
         return slot.status === "available" && slot.assetKey ? [slot.assetKey] : [];
       });
       if (prebuiltKeys.length) {
-        resolver = (await resolvePlayableGameSource({
+        resolver = (await resolveProductRuntimeSource({
           scope: props.scope,
           source: props.source,
         })).mediaResolver;

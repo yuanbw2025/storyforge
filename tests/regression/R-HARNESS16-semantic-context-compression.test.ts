@@ -21,7 +21,8 @@ import { estimateTokens } from '../../src/lib/ai/context-budget'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { db } from '../../src/lib/db/schema'
 import type { AIConfig, ChatMessage } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const CONFIG: AIConfig = {
   provider: 'openai',
@@ -280,6 +281,9 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
   })
 
   it('assembleContext 只在正式 reader 读出原文后应用压缩，不允许伪造 sourceHash', async () => {
+    await db.delete()
+    await db.open()
+    const projectId = (await seedCurrentWorkspace('Semantic compression')).scope.projectId
     const content = sourceText(1_100)
     const inputBudgetTokens = 1_400
     const anchors = extractContextCompressionAnchorsV1({ content, targetTokens: inputBudgetTokens })
@@ -294,7 +298,7 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
       policy,
     })
     const assembled = await assembleContext({
-      projectId: 1,
+      projectId,
       sourceKeys: ['manualText'],
       manualSourceText: content,
       inputBudgetTokens,
@@ -314,7 +318,7 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
       policy,
     })
     await expect(assembleContext({
-      projectId: 1,
+      projectId,
       sourceKeys: ['manualText'],
       manualSourceText: content,
       inputBudgetTokens,
@@ -327,6 +331,7 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
         } : result
       },
     })).rejects.toThrow('转换证据无效')
+    db.close()
   })
 
   it('世界领域 Agent 的正式只读工具实际应用 Skill 压缩策略并把证据带入候选', async () => {
@@ -350,13 +355,6 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
         worldGroupId: null,
         worldOrigin: '潮门开启必须由守灯人敲钟，任何人不得绕过守灯仪式，主角当前尚未知晓钟声来源。',
         continentLayout: '潮'.repeat(5_000),
-        historyLine: '海历3021年建立盐城。',
-        geography: '',
-        history: '海历3021年建立盐城。',
-        society: '',
-        culture: '',
-        economy: '',
-        rules: '',
         summary: '',
         createdAt: now,
         updatedAt: now,

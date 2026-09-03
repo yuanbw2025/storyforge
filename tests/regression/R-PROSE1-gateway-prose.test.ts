@@ -18,8 +18,8 @@ import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { normalizeProseForEditorV1, plainTextToHtml } from '../../src/lib/utils/html'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord, type WorkspaceScope } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord, type WorkspaceScope } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { prepareProseCopilot } from '../../src/lib/agent/prose-copilot'
 import {
@@ -249,7 +249,6 @@ describe.sequential('PROSE-1 · 正文 Gateway 单一上下文与 exact adoption
       authorRequest: '写第二章正文',
       skillId: 'prose.generate',
       perspectiveCharacterId: fixture.characterId,
-      creativeReliabilityEnabled: false,
     })
     expect(prepared.contextEvidence.inputStateSourceKeys).toEqual(expect.arrayContaining([
       'chapterOutline', 'detailedOutline', 'storyArcs', 'storylineProgress',

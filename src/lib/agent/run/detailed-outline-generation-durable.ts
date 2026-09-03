@@ -25,7 +25,7 @@ import type { AssembleContextResult } from '../../registry/types'
 import {
   assertRecordInScope,
   readOwnedRows,
-} from '../../world-engine/scope'
+} from '../../workspace/scope'
 import {
   getAgentSkillV1,
   OUTLINE_DETAIL_CONTEXT_SOURCE_KEYS,
@@ -219,7 +219,7 @@ export async function buildDetailedOutlineGenerationRunContractV3(input: {
   operation: DetailedOutlineGenerationOperationV1
   formalEntry: AgentRunFormalAIEntryBindingV1
 }): Promise<AgentRunContractV3> {
-  const legacy = buildDetailedOutlineGenerationRunContractV1(input)
+  const baseContract = buildDetailedOutlineGenerationRunContractV1(input)
   const skill = getAgentSkillV1('outline.details', 'outline')
   const binding = await createAgentSkillExecutionBindingV2(skill, {
     writeTargets: skill.writeTargets.map(target => ({
@@ -231,7 +231,7 @@ export async function buildDetailedOutlineGenerationRunContractV3(input: {
   })
   await assertAgentSkillExecutionBindingIntegrityV2(binding, '细纲正式生成 binding')
   return {
-    ...legacy,
+    ...baseContract,
     version: 3,
     executionBoundary: 'formal',
     permissions: {
@@ -583,6 +583,7 @@ export async function persistDetailedOutlineGenerationCandidateV1(input: {
   const event = await appendAgentEvent({
     projectId: input.scope.projectId,
     conversationId: conversation.id,
+    durableRunId: input.candidate.durable.runId,
     kind: 'candidate',
     content: input.candidate.output,
     payload,

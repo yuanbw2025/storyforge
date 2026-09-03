@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { currentPlayerReleases } from '../../src/lib/text-game/player-library'
-import type { GameReleaseManifestV1 } from '../../src/lib/types'
+import type { ProductRuntimePackageV1 } from '../../src/lib/types'
 
 function item(input: { id: number; title: string; moduleExportId: number; createdAt: number }) {
   const manifest = {
-    productType: 'storygame',
-    definition: { title: input.title, gameKey: `game-${input.id}` },
-    worldRelease: { narrativeModuleExportId: input.moduleExportId },
-  } as GameReleaseManifestV1
+    productType: 'avg',
+    definition: { title: input.title, productKey: `game-${input.id}` },
+    sourceWorld: { contentHash: `${input.moduleExportId}`.padStart(64, '0') },
+  } as ProductRuntimePackageV1
   return {
     release: {
       id: input.id, projectId: 1, worldId: 1, workId: 1, worldReleaseId: input.id,
+      productionKey: `game-${input.id}`, productType: 'avg',
       version: 1, label: input.title, manifestJson: '{}', contentHash: `${input.id}`.padStart(64, '0'), createdAt: input.createdAt,
     },
     manifest,

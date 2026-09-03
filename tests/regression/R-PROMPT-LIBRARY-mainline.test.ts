@@ -6,6 +6,7 @@ import { usePromptStore } from '../../src/stores/prompt'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { assembleBoundPrompt, promptTemplateMatchesProject } from '../../src/lib/ai/prompt-variable-bindings'
 import type { Project, PromptTemplate } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 describe('小说创作 Prompt 内容回归主模板体系', () => {
   beforeEach(async () => {
@@ -70,9 +71,11 @@ describe('小说创作 Prompt 内容回归主模板体系', () => {
   it('统一装配时项目事实只注入一次，必填手动字段会在调用前阻断', async () => {
     const source = NOVEL_CONTENT_PROMPT_SEEDS.find(seed => seed.assetId === 'P00-A')!
     const template: PromptTemplate = { ...source, createdAt: 1, updatedAt: 1 }
+    const created = await seedCurrentWorkspace('绑定测试')
     const project: Project = {
-      id: 501, name: '绑定测试', genre: 'kehuan', genres: ['kehuan'], status: 'ongoing',
-      description: '测试描述', targetWordCount: 300_000, createdAt: 1, updatedAt: 1,
+      ...created.project,
+      genre: 'kehuan', genres: ['kehuan'], status: 'ongoing',
+      description: '测试描述', targetWordCount: 300_000,
     }
     const missing = await assembleBoundPrompt({ template, project })
     expect(missing.missingVariables).toContain('作者原始想法')

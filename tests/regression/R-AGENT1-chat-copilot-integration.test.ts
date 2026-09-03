@@ -3,7 +3,7 @@ import { prepareWorldOriginCopilot } from '../../src/lib/agent/world-origin-copi
 import { adoptGenerationNodeOutput } from '../../src/lib/generation/generation-node'
 import { db } from '../../src/lib/db/schema'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 
 async function projectTableCounts() {
   return Object.fromEntries(await Promise.all(PROJECT_TABLES.map(async spec => (
@@ -33,12 +33,6 @@ describe('AGENT-1 · ChatCopilot 注册表真实链路', () => {
     }) as number
     const worldviewId = await db.worldviews.add({
       projectId,
-      geography: '',
-      history: '',
-      society: '',
-      culture: '',
-      economy: '',
-      rules: '',
       summary: '',
       worldOrigin: '旧世界由潮汐孕育。',
       worldGroupId: null,

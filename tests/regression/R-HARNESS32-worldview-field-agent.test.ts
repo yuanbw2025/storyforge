@@ -31,8 +31,8 @@ import {
 } from '../../src/lib/generation/generation-node'
 import type { Project, WorkspaceScope } from '../../src/lib/types'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 const directWorkflow = {
   version: 1 as const,
@@ -69,7 +69,6 @@ async function createWorkspace(): Promise<{ project: Project; scope: WorkspaceSc
     theme: '记忆与责任',
     centralConflict: '主角必须在保住父亲记忆与公开镜税真相之间选择。',
     plotPattern: '线性调查',
-    storyLines: '',
     mainPlot: '主角沿盐晶来源追查镜税制度。',
     subPlots: '',
     createdAt: now,

@@ -144,28 +144,28 @@ describe('R-export-fullcoverage · 全表多世界往返安全网', () => {
       chapterId: newChapter!.id,
     })
 
-    // SIM-1 运行时 → 世界、父分支与会话引用全部重映射
-    const newSimulationSessions = await db.simulationSessions
+    // 产品运行时 → 世界、父分支与会话引用全部重映射
+    const newProductRuntimeSessions = await db.productRuntimeSessions
       .where('projectId').equals(newId).toArray()
-    const newSimulationParent = newSimulationSessions.find(row => row.title === '青云山战役')!
-    const newSimulationChild = newSimulationSessions.find(row => row.title === '青云山战役 · 分支')!
-    expect(newSimulationParent.worldGroupId).toBe(newWgA)
-    expect(newSimulationChild).toMatchObject({
+    const newRuntimeParent = newProductRuntimeSessions.find(row => row.title === '青云山战役')!
+    const newRuntimeChild = newProductRuntimeSessions.find(row => row.title === '青云山战役 · 分支')!
+    expect(newRuntimeParent.worldGroupId).toBe(newWgA)
+    expect(newRuntimeChild).toMatchObject({
       worldGroupId: newWgA,
-      parentSessionId: newSimulationParent.id,
+      parentSessionId: newRuntimeParent.id,
       parentThroughSequence: 0,
     })
-    const newSimulationEvent = await db.simulationEvents.where('projectId').equals(newId).first()
-    const newSimulationCheckpoint = await db.simulationCheckpoints
+    const newProductRuntimeEvent = await db.productRuntimeEvents.where('projectId').equals(newId).first()
+    const newProductRuntimeCheckpoint = await db.productRuntimeCheckpoints
       .where('projectId').equals(newId).first()
-    expect(newSimulationEvent).toMatchObject({
+    expect(newProductRuntimeEvent).toMatchObject({
       worldGroupId: newWgA,
-      sessionId: newSimulationChild.id,
+      sessionId: newRuntimeChild.id,
       sequence: 1,
     })
-    expect(newSimulationCheckpoint).toMatchObject({
+    expect(newProductRuntimeCheckpoint).toMatchObject({
       worldGroupId: newWgA,
-      sessionId: newSimulationChild.id,
+      sessionId: newRuntimeChild.id,
       throughSequence: 1,
     })
 

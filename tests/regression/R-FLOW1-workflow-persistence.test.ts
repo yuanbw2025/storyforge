@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useWorkflowStore } from '../../src/stores/workflow'
 import type { PromptWorkflow } from '../../src/lib/types/workflow'
-import { createLegacyWorkflowGraph } from '../../src/lib/workflow/graph'
+import { createLinearWorkflowGraph } from '../../src/lib/workflow/graph'
 import {
   parseImportedWorkflows,
   serializeWorkflows,
@@ -29,7 +29,7 @@ function graphWorkflow(name = '可视化工作流'): PromptWorkflow {
       userConfirmRequired: true,
     },
   ]
-  const graph = createLegacyWorkflowGraph(steps)
+  const graph = createLinearWorkflowGraph(steps)
   graph.nodes[0] = { ...graph.nodes[0], x: 137, y: 91 }
   graph.edges = [
     {

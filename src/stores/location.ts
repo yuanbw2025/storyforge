@@ -6,7 +6,7 @@ import { db } from '../lib/db/schema'
 import type { ImportantLocation } from '../lib/types'
 import { clearImportantLocationReferences } from '../lib/location/lifecycle'
 import { transactionTablesForReferences } from '../lib/registry/lifecycle'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 /** 树形节点（带 children，UI 用） */
 export interface LocationTreeNode extends ImportantLocation {

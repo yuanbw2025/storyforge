@@ -16,7 +16,7 @@ import {
   resolveScopeLike,
   scopeTransactionTables,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 
 export interface SettingAssertionSource {
   sourceKey: string

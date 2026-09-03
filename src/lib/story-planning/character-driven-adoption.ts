@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import { adopt } from '../registry/adopt'
 import type { CharacterDrivenPlotVolume } from '../types/character-driven-plan'
 import type { WorkspaceScope } from '../types/world-ownership'
-import { readOwnedRows, resolveScopeLike } from '../world-engine/scope'
+import { readOwnedRows, resolveScopeLike } from '../workspace/scope'
 
 export interface CharacterDrivenAdoptionResult {
   volumeIds: number[]

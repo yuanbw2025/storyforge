@@ -15,12 +15,11 @@ import { assembleContext } from '../registry/assemble-context'
 import type { AdoptResult, AssembleContextResult } from '../registry/types'
 import type { AIConfig, ChatMessage, CreativeRules, WorkspaceScope } from '../types'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   createAgentContextCompressionSessionV1,
   type AgentContextCompressionRuntimeV1,
@@ -354,7 +353,7 @@ export async function prepareCreativeRulesCopilotV1(
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
   const before = await readSnapshot(input.projectId, scope)
   const routingCategory = input.routingCategory ?? 'agent.world-foundation.creative-rules'
   const config = input.configOverride ?? resolveRequestConfig(

@@ -13,8 +13,8 @@ import type {
   InteractionRuntimeThread,
   InteractionRelationshipChange,
   RuntimeMemoryStatus,
-  SimulationEvent,
-  SimulationInteractionState,
+  ProductRuntimeEvent,
+  CharacterInteractionRuntimeState,
 } from '../types'
 
 type JsonObject = Record<string, unknown>
@@ -257,12 +257,12 @@ function thread(value: unknown): InteractionRuntimeThread {
   }
 }
 
-/** Build the only release-entry projection for CHATGAME-2. */
+/** Build the only release-entry projection for character interaction. */
 export function createInitialInteractionState(input: {
   playerKey?: string
   profiles: readonly FrozenInteractionCharacterProfile[]
   sceneTemplates: readonly FrozenInteractionSceneTemplate[]
-}): SimulationInteractionState {
+}): CharacterInteractionRuntimeState {
   const playerKey = input.playerKey?.trim() || 'player'
   const profiles: InteractionRuntimeProfile[] = input.profiles.map(item => ({
     participantKey: item.participantKey,
@@ -305,7 +305,7 @@ export function createInitialInteractionState(input: {
       for (const target of targets) remember(seed.key, target, seed.content, seed.importance)
     }
   }
-  const state: SimulationInteractionState = {
+  const state: CharacterInteractionRuntimeState = {
     schema: 'storyforge.character-interaction',
     version: 1,
     playerKey,
@@ -335,7 +335,7 @@ export function createInitialInteractionState(input: {
   return parseInteractionState(state)!
 }
 
-export function parseInteractionState(value: unknown): SimulationInteractionState | null {
+export function parseInteractionState(value: unknown): CharacterInteractionRuntimeState | null {
   if (value == null) return null
   if (!isObject(value) || value.schema !== 'storyforge.character-interaction' || value.version !== 1) {
     throw new Error('不支持的角色互动状态。')
@@ -347,7 +347,7 @@ export function parseInteractionState(value: unknown): SimulationInteractionStat
     || !Array.isArray(value.threads)) {
     throw new Error('角色互动状态集合无效。')
   }
-  const result: SimulationInteractionState = {
+  const result: CharacterInteractionRuntimeState = {
     schema: 'storyforge.character-interaction',
     version: 1,
     playerKey: text(value.playerKey, '玩家 key', 160),
@@ -377,13 +377,13 @@ function relationshipKey(value: Pick<InteractionRuntimeRelationship, 'fromPartic
   return `${value.fromParticipantKey}\u0000${value.toParticipantKey}\u0000${value.dimensionKey}`
 }
 
-function payload(event: SimulationEvent): JsonObject {
+function payload(event: ProductRuntimeEvent): JsonObject {
   const parsed: unknown = JSON.parse(event.payloadJson)
   if (!isObject(parsed)) throw new Error(`互动事件 ${event.type} 载荷必须是对象。`)
   return parsed
 }
 
-function verifyEnvelope(event: SimulationEvent, body: JsonObject): void {
+function verifyEnvelope(event: ProductRuntimeEvent, body: JsonObject): void {
   const commandId = text(body.commandId, '互动命令 ID', 200)
   const baseSequence = integer(body.baseSequence, '互动命令基线序号', 0)
   const baseStateHash = text(body.baseStateHash, '互动命令状态哈希', 64)
@@ -396,17 +396,17 @@ function verifyEnvelope(event: SimulationEvent, body: JsonObject): void {
   }
 }
 
-function requireInteraction(state: SimulationInteractionState | null): SimulationInteractionState {
-  if (!state) throw new Error('当前会话没有 CHATGAME-2 角色互动状态。')
+function requireInteraction(state: CharacterInteractionRuntimeState | null): CharacterInteractionRuntimeState {
+  if (!state) throw new Error('当前会话没有角色互动状态。')
   return state
 }
 
-function requireScene(state: SimulationInteractionState): InteractionRuntimeScene {
+function requireScene(state: CharacterInteractionRuntimeState): InteractionRuntimeScene {
   if (!state.activeScene || state.activeScene.status !== 'active') throw new Error('当前没有进行中的互动场景。')
   return state.activeScene
 }
 
-function requireParticipant(state: SimulationInteractionState, participantKey: string): InteractionRuntimeProfile {
+function requireParticipant(state: CharacterInteractionRuntimeState, participantKey: string): InteractionRuntimeProfile {
   const result = state.profiles.find(item => item.participantKey === participantKey)
   if (!result) throw new Error(`互动角色不存在: ${participantKey}`)
   return result
@@ -419,7 +419,7 @@ function visibleTo(message: InteractionRuntimeMessage, participantKey: string): 
 }
 
 function requireEvidence(
-  state: SimulationInteractionState,
+  state: CharacterInteractionRuntimeState,
   participantKey: string,
   sourceEventSequences: number[],
   evidenceExcerpt: string,
@@ -438,7 +438,7 @@ function requireEvidence(
   return sources
 }
 
-function parseAudience(value: unknown, state: SimulationInteractionState): string[] | null {
+function parseAudience(value: unknown, state: CharacterInteractionRuntimeState): string[] | null {
   const audience = optionalStrings(value, '互动消息听众', 160)
   if (audience == null) return null
   for (const key of audience) {
@@ -448,7 +448,7 @@ function parseAudience(value: unknown, state: SimulationInteractionState): strin
 }
 
 function applyKnowledgeDisclosure(input: {
-  state: SimulationInteractionState
+  state: CharacterInteractionRuntimeState
   knowledgeKey: string
   fromParticipantKey: string
   toParticipantKeys: string[]
@@ -484,9 +484,9 @@ function applyKnowledgeDisclosure(input: {
 }
 
 export function applyInteractionEvent(
-  stateValue: SimulationInteractionState | null,
-  event: SimulationEvent,
-): SimulationInteractionState | null {
+  stateValue: CharacterInteractionRuntimeState | null,
+  event: ProductRuntimeEvent,
+): CharacterInteractionRuntimeState | null {
   if (!event.type.startsWith('interaction.')) return stateValue
   const state = requireInteraction(stateValue)
   const body = payload(event)
@@ -792,7 +792,7 @@ export interface InteractionVisibilityView {
 }
 
 export function interactionVisibilityView(
-  stateValue: SimulationInteractionState,
+  stateValue: CharacterInteractionRuntimeState,
   participantKey: string,
 ): InteractionVisibilityView {
   const state = requireInteraction(parseInteractionState(stateValue))
@@ -814,7 +814,7 @@ export interface InteractionContextWindow extends InteractionVisibilityView {
 }
 
 export function buildInteractionContextWindow(
-  state: SimulationInteractionState,
+  state: CharacterInteractionRuntimeState,
   participantKey: string,
   options: { maxCharacters?: number; maxRecentMessages?: number } = {},
 ): InteractionContextWindow {
@@ -847,9 +847,9 @@ export function buildInteractionContextWindow(
  * move into a negative, immutable prehistory range so new events cannot collide.
  */
 export function rebaseInteractionStateForBranch(
-  stateValue: SimulationInteractionState,
+  stateValue: CharacterInteractionRuntimeState,
   parentThroughSequence: number,
-): SimulationInteractionState {
+): CharacterInteractionRuntimeState {
   const state = requireInteraction(parseInteractionState(stateValue))
   const rebase = (sequence: number | null): number | null => {
     if (sequence == null || sequence <= 0) return sequence

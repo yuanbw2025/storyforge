@@ -7,11 +7,11 @@ import type {
   FrozenProductMediaAsset,
   ProductMediaKind,
   FrozenNarrativeBeat,
-  SimulationAvgPresentationState,
-  SimulationEvent,
+  AvgRuntimePresentationState,
+  ProductRuntimeEvent,
 } from '../types'
 import { AVG_CUE_TYPES, AVG_STAGE_LAYERS } from '../types'
-import { freezeProductMediaAsset } from '../game-production/media-contracts'
+import { freezeProductMediaAsset } from '../product-production/media-contracts'
 
 const STABLE_KEY = /^[a-zA-Z0-9._:-]+$/
 const VISUAL_KINDS = new Set<ProductMediaKind>(['background', 'character-pose', 'character-expression', 'cg', 'ui'])
@@ -199,7 +199,7 @@ export function createInitialAvgPresentationState(input: {
   assets: FrozenProductMediaAsset[]
   content: AvgPresentationContentV1
   entryNodeKey: string
-}): SimulationAvgPresentationState {
+}): AvgRuntimePresentationState {
   return {
     schema: 'storyforge.avg-presentation', version: 1, contentHash: input.contentHash,
     // RuntimePackage v2 media additionally carries blobContentHash for the
@@ -211,7 +211,7 @@ export function createInitialAvgPresentationState(input: {
   }
 }
 
-export function parseAvgPresentationState(value: unknown): SimulationAvgPresentationState | null {
+export function parseAvgPresentationState(value: unknown): AvgRuntimePresentationState | null {
   if (value == null) return null
   const row = object(value, '演出状态')
   if (row.schema !== 'storyforge.avg-presentation' || row.version !== 1 || typeof row.contentHash !== 'string'
@@ -238,7 +238,7 @@ export function parseAvgPresentationState(value: unknown): SimulationAvgPresenta
   }
 }
 
-export function applyAvgPresentationEvent(current: SimulationAvgPresentationState | null, event: SimulationEvent, currentNodeKey: string | null, beats: FrozenNarrativeBeat[]): SimulationAvgPresentationState {
+export function applyAvgPresentationEvent(current: AvgRuntimePresentationState | null, event: ProductRuntimeEvent, currentNodeKey: string | null, beats: FrozenNarrativeBeat[]): AvgRuntimePresentationState {
   if (!current) throw new Error('[avg] 演出事件缺少冻结状态')
   const state = structuredClone(current)
   const payload = object(JSON.parse(event.payloadJson), '演出事件 payload')

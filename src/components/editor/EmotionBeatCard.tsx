@@ -9,7 +9,7 @@ import { useEmotionBeatStore } from '../../stores/emotion-beat'
 import type { EmotionBeat } from '../../lib/types'
 import { useDialog } from '../shared/Dialog'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   adoptEmotionBeatCandidateV1,
   generateEmotionBeatCandidateV1,

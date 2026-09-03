@@ -4,11 +4,11 @@ import type { Project, CreateProjectInput } from '../lib/types'
 import { migrateGenre } from '../lib/types'
 import { requireBackupBefore } from '../lib/safety/require-backup-before'
 import { cascadeDeleteProject } from '../lib/registry/lifecycle'
-import { ensureWorkspaceOwnership } from '../lib/world-engine/ownership'
-import { updateProjectAndActiveWork } from '../lib/world-engine/works'
+import { ensureWorkspaceOwnership } from '../lib/workspace/ownership'
+import { updateProjectAndActiveWork } from '../lib/workspace/works'
 import { clearProjectFolderHandle } from '../lib/storage/folder-handle-store'
 import { backfillResourceUidsV1 } from '../lib/context-gateway/resource-identity'
-import { createWorkspace, type CreateWorkspaceOptions } from '../lib/world-engine/create-workspace'
+import { createWorkspace, type CreateWorkspaceOptions } from '../lib/workspace/create-workspace'
 
 interface ProjectStore {
   projects: Project[]
@@ -52,11 +52,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   loadProject: async (id: number) => {
     const raw = await db.projects.get(id)
     if (!raw) return undefined
-    // WORLD-2C C2: projectId-only legacy routes resolve through one ownership
+    // WORLD-2C C2: projectId-only routes resolve through one ownership
     // service before any project-scoped stores begin reading the workspace.
     const project = migrateGenre((await ensureWorkspaceOwnership(id)).project)
     // CTXG-2 explicit workspace-entry migration. Catalog/search remain strictly
-    // read-only; legacy identity repair happens once before feature stores load.
+    // read-only; identity repair happens once before feature stores load.
     await backfillResourceUidsV1(id)
     const projects = get().projects
     const exists = projects.some(p => p.id === id)

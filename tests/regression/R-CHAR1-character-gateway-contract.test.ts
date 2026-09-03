@@ -21,8 +21,8 @@ import { db } from '../../src/lib/db/schema'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 import { REGISTRY_BY_NAME } from '../../src/lib/registry/project-tables'
 import type { WorkspaceScope } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 const now = 1_920_000_000_000
 
@@ -39,7 +39,7 @@ async function seed(): Promise<{
   const projectId = await db.projects.add({
     workspaceUid: generateWorkspaceUid(), name: '角色关系网', genre: 'fantasy', genres: ['fantasy'],
     status: 'drafting', description: '', targetWordCount: 300_000, enableMultiWorld: true,
-    worldCode: 'char1-world', worldVersion: 1, createdAt: now, updatedAt: now,
+createdAt: now, updatedAt: now,
   } as any) as number
   const { scope } = await ensureWorkspaceOwnership(projectId)
   const worldA = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {

@@ -13,7 +13,7 @@ import {
   readOwnedRows,
   resolveReadScopeLike,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 
 const SEPARATOR = '\n\n---\n\n'
 
@@ -50,7 +50,7 @@ export async function generateContextSnapshot(scopeInput: WorkspaceScopeLike): P
   // ── 头部 ──
   sections.push(`# 上下文快照：${project.name}\n生成时间：${new Date().toLocaleString('zh-CN')}\n类型：${project.genre || '未指定'}`)
 
-  // ── 世界观（v3 字段；v2 仅作极老项目兜底）──
+  // ── 世界观（当前字段）──
   const wv = worldviews[0]
   if (wv) {
     const parts: string[] = ['## 世界观']
@@ -62,27 +62,17 @@ export async function generateContextSnapshot(scopeInput: WorkspaceScopeLike): P
       ['种族民族', wv.races], ['势力分布', wv.factionLayout],
       ['政治制度', wv.politicsOverview], ['经济制度', wv.economyOverview],
       ['文化制度', wv.cultureOverview],
-      ['政经文化（旧版资料）', !wv.politicsOverview && !wv.economyOverview && !wv.cultureOverview
-        ? wv.politicsEconomyCulture : undefined],
       ['矛盾冲突', wv.internalConflicts],
     ]
-    let hasV3 = false
     for (const [label, val] of v3) {
-      if (val) { parts.push(`**${label}**：${compress(val, 250)}`); hasV3 = true }
-    }
-    if (!hasV3 && !wv.summary) {
-      if (wv.geography) parts.push(`**地理**：${compress(wv.geography, 300)}`)
-      if (wv.society) parts.push(`**社会**：${compress(wv.society, 300)}`)
-      if (wv.culture) parts.push(`**文化**：${compress(wv.culture, 200)}`)
-      if (wv.rules) parts.push(`**规则**：${compress(wv.rules, 200)}`)
+      if (val) parts.push(`**${label}**：${compress(val, 250)}`)
     }
     sections.push(parts.join('\n'))
   }
 
   const history = histories.find(row =>
     (row.worldGroupId ?? null) === (wv?.worldGroupId ?? null)) ?? histories[0]
-  const historyOverview = history?.overview ||
-    [wv?.historyLine, wv?.worldEvents].filter(Boolean).join('\n\n')
+  const historyOverview = history?.overview
   if (historyOverview || history?.eraSystem) {
     const parts = ['## 历史']
     if (historyOverview) parts.push(compress(historyOverview, 500))

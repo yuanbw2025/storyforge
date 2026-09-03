@@ -24,7 +24,6 @@ const mocks = vi.hoisted(() => ({
       theme: '',
       centralConflict: '',
       plotPattern: '',
-      storyLines: '',
       mainPlot: '',
       subPlots: '',
       createdAt: 1,

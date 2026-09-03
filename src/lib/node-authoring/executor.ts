@@ -2,7 +2,6 @@ import { estimateTokens } from '../ai/context-budget'
 import { chat } from '../ai/client'
 import { useAIConfigStore } from '../../stores/ai-config'
 import {
-  isCreativeReliabilityRuntimeEnabledV1,
   parseCreativeArtifactV1,
   resolveCreativeQualityPolicyV1,
 } from '../agent/creative-reliability'
@@ -29,7 +28,7 @@ import type {
 import { safeAuthoringGraphJson } from './contracts'
 import { adoptDomainCandidate, executeDomainNode } from './domain-execution'
 import { authoringDomainActionBindingV1 } from './domain-action-registry'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord } from '../world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord } from '../workspace/scope'
 
 export interface AuthoringRunSnapshot {
   nodeId: string
@@ -179,7 +178,6 @@ export function buildAuthoringExecutionPlan(input: {
   let estimatedMaxOutputTokens = 0
   const aiState = useAIConfigStore.getState()
   const defaultMaxTokens = aiState.config.maxTokens > 0 ? aiState.config.maxTokens : 16_000
-  const reliabilityEnabled = isCreativeReliabilityRuntimeEnabledV1()
   const reliabilityPolicy = resolveCreativeQualityPolicyV1(aiState.creativeQualityMode)
   for (const node of ordered) {
     const template = AUTHORING_NODE_BY_ID.get(node.templateId)
@@ -202,8 +200,7 @@ export function buildAuthoringExecutionPlan(input: {
     const maxTokens = requestedMaxTokens > 0
       ? Math.max(100, Math.round(requestedMaxTokens))
       : 16_000
-    const canRepairOnce = reliabilityEnabled
-      && reliabilityPolicy.allowAutomaticRepair
+    const canRepairOnce = reliabilityPolicy.allowAutomaticRepair
       && (node.templateId === 'outline.volume'
         || node.templateId === 'outline.chapter'
         || node.templateId === 'chapter.prose')
@@ -387,7 +384,6 @@ async function executeNode(input: {
       worldGroupId: input.worldGroupId,
       aiConfig: requestedAIConfig(node, inputs),
       creativeReliability: {
-        enabled: isCreativeReliabilityRuntimeEnabledV1(),
         qualityMode: aiState.creativeQualityMode,
         budgetProfile: aiState.agentTeamBudgetProfile,
       },

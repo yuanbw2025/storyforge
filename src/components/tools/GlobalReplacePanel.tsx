@@ -187,12 +187,6 @@ export default function GlobalReplacePanel({ project }: Props) {
     // 世界观搜索
     if ((scope === 'all' || scope === 'worldview') && worldview) {
       const wvFields: [string, string][] = [
-        ['地理环境', worldview.geography],
-        ['历史年表', worldview.history],
-        ['社会结构', worldview.society],
-        ['文化宗教', worldview.culture],
-        ['经济体系', worldview.economy],
-        ['世界规则', worldview.rules],
         ['精华摘要', worldview.summary],
         ['世界来源', worldview.worldOrigin || ''],
         ['力量体系', worldview.powerHierarchy || ''],
@@ -210,11 +204,11 @@ export default function GlobalReplacePanel({ project }: Props) {
         ['灵药草药', worldview.naturalResources?.herbs || ''],
         ['矿石', worldview.naturalResources?.minerals || ''],
         ['其他特产', worldview.naturalResources?.others || ''],
-        ['世界历史线', worldview.historyLine || ''],
-        ['世界大事记', worldview.worldEvents || ''],
         ['种族设定', worldview.races || ''],
         ['势力分布', worldview.factionLayout || ''],
-        ['政治经济文化', worldview.politicsEconomyCulture || ''],
+        ['政治制度', worldview.politicsOverview || ''],
+        ['经济制度', worldview.economyOverview || ''],
+        ['文化制度', worldview.cultureOverview || ''],
         ['矛盾冲突', worldview.internalConflicts || ''],
         ['道具设计', worldview.itemDesign || ''],
       ]
@@ -232,7 +226,6 @@ export default function GlobalReplacePanel({ project }: Props) {
         ['主题', storyCore.theme],
         ['核心冲突', storyCore.centralConflict],
         ['情节模式', storyCore.plotPattern],
-        ['故事线', storyCore.storyLines],
         ['一句话故事', storyCore.logline || ''],
         ['故事概念', storyCore.concept || ''],
         ['故事主线', storyCore.mainPlot || ''],
@@ -411,12 +404,6 @@ export default function GlobalReplacePanel({ project }: Props) {
           if (!worldview) continue
 
           const fieldToKey: Record<string, keyof typeof worldview> = {
-            '地理环境': 'geography',
-            '历史年表': 'history',
-            '社会结构': 'society',
-            '文化宗教': 'culture',
-            '经济体系': 'economy',
-            '世界规则': 'rules',
             '精华摘要': 'summary',
             '世界来源': 'worldOrigin',
             '力量体系': 'powerHierarchy',
@@ -427,11 +414,11 @@ export default function GlobalReplacePanel({ project }: Props) {
             '山川河流': 'mountainsRivers',
             '分区域气候': 'climateByRegion',
             '自然资源概述': 'naturalResourceOverview',
-            '世界历史线': 'historyLine',
-            '世界大事记': 'worldEvents',
             '种族设定': 'races',
             '势力分布': 'factionLayout',
-            '政治经济文化': 'politicsEconomyCulture',
+            '政治制度': 'politicsOverview',
+            '经济制度': 'economyOverview',
+            '文化制度': 'cultureOverview',
             '矛盾冲突': 'internalConflicts',
             '道具设计': 'itemDesign',
           }
@@ -501,7 +488,6 @@ export default function GlobalReplacePanel({ project }: Props) {
             '主题': 'theme',
             '核心冲突': 'centralConflict',
             '情节模式': 'plotPattern',
-            '故事线': 'storyLines',
             '一句话故事': 'logline',
             '故事概念': 'concept',
             '故事主线': 'mainPlot',

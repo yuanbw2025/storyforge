@@ -17,7 +17,7 @@ import { resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import type { ExtractedLocation } from '../../lib/ai/adapters/structured-extract-adapter'
 import ExtractionReviewPanel from '../shared/ExtractionReviewPanel'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   abandonLocationExtractionV1,
   adoptLocationExtractionCandidateV1,

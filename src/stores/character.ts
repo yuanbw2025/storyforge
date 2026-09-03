@@ -5,7 +5,7 @@ import { applyCharacterReferenceRemap } from '../lib/registry/character-referenc
 import { normalizeCharacterAxes } from '../lib/character/character-axes'
 import { transactionTablesFor } from '../lib/registry/lifecycle'
 import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-assertions'
-import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 // 注:势力(Faction)已于 C2 并入「势力」词条,旧 factions 表数据由

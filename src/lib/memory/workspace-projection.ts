@@ -36,7 +36,7 @@ import type {
   World,
 } from '../types'
 import type { WorkspaceScope } from '../types/world-ownership'
-import { ensureWorkspaceOwnership } from '../world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../workspace/ownership'
 import {
   generateDocumentId,
   generateWorkspaceUid,
@@ -561,7 +561,7 @@ function storyCoreSemantic(row: StoryCore): Record<string, unknown> {
     主题: row.theme ?? '',
     核心冲突: row.centralConflict ?? '',
     情节模式: row.plotPattern ?? '',
-    故事主线: row.mainPlot ?? row.storyLines ?? '',
+    故事主线: row.mainPlot ?? '',
     故事复线: row.subPlots ?? '',
   }
 }

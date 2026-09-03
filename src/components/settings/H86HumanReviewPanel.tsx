@@ -314,9 +314,9 @@ export default function H86HumanReviewPanel({ checkpoint }: { checkpoint: H86Che
               <tbody>
                 <tr className="border-t border-border/50">
                   <td>旧直连</td>
-                  <td>{record.aggregate.legacyDirect.averageScore.toFixed(2)}</td>
-                  <td>{(record.aggregate.legacyDirect.averageLineEditRatio * 100).toFixed(1)}%</td>
-                  <td>{record.aggregate.legacyDirect.preferredCount}</td>
+                  <td>{record.aggregate.baselineDirect.averageScore.toFixed(2)}</td>
+                  <td>{(record.aggregate.baselineDirect.averageLineEditRatio * 100).toFixed(1)}%</td>
+                  <td>{record.aggregate.baselineDirect.preferredCount}</td>
                 </tr>
                 <tr className="border-t border-border/50">
                   <td>Agent/Harness</td>

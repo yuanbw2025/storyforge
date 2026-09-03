@@ -18,7 +18,7 @@ import {
   resolveScopeLike,
   stampNewRecord,
   type WorkspaceScopeLike,
-} from '../lib/world-engine/scope'
+} from '../lib/workspace/scope'
 
 /** 树形节点（带 children） */
 export interface WorldTreeNode extends WorldNode {

@@ -22,12 +22,12 @@ import type { AIConfig, Project, WorkspaceScope } from '../../types'
 import { stringifyStages } from '../../types/story-arc'
 import {
   H86_AGENT_PROMPT_VERSION_V1,
-  H86_LEGACY_PROMPT_VERSION_V1,
+  H86_BASELINE_PROMPT_VERSION_V1,
   H86_VERIFIER_PROMPT_VERSION_V1,
-  buildH86LegacyStoryArcMessagesV1,
+  buildH86BaselineStoryArcMessagesV1,
   buildH86VerifierMessagesV1,
   createH86CallEvidenceV1,
-  parseH86LegacyStoryArcOutputV1,
+  parseH86BaselineStoryArcOutputV1,
   parseH86VerifierAssessmentV1,
   type H86CallEvidenceV1,
   type H86GenerationAttemptV1,
@@ -183,8 +183,8 @@ async function seedWorkspace(fixture: H86StoryArcFixtureV1): Promise<H86Workspac
     description: 'HARNESS-86 隔离评测项目；运行后由 PROJECT_TABLES 生命周期清理。',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: `h86-${fixture.id}`,
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as Project) as number
@@ -221,8 +221,18 @@ async function seedWorkspace(fixture: H86StoryArcFixtureV1): Promise<H86Workspac
     target: 'worldviews',
     mode: 'replace',
     data: {
-      rules: fixture.worldRules,
       worldOrigin: fixture.worldOrigin,
+    },
+  }), 1)
+  assertSeedAdoption('worldRulesProfiles', await adopt({
+    projectId,
+    scope,
+    target: 'worldRulesProfiles',
+    mode: 'replace',
+    data: {
+      entries: {},
+      customNodes: [],
+      globalNote: fixture.worldRules,
     },
   }), 1)
   assertSeedAdoption('storyCores', await adopt({
@@ -312,7 +322,7 @@ function directPlan(fixture: H86StoryArcFixtureV1): MasterAgentPlan {
   }
 }
 
-async function legacyGeneration(
+async function baselineGeneration(
   input: H86GenerationCallInputV1,
   config: AIConfig,
   workspace: H86WorkspaceV1,
@@ -337,14 +347,14 @@ async function legacyGeneration(
       'locations',
     ],
   })
-  const messages = buildH86LegacyStoryArcMessagesV1(input.fixture, assembled.text)
+  const messages = buildH86BaselineStoryArcMessagesV1(input.fixture, assembled.text)
   let modelCall: ModelCallResultV1
   try {
     modelCall = await callModel({
       messages,
       config: { ...config, temperature: 0.55, maxTokens: 6_000 },
       identity: input.generator,
-      promptVersion: H86_LEGACY_PROMPT_VERSION_V1,
+      promptVersion: H86_BASELINE_PROMPT_VERSION_V1,
       stage: 'generation',
       variant: input.variant,
     })
@@ -362,7 +372,7 @@ async function legacyGeneration(
     }
   }
   try {
-    const output = parseH86LegacyStoryArcOutputV1(modelCall.output, input.fixture)
+    const output = parseH86BaselineStoryArcOutputV1(modelCall.output, input.fixture)
     return {
       attempt: input.attempt,
       status: 'succeeded',
@@ -379,7 +389,7 @@ async function legacyGeneration(
       outputHash: null,
       parserPassed: false,
       calls: [modelCall.call],
-      failureCode: 'legacy_parse_failed',
+      failureCode: 'baseline_parse_failed',
       failureMessage: failureMessage(error),
     }
   }
@@ -565,8 +575,8 @@ export function createH86BrowserRunDependenciesV1(input: {
     generate: async (call: H86GenerationCallInputV1): Promise<H86GenerationAttemptV1> => {
       const workspace = await seedWorkspace(call.fixture)
       try {
-        return call.variant === 'legacy-direct'
-          ? await legacyGeneration(call, input.generatorConfig, workspace)
+        return call.variant === 'baseline-direct'
+          ? await baselineGeneration(call, input.generatorConfig, workspace)
           : await agentHarnessGeneration(call, input.generatorConfig, workspace)
       } finally {
         await cleanupWorkspace(workspace.scope.projectId)

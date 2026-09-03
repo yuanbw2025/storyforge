@@ -22,9 +22,9 @@ import {
   readStoryCoreIntentSnapshotV1,
   storyArcIntentAlignmentV1,
 } from '../../src/lib/storyline/intent-projection'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { cascadeRegisteredReferences } from '../../src/lib/world-engine/lifecycle'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { cascadeRegisteredReferences } from '../../src/lib/workspace/lifecycle'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { StoryArc, StoryCore, WorkspaceScope } from '../../src/lib/types'
 
 const NOW = 1_788_300_000_000
@@ -59,7 +59,6 @@ async function seedWorkspace(): Promise<{
   const storyCoreId = await db.storyCores.add(stampNewRecord(scope, 'storyCores', {
     projectId,
     ...fields,
-    storyLines: '',
     createdAt: NOW,
     updatedAt: NOW,
   }, { owner: 'work' }) as never) as number
@@ -151,7 +150,6 @@ describe.sequential('STORY-1 · 故事意图与可执行故事线投影', () => 
       scope,
       worldGroupId: null,
       authorRequest: '依据作者故事意图生成一条新的主线故事线',
-      creativeReliabilityEnabled: false,
     })
     const refs = prepared.contextGatewayExecution!.retrievalTrace.mandatory
       .flatMap(read => read.sourceRefs)
@@ -169,7 +167,6 @@ describe.sequential('STORY-1 · 故事意图与可执行故事线投影', () => 
       scope,
       worldGroupId: null,
       authorRequest: '依据作者故事意图生成一条新的主线故事线',
-      creativeReliabilityEnabled: false,
     })
     const draft = JSON.stringify([arcCandidate()])
     const producerRunId = await db.agentRuns.add(stampNewRecord(scope, 'agentRuns', {

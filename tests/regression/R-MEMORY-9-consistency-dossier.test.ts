@@ -8,7 +8,7 @@ import {
 import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { useUserStyleStore } from '../../src/stores/user-style'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 
 async function seed() {
   const now = Date.now()

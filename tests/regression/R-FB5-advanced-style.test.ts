@@ -3,7 +3,7 @@ import { buildStyleCalibrationPrompt, buildStyleLearnPrompt } from '../../src/li
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { adopt } from '../../src/lib/registry/adopt'
-import { resolveScopeLike } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike } from '../../src/lib/workspace/scope'
 import {
   createStyleRevisionPair,
   formatStyleFewShotPairs,

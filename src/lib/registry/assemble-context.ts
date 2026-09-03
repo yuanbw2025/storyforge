@@ -14,7 +14,7 @@ import type {
 import { prepareContinuityContext } from '../ai/chapter-memory/continuity-context'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { db } from '../db/schema'
-import { assertRecordInScope, resolveReadScope } from '../world-engine/scope'
+import { assertRecordInScope, resolveReadScope } from '../workspace/scope'
 import { maybeInjectHarnessFaultV1 } from '../agent/dev-fault-injection'
 
 // CTXG contracts share the existing assembleContext/CONTEXT_SOURCES boundary.
@@ -375,7 +375,7 @@ function selectSources(input: AssembleContextInput): ContextSource[] {
 
 function requirementsMet(source: ContextSource, input: AssembleContextInput): boolean {
   if (source.requiresWorldGroupId && !Object.prototype.hasOwnProperty.call(input, 'worldGroupId')) return false
-  if (source.requiresSimulationSessionId && input.simulationSessionId == null) return false
+  if (source.requiresProductRuntimeSessionId && input.productRuntimeSessionId == null) return false
   if (source.requiresOutlineNodeId && input.outlineNodeId == null && input.chapterId == null) return false
   if (
     source.requiresChapterId

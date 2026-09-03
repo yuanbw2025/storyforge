@@ -24,8 +24,8 @@ import { readAgentRunArtifactExactV1 } from '../../memory/artifact-store'
 import { cascadeDeleteProject } from '../../registry/lifecycle'
 import type { ContextSourceRefV1 } from '../../registry/types'
 import type { AIConfig, Character, Project, WorkspaceScope, Worldview } from '../../types'
-import { ensureWorkspaceOwnership } from '../../world-engine/ownership'
-import { stampNewRecord } from '../../world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../workspace/ownership'
+import { stampNewRecord } from '../../workspace/scope'
 import { RACES_GATEWAY_EVAL_FIXTURES_V1 } from './fixtures'
 import { RacesGatewayBlindGraderFailureV1 } from './protocol'
 import {
@@ -110,8 +110,7 @@ function planFor(fixture: RacesGatewayEvalFixtureV1): MasterAgentPlan {
 
 function emptyWorldview(): Omit<Worldview, 'id' | 'projectId'> {
   return {
-    geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '',
-    worldOrigin: '', races: '', createdAt: Date.now(), updatedAt: Date.now(),
+    summary: '', worldOrigin: '', races: '', createdAt: Date.now(), updatedAt: Date.now(),
   }
 }
 

@@ -17,8 +17,6 @@ import {
   beginOutlineGenerationAdoptionV1,
   commitOutlineGenerationAdoptionV1,
   createOutlineGenerationTraceV1,
-  isOutlineDurableHarnessEnabledV1,
-  OUTLINE_DURABLE_HARNESS_STORAGE_KEY,
   OUTLINE_GENERATION_ADOPTION_INTENT_PAYLOAD_TYPE,
   OUTLINE_GENERATION_CANDIDATE_PAYLOAD_TYPE,
   OUTLINE_GENERATION_CONVERSATION_PURPOSE,
@@ -51,8 +49,8 @@ async function createWorkspace(): Promise<{
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: 'outline-durable-world',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number
@@ -170,11 +168,9 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
     await db.delete()
     await db.open()
     clearRecentGenerationShadowTracesV1()
-    localStorage.removeItem(OUTLINE_DURABLE_HARNESS_STORAGE_KEY)
   })
 
   afterEach(() => {
-    localStorage.removeItem(OUTLINE_DURABLE_HARNESS_STORAGE_KEY)
     db.close()
   })
 
@@ -895,12 +891,6 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
 
     expect(await db.agentRuns.count()).toBe(0)
     expect(await db.agentEvents.count()).toBe(0)
-  })
-
-  it('本机回滚开关默认启用，显式 disabled 后关闭 durable 接入', () => {
-    expect(isOutlineDurableHarnessEnabledV1()).toBe(true)
-    localStorage.setItem(OUTLINE_DURABLE_HARNESS_STORAGE_KEY, 'disabled')
-    expect(isOutlineDurableHarnessEnabledV1()).toBe(false)
   })
 
   it('模型失败继续抛出原错误，并把失败步骤写入 durable ledger', async () => {

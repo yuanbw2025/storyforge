@@ -21,10 +21,9 @@ import {
 } from '../types/character-driven-plan'
 import {
   assertRecordInScope,
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   attachAgentContextInputStateV1,
   mergeContextEvidence,
@@ -403,7 +402,7 @@ export async function prepareCharacterDrivenCopilotV1(
     throw new Error('多世界项目必须先选择一个世界，才能生成角色驱动剧情。')
   }
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
   const before = await readSnapshot(input.projectId, scope, input.planId)
   const routingCategory = input.routingCategory ?? 'agent.outline.character-driven'
   const config = input.configOverride ?? resolveRequestConfig(

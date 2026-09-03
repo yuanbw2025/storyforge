@@ -23,7 +23,7 @@ import {
   resolveScope,
   scopeTransactionTables,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import { REGISTRY_BY_NAME } from '../registry/project-tables'
 import { FIELD_BY_TARGET } from '../registry/field-registry'
 import { hashCanonicalValue } from '../agent/run/hash'

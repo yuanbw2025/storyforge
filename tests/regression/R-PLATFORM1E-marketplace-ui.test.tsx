@@ -4,14 +4,14 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import MarketplacePanel from '../../src/components/community/MarketplacePanel'
 import { db } from '../../src/lib/db/schema'
 import type { CommercialListingV1 } from '../../src/lib/commercial/authority'
-import type { GameDistributionBundleV1 } from '../../src/lib/game-platform/distribution-bundle'
+import type { ProductDistributionBundleV1 } from '../../src/lib/product-platform/distribution-bundle'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const RELEASE = 'a'.repeat(64)
 const listing: CommercialListingV1 = {
   listingId: 'listing.market-ui', releaseHash: RELEASE, creatorId: 'user.creator',
-  productType: 'storygame', title: '市场短篇', summary: '严格客户端可发现的完整作品', contentWarnings: [],
+  productType: 'avg', title: '市场短篇', summary: '严格客户端可发现的完整作品', contentWarnings: [],
   license: {
     licenseId: 'license.ui', licenseVersion: '1.0.0', allowOfflineExport: true,
     allowRemix: false, commercialReuse: false, requiresAttribution: false,
@@ -119,18 +119,18 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
   })
 
   it('创作者对本地正式 Release 依次执行冻结、建目录、上传和提交审核', async () => {
-    await db.gameReleases.add({
-      projectId: 1, worldId: 1, workId: 1, gameDefinitionId: null, worldReleaseId: 1,
-      version: 1, label: '本地短篇 v1',
+    await db.productReleases.add({
+      projectId: 1, worldId: 1, workId: 1, worldReleaseId: 1,
+      productionKey: 'market-ui-local', productType: 'avg', version: 1, label: '本地短篇 v1',
       manifestJson: JSON.stringify({
-        productType: 'storygame', runtimePackage: { definition: { title: '本地短篇' } },
+        productType: 'avg', runtimePackage: { productType: 'avg', definition: { title: '本地短篇' } },
       }),
       contentHash: RELEASE, createdAt: 1,
     })
     const fake = client()
     const bundle = {
-      gameRelease: { contentHash: RELEASE }, bundleHash: 'b'.repeat(64),
-    } as unknown as GameDistributionBundleV1
+      productRelease: { contentHash: RELEASE }, bundleHash: 'b'.repeat(64),
+    } as unknown as ProductDistributionBundleV1
     const exportBundle = vi.fn().mockResolvedValue(bundle)
     await act(async () => {
       root.render(createElement(MarketplacePanel, {
@@ -144,7 +144,7 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     await act(async () => { button(host, '冻结、上传并提交审核').click(); await settle() })
     await waitFor(() => expect(host.textContent).toContain('完整发行物已提交审核'))
     expect(exportBundle).toHaveBeenCalledWith({
-      scope: { projectId: 1, worldId: 1, workId: 1 }, gameReleaseId: expect.any(Number),
+      scope: { projectId: 1, worldId: 1, workId: 1 }, productReleaseId: expect.any(Number),
     })
     expect(fake.createListing).toHaveBeenCalledWith(expect.objectContaining({ releaseHash: RELEASE }))
     expect(fake.registerRelease).toHaveBeenCalledWith(expect.objectContaining({ bundle }))

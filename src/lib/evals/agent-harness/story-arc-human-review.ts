@@ -41,7 +41,7 @@ export interface H86HumanVariantAggregateV1 {
 }
 
 export interface H86HumanReviewAggregateV1 {
-  legacyDirect: H86HumanVariantAggregateV1
+  baselineDirect: H86HumanVariantAggregateV1
   agentHarness: H86HumanVariantAggregateV1
   ties: number
 }
@@ -152,7 +152,7 @@ function variantAggregate(
 
 export function aggregateH86HumanReviewV1(items: readonly H86HumanReviewItemV1[]): H86HumanReviewAggregateV1 {
   return {
-    legacyDirect: variantAggregate(items, 'legacy-direct'),
+    baselineDirect: variantAggregate(items, 'baseline-direct'),
     agentHarness: variantAggregate(items, 'agent-harness'),
     ties: items.filter(item => item.preference === 'tie').length,
   }
@@ -160,12 +160,12 @@ export function aggregateH86HumanReviewV1(items: readonly H86HumanReviewItemV1[]
 
 export function evaluateH86HumanReviewGateV1(aggregate: H86HumanReviewAggregateV1): H86HumanReviewGateV1 {
   const failures: H86HumanReviewGateV1['failures'] = []
-  if (aggregate.legacyDirect.reviewedCases < 6 || aggregate.agentHarness.reviewedCases < 6) failures.push('review-incomplete')
-  if (aggregate.agentHarness.averageScore < aggregate.legacyDirect.averageScore - 0.2) failures.push('quality-regression')
-  if (aggregate.agentHarness.averageLineEditRatio > aggregate.legacyDirect.averageLineEditRatio + 0.05) {
+  if (aggregate.baselineDirect.reviewedCases < 6 || aggregate.agentHarness.reviewedCases < 6) failures.push('review-incomplete')
+  if (aggregate.agentHarness.averageScore < aggregate.baselineDirect.averageScore - 0.2) failures.push('quality-regression')
+  if (aggregate.agentHarness.averageLineEditRatio > aggregate.baselineDirect.averageLineEditRatio + 0.05) {
     failures.push('edit-burden-regression')
   }
-  if (aggregate.agentHarness.preferredCount < aggregate.legacyDirect.preferredCount) failures.push('preference-regression')
+  if (aggregate.agentHarness.preferredCount < aggregate.baselineDirect.preferredCount) failures.push('preference-regression')
   return { passed: failures.length === 0, failures, productionReleaseAllowed: false }
 }
 
@@ -200,16 +200,16 @@ export async function createH86HumanReviewV1(input: {
   for (const [index, fixture] of H86_STORY_ARC_DEVELOPMENT_FIXTURES_V1.entries()) {
     const pair = input.checkpoint.cases[index]
     if (pair.fixtureId !== fixture.id) throw new Error('H86 checkpoint fixture 顺序不一致')
-    const legacyAttempts = pair.variants['legacy-direct'].generationAttempts
+    const baselineAttempts = pair.variants['baseline-direct'].generationAttempts
     const agentAttempts = pair.variants['agent-harness'].generationAttempts
-    const legacy = legacyAttempts[legacyAttempts.length - 1]
+    const baseline = baselineAttempts[baselineAttempts.length - 1]
     const agent = agentAttempts[agentAttempts.length - 1]
-    if (legacy?.status !== 'succeeded' || agent?.status !== 'succeeded') throw new Error('H86 人工盲评缺少成对成功输出')
+    if (baseline?.status !== 'succeeded' || agent?.status !== 'succeeded') throw new Error('H86 人工盲评缺少成对成功输出')
     const blindHash = await hashCanonicalValue({ checkpointHash: input.checkpoint.checkpointHash, fixtureId: fixture.id })
     const blindOrder: [H86StoryArcVariantV1, H86StoryArcVariantV1] = Number.parseInt(blindHash.slice(-1), 16) % 2 === 0
-      ? ['legacy-direct', 'agent-harness']
-      : ['agent-harness', 'legacy-direct']
-    const output = (variant: H86StoryArcVariantV1): string => variant === 'legacy-direct' ? legacy.output : agent.output
+      ? ['baseline-direct', 'agent-harness']
+      : ['agent-harness', 'baseline-direct']
+    const output = (variant: H86StoryArcVariantV1): string => variant === 'baseline-direct' ? baseline.output : agent.output
     items.push({
       fixtureId: fixture.id,
       blindOrder,

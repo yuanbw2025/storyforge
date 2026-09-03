@@ -18,7 +18,7 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { Chapter, OutlineNode } from '../types'
 
 /**

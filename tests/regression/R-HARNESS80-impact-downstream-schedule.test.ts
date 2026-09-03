@@ -43,7 +43,7 @@ async function seed(label = 'h80') {
   const now = Date.now()
   const projectId = await db.projects.add({
     name: `影响调度-${label}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 100_000, worldCode: `${label}-${now}`, worldVersion: 1, createdAt: now, updatedAt: now,
+    targetWordCount: 100_000,createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({
     projectId, code: `${label}-${now}`, name: '主世界', description: '', currentVersion: 1,
@@ -92,7 +92,7 @@ async function seed(label = 'h80') {
   } as any) as number
   await db.storyCores.add({
     projectId, workId, logline: '潮汐改变港城命运', concept: '', theme: '', centralConflict: '',
-    plotPattern: '', storyLines: '', mainPlot: '', subPlots: '', createdAt: now, updatedAt: now,
+    plotPattern: '', mainPlot: '', subPlots: '', createdAt: now, updatedAt: now,
   } as any)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,

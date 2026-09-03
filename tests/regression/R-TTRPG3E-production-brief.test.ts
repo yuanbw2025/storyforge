@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
-  GameRuntimePackageV2,
+  ProductRuntimePackageV1,
   ProductWorldSourceSelectionV1,
   TtrpgProductionSeatV2,
   WorkspaceScope,
@@ -290,7 +290,7 @@ describe("R-TTRPG-3E · nine-step production brief", () => {
       endings: "proposal.faction-pressure",
     });
     const rulePack = await resolveTtrpgProductionRulePackV2({ scope, brief });
-    const narrative: GameRuntimePackageV2["narrative"] = {
+    const narrative: ProductRuntimePackageV1["narrative"] = {
       moduleKind: "branching",
       moduleTitle: "潮门调查",
       entryNodeKey: "scene.opening",
@@ -339,7 +339,7 @@ describe("R-TTRPG-3E · nine-step production brief", () => {
       },
       rulePack,
       worldContentHash: "a".repeat(64),
-      playableWorldBundleHash: "b".repeat(64),
+      worldSourceBundleHash: "b".repeat(64),
     });
     expect(
       campaign.characterTemplates

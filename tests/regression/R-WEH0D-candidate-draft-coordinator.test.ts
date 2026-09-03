@@ -8,12 +8,11 @@ import {
   resetCandidateDraftCoordinatorForTestsV1,
 } from '../../src/lib/agent/candidate-draft-coordinator'
 import {
-  appendAgentEvent,
-  getOrCreateAgentConversation,
   readAgentEvents,
   updateAgentEventCandidate,
 } from '../../src/lib/agent/conversations'
 import { db } from '../../src/lib/db/schema'
+import { seedCurrentMasterCandidate } from '../helpers/current-master-candidate'
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -29,17 +28,6 @@ describe('WEH-0D candidate draft coordinator', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    await db.projects.add({
-      id: 98004,
-      name: '候选串行测试',
-      genre: 'fantasy',
-      genres: ['fantasy'],
-      description: '',
-      status: 'drafting',
-      targetWordCount: 100_000,
-      createdAt: 1,
-      updatedAt: 1,
-    } as any)
   })
 
   afterEach(() => {
@@ -49,29 +37,25 @@ describe('WEH-0D candidate draft coordinator', () => {
   })
 
   it('1000 次快速输入只把最终文本作为 durable 结果落库', async () => {
-    const conversation = await getOrCreateAgentConversation({
-      projectId: 98004,
-      worldGroupId: null,
-    })
-    const candidate = await appendAgentEvent({
-      projectId: 98004,
-      conversationId: conversation.id!,
-      kind: 'candidate',
-      content: '初稿',
-      payload: { label: '测试候选' },
-    })
+    const fixture = await seedCurrentMasterCandidate('候选串行测试', '初稿')
+    const candidate = fixture.candidate.event
     for (let index = 0; index < 1000; index += 1) {
       queueCandidateDraftV1({
         key: 'scope:conversation:7:candidate:11',
         draft: `版本-${index}`,
         debounceMs: 60_000,
-        persist: draft => updateAgentEventCandidate(candidate.id!, 98004, draft),
+        persist: draft => updateAgentEventCandidate(
+          candidate.id!,
+          fixture.scope.projectId,
+          draft,
+          fixture.scope,
+        ),
       })
     }
 
     await flushCandidateDraftV1('scope:conversation:7:candidate:11')
 
-    const restored = await readAgentEvents(conversation.id!)
+    const restored = await readAgentEvents(fixture.conversation.id!, fixture.scope)
     expect(restored.find(event => event.id === candidate.id)?.content).toBe('版本-999')
     expect(hasPendingCandidateDraftsV1()).toBe(false)
   })

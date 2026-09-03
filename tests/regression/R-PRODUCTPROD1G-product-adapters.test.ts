@@ -1,0 +1,422 @@
+import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import type {
+  ProductBuildRecordV1,
+  ProductProductionBriefV3,
+  ProductRuntimePackageV1,
+  ProductionProductKindV1,
+  WorkspaceScope,
+  WorldRelease,
+} from '../../src/lib/types'
+import {
+  buildUpperProductModulesV1,
+  listUpperProductProductionAdaptersV1,
+} from '../../src/lib/product-production/product-adapters'
+import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import { createInitialInteractionState } from '../../src/lib/character-interaction/runtime'
+import { applyAdventureEffects, availableAdventureActions, createInitialAdventureState } from '../../src/lib/adventure/runtime'
+import {
+  availableOpenWorldEvolutionActions,
+  createInitialOpenWorldEvolutionState,
+  parseOpenWorldEvolutionState,
+  planOpenWorldEvolutionTurn,
+} from '../../src/lib/open-world/evolution-runtime'
+import {
+  createInitialOpenWorldState,
+  planOpenWorldDraw,
+  planOpenWorldTravel,
+} from '../../src/lib/open-world/runtime'
+import { db } from '../../src/lib/db/schema'
+import { createProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
+import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/runtime-instances'
+import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { readProductRuntimeState } from '../../src/lib/product/runtime-api'
+import {
+  CURRENT_PRODUCT_RESOURCE_KEYS,
+  CURRENT_PRODUCT_SOURCE_CATALOG,
+  currentProductSelection,
+} from '../helpers/current-product-world'
+
+const PRODUCTS: ProductionProductKindV1[] = [
+  'character-interaction', 'text-adventure', 'avg', 'text-open-world',
+]
+
+function productRoles(productType: ProductionProductKindV1): Record<string, string[]> {
+  const key = CURRENT_PRODUCT_RESOURCE_KEYS
+  if (productType === 'character-interaction') return {
+    participants: [key.character], context: [key.story, key.arc],
+  }
+  if (productType === 'text-adventure') return {
+    characters: [key.character], locations: [key.location], items: [key.artifact], quests: [key.arc],
+  }
+  if (productType === 'avg') return {
+    story: [key.story, key.arc], characters: [key.character], locations: [key.location],
+  }
+  return {
+    characters: [key.character], regions: [key.location], items: [key.artifact],
+    factions: [key.lore], quests: [key.arc],
+  }
+}
+
+function brief(productType: ProductionProductKindV1): ProductProductionBriefV3 {
+  const worldContentHash = 'a'.repeat(64)
+  return {
+    schema: 'storyforge.product-production-brief', version: 3,
+    source: {
+      worldReleaseId: 1, worldContentHash,
+      selection: currentProductSelection(productType, productRoles(productType)),
+      startingPoint: {
+        kind: 'mainline', title: '冻结主线', summary: '从主线冲突开始',
+        sourceRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
+        protagonistRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+        openingConflict: '在潮门关闭前决定公开真相还是保护同伴。',
+      },
+    },
+    intent: {
+      productType, playerRole: '守灯人', protagonistRefs: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+      openingSituation: '在潮门关闭前决定公开真相还是保护同伴。',
+      coreExperience: ['调查', '抉择', '承担后果'], requiredFacts: [], forbiddenChanges: [],
+      contentBoundaries: ['不生成未授权露骨内容'], tone: ['克制', '悬疑'],
+    },
+    scale: { scope: 'scene', targetPlayMinutes: 15, targetWordCount: 2500, targetEndingCount: 4 },
+    media: {
+      visualLevel: 'none', audioLevel: 'none', imageCount: 0, musicTrackCount: 0,
+      sfxCount: 0, voiceLineCount: 0, requiredMediaKinds: [],
+    },
+    consultationBudget: { maximumModelCalls: 3, maximumInputTokens: 30_000, maximumOutputTokens: 8_000, maximumCostUsd: null },
+    productionBudget: {
+      maximumModelCalls: 16, maximumInputTokens: 180_000, maximumOutputTokens: 60_000,
+      maximumCostUsd: null, maximumMediaCalls: 1, maximumDurationMs: 3_600_000,
+      maximumStorageBytes: 200_000_000,
+    },
+    qualityProfile: 'internal', capabilityRequirements: [],
+    externalDataPolicy: {
+      allowedDataClasses: ['world-selection'], forbiddenDataClasses: ['api-key'],
+      allowReferenceImages: false, allowVoiceScripts: false,
+    },
+    fallbackPolicy: {
+      allowTextOnly: true, allowExistingProjectMedia: true, allowProceduralAudio: true,
+      onRequiredCapabilityMissing: 'pause',
+    },
+    completionContract: {
+      requiresPlayablePreview: true,
+      requiredGateIds: ['runtime.package.valid', 'runtime.playable', 'narrative.graph.valid', 'rights.complete'],
+      minimumMediaCoverage: 0, allowSoftWaivers: true,
+    },
+    unresolvedDecisionKeys: [],
+  }
+}
+
+function narrative(): ProductRuntimePackageV1['narrative'] {
+  const endingKeys = ['ending.truth', 'ending.shelter', 'ending.depart', 'ending.wait']
+  return {
+    moduleKind: 'main', moduleTitle: '雾港四路', entryNodeKey: 'opening',
+    nodes: [
+      { key: 'opening', kind: 'entry', title: '潮门之前', summary: '先进入信号塔调查。', conditionJson: '{}', effectsJson: '[]', successorKeys: ['crossroads'] },
+      { key: 'crossroads', kind: 'choice', title: '信号塔抉择', summary: '证据齐全后必须承担选择。', conditionJson: '{}', effectsJson: '[]', successorKeys: endingKeys },
+      ...endingKeys.map((key, index) => ({
+        key, kind: 'ending' as const, title: `结局 ${index + 1}`, summary: '选择形成不可变后果。',
+        conditionJson: '{}', effectsJson: '[]', successorKeys: [],
+      })),
+    ],
+    beats: [
+      { beatKey: 'beat.opening', nodeKey: 'opening', kind: 'narration', speakerKey: null, text: '潮声盖过警铃。', order: 0 },
+      { beatKey: 'beat.crossroads', nodeKey: 'crossroads', kind: 'narration', speakerKey: 'character:1', text: '守灯人摊开了最后一份信号记录。', order: 0 },
+      ...endingKeys.map((nodeKey, index) => ({
+        beatKey: `beat.ending.${index + 1}`, nodeKey, kind: 'narration' as const,
+        speakerKey: null, text: `第 ${index + 1} 条道路已经冻结。`, order: 0,
+      })),
+    ],
+    choices: [{
+      choiceKey: 'choice.investigate', sourceNodeKey: 'opening', text: '进入信号塔调查',
+      description: '先确认冻结证据', unavailableReason: '', targetNodeKey: 'crossroads',
+      displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 0,
+    }, ...endingKeys.map((targetNodeKey, index) => ({
+      choiceKey: `choice.${index + 1}`, sourceNodeKey: 'crossroads', text: `选择道路 ${index + 1}`,
+      description: '', unavailableReason: '', targetNodeKey,
+      displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: index,
+    }))],
+  }
+}
+
+function runtimePackage(productType: ProductionProductKindV1): ProductRuntimePackageV1 {
+  const currentBrief = brief(productType)
+  const currentNarrative = narrative()
+  const modules = buildUpperProductModulesV1({
+    brief: currentBrief, narrative: currentNarrative, sourceCatalog: CURRENT_PRODUCT_SOURCE_CATALOG,
+  })
+  const pkg: ProductRuntimePackageV1 = {
+    schema: 'storyforge.product-runtime-package', version: 1, productType,
+    definition: {
+      productKey: `preview.${productType}`, title: `Preview ${productType}`, description: '',
+      enabledCapabilities: modules.enabledCapabilities, rulesetVersion: 1,
+      initialVariables: { productAdapterId: modules.adapterId },
+    },
+    sourceWorld: { contentHash: currentBrief.source.worldContentHash, selection: currentBrief.source.selection },
+    narrative: currentNarrative,
+  }
+  if (modules.interaction) pkg.interaction = modules.interaction
+  if (modules.adventure) pkg.adventure = modules.adventure
+  if (modules.openWorldEvolution) pkg.openWorldEvolution = modules.openWorldEvolution
+  if (modules.openWorld) pkg.openWorld = modules.openWorld
+  if (productType === 'avg') pkg.presentation = { version: 1, cues: [], assets: [] }
+  return parseProductRuntimePackageV1(pkg)
+}
+
+async function workspace(name: string) {
+  const now = Date.now()
+  const projectId = await db.projects.add({
+    workspacePurpose: 'world-engine',
+    name, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
+    description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
+  } as never) as number
+  return ensureWorkspaceOwnership(projectId)
+}
+
+async function insertPreviewBuild(input: {
+  scope: WorkspaceScope
+  sourceWorldRelease: WorldRelease
+  runtimePackage: ProductRuntimePackageV1
+}) {
+  const now = Date.now()
+  const emptyHash = '0'.repeat(64)
+  const manifestHash = 'f'.repeat(64)
+  const productionKey = `current-product.${input.runtimePackage.productType}.${crypto.randomUUID()}`
+  const productionId = await db.productProductions.add({
+    projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId,
+    productionKey, title: input.runtimePackage.definition.title,
+    productType: input.runtimePackage.productType, status: 'preview-ready', stateRevision: 2,
+    controlEpoch: 1, currentBriefRevision: 1, currentBuildNumber: 1,
+    currentProductReleaseId: null, lastErrorJson: '{}', createdAt: now, updatedAt: now,
+  }) as number
+  await db.productProductionBriefs.add({
+    projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId,
+    productionId, revision: 1, parentRevision: null, status: 'authorized',
+    sourceWorldReleaseId: input.sourceWorldRelease.id!, sourceWorldContentHash: input.sourceWorldRelease.contentHash,
+    userIntentSummary: '现行产品预览闭环', unresolvedJson: '[]', estimateJson: '{}', briefJson: '{}',
+    briefHash: emptyHash, sourcePlanJson: '{}', sourcePlanHash: emptyHash,
+    confirmedBriefJson: '{}', confirmedBriefHash: emptyHash,
+    authorizedAt: now, createdAt: now,
+  })
+  const preview = await createProductBuildPreviewManifestV1({
+    productionKey, buildNumber: 1, buildManifestHash: manifestHash,
+    runtimePackage: input.runtimePackage,
+  })
+  const build: ProductBuildRecordV1 = {
+    projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId,
+    productionId, buildNumber: 1, briefRevision: 1, briefHash: emptyHash, parentBuildNumber: null,
+    sourceProductReleaseId: null, status: 'preview-ready', resumeState: null, stateRevision: 2, controlEpoch: 1,
+    planRevision: 1, planJson: '{}', planHash: emptyHash, budgetLedgerJson: '{}', manifestJson: '{}',
+    manifestHash, packageHash: preview.packageHash, previewManifestJson: JSON.stringify(preview),
+    previewHash: preview.previewHash, qualityReportJson: '{}', qualityReportHash: emptyHash,
+    compatibilityJson: '{}', rootTerminalReceiptHash: emptyHash, adoptionIntentHash: null,
+    releasedProductReleaseId: null, failureJson: '{}', authorizedAt: now,
+    startedAt: now, completedAt: now, createdAt: now, updatedAt: now,
+  }
+  const buildId = await db.productBuilds.add(build) as number
+  return { buildId, previewHash: preview.previewHash }
+}
+
+describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
+  it('文字开放世界内部模拟使用现行 schema，并只在解析旧存档时单向归一化', () => {
+    const initial = createInitialOpenWorldEvolutionState(
+      runtimePackage('text-open-world').openWorldEvolution!,
+      'a'.repeat(64),
+    )
+    expect(initial.schema).toBe('storyforge.text-open-world.evolution')
+    expect(parseOpenWorldEvolutionState({
+      ...initial,
+      schema: 'storyforge.text-open-world.evolution',
+    })?.schema).toBe('storyforge.text-open-world.evolution')
+  })
+
+  it('四类非跑团产品与 TTRPG 共享同一 registry，但未过 Golden 的 TTRPG 不得标商业就绪', () => {
+    const catalog = listUpperProductProductionAdaptersV1()
+    expect(catalog.map(item => item.productType)).toEqual([...PRODUCTS, 'ttrpg'])
+    expect(catalog.filter(item => item.commercialReady).map(item => item.productType)).toEqual(PRODUCTS)
+
+    for (const productType of PRODUCTS) {
+      const currentBrief = brief(productType)
+      const worldContentHash = currentBrief.source.worldContentHash
+      const currentNarrative = narrative()
+      const modules = buildUpperProductModulesV1({
+        brief: currentBrief, narrative: currentNarrative, sourceCatalog: CURRENT_PRODUCT_SOURCE_CATALOG,
+      })
+      const pkg: ProductRuntimePackageV1 = {
+        schema: 'storyforge.product-runtime-package', version: 1, productType,
+        definition: {
+          productKey: `registry.${productType}`, title: `Registry ${productType}`, description: '',
+          enabledCapabilities: modules.enabledCapabilities, rulesetVersion: 1,
+          initialVariables: {
+            productAdapterId: modules.adapterId,
+            productAdapterCommercialReady: modules.commercialReady,
+          },
+        },
+        sourceWorld: { contentHash: currentBrief.source.worldContentHash, selection: currentBrief.source.selection },
+        narrative: currentNarrative,
+      }
+      if (modules.interaction) pkg.interaction = modules.interaction
+      if (modules.adventure) pkg.adventure = modules.adventure
+      if (modules.openWorldEvolution) pkg.openWorldEvolution = modules.openWorldEvolution
+      if (modules.openWorld) pkg.openWorld = modules.openWorld
+      if (productType === 'avg') pkg.presentation = { version: 1, cues: [], assets: [] }
+      const parsed = parseProductRuntimePackageV1(pkg)
+      expect(parsed).toMatchObject({
+        productType,
+        definition: { initialVariables: { productAdapterCommercialReady: false } },
+      })
+      if (parsed.interaction) expect(createInitialInteractionState(parsed.interaction).profiles.length).toBeGreaterThan(0)
+      if (parsed.adventure) {
+        const initial = createInitialAdventureState(parsed.adventure, worldContentHash)
+        expect(initial.currentLocationKey).toBe(parsed.adventure.initialLocationKey)
+        if (productType === 'text-adventure') {
+          const first = availableAdventureActions(parsed.adventure, initial)
+            .find(item => item.available && item.action.narrativeChoiceKey != null)!.action
+          const moved = applyAdventureEffects(parsed.adventure, initial, first.successEffects, 1)
+          expect(moved.currentLocationKey).not.toBe(initial.currentLocationKey)
+        }
+      }
+      if (parsed.openWorldEvolution) {
+        const initial = createInitialOpenWorldEvolutionState(parsed.openWorldEvolution, worldContentHash)
+        expect(initial.phase).toBe('planning')
+        const action = availableOpenWorldEvolutionActions(parsed.openWorldEvolution, initial).find(item => item.available)!.action
+        const turn = planOpenWorldEvolutionTurn({
+          content: parsed.openWorldEvolution, state: initial, decisionKeys: [action.key], seed: 'registry', startingSequence: 0,
+        })
+        expect(turn.projected.turn).toBeGreaterThan(initial.turn)
+      }
+      if (parsed.openWorld) {
+        const initial = createInitialOpenWorldState(parsed.openWorld, worldContentHash)
+        expect(initial.currentRegionKey).toBe(parsed.openWorld.initialRegionKey)
+        expect(parsed.adventure!.quests.every(quest => quest.initialStatus === 'available')).toBe(true)
+        const draw = planOpenWorldDraw({
+          content: parsed.openWorld,
+          state: initial,
+          adventure: createInitialAdventureState(parsed.adventure!, worldContentHash),
+          trigger: 'observe',
+          seed: 'registry',
+          startingSequence: 0,
+        })
+        expect(draw.projected.questInstances.some(instance => instance.status === 'revealed')).toBe(true)
+        const edge = parsed.openWorld.travelEdges.find(item => item.fromRegionKey === initial.currentRegionKey)!
+        const travel = planOpenWorldTravel({ content: parsed.openWorld, state: initial, edgeKey: edge.key, startingSequence: 0 })
+        expect(travel.projected.travel?.edgeKey).toBe(edge.key)
+      }
+      if (parsed.interaction) {
+        expect(parsed.interaction.sceneTemplates).toHaveLength(currentNarrative.nodes.filter(node => node.kind !== 'ending').length)
+      }
+      if (parsed.adventure) {
+        expect(parsed.adventure.locations).toHaveLength(currentNarrative.nodes.length)
+        expect(parsed.adventure.actions.filter(action => action.narrativeChoiceKey != null)).toHaveLength(currentNarrative.choices.length)
+      }
+      if (parsed.openWorldEvolution) {
+        expect(parsed.openWorldEvolution.issues).toHaveLength(currentNarrative.nodes.filter(node => node.kind !== 'ending').length)
+        expect(parsed.openWorldEvolution.actions).toHaveLength(currentNarrative.choices.length)
+      }
+      if (parsed.openWorld) {
+        expect(parsed.openWorld.regions).toHaveLength(currentNarrative.nodes.length)
+        expect(parsed.openWorld.travelEdges).toHaveLength(currentNarrative.choices.length)
+      }
+      expect(JSON.stringify(parsed)).not.toMatch(/十二街区治理录|公共资金|失踪的潮汐钟|固定区域任务/)
+    }
+  })
+
+  it('TTRPG adapter 必须消费已验证的 RulePack/Campaign compiler 输出', () => {
+    expect(() => buildUpperProductModulesV1({
+      brief: {
+        ...brief('avg'),
+        source: {
+          ...brief('avg').source,
+          selection: { ...brief('avg').source.selection, productType: 'ttrpg' },
+        },
+        intent: { ...brief('avg').intent, productType: 'ttrpg' },
+      },
+      narrative: narrative(),
+    })).toThrow('缺少已验证 RulePack/Campaign compiler 输出')
+  })
+
+  it('正式产品模块消费冻结世界详情，不再把真实角色、地点、道具和势力降级为编号占位符', () => {
+    const currentBrief = brief('text-open-world')
+    const modules = buildUpperProductModulesV1({
+      brief: currentBrief,
+      narrative: narrative(),
+      sourceCatalog: {
+        ...CURRENT_PRODUCT_SOURCE_CATALOG,
+      },
+    })
+    expect(modules.interaction?.profiles[0]).toMatchObject({
+      name: '林舟', initialKnowledge: [{ content: expect.stringContaining('谨慎的守灯调查者') }],
+    })
+    expect(modules.adventure?.locations[0]).toMatchObject({
+      title: expect.stringContaining('雾港灯塔'), description: expect.stringContaining('潮门关闭前'),
+    })
+    expect(modules.adventure?.items).toContainEqual(expect.objectContaining({ title: '黄铜潮汐钥匙' }))
+    expect(modules.adventure?.actions).toContainEqual(expect.objectContaining({
+      key: 'action.take.source.001', label: '取得：黄铜潮汐钥匙',
+    }))
+    expect(modules.openWorldEvolution?.actors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: '林舟', kind: 'actor' }),
+      expect.objectContaining({ title: '守潮公会', kind: 'organization' }),
+    ]))
+    expect(modules.openWorldEvolution?.issues[0]).toMatchObject({ title: '失踪船队' })
+    expect(modules.openWorld?.regions[0].title).toContain('雾港灯塔')
+  })
+
+  it('内部预览不能伪装成商业候选；只有显式 commercial-candidate Brief 才打开后续商业 QA 门', () => {
+    const internalBrief = brief('avg')
+    const candidateBrief = {
+      ...internalBrief,
+      qualityProfile: 'commercial-candidate' as const,
+    }
+    expect(buildUpperProductModulesV1({ brief: internalBrief, narrative: narrative() }).commercialReady).toBe(false)
+    expect(buildUpperProductModulesV1({ brief: candidateBrief, narrative: narrative() }).commercialReady).toBe(true)
+  })
+
+  it('需要玩法模块的产品拒绝没有可游玩阶段的结局壳', () => {
+    const endingOnly: ProductRuntimePackageV1['narrative'] = {
+      moduleKind: 'main', moduleTitle: '空壳', entryNodeKey: 'ending.only',
+      nodes: [{
+        key: 'ending.only', kind: 'ending', title: '直接结束', summary: '',
+        conditionJson: '{}', effectsJson: '[]', successorKeys: [],
+      }],
+      beats: [{
+        beatKey: 'beat.ending', nodeKey: 'ending.only', kind: 'narration', speakerKey: null,
+        text: '没有可进行的玩法。', order: 0,
+      }],
+      choices: [],
+    }
+    expect(() => buildUpperProductModulesV1({
+      brief: brief('text-adventure'), narrative: endingOnly,
+    })).toThrow('至少一个非结局节点')
+  })
+})
+
+describe('R-PRODUCTPROD-1H · four current non-TTRPG playable Build Previews', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('四种产品均从不可变 Build Preview 建立正式会话，并初始化各自玩法状态', async () => {
+    const owned = await workspace('四产品预览闭环')
+    const revision = await createWorldRevision({ scope: owned.scope, label: '四产品冻结来源' })
+    const worldRelease = await publishWorldRevision(revision.id!)
+    for (const productType of PRODUCTS) {
+      const pkg = runtimePackage(productType)
+      pkg.sourceWorld.contentHash = worldRelease.contentHash
+      const build = await insertPreviewBuild({ scope: owned.scope, sourceWorldRelease: worldRelease, runtimePackage: pkg })
+      const session = await createProductRuntimeInstanceFromSource({
+        scope: owned.scope,
+        source: { kind: 'build', productBuildId: build.buildId, expectedPreviewHash: build.previewHash },
+        title: `${productType} 玩家预览`,
+      })
+      const state = await readProductRuntimeState(session.id!)
+      expect(session).toMatchObject({ kind: productType, productBuildId: build.buildId, productReleaseId: null })
+      expect(state.narrative).toMatchObject({ currentNodeKey: 'opening', completed: false })
+      expect(state.interaction != null).toBe(['character-interaction', 'text-adventure', 'text-open-world'].includes(productType))
+      expect(state.adventure != null).toBe(['text-adventure', 'text-open-world'].includes(productType))
+      expect(state.presentation != null).toBe(productType === 'avg')
+      expect(state.openWorldEvolution != null).toBe(productType === 'text-open-world')
+      expect(state.openWorld != null).toBe(productType === 'text-open-world')
+    }
+    expect(await db.productRuntimeSessions.count()).toBe(PRODUCTS.length)
+  })
+})

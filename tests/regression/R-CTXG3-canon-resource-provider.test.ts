@@ -10,8 +10,8 @@ import {
 } from '../../src/lib/context-gateway/canon-provider'
 import { assertResourcePageV1 } from '../../src/lib/context-gateway/contracts'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { normalizeChapterText, sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import {
   buildRagLibrary,

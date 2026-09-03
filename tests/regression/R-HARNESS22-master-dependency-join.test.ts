@@ -6,7 +6,6 @@ import {
   commitMasterAgentCandidateAdoptionV1,
 } from '../../src/lib/agent/run/master-adoption'
 import {
-  MASTER_AGENT_REPLAN_STORAGE_KEY,
   restoreMasterAgentCandidatesV1,
   runDurableMasterAgentPlanV1,
 } from '../../src/lib/agent/run/master-durable'
@@ -32,8 +31,8 @@ async function createWorkspace(label: string): Promise<{
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number
@@ -171,11 +170,9 @@ describe.sequential('R-HARNESS22 · 主 Agent 同代依赖 join', { timeout: 15_
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    localStorage.setItem(MASTER_AGENT_REPLAN_STORAGE_KEY, 'disabled')
   })
 
   afterEach(() => {
-    localStorage.removeItem(MASTER_AGENT_REPLAN_STORAGE_KEY)
     db.close()
   })
 

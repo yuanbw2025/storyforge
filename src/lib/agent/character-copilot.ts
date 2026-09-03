@@ -29,12 +29,11 @@ import type {
   WorkspaceScope,
 } from '../types'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   attachAgentContextInputStateV1,
   evidenceFromContextResult,
@@ -355,7 +354,7 @@ export async function prepareCharacterCopilot(input: {
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
   const beforeRead = await readCharacterRosterSnapshot(input.projectId, worldGroupId, scope)
   const routingCategory = input.routingCategory ?? 'character.generate'
   const config = input.configOverride ?? resolveRequestConfig(

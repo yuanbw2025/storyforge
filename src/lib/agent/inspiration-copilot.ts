@@ -51,11 +51,10 @@ import {
 import type { MasterCandidateModelIdentityV1 } from './master-candidate-semantic-review'
 import { parseStructuredOutputV1 } from './structured-output-pipeline'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 
 export type InspirationCopilotResult = ReverseResult | ReverseMultiWorldResult
 
@@ -160,7 +159,7 @@ export function hasInspirationCandidateMaterialV1(
       world.powerHierarchy,
       world.continentLayout,
       world.climateByRegion,
-      world.historyLine,
+      world.historyOverview,
       world.races,
       world.factionLayout,
       world.entryCondition,
@@ -171,6 +170,7 @@ export function hasInspirationCandidateMaterialV1(
   }
   const candidate = result as ReverseResult
   return Object.values(candidate.worldview).some(value => value.trim())
+    || candidate.history.overview.trim().length > 0
     || Object.values(candidate.storyCore).some(value => value.trim())
     || candidate.characters.some(character => character.name.trim())
 }
@@ -187,13 +187,15 @@ export function parseInspirationCandidateDraft(
 ): InspirationCopilotResult {
   const fields = mode === 'multiworld'
     ? ['storyCore', 'worlds', 'characters']
-    : ['worldview', 'storyCore', 'characters']
+    : ['worldview', 'history', 'storyCore', 'characters']
   return parseStructuredOutputV1({
     raw: draft,
     contract: {
       version: 1,
       schemaId: `inspiration-reverse-${mode}.v1`,
-      target: mode === 'multiworld' ? 'worldGroups+storyCores+characters' : 'worldviews+storyCores+characters',
+      target: mode === 'multiworld'
+        ? 'worldGroups+worldviews+histories+storyCores+characters'
+        : 'worldviews+histories+storyCores+characters',
       root: 'object',
       maxChars: MAX_INSPIRATION_RESULT_CHARS,
       allowedRootFields: fields,
@@ -226,7 +228,7 @@ export async function prepareInspirationCopilot(input: {
   if (!project) throw new Error('项目不存在。')
   const mode: InspirationResultMode = project.enableMultiWorld ? 'multiworld' : 'single'
   const readScope = await resolveReadScopeLike(input.scope ?? input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
   const snapshot = await snapshotFromResolvedScope(readScope)
   const fragments = parseInspirationFragments(snapshot.fragments)
   const selectedFragmentIds = [...new Set(input.selectedFragmentIds)]

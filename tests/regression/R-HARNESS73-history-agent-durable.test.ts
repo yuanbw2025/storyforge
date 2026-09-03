@@ -24,7 +24,7 @@ async function seed(suffix = '') {
   const projectId = await db.projects.add({
     name: `镜城史志${suffix}`, genre: 'historical', genres: ['historical'], status: 'drafting',
     description: '镜税署在星历三百年改写了盐晶流通法。', targetWordCount: 90_000,
-    worldCode: `history-${now}-${suffix}`, worldVersion: 1, enableMultiWorld: true,
+enableMultiWorld: true,
     createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({

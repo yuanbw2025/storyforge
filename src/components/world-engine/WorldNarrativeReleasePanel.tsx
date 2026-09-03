@@ -8,13 +8,13 @@ import {
   WandSparkles,
 } from 'lucide-react'
 import type {
-  WorldGameProductionHandoffV2,
+  ProductProductionHandoffV1,
   WorldRelease,
   WorldRevision,
   WorkspaceScope,
 } from '../../lib/types'
 import type { WorldReleaseSection } from '../../lib/registry/types'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   createWorldRevision,
   diffWorldRevisions,
@@ -30,14 +30,14 @@ interface Props {
   projectId: number
   activeWorkId?: number | null
   onChanged: () => Promise<void> | void
-  onOpenGameProduction: (handoff: WorldGameProductionHandoffV2) => void
+  onOpenProductProduction: (handoff: ProductProductionHandoffV1) => void
 }
 
 export default function WorldNarrativeReleasePanel({
   projectId,
   activeWorkId,
   onChanged,
-  onOpenGameProduction,
+  onOpenProductProduction,
 }: Props) {
   const dialog = useDialog()
   const [scope, setScope] = useState<WorkspaceScope | null>(null)
@@ -121,11 +121,11 @@ export default function WorldNarrativeReleasePanel({
     await onChanged()
   })
 
-  const handoff = (productType: WorldGameProductionHandoffV2['productType']) => {
+  const handoff = (productType: ProductProductionHandoffV1['productType']) => {
     if (!selectedRelease?.id) return
-    onOpenGameProduction({
-      schema: 'storyforge.world-game-production-handoff',
-      version: 2,
+    onOpenProductProduction({
+      schema: 'storyforge.product-production-handoff',
+      version: 1,
       productType,
       worldReleaseId: selectedRelease.id,
       worldContentHash: selectedRelease.contentHash,
@@ -187,7 +187,7 @@ export default function WorldNarrativeReleasePanel({
           <p className="sf-world-pipeline-note">这里不会生成游戏、媒资、聊天会话或跑团实例。进入具体产品后，用户仍需确认产品设置和 Brief，并明确下达开始指令。</p>
           {selectedRelease && <code>{selectedRelease.sourceWorldCode}@v{selectedRelease.version} · {selectedRelease.contentHash.slice(0, 16)}…</code>}
           <div className="sf-world-pipeline-actions">
-            <button className="sf-button sf-button-secondary" onClick={() => handoff('storygame')} disabled={!selectedRelease?.id}>
+            <button className="sf-button sf-button-secondary" onClick={() => handoff('text-adventure')} disabled={!selectedRelease?.id}>
               <Gamepad2 className="h-4 w-4" />交给文字游戏
             </button>
             <button className="sf-button sf-button-primary" onClick={() => handoff('ttrpg')} disabled={!selectedRelease?.id}>

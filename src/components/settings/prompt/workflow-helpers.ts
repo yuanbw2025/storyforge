@@ -19,30 +19,27 @@ import {
 /**
  * FB-1 修复 · 工作流步骤上下文整形(纯函数,可单测)。
  *
- * IO 部分(从 ref 取上一步输出、调 assembleContext)留在 WorkflowRunner;
+ * IO 部分(从 ref 取显式入边输出、调 assembleContext)留在 WorkflowRunner;
  * 本函数只负责「把各路上下文摆进模板变量槽位」的纯逻辑,因此能脱离 React/DB 直接测。
  *
  * 关键不变量:
  * - projectName/genres/dimension 必须有值(此前全空导致 AI 失去依据)
  * - worldContext 是所有工作流步骤模板共用的「前序上下文」槽位:
- *   已存项目设定(assembledContext)+ 上一步输出(prevOutput)都汇入这里,
- *   因此 step2「世界起源」一定能看到 step1「一句话故事」。
- * - 仍保留步骤自身 inputMapping 中非 worldContext 的特定变量(如 chapterSummary)。
+ *   已存项目设定(assembledContext)+ 图中指向本节点的输入都汇入这里。
+ * - 非 worldContext 端口按 targetVariable 写入对应模板变量。
  */
 export function assembleWorkflowStepVars(params: {
   step: { label?: string; userHint?: string; inputMapping?: Record<string, string> }
-  prevOutput: string
   projectName?: string
   genres?: string
   assembledContext?: string
   worldRulesContext?: string
   userInput?: string
-  /** FLOW-1 显式图入边。提供时取代线性 prevOutput，但保留旧参数兼容。 */
-  upstreamInputs?: WorkflowUpstreamInput[]
+  /** FLOW-1 显式图入边；所有跨节点数据只能由这里进入。 */
+  upstreamInputs: WorkflowUpstreamInput[]
 }): Record<string, string | number | undefined> {
   const {
     step,
-    prevOutput,
     projectName,
     genres,
     assembledContext,
@@ -58,25 +55,15 @@ export function assembleWorkflowStepVars(params: {
   const mergedUserHint = [step.userHint?.trim(), userInput?.trim()].filter(Boolean).join('\n')
   if (mergedUserHint) ctx.userHint = mergedUserHint
 
-  const hasGraphInputs = upstreamInputs !== undefined
-  const graphValues = hasGraphInputs ? groupWorkflowInputsByVariable(upstreamInputs) : {}
+  const graphValues = groupWorkflowInputsByVariable(upstreamInputs)
   for (const [variable, value] of Object.entries(graphValues)) {
     if (variable !== 'worldContext') ctx[variable] = value
   }
 
-  // 旧线性工作流保留 inputMapping 中非 worldContext 的特定变量。
-  if (!hasGraphInputs && step.inputMapping && prevOutput) {
-    for (const [from, to] of Object.entries(step.inputMapping)) {
-      if (from === 'previousOutput' && to !== 'worldContext') ctx[to] = prevOutput
-    }
-  }
-
   if (worldRulesContext) ctx.worldRulesContext = worldRulesContext
 
-  // 通用前序上下文槽位：已存设定 + 显式图入边（或旧线性的上一步输出）。
-  const upstreamContext = hasGraphInputs
-    ? formatWorkflowUpstreamContext(upstreamInputs)
-    : prevOutput
+  // 通用前序上下文槽位：已存设定 + 显式图入边。
+  const upstreamContext = formatWorkflowUpstreamContext(upstreamInputs)
   const prior = [assembledContext, upstreamContext].filter(Boolean).join('\n\n')
   if (prior) ctx.worldContext = prior
 
@@ -105,7 +92,6 @@ export const SAVE_TARGET_PRESETS = [
   { label: '不自动保存（仅复制）', value: '' },
   { label: '世界观.世界起源', value: 'worldview-field:worldOrigin' },
   { label: '世界观.力量体系', value: 'worldview-field:powerHierarchy' },
-  { label: '世界观.世界历史线', value: 'worldview-field:historyLine' },
   { label: '世界观.世界观摘要', value: 'worldview-field:summary' },
   { label: '故事.一句话故事', value: 'storyCore-field:logline' },
   { label: '故事.故事概念', value: 'storyCore-field:concept' },
@@ -153,7 +139,7 @@ export function valueToSaveTarget(v: string): SaveTarget | undefined {
 /** 字段 key → 中文标签的映射，供 targetLabel 使用 */
 const SAVE_TARGET_FIELD_LABELS: Record<string, string> = {
   worldOrigin: '世界起源', powerHierarchy: '力量体系',
-  historyLine: '世界历史线', summary: '世界观摘要',
+  summary: '世界观摘要',
   logline: '一句话故事', concept: '故事概念', theme: '主题',
   centralConflict: '核心冲突', mainPlot: '故事主线',
   writingStyle: '写作风格', toneAndMood: '基调氛围',

@@ -1,7 +1,7 @@
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type { TableSpec } from '../registry/types'
 import type { WorkspaceScope } from '../types'
-import { assertRecordInScope, readOwnedRows } from '../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../workspace/scope'
 import { hashCanonicalValue } from '../agent/run/hash'
 
 export interface WorkspaceContentRevisionEntryV1 {

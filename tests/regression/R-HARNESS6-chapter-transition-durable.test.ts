@@ -44,8 +44,8 @@ async function createWorkspace(label: string): Promise<{
     status: 'drafting',
     description: '',
     targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number

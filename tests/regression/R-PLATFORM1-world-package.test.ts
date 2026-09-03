@@ -4,11 +4,21 @@ import {
   createWorldPackage,
   importWorldPackage,
   inspectWorldPackage,
-} from '../../src/lib/product/world-package'
-import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
+} from '../../src/lib/world-engine/world-package'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { hashWorldReleaseValueV1 } from '../../src/lib/world-engine/release-hash'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+
+const ALL_WORLD_PACKAGE_USES = {
+  'world-remix': true,
+  ttrpg: true,
+  'character-interaction': true,
+  'ai-town': true,
+  'text-adventure': true,
+  avg: true,
+  'text-open-world': true,
+} as const
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize)
@@ -73,11 +83,16 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     return { ...created, release }
   }
 
-  it('v2 只发布注册表登记的世界语义，并保留用途、许可与完整性', async () => {
+  it('v3 只发布注册表登记的世界语义，并用当前产品身份保留用途、许可与完整性', async () => {
     const seeded = await seedProject()
     const pkg = await createWorldPackage(seeded.release.id!, {
       authorName: '林岚', license: 'CC-BY-4.0',
-      allowedUses: { writing: true, ttrpg: true, characterChat: false, textGame: false },
+      allowedUses: {
+        ...ALL_WORLD_PACKAGE_USES,
+        'character-interaction': false,
+        'ai-town': false,
+        avg: false,
+      },
       contentWarnings: ['灾难'],
     })
     const report = await inspectWorldPackage(pkg)
@@ -85,20 +100,21 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     expect(report.valid).toBe(true)
     expect(report.importable).toBe(true)
     expect(pkg.manifest.packageId).toBe(`${seeded.world.code}@v1`)
-    expect(pkg.manifest.allowedUses.characterChat).toBe(false)
+    expect(pkg.packageVersion).toBe(3)
+    expect(pkg.manifest.allowedUses['character-interaction']).toBe(false)
     expect(pkg.release.manifest.semanticContract).toBe(3)
     expect((pkg.release.manifest.portableProject as any).characters).toHaveLength(1)
     expect((pkg.release.manifest.portableProject as any).chapters).toHaveLength(1)
     expect((pkg.release.manifest.portableProject as any).productMediaAssets).toBeUndefined()
     expect(pkg.release.manifest.selectedTables).not.toContain('productMediaAssets')
-    expect(pkg.release.manifest.selectedNarrativeModules).toEqual([])
+    expect(pkg.release.manifest).not.toHaveProperty('selectedNarrativeModules')
   })
 
   it('篡改发布信息或混入产品媒资时拒绝导入', async () => {
     const seeded = await seedProject()
     const pkg = await createWorldPackage(seeded.release.id!, {
       authorName: '匿名', license: 'ALL-RIGHTS-RESERVED',
-      allowedUses: { writing: true, ttrpg: false, characterChat: false, textGame: false },
+      allowedUses: { ...ALL_WORLD_PACKAGE_USES, ttrpg: false, 'character-interaction': false, 'ai-town': false },
     })
     const tampered = JSON.parse(JSON.stringify(pkg))
     tampered.manifest.description = '被替换的描述'
@@ -119,7 +135,7 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     const seeded = await seedProject()
     const pkg = await createWorldPackage(seeded.release.id!, {
       authorName: '匿名', license: 'ALL-RIGHTS-RESERVED',
-      allowedUses: { writing: true, ttrpg: true, characterChat: true, textGame: true },
+      allowedUses: { ...ALL_WORLD_PACKAGE_USES },
     })
     const mutations: Array<(copy: typeof pkg) => void> = [
       copy => { copy.release.manifest.resourceCatalog![0]!.resourceId = 'world:forged:semantic:story:forged' },
@@ -148,7 +164,7 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     const seeded = await seedProject()
     const pkg = await createWorldPackage(seeded.release.id!, {
       authorName: '匿名', license: 'ALL-RIGHTS-RESERVED',
-      allowedUses: { writing: true, ttrpg: true, characterChat: true, textGame: true },
+      allowedUses: { ...ALL_WORLD_PACKAGE_USES },
     })
     const portable = pkg.release.manifest.portableProject as Record<string, unknown>
     const emptySelectedTable = pkg.release.manifest.selectedTables.find(table => (
@@ -173,22 +189,25 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     const seeded = await seedProject()
     const pkg = await createWorldPackage(seeded.release.id!, {
       authorName: '林岚', license: 'CC-BY-SA-4.0',
-      allowedUses: { writing: true, ttrpg: true, characterChat: true, textGame: true },
+      allowedUses: { ...ALL_WORLD_PACKAGE_USES },
     })
     const importedId = await importWorldPackage(pkg)
     const imported = await db.projects.get(importedId)
+    const importedWorld = imported?.activeWorldId == null ? undefined : await db.worlds.get(imported.activeWorldId)
 
     expect(importedId).not.toBe(seeded.scope.projectId)
-    expect(imported?.worldCode).toMatch(/^W-[A-Z0-9]{5}-[A-Z0-9]{4}$/)
-    expect(imported?.worldCode).not.toBe(seeded.world.code)
-    expect(imported?.communityOrigin?.sourceWorldCode).toBe(seeded.world.code)
-    expect(imported?.communityOrigin?.license).toBe('CC-BY-SA-4.0')
+    expect(imported).not.toHaveProperty('worldCode')
+    expect(imported).not.toHaveProperty('worldVersion')
+    expect(importedWorld?.code).toMatch(/^W-[A-Z0-9]{5}-[A-Z0-9]{4}$/)
+    expect(importedWorld?.code).not.toBe(seeded.world.code)
+    expect(importedWorld?.communityOrigin?.sourceWorldCode).toBe(seeded.world.code)
+    expect(importedWorld?.communityOrigin?.license).toBe('CC-BY-SA-4.0')
     expect(await db.worldviews.where('projectId').equals(importedId).count()).toBe(1)
     expect(await db.characters.where('projectId').equals(importedId).count()).toBe(1)
     expect(await db.chapters.where('projectId').equals(importedId).count()).toBe(1)
     expect(await db.productMediaAssets.where('projectId').equals(importedId).count()).toBe(0)
     expect(await db.worldReleases.where('projectId').equals(importedId).count()).toBe(1)
-    expect((await db.projects.get(seeded.scope.projectId))?.worldCode).toBe(seeded.world.code)
+    expect((await db.worlds.get(seeded.scope.worldId))?.code).toBe(seeded.world.code)
   })
 
   it('旧协议和未知版本 fail-closed，不保留分类迁移旁路', async () => {

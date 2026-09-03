@@ -1,4 +1,4 @@
-/** TEXTWORLD-1 authored regional rules, immutable release payload and replayed state. */
+/** Text-open-world authored regional rules, immutable release payload and replayed state. */
 
 export type OpenWorldAttentionLevel = 'focus' | 'active' | 'background'
 export type OpenWorldRegionKnowledge = 'unknown' | 'heard' | 'visited' | 'familiar'
@@ -191,7 +191,7 @@ export interface OpenWorldContentV1 {
   version: 1
   initialRegionKey: string
   tickLimit: number
-  simulationCadenceTicks: number
+  evolutionCadenceTicks: number
   maxPropagationEdgesPerTick: number
   regions: OpenWorldRegionDefinition[]
   travelEdges: OpenWorldTravelEdgeDefinition[]
@@ -295,7 +295,7 @@ export interface OpenWorldPropagationHistoryEntry {
   amount: number
 }
 
-export interface SimulationOpenWorldState {
+export interface OpenWorldRuntimeState {
   schema: 'storyforge.open-world'
   version: 1
   contentHash: string

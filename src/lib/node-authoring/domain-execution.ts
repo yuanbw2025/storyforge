@@ -47,10 +47,9 @@ import {
   adoptRestoredProseCandidate,
   runProseCreativeReliabilityV1,
 } from '../agent/prose-copilot'
-import { buildEnhancedDetailPrompt, parseEnhancedDetailResult } from '../ai/adapters/detail-scene-adapter'
+import { buildEnhancedDetailPrompt } from '../ai/adapters/detail-scene-adapter'
 import { createDetailedOutlineCreativeArtifactV1 } from '../agent/detailed-outline-copilot'
 import {
-  isCreativeReliabilityRuntimeEnabledV1,
   type CreativeArtifactV1,
   type CreativeQualityModeV1,
 } from '../agent/creative-reliability'
@@ -84,7 +83,7 @@ import type {
   AuthoringNodeInstance,
   AuthoringSemantic,
 } from './contracts'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../workspace/scope'
 
 export interface DomainExecutionResult {
   output: string
@@ -110,7 +109,6 @@ export interface DomainExecutionInput {
   worldGroupId: number | null
   aiConfig: AIConfig
   creativeReliability?: {
-    enabled: boolean
     qualityMode: CreativeQualityModeV1
     budgetProfile: AgentTeamBudgetProfile
   }
@@ -159,7 +157,6 @@ function organizationBudgetProfile(value: number): AgentTeamBudgetProfile {
 
 function creativeReliabilitySettings(input: DomainExecutionInput) {
   return input.creativeReliability ?? {
-    enabled: isCreativeReliabilityRuntimeEnabledV1(),
     qualityMode: 'balanced' as const,
     budgetProfile: 'balanced' as const,
   }
@@ -318,29 +315,24 @@ async function executeStoryArc(input: DomainExecutionInput): Promise<DomainExecu
     contextProfile: profileForBudget(contextBudget(input.node, input.inputs, 32_000)),
     configOverride: input.aiConfig,
     generationOverrides: generationOverrides(input.node, input.inputs),
-    creativeReliabilityEnabled: reliability.enabled,
     signal: input.signal,
   })
   const binding = await domainBinding(input)
   const variants: string[] = []
   const creativeArtifacts: CreativeArtifactV1[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
-    if (reliability.enabled) {
-      const result = await runStoryArcCreativeReliabilityV1({
-        prepared,
-        budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
-        qualityMode: reliability.qualityMode,
-      })
-      variants.push(result.draft)
-      creativeArtifacts.push(result.artifact)
-    } else {
-      variants.push(JSON.stringify(await prepared.node.run(prepared.prepared.messages), null, 2))
-    }
+    const result = await runStoryArcCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
+      qualityMode: reliability.qualityMode,
+    })
+    variants.push(result.draft)
+    creativeArtifacts.push(result.artifact)
   }
   return {
     output: variants[0] ?? '',
     variants,
-    ...(creativeArtifacts.length ? { creativeArtifacts } : {}),
+    creativeArtifacts,
     semantic: 'story.arc',
     sourceKeys: binding.sourceKeys,
     sourceHash: binding.sourceHash,
@@ -504,23 +496,18 @@ async function executeOutline(input: DomainExecutionInput): Promise<DomainExecut
   const variants: string[] = []
   const creativeArtifacts: CreativeArtifactV1[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
-    if (reliability.enabled) {
-      const result = await runOutlineCreativeReliabilityV1({
-        prepared,
-        budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
-        qualityMode: reliability.qualityMode,
-      })
-      variants.push(result.draft)
-      creativeArtifacts.push(result.artifact)
-    } else {
-      const candidate = await prepared.node.run(prepared.prepared.messages)
-      variants.push(JSON.stringify(candidate, null, 2))
-    }
+    const result = await runOutlineCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
+      qualityMode: reliability.qualityMode,
+    })
+    variants.push(result.draft)
+    creativeArtifacts.push(result.artifact)
   }
   return {
     output: variants[0] ?? '',
     variants,
-    ...(creativeArtifacts.length ? { creativeArtifacts } : {}),
+    creativeArtifacts,
     semantic: mode === 'volumes' ? 'outline.volume' : 'outline.chapter',
     sourceKeys: binding.sourceKeys,
     sourceHash: binding.sourceHash,
@@ -590,9 +577,7 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
     segmentText(assembled, 'characters'),
     segmentText(assembled, 'foreshadows'),
   )
-  const messages = reliability.enabled
-    ? [{ role: 'system' as const, content: formatNarrativeBriefForPromptV1(narrativeBrief) }, ...baseMessages]
-    : baseMessages
+  const messages = [{ role: 'system' as const, content: formatNarrativeBriefForPromptV1(narrativeBrief) }, ...baseMessages]
   const callMeta = {
     category: 'detail.chapter-planning',
     projectId: input.projectId,
@@ -624,32 +609,26 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
       budget.settleFailedCall(reservation)
       throw error
     }
-    if (reliability.enabled) {
-      const artifact = await createDetailedOutlineCreativeArtifactV1({
-        raw,
-        operation: 'enhanced',
-        narrativeBrief,
-        qualityMode: reliability.qualityMode,
-        modelIdentity: {
-          provider: resolved.config.provider,
-          model: resolved.config.model,
-        },
-        inputText: messages.map(message => message.content).join('\n'),
-        durationMs: Math.max(0, Date.now() - startedAt),
-        ...(result.usage ? { usage: result.usage } : {}),
-      })
-      variants.push(artifact.editableText)
-      creativeArtifacts.push(artifact)
-    } else {
-      const parsed = parseEnhancedDetailResult(raw)
-      if (!parsed) throw new Error('细纲候选不是有效的 JSON 对象。')
-      variants.push(JSON.stringify(parsed, null, 2))
-    }
+    const artifact = await createDetailedOutlineCreativeArtifactV1({
+      raw,
+      operation: 'enhanced',
+      narrativeBrief,
+      qualityMode: reliability.qualityMode,
+      modelIdentity: {
+        provider: resolved.config.provider,
+        model: resolved.config.model,
+      },
+      inputText: messages.map(message => message.content).join('\n'),
+      durationMs: Math.max(0, Date.now() - startedAt),
+      ...(result.usage ? { usage: result.usage } : {}),
+    })
+    variants.push(artifact.editableText)
+    creativeArtifacts.push(artifact)
   }
   return {
     output: variants[0] ?? '',
     variants,
-    ...(creativeArtifacts.length ? { creativeArtifacts } : {}),
+    creativeArtifacts,
     semantic: 'outline.plan',
     sourceKeys: binding.sourceKeys,
     sourceHash: binding.sourceHash,
@@ -690,22 +669,18 @@ async function executeProse(input: DomainExecutionInput): Promise<DomainExecutio
   const variants: string[] = []
   const creativeArtifacts: CreativeArtifactV1[] = []
   for (let index = 0; index < generationCount(input.node, input.inputs); index += 1) {
-    if (reliability.enabled) {
-      const result = await runProseCreativeReliabilityV1({
-        prepared,
-        budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
-        qualityMode: reliability.qualityMode,
-      })
-      variants.push(result.draft)
-      creativeArtifacts.push(result.artifact)
-    } else {
-      variants.push(await prepared.node.run(prepared.prepared.messages))
-    }
+    const result = await runProseCreativeReliabilityV1({
+      prepared,
+      budget: new AgentTeamBudgetTracker(reliability.budgetProfile),
+      qualityMode: reliability.qualityMode,
+    })
+    variants.push(result.draft)
+    creativeArtifacts.push(result.artifact)
   }
   return {
     output: variants[0] ?? '',
     variants,
-    ...(creativeArtifacts.length ? { creativeArtifacts } : {}),
+    creativeArtifacts,
     semantic: 'chapter.prose',
     sourceKeys: binding.sourceKeys,
     sourceHash: binding.sourceHash,

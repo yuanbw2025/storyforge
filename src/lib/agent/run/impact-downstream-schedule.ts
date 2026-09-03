@@ -2,7 +2,7 @@ import { db } from '../../db/schema'
 import type { ImpactHandoffModuleV2 } from '../../consistency/impact-handoff'
 import type { ImpactRemediationItemV1 } from '../../consistency/impact-remediation-plan'
 import type { WorkspaceScope } from '../../types'
-import { assertRecordInScope } from '../../world-engine/scope'
+import { assertRecordInScope } from '../../workspace/scope'
 import {
   assertExpectedImpactReplanCurrentV1,
   resolveImpactDependencyReadinessV1,

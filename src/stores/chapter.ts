@@ -3,7 +3,7 @@ import { db } from '../lib/db/schema'
 import { pickBestChapterForOutline } from '../lib/chapters/selectors'
 import { cascadeDeleteChapterRecords } from '../lib/chapters/lifecycle'
 import type { Chapter } from '../lib/types'
-import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 interface ChapterStore {

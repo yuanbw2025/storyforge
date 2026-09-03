@@ -15,28 +15,26 @@ describe('R-WF · 工作流步骤上下文整形', () => {
   const STEP1_OUTPUT =
     '这部小说讲述科技高度发达的未来世界中,人类与人工智能的冲突与融合,探索身份与自由。'
 
-  it('R-WF-1:第 2 步必须带上第 1 步的输出(修复闭包陈旧 → 链路贯通)', () => {
-    // 模拟「世界起源」步骤:inputMapping 映射到 storyCore(与模板变量 worldContext 不一致)
+  it('R-WF-1:第 2 步必须带上显式入边连接的第 1 步输出', () => {
     const ctx = assembleWorkflowStepVars({
-      step: {
-        label: '世界起源',
-        inputMapping: { previousOutput: 'storyCore' },
-      },
-      prevOutput: STEP1_OUTPUT,
+      step: { label: '世界起源' },
+      upstreamInputs: [{
+        sourceStepId: 'logline', sourceLabel: '一句话故事',
+        targetVariable: 'worldContext', output: STEP1_OUTPUT,
+      }],
       projectName: '测试书',
       genres: '科幻',
       assembledContext: '',
       worldRulesContext: '',
     })
-    // 关键:即便 inputMapping 名字对不上模板变量,通用槽位 worldContext 也必须带上上一步输出
     expect(String(ctx.worldContext)).toContain('人工智能')
     expect(String(ctx.worldContext)).toContain(STEP1_OUTPUT)
   })
 
   it('R-WF-2:项目名/流派/维度必须有值(修复全空 → AI 不再失去依据)', () => {
     const ctx = assembleWorkflowStepVars({
-      step: { label: '世界起源', inputMapping: { previousOutput: 'storyCore' } },
-      prevOutput: STEP1_OUTPUT,
+      step: { label: '世界起源' },
+      upstreamInputs: [],
       projectName: '测试书',
       genres: '科幻',
     })
@@ -47,8 +45,11 @@ describe('R-WF · 工作流步骤上下文整形', () => {
 
   it('R-WF-3:已存项目设定(assembleContext 结果)与上一步输出一起进入 worldContext', () => {
     const ctx = assembleWorkflowStepVars({
-      step: { label: '主要角色', inputMapping: { previousOutput: 'worldContext' } },
-      prevOutput: STEP1_OUTPUT,
+      step: { label: '主要角色' },
+      upstreamInputs: [{
+        sourceStepId: 'world', sourceLabel: '世界起源',
+        targetVariable: 'worldContext', output: STEP1_OUTPUT,
+      }],
       projectName: '测试书',
       genres: '科幻',
       assembledContext: '【世界观】已存的赛博都市设定',
@@ -57,20 +58,24 @@ describe('R-WF · 工作流步骤上下文整形', () => {
     expect(String(ctx.worldContext)).toContain('人工智能')
   })
 
-  it('R-WF-4:保留 inputMapping 中的特定变量(如 chapter.content 的 chapterSummary)', () => {
+  it('R-WF-4:显式端口可以把上游输出送入特定模板变量', () => {
     const ctx = assembleWorkflowStepVars({
-      step: { label: '第一章正文', inputMapping: { previousOutput: 'chapterSummary' } },
-      prevOutput: '第一卷第一章:主角觉醒',
+      step: { label: '第一章正文' },
+      upstreamInputs: [{
+        sourceStepId: 'outline', sourceLabel: '章节细纲',
+        targetVariable: 'chapterSummary', output: '第一卷第一章:主角觉醒',
+      }],
       projectName: '测试书',
       genres: '科幻',
     })
-    expect(ctx.chapterSummary).toBe('第一卷第一章:主角觉醒')
+    expect(ctx.chapterSummary).toContain('章节细纲')
+    expect(ctx.chapterSummary).toContain('第一卷第一章:主角觉醒')
   })
 
   it('R-WF-5:第 1 步(无上一步)不应注入空的 worldContext,但项目元信息仍在', () => {
     const ctx = assembleWorkflowStepVars({
       step: { label: '一句话故事' },
-      prevOutput: '',
+      upstreamInputs: [],
       projectName: '测试书',
       genres: '科幻',
     })
@@ -81,7 +86,7 @@ describe('R-WF · 工作流步骤上下文整形', () => {
   it('R-WF-6:步骤预填内容必须与配置提示一起进入 userHint', () => {
     const ctx = assembleWorkflowStepVars({
       step: { label: '一句话故事', userHint: '保留悬疑感' },
-      prevOutput: '',
+      upstreamInputs: [],
       projectName: '测试书',
       genres: '悬疑',
       userInput: '一个失忆侦探发现自己是凶手。',
@@ -92,7 +97,6 @@ describe('R-WF · 工作流步骤上下文整形', () => {
   it('FLOW-1:显式图只注入目标节点自己的入边并按端口变量分组', () => {
     const ctx = assembleWorkflowStepVars({
       step: { label: '汇合生成' },
-      prevOutput: '不应读取的拓扑相邻输出',
       projectName: '测试书',
       genres: '悬疑',
       assembledContext: '【已存设定】雾港',
@@ -115,6 +119,6 @@ describe('R-WF · 工作流步骤上下文整形', () => {
     expect(ctx.characters).toContain('失忆侦探林默')
     expect(ctx.worldContext).toContain('世界设定 → worldContext')
     expect(ctx.worldContext).toContain('记忆可以买卖')
-    expect(ctx.worldContext).not.toContain('不应读取的拓扑相邻输出')
+    expect(ctx.worldContext).not.toContain('拓扑相邻但未连接的输出')
   })
 })

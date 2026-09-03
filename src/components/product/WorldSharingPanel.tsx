@@ -10,9 +10,9 @@ import {
   inspectWorldPackage,
   type WorldPackageTrustReport,
   type WorldPackageUse,
-} from '../../lib/product/world-package'
+} from '../../lib/world-engine/world-package'
 import type { WorldRelease } from '../../lib/types'
-import { resolveWorkspaceScope } from '../../lib/world-engine/ownership'
+import { resolveWorkspaceScope } from '../../lib/workspace/ownership'
 import { listWorldReleases } from '../../lib/world-engine/releases'
 
 const LICENSE_OPTIONS: Array<{ value: CommunityWorldLicense; label: string }> = [
@@ -23,25 +23,35 @@ const LICENSE_OPTIONS: Array<{ value: CommunityWorldLicense; label: string }> = 
 ]
 
 const USE_OPTIONS: Array<{ id: WorldPackageUse; label: string }> = [
-  { id: 'writing', label: '分步骤写作' },
+  { id: 'world-remix', label: '复制并改编世界' },
   { id: 'ttrpg', label: '跑团' },
-  { id: 'characterChat', label: '角色聊天' },
-  { id: 'textGame', label: '文字游戏' },
+  { id: 'character-interaction', label: '角色互动' },
+  { id: 'ai-town', label: 'AI 小镇' },
+  { id: 'text-adventure', label: '文字冒险' },
+  { id: 'avg', label: 'AVG' },
+  { id: 'text-open-world', label: '文字开放世界' },
 ]
 
 interface Props {
   project?: Project
-  onImported?: (projectId: number) => void
+  worldReleaseRevision?: number
+  onImported?: (projectId: number) => void | Promise<void>
 }
 
 type Preview = { input: unknown; report: WorldPackageTrustReport }
 
-export default function WorldSharingPanel({ project, onImported }: Props) {
+export default function WorldSharingPanel({ project, worldReleaseRevision = 0, onImported }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [authorName, setAuthorName] = useState('')
   const [license, setLicense] = useState<CommunityWorldLicense>('CC-BY-4.0')
   const [allowedUses, setAllowedUses] = useState<Record<WorldPackageUse, boolean>>({
-    writing: true, ttrpg: true, characterChat: true, textGame: true,
+    'world-remix': true,
+    ttrpg: true,
+    'character-interaction': true,
+    'ai-town': true,
+    'text-adventure': true,
+    avg: true,
+    'text-open-world': true,
   })
   const [warnings, setWarnings] = useState('')
   const [busy, setBusy] = useState(false)
@@ -57,7 +67,7 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
       .then(releases => { if (!cancelled) setLatestRelease(releases[0] ?? null) })
       .catch(() => { if (!cancelled) setLatestRelease(null) })
     return () => { cancelled = true }
-  }, [project?.id, project?.worldVersion])
+  }, [project?.id, worldReleaseRevision])
 
   const publish = async () => {
     if (!project?.id) return

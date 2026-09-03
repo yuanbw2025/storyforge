@@ -21,8 +21,8 @@ async function workspace(): Promise<{ project: Project; scope: WorkspaceScope; c
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: 'harness-40-world',
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as Project) as number

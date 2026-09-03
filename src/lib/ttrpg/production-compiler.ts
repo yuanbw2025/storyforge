@@ -1,6 +1,6 @@
 import type {
   FrozenRuntimeMediaAssetV2,
-  GameRuntimePackageV2,
+  ProductRuntimePackageV1,
   RulePackV1,
   TtrpgCampaignContentV1,
   TtrpgCharacterSheetV2,
@@ -8,7 +8,7 @@ import type {
   TtrpgProductionBriefV2,
   ProductWorldSourceSelectionV1,
 } from '../types'
-import type { GameProductionWorldSourceCatalogV2 as WorldGameSourceCatalog } from '../game-production/world-source'
+import type { ProductProductionWorldSourceCatalogV2 as ProductWorldSourceCatalog } from '../product-production/world-source'
 import {
   parseTtrpgCampaignContentV1,
   validateTtrpgCampaignForPublicationV1,
@@ -64,7 +64,7 @@ export function bindProductionMediaToTtrpgCampaignV1(
   return campaign
 }
 
-type Narrative = GameRuntimePackageV2['narrative']
+type Narrative = ProductRuntimePackageV1['narrative']
 
 function resources(rulePack: RulePackV1, attributes: Record<string, number>): Record<string, number> {
   return Object.fromEntries(rulePack.resources.map(resource => {
@@ -104,7 +104,7 @@ function characterFromSeat(input: {
   characterPolicy: TtrpgProductionBriefV2['characters']
   index: number
   rulePack: RulePackV1
-  sourceCatalog: Pick<WorldGameSourceCatalog, 'characters'>
+  sourceCatalog: Pick<ProductWorldSourceCatalog, 'characters'>
   confirmed: boolean
 }): TtrpgCharacterTemplateV1 {
   const source = input.seat.sourceCharacterResourceKey == null ? null
@@ -180,7 +180,7 @@ function characterFromSeat(input: {
 }
 
 function npcTemplate(input: {
-  source: WorldGameSourceCatalog['characters'][number] | null
+  source: ProductWorldSourceCatalog['characters'][number] | null
   index: number
   rulePack: RulePackV1
   campaign: TtrpgProductionBriefV2['campaign']
@@ -236,12 +236,10 @@ export function compileProductionTtrpgCampaignV2(input: {
   brief: TtrpgProductionBriefV2
   selection: ProductWorldSourceSelectionV1
   narrative: Narrative
-  sourceCatalog: Pick<WorldGameSourceCatalog, 'characters' | 'locations' | 'artifacts' | 'storyArcs'>
+  sourceCatalog: Pick<ProductWorldSourceCatalog, 'characters' | 'locations' | 'artifacts' | 'storyArcs'>
   rulePack: RulePackV1
   worldContentHash: string
-  playableWorldBundleHash: string
-  /** Root provenance ref. Development inputs must not masquerade as world:. */
-  sourceRef?: string
+  worldSourceBundleHash: string
 }): TtrpgCampaignContentV1 {
   const rulePack = parseRulePackV1(input.rulePack)
   const brief = input.brief
@@ -255,7 +253,7 @@ export function compileProductionTtrpgCampaignV2(input: {
     lockedSections: [],
   }
   const effectiveCampaign = { ...brief.campaign, background: resolvedDesign.background, coreConflict: resolvedDesign.coreConflict }
-  const sourceRef = input.sourceRef ?? `world:${input.worldContentHash}`
+  const sourceRef = `world:${input.worldContentHash}`
   if (input.narrative.nodes.length < 3) fail('模型叙事不足以编译 CampaignPack')
   const playerCharacters = brief.table.seats.map((seat, index) => characterFromSeat({
     seat, characterPolicy: brief.characters, index, rulePack, sourceCatalog: input.sourceCatalog,
@@ -573,7 +571,7 @@ export function compileProductionTtrpgCampaignV2(input: {
     })),
     ...(tabletop ? { tabletop } : {}),
     visualBible, mediaManifest,
-    sourceWorld: { contentHash: input.worldContentHash, bundleHash: input.playableWorldBundleHash },
+    sourceWorld: { contentHash: input.worldContentHash, bundleHash: input.worldSourceBundleHash },
   }
   const parsed = parseTtrpgCampaignContentV1(campaign, rulePack)
   const report = validateTtrpgCampaignForPublicationV1(parsed, rulePack)

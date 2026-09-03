@@ -24,7 +24,7 @@ import {
   resolveScopeLike,
   scopeTransactionTables,
   stampNewRecord,
-} from '../../world-engine/scope'
+} from '../../workspace/scope'
 
 export const CHAPTER_TRANSITION_STEP_IDS_V1 = {
   retrieval: 'chapter-transition:retrieval',
@@ -343,6 +343,7 @@ export async function persistChapterTransitionCandidateV1(input: {
       const event = stampNewRecord(input.scope, 'agentEvents', {
         projectId: input.scope.projectId,
         conversationId,
+        durableRunId: input.candidate.durable.runId,
         sequence: 1,
         kind: 'candidate',
         content: `章节后处理状态候选 ${input.candidate.stateDiffs.length} 条`,

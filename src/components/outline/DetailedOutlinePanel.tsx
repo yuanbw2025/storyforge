@@ -10,7 +10,7 @@ import AIStreamOutput from '../shared/AIStreamOutput'
 import { nanoid } from '../../lib/utils/id'
 import type { Project, DetailedOutline, DetailedScene, EmotionArc } from '../../lib/types'
 import { db } from '../../lib/db/schema'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   hashDetailedOutlineSourceSummaryV1,
   type DetailedOutlineGenerationOperationV1,

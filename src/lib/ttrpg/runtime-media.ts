@@ -1,26 +1,26 @@
 import Dexie from "dexie";
 import { db } from "../db/schema";
-import { importProductMediaAssetV1 } from "../game-production/media-asset-library";
-import { readProductMediaBlobData } from "../game-production/media-blob-store";
-import { hashGameProductionValueV2 } from "../game-production/hash";
+import { importProductRuntimeMediaAssetV1 } from "../product/runtime-media-library";
+import { readProductMediaBlobData } from "../product-production/media-blob-store";
+import { hashProductProductionValueV2 } from "../product-production/hash";
 import {
-  detectGameImageDimensionsV1,
-  resolveGameMediaProviderAdapterV1,
-  type GameMediaProviderAdapterV1,
-  type GameMediaRequestV1,
+  detectProductImageDimensionsV1,
+  resolveProductMediaProviderAdapterV1,
+  type ProductMediaProviderAdapterV1,
+  type ProductMediaRequestV1,
   type MediaProviderTransportV1,
-} from "../game-production/media-adapters";
-import { verifyPlayableGamePackageSource } from "../game-production/preview-source";
+} from "../product-production/media-adapters";
+import { verifyProductRuntimeSource } from "../product-production/preview-source";
 import {
   configuredMediaRelayUrlV1,
   inspectConfiguredAgnesImageCapabilityV1,
   resolveConfiguredAgnesImageCapabilityV1,
   resolveTrustedRelayMediaCapabilityV1,
-  type ResolvedGameMediaCapabilityV1,
-} from "../game-production/media-transport";
+  type ResolvedProductMediaCapabilityV1,
+} from "../product-production/media-transport";
 import type {
-  SimulationEvent,
-  SimulationSession,
+  ProductRuntimeEvent,
+  ProductRuntimeSession,
   TtrpgMediaManifestV1,
   TtrpgRuntimeAssetRequestRecordV1,
   TtrpgSessionParticipantRecordV2,
@@ -31,12 +31,12 @@ import {
   assertRecordInScope,
   resolveScope,
   scopeTransactionTables,
-} from "../world-engine/scope";
+} from "../workspace/scope";
 import {
-  applySimulationEvent,
-  parseSimulationState,
-  replaySimulationEvents,
-} from "../simulation/runtime";
+  applyProductRuntimeEvent,
+  parseProductRuntimeState,
+  replayProductRuntimeEvents,
+} from "./runtime-api";
 import { parseTtrpgCampaignContentV1 } from "./campaign";
 import {
   avgMediaKindForTtrpgRuntimeV1,
@@ -76,7 +76,7 @@ function boundedText(
 }
 
 interface RuntimeMediaContextV1 {
-  session: SimulationSession;
+  session: ProductRuntimeSession;
   scope: WorkspaceScope;
   visualBible: TtrpgVisualBibleV1;
   manifest: TtrpgMediaManifestV1;
@@ -84,7 +84,7 @@ interface RuntimeMediaContextV1 {
 }
 
 async function loadContext(sessionId: number): Promise<RuntimeMediaContextV1> {
-  const session = await db.simulationSessions.get(sessionId);
+  const session = await db.productRuntimeSessions.get(sessionId);
   if (
     !session ||
     session.kind !== "ttrpg" ||
@@ -103,23 +103,23 @@ async function loadContext(sessionId: number): Promise<RuntimeMediaContextV1> {
     },
   });
   let resolvedSource:
-    | { kind: "release"; gameReleaseId: number }
-    | { kind: "build"; gameBuildId: number; expectedPreviewHash: string }
+    | { kind: "release"; productReleaseId: number }
+    | { kind: "build"; productBuildId: number; expectedPreviewHash: string }
     | null = null;
-  if (session.gameReleaseId != null) {
-    resolvedSource = { kind: "release", gameReleaseId: session.gameReleaseId };
-  } else if (session.gameBuildId != null) {
-    const build = await db.gameBuilds.get(session.gameBuildId);
+  if (session.productReleaseId != null) {
+    resolvedSource = { kind: "release", productReleaseId: session.productReleaseId };
+  } else if (session.productBuildId != null) {
+    const build = await db.productBuilds.get(session.productBuildId);
     if (!build?.previewHash || build.id == null)
       fail("TTRPG Build Preview 不存在");
     resolvedSource = {
       kind: "build",
-      gameBuildId: build.id,
+      productBuildId: build.id,
       expectedPreviewHash: build.previewHash,
     };
   }
   if (!resolvedSource) fail("TTRPG Instance 没有冻结 Release/Build");
-  const verified = await verifyPlayableGamePackageSource({
+  const verified = await verifyProductRuntimeSource({
     scope,
     source: resolvedSource,
   });
@@ -212,11 +212,11 @@ function visualAnchor(
 function requestFromRow(input: {
   row: TtrpgRuntimeAssetRequestRecordV1;
   slot: TtrpgMediaManifestV1["slots"][number];
-  qualityProfile: GameMediaRequestV1["qualityProfile"];
-  environment: GameMediaRequestV1["environment"];
-}): GameMediaRequestV1 {
+  qualityProfile: ProductMediaRequestV1["qualityProfile"];
+  environment: ProductMediaRequestV1["environment"];
+}): ProductMediaRequestV1 {
   return {
-    schema: "storyforge.game-media-request",
+    schema: "storyforge.product-media-request",
     version: 1,
     requestId: input.row.requestKey,
     adapterId: input.row.adapterId,
@@ -238,28 +238,28 @@ function requestFromRow(input: {
   };
 }
 
-async function stateAndEvents(session: SimulationSession) {
-  const events = await db.simulationEvents
+async function stateAndEvents(session: ProductRuntimeSession) {
+  const events = await db.productRuntimeEvents
     .where("sessionId")
     .equals(session.id!)
     .sortBy("sequence");
   return {
     events,
-    state: replaySimulationEvents(
-      parseSimulationState(session.initialStateJson),
+    state: replayProductRuntimeEvents(
+      parseProductRuntimeState(session.initialStateJson),
       events,
     ),
   };
 }
 
 function eventFor(input: {
-  session: SimulationSession;
+  session: ProductRuntimeSession;
   sequence: number;
-  type: SimulationEvent["type"];
+  type: ProductRuntimeEvent["type"];
   targetKey: string;
   commandId: string;
   payload: Record<string, unknown>;
-}): SimulationEvent {
+}): ProductRuntimeEvent {
   return {
     projectId: input.session.projectId,
     worldGroupId: input.session.worldGroupId ?? null,
@@ -283,9 +283,9 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
   promptAddition?: string;
   priority?: number;
   maximumRequestCostUsd?: number;
-  qualityProfile?: GameMediaRequestV1["qualityProfile"];
-  environment?: GameMediaRequestV1["environment"];
-  adapter?: GameMediaProviderAdapterV1;
+  qualityProfile?: ProductMediaRequestV1["qualityProfile"];
+  environment?: ProductMediaRequestV1["environment"];
+  adapter?: ProductMediaProviderAdapterV1;
 }): Promise<TtrpgRuntimeAssetRequestRecordV1> {
   const context = await loadContext(input.sessionId);
   const viewerKey = key(input.viewerKey, "viewerKey");
@@ -309,7 +309,7 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
     slot,
     participants,
   });
-  const styleBibleHash = await hashGameProductionValueV2(context.visualBible);
+  const styleBibleHash = await hashProductProductionValueV2(context.visualBible);
   const promptAddition = boundedText(
     input.promptAddition,
     "附加提示",
@@ -331,7 +331,7 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
     "身份漂移",
     "不一致服装",
   ].join("；");
-  const inputHash = await hashGameProductionValueV2({
+  const inputHash = await hashProductProductionValueV2({
     runtimeSourceHash: context.runtimeSourceHash,
     slot,
     styleBibleHash,
@@ -355,7 +355,7 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
     | "negativePrompt"
     | "inputHash"
   >;
-  const adapter = input.adapter ?? resolveGameMediaProviderAdapterV1(adapterId);
+  const adapter = input.adapter ?? resolveProductMediaProviderAdapterV1(adapterId);
   if (
     adapter.capability.adapterId !== adapterId ||
     !adapter.capability.mediaClasses.includes("image")
@@ -387,13 +387,13 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
   return db.transaction(
     "rw",
     scopeTransactionTables(
-      db.simulationSessions,
-      db.simulationEvents,
+      db.productRuntimeSessions,
+      db.productRuntimeEvents,
       db.ttrpgSessionParticipants,
       db.ttrpgRuntimeAssetRequests,
     ),
     async () => {
-      const session = await db.simulationSessions.get(input.sessionId);
+      const session = await db.productRuntimeSessions.get(input.sessionId);
       if (
         !session ||
         session.status !== "active" ||
@@ -471,8 +471,8 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
           styleBibleHash,
         },
       });
-      applySimulationEvent(state, event);
-      event.id = (await db.simulationEvents.add(event)) as number;
+      applyProductRuntimeEvent(state, event);
+      event.id = (await db.productRuntimeEvents.add(event)) as number;
       const now = event.createdAt;
       const row: TtrpgRuntimeAssetRequestRecordV1 = {
         projectId: session.projectId,
@@ -517,7 +517,7 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
         updatedAt: now,
       };
       row.id = (await db.ttrpgRuntimeAssetRequests.add(row)) as number;
-      await db.simulationSessions.update(session.id!, { updatedAt: now });
+      await db.productRuntimeSessions.update(session.id!, { updatedAt: now });
       return row;
     },
   );
@@ -526,7 +526,7 @@ export async function enqueueTtrpgRuntimeAssetRequestV1(input: {
 async function configuredRuntimeImageCapability(input: {
   context: RuntimeMediaContextV1;
   maximumRequestCostUsd: number;
-}): Promise<ResolvedGameMediaCapabilityV1> {
+}): Promise<ResolvedProductMediaCapabilityV1> {
   const requirementBase = {
     requirementKey: "ttrpg.runtime.visual",
     mediaClass: "image" as const,
@@ -548,7 +548,7 @@ async function configuredRuntimeImageCapability(input: {
   };
   const requirement = {
     ...requirementBase,
-    capabilityHash: await hashGameProductionValueV2(requirementBase),
+    capabilityHash: await hashProductProductionValueV2(requirementBase),
   };
   const agnes = inspectConfiguredAgnesImageCapabilityV1({
     projectId: input.context.scope.projectId,
@@ -654,12 +654,12 @@ async function terminalFailure(input: {
   const detail = boundedText(input.detail || "媒资生成失败", "失败详情", 2_000);
   return db.transaction(
     "rw",
-    db.simulationSessions,
-    db.simulationEvents,
+    db.productRuntimeSessions,
+    db.productRuntimeEvents,
     db.ttrpgRuntimeAssetRequests,
     async () => {
       const [session, row] = await Promise.all([
-        db.simulationSessions.get(input.context.session.id!),
+        db.productRuntimeSessions.get(input.context.session.id!),
         db.ttrpgRuntimeAssetRequests.get(input.requestId),
       ]);
       if (
@@ -682,8 +682,8 @@ async function terminalFailure(input: {
           errorCode,
         },
       });
-      applySimulationEvent(state, event);
-      event.id = (await db.simulationEvents.add(event)) as number;
+      applyProductRuntimeEvent(state, event);
+      event.id = (await db.productRuntimeEvents.add(event)) as number;
       const updatedAt = event.createdAt;
       await db.ttrpgRuntimeAssetRequests.update(row.id!, {
         status: "failed",
@@ -699,7 +699,7 @@ async function terminalFailure(input: {
         revision: row.revision + 1,
         updatedAt,
       });
-      await db.simulationSessions.update(session.id!, { updatedAt });
+      await db.productRuntimeSessions.update(session.id!, { updatedAt });
       return (await db.ttrpgRuntimeAssetRequests.get(row.id!))!;
     },
   );
@@ -708,11 +708,11 @@ async function terminalFailure(input: {
 export async function processTtrpgRuntimeAssetRequestV1(input: {
   requestId: number;
   transport: MediaProviderTransportV1;
-  adapter?: GameMediaProviderAdapterV1;
+  adapter?: ProductMediaProviderAdapterV1;
   signal?: AbortSignal;
   networkClass?: "wifi" | "metered" | "offline";
-  qualityProfile?: GameMediaRequestV1["qualityProfile"];
-  environment?: GameMediaRequestV1["environment"];
+  qualityProfile?: ProductMediaRequestV1["qualityProfile"];
+  environment?: ProductMediaRequestV1["environment"];
 }): Promise<TtrpgRuntimeAssetRequestRecordV1> {
   const original = await db.ttrpgRuntimeAssetRequests.get(input.requestId);
   if (!original) fail("媒资请求不存在");
@@ -769,7 +769,7 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
     });
   }
   const adapter =
-    input.adapter ?? resolveGameMediaProviderAdapterV1(claimed.adapterId);
+    input.adapter ?? resolveProductMediaProviderAdapterV1(claimed.adapterId);
   const request = requestFromRow({
     row: claimed,
     slot,
@@ -816,12 +816,13 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
         actualCostUsd,
       });
     }
-    const dimensions = detectGameImageDimensionsV1(candidate.data);
+    const dimensions = detectProductImageDimensionsV1(candidate.data);
     if (!dimensions) fail("provider 图片无法读取固有尺寸");
     const assetKey =
       `ttrpg.runtime.${claimed.sessionId}.${claimed.requestKey}`.slice(0, 200);
-    const asset = await importProductMediaAssetV1({
+    const asset = await importProductRuntimeMediaAssetV1({
       scope: context.scope,
+      productRuntimeSessionId: context.session.id!,
       assetKey,
       kind: candidate.mediaKind,
       name: `运行时媒资 · ${claimed.slotKey}`,
@@ -848,13 +849,13 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
       fail("统一媒资采用后 content hash 漂移");
     return db.transaction(
       "rw",
-      db.simulationSessions,
-      db.simulationEvents,
+      db.productRuntimeSessions,
+      db.productRuntimeEvents,
       db.ttrpgRuntimeAssetRequests,
       db.productMediaAssets,
       async () => {
         const [session, row, currentAsset] = await Promise.all([
-          db.simulationSessions.get(context.session.id!),
+          db.productRuntimeSessions.get(context.session.id!),
           db.ttrpgRuntimeAssetRequests.get(claimed.id!),
           db.productMediaAssets.get(asset.id!),
         ]);
@@ -883,8 +884,8 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
             mediaContentHash: currentAsset.contentHash,
           },
         });
-        applySimulationEvent(state, event);
-        event.id = (await db.simulationEvents.add(event)) as number;
+        applyProductRuntimeEvent(state, event);
+        event.id = (await db.productRuntimeEvents.add(event)) as number;
         const updatedAt = event.createdAt;
         await db.ttrpgRuntimeAssetRequests.update(row.id!, {
           status: "available",
@@ -900,7 +901,7 @@ export async function processTtrpgRuntimeAssetRequestV1(input: {
           revision: row.revision + 1,
           updatedAt,
         });
-        await db.simulationSessions.update(session.id!, { updatedAt });
+        await db.productRuntimeSessions.update(session.id!, { updatedAt });
         return (await db.ttrpgRuntimeAssetRequests.get(row.id!))!;
       },
     );
@@ -944,12 +945,12 @@ export async function retryTtrpgRuntimeAssetRequestV1(input: {
     fail("viewer 不能重试该媒资请求");
   return db.transaction(
     "rw",
-    db.simulationSessions,
-    db.simulationEvents,
+    db.productRuntimeSessions,
+    db.productRuntimeEvents,
     db.ttrpgRuntimeAssetRequests,
     async () => {
       const [session, row] = await Promise.all([
-        db.simulationSessions.get(context.session.id!),
+        db.productRuntimeSessions.get(context.session.id!),
         db.ttrpgRuntimeAssetRequests.get(original.id!),
       ]);
       if (
@@ -975,8 +976,8 @@ export async function retryTtrpgRuntimeAssetRequestV1(input: {
           styleBibleHash: row.styleBibleHash,
         },
       });
-      applySimulationEvent(state, event);
-      event.id = (await db.simulationEvents.add(event)) as number;
+      applyProductRuntimeEvent(state, event);
+      event.id = (await db.productRuntimeEvents.add(event)) as number;
       const updatedAt = event.createdAt;
       await db.ttrpgRuntimeAssetRequests.update(row.id!, {
         status: "queued",
@@ -988,7 +989,7 @@ export async function retryTtrpgRuntimeAssetRequestV1(input: {
         revision: row.revision + 1,
         updatedAt,
       });
-      await db.simulationSessions.update(session.id!, { updatedAt });
+      await db.productRuntimeSessions.update(session.id!, { updatedAt });
       return (await db.ttrpgRuntimeAssetRequests.get(row.id!))!;
     },
   );
@@ -1014,12 +1015,12 @@ export async function cancelTtrpgRuntimeAssetRequestV1(input: {
     fail("viewer 不能取消该媒资请求");
   return db.transaction(
     "rw",
-    db.simulationSessions,
-    db.simulationEvents,
+    db.productRuntimeSessions,
+    db.productRuntimeEvents,
     db.ttrpgRuntimeAssetRequests,
     async () => {
       const [session, row] = await Promise.all([
-        db.simulationSessions.get(context.session.id!),
+        db.productRuntimeSessions.get(context.session.id!),
         db.ttrpgRuntimeAssetRequests.get(original.id!),
       ]);
       if (!session || !row || !["queued", "failed"].includes(row.status))
@@ -1033,8 +1034,8 @@ export async function cancelTtrpgRuntimeAssetRequestV1(input: {
         commandId: `media.cancel.${row.requestKey}.${row.revision}`,
         payload: { requestKey: row.requestKey, slotKey: row.slotKey },
       });
-      applySimulationEvent(state, event);
-      event.id = (await db.simulationEvents.add(event)) as number;
+      applyProductRuntimeEvent(state, event);
+      event.id = (await db.productRuntimeEvents.add(event)) as number;
       const updatedAt = event.createdAt;
       await db.ttrpgRuntimeAssetRequests.update(row.id!, {
         status: "cancelled",
@@ -1046,7 +1047,7 @@ export async function cancelTtrpgRuntimeAssetRequestV1(input: {
         revision: row.revision + 1,
         updatedAt,
       });
-      await db.simulationSessions.update(session.id!, { updatedAt });
+      await db.productRuntimeSessions.update(session.id!, { updatedAt });
       return (await db.ttrpgRuntimeAssetRequests.get(row.id!))!;
     },
   );
@@ -1184,7 +1185,7 @@ export async function readTtrpgRuntimeMediaBlobV1(input: {
 export async function hashTtrpgVisualBibleV1(
   value: TtrpgVisualBibleV1,
 ): Promise<string> {
-  const digest = hashGameProductionValueV2(parseTtrpgVisualBibleV1(value));
+  const digest = hashProductProductionValueV2(parseTtrpgVisualBibleV1(value));
   return Dexie.currentTransaction ? Dexie.waitFor(digest) : digest;
 }
 

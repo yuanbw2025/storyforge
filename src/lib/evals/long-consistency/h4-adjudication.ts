@@ -1005,14 +1005,14 @@ function failureDetails(error: unknown, hadOutput: boolean): {
   }
 }
 
-function legacyRateLimitedFailure(failure: H4SubtypeAdjudicationFailureV1 | undefined): boolean {
+function previousFormatRateLimitedFailure(failure: H4SubtypeAdjudicationFailureV1 | undefined): boolean {
   return failure?.code === 'adjudicator_error' && failure.message.includes('AI API Error (429)')
 }
 
 function retryLaterFailure(failure: H4SubtypeAdjudicationFailureV1 | undefined): boolean {
   return failure?.code === 'adjudicator_rate_limited'
     || failure?.code === 'adjudicator_error_retry_later'
-    || legacyRateLimitedFailure(failure)
+    || previousFormatRateLimitedFailure(failure)
 }
 
 function terminalFailure(
@@ -1192,7 +1192,7 @@ async function assertCheckpoint(checkpoint: H4SubtypeAdjudicationCheckpointV1): 
     checkpoint.status === 'failed'
     && (
       !currentFailure
-      || (!legacyRateLimitedFailure(currentFailure) && !terminalFailure(
+      || (!previousFormatRateLimitedFailure(currentFailure) && !terminalFailure(
         currentFailure,
         currentProtocolFailures,
         checkpoint.maxAttemptsPerFixture,
@@ -1370,7 +1370,7 @@ export async function runH4SubtypeAdjudicationV1(
     : await resumeCheckpoint(input)
   const latestFailure = checkpoint.failures[checkpoint.failures.length - 1]
   if (checkpoint.status === 'provider-blocked' || (
-    checkpoint.status === 'failed' && legacyRateLimitedFailure(latestFailure)
+    checkpoint.status === 'failed' && previousFormatRateLimitedFailure(latestFailure)
   )) {
     checkpoint = await updateCheckpoint(checkpoint, input, { status: 'running' })
     await input.onCheckpoint?.(structuredClone(checkpoint))

@@ -1,9 +1,9 @@
 import { db } from '../db/schema'
-import { isShareableWorld } from '../product/world-identity'
+import { isShareableWorld } from './world-identity'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type { WorldCapabilityArea } from '../registry/types'
-import type { Project, Work, World, WorkspaceScope } from '../types'
-import { assertRecordInScope } from './scope'
+import type { CommunityWorldOrigin, Project, Work, World, WorkspaceScope } from '../types'
+import { assertRecordInScope } from '../workspace/scope'
 
 /** ARCH-07A: semantic-only capability projection for one explicit world draft. */
 export interface WorldProjection {
@@ -15,6 +15,7 @@ export interface WorldProjection {
   version: number
   name: string
   description: string
+  communityOrigin?: CommunityWorldOrigin
   completeness: number
   readiness: 'empty' | 'building' | 'usable'
   domains: Record<WorldCapabilityArea, WorldDomainSummary>
@@ -181,6 +182,7 @@ function createWorldProjection(
     version: world.currentVersion,
     name: world.name,
     description: world.description || '这个世界还没有写下简介。',
+    communityOrigin: world.communityOrigin,
     completeness: calculateCompleteness(domains),
     readiness: calculateReadiness(domains),
     domains,

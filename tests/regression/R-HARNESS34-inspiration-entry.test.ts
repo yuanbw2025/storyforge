@@ -162,8 +162,22 @@ describe('R-HARNESS34 · 灵感反推主入口契约', () => {
         choices: [{
           message: {
             content: JSON.stringify({
-              worldview: { worldOrigin: '由遗忘诞生的旧城' },
-              storyCore: { logline: '守塔人追查失踪者' },
+              worldview: {
+                worldOrigin: '由遗忘诞生的旧城',
+                powerHierarchy: '记忆税决定城市权力',
+                continentLayout: '旧城坐落在终年雨幕的盆地',
+                climateByRegion: '中心城区常年降雨',
+                races: '居民皆为普通人类',
+                factionLayout: '守塔人与档案官分掌钟塔和名册',
+              },
+              history: { overview: '失忆雨自旧钟塔建成后开始。' },
+              storyCore: {
+                logline: '守塔人追查失踪者',
+                theme: '记忆与身份',
+                centralConflict: '守塔人必须在停止雨与保存城市之间选择',
+                plotPattern: '调查—揭露—抉择',
+                mainPlot: '追查失忆雨并找到被抹去的人',
+              },
               characters: [],
             }),
           },

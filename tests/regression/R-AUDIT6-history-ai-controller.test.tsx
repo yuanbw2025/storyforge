@@ -21,7 +21,7 @@ vi.mock('../../src/lib/agent/run/history-agent-durable', () => ({
   readPendingHistoryAgentCandidateV1: mocks.pending,
   readRecoverableHistoryAgentRunV1: mocks.recoverable,
 }))
-vi.mock('../../src/lib/world-engine/scope', () => ({ resolveScopeLike: mocks.resolveScope }))
+vi.mock('../../src/lib/workspace/scope', () => ({ resolveScopeLike: mocks.resolveScope }))
 
 import { useHistoryAI } from '../../src/components/history/useHistoryAI'
 

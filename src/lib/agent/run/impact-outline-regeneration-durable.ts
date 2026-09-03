@@ -19,7 +19,7 @@ import {
   assertRecordInScope,
   readOwnedRows,
   scopeTransactionTables,
-} from '../../world-engine/scope'
+} from '../../workspace/scope'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import {
   getAgentSkillV1,

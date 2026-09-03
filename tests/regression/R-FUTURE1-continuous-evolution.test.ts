@@ -19,7 +19,7 @@ async function seedWorkspace(): Promise<{
   const projectId = await db.projects.add({
     workspaceUid: generateWorkspaceUid(),
     name: '未来演化验收', genre: 'fantasy', genres: ['fantasy'], description: '',
-    status: 'drafting', targetWordCount: 1_000_000, worldCode: 'future-world', worldVersion: 1,
+    status: 'drafting', targetWordCount: 1_000_000,
     createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({

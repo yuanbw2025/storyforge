@@ -9,7 +9,7 @@ import { createAgentRunV1, appendAgentRunEventV1, readAgentRunV1, type AgentRunS
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
 import { hashChapterText } from '../../ai/chapter-memory/text-normalization'
-import { assertRecordInScope, readOwnedRows } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 
 export const IMPACT_PATCH_RUN_VERSION_V1 = 1 as const
 export const IMPACT_PATCH_CANDIDATE_TYPE_V1 = 'impact-patch-candidate' as const

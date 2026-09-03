@@ -4,7 +4,7 @@ import { assembleContext } from '../../registry/assemble-context'
 import type { ImpactHandoffV2 } from '../../consistency/impact-handoff'
 import type { ImpactRemediationPlanV1 } from '../../consistency/impact-remediation-plan'
 import { hashChapterText } from '../../ai/chapter-memory/text-normalization'
-import { assertRecordInScope, getTableSpec } from '../../world-engine/scope'
+import { assertRecordInScope, getTableSpec } from '../../workspace/scope'
 import {
   resolveCurrentImpactHandoffTargetV2,
   validateCurrentImpactHandoffV2,

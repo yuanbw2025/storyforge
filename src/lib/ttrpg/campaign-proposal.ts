@@ -4,7 +4,7 @@ import type {
   TtrpgCampaignProposalSectionV2,
   TtrpgCampaignProposalV2,
 } from '../types'
-import { isSha256Hash } from '../game-production/hash'
+import { isSha256Hash } from '../product-production/hash'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 export const TTRPG_CAMPAIGN_PROPOSAL_SECTIONS_V2 = [

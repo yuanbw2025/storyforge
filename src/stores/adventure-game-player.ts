@@ -1,15 +1,15 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import {
-  branchSimulationSession,
+  branchProductRuntimeSession,
   commitAdventureAction,
   commitAdventureNarrativeChoice,
-  createSimulationCheckpoint,
-  deleteSimulationSession,
-  readSimulationState,
-  readSimulationStateVersion,
-  verifySimulationCheckpoint,
-} from '../lib/simulation/runtime'
+  createProductRuntimeCheckpoint,
+  deleteProductRuntimeSession,
+  readProductRuntimeState,
+  readProductRuntimeStateVersion,
+  verifyProductRuntimeCheckpoint,
+} from '../lib/adventure/runtime-api'
 import { availableAdventureActions } from '../lib/adventure/runtime'
 import {
   adoptAdventureRuntimeCandidateV1,
@@ -18,24 +18,24 @@ import {
   type AdventureIntentCandidateV1,
   type AdventureNarrationCandidateV1,
 } from '../lib/adventure/harness'
-import { verifyPlayableSessionPackageV2 } from '../lib/game-production/preview-source'
-import { assertGameReleaseUnchanged, parseAdventureGameReleaseManifest } from '../lib/text-game/releases'
-import { assertInstanceBinding, createTextAdventureInstance, readBoundInstances } from '../lib/world-engine/instances'
+import { verifyProductRuntimeSessionSourceV1 } from '../lib/product-production/preview-source'
+import { assertProductReleaseUnchanged, parseAdventureProductReleaseManifest } from '../lib/product/releases'
+import { assertInstanceBinding, createTextAdventureInstance, readBoundInstances } from '../lib/product/runtime-instances'
 import type {
-  AdventureGameRuntimePackageV2,
+  AdventureProductRuntimePackageV1,
   AIConfig,
-  GameRelease,
-  SimulationCheckpoint,
-  SimulationEvent,
-  SimulationRuntimeState,
-  SimulationSession,
+  ProductRelease,
+  ProductRuntimeCheckpoint,
+  ProductRuntimeEvent,
+  ProductRuntimeState,
+  ProductRuntimeSession,
   WorkspaceScope,
 } from '../lib/types'
-import { EMPTY_SIMULATION_STATE } from '../lib/types'
+import { EMPTY_PRODUCT_RUNTIME_STATE } from '../lib/types'
 
 export interface AdventureLibraryItem {
-  release: GameRelease
-  manifest: AdventureGameRuntimePackageV2 | null
+  release: ProductRelease
+  manifest: AdventureProductRuntimePackageV1 | null
   error: string
 }
 
@@ -43,13 +43,13 @@ interface AdventurePlayerState {
   scope: WorkspaceScope | null
   worldGroupId: number | null
   releases: AdventureLibraryItem[]
-  sessions: SimulationSession[]
+  sessions: ProductRuntimeSession[]
   selectedSessionId: number | null
-  events: SimulationEvent[]
-  checkpoints: SimulationCheckpoint[]
+  events: ProductRuntimeEvent[]
+  checkpoints: ProductRuntimeCheckpoint[]
   recoverableRunIds: number[]
-  runtimeState: SimulationRuntimeState
-  selectedManifest: AdventureGameRuntimePackageV2 | null
+  runtimeState: ProductRuntimeState
+  selectedManifest: AdventureProductRuntimePackageV1 | null
   pendingIntent: AdventureIntentCandidateV1 | null
   generatedNarrative: AdventureNarrationCandidateV1 | null
   generatingRunId: number | null
@@ -58,7 +58,7 @@ interface AdventurePlayerState {
   error: string
   load(scope: WorkspaceScope, worldGroupId: number | null, openLibrary?: boolean): Promise<void>
   select(sessionId: number | null): Promise<void>
-  start(gameReleaseId: number, title?: string): Promise<number>
+  start(productReleaseId: number, title?: string): Promise<number>
   act(actionKey: string, commandId?: string): Promise<void>
   generateIntent(text: string, aiConfig: AIConfig): Promise<void>
   adoptPendingIntent(): Promise<void>
@@ -76,7 +76,7 @@ interface AdventurePlayerState {
 let generationAbortController: AbortController | null = null
 
 async function readLibrary(scope: WorkspaceScope): Promise<AdventureLibraryItem[]> {
-  const rows = (await db.gameReleases.where('projectId').equals(scope.projectId).toArray())
+  const rows = (await db.productReleases.where('projectId').equals(scope.projectId).toArray())
     .filter(row => row.worldId === scope.worldId && row.workId === scope.workId)
     .sort((left, right) => right.createdAt - left.createdAt)
   return Promise.all(rows.flatMap(release => {
@@ -86,8 +86,8 @@ async function readLibrary(scope: WorkspaceScope): Promise<AdventureLibraryItem[
     } catch { return [] }
   }).map(async release => {
     try {
-      await assertGameReleaseUnchanged(release.id!)
-      return { release, manifest: parseAdventureGameReleaseManifest(release.manifestJson), error: '' }
+      await assertProductReleaseUnchanged(release.id!)
+      return { release, manifest: parseAdventureProductReleaseManifest(release.manifestJson), error: '' }
     } catch (error) {
       return { release, manifest: null, error: error instanceof Error ? error.message : String(error) }
     }
@@ -96,25 +96,25 @@ async function readLibrary(scope: WorkspaceScope): Promise<AdventureLibraryItem[
 
 async function assertAdventureSession(scope: WorkspaceScope, sessionId: number) {
   const session = await assertInstanceBinding(sessionId, scope)
-  if (session.kind !== 'textadventure') throw new Error('该存档不是文字冒险。')
+  if (session.kind !== 'text-adventure') throw new Error('该存档不是文字冒险。')
   return session
 }
 
-function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyPlayableSessionPackageV2>>['runtimePackage']) {
+function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyProductRuntimeSessionSourceV1>>['runtimePackage']) {
   if (runtimePackage.productType !== 'text-adventure' || !runtimePackage.adventure || !runtimePackage.interaction) {
-    throw new Error('该存档没有绑定有效的文字冒险 Product Build 或 GameRelease。')
+    throw new Error('该存档没有绑定有效的文字冒险 Product Build 或 ProductRelease。')
   }
-  return structuredClone(runtimePackage) as AdventureGameRuntimePackageV2
+  return structuredClone(runtimePackage) as AdventureProductRuntimePackageV1
 }
 
 async function details(scope: WorkspaceScope, sessionId: number) {
   const session = await assertAdventureSession(scope, sessionId)
   const [events, checkpoints, runtimeState, playable, runRows] = await Promise.all([
-    db.simulationEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
-    db.simulationCheckpoints.where('sessionId').equals(sessionId).toArray(),
-    readSimulationState(sessionId),
-    verifyPlayableSessionPackageV2({ scope, session }),
-    db.agentRuns.where('simulationSessionId').equals(sessionId).toArray(),
+    db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
+    db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray(),
+    readProductRuntimeState(sessionId),
+    verifyProductRuntimeSessionSourceV1({ scope, session }),
+    db.agentRuns.where('productRuntimeSessionId').equals(sessionId).toArray(),
   ])
   checkpoints.sort((left, right) => right.createdAt - left.createdAt)
   const resumableRows = runRows.filter(row => !['completed', 'failed', 'cancelled'].includes(row.status))
@@ -133,13 +133,13 @@ async function details(scope: WorkspaceScope, sessionId: number) {
 }
 
 async function automaticCheckpoint(sessionId: number): Promise<void> {
-  const state = await readSimulationState(sessionId)
+  const state = await readProductRuntimeState(sessionId)
   if (!state.adventure) return
   const last = state.adventure.actionHistory[state.adventure.actionHistory.length - 1]
   if (!last || state.adventure.actionHistory.length % 5 !== 0) return
-  const existing = await db.simulationCheckpoints.where('sessionId').equals(sessionId)
+  const existing = await db.productRuntimeCheckpoints.where('sessionId').equals(sessionId)
     .filter(item => item.throughSequence === state.lastSequence && item.name.startsWith('自动 · ')).first()
-  if (!existing) await createSimulationCheckpoint({
+  if (!existing) await createProductRuntimeCheckpoint({
     sessionId, throughSequence: state.lastSequence,
     name: `自动 · ${state.adventure.currentLocationKey} · ${state.adventure.actionHistory.length} 次行动`,
   })
@@ -156,7 +156,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     if (!scope) return
     const releases = await readLibrary(scope)
     const sessions = (await readBoundInstances(scope))
-      .filter(item => item.kind === 'textadventure' && (item.worldGroupId ?? null) === get().worldGroupId)
+      .filter(item => item.kind === 'text-adventure' && (item.worldGroupId ?? null) === get().worldGroupId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
     const explicitlySelected = requested !== undefined
     const desired = explicitlySelected ? requested : get().selectedSessionId
@@ -165,7 +165,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       : explicitlySelected ? null : sessions[0]?.id ?? null
     set({ releases, sessions, selectedSessionId })
     if (selectedSessionId != null) await refresh()
-    else set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_SIMULATION_STATE), selectedManifest: null })
+    else set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null })
   }
   const run = async <T>(operation: () => Promise<T>): Promise<T> => {
     set({ busy: true, error: '' })
@@ -175,7 +175,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
   }
   return {
     scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null,
-    events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_SIMULATION_STATE), selectedManifest: null,
+    events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null,
     pendingIntent: null, generatedNarrative: null, generatingRunId: null,
     loading: false, busy: false, error: '',
     load: async (scope, worldGroupId, openLibrary = false) => {
@@ -189,17 +189,17 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     select: async sessionId => {
       set({ selectedSessionId: sessionId, loading: true, error: '', pendingIntent: null, generatedNarrative: null })
       try {
-        if (sessionId == null) set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_SIMULATION_STATE), selectedManifest: null })
+        if (sessionId == null) set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null })
         else await refresh()
       } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
       finally { set({ loading: false }) }
     },
-    start: (gameReleaseId, title) => run(async () => {
+    start: (productReleaseId, title) => run(async () => {
       const scope = get().scope
-      const item = get().releases.find(candidate => candidate.release.id === gameReleaseId)
+      const item = get().releases.find(candidate => candidate.release.id === productReleaseId)
       if (!scope || !item?.manifest || item.error) throw new Error('请选择可用的文字冒险发布。')
       const session = await createTextAdventureInstance({
-        scope, gameReleaseId, worldGroupId: get().worldGroupId,
+        scope, productReleaseId, worldGroupId: get().worldGroupId,
         title: title?.trim() || `${item.manifest.definition.title} · 新冒险`,
       })
       await reload(session.id!)
@@ -209,7 +209,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       const scope = get().scope; const sessionId = get().selectedSessionId
       if (!scope || sessionId == null) throw new Error('请先开始或继续一个文字冒险。')
       await assertAdventureSession(scope, sessionId)
-      const base = await readSimulationStateVersion(sessionId)
+      const base = await readProductRuntimeStateVersion(sessionId)
       await commitAdventureAction({
         sessionId, actionKey,
         commandId: commandId ?? `textadv:${sessionId}:${crypto.randomUUID()}`,
@@ -227,7 +227,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       set({ generatingRunId: -1, pendingIntent: null })
       try {
         const generated = await generateAdventureRuntimeCandidateV1({
-          scope, simulationSessionId: sessionId, skillId: 'prose.adventure-intent-parser',
+          scope, productRuntimeSessionId: sessionId, skillId: 'prose.adventure-intent-parser',
           objective: text, aiConfig, signal: generationAbortController.signal,
           onRunCreated: runId => set({ generatingRunId: runId }),
         })
@@ -243,7 +243,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       if (!scope || !candidate) throw new Error('当前没有待确认的自由输入候选。')
       await adoptAdventureRuntimeCandidateV1({ scope, runId: candidate.runId })
       set({ pendingIntent: null, generatedNarrative: null })
-      await automaticCheckpoint(candidate.simulationSessionId)
+      await automaticCheckpoint(candidate.productRuntimeSessionId)
       await refresh()
     }),
     rejectPendingIntent: () => run(async () => {
@@ -261,7 +261,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       set({ generatingRunId: -1 })
       try {
         const generated = await generateAdventureRuntimeCandidateV1({
-          scope, simulationSessionId: sessionId, skillId: 'prose.adventure-result-narrator',
+          scope, productRuntimeSessionId: sessionId, skillId: 'prose.adventure-result-narrator',
           objective: `润色行动 ${last.actionKey} 的已发生结果，不改变规则事实。`,
           aiConfig, signal: generationAbortController.signal,
           onRunCreated: runId => set({ generatingRunId: runId }),
@@ -287,7 +287,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       if (!scope) throw new Error('工作区未就绪。')
       const adopted = await adoptAdventureRuntimeCandidateV1({ scope, runId })
       if (adopted.candidate.kind === 'adventure-intent-candidate') {
-        await automaticCheckpoint(adopted.candidate.simulationSessionId)
+        await automaticCheckpoint(adopted.candidate.productRuntimeSessionId)
         set({ pendingIntent: null })
         await refresh()
       } else set({ generatedNarrative: adopted.candidate })
@@ -307,14 +307,14 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       const scope = get().scope; const sessionId = get().selectedSessionId
       if (!scope || sessionId == null) throw new Error('请先选择文字冒险。')
       await assertAdventureSession(scope, sessionId)
-      await createSimulationCheckpoint({ sessionId, name })
+      await createProductRuntimeCheckpoint({ sessionId, name })
       await refresh()
     }),
     forkCheckpoint: (checkpointId, title) => run(async () => {
       const checkpoint = get().checkpoints.find(item => item.id === checkpointId)
       const parent = get().sessions.find(item => item.id === checkpoint?.sessionId)
-      if (!checkpoint || !parent || !await verifySimulationCheckpoint(checkpointId)) throw new Error('检查点不存在或完整性失败。')
-      const child = await branchSimulationSession({
+      if (!checkpoint || !parent || !await verifyProductRuntimeCheckpoint(checkpointId)) throw new Error('检查点不存在或完整性失败。')
+      const child = await branchProductRuntimeSession({
         parentSessionId: parent.id!, throughSequence: checkpoint.throughSequence,
         title: title?.trim() || `${parent.title} · ${checkpoint.name}`,
       })
@@ -323,7 +323,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     forkCurrent: title => run(async () => {
       const parent = get().sessions.find(item => item.id === get().selectedSessionId)
       if (!parent) throw new Error('当前文字冒险存档不存在。')
-      const child = await branchSimulationSession({
+      const child = await branchProductRuntimeSession({
         parentSessionId: parent.id!, throughSequence: get().runtimeState.lastSequence,
         title: title?.trim() || `${parent.title} · 新时间线`,
       })
@@ -333,7 +333,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       const scope = get().scope
       if (!scope) throw new Error('当前 World/Work 尚未就绪。')
       await assertAdventureSession(scope, sessionId)
-      await deleteSimulationSession(sessionId)
+      await deleteProductRuntimeSession(sessionId)
       await reload(get().selectedSessionId === sessionId ? null : undefined)
     }),
   }

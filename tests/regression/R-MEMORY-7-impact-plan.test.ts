@@ -3,7 +3,7 @@ import { db } from '../../src/lib/db/schema'
 import { generateDocumentId, generateWorkspaceUid, generateWorkCode } from '../../src/lib/memory/identity'
 import { buildWorkspaceImpactPlanV1 } from '../../src/lib/memory/workspace-impact'
 import type { WorkspaceFileAdoptionCandidateV1, WorkspaceFileCandidateSetV1 } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 
 const HASH = 'a'.repeat(64)
 

@@ -64,7 +64,7 @@ export interface AvgStageState {
   lastTransition: string | null
 }
 
-export interface SimulationAvgPresentationState {
+export interface AvgRuntimePresentationState {
   schema: 'storyforge.avg-presentation'
   version: 1
   contentHash: string

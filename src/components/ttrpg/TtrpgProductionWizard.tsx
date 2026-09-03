@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
-  GameProductionSourceOptionsV1,
-  GameProductionSourceSelectionV1,
-  GameRulePackRecordV1,
+  ProductProductionSourceOptionsV1,
+  ProductProductionSourceSelectionV1,
+  TtrpgRulePackRecordV1,
   TtrpgProductionSeatV2,
   WorkspaceScope,
 } from "../../lib/types";
@@ -168,8 +168,8 @@ function uniqueLines(value: string): string[] {
 
 export function toTtrpgProductionBriefDraftInputV2(input: {
   value: TtrpgProductionWizardValueV2;
-  sourceOptions: GameProductionSourceOptionsV1 | null;
-  sourceSelection: GameProductionSourceSelectionV1 | null;
+  sourceOptions: ProductProductionSourceOptionsV1 | null;
+  sourceSelection: ProductProductionSourceSelectionV1 | null;
   openingSituation: string;
 }): TtrpgProductionBriefDraftInputV2 {
   const value = input.value;
@@ -365,12 +365,12 @@ export default function TtrpgProductionWizard(props: {
   scope: WorkspaceScope;
   value: TtrpgProductionWizardValueV2;
   onChange: (next: TtrpgProductionWizardValueV2) => void;
-  sourceOptions: GameProductionSourceOptionsV1 | null;
-  sourceSelection: GameProductionSourceSelectionV1 | null;
+  sourceOptions: ProductProductionSourceOptionsV1 | null;
+  sourceSelection: ProductProductionSourceSelectionV1 | null;
   sourceLabel?: string;
 }) {
   const [step, setStep] = useState(0);
-  const [rulePacks, setRulePacks] = useState<GameRulePackRecordV1[]>([]);
+  const [rulePacks, setRulePacks] = useState<TtrpgRulePackRecordV1[]>([]);
   const scopeProjectId = props.scope.projectId;
   const scopeWorldId = props.scope.worldId;
   const scopeWorkId = props.scope.workId;

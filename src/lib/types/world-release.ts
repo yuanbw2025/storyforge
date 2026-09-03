@@ -1,4 +1,3 @@
-import type { NarrativeModuleKind } from './narrative-blueprint'
 import type { WorldCapabilityArea } from '../registry/types'
 
 export interface WorldRevision {
@@ -53,20 +52,15 @@ export interface WorldDerivationV1 {
   createdAt: number
 }
 
-export interface WorldReleaseManifestV2 {
-  schema: 'storyforge.world-package'
-  version: 2
+export interface WorldReleaseManifestV3 {
+  schema: 'storyforge.world-release'
+  version: 3
   /** Pure semantic world contract. */
   semanticContract: 3
   worldCode: string
   worldName: string
   workTitle: string
   selectedTables: string[]
-  selectedNarrativeModules: Array<{
-    exportId: number
-    kind: NarrativeModuleKind
-    title: string
-  }>
   dependencies: Array<{
     table: string
     rowCount: number

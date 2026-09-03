@@ -17,7 +17,9 @@ describe('R-WORLDMAP 段一 · 地图生成读全已填内容', () => {
       factionLayout: '天南帝国、迦南圣地',
       regionDimensions: '帝都·天南城；边陲·落雁镇',     // 城池重镇:此前漏读
       naturalResourceOverview: '北境多寒铁',              // 自然资源:此前漏读
-      politicsEconomyCulture: '修仙文明',
+      politicsOverview: '宗门议会治理疆域',
+      economyOverview: '灵石与商路维系交换',
+      cultureOverview: '修仙文明尊崇师承',
     }
     const codexCtx = '【势力】血衣楼：盘踞东海\n【城池】落雁镇：边陲重镇'  // 词条:此前漏读
     const messages = buildVoronoiMapPrompt(wv, '大陆东高西低', [], codexCtx)

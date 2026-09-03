@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import {
   confirmAdaptationBrief,
   confirmAdaptationPlan,
@@ -192,7 +192,7 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     expect(svg).toContain('data-storyforge-comic-page="1"'); expect(svg).toContain('你'); expect(svg).toContain('readingDirection')
 
     const backup = await exportProjectJSON(item.scope.projectId)
-    expect(backup.version).toBe(9); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')
+    expect(backup.version).toBe(10); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')
     const cyclic = structuredClone(backup)
     const firstAsset = cyclic.comicMediaAssets![0]
     firstAsset.referenceAssetKeys = ['cycle-copy']

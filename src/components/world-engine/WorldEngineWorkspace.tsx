@@ -20,7 +20,7 @@ interface Props {
   onOpenModule: (module: SidebarModule) => void
   activeWorkId?: number | null
   onWorkChanged?: () => Promise<void> | void
-  onOpenGameProduction?: (handoff: import('../../lib/types').WorldGameProductionHandoffV2) => void
+  onOpenProductProduction?: (handoff: import('../../lib/types').ProductProductionHandoffV1) => void
 }
 
 interface DomainModuleLink {
@@ -189,7 +189,7 @@ function DomainCard({ summary, onOpenModule }: { summary: WorldDomainSummary; on
   )
 }
 
-export default function WorldEngineWorkspace({ projection, onOpenModule, activeWorkId, onWorkChanged, onOpenGameProduction }: Props) {
+export default function WorldEngineWorkspace({ projection, onOpenModule, activeWorkId, onWorkChanged, onOpenProductProduction }: Props) {
   if (!projection) {
     return <div className="flex min-h-[20rem] items-center justify-center text-sm text-text-muted">正在读取世界内容…</div>
   }
@@ -214,7 +214,7 @@ export default function WorldEngineWorkspace({ projection, onOpenModule, activeW
         projectId={projection.projectId}
         activeWorkId={activeWorkId}
         onChanged={onWorkChanged ?? (() => {})}
-        onOpenGameProduction={onOpenGameProduction ?? (() => {})}
+        onOpenProductProduction={onOpenProductProduction ?? (() => {})}
       />
       <div className="sf-world-engine-lower-grid">
         <section className="sf-world-engine-bridge">

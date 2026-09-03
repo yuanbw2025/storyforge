@@ -1,6 +1,6 @@
-import type { SimulationTtrpgState } from '../types'
+import type { TtrpgRuntimeState } from '../types'
 
-type Product = NonNullable<SimulationTtrpgState['product']>
+type Product = NonNullable<TtrpgRuntimeState['product']>
 
 /** Milestones award every active PC; actor-targeted XP/currency effects adjust that PC. */
 export function earnedTtrpgCharacterCurrencyV2(product: Product, characterKey: string): number {

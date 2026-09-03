@@ -10,7 +10,7 @@ import {
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { buildMemoryArtifactIndexV1 } from '../../src/lib/memory/settlement'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { resolveScopeLike } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike } from '../../src/lib/workspace/scope'
 import type { Project } from '../../src/lib/types'
 
 const now = 1_700_000_000_000

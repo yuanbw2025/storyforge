@@ -157,18 +157,19 @@ describe('WORLD-1 · 修炼进度作者确认 UI', () => {
       analyze.click()
       await new Promise(resolve => setTimeout(resolve, 0))
     })
-    await vi.waitFor(() => expect(runnerMocks.generate).toHaveBeenCalled())
-    await vi.waitFor(() => expect(host.textContent).toContain('承受九次雷击'), { timeout: 3_000 })
+    await act(async () => {
+      await vi.waitFor(() => expect(runnerMocks.generate).toHaveBeenCalled())
+      await Promise.resolve()
+    })
+    expect(host.textContent).toContain('承受九次雷击')
     expect(runnerMocks.generate).toHaveBeenCalledWith(expect.objectContaining({
       chapterId, worldGroupId: null,
     }))
     expect(await db.cultivationProgress.count()).toBe(0)
 
     let accept = host.querySelector<HTMLButtonElement>('button[aria-label="确认所选修炼候选"]')!
-    await vi.waitFor(() => {
-      accept = host.querySelector<HTMLButtonElement>('button[aria-label="确认所选修炼候选"]')!
-      expect(accept.disabled).toBe(false)
-    })
+    accept = host.querySelector<HTMLButtonElement>('button[aria-label="确认所选修炼候选"]')!
+    expect(accept.disabled).toBe(false)
     await act(async () => {
       accept.click()
       await vi.waitFor(() => expect(runnerMocks.adopt).toHaveBeenCalled())

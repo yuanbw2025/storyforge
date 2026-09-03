@@ -1,7 +1,8 @@
 /**
- * CONTEXT_SOURCES(Phase 1.3a) · AI 上下文读取源注册表。
+ * CONTEXT_SOURCES · AI 上下文读取源的唯一注册表。
  *
- * 本文件只登记读取源和旧适配器桥接。1.3b 再把生成入口迁移到 assembleContext()。
+ * 所有正式读取均由 assembleContext() 或 Context Gateway 解析这份注册；
+ * 组件、Prompt 和产品适配器不得自行维护来源清单。
  */
 import { db } from '../db/schema'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
@@ -97,9 +98,9 @@ import {
   readAgentWorldGroups,
 } from '../agent/read-sources'
 import { readRagSelectionContext } from '../retrieval/rag-library'
-import { parseSimulationCanonSnapshot, verifySimulationCanonSnapshot } from '../simulation/canon-snapshot'
+import { parseProductRuntimeCanonSnapshot, verifyProductRuntimeCanonSnapshot } from '../product/runtime-canon'
 import type { AssembleContextInput } from './types'
-import { readOwnedRows, resolveScope, assertRecordInScope } from '../world-engine/scope'
+import { readOwnedRows, resolveScope, assertRecordInScope } from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import type { AdaptationProject } from '../types'
 
@@ -113,9 +114,9 @@ async function loadAdaptationSourceReader() {
 // runtime context boundary so ordinary writing routes do not eagerly load the
 // complete upper-product runtime into the application entry chunk.
 async function verifyPlayableRuntimeSession(
-  input: Parameters<typeof import('../game-production/preview-source')['verifyPlayableSessionPackageV2']>[0],
+  input: Parameters<typeof import('../product-production/preview-source')['verifyProductRuntimeSessionSourceV1']>[0],
 ) {
-  return (await import('../game-production/preview-source')).verifyPlayableSessionPackageV2(input)
+  return (await import('../product-production/preview-source')).verifyProductRuntimeSessionSourceV1(input)
 }
 
 const WORLD_RELEASE_RESOURCE_PROVIDER_PROXY_V1: ContextResourceProviderV1 = {
@@ -139,17 +140,17 @@ const WORLD_RELEASE_RESOURCE_PROVIDER_PROXY_V1: ContextResourceProviderV1 = {
 // Upper-product readers are lazy for the same reason as adaptation readers:
 // their production Harnesses import the Skill registry, so eager imports here
 // would create CONTEXT_SOURCES -> product Harness -> Skill -> CONTEXT_SOURCES.
-async function readGameProductionBriefContext(input: AssembleContextInput): Promise<string> {
-  return (await import('../game-production/context')).readGameProductionBriefContext(input)
+async function readProductProductionBriefContext(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readProductProductionBriefContext(input)
 }
-async function readGameProductionArtifactInputs(input: AssembleContextInput): Promise<string> {
-  return (await import('../game-production/context')).readGameProductionArtifactInputs(input)
+async function readProductProductionArtifactInputs(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readProductProductionArtifactInputs(input)
 }
-async function readGameProductionQualityFeedback(input: AssembleContextInput): Promise<string> {
-  return (await import('../game-production/context')).readGameProductionQualityFeedback(input)
+async function readProductProductionQualityFeedback(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readProductProductionQualityFeedback(input)
 }
-async function readGameProductionEvolutionBase(input: AssembleContextInput): Promise<string> {
-  return (await import('../game-production/context')).readGameProductionEvolutionBase(input)
+async function readProductProductionEvolutionBase(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readProductProductionEvolutionBase(input)
 }
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
@@ -281,9 +282,9 @@ async function readComicCurrentPagesContext(input: AssembleContextInput): Promis
   ].join('\n'))].join('\n\n')
 }
 
-async function readSimulationStateForContext(sessionId: number) {
-  const { readSimulationState } = await import('../simulation/runtime')
-  return readSimulationState(sessionId)
+async function readProductRuntimeStateForContext(sessionId: number) {
+  const { readProductRuntimeState } = await import('../product/runtime-api')
+  return readProductRuntimeState(sessionId)
 }
 
 async function readActiveNarrativeBlueprint(input: AssembleContextInput): Promise<string> {
@@ -316,9 +317,9 @@ async function readActiveNarrativeBlueprint(input: AssembleContextInput): Promis
   ].filter(Boolean).join('\n')
 }
 
-async function readSimulationRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.simulationSessionId == null) return ''
-  const session = await db.simulationSessions.get(input.simulationSessionId)
+async function readProductRuntimeContext(input: AssembleContextInput): Promise<string> {
+  if (input.productRuntimeSessionId == null) return ''
+  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
   if (!session || session.projectId !== input.projectId) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
   let sourceLabel: string
@@ -338,8 +339,8 @@ async function readSimulationRuntimeContext(input: AssembleContextInput): Promis
     sourceLines = playable.runtimePackage.sourceWorld.selection.resourceKeys.slice(0, 120)
       .map(resourceKey => `- ${resourceKey}｜冻结产品来源`)
   } else {
-    const snapshot = parseSimulationCanonSnapshot(session.canonSnapshotJson)
-    if (!snapshot || !(await verifySimulationCanonSnapshot(snapshot))) {
+    const snapshot = parseProductRuntimeCanonSnapshot(session.canonSnapshotJson)
+    if (!snapshot || !(await verifyProductRuntimeCanonSnapshot(snapshot))) {
       throw new Error('冻结运行时 Canon 快照校验失败。')
     }
     sourceLabel = snapshot.worldLabel
@@ -349,7 +350,7 @@ async function readSimulationRuntimeContext(input: AssembleContextInput): Promis
       `- ${source.sourceKey}｜${source.kind}｜${source.name}${source.summary ? `｜${source.summary}` : ''}`
     ))
   }
-  const state = await readSimulationStateForContext(session.id!)
+  const state = await readProductRuntimeStateForContext(session.id!)
   const entityLines = Object.values(state.entities).slice(0, 120).map(entity => {
     const attributes = Object.entries(entity.attributes)
       .slice(0, 16)
@@ -413,12 +414,12 @@ async function readSimulationRuntimeContext(input: AssembleContextInput): Promis
 }
 
 async function readInteractionRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.simulationSessionId == null) return ''
+  if (input.productRuntimeSessionId == null) return ''
   const participantKey = input.interactionParticipantKey?.trim()
   if (!participantKey) return ''
-  const session = await db.simulationSessions.get(input.simulationSessionId)
+  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
   if (!session || session.projectId !== input.projectId
-    || !['chatgame', 'textadventure', 'textworld'].includes(session.kind)) return ''
+    || !['character-interaction', 'text-adventure', 'text-open-world'].includes(session.kind)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
   if (session.worldId == null || session.workId == null || !session.runtimeSourceHash) {
     throw new Error('正式角色互动实例缺少产品运行源。')
@@ -430,7 +431,7 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
   if (playable.runtimeSourceHash !== session.runtimeSourceHash) {
     throw new Error('角色互动 RuntimePackage 校验失败。')
   }
-  const state = await readSimulationStateForContext(session.id!)
+  const state = await readProductRuntimeStateForContext(session.id!)
   if (!state.interaction) return ''
   const profile = state.interaction.profiles.find(item => item.participantKey === participantKey)
   if (!profile) return ''
@@ -456,11 +457,11 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
 }
 
 async function readAdventureRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.simulationSessionId == null) return ''
-  const session = await db.simulationSessions.get(input.simulationSessionId)
+  if (input.productRuntimeSessionId == null) return ''
+  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
   if (!session || session.projectId !== input.projectId
-    || (session.kind !== 'textadventure' && session.kind !== 'textworld')
-    || (session.gameReleaseId == null && session.gameBuildId == null)) return ''
+    || (session.kind !== 'text-adventure' && session.kind !== 'text-open-world')
+    || (session.productReleaseId == null && session.productBuildId == null)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
   if (session.worldId == null || session.workId == null) throw new Error('正式文字冒险实例缺少工作区作用域。')
   const [playable, { availableAdventureActions }] = await Promise.all([
@@ -476,7 +477,7 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
     throw new Error('文字冒险 RuntimePackage 校验失败。')
   }
   const adventure = runtimePackage.adventure
-  const state = await readSimulationStateForContext(session.id!)
+  const state = await readProductRuntimeStateForContext(session.id!)
   if (!state.adventure) return ''
   const location = adventure.locations.find(item => item.key === state.adventure!.currentLocationKey)
   if (!location) throw new Error('文字冒险当前位置不在冻结发布中。')
@@ -510,39 +511,39 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
   ].join('\n')
 }
 
-async function readNarrativeSimulationRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.simulationSessionId == null) return ''
-  const session = await db.simulationSessions.get(input.simulationSessionId)
+async function readTextOpenWorldEvolutionRuntimeContext(input: AssembleContextInput): Promise<string> {
+  if (input.productRuntimeSessionId == null) return ''
+  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
   if (!session || session.projectId !== input.projectId
-    || (session.kind !== 'textsimulation' && session.kind !== 'textworld')
-    || (session.gameReleaseId == null && session.gameBuildId == null)) return ''
+    || session.kind !== 'text-open-world'
+    || (session.productReleaseId == null && session.productBuildId == null)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
-  if (session.worldId == null || session.workId == null) throw new Error('正式叙事模拟实例缺少工作区作用域。')
+  if (session.worldId == null || session.workId == null) throw new Error('文字开放世界内部状态演化实例缺少工作区作用域。')
   const [playable, runtimeModule] = await Promise.all([
     verifyPlayableRuntimeSession({
       scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
       session,
     }),
-    import('../narrative-simulation/runtime'),
+    import('../open-world/evolution-runtime'),
   ])
   const runtimePackage = playable.runtimePackage
-  if ((runtimePackage.productType !== 'narrative-simulation' && runtimePackage.productType !== 'text-open-world')
-    || !runtimePackage.simulation || playable.runtimeSourceHash !== session.runtimeSourceHash) {
-    throw new Error('叙事模拟 RuntimePackage 校验失败。')
+  if (runtimePackage.productType !== 'text-open-world'
+    || !runtimePackage.openWorldEvolution || playable.runtimeSourceHash !== session.runtimeSourceHash) {
+    throw new Error('文字开放世界内部状态演化 RuntimePackage 校验失败。')
   }
-  const state = await readSimulationStateForContext(session.id!)
-  if (!state.narrativeSimulation) return ''
-  const simulation = state.narrativeSimulation
-  const actions = runtimeModule.availableNarrativeSimulationActions(runtimePackage.simulation, simulation)
-  const reports = runtimeModule.visibleNarrativeSimulationReports(simulation, 'player')
-  const issueByKey = new Map(runtimePackage.simulation.issues.map(issue => [issue.key, issue]))
+  const state = await readProductRuntimeStateForContext(session.id!)
+  if (!state.openWorldEvolution) return ''
+  const openWorldEvolution = state.openWorldEvolution
+  const actions = runtimeModule.availableOpenWorldEvolutionActions(runtimePackage.openWorldEvolution, openWorldEvolution)
+  const reports = runtimeModule.visibleOpenWorldEvolutionReports(openWorldEvolution, 'player')
+  const issueByKey = new Map(runtimePackage.openWorldEvolution.issues.map(issue => [issue.key, issue]))
   return [
-    `【叙事模拟玩家视角】${session.title}｜回合=${simulation.turn}/${simulation.turnLimit}｜阶段=${simulation.phase}｜事件序号=${state.lastSequence}`,
-    `【冻结运行源】${playable.packageHash.slice(0, 16)}｜行动预算=${simulation.actionBudget}`,
-    `【资源】${Object.entries(simulation.resources).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
-    `【指标】${Object.entries(simulation.metrics).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
+    `【文字开放世界·内部状态演化玩家视角】${session.title}｜回合=${openWorldEvolution.turn}/${openWorldEvolution.turnLimit}｜阶段=${openWorldEvolution.phase}｜事件序号=${state.lastSequence}`,
+    `【冻结运行源】${playable.packageHash.slice(0, 16)}｜行动预算=${openWorldEvolution.actionBudget}`,
+    `【资源】${Object.entries(openWorldEvolution.resources).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
+    `【指标】${Object.entries(openWorldEvolution.metrics).map(([key, value]) => `${key}=${value}`).join('、') || '无'}`,
     '【问题与危机】',
-    ...simulation.issues.map(issue => {
+    ...openWorldEvolution.issues.map(issue => {
       const definition = issueByKey.get(issue.issueKey)
       return `- ${issue.issueKey}｜阶段=${issue.stageKey}｜压力=${issue.pressure}｜${definition?.crisis ? '危机' : '问题'}｜${issue.resolved ? '已解决' : '进行中'}`
     }),
@@ -550,16 +551,16 @@ async function readNarrativeSimulationRuntimeContext(input: AssembleContextInput
     ...actions.map(item => `- ${item.action.key}｜${item.action.category}｜${item.action.title}｜${item.available ? '可执行' : `不可执行:${item.reason}`}`),
     '【玩家可见报告】',
     ...(reports.length ? reports.slice(-24).map(report => `- ${report.reportId}｜回合=${report.turn}｜置信度=${report.confidence}｜证据=${report.sourceEventSequences.join(',') || '父分支快照'}｜${report.text}`) : ['- 暂无']),
-    `【Narrative】节点=${state.narrative?.currentNodeKey ?? '无'}｜可用选择=${state.narrative?.availableChoiceKeys?.join('、') || '无'}｜模拟结局=${simulation.qualifiedEndingKey ?? '未确定'}`,
+    `【Narrative】节点=${state.narrative?.currentNodeKey ?? '无'}｜可用选择=${state.narrative?.availableChoiceKeys?.join('、') || '无'}｜演化结局=${openWorldEvolution.qualifiedEndingKey ?? '未确定'}`,
     '模型只能输出有事件证据的报告、建议或表演候选；不得改变资源、指标、问题、行动、回合或结局，也不得读取 actor/debug 私有报告。',
   ].join('\n')
 }
 
 async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise<string> {
-  if (input.simulationSessionId == null) return ''
-  const session = await db.simulationSessions.get(input.simulationSessionId)
-  if (!session || session.projectId !== input.projectId || session.kind !== 'textworld'
-    || (session.gameReleaseId == null && session.gameBuildId == null)) return ''
+  if (input.productRuntimeSessionId == null) return ''
+  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
+  if (!session || session.projectId !== input.projectId || session.kind !== 'text-open-world'
+    || (session.productReleaseId == null && session.productBuildId == null)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
   if (session.worldId == null || session.workId == null) throw new Error('正式开放世界实例缺少工作区作用域。')
   const playable = await verifyPlayableRuntimeSession({
@@ -571,13 +572,13 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     || playable.runtimeSourceHash !== session.runtimeSourceHash) {
     throw new Error('开放世界 RuntimePackage 校验失败。')
   }
-  const state = await readSimulationStateForContext(session.id!)
+  const state = await readProductRuntimeStateForContext(session.id!)
   if (!state.openWorld) return ''
   const world = state.openWorld
   const region = manifest.openWorld.regions.find(item => item.key === world.currentRegionKey)
   const projection = world.regionalProjections.find(item => item.regionKey === world.currentRegionKey)
   if (!region || !projection) return ''
-  const recentEvents = (await db.simulationEvents.where('sessionId').equals(session.id!).toArray())
+  const recentEvents = (await db.productRuntimeEvents.where('sessionId').equals(session.id!).toArray())
     .filter(event => event.type.startsWith('world.') || event.type.startsWith('adventure.quest.'))
     .sort((left, right) => left.sequence - right.sequence).slice(-32)
   const visibleQuests = world.questInstances.filter(item => ['revealed', 'active', 'resolved', 'failed'].includes(item.status))
@@ -620,12 +621,12 @@ async function readGeographyContext(projectId: number, worldGroupId?: number | n
   try {
     const locations = JSON.parse(geography.locations || '[]') as Location[]
     if (Array.isArray(locations) && locations.length) {
-      parts.push(`【旧版地理地点】\n${locations.slice(0, 100).map(location => (
+      parts.push(`【地理地点】\n${locations.slice(0, 100).map(location => (
         `- ${String(location.name ?? '').trim()}（${String(location.type ?? 'other')}）：${String(location.description ?? '').trim() || '无描述'}`
       )).join('\n')}`)
     }
   } catch {
-    // Corrupt legacy location JSON is omitted; the registered source never
+    // Invalid stored location JSON is omitted; the registered source never
     // guesses a replacement or exposes a component-level parsing bypass.
   }
   return parts.join('\n\n')
@@ -1339,7 +1340,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     ownerFrom: 'work',
     budgetTokens: 10_000,
     protectedFromTrim: true,
-    requiresSimulationSessionId: true,
+    requiresProductRuntimeSessionId: true,
     read: readTtrpgGmRuntimeContextV1,
   },
   {
@@ -1350,51 +1351,51 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     ownerFrom: 'work',
     budgetTokens: 10_000,
     protectedFromTrim: true,
-    requiresSimulationSessionId: true,
+    requiresProductRuntimeSessionId: true,
     enabled: input => !!input.ttrpgPlayerActorKey?.trim(),
     read: readTtrpgPlayerRuntimeContextV1,
   },
   {
-    key: 'game-production.brief',
-    label: '已授权游戏生产 Brief',
+    key: 'product-production.brief',
+    label: '已授权上层产品生产 Brief',
     scope: 'project',
     layer: 'L0',
     ownerFrom: 'work',
     budgetTokens: 8000,
     protectedFromTrim: true,
-    enabled: input => Number.isInteger(input.gameProductionId),
-    read: readGameProductionBriefContext,
+    enabled: input => Number.isInteger(input.productProductionId),
+    read: readProductProductionBriefContext,
   },
   {
-    key: 'game-production.artifact-inputs',
-    label: '游戏生产任务依赖',
+    key: 'product-production.artifact-inputs',
+    label: '上层产品生产任务依赖',
     scope: 'project',
     layer: 'L1',
     ownerFrom: 'work',
     budgetTokens: 10_000,
-    enabled: input => Number.isInteger(input.gameBuildId) && !!input.gameArtifactKeys?.length,
-    read: readGameProductionArtifactInputs,
+    enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
+    read: readProductProductionArtifactInputs,
   },
   {
-    key: 'game-production.quality-feedback',
-    label: '游戏生产质量反馈',
+    key: 'product-production.quality-feedback',
+    label: '上层产品生产质量反馈',
     scope: 'project',
     layer: 'L1',
     ownerFrom: 'work',
     budgetTokens: 6000,
-    enabled: input => Number.isInteger(input.gameBuildId),
-    read: readGameProductionQualityFeedback,
+    enabled: input => Number.isInteger(input.productBuildId),
+    read: readProductProductionQualityFeedback,
   },
   {
-    key: 'game-production.evolution-base',
+    key: 'product-production.evolution-base',
     label: '游戏持续演化基线',
     scope: 'project',
     layer: 'L0',
     ownerFrom: 'work',
     budgetTokens: 12_000,
     protectedFromTrim: true,
-    enabled: input => Number.isInteger(input.gameBuildId),
-    read: readGameProductionEvolutionBase,
+    enabled: input => Number.isInteger(input.productBuildId),
+    read: readProductProductionEvolutionBase,
   },
   {
     key: 'adaptation.sourceManifest',
@@ -1480,59 +1481,65 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'adventureRuntime',
     label: '文字冒险玩家视角',
     scope: 'runtime',
+    ownerFrom: 'instance',
     layer: 'L0',
     budgetTokens: 8000,
     protectedFromTrim: true,
-    requiresSimulationSessionId: true,
+    requiresProductRuntimeSessionId: true,
     read: readAdventureRuntimeContext,
   },
   {
-    key: 'narrativeSimulationRuntime',
-    label: '叙事模拟玩家视角',
+    key: 'textOpenWorldEvolutionRuntime',
+    label: '文字开放世界·内部状态演化玩家视角',
     scope: 'runtime',
+    ownerFrom: 'instance',
     layer: 'L0',
     budgetTokens: 8000,
     protectedFromTrim: true,
-    requiresSimulationSessionId: true,
-    read: readNarrativeSimulationRuntimeContext,
+    requiresProductRuntimeSessionId: true,
+    read: readTextOpenWorldEvolutionRuntimeContext,
   },
   {
     key: 'openWorldRuntime',
     label: '文字开放世界玩家视角',
     scope: 'runtime',
+    ownerFrom: 'instance',
     layer: 'L0',
     budgetTokens: 8000,
     protectedFromTrim: true,
-    requiresSimulationSessionId: true,
+    requiresProductRuntimeSessionId: true,
     read: readOpenWorldRuntimeContext,
   },
   {
     key: 'interactionRuntime',
     label: '角色互动单一视角',
     scope: 'runtime',
+    ownerFrom: 'instance',
     layer: 'L0',
     budgetTokens: 8000,
     protectedFromTrim: true,
-    requiresSimulationSessionId: true,
+    requiresProductRuntimeSessionId: true,
     enabled: input => !!input.interactionParticipantKey?.trim(),
     read: readInteractionRuntimeContext,
   },
   {
-    // SIM-1C: NPC 演进只读冻结快照与事件回放，不读取可变 Canon 表。
-    key: 'simulationRuntime',
+    // ProductRuntime 只读不可变产品来源、当前事件投影，不读取可变世界草稿。
+    key: 'productRuntime',
     label: '冻结运行时状态',
     scope: 'runtime',
+    ownerFrom: 'instance',
     layer: 'L0',
     budgetTokens: 8000,
     protectedFromTrim: true,
-    requiresSimulationSessionId: true,
-    read: readSimulationRuntimeContext,
+    requiresProductRuntimeSessionId: true,
+    read: readProductRuntimeContext,
   },
   {
     // AGENT-1: 对话副驾只读工具使用的紧凑项目摘要，不返回整表原始数据。
     key: 'projectStatus',
     label: '项目概况',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 1200,
     read: readAgentProjectStatus,
@@ -1542,6 +1549,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'worldGroups',
     label: '世界组目录',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 1500,
     read: readAgentWorldGroups,
@@ -1551,6 +1559,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'outlineTree',
     label: '大纲树',
     scope: 'world',
+    ownerFrom: 'world',
     layer: 'L2',
     budgetTokens: 6000,
     requiresWorldGroupId: true,
@@ -1561,6 +1570,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'searchResults',
     label: '项目内搜索结果',
     scope: 'world',
+    ownerFrom: 'world',
     layer: 'L2',
     budgetTokens: 2200,
     requiresWorldGroupId: true,
@@ -1668,6 +1678,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'priorOutlineCandidate',
     label: '同批次上一卷章纲候选',
     scope: 'runtime',
+    ownerFrom: 'instance',
     layer: 'L1',
     budgetTokens: 2400,
     protectedFromTrim: true,
@@ -1678,6 +1689,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'chapterContent',
     label: '章节正文',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L0',
     budgetTokens: 100_000,
     requiresChapterId: true,
@@ -1707,6 +1719,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'contextMemo',
     label: '上下文快照',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L3',
     budgetTokens: 1500,
     read: async input => getContextMemo(input.projectId),
@@ -1715,6 +1728,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'chapterOutline',
     label: '当前章节大纲',
     scope: 'node',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 800,
     protectedFromTrim: true,
@@ -1725,6 +1739,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'adjacentChapterOutlines',
     label: '相邻章纲',
     scope: 'node',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 1000,
     protectedFromTrim: true,
@@ -1735,6 +1750,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'existingVolumeOutlines',
     label: '已有卷大纲',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 2400,
     read: input => readExistingVolumeOutlines(input.projectId, input.scope),
@@ -1743,6 +1759,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'outlineSummaries',
     label: '大纲标题与摘要（分析）',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 6_000,
     requiresWorldGroupId: true,
@@ -1752,6 +1769,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'writtenChapters',
     label: '已写章节正文（分析摘录）',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 8_000,
     requiresWorldGroupId: true,
@@ -1761,6 +1779,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'writtenChapterProgress',
     label: '本卷已写正文进度',
     scope: 'node',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 3000,
     protectedFromTrim: true,
@@ -1771,6 +1790,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'currentFacts',
     label: '当前有效事实(事实账本投影)',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 2000,
     requiresChapterId: true,
@@ -1780,6 +1800,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'canonAssertions',
     label: '世界宪法(已确认设定断言)',
     scope: 'world',
+    ownerFrom: 'world',
     layer: 'L1',
     budgetTokens: 1800,
     protectedFromTrim: true,
@@ -1802,6 +1823,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'characterKnowledge',
     label: '角色认知边界(认知账本投影)',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 1600,
     protectedFromTrim: true,
@@ -1820,6 +1842,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'retrievedPassages',
     label: '相关前文召回(NS-5 混合检索)',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 2500,
     requiresChapterId: true,
@@ -1829,6 +1852,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'consistencyReport',
     label: '一致性报告',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 1800,
     protectedFromTrim: true,
@@ -1860,6 +1884,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'detailedOutline',
     label: '本章细纲(场景拆解)',
     scope: 'node',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 1500,
     requiresOutlineNodeId: true,
@@ -1881,6 +1906,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'chapterContinuityHandoff',
     label: '全局直接前驱连续性交接',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 1600,
     protectedFromTrim: true,
@@ -1892,6 +1918,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'previousPlanReconciliation',
     label: '前章计划正文对账',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 1400,
     protectedFromTrim: true,
@@ -1903,6 +1930,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'recentChapterSummaries',
     label: '当前世界最近已验证摘要',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 2200,
     requiresChapterId: true,
@@ -1966,6 +1994,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'powerSystem',
     label: '力量体系',
     scope: 'world',
+    ownerFrom: 'world',
     layer: 'L2',
     budgetTokens: 4000, // 放宽:容下完整力量体系(描述/等级/规则)
     requiresWorldGroupId: true,
@@ -1982,6 +2011,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'codex',
     label: '设定词条',
     scope: 'world',
+    ownerFrom: 'world',
     layer: 'L2',
     budgetTokens: 6000, // 放宽:容下更多设定词条
     requiresWorldGroupId: true,
@@ -2022,6 +2052,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'worldRules',
     label: '真实与幻想规则',
     scope: 'world',
+    ownerFrom: 'world',
     layer: 'L1',
     budgetTokens: 1200,
     requiresWorldGroupId: true,
@@ -2031,6 +2062,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'historical',
     label: '历史时间线',
     scope: 'world',
+    ownerFrom: 'world',
     layer: 'L2',
     budgetTokens: 1800,
     requiresWorldGroupId: true,
@@ -2040,6 +2072,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'locations',
     label: '重要地点',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 1200,
     read: input => buildLocationContext(input.projectId, input.scope),
@@ -2048,6 +2081,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'foreshadows',
     label: '伏笔状态',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 1200,
     read: input => readForeshadows(input.projectId, input.chapterId, input.scope),
@@ -2078,6 +2112,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'storylineProgress',
     label: '作者确认的故事线进度与交汇',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 1400,
     protectedFromTrim: true,
@@ -2104,6 +2139,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'emotionBeats',
     label: '情感节拍',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 1000,
     requiresChapterId: true,
@@ -2122,6 +2158,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'itemLedger',
     label: '物品流水',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 2400,
     read: input => readItemLedger(input.projectId, input.characterId, input.scope),
@@ -2130,6 +2167,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'heldItems',
     label: '当前已持有物品',
     scope: 'chapter',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 1000,
     protectedFromTrim: true,
@@ -2148,6 +2186,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'storyTimeline',
     label: '故事年表',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 2600,
     read: input => readStoryTimeline(input.projectId, input.scope),
@@ -2167,6 +2206,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'characterRelations',
     label: '角色关系',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 2200,
     read: input => readCharacterRelations(input.projectId, input.worldGroupId, input.scope),
@@ -2175,6 +2215,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'references',
     label: '引用手法',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L3',
     budgetTokens: 2000,
     enabled: input => !!input.citedReferenceIds?.length,
@@ -2185,6 +2226,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'userStyleProfile',
     label: '我的文风',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 1800,
     read: input => readUserStyleProfile(input.projectId, input.scope),
@@ -2194,6 +2236,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'inspirationWorkspace',
     label: '增量灵感工作区',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L0',
     budgetTokens: 11_000,
     enabled: input => !!input.inspirationFragmentIds?.length,
@@ -2209,6 +2252,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'characterFacts',
     label: '该角色的剧情事实',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 1500,
     enabled: input => !!input.subjectCharacterName?.trim(),
@@ -2219,21 +2263,13 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     key: 'characterPassages',
     label: '该角色的正文表现',
     scope: 'project',
+    ownerFrom: 'work',
     layer: 'L1',
     budgetTokens: 2500,
     enabled: input => !!input.subjectCharacterName?.trim(),
     read: input => readCharacterPassages(input.projectId, input.subjectCharacterName, input.worldGroupId, input.scope),
   },
 ]
-
-// Transitional C3 defaulting keeps legacy source declarations readable while making
-// the logical owner explicit at runtime. New sources should set ownerFrom directly.
-for (const source of CONTEXT_SOURCES) {
-  if (source.ownerFrom) continue
-  if (source.scope === 'world') source.ownerFrom = 'world'
-  else if (source.scope === 'node' || source.scope === 'chapter' || source.scope === 'project') source.ownerFrom = 'work'
-  else if (source.scope === 'runtime') source.ownerFrom = 'instance'
-}
 
 export const CONTEXT_SOURCE_BY_KEY: ReadonlyMap<string, ContextSource> = new Map(
   CONTEXT_SOURCES.map(source => [source.key, source] as const),

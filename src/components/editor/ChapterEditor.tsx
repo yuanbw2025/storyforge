@@ -199,7 +199,7 @@ import {
   type ImpactStoryTimelineRegenerationCandidateV1,
 } from '../../lib/agent/run/impact-story-timeline-regeneration-durable'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   buildPostAdoptionAuthorizationSnapshotV1,
   invalidateChapterPostAdoptionDerivativesV1,
@@ -3813,8 +3813,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
                       ? '父正文回执或正文产物已失效，需要重新处理'
                       : postAdoptionChainState === 'prose-completed'
                         ? '正文已完成，章后处理尚未启动'
-                        : postAdoptionChainState === 'legacy-unlinked'
-                          ? '兼容后处理记录未绑定正文 Run'
+                        : postAdoptionChainState === 'unlinked'
+                          ? '章后处理记录未绑定正文 Run'
                           : '正文已完成，章后处理正在执行'}
             </div>
           )}
@@ -3832,7 +3832,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               </div>
               <div className="mt-1 text-sky-200/80">
                 任务：{transitionSnapshotRef.current.contract.automationAuthorization.taskTypes.join('、')}；
-                路由：{transitionSnapshotRef.current.contract.automationAuthorization.modelRoutes?.map(route => `${route.taskType}=${route.provider}/${route.model}`).join('；') || '旧版运行未冻结'}；
+                路由：{transitionSnapshotRef.current.contract.automationAuthorization.modelRoutes?.map(route => `${route.taskType}=${route.provider}/${route.model}`).join('；') || '本轮未冻结模型路由'}；
                 预计费用：{transitionSnapshotRef.current.contract.automationAuthorization.estimate.costUsdMax == null
                   ? '未知（自动模式需另行授权未知价格）'
                   : `$${transitionSnapshotRef.current.contract.automationAuthorization.estimate.costUsdMin?.toFixed(4)}–$${transitionSnapshotRef.current.contract.automationAuthorization.estimate.costUsdMax.toFixed(4)}`}。

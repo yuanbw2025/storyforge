@@ -24,7 +24,7 @@ import {
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import { hashCanonicalValue } from '../agent/run/hash'
 
 export interface StorylineProgressCandidate {

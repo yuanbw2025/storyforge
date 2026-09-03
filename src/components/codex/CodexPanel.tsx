@@ -22,7 +22,7 @@ import { resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import type { ExtractedCodexEntry } from '../../lib/ai/adapters/structured-extract-adapter'
 import { useToast } from '../shared/Toast'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   abandonCodexExtractionV1,
   adoptCodexExtractionCandidateV1,

@@ -21,7 +21,7 @@ import {
   resolveScopeLike,
   scopeTransactionTables,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 
 export interface CultivationProgressCandidate {

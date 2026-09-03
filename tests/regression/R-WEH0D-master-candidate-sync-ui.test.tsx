@@ -17,21 +17,12 @@ import {
   flushCandidateDraftsV1,
   resetCandidateDraftCoordinatorForTestsV1,
 } from '../../src/lib/agent/candidate-draft-coordinator'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { seedCurrentMasterCandidate } from '../helpers/current-master-candidate'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-const project: Project = {
-  id: 98005,
-  name: '候选决策屏障',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  description: '',
-  status: 'drafting',
-  targetWordCount: 100_000,
-  enableMultiWorld: false,
-  createdAt: 1,
-  updatedAt: 1,
-}
+let project: Project
 
 let controller: MasterCopilotController | null = null
 
@@ -56,10 +47,12 @@ describe('WEH-0D master candidate decision barrier', () => {
     resetCandidateDraftCoordinatorForTestsV1()
     await db.delete()
     await db.open()
-    await db.projects.put(project)
+    const workspace = await seedCurrentWorkspace('候选决策屏障')
+    project = workspace.project
     const conversation = await getOrCreateAgentConversation({
       projectId: project.id!,
       worldGroupId: null,
+      scope: workspace.scope,
     })
     await appendAgentEvent({
       projectId: project.id!,
@@ -78,6 +71,7 @@ describe('WEH-0D master candidate decision barrier', () => {
         runStepId: 'missing-run-step',
         candidateHash: 'missing-candidate-hash',
       },
+      scope: workspace.scope,
     })
     host = document.createElement('div')
     document.body.append(host)
@@ -123,19 +117,15 @@ describe('WEH-0D master candidate decision barrier', () => {
   })
 
   it('存在未同步候选时刷新意图被显式拦截并触发保存', async () => {
+    await act(async () => root.unmount())
+    await db.delete()
+    await db.open()
+    const fixture = await seedCurrentMasterCandidate('刷新候选屏障', '刷新前初稿')
+    project = fixture.project
+    root = createRoot(host)
+    await act(async () => root.render(createElement(Harness)))
     const ready = await waitForController(value => !value.loading && value.pendingCandidates.length === 1)
     const eventId = ready.pendingCandidates[0].event.id!
-    await db.agentEvents.update(eventId, {
-      durableRunId: null,
-      payload: JSON.stringify({
-        version: 1,
-        taskId: 'legacy-candidate',
-        agentId: 'world-origin',
-        label: '旧版候选',
-        contextSources: [],
-        baseSnapshot: {},
-      }),
-    })
     await act(async () => {
       await ready.updateCandidate(eventId, '刷新前最后一版')
     })

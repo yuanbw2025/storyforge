@@ -1,10 +1,10 @@
 import { hashCanonicalValue } from "../agent/run/hash";
-import { hashGameProductionValueV2 } from "../game-production/hash";
+import { hashProductProductionValueV2 } from "../product-production/hash";
 import {
-  applySimulationEvent,
+  applyProductRuntimeEvent,
   classifyTtrpgSubmittedIntentV2,
-  parseSimulationState,
-} from "../simulation/runtime";
+  parseProductRuntimeState,
+} from "../ttrpg/runtime-api";
 import { parseTtrpgCampaignContentV1 } from "../ttrpg/campaign";
 import {
   parseRulePackV1,
@@ -34,13 +34,13 @@ import {
 } from "../ttrpg/effect-runtime";
 import type {
   RulePackV1,
-  SimulationEvent,
-  SimulationEventType,
-  SimulationRuntimeState,
-  SimulationTtrpgHumanResponseV2,
-  SimulationTtrpgRestReceiptV2,
-  SimulationTtrpgRuleActionResultV1,
-  SimulationTtrpgIntentReceiptV2,
+  ProductRuntimeEvent,
+  ProductRuntimeEventType,
+  ProductRuntimeState,
+  TtrpgRuntimeHumanResponseV2,
+  TtrpgRuntimeRestReceiptV2,
+  TtrpgRuntimeRuleActionResultV1,
+  TtrpgRuntimeIntentReceiptV2,
   TtrpgCampaignContentV1,
   TtrpgRuntimeContentV1,
 } from "../types";
@@ -113,7 +113,7 @@ export interface DurableFormalTtrpgCheckpointV1 {
   rulePackHash: string;
   campaignHash: string;
   seed: string;
-  state: SimulationRuntimeState;
+  state: ProductRuntimeState;
   chat: DurableTtrpgChatEntryV1[];
   dice: OnlineDiceServerCheckpointV1;
   integrityHash: string;
@@ -183,8 +183,8 @@ function publicEvent(
 
 function initialRuntimeState(
   content: TtrpgRuntimeContentV1,
-): SimulationRuntimeState {
-  const entities: SimulationRuntimeState["entities"] = {};
+): ProductRuntimeState {
+  const entities: ProductRuntimeState["entities"] = {};
   for (const template of content.campaign.characterTemplates) {
     entities[template.characterKey] = {
       entityKey: template.characterKey,
@@ -219,7 +219,7 @@ function initialRuntimeState(
       narrative: null,
       adventure: null,
       presentation: null,
-      narrativeSimulation: null,
+      openWorldEvolution: null,
       openWorld: null,
       lastSequence: 0,
     },
@@ -233,7 +233,7 @@ function initialRuntimeState(
  * room snapshot and its domain state can be committed by the same CAS.
  */
 export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV1 {
-  private state: SimulationRuntimeState;
+  private state: ProductRuntimeState;
   private chat: DurableTtrpgChatEntryV1[] = [];
   private dice!: VerifiableOnlineDiceV1;
 
@@ -245,7 +245,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
     private readonly seed: string,
     private readonly rulePack: RulePackV1,
     private readonly campaign: TtrpgCampaignContentV1,
-    state: SimulationRuntimeState,
+    state: ProductRuntimeState,
     private readonly memberIdForActor: (actorKey: string) => string | null,
     private readonly aiPlayerService: OnlineTtrpgAiPlayerServiceV1 | null,
     private readonly aiGmService: OnlineTtrpgAiGmServiceV1 | null,
@@ -268,7 +268,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
     if (!/^[a-f0-9]{64}$/.test(input.releaseHash))
       fail("release_mismatch", "releaseHash 无效");
     const rulePack = parseRulePackV1(input.content.rulePack.content);
-    const calculatedRulePackHash = await hashGameProductionValueV2(rulePack);
+    const calculatedRulePackHash = await hashProductProductionValueV2(rulePack);
     if (calculatedRulePackHash !== input.content.rulePack.contentHash) {
       fail("release_mismatch", "冻结 RulePack hash 不一致");
     }
@@ -276,7 +276,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       input.content.campaign,
       rulePack,
     );
-    const campaignHash = await hashGameProductionValueV2(campaign);
+    const campaignHash = await hashProductProductionValueV2(campaign);
     const selected = [
       ...new Set(
         input.selectedCharacterKeys.map((value) =>
@@ -317,7 +317,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       input.aiPlayerService ?? null,
       input.aiGmService ?? null,
     );
-    state = adapter.commitSimulation(
+    state = adapter.commitRuntimeTransition(
       "ttrpg.session-zero.completed",
       "gm",
       campaign.campaignKey,
@@ -338,7 +338,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
   }
 
   inspect(): {
-    state: SimulationRuntimeState;
+    state: ProductRuntimeState;
     commitments: OnlineDiceCommitmentSeriesV1;
   } {
     return {
@@ -380,7 +380,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           `${input.command.kind}.payload`,
         );
         const reason = paused ? text(payload.reason, "reason", 2_000) : null;
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.safety.changed",
           input.member.actorKey ?? input.member.memberId,
           this.campaign.campaignKey,
@@ -491,7 +491,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             },
           ];
         });
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.scene.opened",
           turnOrder[0],
           scene.locationKey,
@@ -558,7 +558,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             ) ?? 0,
           rollVisibility: "public",
         });
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.rule.action.resolved",
           actorKey,
           result.targetKey,
@@ -629,7 +629,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           actionKey,
           targetKey,
         });
-        let terminal: SimulationTtrpgRuleActionResultV1 | SimulationTtrpgIntentReceiptV2;
+        let terminal: TtrpgRuntimeRuleActionResultV1 | TtrpgRuntimeIntentReceiptV2;
         if (classification.status == null && actionKey) {
           const result = await this.resolveAction({
             commandId,
@@ -642,7 +642,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             rollVisibility,
             declaredIntent: { intentKey, rawInput, goal, method },
           });
-          this.state = this.commitSimulation(
+          this.state = this.commitRuntimeTransition(
             "ttrpg.rule.action.resolved",
             actorKey,
             result.targetKey,
@@ -656,7 +656,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           );
         } else {
           const sequence = this.state.lastSequence + 1;
-          const receipt: SimulationTtrpgIntentReceiptV2 = {
+          const receipt: TtrpgRuntimeIntentReceiptV2 = {
             schema: "storyforge.ttrpg-intent-receipt",
             version: 2,
             receiptKey: `intent-receipt.${sequence}`,
@@ -673,7 +673,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
                 : classification.reason,
             suggestedActionKeys: classification.suggestedActionKeys,
           };
-          this.state = this.commitSimulation(
+          this.state = this.commitRuntimeTransition(
             "ttrpg.intent.receipted",
             actorKey,
             targetKey,
@@ -751,7 +751,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         ) {
           fail("domain_rejected", "该真人角色已经回应本次行动");
         }
-        const response: SimulationTtrpgHumanResponseV2 = {
+        const response: TtrpgRuntimeHumanResponseV2 = {
           schema: "storyforge.ttrpg-human-response",
           version: 2,
           responseKey: `human-response.${responseCommand.actionSequence}.${actorKey}`,
@@ -767,7 +767,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           audience: responseCommand.audience,
           viewerKey: `viewer.online:${input.member.memberId}`,
         };
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.human-response.recorded",
           actorKey,
           sourceAction?.actorKey ?? null,
@@ -829,7 +829,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           command,
         });
         if (applied.replayed) fail("domain_rejected", "物品命令已经执行");
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.item.changed",
           actorKey,
           command.kind === "transfer"
@@ -874,7 +874,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           fail("domain_rejected", "当前战役不能完成这次休息");
         }
         const nextSequence = this.state.lastSequence + 1;
-        const abilityChanges: SimulationTtrpgRestReceiptV2["abilityChanges"] =
+        const abilityChanges: TtrpgRuntimeRestReceiptV2["abilityChanges"] =
           Object.entries(product.abilityStates).flatMap(([stateKey, before]) => {
             if (!rest.actorKeys.includes(before.actorInstanceId)) return [];
             const action = this.rulePack.actions.find(item => item.key === before.abilityKey);
@@ -896,7 +896,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
               }),
             }];
           });
-        const receipt: SimulationTtrpgRestReceiptV2 = {
+        const receipt: TtrpgRuntimeRestReceiptV2 = {
           schema: "storyforge.ttrpg-rest-receipt",
           version: 2,
           eventSequence: nextSequence,
@@ -907,7 +907,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           reason: rest.reason,
           abilityChanges,
         };
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.rest.completed",
           "gm",
           rest.restKey,
@@ -961,7 +961,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           plan: effectCommand.plan,
           eventSequence: this.state.lastSequence + 1,
         });
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.effects.applied",
           effectCommand.plan.audience.startsWith("actor:")
             ? effectCommand.plan.audience.slice("actor:".length)
@@ -990,7 +990,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           ownerActorKey: proposal.ownerActorKey,
           eventSequence: this.state.lastSequence + 1,
         });
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.effects.choice.proposed",
           "gm",
           proposal.ownerActorKey,
@@ -1034,7 +1034,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           commandId,
           eventSequence: this.state.lastSequence + 1,
         });
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.effects.applied",
           choice.ownerActorKey,
           resolved.plan.effects[0].targetRef,
@@ -1072,7 +1072,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         if (!participantKeys.length) fail("domain_rejected", "长期分场没有活动角色编组");
         const ordinal = campaignState.playSessions.length + 1;
         const sessionKey = `session.${ordinal}`;
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.campaign.session.started",
           "gm",
           product.campaignKey,
@@ -1152,7 +1152,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             }];
           },
         );
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.campaign.session.completed",
           "gm",
           sessionKey,
@@ -1253,7 +1253,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             spokenIntent: proposal.spokenIntent,
           },
         });
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.rule.action.resolved",
           actorKey,
           result.targetKey,
@@ -1346,7 +1346,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             spokenIntent: proposal.spokenIntent,
           },
         });
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.rule.action.resolved",
           actorKey,
           result.targetKey,
@@ -1396,7 +1396,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           synthesisFrame: proposal.synthesisFrame,
           modelEvidence: proposal.modelEvidence,
         });
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.gm.response.recorded",
           null,
           action.actorKey,
@@ -1452,7 +1452,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           (clue.visibility === "public" && visibility !== "party")
         )
           fail("domain_rejected", "当前场景不能公开该线索");
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.clue.discovered",
           actorKey,
           clueKey,
@@ -1499,7 +1499,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           ];
         if (!latest || latest.eventSequence !== Number(payload.actionSequence))
           fail("domain_rejected", "叙事必须绑定最近规则行动");
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.gm.response.recorded",
           input.member.memberId,
           null,
@@ -1549,7 +1549,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             milestoneKey: item.milestoneKey,
             award: item.award,
           }));
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.campaign.ended",
           input.member.memberId,
           endingKey,
@@ -1638,7 +1638,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             : operation.kind === "set-fog"
               ? operation.fogKey
               : operation.layerKey;
-        this.state = this.commitSimulation(
+        this.state = this.commitRuntimeTransition(
           "ttrpg.tabletop.updated",
           actorKey,
           operationTarget,
@@ -1661,7 +1661,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
     const resultingStateHash = await hashCanonicalValue({
       releaseHash: this.releaseHash,
       roomSequence: input.sequence,
-      simulationState: this.state,
+      productRuntimeState: this.state,
       chat: this.chat,
       diceNextRollIndex: this.dice.exportServerCheckpoint().nextRollIndex,
     });
@@ -1730,19 +1730,19 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       checkpoint.chat.length > 500
     )
       fail("snapshot_corrupt", "TTRPG domain checkpoint 无效或损坏");
-    this.state = parseSimulationState(checkpoint.state);
+    this.state = parseProductRuntimeState(checkpoint.state);
     this.chat = structuredClone(checkpoint.chat);
     this.dice = await VerifiableOnlineDiceV1.restore(checkpoint.dice);
   }
 
-  private commitSimulation(
-    type: SimulationEventType,
+  private commitRuntimeTransition(
+    type: ProductRuntimeEventType,
     actorKey: string | null,
     targetKey: string | null,
     payload: unknown,
     commandId: string,
-  ): SimulationRuntimeState {
-    const event: SimulationEvent = {
+  ): ProductRuntimeState {
+    const event: ProductRuntimeEvent = {
       projectId: 0,
       sessionId: 0,
       sequence: this.state.lastSequence + 1,
@@ -1753,7 +1753,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       payloadJson: JSON.stringify(payload),
       createdAt: Date.now(),
     };
-    return applySimulationEvent(this.state, event);
+    return applyProductRuntimeEvent(this.state, event);
   }
 
   private async resolveAction(input: {
@@ -1770,8 +1770,8 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       goal: string | null;
       method: string | null;
     } | null;
-    actorAuthority?: SimulationTtrpgRuleActionResultV1["actorAuthority"];
-  }): Promise<SimulationTtrpgRuleActionResultV1> {
+    actorAuthority?: TtrpgRuntimeRuleActionResultV1["actorAuthority"];
+  }): Promise<TtrpgRuntimeRuleActionResultV1> {
     const ttrpg = this.state.ttrpg;
     const product = ttrpg?.product;
     const scene = this.campaign.scenes.find(
@@ -1846,7 +1846,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
     ) {
       fail("domain_rejected", "单体行动必须选择当前场景中的另一名目标");
     }
-    const resourceChanges: SimulationTtrpgRuleActionResultV1["resourceChanges"] =
+    const resourceChanges: TtrpgRuntimeRuleActionResultV1["resourceChanges"] =
       [];
     const resourceCurrent = (entityKey: string, resourceKey: string) => {
       const prior = [...resourceChanges]
@@ -1922,7 +1922,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         null,
       );
     }
-    const abilityChange: SimulationTtrpgRuleActionResultV1["abilityChange"] = {
+    const abilityChange: TtrpgRuntimeRuleActionResultV1["abilityChange"] = {
       stateKey: abilityStateKey,
       before: structuredClone(beforeAbility),
       after: abilityUse.state,
@@ -1961,8 +1961,8 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           condition.stacks,
       0,
     );
-    let check: SimulationTtrpgRuleActionResultV1["check"] = null;
-    let outcome: SimulationTtrpgRuleActionResultV1["outcome"] = "automatic";
+    let check: TtrpgRuntimeRuleActionResultV1["check"] = null;
+    let outcome: TtrpgRuntimeRuleActionResultV1["outcome"] = "automatic";
     if (checkEffect[0]) {
       const actorSkillValue = Number(
         product.characterCustomizations.find(
@@ -2095,7 +2095,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       };
     }
     const effectTargetKey = targetKey ?? input.actorKey;
-    const conditionChanges: SimulationTtrpgRuleActionResultV1["conditionChanges"] =
+    const conditionChanges: TtrpgRuntimeRuleActionResultV1["conditionChanges"] =
       [];
     if (check == null || check.success) {
       for (const [effectIndex, effect] of action.effects.entries()) {

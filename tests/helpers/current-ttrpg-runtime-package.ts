@@ -1,24 +1,24 @@
-import { buildGameProductModulesV1 } from '../../src/lib/game-production/product-adapters'
-import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
-import { parseGameRuntimePackageV2 } from '../../src/lib/game-production/runtime-package'
-import type { GameProductionWorldSourceCatalogV2 } from '../../src/lib/game-production/world-source'
+import { buildUpperProductModulesV1 } from '../../src/lib/product-production/product-adapters'
+import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import type { ProductProductionWorldSourceCatalogV2 } from '../../src/lib/product-production/world-source'
 import {
-  buildPlayableWorldBundleFromResourcesV2,
-  verifyPlayableWorldBundle,
-} from '../../src/lib/simulation/canon-snapshot'
+  buildProductWorldSourceBundleV1,
+  verifyProductWorldSourceBundleV1,
+} from '../../src/lib/product/runtime-canon'
 import {
   compileTtrpgProductionBriefV2,
   resolveTtrpgProductionRulePackV2,
 } from '../../src/lib/ttrpg/production-brief'
 import { compileProductionTtrpgCampaignV2 } from '../../src/lib/ttrpg/production-compiler'
 import type {
-  GameRuntimePackageV2,
+  ProductRuntimePackageV1,
   TtrpgProductionBriefV2,
   TtrpgProductionSeatV2,
   WorkspaceScope,
   WorldRelease,
 } from '../../src/lib/types'
-import { createCurrentGameBriefFixture, createCurrentNarrativeFixture } from './current-runtime-package'
+import { createCurrentProductBriefFixture, createCurrentNarrativeFixture } from './current-runtime-package'
 import { currentProductSelection } from './current-product-world'
 
 /**
@@ -29,13 +29,13 @@ import { currentProductSelection } from './current-product-world'
 export async function createCurrentTtrpgRuntimePackageFixture(input: {
   scope: WorkspaceScope
   worldRelease: WorldRelease & { id: number }
-  sourceCatalog: GameProductionWorldSourceCatalogV2
+  sourceCatalog: ProductProductionWorldSourceCatalogV2
   playerController: 'human' | 'ai'
   gmMode: 'human' | 'ai'
   title?: string
   ruleOrigin?: TtrpgProductionBriefV2['rules']['origin']
   seats?: TtrpgProductionSeatV2[]
-}): Promise<GameRuntimePackageV2> {
+}): Promise<ProductRuntimePackageV1> {
   const player = input.sourceCatalog.characters[0]
   if (!player) throw new Error('现行 TTRPG 测试世界缺少玩家角色')
   const selection = currentProductSelection('ttrpg', {
@@ -44,7 +44,7 @@ export async function createCurrentTtrpgRuntimePackageFixture(input: {
     items: input.sourceCatalog.artifacts.map(artifact => artifact.resourceKey),
     quests: input.sourceCatalog.storyArcs.map(arc => arc.resourceKey),
   }, input.sourceCatalog.worldReference.referenceHash)
-  const productBrief = createCurrentGameBriefFixture({
+  const productBrief = createCurrentProductBriefFixture({
     productType: 'ttrpg',
     worldRelease: input.worldRelease,
     sourceCatalog: input.sourceCatalog,
@@ -74,14 +74,14 @@ export async function createCurrentTtrpgRuntimePackageFixture(input: {
   })
   productBrief.ttrpg = ttrpgBrief
   const rulePack = await resolveTtrpgProductionRulePackV2({ scope: input.scope, brief: ttrpgBrief })
-  const rulePackContentHash = await hashGameProductionValueV2(rulePack)
-  const playableWorld = await buildPlayableWorldBundleFromResourcesV2({
+  const rulePackContentHash = await hashProductProductionValueV2(rulePack)
+  const worldSourceBundle = await buildProductWorldSourceBundleV1({
     world: input.sourceCatalog.world,
     release: input.sourceCatalog.release,
     resources: input.sourceCatalog.resources,
   })
-  if (!await verifyPlayableWorldBundle(playableWorld)) {
-    throw new Error('现行 TTRPG 测试世界未形成合法 PlayableWorldBundle')
+  if (!await verifyProductWorldSourceBundleV1(worldSourceBundle)) {
+    throw new Error('现行 TTRPG 测试世界未形成合法 ProductWorldSourceBundle')
   }
   const narrative = createCurrentNarrativeFixture()
   const campaign = compileProductionTtrpgCampaignV2({
@@ -92,23 +92,23 @@ export async function createCurrentTtrpgRuntimePackageFixture(input: {
     sourceCatalog: input.sourceCatalog,
     rulePack,
     worldContentHash: input.worldRelease.contentHash,
-    playableWorldBundleHash: playableWorld.bundleHash,
+    worldSourceBundleHash: worldSourceBundle.bundleHash,
   })
   const ttrpg = {
     rulePack: { content: rulePack, contentHash: rulePackContentHash },
     campaign,
     compatibility: { runtimeProtocol: 1 as const, minimumPlayerVersion: 1 as const },
   }
-  const modules = buildGameProductModulesV1({
+  const modules = buildUpperProductModulesV1({
     brief: productBrief,
     narrative,
     sourceCatalog: input.sourceCatalog,
     ttrpg,
   })
-  return parseGameRuntimePackageV2({
-    schema: 'storyforge.game-runtime-package', version: 2, productType: 'ttrpg',
+  return parseProductRuntimePackageV1({
+    schema: 'storyforge.product-runtime-package', version: 1, productType: 'ttrpg',
     definition: {
-      gameKey: `current.ttrpg.${input.playerController}.${input.gmMode}`,
+      productKey: `current.ttrpg.${input.playerController}.${input.gmMode}`,
       title: input.title ?? 'Current TTRPG', description: '现行统一 Product Build 跑团运行包。',
       enabledCapabilities: modules.enabledCapabilities,
       rulesetVersion: 1,

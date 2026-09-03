@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { getAgentSkillV1, type AgentSkillDefinitionV1 } from '../../src/lib/agent/skill-registry'
 import { createAgentSkillExecutionBindingV2, assertAgentSkillExecutionBindingIntegrityV2 } from '../../src/lib/agent/execution-binding'
 import { runReadOnlyAgent, type AgentModelAdapter } from '../../src/lib/agent/runner'
@@ -285,7 +285,7 @@ describe('CTXG-7 · Gateway fast/complex execution', () => {
     })).rejects.toThrow('hard-sufficiency')
   })
 
-  it('freezes Gateway policy in Skill V2 and requires V3 only after a Skill rollout becomes required', async () => {
+  it('freezes the authoritative Gateway policy in Skill V2 and requires V3 evidence', async () => {
     const fixture = await seedWorkspace()
     const skill = worldviewSkill()
     const binding = await createAgentSkillExecutionBindingV2(skill)
@@ -297,19 +297,16 @@ describe('CTXG-7 · Gateway fast/complex execution', () => {
     }
     await expect(assertAgentSkillExecutionBindingIntegrityV2(tampered)).rejects.toThrow('skillDefinitionHash')
 
-    const shadowSkill: AgentSkillDefinitionV1 = {
-      ...skill,
-      contextGateway: { ...skill.contextGateway!, rollout: 'shadow', requiredWriteTargets: [] },
-    }
+    const registryContextSkill: AgentSkillDefinitionV1 = { ...skill, contextGateway: undefined }
     await expect(assertContextGatewayCandidateAdoptableV1({
-      skill: shadowSkill,
+      skill: registryContextSkill,
       scope: fixture.scope,
       worldGroupId: null,
       runId: 999,
       stepId: 'task:races',
       attempt: 1,
       candidateHash: 'a'.repeat(64),
-    })).resolves.toEqual({ mode: 'legacy-or-shadow' })
+    })).resolves.toEqual({ mode: 'registry-context' })
 
     const requiredSkill = skill
     await expect(assertContextGatewayCandidateAdoptableV1({

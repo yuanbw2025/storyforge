@@ -55,9 +55,9 @@ const ALL_MODULE_KEYS: { value: PromptModuleKey; label: string }[] = [
   { value: 'geography.concept-map',       label: '地理 · 概念地图 SVG' },
   { value: 'geography.image-map-prompt',  label: '地理 · 图像 Prompt' },
   { value: 'import.parse-all',            label: '导入 · 智能统一解析' },
-  { value: 'import.parse-character',      label: '导入 · 角色解析（旧版）' },
-  { value: 'import.parse-worldview',      label: '导入 · 世界观解析（旧版）' },
-  { value: 'import.parse-outline',        label: '导入 · 大纲解析（旧版）' },
+  { value: 'import.parse-character',      label: '导入 · 角色专项解析' },
+  { value: 'import.parse-worldview',      label: '导入 · 世界观专项解析' },
+  { value: 'import.parse-outline',        label: '导入 · 大纲专项解析' },
   { value: 'style.learn',                 label: '文风 · 画像学习' },
   { value: 'style.calibrate',             label: '文风 · 互动校准' },
 ]

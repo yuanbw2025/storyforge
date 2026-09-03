@@ -3,23 +3,23 @@ import { describeWorldReleaseV1, listAllWorldReleaseResourceDescriptorsV1 } from
 import { executeContextGatewayV1 } from '../../src/lib/context-gateway/execution'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { db } from '../../src/lib/db/schema'
-import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import {
   CHARACTER_INTERACTION_WORLD_REQUIREMENT_ADAPTER_V1,
   TTRPG_WORLD_REQUIREMENT_ADAPTER_V1,
-} from '../../src/lib/world-engine/product-requirement-adapters'
+} from '../../src/lib/product/world-requirement-adapters'
 import {
   freezeProductSourcePlanV1,
   resolveProductSourceReadBoundaryV1,
   validateProductSourcePlanV1,
-  worldReferenceResourceScopeV1,
-} from '../../src/lib/world-engine/product-source-contracts'
+} from '../../src/lib/product/source-contracts'
 import { hashWorldReleaseValueV1 } from '../../src/lib/world-engine/release-hash'
 import { createWorldRevision, publishWorldRevision, worldReleaseUidV1 } from '../../src/lib/world-engine/releases'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import {
   createWorldReferenceV1,
   rebindWorldReferenceV1,
+  resolveWorldReferenceResourceScopeV1,
   validateWorldReferenceV1,
 } from '../../src/lib/world-engine/world-reference'
 
@@ -38,8 +38,17 @@ async function fixture() {
     projectId: created.scope.projectId,
     summary: '潮汐世界由月相法则维持。',
     worldOrigin: '双月牵引海陆。',
-    geography: '群岛与潮门',
-    history: '', society: '', culture: '', economy: '', rules: '满月时潮门开启', races: '潮民',
+    races: '潮民',
+    createdAt: now, updatedAt: now,
+  } as any, { owner: 'world' }))
+  await db.geographies.add(stampNewRecord(created.scope, 'geographies', {
+    projectId: created.scope.projectId,
+    overview: '群岛与潮门', locations: '[]', worldMapData: '',
+    createdAt: now, updatedAt: now,
+  } as any, { owner: 'world' }))
+  await db.worldRulesProfiles.add(stampNewRecord(created.scope, 'worldRulesProfiles', {
+    projectId: created.scope.projectId,
+    entries: {}, customNodes: [], globalNote: '满月时潮门开启',
     createdAt: now, updatedAt: now,
   } as any, { owner: 'world' }))
   const characters = await db.characters.bulkAdd([
@@ -63,7 +72,7 @@ async function fixture() {
   const revision = await createWorldRevision({ scope: created.scope, label: '中立协议 release' })
   const release = await publishWorldRevision(revision.id!)
   const reference = await createWorldReferenceV1(release.id!)
-  const resourceScope = await worldReferenceResourceScopeV1(reference)
+  const resourceScope = await resolveWorldReferenceResourceScopeV1(reference)
   return { ...created, release, reference, resourceScope }
 }
 
@@ -88,7 +97,16 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
       productInstanceKey: 'campaign:tide-gate-investigation',
       worldReference: owned.reference,
       adapter: TTRPG_WORLD_REQUIREMENT_ADAPTER_V1,
-      goal: { allowCrossWorld: false, useManuscriptContinuity: false, investigationHeavy: true },
+      goal: {
+        selectedAreas: ['foundation', 'characters', 'relations'],
+        selectedResourceKinds: [],
+        selectedContextKinds: ['world', 'worldview-field', 'character', 'character-relation'],
+        selectedResourceCount: 1,
+        participantCount: 2,
+        includeSelectedRelations: true,
+        inheritStoryContinuity: false,
+        allowCrossWorld: false,
+      },
       missingStrategy: 'block',
       initialResourceKeys: [worldviewKey],
       createdAt: 10,
@@ -97,7 +115,16 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
       productInstanceKey: 'chat:tide-keeper',
       worldReference: owned.reference,
       adapter: CHARACTER_INTERACTION_WORLD_REQUIREMENT_ADAPTER_V1,
-      goal: { participantCount: 1, inheritStoryContinuity: false, allowCrossWorld: false },
+      goal: {
+        selectedAreas: ['foundation', 'characters'],
+        selectedResourceKinds: [],
+        selectedContextKinds: ['worldview-field', 'character'],
+        selectedResourceCount: 1,
+        participantCount: 1,
+        includeSelectedRelations: false,
+        inheritStoryContinuity: false,
+        allowCrossWorld: false,
+      },
       missingStrategy: 'block',
       createdAt: 10,
     })
@@ -105,8 +132,12 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
     expect(chat.readiness).toBe('ready')
     expect(ttrpg.adapter.adapterId).not.toBe(chat.adapter.adapterId)
     expect(ttrpg.planHash).not.toBe(chat.planHash)
-    expect(ttrpg.requirements.map(item => item.key)).toContain('investigation-evidence')
-    expect(chat.requirements.map(item => item.key)).toContain('conversation-cast')
+    expect(ttrpg.requirements.map(item => item.key)).toEqual(expect.arrayContaining([
+      'author-selected-world-sources', 'product-cast', 'participant-relations',
+    ]))
+    expect(chat.requirements.map(item => item.key)).toEqual(expect.arrayContaining([
+      'author-selected-world-sources', 'product-cast',
+    ]))
     expect(ttrpg.permission.allowedSelectors).not.toEqual(chat.permission.allowedSelectors)
     expect(ttrpg.initialResourceKeys).toEqual([worldviewKey])
 
@@ -115,7 +146,7 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
     expect(boundary.mandatoryResourceKeys).toHaveLength(1)
     expect(boundary.mandatoryFullResourceKeys).toEqual(boundary.mandatoryResourceKeys)
     const gateway = await executeContextGatewayV1({
-      skill: getAgentSkillV1('game-production.consult.v1'),
+      skill: getAgentSkillV1('product-production.consult.v1'),
       scope: owned.scope,
       resourceScope: boundary.sourceScope,
       accessPolicyOverride: chat.gatewayPolicy,
@@ -137,7 +168,16 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
       productInstanceKey: 'chat:portable',
       worldReference: owned.reference,
       adapter: CHARACTER_INTERACTION_WORLD_REQUIREMENT_ADAPTER_V1,
-      goal: { participantCount: 1, inheritStoryContinuity: false, allowCrossWorld: false },
+      goal: {
+        selectedAreas: ['foundation', 'characters'],
+        selectedResourceKinds: [],
+        selectedContextKinds: ['worldview-field', 'character'],
+        selectedResourceCount: 1,
+        participantCount: 1,
+        includeSelectedRelations: false,
+        inheritStoryContinuity: false,
+        allowCrossWorld: false,
+      },
       missingStrategy: 'block',
       createdAt: 10,
     })
@@ -156,7 +196,7 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
 
     const originalDescription = await describeWorldReleaseV1(owned.resourceScope)
     const originalDescriptors = await listAllWorldReleaseResourceDescriptorsV1(owned.resourceScope)
-    const reboundScope = await worldReferenceResourceScopeV1(reboundReference)
+    const reboundScope = await resolveWorldReferenceResourceScopeV1(reboundReference)
     const reboundDescription = await describeWorldReleaseV1(reboundScope)
     const reboundDescriptors = await listAllWorldReleaseResourceDescriptorsV1(reboundScope)
     expect(reboundDescription.scopeFingerprint).not.toBe(originalDescription.scopeFingerprint)

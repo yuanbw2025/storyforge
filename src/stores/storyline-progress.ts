@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { StorylineCrossing, StorylineProgress } from '../lib/types'
-import { readOwnedRows, resolveReadScopeLike, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { readOwnedRows, resolveReadScopeLike, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 interface StorylineProgressStore {
   progress: StorylineProgress[]

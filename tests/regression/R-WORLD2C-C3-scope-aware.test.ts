@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { adopt } from '../../src/lib/registry/adopt'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
-import { readOwnedRows, assertRecordInScope, resolveReadScope } from '../../src/lib/world-engine/scope'
+import { readOwnedRows, assertRecordInScope, resolveReadScope } from '../../src/lib/workspace/scope'
 import type { WorkspaceScope } from '../../src/lib/types/world-ownership'
 import { appendAgentEvent, getOrCreateAgentConversation, readAgentEvents } from '../../src/lib/agent/conversations'
 import { useCultivationStore } from '../../src/stores/cultivation'
@@ -37,8 +37,8 @@ async function createGoldenProject(): Promise<{ projectId: number; worldId: numb
     activeWorldId: worldId,
     activeWorkId: workA,
     ownershipSchemaVersion: 1,
-    worldCode: 'c3-golden-world',
-    worldVersion: 1,
+
+
   })
   return {
     projectId,
@@ -55,46 +55,6 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
   })
 
   afterEach(() => db.close())
-
-  it('旧分步骤项目只读装配零写入，兼容 scope 不得被复用于写回', async () => {
-    const projectId = await db.projects.add({
-      name: '旧分步骤项目', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-      description: '', targetWordCount: 100000, createdAt: 1, updatedAt: 1,
-    } as any) as number
-    await db.storyCores.add({
-      projectId, theme: '旧项目主题', createdAt: 1, updatedAt: 1,
-    } as any)
-
-    const readScope = await resolveReadScope({ projectId })
-    expect(await resolveReadScope({ scope: readScope })).toEqual(readScope)
-    const context = await assembleContext({ projectId, sourceKeys: ['storyCore'] })
-    expect(context.text).toContain('旧项目主题')
-    expect(await db.worlds.count()).toBe(0)
-    expect(await db.works.count()).toBe(0)
-    expect(await db.ownershipMigrations.count()).toBe(0)
-
-    await expect(adopt({
-      projectId,
-      scope: readScope,
-      target: 'storyCores',
-      mode: 'replace',
-      data: { theme: '不得写入' },
-    })).rejects.toThrow('WorkspaceScope')
-  })
-
-  it('只读入口对半成品 World/Work 归属失败关闭，不猜测默认作品', async () => {
-    const projectId = await db.projects.add({
-      name: '不完整归属', genre: 'fantasy', createdAt: 1, updatedAt: 1,
-    } as any) as number
-    await db.worlds.add({
-      projectId, code: 'partial-owner', name: '孤立世界', description: '',
-      currentVersion: 1, createdAt: 1, updatedAt: 1,
-    })
-
-    await expect(assembleContext({ projectId, sourceKeys: ['storyCore'] }))
-      .rejects.toThrow('不完整的 World/Work 归属')
-    expect(await db.ownershipMigrations.count()).toBe(0)
-  })
 
   it('同一 World 下两部 Work 的故事核心与正文上下文严格隔离', async () => {
     const { a, b } = await createGoldenProject()
@@ -172,7 +132,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
     expect(await assertRecordInScope(b, 'storyCores', await db.storyCores.get(row), { owner: 'work' })).toBe(false)
     await expect(resolveReadScope({
       scope: { projectId: a.projectId, worldId: 0, workId: 0 },
-    })).rejects.toThrow('旧项目只读 scope')
+    })).rejects.toThrow('WorkspaceScope 必须包含有效')
     await expect(adopt({
       projectId: a.projectId, scope: { ...a, workId: 999999 }, target: 'storyCores', mode: 'replace', data: { theme: 'bad' },
     })).rejects.toThrow('WorkspaceScope')

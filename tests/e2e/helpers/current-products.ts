@@ -30,21 +30,20 @@ export async function seedCurrentTtrpgProduct(page: Page, input: CurrentTtrpgSee
   return page.evaluate(async seed => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
     const [
-      { seedCurrentProductWorld },
-      { loadGameProductionWorldSourceCatalogV2 },
+      { seedCurrentProductWorld, loadCurrentProductWorldSourceCatalogV1 },
       { createCurrentTtrpgRuntimePackageFixture },
-      { seedCurrentPlayableBuild },
+      { seedCurrentProductBuild },
     ] = await Promise.all([
       importer('/storyforge/tests/helpers/current-product-world.ts'),
-      importer('/storyforge/src/lib/game-production/world-source.ts'),
       importer('/storyforge/tests/helpers/current-ttrpg-runtime-package.ts'),
-      importer('/storyforge/tests/helpers/current-playable-build.ts'),
+      importer('/storyforge/tests/helpers/current-product-build.ts'),
     ])
     const world = await seedCurrentProductWorld(seed.title)
     const release = world.release
-    const sourceCatalog = await loadGameProductionWorldSourceCatalogV2({
+    const sourceCatalog = await loadCurrentProductWorldSourceCatalogV1({
       scope: world.scope,
       worldReleaseId: release.id,
+      productType: 'ttrpg',
     })
     const runtimePackage = await createCurrentTtrpgRuntimePackageFixture({
       scope: world.scope,
@@ -56,7 +55,7 @@ export async function seedCurrentTtrpgProduct(page: Page, input: CurrentTtrpgSee
       ruleOrigin: seed.ruleOrigin,
       seats: seed.seats,
     })
-    const built = await seedCurrentPlayableBuild({
+    const built = await seedCurrentProductBuild({
       scope: world.scope,
       worldRelease: release,
       runtimePackage,

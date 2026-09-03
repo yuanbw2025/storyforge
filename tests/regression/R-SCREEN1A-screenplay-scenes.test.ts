@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import {
   confirmAdaptationBrief,
   confirmAdaptationPlan,
@@ -125,7 +125,7 @@ describe('SCREEN-1A · structured screenplay and deterministic export', () => {
     const fixture = await setup()
     await createScreenplayScene(fixture.scope, { planSectionKey: 'act-1', episodeNumber: 1, sceneNumber: 1, intExt: 'INT', location: '候车室', timeOfDay: '夜', summary: '对话', estimatedSeconds: 40, sourceUnitIds: [fixture.unitId], blocks: [{ id: 'c', type: 'character', characterId: fixture.characterId, name: '林岚' }, { id: 'd', type: 'dialogue', text: '回去吧。' }] })
     const backup = await exportProjectJSON(fixture.scope.projectId)
-    expect(backup.version).toBe(9)
+    expect(backup.version).toBe(10)
     expect(backup.screenplayScenes?.[0]._blockCharacterExportIds).toEqual([0, null])
     expect((backup.screenplayScenes?.[0].blocks[0] as any).characterId).toBeNull()
     const importedId = await importProjectJSON(structuredClone(backup))

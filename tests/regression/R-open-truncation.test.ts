@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { formatWorldviewBlock } from '../../src/lib/ai/context-builder'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 describe('R-open-truncation · 放开内部截断', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
@@ -21,8 +22,9 @@ describe('R-open-truncation · 放开内部截断', () => {
   })
 
   it('assembleContext 输入预算随模型窗口放大(大窗口模型远超旧固定 24K)', async () => {
+    const projectId = (await seedCurrentWorkspace('Large context')).scope.projectId
     const r = await assembleContext({
-      projectId: 999999,
+      projectId,
       provider: 'deepseek',
       model: 'deepseek-v4-pro', // maxContext 128000
       sourceKeys: [],
@@ -31,8 +33,9 @@ describe('R-open-truncation · 放开内部截断', () => {
   })
 
   it('显式传 inputBudgetTokens 时仍尊重该值(覆盖优先)', async () => {
+    const projectId = (await seedCurrentWorkspace('Explicit context budget')).scope.projectId
     const r = await assembleContext({
-      projectId: 999999,
+      projectId,
       provider: 'deepseek',
       model: 'deepseek-v4-pro',
       inputBudgetTokens: 60,

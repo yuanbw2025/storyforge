@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { loadGameProductionWorldSourceCatalogV2 } from '../../src/lib/game-production/world-source'
+import { loadProductProductionConsultationSourceV2 } from '../../src/lib/product-production/world-source'
 import {
   generateTtrpgCampaignProposalCandidateV2,
   ttrpgCampaignDesignFromProposalCandidateV2,
@@ -9,13 +9,13 @@ import {
   createAuthorGuidedTtrpgCampaignDesignV2,
   parseTtrpgCampaignDesignV2,
 } from '../../src/lib/ttrpg/campaign-proposal'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 
 async function workspace() {
   const now = Date.now()
   const projectId = await db.projects.add({
-    workspacePurpose: 'world-engine', workspacePurposeDecision: 'explicit',
+    workspacePurpose: 'world-engine',
     name: 'TTRPG 提案 Harness', genre: 'mystery', genres: ['mystery'], status: 'drafting',
     description: '', targetWordCount: 50_000, createdAt: now, updatedAt: now,
   } as never) as number
@@ -37,7 +37,7 @@ async function workspace() {
     parentId: null, name: '雾港潮门', type: 'harbor', description: '潮门将在暴潮前封闭。',
     createdAt: now, updatedAt: now,
   } as never)
-  const revision = await createWorldRevision({ scope: owned.scope, label: '冻结提案来源', selectedNarrativeModuleIds: [] })
+  const revision = await createWorldRevision({ scope: owned.scope, label: '冻结提案来源' })
   const release = await publishWorldRevision(revision.id!)
   return { ...owned, release }
 }
@@ -63,7 +63,7 @@ describe('TTRPG-3M · durable campaign proposal Harness', () => {
 
   it('只读冻结 WorldRelease，协议失败仅修复一次，产出三种有来源候选与终端运行证据', async () => {
     const owned = await workspace()
-    const catalog = await loadGameProductionWorldSourceCatalogV2({ scope: owned.scope, worldReleaseId: owned.release.id! })
+    const catalog = await loadProductProductionConsultationSourceV2({ scope: owned.scope, worldReleaseId: owned.release.id! })
     const requiredSourceRef = `world-reference:${catalog.worldReference.referenceHash}`
     let calls = 0
     const generated = await generateTtrpgCampaignProposalCandidateV2({
@@ -110,7 +110,7 @@ describe('TTRPG-3M · durable campaign proposal Harness', () => {
 
   it('只重生成指定分区，并由代码保留其它分区、锁定来源和作者说明', async () => {
     const owned = await workspace()
-    const catalog = await loadGameProductionWorldSourceCatalogV2({ scope: owned.scope, worldReleaseId: owned.release.id! })
+    const catalog = await loadProductProductionConsultationSourceV2({ scope: owned.scope, worldReleaseId: owned.release.id! })
     const requiredSourceRef = `world-reference:${catalog.worldReference.referenceHash}`
     const prior = createAuthorGuidedTtrpgCampaignDesignV2({
       sourceWorldContentHash: owned.release.contentHash,

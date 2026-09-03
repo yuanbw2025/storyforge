@@ -7,12 +7,11 @@ import {
   searchWorldReleaseV1,
 } from '../../src/lib/context-gateway/world-release-provider'
 import { db } from '../../src/lib/db/schema'
-import type { WorldReleaseManifestV2 } from '../../src/lib/types'
-import { createWorkspace } from '../../src/lib/world-engine/create-workspace'
+import type { WorldReleaseManifestV3 } from '../../src/lib/types'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
-import { worldReferenceResourceScopeV1 } from '../../src/lib/world-engine/product-source-contracts'
-import { createWorldReferenceV1 } from '../../src/lib/world-engine/world-reference'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { createWorldReferenceV1, resolveWorldReferenceResourceScopeV1 } from '../../src/lib/world-engine/world-reference'
 
 async function phaseDFixture(characterCount = 0) {
   const created = await createWorkspace({
@@ -22,8 +21,15 @@ async function phaseDFixture(characterCount = 0) {
   const now = 1_788_100_000_000
   await db.worldviews.add(stampNewRecord(created.scope, 'worldviews', {
     projectId: created.scope.projectId, summary: '双月潮汐世界', worldOrigin: '双月塑造潮门',
-    geography: '群岛', history: '', society: '', culture: '', economy: '', rules: '潮门随月相开启',
     races: '潮民与羽民', createdAt: now, updatedAt: now,
+  } as any, { owner: 'world' }))
+  await db.geographies.add(stampNewRecord(created.scope, 'geographies', {
+    projectId: created.scope.projectId, overview: '群岛', locations: '[]', worldMapData: '',
+    createdAt: now, updatedAt: now,
+  } as any, { owner: 'world' }))
+  await db.worldRulesProfiles.add(stampNewRecord(created.scope, 'worldRulesProfiles', {
+    projectId: created.scope.projectId, entries: {}, customNodes: [], globalNote: '潮门随月相开启',
+    createdAt: now, updatedAt: now,
   } as any, { owner: 'world' }))
   const primary = await db.worldGroups.add(stampNewRecord(created.scope, 'worldGroups', {
     projectId: created.scope.projectId, name: '镜海', description: '主世界', type: 'primary',
@@ -61,7 +67,7 @@ async function phaseDFixture(characterCount = 0) {
   const revision = await createWorldRevision({ scope: created.scope, label: 'Phase D 完整语义版本' })
   const release = await publishWorldRevision(revision.id!)
   const reference = await createWorldReferenceV1(release.id!)
-  const resourceScope = await worldReferenceResourceScopeV1(reference)
+  const resourceScope = await resolveWorldReferenceResourceScopeV1(reference)
   return { ...created, release, reference, resourceScope }
 }
 
@@ -71,7 +77,7 @@ describe('D-WORLD · 完整世界引擎版本、画像、关系与规模出口',
 
   it('Release 只封存确认 Canon，同时诚实报告候选、冲突与证据/索引能力', async () => {
     const owned = await phaseDFixture()
-    const manifest = JSON.parse(owned.release.manifestJson) as WorldReleaseManifestV2
+    const manifest = JSON.parse(owned.release.manifestJson) as WorldReleaseManifestV3
     const story = manifest.capabilityProfile!.find(item => item.area === 'story')!
     const facts = manifest.resourceCatalog!.find(item => item.resourceKind === 'temporal-fact')!
     expect(story).toMatchObject({
@@ -94,7 +100,7 @@ describe('D-WORLD · 完整世界引擎版本、画像、关系与规模出口',
       selectedTables: ['worldviews'],
     })
     const release = await publishWorldRevision(revision.id!)
-    const manifest = JSON.parse(release.manifestJson) as WorldReleaseManifestV2
+    const manifest = JSON.parse(release.manifestJson) as WorldReleaseManifestV3
     const foundation = manifest.capabilityProfile!.find(item => item.area === 'foundation')!
     const characters = manifest.capabilityProfile!.find(item => item.area === 'characters')!
     expect(foundation.selectionStatus).toBe('partial-selection')

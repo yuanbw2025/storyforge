@@ -6,7 +6,7 @@
  */
 import { PROJECT_TABLES } from '../registry/project-tables'
 
-export const CURRENT_BACKUP_VERSION = 9
+export const CURRENT_BACKUP_VERSION = 10
 
 export interface BackupTrustReport {
   valid: boolean
@@ -91,6 +91,16 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
   }
   if (version != null && version >= 9) {
     for (const tableName of ['comicMediaAssets', 'mediaBlobObjects']) {
+      if (!Array.isArray(input[tableName])) errors.push(`v${version} 备份缺少必需表「${tableName}」。`)
+    }
+  }
+  if (version != null && version >= 10) {
+    for (const tableName of [
+      'productProductions', 'productProductionBriefs', 'productProductionCommands',
+      'productBuilds', 'productBuildArtifacts', 'productQualityGateReceipts',
+      'productReleases', 'productMediaAssets', 'productMediaBlobs',
+      'productRuntimeSessions', 'productRuntimeEvents', 'productRuntimeCheckpoints',
+    ]) {
       if (!Array.isArray(input[tableName])) errors.push(`v${version} 备份缺少必需表「${tableName}」。`)
     }
   }

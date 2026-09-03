@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { WORLD_CAPABILITY_AREAS } from '../../src/lib/registry/types'
 import type { Project, Work, World, WorkspaceScope } from '../../src/lib/types'
-import { createWorkspace, type CreatedWorkspace } from '../../src/lib/world-engine/create-workspace'
+import { createWorkspace, type CreatedWorkspace } from '../../src/lib/workspace/create-workspace'
 import { loadWorldProjection, loadWorldProjections } from '../../src/lib/world-engine/domain'
 import { createWorldRevision } from '../../src/lib/world-engine/releases'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 async function worldEngine(name: string, now = Date.now()): Promise<CreatedWorkspace> {
   return createWorkspace({
@@ -124,7 +124,7 @@ describe('WORLD-2 · 世界领域投影', () => {
       createdAt: now,
       updatedAt: now,
     } as any, { owner: 'work' }))
-    await db.simulationSessions.add({
+    await db.productRuntimeSessions.add({
       projectId: scope.projectId,
       worldId: scope.worldId,
       workId: scope.workId,
@@ -201,7 +201,7 @@ describe('WORLD-2 · 世界领域投影', () => {
   it('技术修订、运行会话与独立作品的内部作用域都不能冒充可发布世界', async () => {
     const created = await worldEngine('只有技术记录的世界')
     await createWorldRevision({ scope: created.scope, label: '空修订' })
-    await db.simulationSessions.add({
+    await db.productRuntimeSessions.add({
       projectId: created.scope.projectId,
       worldId: created.scope.worldId,
       workId: created.scope.workId,

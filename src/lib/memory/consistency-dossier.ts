@@ -3,6 +3,7 @@ import { hashChapterText } from '../ai/chapter-memory/text-normalization'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { db } from '../db/schema'
+import { isWorkspaceUid, isWorkCode } from './identity'
 import type {
   ConsistencyDossierFindingV1,
   ConsistencyDossierSourceRefV1,
@@ -20,7 +21,7 @@ import {
   readOwnedRows,
   resolveReadScopeLike,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 
 const DEFAULT_DOSSIER_TOKEN_LIMIT = 6_000
 const STALE_STATUSES = new Set(['stale', 'source-missing', 'invalid-range'])
@@ -109,16 +110,16 @@ export async function buildLongTermConsistencyDossierV1(input: {
     db.works.get(scope.workId),
     db.chapters.get(input.boundaryChapterId),
   ])
-  if (!project || !boundary
+  if (!project || !world || !work || !boundary
     || !await assertRecordInScope(scope, 'chapters', boundary, { owner: 'work' })) {
     throw new Error('无法为当前作品边界建立长期一致性档案')
   }
-  // v54 startup migration supplies the portable identities in production.
-  // Deterministic legacy labels keep historical exports and isolated Harness
-  // fixtures readable without mutating data from a CONTEXT_SOURCES reader.
-  const workspaceUid = project.workspaceUid ?? `LEGACY-PROJECT-${scope.projectId}`
-  const workCode = work?.code ?? `LEGACY-WORK-${scope.workId || scope.projectId}`
-  const worldCode = world?.code ?? `LEGACY-WORLD-${scope.worldId || scope.projectId}`
+  if (!isWorkspaceUid(project.workspaceUid) || !isWorkCode(work.code) || !world.code.trim()) {
+    throw new Error('当前作品缺少已迁移的 Workspace/World/Work 可移植身份')
+  }
+  const workspaceUid = project.workspaceUid
+  const workCode = work.code
+  const worldCode = world.code
 
   const [facts, knowledge, states, items, timeline, chunks, outlines, chapters] = await Promise.all([
     readOwnedRows<TemporalFact>(scope, 'temporalFacts', { owner: 'work' }),
@@ -200,13 +201,6 @@ export async function buildLongTermConsistencyDossierV1(input: {
   )))).filter((ref): ref is ConsistencyDossierSourceRefV1 => ref != null)
 
   const findings: ConsistencyDossierFindingV1[] = []
-  if (!project.workspaceUid || !work?.code || !world?.code) {
-    findings.push(finding({
-      level: 'L0-structural', severity: 'warning', code: 'legacy-portable-identity',
-      message: '当前记录来自旧身份格式；启动迁移后会补齐可移植 workspaceUid/workCode。',
-      sourceExportIds: [], execution: 'deterministic',
-    }))
-  }
   for (const ref of sourceRefs.filter(row => row.status !== 'current')) {
     findings.push(finding({
       level: 'L0-structural', severity: ref.status === 'invalid' ? 'blocking' : 'warning',

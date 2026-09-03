@@ -1,6 +1,6 @@
 import { db } from '../db/schema'
 import type { ComicMediaAsset, ComicPanel, WorkspaceScope } from '../types'
-import { resolveScope } from '../world-engine/scope'
+import { resolveScope } from '../workspace/scope'
 import { readVerifiedMediaBlobV1 } from '../media/blob-store'
 import { assertComicMediaAssetV1, assertComicMediaReferenceGraphV1, assertPagePanelLayoutV1, framesOverlap } from './contracts'
 

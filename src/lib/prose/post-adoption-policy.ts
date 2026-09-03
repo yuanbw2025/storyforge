@@ -9,8 +9,8 @@ import type {
   Work,
   WorkspaceScope,
 } from '../types/world-ownership'
-import { assertRecordInScope, readOwnedRows } from '../world-engine/scope'
-import { updateWorkPostAdoptionPolicyV1 } from '../world-engine/works'
+import { assertRecordInScope, readOwnedRows } from '../workspace/scope'
+import { updateWorkPostAdoptionPolicyV1 } from '../workspace/works'
 
 export const DEFAULT_POST_ADOPTION_TASK_TYPES_V1 = Object.freeze([
   'organization',
@@ -177,9 +177,7 @@ export async function buildPostAdoptionAuthorizationSnapshotV1(input: {
   scope: WorkspaceScope
   chapterId: number
   sourceTextHash: string
-  /** Legacy single-model input; new callers freeze each routed model below. */
-  model?: string
-  modelRoutes?: Array<{
+  modelRoutes: Array<{
     taskType: 'organization' | 'memory'
     provider: string
     model: string
@@ -191,14 +189,22 @@ export async function buildPostAdoptionAuthorizationSnapshotV1(input: {
     postAdoptionTaskTypes: input.settings.taskTypes,
     postAdoptionBudget: input.settings.budget,
   })
-  const legacyModel = input.model ?? 'unknown'
-  const providedRoutes = new Map((input.modelRoutes ?? []).map(route => [route.taskType, route]))
+  if (new Set(input.modelRoutes.map(route => route.taskType)).size !== input.modelRoutes.length) {
+    throw new Error('章后授权的模型路由不得重复。')
+  }
+  const providedRoutes = new Map(input.modelRoutes.map(route => [route.taskType, route]))
   const modelRoutes = (['organization', 'memory'] as const)
     .filter(taskType => normalized.taskTypes.includes(taskType))
-    .map(taskType => providedRoutes.get(taskType) ?? {
-      taskType,
-      provider: 'legacy',
-      model: legacyModel,
+    .map(taskType => {
+      const route = providedRoutes.get(taskType)
+      if (!route?.provider.trim() || !route.model.trim()) {
+        throw new Error(`章后授权缺少 ${taskType} 的冻结模型路由。`)
+      }
+      return {
+        taskType,
+        provider: route.provider.trim(),
+        model: route.model.trim(),
+      }
     })
   const settingsHash = await hashCanonicalValue(normalized)
   const taskKey = await hashCanonicalValue({

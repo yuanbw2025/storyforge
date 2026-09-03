@@ -3,7 +3,7 @@ import type { ChatMessage, PromptTemplate, PromptVariableContext } from '../type
 import { assembleContext } from '../registry/assemble-context'
 import { CONTEXT_SOURCE_BY_KEY } from '../registry/context-sources'
 import { renderPrompt } from './prompt-engine'
-import { effectiveWorkKind } from '../world-engine/work-kind'
+import { effectiveWorkKind } from '../workspace/work-kind'
 
 export function derivePromptLengthMode(targetWordCount: number): 'short' | 'medium' | 'long' {
   if (targetWordCount <= 50_000) return 'short'

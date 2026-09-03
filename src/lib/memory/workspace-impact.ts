@@ -11,7 +11,7 @@ import type {
   WorkspaceImpactPlanV1,
 } from '../types'
 import type { Chapter } from '../types'
-import { ensureWorkspaceOwnership } from '../world-engine/ownership'
+import { ensureWorkspaceOwnership } from '../workspace/ownership'
 
 function executionForImpact(action: string, mode: string): WorkspaceImpactExecutionV1 {
   if (mode === 'deterministic') return 'deterministic-rebuild'

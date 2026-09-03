@@ -17,7 +17,7 @@ import type {
   StoryArc,
   WorkspaceScope,
 } from '../types'
-import { isLegacyReadScope, readOwnedRows, resolveReadScopeLike } from '../world-engine/scope'
+import { readOwnedRows, resolveReadScopeLike } from '../workspace/scope'
 import { executeContextGatewayV1, type ContextGatewayExecutionV1 } from '../context-gateway/execution'
 import { isContextGatewayRequiredForWriteTargetV1 } from '../context-gateway/skill-policy'
 import {
@@ -389,7 +389,6 @@ export async function prepareCharacterLifecycleCopilotV1(
   const skill = resolveAgentSkillV1('character', input.skillId ?? 'character.lifecycle')
   if (skill.executionMode !== 'lifecycle') throw new Error('角色状态 Copilot 只接受 character.lifecycle Skill。')
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  if (isLegacyReadScope(readScope)) throw new Error('角色状态 required Gateway 入口需要稳定 WorkspaceScope。')
   const before = await readSnapshot({ scope: readScope, worldGroupId: input.worldGroupId, request })
   if (before.snapshot.character.narrativeStatus === request.targetStatus) {
     throw new Error('目标角色已经处于该状态，无需生成变化候选。')

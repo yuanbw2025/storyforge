@@ -15,25 +15,18 @@ import {
 } from '../../src/lib/agent/runner'
 import { db } from '../../src/lib/db/schema'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { resolveWorkspaceScope } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 async function addProject(name = 'Agent Runner') {
-  const now = Date.now()
-  return await db.projects.add({
-    name,
-    genre: 'other',
-    genres: ['other'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    enableMultiWorld: false,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
+  return (await seedCurrentWorkspace(name)).scope.projectId
 }
 
 async function addChapter(projectId: number, content: string) {
   const now = Date.now()
-  const outlineNodeId = await db.outlineNodes.add({
+  const scope = await resolveWorkspaceScope(projectId)
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     projectId,
     parentId: null,
     type: 'chapter',
@@ -43,8 +36,8 @@ async function addChapter(projectId: number, content: string) {
     worldGroupId: null,
     createdAt: now,
     updatedAt: now,
-  }) as number
-  return await db.chapters.add({
+  } as never, { owner: 'work' })) as number
+  return await db.chapters.add(stampNewRecord(scope, 'chapters', {
     projectId,
     outlineNodeId,
     title: '第一章',
@@ -55,7 +48,7 @@ async function addChapter(projectId: number, content: string) {
     notes: '',
     createdAt: now,
     updatedAt: now,
-  }) as number
+  } as never, { owner: 'work' })) as number
 }
 
 function scriptedModel(

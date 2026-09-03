@@ -7,36 +7,39 @@ import { DialogProvider } from '../../src/components/shared/Dialog'
 import { ToastProvider } from '../../src/components/shared/Toast'
 import WorkflowEditor from '../../src/components/settings/prompt/WorkflowEditor'
 import { useWorkflowStore } from '../../src/stores/workflow'
+import { createLinearWorkflowGraph } from '../../src/lib/workflow/graph'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 function baseWorkflow(): PromptWorkflow {
+  const steps: PromptWorkflow['steps'] = [
+    {
+      stepId: 'seed',
+      label: '故事种子',
+      promptModuleKey: 'story.generate',
+      userConfirmRequired: true,
+    },
+    {
+      stepId: 'world',
+      label: '世界设定',
+      promptModuleKey: 'worldview.dimension',
+      inputMapping: { previousOutput: 'storyCore' },
+      userConfirmRequired: true,
+    },
+    {
+      stepId: 'character',
+      label: '角色设计',
+      promptModuleKey: 'character.generate',
+      userConfirmRequired: true,
+    },
+  ]
   return {
     id: 92001,
     scope: 'user',
     name: '画布 UI 测试',
     description: '',
-    steps: [
-      {
-        stepId: 'seed',
-        label: '故事种子',
-        promptModuleKey: 'story.generate',
-        userConfirmRequired: true,
-      },
-      {
-        stepId: 'world',
-        label: '世界设定',
-        promptModuleKey: 'worldview.dimension',
-        inputMapping: { previousOutput: 'storyCore' },
-        userConfirmRequired: true,
-      },
-      {
-        stepId: 'character',
-        label: '角色设计',
-        promptModuleKey: 'character.generate',
-        userConfirmRequired: true,
-      },
-    ],
+    steps,
+    graph: createLinearWorkflowGraph(steps),
     createdAt: 1,
     updatedAt: 1,
   }
@@ -72,7 +75,7 @@ describe('FLOW-1 · 节点画布用户路径', () => {
     await db.promptWorkflows.put(baseWorkflow())
   })
 
-  it('旧工作流直接呈现兼容节点图，作者可建立分支并保存刷新', async () => {
+  it('当前工作流直接呈现显式节点图，作者可建立分支并保存刷新', async () => {
     const mounted = await mount()
     expect(mounted.host.querySelectorAll('[data-testid^="workflow-node-"]')).toHaveLength(3)
     expect(mounted.host.textContent).toContain('故事种子 → 世界设定.storyCore')
@@ -105,7 +108,7 @@ describe('FLOW-1 · 节点画布用户路径', () => {
 
     expect(mounted.host.textContent).toContain('工作流图包含环路')
     expect(mounted.host.textContent).not.toContain('角色设计 → 故事种子.worldContext')
-    expect((await db.promptWorkflows.get(92001))?.graph).toBeUndefined()
+    expect((await db.promptWorkflows.get(92001))?.graph?.edges).toHaveLength(2)
 
     await act(async () => mounted.root.unmount())
     mounted.host.remove()

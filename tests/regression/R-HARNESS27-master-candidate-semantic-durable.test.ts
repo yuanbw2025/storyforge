@@ -4,8 +4,6 @@ import { db } from '../../src/lib/db/schema'
 import { getOrCreateAgentConversation, updateAgentEventCandidate } from '../../src/lib/agent/conversations'
 import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import {
-  MASTER_AGENT_REPLAN_STORAGE_KEY,
-  MASTER_CANDIDATE_SEMANTIC_REVIEW_STORAGE_KEY,
   replanDurableMasterAgentRunV1,
   restoreMasterAgentCandidatesV1,
   runDurableMasterAgentPlanV1,
@@ -43,8 +41,8 @@ async function createWorkspace(label: string): Promise<{
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: `h27-${label}`,
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number
@@ -141,10 +139,10 @@ const INSPIRATION_DRAFT = JSON.stringify({
     powerHierarchy: '',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
     races: '',
     factionLayout: '',
   },
+  history: { overview: '' },
   storyCore: {
     logline: '守灯人追查被雨抹去的名字',
     theme: '记忆',
@@ -266,6 +264,7 @@ function semanticReviewDependency(input: any) {
 async function createRun(label: string, options: {
   semanticReview?: (input: any) => ReturnType<typeof runMasterCandidateSemanticReviewV1>
   budget?: AgentTeamBudgetTracker
+  requireSemanticReview?: boolean
 } = {}) {
   const fixture = await createWorkspace(label)
   const conversation = await getOrCreateAgentConversation({
@@ -279,6 +278,7 @@ async function createRun(label: string, options: {
     conversationId: conversation.id,
     plan: fanOutPlan(),
     budget: options.budget ?? new AgentTeamBudgetTracker('balanced'),
+    candidateSemanticReview: options.requireSemanticReview === false ? 'disabled' : 'required',
   }, {
     execute: executeFixture as any,
     semanticReview: (options.semanticReview ?? semanticReviewDependency) as any,
@@ -290,20 +290,18 @@ describe.sequential('R-HARNESS27 · fan-out 叶子 durable 语义终验', { time
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    globalThis.localStorage?.setItem(MASTER_CANDIDATE_SEMANTIC_REVIEW_STORAGE_KEY, 'enabled')
-    globalThis.localStorage?.removeItem(MASTER_AGENT_REPLAN_STORAGE_KEY)
   })
 
   afterEach(() => {
-    globalThis.localStorage?.removeItem(MASTER_CANDIDATE_SEMANTIC_REVIEW_STORAGE_KEY)
-    globalThis.localStorage?.removeItem(MASTER_AGENT_REPLAN_STORAGE_KEY)
     db.close()
   })
 
-  it('真实发布证据未到位时默认关闭，不增加 reviewer 调用或改变旧 v1 回执', async () => {
-    globalThis.localStorage?.removeItem(MASTER_CANDIDATE_SEMANTIC_REVIEW_STORAGE_KEY)
+  it('Run Contract 显式关闭时不增加 reviewer 调用或改变基础回执', async () => {
     const review = vi.fn(semanticReviewDependency)
-    const { fixture, result } = await createRun('语义终验默认关闭', { semanticReview: review })
+    const { fixture, result } = await createRun('语义终验显式关闭', {
+      semanticReview: review,
+      requireSemanticReview: false,
+    })
     const snapshot = await readAgentRunV1(fixture.scope, result.runId)
 
     expect(review).not.toHaveBeenCalled()
@@ -404,7 +402,6 @@ describe.sequential('R-HARNESS27 · fan-out 叶子 durable 语义终验', { time
   })
 
   it('有逐字证据的 blocking 会停止持久化和下游汇合，并保存可审计 artifact', async () => {
-    globalThis.localStorage?.setItem(MASTER_AGENT_REPLAN_STORAGE_KEY, 'disabled')
     const fixture = await createWorkspace('语义阻断')
     const conversation = await getOrCreateAgentConversation({
       projectId: fixture.scope.projectId,
@@ -418,6 +415,7 @@ describe.sequential('R-HARNESS27 · fan-out 叶子 durable 语义终验', { time
       conversationId: conversation.id,
       plan: fanOutPlan(),
       budget: new AgentTeamBudgetTracker('balanced'),
+      candidateSemanticReview: 'required',
       onDurableBoundary: boundary => { runId = boundary.runId },
     }, {
       execute: executeFixture as any,
@@ -438,6 +436,7 @@ describe.sequential('R-HARNESS27 · fan-out 叶子 durable 语义终验', { time
             })
           : JSON.stringify({ verdict: 'pass', findings: [] }),
       })) as any,
+      disableAutomaticReplanForTest: true,
     })).rejects.toThrow('候选语义终验硬门未通过')
 
     const snapshot = await readAgentRunV1(fixture.scope, runId)
@@ -587,7 +586,6 @@ describe.sequential('R-HARNESS27 · fan-out 叶子 durable 语义终验', { time
   })
 
   it('团队预算不足时在 reviewer 调用前停止，不伪造 review step 或候选', async () => {
-    globalThis.localStorage?.setItem(MASTER_AGENT_REPLAN_STORAGE_KEY, 'disabled')
     const policy = resolveAgentTeamBudgetPolicy('balanced')
     const budget = new AgentTeamBudgetTracker('balanced', {
       ...policy,
@@ -609,6 +607,7 @@ describe.sequential('R-HARNESS27 · fan-out 叶子 durable 语义终验', { time
       conversationId: conversation.id,
       plan: fanOutPlan(),
       budget,
+      candidateSemanticReview: 'required',
       onDurableBoundary: boundary => { runId = boundary.runId },
     }, {
       execute: executeFixture as any,
@@ -617,6 +616,7 @@ describe.sequential('R-HARNESS27 · fan-out 叶子 durable 语义终验', { time
         reviewerConfig: REVIEWER_CONFIG,
         review,
       })) as any,
+      disableAutomaticReplanForTest: true,
     })).rejects.toThrow('模型调用上限')
 
     const snapshot = await readAgentRunV1(fixture.scope, runId)

@@ -219,7 +219,7 @@ export const STORY_CORE_GENERATABLE_FIELD_SPECS = [
     aiGeneration: { version: 1, domain: 'story-intent', label: '故事模式', kind: 'text', directDependencies: ['centralConflict'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 4_000, temporaryAssumptions: 'forbidden' },
   },
   {
-    target: 'storyCores', field: 'mainPlot', type: 'longtext', aliases: ['storyLines', 'plot', '主线', '故事主线'], sanitize: trimString,
+    target: 'storyCores', field: 'mainPlot', type: 'longtext', aliases: ['plot', '主线', '故事主线'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'story-intent', label: '故事主线意图', kind: 'text', directDependencies: ['centralConflict', 'plotPattern'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'forbidden' },
   },
   {
@@ -297,21 +297,8 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   longtext('worldGroups', 'takeawayRules', ['带出规则']),
   num('worldGroups', 'plannedChapterCount', ['预计章节数']),
 
-  // worldviews: legacy free-text fields still used by existing panels.
-  longtext('worldviews', 'geography', ['地理']),
-  longtext('worldviews', 'history', ['旧历史']),
-  longtext('worldviews', 'society', ['社会']),
-  longtext('worldviews', 'culture', ['文化']),
-  json('worldviews', 'economy', ['货币体系', '经济']),
-  longtext('worldviews', 'rules', ['旧世界规则']),
-
-  // worldviews: v3 可生成字段及能力均由同一注册声明派生。
+  // worldviews: 可生成字段及能力均由同一注册声明派生。
   ...WORLDVIEW_GENERATABLE_FIELD_SPECS,
-
-  // 兼容保留但不作为新 AI 生成目标的历史字段。
-  longtext('worldviews', 'historyLine', ['history', 'worldHistory', '历史线']),
-  longtext('worldviews', 'worldEvents', ['events', '大事记']),
-  longtext('worldviews', 'politicsEconomyCulture', ['politics', 'economyCulture', '政治经济文化']),
 
   // 世界引擎人工/确定性初始化共用的正式世界基础字段。
   // 这些表已经由 PROJECT_TABLES 管理生命周期；登记后，演示安装器也必须经 adopt() 写入，
@@ -735,28 +722,28 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   num('userStyleProfiles', 'sampleCount'),
   num('userStyleProfiles', 'sampleWords'),
 
-  // GAMEPROD-1: stable CreativeArtifact output ids. These fields are adopted
+  // PRODUCTPROD-1: stable CreativeArtifact output ids. These fields are adopted
   // only by the production command/artifact/package extensions, never by a component.
-  { ...longtext('gameProductionBriefs', 'userIntentSummary'), candidateId: 'gameProduction.startingPointSuggestions' },
-  { ...json('gameProductionBriefs', 'briefJson'), candidateId: 'gameProduction.briefCandidate' },
-  { ...json('gameBuilds', 'planJson'), candidateId: 'gameProduction.planCandidate' },
-  { ...json('gameBuildArtifacts', 'payloadJson'), candidateId: 'gameProduction.contentArtifactCandidate' },
-  { ...json('gameBuildArtifacts', 'metadataJson'), candidateId: 'gameProduction.mediaRequirementCandidate' },
-  { ...json('gameBuilds', 'compatibilityJson'), candidateId: 'gameProduction.evolutionImpactCandidate' },
-  json('gameBuilds', 'manifestJson'),
-  json('gameBuilds', 'previewManifestJson'),
-  json('gameBuilds', 'qualityReportJson'),
-  json('gameBuildArtifacts', 'qualityJson'),
-  json('gameBuildArtifacts', 'rightsJson'),
+  { ...longtext('productProductionBriefs', 'userIntentSummary'), candidateId: 'productProduction.startingPointSuggestions' },
+  { ...json('productProductionBriefs', 'briefJson'), candidateId: 'productProduction.briefCandidate' },
+  { ...json('productBuilds', 'planJson'), candidateId: 'productProduction.planCandidate' },
+  { ...json('productBuildArtifacts', 'payloadJson'), candidateId: 'productProduction.contentArtifactCandidate' },
+  { ...json('productBuildArtifacts', 'metadataJson'), candidateId: 'productProduction.mediaRequirementCandidate' },
+  { ...json('productBuilds', 'compatibilityJson'), candidateId: 'productProduction.evolutionImpactCandidate' },
+  json('productBuilds', 'manifestJson'),
+  json('productBuilds', 'previewManifestJson'),
+  json('productBuilds', 'qualityReportJson'),
+  json('productBuildArtifacts', 'qualityJson'),
+  json('productBuildArtifacts', 'rightsJson'),
 
   // TTRPG-2A: AI may propose inert rule/campaign JSON, but only the governed
   // authoring service may parse, hash, fixture-test and persist it.
-  { ...text('gameRulePacks', 'title'), candidateId: 'ttrpg.rulePackTitleCandidate' },
-  text('gameRulePacks', 'ruleSystemId'),
-  text('gameRulePacks', 'ruleSystemVersion'),
-  { ...json('gameRulePacks', 'rulePackJson'), candidateId: 'ttrpg.rulePackCandidate' },
-  text('gameRulePacks', 'contentHash'),
-  enumeration('gameRulePacks', 'status', ['draft', 'validated', 'archived']),
+  { ...text('ttrpgRulePacks', 'title'), candidateId: 'ttrpg.rulePackTitleCandidate' },
+  text('ttrpgRulePacks', 'ruleSystemId'),
+  text('ttrpgRulePacks', 'ruleSystemVersion'),
+  { ...json('ttrpgRulePacks', 'rulePackJson'), candidateId: 'ttrpg.rulePackCandidate' },
+  text('ttrpgRulePacks', 'contentHash'),
+  enumeration('ttrpgRulePacks', 'status', ['draft', 'validated', 'archived']),
 
   enumeration('stateCards', 'category', ['character', 'location', 'item', 'faction', 'event']),
   text('stateCards', 'entityName', ['角色名', '实体名']),

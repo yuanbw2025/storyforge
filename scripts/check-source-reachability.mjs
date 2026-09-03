@@ -27,7 +27,10 @@ const entrypoints = [
   // CTXG Phase 1A is a headless public Context Gateway/evidence boundary until formal Skills switch in CTXG-7.
   'src/lib/context-gateway/index.ts',
   // Neutral world-to-product source contracts are a headless architecture API.
-  'src/lib/world-engine/product-source.ts',
+  'src/lib/product/source.ts',
+  // Text-open-world owns this headless durable expression Harness. It is an
+  // internal capability boundary, never a product route or session identity.
+  'src/lib/open-world/evolution-harness.ts',
   // FLOW-3 public domain-node boundary is exercised by regression tests and external tooling.
   'src/lib/node-authoring/index.ts',
   // HARNESS-26 is a headless offline release-evaluation boundary; production routing must not import it.
@@ -38,10 +41,10 @@ const entrypoints = [
   'src/lib/evals/index.ts',
   // Server-only commercial/community/online adapters and external creator tooling live behind a
   // headless boundary. It must stay independently reachable without entering the pure browser bundle.
-  'src/lib/game-platform/headless-platform.ts',
+  'src/lib/product-platform/headless-platform.ts',
   // Scope conversion is a headless ownership-administration service. It remains independently tested
   // while no author UI exposes arbitrary record-owner conversion.
-  'src/lib/world-engine/scope-conversion.ts',
+  'src/lib/registry/ownership-scope-conversion.ts',
 ].map(file => path.resolve(root, file))
 
 const graph = new Map()

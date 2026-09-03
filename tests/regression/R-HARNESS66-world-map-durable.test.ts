@@ -25,7 +25,7 @@ async function seed(suffix = '') {
   const now = Date.now()
   const projectId = await db.projects.add({
     name: `地图治理${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 80_000, worldCode: `map-${now}-${suffix}`, worldVersion: 1,
+    targetWordCount: 80_000,
     createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({
@@ -42,12 +42,12 @@ async function seed(suffix = '') {
   }) as number
   await db.worldviews.add({
     projectId, worldId, worldGroupId,
-    geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '',
+    summary: '',
     worldStructure: '东西双陆', worldDimensions: '疆域东西横跨三千公里',
     continentLayout: '西陆与东海隔潮河相望', mountainsRivers: '东港在西京以东，相距六百公里',
     climateByRegion: '西暖东湿', naturalResourceOverview: '潮河盛产蓝盐',
     factionLayout: '西陆帝国与东海王国', regionDimensions: '西京、东港',
-    races: '', politicsEconomyCulture: '', createdAt: now, updatedAt: now,
+    races: '', politicsOverview: '', economyOverview: '', cultureOverview: '', createdAt: now, updatedAt: now,
   } as any)
   await db.geographies.add({
     projectId, worldId, worldGroupId, overview: '潮河是两国的天然边界',

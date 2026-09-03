@@ -19,12 +19,11 @@ import type { AdoptResult, AssembleContextResult } from '../registry/types'
 import type { AIConfig, ChatMessage, DivineDesign, NaturalResources, Worldview } from '../types'
 import type { WorkspaceScope } from '../types/world-ownership'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   createAgentContextCompressionSessionV1,
   type AgentContextCompressionRuntimeV1,
@@ -702,7 +701,7 @@ export async function prepareWorldviewFieldCopilot(
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
   const before = await readSnapshot(input.projectId, worldGroupId, scope)
   const targetField = resolveWorldviewAgentFieldV1(request)
   const capability = WORLDVIEW_AGENT_FIELD_CAPABILITIES.get(targetField)

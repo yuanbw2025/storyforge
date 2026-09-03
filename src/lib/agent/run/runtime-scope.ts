@@ -15,19 +15,19 @@ function fail(message: string): never {
 // all product engines and release parsers out of the writing application's
 // initial bundle while preserving one verified implementation at execution.
 async function readRuntimeState(sessionId: number) {
-  return (await import("../../simulation/runtime")).readSimulationState(sessionId);
+  return (await import("../../product/runtime-api")).readProductRuntimeState(sessionId);
 }
 
 async function readRuntimeStateVersion(sessionId: number) {
-  return (await import("../../simulation/runtime")).readSimulationStateVersion(sessionId);
+  return (await import("../../product/runtime-api")).readProductRuntimeStateVersion(sessionId);
 }
 
 async function assertRuntimeInstanceBinding(sessionId: number, scope: WorkspaceScope) {
-  return (await import("../../world-engine/instances")).assertInstanceBinding(sessionId, scope);
+  return (await import("../../product/runtime-instances")).assertInstanceBinding(sessionId, scope);
 }
 
 async function frozenRuntimeSource(sessionId: number) {
-  const session = await db.simulationSessions.get(sessionId);
+  const session = await db.productRuntimeSessions.get(sessionId);
   if (!session) fail("运行实例不存在");
   if (
     session.worldId == null ||
@@ -36,8 +36,8 @@ async function frozenRuntimeSource(sessionId: number) {
   ) {
     fail("正式运行实例缺少工作区或冻结运行源");
   }
-  const verified = await (await import("../../game-production/preview-source"))
-    .verifyPlayableSessionPackageV2({
+  const verified = await (await import("../../product-production/preview-source"))
+    .verifyProductRuntimeSessionSourceV1({
     scope: {
       projectId: session.projectId,
       worldId: session.worldId,
@@ -54,17 +54,17 @@ async function frozenRuntimeSource(sessionId: number) {
 /** Capture the exact visible runtime input used by one character-facing model call. */
 export async function captureRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
   participantKey: string;
 }): Promise<RuntimeHarnessBoundaryV1> {
   const session = await assertRuntimeInstanceBinding(
-    input.simulationSessionId,
+    input.productRuntimeSessionId,
     input.scope,
   );
   if (
-    session.kind !== "chatgame" &&
-    session.kind !== "textadventure" &&
-    session.kind !== "textworld"
+    session.kind !== "character-interaction" &&
+    session.kind !== "text-adventure" &&
+    session.kind !== "text-open-world"
   ) {
     fail("角色互动技能只能绑定带冻结互动状态的正式实例");
   }
@@ -75,13 +75,13 @@ export async function captureRuntimeHarnessBoundaryV1(input: {
     readRuntimeState(session.id!),
     frozenRuntimeSource(session.id!),
   ]);
-  if (!state.interaction) fail("实例没有 CHATGAME-2 互动状态");
+  if (!state.interaction) fail("实例没有角色互动状态");
   const { interactionVisibilityView } = await import("../../character-interaction/runtime");
   const visibilityHash = await hashCanonicalValue(
     interactionVisibilityView(state.interaction, participantKey),
   );
   const runtime = {
-    simulationSessionId: session.id!,
+    productRuntimeSessionId: session.id!,
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
@@ -107,7 +107,7 @@ export async function assertRuntimeHarnessFreshV1(input: {
   if (!expected) fail("RunContract 缺少 runtime 输入边界");
   const current = await captureRuntimeHarnessBoundaryV1({
     scope: input.scope,
-    simulationSessionId: expected.simulationSessionId,
+    productRuntimeSessionId: expected.productRuntimeSessionId,
     participantKey: input.participantKey,
   });
   const expectedHash = await hashCanonicalValue(expected);
@@ -119,15 +119,15 @@ export async function assertRuntimeHarnessFreshV1(input: {
 /** Capture the player-visible TEXTADV input without creating an AI side channel. */
 export async function captureAdventureRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
 }): Promise<RuntimeHarnessBoundaryV1> {
   const session = await assertRuntimeInstanceBinding(
-    input.simulationSessionId,
+    input.productRuntimeSessionId,
     input.scope,
   );
   if (
-    (session.kind !== "textadventure" && session.kind !== "textworld") ||
-    (session.gameReleaseId == null && session.gameBuildId == null)
+    (session.kind !== "text-adventure" && session.kind !== "text-open-world") ||
+    (session.productReleaseId == null && session.productBuildId == null)
   ) {
     fail("文字冒险技能只能绑定带冻结冒险状态的正式实例");
   }
@@ -166,7 +166,7 @@ export async function captureAdventureRuntimeHarnessBoundaryV1(input: {
     },
   });
   const runtime = {
-    simulationSessionId: session.id!,
+    productRuntimeSessionId: session.id!,
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
@@ -190,58 +190,57 @@ export async function assertAdventureRuntimeHarnessFreshV1(input: {
   if (!expected) fail("RunContract 缺少 runtime 输入边界");
   const current = await captureAdventureRuntimeHarnessBoundaryV1({
     scope: input.scope,
-    simulationSessionId: expected.simulationSessionId,
+    productRuntimeSessionId: expected.productRuntimeSessionId,
   });
   if (current.boundaryHash !== (await hashCanonicalValue(expected))) {
     fail("冒险状态、可用行动、叙事选择或发布来源已经变化");
   }
 }
 
-/** Capture only deterministic state and player-visible reports for TEXTSIM. */
-export async function captureNarrativeSimulationRuntimeHarnessBoundaryV1(input: {
+/** Capture the text-open-world internal openWorldEvolution state and player-visible reports. */
+export async function captureOpenWorldEvolutionRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
 }): Promise<RuntimeHarnessBoundaryV1> {
   const session = await assertRuntimeInstanceBinding(
-    input.simulationSessionId,
+    input.productRuntimeSessionId,
     input.scope,
   );
   if (
-    (session.kind !== "textsimulation" && session.kind !== "textworld") ||
-    (session.gameReleaseId == null && session.gameBuildId == null)
+    session.kind !== "text-open-world" ||
+    (session.productReleaseId == null && session.productBuildId == null)
   ) {
-    fail("叙事模拟技能只能绑定带冻结模拟状态的正式实例");
+    fail("开放世界状态演化技能只能绑定带冻结状态演化数据的正式实例");
   }
   const [version, state, frozen] = await Promise.all([
     readRuntimeStateVersion(session.id!),
     readRuntimeState(session.id!),
     frozenRuntimeSource(session.id!),
   ]);
-  if (!state.narrativeSimulation) fail("实例没有 TEXTSIM-1 模拟状态");
+  if (!state.openWorldEvolution) fail("文字开放世界实例没有内部开放世界状态演化状态");
   if (
-    (frozen.runtimePackage.productType !== "narrative-simulation" &&
-      frozen.runtimePackage.productType !== "text-open-world") ||
-    !frozen.runtimePackage.simulation
+    frozen.runtimePackage.productType !== "text-open-world" ||
+    !frozen.runtimePackage.openWorldEvolution
   ) {
-    fail("实例冻结 RuntimePackage 缺少叙事模拟模块");
+    fail("实例冻结 RuntimePackage 缺少开放世界状态演化模块");
   }
   const {
-    availableNarrativeSimulationActions,
-    narrativeSimulationProjection,
-    visibleNarrativeSimulationReports,
-  } = await import("../../narrative-simulation/runtime");
+    availableOpenWorldEvolutionActions,
+    openWorldEvolutionProjection,
+    visibleOpenWorldEvolutionReports,
+  } = await import("../../open-world/evolution-runtime");
   const visibilityHash = await hashCanonicalValue({
-    simulation: narrativeSimulationProjection(state.narrativeSimulation),
-    actions: availableNarrativeSimulationActions(
-      frozen.runtimePackage.simulation,
-      state.narrativeSimulation,
+    openWorldEvolution: openWorldEvolutionProjection(state.openWorldEvolution),
+    actions: availableOpenWorldEvolutionActions(
+      frozen.runtimePackage.openWorldEvolution,
+      state.openWorldEvolution,
     ).map((item) => ({
       key: item.action.key,
       available: item.available,
       reason: item.reason,
     })),
-    reports: visibleNarrativeSimulationReports(
-      state.narrativeSimulation,
+    reports: visibleOpenWorldEvolutionReports(
+      state.openWorldEvolution,
       "player",
     ),
     narrative: {
@@ -251,7 +250,7 @@ export async function captureNarrativeSimulationRuntimeHarnessBoundaryV1(input: 
     },
   });
   const runtime = {
-    simulationSessionId: session.id!,
+    productRuntimeSessionId: session.id!,
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
@@ -267,42 +266,42 @@ export async function captureNarrativeSimulationRuntimeHarnessBoundaryV1(input: 
   };
 }
 
-export async function assertNarrativeSimulationRuntimeHarnessFreshV1(input: {
+export async function assertOpenWorldEvolutionRuntimeHarnessFreshV1(input: {
   scope: WorkspaceScope;
   contractScope: AgentRunScopeV1;
 }): Promise<void> {
   const expected = input.contractScope.runtime;
   if (!expected) fail("RunContract 缺少 runtime 输入边界");
-  const current = await captureNarrativeSimulationRuntimeHarnessBoundaryV1({
+  const current = await captureOpenWorldEvolutionRuntimeHarnessBoundaryV1({
     scope: input.scope,
-    simulationSessionId: expected.simulationSessionId,
+    productRuntimeSessionId: expected.productRuntimeSessionId,
   });
   if (current.boundaryHash !== (await hashCanonicalValue(expected))) {
-    fail("叙事模拟状态、玩家可见报告、可用行动、叙事选择或发布来源已经变化");
+    fail("开放世界状态演化状态、玩家可见报告、可用行动、叙事选择或发布来源已经变化");
   }
 }
 
-/** Capture the exact player-visible TEXTWORLD region/task boundary. */
+/** Capture the exact player-visible text-open-world region/task boundary. */
 export async function captureOpenWorldRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
 }): Promise<RuntimeHarnessBoundaryV1> {
   const session = await assertRuntimeInstanceBinding(
-    input.simulationSessionId,
+    input.productRuntimeSessionId,
     input.scope,
   );
   if (
-    session.kind !== "textworld" ||
-    (session.gameReleaseId == null && session.gameBuildId == null)
+    session.kind !== "text-open-world" ||
+    (session.productReleaseId == null && session.productBuildId == null)
   ) {
-    fail("开放世界技能只能绑定正式 textworld 实例");
+    fail("开放世界技能只能绑定正式 text-open-world 实例");
   }
   const [version, state, frozen] = await Promise.all([
     readRuntimeStateVersion(session.id!),
     readRuntimeState(session.id!),
     frozenRuntimeSource(session.id!),
   ]);
-  if (!state.openWorld) fail("实例没有 TEXTWORLD-1 区域状态");
+  if (!state.openWorld) fail("文字开放世界实例没有区域状态");
   if (frozen.runtimePackage.productType !== "text-open-world" || !frozen.runtimePackage.openWorld) {
     fail("实例冻结 RuntimePackage 缺少开放世界模块");
   }
@@ -331,7 +330,7 @@ export async function captureOpenWorldRuntimeHarnessBoundaryV1(input: {
     },
   });
   const runtime = {
-    simulationSessionId: session.id!,
+    productRuntimeSessionId: session.id!,
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
@@ -355,7 +354,7 @@ export async function assertOpenWorldRuntimeHarnessFreshV1(input: {
   if (!expected) fail("RunContract 缺少 runtime 输入边界");
   const current = await captureOpenWorldRuntimeHarnessBoundaryV1({
     scope: input.scope,
-    simulationSessionId: expected.simulationSessionId,
+    productRuntimeSessionId: expected.productRuntimeSessionId,
   });
   if (current.boundaryHash !== (await hashCanonicalValue(expected))) {
     fail("开放世界区域、任务、叙事选择或发布来源已经变化");
@@ -365,7 +364,7 @@ export async function assertOpenWorldRuntimeHarnessFreshV1(input: {
 /** Capture the exact formal GM-only view for one post-resolution narration. */
 export async function captureTtrpgGmRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
 }): Promise<RuntimeHarnessBoundaryV1> {
   const view = await (await import("../../ttrpg/gm-context")).loadTtrpgGmRuntimeViewV1(input);
   if (!view.safety.completed || !view.scene || !view.latestAction) {
@@ -385,7 +384,7 @@ export async function captureTtrpgGmRuntimeHarnessBoundaryV1(input: {
   }
   const visibilityHash = await hashCanonicalValue(view);
   const runtime = {
-    simulationSessionId: view.session.id,
+    productRuntimeSessionId: view.session.id,
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
@@ -409,7 +408,7 @@ export async function assertTtrpgGmRuntimeHarnessFreshV1(input: {
   if (!expected) fail("RunContract 缺少 runtime 输入边界");
   const current = await captureTtrpgGmRuntimeHarnessBoundaryV1({
     scope: input.scope,
-    simulationSessionId: expected.simulationSessionId,
+    productRuntimeSessionId: expected.productRuntimeSessionId,
   });
   if (current.boundaryHash !== (await hashCanonicalValue(expected))) {
     fail("TTRPG 场景、正式裁定、线索可见性、安全约束或发布来源已经变化");
@@ -419,7 +418,7 @@ export async function assertTtrpgGmRuntimeHarnessFreshV1(input: {
 /** Capture one GM-controlled NPC turn before the RulePack action is chosen. */
 export async function captureTtrpgGmActorRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
 }): Promise<RuntimeHarnessBoundaryV1> {
   const view = await (await import("../../ttrpg/gm-context")).loadTtrpgGmRuntimeViewV1(input);
   if (
@@ -439,7 +438,7 @@ export async function captureTtrpgGmActorRuntimeHarnessBoundaryV1(input: {
     fail("AI KP 角色行动上下文已经变化");
   const visibilityHash = await hashCanonicalValue(view);
   const runtime = {
-    simulationSessionId: view.session.id,
+    productRuntimeSessionId: view.session.id,
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
@@ -463,7 +462,7 @@ export async function assertTtrpgGmActorRuntimeHarnessFreshV1(input: {
   if (!expected) fail("AI KP 角色行动 RunContract 缺少 runtime 输入边界");
   const current = await captureTtrpgGmActorRuntimeHarnessBoundaryV1({
     scope: input.scope,
-    simulationSessionId: expected.simulationSessionId,
+    productRuntimeSessionId: expected.productRuntimeSessionId,
   });
   if (current.boundaryHash !== (await hashCanonicalValue(expected))) {
     fail("AI KP 当前 NPC、合法行动、场景、安全约束或发布来源已经变化");
@@ -473,7 +472,7 @@ export async function assertTtrpgGmActorRuntimeHarnessFreshV1(input: {
 /** Capture exactly one AI player's visible state and currently legal actions. */
 export async function captureTtrpgPlayerRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
   actorKey: string;
 }): Promise<RuntimeHarnessBoundaryV1> {
   const view = await (await import("../../ttrpg/player-context")).loadTtrpgPlayerRuntimeViewV1(input);
@@ -490,7 +489,7 @@ export async function captureTtrpgPlayerRuntimeHarnessBoundaryV1(input: {
   }
   const visibilityHash = await hashCanonicalValue(view);
   const runtime = {
-    simulationSessionId: view.session.id,
+    productRuntimeSessionId: view.session.id,
     baseSequence: version.sequence,
     stateHash: version.stateHash,
     visibilityHash,
@@ -515,7 +514,7 @@ export async function assertTtrpgPlayerRuntimeHarnessFreshV1(input: {
   if (!expected) fail("RunContract 缺少 AI 玩家 runtime 输入边界");
   const current = await captureTtrpgPlayerRuntimeHarnessBoundaryV1({
     scope: input.scope,
-    simulationSessionId: expected.simulationSessionId,
+    productRuntimeSessionId: expected.productRuntimeSessionId,
     actorKey: input.actorKey,
   });
   if (current.boundaryHash !== (await hashCanonicalValue(expected))) {

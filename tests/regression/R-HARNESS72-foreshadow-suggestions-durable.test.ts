@@ -23,7 +23,7 @@ async function seed(suffix = '') {
   const projectId = await db.projects.add({
     name: `镜城伏笔${suffix}`, genre: 'suspense', genres: ['suspense'], status: 'drafting',
     description: '守灯人追查一枚不属于任何人的记忆盐晶。', targetWordCount: 90_000,
-    worldCode: `foreshadow-${now}-${suffix}`, worldVersion: 1, enableMultiWorld: true,
+enableMultiWorld: true,
     createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({
@@ -45,7 +45,7 @@ async function seed(suffix = '') {
   } as any)
   const storyCoreId = await db.storyCores.add({
     projectId, workId, theme: '记忆与责任', centralConflict: '守灯人必须公开镜税真相。',
-    plotPattern: '线性调查', storyLines: '', createdAt: now, updatedAt: now,
+    plotPattern: '线性调查', mainPlot: '', createdAt: now, updatedAt: now,
   } as any) as number
   const characterId = await db.characters.add({
     projectId, worldId, homeWorldGroupId: worldGroupId, isCrossWorld: false, name: '沈砚',

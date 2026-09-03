@@ -49,7 +49,7 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   adoptStorylineAnalysisCandidates,
   parseStorylineProgressResult,
@@ -121,7 +121,7 @@ export interface ChapterOrganizationCandidate {
   domainStatus: Record<ChapterOrganizationDomain, ChapterOrganizationDomainStatus>
   domainErrors: Partial<Record<ChapterOrganizationDomain, string>>
   budget: AgentTeamBudgetEvidence
-  /** H5 durable harness evidence; absent for legacy/manual runs. */
+  /** H5 durable Harness evidence; absent only for explicitly manual organization. */
   durable?: ChapterOrganizationDurableEvidence
 }
 
@@ -509,6 +509,7 @@ export async function persistChapterOrganizationCandidate(
     const event = stampNewRecord(scope, 'agentEvents', {
       projectId: candidate.projectId,
       conversationId,
+      durableRunId: options.durable?.runId ?? null,
       sequence: 1,
       kind: 'candidate',
       content: summarizeChapterOrganizationCandidate(storedCandidate),

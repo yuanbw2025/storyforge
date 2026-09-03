@@ -1,10 +1,10 @@
 import type {
-  PlayableWorldBundleV1,
+  ProductWorldSourceBundleV1,
   RulePackV1,
   TtrpgCampaignContentV1,
   TtrpgCharacterTemplateV1,
 } from '../types'
-import { isSha256Hash } from '../game-production/hash'
+import { isSha256Hash } from '../product-production/hash'
 import { evaluateRuleNumberExpressionV1, parseRulePackV1 } from './rule-pack'
 import { parseTtrpgCharacterSheetV2 } from './character-sheet'
 import { parseTtrpgMediaManifestV1, parseTtrpgVisualBibleV1 } from './media-contract'
@@ -707,7 +707,7 @@ function safeSlug(value: string): string {
   return result.slice(0, 80) || 'world'
 }
 
-const LEGACY_FIXTURE_SCENE_KEYS = [
+const PRETAG_FIXTURE_SCENE_KEYS = [
   'scene.opening', 'scene.crosscheck', 'scene.respite', 'scene.confrontation',
 ] as const
 
@@ -715,14 +715,14 @@ const LEGACY_FIXTURE_SCENE_KEYS = [
 export function isTtrpgFixtureCampaignV1(campaign: TtrpgCampaignContentV1): boolean {
   if (campaign.tags.includes('fixture-only')) return true
   const sceneKeys = campaign.scenes.map(scene => scene.sceneKey).sort()
-  const fixtureSceneKeys = [...LEGACY_FIXTURE_SCENE_KEYS].sort()
+  const fixtureSceneKeys = [...PRETAG_FIXTURE_SCENE_KEYS].sort()
   return campaign.campaignKey.endsWith('.lost-evidence')
     && sceneKeys.join(',') === fixtureSceneKeys.join(',')
     && campaign.clues.map(clue => clue.clueKey).sort().join(',') === 'clue.motive,clue.timeline'
 }
 
 function defaultCharacter(
-  entity: PlayableWorldBundleV1['initialState']['entities'][string],
+  entity: ProductWorldSourceBundleV1['initialState']['entities'][string],
   rulePack: RulePackV1,
   authorConfirmed: boolean,
   role: TtrpgCharacterTemplateV1['role'],
@@ -767,7 +767,7 @@ function defaultCharacter(
  * of presenting this fixed investigation skeleton as authored content.
  */
 export function compileTtrpgCampaignDraftV1(input: {
-  playableWorld: PlayableWorldBundleV1
+  worldSourceBundle: ProductWorldSourceBundleV1
   rulePack: RulePackV1
   fixtureOnly: true
   campaignKey?: string
@@ -778,10 +778,10 @@ export function compileTtrpgCampaignDraftV1(input: {
     fail('固定战役编译器仅允许隔离测试 fixture')
   }
   const rulePack = parseRulePackV1(input.rulePack)
-  if (input.playableWorld.source.worldContentHash !== input.playableWorld.canonSnapshot.snapshotHash
-    && !isSha256Hash(input.playableWorld.source.worldContentHash)) fail('PlayableWorld 来源 hash 无效')
-  if (!isSha256Hash(input.playableWorld.bundleHash)) fail('PlayableWorld bundleHash 无效')
-  const entities = Object.values(input.playableWorld.initialState.entities)
+  if (input.worldSourceBundle.source.worldContentHash !== input.worldSourceBundle.canonSnapshot.snapshotHash
+    && !isSha256Hash(input.worldSourceBundle.source.worldContentHash)) fail('ProductWorldSource 来源 hash 无效')
+  if (!isSha256Hash(input.worldSourceBundle.bundleHash)) fail('ProductWorldSource bundleHash 无效')
+  const entities = Object.values(input.worldSourceBundle.initialState.entities)
   const characters = entities.filter(entity => entity.kind === 'character' || entity.kind === 'npc' || entity.kind === 'player')
   if (!characters.length) fail('世界发布至少需要一个角色，才能编译正式 TTRPG 战役')
   const locations = entities.filter(entity => entity.kind === 'location')
@@ -803,9 +803,9 @@ export function compileTtrpgCampaignDraftV1(input: {
   ]
   const locationKey = locations[0]?.entityKey ?? null
   const participantKeys = templates.map(template => template.characterKey)
-  const title = input.title?.trim() || `${input.playableWorld.source.worldName}：失落的证据`
-  const campaignKey = input.campaignKey?.trim() || `campaign.${safeSlug(input.playableWorld.source.worldCode)}.lost-evidence`
-  const sourceRefs = [input.playableWorld.canonSnapshot.sources[0]?.sourceKey].filter((value): value is string => !!value)
+  const title = input.title?.trim() || `${input.worldSourceBundle.source.worldName}：失落的证据`
+  const campaignKey = input.campaignKey?.trim() || `campaign.${safeSlug(input.worldSourceBundle.source.worldCode)}.lost-evidence`
+  const sourceRefs = [input.worldSourceBundle.canonSnapshot.sources[0]?.sourceKey].filter((value): value is string => !!value)
   const sceneSpecs: TtrpgCampaignContentV1['scenes'] = [
     { sceneKey: 'scene.opening', title: '异常出现', description: '一个本应安全的地点留下互相矛盾的痕迹。', locationKey, participantKeys, clueKeys: ['clue.timeline', 'clue.motive'], actionKeys: ['investigate', 'influence', 'overcome', 'guard'], nextSceneKeys: ['scene.crosscheck'], failureForward: '即使检定失败，玩家仍得到模糊线索，但危险时钟推进。', gmSecret: '两条线索分别指向时间与动机，必须交叉验证。', sourceRefs, tabletopMapKey: 'map.scene.opening' },
     { sceneKey: 'scene.crosscheck', title: '交叉验证', description: '玩家可以核对记录、询问目击者或冒险重建现场。', locationKey, participantKeys, clueKeys: ['clue.timeline', 'clue.motive'], actionKeys: ['investigate', 'influence', 'assist', 'guard'], nextSceneKeys: ['scene.respite', 'scene.confrontation'], failureForward: '失败会使对手先一步准备，但不会删除已经发现的事实。', gmSecret: '只有把两个结论放在一起，才能安全进入最终对质。', sourceRefs, tabletopMapKey: 'map.scene.crosscheck' },
@@ -840,7 +840,7 @@ export function compileTtrpgCampaignDraftV1(input: {
   }
   return parseTtrpgCampaignContentV1({
     schema: 'storyforge.ttrpg-campaign', version: 1, campaignKey, title,
-    pitch: `一场发生在${input.playableWorld.source.worldName}的调查冒险。玩家必须在局势失控前找出相互印证的证据，并决定公开真相还是保护相关人物。`,
+    pitch: `一场发生在${input.worldSourceBundle.source.worldName}的调查冒险。玩家必须在局势失控前找出相互印证的证据，并决定公开真相还是保护相关人物。`,
     playerCount: { minimum: 1, maximum: Math.max(1, playerCharacters.length) },
     estimatedMinutes: 180, tags: ['fixture-only', 'investigation', 'adventure', 'fail-forward'], difficulty: 'introductory',
     contentWarnings: ['危险场景', '人物冲突'],
@@ -868,6 +868,6 @@ export function compileTtrpgCampaignDraftV1(input: {
     handouts: [{ handoutKey: 'handout.case-notes', title: '调查记录', body: '按发现顺序记录线索、来源和公开范围。', revealClueKey: null, assetKey: null, fallbackText: '调查记录：时间线证据 / 动机证据 / 尚未公开的信息。' }],
     advancementMilestones: [{ milestoneKey: 'milestone.truth', title: '完成真相拼图', award: rulePack.advancement.awardPerMilestone }],
     tabletop,
-    sourceWorld: { contentHash: input.playableWorld.source.worldContentHash, bundleHash: input.playableWorld.bundleHash },
+    sourceWorld: { contentHash: input.worldSourceBundle.source.worldContentHash, bundleHash: input.worldSourceBundle.bundleHash },
   }, rulePack)
 }

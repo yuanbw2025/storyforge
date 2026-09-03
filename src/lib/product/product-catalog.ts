@@ -25,10 +25,8 @@ export type StoryForgeProductIdV1 =
   | 'upper.ttrpg'
   | 'upper.character-interaction'
   | 'upper.ai-town'
-  | 'upper.storygame'
   | 'upper.text-adventure'
   | 'upper.avg'
-  | 'upper.narrative-simulation'
   | 'upper.text-open-world'
   | 'platform.marketplace'
 
@@ -47,8 +45,34 @@ export interface ProductCatalogEntryV1 {
   maturityNote: string
 }
 
+/**
+ * One navigation surface may contain several independent products, but it may
+ * never borrow the maturity of one representative product.  The surface
+ * registry is therefore derived from explicit product identities and every
+ * product is still checked again when the author enters or creates it.
+ */
+export type ProductSurfaceIdV1 =
+  | 'world-engine'
+  | 'independent-works'
+  | 'node-authoring'
+  | 'ttrpg'
+  | 'character-interaction'
+  | 'text-games'
+  | 'marketplace'
+
+export interface ProductSurfaceEntryV1 {
+  version: 1
+  id: ProductSurfaceIdV1
+  label: string
+  productIds: readonly StoryForgeProductIdV1[]
+}
+
 function entry(input: Omit<ProductCatalogEntryV1, 'version'>): ProductCatalogEntryV1 {
   return Object.freeze({ version: 1, ...input })
+}
+
+function surface(input: Omit<ProductSurfaceEntryV1, 'version'>): ProductSurfaceEntryV1 {
+  return Object.freeze({ version: 1, ...input, productIds: Object.freeze([...input.productIds]) })
 }
 
 export const PRODUCT_CATALOG_V1: readonly ProductCatalogEntryV1[] = Object.freeze([
@@ -61,21 +85,46 @@ export const PRODUCT_CATALOG_V1: readonly ProductCatalogEntryV1[] = Object.freez
   entry({ id: 'upper.ttrpg', label: '跑团', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '架构入口与既有功能可预览，玩法和多人体验尚未专项封板。' }),
   entry({ id: 'upper.character-interaction', label: '角色聊天', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '冻结来源生产与运行纵切面可预览，完整长期体验待专项验收。' }),
   entry({ id: 'upper.ai-town', label: 'AI 小镇', family: 'upper-product', status: 'experimental', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '尚未形成独立产品闭环，默认隐藏。' }),
-  entry({ id: 'upper.storygame', label: '分支叙事', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '制作与运行基础可预览，完整产品体验待专项验收。' }),
   entry({ id: 'upper.text-adventure', label: '文字冒险', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '制作与运行基础可预览，完整产品体验待专项验收。' }),
   entry({ id: 'upper.avg', label: 'AVG', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '制作与运行基础可预览，真实视听资产和演出交付待专项验收。' }),
-  entry({ id: 'upper.narrative-simulation', label: '叙事模拟', family: 'upper-product', status: 'experimental', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '研究性产品入口，默认隐藏。' }),
-  entry({ id: 'upper.text-open-world', label: '文字开放世界', family: 'upper-product', status: 'experimental', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '研究性产品入口，默认隐藏。' }),
-  entry({ id: 'platform.marketplace', label: '社区市场', family: 'platform', status: 'internal', charterPhase: 'F', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '平台与商业化阶段后置，仅供本地内部验证。' }),
+  entry({ id: 'upper.text-open-world', label: '文字开放世界', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '生产与运行能力可预览，区域自治、长期任务演化和性能门待专项验收。' }),
+  entry({ id: 'platform.marketplace', label: '社区市场', family: 'platform', status: 'experimental', charterPhase: 'F', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '平台与商业化阶段后置，默认隐藏，仅允许本地显式研究。' }),
 ])
 
 export const PRODUCT_CATALOG_BY_ID_V1: ReadonlyMap<StoryForgeProductIdV1, ProductCatalogEntryV1> = new Map(
   PRODUCT_CATALOG_V1.map(item => [item.id, item] as const),
 )
 
+export const PRODUCT_SURFACES_V1: readonly ProductSurfaceEntryV1[] = Object.freeze([
+  surface({ id: 'world-engine', label: '世界引擎', productIds: ['world-engine'] }),
+  surface({ id: 'independent-works', label: '作品创作', productIds: [
+    'independent.longform', 'independent.shortform', 'independent.screenplay', 'independent.comic',
+  ] }),
+  surface({ id: 'node-authoring', label: '节点创作', productIds: ['authoring.nodes'] }),
+  surface({ id: 'ttrpg', label: '跑团', productIds: ['upper.ttrpg'] }),
+  surface({ id: 'character-interaction', label: '角色互动', productIds: ['upper.character-interaction'] }),
+  surface({ id: 'text-games', label: '文字游戏', productIds: [
+    'upper.text-adventure', 'upper.avg', 'upper.text-open-world',
+  ] }),
+  surface({ id: 'marketplace', label: '社区市场', productIds: ['platform.marketplace'] }),
+])
+
+export const PRODUCT_SURFACE_BY_ID_V1: ReadonlyMap<ProductSurfaceIdV1, ProductSurfaceEntryV1> = new Map(
+  PRODUCT_SURFACES_V1.map(item => [item.id, item] as const),
+)
+
 export interface ProductEntryDecisionV1 {
   entry: ProductCatalogEntryV1
   channel: ProductCatalogChannelV1
+  visible: boolean
+  enterable: boolean
+  badge: string | null
+  blockers: string[]
+}
+
+export interface ProductSurfaceDecisionV1 {
+  surface: ProductSurfaceEntryV1
+  products: ProductEntryDecisionV1[]
   visible: boolean
   enterable: boolean
   badge: string | null
@@ -111,6 +160,36 @@ export function evaluateProductEntryV1(input: {
   }
 }
 
+export function evaluateProductSurfaceV1(input: {
+  surfaceId: ProductSurfaceIdV1
+  channel: ProductCatalogChannelV1
+  experimentalOptIn?: boolean
+}): ProductSurfaceDecisionV1 {
+  const surface = PRODUCT_SURFACE_BY_ID_V1.get(input.surfaceId)
+  if (!surface) throw new Error(`[product-catalog] 未登记产品界面：${input.surfaceId}`)
+  const products = surface.productIds.map(productId => evaluateProductEntryV1({
+    productId,
+    channel: input.channel,
+    experimentalOptIn: input.experimentalOptIn,
+  }))
+  const visibleProducts = products.filter(item => item.visible)
+  const nonReleasedVisible = visibleProducts.filter(item => item.entry.status !== 'released')
+  return {
+    surface,
+    products,
+    visible: visibleProducts.length > 0,
+    enterable: visibleProducts.length > 0,
+    badge: nonReleasedVisible.length === 0
+      ? null
+      : visibleProducts.length === 1
+        ? nonReleasedVisible[0]?.badge ?? null
+        : `${nonReleasedVisible.length} 项预览`,
+    blockers: visibleProducts.length > 0
+      ? []
+      : products.flatMap(item => item.blockers),
+  }
+}
+
 export function currentProductCatalogChannelV1(): ProductCatalogChannelV1 {
   if (typeof window === 'undefined') return 'test'
   const hostname = window.location.hostname.toLocaleLowerCase('en-US')
@@ -137,6 +216,21 @@ function validateProductCatalogV1(): void {
     if (item.requiresWorldReference && item.family !== 'upper-product') {
       throw new Error(`[product-catalog] 只有上层产品可强制要求 WorldReference：${item.id}`)
     }
+  }
+  const covered = new Set<StoryForgeProductIdV1>()
+  for (const surface of PRODUCT_SURFACES_V1) {
+    if (surface.productIds.length === 0) throw new Error(`[product-catalog] ${surface.id} 没有登记产品`)
+    for (const productId of surface.productIds) {
+      if (!PRODUCT_CATALOG_BY_ID_V1.has(productId)) {
+        throw new Error(`[product-catalog] ${surface.id} 引用了未登记产品：${productId}`)
+      }
+      if (covered.has(productId)) throw new Error(`[product-catalog] 产品被多个界面重复拥有：${productId}`)
+      covered.add(productId)
+    }
+  }
+  for (const item of PRODUCT_CATALOG_V1) {
+    if (item.id === 'upper.ai-town') continue
+    if (!covered.has(item.id)) throw new Error(`[product-catalog] 产品没有界面归属：${item.id}`)
   }
 }
 

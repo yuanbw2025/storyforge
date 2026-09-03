@@ -1,4 +1,4 @@
-import type { SimulationRuntimeState, TtrpgRuntimeContentV1 } from "../types";
+import type { ProductRuntimeState, TtrpgRuntimeContentV1 } from "../types";
 import { evaluateRuleNumberExpressionV1, parseRulePackV1 } from "./rule-pack";
 import { parseTtrpgCampaignContentV1 } from "./campaign";
 import { createDormantTtrpgActionEconomyV2 } from "./action-economy";
@@ -27,9 +27,9 @@ function stableJson(value: unknown): string {
 }
 
 export function createInitialTtrpgProductStateV1(input: {
-  initialState: SimulationRuntimeState;
+  initialState: ProductRuntimeState;
   content: TtrpgRuntimeContentV1;
-}): SimulationRuntimeState {
+}): ProductRuntimeState {
   const state = structuredClone(input.initialState);
   const rulePack = parseRulePackV1(input.content.rulePack.content);
   const campaign = parseTtrpgCampaignContentV1(
@@ -96,7 +96,7 @@ export function createInitialTtrpgProductStateV1(input: {
         locationKey: null,
         lifecycleStatus: "active",
         attributes: {
-          gameOnly: true,
+          productLocal: true,
           description: template.description,
         },
       });
@@ -162,7 +162,7 @@ export function createInitialTtrpgProductStateV1(input: {
       locationKey: null,
       lifecycleStatus: "active",
       attributes: {
-        gameOnly: true,
+        productLocal: true,
         identity: visual?.identityPrompt ?? scene.description,
       },
     };
@@ -380,7 +380,7 @@ export function createInitialTtrpgProductStateV1(input: {
 }
 
 export function assertInitialTtrpgProductStateV1(input: {
-  state: SimulationRuntimeState;
+  state: ProductRuntimeState;
   content: TtrpgRuntimeContentV1;
   allowProgress?: boolean;
 }): void {

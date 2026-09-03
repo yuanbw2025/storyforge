@@ -1,5 +1,5 @@
 import { hashCanonicalValue } from "../agent/run/hash";
-import type { SimulationTtrpgModelEvidenceV1 } from "../types";
+import type { TtrpgRuntimeModelEvidenceV1 } from "../types";
 import { evaluateTtrpgGmCandidateOutputV1 } from "./gm-harness";
 import type { TtrpgGmRuntimeViewV1 } from "./gm-context";
 
@@ -22,7 +22,7 @@ export interface TtrpgGmOperationalEvalSampleV1 {
   protocolAccepted: boolean;
   secretLeak: boolean;
   stateContradiction: boolean;
-  modelEvidence: SimulationTtrpgModelEvidenceV1;
+  modelEvidence: TtrpgRuntimeModelEvidenceV1;
 }
 
 export interface TtrpgGmOperationalGateV1 {
@@ -270,6 +270,48 @@ function sealedView(): TtrpgGmRuntimeViewV1 {
       abilityChange: null,
       nextActorKey: "player.1",
       nextRound: 2,
+      receipt: {
+        schema: "storyforge.ttrpg-action-receipt",
+        version: 2,
+        receiptKey: "receipt.eval.8",
+        actionSequence: 8,
+        terminalStatus: "resolved-check",
+        context: {
+          schema: "storyforge.ttrpg-action-context",
+          version: 2,
+          sceneKey: "scene.current",
+          round: 1,
+          activeActorKey: "player.1",
+          actorKey: "player.1",
+          actorController: "human",
+          targetKey: null,
+          actionKey: "investigate",
+          actionPhase: "action",
+          checkSnapshot: null,
+          criticality: "meaningful",
+          criticalityReasons: ["关键线索检定"],
+          actorConditionKeys: [],
+          actorInventoryInstanceIds: [],
+          grantingItemInstanceIds: [],
+          abilityStateKey: "ability.investigate",
+          abilityUsesBefore: null,
+          abilityCooldownBefore: 0,
+          activeQuestKeys: ["quest.truth"],
+          discoveredConclusionKeys: [],
+          observers: [],
+          reactionWindows: [],
+          reactionCandidates: [],
+        },
+        mechanicalSummary: "林舟执行调查并成功发现时间差。",
+        actorConsequence: "林舟获得一条可继续核对的线索。",
+        sceneConsequence: "档案室的时间线出现可见缺口。",
+        worldConsequence: "没有自动改写世界事实。",
+        failForwardAvailable: true,
+        changedEntityKeys: [],
+        suggestedNextActionKeys: [],
+        nextActorKey: "player.1",
+        nextRound: 2,
+      },
     },
     participants: [
       {
@@ -338,6 +380,17 @@ const valid = (
 ) =>
   JSON.stringify({
     narration,
+    synthesisFrame: {
+      schema: "storyforge.ttrpg-gm-synthesis-frame",
+      version: 2,
+      actionSequence: 8,
+      mechanicalOutcome: "林舟执行调查并成功发现时间差。",
+      actorFeedback: "林舟获得一条可继续核对的线索。",
+      reactions: [],
+      sceneUpdate: "档案室的时间线出现可见缺口。",
+      worldUpdate: "没有自动改写世界事实。",
+      nextPrompts: [],
+    },
     offeredClueKeys,
     recommendedNextSceneKeys,
   });

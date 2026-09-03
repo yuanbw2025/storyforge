@@ -5,18 +5,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useWorldviewStore } from '../../src/stores/worldview'
 import { applyChunkResult } from '../../src/lib/import/chunk-writer'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function createProject(): Promise<number> {
-  const now = Date.now()
-  return await db.projects.add({
-    name: 'Adopt callers',
-    genre: '',
-    description: '',
-    targetWordCount: 0,
-    enableMultiWorld: false,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
+  return (await seedCurrentWorkspace('Adopt callers')).scope.projectId
 }
 
 describe('Phase 1.2b · adopt 调用方迁移', () => {

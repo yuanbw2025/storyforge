@@ -22,8 +22,8 @@ import {
   X,
 } from "lucide-react";
 import { db } from "../../lib/db/schema";
-import { verifyPlayableGamePackageSource } from "../../lib/game-production/preview-source";
-import { verifyGameReleaseManifestV3 } from "../../lib/game-production/runtime-package";
+import { verifyProductRuntimeSource } from "../../lib/product-production/preview-source";
+import { verifyProductReleaseManifestV1 } from "../../lib/product-production/runtime-package";
 import {
   activateTtrpgCampaignSupplementV2,
   completeTtrpgSessionZero,
@@ -41,7 +41,7 @@ import {
   customizeTtrpgPlayerCharacterV1,
   discoverTtrpgClue,
   openTtrpgCampaignScene,
-  readSimulationStateVersion,
+  readProductRuntimeStateVersion,
   recordTtrpgHumanResponseV2,
   recordTtrpgVersionTransitionV2,
   recordTtrpgWorldEvolutionV2,
@@ -49,7 +49,7 @@ import {
   submitTtrpgActionIntentV2,
   updateTtrpgTabletopV1,
   type TtrpgTabletopOperationV1,
-} from "../../lib/simulation/runtime";
+} from "../../lib/ttrpg/runtime-api";
 import { parseTtrpgCampaignContentV1 } from "../../lib/ttrpg/campaign";
 import {
   createTtrpgContinuationFromPlanV2,
@@ -92,17 +92,17 @@ import TtrpgOnlineRoomPanel from "./TtrpgOnlineRoomPanel";
 import type { OnlineRoomJoinHandoffV1 } from "../../lib/online/http-transport";
 import {
   currentAiGmBetaGatePassedV1,
-  currentGamePlatformEnvironmentV1,
-  evaluateGamePlatformCapabilityV1,
-} from "../../lib/game-platform/capability-status";
+  currentProductPlatformEnvironmentV1,
+  evaluateProductPlatformCapabilityV1,
+} from "../../lib/product-platform/capability-status";
 import type {
-  GameRelease,
-  GameRuntimePackageV2,
-  PlayableGameSourceV1,
+  ProductRelease,
+  ProductRuntimePackageV1,
+  ProductRuntimeSourceV1,
   RulePackV1,
-  SimulationCheckpoint,
-  SimulationRuntimeState,
-  SimulationSession,
+  ProductRuntimeCheckpoint,
+  ProductRuntimeState,
+  ProductRuntimeSession,
   TtrpgCampaignContentV1,
   TtrpgCharacterSheetV2,
   TtrpgEffectAudienceV2,
@@ -176,9 +176,9 @@ const CHARACTER_IDENTITY_LIST_FIELDS = [
 >;
 
 interface FrozenCampaignView {
-  runtimePackage: GameRuntimePackageV2;
-  source: PlayableGameSourceV1;
-  /** Online rooms may only bind an immutable published GameRelease. */
+  runtimePackage: ProductRuntimePackageV1;
+  source: ProductRuntimeSourceV1;
+  /** Online rooms may only bind an immutable published ProductRelease. */
   onlineReleaseHash: string | null;
   rulePack: RulePackV1;
   campaign: TtrpgCampaignContentV1;
@@ -194,7 +194,7 @@ function commandId(
 }
 
 function numberAttribute(
-  state: SimulationRuntimeState,
+  state: ProductRuntimeState,
   entityKey: string,
   key: string,
 ): number | null {
@@ -204,7 +204,7 @@ function numberAttribute(
 
 function TabletopBoard(props: {
   tabletop: NonNullable<TtrpgViewerProjectionV1["tabletop"]>;
-  state: SimulationRuntimeState;
+  state: ProductRuntimeState;
   mode: PlayerMode;
   actorKey: string;
   selectedTokenKey: string;
@@ -237,10 +237,10 @@ function TabletopBoard(props: {
 }
 
 export default function TtrpgCampaignGuide(props: {
-  session: SimulationSession;
-  state: SimulationRuntimeState;
+  session: ProductRuntimeSession;
+  state: ProductRuntimeState;
   workspaceScope?: WorkspaceScope;
-  checkpoints: SimulationCheckpoint[];
+  checkpoints: ProductRuntimeCheckpoint[];
   onCheckpoint: (name: string) => Promise<void>;
   onBranch: (title: string) => Promise<number>;
   onRestoreCheckpoint: (checkpointId: number) => Promise<number>;
@@ -327,7 +327,7 @@ export default function TtrpgCampaignGuide(props: {
     useState("");
   const [campaignTransitionNotes, setCampaignTransitionNotes] = useState("");
   const [continuationReleases, setContinuationReleases] = useState<
-    GameRelease[]
+    ProductRelease[]
   >([]);
   const [continuationTargetReleaseId, setContinuationTargetReleaseId] =
     useState("");
@@ -366,7 +366,7 @@ export default function TtrpgCampaignGuide(props: {
     void db.projects.get(projectId).then((project) => {
       if (!cancelled)
         setAiExperimentEnabled(
-          project?.gamePlatformOptIns?.ttrpgAiGmExperimental === true,
+          project?.productPlatformOptIns?.ttrpgAiGmExperimental === true,
         );
     });
     return () => {
@@ -383,19 +383,19 @@ export default function TtrpgCampaignGuide(props: {
         cancelled = true;
       };
     void (async () => {
-      let runtimePackage: GameRuntimePackageV2;
-      let playableSource: PlayableGameSourceV1;
+      let runtimePackage: ProductRuntimePackageV1;
+      let playableSource: ProductRuntimeSourceV1;
       let onlineReleaseHash: string | null = null;
-      if (props.session.gameReleaseId != null) {
-        playableSource = { kind: "release", gameReleaseId: props.session.gameReleaseId };
-        const release = await db.gameReleases.get(props.session.gameReleaseId);
+      if (props.session.productReleaseId != null) {
+        playableSource = { kind: "release", productReleaseId: props.session.productReleaseId };
+        const release = await db.productReleases.get(props.session.productReleaseId);
         if (!release) throw new Error("正式战役发布不存在。");
-        const manifest = await verifyGameReleaseManifestV3(
+        const manifest = await verifyProductReleaseManifestV1(
           release.manifestJson,
         );
         runtimePackage = manifest.runtimePackage;
         onlineReleaseHash = release.contentHash;
-      } else if (props.session.gameBuildId != null) {
+      } else if (props.session.productBuildId != null) {
         const scope =
           props.workspaceScope?.projectId != null &&
           props.workspaceScope.worldId != null &&
@@ -414,21 +414,21 @@ export default function TtrpgCampaignGuide(props: {
               : null;
         if (!scope)
           throw new Error("TTRPG Build Preview 缺少正式工作区 owner。");
-        const build = await db.gameBuilds.get(props.session.gameBuildId);
+        const build = await db.productBuilds.get(props.session.productBuildId);
         if (!build?.previewHash)
           throw new Error("TTRPG Build Preview 不存在或尚未冻结。");
         playableSource = {
           kind: "build",
-          gameBuildId: props.session.gameBuildId,
+          productBuildId: props.session.productBuildId,
           expectedPreviewHash: build.previewHash,
         };
-        const resolved = await verifyPlayableGamePackageSource({
+        const resolved = await verifyProductRuntimeSource({
           scope,
           source: playableSource,
         });
         runtimePackage = resolved.runtimePackage;
       } else {
-        throw new Error("TTRPG 会话没有绑定 GameRelease 或 Build Preview。");
+        throw new Error("TTRPG 会话没有绑定 ProductRelease 或 Build Preview。");
       }
       if (runtimePackage.productType !== "ttrpg" || !runtimePackage.ttrpg) {
         throw new Error("会话绑定的不是正式 TTRPG 产品包。");
@@ -462,8 +462,8 @@ export default function TtrpgCampaignGuide(props: {
   }, [
     productCampaignKey,
     productRulePackContentHash,
-    props.session.gameBuildId,
-    props.session.gameReleaseId,
+    props.session.productBuildId,
+    props.session.productReleaseId,
     props.session.projectId,
     props.session.workId,
     props.session.worldId,
@@ -479,14 +479,14 @@ export default function TtrpgCampaignGuide(props: {
     if (
       props.session.worldId == null ||
       props.session.workId == null ||
-      props.session.gameReleaseId == null
+      props.session.productReleaseId == null
     ) {
       setContinuationReleases([]);
       return () => {
         cancelled = true;
       };
     }
-    void db.gameReleases
+    void db.productReleases
       .where("projectId")
       .equals(props.session.projectId)
       .toArray()
@@ -501,7 +501,7 @@ export default function TtrpgCampaignGuide(props: {
               )
               .map(async (row) => {
                 try {
-                  const manifest = await verifyGameReleaseManifestV3(
+                  const manifest = await verifyProductReleaseManifestV1(
                     row.manifestJson,
                   );
                   return manifest.productType === "ttrpg" ? row : null;
@@ -510,14 +510,14 @@ export default function TtrpgCampaignGuide(props: {
                 }
               }),
           )
-        ).filter((row): row is GameRelease => row != null);
+        ).filter((row): row is ProductRelease => row != null);
         compatible.sort((left, right) => right.version - left.version);
         if (!cancelled) {
           setContinuationReleases(compatible);
           setContinuationTargetReleaseId((current) =>
             compatible.some((row) => String(row.id) === current)
               ? current
-              : String(props.session.gameReleaseId),
+              : String(props.session.productReleaseId),
           );
         }
       });
@@ -525,7 +525,7 @@ export default function TtrpgCampaignGuide(props: {
       cancelled = true;
     };
   }, [
-    props.session.gameReleaseId,
+    props.session.productReleaseId,
     props.session.projectId,
     props.session.workId,
     props.session.worldId,
@@ -864,8 +864,8 @@ export default function TtrpgCampaignGuide(props: {
       setBusy(false);
     }
   };
-  const aiGmDecision = evaluateGamePlatformCapabilityV1("ttrpg-ai-gm", {
-    environment: currentGamePlatformEnvironmentV1(),
+  const aiGmDecision = evaluateProductPlatformCapabilityV1("ttrpg-ai-gm", {
+    environment: currentProductPlatformEnvironmentV1(),
     experimentalProject: aiExperimentEnabled,
     authorOptIn: false,
     onlineServiceConfigured: false,
@@ -880,8 +880,8 @@ export default function TtrpgCampaignGuide(props: {
         if (!project)
           throw new Error("当前项目不存在，无法保存 AI GM 实验授权。");
         await updateProject(projectId, {
-          gamePlatformOptIns: {
-            ...project.gamePlatformOptIns,
+          productPlatformOptIns: {
+            ...project.productPlatformOptIns,
             ttrpgAiGmExperimental: enabled,
           },
         });
@@ -892,7 +892,7 @@ export default function TtrpgCampaignGuide(props: {
     );
   const commitTabletop = async (operation: TtrpgTabletopOperationV1) => {
     await run(async () => {
-      const version = await readSimulationStateVersion(props.session.id!);
+      const version = await readProductRuntimeStateVersion(props.session.id!);
       const tabletopActorKey = mode === "gm" ? "gm" : clueRecipientKey;
       await updateTtrpgTabletopV1({
         sessionId: props.session.id!,
@@ -916,7 +916,7 @@ export default function TtrpgCampaignGuide(props: {
     build: (commandId: string, eventSequence: number) => TtrpgItemCommandV2;
   }) => {
     await run(async () => {
-      const version = await readSimulationStateVersion(props.session.id!);
+      const version = await readProductRuntimeStateVersion(props.session.id!);
       const id = commandId(
         `item-${input.kind}`,
         props.session.id!,
@@ -944,7 +944,7 @@ export default function TtrpgCampaignGuide(props: {
   }) => {
     if (!selectedActor) throw new Error("当前没有可处置行动的角色。");
     await run(async () => {
-      const version = await readSimulationStateVersion(props.session.id!);
+      const version = await readProductRuntimeStateVersion(props.session.id!);
       await commitTtrpgIntentDispositionV2({
         sessionId: props.session.id!,
         commandId: commandId(
@@ -1478,7 +1478,7 @@ export default function TtrpgCampaignGuide(props: {
               }
               onClick={() =>
                 void run(async () => {
-                  const version = await readSimulationStateVersion(
+                  const version = await readProductRuntimeStateVersion(
                     props.session.id!,
                   );
                   await completeTtrpgSessionZero({
@@ -1538,7 +1538,7 @@ export default function TtrpgCampaignGuide(props: {
                   disabled={busy}
                   onClick={() =>
                     void run(async () => {
-                      const version = await readSimulationStateVersion(
+                      const version = await readProductRuntimeStateVersion(
                         props.session.id!,
                       );
                       await changeTtrpgSafetyStatus({
@@ -1573,7 +1573,7 @@ export default function TtrpgCampaignGuide(props: {
                     disabled={busy || !safetyReason.trim()}
                     onClick={() =>
                       void run(async () => {
-                        const version = await readSimulationStateVersion(
+                        const version = await readProductRuntimeStateVersion(
                           props.session.id!,
                         );
                         await changeTtrpgSafetyStatus({
@@ -1858,7 +1858,7 @@ export default function TtrpgCampaignGuide(props: {
                 }
                 onClick={() =>
                   void run(async () => {
-                    const version = await readSimulationStateVersion(
+                    const version = await readProductRuntimeStateVersion(
                       props.session.id!,
                     );
                     await customizeTtrpgPlayerCharacterV1({
@@ -2328,7 +2328,7 @@ export default function TtrpgCampaignGuide(props: {
                               onClick={() =>
                                 void run(async () => {
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   await advanceTtrpgCharacterV1({
@@ -2385,7 +2385,7 @@ export default function TtrpgCampaignGuide(props: {
                                   onClick={() =>
                                     void run(async () => {
                                       const version =
-                                        await readSimulationStateVersion(
+                                        await readProductRuntimeStateVersion(
                                           props.session.id!,
                                         );
                                       await advanceTtrpgCharacterV1({
@@ -2430,7 +2430,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await advanceTtrpgCharacterV1({
@@ -2471,7 +2471,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await advanceTtrpgCharacterV1({
@@ -2668,7 +2668,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await openTtrpgCampaignScene({
@@ -2816,7 +2816,7 @@ export default function TtrpgCampaignGuide(props: {
                           }
                           onClick={() =>
                             void run(async () => {
-                              const version = await readSimulationStateVersion(
+                              const version = await readProductRuntimeStateVersion(
                                 props.session.id!,
                               );
                               await submitTtrpgActionIntentV2({
@@ -2937,7 +2937,7 @@ export default function TtrpgCampaignGuide(props: {
                                     await generateTtrpgGmActorActionCandidateV1(
                                       {
                                         scope: props.workspaceScope,
-                                        simulationSessionId: props.session.id!,
+                                        productRuntimeSessionId: props.session.id!,
                                         objective:
                                           "依据当前 NPC 的目标、已知信息、现场局势和冻结规则，选择一个合理且不替真人玩家做决定的行动。",
                                         aiConfig,
@@ -2958,7 +2958,7 @@ export default function TtrpgCampaignGuide(props: {
                                     runId: generated.candidate.runId,
                                   });
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   setGmActorPendingSequence(version.sequence);
@@ -3023,7 +3023,7 @@ export default function TtrpgCampaignGuide(props: {
                                       runId: gmActorCandidate.runId,
                                     });
                                     const version =
-                                      await readSimulationStateVersion(
+                                      await readProductRuntimeStateVersion(
                                         props.session.id!,
                                       );
                                     setGmActorPendingSequence(version.sequence);
@@ -3126,11 +3126,11 @@ export default function TtrpgCampaignGuide(props: {
                                     );
                                   const cycle = await runTtrpgAiPlayerCycleV1({
                                     scope: props.workspaceScope,
-                                    simulationSessionId: props.session.id!,
+                                    productRuntimeSessionId: props.session.id!,
                                     aiConfig,
                                   });
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   if (cycle.committedActions > 0) {
@@ -3412,7 +3412,7 @@ export default function TtrpgCampaignGuide(props: {
                               onClick={() =>
                                 void run(async () => {
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   const target =
@@ -3568,7 +3568,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await completeTtrpgRestV2({
@@ -3876,7 +3876,7 @@ export default function TtrpgCampaignGuide(props: {
                         disabled={busy || !humanResponseText.trim()}
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await recordTtrpgHumanResponseV2({
@@ -3910,7 +3910,7 @@ export default function TtrpgCampaignGuide(props: {
                         disabled={busy}
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await recordTtrpgHumanResponseV2({
@@ -4119,7 +4119,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             const effects: TtrpgEffectPrimitiveV2[] = [];
@@ -4346,7 +4346,7 @@ export default function TtrpgCampaignGuide(props: {
                       }
                       onClick={() =>
                         void run(async () => {
-                          const version = await readSimulationStateVersion(
+                          const version = await readProductRuntimeStateVersion(
                             props.session.id!,
                           );
                           await commitTtrpgHumanGmNarrationV1({
@@ -4447,7 +4447,7 @@ export default function TtrpgCampaignGuide(props: {
                               const generated =
                                 await generateTtrpgGmNarrationCandidateV1({
                                   scope: props.workspaceScope,
-                                  simulationSessionId: props.session.id!,
+                                  productRuntimeSessionId: props.session.id!,
                                   objective: gmObjective,
                                   aiConfig,
                                 });
@@ -4462,7 +4462,7 @@ export default function TtrpgCampaignGuide(props: {
                           disabled={busy || safetyPaused}
                           onClick={() =>
                             void run(async () => {
-                              const version = await readSimulationStateVersion(
+                              const version = await readProductRuntimeStateVersion(
                                 props.session.id!,
                               );
                               await commitTtrpgDeterministicFallbackV1({
@@ -4997,7 +4997,7 @@ export default function TtrpgCampaignGuide(props: {
                               onClick={() =>
                                 void run(async () => {
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   await discoverTtrpgClue({
@@ -5029,7 +5029,7 @@ export default function TtrpgCampaignGuide(props: {
                               onClick={() =>
                                 void run(async () => {
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   await discoverTtrpgClue({
@@ -5178,7 +5178,7 @@ export default function TtrpgCampaignGuide(props: {
                       }
                       onClick={() =>
                         void run(async () => {
-                          const version = await readSimulationStateVersion(
+                          const version = await readProductRuntimeStateVersion(
                             props.session.id!,
                           );
                           const ordinal = campaignState.playSessions.length + 1;
@@ -5254,7 +5254,7 @@ export default function TtrpgCampaignGuide(props: {
                       disabled={busy || safetyPaused || !viewerProjection}
                       onClick={() =>
                         void run(async () => {
-                          const version = await readSimulationStateVersion(
+                          const version = await readProductRuntimeStateVersion(
                             props.session.id!,
                           );
                           const automaticRecaps =
@@ -5347,7 +5347,7 @@ export default function TtrpgCampaignGuide(props: {
                       const change = async (
                         status: "active" | "reserve" | "retired",
                       ) => {
-                        const version = await readSimulationStateVersion(
+                        const version = await readProductRuntimeStateVersion(
                           props.session.id!,
                         );
                         await changeTtrpgCampaignRosterV2({
@@ -5470,7 +5470,7 @@ export default function TtrpgCampaignGuide(props: {
                     }
                     onClick={() =>
                       void run(async () => {
-                        const version = await readSimulationStateVersion(
+                        const version = await readProductRuntimeStateVersion(
                           props.session.id!,
                         );
                         await activateTtrpgCampaignSupplementV2({
@@ -5535,7 +5535,7 @@ export default function TtrpgCampaignGuide(props: {
                     }
                     onClick={() =>
                       void run(async () => {
-                        const version = await readSimulationStateVersion(
+                        const version = await readProductRuntimeStateVersion(
                           props.session.id!,
                         );
                         await recordTtrpgWorldEvolutionV2({
@@ -5608,7 +5608,7 @@ export default function TtrpgCampaignGuide(props: {
                     }
                     onClick={() =>
                       void run(async () => {
-                        const version = await readSimulationStateVersion(
+                        const version = await readProductRuntimeStateVersion(
                           props.session.id!,
                         );
                         await recordTtrpgVersionTransitionV2({
@@ -5656,7 +5656,7 @@ export default function TtrpgCampaignGuide(props: {
                       {continuationReleases.map((release) => (
                         <option key={release.id} value={release.id}>
                           v{release.version} · {release.label}
-                          {release.id === props.session.gameReleaseId
+                          {release.id === props.session.productReleaseId
                             ? "（同内容安全续团）"
                             : ""}
                         </option>
@@ -5682,7 +5682,7 @@ export default function TtrpgCampaignGuide(props: {
                               if (!targetRelease)
                                 throw new Error("目标 TTRPG 发布不存在。");
                               const targetManifest =
-                                await verifyGameReleaseManifestV3(
+                                await verifyProductReleaseManifestV1(
                                   targetRelease.manifestJson,
                                 );
                               const targetTtrpg =
@@ -5709,7 +5709,7 @@ export default function TtrpgCampaignGuide(props: {
                                   workId: props.session.workId!,
                                 },
                                 parentSessionId: props.session.id!,
-                                targetGameReleaseId: targetRelease.id!,
+                                targetProductReleaseId: targetRelease.id!,
                                 compatibility: sameContent
                                   ? "same-content"
                                   : "manual-migration",
@@ -5868,7 +5868,7 @@ export default function TtrpgCampaignGuide(props: {
                               onClick={() =>
                                 void run(async () => {
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   await recordTtrpgWorldEvolutionV2({
@@ -6081,7 +6081,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await completeTtrpgCampaignEnding({

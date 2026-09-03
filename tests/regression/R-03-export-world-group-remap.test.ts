@@ -66,7 +66,7 @@ describe('R-03: 多世界导出/导入 worldGroupId remap', () => {
       updatedAt: now,
     } as any) as number
 
-    await db.worldviews.add({ projectId, worldGroupId: sideId, geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '', createdAt: now, updatedAt: now } as any)
+    await db.worldviews.add({ projectId, worldGroupId: sideId, summary: '', createdAt: now, updatedAt: now } as any)
     await db.powerSystems.add({ projectId, worldGroupId: sideId, name: '斗气', description: '', levels: '[]', rules: '', createdAt: now, updatedAt: now } as any)
     await db.characters.add({ projectId, homeWorldGroupId: sideId, name: '萧炎', role: 'protagonist', shortDescription: '', appearance: '', personality: '', background: '', motivation: '', abilities: '', relationships: '[]', arc: '', createdAt: now, updatedAt: now } as any)
     await db.outlineNodes.add({ projectId, worldGroupId: sideId, parentId: null, type: 'volume', title: '斗破卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any)

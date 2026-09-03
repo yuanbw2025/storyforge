@@ -4,7 +4,7 @@ import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-
 import { getFactPredicate, normalizeFactValue } from '../registry/fact-predicate-registry'
 import type { TemporalFact } from '../types/temporal-fact'
 import type { WorkspaceScope } from '../types/world-ownership'
-import { readOwnedRows, resolveReadScopeLike } from '../world-engine/scope'
+import { readOwnedRows, resolveReadScopeLike } from '../workspace/scope'
 
 export type CharacterLifecycleStatus = 'alive' | 'dead' | 'missing' | 'unknown'
 

@@ -7,34 +7,38 @@ import {
 import { db } from '../../src/lib/db/schema'
 import { deriveStrictExportProjectJSON } from '../../src/lib/export/registry-export'
 import { deriveImportProjectJSON } from '../../src/lib/export/registry-import'
-import { loadGameProductionWorldSourceCatalogV2 } from '../../src/lib/game-production/world-source'
 import {
   commitInteractionPlayerMessage,
-  deleteSimulationSession,
-  readSimulationState,
-  readSimulationStateVersion,
+  deleteProductRuntimeSession,
+  readProductRuntimeState,
+  readProductRuntimeStateVersion,
   startInteractionScene,
-} from '../../src/lib/simulation/runtime'
+} from '../../src/lib/character-interaction/runtime-api'
 import type {
-  GameRuntimePackageV2,
+  ProductRuntimePackageV1,
   WorkspaceScope,
 } from '../../src/lib/types'
-import { seedCurrentPlayableBuild } from '../helpers/current-playable-build'
-import { currentProductSelection, seedCurrentProductWorld } from '../helpers/current-product-world'
+import { seedCurrentProductBuild } from '../helpers/current-product-build'
+import {
+  currentProductSelection,
+  loadCurrentProductWorldSourceCatalogV1,
+  seedCurrentProductWorld,
+} from '../helpers/current-product-world'
 
 async function fixture(): Promise<{ scope: WorkspaceScope; sessionId: number; playerSequence: number }> {
   const owned = await seedCurrentProductWorld('HARNESS-RUNTIME-1')
   const { scope, release } = owned
-  const catalog = await loadGameProductionWorldSourceCatalogV2({
+  const catalog = await loadCurrentProductWorldSourceCatalogV1({
     scope,
     worldReleaseId: release.id!,
+    productType: 'character-interaction',
   })
-  const runtimePackage: GameRuntimePackageV2 = {
-    schema: 'storyforge.game-runtime-package',
-    version: 2,
+  const runtimePackage: ProductRuntimePackageV1 = {
+    schema: 'storyforge.product-runtime-package',
+    version: 1,
     productType: 'character-interaction',
     definition: {
-      gameKey: 'harness.runtime.interaction',
+      productKey: 'harness.runtime.interaction',
       title: '雨夜钟楼',
       description: '统一产品 Build 驱动的角色互动 Harness 测试包。',
       enabledCapabilities: ['narrative', 'interaction'],
@@ -73,18 +77,18 @@ async function fixture(): Promise<{ scope: WorkspaceScope; sessionId: number; pl
       }],
     },
   }
-  const { session: created } = await seedCurrentPlayableBuild({
+  const { session: created } = await seedCurrentProductBuild({
     scope,
     worldRelease: release as typeof release & { id: number },
     runtimePackage,
     title: '雨夜钟楼',
   })
-  let version = await readSimulationStateVersion(created.id!)
+  let version = await readProductRuntimeStateVersion(created.id!)
   await startInteractionScene({
     sessionId: created.id!, commandId: 'fixture:scene', baseSequence: version.sequence,
     baseStateHash: version.stateHash, sceneId: 'scene:tower:1', sceneKey: 'tower',
   })
-  version = await readSimulationStateVersion(created.id!)
+  version = await readProductRuntimeStateVersion(created.id!)
   const player = await commitInteractionPlayerMessage({
     sessionId: created.id!, commandId: 'fixture:player', baseSequence: version.sequence,
     baseStateHash: version.stateHash, messageId: 'message:player:1', text: '你收到我的信了吗？', audienceKeys: ['aria'],
@@ -100,7 +104,7 @@ describe('R-HARNESS-RUNTIME1 · Instance-scoped 统一 Harness', () => {
     const seeded = await fixture()
     const generated = await generateInteractionRuntimeCandidateV1({
       scope: seeded.scope,
-      simulationSessionId: seeded.sessionId,
+      productRuntimeSessionId: seeded.sessionId,
       participantKey: 'aria',
       skillId: 'character.interaction-reply',
       objective: '回应玩家的问题',
@@ -113,46 +117,46 @@ describe('R-HARNESS-RUNTIME1 · Instance-scoped 统一 Harness', () => {
       },
     })
     expect(generated.snapshot.run.workId).toBeNull()
-    expect(generated.snapshot.run.simulationSessionId).toBe(seeded.sessionId)
+    expect(generated.snapshot.run.productRuntimeSessionId).toBe(seeded.sessionId)
     expect(generated.snapshot.contract.scope.runtime?.baseSequence).toBe(seeded.playerSequence)
 
     const adopted = await adoptInteractionRuntimeCandidateV1({ scope: seeded.scope, runId: generated.snapshot.run.id })
     expect(adopted.snapshot.projection.state).toBe('completed')
     expect(adopted.event?.type).toBe('interaction.character.reply.committed')
-    expect((await readSimulationState(seeded.sessionId)).interaction?.messages.at(-1)?.text)
+    expect((await readProductRuntimeState(seeded.sessionId)).interaction?.messages.at(-1)?.text)
       .toBe('收到了，只是雨把封口打湿了。')
 
     const repeated = await adoptInteractionRuntimeCandidateV1({ scope: seeded.scope, runId: generated.snapshot.run.id })
     expect(repeated.event?.id).toBe(adopted.event?.id)
-    expect((await db.simulationEvents.where('sessionId').equals(seeded.sessionId).toArray())
+    expect((await db.productRuntimeEvents.where('sessionId').equals(seeded.sessionId).toArray())
       .filter(event => event.commandId === `harness:${generated.snapshot.run.id}:character-reply-candidate`)).toHaveLength(1)
   })
 
   it('SIM 推进后候选 fail-closed，不写角色回复', async () => {
     const seeded = await fixture()
     const generated = await generateInteractionRuntimeCandidateV1({
-      scope: seeded.scope, simulationSessionId: seeded.sessionId, participantKey: 'aria',
+      scope: seeded.scope, productRuntimeSessionId: seeded.sessionId, participantKey: 'aria',
       skillId: 'character.interaction-reply', objective: '回应玩家',
       runAI: async () => JSON.stringify({
         kind: 'character-reply', text: '这是即将过期的回复。', replyToSequence: seeded.playerSequence,
         audienceKeys: null, budgetCost: 0, disclosures: [],
       }),
     })
-    const version = await readSimulationStateVersion(seeded.sessionId)
+    const version = await readProductRuntimeStateVersion(seeded.sessionId)
     await commitInteractionPlayerMessage({
       sessionId: seeded.sessionId, commandId: 'fixture:advance', baseSequence: version.sequence,
       baseStateHash: version.stateHash, messageId: 'message:player:2', text: '我又问了一次。', audienceKeys: ['aria'],
     })
     await expect(adoptInteractionRuntimeCandidateV1({ scope: seeded.scope, runId: generated.snapshot.run.id }))
       .rejects.toThrow(/已经变化|已过期/)
-    expect((await readSimulationState(seeded.sessionId)).interaction?.messages.some(message => message.text === '这是即将过期的回复。')).toBe(false)
+    expect((await readProductRuntimeState(seeded.sessionId)).interaction?.messages.some(message => message.text === '这是即将过期的回复。')).toBe(false)
     expect((await db.agentRuns.get(generated.snapshot.run.id))?.status).toBe('paused')
   })
 
   it('采用事件保留为专用入口，并可从采用后崩溃边界幂等恢复终验', async () => {
     const seeded = await fixture()
     const generated = await generateInteractionRuntimeCandidateV1({
-      scope: seeded.scope, simulationSessionId: seeded.sessionId, participantKey: 'aria',
+      scope: seeded.scope, productRuntimeSessionId: seeded.sessionId, participantKey: 'aria',
       skillId: 'character.interaction-reply', objective: '回应玩家',
       runAI: async () => JSON.stringify({
         kind: 'character-reply', text: '我会记住这封信。', replyToSequence: seeded.playerSequence,
@@ -174,14 +178,14 @@ describe('R-HARNESS-RUNTIME1 · Instance-scoped 统一 Harness', () => {
     })).rejects.toThrow('simulated-crash')
     const resumed = await adoptInteractionRuntimeCandidateV1({ scope: seeded.scope, runId: generated.snapshot.run.id })
     expect(resumed.snapshot.projection.state).toBe('completed')
-    expect((await db.simulationEvents.where('sessionId').equals(seeded.sessionId).toArray())
+    expect((await db.productRuntimeEvents.where('sessionId').equals(seeded.sessionId).toArray())
       .filter(event => event.commandId === `harness:${generated.snapshot.run.id}:character-reply-candidate`)).toHaveLength(1)
   })
 
   it('严格备份往返重映射 Instance owner 和契约 runtime session ID', async () => {
     const seeded = await fixture()
     const generated = await generateInteractionRuntimeCandidateV1({
-      scope: seeded.scope, simulationSessionId: seeded.sessionId, participantKey: 'aria',
+      scope: seeded.scope, productRuntimeSessionId: seeded.sessionId, participantKey: 'aria',
       skillId: 'prose.interaction-scene-director', objective: '选择回应角色',
       runAI: async () => JSON.stringify({
         kind: 'scene-director', responders: [{ participantKey: 'aria', intent: '确认收到信件' }],
@@ -191,22 +195,22 @@ describe('R-HARNESS-RUNTIME1 · Instance-scoped 统一 Harness', () => {
     const exported = await deriveStrictExportProjectJSON(seeded.scope.projectId)
     const exportedRun = exported.agentRuns?.find(row => row._exportId === 0) as any
     expect(exportedRun._instanceOwnerExportId).toBeTypeOf('number')
-    expect(exportedRun.simulationSessionId).toBeUndefined()
-    expect(JSON.parse(exportedRun.contractJson).scope.runtime.simulationSessionId).toBe(exportedRun._instanceOwnerExportId + 1)
+    expect(exportedRun.productRuntimeSessionId).toBeUndefined()
+    expect(JSON.parse(exportedRun.contractJson).scope.runtime.productRuntimeSessionId).toBe(exportedRun._instanceOwnerExportId + 1)
 
     const importedProjectId = await deriveImportProjectJSON(exported)
     const importedRun = (await db.agentRuns.where('projectId').equals(importedProjectId).toArray())[0]
-    const importedSession = (await db.simulationSessions.where('projectId').equals(importedProjectId).toArray())[0]
+    const importedSession = (await db.productRuntimeSessions.where('projectId').equals(importedProjectId).toArray())[0]
     expect(importedRun.workId).toBeNull()
-    expect(importedRun.simulationSessionId).toBe(importedSession.id)
-    expect(JSON.parse(importedRun.contractJson).scope.runtime.simulationSessionId).toBe(importedSession.id)
+    expect(importedRun.productRuntimeSessionId).toBe(importedSession.id)
+    expect(JSON.parse(importedRun.contractJson).scope.runtime.productRuntimeSessionId).toBe(importedSession.id)
     expect(importedRun.id).not.toBe(generated.snapshot.run.id)
   })
 
   it('删除实例通过 PROJECT_TABLES 引用级联清理 run、事件与检查点', async () => {
     const seeded = await fixture()
     const generated = await generateInteractionRuntimeCandidateV1({
-      scope: seeded.scope, simulationSessionId: seeded.sessionId, participantKey: 'aria',
+      scope: seeded.scope, productRuntimeSessionId: seeded.sessionId, participantKey: 'aria',
       skillId: 'character.interaction-memory-curator', objective: '整理可追溯记忆',
       runAI: async () => JSON.stringify({
         kind: 'memory-curator', memoryKind: 'key-memory', content: '玩家询问信件是否收到。', importance: 70,
@@ -215,7 +219,7 @@ describe('R-HARNESS-RUNTIME1 · Instance-scoped 统一 Harness', () => {
     })
     expect(await db.agentRunEvents.where('runId').equals(generated.snapshot.run.id).count()).toBeGreaterThan(0)
     expect(await db.agentRunCheckpoints.where('runId').equals(generated.snapshot.run.id).count()).toBe(1)
-    await deleteSimulationSession(seeded.sessionId)
+    await deleteProductRuntimeSession(seeded.sessionId)
     expect(await db.agentRuns.get(generated.snapshot.run.id)).toBeUndefined()
     expect(await db.agentRunEvents.where('runId').equals(generated.snapshot.run.id).count()).toBe(0)
     expect(await db.agentRunCheckpoints.where('runId').equals(generated.snapshot.run.id).count()).toBe(0)

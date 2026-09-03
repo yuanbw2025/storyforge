@@ -13,11 +13,10 @@ import type { AdoptResult } from '../registry/types'
 import type { AIConfig, Worldview } from '../types'
 import type { WorkspaceScope } from '../types/world-ownership'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   attachAgentContextInputStateV1,
   mergeContextEvidence,
@@ -175,7 +174,7 @@ export async function prepareWorldOriginCopilot(
     tools.map(tool => tool.inputBudgetTokens),
   )
   const readScope = await resolveReadScopeLike(input.scope ?? input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
   const toolContextBase = {
     projectId: input.projectId,
     scope,

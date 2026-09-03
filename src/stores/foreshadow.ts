@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import { buildForeshadowTaskContext } from '../lib/foreshadow/context'
 import type { Chapter, Foreshadow, ForeshadowStatus, OutlineNode } from '../lib/types'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 interface ForeshadowStore {
   foreshadows: Foreshadow[]

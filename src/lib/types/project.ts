@@ -100,19 +100,13 @@ export interface CommunityWorldOrigin {
  */
 export type WorkspacePurpose = 'independent-work' | 'world-engine'
 
-/** How the current workspace purpose was established. */
-export type WorkspacePurposeDecision =
-  | 'explicit'
-  | 'legacy-review-required'
-  | 'legacy-confirmed'
-
 /**
  * MASTER-0: project-owned rollout consent. These flags are deliberately part
  * of the portable project root so an export/import never silently widens or
  * loses the author's experimental capability choices.
  */
-export interface GamePlatformProjectOptInsV1 {
-  gameProductionV3?: boolean
+export interface ProductPlatformProjectOptInsV1 {
+  productProductionV3?: boolean
   ttrpgAiGmExperimental?: boolean
 }
 
@@ -123,8 +117,6 @@ export interface Project {
   workspaceUid?: string
   /** ARCH-01: explicit product identity; legacy ambiguity defaults to independent work. */
   workspacePurpose?: WorkspacePurpose
-  /** ARCH-01: legacy classification is never silently treated as author confirmation. */
-  workspacePurposeDecision?: WorkspacePurposeDecision
   name: string
   /** 兼容旧数据的单选流派（保留此字段避免旧代码报错，值始终有效） */
   genre: string
@@ -155,17 +147,7 @@ export interface Project {
   /** 是否启用多世界模式（默认 false） */
   enableMultiWorld?: boolean
 
-  /**
-   * @deprecated ARCH-01 compatibility mirror only.  New code must read the
-   * explicit World row and its identityKind; independent works leave this empty.
-   */
-  worldCode?: string
-  /** @deprecated ARCH-01 compatibility mirror only; not a WorldReference. */
-  worldVersion?: number
-  /** PLATFORM-1：从社区世界包导入时保留来源，本地副本仍分配自己的 worldCode。 */
-  communityOrigin?: CommunityWorldOrigin
-
-  /** WORLD-2C：当前世界/作品兼容指针；尚未首次进入的旧工作区允许缺失。 */
+  /** 当前 World/Work 指针；世界身份和版本只存在于 World/WorldRelease。 */
   activeWorldId?: number | null
   activeWorkId?: number | null
   /** WORLD-2C ownership 合同版本；缺失表示尚未执行惰性迁移。 */
@@ -178,7 +160,7 @@ export interface Project {
   activeCharacterDrivenPlanId?: number | null
 
   /** 游戏平台的项目级显式授权；缺失与 false 等价，旧项目默认不加入实验。 */
-  gamePlatformOptIns?: GamePlatformProjectOptInsV1
+  productPlatformOptIns?: ProductPlatformProjectOptInsV1
 
   createdAt: number        // timestamp
   updatedAt: number        // timestamp

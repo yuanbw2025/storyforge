@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import { importProjectJSON } from '../export/json-export'
 import { hashCanonicalValue } from '../agent/run/hash'
+import { isWorkCode, isWorkspaceUid } from '../memory/identity'
 import {
   captureWorkspaceContentRevisionV1,
   verifyWorkspaceContentRevisionV1,
@@ -12,15 +13,15 @@ import type {
   WorldRevision,
   WorkspaceScope,
 } from '../types'
-import { confirmWorkspacePurpose } from './identity-classification'
+import { promoteNovelWorkspaceToWorldEngine } from './promotion'
 import {
   buildIndependentWorkWorldSnapshot,
   createWorldRevision,
   publishWorldRevision,
   stableJson,
 } from './releases'
-import { resolveScope, scopeTransactionTables } from './scope'
-import { effectiveNovelProfile, effectiveWorkKind } from './work-kind'
+import { resolveScope, scopeTransactionTables } from '../workspace/scope'
+import { effectiveNovelProfile, effectiveWorkKind } from '../workspace/work-kind'
 
 export type WorldDerivationRangeV1 =
   | { kind: 'all-confirmed-canon' }
@@ -66,6 +67,9 @@ export async function deriveNovelToWorld(
   if (effectiveWorkKind(sourceWork) !== 'novel') {
     throw new Error('[derivation] 只有长篇或短篇小说可以派生世界')
   }
+  if (!isWorkspaceUid(sourceProject.workspaceUid) || !isWorkCode(sourceWork.code)) {
+    throw new Error('[derivation] 源作品缺少当前架构的稳定工作区或作品身份')
+  }
 
   const sourceRevision = await captureWorkspaceContentRevisionV1({
     scope: sourceScope,
@@ -86,7 +90,7 @@ export async function deriveNovelToWorld(
   let targetProjectId: number | null = null
   try {
     targetProjectId = await importProjectJSON(snapshot.portableProject as any)
-    await confirmWorkspacePurpose(targetProjectId, 'world-engine', { decision: 'explicit' })
+    await promoteNovelWorkspaceToWorldEngine(targetProjectId)
     const targetScope = await resolveScope({ projectId: targetProjectId })
     const targetName = input.targetName?.trim() || `${sourceWork.title} · 世界`
     const targetDescription = sourceWork.description?.trim()
@@ -113,8 +117,8 @@ export async function deriveNovelToWorld(
     const row: WorldDerivationV1 = {
       projectId: targetProjectId,
       worldId: targetScope.worldId,
-      sourceWorkspaceUid: sourceProject.workspaceUid ?? `legacy:${sourceScope.projectId}`,
-      sourceWorkCode: sourceWork.code ?? `legacy:${sourceScope.workId}`,
+      sourceWorkspaceUid: sourceProject.workspaceUid,
+      sourceWorkCode: sourceWork.code,
       sourceWorkRevision: sourceWork.updatedAt,
       sourceRevisionVectorJson: stableJson(sourceRevision),
       sourceKind: effectiveNovelProfile(sourceWork) === 'short' ? 'short-novel' : 'long-novel',

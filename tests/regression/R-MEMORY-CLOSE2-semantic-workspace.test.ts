@@ -12,8 +12,8 @@ import {
 } from '../../src/lib/memory/workspace-projection'
 import { buildWorkspaceImpactPlanV1 } from '../../src/lib/memory/workspace-impact'
 import { createContextManifestV1, createContextManifestV2FromV1 } from '../../src/lib/agent/run/context-manifest'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 function notFound(): DOMException {
   return new DOMException('not found', 'NotFoundError')
@@ -143,10 +143,9 @@ async function seedTwoWorks() {
     theme: `主题${suffix}`,
     centralConflict: `冲突${suffix}`,
     plotPattern: '线性',
-    storyLines: `旧主线${suffix}`,
+    mainPlot: `主线${suffix}`,
     logline: `一句话${suffix}`,
     concept: `概念${suffix}`,
-    mainPlot: `主线${suffix}`,
     subPlots: `复线${suffix}`,
     createdAt: now,
     updatedAt: now,

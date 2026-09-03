@@ -27,8 +27,8 @@ async function seed(suffix = '') {
   const now = Date.now()
   const projectId = await db.projects.add({
     name: `宪法扫描${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 100_000, worldCode: `constitution-${now}-${suffix}`,
-    worldVersion: 1, enableMultiWorld: true, createdAt: now, updatedAt: now,
+    description: '', targetWordCount: 100_000,
+enableMultiWorld: true, createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({
     projectId, code: `constitution-${now}-${suffix}`, name: `曜月宇宙${suffix}`, description: '',
@@ -45,7 +45,7 @@ async function seed(suffix = '') {
   } as any) as number
   const worldviewId = await db.worldviews.add({
     projectId, worldId, worldGroupId, worldOrigin: '曜月界的魔法源于月亮潮汐。',
-    geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '',
+    summary: '',
     createdAt: now, updatedAt: now,
   } as any) as number
   const powerSystemId = await db.powerSystems.add({

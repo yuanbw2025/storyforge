@@ -10,7 +10,7 @@ import type {
   ConflictPriority,
 } from '../lib/types/world-rules'
 import { createEmptyEntry, isEntryEmpty, countFilledEntries } from '../lib/types/world-rules'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 interface WorldRulesState {
   profile: WorldRulesProfile | null

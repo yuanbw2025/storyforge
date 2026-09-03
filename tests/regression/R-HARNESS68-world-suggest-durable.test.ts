@@ -24,7 +24,7 @@ async function seed(suffix = '') {
   const projectId = await db.projects.add({
     name: `诸界航路${suffix}`, genre: 'fantasy', genres: ['fantasy', 'adventure'], status: 'drafting',
     description: '主角通过潮汐门探索递进世界。', targetWordCount: 120_000,
-    worldCode: `suggest-${now}-${suffix}`, worldVersion: 1, enableMultiWorld: true,
+enableMultiWorld: true,
     createdAt: now, updatedAt: now,
   } as any) as number
   const worldId = await db.worlds.add({

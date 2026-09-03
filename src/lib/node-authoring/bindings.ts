@@ -4,7 +4,7 @@ import { buildRagLibrary, makeRagEntryKey } from '../retrieval/rag-library'
 import { createRagSelectionTrace, type RagLibraryEntry } from '../types/rag-library'
 import type { AuthoringNodeInstance } from './contracts'
 import type { WorkspaceScope } from '../types/world-ownership'
-import { readOwnedRows, resolveScopeLike } from '../world-engine/scope'
+import { readOwnedRows, resolveScopeLike } from '../workspace/scope'
 
 /**
  * FLOW-3 Canon binding adapter.

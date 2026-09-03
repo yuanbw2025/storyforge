@@ -19,7 +19,7 @@ async function seed(): Promise<{
 }> {
   const projectId = await db.projects.add({
     name: '雾港族谱', genre: 'fantasy', genres: ['fantasy'], description: '', status: 'drafting',
-    targetWordCount: 300_000, worldCode: 'codex1-world', worldVersion: 1,
+    targetWordCount: 300_000,
     enableMultiWorld: true, createdAt: NOW, updatedAt: NOW,
   } as never) as number
   const worldId = await db.worlds.add({

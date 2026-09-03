@@ -16,8 +16,8 @@ import type {
   FrozenResourceScopeV1,
   WorkspaceScope,
 } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 const NOW = 1_787_900_000_000
 const HASH_A = 'a'.repeat(64)
